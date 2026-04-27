@@ -136,10 +136,10 @@ static void sdl_seed_all_pane_profiles_from_active(void)
 static void sdl_reset_config_to_resolution_defaults(int screen_width,
     int screen_height)
 {
-    sdl_config_set_defaults_for_resolution(&config, pane_config,
+    bool matched_profile = sdl_config_set_defaults_for_resolution(&config, pane_config,
         &pane_config_count, MAX_PANE_CONFIGS, screen_width, screen_height);
 
-    if (pane_config_count == 0) {
+    if (!matched_profile && pane_config_count == 0) {
         pane_config_count = default_pane_config_count;
         for (int i = 0; i < default_pane_config_count
             && i < MAX_PANE_CONFIGS; i++)
@@ -6060,6 +6060,32 @@ static errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* c
                                 src.x = ((byte)feat_c & 0x3F) * TILE_SIZE;
                                 src.y = (feat_a & 0x3F) * TILE_SIZE;
                                 SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
+                            }
+                        }
+
+                        /* Keep the floor item visible beneath the player tile. */
+                        if (m_idx < 0) {
+                            byte feat = cave_feat[dy][dx];
+
+                            if ((feat == FEAT_FLOOR) || (feat == FEAT_SUNLIGHT)) {
+                                object_type* o_ptr;
+
+                                for (o_ptr = get_first_object(dy, dx); o_ptr;
+                                     o_ptr = get_next_object(o_ptr)) {
+                                    if (o_ptr->marked) {
+                                        byte obj_a = object_attr(o_ptr);
+                                        byte obj_c = (byte)object_char(o_ptr);
+
+                                        if ((obj_a & TILE_FLAG) && (obj_c & TILE_FLAG)) {
+                                            src.x = (obj_c & 0x3F) * TILE_SIZE;
+                                            src.y = (obj_a & 0x3F) * TILE_SIZE;
+                                            SDL_RenderTexture(g_state.renderer,
+                                                g_state.tileset, &src, &dst);
+                                        }
+
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }

@@ -98,6 +98,7 @@ int player_oil_container_unit_capacity(const struct object_type* o_ptr);
 int player_oil_container_slots_used(void);
 int player_oil_container_slot_capacity(void);
 void player_oil_container_set_fuel(struct object_type* o_ptr, int fuel);
+int player_refill_lamp_oil_from_container(struct object_type* o_ptr);
 bool player_lamp_oil_would_overflow(int addition);
 bool player_lamp_oil_would_overflow_with_bonus(int addition, int lantern_bonus);
 bool player_gain_lamp_oil(int addition, bool allow_overflow);
@@ -107,6 +108,9 @@ bool player_prepare_lantern_drop(int lanterns_being_dropped,
     int* oil_to_transfer, int* oil_to_lose);
 bool player_prepare_oil_container_drop(const struct object_type* o_ptr,
     int amount, int* oil_to_transfer, int* oil_to_lose);
+bool player_prepare_oil_container_drop_after_removal(
+    const struct object_type* o_ptr, int amount, int* oil_to_transfer,
+    int* oil_to_lose);
 int player_carried_torch_count(void);
 int player_carried_light_count_for_sval(int sval);
 int player_light_carry_group(const struct object_type* o_ptr);

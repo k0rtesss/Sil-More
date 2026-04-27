@@ -5078,6 +5078,7 @@ bool prep_object_theme(int themetype)
 s16b floor_carry(int y, int x, object_type* j_ptr)
 {
     int n = 0;
+    bool under_player = (cave_m_idx[y][x] < 0);
 
     s16b o_idx;
 
@@ -5099,6 +5100,12 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
         {
             /* Combine the items */
             object_absorb(o_ptr, j_ptr);
+
+            if (under_player)
+            {
+                o_ptr->marked = true;
+                lite_spot(y, x);
+            }
 
             if (j_ptr->number == 0)
             {
@@ -5145,6 +5152,9 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
 
         /* Link the floor to the object */
         cave_o_idx[y][x] = o_idx;
+
+        if (under_player)
+            o_ptr->marked = true;
 
         /* Rearrange to reflect squelching */
         rearrange_stack(y, x);
@@ -6986,6 +6996,7 @@ s16b inven_takeoff(int item, int amt)
     cptr act;
 
     char o_name[80];
+    int oil_to_drop = 0;
 
     /* Get the item to take off */
     o_ptr = &inventory[item];
@@ -7129,6 +7140,18 @@ s16b inven_takeoff(int item, int amt)
     else
     {
         msg_print("You have no room in your pack.");
+    }
+
+    if (player_oil_container_object(&drop_obj))
+    {
+        if (!player_prepare_oil_container_drop_after_removal(&drop_obj, amt,
+                &oil_to_drop, NULL))
+        {
+            return (-1);
+        }
+
+        player_oil_container_set_fuel(&drop_obj, oil_to_drop);
+        object_copy(&drop_template, &drop_obj);
     }
 
     bool can_drop_here = (cave_feat[p_ptr->py][p_ptr->px] == FEAT_FLOOR

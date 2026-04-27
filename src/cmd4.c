@@ -181,6 +181,7 @@ struct object_list_entry
 
 typedef struct supply_list_entry supply_list_entry;
 typedef struct supply_list_columns supply_list_columns;
+typedef struct supply_group_icon supply_group_icon;
 
 struct supply_list_entry
 {
@@ -195,6 +196,7 @@ struct supply_list_entry
 
 struct supply_list_columns
 {
+    int name_col;
     int name_w;
     int weight_col;
     int turns_col;
@@ -206,6 +208,14 @@ struct supply_list_columns
     bool show_qty;
     bool show_sym;
 };
+
+struct supply_group_icon
+{
+    bool has_icon;
+    object_type obj;
+};
+
+#define SUPPLY_COMPACT_TERM_WIDTH 80
 
 struct knowledge_browser_layout
 {
@@ -2545,26 +2555,36 @@ int unique_bane_type_killed(void)
 
 int bane_menu(int* highlight)
 {
-    int i, k;
-
+    int i;
     int ch;
-    int options;
+    int options = BANE_TYPES - 1;
+    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
+    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
+    bool compact_layout = ability_menu_use_compact_layout();
+    int list_col = compact_layout ? ability_menu_list_col()
+                                  : ability_menu_description_col();
+    int desc_col = compact_layout ? ability_menu_description_col()
+                                  : list_col;
+    int prefix_col = indexed_menu_prefix_col(list_col);
+    int list_first_row = 4;
+    int nav_row_1 = MAX(0, term_hgt - 2);
+    int nav_row_2 = MAX(0, term_hgt - 1);
     bool steamdeck = steamdeck_controls_active();
 
     char buf[80];
+    char prefix[8];
 
     byte attr;
 
-    // bane title
-    Term_putstr(COL_DESCRIPTION, 2, -1, TERM_WHITE, "Enemy types");
+    wipe_screen_from(prefix_col);
 
-    // clear the description area
-    wipe_screen_from(COL_DESCRIPTION);
+    Term_putstr(list_col, 2, -1, TERM_WHITE, "Enemy types");
 
     // list the enemies
     for (i = 1; i < BANE_TYPES; i++)
     {
-        k = bane_type_killed(i);
+        int row = list_first_row + i - 1;
+        int k = bane_type_killed(i);
 
         // Determine the appropriate colour
         if (k >= 4)
@@ -2577,49 +2597,76 @@ int bane_menu(int* highlight)
         }
 
         indexed_menu_entry_label(buf, sizeof(buf), i - 1, bane_name[i]);
-        Term_putstr(COL_DESCRIPTION, i + 3, -1, attr, buf);
+        Term_putstr(list_col, row, -1, attr, buf);
+
+        indexed_menu_normal_prefix(prefix, sizeof(prefix), i - 1);
+        Term_putstr(prefix_col, row, -1, attr, prefix);
 
         if (*highlight == i)
         {
             // highlight the label
-            indexed_menu_focus_prefix(buf, sizeof(buf), i - 1);
-            Term_putstr(COL_DESCRIPTION, i + 3, -1, TERM_L_BLUE, buf);
+            indexed_menu_focus_prefix(prefix, sizeof(prefix), i - 1);
+            Term_putstr(prefix_col, row, -1, TERM_L_BLUE, prefix);
+        }
+    }
 
-            /* Indent output by 2 character, and wrap at column 70 */
-            text_out_wrap = 79;
-            text_out_indent = COL_DESCRIPTION;
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > options)
+        *highlight = options;
 
-            Term_gotoxy(text_out_indent, BANE_TYPES + 4);
+    if (*highlight >= 1 && *highlight <= options)
+    {
+        int k = bane_type_killed(*highlight);
+        int old_wrap = text_out_wrap;
+        int old_indent = text_out_indent;
+        int detail_row = compact_layout ? 4 : (BANE_TYPES + 4);
+        byte detail_attr = (k >= 4) ? TERM_SLATE : TERM_L_DARK;
 
-            /* Information */
-            if (k >= 4)
-            {
-                strnfmt(buf, 80, "You have slain %d of these foes.", k);
-                text_out_to_screen(TERM_SLATE, buf);
-            }
-            else
-            {
-                strnfmt(buf, 80,
-                    "You have slain %d of these foes,   and need to slay %d "
-                    "more.",
-                    k, 4 - k);
-                text_out_to_screen(TERM_L_DARK, buf);
-            }
-
-            /* Reset text_out() vars */
-            text_out_wrap = 0;
-            text_out_indent = 0;
+        if (compact_layout)
+        {
+            wipe_screen_from(desc_col);
+            Term_putstr(desc_col, 2, -1, TERM_WHITE, "Enemy Details");
+            Term_putstr(desc_col, detail_row, term_wid - desc_col,
+                (k >= 4) ? TERM_SLATE : TERM_L_DARK,
+                bane_name[*highlight]);
+            detail_row += 2;
         }
 
-        // keep track of the number of options
-        options = i;
+        text_out_wrap = ability_menu_description_wrap(desc_col);
+        text_out_indent = desc_col;
+
+        Term_gotoxy(text_out_indent, detail_row);
+
+        if (k >= 4)
+        {
+            strnfmt(buf, 80, "You have slain %d of these foes.", k);
+        }
+        else
+        {
+            strnfmt(buf, 80,
+                "You have slain %d of these foes, and need to slay %d more.",
+                k, 4 - k);
+        }
+        text_out_to_screen(detail_attr, buf);
+
+        text_out_wrap = old_wrap;
+        text_out_indent = old_indent;
+    }
+
+    if (compact_layout)
+    {
+        Term_putstr(desc_col, nav_row_1, term_wid - desc_col, TERM_SLATE,
+            "8/2 - Navigate");
+        Term_putstr(desc_col, nav_row_2, term_wid - desc_col, TERM_SLATE,
+            "Enter Select  Esc Back");
     }
 
     /* Flush the prompt */
     Term_fresh();
 
     /* Place cursor at current choice */
-    Term_gotoxy(COL_DESCRIPTION, 3 + *highlight);
+    Term_gotoxy(prefix_col, list_first_row + *highlight - 1);
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
@@ -3977,8 +4024,7 @@ void do_cmd_ability_screen(void)
 
                                 if (!skip_purchase)
                                 {
-                                    if (get_check("Are you sure you wish to "
-                                                  "gain this ability? "))
+                                    if (get_check("Gain this ability? "))
                                     {
                                         p_ptr->innate_ability[skilltype]
                                                              [abilitynum]
@@ -11612,6 +11658,23 @@ static void main_menu_format_line(int choice, char* buf, size_t buflen)
     }
 }
 
+static void main_menu_format_controller_prompt(char* buf, size_t buflen)
+{
+    char confirm_label[16];
+    char back_label[16];
+
+    if (!buf || !buflen)
+        return;
+
+    buf[0] = '\0';
+    controller_prompt_label(steamdeck_confirm_key(), "A",
+        confirm_label, sizeof(confirm_label));
+    controller_prompt_label(steamdeck_back_key(), "B",
+        back_label, sizeof(back_label));
+    strnfmt(buf, buflen, "D-pad select  %s open  %s back",
+        confirm_label, back_label);
+}
+
 static int main_menu_calc_width(void)
 {
     int max_w = 0;
@@ -11625,7 +11688,37 @@ static int main_menu_calc_width(void)
         if (w > max_w)
             max_w = w;
     }
+    if (steamdeck_controls_active())
+    {
+        char prompt[96];
+        int w;
+
+        main_menu_format_controller_prompt(prompt, sizeof(prompt));
+        w = (int)strlen(prompt);
+        if (w > max_w)
+            max_w = w;
+    }
     return max_w;
+}
+
+static void main_menu_erase_footprint_row(int col_main, int row, int menu_w)
+{
+    int clear_x;
+    int clear_w;
+
+    if (!Term || row < 0 || row >= Term->hgt)
+        return;
+
+    clear_x = col_main - 2;
+    if (clear_x < 0)
+        clear_x = 0;
+
+    clear_w = menu_w + 4;
+    if (clear_x + clear_w > Term->wid)
+        clear_w = Term->wid - clear_x;
+
+    if (clear_w > 0)
+        Term_erase(clear_x, row, clear_w);
 }
 
 static bool main_menu_choice_is_disabled(int choice)
@@ -11951,17 +12044,7 @@ int main_menu_aux(int* highlight)
     for (i = 0; i < menu_h; i++)
     {
         int y = row_top + i;
-        if (!Term || y < 0 || y >= Term->hgt)
-            continue;
-
-        int clear_x = col_main - 2;
-        if (clear_x < 0)
-            clear_x = 0;
-        int clear_w = menu_w + 4;
-        if (clear_x + clear_w > Term->wid)
-            clear_w = Term->wid - clear_x;
-        if (clear_w > 0)
-            Term_erase(clear_x, y, clear_w);
+        main_menu_erase_footprint_row(col_main, y, menu_w);
     }
 
     for (i = 1; i <= MAIN_MENU_MAX; i++)
@@ -11979,23 +12062,20 @@ int main_menu_aux(int* highlight)
     if (steamdeck && Term)
     {
         int prompt_row = row_top + menu_h;
-        char confirm_label[16];
-        char back_label[16];
         char prompt_buf[96];
+        int prompt_w = menu_w;
 
         if (prompt_row >= Term->hgt)
             prompt_row = Term->hgt - 1;
         if (prompt_row >= 0)
         {
-            Term_erase(0, prompt_row, 255);
-            controller_prompt_label(steamdeck_confirm_key(), "A",
-                confirm_label, sizeof(confirm_label));
-            controller_prompt_label(steamdeck_back_key(), "B",
-                back_label, sizeof(back_label));
-            strnfmt(prompt_buf, sizeof(prompt_buf),
-                "D-pad select  %s open  %s back",
-                confirm_label, back_label);
-            Term_putstr(col_main, prompt_row, -1, TERM_SLATE, prompt_buf);
+            main_menu_erase_footprint_row(col_main, prompt_row, menu_w);
+            main_menu_format_controller_prompt(prompt_buf, sizeof(prompt_buf));
+            if (col_main + prompt_w > Term->wid)
+                prompt_w = Term->wid - col_main;
+            if (prompt_w > 0)
+                Term_putstr(col_main, prompt_row, prompt_w, TERM_SLATE,
+                    prompt_buf);
         }
     }
 
@@ -14033,11 +14113,12 @@ struct option_group_marker
 
 static const struct option_group_marker interface_option_groups[] = {
     { 0, "Messages" },
-    { 2, "Look" },
-    { 5, "Panels" },
-    { 8, "Warnings" },
-    { 9, "Input" },
-    { 13, "Debug" },
+    { 3, "Look" },
+    { 6, "Panels" },
+    { 9, "Warnings" },
+    { 10, "Input" },
+    { 14, "Items" },
+    { 17, "Debug" },
     { -1, NULL }
 };
 
@@ -14543,6 +14624,15 @@ static cptr option_menu_label(int opt)
     case OPT_song_list_sort_by_recent:
         return compact ? (narrow ? "Songs recent" : "Recent songs first")
                        : "Sort song menu by recent use";
+    case OPT_inventory_selection_square:
+        return compact ? (narrow ? "Item frame" : "Item select frame")
+                       : "Item selection frame";
+    case OPT_supply_menu_random_icons:
+        return compact ? (narrow ? "Supply icons" : "Supply icon mode")
+                       : "Supply group icon mode";
+    case OPT_supply_menu_hide_flavor_compact:
+        return compact ? (narrow ? "Hide flavors" : "Hide supply flavors")
+                       : "Hide supply flavors in compact mode";
     case OPT_intro_style:
         return compact ? (narrow ? "Welcome art" : "Welcome screen")
                        : "Welcome screen style";
@@ -15022,6 +15112,12 @@ extern void do_cmd_options_aux(int page, cptr info)
 
                 option_menu_format_line(buf, sizeof(buf), option_menu_label(opt[i]),
                     value_str);
+            }
+            else if (opt[i] == OPT_supply_menu_random_icons)
+            {
+                option_menu_format_line(buf, sizeof(buf),
+                    option_menu_label(opt[i]),
+                    op_ptr->opt[opt[i]] ? "Random" : "Fixed");
             }
             else
             {
@@ -23371,8 +23467,137 @@ static object_type* supply_entry_display_object(const supply_list_entry* entry,
     return o_ptr;
 }
 
+static void supply_strip_leading_name_unit(char* buf)
+{
+    static cptr prefixes[] = {
+        "Fragment of ",
+        "Fragments of ",
+        "Piece of ",
+        "Pieces of ",
+        "Strip of ",
+        "Strips of ",
+        NULL
+    };
+    int i;
+
+    if (!buf || !buf[0])
+        return;
+
+    for (i = 0; prefixes[i]; i++)
+    {
+        size_t len = strlen(prefixes[i]);
+
+        if (strncmp(buf, prefixes[i], len) == 0)
+        {
+            memmove(buf, buf + len, strlen(buf + len) + 1);
+            return;
+        }
+    }
+}
+
+static void supply_strip_compact_kind_word(char* buf, size_t buflen)
+{
+    static cptr prefixes[] = {
+        "Easter Egg of ",
+        "Easter Eggs of ",
+        "Herb of ",
+        "Herbs of ",
+        "Potion of ",
+        "Potions of ",
+        "Gem of ",
+        "Gems of ",
+        NULL
+    };
+    static cptr generic_names[] = {
+        "Easter Egg",
+        "Easter Eggs",
+        "Herb",
+        "Herbs",
+        "Potion",
+        "Potions",
+        "Gem",
+        "Gems",
+        NULL
+    };
+    int i;
+
+    if (!buf || buflen == 0 || !buf[0])
+        return;
+
+    for (i = 0; prefixes[i]; i++)
+    {
+        size_t len = strlen(prefixes[i]);
+
+        if (strncmp(buf, prefixes[i], len) == 0)
+        {
+            memmove(buf, buf + len, strlen(buf + len) + 1);
+            if (!buf[0])
+                SDL_strlcpy(buf, "?", buflen);
+            return;
+        }
+    }
+
+    for (i = 0; generic_names[i]; i++)
+    {
+        if (strcmp(buf, generic_names[i]) == 0)
+        {
+            SDL_strlcpy(buf, "?", buflen);
+            return;
+        }
+    }
+}
+
+static bool supply_entry_compact_flavorless_name(char* buf, size_t buflen,
+    const object_type* o_ptr)
+{
+    object_kind* k_ptr;
+
+    if (!buf || buflen == 0 || !o_ptr || !o_ptr->k_idx)
+        return false;
+
+    if (o_ptr->k_idx < 0 || o_ptr->k_idx >= z_info->k_max)
+        return false;
+
+    k_ptr = &k_info[o_ptr->k_idx];
+    if (!k_ptr->flavor)
+        return false;
+
+    if (object_aware_p(o_ptr))
+    {
+        object_desc_spoil(buf, buflen, o_ptr, false, 0);
+        supply_strip_leading_name_unit(buf);
+        supply_strip_compact_kind_word(buf, buflen);
+        return true;
+    }
+
+    switch (o_ptr->tval)
+    {
+    case TV_FOOD:
+        if (o_ptr->sval >= SV_FOOD_MIN_FOOD)
+            return false;
+        SDL_strlcpy(buf, easter_time() ? "Easter Egg" : "Herb", buflen);
+        break;
+    case TV_POTION:
+        SDL_strlcpy(buf, "Potion", buflen);
+        break;
+    case TV_GEM:
+        SDL_strlcpy(buf, "Gem", buflen);
+        break;
+    default:
+        return false;
+    }
+
+    supply_strip_compact_kind_word(buf, buflen);
+
+    if (object_tried_p(o_ptr))
+        SDL_strlcat(buf, " {tried}", buflen);
+
+    return true;
+}
+
 static void supply_entry_display_name(char* buf, size_t buflen,
-    const supply_list_entry* entry, const object_type* o_ptr, int current_group)
+    const supply_list_entry* entry, const object_type* o_ptr, int current_group,
+    bool compact_names)
 {
     if (!buf || buflen == 0)
         return;
@@ -23382,7 +23607,14 @@ static void supply_entry_display_name(char* buf, size_t buflen,
     if (!entry || !o_ptr)
         return;
 
+    if (compact_names
+        && supply_entry_compact_flavorless_name(buf, buflen, o_ptr))
+    {
+        return;
+    }
+
     object_desc(buf, buflen, o_ptr, false, 0);
+    supply_strip_leading_name_unit(buf);
 
     if (current_group == SUPPLY_GROUP_LIGHTS)
     {
@@ -23416,6 +23648,200 @@ static int supply_entry_turns(const supply_list_entry* entry,
     return player_light_fuel(o_ptr);
 }
 
+static bool supply_kind_is_seen(const object_kind* k_ptr);
+
+static bool supply_icon_frame_is_big(const object_type* o_ptr)
+{
+    return use_bigtile && use_graphics != GRAPHICS_NONE
+        && use_graphics != GRAPHICS_PSEUDO && o_ptr && o_ptr->k_idx;
+}
+
+static void draw_supply_icon(int col, int row, const object_type* o_ptr)
+{
+    byte sym_attr;
+    char sym_char;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return;
+
+    sym_attr = object_attr(o_ptr);
+    sym_char = object_char(o_ptr);
+    Term_putch(col, row, sym_attr, sym_char);
+    if (use_bigtile)
+    {
+        if (sym_attr & TILE_FLAG)
+            Term_putch(col + 1, row, 255, -1);
+        else
+            Term_putch(col + 1, row, 0, ' ');
+    }
+}
+
+static void draw_supply_icon_frame(int col, int row, const object_type* o_ptr)
+{
+    if (op_ptr && op_ptr->opt[OPT_inventory_selection_square])
+        (void)Term_set_extra_cursor(true, col, row,
+            supply_icon_frame_is_big(o_ptr));
+}
+
+static int supply_group_fixed_icon_kind(int group)
+{
+    int k_idx = 0;
+
+    switch (group)
+    {
+    case SUPPLY_GROUP_HERBS:
+        k_idx = lookup_kind(TV_FOOD, SV_FOOD_HEALING);
+        break;
+    case SUPPLY_GROUP_FOOD:
+        k_idx = lookup_kind(TV_FOOD, SV_FOOD_LEMBAS);
+        if (k_idx <= 0)
+            k_idx = lookup_kind(TV_FOOD, SV_FOOD_BREAD);
+        break;
+    case SUPPLY_GROUP_POTIONS:
+        k_idx = lookup_kind(TV_POTION, SV_POTION_HEALING);
+        break;
+    case SUPPLY_GROUP_GEMS:
+        k_idx = lookup_kind(TV_GEM, SV_GEM_LIGHT);
+        break;
+    case SUPPLY_GROUP_LIGHTS:
+        k_idx = lookup_kind(TV_LIGHT, SV_LIGHT_TORCH);
+        break;
+    default:
+        break;
+    }
+
+    if (k_idx > 0)
+        return k_idx;
+
+    for (int i = 0; i < z_info->k_max; i++)
+    {
+        object_kind* k_ptr = &k_info[i];
+
+        if (!k_ptr->name)
+            continue;
+        if (supply_kind_matches(group, k_ptr->tval, k_ptr->sval))
+            return i;
+    }
+
+    return 0;
+}
+
+static bool supply_group_kind_is_carried(int group, int k_idx)
+{
+    for (int i = 0; i < INVEN_PACK; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+
+        if (o_ptr->k_idx == k_idx && supply_item_matches(group, o_ptr))
+            return true;
+    }
+
+    for (int i = 0; i < supplies_entry_count(); i++)
+    {
+        object_type* o_ptr = supplies_entry_at(i);
+
+        if (o_ptr && o_ptr->k_idx == k_idx && supply_item_matches(group, o_ptr))
+            return true;
+    }
+
+    return false;
+}
+
+static bool supply_group_icon_candidate(int group, int k_idx,
+    bool require_known_or_carried)
+{
+    object_kind* k_ptr;
+
+    if (k_idx <= 0 || k_idx >= z_info->k_max)
+        return false;
+
+    k_ptr = &k_info[k_idx];
+    if (!k_ptr->name)
+        return false;
+    if (!supply_kind_matches(group, k_ptr->tval, k_ptr->sval))
+        return false;
+
+    if (!require_known_or_carried)
+        return true;
+
+    return supply_group_kind_is_carried(group, k_idx)
+        || supply_kind_is_seen(k_ptr);
+}
+
+static int supply_group_random_icon_kind(int group)
+{
+    int chosen = 0;
+    int seen = 0;
+
+    for (int pass = 0; pass < 2 && chosen <= 0; pass++)
+    {
+        bool require_known_or_carried = (pass == 0);
+
+        seen = 0;
+        for (int i = 0; i < z_info->k_max; i++)
+        {
+            if (!supply_group_icon_candidate(group, i,
+                    require_known_or_carried))
+                continue;
+
+            seen++;
+            if (rand_int(seen) == 0)
+                chosen = i;
+        }
+    }
+
+    return (chosen > 0) ? chosen : supply_group_fixed_icon_kind(group);
+}
+
+static void choose_supply_group_icon_kinds(
+    int group_icon_kinds[SUPPLY_GROUP_MAX])
+{
+    bool random_icons = op_ptr && op_ptr->opt[OPT_supply_menu_random_icons];
+    u64b saved_state = Rand_state_export();
+
+    for (int group = 0; group < SUPPLY_GROUP_MAX; group++)
+    {
+        if (group == SUPPLY_GROUP_LIGHTS || !random_icons)
+            group_icon_kinds[group] = supply_group_fixed_icon_kind(group);
+        else
+            group_icon_kinds[group] = supply_group_random_icon_kind(group);
+    }
+
+    Rand_state_import(saved_state);
+}
+
+static void prepare_supply_group_icons(supply_group_icon icons[SUPPLY_GROUP_MAX],
+    const int group_icon_kinds[SUPPLY_GROUP_MAX])
+{
+    for (int group = 0; group < SUPPLY_GROUP_MAX; group++)
+    {
+        object_type* icon_obj = &icons[group].obj;
+        int k_idx = group_icon_kinds[group];
+
+        icons[group].has_icon = false;
+        object_wipe(icon_obj);
+
+        if (group == SUPPLY_GROUP_LIGHTS)
+        {
+            object_type* light_ptr = &inventory[INVEN_LITE];
+
+            if (light_ptr->k_idx && light_ptr->tval == TV_LIGHT)
+            {
+                object_copy(icon_obj, light_ptr);
+                icons[group].has_icon = true;
+                continue;
+            }
+        }
+
+        if (k_idx <= 0 || k_idx >= z_info->k_max)
+            continue;
+
+        object_prep(icon_obj, k_idx);
+        icon_obj->ident |= IDENT_KNOWN;
+        icons[group].has_icon = true;
+    }
+}
+
 static void supply_init_columns(const knowledge_browser_layout* layout,
     int current_group, supply_list_columns* cols)
 {
@@ -23433,14 +23859,6 @@ static void supply_init_columns(const knowledge_browser_layout* layout,
     cols->show_turns = (current_group == SUPPLY_GROUP_LIGHTS);
 
     col = layout->term_wid;
-
-    if (cols->show_sym)
-    {
-        col -= 3;
-        cols->sym_hdr_col = col;
-        cols->sym_col = layout->term_wid - (use_bigtile ? 2 : 1);
-        col -= 1;
-    }
 
     if (cols->show_qty)
     {
@@ -23463,13 +23881,21 @@ static void supply_init_columns(const knowledge_browser_layout* layout,
         col -= 1;
     }
 
-    cols->name_w = col - layout->list_col;
+    cols->name_col = layout->list_col;
+    if (cols->show_sym)
+    {
+        cols->sym_hdr_col = layout->list_col;
+        cols->sym_col = layout->list_col;
+        cols->name_col = layout->list_col + (use_bigtile ? 2 : 1);
+    }
+
+    cols->name_w = col - cols->name_col;
     if (cols->name_w < 1)
         cols->name_w = 1;
 }
 
 static int supply_max_name_len(int current_group, supply_list_entry entries[],
-    int entry_cnt)
+    int entry_cnt, bool compact_names)
 {
     int max_len = 0;
     int i;
@@ -23492,13 +23918,19 @@ static int supply_max_name_len(int current_group, supply_list_entry entries[],
             continue;
 
         supply_entry_display_name(name, sizeof(name), entry, o_ptr,
-            current_group);
+            current_group, compact_names);
         len = (int)strlen(name);
         if (len > max_len)
             max_len = len;
     }
 
     return max_len;
+}
+
+static bool supply_use_compact_names_for_width(
+    const knowledge_browser_layout* layout)
+{
+    return layout && (layout->term_wid <= SUPPLY_COMPACT_TERM_WIDTH);
 }
 
 static void compute_supply_group_totals(int totals[SUPPLY_GROUP_MAX])
@@ -23558,7 +23990,7 @@ static void compute_supply_group_totals(int totals[SUPPLY_GROUP_MAX])
     }
 }
 
-static bool supply_kind_is_known(const object_kind* k_ptr)
+static bool supply_kind_is_seen(const object_kind* k_ptr)
 {
     if (!k_ptr)
         return false;
@@ -23566,7 +23998,7 @@ static bool supply_kind_is_known(const object_kind* k_ptr)
     if (cheat_know || p_ptr->wizard)
         return true;
 
-    return k_ptr->aware || k_ptr->everseen || k_ptr->tried;
+    return k_ptr->everseen || k_ptr->tried;
 }
 
 static int collect_supply_entries(int group_idx, supply_list_entry entries[])
@@ -23805,7 +24237,7 @@ static int collect_supply_entries(int group_idx, supply_list_entry entries[])
         }
     }
 
-    /* Add known kinds even when none are carried.
+    /* Add seen kinds even when none are carried.
      * Lights are listed only when actually carried, to avoid misleading 0-count
      * placeholders in the supply menu. */
     if (group_idx == SUPPLY_GROUP_LIGHTS)
@@ -23824,7 +24256,7 @@ static int collect_supply_entries(int group_idx, supply_list_entry entries[])
         return count;
     }
 
-    /* Add known kinds even when none are carried */
+    /* Add seen kinds even when none are carried */
     for (i = 0; i < z_info->k_max; i++)
     {
         object_kind* k_ptr = &k_info[i];
@@ -23836,7 +24268,7 @@ static int collect_supply_entries(int group_idx, supply_list_entry entries[])
         if (!supply_kind_matches(group_idx, k_ptr->tval, k_ptr->sval))
             continue;
 
-        if (!supply_kind_is_known(k_ptr))
+        if (!supply_kind_is_seen(k_ptr))
             continue;
 
         for (j = 0; j < count; j++)
@@ -23971,10 +24403,12 @@ static byte get_supply_item_color(int k_idx, bool aware)
 }
 
 static void display_supply_group_list(int col, int row, int wid, int per_page,
-    int grp_idx[], int grp_cur, int grp_top, int group_totals[])
+    int grp_idx[], int grp_cur, int grp_top, int group_totals[],
+    const supply_group_icon icons[SUPPLY_GROUP_MAX], bool active)
 {
     int i;
     int total_col = col + wid - 3;
+    int text_col = col + (use_bigtile ? 2 : 1);
 
     for (i = 0; i < per_page; i++)
     {
@@ -24009,7 +24443,13 @@ static void display_supply_group_list(int col, int row, int wid, int per_page,
             attr = base_color;
 
         Term_erase(col, row + i, wid);
-        c_put_str(attr, supply_group_text[grp], row + i, col);
+        if (icons && icons[grp].has_icon)
+        {
+            draw_supply_icon(col, row + i, &icons[grp].obj);
+            if (active && grp_top + i == grp_cur)
+                draw_supply_icon_frame(col, row + i, &icons[grp].obj);
+        }
+        c_put_str(attr, supply_group_text[grp], row + i, text_col);
 
         strnfmt(buf, sizeof(buf), "%3d", group_totals[grp]);
         c_put_str(attr, buf, row + i, total_col);
@@ -24019,7 +24459,7 @@ static void display_supply_group_list(int col, int row, int wid, int per_page,
 static void display_supply_list(const knowledge_browser_layout* layout, int row,
     int per_page, supply_list_entry entries[], int entry_cnt, int entry_cur,
     int entry_top, int current_group, int column,
-    const supply_list_columns* cols)
+    const supply_list_columns* cols, bool compact_names)
 {
     int i;
 
@@ -24039,10 +24479,9 @@ static void display_supply_list(const knowledge_browser_layout* layout, int row,
         bool aware;
         object_type* o_ptr;
         byte base_attr, cursor_attr, attr;
-        byte sym_attr;
-        char sym_char;
         char name[128];
         char cell_buf[16];
+        bool selected = (column == 1 && idx == entry_cur);
 
         if (entry->k_idx < 0 || entry->k_idx >= z_info->k_max)
             continue;
@@ -24062,15 +24501,22 @@ static void display_supply_list(const knowledge_browser_layout* layout, int row,
             cursor_attr = aware ? TERM_L_WHITE : TERM_WHITE;
         }
         /* Only highlight when right panel is active (column == 1) */
-        attr = (column == 1 && idx == entry_cur) ? cursor_attr : base_attr;
+        attr = selected ? cursor_attr : base_attr;
 
         o_ptr = supply_entry_display_object(entry, aware, &fake);
         if (!o_ptr)
             continue;
 
         supply_entry_display_name(name, sizeof(name), entry, o_ptr,
-            current_group);
-        Term_putstr(layout->list_col, y, cols->name_w, attr, name);
+            current_group, compact_names);
+        if (cols->show_sym)
+        {
+            draw_supply_icon(cols->sym_col, y, o_ptr);
+            if (selected)
+                draw_supply_icon_frame(cols->sym_col, y, o_ptr);
+        }
+
+        Term_putstr(cols->name_col, y, cols->name_w, attr, name);
 
         if (cols->show_weight)
         {
@@ -24098,16 +24544,6 @@ static void display_supply_list(const knowledge_browser_layout* layout, int row,
             Term_putstr(cols->qty_col, y, 4, attr, cell_buf);
         }
 
-        sym_attr = object_attr(o_ptr);
-        sym_char = object_char(o_ptr);
-        Term_putch(cols->sym_col, y, sym_attr, sym_char);
-        if (use_bigtile)
-        {
-            if (sym_attr & 0x80)
-                Term_putch(cols->sym_col + 1, y, 255, -1);
-            else
-                Term_putch(cols->sym_col + 1, y, 0, ' ');
-        }
     }
 
     for (; i < per_page; i++)
@@ -26627,6 +27063,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     int grp_cnt = SUPPLY_GROUP_MAX;
     int grp_idx[SUPPLY_GROUP_MAX + 1];
     int group_totals[SUPPLY_GROUP_MAX];
+    int group_icon_kinds[SUPPLY_GROUP_MAX];
+    supply_group_icon group_icons[SUPPLY_GROUP_MAX];
     supply_list_entry* entries;
     int grp_cur = 0;
     int grp_top = 0;
@@ -26666,6 +27104,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     grp_idx[grp_cnt] = -1;
     max += 2;
 
+    choose_supply_group_icon_kinds(group_icon_kinds);
+
     entries = mem_alloc_array(z_info->k_max, supply_list_entry);
 
     screen_save();
@@ -26693,7 +27133,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         int split_name_w;
         int full_name_w;
         int max_name_len;
+        bool compact_width;
+        bool compact_draw_names;
 
+        prepare_supply_group_icons(group_icons, group_icon_kinds);
         compute_supply_group_totals(group_totals);
         knowledge_init_layout(&layout, max, true);
         used_weight = supplies_limit_weight();
@@ -26747,7 +27190,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         supply_init_columns(&full_layout, grp_idx[grp_cur], &full_cols);
         split_name_w = split_cols.name_w;
         full_name_w = full_cols.name_w;
-        max_name_len = supply_max_name_len(grp_idx[grp_cur], entries, entry_cnt);
+        compact_width = supply_use_compact_names_for_width(&layout);
+        compact_draw_names = compact_width && op_ptr
+            && op_ptr->opt[OPT_supply_menu_hide_flavor_compact];
+        max_name_len = supply_max_name_len(grp_idx[grp_cur], entries,
+            entry_cnt, compact_draw_names);
+
+        if (split_name_w > 1)
+            split_name_w--;
+
         single_column = knowledge_should_use_single_column_for_names(
             split_name_w, full_name_w, max_name_len);
         draw_layout = single_column ? full_layout : layout;
@@ -26789,8 +27240,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (!single_column)
                     Term_putstr(0, draw_layout.header_row, draw_layout.group_w,
                         TERM_SLATE, "Group");
-                Term_putstr(draw_layout.list_col, draw_layout.header_row,
-                    draw_layout.list_w, TERM_SLATE, list_label);
+                if (draw_cols.show_sym)
+                    Term_putstr(draw_cols.sym_hdr_col, draw_layout.header_row,
+                        use_bigtile ? 2 : 1, TERM_SLATE, "S");
+                Term_putstr(draw_cols.name_col, draw_layout.header_row,
+                    draw_cols.name_w, TERM_SLATE, list_label);
                 if (draw_cols.show_weight)
                     Term_putstr(draw_cols.weight_col, draw_layout.header_row, 5,
                         TERM_SLATE, "Wt");
@@ -26800,9 +27254,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (draw_cols.show_qty)
                     Term_putstr(draw_cols.qty_col, draw_layout.header_row, 3,
                         TERM_SLATE, "Qty");
-                if (draw_cols.show_sym)
-                    Term_putstr(draw_cols.sym_hdr_col, draw_layout.header_row, 3,
-                        TERM_SLATE, "Sym");
             }
 
             for (i = 0; i < draw_layout.term_wid; i++)
@@ -26827,6 +27278,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         prev_term_hgt = draw_layout.term_hgt;
         prev_divider_col = draw_layout.divider_col;
 
+        (void)Term_set_extra_cursor(false, 0, 0, false);
+
         if (!single_column || !column)
         {
             int group_list_w = (!single_column) ? draw_layout.group_w
@@ -26834,13 +27287,13 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             display_supply_group_list(draw_layout.group_col, draw_layout.list_row,
                 group_list_w, draw_layout.list_rows, grp_idx, grp_cur,
-                grp_top, group_totals);
+                grp_top, group_totals, group_icons, column == 0);
         }
         if (!single_column || column)
         {
             display_supply_list(&draw_layout, draw_layout.list_row,
                 draw_layout.list_rows, entries, entry_cnt, entry_cur, entry_top,
-                grp_idx[grp_cur], column, &draw_cols);
+                grp_idx[grp_cur], column, &draw_cols, compact_draw_names);
         }
 
         if (draw_layout.status_row != draw_layout.prompt_row)
@@ -27078,6 +27531,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     }
 
     mem_free_null(entries);
+    (void)Term_set_extra_cursor(false, 0, 0, false);
     screen_load();
 
     if (refresh_after_close)
@@ -28218,11 +28672,363 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
     log_trace("sidebar_compact_name: combined result='%s'", dest);
 }
 
+typedef struct unified_sidebar_compact_entry
+{
+    int entity_index;
+    int entity_type;
+    int y;
+    int x;
+    byte symbol_attr;
+    byte text_attr;
+    char symbol[2];
+    char text[128];
+} unified_sidebar_compact_entry;
+
+static bool unified_sidebar_use_compact_layout(void)
+{
+    return Term && ((Term->hgt <= 18) || (Term->wid <= 60));
+}
+
+static int unified_sidebar_compact_last_row(void)
+{
+    if (!Term || Term->hgt <= 1)
+        return -1;
+
+    return Term->hgt - 2;
+}
+
+static void unified_sidebar_fit_text(char* buf, size_t buflen, cptr text,
+    int max_chars)
+{
+    if (!buf || !buflen)
+        return;
+
+    if (!text)
+        text = "";
+
+    if (max_chars <= 0)
+    {
+        buf[0] = '\0';
+        return;
+    }
+
+    if ((int)strlen(text) <= max_chars)
+        SDL_strlcpy(buf, text, buflen);
+    else if (max_chars <= 3)
+        strnfmt(buf, buflen, "%.*s", max_chars, text);
+    else
+        strnfmt(buf, buflen, "%.*s...", max_chars - 3, text);
+}
+
+static int unified_sidebar_compact_build_entries(
+    const unified_look_state* state,
+    unified_sidebar_compact_entry* entries,
+    int max_entries)
+{
+    int entry_count = 0;
+    int entity_index = 0;
+    int text_col = use_bigtile ? 3 : 2;
+    int text_width = Term ? (Term->wid - text_col - 1) : 40;
+
+    if (!state || !entries || max_entries <= 0)
+        return 0;
+
+    if (text_width < 8)
+        text_width = 8;
+
+    if (state->show_monsters)
+    {
+        get_sorted_target_list(TARGET_LIST_MONSTER, 0);
+
+        for (int i = 0; i < temp_n && entry_count < max_entries; i++)
+        {
+            int m_idx = cave_m_idx[temp_y[i]][temp_x[i]];
+            monster_type* m_ptr;
+            monster_race* r_ptr;
+            unified_sidebar_compact_entry* entry;
+            char m_name[40];
+            char name_buf[80];
+            char hp_bar[10];
+            char suffix[24];
+            int hp_len = 0;
+            int morale_color = TERM_WHITE;
+            int morale_num = 0;
+            int name_budget;
+
+            if (!m_idx)
+                continue;
+            if (!grid_info_is_available(temp_y[i], temp_x[i]))
+                continue;
+
+            m_ptr = &mon_list[m_idx];
+            if (!m_ptr->ml)
+                continue;
+            if (!unified_look_sidebar_in_radius(state, temp_y[i], temp_x[i]))
+                continue;
+
+            r_ptr = &r_info[m_ptr->r_idx];
+            monster_desc_race(m_name, sizeof(m_name), m_ptr->r_idx);
+
+            if (m_ptr->maxhp > 0)
+                hp_len = (8 * m_ptr->hp + m_ptr->maxhp - 1) / m_ptr->maxhp;
+            hp_len = MIN(MAX(hp_len, 0), 8);
+
+            if (m_ptr->confused && m_ptr->stunned)
+                strncpy(hp_bar, "cscscscs", hp_len);
+            else if (m_ptr->confused)
+                strncpy(hp_bar, "cccccccc", hp_len);
+            else if (m_ptr->stunned)
+                strncpy(hp_bar, "ssssssss", hp_len);
+            else
+                strncpy(hp_bar, "********", hp_len);
+            hp_bar[hp_len] = '\0';
+
+            if (m_ptr->alertness < ALERTNESS_UNWARY)
+            {
+                morale_color = TERM_BLUE;
+                morale_num = m_ptr->alertness;
+            }
+            else if (m_ptr->alertness < ALERTNESS_ALERT)
+            {
+                morale_color = TERM_L_BLUE;
+                morale_num = m_ptr->alertness;
+            }
+            else
+            {
+                char dummy_text[20];
+                if (!get_alertness_text(m_ptr, sizeof(dummy_text), dummy_text,
+                        &morale_color))
+                {
+                    morale_color = TERM_WHITE;
+                }
+
+                morale_num = (m_ptr->morale >= 0)
+                    ? ((m_ptr->morale + 9) / 10)
+                    : (m_ptr->morale / 10);
+            }
+
+            strnfmt(suffix, sizeof(suffix), " %s %d", hp_bar, morale_num);
+            name_budget = text_width - (int)strlen(suffix);
+            if (name_budget < 4)
+                name_budget = 4;
+            unified_sidebar_fit_text(name_buf, sizeof(name_buf), m_name,
+                name_budget);
+
+            entry = &entries[entry_count++];
+            entry->entity_index = entity_index++;
+            entry->entity_type = 1;
+            entry->y = temp_y[i];
+            entry->x = temp_x[i];
+            entry->symbol_attr = monster_attr(r_ptr);
+            entry->text_attr = TERM_WHITE;
+            entry->symbol[0] = monster_char(r_ptr);
+            entry->symbol[1] = '\0';
+            strnfmt(entry->text, sizeof(entry->text), "%s%s", name_buf, suffix);
+        }
+    }
+
+    if (state->show_objects)
+    {
+        int group_display_counts[LOOK_GROUP_COUNT] = {0};
+        int object_capacity;
+        unified_sidebar_sorted_object* objects;
+        int valid_objects;
+
+        get_sorted_target_list(TARGET_LIST_OBJECT, 0);
+        object_capacity = (temp_n > 0) ? temp_n : 1;
+        objects = mem_alloc_array(object_capacity, unified_sidebar_sorted_object);
+        valid_objects = unified_sidebar_collect_sorted_objects(state, objects,
+            object_capacity);
+
+        for (int i = 0; i < valid_objects && entry_count < max_entries; i++)
+        {
+            unified_sidebar_sorted_object* sorted = &objects[i];
+            object_type* o_ptr = sorted->o_ptr;
+            unified_sidebar_compact_entry* entry;
+            char o_name[60];
+            char name_source[80];
+            char name_buf[128];
+            char suffix[40];
+            char weight_buf[16];
+            char smith_buf[16];
+            int weight_total;
+            int name_budget;
+            byte base_color;
+
+            if (state->limit_objects_top_five
+                && group_display_counts[sorted->group] >= 5)
+            {
+                continue;
+            }
+
+            group_display_counts[sorted->group]++;
+
+            object_desc_floor(o_name, sizeof(o_name), o_ptr, false, 4);
+            SDL_strlcpy(name_source, o_name, sizeof(name_source));
+            if (sorted->is_artifact && object_known_p(o_ptr))
+            {
+                size_t len = strlen(name_source);
+                if (len + 1 < sizeof(name_source))
+                {
+                    memmove(name_source + 1, name_source, len + 1);
+                    name_source[0] = '*';
+                }
+            }
+
+            weight_total = o_ptr->weight * o_ptr->number;
+            strnfmt(weight_buf, sizeof(weight_buf), " %d.%1d",
+                weight_total / 10, weight_total % 10);
+
+            smith_buf[0] = '\0';
+            if (op_ptr->opt[OPT_show_smithing_difficulty_look]
+                && object_known_p(o_ptr)
+                && object_uses_smithing_difficulty(o_ptr))
+            {
+                int depth = (p_ptr && p_ptr->depth > 0) ? p_ptr->depth : 1;
+                int sd = object_smithing_difficulty(o_ptr);
+                int wr = object_weight_rarity(o_ptr, depth);
+                strnfmt(smith_buf, sizeof(smith_buf), " {%d,%d}", sd, wr);
+            }
+
+            strnfmt(suffix, sizeof(suffix), "%s%s", weight_buf, smith_buf);
+            name_budget = text_width - (int)strlen(suffix);
+            if (name_budget < 4)
+                name_budget = 4;
+            sidebar_compact_name(name_source, name_budget, name_buf,
+                sizeof(name_buf));
+
+            base_color = weapon_glows(o_ptr)
+                ? object_display_color(o_ptr, TERM_L_BLUE)
+                : object_display_color(o_ptr,
+                    tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+
+            entry = &entries[entry_count++];
+            entry->entity_index = entity_index++;
+            entry->entity_type = 2;
+            entry->y = sorted->y;
+            entry->x = sorted->x;
+            entry->symbol_attr = object_attr(o_ptr);
+            entry->text_attr = base_color;
+            entry->symbol[0] = object_char(o_ptr);
+            entry->symbol[1] = '\0';
+            strnfmt(entry->text, sizeof(entry->text), "%s%s", name_buf, suffix);
+        }
+
+        objects = mem_free(objects);
+    }
+
+    return entry_count;
+}
+
+static bool show_unified_sidebar_compact(unified_look_state* state)
+{
+    int first_row;
+    int last_row;
+    int rows;
+    int max_entries;
+    int entry_count;
+    int top = 0;
+    int pictogram_col = 0;
+    int text_col = use_bigtile ? 3 : 2;
+    bool has_sidebar_selection;
+    unified_sidebar_compact_entry* entries;
+
+    if (!unified_sidebar_use_compact_layout())
+        return false;
+
+    if ((state->look_mode == 0) && !state->in_sidebar_mode
+        && (state->selected_entity < 0)
+        && ((state->cursor_y != p_ptr->py) || (state->cursor_x != p_ptr->px)))
+    {
+        (void)Term_set_extra_cursor(false, 0, 0, false);
+
+        if (state->highlighted_y >= 0 && state->highlighted_x >= 0)
+            highlight_entity_on_map(state->highlighted_y, state->highlighted_x,
+                false);
+
+        state->highlighted_y = -1;
+        state->highlighted_x = -1;
+        state->highlighted_entity_type = 0;
+        return true;
+    }
+
+    first_row = 0;
+    last_row = unified_sidebar_compact_last_row();
+    rows = last_row - first_row + 1;
+    if (rows <= 0)
+    {
+        (void)Term_set_extra_cursor(false, 0, 0, false);
+        return true;
+    }
+
+    (void)Term_set_extra_cursor(false, 0, 0, false);
+
+    Term_erase(0, 0, 255);
+
+    max_entries = MAX(1, mon_max + o_max);
+    entries = mem_alloc_array(max_entries, unified_sidebar_compact_entry);
+    entry_count = unified_sidebar_compact_build_entries(state, entries,
+        max_entries);
+
+    has_sidebar_selection = (state->selected_entity >= 0)
+        && (state->in_sidebar_mode || (state->look_mode == 0));
+
+    if (has_sidebar_selection)
+    {
+        top = state->selected_entity - rows / 2;
+        if (top < 0)
+            top = 0;
+        if (top + rows > entry_count)
+            top = entry_count - rows;
+        if (top < 0)
+            top = 0;
+    }
+
+    for (int i = 0; i < rows && top + i < entry_count; i++)
+    {
+        unified_sidebar_compact_entry* entry = &entries[top + i];
+        int row = first_row + i;
+        bool highlight_this = has_sidebar_selection
+            && (state->selected_entity == entry->entity_index);
+        byte text_attr = entry->text_attr;
+        int text_len = (int)strlen(entry->text);
+
+        if (Term && text_len > Term->wid - text_col)
+            text_len = Term->wid - text_col;
+        if (text_len < 0)
+            text_len = 0;
+
+        c_put_str(entry->symbol_attr, entry->symbol, row, pictogram_col);
+        if (use_bigtile)
+            Term_putch(pictogram_col + 1, row, 255, -1);
+
+        Term_putstr(text_col, row, text_len, text_attr, entry->text);
+
+        if (highlight_this)
+        {
+            (void)Term_set_extra_cursor(true, pictogram_col, row, use_bigtile);
+            state->highlighted_y = entry->y;
+            state->highlighted_x = entry->x;
+            state->highlighted_entity_type = entry->entity_type;
+            state->cursor_y = entry->y;
+            state->cursor_x = entry->x;
+            highlight_entity_on_map_type(entry->y, entry->x, true,
+                entry->entity_type);
+        }
+    }
+
+    entries = mem_free(entries);
+    return true;
+}
+
 /*
  * Show unified sidebar with monsters and objects
  */
 void show_unified_sidebar(unified_look_state* state)
 {
+    if (show_unified_sidebar_compact(state))
+        return;
+
     int sidebar_col = 0; /* Left side of screen - column 0 */
     int line = 1;
     int i;
@@ -28270,6 +29076,8 @@ void show_unified_sidebar(unified_look_state* state)
               sidebar_col, Term->wid, sidebar_col - 1, clear_width);
     log_trace("show_unified_sidebar: show_monsters=%d, show_objects=%d", 
               state->show_monsters ? 1 : 0, state->show_objects ? 1 : 0);
+
+    (void)Term_set_extra_cursor(false, 0, 0, false);
 
     if ((state->look_mode == 0) && !state->in_sidebar_mode
         && (state->selected_entity < 0)
@@ -28481,11 +29289,10 @@ void show_unified_sidebar(unified_look_state* state)
                     Term_putch(pictogram_col + 1, line, 255, -1);
                 }
                 
-                /* Display name+health in highlighted color */
-                Term_putstr(name_col, line, name_hp_len, TERM_L_BLUE, display_name);
-                
-                /* Display morale in highlighted color (overrides morale_color when highlighted) */
-                Term_putstr(morale_col, line, morale_display_len, TERM_L_BLUE, morale_display);
+                /* Display selected row in its normal colors; the tile frame marks selection. */
+                Term_putstr(name_col, line, name_hp_len, TERM_WHITE, display_name);
+                Term_putstr(morale_col, line, morale_display_len, morale_color, morale_display);
+                (void)Term_set_extra_cursor(true, pictogram_col, line, use_bigtile);
                 
                 /* Update highlighted position and cursor */
                 state->highlighted_y = temp_y[i];
@@ -28671,7 +29478,7 @@ void show_unified_sidebar(unified_look_state* state)
             bool highlight_this_object = (has_sidebar_selection
                 && (state->selected_entity == (object_start + object_count)));
 
-            byte name_attr = highlight_this_object ? TERM_L_BLUE : base_color;
+            byte name_attr = base_color;
 
             if (highlight_this_object)
             {
@@ -28686,6 +29493,7 @@ void show_unified_sidebar(unified_look_state* state)
                 }
                 
                 Term_putstr(name_col, line, final_name_len, name_attr, display_name);
+                (void)Term_set_extra_cursor(true, pictogram_col, line, use_bigtile);
 
                 state->highlighted_y = entry->y;
                 state->highlighted_x = entry->x;
