@@ -498,7 +498,9 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/platform-signals.c
     src/platform-time.c
     src/log/bootstrap.c
+    src/platform/sdl-app-options.c
     src/sdl-config.c
+    src/platform/sdl-touch-config.c
     src/platform/sdl-config-defaults.c
     src/sdl-sound.c
     src/sound-config.c

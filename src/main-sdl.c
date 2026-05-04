@@ -114,9 +114,6 @@ static bool sdl_gamepad_try_handle_menu_axis(
     const SDL_GamepadAxisEvent* ev);
 void sdl_gamepad_send_key(int key, bool apply_modifiers);
 static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod);
-static bool sdl_build_movement_command_from_input(u16b context, u16b action,
-    u16b direction, const app_input* input,
-    app_movement_command* out_command);
 static u16b sdl_current_movement_input_context(void);
 static void sdl_init_keyboard_input_event(const SDL_KeyboardEvent* key_event,
     app_input* out_input);
@@ -375,63 +372,6 @@ static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod)
     return modifiers;
 }
 
-static bool sdl_build_movement_command_from_input(u16b context, u16b action,
-    u16b direction, const app_input* input,
-    app_movement_command* out_command)
-{
-    if (!input || !out_command)
-        return false;
-
-    app_movement_command_clear(out_command);
-    out_command->context = context;
-    out_command->action = action;
-    out_command->modifiers = input->modifiers;
-    out_command->device = input->device;
-    out_command->input_type = input->type;
-    out_command->source_id = input->source_id;
-    out_command->sequence = input->sequence;
-    out_command->timestamp_usec = input->timestamp_usec;
-
-    switch (input->type)
-    {
-    case APP_INPUT_TYPE_KEY:
-        out_command->trigger = input->payload.key.physical_key
-            ? input->payload.key.physical_key
-            : input->payload.key.logical_key;
-        out_command->trigger_aux = input->payload.key.logical_key;
-        break;
-
-    case APP_INPUT_TYPE_GAMEPAD_BUTTON:
-    case APP_INPUT_TYPE_GAMEPAD_AXIS:
-        out_command->trigger = input->payload.gamepad.control;
-        out_command->trigger_aux = input->payload.gamepad.secondary_control;
-        break;
-
-    case APP_INPUT_TYPE_POINTER_BUTTON:
-        out_command->trigger = input->payload.pointer.button;
-        out_command->trigger_aux = input->payload.pointer.clicks;
-        break;
-
-    default:
-        out_command->trigger = 0;
-        out_command->trigger_aux = 0;
-        break;
-    }
-
-    if (input->flags & APP_INPUT_FLAG_REPEAT)
-        out_command->flags |= APP_MOVEMENT_COMMAND_FLAG_REPEAT;
-    if (input->flags & APP_INPUT_FLAG_SYNTHETIC)
-        out_command->flags |= APP_MOVEMENT_COMMAND_FLAG_SYNTHETIC;
-
-    if (!app_movement_direction_payload_from_direction(direction,
-            &out_command->direction))
-    {
-        return false;
-    }
-
-    return app_movement_command_is_valid(out_command);
-}
-
 static u16b sdl_current_movement_input_context(void)
 {
     app_session* session = app_session_current();
@@ -570,7 +510,7 @@ bool platform_submit_directional_movement(int dir, bool shift, bool ctrl, bool a
     }
 
     context = sdl_current_movement_input_context();
-    if (!sdl_build_movement_command_from_input(context, action, direction,
+    if (!app_movement_command_from_input(context, action, direction,
             &input, &command))
     {
         return false;

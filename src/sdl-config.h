@@ -19,6 +19,7 @@
 #include "app/app-movement.h"
 #include "gamepad-config.h"
 #include "pane-config.h"
+#include "platform/sdl-touch-config-types.h"
 
 #define SDL_MOVEMENT_BINDING_MAX 64
 #define SDL_LAYOUT_SCHEMA_VERSION 2
@@ -119,6 +120,8 @@ struct sdl_config {
     int gamepad_left_stick_combo_bindings[GAMEPAD_MODIFIER_COUNT][GAMEPAD_STICK_DIR_COUNT];
     int gamepad_right_stick_combo_bindings[GAMEPAD_MODIFIER_COUNT][GAMEPAD_STICK_DIR_COUNT];
     int gamepad_shoulder_combo_binding;   // Binding for L1+R1 combo action
+    int touch_profile;
+    bool touch_pane_default_open;
     bool touch_pane_key_labels_visible;
     bool touch_pane_inventory_equipment_cycle;
     int touch_pane_bindings[SDL_TOUCH_PANE_BUTTON_COUNT];
@@ -126,8 +129,19 @@ struct sdl_config {
     int touch_pane_second_bindings[SDL_TOUCH_PANE_BUTTON_COUNT];
     char touch_pane_second_labels[SDL_TOUCH_PANE_BUTTON_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
     char touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
+    bool touch_menu_command_enabled[SDL_TOUCH_MENU_CATEGORY_COUNT];
+    int touch_movement_mode;
+    bool touch_round_movement_enabled;
+    int touch_zone_overlay_mode;
+    int touch_zone_center_bindings[SDL_TOUCH_ZONE_CENTER_BINDING_COUNT];
+    int touch_corner_up_down_side;
+    int touch_corner_action_bindings[SDL_TOUCH_CORNER_ACTION_BINDING_COUNT];
+    int touch_top_panel_mode;
+    bool touch_top_panel_default_open;
+    int touch_top_panel_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+    int touch_top_panel_long_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
     bool touch_swipe_enabled;
-    int touch_swipe_bindings[GAMEPAD_STICK_DIR_COUNT];
+    int touch_swipe_bindings[TOUCH_SWIPE_DIR_COUNT];
 
     bool movement_keyboard_present;
     u16b movement_keyboard_preset;
@@ -154,7 +168,7 @@ void sdl_config_set_defaults(struct sdl_config* config);
 // Set default gamepad bindings (does not touch other fields)
 void sdl_config_set_default_gamepad_bindings(struct sdl_config* config);
 
-// Set default touch pane bindings (does not touch other fields)
+// Set default touch-control and touch-pane bindings (does not touch non-touch fields)
 void sdl_config_set_default_touch_pane_bindings(struct sdl_config* config);
 
 // Migrate old built-in touch pane bindings without overwriting custom labels
@@ -189,4 +203,14 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv);
 void sdl_config_load_app_options(const char* filename);
 bool platform_intro_should_force_flame(void);
 void platform_intro_mark_seen(void);
+bool platform_touch_tutorial_seen(void);
+void platform_touch_tutorial_mark_seen(void);
+bool platform_touch_tutorial_requested(void);
+void platform_touch_tutorial_request(void);
+void platform_touch_tutorial_clear_request(void);
+bool platform_mouse_tutorial_seen(void);
+void platform_mouse_tutorial_mark_seen(void);
+bool platform_mouse_tutorial_requested(void);
+void platform_mouse_tutorial_request(void);
+void platform_mouse_tutorial_clear_request(void);
 bool option_is_app_persistent(int opt);

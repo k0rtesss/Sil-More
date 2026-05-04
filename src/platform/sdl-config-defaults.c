@@ -122,7 +122,7 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* cfg)
         'M', 'h', '\t',
     };
     static const int second_defaults[SDL_TOUCH_PANE_BUTTON_COUNT] = {
-        TOUCH_PANE_BIND_INHERIT, 'X', GAMEPAD_BIND_SHIFT,
+        GAMEPAD_BIND_CTRL, 'X', GAMEPAD_BIND_SHIFT,
         '\t', 'e', '-',
         'r', '0', 'F',
         TOUCH_PANE_BIND_INHERIT, TOUCH_PANE_BIND_INHERIT,
@@ -133,13 +133,27 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* cfg)
         'M', 'q', 'p',
         'w', 'b', 'c',
     };
-    static const int swipe_defaults[GAMEPAD_STICK_DIR_COUNT] = {
-        '8', '2', '4', '6',
+    static const int swipe_defaults[TOUCH_SWIPE_DIR_COUNT] = {
+        TOUCH_BIND_TOP_PANEL_CLOSE, TOUCH_BIND_TOP_PANEL_OPEN, '4', '6',
+    };
+    static const int center_defaults[SDL_TOUCH_ZONE_CENTER_BINDING_COUNT] = {
+        'z', 'Z', INPUT_BIND_CONFIRM, 'u',
+    };
+    static const int corner_action_defaults[SDL_TOUCH_CORNER_ACTION_BINDING_COUNT] = {
+        'f', 'F', 'S', 's',
+    };
+    static const int top_panel_defaults[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
+        'z', 'h', 'i', 'a', 'l', 'f',
+    };
+    static const int top_panel_long_defaults[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
+        'Z', '\t', 'e', 'p', 'j', 'F',
     };
 
     if (!cfg)
         return;
 
+    cfg->touch_profile = SDL_TOUCH_PROFILE_TOUCH_PANE;
+    cfg->touch_pane_default_open = true;
     memcpy(cfg->touch_pane_bindings, main_defaults, sizeof(main_defaults));
     memcpy(cfg->touch_pane_second_bindings, second_defaults,
         sizeof(second_defaults));
@@ -150,6 +164,22 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* cfg)
         sizeof(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_SECOND]));
     cfg->touch_pane_key_labels_visible = false;
     cfg->touch_pane_inventory_equipment_cycle = true;
+    for (int i = 0; i < SDL_TOUCH_MENU_CATEGORY_COUNT; i++)
+        cfg->touch_menu_command_enabled[i] = true;
+    cfg->touch_movement_mode = SDL_TOUCH_MOVEMENT_ON;
+    cfg->touch_round_movement_enabled = false;
+    cfg->touch_zone_overlay_mode = SDL_TOUCH_ZONE_OVERLAY_MARKERS;
+    memcpy(cfg->touch_zone_center_bindings, center_defaults,
+        sizeof(center_defaults));
+    cfg->touch_corner_up_down_side = SDL_TOUCH_CORNER_UP_DOWN_RIGHT;
+    memcpy(cfg->touch_corner_action_bindings, corner_action_defaults,
+        sizeof(corner_action_defaults));
+    cfg->touch_top_panel_mode = SDL_TOUCH_TOP_PANEL_MODE_SHORT;
+    cfg->touch_top_panel_default_open = false;
+    memcpy(cfg->touch_top_panel_bindings, top_panel_defaults,
+        sizeof(top_panel_defaults));
+    memcpy(cfg->touch_top_panel_long_bindings, top_panel_long_defaults,
+        sizeof(top_panel_long_defaults));
     cfg->touch_swipe_enabled = true;
     memcpy(cfg->touch_swipe_bindings, swipe_defaults, sizeof(swipe_defaults));
 }
@@ -198,6 +228,9 @@ void sdl_config_migrate_touch_pane_defaults(struct sdl_config* cfg,
     static const touch_pane_binding_migration migrations[] = {
         { SDL_TOUCH_PANE_PANEL_MAIN, 1, GAMEPAD_BIND_CTRL, 'S', true,
             "Migrated default touch pane Ctrl button to Stealth" },
+        { SDL_TOUCH_PANE_PANEL_SECOND, 0, TOUCH_PANE_BIND_INHERIT,
+            GAMEPAD_BIND_CTRL, false,
+            "Migrated default touch pane Esc second-panel button to Ctrl" },
         { SDL_TOUCH_PANE_PANEL_MAIN, 3, 'e', 'h', false,
             "Migrated default touch pane Equip button to Char" },
         { SDL_TOUCH_PANE_PANEL_MAIN, 5, '-', 'j', false,

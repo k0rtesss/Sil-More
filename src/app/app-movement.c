@@ -404,7 +404,9 @@ bool app_movement_command_is_valid(const app_movement_command* command)
     if (command->modifiers & ~app_movement_allowed_modifiers())
         return false;
     if (command->flags & ~(APP_MOVEMENT_COMMAND_FLAG_REPEAT
-            | APP_MOVEMENT_COMMAND_FLAG_SYNTHETIC))
+            | APP_MOVEMENT_COMMAND_FLAG_SYNTHETIC
+            | APP_MOVEMENT_COMMAND_FLAG_TOUCH
+            | APP_MOVEMENT_COMMAND_FLAG_TRAVEL))
     {
         return false;
     }
@@ -423,6 +425,62 @@ bool app_movement_command_is_valid(const app_movement_command* command)
     }
 
     return true;
+}
+
+bool app_movement_command_from_input(u16b context, u16b action,
+    u16b direction, const app_input* input,
+    app_movement_command* out_command)
+{
+    u32b trigger = 0;
+    u32b trigger_aux = 0;
+
+    if (!input || !out_command)
+        return false;
+    if (!app_movement_input_extract_trigger(input, &trigger, &trigger_aux))
+        return false;
+
+    return app_movement_command_from_semantic(context, action, direction,
+        input->device, input->type, input->source_id, input->modifiers,
+        input->flags, trigger, trigger_aux, input->sequence,
+        input->timestamp_usec, out_command);
+}
+
+bool app_movement_command_from_semantic(u16b context, u16b action,
+    u16b direction, u16b device, u16b input_type, u16b source_id,
+    u16b modifiers, u16b flags, u32b trigger, u32b trigger_aux,
+    u64b sequence, u64b timestamp_usec, app_movement_command* out_command)
+{
+    if (!out_command)
+        return false;
+
+    app_movement_command_clear(out_command);
+    out_command->context = context;
+    out_command->action = action;
+    out_command->modifiers = modifiers;
+    out_command->device = device;
+    out_command->input_type = input_type;
+    out_command->source_id = source_id;
+    out_command->trigger = trigger;
+    out_command->trigger_aux = trigger_aux;
+    out_command->sequence = sequence;
+    out_command->timestamp_usec = timestamp_usec;
+
+    if (flags & APP_INPUT_FLAG_REPEAT)
+        out_command->flags |= APP_MOVEMENT_COMMAND_FLAG_REPEAT;
+    if (flags & APP_INPUT_FLAG_SYNTHETIC)
+        out_command->flags |= APP_MOVEMENT_COMMAND_FLAG_SYNTHETIC;
+    if (device == APP_INPUT_DEVICE_TOUCH)
+        out_command->flags |= APP_MOVEMENT_COMMAND_FLAG_TOUCH;
+    if (trigger == APP_MOVEMENT_SEMANTIC_TRIGGER_POINTER_TRAVEL)
+        out_command->flags |= APP_MOVEMENT_COMMAND_FLAG_TRAVEL;
+
+    if (!app_movement_direction_payload_from_direction(direction,
+            &out_command->direction))
+    {
+        return false;
+    }
+
+    return app_movement_command_is_valid(out_command);
 }
 
 bool app_movement_binding_matches_input(const app_movement_binding* binding,

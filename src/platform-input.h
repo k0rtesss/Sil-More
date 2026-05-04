@@ -66,6 +66,43 @@ void platform_gamepad_action_binding_short_label(int binding, char* buf,
 void platform_input_prompt_for_ui_action(u16b device, u16b action,
     int action_key, char* buf, size_t buflen);
 
+bool platform_touch_menu_commands_enabled(int category);
+void platform_set_touch_menu_commands_enabled(int category, bool value);
+bool platform_touch_menu_commands_default_enabled(int category);
+int platform_touch_profile(void);
+void platform_set_touch_profile(int profile);
+int platform_touch_default_profile(void);
+bool platform_touch_pane_default_open(void);
+void platform_set_touch_pane_default_open(bool value);
+bool platform_touch_pane_default_open_default(void);
+int platform_touch_movement_mode(void);
+void platform_set_touch_movement_mode(int mode);
+int platform_touch_movement_default_mode(void);
+bool platform_touch_round_movement_enabled(void);
+void platform_set_touch_round_movement_enabled(bool value);
+bool platform_touch_round_movement_default_enabled(void);
+int platform_touch_zone_overlay_mode(void);
+void platform_set_touch_zone_overlay_mode(int mode);
+int platform_touch_zone_overlay_default_mode(void);
+int platform_touch_zone_center_binding(int index);
+void platform_set_touch_zone_center_binding(int index, int binding);
+int platform_touch_zone_center_default_binding(int index);
+int platform_touch_corner_up_down_side(void);
+void platform_set_touch_corner_up_down_side(int side);
+int platform_touch_corner_up_down_default_side(void);
+int platform_touch_corner_action_binding(int index);
+void platform_set_touch_corner_action_binding(int index, int binding);
+int platform_touch_corner_action_default_binding(int index);
+int platform_touch_top_panel_mode(void);
+void platform_set_touch_top_panel_mode(int mode);
+int platform_touch_top_panel_default_mode(void);
+bool platform_touch_top_panel_default_open(void);
+void platform_set_touch_top_panel_default_open(bool value);
+bool platform_touch_top_panel_default_open_default(void);
+int platform_touch_top_panel_binding(int index, bool long_press);
+void platform_set_touch_top_panel_binding(int index, bool long_press,
+    int binding);
+int platform_touch_top_panel_default_binding(int index, bool long_press);
 int platform_touch_pane_binding(int index);
 void platform_set_touch_pane_binding(int index, int binding);
 int platform_touch_pane_default_binding(int index);
@@ -84,6 +121,12 @@ void platform_set_touch_pane_button_label_for_panel(int panel, int index,
 void platform_clear_touch_pane_button_label_for_panel(int panel, int index);
 void platform_touch_pane_panel_name(int panel, char* buf, size_t buflen);
 void platform_set_touch_pane_panel_name(int panel, cptr name);
+bool platform_touch_pane_key_labels_visible(void);
+void platform_set_touch_pane_key_labels_visible(bool value);
+bool platform_touch_pane_key_labels_default_visible(void);
+bool platform_touch_pane_inventory_equipment_cycle(void);
+void platform_set_touch_pane_inventory_equipment_cycle(bool value);
+bool platform_touch_pane_inventory_equipment_default_cycle(void);
 bool platform_touch_swipe_enabled(void);
 void platform_set_touch_swipe_enabled(bool value);
 int platform_touch_swipe_binding(int dir);

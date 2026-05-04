@@ -75,10 +75,23 @@ static const touch_pane_slot_info g_touch_pane_slots[SDL_TOUCH_PANE_BUTTON_COUNT
 
 static int g_default_touch_pane_bindings[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_BUTTON_COUNT];
 static char g_default_touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
+static bool g_default_touch_menu_command_enabled[SDL_TOUCH_MENU_CATEGORY_COUNT];
+static int g_default_touch_profile = SDL_TOUCH_PROFILE_TOUCH_PANE;
+static bool g_default_touch_pane_default_open = true;
 static bool g_default_touch_swipe_enabled = true;
-static int g_default_touch_swipe_bindings[GAMEPAD_STICK_DIR_COUNT];
+static int g_default_touch_swipe_bindings[TOUCH_SWIPE_DIR_COUNT];
 static bool g_default_touch_pane_key_labels_visible = false;
 static bool g_default_touch_pane_inventory_equipment_cycle = true;
+static int g_default_touch_movement_mode = SDL_TOUCH_MOVEMENT_ON;
+static bool g_default_touch_round_movement_enabled = false;
+static int g_default_touch_zone_overlay_mode = SDL_TOUCH_ZONE_OVERLAY_MARKERS;
+static int g_default_touch_zone_center_bindings[SDL_TOUCH_ZONE_CENTER_BINDING_COUNT];
+static int g_default_touch_corner_up_down_side = SDL_TOUCH_CORNER_UP_DOWN_RIGHT;
+static int g_default_touch_corner_action_bindings[SDL_TOUCH_CORNER_ACTION_BINDING_COUNT];
+static int g_default_touch_top_panel_mode = SDL_TOUCH_TOP_PANEL_MODE_SHORT;
+static bool g_default_touch_top_panel_default_open = false;
+static int g_default_touch_top_panel_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+static int g_default_touch_top_panel_long_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
 static bool g_default_touch_pane_bindings_ready = false;
 static int g_touch_pane_flash_slot = -1;
 static Uint64 g_touch_pane_flash_until = 0;
@@ -532,6 +545,12 @@ static void sdl_touch_pane_binding_symbol(int binding, char* buf, size_t buflen)
     case ' ':
         SDL_strlcpy(buf, "Space", buflen);
         return;
+    case TOUCH_BIND_TOP_PANEL_OPEN:
+        SDL_strlcpy(buf, "Top Open", buflen);
+        return;
+    case TOUCH_BIND_TOP_PANEL_CLOSE:
+        SDL_strlcpy(buf, "Top Close", buflen);
+        return;
     case '\r':
         SDL_strlcpy(buf, "Enter", buflen);
         return;
@@ -791,6 +810,14 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
     if (binding == GAMEPAD_BIND_ALT) {
         sdl_gamepad_apply_modifier(binding, true);
         sdl_gamepad_apply_modifier(binding, false);
+        return;
+    }
+
+    if (binding == TOUCH_BIND_TOP_PANEL_OPEN
+        || binding == TOUCH_BIND_TOP_PANEL_CLOSE)
+    {
+        /* Top-panel bindings are semantic controls, not legacy key values. */
+        g_state.need_present = true;
         return;
     }
 
@@ -1116,6 +1143,11 @@ void sdl_touch_pane_load_default_bindings(void)
         sizeof(defaults.touch_pane_second_bindings));
     memcpy(g_default_touch_pane_panel_names, defaults.touch_pane_panel_names,
         sizeof(g_default_touch_pane_panel_names));
+    memcpy(g_default_touch_menu_command_enabled,
+        defaults.touch_menu_command_enabled,
+        sizeof(g_default_touch_menu_command_enabled));
+    g_default_touch_profile = defaults.touch_profile;
+    g_default_touch_pane_default_open = defaults.touch_pane_default_open;
     g_default_touch_swipe_enabled = defaults.touch_swipe_enabled;
     memcpy(g_default_touch_swipe_bindings, defaults.touch_swipe_bindings,
         sizeof(g_default_touch_swipe_bindings));
@@ -1123,6 +1155,27 @@ void sdl_touch_pane_load_default_bindings(void)
         defaults.touch_pane_key_labels_visible;
     g_default_touch_pane_inventory_equipment_cycle =
         defaults.touch_pane_inventory_equipment_cycle;
+    g_default_touch_movement_mode = defaults.touch_movement_mode;
+    g_default_touch_round_movement_enabled =
+        defaults.touch_round_movement_enabled;
+    g_default_touch_zone_overlay_mode = defaults.touch_zone_overlay_mode;
+    memcpy(g_default_touch_zone_center_bindings,
+        defaults.touch_zone_center_bindings,
+        sizeof(g_default_touch_zone_center_bindings));
+    g_default_touch_corner_up_down_side =
+        defaults.touch_corner_up_down_side;
+    memcpy(g_default_touch_corner_action_bindings,
+        defaults.touch_corner_action_bindings,
+        sizeof(g_default_touch_corner_action_bindings));
+    g_default_touch_top_panel_mode = defaults.touch_top_panel_mode;
+    g_default_touch_top_panel_default_open =
+        defaults.touch_top_panel_default_open;
+    memcpy(g_default_touch_top_panel_bindings,
+        defaults.touch_top_panel_bindings,
+        sizeof(g_default_touch_top_panel_bindings));
+    memcpy(g_default_touch_top_panel_long_bindings,
+        defaults.touch_top_panel_long_bindings,
+        sizeof(g_default_touch_top_panel_long_bindings));
     g_default_touch_pane_bindings_ready = true;
 }
 
@@ -1367,6 +1420,305 @@ void sdl_touch_pane_render(void)
     }
 }
 
+static int sdl_touch_menu_category_normalized(int category)
+{
+    if (category < 0 || category >= SDL_TOUCH_MENU_CATEGORY_COUNT)
+        return SDL_TOUCH_MENU_CATEGORY_OTHER;
+
+    return category;
+}
+
+static int sdl_touch_profile_normalized(int profile)
+{
+    if (profile >= SDL_TOUCH_PROFILE_TOUCH_PANE
+        && profile < SDL_TOUCH_PROFILE_COUNT)
+    {
+        return profile;
+    }
+
+    return SDL_TOUCH_PROFILE_TOUCH_PANE;
+}
+
+static int sdl_touch_movement_mode_normalized(int mode)
+{
+    if (mode == SDL_TOUCH_MOVEMENT_OFF
+        || mode == SDL_TOUCH_MOVEMENT_LONG_PRESS_ONLY)
+    {
+        return mode;
+    }
+
+    return SDL_TOUCH_MOVEMENT_ON;
+}
+
+static int sdl_touch_zone_overlay_mode_normalized(int mode)
+{
+    if (mode >= SDL_TOUCH_ZONE_OVERLAY_OFF
+        && mode < SDL_TOUCH_ZONE_OVERLAY_COUNT)
+    {
+        return mode;
+    }
+
+    return SDL_TOUCH_ZONE_OVERLAY_MARKERS;
+}
+
+static int sdl_touch_corner_up_down_side_normalized(int side)
+{
+    if (side == SDL_TOUCH_CORNER_UP_DOWN_LEFT
+        || side == SDL_TOUCH_CORNER_UP_DOWN_RIGHT)
+    {
+        return side;
+    }
+
+    return SDL_TOUCH_CORNER_UP_DOWN_RIGHT;
+}
+
+static int sdl_touch_top_panel_mode_normalized(int mode)
+{
+    if (mode == SDL_TOUCH_TOP_PANEL_MODE_SHORT
+        || mode == SDL_TOUCH_TOP_PANEL_MODE_LONG)
+    {
+        return mode;
+    }
+
+    return SDL_TOUCH_TOP_PANEL_MODE_SHORT;
+}
+
+bool platform_touch_menu_commands_enabled(int category)
+{
+    category = sdl_touch_menu_category_normalized(category);
+    return config.touch_menu_command_enabled[category];
+}
+
+void platform_set_touch_menu_commands_enabled(int category, bool value)
+{
+    category = sdl_touch_menu_category_normalized(category);
+    config.touch_menu_command_enabled[category] = value;
+}
+
+bool platform_touch_menu_commands_default_enabled(int category)
+{
+    category = sdl_touch_menu_category_normalized(category);
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_menu_command_enabled[category];
+}
+
+int platform_touch_profile(void)
+{
+    return sdl_touch_profile_normalized(config.touch_profile);
+}
+
+void platform_set_touch_profile(int profile)
+{
+    config.touch_profile = sdl_touch_profile_normalized(profile);
+    g_state.need_present = true;
+}
+
+int platform_touch_default_profile(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return sdl_touch_profile_normalized(g_default_touch_profile);
+}
+
+bool platform_touch_pane_default_open(void)
+{
+    return config.touch_pane_default_open;
+}
+
+void platform_set_touch_pane_default_open(bool value)
+{
+    config.touch_pane_default_open = value;
+    g_state.need_present = true;
+}
+
+bool platform_touch_pane_default_open_default(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_pane_default_open;
+}
+
+int platform_touch_movement_mode(void)
+{
+    return sdl_touch_movement_mode_normalized(config.touch_movement_mode);
+}
+
+void platform_set_touch_movement_mode(int mode)
+{
+    config.touch_movement_mode = sdl_touch_movement_mode_normalized(mode);
+}
+
+int platform_touch_movement_default_mode(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return sdl_touch_movement_mode_normalized(g_default_touch_movement_mode);
+}
+
+bool platform_touch_round_movement_enabled(void)
+{
+    return config.touch_round_movement_enabled;
+}
+
+void platform_set_touch_round_movement_enabled(bool value)
+{
+    config.touch_round_movement_enabled = value;
+    g_state.need_present = true;
+}
+
+bool platform_touch_round_movement_default_enabled(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_round_movement_enabled;
+}
+
+int platform_touch_zone_overlay_mode(void)
+{
+    return sdl_touch_zone_overlay_mode_normalized(
+        config.touch_zone_overlay_mode);
+}
+
+void platform_set_touch_zone_overlay_mode(int mode)
+{
+    config.touch_zone_overlay_mode =
+        sdl_touch_zone_overlay_mode_normalized(mode);
+    g_state.need_present = true;
+}
+
+int platform_touch_zone_overlay_default_mode(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return sdl_touch_zone_overlay_mode_normalized(
+        g_default_touch_zone_overlay_mode);
+}
+
+int platform_touch_zone_center_binding(int index)
+{
+    if (index < 0 || index >= SDL_TOUCH_ZONE_CENTER_BINDING_COUNT)
+        return GAMEPAD_BIND_NONE;
+    return config.touch_zone_center_bindings[index];
+}
+
+void platform_set_touch_zone_center_binding(int index, int binding)
+{
+    if (index < 0 || index >= SDL_TOUCH_ZONE_CENTER_BINDING_COUNT)
+        return;
+    config.touch_zone_center_bindings[index] = binding;
+    g_state.need_present = true;
+}
+
+int platform_touch_zone_center_default_binding(int index)
+{
+    if (index < 0 || index >= SDL_TOUCH_ZONE_CENTER_BINDING_COUNT)
+        return GAMEPAD_BIND_NONE;
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_zone_center_bindings[index];
+}
+
+int platform_touch_corner_up_down_side(void)
+{
+    return sdl_touch_corner_up_down_side_normalized(
+        config.touch_corner_up_down_side);
+}
+
+void platform_set_touch_corner_up_down_side(int side)
+{
+    config.touch_corner_up_down_side =
+        sdl_touch_corner_up_down_side_normalized(side);
+    g_state.need_present = true;
+}
+
+int platform_touch_corner_up_down_default_side(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return sdl_touch_corner_up_down_side_normalized(
+        g_default_touch_corner_up_down_side);
+}
+
+int platform_touch_corner_action_binding(int index)
+{
+    if (index < 0 || index >= SDL_TOUCH_CORNER_ACTION_BINDING_COUNT)
+        return GAMEPAD_BIND_NONE;
+    return config.touch_corner_action_bindings[index];
+}
+
+void platform_set_touch_corner_action_binding(int index, int binding)
+{
+    if (index < 0 || index >= SDL_TOUCH_CORNER_ACTION_BINDING_COUNT)
+        return;
+    config.touch_corner_action_bindings[index] = binding;
+    g_state.need_present = true;
+}
+
+int platform_touch_corner_action_default_binding(int index)
+{
+    if (index < 0 || index >= SDL_TOUCH_CORNER_ACTION_BINDING_COUNT)
+        return GAMEPAD_BIND_NONE;
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_corner_action_bindings[index];
+}
+
+int platform_touch_top_panel_mode(void)
+{
+    return sdl_touch_top_panel_mode_normalized(config.touch_top_panel_mode);
+}
+
+void platform_set_touch_top_panel_mode(int mode)
+{
+    config.touch_top_panel_mode = sdl_touch_top_panel_mode_normalized(mode);
+    g_state.need_present = true;
+}
+
+int platform_touch_top_panel_default_mode(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return sdl_touch_top_panel_mode_normalized(
+        g_default_touch_top_panel_mode);
+}
+
+bool platform_touch_top_panel_default_open(void)
+{
+    return config.touch_top_panel_default_open;
+}
+
+void platform_set_touch_top_panel_default_open(bool value)
+{
+    config.touch_top_panel_default_open = value;
+    g_state.need_present = true;
+}
+
+bool platform_touch_top_panel_default_open_default(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_top_panel_default_open;
+}
+
+int platform_touch_top_panel_binding(int index, bool long_press)
+{
+    if (index < 0 || index >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        return GAMEPAD_BIND_NONE;
+    return long_press ? config.touch_top_panel_long_bindings[index]
+                      : config.touch_top_panel_bindings[index];
+}
+
+void platform_set_touch_top_panel_binding(int index, bool long_press,
+    int binding)
+{
+    if (index < 0 || index >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        return;
+    if (long_press)
+        config.touch_top_panel_long_bindings[index] = binding;
+    else
+        config.touch_top_panel_bindings[index] = binding;
+    g_state.need_present = true;
+}
+
+int platform_touch_top_panel_default_binding(int index, bool long_press)
+{
+    if (index < 0 || index >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        return GAMEPAD_BIND_NONE;
+    sdl_touch_pane_load_default_bindings();
+    return long_press ? g_default_touch_top_panel_long_bindings[index]
+                      : g_default_touch_top_panel_bindings[index];
+}
+
 int platform_touch_pane_binding(int index)
 {
     return platform_touch_pane_binding_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index);
@@ -1569,14 +1921,14 @@ void platform_set_touch_swipe_enabled(bool value)
 
 int platform_touch_swipe_binding(int dir)
 {
-    if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
+    if (dir < 0 || dir >= TOUCH_SWIPE_DIR_COUNT)
         return GAMEPAD_BIND_NONE;
     return config.touch_swipe_bindings[dir];
 }
 
 void platform_set_touch_swipe_binding(int dir, int binding)
 {
-    if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
+    if (dir < 0 || dir >= TOUCH_SWIPE_DIR_COUNT)
         return;
     config.touch_swipe_bindings[dir] = binding;
 }
@@ -1589,7 +1941,7 @@ bool platform_touch_swipe_default_enabled(void)
 
 int platform_touch_swipe_default_binding(int dir)
 {
-    if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
+    if (dir < 0 || dir >= TOUCH_SWIPE_DIR_COUNT)
         return GAMEPAD_BIND_NONE;
     sdl_touch_pane_load_default_bindings();
     return g_default_touch_swipe_bindings[dir];

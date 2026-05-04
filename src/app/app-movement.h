@@ -64,8 +64,19 @@ typedef enum app_movement_preset_id {
 
 typedef enum app_movement_command_flag {
     APP_MOVEMENT_COMMAND_FLAG_REPEAT = 0x0001u,
-    APP_MOVEMENT_COMMAND_FLAG_SYNTHETIC = 0x0002u
+    APP_MOVEMENT_COMMAND_FLAG_SYNTHETIC = 0x0002u,
+    APP_MOVEMENT_COMMAND_FLAG_TOUCH = 0x0004u,
+    APP_MOVEMENT_COMMAND_FLAG_TRAVEL = 0x0008u
 } app_movement_command_flag;
+
+typedef enum app_movement_semantic_trigger {
+    APP_MOVEMENT_SEMANTIC_TRIGGER_NONE = 0,
+    APP_MOVEMENT_SEMANTIC_TRIGGER_TOUCH_ZONE = 0x1000u,
+    APP_MOVEMENT_SEMANTIC_TRIGGER_TOUCH_TOP_PANEL = 0x1001u,
+    APP_MOVEMENT_SEMANTIC_TRIGGER_ROUND_WHEEL = 0x1002u,
+    APP_MOVEMENT_SEMANTIC_TRIGGER_POINTER_MAP = 0x1003u,
+    APP_MOVEMENT_SEMANTIC_TRIGGER_POINTER_TRAVEL = 0x1004u
+} app_movement_semantic_trigger;
 
 typedef struct app_movement_direction_payload {
     u16b direction;
@@ -112,6 +123,13 @@ bool app_movement_direction_from_legacy_keypad(int keypad_dir,
 int app_movement_direction_to_legacy_keypad(u16b direction);
 bool app_movement_binding_is_valid(const app_movement_binding* binding);
 bool app_movement_command_is_valid(const app_movement_command* command);
+bool app_movement_command_from_input(u16b context, u16b action,
+    u16b direction, const app_input* input,
+    app_movement_command* out_command);
+bool app_movement_command_from_semantic(u16b context, u16b action,
+    u16b direction, u16b device, u16b input_type, u16b source_id,
+    u16b modifiers, u16b flags, u32b trigger, u32b trigger_aux,
+    u64b sequence, u64b timestamp_usec, app_movement_command* out_command);
 bool app_movement_binding_matches_input(const app_movement_binding* binding,
     const app_input* input, u16b context);
 bool app_movement_bindings_conflict(const app_movement_binding* left,

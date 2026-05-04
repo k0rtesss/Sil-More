@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-#define APP_UI_COMMAND_FORMAT_VERSION 1u
+#define APP_UI_COMMAND_FORMAT_VERSION 2u
 
 typedef enum app_ui_command_kind {
     APP_UI_COMMAND_KIND_NONE = 0,
@@ -41,6 +41,55 @@ typedef enum app_ui_command_kind {
     APP_UI_COMMAND_KIND_DRAG = 11,
     APP_UI_COMMAND_KIND_RESIZE = 12
 } app_ui_command_kind;
+
+typedef enum app_ui_semantic_command_id {
+    APP_UI_SEMANTIC_COMMAND_NONE = 0,
+    APP_UI_SEMANTIC_COMMAND_TOUCH_ZONE = 0x00010001u,
+    APP_UI_SEMANTIC_COMMAND_TOUCH_TOP_PANEL = 0x00010002u,
+    APP_UI_SEMANTIC_COMMAND_ROUND_MOVEMENT = 0x00010003u,
+    APP_UI_SEMANTIC_COMMAND_PLAYER_ACTION_MENU = 0x00010004u,
+    APP_UI_SEMANTIC_COMMAND_POINTER_ATTACK = 0x00010005u,
+    APP_UI_SEMANTIC_COMMAND_POINTER_RECALL = 0x00010006u,
+    APP_UI_SEMANTIC_COMMAND_POINTER_INSPECT = 0x00010007u,
+    APP_UI_SEMANTIC_COMMAND_POINTER_TRAVEL = 0x00010008u
+} app_ui_semantic_command_id;
+
+typedef enum app_ui_semantic_action_id {
+    APP_UI_SEMANTIC_ACTION_NONE = 0,
+    APP_UI_SEMANTIC_ACTION_PRESS = 0x00020001u,
+    APP_UI_SEMANTIC_ACTION_RELEASE = 0x00020002u,
+    APP_UI_SEMANTIC_ACTION_ACTIVATE = 0x00020003u,
+    APP_UI_SEMANTIC_ACTION_CANCEL = 0x00020004u,
+    APP_UI_SEMANTIC_ACTION_SHORT_BINDING = 0x00020005u,
+    APP_UI_SEMANTIC_ACTION_LONG_BINDING = 0x00020006u,
+    APP_UI_SEMANTIC_ACTION_OPEN = 0x00020007u,
+    APP_UI_SEMANTIC_ACTION_CLOSE = 0x00020008u,
+    APP_UI_SEMANTIC_ACTION_SELECT = 0x00020009u,
+    APP_UI_SEMANTIC_ACTION_MOVE = 0x0002000Au,
+    APP_UI_SEMANTIC_ACTION_RUN = 0x0002000Bu,
+    APP_UI_SEMANTIC_ACTION_INTERACT = 0x0002000Cu,
+    APP_UI_SEMANTIC_ACTION_WAIT = 0x0002000Du,
+    APP_UI_SEMANTIC_ACTION_REST = 0x0002000Eu,
+    APP_UI_SEMANTIC_ACTION_ATTACK_PRIMARY = 0x0002000Fu,
+    APP_UI_SEMANTIC_ACTION_ATTACK_SECONDARY = 0x00020010u,
+    APP_UI_SEMANTIC_ACTION_INSPECT = 0x00020011u,
+    APP_UI_SEMANTIC_ACTION_RECALL = 0x00020012u,
+    APP_UI_SEMANTIC_ACTION_TRAVEL_START = 0x00020013u,
+    APP_UI_SEMANTIC_ACTION_TRAVEL_STEP = 0x00020014u,
+    APP_UI_SEMANTIC_ACTION_TRAVEL_CANCEL = 0x00020015u
+} app_ui_semantic_action_id;
+
+typedef enum app_ui_semantic_target_kind {
+    APP_UI_SEMANTIC_TARGET_NONE = 0,
+    APP_UI_SEMANTIC_TARGET_TOUCH_ZONE = 0x0100u,
+    APP_UI_SEMANTIC_TARGET_TOUCH_TOP_PANEL = 0x0101u,
+    APP_UI_SEMANTIC_TARGET_ROUND_MOVEMENT = 0x0102u,
+    APP_UI_SEMANTIC_TARGET_PLAYER_ACTION_MENU = 0x0103u,
+    APP_UI_SEMANTIC_TARGET_POINTER_ATTACK = 0x0104u,
+    APP_UI_SEMANTIC_TARGET_POINTER_RECALL = 0x0105u,
+    APP_UI_SEMANTIC_TARGET_POINTER_INSPECT = 0x0106u,
+    APP_UI_SEMANTIC_TARGET_POINTER_TRAVEL = 0x0107u
+} app_ui_semantic_target_kind;
 
 typedef enum app_ui_focus_reason {
     APP_UI_FOCUS_REASON_NONE = 0,
@@ -82,6 +131,8 @@ typedef struct app_ui_command {
     u16b modifiers;
     u16b source_id;
     u16b reserved;
+    u32b semantic_command_id;
+    u32b semantic_action_id;
     s32b x;
     s32b y;
     s32b dx;
@@ -111,6 +162,19 @@ void app_ui_focus_state_clear(app_ui_focus_state* state);
 bool app_ui_widget_ref_is_valid(const app_ui_widget_ref* ref);
 bool app_ui_command_is_valid(const app_ui_command* command);
 u16b app_ui_command_kind_from_widget_action(u16b action);
+bool app_ui_semantic_command_id_is_known(u32b command_id);
+bool app_ui_semantic_action_id_is_known(u32b action_id);
+u16b app_ui_semantic_target_kind_for_command(u32b command_id);
+u16b app_ui_command_kind_from_semantic_action(u32b action_id);
+void app_ui_semantic_widget_ref_init(app_ui_widget_ref* ref,
+    u32b command_id, u32b action_id, s16b widget_id, s32b payload0,
+    s32b payload1, cptr label, cptr tooltip);
+bool app_ui_semantic_command_init(app_ui_command* command,
+    u32b command_id, u32b action_id, u16b device, u16b input_type,
+    u16b input_flags, u16b modifiers, u16b source_id, s32b x, s32b y,
+    s32b dx, s32b dy, u16b button, u16b clicks, u64b sequence,
+    u64b timestamp_usec, s16b widget_id, s32b payload0, s32b payload1,
+    cptr label, cptr tooltip);
 
 #ifdef __cplusplus
 }
