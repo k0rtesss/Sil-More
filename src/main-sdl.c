@@ -16,6 +16,8 @@
 #include "angband.h"
 #include "app/app-movement.h"
 #include "sdl-main-internal.h"
+#include "sdl-menu/sdl-player-action-menu.h"
+#include "sdl-menu/sdl-round-movement.h"
 #include "sdl-menu/sdl-scene-menu.h"
 #include "ui/ui-information-scene.h"
 
@@ -1828,6 +1830,12 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
     }
 
     if (sdl_pane_resize_handle_event(ev))
+        return;
+
+    if (sdl_player_action_menu_handle_event(ev))
+        return;
+
+    if (sdl_round_movement_handle_event(ev))
         return;
 
     if (sdl_menu_pointer_handle_event(ev))

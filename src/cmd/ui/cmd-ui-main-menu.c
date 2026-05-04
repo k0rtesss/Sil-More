@@ -19,6 +19,7 @@
 #include "app/app-session.h"
 #include "platform-story-font.h"
 #include "platform-input.h"
+#include "sdl-config.h"
 #include "platform-frame.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
@@ -40,8 +41,12 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
+#include "cmd-ui-main-menu-help.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-file-viewer.h"
 #include "ui/ui-information-scene.h"
+#include "ui/ui-semantic-scene.h"
+#include "ui/ui-touch-mouse-tutorial.h"
 
 #define MAIN_MENU_CHARACTER 1
 #define MAIN_MENU_KNOWLEDGE 2
@@ -150,7 +155,7 @@ static bool main_menu_command_to_key(const app_ui_command* command,
         }
 
         *highlight = choice;
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        if (ui_browser_shell_list_item_should_focus_only(command, false))
             return true;
         *out_key = '\r';
         return true;
@@ -905,6 +910,8 @@ void do_cmd_main_menu(void)
     if (app_session_interactions_enabled(session))
         app_session_clear_interaction(session);
 
+    main_menu_show_requested_input_tutorials();
+
     switch (actiontype)
     {
     case 1: // Character sheet (c)
@@ -966,7 +973,7 @@ void do_cmd_main_menu(void)
     }
     case 12: // Help (h)
     {
-        do_cmd_help();
+        main_menu_help_or_tutorials();
         break;
     }
     case MAIN_MENU_ABOUT: // About (b)
@@ -1893,7 +1900,7 @@ static bool hint_message_command_to_key(const app_ui_command* command,
             return true;
 
         *sel = target->widget_id;
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        if (ui_browser_shell_list_item_should_focus_only(command, false))
             return true;
         if (command->kind == APP_UI_COMMAND_KIND_INSPECT
             || command->kind == APP_UI_COMMAND_KIND_CONTEXT

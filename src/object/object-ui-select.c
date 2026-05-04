@@ -25,6 +25,7 @@
 #include "object/object-ui-display.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 
 #include <ctype.h>
@@ -757,7 +758,7 @@ static bool item_selector_command_to_key(const app_ui_command* command,
     {
         (void)item_selector_set_highlight_row(state, p_ptr->command_wrk,
             target->payload0);
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        if (ui_browser_shell_list_item_should_focus_only(command, false))
             return true;
         if (command->kind == APP_UI_COMMAND_KIND_INSPECT
             || command->kind == APP_UI_COMMAND_KIND_CONTEXT

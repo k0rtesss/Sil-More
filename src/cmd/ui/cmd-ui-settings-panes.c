@@ -29,6 +29,8 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "ui/ui-browser-shell.h"
+#include "ui/ui-help.h"
 #include "ui/ui-information-scene.h"
 
 /*
@@ -39,15 +41,8 @@ static int get_supporting_pane_config_count(void);
 static void do_cmd_supporting_pane_layout_editor(bool* settings_changed);
 static void do_cmd_menu_font_editor(bool* settings_changed);
 static void do_cmd_supporting_pane_font_editor(bool* settings_changed);
-void do_cmd_touch_pane_button_editor(bool* settings_changed);
 static const char* pane_type_short_name(enum pane_type type);
 const char* settings_sdl_config_path(void);
-static const char* settings_sdl_touch_slot_name(int idx);
-static void settings_sdl_touch_panel_name(int panel, char* buf, size_t buflen);
-static void settings_sdl_touch_button_label(int panel, int slot, char* buf,
-    size_t buflen);
-static int settings_sdl_touch_binding(int panel, int slot);
-static void settings_sdl_set_touch_binding(int panel, int slot, int binding);
 
 const char* settings_sdl_config_path(void)
 {
@@ -445,6 +440,162 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     return ui_information_scene_present_ui(&scene);
 }
 
+static int settings_panes_wait_browser_key(
+    const ui_browser_shell_command_map* map,
+    ui_browser_shell_command_result* out_result)
+{
+    int key;
+
+    inkey_set_cursor_hidden(true);
+    key = ui_browser_shell_wait_key(map, 0, out_result);
+    inkey_set_cursor_hidden(false);
+    return key;
+}
+
+static void settings_panes_wait_back_only(int button_id)
+{
+    ui_browser_shell_command_map map;
+    ui_browser_shell_button_key button_key = { 0, ESCAPE };
+
+    button_key.id = (s16b)button_id;
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = &button_key;
+    map.button_key_count = 1;
+    (void)settings_panes_wait_browser_key(&map, NULL);
+}
+
+static bool pane_settings_command_to_key(const app_ui_command* command, int n,
+    int* selection, char* out_key)
+{
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 1, '2' },
+        { 2, '6' },
+        { 3, '0' },
+        { 4, '\r' },
+        { 5, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !selection || !out_key)
+        return false;
+
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.row_activate_key = '\0';
+
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+        return false;
+
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        (void)ui_browser_shell_apply_row_focus(&result, selection, n, NULL, 0);
+        if (result.focus_only)
+            return true;
+
+        switch (*selection)
+        {
+        case 11:
+        case 12:
+        case 13:
+        case 15:
+        case 16:
+        case 17:
+            *out_key = '\r';
+            break;
+        case 1:
+        case 5:
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+        case 10:
+        case 14:
+            *out_key = ' ';
+            break;
+        default:
+            *out_key = '6';
+            break;
+        }
+        return true;
+    }
+
+    *out_key = result.key;
+    return true;
+}
+
+static bool settings_font_editor_command_to_key(
+    const app_ui_command* command, int row_count, int* selection,
+    char* out_key)
+{
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 1, '2' },
+        { 2, '6' },
+        { 3, '0' },
+        { 4, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !selection || !out_key)
+        return false;
+
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.row_activate_key = '6';
+
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+        return false;
+
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        (void)ui_browser_shell_apply_row_focus(&result, selection, row_count,
+            NULL, 0);
+
+    *out_key = result.key;
+    return true;
+}
+
+static bool supporting_pane_layout_command_to_key(
+    const app_ui_command* command, int row_count, int* selection,
+    char* out_key)
+{
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 1, '2' },
+        { 2, ' ' },
+        { 3, '6' },
+        { 4, '0' },
+        { 5, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !selection || !out_key)
+        return false;
+
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.row_activate_key = ' ';
+
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+        return false;
+
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        (void)ui_browser_shell_apply_row_focus(&result, selection, row_count,
+            NULL, 0);
+
+    *out_key = result.key;
+    return true;
+}
+
 void do_cmd_pane_settings(void)
 {
     int k = 0;
@@ -470,17 +621,39 @@ void do_cmd_pane_settings(void)
         }
 
         /* Get key */
-        inkey_set_cursor_hidden(true);
-        char ch = settings_ui_read_key(false);
-        inkey_set_cursor_hidden(false);
-        
-        /* Try to translate the key into a direction */
-        dir = target_dir(ch);
-        if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
-            ch = I2D(dir);
-        
-        /* Process input */
-        switch (ch)
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+            char ch = '\0';
+
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && pane_settings_command_to_key(&event.command, n, &k,
+                    &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+
+            /* Try to translate the key into a direction */
+            dir = target_dir(ch);
+            if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
+                ch = I2D(dir);
+
+            /* Process input */
+            switch (ch)
         {
         case ESCAPE:
         {
@@ -999,6 +1172,7 @@ void do_cmd_pane_settings(void)
             break;
         }
         }
+        }
     }
 }
 
@@ -1137,15 +1311,38 @@ static void do_cmd_menu_font_editor(bool* settings_changed)
                 done = true;
         }
 
-        inkey_set_cursor_hidden(true);
-        char ch = settings_ui_read_key(false);
-        inkey_set_cursor_hidden(false);
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+            char ch = '\0';
 
-        dir = target_dir(ch);
-        if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
-            ch = I2D(dir);
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && settings_font_editor_command_to_key(&event.command,
+                    (int)N_ELEMENTS(settings_sdl_menu_font_entries), &sel,
+                    &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
 
-        switch (ch)
+            dir = target_dir(ch);
+            if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
+                ch = I2D(dir);
+
+            switch (ch)
         {
         case ESCAPE:
         case '\n':
@@ -1212,6 +1409,7 @@ static void do_cmd_menu_font_editor(bool* settings_changed)
         default:
             bell("Illegal command for menu font editor!");
             break;
+            }
         }
     }
 
@@ -1248,7 +1446,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
             (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
                 true, "Esc", "Back");
             (void)ui_information_scene_present_ui(&scene);
-            (void)settings_ui_read_key(false);
+            settings_panes_wait_back_only(1);
         }
         return;
     }
@@ -1327,15 +1525,37 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
                     done = true;
             }
 
-            inkey_set_cursor_hidden(true);
-            char ch = settings_ui_read_key(false);
-            inkey_set_cursor_hidden(false);
+            {
+                ui_information_scene_event event;
+                char command_key = '\0';
+                char ch = '\0';
 
-            dir = target_dir(ch);
-            if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
-                ch = I2D(dir);
+                if (!ui_information_scene_wait_event(&event, 0))
+                {
+                    ch = ESCAPE;
+                }
+                else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+                {
+                    ch = (char)event.key;
+                }
+                else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                    && settings_font_editor_command_to_key(&event.command,
+                        pane_count, &sel, &command_key))
+                {
+                    ch = command_key;
+                    if (!ch)
+                        continue;
+                }
+                else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+                {
+                    continue;
+                }
 
-            switch (ch)
+                dir = target_dir(ch);
+                if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
+                    ch = I2D(dir);
+
+                switch (ch)
             {
             case ESCAPE:
             case '\n':
@@ -1392,6 +1612,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
             default:
                 bell("Illegal command for pane font editor!");
                 break;
+                }
             }
         }
 
@@ -1589,7 +1810,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
             (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
                 true, "Esc", "Back");
             (void)ui_information_scene_present_ui(&scene);
-            (void)settings_ui_read_key(false);
+            settings_panes_wait_back_only(1);
         }
         return;
     }
@@ -1731,15 +1952,37 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                 if (!done && !ui_information_scene_present_ui(&scene))
                     done = true;
         }
-        inkey_set_cursor_hidden(true);
-        char ch = settings_ui_read_key(false);
-        inkey_set_cursor_hidden(false);
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+            char ch = '\0';
 
-        dir = target_dir(ch);
-        if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
-            ch = I2D(dir);
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && supporting_pane_layout_command_to_key(&event.command,
+                    pane_count, &sel, &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
 
-        switch (ch)
+            dir = target_dir(ch);
+            if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
+                ch = I2D(dir);
+
+            switch (ch)
         {
         case ESCAPE:
         case '\n':
@@ -1867,393 +2110,10 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
         default:
             bell("Illegal command for pane layout editor!");
             break;
+            }
         }
     }
 
     if (changed && settings_changed)
         *settings_changed = true;
-}
-
-static const int touch_pane_main_action_choices[] = {
-    GAMEPAD_BIND_NONE,
-    ESCAPE, GAMEPAD_BIND_CTRL, GAMEPAD_BIND_SHIFT, INPUT_BIND_CONFIRM,
-    'e', 'i', 'j',
-    'u', 's', 'f',
-    '7', '8', '9',
-    '4', '5', '6',
-    '1', '2', '3',
-    'a', 'x', 'd',
-    'M', 'h', '\t',
-    'z', '.', '/',
-    'w', 'r', 'k', 'g', 'Z',
-    'o', 'c', 'D', 'X',
-    '-', '{', 'a', 'E', 't', 'p', 'q',
-    'F', 'S', 'l', 'b', 'L',
-    '0', '<', '>', '?', 'O', ':', '~', '[', ']', '@',
-};
-
-static const int touch_pane_second_action_choices[] = {
-    TOUCH_PANE_BIND_INHERIT, GAMEPAD_BIND_NONE,
-    ESCAPE, GAMEPAD_BIND_CTRL, GAMEPAD_BIND_SHIFT, INPUT_BIND_CONFIRM,
-    'e', 'i', 'j',
-    'u', 's', 'f',
-    '7', '8', '9',
-    '4', '5', '6',
-    '1', '2', '3',
-    'a', 'x', 'd',
-    'M', 'h', '\t',
-    'z', '.', '/',
-    'w', 'r', 'k', 'g', 'Z',
-    'o', 'c', 'D', 'X',
-    '-', '{', 'a', 'E', 't', 'p', 'q',
-    'F', 'S', 'l', 'b', 'L',
-    '0', '<', '>', '?', 'O', ':', '~', '[', ']', '@',
-};
-
-static const int* touch_pane_action_choices_for_panel(int panel, int* count)
-{
-    if (count)
-        *count = (panel == SDL_TOUCH_PANE_PANEL_SECOND)
-            ? (int)N_ELEMENTS(touch_pane_second_action_choices)
-            : (int)N_ELEMENTS(touch_pane_main_action_choices);
-
-    return (panel == SDL_TOUCH_PANE_PANEL_SECOND)
-        ? touch_pane_second_action_choices
-        : touch_pane_main_action_choices;
-}
-
-static int touch_pane_action_choice_index(int panel, int binding)
-{
-    int count = 0;
-    const int* choices = touch_pane_action_choices_for_panel(panel, &count);
-
-    for (int i = 0; i < count; i++)
-    {
-        if (choices[i] == binding)
-            return i;
-    }
-    return 0;
-}
-
-static void touch_pane_action_label_for_panel(int panel, int binding, char* buf, size_t buflen)
-{
-    if (!buf || !buflen)
-        return;
-
-    if (binding == TOUCH_PANE_BIND_INHERIT) {
-        SDL_strlcpy(buf, "Main panel button", buflen);
-        return;
-    }
-
-    if (binding == GAMEPAD_BIND_SHIFT) {
-        char panel_name[SDL_TOUCH_PANE_LABEL_LEN];
-        settings_sdl_touch_panel_name((panel == SDL_TOUCH_PANE_PANEL_SECOND)
-                ? SDL_TOUCH_PANE_PANEL_MAIN
-                : SDL_TOUCH_PANE_PANEL_SECOND,
-            panel_name, sizeof(panel_name));
-        strnfmt(buf, buflen, "Switch to %s panel", panel_name);
-        return;
-    }
-
-    binding_action_label(binding, buf, buflen);
-}
-
-static const char* settings_sdl_touch_slot_name(int idx)
-{
-    return SETTINGS_SDL_GET(touch_pane_slot_name)(idx);
-}
-
-static void settings_sdl_touch_panel_name(int panel, char* buf, size_t buflen)
-{
-    SETTINGS_SDL_GET(touch_pane_panel_name)(panel, buf, buflen);
-}
-
-static void settings_sdl_touch_button_label(int panel, int slot, char* buf,
-    size_t buflen)
-{
-    SETTINGS_SDL_GET(touch_pane_button_label_for_panel)(panel, slot, buf,
-        buflen);
-}
-
-static int settings_sdl_touch_binding(int panel, int slot)
-{
-    return SETTINGS_SDL_GET(touch_pane_binding_for_panel)(panel, slot);
-}
-
-static void settings_sdl_set_touch_binding(int panel, int slot, int binding)
-{
-    SETTINGS_SDL_SET(touch_pane_binding_for_panel)(panel, slot, binding);
-}
-
-static void settings_sdl_set_touch_button_label(int panel, int slot,
-    cptr label)
-{
-    SETTINGS_SDL_SET(touch_pane_button_label_for_panel)(panel, slot, label);
-}
-
-static void settings_sdl_set_touch_panel_name(int panel, cptr name)
-{
-    SETTINGS_SDL_SET(touch_pane_panel_name)(panel, name);
-}
-
-static int settings_sdl_touch_default_binding(int panel, int slot)
-{
-    const struct sdl_config* defaults = settings_sdl_default_config();
-
-    if (panel < 0 || panel >= SDL_TOUCH_PANE_PANEL_COUNT
-        || slot < 0 || slot >= SDL_TOUCH_PANE_BUTTON_COUNT)
-    {
-        return GAMEPAD_BIND_NONE;
-    }
-
-    return (panel == SDL_TOUCH_PANE_PANEL_SECOND)
-        ? defaults->touch_pane_second_bindings[slot]
-        : defaults->touch_pane_bindings[slot];
-}
-
-void do_cmd_touch_pane_button_editor(bool* settings_changed)
-{
-    int highlight = 0;
-    int top = 0;
-    int panel = SDL_TOUCH_PANE_PANEL_MAIN;
-    bool done = false;
-    bool changed = false;
-    const int list_start_row = 5;
-
-    while (!done)
-    {
-        settings_ui_layout layout = settings_ui_read_layout();
-        int visible_rows = settings_ui_list_visible_rows(&layout,
-            list_start_row, 6, 5);
-
-        if (highlight < 0)
-            highlight = 0;
-        if (highlight >= SDL_TOUCH_PANE_BUTTON_COUNT)
-            highlight = SDL_TOUCH_PANE_BUTTON_COUNT - 1;
-
-        if (top > highlight)
-            top = highlight;
-        if (top + visible_rows <= highlight)
-            top = highlight - visible_rows + 1;
-        if (top < 0)
-            top = 0;
-
-        app_ui_scene scene;
-        app_ui_panel* ui_panel = settings_browser_scene_begin_ex(&scene,
-            "Touch Settings", "", 1100, 2200);
-
-        if (!ui_panel)
-        {
-            done = true;
-        }
-        else
-        {
-            char panel_name[SDL_TOUCH_PANE_LABEL_LEN];
-            char info_buf[96];
-
-            settings_sdl_touch_panel_name(panel, panel_name,
-                sizeof(panel_name));
-            strnfmt(info_buf, sizeof(info_buf), "Editing %s panel%s",
-                panel_name,
-                (panel == SDL_TOUCH_PANE_PANEL_SECOND)
-                    ? " (empty = main panel)"
-                    : "");
-            app_ui_panel_set_subtitle(ui_panel, TERM_SLATE, info_buf);
-            if (top > 0)
-                app_ui_panel_set_row_offset(ui_panel, (s16b)top);
-
-            for (int i = 0; i < SDL_TOUCH_PANE_BUTTON_COUNT; i++)
-            {
-                char action_buf[80];
-                char label_buf[SDL_TOUCH_PANE_LABEL_LEN];
-                char left_buf[64];
-                byte a = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
-
-                settings_sdl_touch_button_label(panel, i,
-                    label_buf, sizeof(label_buf));
-                touch_pane_action_label_for_panel(panel,
-                    settings_sdl_touch_binding(panel, i),
-                    action_buf, sizeof(action_buf));
-
-                if (label_buf[0])
-                {
-                    strnfmt(left_buf, sizeof(left_buf), "%s %s",
-                        settings_sdl_touch_slot_name(i), label_buf);
-                }
-                else
-                {
-                    strnfmt(left_buf, sizeof(left_buf), "%s",
-                        settings_sdl_touch_slot_name(i));
-                }
-
-                if (!settings_browser_add_pair_row(ui_panel, (s16b)i, a,
-                        TERM_SLATE, true, i == highlight, left_buf,
-                        action_buf))
-                {
-                    done = true;
-                    break;
-                }
-            }
-
-            (void)app_ui_panel_add_footer_action(ui_panel, 1, TERM_WHITE,
-                true, "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(ui_panel, 2, TERM_WHITE,
-                true, "4/6", "Action");
-            (void)app_ui_panel_add_footer_action(ui_panel, 3, TERM_WHITE,
-                true, "Tab", "Panel");
-            (void)app_ui_panel_add_footer_action(ui_panel, 4, TERM_WHITE,
-                true, "l/p", "Rename");
-            (void)app_ui_panel_add_footer_action(ui_panel, 5, TERM_WHITE,
-                true, "r", "Reset");
-            (void)app_ui_panel_add_footer_action(ui_panel, 6, TERM_WHITE,
-                true, "R", "Reset all");
-            (void)app_ui_panel_add_footer_action(ui_panel, 7, TERM_WHITE,
-                true, "Esc", "Back");
-            if (!done && !ui_information_scene_present_ui(&scene))
-                done = true;
-        }
-
-        inkey_set_cursor_hidden(true);
-        char ch = settings_ui_read_key(false);
-        inkey_set_cursor_hidden(false);
-
-        {
-            int dir = target_dir(ch);
-            if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
-                ch = I2D(dir);
-        }
-
-        switch (ch)
-        {
-        case ESCAPE:
-        case '\n':
-        case '\r':
-            done = true;
-            break;
-
-        case '-':
-        case '8':
-            highlight = (SDL_TOUCH_PANE_BUTTON_COUNT + highlight - 1) % SDL_TOUCH_PANE_BUTTON_COUNT;
-            break;
-
-        case '2':
-            highlight = (highlight + 1) % SDL_TOUCH_PANE_BUTTON_COUNT;
-            break;
-
-        case 'n':
-        case '4':
-        {
-            int choice_count = 0;
-            const int* choices = touch_pane_action_choices_for_panel(panel, &choice_count);
-            int idx = touch_pane_action_choice_index(panel, settings_sdl_touch_binding(panel, highlight));
-            idx = (choice_count + idx - 1) % choice_count;
-            settings_sdl_set_touch_binding(panel, highlight, choices[idx]);
-            changed = true;
-            break;
-        }
-
-        case 'y':
-        case '6':
-        case ' ':
-        case 't':
-        case '5':
-        {
-            int choice_count = 0;
-            const int* choices = touch_pane_action_choices_for_panel(panel, &choice_count);
-            int idx = touch_pane_action_choice_index(panel, settings_sdl_touch_binding(panel, highlight));
-            idx = (idx + 1) % choice_count;
-            settings_sdl_set_touch_binding(panel, highlight, choices[idx]);
-            changed = true;
-            break;
-        }
-
-        case 'l':
-        case 'L':
-        {
-            char prompt[96];
-            char prompt_long[96];
-            char prompt_medium[96];
-            char prompt_short[64];
-            char current_label[SDL_TOUCH_PANE_LABEL_LEN];
-            char new_label[SDL_TOUCH_PANE_LABEL_LEN];
-            char current_buf[96];
-
-            settings_sdl_touch_button_label(panel, highlight, current_label, sizeof(current_label));
-            strnfmt(prompt_long, sizeof(prompt_long),
-                "New label for %s (blank = use key label): ",
-                settings_sdl_touch_slot_name(highlight));
-            strnfmt(prompt_medium, sizeof(prompt_medium),
-                "New label for %s (blank = default): ",
-                settings_sdl_touch_slot_name(highlight));
-            strnfmt(prompt_short, sizeof(prompt_short), "Label for %s: ",
-                settings_sdl_touch_slot_name(highlight));
-            strnfmt(prompt, sizeof(prompt), "%s",
-                settings_ui_pick_label(layout.prompt_line_chars,
-                    prompt_long, prompt_medium, prompt_short));
-            strnfmt(current_buf, sizeof(current_buf), "Current label: %s", current_label);
-            new_label[0] = '\0';
-            if (settings_ui_prompt_string("Touch Settings", prompt,
-                    current_buf, new_label, sizeof(new_label)))
-            {
-                settings_sdl_set_touch_button_label(panel, highlight,
-                    new_label);
-                changed = true;
-            }
-            break;
-        }
-
-        case '\t':
-            panel = (panel == SDL_TOUCH_PANE_PANEL_MAIN)
-                ? SDL_TOUCH_PANE_PANEL_SECOND
-                : SDL_TOUCH_PANE_PANEL_MAIN;
-            break;
-
-        case 'p':
-        case 'P':
-        {
-            char prompt[96];
-            char current_name[SDL_TOUCH_PANE_LABEL_LEN];
-            char new_name[SDL_TOUCH_PANE_LABEL_LEN];
-            char current_buf[96];
-
-            settings_sdl_touch_panel_name(panel, current_name, sizeof(current_name));
-            strnfmt(prompt, sizeof(prompt), "%s",
-                settings_ui_pick_label(layout.prompt_line_chars,
-                    "Name for current panel (blank = default): ",
-                    "Panel name (blank = default): ",
-                    "Panel name: "));
-            strnfmt(current_buf, sizeof(current_buf), "Current panel name: %s", current_name);
-            new_name[0] = '\0';
-            if (settings_ui_prompt_string("Touch Settings", prompt,
-                    current_buf, new_name, sizeof(new_name)))
-            {
-                settings_sdl_set_touch_panel_name(panel, new_name);
-                changed = true;
-            }
-            break;
-        }
-
-        case 'r':
-            settings_sdl_set_touch_binding(panel, highlight,
-                settings_sdl_touch_default_binding(panel, highlight));
-            platform_clear_touch_pane_button_label_for_panel(panel, highlight);
-            changed = true;
-            break;
-
-        case 'R':
-            platform_touch_pane_reset_bindings_to_default();
-            changed = true;
-            break;
-
-        default:
-            bell("Illegal command for touch settings!");
-            break;
-        }
-    }
-
-    if (changed)
-    {
-        if (settings_changed)
-            *settings_changed = true;
-    }
 }

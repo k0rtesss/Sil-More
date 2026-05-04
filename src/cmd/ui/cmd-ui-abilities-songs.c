@@ -19,6 +19,7 @@
  */
 
 #include "angband.h"
+#include "ui/ui-browser-shell.h"
 #include "app/app-ui.h"
 #include "cmd-ui-abilities.h"
 #include "cmd-ui-abilities-scenes.h"
@@ -307,7 +308,7 @@ static bool song_semantic_command_to_key(const app_ui_command* command,
 
         if (row >= 0)
             *selected = row;
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        if (ui_browser_shell_list_item_should_focus_only(command, false))
             return true;
         if (row >= 0)
             *out_key = '\r';

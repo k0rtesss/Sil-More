@@ -15,6 +15,8 @@
 
 #include "angband.h"
 
+#include "../cmd/combat/cmd-ranged.h"
+#include "../cmd/world/cmd-world.h"
 #include "../platform-input.h"
 #include "../sdl-main-internal.h"
 
@@ -65,6 +67,30 @@ static s16b g_map_pointer_path_preview_target_x = -1;
 
 static void sdl_map_pointer_clear_path_preview(void);
 static void sdl_map_pointer_update_path_preview(s16b map_y, s16b map_x);
+
+static void sdl_map_pointer_current_modifiers(bool* out_shift, bool* out_ctrl,
+    bool* out_alt)
+{
+    SDL_Keymod mod = SDL_GetModState();
+    bool shift = ((mod & SDL_KMOD_SHIFT) != 0) || sdl_gamepad_shift_active();
+    bool ctrl = ((mod & SDL_KMOD_CTRL) != 0) || sdl_gamepad_ctrl_active();
+    bool alt = ((mod & SDL_KMOD_ALT) != 0) || sdl_gamepad_alt_active();
+
+    if (out_shift)
+        *out_shift = shift;
+    if (out_ctrl)
+        *out_ctrl = ctrl;
+    if (out_alt)
+        *out_alt = alt;
+}
+
+static bool sdl_map_pointer_attack_modifier_active(void)
+{
+    bool ctrl = false;
+
+    sdl_map_pointer_current_modifiers(NULL, &ctrl, NULL);
+    return ctrl;
+}
 
 static void sdl_map_pointer_window_point_to_pixels(float* x, float* y)
 {
@@ -243,6 +269,10 @@ static void sdl_map_pointer_note_hover(s16b map_y, s16b map_x, u16b device)
         && g_map_pointer_hover_y == map_y
         && g_map_pointer_hover_x == map_x)
     {
+        if (sdl_map_pointer_attack_modifier_active())
+            sdl_map_pointer_clear_path_preview();
+        else
+            sdl_map_pointer_update_path_preview(map_y, map_x);
         return;
     }
 
@@ -253,7 +283,10 @@ static void sdl_map_pointer_note_hover(s16b map_y, s16b map_x, u16b device)
     dungeon_note_cursor_relative(map_y, map_x);
     sdl_map_pointer_note_focus(map_y, map_x, device, false,
         APP_UI_WIDGET_ACTION_INSPECT);
-    sdl_map_pointer_update_path_preview(map_y, map_x);
+    if (sdl_map_pointer_attack_modifier_active())
+        sdl_map_pointer_clear_path_preview();
+    else
+        sdl_map_pointer_update_path_preview(map_y, map_x);
     g_state.need_present = true;
 }
 
@@ -544,6 +577,260 @@ static bool sdl_map_pointer_is_adjacent_to_player(s16b map_y, s16b map_x,
     return true;
 }
 
+static bool sdl_map_pointer_grid_has_visible_monster(s16b map_y, s16b map_x,
+    int* out_m_idx)
+{
+    int m_idx;
+
+    if (out_m_idx)
+        *out_m_idx = 0;
+    if (!in_bounds_fully(map_y, map_x) || !grid_info_is_available(map_y, map_x))
+        return false;
+
+    m_idx = cave_m_idx[map_y][map_x];
+    if (m_idx <= 0 || !mon_list[m_idx].ml)
+        return false;
+
+    if (out_m_idx)
+        *out_m_idx = m_idx;
+    return true;
+}
+
+static bool sdl_map_pointer_find_unsearched_skeleton(s16b map_y, s16b map_x,
+    s16b* out_o_idx)
+{
+    object_type* o_ptr;
+
+    if (out_o_idx)
+        *out_o_idx = 0;
+    if (!in_bounds_fully(map_y, map_x) || !grid_info_is_available(map_y, map_x))
+        return false;
+
+    for (o_ptr = get_first_object(map_y, map_x); o_ptr;
+         o_ptr = get_next_object(o_ptr))
+    {
+        if (!o_ptr->k_idx || !o_ptr->marked || o_ptr->tval != TV_SKELETON)
+            continue;
+        if (object_is_searched_skeleton(o_ptr))
+            continue;
+
+        if (out_o_idx)
+            *out_o_idx = (s16b)(o_ptr - o_list);
+        return true;
+    }
+
+    return false;
+}
+
+static bool sdl_map_pointer_find_chest_action(s16b map_y, s16b map_x,
+    s16b* out_o_idx, bool* out_trapped)
+{
+    s16b o_idx;
+    object_type* o_ptr;
+    bool trapped = false;
+
+    if (out_o_idx)
+        *out_o_idx = 0;
+    if (out_trapped)
+        *out_trapped = false;
+
+    o_idx = cmd_interact_chest_check(map_y, map_x);
+    if (!o_idx)
+        return false;
+
+    o_ptr = &o_list[o_idx];
+    if (!o_ptr->k_idx || o_ptr->pval == 0)
+        return false;
+
+    trapped = object_known_p(o_ptr) && (o_ptr->pval > 0)
+        && chest_traps[o_ptr->pval];
+
+    if (out_o_idx)
+        *out_o_idx = o_idx;
+    if (out_trapped)
+        *out_trapped = trapped;
+    return true;
+}
+
+static bool sdl_map_pointer_feature_action_target(s16b map_y, s16b map_x,
+    int* out_dir)
+{
+    int dir = 0;
+    int feat;
+    s16b o_idx = 0;
+
+    if (out_dir)
+        *out_dir = 0;
+    if (!p_ptr || !in_bounds_fully(map_y, map_x))
+        return false;
+
+    if (map_y == p_ptr->py && map_x == p_ptr->px)
+    {
+        dir = 5;
+    }
+    else if (!sdl_map_pointer_is_adjacent_to_player(map_y, map_x, &dir))
+    {
+        return false;
+    }
+
+    if (dir != 5 && !(cave_info[map_y][map_x] & (CAVE_MARK | CAVE_SEEN)))
+        return false;
+
+    if (sdl_map_pointer_grid_has_visible_monster(map_y, map_x, NULL))
+        return false;
+
+    feat = cave_feat[map_y][map_x];
+    if (cave_wall_bold(map_y, map_x)
+        || cave_known_closed_door_bold(map_y, map_x)
+        || (cave_trap_bold(map_y, map_x) && !cave_floorlike_bold(map_y, map_x))
+        || feat == FEAT_OPEN)
+    {
+        if (out_dir)
+            *out_dir = dir;
+        return true;
+    }
+
+    if (sdl_map_pointer_find_chest_action(map_y, map_x, &o_idx, NULL)
+        || sdl_map_pointer_find_unsearched_skeleton(map_y, map_x, &o_idx))
+    {
+        if (out_dir)
+            *out_dir = dir;
+        return true;
+    }
+
+    if (dir == 5 && ((feat == FEAT_LESS) || (feat == FEAT_LESS_SHAFT)
+            || (feat == FEAT_MORE) || (feat == FEAT_MORE_SHAFT)
+            || cave_forge_bold(map_y, map_x)))
+    {
+        if (out_dir)
+            *out_dir = dir;
+        return true;
+    }
+
+    return false;
+}
+
+static bool sdl_map_pointer_submit_feature_action(s16b map_y, s16b map_x,
+    u16b device, u16b button, u16b clicks)
+{
+    int dir = 0;
+
+    if (!sdl_map_pointer_feature_action_target(map_y, map_x, &dir))
+        return false;
+
+    sdl_map_pointer_cancel_press();
+    sdl_map_pointer_cancel_travel();
+    sdl_map_pointer_clear_path_preview();
+    return platform_submit_directional_movement(dir, false, true, false,
+        device, APP_INPUT_TYPE_POINTER_BUTTON, 0, APP_INPUT_FLAG_RELEASE,
+        button, clicks);
+}
+
+static int sdl_map_pointer_ranged_range_for_quiver(int quiver)
+{
+    object_type* ammo;
+    object_type* bow;
+    u32b f1 = 0;
+    u32b f2 = 0;
+    u32b f3 = 0;
+    u32b f4 = 0;
+
+    if (!p_ptr)
+        return 0;
+
+    ammo = (quiver == 2) ? &inventory[INVEN_QUIVER2] : &inventory[INVEN_QUIVER1];
+    if (!ammo->k_idx)
+        return 0;
+
+    object_flags4(ammo, &f1, &f2, &f3, &f4);
+    if (player_can_treat_as_throwing_flags(ammo, f3))
+        return throwing_range(ammo);
+
+    bow = &inventory[INVEN_BOW];
+    if (!bow->tval || !p_ptr->ammo_tval)
+        return 0;
+
+    return archery_range(bow);
+}
+
+static bool sdl_map_pointer_can_fire_quiver_at_monster(int quiver, int m_idx)
+{
+    monster_type* m_ptr;
+    int range;
+
+    if (m_idx <= 0)
+        return false;
+
+    m_ptr = &mon_list[m_idx];
+    if (!m_ptr->r_idx || !m_ptr->ml)
+        return false;
+
+    range = sdl_map_pointer_ranged_range_for_quiver(quiver);
+    if (range <= 0)
+        return false;
+    if (!target_able(m_idx))
+        return false;
+    if (distance(p_ptr->py, p_ptr->px, m_ptr->fy, m_ptr->fx) > range)
+        return false;
+
+    return true;
+}
+
+static bool sdl_map_pointer_submit_ranged_attack(int quiver, int m_idx)
+{
+    int saved_command_dir;
+
+    if (!sdl_map_pointer_can_fire_quiver_at_monster(quiver, m_idx))
+        return false;
+
+    sdl_map_pointer_cancel_press();
+    sdl_map_pointer_cancel_travel();
+    sdl_map_pointer_clear_path_preview();
+    health_track(m_idx);
+    target_set_monster(m_idx);
+
+    saved_command_dir = p_ptr->command_dir;
+    p_ptr->command_dir = 5;
+    do_cmd_fire(quiver);
+    p_ptr->command_dir = saved_command_dir;
+    return true;
+}
+
+static bool sdl_map_pointer_submit_pointer_attack(s16b map_y, s16b map_x,
+    u16b device, u16b button, u16b clicks)
+{
+    bool shift = false;
+    bool ctrl = false;
+    int m_idx = 0;
+    int primary_quiver;
+    int secondary_quiver;
+
+    sdl_map_pointer_current_modifiers(&shift, &ctrl, NULL);
+    if (!ctrl || !p_ptr)
+        return false;
+
+    if (sdl_map_pointer_feature_action_target(map_y, map_x, NULL))
+        return sdl_map_pointer_submit_feature_action(map_y, map_x,
+            device, button, clicks);
+
+    if (sdl_map_pointer_is_adjacent_to_player(map_y, map_x, NULL))
+        return false;
+    if (!sdl_map_pointer_grid_has_visible_monster(map_y, map_x, &m_idx))
+        return false;
+
+    primary_quiver = shift ? 2 : 1;
+    secondary_quiver = shift ? 1 : 2;
+
+    if (sdl_map_pointer_submit_ranged_attack(primary_quiver, m_idx)
+        || sdl_map_pointer_submit_ranged_attack(secondary_quiver, m_idx))
+    {
+        return true;
+    }
+
+    bell("No clear shot.");
+    return true;
+}
+
 static void sdl_map_pointer_update_path_preview(s16b map_y, s16b map_x)
 {
     int dir = 0;
@@ -567,7 +854,6 @@ static void sdl_map_pointer_update_path_preview(s16b map_y, s16b map_x)
 static bool sdl_map_pointer_submit_adjacent_movement(s16b map_y, s16b map_x,
     u16b device, u16b button, u16b clicks)
 {
-    SDL_Keymod mod;
     int dir = 0;
     bool shift;
     bool ctrl;
@@ -576,10 +862,9 @@ static bool sdl_map_pointer_submit_adjacent_movement(s16b map_y, s16b map_x,
     if (!sdl_map_pointer_is_adjacent_to_player(map_y, map_x, &dir))
         return false;
 
-    mod = SDL_GetModState();
-    shift = ((mod & SDL_KMOD_SHIFT) != 0) || sdl_gamepad_shift_active();
-    ctrl = ((mod & SDL_KMOD_CTRL) != 0) || sdl_gamepad_ctrl_active();
-    alt = ((mod & SDL_KMOD_ALT) != 0) || sdl_gamepad_alt_active();
+    sdl_map_pointer_current_modifiers(&shift, &ctrl, &alt);
+    if (ctrl)
+        shift = false;
     return platform_submit_directional_movement(dir, shift, ctrl, alt,
         device, APP_INPUT_TYPE_POINTER_BUTTON, 0, APP_INPUT_FLAG_RELEASE,
         button, clicks);
@@ -689,12 +974,30 @@ static void sdl_map_pointer_handle_cell_release(s16b map_y, s16b map_x,
 {
     if (button == SDL_BUTTON_RIGHT)
     {
+        if (sdl_map_pointer_submit_feature_action(map_y, map_x,
+                device, button, clicks))
+        {
+            return;
+        }
         sdl_map_pointer_open_preview(map_y, map_x, device, true);
         return;
     }
 
     if (button != SDL_BUTTON_LEFT)
         return;
+
+    if (device == APP_INPUT_DEVICE_TOUCH
+        && sdl_map_pointer_submit_feature_action(map_y, map_x,
+            device, button, clicks))
+    {
+        return;
+    }
+
+    if (sdl_map_pointer_submit_pointer_attack(map_y, map_x,
+            device, button, clicks))
+    {
+        return;
+    }
 
     if (sdl_map_pointer_submit_adjacent_movement(map_y, map_x, device,
             button, clicks))
@@ -890,6 +1193,15 @@ bool sdl_map_pointer_handle_event(const SDL_Event* ev)
             return true;
         }
         return false;
+    }
+
+    if ((ev->type == SDL_EVENT_KEY_DOWN || ev->type == SDL_EVENT_KEY_UP)
+        && (ev->key.key == SDLK_LCTRL || ev->key.key == SDLK_RCTRL
+            || ev->key.key == SDLK_LSHIFT || ev->key.key == SDLK_RSHIFT))
+    {
+        if (g_map_pointer_hover_active)
+            sdl_map_pointer_note_hover(g_map_pointer_hover_y,
+                g_map_pointer_hover_x, APP_INPUT_DEVICE_POINTER);
     }
 
     if (ev->type == SDL_EVENT_MOUSE_MOTION)

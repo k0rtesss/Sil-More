@@ -99,6 +99,10 @@ char ui_browser_shell_scroll_command_key(const app_ui_command* command,
     const ui_browser_shell_scroll_keys* keys);
 char ui_browser_shell_direction_command_key(const app_ui_command* command,
     const ui_browser_shell_scroll_keys* keys);
+bool ui_browser_shell_command_is_explicit_activate(
+    const app_ui_command* command);
+bool ui_browser_shell_list_item_should_focus_only(
+    const app_ui_command* command, bool inspect_action);
 bool ui_browser_shell_translate_command(const app_ui_command* command,
     const ui_browser_shell_command_map* map,
     ui_browser_shell_command_result* out_result);

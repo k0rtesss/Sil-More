@@ -26,6 +26,7 @@
 #include "object/object-ui-enhanced.h"
 #include "player/identification.h"
 #include "supplies.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 
 #define ENHANCED_MAX_LIST 80
@@ -917,8 +918,6 @@ static bool enhanced_item_command_to_key(const app_ui_command* command,
             return true;
 
         *highlight_row = entry_index;
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
         if (command->kind == APP_UI_COMMAND_KIND_INSPECT
             || command->kind == APP_UI_COMMAND_KIND_CONTEXT
             || target->action == APP_UI_WIDGET_ACTION_INSPECT)
@@ -926,6 +925,8 @@ static bool enhanced_item_command_to_key(const app_ui_command* command,
             *out_key = 'x';
             return true;
         }
+        if (ui_browser_shell_list_item_should_focus_only(command, false))
+            return true;
 
         *out_key = '\r';
         return true;

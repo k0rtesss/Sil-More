@@ -426,20 +426,105 @@ Manual smoke checklist:
   builder in `src/main-sdl.c` with the app-layer adapter. Validation:
   `powershell -ExecutionPolicy Bypass -File .\build-incremental.ps1` passed.
 - Main integration: reviewed A/B together, added mouse tutorial seen/request
-  state beside touch tutorial state, kept top-panel open/close binding
-  sentinels out of the legacy key queue until the semantic top-panel renderer
-  lands, and split SDL app/touch config helpers under `src/platform/` to keep
-  source-size and folder-ownership audits green. Validation:
+  state beside touch tutorial state, integrated Wave 2 C-H, kept the new
+  behavior in semantic SDL/menu/app paths, and split large touch/settings/menu
+  surfaces into owned files (`src/platform/sdl-touch-controls.*`,
+  `src/cmd/ui/cmd-ui-settings-touch.c`, and
+  `src/cmd/ui/cmd-ui-main-menu-help.*`) to keep source-size and
+  folder-ownership audits green. Validation:
   `git diff --check`,
   `powershell -ExecutionPolicy Bypass -File .\build-incremental.ps1`,
+  `powershell -ExecutionPolicy Bypass -File .\build-incremental.ps1 -Target portable`,
   `py -3 tools\ui_debt_audit.py --check`,
   `py -3 tools\modernization_audit.py --check`,
   `py -3 tools\source_size_audit.py --check`, and
-  `ctest --preset test-standard --output-on-failure` passed.
-- Agent C: not started.
-- Agent D: not started.
-- Agent E: not started.
-- Agent F: not started.
-- Agent G: not started.
-- Agent H: not started.
+  `ctest --preset test-standard --output-on-failure` passed. Also ran
+  `py -3 tools\make_guid.py --dry-run` and
+  `py -3 tools\check_flag_tables.py`.
+- Agent C: implemented touch-zone and top-panel runtime behavior in the
+  current SDL touch path. Added logical-pixel corner/center zone layout,
+  center and corner binding dispatch, left/right up-down-side selection,
+  overlay rendering modes (`OFF`, marker lines, borders, borders+labels),
+  leave-zone cancel behavior, long-press timeout dispatch, top-panel
+  short/long binding dispatch, short vs long six-button layout selection,
+  default-open runtime state, open/close state reset, and top-panel
+  open/close binding handling from existing swipe/touch bindings. Wired the
+  zone/top-panel overlay render through the semantic dungeon renderer so the
+  controls draw in dungeon logical pixels rather than terminal cells, and
+  gated zone/top-panel consumption off while semantic dungeon overlays are
+  active or semantic widget hits already own the touch. Existing touch pane
+  and swipe handling stayed in place.
+  Remains: no hidden reopen indicator landed in this lane.
+  Validation: standard and portable incremental builds, `ctest --preset
+  test-standard --output-on-failure`, UI debt, modernization, and source-size
+  audits passed after integration.
+- Agent D: implemented dedicated SDL overlay modules for round movement and
+  the player action menu in `src/sdl-menu/sdl-round-movement.*` and
+  `src/sdl-menu/sdl-player-action-menu.*`. Round movement now opens as a
+  logical-pixel wheel gated by `touch_round_movement_enabled`, submits
+  touch semantic movement through `platform_submit_directional_movement()`
+  with the round-wheel semantic trigger, supports center repeat and ctrl-ring
+  interact submission, and resets cleanly on finger cancel/config reset.
+  Player-cell touch now opens a logical-pixel action menu over the dungeon
+  canvas; menu entries support tap selection, long-press secondary behavior
+  for wait/use/desc, gamepad hover/confirm/cancel handling, and legacy command
+  dispatch without new terminal hit testing. `src/main-sdl.c` routes events
+  into the new overlays, `src/sdl-scene-dungeon.c` renders them from dungeon
+  scene coordinates, and `src/sdl-touch.c` now folds player-action long-press
+  timeout/reset into the existing touch flush path.
+  Remains: develop's dedicated exchange-target follow-up overlay was not
+  ported here; the action menu currently dispatches `X` directly for exchange
+  instead of opening the old target picker.
+  Validation: `powershell -ExecutionPolicy Bypass -File
+  .\build-incremental.ps1` passed, and `ctest -R sil_ui0_audit
+  --output-on-failure` passed from `build-standard`.
+- Agent E: implemented map-pointer parity in `src/sdl-menu/sdl-map-pointer.c`
+  for hover/path-preview modifier refresh, long-tap inspect retention,
+  right-click recall with contextual feature actions, touch skeleton/door/trap/
+  tunnel interactions via semantic interact-direction submission, and a narrow
+  ctrl-based pointer attack path that prefers quiver 1 and uses Shift+Ctrl for
+  quiver 2. Remains: no dedicated player-action radial UI in this lane, and
+  the pointer attack path is intentionally scoped to ctrl-triggered map
+  attacks within the owned files. Validation: targeted `cc` compile of
+  `src/sdl-menu/sdl-map-pointer.c`, standard and portable incremental builds,
+  `ctest --preset test-standard --output-on-failure`, UI debt,
+  modernization, and source-size audits passed after integration.
+- Agent F: implemented menu/screen semantic coverage in owned browser-style
+  surfaces. Added focus-first row selection for shared browser-shell list
+  widgets and patched manual semantic handlers for the main menu, hint-message
+  list/detail flow, songs, abilities, inventory/equipment selectors, and
+  enhanced inventory/equipment overlays so first tap selects and second
+  activate opens/uses where the scene expects it. Converted SDL pane settings,
+  menu-font settings, supporting-pane font/layout editors, and their semantic
+  notice modals from raw-key-only loops to semantic row/footer command
+  handling. Remains: deeper birth-flow parity still lives outside this lane's
+  write ownership. Validation: targeted syntax-only compile checks passed for
+  the owned files, and standard/portable builds plus the full standard CTest
+  preset passed after integration.
+- Agent G: implemented semantic Touch Settings UI in
+  `src/cmd/ui/cmd-ui-settings-panes.c`. `Touch Settings` now splits into
+  `Touch Control` and `Touch Panel`; `Touch Control` exposes touch profile,
+  movement mode, round movement, zone overlay mode, corner up/down side, top
+  panel mode/default-open, per-menu command category toggles, and dedicated
+  editors for center-zone, corner, and top-panel bindings. The existing touch
+  panel button editor remains available under `Touch Panel` and now reads
+  semantic browser-shell input so rows and footer actions stay reachable by
+  keyboard, gamepad, mouse, and touch. Reset actions use the platform touch
+  default getters for the new touch-control surfaces and touch-panel binding
+  defaults for the existing panel editor. Validation:
+  `powershell -ExecutionPolicy Bypass -File .\build-incremental.ps1` passed.
+  The large settings implementation was split into
+  `src/cmd/ui/cmd-ui-settings-touch.c` during integration. Remains: no manual
+  smoke pass was run for pointer/touch interaction.
+- Agent H: implemented `src/ui/ui-touch-mouse-tutorial.[ch]` with semantic
+  touch and mouse tutorial scenes. Touch uses two responsive pages plus a
+  profile-choice chooser that applies and saves touch profile defaults; mouse
+  uses two dismissible pages. Added first-run birth-flow hooks for portable
+  touch devices and desktop mouse setups, plus a main-menu Help chooser that
+  can open help, touch tutorial, or mouse tutorial; requested tutorial flags
+  are now consumed at the main-menu boundary. Validation:
+  `powershell -ExecutionPolicy Bypass -File .\build-incremental.ps1` and
+  `git diff --check` passed. Remains: no dedicated settings-side tutorial
+  trigger was added in this wave, and compact/mobile smoke on real hardware is
+  still pending.
 - Agent I: not started.

@@ -196,6 +196,30 @@ char ui_browser_shell_direction_command_key(const app_ui_command* command,
     return '\0';
 }
 
+bool ui_browser_shell_command_is_explicit_activate(
+    const app_ui_command* command)
+{
+    if (!command)
+        return false;
+
+    return command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+        || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+        || command->clicks >= 2;
+}
+
+bool ui_browser_shell_list_item_should_focus_only(
+    const app_ui_command* command, bool inspect_action)
+{
+    if (!command)
+        return false;
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        return true;
+    if (inspect_action)
+        return false;
+
+    return !ui_browser_shell_command_is_explicit_activate(command);
+}
+
 static char ui_browser_shell_lookup_button_key(
     const ui_browser_shell_command_map* map, s16b id)
 {
@@ -289,10 +313,11 @@ bool ui_browser_shell_translate_command(const app_ui_command* command,
 
     if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
     {
-        result.focus_only = (command->kind == APP_UI_COMMAND_KIND_FOCUS);
         result.inspect = command->kind == APP_UI_COMMAND_KIND_INSPECT
             || command->kind == APP_UI_COMMAND_KIND_CONTEXT
             || target->action == APP_UI_WIDGET_ACTION_INSPECT;
+        result.focus_only = ui_browser_shell_list_item_should_focus_only(
+            command, result.inspect);
         if (!result.focus_only)
             result.key = result.inspect ? map->row_inspect_key
                                         : map->row_activate_key;

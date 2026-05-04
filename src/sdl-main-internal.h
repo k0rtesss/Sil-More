@@ -159,6 +159,7 @@ void sdl_gamepad_load_default_bindings(void);
 
 bool sdl_touch_pane_handle_event(const SDL_Event* ev);
 void sdl_touch_pane_render(void);
+void sdl_touch_dungeon_overlay_render(int canvas_w, int canvas_h);
 void sdl_touch_pane_render_reset_prompt(void);
 void sdl_touch_pane_cancel_press(void);
 int sdl_touch_pane_pending_timeout_ms(Uint64 now_ns);
@@ -177,6 +178,18 @@ bool sdl_map_pointer_flush_pending_long_press(Uint64 now_ns);
 void sdl_map_pointer_reset_input_state(void);
 bool sdl_map_pointer_preview_cell(s16b map_y, s16b map_x,
     bool* out_is_target);
+
+bool sdl_round_movement_handle_event(const SDL_Event* ev);
+void sdl_round_movement_render(const sdl_view* main_view,
+    const app_dungeon_snapshot* snapshot);
+void sdl_round_movement_reset_input_state(void);
+
+bool sdl_player_action_menu_handle_event(const SDL_Event* ev);
+int sdl_player_action_menu_pending_timeout_ms(Uint64 now_ns);
+bool sdl_player_action_menu_flush_pending_press(Uint64 now_ns);
+void sdl_player_action_menu_render(const sdl_view* main_view,
+    const app_dungeon_snapshot* snapshot);
+void sdl_player_action_menu_reset_input_state(void);
 
 void sdl_load_story_fonts(void);
 void sdl_story_font_cache_clear(void);

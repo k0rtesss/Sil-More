@@ -56,6 +56,9 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
 bool sdl_scene_dungeon_hit_test_map_cell(const sdl_view* main_view,
     const app_dungeon_snapshot* snapshot, float window_x, float window_y,
     s16b* out_map_y, s16b* out_map_x);
+bool sdl_scene_dungeon_map_cell_rect(const sdl_view* main_view,
+    const app_dungeon_snapshot* snapshot, s16b map_y, s16b map_x,
+    SDL_FRect* out_rect);
 bool sdl_scene_bootstrap_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_bootstrap_snapshot* snapshot);
 bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,

@@ -1690,6 +1690,25 @@ bool sdl_scene_dungeon_hit_test_map_cell(const sdl_view* main_view,
     return true;
 }
 
+bool sdl_scene_dungeon_map_cell_rect(const sdl_view* main_view,
+    const app_dungeon_snapshot* snapshot, s16b map_y, s16b map_x,
+    SDL_FRect* out_rect)
+{
+    const app_map_snapshot* map = sdl_scene_map_snapshot(snapshot);
+    const app_dungeon_overlay_snapshot* overlay = sdl_scene_overlay_snapshot(snapshot);
+    if (out_rect)
+        memset(out_rect, 0, sizeof(*out_rect));
+    if (!main_view || !snapshot || !out_rect || !main_view->ready || !map
+        || !overlay)
+        return false;
+    sdl_scene_layout layout = sdl_scene_make_layout(main_view, map,
+        sdl_scene_overlay_chrome_scene(overlay),
+        sdl_scene_overlay_interaction(overlay));
+    if (layout.canvas_w <= 0 || layout.canvas_h <= 0)
+        return false;
+    return sdl_scene_map_cell_rect(main_view, &layout, map, map_y, map_x, out_rect);
+}
+
 static void sdl_scene_render_interaction_overlay(const sdl_view* view,
     const sdl_scene_layout* layout, const app_interaction_state* interaction)
 {
@@ -2472,6 +2491,9 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
         (void)sdl_scene_ui_render_overlay(main_view,
             layout.canvas_w, layout.canvas_h, transient_scene);
     sdl_scene_render_interaction_overlay(main_view, &layout, interaction);
+    sdl_touch_dungeon_overlay_render(layout.canvas_w, layout.canvas_h);
+    sdl_player_action_menu_render(main_view, snapshot);
+    sdl_round_movement_render(main_view, snapshot);
 
     SDL_SetRenderTarget(g_state.renderer, NULL);
     return true;

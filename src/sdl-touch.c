@@ -14,8 +14,12 @@
  */
 
 #include "angband.h"
+#include "app/app-scene-dungeon.h"
+#include "app/app-ui-command.h"
 #include "object/object-ui-enhanced.h"
+#include "sdl-menu/sdl-scene-menu.h"
 #include "sdl-main-internal.h"
+#include "platform/sdl-touch-controls.h"
 
 typedef struct touch_pane_slot_info {
     const char* slot_name;
@@ -104,14 +108,10 @@ static touch_swipe_state g_touch_swipe;
 
 static bool sdl_touch_pane_point_to_slot(float x, float y, int* out_slot);
 static int sdl_touch_swipe_index_for_keypad_dir(int dir);
-static float sdl_touch_swipe_threshold_px(void);
+float sdl_touch_swipe_threshold_px(void);
 static int sdl_touch_swipe_direction_for_delta(float dx, float dy,
     float threshold);
 static void sdl_touch_swipe_cancel(void);
-static bool sdl_touch_swipe_handle_pointer_down(float x, float y,
-    SDL_FingerID finger_id);
-static bool sdl_touch_swipe_handle_pointer_motion(float x, float y,
-    SDL_FingerID finger_id);
 static void sdl_touch_swipe_handle_pointer_up(float x, float y,
     SDL_FingerID finger_id);
 
@@ -356,7 +356,7 @@ static void sdl_touch_pane_draw_arrow(const SDL_FRect* rect, int binding, SDL_Co
         tip_y - dy * head_len - py * head_len * 0.55f);
 }
 
-static void sdl_touch_pane_draw_button_text(const SDL_FRect* rect, const char* name, const char* symbol,
+void sdl_touch_pane_draw_button_text(const SDL_FRect* rect, const char* name, const char* symbol,
     SDL_Color color)
 {
     SDL_Surface* name_surface = NULL;
@@ -790,7 +790,7 @@ static void sdl_touch_pane_send_confirm_action(void)
     sdl_submit_legacy_input_byte('\r');
 }
 
-static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool long_press)
+void sdl_touch_pane_send_binding(int binding, bool second_panel, bool long_press)
 {
     if (binding == GAMEPAD_BIND_NONE)
         return;
@@ -816,8 +816,7 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
     if (binding == TOUCH_BIND_TOP_PANEL_OPEN
         || binding == TOUCH_BIND_TOP_PANEL_CLOSE)
     {
-        /* Top-panel bindings are semantic controls, not legacy key values. */
-        g_state.need_present = true;
+        sdl_touch_controls_set_top_panel_open(binding == TOUCH_BIND_TOP_PANEL_OPEN);
         return;
     }
 
@@ -909,7 +908,7 @@ static int sdl_touch_swipe_index_for_keypad_dir(int dir)
     }
 }
 
-static float sdl_touch_swipe_threshold_px(void)
+float sdl_touch_swipe_threshold_px(void)
 {
     int cell_px = (g_views[0].cell_w > g_views[0].cell_h)
         ? g_views[0].cell_w
@@ -950,7 +949,7 @@ static void sdl_touch_swipe_cancel(void)
     g_touch_swipe.last_y = 0.0f;
 }
 
-static bool sdl_touch_swipe_handle_pointer_down(float x, float y,
+bool sdl_touch_swipe_handle_pointer_down(float x, float y,
     SDL_FingerID finger_id)
 {
     int slot = -1;
@@ -974,7 +973,7 @@ static bool sdl_touch_swipe_handle_pointer_down(float x, float y,
     return true;
 }
 
-static bool sdl_touch_swipe_handle_pointer_motion(float x, float y,
+bool sdl_touch_swipe_handle_pointer_motion(float x, float y,
     SDL_FingerID finger_id)
 {
     int dir;
@@ -1031,21 +1030,46 @@ void sdl_touch_pane_cancel_press(void)
 
 int sdl_touch_pane_pending_timeout_ms(Uint64 now_ns)
 {
+    int timeout_ms;
+    int player_action_timeout_ms;
+    int controls_timeout_ms;
     Uint64 elapsed;
 
-    if (!g_touch_pane_press.active)
-        return -1;
+    timeout_ms = -1;
+    if (g_touch_pane_press.active) {
+        elapsed = now_ns - g_touch_pane_press.start_time;
+        timeout_ms = (elapsed >= (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
+            ? 0
+            : (TOUCH_PANE_LONG_PRESS_MS - (int)(elapsed / 1000000ULL));
+    }
 
-    elapsed = now_ns - g_touch_pane_press.start_time;
-    if (elapsed >= (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
-        return 0;
+    controls_timeout_ms = sdl_touch_controls_pending_timeout_ms(now_ns);
+    if (timeout_ms < 0
+        || (controls_timeout_ms >= 0 && controls_timeout_ms < timeout_ms))
+    {
+        timeout_ms = controls_timeout_ms;
+    }
 
-    return TOUCH_PANE_LONG_PRESS_MS - (int)(elapsed / 1000000ULL);
+    player_action_timeout_ms
+        = sdl_player_action_menu_pending_timeout_ms(now_ns);
+    if (timeout_ms < 0
+        || (player_action_timeout_ms >= 0
+            && player_action_timeout_ms < timeout_ms))
+    {
+        timeout_ms = player_action_timeout_ms;
+    }
+
+    return timeout_ms;
 }
 
 bool sdl_touch_pane_flush_pending_press(Uint64 now_ns)
 {
     int slot;
+
+    if (sdl_touch_controls_flush_pending_press(now_ns))
+        return true;
+    if (sdl_player_action_menu_flush_pending_press(now_ns))
+        return true;
 
     if (!g_touch_pane_press.active)
         return false;
@@ -1181,6 +1205,8 @@ void sdl_touch_pane_load_default_bindings(void)
 
 void sdl_touch_pane_reset_input_state(void)
 {
+    sdl_touch_controls_reset_input_state();
+
     if (g_touch_pane_ctrl_toggle) {
         g_touch_pane_ctrl_toggle = false;
         sdl_gamepad_apply_modifier(GAMEPAD_BIND_CTRL, false);
@@ -1190,6 +1216,8 @@ void sdl_touch_pane_reset_input_state(void)
     g_touch_pane_reset_confirm_active = false;
     sdl_touch_pane_cancel_press();
     sdl_touch_swipe_cancel();
+    sdl_round_movement_reset_input_state();
+    sdl_player_action_menu_reset_input_state();
     g_touch_pane_flash_slot = -1;
     g_touch_pane_flash_until = 0;
     g_touch_pane_pressed_slot = -1;
@@ -1259,7 +1287,17 @@ bool sdl_touch_pane_handle_event(const SDL_Event* ev)
         SDL_GetWindowSizeInPixels(g_state.window, &window_w, &window_h);
         x = ev->tfinger.x * (float)window_w;
         y = ev->tfinger.y * (float)window_h;
+        if (sdl_touch_controls_top_handle_pointer_down(x, y,
+                ev->tfinger.fingerID))
+        {
+            return true;
+        }
         if (sdl_touch_pane_handle_pointer_down(x, y, false,
+                ev->tfinger.fingerID))
+        {
+            return true;
+        }
+        if (sdl_touch_controls_zone_handle_pointer_down(x, y,
                 ev->tfinger.fingerID))
         {
             return true;
@@ -1283,6 +1321,16 @@ bool sdl_touch_pane_handle_event(const SDL_Event* ev)
         SDL_GetWindowSizeInPixels(g_state.window, &window_w, &window_h);
         x = ev->tfinger.x * (float)window_w;
         y = ev->tfinger.y * (float)window_h;
+        if (sdl_touch_controls_top_handle_pointer_motion(x, y,
+                ev->tfinger.fingerID))
+        {
+            return true;
+        }
+        if (sdl_touch_controls_zone_handle_pointer_motion(x, y,
+                ev->tfinger.fingerID))
+        {
+            return true;
+        }
         if (sdl_touch_swipe_handle_pointer_motion(x, y,
                 ev->tfinger.fingerID))
         {
@@ -1301,6 +1349,16 @@ bool sdl_touch_pane_handle_event(const SDL_Event* ev)
         SDL_GetWindowSizeInPixels(g_state.window, &window_w, &window_h);
         x = ev->tfinger.x * (float)window_w;
         y = ev->tfinger.y * (float)window_h;
+        if (sdl_touch_controls_top_handle_pointer_up(x, y,
+                ev->tfinger.fingerID))
+        {
+            return true;
+        }
+        if (sdl_touch_controls_zone_handle_pointer_up(x, y,
+                ev->tfinger.fingerID))
+        {
+            return true;
+        }
         sdl_touch_swipe_handle_pointer_up(x, y, ev->tfinger.fingerID);
         sdl_touch_pane_handle_pointer_up(false, ev->tfinger.fingerID);
         return true;
@@ -1318,6 +1376,7 @@ bool sdl_touch_pane_handle_event(const SDL_Event* ev)
         {
             sdl_touch_swipe_cancel();
         }
+        sdl_touch_controls_handle_pointer_canceled(ev->tfinger.fingerID);
         return true;
     }
 
@@ -1420,6 +1479,11 @@ void sdl_touch_pane_render(void)
     }
 }
 
+void sdl_touch_dungeon_overlay_render(int canvas_w, int canvas_h)
+{
+    sdl_touch_controls_render(canvas_w, canvas_h);
+}
+
 static int sdl_touch_menu_category_normalized(int category)
 {
     if (category < 0 || category >= SDL_TOUCH_MENU_CATEGORY_COUNT)
@@ -1510,6 +1574,7 @@ int platform_touch_profile(void)
 void platform_set_touch_profile(int profile)
 {
     config.touch_profile = sdl_touch_profile_normalized(profile);
+    sdl_touch_controls_cancel_zone_press();
     g_state.need_present = true;
 }
 
@@ -1560,6 +1625,9 @@ bool platform_touch_round_movement_enabled(void)
 void platform_set_touch_round_movement_enabled(bool value)
 {
     config.touch_round_movement_enabled = value;
+    if (!value)
+        sdl_round_movement_reset_input_state();
+    sdl_touch_controls_cancel_zone_press();
     g_state.need_present = true;
 }
 
@@ -1622,6 +1690,7 @@ void platform_set_touch_corner_up_down_side(int side)
 {
     config.touch_corner_up_down_side =
         sdl_touch_corner_up_down_side_normalized(side);
+    sdl_touch_controls_cancel_zone_press();
     g_state.need_present = true;
 }
 
@@ -1663,6 +1732,7 @@ int platform_touch_top_panel_mode(void)
 void platform_set_touch_top_panel_mode(int mode)
 {
     config.touch_top_panel_mode = sdl_touch_top_panel_mode_normalized(mode);
+    sdl_touch_controls_cancel_top_panel_press();
     g_state.need_present = true;
 }
 
@@ -1681,6 +1751,7 @@ bool platform_touch_top_panel_default_open(void)
 void platform_set_touch_top_panel_default_open(bool value)
 {
     config.touch_top_panel_default_open = value;
+    sdl_touch_controls_set_top_panel_open(value);
     g_state.need_present = true;
 }
 
@@ -1767,9 +1838,9 @@ int platform_touch_pane_default_binding_for_panel(int panel, int index)
 
 void platform_touch_pane_reset_bindings_to_default(void)
 {
-    sdl_touch_pane_reset_input_state();
     sdl_config_set_default_touch_pane_bindings(&config);
     sdl_config_clear_touch_pane_labels(&config);
+    sdl_touch_pane_reset_input_state();
 }
 
 cptr platform_touch_pane_slot_name(int index)

@@ -40,6 +40,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_guid.h"
 #include "cmd-ui.h"
 #include "cmd-ui-abilities-scenes.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 
 static int ability_purchase_exp_cost(int skilltype)
@@ -2161,10 +2162,9 @@ static bool ability_semantic_command_to_key(ability_semantic_state* state,
     {
         (void)ability_semantic_select_ability_by_id(state, current_skill,
             entries, entry_count, target->widget_id);
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        if (ui_browser_shell_list_item_should_focus_only(command, false))
             return true;
-        if (command->clicks >= 2)
-            *out_key = '\r';
+        *out_key = '\r';
         return true;
     }
 

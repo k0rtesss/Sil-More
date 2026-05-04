@@ -23,9 +23,11 @@
 #include "blitz.h"
 #include "log/log.h"
 #include "platform-input.h"
+#include "sdl-config.h"
 #include "platform-story-font.h"
 #include "ui/ui-information-scene.h"
 #include "ui/ui-semantic-scene.h"
+#include "ui/ui-touch-mouse-tutorial.h"
 
 typedef struct birth_menu {
     bool ghost;
@@ -199,6 +201,25 @@ static void birth_menu_scene_leave(birth_menu_scene_scope* scope)
     app_session_set_snapshot(session, NULL);
     app_session_pop_wait_scope(session, &scope->wait_scope);
     scope->active = false;
+}
+
+static void birth_show_input_tutorials(void)
+{
+    bool touch_requested = platform_touch_tutorial_requested();
+    bool mouse_requested = platform_mouse_tutorial_requested();
+    bool portable = portable_controls_active();
+
+    if (touch_requested || (portable && !platform_touch_tutorial_seen()))
+    {
+        if (!display_touch_tutorial())
+            log_warn("touch tutorial: semantic scene presentation failed");
+    }
+
+    if (mouse_requested || (!portable && !platform_mouse_tutorial_seen()))
+    {
+        if (!display_mouse_tutorial())
+            log_warn("mouse tutorial: semantic scene presentation failed");
+    }
 }
 
 static void birth_menu_clear_pending_input(void)
@@ -2190,6 +2211,7 @@ NavResult birth_run_stats_allocation(void)
 
         display_character_tutorial();
         log_info("Character screen tutorial completed");
+        birth_show_input_tutorials();
     }
     else
     {

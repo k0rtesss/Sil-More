@@ -212,6 +212,7 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/ui/cmd-ui-knowledge.c
     src/cmd/ui/cmd-ui-look.c
     src/cmd/ui/cmd-ui-main-menu.c
+    src/cmd/ui/cmd-ui-main-menu-help.c
     src/cmd/ui/cmd-ui-nearby.c
     src/cmd/ui/cmd-ui-object-display.c
     src/cmd/ui/cmd-ui-query.c
@@ -219,6 +220,7 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/ui/cmd-ui-settings-controller.c
     src/cmd/ui/cmd-ui-settings-keybinds.c
     src/cmd/ui/cmd-ui-settings-panes.c
+    src/cmd/ui/cmd-ui-settings-touch.c
     src/cmd/ui/cmd-ui-settings-visuals.c
     src/cmd/world/cmd-interact-chest.c
     src/cmd/world/cmd-interact-chest-core.c
@@ -466,6 +468,7 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/ui/ui-look-sidebar.c
     src/ui/ui-narrative.c
     src/ui/ui-semantic-scene.c
+    src/ui/ui-touch-mouse-tutorial.c
     src/ui/ui-story.c
     src/ui/ui-status.c
     src/ui/story_font.c
@@ -481,6 +484,8 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/sdl-scene-menu.c
     src/sdl-menu/sdl-menu-pointer.c
     src/sdl-menu/sdl-map-pointer.c
+    src/sdl-menu/sdl-player-action-menu.c
+    src/sdl-menu/sdl-round-movement.c
     src/sdl-menu/sdl-scene-menu-base.c
     src/sdl-menu/sdl-scene-menu-browser.c
     src/sdl-menu/sdl-scene-menu-chrome.c
@@ -489,6 +494,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/sdl-scene.c
     src/sdl-story-font.c
     src/sdl-touch.c
+    src/platform/sdl-touch-controls.c
     src/sdl-ui-style.c
     src/pane.c
     src/fs/io_sdl.c
