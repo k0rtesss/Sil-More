@@ -99,7 +99,9 @@ static bool savefile_has_thrall_quest_requested = false;
 static bool savefile_has_randart_flags4 = false;
 static bool savefile_has_item_bonuses = false;
 static bool savefile_has_randart_bonuses = false;
+static bool savefile_has_revenge_fields = false;
 static bool savefile_has_legendary_area_map = false;
+static bool savefile_has_morgoth_call_state = false;
 
 /* Version comparison helpers: update these when bumping savefile semantics. */
 static int savefile_version_compare(byte major, byte minor, byte patch, byte extra)
@@ -1052,14 +1054,17 @@ static void rd_lore(int r_idx)
     /* Read the "Racial" monster limit per level */
     rd_byte(&r_ptr->max_num);
 
-    // 8 spare bytes
-    strip_bytes(8);
+    /* Song-revealed lore plus spare bytes */
+    rd_byte(&l_ptr->song_lore_flags);
+    strip_bytes(7);
 
     /* Repair the lore flags */
     l_ptr->flags1 &= r_ptr->flags1;
     l_ptr->flags2 &= r_ptr->flags2;
     l_ptr->flags3 &= r_ptr->flags3;
     l_ptr->flags4 &= r_ptr->flags4;
+    l_ptr->song_lore_flags
+        &= (MONSTER_LORE_SONG_CONTEST | MONSTER_LORE_SONG_LAMENT);
 }
 
 static void rd_monster_race_stats(monster_race* r_ptr)
@@ -1609,7 +1614,7 @@ static errr rd_extra(void)
     rd_byte(&p_ptr->self_made_arts);
     rd_byte(&p_ptr->climbing);
 
-    // 15 spare bytes (was 19, used 4)
+    // Reserved block: legacy status bytes plus branch-added state fields.
     {
         byte morgoth_hall_entered = 0;
         byte morgoth_second_wind = 0;
@@ -1617,20 +1622,40 @@ static errr rd_extra(void)
         s16b lamp_oil = 0;
         u16b revenge_kills = 0;
         u16b revenge_bonus = 0;
+        byte morgoth_call_state = 0;
+
         rd_byte(&morgoth_hall_entered);
         rd_byte(&morgoth_second_wind);
         rd_byte(&discovery_lore_flags);
         rd_s16b(&lamp_oil);
-        rd_u16b(&revenge_kills);
-        rd_u16b(&revenge_bonus);
-        strip_bytes(2);
+
+        if (savefile_has_revenge_fields)
+        {
+            rd_u16b(&revenge_kills);
+            rd_u16b(&revenge_bonus);
+            rd_byte(&morgoth_call_state);
+            strip_bytes(5);
+        }
+        else
+        {
+            strip_bytes(2);
+            if (savefile_has_morgoth_call_state)
+                rd_byte(&morgoth_call_state);
+            else
+                strip_bytes(1);
+            strip_bytes(7);
+        }
+
         p_ptr->morgoth_hall_entered = morgoth_hall_entered ? 1 : 0;
         p_ptr->morgoth_second_wind = morgoth_second_wind ? 1 : 0;
         p_ptr->discovery_lore_flags = discovery_lore_flags;
         p_ptr->lamp_oil = lamp_oil;
         p_ptr->revenge_kills = revenge_kills;
         p_ptr->revenge_bonus = revenge_bonus;
-        strip_bytes(4);
+        p_ptr->morgoth_call_state =
+            morgoth_call_state
+            & (SAVEFILE_MORGOTH_CALL_SEEN
+                | SAVEFILE_MORGOTH_CALL_ESCALATION_MASK);
     }
 
     /* Read item-quality squelch sub-menu */
@@ -1999,6 +2024,7 @@ static errr rd_extra(void)
 
     /* Min depth counter */
     rd_s32b(&min_depth_counter);
+    morgoth_call_sync_loaded_stage();
     log_info("LOAD: min_depth_counter=%d, calculated min_depth()=%d", min_depth_counter, min_depth());
 
     /* Quest states loaded from save should remain as-is for this character */
@@ -4090,7 +4116,9 @@ static errr rd_savefile_new_aux(void)
     savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);
     savefile_has_item_bonuses = savefile_version_at_least(0, 9, 5, 2);
     savefile_has_randart_bonuses = savefile_version_at_least(0, 9, 5, 3);
+    savefile_has_revenge_fields = savefile_version_at_least(0, 9, 7, 1);
     savefile_has_legendary_area_map = savefile_version_at_least(0, 9, 7, 1);
+    savefile_has_morgoth_call_state = savefile_version_at_least(0, 9, 6, 4);
 
     /* Reset load byte offset counter */
     load_byte_offset = 0;
@@ -4556,7 +4584,9 @@ bool load_player(void)
             savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);
             savefile_has_item_bonuses = savefile_version_at_least(0, 9, 5, 2);
             savefile_has_randart_bonuses = savefile_version_at_least(0, 9, 5, 3);
+            savefile_has_revenge_fields = savefile_version_at_least(0, 9, 7, 1);
             savefile_has_legendary_area_map = savefile_version_at_least(0, 9, 7, 1);
+            savefile_has_morgoth_call_state = savefile_version_at_least(0, 9, 6, 4);
         }
 
         load_byte_offset = 0; /* reset counter before decoding stream */
