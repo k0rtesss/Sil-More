@@ -16,6 +16,7 @@
 
 #include "angband.h"
 #include "log/log.h"
+#include "metarun/metarun-meta-state.h"
 #include "player/identification.h"
 #include "player/player-song-effects.h"
 #include "player/player-song-duels.h"
@@ -735,6 +736,7 @@ void sing_song_of_challenge(int score)
             m_ptr->tmp_morale = MAX(m_ptr->tmp_morale, 30);
             calc_morale(m_ptr);
             calc_stance(m_ptr);
+            legendary_song_observe_monster(i, 0);
         }
     }
 }
@@ -1063,6 +1065,7 @@ void sing_song_of_elbereth(int score)
         {
             /* Decrease temporary morale */
             m_ptr->tmp_morale -= result * 10;
+            legendary_song_observe_monster(i, 0);
         }
     }
 }
@@ -1085,6 +1088,21 @@ void sing_song_of_trees(int score)
     /* Shows damage messages to provide feedback when monsters are affected */
     /* IMPORTANT: Use uniform=true so dd doesn't decay with distance (damage is based on light_level at monster's position) */
     u32b flg = PROJECT_BOOM | PROJECT_KILL | PROJECT_PASS | PROJECT_HIDE;
+
+    for (int i = 1; i < mon_max; i++)
+    {
+        monster_type* m_ptr = &mon_list[i];
+        monster_race* r_ptr;
+
+        if (!m_ptr->r_idx)
+            continue;
+        if (distance(py, px, m_ptr->fy, m_ptr->fx) > rad)
+            continue;
+
+        r_ptr = &r_info[m_ptr->r_idx];
+        if (r_ptr->flags3 & RF3_HURT_LITE)
+            legendary_song_observe_monster(i, 0);
+    }
     
     (void)project(-1, rad, py, px, py, px, dd, ds, dif, GF_LIGHT, flg, 0, true);
 }
@@ -1130,6 +1148,7 @@ void sing_song_of_lorien(int score)
         if (result > 0)
         {
             set_alertness(m_ptr, m_ptr->alertness - result);
+            legendary_song_observe_monster(i, 0);
         }
     }
 }
@@ -1417,6 +1436,7 @@ void sing_song_of_shattering(int score)
                 }
                 
                 log_debug("Song of Shattering: Weapon damage SUCCESS");
+                legendary_song_observe_monster(i, 0);
             }
             else
             {
@@ -1446,6 +1466,7 @@ void sing_song_of_shattering(int score)
                 }
                 
                 log_debug("Song of Shattering: Armour damage SUCCESS");
+                legendary_song_observe_monster(i, 0);
             }
             else
             {
@@ -1655,6 +1676,7 @@ void sing_song_of_revealing(int score, bool primary_song)
             {
                 m_ptr->ml = true;
             }
+            legendary_song_observe_monster(i, 0);
             
             dungeon_mark_map_for_redraw();
         }
@@ -1670,6 +1692,7 @@ void sing(void)
     int score = 0;
     int cost = 0;
     bool abort_song = false;
+    int effective_score = 0;
 
     song_revealing_decay();
 
@@ -1727,6 +1750,9 @@ void sing(void)
             song = p_ptr->song2;
 
         score = ability_bonus(S_SNG, song);
+        effective_score = (song != SNG_NOTHING) ? song_effective_skill(song) : 0;
+        if (song != SNG_NOTHING)
+            legendary_song_observe_begin(song, effective_score);
 
         switch (song)
         {
@@ -1891,6 +1917,9 @@ void sing(void)
             break;
         }
         }
+
+        if (song != SNG_NOTHING)
+            legendary_song_observe_end(song, effective_score);
 
         if (abort_song)
             break;

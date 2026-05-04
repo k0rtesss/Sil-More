@@ -24,6 +24,7 @@
 #include "app/app-session.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "metarun/metarun-meta-state.h"
 #include "monster/monster-death.h"
 #include "player/killer.h"
 #include "ui/ui-death.h"
@@ -1294,6 +1295,12 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
             else
                 message_format(
                     MSG_KILL, m_ptr->r_idx, "%^s has been slain.", m_name);
+        }
+
+        if (who < 0)
+        {
+            (void)meta_monster_record_revenge_kill((u16b)m_ptr->r_idx);
+            (void)meta_monster_apply_runtime_overrides();
         }
 
         /* Generate treasure */

@@ -42,6 +42,7 @@
 #include "platform-time.h"
 #include "support/reliability-checks.h"
 #include "app/app-ui.h"
+#include "metarun/metarun-meta-state.h"
 #include "metarun.h"
 #include "metarun/metarun-internal.h"
 #include "runtime/runtime-game.h"
@@ -1503,6 +1504,7 @@ static void start_new_metarun(void)
          - save any corresponding savefiles as dead
          Then archive/clear the score file so the next run starts clean. */
      metarun_finalize_scores_and_saves();
+     meta_state_clear_current_metarun_files();
      clear_scorefile();
 
     /* Hard purge the current savefile if this was a noscore wizard/debug run */

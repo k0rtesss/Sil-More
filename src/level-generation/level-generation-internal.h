@@ -231,6 +231,7 @@ extern level_partition_kind partition_kind_from_mode(quadrant_mode_t mode);
 extern void connect_partition_hubs(void);
 extern void repair_all_outer_walls(void);
 extern void ensure_minimum_rooms(void);
+extern bool place_legendary_area_for_depth(void);
 extern int scaled_attempts(int base, int area_factor);
 extern quadrant_mode_t pick_weighted_mode(const int *weights, int count);
 extern int mode_weight_for_depth(quadrant_mode_t mode, int depth, int blocks,

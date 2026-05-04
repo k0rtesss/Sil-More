@@ -15,10 +15,11 @@
  */
 
 #include "angband.h"
+#include "metarun/metarun-meta-state.h"
 #include "player/player-song-duels.h"
 
-#define SONG_DUEL_STACK_LIMIT 3
 #define SONG_DUEL_LOCKOUT_TURNS 10
+#define SONG_DUEL_STACK_LIMIT 3
 
 bool song_is_duel(int song)
 {
@@ -301,6 +302,8 @@ static void song_duel_finish_monster_loss(monster_type* m_ptr, int song, int son
 
     m_ptr->song = SNG_NOTHING;
     m_ptr->song_lockout_timer = SONG_DUEL_LOCKOUT_TURNS;
+    if (m_ptr >= mon_list && m_ptr < mon_list + mon_max)
+        legendary_song_observe_monster((int)(m_ptr - mon_list), 0);
 
     // Mark this duel as completed so it can't be re-targeted
     if (song == SNG_CONTEST)

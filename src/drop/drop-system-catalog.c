@@ -19,6 +19,7 @@
 #include "fs/path.h"
 #include "fs/file.h"
 #include "log/log.h"
+#include "metarun/metarun-meta-state.h"
 #include <string.h>
 
 /*
@@ -225,17 +226,19 @@ static int collect_ego_allocations(const ego_item_type* e_ptr, byte* depths, byt
     return count;
 }
 
-static int schedule_min_depth(const byte* depths, int count, int fallback)
+static int schedule_min_depth(const byte* depths, const byte* rarities,
+    int count, int fallback)
 {
     if (count <= 0)
         return fallback;
-    int min_depth = depths[0];
-    for (int i = 1; i < count; i++)
+
+    for (int i = 0; i < count; i++)
     {
-        if (depths[i] < min_depth)
-            min_depth = depths[i];
+        if (rarities[i] > 0 && depths[i] > 0)
+            return depths[i];
     }
-    return (min_depth > 0) ? min_depth : fallback;
+
+    return fallback;
 }
 
 static int schedule_max_depth_cap(const byte* depths, const byte* rarities, int count)
@@ -261,19 +264,62 @@ static int schedule_max_depth_cap(const byte* depths, const byte* rarities, int 
     return 0; /* no cap */
 }
 
+static int schedule_leading_zero_floor(const byte* depths, const byte* rarities,
+    int count)
+{
+    int effective_count = count;
+
+    while (effective_count > 1 && rarities[effective_count - 1] == 0)
+        effective_count--;
+
+    if (effective_count <= 1 || rarities[0] != 0)
+        return 0;
+
+    for (int i = 1; i < effective_count; i++)
+    {
+        if (rarities[i] > 0)
+            return depths[0];
+    }
+
+    return 0;
+}
+
 static int rarity_from_schedule(const byte* depths, const byte* rarities, int count,
     int depth, int default_rarity)
 {
+    int effective_count = count;
+    int first_positive = -1;
+
     if (count <= 0)
         return default_rarity;
 
     /* Trailing zero-rarity entries are treated as max-depth markers, not an
      * in-band rarity override at that exact depth. */
-    while (count > 1 && rarities[count - 1] == 0)
-        count--;
+    while (effective_count > 1 && rarities[effective_count - 1] == 0)
+        effective_count--;
+
+    for (int i = 0; i < effective_count; i++)
+    {
+        if (rarities[i] > 0)
+        {
+            first_positive = i;
+            break;
+        }
+    }
+
+    if (first_positive < 0)
+        return 0;
+
+    if (rarities[0] == 0 && first_positive > 0)
+    {
+        if (depth < depths[0])
+            return 0;
+        if (depth < depths[first_positive])
+            return rarities[first_positive];
+    }
 
     int rarity = rarities[0];
-    for (int i = 1; i < count; i++)
+    for (int i = 1; i < effective_count; i++)
     {
         if (depth >= depths[i])
             rarity = rarities[i];
@@ -290,6 +336,9 @@ static int combine_allocations(const byte* base_depths, const byte* base_raritie
     int base_cap = schedule_max_depth_cap(base_depths, base_rarities, base_count);
     int ego_cap = schedule_max_depth_cap(ego_depths, ego_rarities, ego_count);
     int combined_cap = 0;
+    int combined_floor = MAX(
+        schedule_leading_zero_floor(base_depths, base_rarities, base_count),
+        schedule_leading_zero_floor(ego_depths, ego_rarities, ego_count));
     if (base_cap > 0 && ego_cap > 0)
         combined_cap = MIN(base_cap, ego_cap);
     else if (base_cap > 0)
@@ -348,9 +397,19 @@ static int combine_allocations(const byte* base_depths, const byte* base_raritie
     }
 
     int out_count = 0;
+    if (combined_floor > 0
+        && (combined_cap <= 0 || combined_floor <= combined_cap))
+    {
+        out_depths[out_count] = (byte)combined_floor;
+        out_rarities[out_count] = 0;
+        out_count++;
+    }
+
     for (int i = 0; i < merged_count && out_count < DROP_ALLOC_MAX; i++)
     {
         int depth = merged[i];
+        if (combined_floor > 0 && depth < combined_floor)
+            continue;
         if (combined_cap > 0 && depth > combined_cap)
             continue;
         int base_r = rarity_from_schedule(base_depths, base_rarities, base_count, depth, 1);
@@ -772,7 +831,8 @@ static void build_normal_variants(int k_idx)
     if (!has_positive_rarity && rarity_cap_depth < 0)
         return; /* never spawns */
 
-    int min_depth = schedule_min_depth(alloc_depths, num_allocations, fallback_min);
+    int min_depth = schedule_min_depth(alloc_depths, alloc_rarities,
+        num_allocations, fallback_min);
     int max_depth = max_locale_depth(k_ptr);
     if (min_depth <= 0)
         min_depth = 1;
@@ -978,8 +1038,10 @@ static void build_ego_variants(int e_idx)
                 continue;
             }
 
-            int base_min_depth = schedule_min_depth(base_depths, base_allocs, base_fallback_depth);
-            int min_depth = schedule_min_depth(ego_depths, ego_allocs, ego_fallback_depth);
+            int base_min_depth = schedule_min_depth(base_depths, base_rarities,
+                base_allocs, base_fallback_depth);
+            int min_depth = schedule_min_depth(ego_depths, ego_rarities,
+                ego_allocs, ego_fallback_depth);
             if (base_min_depth <= 0)
                 base_min_depth = 1;
             if (min_depth < base_min_depth)
@@ -1233,9 +1295,12 @@ static void build_ego_combo_variants(int prefix_idx, int suffix_idx)
             continue;
         }
 
-        int base_min_depth = schedule_min_depth(base_depths, base_allocs, base_fallback_depth);
-        int prefix_min_depth = schedule_min_depth(prefix_depths, prefix_allocs, prefix_fallback_depth);
-        int suffix_min_depth = schedule_min_depth(suffix_depths, suffix_allocs, suffix_fallback_depth);
+        int base_min_depth = schedule_min_depth(base_depths, base_rarities,
+            base_allocs, base_fallback_depth);
+        int prefix_min_depth = schedule_min_depth(prefix_depths, prefix_rarities,
+            prefix_allocs, prefix_fallback_depth);
+        int suffix_min_depth = schedule_min_depth(suffix_depths, suffix_rarities,
+            suffix_allocs, suffix_fallback_depth);
 
         if (base_min_depth <= 0)
             base_min_depth = 1;
@@ -1462,6 +1527,18 @@ static void build_artifact_variants(int a_idx)
         depth_arr, rarity_arr, 1);
 }
 
+static void append_runtime_meta_artifacts_to_drop_catalog(void)
+{
+    if (meta_artifact_runtime_count() == 0)
+        return;
+
+    for (int a_idx = z_info->art_rand_max; a_idx < z_info->art_max; a_idx++)
+    {
+        if (meta_artifact_runtime_slot_is_meta(a_idx))
+            build_artifact_variants(a_idx);
+    }
+}
+
 static void clear_drop_entries(void)
 {
     mem_free_null(g_drop_entries);
@@ -1541,6 +1618,9 @@ static bool save_drop_raw(void)
 
 void drop_system_init(void)
 {
+    if (!meta_artifact_prepare_runtime())
+        log_warn("drop_system_init: failed to prepare remembered artefacts");
+
     /* Try to use cached raw if up to date */
 #ifdef CHECK_MODIFICATION_TIME
     char raw_path[1024];
@@ -1569,6 +1649,7 @@ void drop_system_init(void)
 
     if (!need_rebuild && load_drop_raw())
     {
+        append_runtime_meta_artifacts_to_drop_catalog();
         log_info("Loaded drop catalog from drops.raw (%zu entries)", g_drop_count);
         return;
     }
@@ -1605,8 +1686,9 @@ void drop_system_init(void)
         }
     }
 
-    /* Artefacts */
-    for (int a_idx = 1; a_idx < z_info->art_max; a_idx++)
+    /* Canonical artefacts only. Metarun remembered artefacts are appended in
+     * memory after the raw catalog is loaded or rebuilt. */
+    for (int a_idx = 1; a_idx < z_info->art_rand_max; a_idx++)
         build_artifact_variants(a_idx);
 
     /* Log catalog size by category/group for diagnostics */
@@ -1622,6 +1704,7 @@ void drop_system_init(void)
     }
 
     save_drop_raw();
+    append_runtime_meta_artifacts_to_drop_catalog();
     log_info("Drop catalog rebuilt: %zu entries (weapon=%zu armor=%zu jewelry=%zu supply=%zu | normal=%zu ego=%zu art=%zu)",
         g_drop_count, cat_counts[DROP_CAT_WEAPON], cat_counts[DROP_CAT_ARMOR],
         cat_counts[DROP_CAT_JEWELRY], cat_counts[DROP_CAT_SUPPLY],

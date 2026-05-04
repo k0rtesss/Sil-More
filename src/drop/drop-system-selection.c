@@ -15,6 +15,7 @@
 
 #include "angband.h"
 #include "drop/drop-system-internal.h"
+#include "metarun/metarun-meta-state.h"
 #include "level-generation/gen-log.h"
 #include "mem/alloc.h"
 
@@ -520,7 +521,8 @@ static bool collect_candidate_entries(
             }
 
             artefact_type* a_ptr = &a_info[e.group_id];
-            if (a_ptr->cur_num || (a_ptr->seen & ART_SEEN_PHYSICAL))
+            if ((a_ptr->cur_num || (a_ptr->seen & ART_SEEN_PHYSICAL)) &&
+                !meta_artifact_runtime_slot_is_meta(e.group_id))
             {
                 filter_artifact++;
                 continue;

@@ -45,7 +45,28 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   endif()
 endif()
 
+if(SIL_IOS AND SIL_USE_LOCAL_DATA)
+  message(WARNING "SIL_USE_LOCAL_DATA is not writable in an iOS app bundle; forcing it OFF so saves/configs use SDL_GetPrefPath().")
+  set(SIL_USE_LOCAL_DATA OFF CACHE BOOL "Store generated data inside the game directory (debug builds)" FORCE)
+endif()
+
 set(SIL_EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/defines.h"
+)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/src/defines.h" SIL_VERSION_STRING_LINE
+  REGEX "^#define[ \t]+VERSION_STRING[ \t]+\"[^\"]+\""
+)
+if(NOT SIL_VERSION_STRING_LINE)
+  message(FATAL_ERROR "Could not read VERSION_STRING from src/defines.h")
+endif()
+string(REGEX REPLACE
+  "^#define[ \t]+VERSION_STRING[ \t]+\"([^\"]+)\".*$"
+  "\\1"
+  SIL_VERSION_STRING
+  "${SIL_VERSION_STRING_LINE}"
+)
 
 # Configure SDL_mixer when built from the vendored submodule: enable only the
 # codecs we actually use (WAV + Ogg Vorbis via stb_vorbis) and keep the build
@@ -246,6 +267,7 @@ set(SIL_MORE_SOURCES_LEVEL_GENERATION
     src/level-generation/level-generation-layout-info.c
     src/level-generation/level-generation-layout-anchors.c
     src/level-generation/level-generation-layout.c
+    src/level-generation/level-generation-legendary.c
     src/level-generation/level-generation-layout-morgoth.c
     src/level-generation/level-generation-layout-partitions.c
     src/level-generation/level-generation-quests.c
@@ -362,6 +384,8 @@ set(SIL_MORE_SOURCES_SMITHING
 )
 
 set(SIL_MORE_SOURCES_SAVE_AND_META
+    src/metarun/metarun-meta-state.c
+    src/metarun/metarun-monster-events.c
     src/metarun/metarun.c
     src/metarun/metarun-persistence.c
     src/metarun/metarun-score.c
@@ -645,18 +669,25 @@ if(SIL_IOS)
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/ios/Info.plist.in"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.silqh.silmore"
     MACOSX_BUNDLE_BUNDLE_NAME "Sil-More"
-    MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
-    MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${SIL_VERSION_STRING}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${SIL_VERSION_STRING}"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
     XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon"
   )
 
-  file(GLOB SIL_RES_EDIT "lib/edit/*.txt")
-  file(GLOB SIL_RES_PREF "lib/pref/*.json")
-  file(GLOB SIL_RES_FONT "lib/xtra/font/*.ttf")
-  file(GLOB SIL_RES_GRAF "lib/xtra/graf/*.png")
-  file(GLOB SIL_RES_SOUND "lib/xtra/sound/*")
-  file(GLOB SIL_RES_HELP "lib/help/*.txt" "lib/help/*.hlp")
+  set(SIL_IOS_ASSET_CATALOG "${CMAKE_SOURCE_DIR}/ios/Assets.xcassets")
+  set_source_files_properties("${SIL_IOS_ASSET_CATALOG}" PROPERTIES
+    MACOSX_PACKAGE_LOCATION "Resources"
+  )
+  target_sources(sil-more PRIVATE "${SIL_IOS_ASSET_CATALOG}")
+
+  file(GLOB SIL_RES_EDIT    CONFIGURE_DEPENDS "lib/edit/*.txt")
+  file(GLOB SIL_RES_PREF    CONFIGURE_DEPENDS "lib/pref/*.prf" "lib/pref/*.json")
+  file(GLOB SIL_RES_FONT    CONFIGURE_DEPENDS "lib/xtra/font/*.ttf")
+  file(GLOB SIL_RES_GRAF    CONFIGURE_DEPENDS "lib/xtra/graf/*.png")
+  file(GLOB_RECURSE SIL_RES_SOUND LIST_DIRECTORIES false CONFIGURE_DEPENDS "lib/xtra/sound/*")
+  file(GLOB_RECURSE SIL_RES_MUSIC LIST_DIRECTORIES false CONFIGURE_DEPENDS "lib/xtra/music/*")
+  file(GLOB SIL_RES_HELP    CONFIGURE_DEPENDS "lib/help/*.txt" "lib/help/*.hlp")
 
   foreach(_file ${SIL_RES_EDIT})
     set_source_files_properties(${_file} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/lib/edit")
@@ -671,7 +702,26 @@ if(SIL_IOS)
     set_source_files_properties(${_file} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/lib/xtra/graf")
   endforeach()
   foreach(_file ${SIL_RES_SOUND})
-    set_source_files_properties(${_file} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/lib/xtra/sound")
+    get_filename_component(_dir "${_file}" DIRECTORY)
+    file(RELATIVE_PATH _rel_dir "${CMAKE_CURRENT_SOURCE_DIR}/lib/xtra/sound" "${_dir}")
+    string(REPLACE "\\" "/" _rel_dir "${_rel_dir}")
+    if(_rel_dir STREQUAL ".")
+      set(_package_dir "Resources/lib/xtra/sound")
+    else()
+      set(_package_dir "Resources/lib/xtra/sound/${_rel_dir}")
+    endif()
+    set_source_files_properties("${_file}" PROPERTIES MACOSX_PACKAGE_LOCATION "${_package_dir}")
+  endforeach()
+  foreach(_file ${SIL_RES_MUSIC})
+    get_filename_component(_dir "${_file}" DIRECTORY)
+    file(RELATIVE_PATH _rel_dir "${CMAKE_CURRENT_SOURCE_DIR}/lib/xtra/music" "${_dir}")
+    string(REPLACE "\\" "/" _rel_dir "${_rel_dir}")
+    if(_rel_dir STREQUAL ".")
+      set(_package_dir "Resources/lib/xtra/music")
+    else()
+      set(_package_dir "Resources/lib/xtra/music/${_rel_dir}")
+    endif()
+    set_source_files_properties("${_file}" PROPERTIES MACOSX_PACKAGE_LOCATION "${_package_dir}")
   endforeach()
   foreach(_file ${SIL_RES_HELP})
     set_source_files_properties(${_file} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/lib/help")
@@ -679,9 +729,11 @@ if(SIL_IOS)
 
   set(SIL_ALL_RESOURCES
     ${SIL_RES_EDIT} ${SIL_RES_PREF} ${SIL_RES_FONT}
-    ${SIL_RES_GRAF} ${SIL_RES_SOUND} ${SIL_RES_HELP}
+    ${SIL_RES_GRAF} ${SIL_RES_SOUND} ${SIL_RES_MUSIC} ${SIL_RES_HELP}
   )
   target_sources(sil-more PRIVATE ${SIL_ALL_RESOURCES})
+
+  target_compile_definitions(sil-more PRIVATE SIL_IOS)
 endif()
 
 # Include Windows resource (.rc) so the executable has an icon on Windows

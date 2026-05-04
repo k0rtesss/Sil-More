@@ -74,7 +74,7 @@
 
 # Version stamp (required)
 
-V:0.9.6
+V:0.9.7
 
 
 
@@ -315,7 +315,7 @@ C:0:0:0:0:0:0:1:2
 T:34:0:9
 # also valid on helms (helm and great helm)
 T:32:5:6
-A:2/100:10:50/15:33
+A:2/100:10/50:15/33
 F:AGGRAVATE | DIF_ID | LIGHT_CURSE | EVIL_ITEM | WILL | MIN_DEPTH_SPEED
 D:[shield]It goads the bearer toward the harsh answer, as though a shield
 D: were given not for shelter but for driving into the thick of strife. ||
@@ -353,12 +353,12 @@ D: iron, and patience into one strength without boast.
 
 # Daggers
 
-N:20:of Cuiviénen
+N:20:of Cuivienen
 W:0:20:0:6000
 C:0:0:0:0:0:0:3
 T:23:4:4
 F:LIGHT | SUST_GRA | SUST_DEX | SONG | NOBLE_ITEM
-D:[dagger]A memory of the first starlight of Cuiviénen rests in this
+D:[dagger]A memory of the first starlight of Cuivienen rests in this
 D: small blade, making it seem fitter for a swift and graceful hand than
 D: for any coarse work of butchery.
 
@@ -488,7 +488,7 @@ F:NOBLE_ITEM | SLAY_TROLL
 B:0/6
 D:[war_hammer]It carries the bold strength of Hador's House, and troll
 D: flesh seems especially hateful to its heavy blow. ||
-D:[glaive]Its long edge has the valour of the Men of Dor-lómin, eager
+D:[glaive]Its long edge has the valour of the Men of Dor-lomin, eager
 D: for the great and brutish foes that once broke lesser lines. ||
 D:[axe]There is a man's fierce nobility in it, as though it had been
 D: borne by one who would rather die standing than yield ground to trolls. ||
@@ -521,18 +521,18 @@ D: it may find wrath answering sooner than wisdom.
 
 # Swords only
 
-N:31:of the Fëanorians
+N:31:of the Feanorians
 W:12:30:0:1000
 C:0:0:0:0:0:0:1
 T:23:10:99
 F:GRA | DEX | DANGER | NOBLE_ITEM
 D:[short_sword]It answers the hand with a bright fierce quickness, like
-D: one of those lesser blades that still carried the proud fire of Fëanor's
+D: one of those lesser blades that still carried the proud fire of Feanor's
 D: house. ||
 D:[great_sword]Even in so great a blade there is a perilous swiftness,
-D: splendid and a little terrible, after the manner of the Fëanorians. ||
+D: splendid and a little terrible, after the manner of the Feanorians. ||
 D:[sword]A bright and restless mastery is remembered in it, noble in
-D: craft yet shadowed by the dangerous fire of Fëanor's line.
+D: craft yet shadowed by the dangerous fire of Feanor's line.
 
 
 # Daggers, curved swords, and short swords only
@@ -721,14 +721,14 @@ D: free folk, not for any honest proving of arms. ||
 D:[short_sword]The short black blade seems made for killing Men and Elves
 D: in the crush, where malice profits from closeness. ||
 D:[great_sword]Its long black edge carries the old hatred of Angband for
-D: the Children of Ilúvatar. ||
+D: the Children of Iluvatar. ||
 D:[spear]This spear's point is set with a grim purpose toward the free
 D: peoples, as if black iron itself had learned enmity. ||
 D:[glaive]Along its edge there runs a hatred broad as the stroke it
 D: makes, cruelly bent toward Men and Elves alike. ||
 D:[axe]A black killing-tool for butcher's work among the free peoples. ||
 D:[default]Black iron and old malice are joined in it, and the Children
-D: of Ilúvatar are its favoured prey.
+D: of Iluvatar are its favoured prey.
 
 
 # Daggers, curved swords, short swords, hand axes, and glaives
@@ -1515,7 +1515,7 @@ W:0:50:0:0
 C:0:0:0:0:0:0:0
 T:40:0:4
 T:40:6:99
-A:1:0:13:50
+A:1/0:13/50
 F:UNLIGHT | VUL_FIRE | DIF_ID | LIGHT_CURSE | JINX
 D:[amulet]An unwholesome dusk hangs about it, as though the little
 D: thing withheld what light should naturally rest upon it. The eye
@@ -1531,7 +1531,7 @@ N:144:(Tainted)
 W:0:40:0:0
 C:0:0:0:0:0:0:0
 T:45:0:99
-A:1:0:13:50
+A:1/0:13/50
 F:DANGER | HAUNTED | DIF_ID | LIGHT_CURSE | JINX
 D:[ring]Something in it has been secretly marred. Its virtue remains,
 D: yet not cleanly: one feels a lurking warp in the work, as if help
@@ -1609,7 +1609,7 @@ D: to wake again, as though the forge itself had judged the blow.
 
 # Daggers and hand axes only
 # (ability 0/3 is Throwing)
-# The Gaurwaith were the outlaw band of Túrin, living by their wits and weapons in the wild.
+# The Gaurwaith were the outlaw band of Turin, living by their wits and weapons in the wild.
 
 N:149:of the Gaurwaith
 W:4:75:0:1500
@@ -1710,7 +1710,7 @@ D: sundered outright than merely held at bay.
 
 # Warhammers, hand axes, battle-axes, great-axes
 
-N:154:of Aulë's Warding
+N:154:of Aule's Warding
 W:12:30:0:3000
 C:0:0:0:0:0:0:0
 T:21:8:8
@@ -1723,7 +1723,7 @@ D:[hand_axe]Though small, it carries a stern hallowing, as if made to
 D: bite truly upon the deathless and the blood-drinking things that
 D: mock the works of living hands. ||
 D:[battle_axe]Its broad edge has in it a lawful wrath against the
-D: walking dead, as though the craft of Aulë denied them any lasting
+D: walking dead, as though the craft of Aule denied them any lasting
 D: place in the world of stone and iron. ||
 D:[great_axe]A deep protective virtue abides in it, and even its vast
 D: stroke feels set not only to destroy, but to cast down what should
@@ -1960,7 +1960,7 @@ D: black hunts of the Enemy, when free folk or web-spawn were driven
 D: from cover by pain, shouting, and the promise of worse behind.
 
 
-# Fëanorian Lamp only
+# Feanorian Lamp only
 # (ability 7/7 is Song of the Trees)
 
 N:170:of Laurelin

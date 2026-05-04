@@ -29,6 +29,7 @@
 #include "runtime/runtime-dungeon-internal.h"
 #include "runtime/runtime-dungeon.h"
 #include "runtime/runtime-game.h"
+#include "metarun/metarun-meta-state.h"
 #include "score/score_io.h"
 #include "spell/spell-detection.h"
 #include "ui/ui-information-scene.h"
@@ -1034,6 +1035,7 @@ bool runtime_dungeon_prepare_level_presentation(void)
     runtime_dungeon_publish_runtime_snapshot(0, 0, 0);
 
     runtime_dungeon_handle_partition_entry(true);
+    legendary_area_note_player_position();
 
     log_info("Dungeon display setup completed successfully");
     log_debug("Final setup state: character_generated=%s, character_icky=%d, update=0x%08X, redraw=0x%08X, window=0x%08X",

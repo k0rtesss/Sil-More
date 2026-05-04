@@ -1,17 +1,4 @@
-# Copyright (C) 2025-2026 Sil-More contributors
-#
-# This file is part of Sil-More.
-#
-# Sil-More is free software; you can redistribute it and/or modify it
-# under the terms of the GNU General Public License version 2 as
-# published by the Free Software Foundation.
-#
-# Sil-More is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
-# for more details.
-
-# Create a clean release build folder matching sil-more_beta 0.9 structure
+﻿# Create clean standard and portable release build folders matching sil-more_beta 0.9 structure
 # Based on analysis of the existing clean build
 
 param(
@@ -27,6 +14,7 @@ if ($IncludeCoverArt) {
 } else {
     Write-Host "Mode: SLIM (without CoverArt)" -ForegroundColor Cyan
 }
+Write-Host "Portable companion release will also be created." -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 
 function Remove-WavFilesRecursive {
@@ -61,15 +49,26 @@ function Resolve-ScriptRelativePath {
     return [System.IO.Path]::GetFullPath((Join-Path $scriptRoot $PathValue))
 }
 
+$portableOutputFolder = if ($OutputFolder -match '(?i)-portable$') {
+    $OutputFolder
+} elseif ($OutputFolder -match '(?i)-release$') {
+    $OutputFolder -replace '(?i)-release$', '-portable-release'
+} else {
+    "$OutputFolder-portable"
+}
+
 $buildScriptPath = Resolve-ScriptRelativePath "build-cmake.bat"
+$portableScriptPath = Resolve-ScriptRelativePath "create-portable-release-build.ps1"
 $deploymentFolderPath = Resolve-ScriptRelativePath "sil-more-windows-sdl3"
 $deploymentFolder = Split-Path -Leaf $deploymentFolderPath
 $deploymentExePath = Join-Path $deploymentFolderPath "sil-more.exe"
 $outputFolderPath = Resolve-ScriptRelativePath $OutputFolder
+$portableOutputFolderPath = Resolve-ScriptRelativePath $portableOutputFolder
 $libSourceRoot = Resolve-ScriptRelativePath "lib"
 $coverArtPath = Resolve-ScriptRelativePath "CoverArt"
 $legacyCoverArtPath = Resolve-ScriptRelativePath "sil-more_beta 0.9/CoverArt"
 $archiveScriptPath = Resolve-ScriptRelativePath "create-distribution-archive.ps1"
+$releaseApkPath = Resolve-ScriptRelativePath "android/app/build/outputs/apk/release/app-release.apk"
 
 # Define game data folders to copy (content only) - edit, pref, xtra, docs
 $libFoldersToCopy = @('edit', 'pref', 'xtra', 'docs')
@@ -340,13 +339,23 @@ $manifestText += "`n"
 $manifestText | Set-Content (Join-Path $outputFolderPath "MANIFEST.txt")
 Write-Host "  [OK] MANIFEST.txt"
 
+# Create the portable companion release build.
+Write-Host ""
+Write-Host "Creating portable release build..." -ForegroundColor Yellow
+& $portableScriptPath -OutputFolder $portableOutputFolder -Version $Version -IncludeCoverArt:$IncludeCoverArt
+if (-not $?) {
+    Write-Host "Portable release build failed!" -ForegroundColor Red
+    exit 1
+}
+
 # Calculate and display final size
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "Release build complete!" -ForegroundColor Green
+Write-Host "Release builds complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Location: $outputFolderPath" -ForegroundColor Cyan
+Write-Host "Standard location: $outputFolderPath" -ForegroundColor Cyan
+Write-Host "Portable location: $portableOutputFolderPath" -ForegroundColor Cyan
 
 $folderSize = (Get-ChildItem -Recurse $outputFolderPath | Measure-Object -Property Length -Sum).Sum / 1MB
 $folderSizeGB = $folderSize / 1024
@@ -369,5 +378,6 @@ if ($IncludeCoverArt) {
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Test: $(Join-Path $outputFolderPath 'sil-more.exe')"
-Write-Host "  2. Archive: $archiveScriptPath -ReleaseFolder $outputFolderPath -Version $Version"
+Write-Host "  2. Test portable: $(Join-Path $portableOutputFolderPath 'sil-more.exe')"
+Write-Host "  3. Package distributions: $archiveScriptPath -ReleaseFolder $outputFolderPath -PortableReleaseFolder $portableOutputFolderPath -Version $Version -ApkPath $releaseApkPath"
 Write-Host ""

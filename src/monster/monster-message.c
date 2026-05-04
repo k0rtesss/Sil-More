@@ -20,6 +20,7 @@
  */
 
 #include "angband.h"
+#include "metarun/metarun-meta-state.h"
 #include "monster/monster.h"
 
 void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
@@ -28,6 +29,8 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
     monster_race* r_ptr;
     cptr name;
     bool seen, pron;
+
+    meta_monster_apply_runtime_overrides();
 
     if (p_ptr->image)
     {
@@ -224,11 +227,21 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
 void monster_desc_race(char* desc, size_t max, int r_idx)
 {
     monster_race* r_ptr = &r_info[r_idx];
+    const meta_monster_record* record;
 
+    meta_monster_apply_runtime_overrides();
     cptr name = (r_name + r_ptr->name);
 
     /* Write the name */
     SDL_strlcpy(desc, name, max);
+    record = meta_monster_find_record_for_race((u16b)r_idx);
+    if (record && record->rank > 0)
+    {
+        int stars = MIN(3, record->rank);
+
+        while (stars-- > 0)
+            SDL_strlcat(desc, "*", max);
+    }
 }
 
 void message_pain(int m_idx, int dam)

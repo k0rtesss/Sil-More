@@ -16,7 +16,9 @@
 
 #include "angband.h"
 #include "fs/save-internal.h"
+#include "fs/savefile-format.h"
 #include "log/log.h"
+#include "metarun/metarun-meta-state.h"
 
 #define IMPORTANT_FLAGS_LO                                                     \
     (CAVE_MARK | CAVE_GLOW | CAVE_ICKY | CAVE_ROOM | CAVE_G_VAULT | CAVE_HIDDEN)
@@ -205,6 +207,61 @@ void wr_dungeon(void)
             wr_byte(buf[choice_idx]);
     }
     log_trace("[save:%06u] === END DOOR_CHOICES ===",
+        (unsigned)save_byte_offset);
+
+    log_trace("[save:%06u] === BEGIN LEGENDARY_AREA_ID ===",
+        (unsigned)save_byte_offset);
+    {
+        guid64 record_guid = { 0, 0 };
+        bool entry_seen = false;
+        bool has_active = legendary_area_get_save_record(
+            META_DUNGEON_LEGENDARY_AREA_ID_PRIMARY, &record_guid, &entry_seen);
+        u16b prev_id = 0;
+        u16b run_len = 0;
+
+        legendary_area_map_ensure();
+        wr_u16b(SAVEFILE_LEGENDARY_AREA_MAGIC);
+        wr_byte(SAVEFILE_LEGENDARY_AREA_VERSION);
+        wr_u16b(has_active ? 1 : 0);
+        if (has_active)
+        {
+            wr_u16b(META_DUNGEON_LEGENDARY_AREA_ID_PRIMARY);
+            wr_u32b(record_guid.hi);
+            wr_u32b(record_guid.lo);
+            wr_byte(entry_seen ? 1 : 0);
+        }
+
+        for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        {
+            for (x = 0; x < p_ptr->cur_map_wid; x++)
+            {
+                u16b id = legendary_area_id ? legendary_area_id[y][x] : 0;
+
+                if (run_len == 0)
+                {
+                    prev_id = id;
+                    run_len = 1;
+                }
+                else if (id == prev_id && run_len < MAX_SHORT)
+                {
+                    run_len++;
+                }
+                else
+                {
+                    wr_u16b(run_len);
+                    wr_u16b(prev_id);
+                    prev_id = id;
+                    run_len = 1;
+                }
+            }
+        }
+        if (run_len)
+        {
+            wr_u16b(run_len);
+            wr_u16b(prev_id);
+        }
+    }
+    log_trace("[save:%06u] === END LEGENDARY_AREA_ID ===",
         (unsigned)save_byte_offset);
 
     log_trace("[save:%06u] Compacting objects and monsters",

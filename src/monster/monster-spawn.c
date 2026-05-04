@@ -23,6 +23,7 @@
 #include "angband.h"
 #include "cmd/monster/cmd-monster.h"
 #include "log/log.h"
+#include "metarun/metarun-meta-state.h"
 #include "monster/monster.h"
 
 /*
@@ -31,6 +32,8 @@
 errr get_mon_num_prep(void)
 {
     int i;
+
+    meta_monster_apply_runtime_overrides();
 
     /* Scan the allocation table */
     for (i = 0; i < alloc_race_size; i++)
@@ -112,6 +115,8 @@ s16b get_mon_num(int level, bool special, bool allow_non_smart, bool vault)
     int build_vault_type = 0;
     bool exact_token = false;
     int current_generation_depth = player_generation_depth();
+
+    meta_monster_apply_runtime_overrides();
 
     // determine the effective level:
 
@@ -350,6 +355,8 @@ bool place_monster_one(
     monster_type monster_type_body;
 
     cptr name;
+
+    meta_monster_apply_runtime_overrides();
 
     /* Paranoia */
     if (!in_bounds(y, x))

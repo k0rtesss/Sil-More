@@ -20,8 +20,18 @@
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "metarun/metarun-meta-state.h"
 
 static int overwhelming_att_mod(monster_type* m_ptr);
+
+static int revenge_bonus_against(const monster_type* m_ptr)
+{
+    if (!m_ptr || !m_ptr->r_idx)
+        return 0;
+    if (!meta_monster_is_revenge_marked_race((u16b)m_ptr->r_idx))
+        return 0;
+    return meta_monster_revenge_bonus();
+}
 
 int skill_check(
     monster_type* m_ptr1, int skill, int difficulty, monster_type* m_ptr2)
@@ -39,9 +49,11 @@ int skill_check(
 
     // elf-bane bonus against you
     if ((m_ptr1 == PLAYER) && (m_ptr2 != NULL))
-        difficulty += elf_bane_bonus(m_ptr2) + dwarf_bane_bonus(m_ptr2);
+        difficulty += elf_bane_bonus(m_ptr2) + dwarf_bane_bonus(m_ptr2)
+            + edain_bane_bonus(m_ptr2);
     if ((m_ptr2 == PLAYER) && (m_ptr1 != NULL))
-        skill += elf_bane_bonus(m_ptr1) + dwarf_bane_bonus(m_ptr1);
+        skill += elf_bane_bonus(m_ptr1) + dwarf_bane_bonus(m_ptr1)
+            + edain_bane_bonus(m_ptr1);
 
     // the basic rolls
     skill_total = dieroll(10) + skill;
@@ -178,6 +190,9 @@ int total_player_attack(monster_type* m_ptr, int base)
     // reward unique bane ability (if applicable)
     att += unique_bane_bonus(m_ptr);
 
+    // reward metarun revenge (if applicable)
+    att += revenge_bonus_against(m_ptr);
+
     // reward master hunter ability (if applicable)
     att += master_hunter_bonus(m_ptr);
 
@@ -223,6 +238,9 @@ int total_player_evasion(monster_type* m_ptr, bool archery)
 
     // reward unique bane ability (if applicable)
     evn += unique_bane_bonus(m_ptr);
+
+    // reward metarun revenge (if applicable)
+    evn += revenge_bonus_against(m_ptr);
 
     // halve evasion for certain situations (and only halve positive evasion!)
     if (evn > 0)
@@ -273,6 +291,7 @@ int total_monster_attack(monster_type* m_ptr, int base)
     // elf-bane bonus
     att += elf_bane_bonus(m_ptr);
     att += dwarf_bane_bonus(m_ptr);
+    att += edain_bane_bonus(m_ptr);
 
     // unique bane penalty (player ability affecting monster)
     att -= unique_bane_bonus(m_ptr);
@@ -316,6 +335,7 @@ int total_monster_evasion(monster_type* m_ptr, bool archery)
     // elf-bane bonus
     evn += elf_bane_bonus(m_ptr);
     evn += dwarf_bane_bonus(m_ptr);
+    evn += edain_bane_bonus(m_ptr);
 
     // unique bane penalty (player ability affecting monster)
     evn -= unique_bane_bonus(m_ptr);

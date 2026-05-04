@@ -119,6 +119,8 @@ struct sdl_config {
     int gamepad_left_stick_combo_bindings[GAMEPAD_MODIFIER_COUNT][GAMEPAD_STICK_DIR_COUNT];
     int gamepad_right_stick_combo_bindings[GAMEPAD_MODIFIER_COUNT][GAMEPAD_STICK_DIR_COUNT];
     int gamepad_shoulder_combo_binding;   // Binding for L1+R1 combo action
+    bool touch_pane_key_labels_visible;
+    bool touch_pane_inventory_equipment_cycle;
     int touch_pane_bindings[SDL_TOUCH_PANE_BUTTON_COUNT];
     char touch_pane_labels[SDL_TOUCH_PANE_BUTTON_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
     int touch_pane_second_bindings[SDL_TOUCH_PANE_BUTTON_COUNT];
@@ -154,6 +156,10 @@ void sdl_config_set_default_gamepad_bindings(struct sdl_config* config);
 
 // Set default touch pane bindings (does not touch other fields)
 void sdl_config_set_default_touch_pane_bindings(struct sdl_config* config);
+
+// Migrate old built-in touch pane bindings without overwriting custom labels
+void sdl_config_migrate_touch_pane_defaults(struct sdl_config* config,
+    bool old_touch_pane_defaults);
 
 // Clear custom touch pane labels (does not touch other fields)
 void sdl_config_clear_touch_pane_labels(struct sdl_config* config);

@@ -40,6 +40,7 @@ extern bool savefile_has_thrall_quest_requested;
 extern bool savefile_has_randart_flags4;
 extern bool savefile_has_item_bonuses;
 extern bool savefile_has_randart_bonuses;
+extern bool savefile_has_legendary_area_map;
 
 extern u32b load_byte_offset;
 extern bool load_read_failed;

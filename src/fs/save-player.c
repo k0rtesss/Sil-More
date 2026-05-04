@@ -19,6 +19,7 @@
 #include "fs/path.h"
 #include "fs/save-internal.h"
 #include "log/log.h"
+#include "metarun/metarun-meta-state.h"
 #include <stdio.h>
 
 static void updatecharinfoS(void)
@@ -198,6 +199,8 @@ void wr_extra(void)
 
     wr_byte(p_ptr->stealth_mode);
     wr_byte(p_ptr->self_made_arts);
+
+    meta_monster_sync_player_state();
 
     wr_byte(p_ptr->climbing);
 

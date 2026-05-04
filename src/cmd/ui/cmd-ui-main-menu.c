@@ -62,6 +62,11 @@ extern struct sound_config g_sound_config;
 
 #define MAIN_MENU_MAX 16
 
+typedef enum main_menu_footer_action {
+    MAIN_MENU_FOOTER_SELECT = 101,
+    MAIN_MENU_FOOTER_BACK = 102
+} main_menu_footer_action;
+
 typedef struct main_menu_about_span {
     byte attr;
     cptr text;
@@ -149,6 +154,24 @@ static bool main_menu_command_to_key(const app_ui_command* command,
             return true;
         *out_key = '\r';
         return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case MAIN_MENU_FOOTER_SELECT:
+            *out_key = '\r';
+            return true;
+        case MAIN_MENU_FOOTER_BACK:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
     }
 
     if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
@@ -490,6 +513,35 @@ static bool main_menu_scene_add_row(app_ui_panel* panel, int id,
         highlight == id, entry->key, entry->label, meta_buf);
 }
 
+static bool main_menu_scene_add_footer_actions(app_ui_panel* panel)
+{
+    bool steamdeck;
+
+    if (!panel)
+        return false;
+
+    steamdeck = steamdeck_controls_active();
+    if (steamdeck)
+    {
+        char select_label[APP_UI_KEY_MAX];
+        char back_label[APP_UI_KEY_MAX];
+
+        main_menu_prompt_label(steamdeck_confirm_key(), "A", select_label,
+            sizeof(select_label));
+        main_menu_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        return app_ui_panel_add_footer_action(panel, MAIN_MENU_FOOTER_SELECT,
+            TERM_L_BLUE, true, select_label, "Select")
+            && app_ui_panel_add_footer_action(panel, MAIN_MENU_FOOTER_BACK,
+                TERM_WHITE, true, back_label, "Back");
+    }
+
+    return app_ui_panel_add_footer_action(panel, MAIN_MENU_FOOTER_SELECT,
+        TERM_L_BLUE, true, "Enter", "Select")
+        && app_ui_panel_add_footer_action(panel, MAIN_MENU_FOOTER_BACK,
+            TERM_WHITE, true, "Esc", "Back");
+}
+
 static bool main_menu_scene_add_detail(app_ui_panel* panel, int highlight,
     bool death_view)
 {
@@ -578,7 +630,8 @@ static bool main_menu_build_ui_scene(app_ui_scene* scene, int highlight,
             death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_RETURN_GAME, highlight,
             death_view)
-        && main_menu_scene_add_detail(panel, highlight, death_view);
+        && main_menu_scene_add_detail(panel, highlight, death_view)
+        && main_menu_scene_add_footer_actions(panel);
 }
 
 static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,

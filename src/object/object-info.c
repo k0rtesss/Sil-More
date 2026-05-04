@@ -16,8 +16,10 @@
  */
 
 #include "angband.h"
+#include "cmd/movement/cmd-depth-bonus.h"
 #include "cmd/combat/cmd-ranged.h"
 #include "log/log.h"
+#include "object/object-flags.h"
 #include "object/object-info.h"
 #include "object/object-info-internal.h"
 #include "object/object-use.h"
@@ -1199,6 +1201,29 @@ static bool describe_ignores(const object_type* o_ptr, u32b f3)
     return ((n > 0) ? true : false);
 }
 
+static void format_min_depth_bonus_depths(char* buf, size_t buflen, int units)
+{
+    int whole;
+    int rem;
+
+    if (!buf || buflen == 0)
+        return;
+
+    if (units < 0)
+        units = 0;
+
+    whole = units / MIN_DEPTH_BONUS_UNITS_PER_DEPTH;
+    rem = units % MIN_DEPTH_BONUS_UNITS_PER_DEPTH;
+
+    if (rem == 0)
+        strnfmt(buf, buflen, "%d", whole);
+    else if (MIN_DEPTH_BONUS_UNITS_PER_DEPTH == 2 && rem == 1)
+        strnfmt(buf, buflen, "%d.5", whole);
+    else
+        strnfmt(buf, buflen, "%d+%d/%d", whole, rem,
+            MIN_DEPTH_BONUS_UNITS_PER_DEPTH);
+}
+
 /*
  * Describe stat sustains.
  */
@@ -1239,6 +1264,9 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     cptr good[24], bad[14];
     int gc = 0, bc = 0;
     bool something = false;
+    char deep_call_desc[120];
+    char deep_call_equipped_bonus[16];
+    char deep_call_inventory_bonus[16];
 
     /* Throwing weapons. */
     if (f3 & (TR3_THROWING))
@@ -1287,7 +1315,18 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     if (f4 & (TR4_BREAKS_PERMA_CURSE))
         good[gc++] = "can break the Oath of Fëanor on your equipped items";
     if (f4 & (TR4_DEEP_CALL))
-        good[gc++] = "bears a Deep Call, speeding the minimum depth timer as if you were three levels deeper even in your inventory";
+    {
+        format_min_depth_bonus_depths(deep_call_equipped_bonus,
+            sizeof(deep_call_equipped_bonus),
+            MIN_DEPTH_ITEM_BONUS_DEEP_CALL_EQUIPPED);
+        format_min_depth_bonus_depths(deep_call_inventory_bonus,
+            sizeof(deep_call_inventory_bonus),
+            MIN_DEPTH_ITEM_BONUS_DEEP_CALL_INVENTORY);
+        strnfmt(deep_call_desc, sizeof(deep_call_desc),
+            "bears a Deep Call, speeding min depth (+%s equipped, +%s in inventory)",
+            deep_call_equipped_bonus, deep_call_inventory_bonus);
+        good[gc++] = deep_call_desc;
+    }
     if ((f4 & (TR4_PROT_FIRE)) && (o_ptr->pd > 0))
         good[gc++] = "uses its protection against fire";
     if ((f4 & (TR4_PROT_COLD)) && (o_ptr->pd > 0))
@@ -1326,9 +1365,9 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     if (f2 & (TR2_HUNGER))
         bad[bc++] = "increases your hunger";
     if (f2 & (TR2_DARKNESS))
-        bad[bc++] = "shrouds you in darkness (but concentrates your light)";
+        bad[bc++] = "reduces your light radius by 1, but concentrates the light that remains";
     if (f4 & (TR4_UNLIGHT))
-        bad[bc++] = "dims your light";
+        bad[bc++] = "reduces your light radius by 1 without concentrating the light that remains";
     if (f2 & (TR2_SLOWNESS))
         bad[bc++] = "slows your movement";
     if (f2 & (TR2_AGGRAVATE))
@@ -1346,7 +1385,7 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     if (cursed_p(o_ptr))
     {
         if (f3 & (TR3_PERMA_CURSE))
-            bad[bc++] = "bound by the Oath of Fëanor (broken by holy light); the Silmarils are calling you, speeding the minimum depth timer as if you were three levels deeper even in your inventory";
+            bad[bc++] = "bound by the Oath of Fëanor (broken by holy light); the Silmarils are calling you, speeding the minimum depth timer as if you were five levels deeper even in your inventory";
         else if (f3 & (TR3_HEAVY_CURSE))
             bad[bc++] = "heavily cursed";
         else if (object_known_p(o_ptr))
@@ -1596,9 +1635,12 @@ static bool describe_abilities(const object_type* o_ptr)
 {
     cptr ability[8];
     static char ability_buf[8][80]; /* Static buffer for modified ability names */
+    char cruel_blow_bonus[16];
+    char cruel_blow_desc[160];
     int ac = 0;
     ability_type* b_ptr;
     int i;
+    bool grants_cruel_blow = false;
 
     // only describe when identified
     if (!object_known_p(o_ptr) && !(o_ptr->ident & (IDENT_SPOIL)))
@@ -1609,6 +1651,12 @@ static bool describe_abilities(const object_type* o_ptr)
     {
         b_ptr
             = &b_info[ability_index(o_ptr->skilltype[i], o_ptr->abilitynum[i])];
+
+        if (o_ptr->skilltype[i] == S_STL
+            && o_ptr->abilitynum[i] == STL_CRUEL_BLOW)
+        {
+            grants_cruel_blow = true;
+        }
 
         /* Check if this is a Bane ability with a specific type */
         if (o_ptr->skilltype[i] == S_PER && o_ptr->abilitynum[i] == PER_BANE
@@ -1644,6 +1692,17 @@ static bool describe_abilities(const object_type* o_ptr)
 
         /* Output end (if needed) */
         p_text_out(".  ");
+
+        if (grants_cruel_blow)
+        {
+            format_min_depth_bonus_depths(cruel_blow_bonus,
+                sizeof(cruel_blow_bonus),
+                MIN_DEPTH_ITEM_BONUS_CRUEL_BLOW_EQUIPPED);
+            strnfmt(cruel_blow_desc, sizeof(cruel_blow_desc),
+                "When equipped, its Cruel Blow grant speeds min depth by the same amount as equipped Deep Call (+%s), even if disabled.  ",
+                cruel_blow_bonus);
+            p_text_out(cruel_blow_desc);
+        }
 
         /* It granted abilities */
         return (true);

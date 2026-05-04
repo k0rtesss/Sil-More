@@ -846,9 +846,9 @@ struct character_profile
     s16b h_adj[A_MAX];                         /* Character stat bonuses */
     s16b a_adj[CHARACTER_ABILITY_MAX][2];      /* Ability slots: [i][0]=stat, [i][1]=ability */
 
-    u32b flags;   /* Character flags (RHF set) */
-    u32b flags_u; /* Character unique flags */
-    byte power;   /* Power rating: 0=weak ... 3=very powerful */
+    u32b flags, flags_u; /* Character flags (RHF set) / unique flags */
+    byte power, revenge_mark_count, revenge_mark_pad[2];
+    guid64 revenge_monster_guid[8]; u32b revenge_reason[8];
     start_item start_items[MAX_START_ITEMS]; /* Bonus kit */
 };
 
@@ -1118,9 +1118,9 @@ struct player_type
     byte active_ability[S_MAX][ABILITIES_MAX]; /* Whether or not you are using
                                                   each ability */
 
-    s16b last_attack_m_idx; // m_idx of the monster attacked last round (if any)
-    s16b consecutive_attacks; // number of rounds spent attacking this monster
+    s16b last_attack_m_idx, consecutive_attacks; // attack target and streak
     s16b bane_type; // the monster type you have specialized against
+    u16b revenge_kills, revenge_bonus; /* Current metarun revenge state */
     byte previous_action[ACTION_MAX]; // stores the previous actions you have
                                       // taken
     byte focused; // stores whether you are currently focusing for an attack

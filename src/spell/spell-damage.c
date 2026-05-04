@@ -19,6 +19,7 @@
 #include "cmd/world/cmd-interact-chest.h"
 #include "log/log.h"
 #include "melee/melee-attack.h"
+#include "metarun/metarun-meta-state.h"
 #include "player/killer.h"
 #include "spell/spell-damage.h"
 #include <math.h>
@@ -125,6 +126,7 @@ void take_hit(int dam, cptr kb_str)
         }
 
         killer_commit(kb_str);
+        meta_monster_record_current_player_death(p_ptr->died_from);
 
         /* Note death */
         p_ptr->is_dead = true;

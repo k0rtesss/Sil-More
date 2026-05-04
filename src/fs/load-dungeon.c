@@ -16,7 +16,9 @@
 
 #include "angband.h"
 #include "fs/load-internal.h"
+#include "fs/savefile-format.h"
 #include "log/log.h"
+#include "metarun/metarun-meta-state.h"
 #include "support/reliability-checks.h"
 #include <string.h>
 
@@ -339,9 +341,95 @@ errr rd_dungeon(void)
                 "Read door-choices block after cave_color: magic=0x%04X, len=%d (used=%d)",
                 DOOR_CHOICES_MAGIC, n, to_read);
             styles_load_level_door_choices(buf, to_read);
+
+            legendary_area_map_reset();
+            if (savefile_has_legendary_area_map)
+            {
+                u16b legendary_magic = 0;
+
+                rd_u16b(&legendary_magic);
+                if (legendary_magic == SAVEFILE_LEGENDARY_AREA_MAGIC)
+                {
+                    byte legendary_version = 0;
+                    u16b active_count = 0;
+                    u16b active_id = META_DUNGEON_LEGENDARY_AREA_ID_NONE;
+                    guid64 active_guid = { 0, 0 };
+                    byte active_seen = 0;
+                    int loaded = 0;
+
+                    rd_byte(&legendary_version);
+                    if (legendary_version != SAVEFILE_LEGENDARY_AREA_VERSION)
+                    {
+                        note(format("Invalid legendary-area map version %u",
+                            (unsigned)legendary_version));
+                        return (-1);
+                    }
+
+                    rd_u16b(&active_count);
+                    for (int active_idx = 0; active_idx < active_count; active_idx++)
+                    {
+                        u16b area_id = 0;
+                        guid64 record_guid;
+                        byte entry_seen = 0;
+
+                        rd_u16b(&area_id);
+                        rd_u32b(&record_guid.hi);
+                        rd_u32b(&record_guid.lo);
+                        rd_byte(&entry_seen);
+                        if (active_id == META_DUNGEON_LEGENDARY_AREA_ID_NONE)
+                        {
+                            active_id = area_id;
+                            active_guid = record_guid;
+                            active_seen = entry_seen;
+                        }
+                    }
+
+                    if (!legendary_area_map_ensure())
+                        return (-1);
+
+                    while (loaded < p_ptr->cur_map_hgt * p_ptr->cur_map_wid)
+                    {
+                        u16b run_len = 0;
+                        u16b area_id = 0;
+
+                        rd_u16b(&run_len);
+                        rd_u16b(&area_id);
+                        if (run_len == 0)
+                            break;
+
+                        while (run_len-- > 0 &&
+                               loaded < p_ptr->cur_map_hgt * p_ptr->cur_map_wid)
+                        {
+                            int ly = loaded / p_ptr->cur_map_wid;
+                            int lx = loaded % p_ptr->cur_map_wid;
+                            legendary_area_id[ly][lx] = area_id;
+                            loaded++;
+                        }
+                    }
+
+                    if (active_id != META_DUNGEON_LEGENDARY_AREA_ID_NONE &&
+                        !legendary_area_restore_after_load(active_id, active_guid,
+                            active_seen != 0))
+                    {
+                        legendary_area_discard_unresolved_loaded_records();
+                    }
+                    else if (active_id == META_DUNGEON_LEGENDARY_AREA_ID_NONE)
+                    {
+                        legendary_area_discard_unresolved_loaded_records();
+                    }
+                }
+                else
+                {
+                    objects_count_prefetch = legendary_magic;
+                    log_debug(
+                        "No legendary-area block after door choices; staged objects count prefetch=%u",
+                        (unsigned)objects_count_prefetch);
+                }
+            }
         }
         else
         {
+            legendary_area_map_reset();
             objects_count_prefetch = maybe_magic;
             log_debug(
                 "No door-choices after cave_color; staged objects count prefetch=%u",

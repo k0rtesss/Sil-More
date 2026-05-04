@@ -38,6 +38,7 @@ byte* temp_x;
 u16b (*cave_info)[256];
 byte (*cave_feat)[MAX_DUNGEON_WID];
 byte (*cave_color)[MAX_DUNGEON_WID];
+u16b (*legendary_area_id)[MAX_DUNGEON_WID];
 s16b (*cave_light)[MAX_DUNGEON_WID];
 s16b (*cave_o_idx)[MAX_DUNGEON_WID];
 s16b (*cave_m_idx)[MAX_DUNGEON_WID];

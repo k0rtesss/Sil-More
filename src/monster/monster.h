@@ -46,6 +46,8 @@ void monster_swap(int y1, int x1, int y2, int x2);
 s16b player_place(int y, int x);
 s16b monster_place(int y, int x, monster_type* n_ptr);
 void calc_monster_speed(int y, int x);
+bool monster_race_is_vala(int r_idx);
+bool monster_clear_vala_state(monster_type* m_ptr);
 void set_monster_haste(s16b m_idx, s16b counter, bool message);
 s16b monster_lookup_guid(u64b guid);
 s16b monster_lookup_guid_text(const char* text);

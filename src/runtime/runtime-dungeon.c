@@ -37,6 +37,7 @@
 #include "runtime/runtime-dungeon-internal.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "metarun/metarun-meta-state.h"
 #include "drop_system.h"
 #include "score/score_entry.h"
 #include "score/score_io.h"
@@ -57,6 +58,7 @@ void reset_dungeon_state(void)
 {
     runtime_dungeon_reset_vault_transition_state();
     runtime_dungeon_reset_presentation_state();
+    legendary_area_level_reset();
 }
 
 /*
@@ -1343,6 +1345,7 @@ static void process_player(void)
         /* Update labyrinth map restriction and partition-entry messages/XP. */
         runtime_dungeon_update_labyrinth_view_state(true);
         runtime_dungeon_handle_partition_entry(false);
+        legendary_area_note_player_position();
         runtime_dungeon_handle_vault_transition();
 
         /* Significant */

@@ -157,7 +157,7 @@
 
 # Version stamp (required)
 
-V:0.9.6
+V:0.9.7
 
 ### The Gates of Angband (type 10) -- maximum size 66x44 ??? ###
 ### This must be the first vault record
@@ -2931,17 +2931,19 @@ M:Cold water and ancient stone keep an austere memory here, and the deep places 
 F:SURFACE
 F:LIGHT
 S:57:1
-D:#########
-D:####,0###
-D:###,,,,##
-D:##.77777#
-D:#..77777#
-D:$...7u77#
-D:#..77777#
-D:##.77777#
-D:###,,,,##
-D:####,0###
-D:#########
+D:           
+D: ######### 
+D: ####,0### 
+D: ###,,,,## 
+D: ##.77777# 
+D: #..77777# 
+D:$...7u77#  
+D: #..77777# 
+D: ##.77777# 
+D: ###,,,,## 
+D: ####,0### 
+D: ######### 
+D:           
 
 
 #Type7 more
@@ -3033,8 +3035,8 @@ D:###################################
 
 #Quest Vaults
 
-# Quest vault: Aulë's Forge (small)
-N:460:Aulë's Forge (Small)
+# Quest vault: Aule's Forge (small)
+N:460:Aule's Forge (Small)
 X:6:5:5
 S:57:1
 F:QUEST | LIGHT

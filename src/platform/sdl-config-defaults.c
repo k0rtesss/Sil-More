@@ -112,8 +112,8 @@ void sdl_config_set_default_gamepad_bindings(struct sdl_config* cfg)
 void sdl_config_set_default_touch_pane_bindings(struct sdl_config* cfg)
 {
     static const int main_defaults[SDL_TOUCH_PANE_BUTTON_COUNT] = {
-        ESCAPE, GAMEPAD_BIND_CTRL, GAMEPAD_BIND_SHIFT,
-        'e', 'i', 'j',
+        ESCAPE, 'S', GAMEPAD_BIND_SHIFT,
+        'h', 'i', 'j',
         'u', 's', 'f',
         '7', '8', '9',
         '4', INPUT_BIND_CONFIRM, '6',
@@ -122,15 +122,15 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* cfg)
         'M', 'h', '\t',
     };
     static const int second_defaults[SDL_TOUCH_PANE_BUTTON_COUNT] = {
-        TOUCH_PANE_BIND_INHERIT, TOUCH_PANE_BIND_INHERIT, GAMEPAD_BIND_SHIFT,
-        '0', '-', 'q',
-        'r', 'S', 'F',
+        TOUCH_PANE_BIND_INHERIT, 'X', GAMEPAD_BIND_SHIFT,
+        '\t', 'e', '-',
+        'r', '0', 'F',
         TOUCH_PANE_BIND_INHERIT, TOUCH_PANE_BIND_INHERIT,
         TOUCH_PANE_BIND_INHERIT,
         TOUCH_PANE_BIND_INHERIT, 'z', TOUCH_PANE_BIND_INHERIT,
         TOUCH_PANE_BIND_INHERIT, TOUCH_PANE_BIND_INHERIT,
         TOUCH_PANE_BIND_INHERIT,
-        'L', 'X', 'p',
+        'M', 'q', 'p',
         'w', 'b', 'c',
     };
     static const int swipe_defaults[GAMEPAD_STICK_DIR_COUNT] = {
@@ -146,10 +146,94 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* cfg)
     SDL_strlcpy(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_MAIN], "Main",
         sizeof(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_MAIN]));
     SDL_strlcpy(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_SECOND],
-        "Shift",
+        "2nd Panel",
         sizeof(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_SECOND]));
+    cfg->touch_pane_key_labels_visible = false;
+    cfg->touch_pane_inventory_equipment_cycle = true;
     cfg->touch_swipe_enabled = true;
     memcpy(cfg->touch_swipe_bindings, swipe_defaults, sizeof(swipe_defaults));
+}
+
+typedef struct touch_pane_binding_migration {
+    int panel;
+    int index;
+    int old_binding;
+    int new_binding;
+    bool old_defaults_only;
+    cptr message;
+} touch_pane_binding_migration;
+
+static void sdl_config_migrate_touch_pane_binding(struct sdl_config* cfg,
+    const touch_pane_binding_migration* migration)
+{
+    int* bindings;
+    char (*labels)[SDL_TOUCH_PANE_LABEL_LEN];
+
+    if (!cfg || !migration)
+        return;
+    if (migration->panel < 0 || migration->panel >= SDL_TOUCH_PANE_PANEL_COUNT
+        || migration->index < 0
+        || migration->index >= SDL_TOUCH_PANE_BUTTON_COUNT)
+    {
+        return;
+    }
+
+    bindings = (migration->panel == SDL_TOUCH_PANE_PANEL_SECOND)
+        ? cfg->touch_pane_second_bindings : cfg->touch_pane_bindings;
+    labels = (migration->panel == SDL_TOUCH_PANE_PANEL_SECOND)
+        ? cfg->touch_pane_second_labels : cfg->touch_pane_labels;
+    if (bindings[migration->index] != migration->old_binding
+        || labels[migration->index][0])
+    {
+        return;
+    }
+
+    bindings[migration->index] = migration->new_binding;
+    log_info("%s", migration->message);
+}
+
+void sdl_config_migrate_touch_pane_defaults(struct sdl_config* cfg,
+    bool old_touch_pane_defaults)
+{
+    static const touch_pane_binding_migration migrations[] = {
+        { SDL_TOUCH_PANE_PANEL_MAIN, 1, GAMEPAD_BIND_CTRL, 'S', true,
+            "Migrated default touch pane Ctrl button to Stealth" },
+        { SDL_TOUCH_PANE_PANEL_MAIN, 3, 'e', 'h', false,
+            "Migrated default touch pane Equip button to Char" },
+        { SDL_TOUCH_PANE_PANEL_MAIN, 5, '-', 'j', false,
+            "Migrated default touch pane Fletch button to Supply" },
+        { SDL_TOUCH_PANE_PANEL_SECOND, 1, TOUCH_PANE_BIND_INHERIT, 'X', false,
+            "Migrated default touch pane Stealth second-panel button to Exchange" },
+        { SDL_TOUCH_PANE_PANEL_SECOND, 3, '0', '\t', false,
+            "Migrated default touch pane Char second-panel button to Ability" },
+        { SDL_TOUCH_PANE_PANEL_SECOND, 4, '-', 'e', false,
+            "Migrated default touch pane Inv second-panel button to Equip" },
+        { SDL_TOUCH_PANE_PANEL_SECOND, 5, 'q', '-', false,
+            "Migrated default touch pane Supply second-panel button to Fletch" },
+        { SDL_TOUCH_PANE_PANEL_SECOND, 7, 'S', '0', false,
+            "Migrated default touch pane Sing second-panel button to Smith" },
+        { SDL_TOUCH_PANE_PANEL_SECOND, 18, 'L', 'M', false,
+            "Migrated default touch pane View second-panel button to Map" },
+        { SDL_TOUCH_PANE_PANEL_SECOND, 19, 'X', 'q', false,
+            "Migrated default touch pane Desc second-panel button to Quaff" },
+    };
+
+    if (!cfg)
+        return;
+    for (size_t i = 0; i < N_ELEMENTS(migrations); i++) {
+        if (!migrations[i].old_defaults_only || old_touch_pane_defaults)
+            sdl_config_migrate_touch_pane_binding(cfg, &migrations[i]);
+    }
+
+    if (old_touch_pane_defaults
+        && strcmp(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_SECOND],
+            "Shift") == 0)
+    {
+        SDL_strlcpy(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_SECOND],
+            "2nd Panel", sizeof(cfg->touch_pane_panel_names[
+                SDL_TOUCH_PANE_PANEL_SECOND]));
+        log_info("Migrated default touch pane Shift panel name to 2nd Panel");
+    }
 }
 
 void sdl_config_clear_touch_pane_labels(struct sdl_config* cfg)

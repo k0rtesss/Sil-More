@@ -18,6 +18,7 @@
 #include "angband.h"
 #include "smithing/smithing-internal.h"
 #include "log/log.h"
+#include "metarun/metarun-meta-state.h"
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 
@@ -25,6 +26,46 @@ void artefact_copy(artefact_type* a1_ptr, artefact_type* a2_ptr)
 {
     /* Copy the structure */
     memcpy(a1_ptr, a2_ptr, sizeof(artefact_type));
+}
+
+static int smith_find_available_artefact_slot(void)
+{
+    if (!a_info || !z_info)
+        return -1;
+
+    for (int a_idx = z_info->art_rand_max;
+         a_idx < z_info->art_self_made_max - 2;
+         a_idx++)
+    {
+        artefact_type* a_ptr = &a_info[a_idx];
+        if (a_ptr->tval == 0 && a_ptr->sval == 0 && !a_ptr->name[0])
+            return a_idx;
+    }
+
+    return -1;
+}
+
+static bool smith_used_aule_forge_for_item(int saved_difficulty)
+{
+    int effective_skill;
+
+    if (!p_ptr || !p_ptr->have_ability[S_SPC][SPC_AULE])
+        return false;
+
+    effective_skill = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
+    return saved_difficulty > effective_skill;
+}
+
+static bool smith_used_masterpiece_for_item(int saved_difficulty)
+{
+    int effective_skill;
+
+    if (!p_ptr || p_ptr->have_ability[S_SPC][SPC_AULE] ||
+        !p_ptr->active_ability[S_SMT][SMT_MASTERPIECE])
+        return false;
+
+    effective_skill = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
+    return saved_difficulty > effective_skill;
 }
 
 /*
@@ -688,8 +729,11 @@ int find_reforge_target_item(void)
 void create_smithing_item(void)
 {
     int slot;
+    int artefact_slot = -1;
+    int saved_difficulty = 0;
     object_type* o_ptr;
     char o_name[80];
+    bool meta_saved = false;
 
     log_debug("Creating smithing item");
 
@@ -701,13 +745,51 @@ void create_smithing_item(void)
     if (smith_o_ptr->name1)
     {
         log_info("Creating new artifact");
-        smith_o_ptr->name1 = z_info->art_rand_max + p_ptr->self_made_arts;
+        saved_difficulty = object_difficulty(smith_o_ptr);
+        artefact_slot = smith_find_available_artefact_slot();
+        if (artefact_slot < 0)
+        {
+            log_error("No runtime slot available for newly forged artefact");
+            return;
+        }
+
+        if (saved_difficulty >= 15)
+            msg_print("This work may be remembered through the long years of Beleriand. Name it with care.");
+
+        smith_o_ptr->name1 = artefact_slot;
 
         artefact_copy(&a_info[smith_o_ptr->name1], smith_a_ptr);
         artefact_type* created = &a_info[smith_o_ptr->name1];
         if (score_guid_is_zero(&created->guid)) {
             created->guid = score_guid_random();
         }
+
+        if (saved_difficulty >= 15)
+        {
+            meta_artifact_record record;
+            bool used_aule_forge =
+                smith_used_aule_forge_for_item(saved_difficulty);
+            bool used_masterpiece =
+                smith_used_masterpiece_for_item(saved_difficulty);
+
+            if (meta_artifact_build_created_record(&record, created,
+                    smith_o_ptr, saved_difficulty, used_masterpiece,
+                    used_aule_forge))
+            {
+                meta_saved = meta_artifact_register_created(&record);
+                if (!meta_saved)
+                {
+                    log_warn("Failed to persist remembered artefact '%s' to artefact.db",
+                        created->name);
+                }
+            }
+            else
+            {
+                log_warn("Failed to build remembered artefact record for '%s'",
+                    created->name);
+            }
+        }
+
         (void)score_artefact_register(created);
         p_ptr->self_made_arts++;
 
@@ -751,6 +833,10 @@ void create_smithing_item(void)
 
     // create description
     object_desc(o_name, sizeof(o_name), smith_o_ptr, true, 3);
+
+    if (meta_saved)
+        msg_format("%s is set among the works that may outlive its maker.",
+            o_name);
 
     // Record the depth where the object was created
     do_cmd_note(format("Made %s  %d.%d lb", o_name,

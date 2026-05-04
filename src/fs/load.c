@@ -20,6 +20,7 @@
 #include "fs/file.h"
 #include "fs/load.h"
 #include "log/log.h"
+#include "metarun/metarun-meta-state.h"
 #include "platform-config.h"
 #include "platform-frame.h"
 #include "runtime/runtime-cli.h"
@@ -119,6 +120,7 @@ bool savefile_has_thrall_quest_requested = false;
 bool savefile_has_randart_flags4 = false;
 bool savefile_has_item_bonuses = false;
 bool savefile_has_randart_bonuses = false;
+bool savefile_has_legendary_area_map = false;
 
 /* Version comparison helpers: update these when bumping savefile semantics. */
 static int savefile_version_compare(byte major, byte minor, byte patch, byte extra)
@@ -187,6 +189,7 @@ static void load_init_version_features(void)
     savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);
     savefile_has_item_bonuses = savefile_version_at_least(0, 9, 5, 2);
     savefile_has_randart_bonuses = savefile_version_at_least(0, 9, 5, 3);
+    savefile_has_legendary_area_map = savefile_version_at_least(0, 9, 6, 2);
 }
 /* For backward-compatible reading: if the door-choices block is absent,
  * we prefetch the next u16 (objects count) here after probing. */
@@ -1557,12 +1560,14 @@ static errr rd_savefile_new_aux(void)
     if (load_expect_stream_ok("monster memory"))
         return (-1);
     restore_monster_races_from_base();
+    meta_monster_invalidate_runtime_overrides();
     if (savefile_has_runtime_overrides)
     {
         rd_monster_runtime_overrides();
         if (load_expect_stream_ok("monster runtime overrides"))
             return (-1);
     }
+    (void)meta_monster_apply_runtime_overrides();
     if (runtime_cli_fiddle())
         note("Loaded Monster Memory");
 

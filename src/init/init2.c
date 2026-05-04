@@ -22,6 +22,7 @@
 #include "fs/path.h"
 #include "init/init-lifecycle.h"
 #include "log/log.h"
+#include "metarun/metarun-meta-state.h"
 #include "platform-audio.h"
 #include "runtime/runtime-cli.h"
 #include "platform-config.h"
@@ -1001,6 +1002,10 @@ void init_angband(void)
     {
         init_angband_aux("Cannot load or create metarun file!");
     }
+    if (!meta_state_init())
+    {
+        init_angband_aux("Cannot initialize meta-state files!");
+    }
 
     note("[Initializing array sizes...]");
     if (init_z_info())
@@ -1364,6 +1369,8 @@ NavResult initial_menu(bool* start_new)
 
 void cleanup_angband(void)
 {
+    meta_state_shutdown();
+
     mem_free_null(alloc_ego_table);
     mem_free_null(alloc_race_table);
     mem_free_null(alloc_kind_table);

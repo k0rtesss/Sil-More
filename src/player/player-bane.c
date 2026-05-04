@@ -66,8 +66,10 @@ int elf_bane_bonus(monster_type* m_ptr)
 
     r_ptr = &r_info[m_ptr->r_idx];
 
-    /* race.txt serials 0-3 are the Elven lineages */
-    if ((r_ptr->flags2 & RF2_ELFBANE) && (p_ptr->prace <= 3))
+    /* race.txt serials 0-2 are Noldor; serial 3 is Sindar */
+    if (((r_ptr->flags2 & RF2_ELFBANE) && (p_ptr->prace <= 3))
+        || ((r_ptr->flags4 & RF4_NOLDORBANE) && (p_ptr->prace <= 2))
+        || ((r_ptr->flags4 & RF4_SINDARBANE) && (p_ptr->prace == 3)))
     {
         return 5;
     }
@@ -86,6 +88,24 @@ int dwarf_bane_bonus(monster_type* m_ptr)
 
     /* race.txt serial 4 is Naugrim */
     if ((r_ptr->flags4 & RF4_DWARFBANE) && (p_ptr->prace == 4))
+    {
+        return 5;
+    }
+
+    return 0;
+}
+
+int edain_bane_bonus(monster_type* m_ptr)
+{
+    monster_race* r_ptr;
+
+    if (m_ptr == NULL)
+        return 0;
+
+    r_ptr = &r_info[m_ptr->r_idx];
+
+    /* race.txt serial 5 is Edain */
+    if ((r_ptr->flags4 & RF4_EDAINBANE) && (p_ptr->prace == 5))
     {
         return 5;
     }

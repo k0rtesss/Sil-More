@@ -14,6 +14,7 @@
  */
 
 #include "angband.h"
+#include "object/object-ui-enhanced.h"
 #include "sdl-main-internal.h"
 
 typedef struct touch_pane_slot_info {
@@ -41,11 +42,15 @@ typedef struct touch_swipe_state {
     float last_y;
 } touch_swipe_state;
 
+enum {
+    SDL_TOUCH_PANE_CENTER_SLOT = 13
+};
+
 static const touch_pane_slot_info g_touch_pane_slots[SDL_TOUCH_PANE_BUTTON_COUNT] = {
     { "Esc", "Esc", ESCAPE },
-    { "Ctrl", "Ctrl", GAMEPAD_BIND_CTRL },
-    { "Shift", "Shift", GAMEPAD_BIND_SHIFT },
-    { "Worn", "Worn", 'e' },
+    { "Stealth", "Stealth", 'S' },
+    { "2nd Panel", "2nd Panel", GAMEPAD_BIND_SHIFT },
+    { "Char", "Char", 'h' },
     { "Inv", "Inv", 'i' },
     { "Supply", "Supply", 'j' },
     { "Use", "Use", 'u' },
@@ -55,7 +60,7 @@ static const touch_pane_slot_info g_touch_pane_slots[SDL_TOUCH_PANE_BUTTON_COUNT
     { "North", NULL, '8' },
     { "Northeast", NULL, '9' },
     { "West", NULL, '4' },
-    { "Center", "Space", INPUT_BIND_CONFIRM },
+    { "Center", "Confirm", INPUT_BIND_CONFIRM },
     { "East", NULL, '6' },
     { "Southwest", NULL, '1' },
     { "South", NULL, '2' },
@@ -72,6 +77,8 @@ static int g_default_touch_pane_bindings[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_P
 static char g_default_touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
 static bool g_default_touch_swipe_enabled = true;
 static int g_default_touch_swipe_bindings[GAMEPAD_STICK_DIR_COUNT];
+static bool g_default_touch_pane_key_labels_visible = false;
+static bool g_default_touch_pane_inventory_equipment_cycle = true;
 static bool g_default_touch_pane_bindings_ready = false;
 static int g_touch_pane_flash_slot = -1;
 static Uint64 g_touch_pane_flash_until = 0;
@@ -640,21 +647,39 @@ static void sdl_touch_pane_default_label_for_panel_slot(int panel, int index, ch
 
     if (panel == SDL_TOUCH_PANE_PANEL_SECOND) {
         switch (index) {
+        case 1:
+            if (binding == 'X') {
+                SDL_strlcpy(buf, "Exchange", buflen);
+                return;
+            }
+            break;
         case 3:
+            if (binding == '\t') {
+                SDL_strlcpy(buf, "Ability", buflen);
+                return;
+            }
+            break;
+        case 4:
+            if (binding == 'e') {
+                SDL_strlcpy(buf, "Equip", buflen);
+                return;
+            }
+            break;
+        case 5:
+            if (binding == '-') {
+                SDL_strlcpy(buf, "Fletch", buflen);
+                return;
+            }
+            break;
+        case 7:
             if (binding == '0') {
                 SDL_strlcpy(buf, "Smith", buflen);
                 return;
             }
             break;
         case 18:
-            if (binding == 'L') {
-                SDL_strlcpy(buf, "AltView", buflen);
-                return;
-            }
-            break;
-        case 7:
-            if (binding == 'S') {
-                SDL_strlcpy(buf, "Stealth", buflen);
+            if (binding == 'M') {
+                SDL_strlcpy(buf, "Map", buflen);
                 return;
             }
             break;
@@ -665,6 +690,10 @@ static void sdl_touch_pane_default_label_for_panel_slot(int panel, int index, ch
             }
             break;
         case 19:
+            if (binding == 'q') {
+                SDL_strlcpy(buf, "Quaff", buflen);
+                return;
+            }
             if (binding == 'X') {
                 SDL_strlcpy(buf, "Exch", buflen);
                 return;
@@ -797,6 +826,32 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
     sdl_gamepad_send_key(binding, false);
 }
 
+static int sdl_touch_pane_cycle_inventory_equipment_binding(int binding)
+{
+    if (!config.touch_pane_inventory_equipment_cycle)
+        return binding;
+    if (character_icky <= 0)
+        return binding;
+    if (binding != 'i' && binding != 'e')
+        return binding;
+
+    if (p_ptr) {
+        if (p_ptr->command_wrk == USE_INVEN && binding == 'i')
+            return 'e';
+        if (p_ptr->command_wrk == USE_EQUIP && binding == 'e')
+            return 'i';
+    }
+
+    if (current_menu_command != 0) {
+        if (current_menu_state == 0 && binding == 'i')
+            return 'e';
+        if (current_menu_state == 1 && binding == 'e')
+            return 'i';
+    }
+
+    return binding;
+}
+
 static void sdl_touch_pane_send_slot(int panel, int index, bool long_press)
 {
     int binding;
@@ -807,6 +862,7 @@ static void sdl_touch_pane_send_slot(int panel, int index, bool long_press)
         return;
 
     binding = sdl_touch_pane_effective_binding_for_panel(panel, index);
+    binding = sdl_touch_pane_cycle_inventory_equipment_binding(binding);
     sdl_touch_pane_send_binding(binding, panel == SDL_TOUCH_PANE_PANEL_SECOND, long_press);
 }
 
@@ -1063,6 +1119,10 @@ void sdl_touch_pane_load_default_bindings(void)
     g_default_touch_swipe_enabled = defaults.touch_swipe_enabled;
     memcpy(g_default_touch_swipe_bindings, defaults.touch_swipe_bindings,
         sizeof(g_default_touch_swipe_bindings));
+    g_default_touch_pane_key_labels_visible =
+        defaults.touch_pane_key_labels_visible;
+    g_default_touch_pane_inventory_equipment_cycle =
+        defaults.touch_pane_inventory_equipment_cycle;
     g_default_touch_pane_bindings_ready = true;
 }
 
@@ -1285,9 +1345,19 @@ void sdl_touch_pane_render(void)
         }
 
         sdl_touch_pane_display_label_for_slot(panel, i, label, sizeof(label));
-        sdl_touch_pane_binding_symbol(binding, symbol, sizeof(symbol));
-        if (sdl_touch_pane_should_hide_symbol(label, symbol))
-            symbol[0] = '\0';
+        if (i == SDL_TOUCH_PANE_CENTER_SLOT
+            && sdl_touch_pane_confirm_binding(binding))
+        {
+            SDL_strlcpy(label, "Confirm", sizeof(label));
+            SDL_strlcpy(symbol, "(pick)", sizeof(symbol));
+        } else {
+            sdl_touch_pane_binding_symbol(binding, symbol, sizeof(symbol));
+            if (!config.touch_pane_key_labels_visible
+                || sdl_touch_pane_should_hide_symbol(label, symbol))
+            {
+                symbol[0] = '\0';
+            }
+        }
         sdl_touch_pane_draw_button_text(&slot_rects[i], label, symbol, text_color);
     }
 
@@ -1450,6 +1520,39 @@ void platform_set_touch_pane_panel_name(int panel, cptr name)
 
     SDL_strlcpy(config.touch_pane_panel_names[panel], name,
         sizeof(config.touch_pane_panel_names[panel]));
+}
+
+bool platform_touch_pane_key_labels_visible(void)
+{
+    return config.touch_pane_key_labels_visible;
+}
+
+void platform_set_touch_pane_key_labels_visible(bool value)
+{
+    config.touch_pane_key_labels_visible = value;
+    g_state.need_present = true;
+}
+
+bool platform_touch_pane_key_labels_default_visible(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_pane_key_labels_visible;
+}
+
+bool platform_touch_pane_inventory_equipment_cycle(void)
+{
+    return config.touch_pane_inventory_equipment_cycle;
+}
+
+void platform_set_touch_pane_inventory_equipment_cycle(bool value)
+{
+    config.touch_pane_inventory_equipment_cycle = value;
+}
+
+bool platform_touch_pane_inventory_equipment_default_cycle(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_pane_inventory_equipment_cycle;
 }
 
 bool platform_touch_swipe_enabled(void)

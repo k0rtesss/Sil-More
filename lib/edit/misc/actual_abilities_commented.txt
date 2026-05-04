@@ -83,7 +83,7 @@ C:7:10  # Song of Slaying
 C:7:11  # Song of Elveness
 C:7:12  # Song of Staying
 C:7:13  # Song of Disguise
-C:7:14  # Song of Lórien
+C:7:14  # Song of Lorien
 C:7:15  # Song of Shattering
 C:7:16  # Song of Mastery
 C:7:17  # Grace

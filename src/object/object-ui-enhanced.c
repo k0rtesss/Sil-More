@@ -92,6 +92,15 @@ typedef struct enhanced_item_snapshot_state {
     enhanced_item_snapshot_entry entries[ENHANCED_MAX_LIST];
 } enhanced_item_snapshot_state;
 
+typedef enum enhanced_item_footer_action {
+    ENHANCED_ITEM_FOOTER_SELECT = 1,
+    ENHANCED_ITEM_FOOTER_INSPECT = 2,
+    ENHANCED_ITEM_FOOTER_DROP = 3,
+    ENHANCED_ITEM_FOOTER_MOVE = 4,
+    ENHANCED_ITEM_FOOTER_SWITCH = 5,
+    ENHANCED_ITEM_FOOTER_BACK = 6
+} enhanced_item_footer_action;
+
 static bool enhanced_item_snapshot_active(void)
 {
     return app_session_interactions_enabled(app_session_current());
@@ -411,6 +420,81 @@ static void enhanced_item_build_prompt_line(char* buf, size_t buf_size,
     }
 }
 
+static bool enhanced_item_can_switch_from_footer(
+    const enhanced_item_snapshot_state* state)
+{
+    if (!state)
+        return false;
+    if (current_menu_command == 'u' || current_menu_command == 'x')
+        return true;
+    if (enhanced_item_same_button_cycle_enabled())
+        return true;
+    return false;
+}
+
+static void enhanced_item_add_footer_actions(app_ui_panel* panel,
+    const enhanced_item_snapshot_state* state)
+{
+    if (!panel || !state)
+        return;
+
+    if (portable_controls_active())
+    {
+        char confirm_label[APP_UI_KEY_MAX];
+        char inspect_label[APP_UI_KEY_MAX];
+        char switch_label[APP_UI_KEY_MAX];
+
+        inventory_prompt_label(' ', "A", confirm_label,
+            sizeof(confirm_label));
+        SDL_strlcpy(inspect_label, "Right", sizeof(inspect_label));
+        inventory_prompt_label(
+            current_menu_command ? current_menu_command
+                                 : ((state->mode == (USE_INVEN)) ? 'i' : 'e'),
+            (state->mode == (USE_INVEN)) ? "R1" : "L1", switch_label,
+            sizeof(switch_label));
+
+        (void)app_ui_panel_add_footer_action(panel,
+            ENHANCED_ITEM_FOOTER_SELECT, TERM_L_BLUE, true, confirm_label,
+            (state->mode == (USE_EQUIP)) ? "Remove"
+                                          : ((current_menu_command == 'w')
+                                                ? "Wield"
+                                                : "Use"));
+        (void)app_ui_panel_add_footer_action(panel,
+            ENHANCED_ITEM_FOOTER_INSPECT, TERM_WHITE, true, inspect_label,
+            "Inspect");
+        (void)app_ui_panel_add_footer_action(panel, ENHANCED_ITEM_FOOTER_DROP,
+            TERM_WHITE, true, "Left", "Drop");
+        (void)app_ui_panel_add_footer_action(panel, ENHANCED_ITEM_FOOTER_MOVE,
+            TERM_WHITE, true, "D-pad", "Move");
+        if (enhanced_item_can_switch_from_footer(state))
+        {
+            (void)app_ui_panel_add_footer_action(panel,
+                ENHANCED_ITEM_FOOTER_SWITCH, TERM_WHITE, true, switch_label,
+                "Switch");
+        }
+        (void)app_ui_panel_add_footer_action(panel, ENHANCED_ITEM_FOOTER_BACK,
+            TERM_WHITE, true, "Esc", "Back");
+        return;
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, ENHANCED_ITEM_FOOTER_SELECT,
+        TERM_L_BLUE, true, "Space", (state->mode == (USE_EQUIP)) ? "Remove"
+            : ((current_menu_command == 'w') ? "Wield" : "Use"));
+    (void)app_ui_panel_add_footer_action(panel, ENHANCED_ITEM_FOOTER_INSPECT,
+        TERM_WHITE, true, "6", "Inspect");
+    (void)app_ui_panel_add_footer_action(panel, ENHANCED_ITEM_FOOTER_DROP,
+        TERM_WHITE, true, "4", "Drop");
+    (void)app_ui_panel_add_footer_action(panel, ENHANCED_ITEM_FOOTER_MOVE,
+        TERM_WHITE, true, "8/2", "Move");
+    if (enhanced_item_can_switch_from_footer(state))
+    {
+        (void)app_ui_panel_add_footer_action(panel, ENHANCED_ITEM_FOOTER_SWITCH,
+            TERM_WHITE, true, current_menu_command ? "Again" : "/", "Switch");
+    }
+    (void)app_ui_panel_add_footer_action(panel, ENHANCED_ITEM_FOOTER_BACK,
+        TERM_WHITE, true, "Esc", "Back");
+}
+
 static bool enhanced_item_append_compare_overlay_rows(app_ui_panel* panel,
     int item_index)
 {
@@ -712,6 +796,7 @@ static bool enhanced_item_build_snapshot_scene(app_ui_scene* scene,
     enhanced_item_build_prompt_line(prompt, sizeof(prompt), state->mode);
     if (prompt[0])
         (void)app_ui_panel_add_body_line(panel, TERM_WHITE, prompt);
+    enhanced_item_add_footer_actions(panel, state);
 
     if (state->entry_count <= 0)
     {
@@ -844,6 +929,38 @@ static bool enhanced_item_command_to_key(const app_ui_command* command,
 
         *out_key = '\r';
         return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case ENHANCED_ITEM_FOOTER_SELECT:
+            *out_key = '\r';
+            return true;
+        case ENHANCED_ITEM_FOOTER_INSPECT:
+            *out_key = '6';
+            return true;
+        case ENHANCED_ITEM_FOOTER_DROP:
+            *out_key = '4';
+            return true;
+        case ENHANCED_ITEM_FOOTER_MOVE:
+            *out_key = '2';
+            return true;
+        case ENHANCED_ITEM_FOOTER_SWITCH:
+            *out_key = current_menu_command
+                ? current_menu_command
+                : ((state->mode == (USE_INVEN)) ? 'i' : 'e');
+            return true;
+        case ENHANCED_ITEM_FOOTER_BACK:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
     }
 
     return false;

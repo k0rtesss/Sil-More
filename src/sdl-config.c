@@ -1982,8 +1982,12 @@ void sdl_config_load(const char* filename, struct sdl_config* cfg,
             cJSON* second_bindings = cJSON_GetObjectItemCaseSensitive(touch_pane, "secondBindings");
             cJSON* second_labels = cJSON_GetObjectItemCaseSensitive(touch_pane, "secondLabels");
             cJSON* panel_names = cJSON_GetObjectItemCaseSensitive(touch_pane, "panelNames");
+            cJSON* show_key_labels = cJSON_GetObjectItemCaseSensitive(touch_pane, "showKeyLabels");
+            cJSON* inv_equip_cycle = cJSON_GetObjectItemCaseSensitive(touch_pane, "inventoryEquipmentCycle");
             cJSON* swipe_enabled = cJSON_GetObjectItemCaseSensitive(touch_pane, "swipeEnabled");
             cJSON* swipe_bindings = cJSON_GetObjectItemCaseSensitive(touch_pane, "swipeBindings");
+            bool old_touch_pane_defaults = !cJSON_IsBool(show_key_labels);
+
             if (cJSON_IsArray(bindings)) {
                 int count = cJSON_GetArraySize(bindings);
                 if (count == 21) {
@@ -2037,6 +2041,23 @@ void sdl_config_load(const char* filename, struct sdl_config* cfg,
                 }
                 log_debug("Loaded touchPane.panelNames (%d entries)", count);
             }
+
+            if (cJSON_IsBool(show_key_labels)) {
+                cfg->touch_pane_key_labels_visible =
+                    cJSON_IsTrue(show_key_labels);
+                log_debug("Loaded touchPane.showKeyLabels: %s",
+                    cfg->touch_pane_key_labels_visible ? "true" : "false");
+            }
+
+            if (cJSON_IsBool(inv_equip_cycle)) {
+                cfg->touch_pane_inventory_equipment_cycle =
+                    cJSON_IsTrue(inv_equip_cycle);
+                log_debug("Loaded touchPane.inventoryEquipmentCycle: %s",
+                    cfg->touch_pane_inventory_equipment_cycle ? "true" : "false");
+            }
+
+            sdl_config_migrate_touch_pane_defaults(cfg,
+                old_touch_pane_defaults);
 
             if (cJSON_IsBool(swipe_enabled)) {
                 cfg->touch_swipe_enabled = cJSON_IsTrue(swipe_enabled);
@@ -2299,6 +2320,10 @@ bool sdl_config_save(const char* filename, const struct sdl_config* cfg,
             if (panel_names) {
                 cJSON_AddItemToObject(touch_pane, "panelNames", panel_names);
             }
+            cJSON_AddBoolToObject(touch_pane, "showKeyLabels",
+                cfg->touch_pane_key_labels_visible);
+            cJSON_AddBoolToObject(touch_pane, "inventoryEquipmentCycle",
+                cfg->touch_pane_inventory_equipment_cycle);
             cJSON_AddBoolToObject(touch_pane, "swipeEnabled",
                 cfg->touch_swipe_enabled);
             if (swipe_bindings) {
