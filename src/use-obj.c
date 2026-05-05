@@ -1091,8 +1091,15 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
         }
 
         /* Get a direction, allow cancel */
-        if (!get_aim_dir(&dir, 0))
+        if (o_ptr->sval == SV_HORN_BLASTING)
+        {
+            if (!get_aim_dir_vertical(&dir, 0))
+                return (false);
+        }
+        else if (!get_aim_dir(&dir, 0))
+        {
             return (false);
+        }
     }
 
     /* Base chance of success */
@@ -1136,7 +1143,16 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
     case SV_HORN_FORCE:
     {
         int i, j, k;
-        int direction = chome[dir];
+        int force_dir = dir;
+        int direction;
+
+        if (force_dir == 5 && target_okay(0))
+        {
+            force_dir = rough_direction(
+                p_ptr->py, p_ptr->px, p_ptr->target_row, p_ptr->target_col);
+        }
+
+        direction = chome[force_dir];
 
         for (i = -1; i < 2; ++i)
         {
