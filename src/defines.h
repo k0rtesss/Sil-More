@@ -66,6 +66,8 @@
 
 /* Marker before the serialized supplies block in savefiles that include it. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
+/* Marker before the serialized jewelry preset block in 0.9.6.7+ savefiles. */
+#define SAVEFILE_JEWELRY_PRESET_BLOCK_MAGIC 0x4A57
 /* Packed one-byte Morgoth summons state in 0.9.6.4+ savefiles. */
 #define SAVEFILE_MORGOTH_CALL_SEEN 0x08
 #define SAVEFILE_MORGOTH_CALL_ESCALATION_MASK 0x07
@@ -345,6 +347,7 @@
  */
 #define ART_SEEN_PHYSICAL 0x01 /* Player has actually seen the artefact */
 #define ART_SEEN_REVEALED 0x02 /* Revealed via lore/quests (knowledge menu) */
+#define ART_SEEN_METARUN_EASY_ID 0x04 /* Remembered EASY_ID artefact this metarun */
 
 /*
  * Run-wide discovery lore flags (player_type.discovery_lore_flags).

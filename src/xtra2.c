@@ -511,6 +511,7 @@ bool set_image(int v)
         if (!p_ptr->image)
         {
             msg_print("Fantastic visions appear before your eyes.");
+            hallucination_randomize_style_transitions();
             notice = true;
         }
     }
@@ -521,6 +522,7 @@ bool set_image(int v)
         if (p_ptr->image)
         {
             msg_print("You can see clearly again.");
+            hallucination_clear_style_transitions();
             notice = true;
         }
     }
