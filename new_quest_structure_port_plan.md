@@ -100,6 +100,42 @@ Validation completed:
 - `.\build-cmake.bat` passed for both standard and portable builds.
 - Portable runtime initialization reached the interactive/menu state after deleting and regenerating `limits.raw`, `quest.raw`, `ability.raw`, and `vault.raw`; no parse/init errors were found in the portable log.
 
+## Phase 2 and Phase 3 Implementation Record
+
+Status: completed on branch `port-new-quest-structure`.
+
+Commits:
+
+- `457cfb26` `phase 2`
+- `cd8d6117` `phase3`
+
+Integrated runtime files:
+
+- `src/generate.c`: quest lottery/runtime generation, follow-up quest availability checks, forced quest vault placement, Tulkas stronghold scheduling, Varda shadow bastion placement, Nienna Morgoth-hall giver handling, quest-vault retry cleanup, and special vault monster reservation checks.
+- `src/xtra2.c`: quest interactions, reward application, status display, Varda gift selection, follow-up completion handlers, global quest completion, Nienna mercy/Morgoth/pacifist hooks, Orome hunt tracking, Tulkas orc/Morgoth hooks, and Varda shadow/Ungoliant hooks.
+- `src/save.c`, `src/load.c`, `src/birth.c`, `src/types.h`: persistent quest fields, defaults, and `0.9.7.2` save gates.
+- `src/cmd1.c`, `src/cmd2.c`, `src/dungeon.c`, `src/monster2.c`, `src/object2.c`, `src/spells1.c`, `src/spells2.c`, `src/tables.c`, `src/drop_system.c`, `src/cmd4.c`: gameplay hooks for quest failure/completion, monster restrictions, challenge behavior, rewards, and status/menu integration.
+
+Final review corrections:
+
+- `src/generate.c`: replaced fixed 8-slot roulette scratch arrays with `ROULETTE_QUEST_MAX` based on `QUEST_SLOT_MAX`, and added an overflow guard. Current data has seven roulette quests, but this prevents future `Y:1` additions from writing past the registry.
+
+Comparison notes against `origin/New-quest-structure`:
+
+- Ported the quest-specific implementation from source commits through `8ff00b01`.
+- Preserved current `develop` as authoritative for newer generation, scoring, UI, save/load, drop-system, SDL, and data behavior.
+- Intentionally did not port out-of-scope old-branch files: `.claude/*`, `.gitignore`, source `session_notes.md`, `src/main-sdl.c`, `src/wizard2.c`, and `src/z-term.c`.
+- Did not port the source branch `src/cave.c` Oath of Light light-intensity tweak because current `develop` already applies Oath of Light as a light-radius reward in `src/xtra1.c`, matching current oath and quest reward text.
+- Did not copy old source-branch save gates such as `0.9.1.10`; new quest fields use `savefile_version_at_least(0, 9, 7, 2)`.
+
+Final validation completed:
+
+- `git diff --check` passed, with only the repo's normal LF/CRLF warning for `src/generate.c`.
+- Structured data check passed: 16 contiguous quest IDs, `M:Q:18`, seven roulette quests, all quest `A:8` reward IDs resolve to `lib/edit/ability.txt`, and vaults 464-467 exist with the `QUEST` flag.
+- `powershell -ExecutionPolicy Bypass -File .\build-incremental.ps1` passed.
+- `.\build-cmake.bat` passed for both standard and portable builds after the final review fix.
+- Portable startup smoke test regenerated `limits.raw`, `quest.raw`, `ability.raw`, `vault.raw`, and `oath.raw`; no quest/ability/vault parser errors were found in `sil-more-windows-sdl3-portable/log.txt`.
+
 ## Scope To Port
 
 Port these quest-structure concepts:

@@ -1743,7 +1743,8 @@ static bool is_maeglin_quest_vault(vault_type *v)
 }
 
 /* Roulette quest registry - initialized dynamically based on Y:1 field */
-static roulette_quest_entry roulette_quests[8];  /* Max 8 quests from limits.txt */
+#define ROULETTE_QUEST_MAX QUEST_SLOT_MAX
+static roulette_quest_entry roulette_quests[ROULETTE_QUEST_MAX];
 static int roulette_quest_count = 0;
 
 /* Parametric formula calculation */
@@ -1981,6 +1982,12 @@ static void init_roulette_quest_registry(void) {
         
         /* Skip if not a roulette quest (Y:1) */
         if (q_ptr->quest_type != 1) continue;
+
+        if (roulette_quest_count >= (int)N_ELEMENTS(roulette_quests)) {
+            log_warn("Quest lottery: ignoring roulette quest %d; registry is full (%d entries)",
+                i, (int)N_ELEMENTS(roulette_quests));
+            continue;
+        }
         
         /* Add to registry */
         roulette_quest_entry* entry = &roulette_quests[roulette_quest_count];
@@ -2288,7 +2295,7 @@ static void run_quest_lottery(void) {
     quest_lottery_resolved = true;
     
     /* Create a randomized order for quest evaluation */
-    int quest_order[8];  /* Max 8 quests */
+    int quest_order[ROULETTE_QUEST_MAX];
     for (int i = 0; i < roulette_quest_count; i++) {
         quest_order[i] = i;
     }
