@@ -3445,6 +3445,266 @@ errr parse_v_info(char* buf, header* head)
 /*
  * Initialize the "b_info" array, by parsing an ascii "template" file
  */
+static void ability_req_copy_token(char* out, size_t out_sz, cptr src)
+{
+    size_t len;
+    size_t i;
+    size_t j = 0;
+
+    if (!out || out_sz == 0)
+        return;
+
+    out[0] = '\0';
+
+    if (!src)
+        return;
+
+    while (*src && isspace((unsigned char)*src))
+        src++;
+
+    len = strlen(src);
+    while (len > 0 && isspace((unsigned char)src[len - 1]))
+        len--;
+
+    for (i = 0; i < len && j + 1 < out_sz; i++)
+    {
+        unsigned char c = (unsigned char)src[i];
+
+        if ((c == '-') || isspace(c))
+            out[j++] = '_';
+        else
+            out[j++] = (char)toupper(c);
+    }
+
+    out[j] = '\0';
+}
+
+static bool ability_req_parse_int(cptr src, int max_value, int* out)
+{
+    char token[32];
+    int value = 0;
+    int i;
+
+    if (!out)
+        return false;
+
+    ability_req_copy_token(token, sizeof(token), src);
+
+    if (!token[0])
+        return false;
+
+    for (i = 0; token[i]; i++)
+    {
+        if (!isdigit((unsigned char)token[i]))
+            return false;
+
+        value = (value * 10) + (token[i] - '0');
+        if (value > max_value)
+            return false;
+    }
+
+    *out = value;
+    return true;
+}
+
+static bool ability_req_parse_stat_name(cptr src, int* index)
+{
+    char token[64];
+    cptr name;
+
+    if (!index)
+        return false;
+
+    ability_req_copy_token(token, sizeof(token), src);
+    name = token;
+
+    if (!strncmp(name, "STAT_", 5))
+        name += 5;
+    else if (!strncmp(name, "A_", 2))
+        name += 2;
+    else if (!strncmp(name, "STAT", 4) && isdigit((unsigned char)name[4]))
+        name += 4;
+    else if ((name[0] == 'A') && isdigit((unsigned char)name[1]))
+        name += 1;
+
+    if (ability_req_parse_int(name, A_MAX - 1, index))
+        return true;
+
+    if (streq(name, "STR") || streq(name, "STRENGTH"))
+    {
+        *index = A_STR;
+        return true;
+    }
+    if (streq(name, "DEX") || streq(name, "DEXTERITY"))
+    {
+        *index = A_DEX;
+        return true;
+    }
+    if (streq(name, "CON") || streq(name, "CONSTITUTION"))
+    {
+        *index = A_CON;
+        return true;
+    }
+    if (streq(name, "GRA") || streq(name, "GRACE"))
+    {
+        *index = A_GRA;
+        return true;
+    }
+
+    return false;
+}
+
+static bool ability_req_parse_skill_name(cptr src, int* index)
+{
+    char token[64];
+    cptr name;
+
+    if (!index)
+        return false;
+
+    ability_req_copy_token(token, sizeof(token), src);
+    name = token;
+
+    if (!strncmp(name, "SKILL_", 6))
+        name += 6;
+    else if (!strncmp(name, "S_", 2))
+        name += 2;
+    else if (!strncmp(name, "SKILL", 5) && isdigit((unsigned char)name[5]))
+        name += 5;
+    else if ((name[0] == 'S') && isdigit((unsigned char)name[1]))
+        name += 1;
+
+    if (ability_req_parse_int(name, S_MAX - 1, index))
+        return true;
+
+    if (streq(name, "MEL") || streq(name, "MELEE"))
+    {
+        *index = S_MEL;
+        return true;
+    }
+    if (streq(name, "ARC") || streq(name, "ARCHERY"))
+    {
+        *index = S_ARC;
+        return true;
+    }
+    if (streq(name, "EVN") || streq(name, "EVASION"))
+    {
+        *index = S_EVN;
+        return true;
+    }
+    if (streq(name, "STL") || streq(name, "STEALTH"))
+    {
+        *index = S_STL;
+        return true;
+    }
+    if (streq(name, "PER") || streq(name, "PERCEPTION"))
+    {
+        *index = S_PER;
+        return true;
+    }
+    if (streq(name, "WIL") || streq(name, "WILL"))
+    {
+        *index = S_WIL;
+        return true;
+    }
+    if (streq(name, "SMT") || streq(name, "CMT") || streq(name, "SMITHING"))
+    {
+        *index = S_SMT;
+        return true;
+    }
+    if (streq(name, "SNG") || streq(name, "SONG"))
+    {
+        *index = S_SNG;
+        return true;
+    }
+    if (streq(name, "SPC") || streq(name, "SPECIAL"))
+    {
+        *index = S_SPC;
+        return true;
+    }
+
+    return false;
+}
+
+static bool ability_req_parse_name(cptr src, bool* is_stat, int* index)
+{
+    if (!is_stat || !index)
+        return false;
+
+    if (ability_req_parse_stat_name(src, index))
+    {
+        *is_stat = true;
+        return true;
+    }
+
+    if (ability_req_parse_skill_name(src, index))
+    {
+        *is_stat = false;
+        return true;
+    }
+
+    return false;
+}
+
+static errr parse_ability_requirement_line(ability_type* b_ptr, char* s)
+{
+    int count = 0;
+    char* comment;
+
+    if (!b_ptr || !s)
+        return (PARSE_ERROR_GENERIC);
+
+    comment = strchr(s, '#');
+    if (comment)
+        *comment = '\0';
+
+    while (*s)
+    {
+        char* req_name;
+        char* req_value;
+        char* next;
+        int value;
+        int index;
+        bool is_stat;
+
+        while (*s && (isspace((unsigned char)*s) || (*s == ':')))
+            s++;
+
+        if (!*s)
+            break;
+
+        req_name = s;
+        req_value = strchr(req_name, ':');
+        if (!req_value)
+            return (PARSE_ERROR_GENERIC);
+
+        *req_value++ = '\0';
+        next = strchr(req_value, ':');
+        if (next)
+            *next++ = '\0';
+
+        if (!ability_req_parse_name(req_name, &is_stat, &index))
+            return (PARSE_ERROR_GENERIC);
+
+        if (!ability_req_parse_int(req_value, 255, &value))
+            return (PARSE_ERROR_OUT_OF_BOUNDS);
+
+        if (is_stat)
+            b_ptr->stat_req[index] = (byte)value;
+        else
+            b_ptr->skill_req[index] = (byte)value;
+
+        count++;
+
+        if (!next)
+            break;
+
+        s = next;
+    }
+
+    return (count > 0) ? 0 : (PARSE_ERROR_GENERIC);
+}
+
 errr parse_b_info(char* buf, header* head)
 {
     int i;
@@ -3511,10 +3771,30 @@ errr parse_b_info(char* buf, header* head)
         if (3 != sscanf(buf + 2, "%d:%d:%d", &skilltype, &abilitynum, &level))
             return (PARSE_ERROR_GENERIC);
 
+        if ((skilltype < 0) || (skilltype >= S_MAX)
+            || (abilitynum < 0) || (abilitynum >= ABILITIES_MAX)
+            || (level < 0) || (level > 255))
+        {
+            return (PARSE_ERROR_OUT_OF_BOUNDS);
+        }
+
         /* Save the values */
-        b_ptr->skilltype = skilltype;
-        b_ptr->abilitynum = abilitynum;
-        b_ptr->level = level;
+        b_ptr->skilltype = (byte)skilltype;
+        b_ptr->abilitynum = (byte)abilitynum;
+        b_ptr->level = (byte)level;
+
+        /* Legacy compatibility: I: still supplies the own-skill requirement. */
+        b_ptr->skill_req[skilltype] = (byte)level;
+    }
+
+    /* Process 'R' for extra stat/skill requirements */
+    else if (buf[0] == 'R')
+    {
+        /* There better be a current b_ptr */
+        if (!b_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        return parse_ability_requirement_line(b_ptr, buf + 2);
     }
 
     /* Process 'P' for "Prerequisites" (one line only) */

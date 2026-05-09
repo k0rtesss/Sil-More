@@ -279,7 +279,9 @@ struct ability_type
     byte skilltype; /* Skill type */
     byte abilitynum; /* Ability number within a skill */
 
-    byte level; /* Prerequisite skill level */
+    byte level; /* Legacy/default prerequisite skill level */
+    byte stat_req[A_MAX]; /* Minimum intrinsic stat levels */
+    byte skill_req[S_MAX]; /* Minimum base skill levels */
     byte prereqs; /* Number of prerequisite abilities */
     byte prereq_skilltype[4]; /* Skill type (for prerequisites) */
     byte prereq_abilitynum[4]; /* The ability within that skill (for

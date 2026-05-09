@@ -1395,7 +1395,9 @@ static void ability_menu_sort_smithing_entries(ability_type* entries[],
         int abilitynum = abilitynums[i];
         int j = i - 1;
 
-        while ((j >= 0) && (entry->level < entries[j]->level))
+        while ((j >= 0)
+            && (ability_requirement_level(entry)
+                < ability_requirement_level(entries[j])))
         {
             entries[j + 1] = entries[j];
             attrs[j + 1] = attrs[j];
@@ -1427,6 +1429,67 @@ static void ability_menu_format_amount_line(char* buf, size_t buflen,
         strnfmt(buf, buflen, "%s %d / %d", short_label, need, have);
     else
         strnfmt(buf, buflen, "%d %s (you have %d)", need, long_label, have);
+}
+
+static void ability_menu_format_requirement_line(char* buf, size_t buflen,
+    cptr long_label, cptr short_label, int need, int have, int max_width)
+{
+    if (max_width <= 30)
+        strnfmt(buf, buflen, "%s %d / %d", short_label, need, have);
+    else
+        strnfmt(buf, buflen, "%s %d (you have %d)", long_label, need, have);
+}
+
+static cptr ability_menu_stat_requirement_name(int stat, bool short_name)
+{
+    static cptr stat_req_names[A_MAX]
+        = { "Strength", "Dexterity", "Constitution", "Grace" };
+    static cptr stat_req_short_names[A_MAX] = { "Str", "Dex", "Con", "Gra" };
+
+    if (stat < 0 || stat >= A_MAX)
+        return "";
+
+    return short_name ? stat_req_short_names[stat] : stat_req_names[stat];
+}
+
+static int ability_requirement_stat_value(int stat)
+{
+    if (stat < 0 || stat >= A_MAX)
+        return 0;
+
+    return p_ptr->stat_base[stat] + p_ptr->stat_drain[stat];
+}
+
+static int ability_requirement_skill_value(int skill)
+{
+    if (skill < 0 || skill >= S_MAX)
+        return 0;
+
+    return p_ptr->skill_base[skill];
+}
+
+static bool ability_requirements_met(const ability_type* b_ptr)
+{
+    int i;
+
+    if (!b_ptr)
+        return false;
+
+    for (i = 0; i < A_MAX; i++)
+    {
+        if ((b_ptr->stat_req[i] > 0)
+            && (b_ptr->stat_req[i] > ability_requirement_stat_value(i)))
+            return false;
+    }
+
+    for (i = 0; i < S_MAX; i++)
+    {
+        if ((b_ptr->skill_req[i] > 0)
+            && (b_ptr->skill_req[i] > ability_requirement_skill_value(i)))
+            return false;
+    }
+
+    return true;
 }
 
 static void ability_menu_append_text(char* out, size_t outsz, size_t* cur,
@@ -1522,22 +1585,58 @@ static int ability_menu_next_row_after_text(int desc_col, int fallback_row)
 static void ability_menu_render_prerequisites_block(int skilltype,
     const ability_type* b_ptr, int desc_col)
 {
-    int j;
+    int i, j;
     int row = ability_menu_next_row_after_text(desc_col, 3);
     int info_width = ability_menu_text_width(desc_col, 2);
+    bool have_requirement = false;
     char buf[80];
 
-    Term_putstr(desc_col, row, -1, TERM_YELLOW, "Prerequisites:");
+    Term_putstr(desc_col, row, -1, TERM_YELLOW, "Requirements:");
+    row++;
 
-    ability_menu_format_amount_line(buf, sizeof(buf), "skill points", "Skill",
-        b_ptr->level, p_ptr->skill_base[skilltype], info_width);
+    for (i = 0; i < A_MAX; i++)
+    {
+        int need = b_ptr->stat_req[i];
+        int have;
 
-    Term_putstr(desc_col + 2, row + 1, -1,
-        (b_ptr->level <= p_ptr->skill_base[skilltype]) ? TERM_L_GREEN
-                                                       : TERM_L_DARK,
-        buf);
+        if (need <= 0)
+            continue;
 
-    row += 2;
+        have = ability_requirement_stat_value(i);
+        have_requirement = true;
+        ability_menu_format_requirement_line(buf, sizeof(buf),
+            ability_menu_stat_requirement_name(i, false),
+            ability_menu_stat_requirement_name(i, true), need, have,
+            info_width);
+
+        Term_putstr(desc_col + 2, row, -1,
+            (need <= have) ? TERM_L_GREEN : TERM_L_DARK, buf);
+        row++;
+    }
+
+    for (i = 0; i < S_MAX; i++)
+    {
+        int need = b_ptr->skill_req[i];
+        int have;
+
+        if (need <= 0)
+            continue;
+
+        have = ability_requirement_skill_value(i);
+        have_requirement = true;
+        ability_menu_format_requirement_line(buf, sizeof(buf),
+            skill_names_full[i], skill_names[i], need, have, info_width);
+
+        Term_putstr(desc_col + 2, row, -1,
+            (need <= have) ? TERM_L_GREEN : TERM_L_DARK, buf);
+        row++;
+    }
+
+    if (!have_requirement)
+    {
+        Term_putstr(desc_col + 2, row, -1, TERM_L_GREEN, "None");
+        row++;
+    }
 
     if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
     {
@@ -1916,6 +2015,25 @@ int ability_index(int skilltype, int abilitynum)
     return (0);
 }
 
+int ability_requirement_level(const ability_type* b_ptr)
+{
+    int i;
+    int level = 0;
+
+    if (!b_ptr)
+        return 0;
+
+    for (i = 0; i < A_MAX; i++)
+        if (b_ptr->stat_req[i] > level)
+            level = b_ptr->stat_req[i];
+
+    for (i = 0; i < S_MAX; i++)
+        if (b_ptr->skill_req[i] > level)
+            level = b_ptr->skill_req[i];
+
+    return level;
+}
+
 /*
  *  Counts the number of innate abilities in a skill
  */
@@ -1970,10 +2088,8 @@ bool prereqs(int skilltype, int abilitynum)
 
     b_ptr = &b_info[ability_index(skilltype, abilitynum)];
 
-    if (p_ptr->skill_base[skilltype] < b_ptr->level)
-    {
+    if (!ability_requirements_met(b_ptr))
         return (false);
-    }
 
     return prereq_abilities_met(b_ptr);
 }
@@ -4478,10 +4594,10 @@ void do_cmd_ability_screen(void)
                             continue;
                         }
                         ability_type* b_ptr = &b_info[ability_index(skilltype, abilitynum)];
-                        bool has_skill_prereq = (p_ptr->skill_base[skilltype] >= b_ptr->level);
+                        bool has_stat_skill_prereq = ability_requirements_met(b_ptr);
                         bool has_ability_prereq = prereq_abilities_met(b_ptr);
 
-                        if (has_skill_prereq && has_ability_prereq)
+                        if (has_stat_skill_prereq && has_ability_prereq)
                         {
                             int exp_cost = ability_purchase_exp_cost(skilltype);
 
@@ -4668,8 +4784,8 @@ void do_cmd_ability_screen(void)
                         }
                         else
                         {
-                            if (!has_skill_prereq)
-                                bell("Insufficient skill points for ability!");
+                            if (!has_stat_skill_prereq)
+                                bell("Insufficient stat or skill requirements for ability!");
                             else
                                 bell("Insufficient prerequisite abilities for ability!");
                         }
@@ -7192,9 +7308,8 @@ int object_difficulty(object_type* o_ptr)
     // Abilities
     for (i = 0; i < o_ptr->abilities; i++)
     {
-        int level = (&b_info[ability_index(
-                         o_ptr->skilltype[i], o_ptr->abilitynum[i])])
-                        ->level;
+        int level = ability_requirement_level(&b_info[ability_index(
+            o_ptr->skilltype[i], o_ptr->abilitynum[i])]);
 
         dif_inc += 5 + (level / 3);
         smithing_cost.exp += 50 * level;

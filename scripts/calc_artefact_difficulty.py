@@ -25,7 +25,7 @@ BONUS_TOKEN_ALIASES = {
 STAT_TOKENS = ('STR', 'DEX', 'CON', 'GRA')
 SKILL_TOKENS = ('ARCHERY', 'STEALTH', 'PERCEPTION', 'WILL', 'SMITHING', 'SONG')
 
-# Global dictionary mapping (skill_number, ability_value) -> level
+# Global dictionary mapping (skill_number, ability_value) -> requirement level
 # Populated by parse_ability_file()
 ABILITY_LEVELS = {}
 
@@ -34,19 +34,96 @@ ABILITY_LEVELS = {}
 OBJECTS_BY_TYPE = {}
 
 
+ABILITY_REQ_STAT_TOKENS = {
+    'STR': 0,
+    'STRENGTH': 0,
+    'DEX': 1,
+    'DEXTERITY': 1,
+    'CON': 2,
+    'CONSTITUTION': 2,
+    'GRA': 3,
+    'GRACE': 3,
+}
+
+ABILITY_REQ_SKILL_TOKENS = {
+    'MEL': 0,
+    'MELEE': 0,
+    'ARC': 1,
+    'ARCHERY': 1,
+    'EVN': 2,
+    'EVASION': 2,
+    'STL': 3,
+    'STEALTH': 3,
+    'PER': 4,
+    'PERCEPTION': 4,
+    'WIL': 5,
+    'WILL': 5,
+    'SMT': 6,
+    'CMT': 6,
+    'SMITHING': 6,
+    'SNG': 7,
+    'SONG': 7,
+    'SPC': 8,
+    'SPECIAL': 8,
+}
+
+
+def normalize_ability_req_token(token):
+    return re.sub(r'[\s-]+', '_', token.strip().upper())
+
+
+def parse_ability_req_name(token):
+    name = normalize_ability_req_token(token)
+
+    stat_name = name
+    if stat_name.startswith('STAT_'):
+        stat_name = stat_name[5:]
+    elif stat_name.startswith('A_'):
+        stat_name = stat_name[2:]
+    elif re.fullmatch(r'STAT\d+', stat_name):
+        stat_name = stat_name[4:]
+    elif re.fullmatch(r'A\d+', stat_name):
+        stat_name = stat_name[1:]
+
+    if stat_name.isdigit() and 0 <= int(stat_name) <= 3:
+        return True, int(stat_name)
+    if stat_name in ABILITY_REQ_STAT_TOKENS:
+        return True, ABILITY_REQ_STAT_TOKENS[stat_name]
+
+    skill_name = name
+    if skill_name.startswith('SKILL_'):
+        skill_name = skill_name[6:]
+    elif skill_name.startswith('S_'):
+        skill_name = skill_name[2:]
+    elif re.fullmatch(r'SKILL\d+', skill_name):
+        skill_name = skill_name[5:]
+    elif re.fullmatch(r'S\d+', skill_name):
+        skill_name = skill_name[1:]
+
+    if skill_name.isdigit() and 0 <= int(skill_name) <= 8:
+        return False, int(skill_name)
+    if skill_name in ABILITY_REQ_SKILL_TOKENS:
+        return False, ABILITY_REQ_SKILL_TOKENS[skill_name]
+
+    raise ValueError(f"unknown ability requirement token '{token}'")
+
+
 def parse_ability_file(filepath):
-    """Parse ability.txt to get ability levels.
+    """Parse ability.txt to get ability requirement levels.
 
     Format:
         N: ability_number : ability_name
-        I: skill_number : ability_value : level_requirement
+        I: skill_number : ability_value : default own-skill level_requirement
+        R: requirement_name : level : requirement_name : level : ...
 
-    Returns dict mapping (skill_number, ability_value) -> level
+    Returns dict mapping (skill_number, ability_value) -> max requirement level
     """
     global ABILITY_LEVELS
     ABILITY_LEVELS = {}
 
     current_ability_num = None
+    current_key = None
+    current_requirements = {}
 
     with open(filepath, 'r', encoding='utf-8') as f:
         for line in f:
@@ -58,13 +135,33 @@ def parse_ability_file(filepath):
             if line.startswith('N:'):
                 parts = line[2:].split(':')
                 current_ability_num = int(parts[0])
+                current_key = None
+                current_requirements = {}
 
             elif line.startswith('I:') and current_ability_num is not None:
                 parts = line[2:].split(':')
                 skill_num = int(parts[0])
                 ability_val = int(parts[1])
                 level = int(parts[2])
-                ABILITY_LEVELS[(skill_num, ability_val)] = level
+                current_key = (skill_num, ability_val)
+                current_requirements = {(False, skill_num): level}
+                ABILITY_LEVELS[current_key] = max(current_requirements.values(), default=0)
+
+            elif line.startswith('R:') and current_key is not None:
+                body = line[2:].split('#', 1)[0].strip()
+                if not body:
+                    continue
+
+                parts = [part.strip() for part in body.split(':')]
+                if len(parts) % 2 != 0:
+                    raise ValueError(f"invalid ability requirement line: {line}")
+
+                for name, value_text in zip(parts[0::2], parts[1::2]):
+                    is_stat, index = parse_ability_req_name(name)
+                    level = int(value_text)
+                    current_requirements[(is_stat, index)] = level
+
+                ABILITY_LEVELS[current_key] = max(current_requirements.values(), default=0)
 
     return ABILITY_LEVELS
 
@@ -813,7 +910,7 @@ def calculate_difficulty(art):
 
     # === ABILITIES (granted abilities) ===
     # dif_inc += 5 + (level / 3) per ability
-    # Uses actual ability levels from ability.txt
+    # Uses actual ability requirement levels from ability.txt
     ability_list = art.get('ability_list', [])
     for skill_num, ability_val in ability_list:
         level = get_ability_level(skill_num, ability_val)

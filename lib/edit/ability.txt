@@ -10,7 +10,8 @@
 # === Understanding ability.txt ===
 #
 # N: ability number : ability name
-# I: skill number : ability value : level requirement
+# I: skill number : ability value : default own-skill level requirement
+# R: requirement name : level : requirement name : level : ...
 # P: prerequisite skill number / prerequisite ability value : ...
 # D: description (poetic/lore text)
 # E: effect (mechanical description)
@@ -18,8 +19,13 @@
 # 'N' indicates the beginning of an entry. The serial number must
 #     increase for each new ability.
 #
-# 'I' is the skill number (melee = 1 etc), ability number in this skill
-#     and the level requirement for the ability
+# 'I' is the skill number (melee = 0 etc), ability number in this skill
+#     and the default own-skill level requirement for the ability. Use 0 if
+#     the ability has no own-skill requirement.
+#
+# 'R' adds or overrides stat/skill requirements. Names may be abbreviations
+#     or full names: STR, DEX, CON, GRA, MEL, ARC, EVN, STL, PER, WIL, SMT,
+#     SNG, SPC. Example: R:STR:2:PER:7:WIL:3:GRA:2
 #
 # 'P' is the prerequisite abilities if any
 #

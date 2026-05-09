@@ -733,6 +733,7 @@ extern void do_cmd_change_song(void);
 extern void show_songs_with_highlight(int highlight);
 extern void wipe_screen_from(int col);
 extern int ability_index(int skilltype, int abilitynum);
+extern int ability_requirement_level(const ability_type* b_ptr);
 extern void ability_log_reset(void);
 extern void ability_log_record_gain(int skilltype, int abilitynum);
 extern void ability_log_sync_missing(void);
