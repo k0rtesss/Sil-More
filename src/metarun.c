@@ -50,6 +50,13 @@
 
 /* =========================  constants  ========================= */
 #define CURSE_MENU_LINES  3
+#define METARUN_RUNTIME_CHALLENGE_FLAGS_IDX 0
+#define METARUN_CHALLENGE_DISCON_FLAG 0x01
+#define METARUN_CHALLENGE_SINGLE_FLAG 0x02
+#define METARUN_CHALLENGE_FIXED_FLAG 0x04
+#define METARUN_CHALLENGE_TULKAS_BLUNT_FLAG 0x08
+#define METARUN_CHALLENGE_TORCHLIGHT_FLAG 0x10
+#define METARUN_RUNTIME_CHALLENGE_COUNT_BASE 1
 
 /* =========================  globals  =========================== */
 static metarun *metaruns    = NULL;
@@ -65,6 +72,404 @@ static int popcount32(u32b value)
         count++;
     }
     return count;
+}
+
+static void metarun_sync_runtime_byte(metarun *current, int idx)
+{
+    if (!current || idx < 0 || idx >= (int)N_ELEMENTS(metar.reserved_runtime)) return;
+    current->reserved_runtime[idx] = metar.reserved_runtime[idx];
+}
+
+static void metarun_sync_quest_reserved_byte(metarun *current, int idx)
+{
+    if (!current || idx < 0 || idx >= (int)N_ELEMENTS(metar.quest_reserved)) return;
+    current->quest_reserved[idx] = metar.quest_reserved[idx];
+}
+
+static bool metarun_challenge_flag_unlocked(byte flag)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) return false;
+
+    byte *flags = &metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    bool unlocked = ((*flags) & flag) != 0;
+    current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] = *flags;
+    return unlocked;
+}
+
+static void metarun_unlock_challenge_flag(byte flag, cptr debug_name)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("%s: no current metarun", debug_name ? debug_name : "metarun_unlock_challenge_flag");
+        return;
+    }
+
+    byte *flags = &metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    log_debug("%s: before unlock, flag byte=0x%02x", debug_name, *flags);
+
+    if (((*flags) & flag) != 0) {
+        log_debug("%s: already unlocked, skipping", debug_name);
+        metarun_sync_runtime_byte(current, METARUN_RUNTIME_CHALLENGE_FLAGS_IDX);
+        return;
+    }
+
+    *flags |= flag;
+    metarun_sync_runtime_byte(current, METARUN_RUNTIME_CHALLENGE_FLAGS_IDX);
+    log_debug("%s: after unlock, flag byte=0x%02x", debug_name, *flags);
+    save_metaruns();
+}
+
+bool metarun_challenge_disconnected_unlocked(void)
+{
+    bool unlocked = metarun_challenge_flag_unlocked(METARUN_CHALLENGE_DISCON_FLAG);
+    byte *flags = &metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+
+    /* Backfill unlock if the Mandos traitor quest was already completed before the flag existed. */
+    if (!unlocked && metarun_quest_completion_count(METARUN_QUEST_MANDOS_TRAITOR) > 0) {
+        log_debug("metarun_challenge_disconnected_unlocked: retro-unlocking from quest completion");
+        *flags |= METARUN_CHALLENGE_DISCON_FLAG;
+        metarun_sync_runtime_byte(metarun_current_mutable(), METARUN_RUNTIME_CHALLENGE_FLAGS_IDX);
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_disconnected_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
+    return unlocked;
+}
+
+void metarun_unlock_challenge_disconnected(void)
+{
+    metarun_unlock_challenge_flag(METARUN_CHALLENGE_DISCON_FLAG, "metarun_unlock_challenge_disconnected");
+}
+
+bool metarun_challenge_single_stair_unlocked(void)
+{
+    bool unlocked = metarun_challenge_flag_unlocked(METARUN_CHALLENGE_SINGLE_FLAG);
+    byte *flags = &metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+
+    /* Backfill unlock if the drake quest was already completed before the flag existed. */
+    if (!unlocked && metarun_quest_completion_count(METARUN_QUEST_OROME_DRAGONS) > 0) {
+        log_debug("metarun_challenge_single_stair_unlocked: retro-unlocking from quest completion");
+        *flags |= METARUN_CHALLENGE_SINGLE_FLAG;
+        metarun_sync_runtime_byte(metarun_current_mutable(), METARUN_RUNTIME_CHALLENGE_FLAGS_IDX);
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_single_stair_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
+    return unlocked;
+}
+
+void metarun_unlock_challenge_single_stair(void)
+{
+    metarun_unlock_challenge_flag(METARUN_CHALLENGE_SINGLE_FLAG, "metarun_unlock_challenge_single_stair");
+}
+
+bool metarun_challenge_fixed_exp_unlocked(void)
+{
+    bool unlocked = metarun_challenge_flag_unlocked(METARUN_CHALLENGE_FIXED_FLAG);
+    byte *flags = &metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+
+    if (!unlocked &&
+        (metarun_quest_completion_count(METARUN_QUEST_NIENA_MORGOTH) > 0 ||
+         metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP) > 0)) {
+        log_debug("metarun_challenge_fixed_exp_unlocked: retro-unlocking from prior completion");
+        *flags |= METARUN_CHALLENGE_FIXED_FLAG;
+        metarun_sync_runtime_byte(metarun_current_mutable(), METARUN_RUNTIME_CHALLENGE_FLAGS_IDX);
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_fixed_exp_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
+    return unlocked;
+}
+
+void metarun_unlock_challenge_fixed_exp(void)
+{
+    metarun_unlock_challenge_flag(METARUN_CHALLENGE_FIXED_FLAG, "metarun_unlock_challenge_fixed_exp");
+}
+
+bool metarun_challenge_tulkas_blunt_unlocked(void)
+{
+    bool unlocked = metarun_challenge_flag_unlocked(METARUN_CHALLENGE_TULKAS_BLUNT_FLAG);
+    byte *flags = &metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+
+    if (!unlocked &&
+        (metarun_quest_completion_count(METARUN_QUEST_TULKAS_ORCS) > 0 ||
+         metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > 0)) {
+        log_debug("metarun_challenge_tulkas_blunt_unlocked: retro-unlocking from prior completions");
+        *flags |= METARUN_CHALLENGE_TULKAS_BLUNT_FLAG;
+        metarun_sync_runtime_byte(metarun_current_mutable(), METARUN_RUNTIME_CHALLENGE_FLAGS_IDX);
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_tulkas_blunt_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
+    return unlocked;
+}
+
+void metarun_unlock_challenge_tulkas_blunt(void)
+{
+    metarun_unlock_challenge_flag(METARUN_CHALLENGE_TULKAS_BLUNT_FLAG, "metarun_unlock_challenge_tulkas_blunt");
+}
+
+bool metarun_challenge_torchlight_unlocked(void)
+{
+    bool unlocked = metarun_challenge_flag_unlocked(METARUN_CHALLENGE_TORCHLIGHT_FLAG);
+    byte *flags = &metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+
+    if (!unlocked && metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT) > 0) {
+        log_debug("metarun_challenge_torchlight_unlocked: retro-unlocking from prior completions");
+        *flags |= METARUN_CHALLENGE_TORCHLIGHT_FLAG;
+        metarun_sync_runtime_byte(metarun_current_mutable(), METARUN_RUNTIME_CHALLENGE_FLAGS_IDX);
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_torchlight_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
+    return unlocked;
+}
+
+void metarun_unlock_challenge_torchlight(void)
+{
+    metarun_unlock_challenge_flag(METARUN_CHALLENGE_TORCHLIGHT_FLAG, "metarun_unlock_challenge_torchlight");
+}
+
+static byte *challenge_count_slot(int challenge_id)
+{
+    if (challenge_id <= CHALLENGE_NONE || challenge_id > CHALLENGE_MAX_TRACKED) return NULL;
+    int idx = METARUN_RUNTIME_CHALLENGE_COUNT_BASE + (challenge_id - 1);
+    if (idx < 0 || idx >= (int)N_ELEMENTS(metar.reserved_runtime)) return NULL;
+    return &metar.reserved_runtime[idx];
+}
+
+int metarun_challenge_completion_count(int challenge_id)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+
+    byte *slot = challenge_count_slot(challenge_id);
+    if (!slot) return 0;
+    return *slot;
+}
+
+void metarun_mark_challenge_completed(int challenge_id)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_mark_challenge_completed: no current metarun");
+        return;
+    }
+
+    byte *slot = challenge_count_slot(challenge_id);
+    if (!slot) {
+        log_debug("metarun_mark_challenge_completed: invalid challenge id %d", challenge_id);
+        return;
+    }
+
+    if (*slot < 255) (*slot)++;
+    metarun_sync_runtime_byte(current, METARUN_RUNTIME_CHALLENGE_COUNT_BASE + (challenge_id - 1));
+    save_metaruns();
+    log_debug("metarun_mark_challenge_completed: challenge %d completions now %d", challenge_id, *slot);
+}
+
+int metarun_mandos_resurrection_charges(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+    if (METARUN_SLOT_MANDOS_RES_CHARGES < 0 ||
+        METARUN_SLOT_MANDOS_RES_CHARGES >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        return 0;
+    }
+    return metar.quest_reserved[METARUN_SLOT_MANDOS_RES_CHARGES];
+}
+
+void metarun_add_mandos_resurrection_charge(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_add_mandos_resurrection_charge: no current metarun");
+        return;
+    }
+    if (METARUN_SLOT_MANDOS_RES_CHARGES < 0 ||
+        METARUN_SLOT_MANDOS_RES_CHARGES >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        log_debug("metarun_add_mandos_resurrection_charge: invalid slot %d", METARUN_SLOT_MANDOS_RES_CHARGES);
+        return;
+    }
+
+    byte *slot = &metar.quest_reserved[METARUN_SLOT_MANDOS_RES_CHARGES];
+    if (*slot >= 1) {
+        log_debug("metarun_add_mandos_resurrection_charge: charge already present (%d)", *slot);
+        metarun_sync_quest_reserved_byte(current, METARUN_SLOT_MANDOS_RES_CHARGES);
+        return;
+    }
+
+    *slot = 1;
+    metarun_sync_quest_reserved_byte(current, METARUN_SLOT_MANDOS_RES_CHARGES);
+    save_metaruns();
+    log_debug("metarun_add_mandos_resurrection_charge: granted charge, slot now %d", *slot);
+}
+
+bool metarun_consume_mandos_resurrection_charge(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_consume_mandos_resurrection_charge: no current metarun");
+        return false;
+    }
+    if (METARUN_SLOT_MANDOS_RES_CHARGES < 0 ||
+        METARUN_SLOT_MANDOS_RES_CHARGES >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        log_debug("metarun_consume_mandos_resurrection_charge: invalid slot %d", METARUN_SLOT_MANDOS_RES_CHARGES);
+        return false;
+    }
+
+    byte *slot = &metar.quest_reserved[METARUN_SLOT_MANDOS_RES_CHARGES];
+    if (*slot == 0) {
+        log_debug("metarun_consume_mandos_resurrection_charge: no charges to consume");
+        metarun_sync_quest_reserved_byte(current, METARUN_SLOT_MANDOS_RES_CHARGES);
+        return false;
+    }
+
+    (*slot)--;
+    metarun_sync_quest_reserved_byte(current, METARUN_SLOT_MANDOS_RES_CHARGES);
+    save_metaruns();
+    log_debug("metarun_consume_mandos_resurrection_charge: charge consumed, slot now %d", *slot);
+    return true;
+}
+
+int metarun_niena_curse_cleanses(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+    if (METARUN_SLOT_NIENA_CURSE_CLEANSE < 0 ||
+        METARUN_SLOT_NIENA_CURSE_CLEANSE >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        return 0;
+    }
+    return metar.quest_reserved[METARUN_SLOT_NIENA_CURSE_CLEANSE];
+}
+
+void metarun_add_niena_curse_cleansing_charge(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_add_niena_curse_cleansing_charge: no current metarun");
+        return;
+    }
+    if (METARUN_SLOT_NIENA_CURSE_CLEANSE < 0 ||
+        METARUN_SLOT_NIENA_CURSE_CLEANSE >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        log_debug("metarun_add_niena_curse_cleansing_charge: invalid slot %d", METARUN_SLOT_NIENA_CURSE_CLEANSE);
+        return;
+    }
+
+    byte *slot = &metar.quest_reserved[METARUN_SLOT_NIENA_CURSE_CLEANSE];
+    if (*slot >= 1) {
+        log_debug("metarun_add_niena_curse_cleansing_charge: charge already present (%d)", *slot);
+        metarun_sync_quest_reserved_byte(current, METARUN_SLOT_NIENA_CURSE_CLEANSE);
+        return;
+    }
+
+    *slot = 1;
+    metarun_sync_quest_reserved_byte(current, METARUN_SLOT_NIENA_CURSE_CLEANSE);
+    save_metaruns();
+    log_debug("metarun_add_niena_curse_cleansing_charge: granted charge, slot now %d", *slot);
+}
+
+bool metarun_consume_niena_curse_cleansing_charge(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_consume_niena_curse_cleansing_charge: no current metarun");
+        return false;
+    }
+    if (METARUN_SLOT_NIENA_CURSE_CLEANSE < 0 ||
+        METARUN_SLOT_NIENA_CURSE_CLEANSE >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        log_debug("metarun_consume_niena_curse_cleansing_charge: invalid slot %d", METARUN_SLOT_NIENA_CURSE_CLEANSE);
+        return false;
+    }
+
+    byte *slot = &metar.quest_reserved[METARUN_SLOT_NIENA_CURSE_CLEANSE];
+    if (*slot == 0) {
+        log_debug("metarun_consume_niena_curse_cleansing_charge: no charges to consume");
+        metarun_sync_quest_reserved_byte(current, METARUN_SLOT_NIENA_CURSE_CLEANSE);
+        return false;
+    }
+
+    (*slot)--;
+    metarun_sync_quest_reserved_byte(current, METARUN_SLOT_NIENA_CURSE_CLEANSE);
+    save_metaruns();
+    log_debug("metarun_consume_niena_curse_cleansing_charge: charge consumed, slot now %d", *slot);
+    return true;
+}
+
+byte metarun_orome_great_hunt_mask(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+    if (METARUN_SLOT_OROME_GREAT_HUNT_MASK < 0 ||
+        METARUN_SLOT_OROME_GREAT_HUNT_MASK >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        return 0;
+    }
+    return metar.quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_MASK];
+}
+
+void metarun_set_orome_great_hunt_mask(byte mask)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_set_orome_great_hunt_mask: no current metarun");
+        return;
+    }
+    if (METARUN_SLOT_OROME_GREAT_HUNT_MASK < 0 ||
+        METARUN_SLOT_OROME_GREAT_HUNT_MASK >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        log_debug("metarun_set_orome_great_hunt_mask: invalid slot %d", METARUN_SLOT_OROME_GREAT_HUNT_MASK);
+        return;
+    }
+    if (metar.quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_MASK] == mask) {
+        metarun_sync_quest_reserved_byte(current, METARUN_SLOT_OROME_GREAT_HUNT_MASK);
+        return;
+    }
+
+    metar.quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_MASK] = mask;
+    metarun_sync_quest_reserved_byte(current, METARUN_SLOT_OROME_GREAT_HUNT_MASK);
+    save_metaruns();
+    log_debug("metarun_set_orome_great_hunt_mask: mask set to 0x%02x", mask);
+}
+
+bool metarun_orome_great_hunt_active(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return false;
+    if (METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE < 0 ||
+        METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        return false;
+    }
+    return metar.quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE] != 0;
+}
+
+void metarun_set_orome_great_hunt_active(bool active)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_set_orome_great_hunt_active: no current metarun");
+        return;
+    }
+    if (METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE < 0 ||
+        METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE >= (int)N_ELEMENTS(metar.quest_reserved)) {
+        log_debug("metarun_set_orome_great_hunt_active: invalid slot %d", METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE);
+        return;
+    }
+
+    byte value = active ? 1 : 0;
+    if (metar.quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE] == value) {
+        metarun_sync_quest_reserved_byte(current, METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE);
+        return;
+    }
+
+    metar.quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE] = value;
+    metarun_sync_quest_reserved_byte(current, METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE);
+    save_metaruns();
+    log_debug("metarun_set_orome_great_hunt_active: active set to %d", value);
 }
 
 static void metarun_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
@@ -1515,6 +1920,14 @@ errr load_metaruns(bool create_if_missing)
                 metarun_sanitize_blessing_economy(&metaruns[i]);
                 metarun_sanitize_major_blessing_bits(&metaruns[i]);
             }
+        } else if (entry_size == METARUN_V11_COMPACT_SIZE) {
+            metarun_v11_compact *legacy = mem_alloc_array(metarun_max, metarun_v11_compact);
+            sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v11_compact));
+            for (s16b i = 0; i < metarun_max; i++) {
+                metarun_from_v11_compact(&metaruns[i], &legacy[i]);
+            }
+            legacy = mem_free(legacy);
+            log_info("Loaded %d metarun entries from compact layout (8 quest slots)", metarun_max);
         } else if (entry_size == METARUN_V10_SIZE) {
             metarun_v10 *legacy = mem_alloc_array(metarun_max, metarun_v10);
             sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v10));

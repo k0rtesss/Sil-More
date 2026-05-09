@@ -979,6 +979,10 @@ struct quest_type
     u32b completion_text; /* Completion text (W:) (offset) */
     u32b title_text; /* Title text (T:) (offset) */
     u32b challenge_text; /* Challenge text (C:) (offset) */
+    byte vala_id; /* Owning Vala (Z: field, VALA_*) */
+    byte sequence; /* Quest position in the Vala chain (J: field, 1-3) */
+    byte quest_flags; /* Flags from F: (global, chain rules, etc.) */
+    byte challenge_unlock; /* Challenge ID unlocked on completion (H: field) */
     
     byte quest_num; /* Quest index (TULKAS, AULE, MANDOS, NIENA) */
     byte difficulty; /* Difficulty level */
@@ -991,6 +995,7 @@ struct quest_type
     byte skill_bonus; /* Skill bonus amount (K: field second part) */
     byte ability_type; /* Special ability type (A: field first part) */
     byte ability_id; /* Special ability ID (A: field second part) */
+    byte completion_cap; /* Maximum completions allowed per metarun (L: field) */
     
     /* Quest State Mapping (V: and M: fields) */
     u32b quest_state_var; /* Quest state variable name (V: field) (offset) */
@@ -1385,6 +1390,8 @@ struct player_type
     byte artefacts; /* Number of artefacts generated so far */
 
     bool killed_enemy_with_arrow;
+    byte orome_bow_hit_streak; /* Consecutive archery hits for Huntsman's Rhythm */
+    byte orome_spear_ready; /* Flag: double-damage spear hit primed */
 
     byte unused1; /* was sex - so unused byte race/character player info */
 
@@ -1395,6 +1402,13 @@ struct player_type
     s16b tulkas_target_r_idx; /* Target unique monster for Tulkas quest */
     s16b tulkas_prize_a_idx; /* Artifact prize for Tulkas quest */
     byte tulkas_quest_complete; /* Whether quest is completed but reward not given */
+    s16b tulkas_stronghold_level; /* Scheduled depth for the Orc stronghold */
+    byte tulkas_stronghold_placed; /* Stronghold vault placed on this run */
+    byte tulkas_second_roll_done; /* Rolled the second Tulkas quest trigger */
+    byte tulkas_orc_mask; /* Bitmask of slain quest orcs */
+    byte tulkas_orc_restricted; /* Block orc uniques from spawning outside quest */
+    byte tulkas_second_spawn_pending; /* Pending spawn for Tulkas quest giver */
+    byte tulkas_morgoth_progress; /* Highest percent of Morgoth's HP lost to the player */
     /* Aule quest tracking */
     byte aule_quest;           /* Aule quest state (AULE_QUEST_*) */
     byte aule_forge_y;         /* Y coord of Aule's forge (for validation) */
@@ -1409,6 +1423,8 @@ struct player_type
     byte mandos_monsters_remaining; /* Number of monsters left to clear */
     s16b mandos_level;         /* Dungeon depth where vault resides */
     s16b mandos_reserved;      /* padding */
+    byte mandos_resurrection_primed; /* Mandos resurrection primed for this hero */
+    byte mandos_resurrection_used; /* Mandos resurrection already consumed */
     /* Niena quest tracking */
     byte niena_quest;          /* Niena quest state (NIENA_QUEST_*) */
     byte niena_monsters_seen;  /* Number of monsters seen during quest */
@@ -1426,15 +1442,24 @@ struct player_type
     s16b orome_spiders_killed; /* Total spiders killed (any type) */
     s16b orome_serpents_killed; /* Total serpents killed (any type) */
     s16b orome_vampires_killed; /* Total vampires killed (any type) */
+    s16b orome_dragons_killed; /* Total dragons killed (non-hatchling) */
+    byte orome_great_hunt_mask; /* Bitmask of great hunt uniques slain */
     /* Varda quest tracking */
     byte varda_quest;          /* Varda quest state (VARDA_QUEST_*) */
     byte varda_vault_ready;    /* Flag: should force Duruin Bastion on this level */
     byte varda_vault_placed;   /* Flag: bastion successfully placed this run */
     byte varda_reserved;       /* padding */
     s16b varda_level;          /* Depth where bastion was placed (for regen) */
+    byte varda_shadow_restricted; /* Block Belegwath from spawning outside his quest */
+    byte varda_shadow_ready;   /* Flag: should force Shadow Bastion on this level */
+    byte varda_shadow_placed;  /* Flag: Shadow Bastion successfully placed this run */
+    byte varda_shadow_pad;     /* padding */
+    s16b varda_shadow_level;   /* Depth where Shadow Bastion was placed */
+    byte vala_quest_stage2[VALA_MAX]; /* Second-stage quest states per Vala */
+    byte vala_quest_stage3[VALA_MAX]; /* Third-stage quest states per Vala */
     /* Generic quest/vault tracking */
     byte quest_vault_used;     /* Has a quest-designated vault generated this game */
-    byte quest_reserved[15];   /* quest_reserved[0] = any quest spawned flag (run-wide); quest_reserved[1..6] mark quest completions recorded this run */
+    byte quest_reserved[QUEST_SLOT_MAX];   /* quest_reserved[0] = any quest spawned flag (run-wide); quest_reserved[1..n] mark quest completions recorded this run */
 };
 
 /* scores.raw header version == core game version (no independent bumping) */

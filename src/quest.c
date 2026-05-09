@@ -22,10 +22,27 @@ static const u32b metarun_known_quest_flags[] = {
     METARUN_QUEST_MANDOS,
     METARUN_QUEST_NIENA,
     METARUN_QUEST_OROME,
-    METARUN_QUEST_VARDA
+    METARUN_QUEST_VARDA,
+    METARUN_QUEST_MANDOS_TRAITOR,
+    METARUN_QUEST_MANDOS_BETRAYER,
+    METARUN_QUEST_OROME_DRAGONS,
+    METARUN_QUEST_OROME_GREAT_HUNT,
+    METARUN_QUEST_NIENA_MORGOTH,
+    METARUN_QUEST_NIENA_PACIFIST,
+    METARUN_QUEST_TULKAS_ORCS,
+    METARUN_QUEST_TULKAS_MORGOTH,
+    METARUN_QUEST_VARDA_SHADOW,
+    METARUN_QUEST_VARDA_UNGOLIANT
 };
 
-#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_VARDA)
+#define METARUN_KNOWN_QUEST_MASK \
+    (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | \
+     METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_VARDA | \
+     METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | \
+     METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_OROME_GREAT_HUNT | \
+     METARUN_QUEST_NIENA_MORGOTH | METARUN_QUEST_NIENA_PACIFIST | \
+     METARUN_QUEST_TULKAS_ORCS | METARUN_QUEST_TULKAS_MORGOTH | \
+     METARUN_QUEST_VARDA_SHADOW | METARUN_QUEST_VARDA_UNGOLIANT)
 
 static int quest_slot_from_flag(u32b quest_flag)
 {
@@ -33,6 +50,137 @@ static int quest_slot_from_flag(u32b quest_flag)
         if (quest_flag == metarun_known_quest_flags[i]) return (int)i;
     }
     return -1;
+}
+
+static int quest_id_from_slot(int slot)
+{
+    switch (slot) {
+        case 0: return QUEST_ID_TULKAS;
+        case 1: return QUEST_ID_AULE;
+        case 2: return QUEST_ID_MANDOS;
+        case 3: return QUEST_ID_NIENA;
+        case 4: return QUEST_ID_OROME;
+        case 5: return QUEST_ID_VARDA;
+        case 6: return QUEST_ID_MANDOS_TRAITOR;
+        case 7: return QUEST_ID_MANDOS_BETRAYER;
+        case 8: return QUEST_ID_OROME_DRAGONS;
+        case 9: return QUEST_ID_OROME_GREAT_HUNT;
+        case 10: return QUEST_ID_NIENA_MORGOTH;
+        case 11: return QUEST_ID_NIENA_PACIFIST;
+        case 12: return QUEST_ID_TULKAS_ORCS;
+        case 13: return QUEST_ID_TULKAS_MORGOTH;
+        case 14: return QUEST_ID_VARDA_SHADOW;
+        case 15: return QUEST_ID_VARDA_UNGOLIANT;
+        default: return 0;
+    }
+}
+
+static byte *quest_state_slot(int quest_id)
+{
+    if (!p_ptr || quest_id <= 0) return NULL;
+    if (!z_info || quest_id >= z_info->quest_max) return NULL;
+    if (!quest_info) return NULL;
+
+    quest_type *q_ptr = &quest_info[quest_id];
+    int vala_idx = (q_ptr->vala_id > 0) ? (q_ptr->vala_id - 1) : -1;
+    int stage = (q_ptr->sequence > 0) ? q_ptr->sequence : 1;
+
+    if (stage == 1) {
+        switch (q_ptr->vala_id) {
+            case VALA_TULKAS: return &p_ptr->tulkas_quest;
+            case VALA_AULE:   return &p_ptr->aule_quest;
+            case VALA_MANDOS: return &p_ptr->mandos_quest;
+            case VALA_NIENNA: return &p_ptr->niena_quest;
+            case VALA_OROME:  return &p_ptr->orome_quest;
+            case VALA_VARDA:  return &p_ptr->varda_quest;
+            default: break;
+        }
+    } else if (stage == 2) {
+        if (vala_idx >= 0 && vala_idx < VALA_MAX) return &p_ptr->vala_quest_stage2[vala_idx];
+    } else if (stage == 3) {
+        if (vala_idx >= 0 && vala_idx < VALA_MAX) return &p_ptr->vala_quest_stage3[vala_idx];
+    }
+
+    return NULL;
+}
+
+byte quest_get_state(int quest_id)
+{
+    byte *slot = quest_state_slot(quest_id);
+    return slot ? *slot : QUEST_STATE_NOT_STARTED;
+}
+
+void quest_set_state(int quest_id, byte state)
+{
+    byte *slot = quest_state_slot(quest_id);
+    if (slot) *slot = state;
+}
+
+int quest_id_for_vala_stage(int vala_id, int stage)
+{
+    if (!z_info || !quest_info) return 0;
+    for (int i = 1; i < z_info->quest_max; i++) {
+        quest_type *q_ptr = &quest_info[i];
+        if (!q_ptr->name) continue;
+        if (q_ptr->vala_id != vala_id) continue;
+        int q_stage = q_ptr->sequence ? q_ptr->sequence : 1;
+        if (q_stage == stage) return i;
+    }
+    return 0;
+}
+
+u32b quest_metarun_flag(int quest_id)
+{
+    switch (quest_id) {
+        case QUEST_ID_TULKAS: return METARUN_QUEST_TULKAS;
+        case QUEST_ID_AULE: return METARUN_QUEST_AULE;
+        case QUEST_ID_MANDOS: return METARUN_QUEST_MANDOS;
+        case QUEST_ID_NIENA: return METARUN_QUEST_NIENA;
+        case QUEST_ID_OROME: return METARUN_QUEST_OROME;
+        case QUEST_ID_VARDA: return METARUN_QUEST_VARDA;
+        case QUEST_ID_MANDOS_TRAITOR: return METARUN_QUEST_MANDOS_TRAITOR;
+        case QUEST_ID_MANDOS_BETRAYER: return METARUN_QUEST_MANDOS_BETRAYER;
+        case QUEST_ID_OROME_DRAGONS: return METARUN_QUEST_OROME_DRAGONS;
+        case QUEST_ID_OROME_GREAT_HUNT: return METARUN_QUEST_OROME_GREAT_HUNT;
+        case QUEST_ID_NIENA_MORGOTH: return METARUN_QUEST_NIENA_MORGOTH;
+        case QUEST_ID_NIENA_PACIFIST: return METARUN_QUEST_NIENA_PACIFIST;
+        case QUEST_ID_TULKAS_ORCS: return METARUN_QUEST_TULKAS_ORCS;
+        case QUEST_ID_TULKAS_MORGOTH: return METARUN_QUEST_TULKAS_MORGOTH;
+        case QUEST_ID_VARDA_SHADOW: return METARUN_QUEST_VARDA_SHADOW;
+        case QUEST_ID_VARDA_UNGOLIANT: return METARUN_QUEST_VARDA_UNGOLIANT;
+        default: return 0;
+    }
+}
+
+cptr quest_display_title(int quest_id)
+{
+    static char fallback[32];
+
+    if (!z_info || quest_id <= 0 || quest_id >= z_info->quest_max || !quest_info)
+        return "Unknown quest";
+
+    quest_type *q_ptr = &quest_info[quest_id];
+    if (q_ptr->title_text && q_text) {
+        return q_text + q_ptr->title_text;
+    }
+    if (q_ptr->name && quest_name_text) {
+        return quest_name_text + q_ptr->name;
+    }
+
+    strnfmt(fallback, sizeof(fallback), "Quest %d", quest_id);
+    return fallback;
+}
+
+int quest_completion_cap(int quest_idx)
+{
+    if (!z_info || quest_idx <= 0 || quest_idx >= z_info->quest_max || !quest_info)
+        return METARUN_QUEST_COMPLETION_CAP;
+
+    quest_type *q_ptr = &quest_info[quest_idx];
+    byte cap = q_ptr->completion_cap;
+    if (cap == 0) return METARUN_QUEST_COMPLETION_CAP;
+    if (cap > METARUN_QUEST_COMPLETION_CAP) return METARUN_QUEST_COMPLETION_CAP;
+    return cap;
 }
 
 void metarun_seed_quest_counts_from_mask(metarun *m, u32b mask)
@@ -54,9 +202,12 @@ void metarun_clamp_and_sync_quests(metarun *m)
 
     for (size_t i = 0; i < METARUN_QUEST_SLOT_MAX; i++) {
         byte count = m->quest_completion_counts[i];
-        if (count > METARUN_QUEST_COMPLETION_CAP) {
+        int quest_id = quest_id_from_slot((int)i);
+        int cap = quest_completion_cap(quest_id);
+        if (cap < 1) cap = METARUN_QUEST_COMPLETION_CAP;
+        if (count > cap) count = (byte)cap;
+        if (count > METARUN_QUEST_COMPLETION_CAP)
             count = METARUN_QUEST_COMPLETION_CAP;
-        }
 
         if (i < N_ELEMENTS(metarun_known_quest_flags)) {
             if (count > 0) {
@@ -160,7 +311,10 @@ void metarun_mark_quest_completed(u32b quest_flag)
 
     if (slot >= 0 && slot < METARUN_QUEST_SLOT_MAX) {
         byte current = metar.quest_completion_counts[slot];
-        if (current < METARUN_QUEST_COMPLETION_CAP) {
+        int quest_id = quest_id_from_slot(slot);
+        int cap = quest_completion_cap(quest_id);
+        if (cap < 1) cap = METARUN_QUEST_COMPLETION_CAP;
+        if (current < cap) {
             metar.quest_completion_counts[slot] = current + 1;
             changed = true;
         }
@@ -206,30 +360,91 @@ void metarun_check_and_update_quests(void)
         log_trace("Metarun: Marking Tulkas quest as completed (rewarded, was %d)", p_ptr->tulkas_quest);
         metarun_mark_quest_completed(METARUN_QUEST_TULKAS);
     }
+    byte tulkas_orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
+    if (tulkas_orc_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_TULKAS_ORCS)) {
+        log_trace("Metarun: Marking Tulkas orc quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_TULKAS_ORCS);
+    }
+    byte tulkas_morgoth_state = quest_get_state(QUEST_ID_TULKAS_MORGOTH);
+    if (tulkas_morgoth_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_TULKAS_MORGOTH)) {
+        log_trace("Metarun: Marking Tulkas Morgoth quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_TULKAS_MORGOTH);
+    }
     
     if (p_ptr->aule_quest == AULE_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_AULE)) {
         log_trace("Metarun: Marking Aule quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_AULE);
     }
 
-    if (p_ptr->mandos_quest == MANDOS_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_MANDOS)) {
+    if (p_ptr->mandos_quest == MANDOS_QUEST_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_MANDOS)) {
         log_trace("Metarun: Marking Mandos quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_MANDOS);
+    }
+    byte mandos_second_state = quest_get_state(QUEST_ID_MANDOS_TRAITOR);
+    if (mandos_second_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_MANDOS_TRAITOR)) {
+        log_trace("Metarun: Marking Mandos second quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_MANDOS_TRAITOR);
+    }
+    byte mandos_third_state = quest_get_state(QUEST_ID_MANDOS_BETRAYER);
+    if (mandos_third_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_MANDOS_BETRAYER)) {
+        log_trace("Metarun: Marking Mandos third quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_MANDOS_BETRAYER);
     }
 
     if (p_ptr->niena_quest == NIENA_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_NIENA)) {
         log_trace("Metarun: Marking Nienna quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_NIENA);
     }
+    byte niena_second_state = quest_get_state(QUEST_ID_NIENA_MORGOTH);
+    if (niena_second_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_NIENA_MORGOTH)) {
+        log_trace("Metarun: Marking Niena Morgoth quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_NIENA_MORGOTH);
+    }
+    byte niena_third_state = quest_get_state(QUEST_ID_NIENA_PACIFIST);
+    if (niena_third_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_NIENA_PACIFIST)) {
+        log_trace("Metarun: Marking Niena pacifist quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_NIENA_PACIFIST);
+    }
 
     if (p_ptr->orome_quest == OROME_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_OROME)) {
         log_trace("Metarun: Marking Orome quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_OROME);
     }
+    byte orome_second_state = quest_get_state(QUEST_ID_OROME_DRAGONS);
+    if (orome_second_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_OROME_DRAGONS)) {
+        log_trace("Metarun: Marking Orome dragon quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_OROME_DRAGONS);
+    }
+    byte orome_third_state = quest_get_state(QUEST_ID_OROME_GREAT_HUNT);
+    if (orome_third_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_OROME_GREAT_HUNT)) {
+        log_trace("Metarun: Marking Orome great hunt quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_OROME_GREAT_HUNT);
+    }
     
     if (p_ptr->varda_quest == VARDA_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_VARDA)) {
         log_trace("Metarun: Marking Varda quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_VARDA);
+    }
+    byte varda_second_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
+    if (varda_second_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_VARDA_SHADOW)) {
+        log_trace("Metarun: Marking Varda Shadow quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_VARDA_SHADOW);
+    }
+    byte varda_third_state = quest_get_state(QUEST_ID_VARDA_UNGOLIANT);
+    if (varda_third_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_VARDA_UNGOLIANT)) {
+        log_trace("Metarun: Marking Varda Ungoliant quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_VARDA_UNGOLIANT);
     }
 }
 
@@ -241,6 +456,7 @@ void metarun_restore_quest_states(void)
         log_trace("Metarun restore: Invalid current_run=%d, metarun_max=%d", current_idx, metarun_entry_count());
         return;
     }
+    if (!p_ptr) return;
     
     log_trace("Metarun restore: Restoring quest states from metarun[%d], completed_quests=0x%08X", 
               current_idx, current->completed_quests);
@@ -252,6 +468,23 @@ void metarun_restore_quest_states(void)
             log_trace("Metarun restore: Tulkas quest set to REWARDED (%d)", TULKAS_QUEST_REWARDED);
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_TULKAS);
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_TULKAS_ORCS) > 0) {
+        if (quest_get_state(QUEST_ID_TULKAS_ORCS) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Tulkas orc quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_TULKAS_ORCS);
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_TULKAS_MORGOTH) > 0) {
+        if (quest_get_state(QUEST_ID_TULKAS_MORGOTH) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_TULKAS_MORGOTH, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Tulkas Morgoth quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_TULKAS_MORGOTH);
+        if (p_ptr->tulkas_morgoth_progress < 100) {
+            p_ptr->tulkas_morgoth_progress = 100;
+        }
     }
     
     /* Restore Aule quest state */
@@ -271,6 +504,20 @@ void metarun_restore_quest_states(void)
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_MANDOS);
     }
+    if (metarun_quest_completion_count(METARUN_QUEST_MANDOS_TRAITOR) > 0) {
+        if (quest_get_state(QUEST_ID_MANDOS_TRAITOR) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_MANDOS_TRAITOR, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Mandos second quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_MANDOS_TRAITOR);
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) > 0) {
+        if (quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_MANDOS_BETRAYER, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Mandos third quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_MANDOS_BETRAYER);
+    }
     
     /* Restore Niena quest state */
     if (metarun_quest_completion_count(METARUN_QUEST_NIENA) > 0) {
@@ -281,6 +528,20 @@ void metarun_restore_quest_states(void)
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_NIENA);
     }
+    if (metarun_quest_completion_count(METARUN_QUEST_NIENA_MORGOTH) > 0) {
+        if (quest_get_state(QUEST_ID_NIENA_MORGOTH) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Niena Morgoth quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_NIENA_MORGOTH);
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_NIENA_PACIFIST) > 0) {
+        if (quest_get_state(QUEST_ID_NIENA_PACIFIST) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Niena pacifist quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_NIENA_PACIFIST);
+    }
     
     /* Restore Orome quest state */
     if (metarun_quest_completion_count(METARUN_QUEST_OROME) > 0) {
@@ -289,6 +550,34 @@ void metarun_restore_quest_states(void)
             log_trace("Metarun restore: Orome quest set to REWARDED (%d)", OROME_QUEST_REWARDED);
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_OROME);
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_OROME_DRAGONS) > 0) {
+        if (quest_get_state(QUEST_ID_OROME_DRAGONS) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_OROME_DRAGONS, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Orome dragon quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_OROME_DRAGONS);
+    }
+    p_ptr->orome_great_hunt_mask = metarun_orome_great_hunt_mask();
+    if (metarun_quest_completion_count(METARUN_QUEST_OROME_GREAT_HUNT) > 0) {
+        if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Orome great hunt quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        metarun_set_orome_great_hunt_active(false);
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_OROME_GREAT_HUNT);
+    }
+    if (metarun_orome_great_hunt_active() &&
+        quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_REWARDED) {
+        if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_ACTIVE) {
+            quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_ACTIVE);
+            log_trace("Metarun restore: Orome great hunt quest set to ACTIVE (%d)", QUEST_STATE_ACTIVE);
+        }
+    } else if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) >= QUEST_STATE_ACTIVE &&
+               quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_REWARDED &&
+               !metarun_orome_great_hunt_active()) {
+        metarun_set_orome_great_hunt_active(true);
+        log_trace("Metarun restore: Backfilled Orome great hunt active flag from quest state");
     }
     
     /* Restore Varda quest state */
@@ -299,7 +588,36 @@ void metarun_restore_quest_states(void)
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA);
     }
+    if (metarun_quest_completion_count(METARUN_QUEST_VARDA_SHADOW) > 0) {
+        if (quest_get_state(QUEST_ID_VARDA_SHADOW) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Varda Shadow quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA_SHADOW);
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_VARDA_UNGOLIANT) > 0) {
+        if (quest_get_state(QUEST_ID_VARDA_UNGOLIANT) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Varda Ungoliant quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA_UNGOLIANT);
+    }
     
-    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d, Niena: %d, Orome: %d, Varda: %d",
-              p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->varda_quest);
+    log_trace("Metarun restore: Final quest states - Tulkas: %d (orcs:%d, morgoth:%d), Aule: %d, Mandos: %d (2:%d,3:%d), Niena: %d (2:%d,3:%d), Orome: %d (dragons:%d, hunt:%d), Varda: %d (shadow:%d, ungoliant:%d)",
+              p_ptr->tulkas_quest,
+              quest_get_state(QUEST_ID_TULKAS_ORCS),
+              quest_get_state(QUEST_ID_TULKAS_MORGOTH),
+              p_ptr->aule_quest,
+              p_ptr->mandos_quest,
+              quest_get_state(QUEST_ID_MANDOS_TRAITOR),
+              quest_get_state(QUEST_ID_MANDOS_BETRAYER),
+              p_ptr->niena_quest,
+              quest_get_state(QUEST_ID_NIENA_MORGOTH),
+              quest_get_state(QUEST_ID_NIENA_PACIFIST),
+              p_ptr->orome_quest,
+              quest_get_state(QUEST_ID_OROME_DRAGONS),
+              quest_get_state(QUEST_ID_OROME_GREAT_HUNT),
+              p_ptr->varda_quest,
+              quest_get_state(QUEST_ID_VARDA_SHADOW),
+              quest_get_state(QUEST_ID_VARDA_UNGOLIANT));
 }

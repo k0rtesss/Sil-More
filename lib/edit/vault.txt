@@ -54,6 +54,7 @@
 #     WEBS        - has a 5% chance of a web per empty square
 #     LIGHT       - 100% chance of being permanently lit
 #     SURFACE     - generated more seldom in deeper dungeons
+#     QUEST       - quest vault
 #
 # 'D' lines describe the layout of the vault. Lines must be padded
 #     with spaces to fill the dimensions specified. Vaults are described
@@ -3098,6 +3099,66 @@ D:#.#cc+e.e.+cc#.?.#
 D:#.####.h..####S..#
 D:##################
 
+
+# Quest vault: Den of Maeglin the Traitor
+N:464:Den of Maeglin the Traitor
+X:7:1:1
+F:QUEST | NO_ROTATION
+D:######$#######
+D:#...:...:...##
+D:#..##+##..#..$
+D:#....m.N.....$
+D:$..:.....:...$
+D:#..##+##..#..$
+D:#...:...:....#
+D:#............$
+D:#######$######
+
+# Quest vault: Easterling Fortress
+N:465:Easterling Fortress
+X:7:12:1
+F:QUEST | NO_ROTATION
+D:#######################
+D:#$$..w..###N###..w..$$#
+D:#..x..###...###..x..@.#
+D:#..###..#.....#..###..#
+D:#...w..+#..u..#+..w...#
+D:#.....###..#..###.....#
+D:#...w..+#..h..#+..w...#
+D:#..###..#.....#..###..#
+D:#..x..###...###..x..@.#
+D:#$$..w..###@###..w..$$#
+D:#######################
+
+# Quest vault: Orc Stronghold
+N:466:Orc Stronghold
+X:7:8:1
+F:QUEST | NO_ROTATION
+D:#################
+D:#..b....#....g..#
+D:#.#.#.#.#.#.#.#.#
+D:#..c....#....l..#
+D:###+####+####+###
+D:#..p....#....t..#
+D:#.#.#.#.#.#.#.#.#
+D:#################
+
+# Quest vault: Shadow Bastion
+N:467:Shadow Bastion
+X:6:11:3
+S:*:1
+F:QUEST | NO_ROTATION
+D:##########$##########
+D:#######.......#######
+D:#####...##s##...#####
+D:###..q..#k.n#..q..###
+D:###.....#.q.#.....###
+D:$...j...#qSq#...j...$
+D:###.....#.q.#.....###
+D:###..q..#n.k#..q..###
+D:#####...##s##...#####
+D:#######.......#######
+D:##########$##########
 
 ## Vault: Draugluin's Kennel
 ## Lore: A larger wolf den where the spawn of Draugluin, father of werewolves, are kept.

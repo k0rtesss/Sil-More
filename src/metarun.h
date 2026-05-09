@@ -34,9 +34,25 @@ extern curse_type* cu_info;
 #define METARUN_QUEST_NIENA    (1UL << 3)   /* Niena quest completed  */
 #define METARUN_QUEST_OROME    (1UL << 4)   /* Orome quest completed  */
 #define METARUN_QUEST_VARDA    (1UL << 5)   /* Varda quest completed  */
-#define METARUN_QUEST_SLOT_MAX 8            /* Max quest slots tracked in metarun */
+#define METARUN_QUEST_MANDOS_TRAITOR (1UL << 6) /* Mandos second quest completed */
+#define METARUN_QUEST_MANDOS_BETRAYER (1UL << 7) /* Mandos third quest completed */
+#define METARUN_QUEST_OROME_DRAGONS (1UL << 8) /* Orome dragon quest completed */
+#define METARUN_QUEST_OROME_GREAT_HUNT (1UL << 9) /* Orome great hunt quest completed */
+#define METARUN_QUEST_NIENA_MORGOTH (1UL << 10) /* Niena's Morgoth-hall mercy quest completed */
+#define METARUN_QUEST_NIENA_PACIFIST (1UL << 11) /* Niena's pacifist escape quest completed */
+#define METARUN_QUEST_TULKAS_ORCS (1UL << 12) /* Tulkas second quest (orc stronghold) */
+#define METARUN_QUEST_TULKAS_MORGOTH (1UL << 13) /* Tulkas third quest (wound Morgoth) */
+#define METARUN_QUEST_VARDA_SHADOW (1UL << 14) /* Varda second quest (Shadow Bastion) */
+#define METARUN_QUEST_VARDA_UNGOLIANT (1UL << 15) /* Varda third quest (Ungoliant hunt) */
+#define METARUN_QUEST_SLOT_MAX 24           /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
-/* Additional quests can be added as (1UL << 5), (1UL << 6), etc.   */
+/* Additional quests can be added as (1UL << 16), (1UL << 17), etc. */
+
+/* quest_reserved[] slots */
+#define METARUN_SLOT_MANDOS_RES_CHARGES 0      /* Stored resurrection charges from Mandos' final quest */
+#define METARUN_SLOT_OROME_GREAT_HUNT_MASK 1   /* Bitmask of slain uniques for Orome's great hunt */
+#define METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE 2 /* Flag: Orome great hunt quest is active */
+#define METARUN_SLOT_NIENA_CURSE_CLEANSE 3     /* Stored curse-cleansing charges from Niena's pacifist quest */
 
 /* ------------------------------------------------------------------ */
 /*  Meta-run save-record                                              */
@@ -183,9 +199,31 @@ int metarun_quest_completion_count(u32b quest_flag); /* How many times quest com
 void metarun_mark_quest_completed(u32b quest_flag); /* Mark quest as completed */
 void metarun_check_and_update_quests(void);         /* Check current character quests and update metarun */
 void metarun_restore_quest_states(void);            /* Restore quest states from metarun after character load */
+int metarun_mandos_resurrection_charges(void);      /* Stored Mandos resurrection charges */
+void metarun_add_mandos_resurrection_charge(void);  /* Grant a Mandos resurrection charge (max 1) */
+bool metarun_consume_mandos_resurrection_charge(void); /* Spend a Mandos resurrection charge */
+int metarun_niena_curse_cleanses(void);             /* Stored curse-cleansing charges from Niena's pacifist quest */
+void metarun_add_niena_curse_cleansing_charge(void); /* Grant a Niena curse-cleansing charge (max 1) */
+bool metarun_consume_niena_curse_cleansing_charge(void); /* Spend a Niena curse-cleansing charge */
+byte metarun_orome_great_hunt_mask(void);           /* Bitmask of Orome hunt uniques slain across the metarun */
+void metarun_set_orome_great_hunt_mask(byte mask);  /* Persist the Orome hunt kill mask */
+bool metarun_orome_great_hunt_active(void);         /* Whether the Orome hunt quest is active for this metarun */
+void metarun_set_orome_great_hunt_active(bool active); /* Toggle the Orome hunt active flag */
 void metarun_seed_quest_counts_from_mask(metarun *m, u32b mask); /* Expand quest mask into counters */
 void metarun_clamp_and_sync_quests(metarun *m);     /* Clamp counters and sync mask */
 int metarun_total_quest_completions(const metarun *m); /* Aggregate quest completion total */
+bool metarun_challenge_disconnected_unlocked(void); /* Has the disconnected stair challenge been unlocked? */
+void metarun_unlock_challenge_disconnected(void);   /* Unlock the disconnected stair challenge for this metarun */
+bool metarun_challenge_single_stair_unlocked(void); /* Has the single-stair challenge been unlocked? */
+void metarun_unlock_challenge_single_stair(void);   /* Unlock the single-stair challenge for this metarun */
+bool metarun_challenge_fixed_exp_unlocked(void);    /* Has the fixed-50k XP challenge been unlocked? */
+void metarun_unlock_challenge_fixed_exp(void);      /* Unlock the fixed-50k XP challenge for this metarun */
+bool metarun_challenge_tulkas_blunt_unlocked(void); /* Has the Tulkas blunt challenge been unlocked? */
+void metarun_unlock_challenge_tulkas_blunt(void);   /* Unlock the Tulkas blunt challenge for this metarun */
+bool metarun_challenge_torchlight_unlocked(void);   /* Has the Varda torchlight challenge been unlocked? */
+void metarun_unlock_challenge_torchlight(void);     /* Unlock the Varda torchlight challenge for this metarun */
+int metarun_challenge_completion_count(int challenge_id); /* How many times a challenge run finished */
+void metarun_mark_challenge_completed(int challenge_id);  /* Record a finished challenge run */
 
 /* ------------------------------------------------------------------ */
 /*  Oath system tracking                                              */

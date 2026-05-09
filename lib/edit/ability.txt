@@ -839,4 +839,24 @@ I:8:9:0
 D:Swearing the Oath of Light, dedicating yourself to the memory of the Two Trees as those faithful Noldor who kept Varda's stars burning even in the deepest darkness of Angband. You refuse any gear that would dim your radiance, and while the oath endures, your inner fire burns brighter against the encroaching shadow.
 E:+1 inner light intensity. Breaks if you equip gear that reduces your light.
 
+N:170:Wraith of Orome
+I:8:10:0
+D:Bearing Orome's hunting wrath, you enter battle as a shadow of the Huntsman riding beneath the stars. Rage sharpens every sinew instead of clouding the hand, turning fury into a clean and terrible pursuit.
+E:When raging, each stat rises by one instead of applying the normal rage stat changes. Quest reward.
+
+N:171:Huntsman's Rhythm
+I:8:11:0
+D:Following the cadence of Orome's hunt, bow and spear become one pursuit. Two true arrows mark the quarry's movement, and the next thrust follows with the force of the chase behind it.
+E:Two bow hits prime your next spear attack for doubled damage. Quest reward.
+
+N:172:Wrath of Tulkas
+I:8:12:0
+D:Tulkas' laughter thunders in your blood, lending the force that once cast Morgoth down before the gates of Utumno. Your smiting blows carry a joy so fierce that even mighty enemies feel the world shake.
+E:Smite strikes with enhanced force. Quest reward.
+
+N:173:Queen of the Stars
+I:8:13:0
+D:Varda's clear starlight rests upon you, bright and unsullied. In the deepest shadow, the memory of the stars answers, kindling a radiance no darkness can wholly devour.
+E:Strengthens Varda's light blessings. Quest reward.
+
 
