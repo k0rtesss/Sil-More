@@ -3566,6 +3566,9 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                 prt = damroll(armor_dice, armor_sides);
                 net_dam = damage - prt;
 
+                if (who < 0 && m_ptr->r_idx == R_IDX_MORGOTH)
+                    niena_mark_morgoth_attack();
+
                 // apply damage after protection
                 if (net_dam > 0)
                 {

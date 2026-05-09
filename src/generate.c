@@ -94,10 +94,10 @@ static vault_monster_spec vault_monster_table[] = {
     {'C', "9cbdbb88fd4f59dc", 0, false, true, true},
     {'H', "c790972955718680", 0, false, true, false},
     {'@', "4acd2c9fcc5cd6e5", 0, false, true, false},
-    {'w', "0e401610ae33a21f", 0, false, false, true},
-    {'x', "7ed54d5976d25b3e", 0, false, false, true},
-    {'h', "66eda88da3bb69b9", 0, false, false, true},
-    {'u', "e7c39145ef0dc35d", 0, false, false, true},
+    {'[', "0e401610ae33a21f", 0, false, false, true}, /* Easterling warrior */
+    {']', "7ed54d5976d25b3e", 0, false, false, true}, /* Easterling archer */
+    {'}', "66eda88da3bb69b9", 0, false, false, true}, /* Ulfang the Black */
+    {'{', "e7c39145ef0dc35d", 0, false, false, true}, /* Uldor, the Accursed */
     {'o', "88ef7547642967b2", 0, false, true, false},
     {'O', "2c739cdb1be99f2c", 0, false, true, false},
     {'Z', "05f49e29acf49a93", 0, false, true, true},
@@ -119,7 +119,7 @@ static vault_monster_spec vault_monster_table[] = {
     {'U', "c2485b83ba33934d", 0, false, true, true},
     {'G', "7b038638b2981d20", 0, false, true, true},
     {'V', "58d8cf770bfcbe6f", 0, false, true, true},
-    {'S', "bba0d000d9578563", 0, false, false, true}, /* Belegwath, Balrog of Shadow */
+    {'_', "bba0d000d9578563", 0, false, false, true}, /* Belegwath, Balrog of Shadow */
     {'B', "9c44dec3f9d6d14c", 0, false, false, true}, /* Duruin, Least of the Balrogs */
     {'q', "ccff426ff2ef0318", 0, false, true, true},  /* Whispering shadow */
     {'j', "d5e4892102e9b48a", 0, false, true, true},  /* Shadow spider */

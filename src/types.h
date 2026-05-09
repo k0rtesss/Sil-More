@@ -984,7 +984,7 @@ struct quest_type
     byte quest_flags; /* Flags from F: (global, chain rules, etc.) */
     byte challenge_unlock; /* Challenge ID unlocked on completion (H: field) */
     
-    byte quest_num; /* Quest index (TULKAS, AULE, MANDOS, NIENA) */
+    byte quest_num; /* Quest index from quest.txt */
     byte difficulty; /* Difficulty level */
     byte reward_type; /* Type of reward (ability, item, etc.) */
     byte reward_value; /* Specific reward identifier */

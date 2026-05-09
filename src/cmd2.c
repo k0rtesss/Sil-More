@@ -28,6 +28,59 @@
 #define THROW_PENDING_NONE -9999
 static int throw_pending_slot = THROW_PENDING_NONE;
 
+static byte mandos_second_state(void)
+{
+    return quest_get_state(QUEST_ID_MANDOS_TRAITOR);
+}
+
+static byte mandos_third_state(void)
+{
+    return quest_get_state(QUEST_ID_MANDOS_BETRAYER);
+}
+
+static bool mandos_any_active(void)
+{
+    byte second = mandos_second_state();
+    byte third = mandos_third_state();
+
+    return (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE &&
+               p_ptr->mandos_quest < MANDOS_QUEST_REWARDED) ||
+           (second >= QUEST_STATE_ACTIVE && second < QUEST_STATE_REWARDED) ||
+           (third >= QUEST_STATE_ACTIVE && third < QUEST_STATE_REWARDED);
+}
+
+static bool mandos_any_giver_present(void)
+{
+    byte second = mandos_second_state();
+    byte third = mandos_third_state();
+
+    return p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT ||
+           second == QUEST_STATE_GIVER_PRESENT ||
+           third == QUEST_STATE_GIVER_PRESENT;
+}
+
+static void mandos_reset_all_states(void)
+{
+    p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+    quest_set_state(QUEST_ID_MANDOS_TRAITOR, QUEST_STATE_NOT_STARTED);
+    quest_set_state(QUEST_ID_MANDOS_BETRAYER, QUEST_STATE_NOT_STARTED);
+    p_ptr->mandos_level = 0;
+}
+
+static void reset_varda_shadow_giver_if_left_level(void)
+{
+    if (quest_get_state(QUEST_ID_VARDA_SHADOW) != QUEST_STATE_GIVER_PRESENT)
+        return;
+    if (p_ptr->varda_shadow_level != p_ptr->depth)
+        return;
+
+    quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_NOT_STARTED);
+    p_ptr->varda_shadow_level = 0;
+    p_ptr->varda_shadow_ready = 0;
+    p_ptr->varda_shadow_placed = 0;
+    p_ptr->varda_shadow_restricted = 0;
+}
+
 typedef enum
 {
     MORGOTH_CALL_DRAIN_RESISTED = 0,
@@ -649,7 +702,7 @@ void do_cmd_go_up(void)
     }
 
     // warn player if they have an active Mandos quest and are trying to leave
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    if (mandos_any_active())
     {
         msg_print("The spirits in the tomb grow restless as you prepare to leave...");
         msg_print("Abandoning the tomb will mean failure of Mandos' quest.");
@@ -911,15 +964,15 @@ void do_cmd_go_up(void)
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
     }
 
-    /* Reset mandos quest if active */
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    /* Reset Mandos quests if active */
+    if (mandos_any_active())
     {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        mandos_reset_all_states();
         msg_print("You have abandoned the tomb. Mandos' quest is lost.");
     }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
+    else if (mandos_any_giver_present())
     {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        mandos_reset_all_states();
     }
 
     /* Reset Varda quest if she was waiting on the previous level */
@@ -929,6 +982,8 @@ void do_cmd_go_up(void)
         p_ptr->varda_level = 0;
         /* Encountering a quest giver still consumes the run's single quest slot. */
     }
+
+    reset_varda_shadow_giver_if_left_level();
 
     // another staircase has been used...
     p_ptr->stairs_taken++;
@@ -1001,7 +1056,7 @@ void do_cmd_go_down(void)
     }
 
     // warn player if they have an active Mandos quest and are trying to leave
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    if (mandos_any_active())
     {
         msg_print("The spirits in the tomb grow restless as you prepare to leave...");
         msg_print("Abandoning the tomb will mean failure of Mandos' quest.");
@@ -1116,6 +1171,8 @@ void do_cmd_go_down(void)
         /* Encountering a quest giver still consumes the run's single quest slot. */
     }
 
+    reset_varda_shadow_giver_if_left_level();
+
     /* Reset aule quest if active */
     if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
     {
@@ -1127,15 +1184,15 @@ void do_cmd_go_down(void)
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
     }
 
-    /* Reset mandos quest if active */
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    /* Reset Mandos quests if active */
+    if (mandos_any_active())
     {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        mandos_reset_all_states();
         msg_print("You have abandoned the tomb. Mandos' quest is lost.");
     }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
+    else if (mandos_any_giver_present())
     {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        mandos_reset_all_states();
     }
 
     /* Reset niena quest if active */
@@ -9562,6 +9619,7 @@ void do_cmd_fire(int quiver)
     bool puncture = false;
     bool returning_arrow = false;
     bool warding_girdle_active = false;
+    bool huntsman_rhythm = false;
 
     // Determine the projectile in the requested quiver
     if (quiver == 1)
@@ -9707,6 +9765,12 @@ void do_cmd_fire(int quiver)
     }
 
     p_ptr->killed_enemy_with_arrow = false;
+    huntsman_rhythm = p_ptr->active_ability[S_SPC][SPC_HUNTSMAN_RHYTHM];
+    if (!huntsman_rhythm)
+    {
+        p_ptr->orome_bow_hit_streak = 0;
+        p_ptr->orome_spear_ready = 0;
+    }
 
     // set dummy variables to pass to project_path (so it doesn't clobber the
     // real ones)
@@ -10301,6 +10365,33 @@ void do_cmd_fire(int quiver)
                                     m_ptr->slowed + crit_bonus_dice + 1, false);
                             }
                         }
+
+                        if (huntsman_rhythm)
+                        {
+                            bool consumed_ready = false;
+
+                            if (p_ptr->orome_spear_ready)
+                            {
+                                p_ptr->orome_spear_ready = 0;
+                                p_ptr->orome_bow_hit_streak = 0;
+                                consumed_ready = true;
+                            }
+
+                            if (net_dam > 0)
+                            {
+                                if (consumed_ready)
+                                    p_ptr->orome_bow_hit_streak = 1;
+                                else if (p_ptr->orome_bow_hit_streak < 2)
+                                    p_ptr->orome_bow_hit_streak++;
+
+                                if (p_ptr->orome_bow_hit_streak >= 2)
+                                    p_ptr->orome_spear_ready = 1;
+                            }
+                            else if (!consumed_ready)
+                            {
+                                p_ptr->orome_bow_hit_streak = 0;
+                            }
+                        }
                     }
 
                     /* Stop looking if a monster was hit but not pierced */
@@ -10332,6 +10423,10 @@ void do_cmd_fire(int quiver)
                 {
                     // there is at least one target left on the trajectory
                     targets_remaining = true;
+                    if (huntsman_rhythm)
+                    {
+                        p_ptr->orome_bow_hit_streak = 0;
+                    }
                 }
 
                 /* we have missed a target, but could still hit something (with

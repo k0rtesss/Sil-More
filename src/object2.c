@@ -1035,6 +1035,82 @@ static bool kind_is_not_damaged(int k_idx)
 }
 #endif
 
+#define QUEST_CHALLENGE_OBJECT_ATTEMPTS 100
+
+static bool tulkas_blunt_challenge_active(void)
+{
+    return op_ptr && (op_ptr->opt[OPT_birth_tulkas_blunt] ||
+        op_ptr->opt[OPT_adult_tulkas_blunt]);
+}
+
+static bool torchlight_challenge_active(void)
+{
+    return op_ptr && (op_ptr->opt[OPT_birth_torchlight] ||
+        op_ptr->opt[OPT_adult_torchlight]);
+}
+
+static bool tulkas_blunt_kind_ok(int k_idx)
+{
+    if (!z_info || !k_info || k_idx <= 0 || k_idx >= z_info->k_max)
+        return false;
+
+    object_kind* k_ptr = &k_info[k_idx];
+    switch (k_ptr->tval)
+    {
+    case TV_SWORD:
+    case TV_POLEARM:
+    case TV_BOW:
+    case TV_ARROW:
+        return false;
+    default:
+        return true;
+    }
+}
+
+static bool torchlight_kind_ok(int k_idx)
+{
+    if (!z_info || !k_info || k_idx <= 0 || k_idx >= z_info->k_max)
+        return false;
+
+    object_kind* k_ptr = &k_info[k_idx];
+    if (k_ptr->tval != TV_LIGHT)
+        return true;
+
+    if (k_ptr->flags3 & TR3_INSTA_ART)
+        return true;
+
+    return k_ptr->sval == SV_LIGHT_TORCH ||
+        k_ptr->sval == SV_LIGHT_MALLORN;
+}
+
+static bool object_kind_allowed_by_active_challenges(int k_idx)
+{
+    if (tulkas_blunt_challenge_active() && !tulkas_blunt_kind_ok(k_idx))
+        return false;
+
+    if (torchlight_challenge_active() && !torchlight_kind_ok(k_idx))
+        return false;
+
+    return true;
+}
+
+static bool object_allowed_by_active_challenges(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    return object_kind_allowed_by_active_challenges(o_ptr->k_idx);
+}
+
+static void release_rejected_artefact(object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->name1 || !z_info || !a_info)
+        return;
+
+    if (o_ptr->name1 > 0 && o_ptr->name1 < z_info->art_max)
+        a_info[o_ptr->name1].cur_num = 0;
+}
+
 /*
  * Deletes all objects at given location
  */
@@ -1455,7 +1531,11 @@ void get_obj_num_prep(void)
     for (i = 0; i < alloc_kind_size; i++)
     {
         /* Accept objects which pass the restriction, if any */
-        if (!get_obj_num_hook)
+        if (!object_kind_allowed_by_active_challenges(table[i].index))
+        {
+            table[i].prob2 = 0;
+        }
+        else if (!get_obj_num_hook)
         {
             // damaged items only on skeletons
             if (kind_is_damaged_item(table[i].index))
@@ -4928,10 +5008,29 @@ bool make_object_with_profile(object_type* j_ptr, drop_quality quality,
     int objecttype, const drop_profile* profile)
 {
     int depth = object_level;
+    bool generated = false;
     bool allow_artefacts = (object_generation_mode == OB_GEN_MODE_CHEST)
         || (object_generation_mode == OB_GEN_MODE_MONSTER_DROP);
-    if (!drop_generate_object_profiled(
-            depth, quality, objecttype, 0, allow_artefacts, profile, j_ptr))
+
+    for (int attempt = 0; attempt < QUEST_CHALLENGE_OBJECT_ATTEMPTS; attempt++)
+    {
+        if (!drop_generate_object_profiled(
+                depth, quality, objecttype, 0, allow_artefacts, profile, j_ptr))
+        {
+            continue;
+        }
+
+        if (object_allowed_by_active_challenges(j_ptr))
+        {
+            generated = true;
+            break;
+        }
+
+        release_rejected_artefact(j_ptr);
+        object_wipe(j_ptr);
+    }
+
+    if (!generated)
         return false;
 
     apply_generated_object_rating(j_ptr, NULL);
@@ -4949,17 +5048,33 @@ bool make_guaranteed_artefact_with_profile(object_type* j_ptr,
 {
     bool allow_artefacts = (object_generation_mode == OB_GEN_MODE_CHEST)
         || (object_generation_mode == OB_GEN_MODE_MONSTER_DROP);
+    bool generated = false;
 
     if (!allow_artefacts || adult_no_artefacts)
         return false;
 
     bool mentioned = false;
 
-    if (!drop_generate_guaranteed_artefact(
-            object_level, object_level, quality, objecttype, profile, j_ptr))
+    for (int attempt = 0; attempt < QUEST_CHALLENGE_OBJECT_ATTEMPTS; attempt++)
     {
-        return false;
+        if (!drop_generate_guaranteed_artefact(
+                object_level, object_level, quality, objecttype, profile, j_ptr))
+        {
+            continue;
+        }
+
+        if (object_allowed_by_active_challenges(j_ptr))
+        {
+            generated = true;
+            break;
+        }
+
+        release_rejected_artefact(j_ptr);
+        object_wipe(j_ptr);
     }
+
+    if (!generated)
+        return false;
 
     apply_generated_object_rating(j_ptr, &mentioned);
 
@@ -5565,8 +5680,24 @@ void place_object(int y, int x, drop_quality quality, int droptype,
 
     /* Make an object (if possible) */
     int depth = object_level;
-    while (!drop_generate_object(depth, quality, droptype, allow_artefacts, i_ptr))
-        continue;
+    bool generated = false;
+    for (int attempt = 0; attempt < QUEST_CHALLENGE_OBJECT_ATTEMPTS; attempt++)
+    {
+        if (!drop_generate_object(depth, quality, droptype, allow_artefacts, i_ptr))
+            continue;
+
+        if (object_allowed_by_active_challenges(i_ptr))
+        {
+            generated = true;
+            break;
+        }
+
+        release_rejected_artefact(i_ptr);
+        object_wipe(i_ptr);
+    }
+
+    if (!generated)
+        return;
 
     /* Give it to the floor */
     if (!floor_carry(y, x, i_ptr))

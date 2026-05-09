@@ -286,10 +286,11 @@ cptr option_text[OPT_MAX] = {
     NULL, /* reserved legacy slot: birth_maximize */
     "birth_discon_stair", /* OPT_birth_discon_stair */
     "birth_ironman", /* OPT_birth_ironman */
-    NULL, "birth_no_artefacts", /* OPT_birth_no_artefacts */
+    "birth_single_stair", /* OPT_birth_single_stair */
+    "birth_no_artefacts", /* OPT_birth_no_artefacts */
     "birth_fixed_exp", /* OPT_birth_fixed_exp */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
+    "birth_tulkas_blunt", /* OPT_birth_tulkas_blunt */
+    "birth_torchlight", /* OPT_birth_torchlight */
     NULL, /* reserved legacy slot: birth_force_small_lev */
     NULL, /* reserved legacy slot: birth_retain_squelch */
     NULL, /* reserved legacy slot: birth_no_quests */
@@ -350,11 +351,11 @@ cptr option_text[OPT_MAX] = {
     NULL, /* reserved legacy slot: adult_maximize */
     "adult_discon_stair", /* OPT_adult_discon_stair */
     "adult_ironman", /* OPT_adult_ironman */
-    NULL, /* reserved legacy slot: adult_no_stores */
+    "adult_single_stair", /* OPT_adult_single_stair */
     "adult_no_artefacts", /* OPT_adult_no_artefacts */
     NULL, /* reserved legacy slot: adult_rand_artefacts */
-    NULL, /* reserved legacy slot: adult_no_stacking */
-    NULL, /* reserved legacy slot: adult_auto_notes */
+    "adult_tulkas_blunt", /* OPT_adult_tulkas_blunt */
+    "adult_torchlight", /* OPT_adult_torchlight */
     NULL, /* reserved legacy slot: adult_force_small_lev */
     NULL, /* reserved legacy slot: adult_retain_squelch */
     NULL, /* reserved legacy slot: adult_no_quests */
@@ -531,10 +532,11 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* reserved legacy slot: birth_maximize */
     "Disconnected stairs", /* OPT_birth_discon_stair */
     "Straight down (no up stairs until endgame)", /* OPT_birth_ironman */
-    NULL, "No artefacts", /* OPT_birth_no_artefacts */
+    "Single stair (one up / one down)", /* OPT_birth_single_stair */
+    "No artefacts", /* OPT_birth_no_artefacts */
     "Fixed XP - gain 50K at start and nothing after", /* OPT_birth_fixed_exp */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
+    "Tulkas' challenge: blunt weapons only", /* OPT_birth_tulkas_blunt */
+    "Varda's challenge: torches only", /* OPT_birth_torchlight */
     NULL, /* reserved legacy slot: birth_take_notes */
     NULL, /* reserved legacy slot: birth_force_small_lev */
     NULL, /* reserved legacy slot: birth_retain_squelch */
@@ -595,11 +597,11 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* reserved legacy slot: adult_maximize */
     "Disconnected stairs", /* OPT_adult_discon_stair */
     "Straight down (no up stairs until endgame)", /* OPT_adult_ironman */
-    NULL, /* reserved legacy slot: adult_no_stores */
+    "Single stair (one up / one down)", /* OPT_adult_single_stair */
     "No artefacts", /* OPT_adult_no_artefacts */
     NULL, /* reserved legacy slot: adult_rand_artefacts */
-    NULL, /* reserved legacy slot: adult_no_stacking */
-    NULL, /* reserved legacy slot: adult_take_notes */
+    "Tulkas' challenge: blunt weapons only", /* OPT_adult_tulkas_blunt */
+    "Varda's challenge: torches only", /* OPT_adult_torchlight */
     NULL, /* reserved legacy slot: adult_force_small_lev */
     NULL, /* reserved legacy slot: adult_retain_squelch */
     NULL, /* reserved legacy slot: adult_no_quests */
@@ -796,11 +798,11 @@ const bool option_norm[OPT_MAX] = {
     false, /* reserved legacy slot: birth_maximize */
     false, /* OPT_birth_discon_stair */
     false, /* OPT_birth_ironman */
-    false, /* reserved legacy slot */
+    false, /* OPT_birth_single_stair */
     false, /* OPT_birth_no_artefacts */
     false, /* OPT_birth_fixed_exp */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
+    false, /* OPT_birth_tulkas_blunt */
+    false, /* OPT_birth_torchlight */
     false, /* reserved legacy slot: birth_force_small_lev */
     false, /* reserved legacy slot: birth_retain_squelch */
     false, /* reserved legacy slot: OPT_birth_no_quests */
@@ -861,11 +863,11 @@ const bool option_norm[OPT_MAX] = {
     false, /* reserved legacy slot: adult_maximize */
     false, /* OPT_adult_discon_stair */
     false, /* OPT_adult_ironman */
-    false, /* reserved legacy slot: adult_no_stores */
+    false, /* OPT_adult_single_stair */
     false, /* OPT_adult_no_artefacts */
     false, /* reserved legacy slot: adult_rand_artefacts */
-    false, /* reserved legacy slot: adult_no_stacking */
-    false, /* reserved legacy slot: adult_take_notes */
+    false, /* OPT_adult_tulkas_blunt */
+    false, /* OPT_adult_torchlight */
     false, /* reserved legacy slot: adult_force_small_lev */
     false, /* reserved legacy slot: adult_retain_squelch */
     false, /* reserved legacy slot: OPT_adult_no_quests */
@@ -973,8 +975,9 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
 
     /*** Birth ***/
 
-    { OPT_birth_discon_stair, OPT_birth_ironman, OPT_birth_no_artefacts,
-        OPT_birth_fixed_exp, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+    { OPT_birth_discon_stair, OPT_birth_ironman, OPT_birth_single_stair,
+        OPT_birth_no_artefacts, OPT_birth_fixed_exp, OPT_birth_tulkas_blunt,
+        OPT_birth_torchlight, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 

@@ -5176,6 +5176,9 @@ static bool project_m(
     if (m_ptr->ml)
         seen = true;
 
+    if (who < 0 && m_ptr->r_idx == R_IDX_MORGOTH)
+        niena_mark_morgoth_attack();
+
     /* Get the monster name*/
     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 

@@ -2757,6 +2757,54 @@ static drop_category roll_category(const drop_request* req)
     return DROP_CAT_SUPPLY;
 }
 
+static bool drop_challenge_tulkas_blunt_active(void)
+{
+    return op_ptr && (op_ptr->opt[OPT_birth_tulkas_blunt] ||
+        op_ptr->opt[OPT_adult_tulkas_blunt]);
+}
+
+static bool drop_challenge_torchlight_active(void)
+{
+    return op_ptr && (op_ptr->opt[OPT_birth_torchlight] ||
+        op_ptr->opt[OPT_adult_torchlight]);
+}
+
+static bool drop_entry_allowed_by_challenges(const drop_entry* e)
+{
+    if (!e)
+        return false;
+
+    if (drop_challenge_tulkas_blunt_active())
+    {
+        switch (e->obj.tval)
+        {
+        case TV_SWORD:
+        case TV_POLEARM:
+        case TV_BOW:
+        case TV_ARROW:
+            return false;
+        default:
+            break;
+        }
+    }
+
+    if (drop_challenge_torchlight_active() && e->obj.tval == TV_LIGHT)
+    {
+        const object_kind* k_ptr = NULL;
+
+        if (e->obj.k_idx > 0 && z_info && e->obj.k_idx < z_info->k_max)
+            k_ptr = &k_info[e->obj.k_idx];
+
+        if (k_ptr && (k_ptr->flags3 & TR3_INSTA_ART))
+            return true;
+
+        return e->obj.sval == SV_LIGHT_TORCH ||
+            e->obj.sval == SV_LIGHT_MALLORN;
+    }
+
+    return true;
+}
+
 static bool droptype_matches(const drop_request* req, const drop_entry* e)
 {
     bool damaged = drop_object_is_damaged(&e->obj);
@@ -2863,6 +2911,9 @@ static bool collect_candidate_entries(
             continue;
 
         if (req->alignment_filter == DROP_ALIGNMENT_FILTER_EVIL && !e.evil)
+            continue;
+
+        if (!drop_entry_allowed_by_challenges(&e))
             continue;
 
         if (e.noble)

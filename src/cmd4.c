@@ -16933,8 +16933,11 @@ static cptr option_menu_label(int opt)
         case OPT_show_elemental_item_rolls: return narrow ? "Dbg elem items" : "Debug elemental items";
         case OPT_birth_discon_stair: return narrow ? "Disc. stairs" : "Disconnected stairs";
         case OPT_birth_ironman: return narrow ? "Straight down" : "Straight down";
+        case OPT_birth_single_stair: return narrow ? "Single stair" : "Single stair";
         case OPT_birth_no_artefacts: return narrow ? "No artefacts" : "No artefacts";
         case OPT_birth_fixed_exp: return narrow ? "Fixed XP" : "Fixed experience";
+        case OPT_birth_tulkas_blunt: return narrow ? "Blunt only" : "Blunt weapons only";
+        case OPT_birth_torchlight: return narrow ? "Torches only" : "Torches only";
         case OPT_cheat_peek: return narrow ? "Debug obj gen" : "Debug object gen";
         case OPT_cheat_hear: return narrow ? "Debug mon gen" : "Debug monster gen";
         case OPT_cheat_room: return narrow ? "Debug room gen" : "Debug dungeon gen";
