@@ -927,6 +927,7 @@ static void maybe_award_partition_discovery_xp(level_partition_kind kind,
 
     p_ptr->discovery_lore_flags |= bit;
     gain_exp(300);
+    gain_knowledge_points(2, "You discover a new region.");
     display_narrative_text(text, narrative_mode, line_delay);
 }
 
@@ -3506,6 +3507,8 @@ static void process_player(void)
                     if (!greater_vault_xp_awarded)
                     {
                         gain_exp(vault_xp);
+                        gain_knowledge_points(5,
+                            "The great vault yields hidden knowledge.");
                         greater_vault_xp_awarded = true;
                     }
 
@@ -3527,6 +3530,8 @@ static void process_player(void)
                 if (!greater_vault_xp_awarded)
                 {
                     gain_exp(vault_xp);
+                    gain_knowledge_points(5,
+                        "The great vault yields hidden knowledge.");
                     greater_vault_xp_awarded = true;
                 }
             }

@@ -279,6 +279,8 @@ static void get_extra(void)
     int i, j;
     
     p_ptr->new_exp = p_ptr->exp = get_start_xp();
+    p_ptr->lore = 0;
+    p_ptr->knowledge_points = 0;
     p_ptr->discovery_lore_flags = 0;
     log_debug("Set starting experience to %d", p_ptr->exp);
 
@@ -4647,6 +4649,18 @@ static const int birth_stat_costs[11]
     = { -4, -3, -2, -1, 0, 1, 3, 6, 10, 15, 21 };
 
 #define MAX_COST 13
+#define BIRTH_STAT_LORE A_MAX
+#define BIRTH_STAT_MAX (A_MAX + 1)
+
+static int birth_stat_current_cost(int stat)
+{
+    int index = stat + 4;
+
+    if (index < 0 || index >= (int)N_ELEMENTS(birth_stat_costs))
+        return 9999;
+
+    return birth_stat_costs[index];
+}
 
 static int birth_stat_increase_cost(int stat)
 {
@@ -4659,6 +4673,39 @@ static int birth_stat_increase_cost(int stat)
         return 0;
 
     return birth_stat_costs[next_index] - birth_stat_costs[current_index];
+}
+
+static cptr birth_stat_label(int stat)
+{
+    if (stat == BIRTH_STAT_LORE)
+        return "Lore";
+
+    if (stat >= 0 && stat < A_MAX)
+        return stat_names[stat];
+
+    return "";
+}
+
+static cptr birth_stat_full_label(int stat)
+{
+    if (stat == BIRTH_STAT_LORE)
+        return "lore";
+
+    if (stat >= 0 && stat < A_MAX)
+        return stat_names_full[stat];
+
+    return "";
+}
+
+static int birth_stat_display_value(int stat)
+{
+    if (stat == BIRTH_STAT_LORE)
+        return p_ptr->lore;
+
+    if (stat >= 0 && stat < A_MAX)
+        return p_ptr->stat_use[stat];
+
+    return 0;
 }
 
 /* Forward declaration: used by compact skill allocation rendering. */
@@ -5070,27 +5117,27 @@ static NavResult blitz_configure_effects(void)
     return NAV_OK;
 }
 
-static void blitz_auto_assign_stats(int stats[A_MAX])
+static void blitz_auto_assign_stats(int stats[BIRTH_STAT_MAX])
 {
     int cost = 0;
 
-    for (int i = 0; i < A_MAX; i++)
+    for (int i = 0; i < BIRTH_STAT_MAX; i++)
         stats[i] = 0;
 
     while (cost < MAX_COST)
     {
-        int choices[A_MAX];
+        int choices[BIRTH_STAT_MAX];
         int choice_count = 0;
 
-        for (int i = 0; i < A_MAX; i++)
+        for (int i = 0; i < BIRTH_STAT_MAX; i++)
         {
             int next = stats[i] + 1;
             int next_cost;
 
             if (next > 6)
                 continue;
-            next_cost = cost - birth_stat_costs[stats[i] + 4]
-                + birth_stat_costs[next + 4];
+            next_cost = cost - birth_stat_current_cost(stats[i])
+                + birth_stat_current_cost(next);
             if (next_cost <= MAX_COST)
                 choices[choice_count++] = i;
         }
@@ -5099,9 +5146,9 @@ static void blitz_auto_assign_stats(int stats[A_MAX])
             break;
 
         int pick = choices[rand_int(choice_count)];
-        cost -= birth_stat_costs[stats[pick] + 4];
+        cost -= birth_stat_current_cost(stats[pick]);
         stats[pick]++;
-        cost += birth_stat_costs[stats[pick] + 4];
+        cost += birth_stat_current_cost(stats[pick]);
     }
 }
 
@@ -5187,7 +5234,7 @@ static void blitz_auto_assign_skills(void)
 
 static NavResult blitz_auto_build_character(void)
 {
-    int stats[A_MAX];
+    int stats[BIRTH_STAT_MAX];
 
     get_extra();
     blitz_auto_assign_stats(stats);
@@ -5198,6 +5245,7 @@ static NavResult blitz_auto_build_character(void)
         p_ptr->stat_base[i] = stats[i] + bonus;
         p_ptr->stat_drain[i] = 0;
     }
+    p_ptr->lore = stats[BIRTH_STAT_LORE];
 
     p_ptr->update |= (PU_BONUS | PU_HP);
     update_stuff();
@@ -5369,7 +5417,7 @@ static void birth_configure_allocation_sheet_layout(bool stats_screen,
 
     if (stats_screen)
     {
-        int stat_last_row = 1 + A_MAX - 1;
+        int stat_last_row = 1 + BIRTH_STAT_MAX - 1;
 
         for (int stat_gap = 1; stat_gap >= 0; stat_gap--)
         {
@@ -5471,7 +5519,7 @@ birth_allocation_layout_done:
     {
         if (stats_screen)
         {
-            int stat_last_row = 1 + A_MAX - 1;
+            int stat_last_row = 1 + BIRTH_STAT_MAX - 1;
 
             status_row = MIN(stat_last_row + 1, body_last_row);
             skill_first_row = MIN(status_row + 1, body_last_row);
@@ -5580,7 +5628,7 @@ static void birth_register_visible_stat_clicks(void)
         if (end_col <= start_col)
             end_col = wid;
 
-        for (int stat = 0; stat < A_MAX; stat++)
+        for (int stat = 0; stat < BIRTH_STAT_MAX; stat++)
         {
             int stat_row = row + 1 + stat;
 
@@ -5594,7 +5642,7 @@ static void birth_register_visible_stat_clicks(void)
     }
 }
 
-static void birth_display_stats_allocation_compact(const int stats[A_MAX],
+static void birth_display_stats_allocation_compact(const int stats[BIRTH_STAT_MAX],
     int selected, int points_left, bool steamdeck)
 {
     int wid = 80;
@@ -5624,13 +5672,13 @@ static void birth_display_stats_allocation_compact(const int stats[A_MAX],
     Term_erase(0, info_row, 255);
     Term_erase(0, prompt_row, 255);
 
-    if (selected >= 0 && selected < A_MAX)
+    if (selected >= 0 && selected < BIRTH_STAT_MAX)
     {
         int cost = birth_stat_increase_cost(stats[selected]);
-        cnv_stat(p_ptr->stat_use[selected], stat_buf);
+        cnv_stat(birth_stat_display_value(selected), stat_buf);
 
         strnfmt(buf, sizeof(buf), "Selected: %s %s  Cost: %d  Left: %d",
-            stat_names_full[selected], stat_buf, cost, points_left);
+            birth_stat_full_label(selected), stat_buf, cost, points_left);
         c_put_str(TERM_L_BLUE, buf, info_row, 1);
     }
     else
@@ -5736,7 +5784,7 @@ static void birth_display_skill_allocation_compact(int selected_skill, const int
 /*
  * Helper function for 'player_birth()'.
  */
-static NavResult player_birth_aux_2(int stats[A_MAX])
+static NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
 {
     int i;
 
@@ -5775,6 +5823,7 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
             p_ptr->stat_base[i] = stats[i] + bonus;
             p_ptr->stat_drain[i] = 0;
         }
+        p_ptr->lore = stats[BIRTH_STAT_LORE];
         
         /* Calculate bonuses and hitpoints */
         p_ptr->update |= (PU_BONUS | PU_HP);
@@ -5824,10 +5873,11 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
             /* Apply the racial bonuses */
             p_ptr->stat_base[i] = stats[i] + bonus;
             p_ptr->stat_drain[i] = 0;
-
-            /* Total cost */
-            cost += birth_stat_costs[stats[i] + 4];
         }
+        p_ptr->lore = stats[BIRTH_STAT_LORE];
+
+        for (i = 0; i < BIRTH_STAT_MAX; i++)
+            cost += birth_stat_current_cost(stats[i]);
 
         /* Restrict cost */
         if (cost > MAX_COST)
@@ -5869,10 +5919,10 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
         else
         {
             int prompt_row = birth_prompt_row();
-            int status_row = row + A_MAX;
+            int status_row = row + BIRTH_STAT_MAX;
             ui_menu_click_begin();
             ui_menu_click_set_hover_enabled(true);
-            ui_scroll_area_begin(row, row + A_MAX - 1,
+            ui_scroll_area_begin(row, row + BIRTH_STAT_MAX - 1,
                 SDL_TOUCH_MENU_CATEGORY_OTHER);
             ui_scroll_area_set_keys('6', '4', '6', '4');
 
@@ -5887,7 +5937,7 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
             c_put_str(TERM_L_GREEN, buf, 0, sheet_col + 34);
 
             /* Display the costs */
-            for (i = 0; i < A_MAX; i++)
+            for (i = 0; i < BIRTH_STAT_MAX; i++)
             {
                 if (i == stat)
                 {
@@ -5895,7 +5945,7 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
 
                     /* Match the character sheet label rendering: trim trailing spaces.
                      * (stat_names[] include padding for mono layouts.) */
-                    const char* stat_label = (p_ptr->stat_drain[i] < 0) ? stat_names_reduced[i] : stat_names[i];
+                    const char* stat_label = birth_stat_label(i);
                     char trimmed_label[32];
                     SDL_strlcpy(trimmed_label, stat_label ? stat_label : "", sizeof(trimmed_label));
                     int len = (int)strlen(trimmed_label);
@@ -5938,7 +5988,8 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
                 char stat_label[16];
                 int stat_label_len;
 
-                SDL_strlcpy(stat_label, stat_names[stat], sizeof(stat_label));
+                SDL_strlcpy(stat_label, birth_stat_label(stat),
+                    sizeof(stat_label));
                 stat_label_len = (int)strlen(stat_label);
                 while (stat_label_len > 0
                     && stat_label[stat_label_len - 1] == ' ')
@@ -5948,7 +5999,7 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
 
                 strnfmt(stat_buf, sizeof(stat_buf),
                     "%s %d Cost:%d Left:%d",
-                    stat_label, p_ptr->stat_use[stat],
+                    stat_label, birth_stat_display_value(stat),
                     birth_stat_increase_cost(stats[stat]), MAX_COST - cost);
                 birth_draw_allocation_confirm_status(status_row, sheet_col - 1,
                     sheet_col + 37, stat_buf);
@@ -6003,7 +6054,7 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
             if (ui_menu_click_take_action(&clicked_choice, &click_action))
             {
                 ui_menu_click_clear();
-                if (clicked_choice >= 0 && clicked_choice < A_MAX)
+                if (clicked_choice >= 0 && clicked_choice < BIRTH_STAT_MAX)
                 {
                     if (click_action == UI_MENU_CLICK_HOVER
                         || clicked_choice != stat)
@@ -6057,13 +6108,13 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
         /* Prev stat */
         if (ch == '8')
         {
-            stat = (stat + A_MAX - 1) % A_MAX;
+            stat = (stat + BIRTH_STAT_MAX - 1) % BIRTH_STAT_MAX;
         }
 
         /* Next stat */
         if (ch == '2')
         {
-            stat = (stat + 1) % A_MAX;
+            stat = (stat + 1) % BIRTH_STAT_MAX;
         }
 
         /* Decrease stat */
@@ -6073,7 +6124,7 @@ static NavResult player_birth_aux_2(int stats[A_MAX])
         }
 
         /* Increase stat */
-        if (ch == '6')
+        if ((ch == '6') && (birth_stat_increase_cost(stats[stat]) > 0))
         {
             stats[stat]++;
         }
@@ -6627,10 +6678,11 @@ static NavResult player_birth_aux(void)
     }
     else
     {
-        int stat_alloc[A_MAX];
+        int stat_alloc[BIRTH_STAT_MAX];
 
         for (int i = 0; i < A_MAX; i++)
             stat_alloc[i] = p_ptr->stat_base[i];
+        stat_alloc[BIRTH_STAT_LORE] = p_ptr->lore;
 
         for (;;)
         {
@@ -6662,9 +6714,10 @@ static NavResult player_birth_aux(void)
     // Reset the number of artefacts
     p_ptr->artefacts = 0;
 
-    log_trace("Final character stats: Str=%d Dex=%d Con=%d Gra=%d",
+    log_trace("Final character stats: Str=%d Dex=%d Con=%d Gra=%d Lore=%d",
               p_ptr->stat_base[A_STR], p_ptr->stat_base[A_DEX],
-              p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA]);
+              p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA],
+              p_ptr->lore);
 
     /* Accept */
     return NAV_OK;

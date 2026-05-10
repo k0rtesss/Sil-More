@@ -1294,6 +1294,13 @@ void do_cmd_character_sheet(void)
 #define ABILITY_MENU_CLICK_SKILL_BASE 1000
 #define ABILITY_MENU_CLICK_ABILITY_BASE 2000
 #define ABILITY_MENU_SWITCH_SKILL_BASE (ABILITIES_MAX + 10)
+#define ABILITY_MENU_RETURN_TO_SKILLS (ABILITIES_MAX + 1)
+#define ABILITY_MENU_RETURN_TO_GAME (ABILITIES_MAX + 2)
+#define ABILITY_MENU_GAIN_SKILLS (ABILITIES_MAX + 3)
+#define ABILITY_MENU_SKILL_LORE S_MAX
+
+static int ability_menu_selected_skilltype = -1;
+static int ability_menu_selected_abilitynum = -1;
 
 static bool ability_menu_use_compact_layout(void)
 {
@@ -1361,8 +1368,139 @@ static void ability_menu_put_exit_button(void)
         "Exit");
 }
 
+static void ability_menu_show_error(cptr msg)
+{
+    int wid = Term ? Term->wid : 80;
+    int clear_width;
+
+    if (wid < 1)
+        wid = 80;
+
+    clear_width = wid - 9;
+    if (clear_width < 1)
+        clear_width = wid;
+    if (clear_width > 72)
+        clear_width = 72;
+
+    if (character_generated && msg)
+    {
+        message_add(msg, MSG_BELL);
+        p_ptr->window |= (PW_MESSAGE);
+        window_stuff();
+    }
+
+    Term_erase(0, 0, clear_width);
+    Term_putstr(0, 0, -1, TERM_L_RED, msg);
+    Term_fresh();
+}
+
 int abilities_in_skill(int skilltype);
 bool prereqs(int skilltype, int abilitynum);
+
+static int ability_knowledge_base_cost(int skilltype, int abilitynum)
+{
+    ability_type* b_ptr;
+
+    if (!b_info || !z_info)
+        return 0;
+    if (skilltype < 0 || skilltype >= S_MAX)
+        return 0;
+    if (abilitynum < 0 || abilitynum >= ABILITIES_MAX)
+        return 0;
+
+    b_ptr = &b_info[ability_index(skilltype, abilitynum)];
+    if (!b_ptr->name || b_ptr->skilltype != skilltype
+        || b_ptr->abilitynum != abilitynum)
+    {
+        return 0;
+    }
+
+    return b_ptr->knowledge_cost;
+}
+
+static bool ability_uses_knowledge_points(int skilltype, int abilitynum)
+{
+    return ability_knowledge_base_cost(skilltype, abilitynum) > 0;
+}
+
+static bool ability_menu_is_lore_ability(int skilltype, int abilitynum)
+{
+    return ability_uses_knowledge_points(skilltype, abilitynum);
+}
+
+static int ability_purchase_knowledge_cost(int skilltype, int abilitynum)
+{
+    int cost = ability_knowledge_base_cost(skilltype, abilitynum);
+
+    if (cost <= 0)
+        return 0;
+
+    cost -= p_ptr->lore;
+    if (cost < 0)
+        cost = 0;
+
+    return cost;
+}
+
+static int ability_purchase_exp_cost(int skilltype);
+
+static byte ability_menu_entry_attr(int skilltype, int abilitynum)
+{
+    if (p_ptr->have_ability[skilltype][abilitynum])
+    {
+        if (p_ptr->innate_ability[skilltype][abilitynum])
+        {
+            if (p_ptr->active_ability[skilltype][abilitynum])
+                return TERM_WHITE;
+            return TERM_RED;
+        }
+
+        if (p_ptr->active_ability[skilltype][abilitynum])
+            return TERM_L_GREEN;
+        return TERM_RED;
+    }
+
+    if (!prereqs(skilltype, abilitynum))
+        return TERM_L_DARK;
+
+    if (ability_uses_knowledge_points(skilltype, abilitynum))
+    {
+        if (ability_purchase_knowledge_cost(skilltype, abilitynum)
+            > p_ptr->knowledge_points)
+        {
+            return TERM_L_DARK;
+        }
+    }
+    else if (ability_purchase_exp_cost(skilltype) > p_ptr->new_exp)
+    {
+        return TERM_L_DARK;
+    }
+
+    return TERM_SLATE;
+}
+
+static bool ability_menu_entry_can_activate(int skilltype, int abilitynum)
+{
+    if (skilltype < 0 || skilltype >= S_MAX
+        || abilitynum < 0 || abilitynum >= ABILITIES_MAX)
+    {
+        return false;
+    }
+
+    if (p_ptr->have_ability[skilltype][abilitynum])
+        return true;
+
+    if (!prereqs(skilltype, abilitynum))
+        return false;
+
+    if (ability_uses_knowledge_points(skilltype, abilitynum))
+    {
+        return ability_purchase_knowledge_cost(skilltype, abilitynum)
+            <= p_ptr->knowledge_points;
+    }
+
+    return ability_purchase_exp_cost(skilltype) <= p_ptr->new_exp;
+}
 
 static int ability_purchase_exp_cost(int skilltype)
 {
@@ -1457,7 +1595,8 @@ static int ability_requirement_stat_value(int stat)
     if (stat < 0 || stat >= A_MAX)
         return 0;
 
-    return p_ptr->stat_base[stat] + p_ptr->stat_drain[stat];
+    return p_ptr->stat_base[stat] + p_ptr->stat_drain[stat]
+        + p_ptr->stat_equip_mod[stat];
 }
 
 static int ability_requirement_skill_value(int skill)
@@ -1465,7 +1604,7 @@ static int ability_requirement_skill_value(int skill)
     if (skill < 0 || skill >= S_MAX)
         return 0;
 
-    return p_ptr->skill_base[skill];
+    return p_ptr->skill_base[skill] + p_ptr->skill_equip_mod[skill];
 }
 
 static bool ability_requirements_met(const ability_type* b_ptr)
@@ -1589,6 +1728,11 @@ static void ability_menu_render_prerequisites_block(int skilltype,
     int row = ability_menu_next_row_after_text(desc_col, 3);
     int info_width = ability_menu_text_width(desc_col, 2);
     bool have_requirement = false;
+    bool uses_knowledge = ability_uses_knowledge_points(skilltype,
+        b_ptr->abilitynum);
+    int knowledge_cost = uses_knowledge
+        ? ability_purchase_knowledge_cost(skilltype, b_ptr->abilitynum)
+        : 0;
     char buf[80];
 
     Term_putstr(desc_col, row, -1, TERM_YELLOW, "Requirements:");
@@ -1629,6 +1773,18 @@ static void ability_menu_render_prerequisites_block(int skilltype,
 
         Term_putstr(desc_col + 2, row, -1,
             (need <= have) ? TERM_L_GREEN : TERM_L_DARK, buf);
+        row++;
+    }
+
+    if (uses_knowledge)
+    {
+        have_requirement = true;
+        ability_menu_format_requirement_line(buf, sizeof(buf), "Knowledge",
+            "KP", knowledge_cost, p_ptr->knowledge_points, info_width);
+        Term_putstr(desc_col + 2, row, -1,
+            (knowledge_cost <= p_ptr->knowledge_points) ? TERM_L_GREEN
+                                                        : TERM_L_DARK,
+            buf);
         row++;
     }
 
@@ -1675,16 +1831,18 @@ static void ability_menu_render_prerequisites_block(int skilltype,
         row++;
     }
 
-    if (skilltype != S_SPC && prereqs(skilltype, b_ptr->abilitynum))
+    if (skilltype != S_SPC && !uses_knowledge
+        && prereqs(skilltype, b_ptr->abilitynum))
     {
-        int exp_cost = ability_purchase_exp_cost(skilltype);
-
         Term_putstr(desc_col, row, -1, TERM_YELLOW, "Current price:");
 
-        ability_menu_format_amount_line(buf, sizeof(buf), "experience", "Exp",
-            exp_cost, p_ptr->new_exp, info_width);
+        int exp_cost = ability_purchase_exp_cost(skilltype);
+
+        ability_menu_format_amount_line(buf, sizeof(buf), "experience",
+            "Exp", exp_cost, p_ptr->new_exp, info_width);
         Term_putstr(desc_col + 2, row + 1, -1,
-            (exp_cost <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK, buf);
+            (exp_cost <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK,
+            buf);
 
         row += 2;
     }
@@ -1712,9 +1870,12 @@ static int ability_menu_stepped_song_bonus(int skill, int first_threshold,
     return bonus;
 }
 
-static int ability_menu_current_song_score(void)
+static int ability_menu_current_song_score(const ability_type* b_ptr)
 {
-    return MAX(0, p_ptr->skill_use[S_SNG]);
+    if (!b_ptr)
+        return MAX(0, p_ptr->skill_use[S_SNG]);
+
+    return MAX(0, ability_score(b_ptr->skilltype, b_ptr->abilitynum));
 }
 
 static int ability_menu_minor_song_score(int song_skill)
@@ -1751,7 +1912,7 @@ static void ability_menu_append_song_cost(char* text, size_t text_size,
 
 static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
 {
-    int song_skill = ability_menu_current_song_score();
+    int song_skill = ability_menu_current_song_score(b_ptr);
     char bonus_text[384];
 
     bonus_text[0] = '\0';
@@ -2054,6 +2215,10 @@ int abilities_in_skill(int skilltype)
 
         /* Skip entries for the wrong skill type */
         if (b_ptr->skilltype != skilltype)
+            continue;
+
+        /* Lore abilities use knowledge points and do not raise XP prices. */
+        if (ability_menu_is_lore_ability(skilltype, b_ptr->abilitynum))
             continue;
 
         /* Add to the count */
@@ -3628,7 +3793,53 @@ static bool ability_menu_show_special_skill(void)
 
 static int ability_menu_skill_options(void)
 {
-    return ability_menu_show_special_skill() ? S_MAX : (S_MAX - 1);
+    /* Real skills, plus the pseudo Lore category. Hide Special when empty. */
+    return ability_menu_show_special_skill() ? (S_MAX + 1) : S_MAX;
+}
+
+static bool ability_menu_option_is_lore(int option_index, int options)
+{
+    return option_index == options - 1;
+}
+
+static int ability_menu_skilltype_from_option(int option_index, int options)
+{
+    if (option_index < 0 || option_index >= options)
+        return -1;
+
+    if (ability_menu_option_is_lore(option_index, options))
+        return ABILITY_MENU_SKILL_LORE;
+
+    return option_index;
+}
+
+static int ability_menu_option_from_skilltype(int skilltype)
+{
+    int options = ability_menu_skill_options();
+
+    if (skilltype == ABILITY_MENU_SKILL_LORE)
+        return options - 1;
+
+    if (skilltype >= 0 && skilltype < S_MAX)
+        return skilltype;
+
+    return 0;
+}
+
+static int ability_menu_highlight_from_skilltype(int skilltype)
+{
+    return ability_menu_option_from_skilltype(skilltype) + 1;
+}
+
+static cptr ability_menu_skill_label(int option_index, int options)
+{
+    if (ability_menu_option_is_lore(option_index, options))
+        return "Lore";
+
+    if (option_index >= 0 && option_index < S_MAX)
+        return skill_names_full[option_index];
+
+    return "";
 }
 
 static void ability_menu_draw_skills(int highlight, int options, int click_base)
@@ -3641,8 +3852,9 @@ static void ability_menu_draw_skills(int highlight, int options, int click_base)
     for (i = 0; i < options; i++)
     {
         int row = i + 4;
+        cptr label = ability_menu_skill_label(i, options);
 
-        indexed_menu_entry_label(buf, sizeof(buf), i, skill_names_full[i]);
+        indexed_menu_entry_label(buf, sizeof(buf), i, label);
         Term_putstr(COL_SKILL, row, -1,
             (highlight == i + 1) ? TERM_L_BLUE : TERM_WHITE, buf);
 
@@ -3690,7 +3902,7 @@ int abilities_menu1(int* highlight)
         {
             if (click_action == UI_MENU_CLICK_HOVER)
                 return (0);
-            return (S_MAX + 1);
+            return (ABILITY_MENU_RETURN_TO_GAME);
         }
 
         if (clicked_choice >= 1 && clicked_choice <= options)
@@ -3717,12 +3929,12 @@ int abilities_menu1(int* highlight)
     if ((ch == ESCAPE) || (ch == 'q') || (ch == '\t')
         || (steamdeck && ch == steamdeck_back_key()))
     {
-        return (S_MAX + 1);  // Always return S_MAX + 1 to exit, regardless of options
+        return (ABILITY_MENU_RETURN_TO_GAME);
     }
 
     if (ch == 'i')
     {
-        return (S_MAX + 2);
+        return (ABILITY_MENU_GAIN_SKILLS);
     }
 
     /* Choose current  */
@@ -3750,6 +3962,7 @@ int abilities_menu1(int* highlight)
 int abilities_menu2(int skilltype, int* highlight)
 {
     int i;
+    bool lore_menu = (skilltype == ABILITY_MENU_SKILL_LORE);
     bool compact_layout = ability_menu_use_compact_layout();
     bool steamdeck = steamdeck_controls_active();
     bool menu_letters = sdl_menu_letters_enabled();
@@ -3765,12 +3978,17 @@ int abilities_menu2(int skilltype, int* highlight)
     int ch;
     int visible_count = 0; // Count of actually visible abilities
     int visible_abilities[ABILITIES_MAX]; // Map display letters to ability numbers
+    int visible_skilltypes[ABILITIES_MAX]; // Map display letters to real skill types
+    int visible_menu_ids[ABILITIES_MAX]; // Stable highlight ids within this menu
     int top_visible = 0;
     int highlight_display_index = -1;
 
     char buf[80];
 
     byte attr;
+
+    ability_menu_selected_skilltype = -1;
+    ability_menu_selected_abilitynum = -1;
 
     // In compact layout the abilities list reuses the skills column.
     wipe_screen_from(indexed_menu_prefix_col(
@@ -3779,8 +3997,10 @@ int abilities_menu2(int skilltype, int* highlight)
     ui_menu_click_set_hover_enabled(true);
 
     if (!compact_layout)
-        ability_menu_draw_skills(skilltype + 1, ability_menu_skill_options(),
-            ABILITY_MENU_CLICK_SKILL_BASE);
+    {
+        ability_menu_draw_skills(ability_menu_highlight_from_skilltype(skilltype),
+            ability_menu_skill_options(), ABILITY_MENU_CLICK_SKILL_BASE);
+    }
 
     // abilities title with color
     Term_putstr(ability_col, 1, -1, TERM_L_BLUE, "Abilities");
@@ -3837,83 +4057,113 @@ int abilities_menu2(int skilltype, int* highlight)
     }
 
     // list the abilities
-    for (i = 0; i < z_info->b_max; i++)
+    if (lore_menu)
     {
-        b_ptr = &b_info[i];
-
-        /* Skip non-entries */
-        if (!b_ptr->name)
-            continue;
-
-        /* Skip entries for the wrong skill type */
-        if (b_ptr->skilltype != skilltype)
-            continue;
-
-        /* For special abilities, only show granted abilities */
-        if (skilltype == S_SPC && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+        for (i = 0; i < z_info->b_max; i++)
         {
-            continue;
-        }
+            int entry_skilltype;
+            int entry_abilitynum;
 
-        /* Hide deprecated WIL_OATH ability from menu (now handled at birth) */
-        if (skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH)
-            continue;
+            b_ptr = &b_info[i];
 
-        // Safety check for ability number bounds
-        if (b_ptr->abilitynum >= ABILITIES_MAX) {
-            continue;
-        }
+            if (!b_ptr->name)
+                continue;
 
-        // Safety check for array bounds
-        if (visible_count >= ABILITIES_MAX) {
-            break;
-        }
+            entry_skilltype = b_ptr->skilltype;
+            entry_abilitynum = b_ptr->abilitynum;
 
-        /* Determine the appropriate colour. */
-        if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-        {
-            if (p_ptr->innate_ability[skilltype][b_ptr->abilitynum])
+            if (entry_skilltype < 0 || entry_skilltype >= S_MAX
+                || entry_abilitynum < 0 || entry_abilitynum >= ABILITIES_MAX)
             {
-                if (p_ptr->active_ability[skilltype][b_ptr->abilitynum])
-                    attr = TERM_WHITE;
-                else
-                    attr = TERM_RED;
+                continue;
             }
-            else
+
+            if (!ability_menu_is_lore_ability(entry_skilltype,
+                entry_abilitynum))
             {
-                if (p_ptr->active_ability[skilltype][b_ptr->abilitynum])
-                    attr = TERM_L_GREEN;
-                else
-                    attr = TERM_RED;
+                continue;
             }
+
+            if (visible_count >= ABILITIES_MAX)
+                break;
+
+            visible_entries[visible_count] = b_ptr;
+            visible_attrs[visible_count] =
+                ability_menu_entry_attr(entry_skilltype, entry_abilitynum);
+            visible_abilities[visible_count] = entry_abilitynum;
+            visible_skilltypes[visible_count] = entry_skilltype;
+            visible_menu_ids[visible_count] = visible_count;
+
+            if (first_visible_ability == -1)
+                first_visible_ability = visible_menu_ids[visible_count];
+
+            visible_count++;
         }
-        else if (prereqs(skilltype, b_ptr->abilitynum))
+    }
+    else
+    {
+        for (i = 0; i < z_info->b_max; i++)
         {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-        }
+            b_ptr = &b_info[i];
 
-        visible_entries[visible_count] = b_ptr;
-        visible_attrs[visible_count] = attr;
+            /* Skip non-entries */
+            if (!b_ptr->name)
+                continue;
 
-        // Map this visible ability to its position
-        visible_abilities[visible_count] = b_ptr->abilitynum;
-        
-        // Track first visible ability for highlight adjustment
-        if (first_visible_ability == -1) {
-            first_visible_ability = b_ptr->abilitynum;
+            /* Skip entries for the wrong skill type */
+            if (b_ptr->skilltype != skilltype)
+                continue;
+
+            /* For special abilities, only show granted abilities */
+            if (skilltype == S_SPC
+                && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+            {
+                continue;
+            }
+
+            /* Hide deprecated WIL_OATH ability from menu (now handled at birth) */
+            if (skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH)
+                continue;
+
+            /* Lore abilities are shown in the pseudo Lore category. */
+            if (ability_menu_is_lore_ability(skilltype, b_ptr->abilitynum))
+                continue;
+
+            // Safety check for ability number bounds
+            if (b_ptr->abilitynum >= ABILITIES_MAX) {
+                continue;
+            }
+
+            // Safety check for array bounds
+            if (visible_count >= ABILITIES_MAX) {
+                break;
+            }
+
+            visible_entries[visible_count] = b_ptr;
+            visible_attrs[visible_count] =
+                ability_menu_entry_attr(skilltype, b_ptr->abilitynum);
+            visible_abilities[visible_count] = b_ptr->abilitynum;
+            visible_skilltypes[visible_count] = skilltype;
+            visible_menu_ids[visible_count] = b_ptr->abilitynum;
+
+            // Track first visible ability for highlight adjustment
+            if (first_visible_ability == -1) {
+                first_visible_ability = visible_menu_ids[visible_count];
+            }
+
+            visible_count++;
         }
-
-        visible_count++;
     }
 
     if (skilltype == S_SMT)
     {
         ability_menu_sort_smithing_entries(visible_entries, visible_attrs,
             visible_abilities, visible_count);
+        for (i = 0; i < visible_count; i++)
+        {
+            visible_skilltypes[i] = S_SMT;
+            visible_menu_ids[i] = visible_abilities[i];
+        }
     }
 
     /* Safety check: if no abilities are visible, show message and exit */
@@ -3931,16 +4181,16 @@ int abilities_menu2(int skilltype, int* highlight)
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
                     continue;
-                return (ABILITIES_MAX + 2);
+                return (ABILITY_MENU_RETURN_TO_GAME);
             }
         } while (ch == UI_MENU_CLICK_WAKE_KEY);
 
-        return (ABILITIES_MAX + 1); /* Return to skills menu */
+        return (ABILITY_MENU_RETURN_TO_SKILLS); /* Return to skills menu */
     }
 
     for (i = 0; i < visible_count; i++)
     {
-        if (visible_abilities[i] == *highlight - 1)
+        if (visible_menu_ids[i] == *highlight - 1)
         {
             highlight_display_index = i;
             break;
@@ -3974,11 +4224,13 @@ int abilities_menu2(int skilltype, int* highlight)
     for (i = top_visible; i < visible_count && i < top_visible + list_rows; i++)
     {
         int display_row = list_first_row + (i - top_visible);
+        int entry_skilltype = visible_skilltypes[i];
+        int entry_menu_id = visible_menu_ids[i];
 
         b_ptr = visible_entries[i];
         attr = visible_attrs[i];
 
-        if ((skilltype == S_PER) && (b_ptr->abilitynum == PER_BANE)
+        if ((entry_skilltype == S_PER) && (b_ptr->abilitynum == PER_BANE)
             && (p_ptr->bane_type > 0))
         {
             char name_buf[80];
@@ -3986,7 +4238,7 @@ int abilities_menu2(int skilltype, int* highlight)
                 bane_name[p_ptr->bane_type], (b_name + b_ptr->name));
             indexed_menu_entry_label(buf, sizeof(buf), i, name_buf);
         }
-        else if ((skilltype == S_WIL) && (b_ptr->abilitynum == WIL_OATH)
+        else if ((entry_skilltype == S_WIL) && (b_ptr->abilitynum == WIL_OATH)
             && (p_ptr->oath_type > 0))
         {
             char name_buf[80];
@@ -4004,7 +4256,7 @@ int abilities_menu2(int skilltype, int* highlight)
             indexed_menu_prefix_col(ability_col), display_row,
             ability_menu_click_width(ability_col, desc_col, buf));
 
-        if (*highlight == b_ptr->abilitynum + 1)
+        if (*highlight == entry_menu_id + 1)
         {
             /* Highlight the label with bright blue */
             indexed_menu_focus_prefix(buf, sizeof(buf), i);
@@ -4024,7 +4276,7 @@ int abilities_menu2(int skilltype, int* highlight)
                 char* description_text = NULL;
                 bool use_death_message = false;
                 
-                if (skilltype == S_SPC && 
+                if (entry_skilltype == S_SPC &&
                     (b_ptr->abilitynum == SPC_OATH_MERCY || 
                      b_ptr->abilitynum == SPC_OATH_SILENCE || 
                      b_ptr->abilitynum == SPC_OATH_IRON ||
@@ -4088,21 +4340,21 @@ int abilities_menu2(int skilltype, int* highlight)
                     case 1: /* Effect first, then description */
                         if (has_effect) {
                             text_out_to_screen(TERM_L_WHITE, effect_text);
-                            if (skilltype == S_SNG)
+                            if (entry_skilltype == S_SNG)
                             {
                                 ability_menu_render_song_bonus_block(b_ptr);
                                 song_bonus_rendered = true;
                             }
                         }
-                        if (!p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+                        if (!p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum])
                         {
                             if (has_effect) text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            ability_menu_render_prerequisites_block(skilltype,
+                            ability_menu_render_prerequisites_block(entry_skilltype,
                                 b_ptr, desc_col);
                         }
                         if (has_desc) {
                             if (has_effect
-                                || !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+                                || !p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum])
                                 text_out_to_screen(TERM_L_WHITE, desc_sep);
                             text_out_to_screen(TERM_SLATE, desc_text);
                         }
@@ -4110,7 +4362,7 @@ int abilities_menu2(int skilltype, int* highlight)
                     case 2: /* Effect only */
                         if (has_effect) {
                             text_out_to_screen(TERM_L_WHITE, effect_text);
-                            if (skilltype == S_SNG)
+                            if (entry_skilltype == S_SNG)
                             {
                                 ability_menu_render_song_bonus_block(b_ptr);
                                 song_bonus_rendered = true;
@@ -4119,11 +4371,11 @@ int abilities_menu2(int skilltype, int* highlight)
                         else if (has_desc) {
                             text_out_to_screen(TERM_L_WHITE, desc_text);
                         }
-                        if (!p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+                        if (!p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum])
                         {
                             if (has_effect || has_desc)
                                 text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            ability_menu_render_prerequisites_block(skilltype,
+                            ability_menu_render_prerequisites_block(entry_skilltype,
                                 b_ptr, desc_col);
                         }
                         break;
@@ -4134,27 +4386,27 @@ int abilities_menu2(int skilltype, int* highlight)
                         if (has_effect) {
                             if (has_desc) text_out_to_screen(TERM_L_WHITE, desc_sep);
                             text_out_to_screen(TERM_L_WHITE, effect_text);
-                            if (skilltype == S_SNG)
+                            if (entry_skilltype == S_SNG)
                             {
                                 ability_menu_render_song_bonus_block(b_ptr);
                                 song_bonus_rendered = true;
                             }
                         }
-                        if (!p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+                        if (!p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum])
                         {
                             if (has_desc || has_effect)
                                 text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            ability_menu_render_prerequisites_block(skilltype,
+                            ability_menu_render_prerequisites_block(entry_skilltype,
                                 b_ptr, desc_col);
                         }
                         break;
                     }
 
-                    if (skilltype == S_SNG && !song_bonus_rendered)
+                    if (entry_skilltype == S_SNG && !song_bonus_rendered)
                         ability_menu_render_song_bonus_block(b_ptr);
 
                     /* For Nienna's Gift of Mercy, show current bonus */
-                    if (skilltype == S_SPC && b_ptr->abilitynum == SPC_NIENA_MERCY && 
+                    if (entry_skilltype == S_SPC && b_ptr->abilitynum == SPC_NIENA_MERCY &&
                         p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY])
                     {
                         /* Calculate current stealth bonus (same logic as in xtra1.c) */
@@ -4192,7 +4444,7 @@ int abilities_menu2(int skilltype, int* highlight)
                         }
                     }
 
-                    if ((skilltype == S_EVN)
+                    if ((entry_skilltype == S_EVN)
                         && (b_ptr->abilitynum == EVN_HEAVY_ARMOUR))
                     {
                         const int armour_weight = heavy_armour_desc_current_weight();
@@ -4200,7 +4452,7 @@ int abilities_menu2(int skilltype, int* highlight)
                         const int evasion_bonus =
                             heavy_armour_desc_current_evasion_bonus();
                         const bool learned =
-                            p_ptr->have_ability[skilltype][b_ptr->abilitynum];
+                            p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum];
                         char bonus_text[160];
 
                         strnfmt(bonus_text, sizeof(bonus_text),
@@ -4226,8 +4478,8 @@ int abilities_menu2(int skilltype, int* highlight)
             }
 
             // if you have the ability and it is Bane...
-            if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
-                && (skilltype == S_PER) && (b_ptr->abilitynum == PER_BANE)
+            if (p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum]
+                && (entry_skilltype == S_PER) && (b_ptr->abilitynum == PER_BANE)
                 && (p_ptr->bane_type > 0))
             {
                 int killed = bane_type_killed(p_ptr->bane_type);
@@ -4257,8 +4509,8 @@ int abilities_menu2(int skilltype, int* highlight)
                         format("  (next bonus at %d slain)", next_threshold));
                 }
             }
-            else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
-                && (skilltype == S_WIL) && (b_ptr->abilitynum == WIL_OATH)
+            else if (p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum]
+                && (entry_skilltype == S_WIL) && (b_ptr->abilitynum == WIL_OATH)
                 && (p_ptr->oath_type > 0))
             {
                 /* Place oath info dynamically after description text */
@@ -4289,8 +4541,8 @@ int abilities_menu2(int skilltype, int* highlight)
                         format("Bonus: %s.", oath_reward_short(p_ptr->oath_type)));
             }
             // if you have the unique bane special ability
-            else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
-                && (skilltype == S_SPC) && (b_ptr->abilitynum == SPC_UNIQUE_BANE))
+            else if (p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum]
+                && (entry_skilltype == S_SPC) && (b_ptr->abilitynum == SPC_UNIQUE_BANE))
             {
                 int uniques_killed = unique_bane_type_killed();
                 int current_bonus = 0;
@@ -4356,10 +4608,11 @@ int abilities_menu2(int skilltype, int* highlight)
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
                     return (0);
-                return (ABILITIES_MAX + 2);
+                return (ABILITY_MENU_RETURN_TO_GAME);
             }
             else if (clicked_choice >= ABILITY_MENU_CLICK_SKILL_BASE
-                && clicked_choice < ABILITY_MENU_CLICK_SKILL_BASE + S_MAX)
+                && clicked_choice < ABILITY_MENU_CLICK_SKILL_BASE
+                    + ability_menu_skill_options())
             {
                 int clicked_skill = clicked_choice - ABILITY_MENU_CLICK_SKILL_BASE;
                 int skill_options = ability_menu_skill_options();
@@ -4375,10 +4628,21 @@ int abilities_menu2(int skilltype, int* highlight)
 
                 if (selected_index >= 0 && selected_index < visible_count)
                 {
-                    *highlight = visible_abilities[selected_index] + 1;
-                    if (click_action != UI_MENU_CLICK_HOVER)
-                        return (*highlight);
-                    return (0);
+                    *highlight = visible_menu_ids[selected_index] + 1;
+
+                    if (click_action == UI_MENU_CLICK_HOVER
+                        || !ability_menu_entry_can_activate(
+                            visible_skilltypes[selected_index],
+                            visible_abilities[selected_index]))
+                    {
+                        return (0);
+                    }
+
+                    ability_menu_selected_skilltype =
+                        visible_skilltypes[selected_index];
+                    ability_menu_selected_abilitynum =
+                        visible_abilities[selected_index];
+                    return (*highlight);
                 }
             }
         }
@@ -4389,7 +4653,7 @@ int abilities_menu2(int skilltype, int* highlight)
         int selected_index = (int)ch - 'a';
         /* Bounds check for safety */
         if (selected_index >= 0 && selected_index < visible_count) {
-            *highlight = visible_abilities[selected_index] + 1;
+            *highlight = visible_menu_ids[selected_index] + 1;
             return abilities_menu2(skilltype, highlight);
         }
     }
@@ -4399,7 +4663,7 @@ int abilities_menu2(int skilltype, int* highlight)
         int selected_index = (int)ch - 'A';
         /* Bounds check for safety */
         if (selected_index >= 0 && selected_index < visible_count) {
-            *highlight = visible_abilities[selected_index] + 1;
+            *highlight = visible_menu_ids[selected_index] + 1;
             return abilities_menu2(skilltype, highlight);
         }
     }
@@ -4407,23 +4671,43 @@ int abilities_menu2(int skilltype, int* highlight)
     if ((ch == ESCAPE) || (ch == 'q') || (ch == '4')
         || (steamdeck && ch == steamdeck_back_key()))
     {
-        return (ABILITIES_MAX + 1);
+        return (ABILITY_MENU_RETURN_TO_SKILLS);
     }
 
     if (ch == '\t')
     {
-        return (ABILITIES_MAX + 2);
+        return (ABILITY_MENU_RETURN_TO_GAME);
     }
 
     if (ch == 'i')
     {
-        return (ABILITIES_MAX + 3);
+        return (ABILITY_MENU_GAIN_SKILLS);
     }
 
     /* Choose current  */
     if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6')
         || (steamdeck && ch == steamdeck_confirm_key()))
     {
+        bool can_activate = false;
+
+        for (i = 0; i < visible_count; i++)
+        {
+            if (visible_menu_ids[i] + 1 == *highlight)
+            {
+                can_activate = ability_menu_entry_can_activate(
+                    visible_skilltypes[i], visible_abilities[i]);
+                if (can_activate)
+                {
+                    ability_menu_selected_skilltype = visible_skilltypes[i];
+                    ability_menu_selected_abilitynum = visible_abilities[i];
+                }
+                break;
+            }
+        }
+
+        if (!can_activate)
+            return (0);
+
         return (*highlight);
     }
 
@@ -4435,7 +4719,7 @@ int abilities_menu2(int skilltype, int* highlight)
             /* Find current visible index */
             int current_visible_index = -1;
             for (int i = 0; i < visible_count; i++) {
-                if (visible_abilities[i] + 1 == *highlight) {
+                if (visible_menu_ids[i] + 1 == *highlight) {
                     current_visible_index = i;
                     break;
                 }
@@ -4443,12 +4727,12 @@ int abilities_menu2(int skilltype, int* highlight)
             
             /* Move to previous visible ability */
             if (current_visible_index > 0) {
-                *highlight = visible_abilities[current_visible_index - 1] + 1;
+                *highlight = visible_menu_ids[current_visible_index - 1] + 1;
             } else if (current_visible_index == 0) {
-                *highlight = visible_abilities[visible_count - 1] + 1;
+                *highlight = visible_menu_ids[visible_count - 1] + 1;
             } else {
                 /* Fallback if not found - go to first visible */
-                *highlight = visible_abilities[0] + 1;
+                *highlight = visible_menu_ids[0] + 1;
             }
         }
     }
@@ -4461,7 +4745,7 @@ int abilities_menu2(int skilltype, int* highlight)
             /* Find current visible index */
             int current_visible_index = -1;
             for (int i = 0; i < visible_count; i++) {
-                if (visible_abilities[i] + 1 == *highlight) {
+                if (visible_menu_ids[i] + 1 == *highlight) {
                     current_visible_index = i;
                     break;
                 }
@@ -4469,12 +4753,12 @@ int abilities_menu2(int skilltype, int* highlight)
             
             /* Move to next visible ability */
             if (current_visible_index >= 0 && current_visible_index < visible_count - 1) {
-                *highlight = visible_abilities[current_visible_index + 1] + 1;
+                *highlight = visible_menu_ids[current_visible_index + 1] + 1;
             } else if (current_visible_index == visible_count - 1) {
-                *highlight = visible_abilities[0] + 1;
+                *highlight = visible_menu_ids[0] + 1;
             } else {
                 /* Fallback if not found - go to first visible */
-                *highlight = visible_abilities[0] + 1;
+                *highlight = visible_menu_ids[0] + 1;
             }
         }
     }
@@ -4532,7 +4816,7 @@ void do_cmd_ability_screen(void)
             menu1_choice = abilities_menu1(&highlight1);
         }
 
-        if (menu1_choice == (S_MAX + 2))
+        if (menu1_choice == ABILITY_MENU_GAIN_SKILLS)
         {
             log_trace("ABILITY_SCREEN: in-menu skill increase requested (menu1)");
             (void)gain_skills();
@@ -4542,12 +4826,26 @@ void do_cmd_ability_screen(void)
             continue;
         }
 
-        skilltype = menu1_choice - 1;
+        if (menu1_choice == ABILITY_MENU_RETURN_TO_GAME)
+            break;
+
+        {
+            int skill_options = ability_menu_skill_options();
+            int option_index = menu1_choice - 1;
+
+            skilltype =
+                ability_menu_skilltype_from_option(option_index, skill_options);
+            if (skilltype < 0)
+                continue;
+
+            highlight1 = option_index + 1;
+        }
 
         log_trace("ABILITY_SCREEN: abilities_menu1 returned skilltype=%d", skilltype);
 
         // if a skill has been selected...
-        if ((skilltype >= 0) && (skilltype < S_MAX))
+        if ((skilltype >= 0) && ((skilltype < S_MAX)
+            || (skilltype == ABILITY_MENU_SKILL_LORE)))
         {
             log_trace("ABILITY_SCREEN: Valid skill selected (%d), entering abilities loop", skilltype);
             
@@ -4562,15 +4860,24 @@ void do_cmd_ability_screen(void)
                 menu2_choice = abilities_menu2(skilltype, &highlight2);
 
                 if (menu2_choice >= ABILITY_MENU_SWITCH_SKILL_BASE
-                    && menu2_choice < ABILITY_MENU_SWITCH_SKILL_BASE + S_MAX)
+                    && menu2_choice < ABILITY_MENU_SWITCH_SKILL_BASE
+                        + ability_menu_skill_options())
                 {
-                    skilltype = menu2_choice - ABILITY_MENU_SWITCH_SKILL_BASE;
-                    highlight1 = skilltype + 1;
+                    int option_index =
+                        menu2_choice - ABILITY_MENU_SWITCH_SKILL_BASE;
+                    int next_skilltype = ability_menu_skilltype_from_option(
+                        option_index, ability_menu_skill_options());
+
+                    if (next_skilltype < 0)
+                        continue;
+
+                    skilltype = next_skilltype;
+                    highlight1 = option_index + 1;
                     highlight2 = 1;
                     continue;
                 }
 
-                if (menu2_choice == (ABILITIES_MAX + 3))
+                if (menu2_choice == ABILITY_MENU_GAIN_SKILLS)
                 {
                     log_trace("ABILITY_SCREEN: in-menu skill increase requested (menu2)");
                     (void)gain_skills();
@@ -4580,37 +4887,78 @@ void do_cmd_ability_screen(void)
                     continue;
                 }
 
-                abilitynum = menu2_choice - 1;
-
-                log_trace("ABILITY_SCREEN: abilities_menu2 returned abilitynum=%d", abilitynum);
-
-                if ((abilitynum >= 0) && (abilitynum < ABILITIES_MAX))
+                if (menu2_choice == ABILITY_MENU_RETURN_TO_SKILLS)
                 {
-                    if (!p_ptr->have_ability[skilltype][abilitynum])
+                    return_to_skills = true;
+                    continue;
+                }
+
+                if (menu2_choice == ABILITY_MENU_RETURN_TO_GAME)
+                {
+                    return_to_skills = true;
+                    return_to_game = true;
+                    continue;
+                }
+
+                if (menu2_choice == 0)
+                    continue;
+
+                abilitynum = ability_menu_selected_abilitynum;
+                {
+                    int ability_skilltype = ability_menu_selected_skilltype;
+
+                    if (ability_skilltype < 0 || abilitynum < 0)
+                    {
+                        ability_skilltype = skilltype;
+                        abilitynum = menu2_choice - 1;
+                    }
+
+                    log_trace("ABILITY_SCREEN: abilities_menu2 returned skilltype=%d abilitynum=%d",
+                        ability_skilltype, abilitynum);
+
+                if ((ability_skilltype >= 0) && (ability_skilltype < S_MAX)
+                    && (abilitynum >= 0) && (abilitynum < ABILITIES_MAX))
+                {
+                    if (!p_ptr->have_ability[ability_skilltype][abilitynum])
                     {
                         // Special abilities cannot be purchased
-                        if (skilltype == S_SPC) {
+                        if (ability_skilltype == S_SPC) {
                             bell("This special ability cannot be purchased.");
                             continue;
                         }
-                        ability_type* b_ptr = &b_info[ability_index(skilltype, abilitynum)];
+                        ability_type* b_ptr = &b_info[ability_index(ability_skilltype, abilitynum)];
                         bool has_stat_skill_prereq = ability_requirements_met(b_ptr);
                         bool has_ability_prereq = prereq_abilities_met(b_ptr);
 
                         if (has_stat_skill_prereq && has_ability_prereq)
                         {
-                            int exp_cost = ability_purchase_exp_cost(skilltype);
+                            bool uses_knowledge =
+                                ability_uses_knowledge_points(ability_skilltype,
+                                    abilitynum);
+                            int exp_cost = uses_knowledge
+                                ? 0
+                                : ability_purchase_exp_cost(ability_skilltype);
+                            int knowledge_cost = ability_purchase_knowledge_cost(
+                                ability_skilltype, abilitynum);
 
-                            if (exp_cost > p_ptr->new_exp)
+                            if (knowledge_cost > p_ptr->knowledge_points)
                             {
-                                bell("You do not have enough experience to "
-                                     "acquire this "
-                                     "ability.");
+                                ability_menu_show_error(
+                                    "You do not have enough knowledge to "
+                                    "acquire this ability.");
+                                continue;
+                            }
+                            else if (exp_cost > p_ptr->new_exp)
+                            {
+                                ability_menu_show_error(
+                                    "You do not have enough experience to "
+                                    "acquire this ability.");
+                                continue;
                             }
                             else
                             {
                                 // special menu for bane
-                                if ((skilltype == S_PER)
+                                if ((ability_skilltype == S_PER)
                                     && (abilitynum == PER_BANE))
                                 {
                                     while (!return_to_abilities)
@@ -4647,7 +4995,7 @@ void do_cmd_ability_screen(void)
                                     return_to_abilities = false;
                                 }
                                 // special menu for Oath //XXX Oaths
-                                if ((skilltype == S_WIL)
+                                if ((ability_skilltype == S_WIL)
                                     && (abilitynum == WIL_OATH))
                                 {
                                     while (!return_to_abilities)
@@ -4684,28 +5032,38 @@ void do_cmd_ability_screen(void)
                                 }
 
                                 // Block purchasing Masterpiece if Aule's Forge already owned
-                                if (skilltype == S_SMT && abilitynum == SMT_MASTERPIECE && p_ptr->have_ability[S_SPC][SPC_AULE]) {
+                                if (ability_skilltype == S_SMT && abilitynum == SMT_MASTERPIECE && p_ptr->have_ability[S_SPC][SPC_AULE]) {
                                     bell("Aule's Forge supersedes Masterpiece; you cannot purchase it.");
                                     skip_purchase = true;
                                 }
 
                                 if (!skip_purchase)
                                 {
-                                    if (get_check("Gain this ability? "))
+                                    bool confirmed_purchase;
+
+                                    ui_menu_click_clear();
+                                    confirmed_purchase =
+                                        get_check("Gain this ability? ");
+                                    ui_menu_click_clear();
+
+                                    if (confirmed_purchase)
                                     {
-                                        p_ptr->innate_ability[skilltype]
+                                        p_ptr->innate_ability[ability_skilltype]
                                                              [abilitynum]
                                             = true;
-                                        p_ptr->have_ability[skilltype]
+                                        p_ptr->have_ability[ability_skilltype]
                                                            [abilitynum]
                                             = true;
-                                        p_ptr->active_ability[skilltype]
+                                        p_ptr->active_ability[ability_skilltype]
                                                              [abilitynum]
                                             = true;
-                                        ability_log_record_gain(skilltype, abilitynum);
+                                        ability_log_record_gain(ability_skilltype, abilitynum);
                                         Term_putstr(0, 0, -1, TERM_WHITE,
                                             "Ability gained.");
                                         p_ptr->new_exp -= exp_cost;
+                                        p_ptr->knowledge_points -= knowledge_cost;
+                                        if (p_ptr->knowledge_points < 0)
+                                            p_ptr->knowledge_points = 0;
 
                                         if (banechoice <= 0 && oathchoice <= 0)
                                         {
@@ -4714,7 +5072,7 @@ void do_cmd_ability_screen(void)
                                                 format("(%s)",
                                                     b_name
                                                         + (&b_info[ability_index(
-                                                               skilltype,
+                                                               ability_skilltype,
                                                                abilitynum)])
                                                               ->name),
                                                 p_ptr->depth);
@@ -4730,7 +5088,7 @@ void do_cmd_ability_screen(void)
                                                     bane_name[banechoice],
                                                     b_name
                                                         + (&b_info[ability_index(
-                                                               skilltype,
+                                                               ability_skilltype,
                                                                abilitynum)])
                                                               ->name),
                                                 p_ptr->depth);
@@ -4762,7 +5120,7 @@ void do_cmd_ability_screen(void)
                                                 format("(%s: %s)",
                                                     b_name
                                                         + (&b_info[ability_index(
-                                                               skilltype,
+                                                               ability_skilltype,
                                                                abilitynum)])
                                                               ->name,
                                                     oath_name_short(oathchoice)),
@@ -4775,6 +5133,10 @@ void do_cmd_ability_screen(void)
                                         /* Recalculate bonuses */
                                         p_ptr->update |= (PU_BONUS);
                                         p_ptr->update |= (PU_MANA);
+                                    }
+                                    else
+                                    {
+                                        flush();
                                     }
                                 }
                                 skip_purchase = false;
@@ -4795,7 +5157,7 @@ void do_cmd_ability_screen(void)
                     else
                     {
                         // Prevent oath special abilities from being deactivated or reactivated when broken
-                        if (skilltype == S_SPC && (abilitynum == SPC_OATH_MERCY || 
+                        if (ability_skilltype == S_SPC && (abilitynum == SPC_OATH_MERCY ||
                                                    abilitynum == SPC_OATH_SILENCE || 
                                                    abilitynum == SPC_OATH_IRON ||
                                                    abilitynum == SPC_OATH_SMITH ||
@@ -4811,7 +5173,7 @@ void do_cmd_ability_screen(void)
                             if (abilitynum == SPC_OATH_VALOROUS && oath_invalid(OATH_VALOROUS)) oath_broken = true;
                             if (abilitynum == SPC_OATH_LIGHT && oath_invalid(OATH_LIGHT)) oath_broken = true;
                             
-                            if (p_ptr->active_ability[skilltype][abilitynum])
+                            if (p_ptr->active_ability[ability_skilltype][abilitynum])
                             {
                                 Term_putstr(0, 0, -1, TERM_WHITE,
                                     "Sacred oaths cannot be deactivated once sworn.");
@@ -4823,7 +5185,7 @@ void do_cmd_ability_screen(void)
                             }
                             else
                             {
-                                p_ptr->active_ability[skilltype][abilitynum] = true;
+                                p_ptr->active_ability[ability_skilltype][abilitynum] = true;
                                 Term_putstr(0, 0, -1, TERM_WHITE,
                                     "Oath ability reactivated.");
                             }
@@ -4831,15 +5193,15 @@ void do_cmd_ability_screen(void)
                         else
                         {
                             // toggle its activity for non-oath abilities
-                            if (p_ptr->active_ability[skilltype][abilitynum])
+                            if (p_ptr->active_ability[ability_skilltype][abilitynum])
                             {
-                                p_ptr->active_ability[skilltype][abilitynum]
+                                p_ptr->active_ability[ability_skilltype][abilitynum]
                                     = false;
                                 Term_putstr(0, 0, -1, TERM_WHITE,
                                     "Ability now switched off.");
 
                                 // need to cancel second song in some cases
-                                if ((skilltype == S_SNG)
+                                if ((ability_skilltype == S_SNG)
                                     && (abilitynum == SNG_WOVEN_THEMES))
                                 {
                                     p_ptr->song2 = SNG_NOTHING;
@@ -4847,7 +5209,7 @@ void do_cmd_ability_screen(void)
                             }
                             else
                             {
-                                p_ptr->active_ability[skilltype][abilitynum] = true;
+                                p_ptr->active_ability[ability_skilltype][abilitynum] = true;
                                 Term_putstr(0, 0, -1, TERM_WHITE,
                                     "Ability now switched on. ");
                             }
@@ -4875,6 +5237,7 @@ void do_cmd_ability_screen(void)
             // reset some things for the next time around
             highlight2 = 1;
             return_to_skills = false;
+        }
         }
         else if (skilltype >= S_MAX)
         {

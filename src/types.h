@@ -280,8 +280,12 @@ struct ability_type
     byte abilitynum; /* Ability number within a skill */
 
     byte level; /* Legacy/default prerequisite skill level */
-    byte stat_req[A_MAX]; /* Minimum intrinsic stat levels */
-    byte skill_req[S_MAX]; /* Minimum base skill levels */
+    byte stat_req[A_MAX]; /* Minimum equipment-adjusted stat levels */
+    byte skill_req[S_MAX]; /* Minimum equipment-adjusted skill levels */
+    byte knowledge_cost; /* Knowledge point cost; 0 means experience cost */
+    byte score_weights_set; /* Whether S: score weights override defaults */
+    s16b stat_score_weight[A_MAX]; /* Ability score stat weights, 100 = x1 */
+    s16b skill_score_weight[S_MAX]; /* Ability score skill weights, 100 = x1 */
     byte prereqs; /* Number of prerequisite abilities */
     byte prereq_skilltype[4]; /* Skill type (for prerequisites) */
     byte prereq_abilitynum[4]; /* The ability within that skill (for
@@ -1112,6 +1116,8 @@ struct player_type
     s32b kill_exp; /* Total experience from killing monsters */
     s32b descent_exp; /* Total experience from descending to new levels */
     s32b ident_exp; /* Total experience from identifying objects */
+    s16b lore; /* Lore stat: improves identification and knowledge costs */
+    s32b knowledge_points; /* Knowledge currency for lore abilities */
     byte discovery_lore_flags; /* Run-wide discovery XP awards already claimed */
 
     s16b mhp; /* Max hit pts */

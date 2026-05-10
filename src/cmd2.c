@@ -172,7 +172,8 @@ static int min_depth_timer_item_bonus_units(void)
             units += equipped ? MIN_DEPTH_ITEM_BONUS_DEEP_CALL_EQUIPPED
                               : MIN_DEPTH_ITEM_BONUS_DEEP_CALL_INVENTORY;
         /* Count the item grant itself, even if the player disables the ability. */
-        if (equipped && object_grants_ability(o_ptr, S_STL, STL_CRUEL_BLOW))
+        if (equipped && object_grants_usable_ability(o_ptr, S_STL,
+                STL_CRUEL_BLOW))
             units += MIN_DEPTH_ITEM_BONUS_CRUEL_BLOW_EQUIPPED;
         if (f3 & TR3_PERMA_CURSE)
             units += MIN_DEPTH_ITEM_BONUS_PERMA_CURSE;
@@ -11012,9 +11013,9 @@ void do_cmd_throw(bool automatic)
     missile_char = object_char(i_ptr);
     treat_as_throwing = player_can_treat_as_throwing_flags(i_ptr, f3);
     has_throwing_ability = p_ptr->active_ability[S_MEL][MEL_THROWING]
-        || object_grants_ability(i_ptr, S_MEL, MEL_THROWING);
+        || object_grants_usable_ability(i_ptr, S_MEL, MEL_THROWING);
     has_impale_ability = (p_ptr->active_ability[S_MEL][MEL_IMPALE]
-        || object_grants_ability(i_ptr, S_MEL, MEL_IMPALE))
+        || object_grants_usable_ability(i_ptr, S_MEL, MEL_IMPALE))
         && weapon_is_impale_eligible(i_ptr);
     remaining_impale_targets = has_impale_ability ? 1 : 0;
 

@@ -1196,7 +1196,7 @@ int crit_bonus(int hit_result, int weight, const monster_race* r_ptr,
 
         if ((skill_type == S_MEL) && thrown && o_ptr
             && (p_ptr->active_ability[S_MEL][MEL_THROWING]
-                || object_grants_ability(o_ptr, S_MEL, MEL_THROWING))
+                || object_grants_usable_ability(o_ptr, S_MEL, MEL_THROWING))
             && player_can_treat_as_throwing(o_ptr))
         {
             crit_seperation -= 10;

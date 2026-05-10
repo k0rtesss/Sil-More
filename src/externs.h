@@ -1730,7 +1730,12 @@ extern bool weapon_glows(const object_type* o_ptr);
 extern byte object_display_color(const object_type* o_ptr, byte base_color);
 extern void calc_torch(void);
 extern int song_effective_skill(int song);
+extern int ability_score(int skilltype, int abilitynum);
+extern bool ability_requirements_currently_met(int skilltype, int abilitynum);
 extern int ability_bonus(int skilltype, int abilitynum);
+extern bool ability_requirement_is_suspended(int skilltype, int abilitynum);
+extern bool object_grants_usable_ability(const object_type* o_ptr,
+    int skilltype, int abilitynum);
 extern int affinity_level(int skilltype);
 extern int minstrel_level(void);
 
@@ -1775,6 +1780,7 @@ extern void check_experience(void);
 extern void gain_skills_set_initial_skill(int skill);
 extern s32b adjusted_mon_exp(const monster_race* r_ptr, bool kill);
 extern void gain_exp(s32b amount);
+extern void gain_knowledge_points(s32b amount, cptr reason);
 extern void lose_exp(s32b amount);
 extern bool random_stair_location(int* sy, int* sx);
 extern void break_truce(bool obvious);

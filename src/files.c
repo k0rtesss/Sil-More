@@ -1770,6 +1770,10 @@ void display_player_xtra_info(int mode)
                      cur, 5, TERM_L_GREEN,
                      '/', rhs, 6, TERM_L_GREEN);
 
+    strnfmt(cur, sizeof(cur), "%ld", (long)p_ptr->knowledge_points);
+    put_single20_right(col_stats, row_stats++,
+                     "Know", cur, 12, TERM_L_GREEN);
+
     /* Burden: cur/max in pounds with tenths */
     {
         long cur_b = (long)p_ptr->total_weight;
@@ -3230,6 +3234,16 @@ void display_character_tutorial(void)
                 else if (stat == A_GRA) desc = "Grace: will/perception/song/smithing and voice.";
                 row += tutorial_put_wrapped_limited(desc, text_col, row, text_w, content_max_row, TERM_SLATE);
             }
+
+            if (row < content_max_row)
+            {
+                char line[96];
+                strnfmt(line, sizeof(line), "Lore: %d", p_ptr->lore);
+                Term_putstr(2, row++, -1, TERM_WHITE, line);
+                row += tutorial_put_wrapped_limited(
+                    "Lore: identification insight and reduced knowledge costs.",
+                    text_col, row, text_w, content_max_row, TERM_SLATE);
+            }
         }
         else if (page >= page_skills_start && page < page_skills_start + skill_pages)
         {
@@ -3705,6 +3719,10 @@ static int display_player_compact_summary_block(int row_start)
                  cur, 5, TERM_L_GREEN,
                  '/', rhs, 6, TERM_L_GREEN);
 
+        strnfmt(cur, sizeof(cur), "%ld", (long)p_ptr->knowledge_points);
+        put_single20_right(col, row++,
+                 "Know", cur, 12, TERM_L_GREEN);
+
         /* Burden */
         {
             long cur_b = (long)p_ptr->total_weight;
@@ -3831,6 +3849,10 @@ static int display_player_compact_summary_block(int row_start)
                      "Exp",
                      cur, 5, TERM_L_GREEN,
                      '/', rhs, 6, TERM_L_GREEN);
+
+    strnfmt(cur, sizeof(cur), "%ld", (long)p_ptr->knowledge_points);
+    put_single20_right(col_r, row_r++,
+                     "Know", cur, 12, TERM_L_GREEN);
 
     /* Burden (right) */
     {
@@ -4045,12 +4067,15 @@ static int display_player_compact_trait_max_label_chars(void)
     return max_chars;
 }
 
+#define COMPACT_ATTRIBUTE_ROWS (A_MAX + 1)
+#define COMPACT_ATTRIBUTE_LORE A_MAX
+
 static bool display_player_compact_can_embed_traits(int row_start)
 {
     int wid = 80;
     int hgt = 24;
     int skills_count = 0;
-    int attr_block_h = 1 + A_MAX;
+    int attr_block_h = 1 + COMPACT_ATTRIBUTE_ROWS;
     int skill_block_h;
     int trait_lines;
     int trait_block_h;
@@ -4519,11 +4544,13 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
     if (max_cols < 10)
         return;
 
-    if (stat < 0 || stat >= A_MAX)
+    if (stat < 0 || stat >= COMPACT_ATTRIBUTE_ROWS)
         return;
 
-    int use = p_ptr->stat_use[stat];
-    int base = p_ptr->stat_base[stat];
+    int use = (stat == COMPACT_ATTRIBUTE_LORE) ? p_ptr->lore
+                                               : p_ptr->stat_use[stat];
+    int base = (stat == COMPACT_ATTRIBUTE_LORE) ? p_ptr->lore
+                                                : p_ptr->stat_base[stat];
     int mod = use - base;
 
     int val_w = 10;
@@ -4554,7 +4581,10 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
     Term_erase(col, row, label_w);
     Term_erase(val_start, row, val_w);
 
-    const char* stat_label = (p_ptr->stat_drain[stat] < 0) ? stat_names_reduced[stat] : stat_names[stat];
+    const char* stat_label = (stat == COMPACT_ATTRIBUTE_LORE)
+        ? "Lore"
+        : ((p_ptr->stat_drain[stat] < 0) ? stat_names_reduced[stat]
+                                         : stat_names[stat]);
     char label_buf[32];
     SDL_strlcpy(label_buf, stat_label ? stat_label : "", sizeof(label_buf));
     int len = (int)strlen(label_buf);
@@ -4598,7 +4628,8 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
     if (out_col < val_start)
         out_col = val_start;
 
-    byte stat_color = (p_ptr->stat_drain[stat] < 0) ? TERM_YELLOW : TERM_L_GREEN;
+    byte stat_color = (stat != COMPACT_ATTRIBUTE_LORE
+        && p_ptr->stat_drain[stat] < 0) ? TERM_YELLOW : TERM_L_GREEN;
     byte value_attr = (stat == compact_stat_highlight) ? TERM_L_BLUE : stat_color;
     Term_putstr(out_col, row, val_len, value_attr, val_text);
 }
@@ -4621,7 +4652,7 @@ static void display_player_compact_attributes(int row_start, int max_cols)
     if (max_cols < 10)
         max_cols = 10;
 
-    for (int stat = 0; stat < A_MAX && row < hgt - 1; ++stat)
+    for (int stat = 0; stat < COMPACT_ATTRIBUTE_ROWS && row < hgt - 1; ++stat)
     {
         display_player_compact_attribute_line(row++, col, max_cols, stat);
     }
@@ -4731,7 +4762,7 @@ static void display_player_compact_attributes_and_skills(int row_start)
         if (s != S_SPC)
             skills_count++;
 
-    int attr_block_h = 1 + A_MAX;
+    int attr_block_h = 1 + COMPACT_ATTRIBUTE_ROWS;
     int skill_block_h = 1 + skills_count;
     int block_h = (attr_block_h > skill_block_h) ? attr_block_h : skill_block_h;
 
@@ -4785,7 +4816,7 @@ static void display_player_compact_attributes_and_skills(int row_start)
     }
 
     /* Stacked fallback: Skills below Attributes (may truncate if short). */
-    int row_skills = row_start + 1 + A_MAX
+    int row_skills = row_start + 1 + COMPACT_ATTRIBUTE_ROWS
         + (display_player_compact_tight_spacing() ? 0 : 1);
     if (row_skills < hgt - 1)
         display_player_compact_skills_list(row_skills);
@@ -4888,6 +4919,14 @@ void display_player_stat_info(int row, int col)
             sdl_story_font_disable();
         }
     }
+
+    if (story_character_enabled()) {
+        sdl_story_font_enable();
+    }
+    put_str("Lore", row + A_MAX, col);
+    if (story_character_enabled()) {
+        sdl_story_font_disable();
+    }
     
     /* Second: Display all numbers with monospace font (always) */
     for (i = 0; i < A_MAX; i++)
@@ -4942,6 +4981,9 @@ void display_player_stat_info(int row, int col)
             c_put_str(TERM_SLATE, buf, row + i, col + 21);
         }
     }
+
+    cnv_stat(p_ptr->lore, buf);
+    c_put_str(TERM_L_GREEN, buf, row + A_MAX, col + 5);
 
     /* Leave with story font disabled */
     sdl_story_font_disable();

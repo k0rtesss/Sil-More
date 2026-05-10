@@ -12,6 +12,8 @@
 # N: ability number : ability name
 # I: skill number : ability value : default own-skill level requirement
 # R: requirement name : level : requirement name : level : ...
+# K: knowledge point cost (uses knowledge instead of experience)
+# S: score source : weight : score source : weight : ...
 # P: prerequisite skill number / prerequisite ability value : ...
 # D: description (poetic/lore text)
 # E: effect (mechanical description)
@@ -23,9 +25,20 @@
 #     and the default own-skill level requirement for the ability. Use 0 if
 #     the ability has no own-skill requirement.
 #
-# 'R' adds or overrides stat/skill requirements. Names may be abbreviations
-#     or full names: STR, DEX, CON, GRA, MEL, ARC, EVN, STL, PER, WIL, SMT,
-#     SNG, SPC. Example: R:STR:2:PER:7:WIL:3:GRA:2
+# 'R' adds or overrides stat/skill requirements. Requirements are checked
+#     against equipment-adjusted values while abilities are used, so an ability
+#     can be enabled by gear and stop working when that gear is removed. Names
+#     may be abbreviations or full names: STR, DEX, CON, GRA, MEL, ARC, EVN,
+#     STL, PER, WIL, SMT, SNG, SPC. Example: R:STR:2:PER:7:WIL:3:GRA:2
+#
+# 'K' marks a Lore ability and sets its base knowledge point price. Lore
+#     reduces this price by its current value, to a minimum of 0.
+#
+# 'S' overrides the score used by score-driven ability effects. Names use the
+#     same tokens as 'R'. Skill tokens add that skill without its default stat
+#     modifier, so stat influence is controlled by explicit stat tokens. Weights
+#     are multipliers: 1 = full, 1/2 or 0.5 = half, 2 = double, 50% = half.
+#     Example: S:SNG:1:GRA:1:STL:1
 #
 # 'P' is the prerequisite abilities if any
 #
@@ -403,6 +416,7 @@ E:+1 Dexterity.
 
 N:80:Quick Study
 I:4:0:1
+K:2
 D:With the quick understanding of the loremasters of Gondolin, who gathered and preserved the accumulated wisdom of the Noldor within the Hidden City. Their voracious study of all arts and sciences allowed them to grasp new disciplines swiftly, drawing connections that others would miss.
 E:Take advanced abilities without prerequisites. Modest bonus to identifying items.
 T:40:0:99  # Amulet
@@ -435,6 +449,7 @@ T:40:0:99  # Amulet
 
 N:84:Alchemy
 I:4:4:5
+K:3
 D:Understanding the hidden properties of things as did the scholars of the Noldor in Tirion, who studied the nature of every herb and mineral beneath the light of Laurelin. Such knowledge reveals the purpose of elixirs and powders at a glance, and attunes the mind to the resonance of enchanted crystals.
 E:Auto-identify herbs, potions, staves, and horns. +50% range for Gems of Revelation, Foes, and Treasures.
 T:32:0:99  # Helm
@@ -488,6 +503,7 @@ T:34:0:99  # Shields
 
 N:101:Channeling
 I:5:1:2
+K:4
 D:Channeling power as the Maiar once aided the Eldar in Valinor, guiding the flow of enchantment through crafted vessels. Those who master this art understand the inner workings of staves and horns instinctively, and can draw forth their power without risk of the wild discharges that imperil the untrained.
 E:Auto-identify staves and horns. Channel charges safely without risk.
 T:32:0:99  # Helm
@@ -565,8 +581,9 @@ E:+1 Constitution.
 
 N:120:Weaponsmith
 I:6:0:2
+S:SMT:1:STR:1:DEX:1
 D:Forging weapons in the tradition of the great smiths of Nogrod, who crafted the legendary knife Angrist that Curufin bore, its edge keen enough to cut iron as if it were green wood. To know the making of a weapon is also to understand its nature at a glance.
-E:Create weapons at the forge. Modest bonus to identifying weapons.
+E:Create weapons at the forge. Score-based bonus to identifying weapons.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -579,8 +596,9 @@ T:31:0:99  # Gloves
 
 N:122:Jeweller
 I:6:2:4
+S:SMT:1:GRA:2:DEX:1/2
 D:Working gems and precious metals as the craftsmen of the Noldor fashioned the Nauglamir in the hidden workshops of Nargothrond. The jeweller's art encompasses not only rings and necklaces but also the shaping of crystals and light-bearing vessels, and one versed in this craft recognises such works at once.
-E:Create rings, amulets, horns, and light sources. Auto-identify them. Modest jewellery ID bonus.
+E:Create rings, amulets, horns, and light sources. Auto-identify them. Score-based jewellery ID bonus.
 T:31:0:99  # Gloves
 
 N:123:Enchantment
@@ -592,6 +610,7 @@ T:31:0:99  # Gloves
 
 N:124:Expertise
 I:6:4:6
+K:5
 P:6/3
 D:Attaining the effortless mastery of Curufin, most skilled of the sons of Feanor in the crafts of hand, who could shape metal with a speed and ease that seemed almost careless. Such expertise allows the smith to work without waste, achieving in moments what lesser craftsmen labor over for hours.
 E:Halve forging time. Negate all experience and stat costs of smithing.
@@ -671,8 +690,9 @@ T:21:3:3   # Quarterstaves
 
 N:144:Song of Silence
 I:7:4:3
+S:SNG:1:GRA:1:STL:1
 D:In hushed tones akin to Luthien's enchantment that cloaked her passage through the shadowed realms between Doriath and Angband. You weave a blanket of quiet about yourself, muffling all sounds within its reach, so that the ears of your enemies are confounded and the darkness itself seems to swallow their cries.
-E:Muffles sounds, making it harder for enemies to detect you or call for allies.
+E:Muffles sounds, making it harder for enemies to detect you or call for allies. Song score includes Stealth.
 T:40:0:99  # Amulet
 T:35:0:99  # Cloak
 T:36:2:2   # Robe

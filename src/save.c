@@ -926,8 +926,11 @@ static void wr_extra(void)
     {
         for (j = 0; j < ABILITIES_MAX; ++j)
         {
+            byte active = p_ptr->active_ability[i][j]
+                || ability_requirement_is_suspended(i, j);
+
             wr_byte(p_ptr->innate_ability[i][j]);
-            wr_byte(p_ptr->active_ability[i][j]);
+            wr_byte(active);
             wr_byte(p_ptr->have_ability[i][j]);
             
             /* Debug special abilities save */
@@ -1043,8 +1046,8 @@ static void wr_extra(void)
                 | SAVEFILE_MORGOTH_CALL_ESCALATION_MASK);
         wr_byte(morgoth_call_state);
     }
-    wr_byte(0);
-    wr_u32b(0L);
+    wr_byte((byte)MIN(MAX(p_ptr->lore, 0), 255));
+    wr_s32b(p_ptr->knowledge_points);
 
     /* Save item-quality squelch sub-menu */
     for (i = 0; i < SQUELCH_BYTES; i++)

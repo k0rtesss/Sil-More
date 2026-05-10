@@ -228,7 +228,7 @@ static int pointer_attack_throwing_display_attack(const object_type* o_ptr)
     attack += polearm_bonus(o_ptr);
 
     if (p_ptr->active_ability[S_MEL][MEL_THROWING]
-        || object_grants_ability(o_ptr, S_MEL, MEL_THROWING))
+        || object_grants_usable_ability(o_ptr, S_MEL, MEL_THROWING))
     {
         attack += 1;
     }
@@ -4927,9 +4927,271 @@ static int song_synergy_bonus(byte abilitynum, int full_skill)
     return synergy;
 }
 
+static int ability_score_apply_weight(int value, int weight)
+{
+    long scaled = (long)value * (long)weight;
+
+    if (scaled >= 0)
+        return (int)((scaled + 50L) / 100L);
+
+    return (int)(-((-scaled + 50L) / 100L));
+}
+
+static ability_type* ability_score_info(int skilltype, int abilitynum)
+{
+    ability_type* b_ptr;
+
+    if (!z_info || !b_info)
+        return NULL;
+    if (skilltype < 0 || skilltype >= S_MAX)
+        return NULL;
+    if (abilitynum < 0 || abilitynum >= ABILITIES_MAX)
+        return NULL;
+
+    b_ptr = &b_info[ability_index(skilltype, abilitynum)];
+    if (!b_ptr->name || b_ptr->skilltype != skilltype
+        || b_ptr->abilitynum != abilitynum)
+    {
+        return NULL;
+    }
+
+    return b_ptr;
+}
+
+static bool ability_score_has_custom_weights(int skilltype, int abilitynum)
+{
+    ability_type* b_ptr = ability_score_info(skilltype, abilitynum);
+
+    return b_ptr && b_ptr->score_weights_set;
+}
+
+static byte ability_requirement_suspended[S_MAX][ABILITIES_MAX];
+
+static int ability_requirement_current_stat_value(int stat)
+{
+    if (!p_ptr || stat < 0 || stat >= A_MAX)
+        return 0;
+
+    return p_ptr->stat_base[stat] + p_ptr->stat_drain[stat]
+        + p_ptr->stat_equip_mod[stat];
+}
+
+static int ability_requirement_current_skill_value(int skill)
+{
+    if (!p_ptr || skill < 0 || skill >= S_MAX)
+        return 0;
+
+    return p_ptr->skill_base[skill] + p_ptr->skill_equip_mod[skill];
+}
+
+static bool ability_has_runtime_requirements(const ability_type* b_ptr)
+{
+    int i;
+
+    if (!b_ptr)
+        return false;
+
+    for (i = 0; i < A_MAX; i++)
+    {
+        if (b_ptr->stat_req[i] > 0)
+            return true;
+    }
+
+    for (i = 0; i < S_MAX; i++)
+    {
+        if (b_ptr->skill_req[i] > 0)
+            return true;
+    }
+
+    return false;
+}
+
+bool ability_requirements_currently_met(int skilltype, int abilitynum)
+{
+    ability_type* b_ptr = ability_score_info(skilltype, abilitynum);
+    int i;
+
+    if (!b_ptr)
+        return false;
+
+    for (i = 0; i < A_MAX; i++)
+    {
+        if ((b_ptr->stat_req[i] > 0)
+            && (b_ptr->stat_req[i] > ability_requirement_current_stat_value(i)))
+        {
+            return false;
+        }
+    }
+
+    for (i = 0; i < S_MAX; i++)
+    {
+        if ((b_ptr->skill_req[i] > 0)
+            && (b_ptr->skill_req[i] > ability_requirement_current_skill_value(i)))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool object_grants_usable_ability(const object_type* o_ptr, int skilltype,
+    int abilitynum)
+{
+    return object_grants_ability(o_ptr, skilltype, abilitynum)
+        && ability_requirements_currently_met(skilltype, abilitynum);
+}
+
+bool ability_requirement_is_suspended(int skilltype, int abilitynum)
+{
+    if (skilltype < 0 || skilltype >= S_MAX)
+        return false;
+    if (abilitynum < 0 || abilitynum >= ABILITIES_MAX)
+        return false;
+
+    return ability_requirement_suspended[skilltype][abilitynum] ? true : false;
+}
+
+static void stop_song_if_ability_suspended(int skilltype, int abilitynum)
+{
+    if (skilltype != S_SNG)
+        return;
+
+    if (p_ptr->song1 == abilitynum)
+    {
+        p_ptr->song1 = p_ptr->song2;
+        p_ptr->song2 = SNG_NOTHING;
+        p_ptr->redraw |= PR_SONG;
+    }
+    else if (p_ptr->song2 == abilitynum)
+    {
+        p_ptr->song2 = SNG_NOTHING;
+        p_ptr->redraw |= PR_SONG;
+    }
+
+    if (abilitynum == SNG_WOVEN_THEMES && p_ptr->song2 != SNG_NOTHING)
+    {
+        p_ptr->song2 = SNG_NOTHING;
+        p_ptr->redraw |= PR_SONG;
+    }
+}
+
+static void update_active_ability_requirements(void)
+{
+    bool changed = false;
+
+    if (!p_ptr || !z_info || !b_info)
+        return;
+
+    for (int i = 0; i < z_info->b_max; i++)
+    {
+        ability_type* b_ptr = &b_info[i];
+        int skilltype;
+        int abilitynum;
+        bool met;
+
+        if (!b_ptr->name)
+            continue;
+
+        skilltype = b_ptr->skilltype;
+        abilitynum = b_ptr->abilitynum;
+
+        if (skilltype < 0 || skilltype >= S_MAX
+            || abilitynum < 0 || abilitynum >= ABILITIES_MAX)
+        {
+            continue;
+        }
+
+        if (!p_ptr->have_ability[skilltype][abilitynum])
+        {
+            ability_requirement_suspended[skilltype][abilitynum] = false;
+            continue;
+        }
+
+        if (!ability_has_runtime_requirements(b_ptr))
+        {
+            ability_requirement_suspended[skilltype][abilitynum] = false;
+            continue;
+        }
+
+        met = ability_requirements_currently_met(skilltype, abilitynum);
+
+        if (p_ptr->active_ability[skilltype][abilitynum] && !met)
+        {
+            p_ptr->active_ability[skilltype][abilitynum] = false;
+            ability_requirement_suspended[skilltype][abilitynum] = true;
+            stop_song_if_ability_suspended(skilltype, abilitynum);
+            changed = true;
+        }
+        else if (!p_ptr->active_ability[skilltype][abilitynum]
+            && ability_requirement_suspended[skilltype][abilitynum] && met)
+        {
+            p_ptr->active_ability[skilltype][abilitynum] = true;
+            ability_requirement_suspended[skilltype][abilitynum] = false;
+            changed = true;
+        }
+    }
+
+    if (changed)
+    {
+        p_ptr->redraw |= (PR_EXP | PR_BASIC);
+        p_ptr->window |= (PW_PLAYER_0);
+    }
+}
+
+static int ability_score_skill_source(int skilltype)
+{
+    if (!p_ptr || skilltype < 0 || skilltype >= S_MAX)
+        return 0;
+
+    /*
+     * Custom ability scores keep skill and stat contributions separate, so
+     * designers can opt out of the default stat attached to a skill.
+     */
+    return p_ptr->skill_base[skilltype] + p_ptr->skill_equip_mod[skilltype]
+        + p_ptr->skill_misc_mod[skilltype];
+}
+
+int ability_score(int skilltype, int abilitynum)
+{
+    ability_type* b_ptr = ability_score_info(skilltype, abilitynum);
+    int score = 0;
+
+    if (!p_ptr)
+        return 0;
+
+    if (!b_ptr || !b_ptr->score_weights_set)
+    {
+        if (skilltype >= 0 && skilltype < S_MAX)
+            return p_ptr->skill_use[skilltype];
+
+        return 0;
+    }
+
+    for (int i = 0; i < A_MAX; i++)
+    {
+        if (b_ptr->stat_score_weight[i])
+        {
+            score += ability_score_apply_weight(
+                p_ptr->stat_use[i], b_ptr->stat_score_weight[i]);
+        }
+    }
+
+    for (int i = 0; i < S_MAX; i++)
+    {
+        if (b_ptr->skill_score_weight[i])
+        {
+            score += ability_score_apply_weight(
+                ability_score_skill_source(i), b_ptr->skill_score_weight[i]);
+        }
+    }
+
+    return score;
+}
+
 int song_effective_skill(int abilitynum)
 {
-    int skill = p_ptr->skill_use[S_SNG];
+    int skill = ability_score(S_SNG, abilitynum);
     const int full_skill = skill;
 
     // penalize minor themes - check if this ability is the minor theme
@@ -4947,7 +5209,7 @@ int song_effective_skill(int abilitynum)
         && (abilitynum != SNG_DISGUISE) && (abilitynum != SNG_LORIEN))
     {
         // Calculate Silence bonus directly to avoid recursion
-        int silence_skill = p_ptr->skill_use[S_SNG] / 2;
+        int silence_skill = ability_score(S_SNG, SNG_SILENCE) / 2;
         int silence_penalty = silence_skill / 2;
         skill -= silence_penalty;
         if (skill < 0)
@@ -4991,7 +5253,7 @@ static int stepped_song_bonus(int skill, int first_threshold, int next_gap)
 int ability_bonus(int skilltype, int abilitynum)
 {
     int bonus = 0;
-    int skill = p_ptr->skill_use[skilltype];
+    int skill = ability_score(skilltype, abilitynum);
 
     if (skilltype == S_SNG)
     {
@@ -5095,6 +5357,10 @@ int ability_bonus(int skilltype, int abilitynum)
         // these bonuses are never negative
         if (bonus < 0)
             bonus = 0;
+    }
+    else
+    {
+        bonus = ability_score_has_custom_weights(skilltype, abilitynum) ? skill : 0;
     }
 
     return (bonus);
@@ -5523,12 +5789,6 @@ static void calc_bonuses(void)
         if (f2 & (TR2_SUST_GRA))
             p_ptr->sustain_gra += 1;
 
-        // Parrying grants extra bonus for weapon evasion:
-        if (p_ptr->active_ability[S_EVN][EVN_PARRY] && (i == INVEN_WIELD))
-        {
-            p_ptr->skill_equip_mod[S_EVN] += o_ptr->evn;
-        }
-
         /* Add up the armour weight */
         if ((i >= INVEN_BODY) && (i <= INVEN_FEET))
             armour_weight += o_ptr->weight;
@@ -5566,11 +5826,6 @@ static void calc_bonuses(void)
         /* Apply the evasion bonus */
         p_ptr->skill_equip_mod[S_EVN] += o_ptr->evn;
 
-        if (p_ptr->active_ability[S_EVN][EVN_HEAVY_ARMOUR]
-            && heavy_armour_evasion_bonus_applies(o_ptr))
-        {
-            p_ptr->skill_equip_mod[S_EVN] += 1;
-        }
     }
 
     /* Clear the old item granted abilities */
@@ -5585,6 +5840,29 @@ static void calc_bonuses(void)
             {
                 p_ptr->active_ability[i][j] = false;
             }
+        }
+    }
+
+    update_active_ability_requirements();
+
+    /* Ability-dependent equipment bonuses must run after requirement gating. */
+    o_ptr = &inventory[INVEN_WIELD];
+    if (o_ptr->k_idx && p_ptr->active_ability[S_EVN][EVN_PARRY])
+    {
+        p_ptr->skill_equip_mod[S_EVN] += o_ptr->evn;
+    }
+
+    if (p_ptr->active_ability[S_EVN][EVN_HEAVY_ARMOUR])
+    {
+        for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+        {
+            o_ptr = &inventory[i];
+
+            if (!o_ptr->k_idx)
+                continue;
+
+            if (heavy_armour_evasion_bonus_applies(o_ptr))
+                p_ptr->skill_equip_mod[S_EVN] += 1;
         }
     }
 
@@ -5629,7 +5907,7 @@ static void calc_bonuses(void)
         }
     }
 
-    /* Oath of Light: wearing shadowed gear immediately breaks the vow */
+    /* Oath of Light: wearing light-dimming gear immediately breaks the vow */
     if (p_ptr->oath_type == OATH_LIGHT && !oath_invalid(OATH_LIGHT))
     {
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
@@ -5639,7 +5917,7 @@ static void calc_bonuses(void)
 
             u32b f1, f2, f3, f4;
             object_flags4(o_ptr, &f1, &f2, &f3, &f4);
-            if ((f2 & TR2_DARKNESS) || (f4 & TR4_UNLIGHT) || (f3 & TR3_LIGHT_CURSE))
+            if ((f2 & TR2_DARKNESS) || (f4 & TR4_UNLIGHT))
             {
                 p_ptr->oaths_broken |= OATH_LIGHT_FLAG;
                 p_ptr->active_ability[S_SPC][SPC_OATH_LIGHT] = false;
@@ -5830,7 +6108,7 @@ static void calc_bonuses(void)
 
     // Mandos' Doom special ability grants immunity to fear, hallucination,
     // entrancement, rage, stun and confusion (implemented as high resistance + clear)
-    if (p_ptr->have_ability[S_SPC][SPC_MANDOS]) {
+    if (p_ptr->active_ability[S_SPC][SPC_MANDOS]) {
         p_ptr->resist_fear += 100; // effectively immune
         p_ptr->resist_hallu += 100;
         p_ptr->resist_stun += 100;
@@ -5863,7 +6141,7 @@ static void calc_bonuses(void)
             log_trace("ABILITY DEBUG: Mandos' Doom - cleared confusion effect");
         }
     } else {
-        log_trace("ABILITY DEBUG: Mandos' Doom NOT active - have_ability[S_SPC][SPC_MANDOS] = %d", p_ptr->have_ability[S_SPC][SPC_MANDOS]);
+        log_trace("ABILITY DEBUG: Mandos' Doom NOT active - active_ability[S_SPC][SPC_MANDOS] = %d", p_ptr->active_ability[S_SPC][SPC_MANDOS]);
     }
 
     /* Big cave environmental penalties: reduce key resistances while inside. */
@@ -5923,7 +6201,7 @@ static void calc_bonuses(void)
     }
 
     // Niena's Gift of Mercy special ability grants enhanced stealth proportional to mercy shown
-    if (p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY]) {
+    if (p_ptr->active_ability[S_SPC][SPC_NIENA_MERCY]) {
         if (total_monsters_seen > 0) {
             /* Calculate stealth bonus: 10*(seen-killed)/seen, rounded up */
             int mercy_ratio_times_10 = (10 * (total_monsters_seen - total_monsters_killed));
@@ -6429,14 +6707,18 @@ bool player_auto_identifies_object(const object_type* o_ptr)
     if (object_uses_smithing_difficulty(o_ptr))
         return false;
 
-    bool alchemy = p_ptr->active_ability[S_PER][PER_ALCHEMY]
-        || p_ptr->have_ability[S_PER][PER_ALCHEMY];
-    bool channeling = p_ptr->active_ability[S_WIL][WIL_CHANNELING]
-        || p_ptr->have_ability[S_WIL][WIL_CHANNELING];
-    bool jeweller = p_ptr->active_ability[S_SMT][SMT_JEWELLER]
-        || p_ptr->have_ability[S_SMT][SMT_JEWELLER];
-    bool enchantment = p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT]
-        || p_ptr->have_ability[S_SMT][SMT_ENCHANTMENT];
+    bool alchemy = (p_ptr->active_ability[S_PER][PER_ALCHEMY]
+        || p_ptr->have_ability[S_PER][PER_ALCHEMY])
+        && ability_requirements_currently_met(S_PER, PER_ALCHEMY);
+    bool channeling = (p_ptr->active_ability[S_WIL][WIL_CHANNELING]
+        || p_ptr->have_ability[S_WIL][WIL_CHANNELING])
+        && ability_requirements_currently_met(S_WIL, WIL_CHANNELING);
+    bool jeweller = (p_ptr->active_ability[S_SMT][SMT_JEWELLER]
+        || p_ptr->have_ability[S_SMT][SMT_JEWELLER])
+        && ability_requirements_currently_met(S_SMT, SMT_JEWELLER);
+    bool enchantment = (p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT]
+        || p_ptr->have_ability[S_SMT][SMT_ENCHANTMENT])
+        && ability_requirements_currently_met(S_SMT, SMT_ENCHANTMENT);
 
     bool is_potion = (o_ptr->tval == TV_POTION);
     bool is_herb = (o_ptr->tval == TV_FOOD) && (o_ptr->sval <= SV_FOOD_SICKNESS);
@@ -6468,8 +6750,21 @@ static bool player_has_ability_bonus(int skilltype, int abilitynum)
     if (abilitynum < 0 || abilitynum >= ABILITIES_MAX)
         return false;
 
-    return p_ptr->active_ability[skilltype][abilitynum]
-        || p_ptr->have_ability[skilltype][abilitynum];
+    return (p_ptr->active_ability[skilltype][abilitynum]
+        || p_ptr->have_ability[skilltype][abilitynum])
+        && ability_requirements_currently_met(skilltype, abilitynum);
+}
+
+static int player_ability_ident_bonus(int skilltype, int abilitynum,
+    int fallback_bonus)
+{
+    if (!player_has_ability_bonus(skilltype, abilitynum))
+        return 0;
+
+    if (ability_score_has_custom_weights(skilltype, abilitynum))
+        return ability_score(skilltype, abilitynum);
+
+    return fallback_bonus;
 }
 
 typedef enum
@@ -6584,15 +6879,25 @@ static int player_smithing_identify_skill(const object_type* o_ptr,
     int bonus_artifice = player_has_ability_bonus(S_SMT, SMT_ARTEFACT) ? 7 : 0;
     int bonus_curse_breaking = player_has_ability_bonus(S_WIL, WIL_CURSE_BREAKING) ? 7 : 0;
     int bonus_quick_study = player_has_ability_bonus(S_PER, PER_QUICK_STUDY) ? 5 : 0;
+    int bonus_lore = p_ptr->lore * 5;
 
     int category_bonus = 0;
     smith_id_category cat = smith_id_category_for_object(o_ptr);
-    if (cat == SMITH_ID_CAT_WEAPON && player_has_ability_bonus(S_SMT, SMT_WEAPONSMITH))
-        category_bonus = 5;
-    if (cat == SMITH_ID_CAT_ARMOUR && player_has_ability_bonus(S_SMT, SMT_ARMOURSMITH))
-        category_bonus = 5;
-    if (cat == SMITH_ID_CAT_JEWELLERY && player_has_ability_bonus(S_SMT, SMT_JEWELLER))
-        category_bonus = 5;
+    if (cat == SMITH_ID_CAT_WEAPON)
+    {
+        category_bonus = player_ability_ident_bonus(
+            S_SMT, SMT_WEAPONSMITH, 5);
+    }
+    if (cat == SMITH_ID_CAT_ARMOUR)
+    {
+        category_bonus = player_ability_ident_bonus(
+            S_SMT, SMT_ARMOURSMITH, 5);
+    }
+    if (cat == SMITH_ID_CAT_JEWELLERY)
+    {
+        category_bonus = player_ability_ident_bonus(
+            S_SMT, SMT_JEWELLER, 5);
+    }
 
     int bonus_equipped = is_equipped ? 3 : 0;
     int bonus_experienced = (o_ptr && (o_ptr->ident & IDENT_EXPERIENCED)) ? 5 : 0;
@@ -6641,6 +6946,7 @@ static int player_smithing_identify_skill(const object_type* o_ptr,
     skill += bonus_artifice;
     skill += bonus_curse_breaking;
     skill += bonus_quick_study;
+    skill += bonus_lore;
     if (current_character_profile && (current_character_profile->flags & RHF_KHELED_ZARAM))
         skill += 30;
 
@@ -6669,7 +6975,7 @@ static int player_smithing_identify_skill(const object_type* o_ptr,
     }
 
     log_debug(
-        "smithing-ident: skill calc k_idx=%d tval=%d sval=%d name1=%d ego_pfx=%d ego_sfx=%d ident=0x%08X base(per_no_gra=%d smt_no_gra=%d gra=%d) abil(enchant=%d artifice=%d cursebreak=%d quick=%d) cat=%d cat_bonus=%d ctx(equip=%d exp=%d ego=%d revealing=%d) bonus=%d dist(apply=%d ignore=%d pen=%d curse_penalty=%d ident_diff=%d) => skill=%d",
+        "smithing-ident: skill calc k_idx=%d tval=%d sval=%d name1=%d ego_pfx=%d ego_sfx=%d ident=0x%08X base(per_no_gra=%d smt_no_gra=%d gra=%d) abil(enchant=%d artifice=%d cursebreak=%d quick=%d lore=%d) cat=%d cat_bonus=%d ctx(equip=%d exp=%d ego=%d revealing=%d) bonus=%d dist(apply=%d ignore=%d pen=%d curse_penalty=%d ident_diff=%d) => skill=%d",
         o_ptr ? o_ptr->k_idx : 0,
         o_ptr ? o_ptr->tval : 0,
         o_ptr ? o_ptr->sval : 0,
@@ -6678,7 +6984,8 @@ static int player_smithing_identify_skill(const object_type* o_ptr,
         o_ptr ? object_ego_suffix(o_ptr) : 0,
         (unsigned)(o_ptr ? o_ptr->ident : 0),
         base_per, base_smt, grace_bonus,
-        bonus_enchantment, bonus_artifice, bonus_curse_breaking, bonus_quick_study,
+        bonus_enchantment, bonus_artifice, bonus_curse_breaking,
+        bonus_quick_study, bonus_lore,
         (int)cat, category_bonus,
         bonus_equipped, bonus_experienced, bonus_known_ego,
         bonus_revealing,
@@ -6857,6 +7164,7 @@ void update_lore_aux(object_type* o_ptr)
                 // gain experience for identification
                 new_exp = 100;
                 gain_exp(new_exp);
+                gain_knowledge_points(1, "An artefact is identified.");
                 p_ptr->ident_exp += new_exp;
                 object_desc(shorter_desc, sizeof(shorter_desc), o_ptr, true, 0);
                 msg_format("The hidden tale of %s rises before your thought, and 100 experience is won.",

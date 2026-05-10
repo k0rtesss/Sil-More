@@ -1624,6 +1624,8 @@ static errr rd_extra(void)
         u16b revenge_kills = 0;
         u16b revenge_bonus = 0;
         byte morgoth_call_state = 0;
+        byte lore = 0;
+        s32b knowledge_points = 0;
 
         rd_byte(&morgoth_hall_entered);
         rd_byte(&morgoth_second_wind);
@@ -1635,7 +1637,8 @@ static errr rd_extra(void)
             rd_u16b(&revenge_kills);
             rd_u16b(&revenge_bonus);
             rd_byte(&morgoth_call_state);
-            strip_bytes(5);
+            rd_byte(&lore);
+            rd_s32b(&knowledge_points);
         }
         else
         {
@@ -1657,6 +1660,8 @@ static errr rd_extra(void)
             morgoth_call_state
             & (SAVEFILE_MORGOTH_CALL_SEEN
                 | SAVEFILE_MORGOTH_CALL_ESCALATION_MASK);
+        p_ptr->lore = lore;
+        p_ptr->knowledge_points = MAX(0, knowledge_points);
     }
 
     /* Read item-quality squelch sub-menu */
