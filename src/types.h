@@ -282,10 +282,17 @@ struct ability_type
     byte level; /* Legacy/default prerequisite skill level */
     byte stat_req[A_MAX]; /* Minimum equipment-adjusted stat levels */
     byte skill_req[S_MAX]; /* Minimum equipment-adjusted skill levels */
+    byte lore_req; /* Minimum Lore stat */
+    byte stat_req_lt[A_MAX]; /* Maximum stat requirements, exclusive */
+    byte skill_req_lt[S_MAX]; /* Maximum skill requirements, exclusive */
+    byte lore_req_lt; /* Maximum Lore requirement, exclusive */
     byte knowledge_cost; /* Knowledge point cost; 0 means experience cost */
+    byte hidden; /* Hide from ability menus unless already known */
     byte score_weights_set; /* Whether S: score weights override defaults */
     s16b stat_score_weight[A_MAX]; /* Ability score stat weights, 100 = x1 */
     s16b skill_score_weight[S_MAX]; /* Ability score skill weights, 100 = x1 */
+    bool stat_score_weight_set[A_MAX]; /* Explicit stat score sources */
+    bool skill_score_weight_set[S_MAX]; /* Explicit skill score sources */
     byte prereqs; /* Number of prerequisite abilities */
     byte prereq_skilltype[4]; /* Skill type (for prerequisites) */
     byte prereq_abilitynum[4]; /* The ability within that skill (for

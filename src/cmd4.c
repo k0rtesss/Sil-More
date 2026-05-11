@@ -1488,7 +1488,12 @@ static bool ability_menu_entry_can_activate(int skilltype, int abilitynum)
     }
 
     if (p_ptr->have_ability[skilltype][abilitynum])
-        return true;
+    {
+        if (p_ptr->active_ability[skilltype][abilitynum])
+            return true;
+
+        return ability_requirements_currently_met(skilltype, abilitynum);
+    }
 
     if (!prereqs(skilltype, abilitynum))
         return false;
@@ -1578,6 +1583,17 @@ static void ability_menu_format_requirement_line(char* buf, size_t buflen,
         strnfmt(buf, buflen, "%s %d (you have %d)", long_label, need, have);
 }
 
+static void ability_menu_format_less_than_requirement_line(char* buf,
+    size_t buflen, cptr long_label, cptr short_label, int limit, int have,
+    int max_width)
+{
+    if (max_width <= 30)
+        strnfmt(buf, buflen, "%s <%d / %d", short_label, limit, have);
+    else
+        strnfmt(buf, buflen, "%s less than %d (you have %d)", long_label,
+            limit, have);
+}
+
 static cptr ability_menu_stat_requirement_name(int stat, bool short_name)
 {
     static cptr stat_req_names[A_MAX]
@@ -1607,6 +1623,46 @@ static int ability_requirement_skill_value(int skill)
     return p_ptr->skill_base[skill] + p_ptr->skill_equip_mod[skill];
 }
 
+static int ability_menu_score_skill_source(int skill)
+{
+    if (skill < 0 || skill >= S_MAX)
+        return 0;
+
+    return p_ptr->skill_base[skill] + p_ptr->skill_equip_mod[skill]
+        + p_ptr->skill_misc_mod[skill];
+}
+
+static int ability_menu_score_apply_weight(int value, int weight)
+{
+    long scaled = (long)value * (long)weight;
+
+    if (scaled >= 0)
+        return (int)((scaled + 50L) / 100L);
+
+    return (int)(-((-scaled + 50L) / 100L));
+}
+
+static void ability_menu_format_score_weight(char* buf, size_t buflen,
+    int weight)
+{
+    int abs_weight = ABS(weight);
+    cptr sign = (weight < 0) ? "-" : "";
+
+    if (abs_weight == 0)
+        strnfmt(buf, buflen, "0");
+    else if (abs_weight == 50)
+        strnfmt(buf, buflen, "%s1/2", sign);
+    else if (abs_weight == 100)
+        strnfmt(buf, buflen, "%s1", sign);
+    else if (abs_weight == 150)
+        strnfmt(buf, buflen, "%s1.5", sign);
+    else if ((abs_weight % 100) == 0)
+        strnfmt(buf, buflen, "%s%d", sign, abs_weight / 100);
+    else
+        strnfmt(buf, buflen, "%s%d.%02d", sign, abs_weight / 100,
+            abs_weight % 100);
+}
+
 static bool ability_requirements_met(const ability_type* b_ptr)
 {
     int i;
@@ -1614,10 +1670,19 @@ static bool ability_requirements_met(const ability_type* b_ptr)
     if (!b_ptr)
         return false;
 
+    if ((b_ptr->lore_req > 0) && (b_ptr->lore_req > p_ptr->lore))
+        return false;
+
+    if ((b_ptr->lore_req_lt > 0) && (p_ptr->lore >= b_ptr->lore_req_lt))
+        return false;
+
     for (i = 0; i < A_MAX; i++)
     {
         if ((b_ptr->stat_req[i] > 0)
             && (b_ptr->stat_req[i] > ability_requirement_stat_value(i)))
+            return false;
+        if ((b_ptr->stat_req_lt[i] > 0)
+            && (ability_requirement_stat_value(i) >= b_ptr->stat_req_lt[i]))
             return false;
     }
 
@@ -1625,6 +1690,9 @@ static bool ability_requirements_met(const ability_type* b_ptr)
     {
         if ((b_ptr->skill_req[i] > 0)
             && (b_ptr->skill_req[i] > ability_requirement_skill_value(i)))
+            return false;
+        if ((b_ptr->skill_req_lt[i] > 0)
+            && (ability_requirement_skill_value(i) >= b_ptr->skill_req_lt[i]))
             return false;
     }
 
@@ -1721,8 +1789,8 @@ static int ability_menu_next_row_after_text(int desc_col, int fallback_row)
     return y;
 }
 
-static void ability_menu_render_prerequisites_block(int skilltype,
-    const ability_type* b_ptr, int desc_col)
+static int ability_menu_render_prerequisites_block(int skilltype,
+    const ability_type* b_ptr, int desc_col, bool show_price)
 {
     int i, j;
     int row = ability_menu_next_row_after_text(desc_col, 3);
@@ -1737,6 +1805,34 @@ static void ability_menu_render_prerequisites_block(int skilltype,
 
     Term_putstr(desc_col, row, -1, TERM_YELLOW, "Requirements:");
     row++;
+
+    if (b_ptr->lore_req > 0)
+    {
+        int need = b_ptr->lore_req;
+        int have = p_ptr->lore;
+
+        have_requirement = true;
+        ability_menu_format_requirement_line(buf, sizeof(buf), "Lore", "Lore",
+            need, have, info_width);
+
+        Term_putstr(desc_col + 2, row, -1,
+            (need <= have) ? TERM_L_GREEN : TERM_L_DARK, buf);
+        row++;
+    }
+
+    if (b_ptr->lore_req_lt > 0)
+    {
+        int limit = b_ptr->lore_req_lt;
+        int have = p_ptr->lore;
+
+        have_requirement = true;
+        ability_menu_format_less_than_requirement_line(buf, sizeof(buf),
+            "Lore", "Lore", limit, have, info_width);
+
+        Term_putstr(desc_col + 2, row, -1,
+            (have < limit) ? TERM_L_GREEN : TERM_L_DARK, buf);
+        row++;
+    }
 
     for (i = 0; i < A_MAX; i++)
     {
@@ -1758,6 +1854,26 @@ static void ability_menu_render_prerequisites_block(int skilltype,
         row++;
     }
 
+    for (i = 0; i < A_MAX; i++)
+    {
+        int limit = b_ptr->stat_req_lt[i];
+        int have;
+
+        if (limit <= 0)
+            continue;
+
+        have = ability_requirement_stat_value(i);
+        have_requirement = true;
+        ability_menu_format_less_than_requirement_line(buf, sizeof(buf),
+            ability_menu_stat_requirement_name(i, false),
+            ability_menu_stat_requirement_name(i, true), limit, have,
+            info_width);
+
+        Term_putstr(desc_col + 2, row, -1,
+            (have < limit) ? TERM_L_GREEN : TERM_L_DARK, buf);
+        row++;
+    }
+
     for (i = 0; i < S_MAX; i++)
     {
         int need = b_ptr->skill_req[i];
@@ -1776,7 +1892,25 @@ static void ability_menu_render_prerequisites_block(int skilltype,
         row++;
     }
 
-    if (uses_knowledge)
+    for (i = 0; i < S_MAX; i++)
+    {
+        int limit = b_ptr->skill_req_lt[i];
+        int have;
+
+        if (limit <= 0)
+            continue;
+
+        have = ability_requirement_skill_value(i);
+        have_requirement = true;
+        ability_menu_format_less_than_requirement_line(buf, sizeof(buf),
+            skill_names_full[i], skill_names[i], limit, have, info_width);
+
+        Term_putstr(desc_col + 2, row, -1,
+            (have < limit) ? TERM_L_GREEN : TERM_L_DARK, buf);
+        row++;
+    }
+
+    if (uses_knowledge && show_price)
     {
         have_requirement = true;
         ability_menu_format_requirement_line(buf, sizeof(buf), "Knowledge",
@@ -1785,19 +1919,14 @@ static void ability_menu_render_prerequisites_block(int skilltype,
             (knowledge_cost <= p_ptr->knowledge_points) ? TERM_L_GREEN
                                                         : TERM_L_DARK,
             buf);
-        row++;
-    }
-
-    if (!have_requirement)
-    {
-        Term_putstr(desc_col + 2, row, -1, TERM_L_GREEN, "None");
-        row++;
+            row++;
     }
 
     if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
     {
         for (j = 0; j < b_ptr->prereqs; j++)
         {
+            have_requirement = true;
             if (j == 0)
             {
                 strnfmt(buf, sizeof(buf), "%s",
@@ -1827,11 +1956,18 @@ static void ability_menu_render_prerequisites_block(int skilltype,
     }
     else if (b_ptr->prereqs > 0)
     {
+        have_requirement = true;
         Term_putstr(desc_col + 2, row, -1, TERM_GREEN, "Quick Study");
         row++;
     }
 
-    if (skilltype != S_SPC && !uses_knowledge
+    if (!have_requirement)
+    {
+        Term_putstr(desc_col + 2, row, -1, TERM_L_GREEN, "None");
+        row++;
+    }
+
+    if (show_price && skilltype != S_SPC && !uses_knowledge
         && prereqs(skilltype, b_ptr->abilitynum))
     {
         Term_putstr(desc_col, row, -1, TERM_YELLOW, "Current price:");
@@ -1848,6 +1984,112 @@ static void ability_menu_render_prerequisites_block(int skilltype,
     }
 
     Term_gotoxy(desc_col, row);
+    return row;
+}
+
+static int ability_menu_render_score_block(const ability_type* b_ptr,
+    int desc_col, int row)
+{
+    int info_width = ability_menu_text_width(desc_col, 2);
+    bool any_source = false;
+    char buf[96];
+    char weight_buf[24];
+
+    if (!b_ptr || !b_ptr->score_weights_set)
+        return row;
+
+    if (row < 1)
+        row = ability_menu_next_row_after_text(desc_col, 3);
+
+    Term_putstr(desc_col, row, -1, TERM_YELLOW, "Contributions:");
+    row++;
+
+    for (int i = 0; i < A_MAX; i++)
+    {
+        int source;
+        int weight;
+        int contribution;
+
+        if (!b_ptr->stat_score_weight_set[i])
+            continue;
+
+        source = p_ptr->stat_use[i];
+        weight = b_ptr->stat_score_weight[i];
+        contribution = ability_menu_score_apply_weight(source, weight);
+        ability_menu_format_score_weight(weight_buf, sizeof(weight_buf),
+            weight);
+
+        if (info_width <= 30)
+        {
+            strnfmt(buf, sizeof(buf), "%s %d x %s = %+d",
+                ability_menu_stat_requirement_name(i, true), source,
+                weight_buf, contribution);
+        }
+        else
+        {
+            strnfmt(buf, sizeof(buf), "%s %d x %s = %+d",
+                ability_menu_stat_requirement_name(i, false), source,
+                weight_buf, contribution);
+        }
+
+        Term_putstr(desc_col + 2, row, -1, TERM_L_GREEN, buf);
+        row++;
+        any_source = true;
+    }
+
+    for (int i = 0; i < S_MAX; i++)
+    {
+        int source;
+        int weight;
+        int contribution;
+
+        if (!b_ptr->skill_score_weight_set[i])
+            continue;
+
+        source = ability_menu_score_skill_source(i);
+        weight = b_ptr->skill_score_weight[i];
+        contribution = ability_menu_score_apply_weight(source, weight);
+        ability_menu_format_score_weight(weight_buf, sizeof(weight_buf),
+            weight);
+
+        if (info_width <= 30)
+            strnfmt(buf, sizeof(buf), "%s %d x %s = %+d",
+                skill_names[i], source, weight_buf, contribution);
+        else
+            strnfmt(buf, sizeof(buf), "%s %d x %s = %+d",
+                skill_names_full[i], source, weight_buf, contribution);
+
+        Term_putstr(desc_col + 2, row, -1, TERM_L_GREEN, buf);
+        row++;
+        any_source = true;
+    }
+
+    if (!any_source)
+    {
+        Term_putstr(desc_col + 2, row, -1, TERM_L_GREEN, "None");
+        row++;
+    }
+
+    strnfmt(buf, sizeof(buf), "Current score: %+d",
+        ability_score(b_ptr->skilltype, b_ptr->abilitynum));
+    Term_putstr(desc_col + 2, row, -1, TERM_WHITE, buf);
+    row++;
+
+    Term_gotoxy(desc_col, row);
+    return row;
+}
+
+static void ability_menu_render_data_blocks(int skilltype,
+    const ability_type* b_ptr, int desc_col, bool show_price)
+{
+    int row = ability_menu_render_prerequisites_block(skilltype, b_ptr,
+        desc_col, show_price);
+
+    if (b_ptr && b_ptr->score_weights_set)
+    {
+        row++;
+        ability_menu_render_score_block(b_ptr, desc_col, row);
+    }
 }
 
 static int ability_menu_stepped_song_bonus(int skill, int first_threshold,
@@ -2047,7 +2289,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
             : "";
 
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: disguise checks use %d + Will%s.",
+            "\n\nCurrent effect: disguise checks use %d%s.",
             disguise_bonus, extra);
         break;
     }
@@ -2184,6 +2426,9 @@ int ability_requirement_level(const ability_type* b_ptr)
     if (!b_ptr)
         return 0;
 
+    if (b_ptr->lore_req > level)
+        level = b_ptr->lore_req;
+
     for (i = 0; i < A_MAX; i++)
         if (b_ptr->stat_req[i] > level)
             level = b_ptr->stat_req[i];
@@ -2215,6 +2460,9 @@ int abilities_in_skill(int skilltype)
 
         /* Skip entries for the wrong skill type */
         if (b_ptr->skilltype != skilltype)
+            continue;
+
+        if (b_ptr->hidden)
             continue;
 
         /* Lore abilities use knowledge points and do not raise XP prices. */
@@ -4078,6 +4326,12 @@ int abilities_menu2(int skilltype, int* highlight)
                 continue;
             }
 
+            if (b_ptr->hidden
+                && !p_ptr->have_ability[entry_skilltype][entry_abilitynum])
+            {
+                continue;
+            }
+
             if (!ability_menu_is_lore_ability(entry_skilltype,
                 entry_abilitynum))
             {
@@ -4113,6 +4367,12 @@ int abilities_menu2(int skilltype, int* highlight)
             /* Skip entries for the wrong skill type */
             if (b_ptr->skilltype != skilltype)
                 continue;
+
+            if (b_ptr->hidden
+                && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+            {
+                continue;
+            }
 
             /* For special abilities, only show granted abilities */
             if (skilltype == S_SPC
@@ -4346,16 +4606,13 @@ int abilities_menu2(int skilltype, int* highlight)
                                 song_bonus_rendered = true;
                             }
                         }
-                        if (!p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum])
-                        {
-                            if (has_effect) text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            ability_menu_render_prerequisites_block(entry_skilltype,
-                                b_ptr, desc_col);
-                        }
+                        if (has_effect) text_out_to_screen(TERM_L_WHITE, desc_sep);
+                        ability_menu_render_data_blocks(entry_skilltype, b_ptr,
+                            desc_col,
+                            !p_ptr->have_ability[entry_skilltype]
+                                                [b_ptr->abilitynum]);
                         if (has_desc) {
-                            if (has_effect
-                                || !p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum])
-                                text_out_to_screen(TERM_L_WHITE, desc_sep);
+                            text_out_to_screen(TERM_L_WHITE, desc_sep);
                             text_out_to_screen(TERM_SLATE, desc_text);
                         }
                         break;
@@ -4371,13 +4628,12 @@ int abilities_menu2(int skilltype, int* highlight)
                         else if (has_desc) {
                             text_out_to_screen(TERM_L_WHITE, desc_text);
                         }
-                        if (!p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum])
-                        {
-                            if (has_effect || has_desc)
-                                text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            ability_menu_render_prerequisites_block(entry_skilltype,
-                                b_ptr, desc_col);
-                        }
+                        if (has_effect || has_desc)
+                            text_out_to_screen(TERM_L_WHITE, desc_sep);
+                        ability_menu_render_data_blocks(entry_skilltype, b_ptr,
+                            desc_col,
+                            !p_ptr->have_ability[entry_skilltype]
+                                                [b_ptr->abilitynum]);
                         break;
                     default: /* 0: Description first, then effect */
                         if (has_desc) {
@@ -4392,13 +4648,12 @@ int abilities_menu2(int skilltype, int* highlight)
                                 song_bonus_rendered = true;
                             }
                         }
-                        if (!p_ptr->have_ability[entry_skilltype][b_ptr->abilitynum])
-                        {
-                            if (has_desc || has_effect)
-                                text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            ability_menu_render_prerequisites_block(entry_skilltype,
-                                b_ptr, desc_col);
-                        }
+                        if (has_desc || has_effect)
+                            text_out_to_screen(TERM_L_WHITE, desc_sep);
+                        ability_menu_render_data_blocks(entry_skilltype, b_ptr,
+                            desc_col,
+                            !p_ptr->have_ability[entry_skilltype]
+                                                [b_ptr->abilitynum]);
                         break;
                     }
 
@@ -5209,9 +5464,18 @@ void do_cmd_ability_screen(void)
                             }
                             else
                             {
-                                p_ptr->active_ability[ability_skilltype][abilitynum] = true;
-                                Term_putstr(0, 0, -1, TERM_WHITE,
-                                    "Ability now switched on. ");
+                                if (!ability_requirements_currently_met(
+                                        ability_skilltype, abilitynum))
+                                {
+                                    Term_putstr(0, 0, -1, TERM_RED,
+                                        "Ability requirements are not met.");
+                                }
+                                else
+                                {
+                                    p_ptr->active_ability[ability_skilltype][abilitynum] = true;
+                                    Term_putstr(0, 0, -1, TERM_WHITE,
+                                        "Ability now switched on. ");
+                                }
                             }
                         }
 

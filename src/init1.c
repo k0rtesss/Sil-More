@@ -3646,6 +3646,103 @@ static bool ability_req_parse_name(cptr src, bool* is_stat, int* index)
     return false;
 }
 
+static bool ability_req_parse_lore_name(cptr src)
+{
+    char token[64];
+    cptr name;
+
+    ability_req_copy_token(token, sizeof(token), src);
+    name = token;
+
+    return streq(name, "KNW") || streq(name, "KNOWLEDGE")
+        || streq(name, "LORE");
+}
+
+static bool ability_req_strip_suffix(char* token, cptr suffix)
+{
+    size_t token_len;
+    size_t suffix_len;
+
+    if (!token || !suffix)
+        return false;
+
+    token_len = strlen(token);
+    suffix_len = strlen(suffix);
+
+    if (token_len <= suffix_len)
+        return false;
+
+    if (strcmp(token + token_len - suffix_len, suffix))
+        return false;
+
+    token[token_len - suffix_len] = '\0';
+    return true;
+}
+
+static bool ability_req_parse_limited_name(cptr src, bool* is_less_than,
+    bool* is_lore, bool* is_stat, int* index)
+{
+    char token[64];
+    char base[64];
+    cptr name;
+    bool less_than = false;
+
+    if (!is_less_than || !is_lore || !is_stat || !index)
+        return false;
+
+    ability_req_copy_token(token, sizeof(token), src);
+    if (!token[0])
+        return false;
+
+    name = token;
+
+    if (!strncmp(name, "LT_", 3))
+    {
+        less_than = true;
+        name += 3;
+    }
+    else if (!strncmp(name, "LESS_THAN_", 10))
+    {
+        less_than = true;
+        name += 10;
+    }
+
+    SDL_strlcpy(base, name, sizeof(base));
+
+    if (ability_req_strip_suffix(base, "_LT")
+        || ability_req_strip_suffix(base, "_LESS_THAN"))
+    {
+        less_than = true;
+    }
+
+    if (ability_req_parse_lore_name(base))
+    {
+        *is_less_than = less_than;
+        *is_lore = true;
+        *is_stat = false;
+        *index = 0;
+        return true;
+    }
+
+    if (ability_req_parse_stat_name(base, index))
+    {
+        *is_less_than = less_than;
+        *is_lore = false;
+        *is_stat = true;
+        return true;
+    }
+
+    if (ability_req_parse_skill_name(base, index))
+    {
+        *is_less_than = less_than;
+        *is_lore = false;
+        *is_stat = false;
+        return true;
+    }
+
+    return false;
+}
+
 static errr parse_ability_requirement_line(ability_type* b_ptr, char* s)
 {
     int count = 0;
@@ -3666,6 +3763,8 @@ static errr parse_ability_requirement_line(ability_type* b_ptr, char* s)
         int value;
         int index;
         bool is_stat;
+        bool is_lore;
+        bool is_less_than;
 
         while (*s && (isspace((unsigned char)*s) || (*s == ':')))
             s++;
@@ -3683,16 +3782,34 @@ static errr parse_ability_requirement_line(ability_type* b_ptr, char* s)
         if (next)
             *next++ = '\0';
 
-        if (!ability_req_parse_name(req_name, &is_stat, &index))
+        if (!ability_req_parse_limited_name(req_name, &is_less_than, &is_lore,
+                &is_stat, &index))
             return (PARSE_ERROR_GENERIC);
 
         if (!ability_req_parse_int(req_value, 255, &value))
             return (PARSE_ERROR_OUT_OF_BOUNDS);
 
-        if (is_stat)
-            b_ptr->stat_req[index] = (byte)value;
+        if (is_lore)
+        {
+            if (is_less_than)
+                b_ptr->lore_req_lt = (byte)value;
+            else
+                b_ptr->lore_req = (byte)value;
+        }
+        else if (is_stat)
+        {
+            if (is_less_than)
+                b_ptr->stat_req_lt[index] = (byte)value;
+            else
+                b_ptr->stat_req[index] = (byte)value;
+        }
         else
-            b_ptr->skill_req[index] = (byte)value;
+        {
+            if (is_less_than)
+                b_ptr->skill_req_lt[index] = (byte)value;
+            else
+                b_ptr->skill_req[index] = (byte)value;
+        }
 
         count++;
 
@@ -3939,9 +4056,15 @@ static errr parse_ability_score_line(ability_type* b_ptr, char* s)
             return (PARSE_ERROR_OUT_OF_BOUNDS);
 
         if (is_stat)
+        {
             b_ptr->stat_score_weight[index] = (s16b)weight;
+            b_ptr->stat_score_weight_set[index] = true;
+        }
         else
+        {
             b_ptr->skill_score_weight[index] = (s16b)weight;
+            b_ptr->skill_score_weight_set[index] = true;
+        }
 
         b_ptr->score_weights_set = true;
         count++;
@@ -4063,6 +4186,24 @@ errr parse_b_info(char* buf, header* head)
             return (PARSE_ERROR_OUT_OF_BOUNDS);
 
         b_ptr->knowledge_cost = (byte)knowledge_cost;
+    }
+
+    /* Process 'H' for hidden/deprecated ability entries */
+    else if (buf[0] == 'H')
+    {
+        int hidden;
+
+        /* There better be a current b_ptr */
+        if (!b_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        if (1 != sscanf(buf + 2, "%d", &hidden))
+            return (PARSE_ERROR_GENERIC);
+
+        if (hidden < 0 || hidden > 1)
+            return (PARSE_ERROR_OUT_OF_BOUNDS);
+
+        b_ptr->hidden = (byte)hidden;
     }
 
     /* Process 'S' for data-driven ability score weights */

@@ -1515,7 +1515,7 @@ void listen(monster_type* m_ptr)
     if (!p_ptr->active_ability[S_PER][PER_LISTEN])
         return;
 
-    detect_monster_noise(m_ptr, p_ptr->skill_use[S_PER]);
+    detect_monster_noise(m_ptr, ability_score(S_PER, PER_LISTEN));
 }
 
 /*

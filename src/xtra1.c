@@ -4991,15 +4991,18 @@ static bool ability_has_runtime_requirements(const ability_type* b_ptr)
     if (!b_ptr)
         return false;
 
+    if (b_ptr->lore_req > 0 || b_ptr->lore_req_lt > 0)
+        return true;
+
     for (i = 0; i < A_MAX; i++)
     {
-        if (b_ptr->stat_req[i] > 0)
+        if (b_ptr->stat_req[i] > 0 || b_ptr->stat_req_lt[i] > 0)
             return true;
     }
 
     for (i = 0; i < S_MAX; i++)
     {
-        if (b_ptr->skill_req[i] > 0)
+        if (b_ptr->skill_req[i] > 0 || b_ptr->skill_req_lt[i] > 0)
             return true;
     }
 
@@ -5014,10 +5017,22 @@ bool ability_requirements_currently_met(int skilltype, int abilitynum)
     if (!b_ptr)
         return false;
 
+    if ((b_ptr->lore_req > 0) && (b_ptr->lore_req > p_ptr->lore))
+        return false;
+
+    if ((b_ptr->lore_req_lt > 0) && (p_ptr->lore >= b_ptr->lore_req_lt))
+        return false;
+
     for (i = 0; i < A_MAX; i++)
     {
         if ((b_ptr->stat_req[i] > 0)
             && (b_ptr->stat_req[i] > ability_requirement_current_stat_value(i)))
+        {
+            return false;
+        }
+        if ((b_ptr->stat_req_lt[i] > 0)
+            && (ability_requirement_current_stat_value(i)
+                >= b_ptr->stat_req_lt[i]))
         {
             return false;
         }
@@ -5027,6 +5042,12 @@ bool ability_requirements_currently_met(int skilltype, int abilitynum)
     {
         if ((b_ptr->skill_req[i] > 0)
             && (b_ptr->skill_req[i] > ability_requirement_current_skill_value(i)))
+        {
+            return false;
+        }
+        if ((b_ptr->skill_req_lt[i] > 0)
+            && (ability_requirement_current_skill_value(i)
+                >= b_ptr->skill_req_lt[i]))
         {
             return false;
         }
@@ -5170,7 +5191,7 @@ int ability_score(int skilltype, int abilitynum)
 
     for (int i = 0; i < A_MAX; i++)
     {
-        if (b_ptr->stat_score_weight[i])
+        if (b_ptr->stat_score_weight_set[i])
         {
             score += ability_score_apply_weight(
                 p_ptr->stat_use[i], b_ptr->stat_score_weight[i]);
@@ -5179,7 +5200,7 @@ int ability_score(int skilltype, int abilitynum)
 
     for (int i = 0; i < S_MAX; i++)
     {
-        if (b_ptr->skill_score_weight[i])
+        if (b_ptr->skill_score_weight_set[i])
         {
             score += ability_score_apply_weight(
                 ability_score_skill_source(i), b_ptr->skill_score_weight[i]);
@@ -5972,7 +5993,8 @@ static void calc_bonuses(void)
         p_ptr->skill_misc_mod[S_MEL] -= 3;
     }
 
-    if (p_ptr->active_ability[S_WIL][WIL_POISON_RESISTANCE])
+    if (p_ptr->active_ability[S_WIL][WIL_INDOMITABLE]
+        || p_ptr->active_ability[S_WIL][WIL_POISON_RESISTANCE])
     {
         p_ptr->resist_pois += 1;
     }

@@ -1009,7 +1009,7 @@ static void sing_song_of_disguise(int score)
 
     song_disguise_clear_pacified();
 
-    int player_skill = score + p_ptr->skill_use[S_WIL];
+    int player_skill = score;
     int observer_penalty = count_monsters_observing_player();
 
     // Turgon's unique: Shadow Walker - add Perception to the check
