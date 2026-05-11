@@ -981,7 +981,7 @@ void do_cmd_go_up(void)
     {
         p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
         p_ptr->varda_level = 0;
-        /* Encountering a quest giver still consumes the run's single quest slot. */
+        /* Encountering a quest giver still counts against the initiated quest cap. */
     }
 
     reset_varda_shadow_giver_if_left_level();
@@ -1169,7 +1169,7 @@ void do_cmd_go_down(void)
     {
         p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
         p_ptr->varda_level = 0;
-        /* Encountering a quest giver still consumes the run's single quest slot. */
+        /* Encountering a quest giver still counts against the initiated quest cap. */
     }
 
     reset_varda_shadow_giver_if_left_level();

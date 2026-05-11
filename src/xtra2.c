@@ -7306,6 +7306,13 @@ bool check_quest_eligibility(int quest_idx, int depth)
             log_trace("Quest %d eligibility: METARUN_COMPLETED (count=%d) without oath override = FAIL", quest_idx, metarun_count);
             return false;
         }
+        if (metarun_count > 0 && !metarun_repeat_tier_unlocked(metarun_count)) {
+            log_trace("Quest %d eligibility: REPEAT_TIER_LOCKED (count=%d, completed_at_least=%d/%d) = FAIL",
+                      quest_idx, metarun_count,
+                      metarun_quests_completed_at_least(metarun_count),
+                      QUEST_REPEAT_TIER_REQUIRED);
+            return false;
+        }
         if (metarun_count > 0 && oath_override) {
             log_trace("Quest %d eligibility: metarun completion count=%d overridden by active oath %d", quest_idx, metarun_count, q_ptr->oath_id);
         }
@@ -7356,14 +7363,10 @@ bool check_quest_eligibility(int quest_idx, int depth)
             break;
     }
     
-    /* 3. Only one quest per run (for roulette quests).  Varda's second
-     * stage intentionally reuses the slot reserved by her first reward. */
-    bool varda_shadow_slot_reuse = (quest_idx == QUEST_ID_VARDA_SHADOW &&
-        p_ptr->quest_reserved[0] &&
-        p_ptr->varda_quest == VARDA_QUEST_REWARDED &&
-        p_ptr->oath_type == OATH_LIGHT && !oath_invalid(OATH_LIGHT));
-    if (q_ptr->quest_type == 1 && p_ptr->quest_reserved[0] && !varda_shadow_slot_reuse) { /* Y:1 = roulette quest */
-        log_trace("Quest %d eligibility: QUEST_RESERVED = FAIL", quest_idx);
+    /* 3. Per-character initiation cap for roulette quests. */
+    if (q_ptr->quest_type == 1 && !quest_can_initiate_more()) { /* Y:1 = roulette quest */
+        log_trace("Quest %d eligibility: INITIATED_CAP (%d/%d) = FAIL",
+                  quest_idx, quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN);
         return false;
     }
     
@@ -9186,6 +9189,78 @@ bool spawn_quest_giver_near_player(int quest_giver_r_idx)
     return false;
 }
 
+static bool trigger_adjacent_quest_giver_interaction(
+    int quest_giver_r_idx, cptr quest_giver_name, void (*interaction)(void))
+{
+    int y, x;
+
+    for (y = p_ptr->py - 1; y <= p_ptr->py + 1; y++)
+    {
+        for (x = p_ptr->px - 1; x <= p_ptr->px + 1; x++)
+        {
+            if (y == p_ptr->py && x == p_ptr->px) continue;
+            if (!in_bounds(y, x)) continue;
+            if (cave_m_idx[y][x] <= 0) continue;
+
+            int m_idx = cave_m_idx[y][x];
+            if (m_idx >= mon_max) continue;
+
+            monster_type* m_ptr = &mon_list[m_idx];
+            if (m_ptr->r_idx == quest_giver_r_idx)
+            {
+                log_trace("Found %s adjacent at (%d, %d), triggering interaction",
+                    quest_giver_name ? quest_giver_name : "quest giver", y, x);
+                interaction();
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool ensure_reward_quest_giver_near_player(
+    int quest_giver_r_idx, int radius, cptr quest_giver_name, cptr arrival_message,
+    int* spawn_y, int* spawn_x)
+{
+    int y, x;
+
+    if (spawn_y) *spawn_y = -1;
+    if (spawn_x) *spawn_x = -1;
+
+    if (is_quest_giver_present(quest_giver_r_idx))
+    {
+        log_trace("%s reward: quest giver already exists on current level",
+            quest_giver_name ? quest_giver_name : "Quest");
+        return true;
+    }
+
+    for (y = p_ptr->py - radius; y <= p_ptr->py + radius; y++)
+    {
+        for (x = p_ptr->px - radius; x <= p_ptr->px + radius; x++)
+        {
+            if (!in_bounds(y, x)) continue;
+            if (!cave_floor_bold(y, x)) continue;
+            if (cave_m_idx[y][x] != 0) continue;
+            if (distance(p_ptr->py, p_ptr->px, y, x) < 2) continue;
+
+            if (place_monster_one(y, x, quest_giver_r_idx, true, true, NULL))
+            {
+                if (spawn_y) *spawn_y = y;
+                if (spawn_x) *spawn_x = x;
+                if (arrival_message) msg_print(arrival_message);
+                log_trace("%s reward: placed quest giver at (%d, %d)",
+                    quest_giver_name ? quest_giver_name : "Quest", y, x);
+                return true;
+            }
+        }
+    }
+
+    log_trace("%s reward: failed to place quest giver near player",
+        quest_giver_name ? quest_giver_name : "Quest");
+    return false;
+}
+
 static void quest_show_text_or_fallback(int quest_idx, bool completion,
     cptr menu_title, byte title_color, byte text_color, cptr fallback_a,
     cptr fallback_b)
@@ -9241,6 +9316,11 @@ static void quest_apply_followup_side_effects(int quest_idx)
         case QUEST_ID_OROME_DRAGONS:
             if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_ACTIVE)
             {
+                if (!quest_can_accept_more()) {
+                    log_trace("Orome great hunt activation blocked by active quest cap (%d/%d)",
+                              quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+                    break;
+                }
                 quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_ACTIVE);
                 p_ptr->orome_great_hunt_mask = metarun_orome_great_hunt_mask();
                 metarun_set_orome_great_hunt_active(true);
@@ -9363,6 +9443,13 @@ static void valar_followup_quest_interaction(int quest_idx, int quest_giver_r_id
 
     if (state == QUEST_STATE_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Quest %d accept blocked by active quest cap (%d/%d)",
+                      quest_idx, quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         quest_show_text_or_fallback(quest_idx, false, menu_title,
             title_color, text_color,
             "A Vala gives you a new charge.",
@@ -9370,7 +9457,6 @@ static void valar_followup_quest_interaction(int quest_idx, int quest_giver_r_id
 
         quest_set_state(quest_idx, QUEST_STATE_ACTIVE);
         quest_accept_followup_side_effects(quest_idx);
-        p_ptr->quest_reserved[0] = 1;
 
         if (remove_on_accept)
             remove_quest_giver_silent(quest_giver_r_idx);
@@ -9448,6 +9534,13 @@ void check_niena_morgoth_interaction(void)
             monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
             if (m_ptr->r_idx != R_IDX_NIENA) continue;
 
+            if (!quest_can_accept_more()) {
+                msg_print("You are already committed to two quests. Finish one before accepting another.");
+                log_trace("Niena Morgoth quest: accept blocked by active quest cap (%d/%d)",
+                          quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+                return;
+            }
+
             quest_show_text_or_fallback(QUEST_ID_NIENA_MORGOTH, false,
                 "Nienna's Mercy", TERM_L_BLUE, TERM_WHITE,
                 "In the shadow of the throne, Nienna waits.",
@@ -9504,6 +9597,11 @@ void ensure_niena_pacifist_active(void)
 
     if (pacifist_state == QUEST_STATE_NOT_STARTED)
     {
+        if (!quest_can_accept_more()) {
+            log_trace("Niena pacifist quest: activation blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
         quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_ACTIVE);
         p_ptr->niena_reserved &= ~NIENA_FLAG_PACIFIST_FAILED;
     }
@@ -9539,6 +9637,11 @@ void ensure_tulkas_morgoth_active(void)
 
     if (state == QUEST_STATE_NOT_STARTED)
     {
+        if (!quest_can_accept_more()) {
+            log_trace("Tulkas Morgoth quest: activation blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
         quest_set_state(QUEST_ID_TULKAS_MORGOTH, QUEST_STATE_ACTIVE);
         p_ptr->tulkas_morgoth_progress = 0;
     }
@@ -9594,8 +9697,14 @@ void ensure_varda_ungoliant_active(void)
         return;
     }
 
-    if (state == QUEST_STATE_NOT_STARTED)
+    if (state == QUEST_STATE_NOT_STARTED) {
+        if (!quest_can_accept_more()) {
+            log_trace("Varda Ungoliant quest: activation blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
         quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_ACTIVE);
+    }
 
     if (quest_get_state(QUEST_ID_VARDA_UNGOLIANT) == QUEST_STATE_ACTIVE &&
         r_info[R_IDX_UNGOLIANT].max_num == 0)
@@ -9645,6 +9754,13 @@ void tulkas_quest_interaction(void)
     
     if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Tulkas quest: accept blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Starting Tulkas quest interaction - assigning target and prize");
         
         /* Assign quest target and prize */
@@ -9844,12 +9960,27 @@ void tulkas_quest_interaction(void)
     }
 }
 
+static void tulkas_adjacent_quest_interaction(void)
+{
+    byte tulkas_orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
+
+    if (tulkas_orc_state >= QUEST_STATE_GIVER_PRESENT &&
+        tulkas_orc_state <= QUEST_STATE_SUCCESS)
+    {
+        valar_followup_quest_interaction(QUEST_ID_TULKAS_ORCS,
+            R_IDX_TULKAS, "Tulkas, Orc-Bane",
+            TERM_YELLOW, TERM_WHITE, true);
+        return;
+    }
+
+    tulkas_quest_interaction();
+}
+
 /*
  * Check if player is adjacent to Tulkas and handle interaction
  */
 void check_tulkas_quest_interaction(void)
 {
-    int i, y, x;
     byte tulkas_orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
     
     /* Only check if quest is in appropriate state */
@@ -9861,44 +9992,23 @@ void check_tulkas_quest_interaction(void)
         return;
     }
     
-    log_trace("check_tulkas_quest_interaction: checking adjacency, quest state: %d", p_ptr->tulkas_quest);
-    
-    /* Check all adjacent squares for Tulkas */
-    for (i = 1; i < 9; i++)
+    if (trigger_adjacent_quest_giver_interaction(
+        R_IDX_TULKAS, "Tulkas", tulkas_adjacent_quest_interaction))
     {
-        y = p_ptr->py + ddy[i];
-        x = p_ptr->px + ddx[i];
-        
-        /* Check bounds */
-        if (!in_bounds(y, x)) continue;
-        
-        /* Check for monster */
-        if (cave_m_idx[y][x] > 0)
-        {
-            int m_idx = cave_m_idx[y][x];
-            
-            if (m_idx >= mon_max) continue;
-            
-            monster_type* m_ptr = &mon_list[m_idx];
-            
-            /* Check if it's Tulkas */
-            if (m_ptr->r_idx == R_IDX_TULKAS)
-            {
-                if (tulkas_orc_state >= QUEST_STATE_GIVER_PRESENT &&
-                    tulkas_orc_state <= QUEST_STATE_SUCCESS)
-                {
-                    valar_followup_quest_interaction(QUEST_ID_TULKAS_ORCS,
-                        R_IDX_TULKAS, "Tulkas, Orc-Bane",
-                        TERM_YELLOW, TERM_WHITE, true);
-                    return;
-                }
-
-                log_trace("Found Tulkas adjacent, calling interaction");
-                tulkas_quest_interaction();
-                return;
-            }
-        }
+        return;
     }
+
+    if (tulkas_orc_state == QUEST_STATE_SUCCESS)
+        ensure_reward_quest_giver_near_player(
+            R_IDX_TULKAS, 3, "Tulkas",
+            "Tulkas Unclad materializes nearby with a booming laugh, ready to reward your valor!",
+            NULL, NULL);
+
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE)
+        ensure_reward_quest_giver_near_player(
+            R_IDX_TULKAS, 3, "Tulkas",
+            "Tulkas Unclad materializes nearby with a booming laugh, ready to reward your valor!",
+            NULL, NULL);
 }
 
 /*
@@ -9911,7 +10021,10 @@ void check_tulkas_quest_completion(int r_idx)
     {
         quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_SUCCESS);
         msg_print("The last marked orc captain falls. Seek Tulkas for your reward.");
-        spawn_quest_giver_near_player(R_IDX_TULKAS);
+        ensure_reward_quest_giver_near_player(
+            R_IDX_TULKAS, 3, "Tulkas",
+            "Tulkas Unclad materializes nearby with a booming laugh, ready to reward your valor!",
+            NULL, NULL);
         log_trace("Tulkas orc quest completed");
     }
 
@@ -9922,24 +10035,11 @@ void check_tulkas_quest_completion(int r_idx)
         p_ptr->tulkas_quest_complete = 1;
         
         msg_print("The deed is done! Seek out Tulkas Unclad to claim your reward.");
-        
-        /* Spawn Tulkas in the same room */
-        int y, x;
-        
-        /* Try to find a suitable spot near the player */
-        for (y = p_ptr->py - 3; y <= p_ptr->py + 3; y++)
-        {
-            for (x = p_ptr->px - 3; x <= p_ptr->px + 3; x++)
-            {
-                if (in_bounds(y, x) && cave_floor_bold(y, x) && 
-                    cave_m_idx[y][x] == 0 && distance(p_ptr->py, p_ptr->px, y, x) >= 2)
-                {
-                    place_monster_one(y, x, R_IDX_TULKAS, true, true, NULL);
-                    msg_print("Tulkas Unclad materializes nearby with a booming laugh, ready to reward your valor!");
-                    return;
-                }
-            }
-        }
+
+        ensure_reward_quest_giver_near_player(
+            R_IDX_TULKAS, 3, "Tulkas",
+            "Tulkas Unclad materializes nearby with a booming laugh, ready to reward your valor!",
+            NULL, NULL);
     }
 }
 
@@ -10013,6 +10113,47 @@ static bool artefact_is_radiant_candidate(artefact_type* a_ptr)
     return true;
 }
 
+static int varda_rarity_weight(int a_idx)
+{
+    artefact_type* a_ptr = &a_info[a_idx];
+    int rarity = (a_ptr->rarity > 0) ? a_ptr->rarity : 1;
+
+    return MAX(1, 10000 / rarity);
+}
+
+static int take_weighted_varda_candidate(int* candidates, int* candidate_count)
+{
+    int total_weight = 0;
+    int pick;
+    int selected = 0;
+
+    if (!candidates || !candidate_count || *candidate_count <= 0) return 0;
+
+    for (int i = 0; i < *candidate_count; i++) {
+        total_weight += varda_rarity_weight(candidates[i]);
+    }
+
+    if (total_weight <= 0) return 0;
+
+    pick = rand_int(total_weight);
+    for (int i = 0; i < *candidate_count; i++) {
+        int weight = varda_rarity_weight(candidates[i]);
+        if (pick < weight) {
+            selected = candidates[i];
+            for (int j = i; j < *candidate_count - 1; j++) {
+                candidates[j] = candidates[j + 1];
+            }
+            (*candidate_count)--;
+            return selected;
+        }
+        pick -= weight;
+    }
+
+    selected = candidates[*candidate_count - 1];
+    (*candidate_count)--;
+    return selected;
+}
+
 static int build_varda_reward_options(int* choices, int max_choices)
 {
     if (!choices || max_choices <= 0 || !z_info) return 0;
@@ -10066,17 +10207,9 @@ static int build_varda_reward_options(int* choices, int max_choices)
 
     if (candidate_count == 0) return 0;
 
-    /* Shuffle candidates */
-    for (int i = candidate_count - 1; i > 0; i--) {
-        int swap_idx = rand_int(i + 1);
-        int tmp = candidates[i];
-        candidates[i] = candidates[swap_idx];
-        candidates[swap_idx] = tmp;
-    }
-
     int final_count = MIN(max_choices, candidate_count);
     for (int i = 0; i < final_count; i++) {
-        choices[i] = candidates[i];
+        choices[i] = take_weighted_varda_candidate(candidates, &candidate_count);
     }
     return final_count;
 }
@@ -10313,7 +10446,6 @@ static bool grant_varda_reward_for_quest(int quest_idx, cptr* completion_texts, 
     if (quest_idx == QUEST_ID_VARDA)
     {
         p_ptr->varda_quest = VARDA_QUEST_REWARDED;
-        p_ptr->quest_reserved[0] = 1;
         p_ptr->varda_vault_ready = 0;
         p_ptr->varda_vault_placed = 1;
 
@@ -10324,7 +10456,6 @@ static bool grant_varda_reward_for_quest(int quest_idx, cptr* completion_texts, 
     else
     {
         quest_set_state(quest_idx, QUEST_STATE_REWARDED);
-        p_ptr->quest_reserved[0] = 1;
         apply_quest_rewards(quest_idx);
         quest_apply_followup_side_effects(quest_idx);
 
@@ -10359,35 +10490,19 @@ static void varda_make_light_pool(int y, int x)
 
 static void try_place_varda_near_player(void)
 {
-    /* Avoid double-spawning */
-    for (int i = 1; i < mon_max; i++) {
-        monster_type* m_ptr = &mon_list[i];
-        if (m_ptr->r_idx == R_IDX_VARDA) {
-            log_trace("Varda reward: quest giver already exists on level");
-            return;
-        }
+    int y = -1;
+    int x = -1;
+
+    if (ensure_reward_quest_giver_near_player(
+        R_IDX_VARDA, 2, "Varda", NULL, &y, &x))
+    {
+        if (y >= 0 && x >= 0)
+            varda_make_light_pool(y, x);
+        p_ptr->varda_level = p_ptr->depth;
+        return;
     }
 
-    for (int y = p_ptr->py - 2; y <= p_ptr->py + 2; y++) {
-        for (int x = p_ptr->px - 2; x <= p_ptr->px + 2; x++) {
-            if (!in_bounds(y, x)) continue;
-            if (y == p_ptr->py && x == p_ptr->px) continue;
-            if (distance(p_ptr->py, p_ptr->px, y, x) < 2) continue;
-            if (!cave_floor_bold(y, x)) continue;
-            if (cave_m_idx[y][x] != 0) continue;
-
-            if (place_monster_one(y, x, R_IDX_VARDA, true, true, NULL)) {
-                varda_make_light_pool(y, x);
-                p_ptr->varda_level = p_ptr->depth;
-                log_trace("Varda reward: placed quest giver at (%d,%d)", y, x);
-                return;
-            }
-        }
-    }
-
-    /* Mark this depth as attempted even if placement failed, to avoid infinite spawn loops */
-    p_ptr->varda_level = p_ptr->depth;
-    log_trace("Varda reward: failed to place quest giver near player (no valid space), will retry on new depth");
+    log_trace("Varda reward: failed to place quest giver near player; will retry while reward is pending");
 }
 
 static bool varda_quest_duruin_present(void)
@@ -10438,7 +10553,6 @@ void varda_quest_fail_if_bastion_missed(void)
 
     p_ptr->varda_quest = VARDA_QUEST_FAILED;
     p_ptr->varda_vault_ready = 0;
-    p_ptr->quest_reserved[0] = 1;
 
     msg_print("You have left Duruin's Bastion behind.");
     msg_print("Varda's quest is lost.");
@@ -10463,7 +10577,8 @@ void check_varda_quest_completion(int r_idx)
         p_ptr->varda_shadow_ready = 0;
         p_ptr->varda_shadow_level = p_ptr->depth;
         msg_print("Belegwath falls. The Shadow Bastion opens to starlight!");
-        spawn_quest_giver_near_player(R_IDX_VARDA);
+        ensure_reward_quest_giver_near_player(
+            R_IDX_VARDA, 2, "Varda", NULL, NULL, NULL);
         log_trace("Varda shadow quest completed - Belegwath slain");
         return;
     }
@@ -10484,9 +10599,15 @@ void varda_quest_interaction(void)
     last_interaction_turn = turn;
 
     if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT) {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Varda quest: accept blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Varda quest: accepting quest");
         p_ptr->varda_quest = VARDA_QUEST_ACTIVE;
-        p_ptr->quest_reserved[0] = 1;
         p_ptr->varda_level = p_ptr->depth;
 
         /* Remove quest giver for roulette quests without a generic
@@ -10562,8 +10683,14 @@ static void varda_shadow_quest_interaction(void)
 
     if (state == QUEST_STATE_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Varda shadow quest: accept blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_ACTIVE);
-        p_ptr->quest_reserved[0] = 1;
         p_ptr->varda_shadow_level = p_ptr->depth;
 
         remove_quest_giver_silent(R_IDX_VARDA);
@@ -10661,18 +10788,18 @@ void check_varda_quest_interaction(void)
         }
     }
 
-    /* If Varda should be present for a reward but isn't adjacent, try to place her */
-    /* Only attempt placement once per depth to avoid infinite spawn loops */
-    if (p_ptr->varda_quest == VARDA_QUEST_SUCCESS && p_ptr->varda_level != p_ptr->depth) {
+    /* If Varda should be present for a reward but isn't on the level, try to place her. */
+    if (p_ptr->varda_quest == VARDA_QUEST_SUCCESS && !is_quest_giver_present(R_IDX_VARDA)) {
         log_trace("Varda quest: success state without nearby quest giver - attempting to place Varda");
         try_place_varda_near_player();
     }
 
     if (quest_get_state(QUEST_ID_VARDA_SHADOW) == QUEST_STATE_SUCCESS &&
-        p_ptr->varda_shadow_level != p_ptr->depth)
+        !is_quest_giver_present(R_IDX_VARDA))
     {
         log_trace("Varda shadow quest: success state without nearby quest giver - attempting to place Varda");
-        spawn_quest_giver_near_player(R_IDX_VARDA);
+        ensure_reward_quest_giver_near_player(
+            R_IDX_VARDA, 2, "Varda", NULL, NULL, NULL);
     }
 }
 
@@ -10775,9 +10902,17 @@ void aule_quest_interaction(void)
     /* Handle first encounter - initialize quest */
     if (p_ptr->aule_quest == AULE_QUEST_NOT_STARTED)
     {
+        if (!quest_can_initiate_more()) {
+            msg_print("You have already found as many quest-givers as this journey can bear.");
+            log_trace("Aule quest: first encounter blocked by initiated quest cap (%d/%d)",
+                      quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN);
+            return;
+        }
+
         log_trace("First encounter with Aule - setting to FORGE_PRESENT");
         p_ptr->aule_quest = AULE_QUEST_FORGE_PRESENT;
         p_ptr->aule_level = p_ptr->depth;
+        quest_note_initiated(QUEST_ID_AULE);
         /* Don't start the actual quest conversation yet, let them talk again */
         msg_print("You encounter Aule the Smith, Maker of Mountains.");
         msg_print("'Speak with me again to learn of the challenges that await.'");
@@ -10787,6 +10922,13 @@ void aule_quest_interaction(void)
     /* Handle quest explanation */
     if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Aule quest: accept blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Aule quest explanation - setting to ACTIVE");
         p_ptr->aule_quest = AULE_QUEST_ACTIVE;
         
@@ -10893,9 +11035,17 @@ void mandos_quest_interaction(void)
     /* Handle first encounter - initialize quest */
     if (p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED)
     {
+        if (!quest_can_initiate_more()) {
+            msg_print("You have already found as many quest-givers as this journey can bear.");
+            log_trace("Mandos quest: first encounter blocked by initiated quest cap (%d/%d)",
+                      quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN);
+            return;
+        }
+
         log_trace("First encounter with Mandos - setting to GIVER_PRESENT");
         p_ptr->mandos_quest = MANDOS_QUEST_GIVER_PRESENT;
         p_ptr->mandos_level = p_ptr->depth;
+        quest_note_initiated(QUEST_ID_MANDOS);
         /* Don't start the actual quest conversation yet, let them talk again */
         msg_print("You encounter Mandos, the Doomsman of the Valar.");
         msg_print("His stern gaze weighs upon your soul, as if judging your worth.");
@@ -10914,6 +11064,13 @@ void mandos_quest_interaction(void)
     
     if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Mandos quest: accept blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Starting Mandos quest interaction - assigning Brodda quest");
         
         /* Set quest state */
@@ -11178,7 +11335,10 @@ void check_orome_quest_completion(void)
     {
         quest_set_state(QUEST_ID_OROME_DRAGONS, QUEST_STATE_SUCCESS);
         msg_print("The tenth great dragon falls. Seek Orome for your reward.");
-        spawn_quest_giver_near_player(R_IDX_OROME);
+        ensure_reward_quest_giver_near_player(
+            R_IDX_OROME, 3, "Orome",
+            "Orome the Huntsman materializes nearby, ready to honor your success!",
+            NULL, NULL);
         log_trace("Orome dragon quest completed");
     }
 
@@ -11247,6 +11407,13 @@ void niena_quest_interaction(void)
     
     if (p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Niena quest: accept blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Starting Niena quest interaction - offering mercy quest");
         
         /* Extract initialization texts from quest data */
@@ -11439,6 +11606,10 @@ void check_niena_quest_interaction(void)
             }
         }
     }
+
+    if (p_ptr->niena_quest == NIENA_QUEST_SUCCESS)
+        ensure_reward_quest_giver_near_player(
+            R_IDX_NIENA, 3, "Niena", NULL, NULL, NULL);
 }
 
 /*
@@ -11464,33 +11635,8 @@ void check_niena_quest_completion(void)
         msg_print("'You have done well, showing mercy where others would show only violence.'");
         msg_print("Wait here a moment - she wishes to speak with you.");
         
-        /* Make Niena appear near the player for the reward interaction */
-        int attempts;
-        bool niena_spawned = false;
-        
-        for (attempts = 0; attempts < 20 && !niena_spawned; attempts++)
-        {
-            int try_y = p_ptr->py + rand_range(-3, 3);
-            int try_x = p_ptr->px + rand_range(-3, 3);
-            
-            /* Must be valid coordinates and floor */
-            if (in_bounds(try_y, try_x) && cave_floor_bold(try_y, try_x) && 
-                cave_m_idx[try_y][try_x] == 0 &&
-                distance(p_ptr->py, p_ptr->px, try_y, try_x) >= 2)
-            {
-                if (place_monster_one(try_y, try_x, R_IDX_NIENA, true, true, NULL))
-                {
-                    niena_spawned = true;
-                    log_trace("Niena spawned near stairs at (%d, %d) for quest completion", try_y, try_x);
-                }
-            }
-        }
-        
-        if (!niena_spawned) {
-            log_trace("Failed to spawn Niena for quest completion - will complete anyway");
-            /* Complete the quest directly if spawning fails */
-            niena_quest_interaction();
-        }
+        ensure_reward_quest_giver_near_player(
+            R_IDX_NIENA, 3, "Niena", NULL, NULL, NULL);
     }
 }
 
@@ -11516,6 +11662,13 @@ void orome_quest_interaction(void)
     
     if (p_ptr->orome_quest == OROME_QUEST_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Orome quest: accept blocked by active quest cap (%d/%d)",
+                      quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Starting Orome quest interaction - offering hunting quest");
         
         /* Extract initialization texts from quest data */
@@ -11679,34 +11832,19 @@ void check_orome_quest_interaction(void)
     if (p_ptr->orome_quest == OROME_QUEST_SUCCESS)
     {
         log_trace("Orome quest complete but no Orome found - trying to spawn");
-        
-        /* Try to find a suitable spot near the player */
-        for (y = p_ptr->py - 3; y <= p_ptr->py + 3; y++)
-        {
-            for (x = p_ptr->px - 3; x <= p_ptr->px + 3; x++)
-            {
-                if (in_bounds(y, x) && cave_floor_bold(y, x) && 
-                    cave_m_idx[y][x] == 0 && distance(p_ptr->py, p_ptr->px, y, x) >= 2)
-                {
-                    if (place_monster_one(y, x, R_IDX_OROME, true, true, NULL))
-                    {
-                        msg_print("Orome the Huntsman materializes nearby, ready to honor your success!");
-                        log_trace("Successfully spawned Orome for quest completion");
-                        return;
-                    }
-                }
-            }
-        }
-        
-        log_trace("Failed to spawn Orome for quest completion - will complete anyway");
-        /* Complete the quest directly if spawning fails */
-        orome_quest_interaction();
+        ensure_reward_quest_giver_near_player(
+            R_IDX_OROME, 3, "Orome",
+            "Orome the Huntsman materializes nearby, ready to honor your success!",
+            NULL, NULL);
     }
 
     if (quest_get_state(QUEST_ID_OROME_DRAGONS) == QUEST_STATE_SUCCESS)
     {
         log_trace("Orome dragon quest complete but no Orome found - trying to spawn");
-        spawn_quest_giver_near_player(R_IDX_OROME);
+        ensure_reward_quest_giver_near_player(
+            R_IDX_OROME, 3, "Orome",
+            "Orome the Huntsman materializes nearby, ready to honor your success!",
+            NULL, NULL);
     }
 }
 

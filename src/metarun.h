@@ -212,6 +212,13 @@ void metarun_set_orome_great_hunt_active(bool active); /* Toggle the Orome hunt 
 void metarun_seed_quest_counts_from_mask(metarun *m, u32b mask); /* Expand quest mask into counters */
 void metarun_clamp_and_sync_quests(metarun *m);     /* Clamp counters and sync mask */
 int metarun_total_quest_completions(const metarun *m); /* Aggregate quest completion total */
+int metarun_quests_completed_at_least(int minimum_count); /* Quests completed at least N times */
+bool metarun_repeat_tier_unlocked(int prior_completion_count); /* Has repeat tier N+1 unlocked? */
+int quest_initiated_count_this_run(void);           /* Count quest encounters initiated this character */
+int quest_accepted_count_this_run(void);            /* Count accepted quests currently in progress */
+bool quest_can_initiate_more(void);                 /* Per-character initiated quest cap check */
+bool quest_can_accept_more(void);                   /* Per-character active quest cap check */
+void quest_note_initiated(int quest_idx);           /* Record a quest encounter initiated this character */
 bool metarun_challenge_disconnected_unlocked(void); /* Has the disconnected stair challenge been unlocked? */
 void metarun_unlock_challenge_disconnected(void);   /* Unlock the disconnected stair challenge for this metarun */
 bool metarun_challenge_single_stair_unlocked(void); /* Has the single-stair challenge been unlocked? */
