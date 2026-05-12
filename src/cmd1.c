@@ -30,6 +30,11 @@ static int revenge_bonus_against(const monster_type* m_ptr)
     return meta_monster_revenge_bonus();
 }
 
+static void player_face_grid_before_attack(int y, int x)
+{
+    player_set_visual_facing_target_immediate(y, x);
+}
+
 static bool weapon_has_attack_confirmation_inscription(const object_type* o_ptr)
 {
     cptr s;
@@ -6238,6 +6243,8 @@ void py_attack_aux(int y, int x, int attack_type)
     m_ptr = &mon_list[m_idx];
     r_ptr = &r_info[m_ptr->r_idx];
 
+    player_face_grid_before_attack(y, x);
+
     /*possibly update the monster health bar*/
     if (p_ptr->health_who == cave_m_idx[y][x])
         p_ptr->redraw |= (PR_HEALTHBAR);
@@ -6994,6 +7001,7 @@ void py_attack(int y, int x, int attack_type)
     p_ptr->previous_action[0] = ACTION_MISC;
 
     dir = dir_from_delta(y - p_ptr->py, x - p_ptr->px);
+    player_set_visual_facing_dir(dir);
     dir0 = chome[dir];
 
     // Debug logging for whirlwind
@@ -7266,6 +7274,7 @@ void move_player(int dir)
     int y, x;
 
     /* Find the result of moving */
+    player_set_visual_facing_dir(dir);
     y = py + ddy[dir];
     x = px + ddx[dir];
 
