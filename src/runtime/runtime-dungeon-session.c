@@ -31,6 +31,46 @@
 #include <string.h>
 #include <time.h>
 
+static bool try_mandos_resurrection(void)
+{
+    if (!p_ptr || !p_ptr->mandos_resurrection_primed
+        || p_ptr->mandos_resurrection_used)
+    {
+        return false;
+    }
+
+    p_ptr->mandos_resurrection_used = 1;
+    p_ptr->mandos_resurrection_primed = 0;
+    p_ptr->is_dead = false;
+
+    p_ptr->chp = p_ptr->mhp;
+    p_ptr->chp_frac = 0;
+    p_ptr->csp = p_ptr->msp;
+    p_ptr->csp_frac = 0;
+
+    (void)set_blind(0);
+    (void)set_confused(0);
+    (void)set_poisoned(0);
+    (void)set_afraid(0);
+    (void)set_entranced(0);
+    (void)set_image(0);
+    (void)set_stun(0);
+    (void)set_cut(0);
+    (void)res_stat(A_STR, 20);
+    (void)res_stat(A_CON, 20);
+    (void)res_stat(A_DEX, 20);
+    (void)res_stat(A_GRA, 20);
+    (void)set_food(PY_FOOD_FULL - 1);
+
+    SDL_strlcpy(p_ptr->died_from, "Mandos' reprieve",
+        sizeof(p_ptr->died_from));
+    p_ptr->leaving = true;
+
+    msg_print("Mandos' judgment is stayed; you are returned for one more attempt.");
+    log_info("Mandos resurrection triggered; character restored");
+    return true;
+}
+
 static void snapshot_run_history(const char* reason)
 {
     if (!character_generated || !p_ptr || p_ptr->is_dead)
@@ -421,7 +461,8 @@ PlayResult play_game(void)
         {
             log_info("Player '%s' died at level %d, turn %d.",
                 op_ptr->base_name, p_ptr->depth, turn);
-            if ((p_ptr->wizard || (p_ptr->noscore & 0x0008) || cheat_live)
+            if (!try_mandos_resurrection()
+                && (p_ptr->wizard || (p_ptr->noscore & 0x0008) || cheat_live)
                 && !get_check("Die? "))
             {
                 log_debug("Player cheated death - restoring to full health");

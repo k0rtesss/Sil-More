@@ -181,14 +181,10 @@ static bool cave_gen(void)
     log_trace("cave_gen: Starting level generation (quest_vault_used=%s, lottery_winner=%d)", 
               p_ptr->quest_vault_used ? "true" : "false", quest_lottery_winner);
     
-    /* Varda quest reserves the run to avoid other quest content until complete */
-    if (!is_morgoth_level && p_ptr->varda_quest >= VARDA_QUEST_ACTIVE && !p_ptr->quest_reserved[0]) {
-        p_ptr->quest_reserved[0] = 1;
-        log_trace("Varda quest: === QUEST SLOT RESERVED === Active Varda quest reserves slot (state=%d)", p_ptr->varda_quest);
-    }
-    
-    log_trace("cave_gen: Quest status at level start - quest_reserved[0]=%d, varda_quest=%d, lottery_winner=%d",
-              p_ptr->quest_reserved[0], p_ptr->varda_quest, quest_lottery_winner);
+    log_trace("cave_gen: Quest status at level start - initiated=%d/%d, accepted=%d/%d, varda_quest=%d, lottery_winner=%d",
+              quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN,
+              quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN,
+              p_ptr->varda_quest, quest_lottery_winner);
     
     /* Varda quest: flag forced bastion placement on first level deeper than 500ft */
     if (!is_morgoth_level && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
@@ -383,38 +379,27 @@ static bool cave_gen(void)
                 return false;
             }
             tulkas_stronghold_forced = true;
-            p_ptr->quest_reserved[0] = 1;
             log_trace("Quest vault: === ORC STRONGHOLD SUCCESS === Placed successfully");
         }
                   
-        /* QUEST VAULT REGENERATION FIX: Allow quest vault re-placement during regeneration */
-        /* Quest vaults can be placed if: */
-        /* 1. quest_vault_used is false (haven't successfully completed a quest vault this run), OR */
-        /* 2. We're in a regeneration scenario (quest vault was placed before but level failed) */
-        if (!p_ptr->quest_vault_used && !duruin_bastion_forced && !shadow_bastion_forced && !tulkas_stronghold_forced)
+        /* Quest vaults can add another initiated quest until the per-run cap. */
+        if (quest_can_initiate_more() && !duruin_bastion_forced && !shadow_bastion_forced && !tulkas_stronghold_forced)
         {
-            /* QUEST VAULT REGENERATION FIX: Remove the quest_vault_attempted_this_level check */
-            /* to allow quest vault re-placement during level regeneration */
+            log_trace("Quest vault: Checking placement allowance:");
+            log_trace("Quest vault:   initiated=%d/%d, lottery_winner=%d",
+                      quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN, quest_lottery_winner);
+            log_trace("Quest vault:   tulkas=%d, tulkas_orcs_state=%d, stronghold_level=%d, mandos=%d, aule=%d, varda=%d shadow=%d, lottery_winner=%d",
+                      p_ptr->tulkas_quest, quest_get_state(QUEST_ID_TULKAS_ORCS),
+                      p_ptr->tulkas_stronghold_level, p_ptr->mandos_quest,
+                      p_ptr->aule_quest, p_ptr->varda_quest,
+                      varda_shadow_state, quest_lottery_winner);
             
-            /* Check if any quest is already active - ONE QUEST PER RUN ENFORCEMENT */
-            log_trace("Quest vault: Checking one-quest-per-run enforcement:");
-            log_trace("Quest vault:   quest_reserved[0]=%d (should block if 1)", p_ptr->quest_reserved[0]);
-            log_trace("Quest vault:   tulkas=%d, tulkas_orcs=%d, mandos=%d, aule=%d, varda=%d, shadow=%d, lottery_winner=%d",
-                      p_ptr->tulkas_quest, quest_get_state(QUEST_ID_TULKAS_ORCS), p_ptr->mandos_quest, p_ptr->aule_quest,
-                      p_ptr->varda_quest, varda_shadow_state, quest_lottery_winner);
-            
-            if (p_ptr->quest_reserved[0] || 
-                quest_lottery_winner > 0 ||
-                p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED ||
-                quest_get_state(QUEST_ID_TULKAS_ORCS) != QUEST_STATE_NOT_STARTED ||
-                p_ptr->tulkas_stronghold_level > 0 ||
-                p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED ||
-                p_ptr->aule_quest != AULE_QUEST_NOT_STARTED ||
-                p_ptr->varda_quest != VARDA_QUEST_NOT_STARTED ||
-                varda_shadow_state != QUEST_STATE_NOT_STARTED) {
-                log_trace("Quest vault: === BLOCKED === This level already belongs to another quest (tulkas=%d, tulkas_orcs=%d, stronghold=%d, mandos=%d, aule=%d, varda=%d, shadow=%d, reserved=%d, lottery_winner=%d)", 
-                         p_ptr->tulkas_quest, quest_get_state(QUEST_ID_TULKAS_ORCS), p_ptr->tulkas_stronghold_level, p_ptr->mandos_quest, p_ptr->aule_quest,
-                         p_ptr->varda_quest, varda_shadow_state, p_ptr->quest_reserved[0], quest_lottery_winner);
+            if (quest_lottery_winner > 0) {
+                log_trace("Quest vault: === BLOCKED === This level already belongs to roulette quest %d (tulkas=%d, tulkas_orcs_state=%d, stronghold_level=%d, mandos=%d, aule=%d, varda=%d, shadow=%d, initiated=%d)",
+                         quest_lottery_winner, p_ptr->tulkas_quest, quest_get_state(QUEST_ID_TULKAS_ORCS),
+                         p_ptr->tulkas_stronghold_level, p_ptr->mandos_quest,
+                         p_ptr->aule_quest, p_ptr->varda_quest, varda_shadow_state,
+                         quest_initiated_count_this_run());
                 /* Don't place any quest vaults - skip to end */
             } else {
                 int quest_vault_roll;
@@ -757,8 +742,9 @@ static bool cave_gen(void)
     if (quest_lottery_winner == QUEST_ID_VARDA || quest_lottery_winner == QUEST_ID_VARDA_SHADOW) {
         bool shadow_quest = (quest_lottery_winner == QUEST_ID_VARDA_SHADOW);
         log_trace("Varda spawn: === VARDA WON LOTTERY === Attempting spawn at depth %d for quest %d", p_ptr->depth, quest_lottery_winner);
-        log_trace("Varda spawn: Current state - varda_quest=%d, shadow_state=%d, quest_reserved[0]=%d", 
-                  p_ptr->varda_quest, varda_shadow_state, p_ptr->quest_reserved[0]);
+        log_trace("Varda spawn: Current state - varda_quest=%d, shadow_state=%d, initiated=%d/%d",
+                  p_ptr->varda_quest, varda_shadow_state,
+                  quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN);
         
         /* Safety: enforce early-depth requirement even if data is misconfigured */
         if (p_ptr->depth > 3) {
@@ -847,17 +833,18 @@ static bool cave_gen(void)
                 if (shadow_quest) {
                     quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_GIVER_PRESENT);
                     p_ptr->varda_shadow_level = p_ptr->depth;
+                    quest_note_initiated(QUEST_ID_VARDA_SHADOW);
                 } else {
                     p_ptr->varda_quest = VARDA_QUEST_GIVER_PRESENT;
                     p_ptr->varda_level = p_ptr->depth;
+                    quest_note_initiated(QUEST_ID_VARDA);
                 }
-                p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
                 level_gen_debug_note_questgiver(shadow_quest ? QUEST_ID_VARDA_SHADOW : QUEST_ID_VARDA);
                 log_trace("Varda spawn: === SUCCESS === Placed at (%d,%d) on sunlight tile", try_y, try_x);
                 if (shadow_quest) {
-                    log_trace("Varda spawn: Shadow quest state set to GIVER_PRESENT, quest_reserved[0]=1");
+                    log_trace("Varda spawn: Shadow quest state set to GIVER_PRESENT");
                 } else {
-                    log_trace("Varda spawn: Quest state set to GIVER_PRESENT (%d), quest_reserved[0]=1", p_ptr->varda_quest);
+                    log_trace("Varda spawn: Quest state set to GIVER_PRESENT (%d)", p_ptr->varda_quest);
                 }
             }
             
@@ -889,7 +876,7 @@ static bool cave_gen(void)
         if (spawn_tulkas_near_player_with_fallback())
         {
             p_ptr->tulkas_quest = TULKAS_QUEST_GIVER_PRESENT;
-            p_ptr->quest_reserved[0] = 1;
+            quest_note_initiated(QUEST_ID_TULKAS);
             level_gen_debug_note_questgiver(QUEST_ID_TULKAS);
             log_trace("Tulkas spawn: success, quest state set to %d", p_ptr->tulkas_quest);
         }
@@ -984,7 +971,7 @@ static bool cave_gen(void)
                         if (place_monster_one(try_y, try_x, R_IDX_NIENA, true, true, NULL))
                         {
                             p_ptr->niena_quest = NIENA_QUEST_GIVER_PRESENT;
-                            p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
+                            quest_note_initiated(QUEST_ID_NIENA);
                             level_gen_debug_note_questgiver(QUEST_ID_NIENA);
                             niena_spawned = true;
                             log_trace("Niena spawned near player at (%d, %d), player at (%d, %d), quest state: %d", 
@@ -1018,7 +1005,7 @@ static bool cave_gen(void)
                         if (place_monster_one(room_y, room_x, R_IDX_NIENA, true, true, NULL))
                         {
                             p_ptr->niena_quest = NIENA_QUEST_GIVER_PRESENT;
-                            p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
+                            quest_note_initiated(QUEST_ID_NIENA);
                             level_gen_debug_note_questgiver(QUEST_ID_NIENA);
                             niena_spawned = true;
                             log_trace("Niena spawned in fallback room at (%d, %d), quest state: %d", 
@@ -1049,7 +1036,7 @@ static bool cave_gen(void)
                         if (place_monster_one(scan_y, scan_x, R_IDX_NIENA, true, true, NULL))
                         {
                             p_ptr->niena_quest = NIENA_QUEST_GIVER_PRESENT;
-                            p_ptr->quest_reserved[0] = 1;
+                            quest_note_initiated(QUEST_ID_NIENA);
                             level_gen_debug_note_questgiver(QUEST_ID_NIENA);
                             niena_spawned = true;
                             log_trace("Niena spawned by exhaustive scan at (%d, %d), quest state: %d",
@@ -1138,7 +1125,7 @@ static bool cave_gen(void)
                     if (place_monster_one(try_y, try_x, R_IDX_OROME, true, true, NULL))
                     {
                         p_ptr->orome_quest = OROME_QUEST_GIVER_PRESENT;
-                        p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
+                        quest_note_initiated(QUEST_ID_OROME);
                         level_gen_debug_note_questgiver(QUEST_ID_OROME);
                         orome_spawned = true;
                         log_trace("Orome spawned near player at (%d, %d), player at (%d, %d), quest state: %d", 
@@ -1164,7 +1151,7 @@ static bool cave_gen(void)
                         if (place_monster_one(room_y, room_x, R_IDX_OROME, true, true, NULL))
                         {
                             p_ptr->orome_quest = OROME_QUEST_GIVER_PRESENT;
-                            p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
+                            quest_note_initiated(QUEST_ID_OROME);
                             level_gen_debug_note_questgiver(QUEST_ID_OROME);
                             orome_spawned = true;
                             log_trace("Orome spawned in fallback room at (%d, %d), quest state: %d", 
@@ -1387,8 +1374,9 @@ static bool spawn_niena_morgoth_hall(void)
     if (state != QUEST_STATE_NOT_STARTED && !has_pending_giver) {
         return false;
     }
-    if (!has_pending_giver && p_ptr->quest_reserved[0]) {
-        log_trace("Niena Morgoth quest: blocked by quest_reserved[0]");
+    if (!has_pending_giver && !quest_can_initiate_more()) {
+        log_trace("Niena Morgoth quest: blocked by initiated quest cap (%d/%d)",
+                  quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN);
         return false;
     }
     if (p_ptr->oath_type != OATH_MERCY || oath_invalid(OATH_MERCY)) {
@@ -1418,7 +1406,8 @@ static bool spawn_niena_morgoth_hall(void)
                 quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_GIVER_PRESENT);
                 p_ptr->niena_level = p_ptr->depth;
                 p_ptr->niena_reserved &= ~(NIENA_FLAG_MORGOTH_ATTACKED | NIENA_FLAG_MERCY_GIFT_TEMP);
-                p_ptr->quest_reserved[0] = 1;
+                if (!has_pending_giver)
+                    quest_note_initiated(QUEST_ID_NIENA_MORGOTH);
                 level_gen_debug_note_questgiver(QUEST_ID_NIENA_MORGOTH);
                 log_trace("Niena Morgoth quest: placed giver at (%d,%d)", y, x);
                 return true;
@@ -1587,7 +1576,7 @@ if (playerturn == 0) {
     // you fell down)
     p_ptr->skip_next_turn = false;
 
-    bool preserve_run_quest_slot = run_has_consumed_quest_slot();
+    byte preserved_initiated_count = run_quest_initiated_count();
 
     while (true)
     {
@@ -1606,7 +1595,7 @@ if (playerturn == 0) {
         reset_pending_quest_states();
         
         /* Reset quest states that may have been set during previous failed attempts */
-        reset_quest_vault_states(preserve_run_quest_slot);
+        reset_quest_vault_states(preserved_initiated_count);
 
         /* Paranoia: Check that cave_color is allocated */
         if (!cave_color)
@@ -1818,7 +1807,6 @@ if (playerturn == 0) {
                 quest_get_state(QUEST_ID_TULKAS_ORCS) == QUEST_STATE_GIVER_PRESENT)
             {
                 if (spawn_tulkas_near_player_with_fallback()) {
-                    p_ptr->quest_reserved[0] = 1;
                     p_ptr->tulkas_second_spawn_pending = 0;
                     level_gen_debug_note_questgiver(QUEST_ID_TULKAS_ORCS);
                     log_trace("Tulkas orc quest: Quest giver spawned after stronghold placement");
@@ -1830,8 +1818,9 @@ if (playerturn == 0) {
             /* QUEST VAULT REGENERATION FIX: Only mark quest_vault_used when level generation is COMPLETELY successful */
             /* This ensures quest vaults can be re-placed during regeneration attempts */
             if (quest_vault_placed_this_attempt) {
-                p_ptr->quest_vault_used = 1;
-                log_trace("QUEST VAULT FIX: Level completely successful - setting quest_vault_used = 1");
+                if (p_ptr->quest_vault_used < 255) p_ptr->quest_vault_used++;
+                log_trace("QUEST VAULT FIX: Level completely successful - quest_vault_used now %d",
+                    p_ptr->quest_vault_used);
             } else {
                 log_trace("QUEST VAULT FIX: Level successful but no quest vault placed this attempt");
             }

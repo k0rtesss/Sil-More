@@ -113,9 +113,9 @@ static NavResult player_birth_aux(void)
 
     p_ptr->artefacts = 0;
 
-    log_trace("Final character stats: Str=%d Dex=%d Con=%d Gra=%d",
+    log_trace("Final character stats: Str=%d Dex=%d Con=%d Gra=%d Lore=%d",
         p_ptr->stat_base[A_STR], p_ptr->stat_base[A_DEX],
-        p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA]);
+        p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA], p_ptr->lore);
 
 cleanup_semantic_birth_ui:
     ui_information_scene_leave(&semantic_scope);

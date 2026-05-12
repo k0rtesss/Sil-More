@@ -513,7 +513,10 @@ static void birth_trimmed_stat_label(int stat, char* buf, size_t buflen)
     if (!buf || !buflen)
         return;
 
-    label = (stat >= 0 && stat < A_MAX) ? stat_names[stat] : "";
+    if (stat == BIRTH_STAT_LORE)
+        label = "Lore";
+    else
+        label = (stat >= 0 && stat < A_MAX) ? stat_names[stat] : "";
     SDL_strlcpy(buf, label ? label : "", buflen);
     len = strlen(buf);
     while (len > 0 && buf[len - 1] == ' ')
@@ -593,7 +596,8 @@ static void birth_build_review_prompt(bool steamdeck, char* buf, size_t buflen)
 }
 
 static bool birth_build_stats_allocation_ui_scene(app_ui_scene* scene,
-    const int stats[A_MAX], int selected_stat, int points_left, bool steamdeck)
+    const int stats[BIRTH_STAT_COUNT], int selected_stat, int points_left,
+    bool steamdeck)
 {
     app_ui_panel *panel;
     char prompt[160];
@@ -628,7 +632,7 @@ static bool birth_build_stats_allocation_ui_scene(app_ui_scene* scene,
     panel->focus_area = APP_UI_FOCUS_ROWS;
     panel->selected_row = selected_stat;
 
-    for (i = 0; i < A_MAX; i++)
+    for (i = 0; i < BIRTH_STAT_COUNT; i++)
     {
         char label[32];
         char meta[16];
@@ -676,8 +680,9 @@ static bool birth_build_stats_allocation_ui_scene(app_ui_scene* scene,
             "q", "Quit");
 }
 
-static bool birth_present_stats_allocation_ui_scene(const int stats[A_MAX],
-    int selected_stat, int points_left, bool steamdeck)
+static bool birth_present_stats_allocation_ui_scene(
+    const int stats[BIRTH_STAT_COUNT], int selected_stat, int points_left,
+    bool steamdeck)
 {
     app_ui_scene scene;
 
@@ -1670,6 +1675,7 @@ static bool get_player_race(void)
         p_ptr->wt = 0;
         for (i = 0; i < A_MAX; i++)
             p_ptr->stat_base[i] = 0;
+        p_ptr->lore = 0;
     }
     p_ptr->prace = race;
 
@@ -1759,6 +1765,7 @@ static bool get_character_profile(void)
                     p_ptr->wt = 0;
                     for (j = 0; j < A_MAX; j++)
                         p_ptr->stat_base[j] = 0;
+                    p_ptr->lore = 0;
                 }
                 p_ptr->pcharacter = i;
             }
@@ -2180,12 +2187,13 @@ NavResult birth_run_stats_allocation(void)
 {
     int i;
     int stat = 0;
-    int stats[A_MAX];
+    int stats[BIRTH_STAT_COUNT];
     int cost;
     char ch;
 
     for (i = 0; i < A_MAX; i++)
         stats[i] = p_ptr->stat_base[i];
+    stats[BIRTH_STAT_LORE] = p_ptr->lore;
 
     birth_prepare_character_extra();
 
@@ -2202,6 +2210,7 @@ NavResult birth_run_stats_allocation(void)
             p_ptr->stat_base[i] = stats[i] + bonus;
             p_ptr->stat_drain[i] = 0;
         }
+        p_ptr->lore = stats[BIRTH_STAT_LORE];
 
         p_ptr->update |= (PU_BONUS | PU_HP);
         update_stuff();
@@ -2235,6 +2244,8 @@ NavResult birth_run_stats_allocation(void)
             p_ptr->stat_drain[i] = 0;
             cost += birth_stat_cost(stats[i]);
         }
+        p_ptr->lore = stats[BIRTH_STAT_LORE];
+        cost += birth_stat_cost(stats[BIRTH_STAT_LORE]);
 
         if (cost > BIRTH_MAX_COST)
         {
@@ -2257,7 +2268,7 @@ NavResult birth_run_stats_allocation(void)
             return NAV_TO_MAIN;
         }
 
-        ch = birth_wait_allocation_key(&stat, A_MAX, false, true);
+        ch = birth_wait_allocation_key(&stat, BIRTH_STAT_COUNT, false, true);
         if (ch == '\0')
             continue;
 
@@ -2277,10 +2288,10 @@ NavResult birth_run_stats_allocation(void)
             return NAV_OK;
 
         if (ch == '8')
-            stat = (stat + A_MAX - 1) % A_MAX;
+            stat = (stat + BIRTH_STAT_COUNT - 1) % BIRTH_STAT_COUNT;
 
         if (ch == '2')
-            stat = (stat + 1) % A_MAX;
+            stat = (stat + 1) % BIRTH_STAT_COUNT;
 
         if ((ch == '4') && (stats[stat] > 0))
             stats[stat]--;

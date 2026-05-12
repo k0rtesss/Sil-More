@@ -142,6 +142,8 @@ void wr_extra(void)
     wr_s32b(p_ptr->kill_exp);
     wr_s32b(p_ptr->descent_exp);
     wr_s32b(p_ptr->ident_exp);
+    wr_s16b(p_ptr->lore);
+    wr_s32b(p_ptr->knowledge_points);
 
     wr_s16b(p_ptr->mhp);
     wr_s16b(p_ptr->chp);

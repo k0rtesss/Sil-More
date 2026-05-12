@@ -101,7 +101,8 @@ static int min_depth_timer_item_bonus_units(void)
             units += equipped ? MIN_DEPTH_ITEM_BONUS_DEEP_CALL_EQUIPPED
                               : MIN_DEPTH_ITEM_BONUS_DEEP_CALL_INVENTORY;
         /* Count the item grant itself, even if the player disables the ability. */
-        if (equipped && object_grants_ability(o_ptr, S_STL, STL_CRUEL_BLOW))
+        if (equipped && object_grants_usable_ability(
+                o_ptr, S_STL, STL_CRUEL_BLOW))
             units += MIN_DEPTH_ITEM_BONUS_CRUEL_BLOW_EQUIPPED;
         if (f3 & TR3_PERMA_CURSE)
             units += MIN_DEPTH_ITEM_BONUS_PERMA_CURSE;
@@ -364,6 +365,9 @@ void do_cmd_go_up(void)
         }
     }
 
+    if (!varda_quest_confirm_leave_bastion())
+        return;
+
     /* Hack -- take a turn */
     p_ptr->energy_use = 100;
 
@@ -579,6 +583,8 @@ void do_cmd_go_up(void)
         }
     }
 
+    varda_quest_fail_if_bastion_missed();
+
     // make a note if the player loses a greater vault
     note_lost_greater_vault();
 
@@ -721,6 +727,9 @@ void do_cmd_go_down(void)
         }
     }
 
+    if (!varda_quest_confirm_leave_bastion())
+        return;
+
     // Do not descend from the Gates
     if (p_ptr->depth == 0)
     {
@@ -798,6 +807,8 @@ void do_cmd_go_down(void)
         message(MSG_STAIRS, 0, "You emerge much deeper in the dungeon.");
         new = min;
     }
+
+    varda_quest_fail_if_bastion_missed();
 
     // make a note if the player loses a greater vault
     note_lost_greater_vault();

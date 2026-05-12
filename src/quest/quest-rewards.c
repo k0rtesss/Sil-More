@@ -207,6 +207,13 @@ bool check_quest_eligibility(int quest_idx, int depth)
             log_trace("Quest %d eligibility: METARUN_COMPLETED (count=%d) without oath override = FAIL", quest_idx, metarun_count);
             return false;
         }
+        if (metarun_count > 0 && !metarun_repeat_tier_unlocked(metarun_count)) {
+            log_trace("Quest %d eligibility: REPEAT_TIER_LOCKED (count=%d, completed_at_least=%d/%d) = FAIL",
+                     quest_idx, metarun_count,
+                     metarun_quests_completed_at_least(metarun_count),
+                     QUEST_REPEAT_TIER_REQUIRED);
+            return false;
+        }
         if (metarun_count > 0 && oath_override) {
             log_trace("Quest %d eligibility: metarun completion count=%d overridden by active oath %d", quest_idx, metarun_count, q_ptr->oath_id);
         }
@@ -214,7 +221,7 @@ bool check_quest_eligibility(int quest_idx, int depth)
     
     /* 2. Check quest-specific state (must not be started for roulette quests) */
     switch (quest_idx) {
-        case 1: /* Tulkas */
+        case QUEST_ID_TULKAS:
             if (p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED) {
                 log_trace("Quest %d eligibility: TULKAS_ALREADY_STARTED = FAIL", quest_idx);
                 return false;
@@ -224,17 +231,44 @@ bool check_quest_eligibility(int quest_idx, int depth)
                 return false;
             }
             break;
-        case 4: /* Niena */
+        case QUEST_ID_NIENA:
             if (p_ptr->niena_quest != NIENA_QUEST_NOT_STARTED) {
                 log_trace("Quest %d eligibility: NIENA_ALREADY_STARTED = FAIL", quest_idx);
                 return false;
             }
             break;
+        case QUEST_ID_TULKAS_ORCS:
+            if (quest_get_state(quest_idx) != QUEST_STATE_NOT_STARTED) {
+                log_trace("Quest %d eligibility: TULKAS_ORCS_ALREADY_STARTED = FAIL", quest_idx);
+                return false;
+            }
+            if (!tulkas_orc_targets_alive(true)) {
+                log_trace("Quest %d eligibility: TULKAS_ORCS_NO_TARGETS = FAIL", quest_idx);
+                return false;
+            }
+            break;
+        case QUEST_ID_MANDOS_TRAITOR:
+        case QUEST_ID_MANDOS_BETRAYER:
+        case QUEST_ID_OROME_DRAGONS:
+        case QUEST_ID_OROME_GREAT_HUNT:
+        case QUEST_ID_NIENA_MORGOTH:
+        case QUEST_ID_NIENA_PACIFIST:
+        case QUEST_ID_TULKAS_MORGOTH:
+        case QUEST_ID_VARDA_SHADOW:
+        case QUEST_ID_VARDA_UNGOLIANT:
+            if (quest_get_state(quest_idx) != QUEST_STATE_NOT_STARTED) {
+                log_trace("Quest %d eligibility: FOLLOWUP_ALREADY_STARTED = FAIL (state=%d)",
+                         quest_idx, quest_get_state(quest_idx));
+                return false;
+            }
+            break;
     }
     
-    /* 3. Only one quest per run (for roulette quests) */
-    if (q_ptr->quest_type == 1 && p_ptr->quest_reserved[0]) { /* Y:1 = roulette quest */
-        log_trace("Quest %d eligibility: QUEST_RESERVED = FAIL", quest_idx);
+    /* 3. Per-character initiation cap for roulette quests. */
+    if (q_ptr->quest_type == 1 && !quest_can_initiate_more()) { /* Y:1 = roulette quest */
+        log_trace("Quest %d eligibility: INITIATED_CAP (%d/%d) = FAIL",
+                 quest_idx, quest_initiated_count_this_run(),
+                 QUEST_MAX_INITIATED_PER_RUN);
         return false;
     }
     

@@ -1469,7 +1469,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     if (chosen_oath(OATH_LIGHT) && !oath_invalid(OATH_LIGHT))
     {
         object_flags4(o_ptr, &f1, &f2, &f3, &f4);
-        if ((f2 & TR2_DARKNESS) || (f4 & TR4_UNLIGHT) || (f3 & TR3_LIGHT_CURSE))
+        if ((f2 & TR2_DARKNESS) || (f4 & TR4_UNLIGHT))
         {
             char* prompt = oath_confirmation_prompt(OATH_LIGHT);
             if (!prompt || !prompt[0]) {

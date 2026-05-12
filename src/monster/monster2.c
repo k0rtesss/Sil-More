@@ -22,6 +22,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "monster/monster.h"
+#include "player/player-abilities.h"
 
 static void listen_hint_handle_monster_removed(int m_idx);
 static void listen_hint_set(int m_idx);
@@ -1037,7 +1038,7 @@ static void listen(monster_type* m_ptr)
     if (!p_ptr->active_ability[S_PER][PER_LISTEN])
         return;
 
-    detect_monster_noise(m_ptr, p_ptr->skill_use[S_PER]);
+    detect_monster_noise(m_ptr, ability_score(S_PER, PER_LISTEN));
 }
 
 /*
@@ -1365,6 +1366,8 @@ void update_mon(int m_idx, bool full)
         && (l_ptr->psights < MAX_SHORT))
     {
         int new_exp = adjusted_mon_exp(r_ptr, false);
+        bool first_unique_sighting =
+            (r_ptr->flags1 & RF1_UNIQUE) && (l_ptr->psights == 0);
 
         // gain experience for encounter
         gain_exp(new_exp);
@@ -1390,6 +1393,9 @@ void update_mon(int m_idx, bool full)
                 note2, format("Encountered %s", real_name), sizeof(note2));
 
             do_cmd_note(note2, p_ptr->depth);
+
+            if (first_unique_sighting)
+                gain_knowledge_points(1, "A unique foe enters your lore.");
         }
 
         // if it was a wraith, possibly realise you are haunted

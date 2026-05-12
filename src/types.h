@@ -272,7 +272,20 @@ struct ability_type
     byte skilltype; /* Skill type */
     byte abilitynum; /* Ability number within a skill */
 
-    byte level; /* Prerequisite skill level */
+    byte level; /* Legacy/default prerequisite skill level */
+    byte stat_req[A_MAX]; /* Minimum stat requirements */
+    byte skill_req[S_MAX]; /* Minimum skill requirements */
+    byte lore_req; /* Minimum lore requirement */
+    byte stat_req_lt[A_MAX]; /* Maximum-exclusive stat requirements */
+    byte skill_req_lt[S_MAX]; /* Maximum-exclusive skill requirements */
+    byte lore_req_lt; /* Maximum-exclusive lore requirement */
+    byte knowledge_cost; /* Knowledge point cost, if any */
+    byte hidden; /* Hide until granted */
+    byte score_weights_set; /* Uses custom score weights */
+    s16b stat_score_weight[A_MAX]; /* Percent weights for stats */
+    s16b skill_score_weight[S_MAX]; /* Percent weights for skills */
+    bool stat_score_weight_set[A_MAX];
+    bool skill_score_weight_set[S_MAX];
     byte prereqs; /* Number of prerequisite abilities */
     byte prereq_skilltype[4]; /* Skill type (for prerequisites) */
     byte prereq_abilitynum[4]; /* The ability within that skill (for
@@ -1098,6 +1111,8 @@ struct player_type
     s32b kill_exp; /* Total experience from killing monsters */
     s32b descent_exp; /* Total experience from descending to new levels */
     s32b ident_exp; /* Total experience from identifying objects */
+    s16b lore; /* Lore aptitude used by knowledge abilities */
+    s32b knowledge_points; /* Spendable knowledge points */
     byte discovery_lore_flags; /* Run-wide discovery XP awards already claimed */
 
     s16b mhp; /* Max hit pts */
@@ -1443,7 +1458,7 @@ struct player_type
     byte vala_quest_stage3[VALA_MAX]; /* Third-stage quest states per Vala */
     /* Generic quest/vault tracking */
     byte quest_vault_used;     /* Has a quest-designated vault generated this game */
-    byte quest_reserved[QUEST_SLOT_MAX];   /* quest_reserved[0] = any quest spawned flag (run-wide); quest_reserved[1..n] mark quest completions recorded this run */
+    byte quest_reserved[QUEST_SLOT_MAX];   /* quest_reserved[0] = initiated quest count; quest_reserved[1..n] mark quest completions recorded this run */
 };
 
 /* scores.raw header version == core game version (no independent bumping) */

@@ -1,24 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-# Copyright (C) 2025-2026 Sil-More contributors
-#
-# This file is part of Sil-More.
-#
-# Sil-More is free software; you can redistribute it and/or modify it
-# under the terms of the GNU General Public License version 2 as
-# published by the Free Software Foundation.
-#
-# Sil-More is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
-# for more details.
-
 """
 Calculate smithing difficulty for each artefact in artefact.txt and special.txt
 
-Based on the smithing-difficulty logic in src/drop/drop-system-difficulty.c,
-including the costs for flags like slays, brands, sharpness, and related bonuses.
+Based on the REAL object_difficulty() function in src/cmd4.c (lines 3980+)
+which includes proper costs for flags like slays, brands, sharpness, etc.
 """
 
 import re
@@ -39,7 +25,7 @@ BONUS_TOKEN_ALIASES = {
 STAT_TOKENS = ('STR', 'DEX', 'CON', 'GRA')
 SKILL_TOKENS = ('ARCHERY', 'STEALTH', 'PERCEPTION', 'WILL', 'SMITHING', 'SONG')
 
-# Global dictionary mapping (skill_number, ability_value) -> level
+# Global dictionary mapping (skill_number, ability_value) -> requirement level
 # Populated by parse_ability_file()
 ABILITY_LEVELS = {}
 
@@ -48,19 +34,96 @@ ABILITY_LEVELS = {}
 OBJECTS_BY_TYPE = {}
 
 
+ABILITY_REQ_STAT_TOKENS = {
+    'STR': 0,
+    'STRENGTH': 0,
+    'DEX': 1,
+    'DEXTERITY': 1,
+    'CON': 2,
+    'CONSTITUTION': 2,
+    'GRA': 3,
+    'GRACE': 3,
+}
+
+ABILITY_REQ_SKILL_TOKENS = {
+    'MEL': 0,
+    'MELEE': 0,
+    'ARC': 1,
+    'ARCHERY': 1,
+    'EVN': 2,
+    'EVASION': 2,
+    'STL': 3,
+    'STEALTH': 3,
+    'PER': 4,
+    'PERCEPTION': 4,
+    'WIL': 5,
+    'WILL': 5,
+    'SMT': 6,
+    'CMT': 6,
+    'SMITHING': 6,
+    'SNG': 7,
+    'SONG': 7,
+    'SPC': 8,
+    'SPECIAL': 8,
+}
+
+
+def normalize_ability_req_token(token):
+    return re.sub(r'[\s-]+', '_', token.strip().upper())
+
+
+def parse_ability_req_name(token):
+    name = normalize_ability_req_token(token)
+
+    stat_name = name
+    if stat_name.startswith('STAT_'):
+        stat_name = stat_name[5:]
+    elif stat_name.startswith('A_'):
+        stat_name = stat_name[2:]
+    elif re.fullmatch(r'STAT\d+', stat_name):
+        stat_name = stat_name[4:]
+    elif re.fullmatch(r'A\d+', stat_name):
+        stat_name = stat_name[1:]
+
+    if stat_name.isdigit() and 0 <= int(stat_name) <= 3:
+        return True, int(stat_name)
+    if stat_name in ABILITY_REQ_STAT_TOKENS:
+        return True, ABILITY_REQ_STAT_TOKENS[stat_name]
+
+    skill_name = name
+    if skill_name.startswith('SKILL_'):
+        skill_name = skill_name[6:]
+    elif skill_name.startswith('S_'):
+        skill_name = skill_name[2:]
+    elif re.fullmatch(r'SKILL\d+', skill_name):
+        skill_name = skill_name[5:]
+    elif re.fullmatch(r'S\d+', skill_name):
+        skill_name = skill_name[1:]
+
+    if skill_name.isdigit() and 0 <= int(skill_name) <= 8:
+        return False, int(skill_name)
+    if skill_name in ABILITY_REQ_SKILL_TOKENS:
+        return False, ABILITY_REQ_SKILL_TOKENS[skill_name]
+
+    raise ValueError(f"unknown ability requirement token '{token}'")
+
+
 def parse_ability_file(filepath):
-    """Parse ability.txt to get ability levels.
+    """Parse ability.txt to get ability requirement levels.
 
     Format:
         N: ability_number : ability_name
-        I: skill_number : ability_value : level_requirement
+        I: skill_number : ability_value : default own-skill level_requirement
+        R: requirement_name : level : requirement_name : level : ...
 
-    Returns dict mapping (skill_number, ability_value) -> level
+    Returns dict mapping (skill_number, ability_value) -> max requirement level
     """
     global ABILITY_LEVELS
     ABILITY_LEVELS = {}
 
     current_ability_num = None
+    current_key = None
+    current_requirements = {}
 
     with open(filepath, 'r', encoding='utf-8') as f:
         for line in f:
@@ -72,13 +135,33 @@ def parse_ability_file(filepath):
             if line.startswith('N:'):
                 parts = line[2:].split(':')
                 current_ability_num = int(parts[0])
+                current_key = None
+                current_requirements = {}
 
             elif line.startswith('I:') and current_ability_num is not None:
                 parts = line[2:].split(':')
                 skill_num = int(parts[0])
                 ability_val = int(parts[1])
                 level = int(parts[2])
-                ABILITY_LEVELS[(skill_num, ability_val)] = level
+                current_key = (skill_num, ability_val)
+                current_requirements = {(False, skill_num): level}
+                ABILITY_LEVELS[current_key] = max(current_requirements.values(), default=0)
+
+            elif line.startswith('R:') and current_key is not None:
+                body = line[2:].split('#', 1)[0].strip()
+                if not body:
+                    continue
+
+                parts = [part.strip() for part in body.split(':')]
+                if len(parts) % 2 != 0:
+                    raise ValueError(f"invalid ability requirement line: {line}")
+
+                for name, value_text in zip(parts[0::2], parts[1::2]):
+                    is_stat, index = parse_ability_req_name(name)
+                    level = int(value_text)
+                    current_requirements[(is_stat, index)] = level
+
+                ABILITY_LEVELS[current_key] = max(current_requirements.values(), default=0)
 
     return ABILITY_LEVELS
 
@@ -434,8 +517,7 @@ def parse_special_file(filepath):
 
 def calculate_difficulty(art):
     """
-    Calculate smithing difficulty using the engine formula from
-    src/drop/drop-system-difficulty.c.
+    Calculate smithing difficulty using the REAL formula from src/cmd4.c object_difficulty().
     This accounts for all flags, slays, brands, sharpness, etc.
     
     For normal items: Use the actual stats from the generated variant.
@@ -453,6 +535,28 @@ def calculate_difficulty(art):
     is_special = (art['type'] == 'special')
     is_normal = (art['type'] == 'normal')
     is_dual_ego = (art['type'] == 'dual_ego')
+
+    # For non-jewelry items (special/dual-ego/artefact), strip base flags and add back specific ones
+    # This mirrors smithing-difficulty.c lines 139-180
+    is_artefact = (art['type'] == 'artefact')
+    if (is_special or is_dual_ego or is_artefact) and tval not in [45, 40]:  # Not ring or amulet
+        # Get base item flags from the OBJECTS_BY_TYPE lookup
+        base_key = (tval, sval)
+        if base_key in OBJECTS_BY_TYPE:
+            base_obj_flags = set(OBJECTS_BY_TYPE[base_key].get('flags', []))
+            # For artefacts, ADD base flags first (special/ego already have them combined at line 1315)
+            # This mirrors how object_flags4() in C code combines base + artefact flags
+            if is_artefact:
+                flags = flags | base_obj_flags
+            # Strip base item flags
+            flags = flags - base_obj_flags
+            # Add back specific flags that should always count
+            add_back_flags = {'TUNNEL', 'STL', 'STEALTH', 'ACCURATE', 'SHARPNESS', 'SHARPNESS2',
+                              'DAMAGE_SIDES', 'REGEN', 'RES_COLD', 'RES_FIRE',
+                              'CHEAT_DEATH', 'STAND_FAST', 'ENCHANTABLE'}
+            for flag in add_back_flags:
+                if flag in base_obj_flags:
+                    flags.add(flag)
 
     # Get base item stats
     if is_special or is_normal or is_dual_ego:
@@ -500,11 +604,11 @@ def calculate_difficulty(art):
     if tval not in [45, 40]:  # Not ring or amulet
         dif_inc += base_level // 2
 
-    # Horn items add (level - 1) difficulty (see drop-system-difficulty.c)
+    # Horn items add (level - 1) difficulty (cmd4.c:4593-4613)
     if tval == 47:  # TV_HORN
         dif_inc += base_level - 1
 
-    # Weight factor calculation (see drop-system-difficulty.c)
+    # Weight factor calculation (cmd4.c:4663-4671)
     # Unusual weight items (lighter or heavier than base) get difficulty bonus
     item_weight = art.get('weight', 0)
     base_weight = get_base_weight(tval, sval)
@@ -808,7 +912,7 @@ def calculate_difficulty(art):
 
     # === ABILITIES (granted abilities) ===
     # dif_inc += 5 + (level / 3) per ability
-    # Uses actual ability levels from ability.txt
+    # Uses actual ability requirement levels from ability.txt
     ability_list = art.get('ability_list', [])
     for skill_num, ability_val in ability_list:
         level = get_ability_level(skill_num, ability_val)
@@ -1605,8 +1709,7 @@ def generate_dual_ego_variants(specials_raw, objects):
                 combined_rarity = combined_schedule[0][1] if combined_schedule else 0
                 _obj_name_d = clean_obj_name(obj['name'])
 
-                # Range math mirrors src/drop/drop-system-catalog.c:
-                # build_ego_combo_variants().
+                # Range math mirrors src/drop_system.c: build_ego_combo_variants().
                 att_min = obj['att'] \
                     + smithing_step_from_ego_bonus_py(prefix['max_att']) \
                     + smithing_step_from_ego_bonus_py(suffix['max_att'])
@@ -1738,7 +1841,7 @@ def generate_dual_ego_variants(specials_raw, objects):
 def get_base_flags(tval, sval):
     """Get base flags for items from object.txt that should be subtracted."""
     # For non-jewelry items, base flags don't count toward difficulty
-    # But TUNNEL and STEALTH are added back in (see drop-system-difficulty.c)
+    # But TUNNEL and STEALTH are added back in (see cmd4.c lines 4072-4077)
     base_flags = {
         # Digging tools have TUNNEL flag
         (20, 1): {'TUNNEL'},  # Shovel
@@ -1947,7 +2050,7 @@ def main(argv=None):
     possible_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'artefact.txt'),
         os.path.join(script_dir, 'lib', 'edit', 'artefact.txt'),
-        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\artefact.txt',
+        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\artefact.txt',
     ]
     
     artefact_file = None
@@ -1963,7 +2066,7 @@ def main(argv=None):
     special_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'special.txt'),
         os.path.join(script_dir, 'lib', 'edit', 'special.txt'),
-        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\special.txt',
+        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\special.txt',
     ]
     
     special_file = None
@@ -1976,7 +2079,7 @@ def main(argv=None):
     object_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'object.txt'),
         os.path.join(script_dir, 'lib', 'edit', 'object.txt'),
-        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\object.txt',
+        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\object.txt',
     ]
     
     object_file = None
@@ -1989,7 +2092,7 @@ def main(argv=None):
     ability_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'ability.txt'),
         os.path.join(script_dir, 'lib', 'edit', 'ability.txt'),
-        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\ability.txt',
+        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\ability.txt',
     ]
 
     ability_file = None
@@ -2255,7 +2358,7 @@ def main(argv=None):
     
     print()
     print("=" * 120)
-    print("DIFFICULTY FORMULA (from src/drop/drop-system-difficulty.c):")
+    print("DIFFICULTY FORMULA (from src/cmd4.c object_difficulty()):")
     print("  - Base item level / 2")
     print("  - Attack bonus: weapons +3/point, others +6/point; negatives reduce at half rate")
     print("  - Evasion bonus: +6/point armor, +9/point others; negatives reduce at half rate")

@@ -113,6 +113,7 @@ static void award_greater_vault_entry(bool entered_morgoth_hall)
     if (!greater_vault_xp_awarded)
     {
         gain_exp(vault_xp);
+        gain_knowledge_points(5, "The great vault yields hidden knowledge.");
         greater_vault_xp_awarded = true;
     }
 
@@ -777,6 +778,7 @@ static void maybe_award_partition_discovery_xp(level_partition_kind kind)
 
     p_ptr->discovery_lore_flags |= bit;
     gain_exp(300);
+    gain_knowledge_points(2, "You discover a new region.");
     display_narrative_text(text);
 }
 
@@ -1062,6 +1064,7 @@ bool runtime_dungeon_prepare_level_presentation(void)
     }
 
     runtime_dungeon_show_initial_partition_banner();
+    varda_quest_notice_bastion_level_entry();
     return true;
 }
 

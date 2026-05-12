@@ -565,12 +565,6 @@ void calc_bonuses(void)
         if (f2 & (TR2_SUST_GRA))
             p_ptr->sustain_gra += 1;
 
-        // Parrying grants extra bonus for weapon evasion:
-        if (p_ptr->active_ability[S_EVN][EVN_PARRY] && (i == INVEN_WIELD))
-        {
-            p_ptr->skill_equip_mod[S_EVN] += o_ptr->evn;
-        }
-
         /* Add up the armour weight */
         if ((i >= INVEN_BODY) && (i <= INVEN_FEET))
             armour_weight += o_ptr->weight;
@@ -608,11 +602,6 @@ void calc_bonuses(void)
         /* Apply the evasion bonus */
         p_ptr->skill_equip_mod[S_EVN] += o_ptr->evn;
 
-        if (p_ptr->active_ability[S_EVN][EVN_HEAVY_ARMOUR]
-            && heavy_armour_evasion_bonus_applies(o_ptr))
-        {
-            p_ptr->skill_equip_mod[S_EVN] += 1;
-        }
     }
 
     /* Clear the old item granted abilities */
@@ -627,6 +616,28 @@ void calc_bonuses(void)
             {
                 p_ptr->active_ability[i][j] = false;
             }
+        }
+    }
+
+    update_active_ability_requirements();
+
+    /* Ability-dependent equipment bonuses must run after requirement gating. */
+    o_ptr = &inventory[INVEN_WIELD];
+    if (o_ptr->k_idx && p_ptr->active_ability[S_EVN][EVN_PARRY])
+    {
+        p_ptr->skill_equip_mod[S_EVN] += o_ptr->evn;
+    }
+
+    if (p_ptr->active_ability[S_EVN][EVN_HEAVY_ARMOUR])
+    {
+        for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+        {
+            o_ptr = &inventory[i];
+            if (!o_ptr->k_idx)
+                continue;
+
+            if (heavy_armour_evasion_bonus_applies(o_ptr))
+                p_ptr->skill_equip_mod[S_EVN] += 1;
         }
     }
 
@@ -671,7 +682,7 @@ void calc_bonuses(void)
         }
     }
 
-    /* Oath of Light: wearing shadowed gear immediately breaks the vow */
+    /* Oath of Light: wearing light-dimming gear immediately breaks the vow */
     if (p_ptr->oath_type == OATH_LIGHT && !oath_invalid(OATH_LIGHT))
     {
         for (int slot_idx = INVEN_WIELD; slot_idx < INVEN_TOTAL; slot_idx++)
@@ -681,8 +692,7 @@ void calc_bonuses(void)
 
             u32b gear_f1, gear_f2, gear_f3, gear_f4;
             object_flags4(gear_o_ptr, &gear_f1, &gear_f2, &gear_f3, &gear_f4);
-            if ((gear_f2 & TR2_DARKNESS) || (gear_f4 & TR4_UNLIGHT)
-                || (gear_f3 & TR3_LIGHT_CURSE))
+            if ((gear_f2 & TR2_DARKNESS) || (gear_f4 & TR4_UNLIGHT))
             {
                 p_ptr->oaths_broken |= OATH_LIGHT_FLAG;
                 p_ptr->active_ability[S_SPC][SPC_OATH_LIGHT] = false;
@@ -737,7 +747,8 @@ void calc_bonuses(void)
         p_ptr->skill_misc_mod[S_MEL] -= 3;
     }
 
-    if (p_ptr->active_ability[S_WIL][WIL_POISON_RESISTANCE])
+    if (p_ptr->active_ability[S_WIL][WIL_INDOMITABLE]
+        || p_ptr->active_ability[S_WIL][WIL_POISON_RESISTANCE])
     {
         p_ptr->resist_pois += 1;
     }
@@ -883,7 +894,7 @@ void calc_bonuses(void)
 
     // Mandos' Doom special ability grants immunity to fear, hallucination,
     // entrancement, rage, stun and confusion (implemented as high resistance + clear)
-    if (p_ptr->have_ability[S_SPC][SPC_MANDOS]) {
+    if (p_ptr->active_ability[S_SPC][SPC_MANDOS]) {
         p_ptr->resist_fear += 100; // effectively immune
         p_ptr->resist_hallu += 100;
         p_ptr->resist_stun += 100;
@@ -916,7 +927,7 @@ void calc_bonuses(void)
             log_trace("ABILITY DEBUG: Mandos' Doom - cleared confusion effect");
         }
     } else {
-        log_trace("ABILITY DEBUG: Mandos' Doom NOT active - have_ability[S_SPC][SPC_MANDOS] = %d", p_ptr->have_ability[S_SPC][SPC_MANDOS]);
+        log_trace("ABILITY DEBUG: Mandos' Doom NOT active - active_ability[S_SPC][SPC_MANDOS] = %d", p_ptr->active_ability[S_SPC][SPC_MANDOS]);
     }
 
     /* Big cave environmental penalties: reduce key resistances while inside. */
@@ -976,7 +987,7 @@ void calc_bonuses(void)
     }
 
     // Niena's Gift of Mercy special ability grants enhanced stealth proportional to mercy shown
-    if (p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY]) {
+    if (p_ptr->active_ability[S_SPC][SPC_NIENA_MERCY]) {
         if (total_monsters_seen > 0) {
             /* Calculate stealth bonus: 10*(seen-killed)/seen, rounded up */
             int mercy_ratio_times_10 = (10 * (total_monsters_seen - total_monsters_killed));

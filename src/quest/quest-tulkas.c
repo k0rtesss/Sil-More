@@ -277,6 +277,11 @@ void ensure_tulkas_morgoth_active(void)
 
     if (state == QUEST_STATE_NOT_STARTED)
     {
+        if (!quest_can_accept_more()) {
+            log_trace("Tulkas Morgoth quest: activation blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
         quest_set_state(QUEST_ID_TULKAS_MORGOTH, QUEST_STATE_ACTIVE);
         p_ptr->tulkas_morgoth_progress = 0;
     }
@@ -320,10 +325,20 @@ void tulkas_quest_interaction(void)
         cptr* init_texts = extract_quest_init_texts(QUEST_ID_TULKAS_ORCS, &text_count);
         init_texts = prepend_repeat_context(QUEST_ID_TULKAS_ORCS, init_texts, &text_count, false);
 
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Tulkas orc quest: accept blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            if (init_texts) {
+                free_quest_texts(init_texts, text_count);
+            }
+            return;
+        }
+
         quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_ACTIVE);
         p_ptr->tulkas_orc_mask = 0;
         p_ptr->tulkas_orc_restricted = 1;
-        remove_quest_giver(R_IDX_TULKAS);
+        remove_quest_giver_silent(R_IDX_TULKAS);
 
         if (init_texts && text_count > 0) {
             quest_typewriter_menu("Tulkas, Orc-Bane", init_texts, text_count, TERM_YELLOW, TERM_WHITE);
@@ -372,6 +387,13 @@ void tulkas_quest_interaction(void)
     
     if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Tulkas quest: accept blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Starting Tulkas quest interaction - assigning target and prize");
         
         /* Assign quest target and prize */
@@ -422,7 +444,7 @@ void tulkas_quest_interaction(void)
         p_ptr->tulkas_quest = TULKAS_QUEST_ACTIVE;
         
         /* Remove the quest giver now that quest is accepted */
-        remove_quest_giver(R_IDX_TULKAS);
+        remove_quest_giver_silent(R_IDX_TULKAS);
         
         /* Reserve the artifact */
         valar_reserved_artifacts[prize_a_idx] = true;

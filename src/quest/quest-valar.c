@@ -186,6 +186,54 @@ static void unlock_quest_completion_challenge(int quest_id)
     }
 }
 
+static void apply_followup_side_effects(int quest_id)
+{
+    switch (quest_id)
+    {
+    case QUEST_ID_MANDOS_BETRAYER:
+        metarun_add_mandos_resurrection_charge();
+        msg_print("Mandos grants one reprieve from death to this lineage.");
+        break;
+    case QUEST_ID_OROME_DRAGONS:
+        if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_ACTIVE)
+        {
+            if (!quest_can_accept_more()) {
+                log_trace("Orome great hunt activation blocked by active quest cap (%d/%d)",
+                    quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+                break;
+            }
+            quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_ACTIVE);
+            p_ptr->orome_great_hunt_mask = metarun_orome_great_hunt_mask();
+            metarun_set_orome_great_hunt_active(true);
+            msg_print("Orome's greatest hunt begins for your lineage.");
+        }
+        break;
+    case QUEST_ID_OROME_GREAT_HUNT:
+        metarun_set_orome_great_hunt_active(false);
+        break;
+    case QUEST_ID_NIENA_MORGOTH:
+        niena_revoke_temp_mercy_gift(false);
+        break;
+    case QUEST_ID_NIENA_PACIFIST:
+        metarun_add_niena_curse_cleansing_charge();
+        msg_print("Nienna grants one grace to cleanse a curse from this lineage.");
+        break;
+    case QUEST_ID_TULKAS_ORCS:
+        p_ptr->tulkas_orc_restricted = 0;
+        p_ptr->tulkas_second_spawn_pending = 0;
+        break;
+    case QUEST_ID_VARDA_SHADOW:
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->varda_shadow_restricted = 0;
+        break;
+    case QUEST_ID_VARDA_UNGOLIANT:
+        p_ptr->varda_shadow_restricted = 0;
+        break;
+    default:
+        break;
+    }
+}
+
 void grant_followup_quest_rewards(int quest_id)
 {
     u32b quest_flag = quest_metarun_flag(quest_id);
@@ -199,6 +247,7 @@ void grant_followup_quest_rewards(int quest_id)
     }
 
     apply_quest_rewards(quest_id);
+    apply_followup_side_effects(quest_id);
     unlock_quest_completion_challenge(quest_id);
 }
 
@@ -295,9 +344,17 @@ void aule_quest_interaction(void)
     /* Handle first encounter - initialize quest */
     if (p_ptr->aule_quest == AULE_QUEST_NOT_STARTED)
     {
+        if (!quest_can_initiate_more()) {
+            msg_print("You have already found as many quest-givers as this journey can bear.");
+            log_trace("Aule quest: first encounter blocked by initiated quest cap (%d/%d)",
+                quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN);
+            return;
+        }
+
         log_trace("First encounter with Aule - setting to FORGE_PRESENT");
         p_ptr->aule_quest = AULE_QUEST_FORGE_PRESENT;
         p_ptr->aule_level = p_ptr->depth;
+        quest_note_initiated(QUEST_ID_AULE);
         /* Don't start the actual quest conversation yet, let them talk again */
         msg_print("You encounter Aulë the Smith, Maker of Mountains.");
         msg_print("'Speak with me again to learn of the challenges that await.'");
@@ -307,14 +364,21 @@ void aule_quest_interaction(void)
     /* Handle quest explanation */
     if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Aule quest: accept blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Aule quest explanation - setting to ACTIVE");
         p_ptr->aule_quest = AULE_QUEST_ACTIVE;
         
         /* Only remove quest giver for roulette-based quests (Y:1) */
         quest_type* q_ptr = &quest_info[2]; /* Aule is quest index 2 */
         if (q_ptr->quest_type == 1) { /* Y:1 = roulette-based */
-            remove_quest_giver(R_IDX_AULE);
-            log_trace("Aule quest giver removed (roulette-based quest)");
+            remove_quest_giver_silent(R_IDX_AULE);
+            log_trace("Aule quest giver removed silently (roulette-based quest)");
         } else {
             log_trace("Aule quest giver NOT removed (vault-based quest)");
         }
@@ -423,6 +487,16 @@ void mandos_quest_interaction(void)
         cptr* init_texts = extract_quest_init_texts(quest_id, &text_count);
         init_texts = prepend_repeat_context(quest_id, init_texts, &text_count, false);
 
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Mandos follow-up quest %d accept blocked by active quest cap (%d/%d)",
+                quest_id, quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            if (init_texts) {
+                free_quest_texts(init_texts, text_count);
+            }
+            return;
+        }
+
         quest_set_state(quest_id, QUEST_STATE_ACTIVE);
 
         if (init_texts && text_count > 0) {
@@ -478,9 +552,17 @@ void mandos_quest_interaction(void)
     /* Handle first encounter - initialize quest */
     if (p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED)
     {
+        if (!quest_can_initiate_more()) {
+            msg_print("You have already found as many quest-givers as this journey can bear.");
+            log_trace("Mandos quest: first encounter blocked by initiated quest cap (%d/%d)",
+                quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN);
+            return;
+        }
+
         log_trace("First encounter with Mandos - setting to GIVER_PRESENT");
         p_ptr->mandos_quest = MANDOS_QUEST_GIVER_PRESENT;
         p_ptr->mandos_level = p_ptr->depth;
+        quest_note_initiated(QUEST_ID_MANDOS);
         /* Don't start the actual quest conversation yet, let them talk again */
         msg_print("You encounter Mandos, the Doomsman of the Valar.");
         msg_print("His stern gaze weighs upon your soul, as if judging your worth.");
@@ -499,6 +581,13 @@ void mandos_quest_interaction(void)
     
     if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Mandos quest: accept blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Starting Mandos quest interaction - assigning Brodda quest");
         
         /* Set quest state */
@@ -508,8 +597,8 @@ void mandos_quest_interaction(void)
         /* Only remove quest giver for roulette-based quests (Y:1) */
         quest_type* q_ptr = &quest_info[3]; /* Mandos is quest index 3 */
         if (q_ptr->quest_type == 1) { /* Y:1 = roulette-based */
-            remove_quest_giver(R_IDX_MANDOS);
-            log_trace("Mandos quest giver removed (roulette-based quest)");
+            remove_quest_giver_silent(R_IDX_MANDOS);
+            log_trace("Mandos quest giver removed silently (roulette-based quest)");
         } else {
             log_trace("Mandos quest giver NOT removed (vault-based quest)");
         }

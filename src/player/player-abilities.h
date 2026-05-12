@@ -18,9 +18,20 @@
 
 #include "h-basic.h"
 
+typedef struct ability_type ability_type;
+typedef struct object_type object_type;
+
 int ability_index(int skilltype, int abilitynum);
 bool ability_prereqs_met(int skilltype, int abilitynum);
 int abilities_in_skill(int skilltype);
 bool prereqs(int skilltype, int abilitynum);
+int ability_requirement_level(const ability_type* b_ptr);
+bool ability_requirements_currently_met(int skilltype, int abilitynum);
+bool ability_requirement_is_suspended(int skilltype, int abilitynum);
+bool object_grants_usable_ability(
+    const object_type* o_ptr, int skilltype, int abilitynum);
+void update_active_ability_requirements(void);
+int ability_score(int skilltype, int abilitynum);
+bool ability_score_has_custom_weights(int skilltype, int abilitynum);
 
 #endif /* INCLUDED_PLAYER_ABILITIES_H */

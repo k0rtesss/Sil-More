@@ -19,6 +19,7 @@
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"
+#include "player/player-abilities.h"
 #include "metarun.h"
 #include "metarun/metarun-meta-state.h"
 
@@ -552,7 +553,7 @@ int crit_bonus(int hit_result, int weight, const monster_race* r_ptr,
 
         if ((skill_type == S_MEL) && thrown && o_ptr
             && (p_ptr->active_ability[S_MEL][MEL_THROWING]
-                || object_grants_ability(o_ptr, S_MEL, MEL_THROWING))
+                || object_grants_usable_ability(o_ptr, S_MEL, MEL_THROWING))
             && player_can_treat_as_throwing(o_ptr))
         {
             crit_seperation -= 10;
@@ -600,7 +601,7 @@ int crit_bonus(int hit_result, int weight, const monster_race* r_ptr,
             crit_bonus_dice = 0;
     }
     else if (m_ptr && p_ptr->active_ability[S_PER][PER_OUTWIT]
-        && skill_check(PLAYER, p_ptr->skill_use[S_PER],
+        && skill_check(PLAYER, ability_score(S_PER, PER_OUTWIT),
                monster_skill(m_ptr, S_PER), m_ptr)
             > 0)
     {

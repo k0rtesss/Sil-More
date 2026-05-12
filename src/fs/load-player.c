@@ -146,6 +146,16 @@ errr rd_extra(void)
     rd_s32b(&p_ptr->kill_exp);
     rd_s32b(&p_ptr->descent_exp);
     rd_s32b(&p_ptr->ident_exp);
+    if (savefile_version_at_least(0, 9, 6, 3))
+    {
+        rd_s16b(&p_ptr->lore);
+        rd_s32b(&p_ptr->knowledge_points);
+    }
+    else
+    {
+        p_ptr->lore = 0;
+        p_ptr->knowledge_points = 0;
+    }
 
     rd_s16b(&p_ptr->mhp);
     rd_s16b(&p_ptr->chp);
@@ -484,8 +494,11 @@ errr rd_extra(void)
         p_ptr->quest_reserved[qi] = 0;
     }
 
-    if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE)
+    if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE
+        && p_ptr->quest_reserved[0] < 1)
+    {
         p_ptr->quest_reserved[0] = 1;
+    }
 
     if (savefile_has_skeleton_notes)
     {

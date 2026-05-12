@@ -502,8 +502,25 @@ void place_object(int y, int x, drop_quality quality, int droptype,
 
     /* Make an object (if possible) */
     int depth = object_level;
-    while (!drop_generate_object(depth, quality, droptype, allow_artefacts, i_ptr))
-        continue;
+    bool generated = false;
+    for (int attempt = 0; attempt < OBJECT_CHALLENGE_GENERATION_ATTEMPTS;
+         attempt++)
+    {
+        if (!drop_generate_object(depth, quality, droptype, allow_artefacts, i_ptr))
+            continue;
+
+        if (object_allowed_by_active_challenges(i_ptr))
+        {
+            generated = true;
+            break;
+        }
+
+        object_release_rejected_artefact(i_ptr);
+        object_wipe(i_ptr);
+    }
+
+    if (!generated)
+        return;
 
     /* Give it to the floor */
     if (!floor_carry(y, x, i_ptr))

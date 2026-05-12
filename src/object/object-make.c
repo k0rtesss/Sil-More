@@ -1748,10 +1748,30 @@ bool make_object_with_profile(object_type* j_ptr, drop_quality quality,
     int objecttype, const drop_profile* profile)
 {
     int depth = object_level;
+    bool generated = false;
     bool allow_artefacts = (object_generation_mode == OB_GEN_MODE_CHEST)
         || (object_generation_mode == OB_GEN_MODE_MONSTER_DROP);
-    if (!drop_generate_object_profiled(
-            depth, quality, objecttype, 0, allow_artefacts, profile, j_ptr))
+
+    for (int attempt = 0; attempt < OBJECT_CHALLENGE_GENERATION_ATTEMPTS;
+         attempt++)
+    {
+        if (!drop_generate_object_profiled(
+                depth, quality, objecttype, 0, allow_artefacts, profile, j_ptr))
+        {
+            continue;
+        }
+
+        if (object_allowed_by_active_challenges(j_ptr))
+        {
+            generated = true;
+            break;
+        }
+
+        object_release_rejected_artefact(j_ptr);
+        object_wipe(j_ptr);
+    }
+
+    if (!generated)
         return false;
 
     apply_generated_object_rating(j_ptr, NULL);
@@ -1769,17 +1789,34 @@ bool make_guaranteed_artefact_with_profile(object_type* j_ptr,
 {
     bool allow_artefacts = (object_generation_mode == OB_GEN_MODE_CHEST)
         || (object_generation_mode == OB_GEN_MODE_MONSTER_DROP);
+    bool generated = false;
 
     if (!allow_artefacts || adult_no_artefacts)
         return false;
 
     bool mentioned = false;
 
-    if (!drop_generate_guaranteed_artefact(
-            object_level, object_level, quality, objecttype, profile, j_ptr))
+    for (int attempt = 0; attempt < OBJECT_CHALLENGE_GENERATION_ATTEMPTS;
+         attempt++)
     {
-        return false;
+        if (!drop_generate_guaranteed_artefact(
+                object_level, object_level, quality, objecttype, profile, j_ptr))
+        {
+            continue;
+        }
+
+        if (object_allowed_by_active_challenges(j_ptr))
+        {
+            generated = true;
+            break;
+        }
+
+        object_release_rejected_artefact(j_ptr);
+        object_wipe(j_ptr);
     }
+
+    if (!generated)
+        return false;
 
     apply_generated_object_rating(j_ptr, &mentioned);
 

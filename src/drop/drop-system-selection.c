@@ -502,7 +502,8 @@ static bool collect_candidate_entries(
     int penalty_depth = req->min_depth_penalty_depth;
 
     int filter_artifact = 0, filter_droptype = 0, filter_category = 0;
-    int filter_maxdepth = 0, filter_difficulty = 0, filter_total = 0;
+    int filter_maxdepth = 0, filter_difficulty = 0, filter_challenge = 0;
+    int filter_total = 0;
 
     for (size_t i = 0; i < g_drop_count; i++)
     {
@@ -539,6 +540,12 @@ static bool collect_candidate_entries(
 
         if (req->alignment_filter == DROP_ALIGNMENT_FILTER_EVIL && !e.evil)
             continue;
+
+        if (!object_kind_allowed_by_active_challenges(e.obj.k_idx))
+        {
+            filter_challenge++;
+            continue;
+        }
 
         if (e.noble)
         {
@@ -610,10 +617,10 @@ static bool collect_candidate_entries(
     {
         gen_log_write("DROP_FILTER",
             "depth=%d cat=%s relaxed=%s total=%d artifact_used=%d droptype=%d "
-            "category=%d maxdepth=%d difficulty=%d passed=%zu",
+            "category=%d maxdepth=%d difficulty=%d challenge=%d passed=%zu",
             gen_depth, drop_category_name(req->cat), relaxed ? "yes" : "no",
             filter_total, filter_artifact, filter_droptype, filter_category,
-            filter_maxdepth, filter_difficulty, count);
+            filter_maxdepth, filter_difficulty, filter_challenge, count);
     }
 
     *out = buf;

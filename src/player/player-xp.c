@@ -125,6 +125,32 @@ void gain_exp(s32b amount)
     check_experience();
 }
 
+void gain_knowledge_points(s32b amount, cptr reason)
+{
+    if (amount <= 0)
+        return;
+
+    p_ptr->knowledge_points += amount;
+    if (p_ptr->knowledge_points < 0)
+        p_ptr->knowledge_points = 0;
+    if (p_ptr->knowledge_points > PY_MAX_EXP)
+        p_ptr->knowledge_points = PY_MAX_EXP;
+
+    if (reason && reason[0])
+    {
+        msg_format("%s You gain %ld knowledge point%s.", reason,
+            (long)amount, amount == 1 ? "" : "s");
+    }
+    else
+    {
+        msg_format("You gain %ld knowledge point%s.", (long)amount,
+            amount == 1 ? "" : "s");
+    }
+
+    p_ptr->redraw |= (PR_EXP | PR_BASIC);
+    p_ptr->window |= (PW_PLAYER_0);
+}
+
 /*
  * Lose experience
  */

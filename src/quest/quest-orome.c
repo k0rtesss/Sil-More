@@ -164,9 +164,19 @@ void orome_quest_interaction(void)
         cptr* init_texts = extract_quest_init_texts(QUEST_ID_OROME_DRAGONS, &text_count);
         init_texts = prepend_repeat_context(QUEST_ID_OROME_DRAGONS, init_texts, &text_count, false);
 
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Orome dragon quest: accept blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            if (init_texts) {
+                free_quest_texts(init_texts, text_count);
+            }
+            return;
+        }
+
         quest_set_state(QUEST_ID_OROME_DRAGONS, QUEST_STATE_ACTIVE);
         p_ptr->orome_dragons_killed = 0;
-        remove_quest_giver(R_IDX_OROME);
+        remove_quest_giver_silent(R_IDX_OROME);
 
         if (init_texts && text_count > 0) {
             quest_typewriter_menu("Oromë, Warden of the Drakes", init_texts, text_count, TERM_GREEN, TERM_WHITE);
@@ -214,6 +224,13 @@ void orome_quest_interaction(void)
     
     if (p_ptr->orome_quest == OROME_QUEST_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Orome quest: accept blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Starting Orome quest interaction - offering hunting quest");
         
         /* Extract initialization texts from quest data */
@@ -262,7 +279,7 @@ void orome_quest_interaction(void)
         p_ptr->orome_killed_count = 0;
         
         /* Remove the quest giver now that quest is accepted */
-        remove_quest_giver(R_IDX_OROME);
+        remove_quest_giver_silent(R_IDX_OROME);
         
         msg_format("You must hunt and slay %d %s to prove your prowess.", target_count, target_name);
         msg_print("Return when the hunt is complete to claim your reward.");

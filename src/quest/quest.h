@@ -24,6 +24,13 @@ int quest_id_for_vala_stage(int vala_id, int stage);
 u32b quest_metarun_flag(int quest_id);
 cptr quest_display_title(int quest_id);
 int quest_completion_cap(int quest_idx);
+int metarun_quests_completed_at_least(int minimum_count);
+bool metarun_repeat_tier_unlocked(int prior_completion_count);
+int quest_initiated_count_this_run(void);
+int quest_accepted_count_this_run(void);
+bool quest_can_initiate_more(void);
+bool quest_can_accept_more(void);
+void quest_note_initiated(int quest_idx);
 
 bool check_quest_eligibility(int quest_idx, int depth);
 void apply_quest_rewards(int quest_idx);
@@ -52,6 +59,10 @@ void check_aule_quest_interaction(void);
 void varda_quest_interaction(void);
 void check_varda_quest_interaction(void);
 void check_varda_quest_completion(int r_idx);
+bool varda_quest_bastion_level_active(void);
+void varda_quest_notice_bastion_level_entry(void);
+bool varda_quest_confirm_leave_bastion(void);
+void varda_quest_fail_if_bastion_missed(void);
 
 void mandos_quest_interaction(void);
 void check_mandos_quest_interaction(void);

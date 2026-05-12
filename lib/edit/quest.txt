@@ -10,6 +10,11 @@
 # Y: Quest type (0=vault-based, 1=roulette-based)
 # R: Variable name for quest state (e.g., "tulkas_quest", "aule_quest")
 # M: Metarun quest ID (e.g., METARUN_QUEST_TULKAS, METARUN_QUEST_AULE)
+# Z: Vala owner (Tulkas, Aule, Mandos, Nienna, Orome, Varda)
+# J: Quest sequence (1-3) within that Vala
+# F: Quest flags (GLOBAL, etc.)
+# H: Challenge unlocked by the quest (DISCONNECTED, SINGLE_STAIR, FIXED_50K, TULKAS_BLUNT)
+# L: Per-metarun completion cap
 # S: Stat bonuses (str:dex:con:gra)
 # K: Skill bonuses (skill:bonus pairs)
 # A: Special abilities granted
@@ -21,15 +26,19 @@ V:0.9.7
 
 # Quest of Tulkas the Strong
 Q:1:Tulkas the Strong
+Z:Tulkas
+J:1
 T:The Strong One tests your mettle in combat
 C:Hunt down the named creature of shadow, [monster name], and return victorious
 O:5
 E:DEPTH_RANGE:6:19
+L:7
 Y:1
 R:tulkas_quest
 M:METARUN_QUEST_TULKAS
 P:LINEAR_DECAY:27:0:0:0
 S:1:0:0:0
+A:8:8
 I:The air trembles as if with distant thunder, and a great, booming laugh echoes in the stone halls.
 I:Before you stands Tulkas the Strong, his eyes bright with challenge.
 I:
@@ -47,12 +56,16 @@ W:
 W:"A glorious fight! I felt the earth shake with the fall of your foe!"
 W:"You have proven your might and shown courage worthy of the songs of old."
 W:"Take this prize-wrought ere the Sun and Moon first rose-and wield it well!"
+W:"Along with it, take the hunter's lore of Unique Bane, that mighty foes may find no refuge from your wrath."
 
 # Quest of Aule the Smith
 Q:2:Aule the Smith
+Z:Aule
+J:1
 T:The Maker challenges you to prove your craft
 C:At Aule's forge, craft a work of true worth and mastery
 O:4
+L:7
 Y:0
 R:aule_quest
 M:METARUN_QUEST_AULE
@@ -80,9 +93,12 @@ W:"You are worthy of my blessing. May your arm never tire at the anvil, and may 
 
 # Quest of Mandos the Doomsman
 Q:3:Mandos the Doomsman
+Z:Mandos
+J:1
 T:The Doomsman bids you release a bound spirit
 C:Unmake the false body and free Brodda's spirit to Mandos's judgment
 O:3
+L:2
 Y:0
 R:mandos_quest
 M:METARUN_QUEST_MANDOS
@@ -105,10 +121,13 @@ W:"Accept now this gift: a spirit shielded from the great fears that unman the h
 
 # Quest of Nienna, Lady of Pity
 Q:4:Nienna, Lady of Pity
+Z:Nienna
+J:1
 T:The Lady of Pity tests your compassion
 C:Find the downward stair without taking a life
 O:1
 E:DEPTH_RANGE:14:25
+L:7
 Y:1
 R:niena_quest
 M:METARUN_QUEST_NIENA
@@ -133,16 +152,19 @@ W:"For the mercy you have shown to the lost, I grant you this blessing: may your
 
 # Quest of Orome, the Great Hunter  
 Q:5:Orome, the Great Hunter
+Z:Orome
+J:1
 T:The Great Hunter tests your skill in the hunt
 C:Hunt down the foul kindreds throughout your journey: 100 wolves, 80 spiders, 60 serpents, or 30 vampires
 O:2
 E:DEPTH_RANGE:2:10
+L:7
 Y:1
 R:orome_quest
 M:METARUN_QUEST_OROME
 P:LINEAR_INTERPOLATE:0.05:0.125:0:0
 S:0:1:0:0
-A:8:8
+A:8:10
 I:The air grows wild and clean, smelling of ancient forests under a starlit sky.
 I:The clear, mighty blast of a great horn, the Valaroma, echoes from the walls, shaking the very stones
 I:and sending a tremor of fear through all evil things.
@@ -160,21 +182,23 @@ I:When your great hunt reaches its end, I shall return to bestow my blessing upo
 W:As the last of your chosen prey falls, the triumphant sound of the Valaroma rings out once more.
 W:Orome appears, his eyes bright with approval.
 W:
-W:"A mighty hunt! The foul things of the dark have learned to fear your name.
-W:You have the eye of a true hunter and a spirit that does not quail before the beasts of night."
+W:"A mighty hunt! The foul things of the dark have learned to fear your name."
+W:"You have the eye of a true hunter and a spirit that does not quail before the beasts of night."
 W:
-W:"For this service, I grant you the Hunter's Insight. With every mighty foe you overcome,
-W:your understanding of their fell nature shall deepen, and their strengths shall reveal their weaknesses to your keen eye."
+W:"For this service, I grant you the Wraith of Orome, that the fury of the hunt may quicken your strength and grace rather than dull your hand or heart."
 W:
-W:"You have shown a will that lets deeds speak louder than words.
-W:Such resolve makes you worthy to swear the Oath of Silence, should you choose such a path in a life to come."
+W:"You have shown a focused purpose and a will that lets deeds speak louder than words."
+W:"Such resolve makes you worthy of the Oath of Silence, should you choose that path."
 
 # Quest of Varda, Lady of the Stars
 Q:6:Varda, Lady of the Stars
+Z:Varda
+J:1
 T:The Star-kindler bids you cleanse the shadows
 C:Find and slay Duruin, least of the balrogs, within his Bastion on the first level you reach after 500 ft
 O:6
 E:DEPTH_RANGE:1:3
+L:1
 Y:1
 R:varda_quest
 M:METARUN_QUEST_VARDA
@@ -201,3 +225,289 @@ W:
 W:"Choose now one lamp of my blessing, and bear it through the night that lies ahead.
 W:If you would keep its radiance, swear the Oath of Light and shun all shadowed gear,
 W:for my gifts endure only in hearts that remain true."
+
+# Mandos' Doom - Second Judgment
+Q:7:Mandos, Doom of the Easterlings
+Z:Mandos
+J:2
+T:The Doomsman sends you against the Easterling traitors
+C:Storm the Easterling Fortress and slay Ulfang the Black and Uldor the Accursed
+O:3
+L:2
+Y:0
+R:mandos_second_quest
+M:METARUN_QUEST_MANDOS_TRAITOR
+H:DISCONNECTED
+E:DEPTH_RANGE:10:13
+S:0:0:1:0
+A:8:0
+I:The chill of Mandos' presence settles once more upon you, heavy as iron and cold as the Void.
+I:
+I:"You who have tasted of my judgment, hear me again."
+I:"Two mortal kings turned traitor dwell in these depths -- Ulfang the Black and his son Uldor the Accursed."
+I:"Their treachery at the Nirnaeth Arnoediad brought ruin upon the hosts of the Eldar, and their guilt is not yet answered."
+I:
+I:"They have raised an Easterling fortress in service to the Enemy."
+I:"Go there. Judge them in their own hall and end their line, that the doom long appointed may at last be fulfilled."
+W:The clamour of arms falls silent as the Easterling lords lie dead amid the ruin of their garrison.
+W:Mandos' voice speaks from the stillness, cold and final.
+W:
+W:"The traitors of the East are cast down. The doom I spoke upon them is fulfilled."
+W:"You have been the instrument of a judgment long deferred."
+W:"Take again the strength I set upon you, and walk the paths that lie beyond the known stairs."
+
+# Mandos' Doom - Final Judgment
+Q:8:Mandos, Doom of the Betrayer
+Z:Mandos
+J:3
+T:The Doomsman bids you end the hidden traitor
+C:Seek the Den of Maeglin the Traitor and end his false life
+O:3
+L:1
+Y:0
+R:mandos_third_quest
+M:METARUN_QUEST_MANDOS_BETRAYER
+E:DEPTH_RANGE:17:19
+S:0:0:1:0
+A:0:0
+I:The voice of Mandos returns, colder and more terrible than before, now that you have twice endured his charge.
+I:
+I:"One betrayal yet festers in these depths, the greatest of all."
+I:"Maeglin, who sold Gondolin to the Enemy for a promise of dominion and dark love, still haunts the deep places."
+I:"He lurks in a den between the seventeenth and nineteenth delvings, a shade that will not answer my summons."
+I:
+I:"Hunt him there and deliver final judgment."
+I:"Do this, and I shall grant a gift beyond doom -- a single return from death's gate, that you may finish what remains undone."
+W:As Maeglin falls, the air stills. Mandos steps from shadow, the weight of ancient judgment in his eyes.
+W:
+W:"The betrayer of Gondolin meets his doom at last. Long has he evaded the fate I appointed."
+W:"His treachery brought the Hidden City to ruin and delivered its people to fire and sword."
+W:"Now that account is settled. Carry this reprieve I grant: once only, death shall loosen its hold at your call."
+
+# Quest of Orome, Warden of the Drakes
+Q:9:Orome, Warden of the Drakes
+Z:Orome
+J:2
+T:The Huntsman challenges you against the great drakes
+C:Slay ten great dragons of renown (no hatchlings) and return to Orome
+O:2
+L:7
+Y:1
+R:orome_second_quest
+M:METARUN_QUEST_OROME_DRAGONS
+H:SINGLE_STAIR
+E:DEPTH_RANGE:14:25
+P:LINEAR_INTERPOLATE:0.05:0.10:0:0
+S:0:0:0:0
+A:8:10
+I:The clear call of the Valaroma rolls again through the deep halls, and Orome rides from shadow with eyes alight.
+I:
+I:"You have proven yourself among the lesser beasts, hunter. Now I set you a worthier quarry."
+I:"The great worms that brood in these depths are the mightiest servants of Morgoth after his Balrogs."
+I:"Their fires scorch the stone, and their terror breaks the will of even the bold."
+I:
+I:"Slay ten dragons of renown -- not the whelps that crawl in the shallows, but the great drakes and their ancient kin."
+I:"Break their terror and return to me. Then shall you know what it is to be called a true hunter of Orome."
+W:The air shimmers with heat and fading dread as the last dragon falls. Orome appears, well satisfied by the ruin of its kin.
+W:
+W:"Well struck! The lords of flame and frost have learned to flee before your horn."
+W:"No hunter since the riding of the Valar has broken so many of the great worms."
+W:"Keep the Wraith of Orome to carry you through such fury, and know that a harsher path awaits your line: lone stairs, one way up and one way down upon each delving."
+W:"Choose it, if you would test the mettle of your heirs."
+
+# Quest of Orome, the Great Hunt
+Q:10:Orome, Hunt of the Great
+Z:Orome
+J:3
+T:The Huntsman sets the greatest of all hunts
+C:Slay Orome's marked foes across your delvings: Scatha, Smaug, Draugluin, Gostir, Shelob, Thuringwethil
+O:2
+L:1
+Y:0
+R:orome_third_quest
+M:METARUN_QUEST_OROME_GREAT_HUNT
+F:GLOBAL
+S:0:0:0:0
+A:8:11
+I:The clear call of the Valaroma returns, closer and more urgent than before.
+I:Orome's gaze burns with a fierce light as he speaks.
+I:
+I:"The greatest prey still prowl beneath the earth, and their names are known to me."
+I:"Scatha the Worm, Smaug the Golden, Draugluin lord of werewolves, Gostir the dreadful, Shelob spawn of Ungoliant, and Thuringwethil the vampire."
+I:
+I:"Hunt them down across every delving. This charge I lay upon you and all your heirs, until the last of them falls."
+I:"It is a doom and a glory both -- the greatest hunt since the world was young."
+W:The final mark is slain. The Valaroma rings once more, and Orome's presence thunders in your bones.
+W:
+W:"Your line has answered every horn-blast, and the great hunt is ended at last."
+W:"Take this gift: the rhythm of bow and spear, that two arrows struck true shall drive your next spear home with doubled wrath."
+W:"Let those who follow you claim this hunter's art for 5000 experience, and walk the path of the Huntsman forevermore."
+
+# Quest of Nienna, Mercy in Angband
+Q:11:Nienna's Mercy in Angband
+Z:Nienna
+J:2
+T:Nienna bids you steal light without striking the Foe
+C:Escape with a Silmaril from Morgoth's hall without striking him at all, not even with area attacks. Wounds from other creatures do not count against you
+O:1
+L:1
+Y:0
+R:niena_second_quest
+M:METARUN_QUEST_NIENA_MORGOTH
+H:FIXED_50K
+E:DEPTH_RANGE:20:20
+S:0:0:0:0
+A:0:0
+I:In the shadow of the Iron Crown, Nienna awaits, her form dim with sorrow yet steady with resolve.
+I:
+I:"The hour of greatest mercy draws near. A Silmaril blazes upon Morgoth's brow, and its light cries out to be freed."
+I:"Take it from his crown, yet lay no blow upon the Dark Lord -- not blade, not arrow, not song, nor blast of wrath."
+I:"Even the sweep of your power must spare him. Only the malice of his own servants is not counted against you."
+I:
+I:"I lend you my Gift of Mercy for this task. Let it shield you in the darkness."
+I:"Tread softly, and bring the light out of these pits. Prove that even in the seat of evil, mercy may endure."
+W:As you flee the throne room with the Silmaril blazing in your hand, Nienna's presence soothes your racing heart.
+W:
+W:"You have stolen light from the Iron Crown without striking the Black Foe. Mercy has endured even in Angband."
+W:"Few deeds in all the ages of the world shall rival this."
+W:"I open a harsher road for your line: the fixed 50,000 experience challenge, and my Gift of Mercy may be learned thereafter for 5000 experience."
+
+# Quest of Nienna, Path of Peace
+Q:12:Nienna's Path of Peace
+Z:Nienna
+J:3
+T:Nienna calls you to walk Angband without bloodshed
+C:Escape Angband without taking a single life; the first kill ends the vow for that life
+O:1
+F:GLOBAL
+L:1
+Y:0
+R:niena_third_quest
+M:METARUN_QUEST_NIENA_PACIFIST
+I:Before you descend, Nienna's quiet grief settles over the stairs like a grey mantle. Her words are soft but unyielding.
+I:
+I:"The final test of mercy awaits. Go down into the uttermost dark and return without taking a single life."
+I:"Every creature you meet, however foul, bears within it a spark that was kindled by Iluvatar."
+I:"The first blood you spill shall break this mercy, and the vow will be shattered beyond mending."
+I:
+I:"But if you reach the light again with clean hands, I will wash away every curse that clings to your tale."
+I:"Walk now the path of peace, the hardest road of all."
+W:The air tastes clean and sweet as you step into freedom with no blood upon your hands. Nienna's relief falls upon you like a gentle rain.
+W:
+W:"Mercy has endured even in the pits of Angband, where all other virtues fail."
+W:"You have walked through the domain of the Enemy and left not a single corpse behind."
+W:"You may call upon me once to sweep away the dooms that shadow you, for you have earned a grace beyond any warrior's prize."
+
+# Quest of Tulkas, Orc-Bane
+Q:13:Tulkas, Orc-Bane
+Z:Tulkas
+J:2
+T:Tulkas sends you against the orc captains
+C:Storm the Orc stronghold and slay every marked captain: Gorgol, Boldog, Balcmeg, Lug, Orcobal, Othrod
+O:5
+L:1
+Y:1
+R:tulkas_second_quest
+M:METARUN_QUEST_TULKAS_ORCS
+H:TULKAS_BLUNT
+E:DEPTH_RANGE:5:6
+P:LINEAR_DECAY:27:0:0:0
+S:0:0:0:0
+A:8:8
+I:On your first steps past the shallows, Tulkas meets you in a flurry of motion, his laughter booming through the stones.
+I:
+I:"The orcs breed bold captains in a stronghold below -- Gorgol, Boldog, Balcmeg, Lug, Orcobal, Othrod."
+I:"Each of them a petty tyrant, each swollen with the malice of their master. All of them still draw breath, and that offends me."
+I:
+I:"I will seal them in their lair and bar their kind from the tunnels."
+I:"Hunt them down and break their pride. Leave not one of their captains standing."
+I:"Do this, and I will teach you to scour uniques from the earth, and open a harsher challenge for your line."
+W:The last orc captain falls, and the stronghold echoes with silence. Tulkas strides from the dust, his grin fierce as a blade.
+W:
+W:"You have crushed their chiefs and broken their muster! Not one captain remains to rally their wretched host."
+W:"The orcs shall long remember the day their stronghold was emptied."
+W:"Take this prize of war and the hunter's bane. A brutal road lies open for your heirs: a delve where only blunt arms may serve."
+
+# Quest of Tulkas, Black Foe's Scourge
+Q:14:Tulkas, Black Foe's Scourge
+Z:Tulkas
+J:3
+T:Tulkas commands you to scar the Black Foe himself
+C:Drive Morgoth to half his strength with your own blows, proving you can shake the Enemy upon his throne
+O:5
+F:GLOBAL
+L:1
+Y:0
+R:tulkas_third_quest
+M:METARUN_QUEST_TULKAS_MORGOTH
+S:0:0:0:0
+A:8:12
+I:Even in the shallows you feel Tulkas' mirth and challenge, rolling like distant thunder behind you.
+I:
+I:"One day you will stand before the Black Foe upon his throne of iron."
+I:"When that hour comes, do not cower. Do not merely endure. Strike him."
+I:"Halve his might with your own hand, and let him feel the wrath of those he has wronged."
+I:
+I:"I, Tulkas, who wrestled Morgoth before the gates of Utumno, set this charge upon you."
+I:"Do this, and I will lend you a fury beyond the measure of mortal strength."
+W:As your blows stagger Morgoth upon his throne, laughter like an earthquake rolls through Angband -- Tulkas exultant at your defiance.
+W:
+W:"Well struck! The Black Foe reels, and the pillars of his hall tremble!"
+W:"Not since I cast him upon his face before Utumno has he known such indignity!"
+W:"Let my wrath flow through your smiting hand forevermore. The Enemy shall know your strength, and the strength of all who follow you."
+
+# Quest of Varda, Shadow's Bastion
+Q:15:Varda, Shadow's Bastion
+Z:Varda
+J:2
+T:The Star-kindler sends you against Belegwath's bastion
+C:Face Belegwath, Balrog of Shadow, in his Shadow Bastion beyond the fifteenth delving
+O:6
+L:1
+E:DEPTH_RANGE:1:3
+Y:1
+R:varda_second_quest
+M:METARUN_QUEST_VARDA_SHADOW
+P:LINEAR_INTERPOLATE:0.15:0.05:0:0
+S:0:0:0:0
+A:0:0
+I:Starlight gathers again around you as you carry the Oath of Light. Varda's gaze is steady and clear.
+I:
+I:"You have broken one bastion of shadow, but a greater darkness stirs below."
+I:"Belegwath, a Balrog mightier than Duruin, has woven a Shadow Bastion in the deep halls beyond the fifteenth delving."
+I:"His darkness is a living thing that devours the light and chokes the spirit."
+I:
+I:"Go there and unmake him. Break his darkness, and the stars shall answer you with renewed grace."
+I:"Carry the light that I have kindled in you, and let it burn through his shadow."
+W:The Shadow Bastion falls silent as Belegwath is unmade, and starlight pours in where darkness once held absolute dominion.
+W:Varda's voice rings clear as the dawn of the world.
+W:
+W:"You have broken another stronghold of the Enemy's shadow. The deep places breathe freely once more."
+W:"Choose your radiant gift anew, and carry the blessing of the Queen of Stars deeper into the dark."
+
+# Quest of Varda, Gloomweaver's Doom
+Q:16:Varda, Gloomweaver's Doom
+Z:Varda
+J:3
+T:The Star-kindler commands you to end Ungoliant's unlight
+C:Seek out and slay Ungoliant, the Gloomweaver, ending her unlight forever
+O:6
+F:GLOBAL
+L:1
+Y:0
+R:varda_third_quest
+M:METARUN_QUEST_VARDA_UNGOLIANT
+S:0:0:0:0
+I:Starlight gathers once more, sharper and brighter than before. Varda's gaze fixes upon the deepest darkness.
+I:
+I:"There remains one enemy whom I will not suffer to endure: Ungoliant, the Gloomweaver."
+I:"She who drank the light of the Two Trees and vomited forth the Unlight that even my stars could not pierce."
+I:"Her hunger is boundless, and her malice older than Morgoth's reign."
+I:
+I:"Hunt her through the deepest places of the earth. When she is unmade, your line shall never enter the dark unarmed."
+I:"Each new venture shall begin with a relic of your choosing, drawn from the light reclaimed."
+W:Ungoliant's unlight gutters and dies, and starlight floods the void she leaves behind. Varda's voice is a clear, distant bell of triumph.
+W:
+W:"Her hunger is ended at last. The Gloomweaver shall devour no more light."
+W:"Henceforth, every new venture of your line shall begin with a relic chosen under starlight."
+W:"Carry it well, and remember: the Queen of Stars sees the first step as surely as the last."

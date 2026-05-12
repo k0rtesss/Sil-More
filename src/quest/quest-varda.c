@@ -41,6 +41,11 @@ void ensure_varda_ungoliant_active(void)
 
     if (state == QUEST_STATE_NOT_STARTED)
     {
+        if (!quest_can_accept_more()) {
+            log_trace("Varda Ungoliant quest: activation blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
         quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_ACTIVE);
     }
 
@@ -412,7 +417,6 @@ static bool grant_varda_reward(int quest_id, cptr* completion_texts, int complet
 
     create_chosen_artefact(selected, p_ptr->py, p_ptr->px, true);
     msg_print("Starlight gathers at your feet, coalescing into a shining relic.");
-    p_ptr->quest_reserved[0] = 1;
     if (quest_id == QUEST_ID_VARDA_SHADOW) {
         quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_REWARDED);
         p_ptr->varda_shadow_ready = 0;
@@ -477,6 +481,72 @@ static void try_place_varda_near_player(void)
     log_trace("Varda reward: failed to place quest giver near player (no valid space), will retry on new depth");
 }
 
+static bool varda_quest_duruin_present(void)
+{
+    for (int i = 1; i < mon_max; i++)
+    {
+        monster_type* m_ptr = &mon_list[i];
+        if (m_ptr->r_idx == R_IDX_DURUIN)
+            return true;
+    }
+
+    return false;
+}
+
+bool varda_quest_bastion_level_active(void)
+{
+    if (!p_ptr)
+        return false;
+    if (p_ptr->varda_quest != VARDA_QUEST_ACTIVE)
+        return false;
+    if (!p_ptr->varda_vault_placed)
+        return false;
+    if (p_ptr->varda_level != p_ptr->depth)
+        return false;
+
+    return varda_quest_duruin_present();
+}
+
+void varda_quest_notice_bastion_level_entry(void)
+{
+    if (!varda_quest_bastion_level_active())
+        return;
+
+    msg_print("Varda's quest presses upon you.");
+    msg_print("This is the first level you have reached after 500 ft.");
+    msg_print("Duruin, least of the Balrogs, waits here.");
+    msg_print("His Bastion is on this level.");
+    msg_print("Leave without slaying him and the quest is lost.");
+}
+
+bool varda_quest_confirm_leave_bastion(void)
+{
+    if (!varda_quest_bastion_level_active())
+        return true;
+
+    msg_print("Duruin's Bastion lies on this level.");
+    msg_print("It is the first level you reached after 500 ft.");
+    msg_print("Leaving now will fail Varda's quest.");
+
+    return get_check("Leave Duruin's Bastion and fail Varda's quest? ");
+}
+
+void varda_quest_fail_if_bastion_missed(void)
+{
+    if (!varda_quest_bastion_level_active())
+        return;
+
+    p_ptr->varda_quest = VARDA_QUEST_FAILED;
+    p_ptr->varda_vault_ready = 0;
+
+    msg_print("You have left Duruin's Bastion behind.");
+    msg_print("Varda's quest is lost.");
+    do_cmd_note("Failed Varda's quest by leaving Duruin's Bastion behind.",
+        p_ptr->depth);
+    log_trace("Varda quest: FAILED - player left Duruin's Bastion at depth %d",
+        p_ptr->depth);
+}
+
 void check_varda_quest_completion(int r_idx)
 {
     if (p_ptr->varda_quest == VARDA_QUEST_ACTIVE && r_idx == R_IDX_DURUIN) {
@@ -531,10 +601,19 @@ void varda_quest_interaction(void)
         cptr* init_texts = extract_quest_init_texts(QUEST_ID_VARDA_SHADOW, &text_count);
         init_texts = prepend_repeat_context(QUEST_ID_VARDA_SHADOW, init_texts, &text_count, false);
 
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Varda shadow quest: accept blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            if (init_texts) {
+                free_quest_texts(init_texts, text_count);
+            }
+            return;
+        }
+
         quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_ACTIVE);
-        p_ptr->quest_reserved[0] = 1;
         p_ptr->varda_shadow_restricted = 1;
-        remove_quest_giver(R_IDX_VARDA);
+        remove_quest_giver_silent(R_IDX_VARDA);
 
         if (init_texts && text_count > 0) {
             quest_typewriter_menu("Varda, Shadow's Bastion", init_texts, text_count, TERM_WHITE, TERM_L_BLUE);
@@ -583,13 +662,19 @@ void varda_quest_interaction(void)
     }
 
     if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT) {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Varda quest: accept blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Varda quest: accepting quest");
         p_ptr->varda_quest = VARDA_QUEST_ACTIVE;
-        p_ptr->quest_reserved[0] = 1;
         p_ptr->varda_level = p_ptr->depth;
 
         /* Remove quest giver for roulette quests */
-        remove_quest_giver(R_IDX_VARDA);
+        remove_quest_giver_silent(R_IDX_VARDA);
 
         int text_count = 0;
         cptr* init_texts = extract_quest_init_texts(QUEST_ID_VARDA, &text_count);

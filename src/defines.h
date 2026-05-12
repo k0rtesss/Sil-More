@@ -61,7 +61,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 6
-#define VERSION_EXTRA 2   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 3   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 #define METAR_CURSE_SLOTS 64  /* Maximum number of distinct metarun curses supported */
@@ -683,6 +683,10 @@
 #define SPC_HUNTSMAN_RHYTHM 11 /* Orome's Huntsman's Rhythm */
 #define SPC_TULKAS_WRATH 12 /* Wrath of Tulkas */
 #define SPC_QUEEN_STARS 13 /* Queen of the Stars */
+
+#define QUEST_MAX_INITIATED_PER_RUN 3
+#define QUEST_MAX_ACCEPTED_PER_RUN 2
+#define QUEST_REPEAT_TIER_REQUIRED 3
 
 /*
  * Attack Types
@@ -3867,6 +3871,7 @@
 #define VARDA_QUEST_ACTIVE 2         /* Accepted quest: hunt Duruin's bastion */
 #define VARDA_QUEST_SUCCESS 3        /* Duruin slain */
 #define VARDA_QUEST_REWARDED 4       /* Reward given, quest complete */
+#define VARDA_QUEST_FAILED 5         /* Duruin's bastion was left behind */
 
 /*
  * Quest Parametric Formula Types (P: field)

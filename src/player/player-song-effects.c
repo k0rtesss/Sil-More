@@ -685,6 +685,12 @@ bool singing(int song)
     }
     else
     {
+        if (song < 0 || song >= SNG_MAX)
+            return (false);
+
+        if (!p_ptr->active_ability[S_SNG][song])
+            return (false);
+
         if (p_ptr->song1 == song)
             return (true);
         if (p_ptr->song2 == song)

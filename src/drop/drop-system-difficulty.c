@@ -541,9 +541,8 @@ int smithing_difficulty_baseline(const object_type* o_ptr)
     /* Abilities */
     for (int i = 0; i < o_ptr->abilities; i++)
     {
-        int level = (&b_info[ability_index(
-                         o_ptr->skilltype[i], o_ptr->abilitynum[i])])
-                        ->level;
+        int level = ability_requirement_level(&b_info[ability_index(
+            o_ptr->skilltype[i], o_ptr->abilitynum[i])]);
         dif_inc += 5 + (level / 3);
     }
 

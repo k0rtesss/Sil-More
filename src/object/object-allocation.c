@@ -43,6 +43,84 @@ static bool kind_is_damaged_item(int k_idx)
     return k_ptr->flags3 & TR3_DAMAGED;
 }
 
+static bool tulkas_blunt_challenge_active(void)
+{
+    return op_ptr && (op_ptr->opt[OPT_birth_tulkas_blunt] ||
+        op_ptr->opt[OPT_adult_tulkas_blunt]);
+}
+
+static bool torchlight_challenge_active(void)
+{
+    return op_ptr && (op_ptr->opt[OPT_birth_torchlight] ||
+        op_ptr->opt[OPT_adult_torchlight]);
+}
+
+static bool tulkas_blunt_kind_ok(int k_idx)
+{
+    object_kind* k_ptr;
+
+    if (!z_info || !k_info || k_idx <= 0 || k_idx >= z_info->k_max)
+        return false;
+
+    k_ptr = &k_info[k_idx];
+    switch (k_ptr->tval)
+    {
+    case TV_SWORD:
+    case TV_POLEARM:
+    case TV_BOW:
+    case TV_ARROW:
+        return false;
+    default:
+        return true;
+    }
+}
+
+static bool torchlight_kind_ok(int k_idx)
+{
+    object_kind* k_ptr;
+
+    if (!z_info || !k_info || k_idx <= 0 || k_idx >= z_info->k_max)
+        return false;
+
+    k_ptr = &k_info[k_idx];
+    if (k_ptr->tval != TV_LIGHT)
+        return true;
+
+    if (k_ptr->flags3 & TR3_INSTA_ART)
+        return true;
+
+    return k_ptr->sval == SV_LIGHT_TORCH ||
+        k_ptr->sval == SV_LIGHT_MALLORN;
+}
+
+bool object_kind_allowed_by_active_challenges(int k_idx)
+{
+    if (tulkas_blunt_challenge_active() && !tulkas_blunt_kind_ok(k_idx))
+        return false;
+
+    if (torchlight_challenge_active() && !torchlight_kind_ok(k_idx))
+        return false;
+
+    return true;
+}
+
+bool object_allowed_by_active_challenges(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    return object_kind_allowed_by_active_challenges(o_ptr->k_idx);
+}
+
+void object_release_rejected_artefact(object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->name1 || !z_info || !a_info)
+        return;
+
+    if (o_ptr->name1 > 0 && o_ptr->name1 < z_info->art_max)
+        a_info[o_ptr->name1].cur_num = 0;
+}
+
 /*
  * Apply a "object restriction function" to the "object allocation table"
  */
@@ -57,7 +135,11 @@ void get_obj_num_prep(void)
     for (i = 0; i < alloc_kind_size; i++)
     {
         /* Accept objects which pass the restriction, if any */
-        if (!get_obj_num_hook)
+        if (!object_kind_allowed_by_active_challenges(table[i].index))
+        {
+            table[i].prob2 = 0;
+        }
+        else if (!get_obj_num_hook)
         {
             // damaged items only on skeletons
             if (kind_is_damaged_item(table[i].index))

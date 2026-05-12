@@ -1837,9 +1837,9 @@ void do_cmd_throw(bool automatic)
     missile_char = object_char(i_ptr);
     treat_as_throwing = player_can_treat_as_throwing_flags(i_ptr, f3);
     has_throwing_ability = p_ptr->active_ability[S_MEL][MEL_THROWING]
-        || object_grants_ability(i_ptr, S_MEL, MEL_THROWING);
+        || object_grants_usable_ability(i_ptr, S_MEL, MEL_THROWING);
     has_impale_ability = (p_ptr->active_ability[S_MEL][MEL_IMPALE]
-        || object_grants_ability(i_ptr, S_MEL, MEL_IMPALE))
+        || object_grants_usable_ability(i_ptr, S_MEL, MEL_IMPALE))
         && weapon_is_impale_eligible(i_ptr);
     remaining_impale_targets = has_impale_ability ? 1 : 0;
 

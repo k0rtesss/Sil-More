@@ -79,6 +79,13 @@ void check_niena_morgoth_interaction(void)
             m_ptr = &mon_list[cave_m_idx[y][x]];
             if (m_ptr->r_idx != R_IDX_NIENA) continue;
 
+            if (!quest_can_accept_more()) {
+                msg_print("You are already committed to two quests. Finish one before accepting another.");
+                log_trace("Niena Morgoth quest: accept blocked by active quest cap (%d/%d)",
+                    quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+                return;
+            }
+
             int text_count = 0;
             cptr* init_texts = extract_quest_init_texts(QUEST_ID_NIENA_MORGOTH, &text_count);
             init_texts = prepend_repeat_context(QUEST_ID_NIENA_MORGOTH, init_texts, &text_count, false);
@@ -107,7 +114,7 @@ void check_niena_morgoth_interaction(void)
             }
 
             quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_ACTIVE);
-            remove_quest_giver(R_IDX_NIENA);
+            remove_quest_giver_silent(R_IDX_NIENA);
             return;
         }
     }
@@ -130,6 +137,11 @@ void ensure_niena_pacifist_active(void)
 
     if (state == QUEST_STATE_NOT_STARTED)
     {
+        if (!quest_can_accept_more()) {
+            log_trace("Niena pacifist quest: activation blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
         quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_ACTIVE);
         p_ptr->niena_reserved &= ~NIENA_FLAG_PACIFIST_FAILED;
     }
@@ -160,6 +172,13 @@ void niena_quest_interaction(void)
     
     if (p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
     {
+        if (!quest_can_accept_more()) {
+            msg_print("You are already committed to two quests. Finish one before accepting another.");
+            log_trace("Niena quest: accept blocked by active quest cap (%d/%d)",
+                quest_accepted_count_this_run(), QUEST_MAX_ACCEPTED_PER_RUN);
+            return;
+        }
+
         log_trace("Starting Niena quest interaction - offering mercy quest");
         
         /* Extract initialization texts from quest data */
@@ -186,7 +205,7 @@ void niena_quest_interaction(void)
         p_ptr->niena_level = p_ptr->depth; /* Track where quest was started */
         
         /* Remove the quest giver now that quest is accepted */
-        remove_quest_giver(R_IDX_NIENA);
+        remove_quest_giver_silent(R_IDX_NIENA);
         
         /* Make all stairs visible */
         int y, x;

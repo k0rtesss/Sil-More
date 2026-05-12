@@ -20,6 +20,7 @@
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"
+#include "player/player-abilities.h"
 #include "metarun.h"
 #include "platform-frame.h"
 #include "platform-time.h"
@@ -234,6 +235,8 @@ void hit_trap(int y, int x)
             // take some damage
             falling_damage(false);
 
+            varda_quest_fail_if_bastion_missed();
+
             // make a note if the player loses a greater vault
             note_lost_greater_vault();
 
@@ -262,6 +265,8 @@ void hit_trap(int y, int x)
 
         // take some damage
         falling_damage(false);
+
+        varda_quest_fail_if_bastion_missed();
 
         // make a note if the player loses a greater vault
         note_lost_greater_vault();
@@ -799,7 +804,8 @@ int concentration_bonus(int y, int x)
     if (p_ptr->active_ability[S_PER][PER_CONCENTRATION]
         && (p_ptr->last_attack_m_idx == cave_m_idx[y][x]))
     {
-        bonus = MIN(p_ptr->consecutive_attacks, p_ptr->skill_use[S_PER] / 2);
+        bonus = MIN(p_ptr->consecutive_attacks,
+            ability_score(S_PER, PER_CONCENTRATION) / 2);
     }
 
     // If the player is not engaged with this monster, reset the attack count
@@ -826,7 +832,7 @@ int focused_attack_bonus(void)
 
         if (p_ptr->active_ability[S_PER][PER_FOCUSED_ATTACK])
         {
-            return (p_ptr->skill_use[S_PER] / 2);
+            return (ability_score(S_PER, PER_FOCUSED_ATTACK) / 2);
         }
     }
 
@@ -842,8 +848,8 @@ int master_hunter_bonus(monster_type* m_ptr)
     // master hunter bonus
     if (p_ptr->active_ability[S_PER][PER_MASTER_HUNTER])
     {
-        return (
-            MIN((&l_list[m_ptr->r_idx])->pkills, p_ptr->skill_use[S_PER] / 2));
+        return (MIN((&l_list[m_ptr->r_idx])->pkills,
+            ability_score(S_PER, PER_MASTER_HUNTER) / 2));
     }
     else
     {
@@ -1240,7 +1246,6 @@ void py_attack_aux(int y, int x, int attack_type)
     int stealth_bonus = 0;
     int assassination_bonus = 0;
     int monster_ripostes = 0;
-    int effective_strength;
     int damage_type = GF_HURT;
 
     int m_idx;
@@ -1257,10 +1262,8 @@ void py_attack_aux(int y, int x, int attack_type)
     bool knocked = false;
     bool charge = false;
     bool rapid_attack = false;
-    bool off_hand_blow = false;
     bool fatal_blow = false;
     bool smite = false;
-    bool tulkas_wrath = false;
     bool huntsman_rhythm = false;
 
     u32b f1, f2, f3, f4; // the weapon's flags
@@ -1457,7 +1460,6 @@ void py_attack_aux(int y, int x, int attack_type)
                     || attack_type == ATT_IMPALE
                     || attack_type == ATT_FOLLOW_THROUGH
                     || attack_type == ATT_WHIRLWIND);
-            tulkas_wrath = smite && wrath_ability;
         }
 
         do_knock_back = false;
@@ -1479,7 +1481,6 @@ void py_attack_aux(int y, int x, int attack_type)
         if ((num == blows) && (num != 1) && (p_ptr->mds2 > 0)
             && attack_type != ATT_IMPALE)
         {
-            off_hand_blow = true;
             rapid_attack = false;
 
             attack_mod += p_ptr->offhand_mel_mod;
@@ -1678,37 +1679,12 @@ void py_attack_aux(int y, int x, int attack_type)
                 }
             }
 
-            // determine the player's score for knocking an opponent backwards
-            // if they have the ability first calculate their strength including
-            // modifiers for this attack
-            effective_strength = p_ptr->stat_use[A_STR];
-            if (charge)
-                effective_strength += 3;
-            if (rapid_attack)
-                effective_strength -= 3;
-            if (off_hand_blow)
-                effective_strength -= 3;
-
-            // cap the value by the weapon weight
-            if (effective_strength > weapon_weight / 10)
-                effective_strength = weapon_weight / 10;
-            if ((effective_strength < 0)
-                && (-effective_strength > weapon_weight / 10))
-                effective_strength = -(weapon_weight / 10);
-
-            // give an extra +2 bonus for using a weapon two-handed
-            if (two_handed_melee())
-                effective_strength += 2;
-
-            if (tulkas_wrath)
-                effective_strength *= 2;
-
             // check whether the effect triggers
             if (p_ptr->active_ability[S_MEL][MEL_KNOCK_BACK]
                 && (attack_type != ATT_OPPORTUNIST)
                 && !(r_ptr->flags1 & (RF1_NEVER_MOVE))
                 && !(r_ptr->flags1 & (RF1_HIDDEN_MOVE))
-                && (skill_check(PLAYER, effective_strength * 2,
+                && (skill_check(PLAYER, ability_score(S_MEL, MEL_KNOCK_BACK),
                         monster_stat(m_ptr, A_CON) * 2, m_ptr)
                     > 0))
             {

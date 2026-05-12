@@ -360,6 +360,8 @@ void birth_prepare_character_extra(void)
 
     p_ptr->new_exp = p_ptr->exp = birth_get_start_xp();
     p_ptr->discovery_lore_flags = 0;
+    p_ptr->lore = 0;
+    p_ptr->knowledge_points = 0;
     log_debug("Set starting experience to %d", p_ptr->exp);
 
     p_ptr->song1 = SNG_NOTHING;
@@ -426,6 +428,7 @@ void player_wipe(void)
     int age = 0;
     int height = 0;
     int weight = 0;
+    int lore = 0;
 
     character_generated = false;
     log_debug("birth.c: character_generated set to false - starting character wipe");
@@ -453,6 +456,7 @@ void player_wipe(void)
                 stat[i] = 0;
             }
         }
+        lore = (!(p_ptr->noscore & 0x0008)) ? p_ptr->lore : 0;
     }
 
     memset(p_ptr, 0, sizeof(player_type));
@@ -470,6 +474,7 @@ void player_wipe(void)
         SDL_strlcpy(p_ptr->history, history, sizeof(p_ptr->history));
         for (i = 0; i < A_MAX; i++)
             p_ptr->stat_base[i] = stat[i];
+        p_ptr->lore = lore;
     }
     else
     {
@@ -482,6 +487,7 @@ void player_wipe(void)
         p_ptr->history[0] = '\0';
         for (i = 0; i < A_MAX; i++)
             p_ptr->stat_base[i] = 0;
+        p_ptr->lore = 0;
     }
 
     for (i = 0; i < INVEN_TOTAL; i++)

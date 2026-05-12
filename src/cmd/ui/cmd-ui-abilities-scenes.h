@@ -18,6 +18,18 @@
 
 #include "angband.h"
 
+int ability_purchase_exp_cost(int skilltype);
+bool ability_uses_knowledge_points(int skilltype, int abilitynum);
+int ability_purchase_knowledge_cost(int skilltype, int abilitynum);
+
+int ability_semantic_oath_id_for_ability(int abilitynum);
+const char* oath_name_short(int oath_id);
+const char* oath_desc2_short(int oath_id);
+const char* oath_reward_short(int oath_id);
+
+bool ability_semantic_add_wrapped_detail_lines(app_ui_panel* panel,
+    byte attr, cptr text, int wrap_chars);
+bool ability_semantic_add_detail_break(app_ui_panel* panel);
 void ability_semantic_add_description_lines(app_ui_panel* panel,
     int skilltype, const ability_type* b_ptr);
 

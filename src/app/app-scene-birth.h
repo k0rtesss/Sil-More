@@ -23,6 +23,8 @@ extern "C" {
 #endif
 
 #define BIRTH_MAX_COST 13
+#define BIRTH_STAT_LORE A_MAX
+#define BIRTH_STAT_COUNT (A_MAX + 1)
 
 NavResult player_birth(void);
 NavResult character_creation(void);

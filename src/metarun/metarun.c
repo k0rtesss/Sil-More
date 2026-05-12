@@ -599,7 +599,6 @@ static void resolve_niena_morgoth_quest_on_exit(bool escaped_with_sils)
     niena_revoke_temp_mercy_gift(true);
     metarun_mark_quest_completed(METARUN_QUEST_NIENA_MORGOTH);
     metarun_unlock_challenge_fixed_exp();
-    p_ptr->quest_reserved[0] = 1;
     msg_print("The fixed 50k XP challenge is now unlocked.");
 }
 

@@ -735,9 +735,8 @@ int object_difficulty(object_type* o_ptr)
     // Abilities
     for (i = 0; i < o_ptr->abilities; i++)
     {
-        int level = (&b_info[ability_index(
-                         o_ptr->skilltype[i], o_ptr->abilitynum[i])])
-                        ->level;
+        int level = ability_requirement_level(&b_info[ability_index(
+            o_ptr->skilltype[i], o_ptr->abilitynum[i])]);
 
         dif_inc += 5 + (level / 3);
         smithing_cost.exp += 50 * level;

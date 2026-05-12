@@ -203,6 +203,7 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/movement/cmd-search.c
     src/cmd/movement/cmd-travel.c
     src/cmd/ui/cmd-ui-abilities.c
+    src/cmd/ui/cmd-ui-abilities-details.c
     src/cmd/ui/cmd-ui-abilities-scenes.c
     src/cmd/ui/cmd-ui-abilities-songs.c
     src/cmd/ui/cmd-ui-character.c

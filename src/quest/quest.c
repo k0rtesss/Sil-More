@@ -194,6 +194,103 @@ int quest_completion_cap(int quest_idx)
     return cap;
 }
 
+int metarun_quests_completed_at_least(int minimum_count)
+{
+    int total = 0;
+
+    if (minimum_count <= 0)
+        return (int)N_ELEMENTS(metarun_known_quest_flags);
+
+    for (size_t i = 0;
+         i < METARUN_QUEST_SLOT_MAX && i < N_ELEMENTS(metarun_known_quest_flags);
+         i++)
+    {
+        if (metar.quest_completion_counts[i] >= minimum_count)
+            total++;
+    }
+
+    return total;
+}
+
+bool metarun_repeat_tier_unlocked(int prior_completion_count)
+{
+    if (prior_completion_count <= 0)
+        return true;
+
+    return metarun_quests_completed_at_least(prior_completion_count)
+        >= QUEST_REPEAT_TIER_REQUIRED;
+}
+
+int quest_initiated_count_this_run(void)
+{
+    if (!p_ptr)
+        return 0;
+
+    return MIN((int)p_ptr->quest_reserved[0], QUEST_MAX_INITIATED_PER_RUN);
+}
+
+static bool quest_state_is_accepted(int quest_idx)
+{
+    if (!p_ptr)
+        return false;
+
+    switch (quest_idx)
+    {
+    case QUEST_ID_TULKAS:
+        return p_ptr->tulkas_quest == TULKAS_QUEST_ACTIVE;
+    case QUEST_ID_AULE:
+        return p_ptr->aule_quest == AULE_QUEST_ACTIVE;
+    case QUEST_ID_MANDOS:
+        return p_ptr->mandos_quest == MANDOS_QUEST_ACTIVE;
+    case QUEST_ID_NIENA:
+        return p_ptr->niena_quest == NIENA_QUEST_ACTIVE;
+    case QUEST_ID_OROME:
+        return p_ptr->orome_quest == OROME_QUEST_ACTIVE;
+    case QUEST_ID_VARDA:
+        return p_ptr->varda_quest == VARDA_QUEST_ACTIVE;
+    default:
+        return quest_get_state(quest_idx) == QUEST_STATE_ACTIVE;
+    }
+}
+
+int quest_accepted_count_this_run(void)
+{
+    int total = 0;
+
+    for (int quest_idx = QUEST_ID_TULKAS; quest_idx <= QUEST_ID_VARDA_UNGOLIANT;
+         quest_idx++)
+    {
+        if (quest_state_is_accepted(quest_idx))
+            total++;
+    }
+
+    return total;
+}
+
+bool quest_can_initiate_more(void)
+{
+    return quest_initiated_count_this_run() < QUEST_MAX_INITIATED_PER_RUN;
+}
+
+bool quest_can_accept_more(void)
+{
+    return quest_accepted_count_this_run() < QUEST_MAX_ACCEPTED_PER_RUN;
+}
+
+void quest_note_initiated(int quest_idx)
+{
+    if (!p_ptr)
+        return;
+
+    if (p_ptr->quest_reserved[0] < QUEST_MAX_INITIATED_PER_RUN)
+        p_ptr->quest_reserved[0]++;
+    else
+        p_ptr->quest_reserved[0] = QUEST_MAX_INITIATED_PER_RUN;
+
+    log_trace("Quest %d initiated this run (%d/%d)", quest_idx,
+        p_ptr->quest_reserved[0], QUEST_MAX_INITIATED_PER_RUN);
+}
+
 void metarun_seed_quest_counts_from_mask(metarun *m, u32b mask)
 {
     if (!m) return;

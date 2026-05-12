@@ -27,6 +27,7 @@
 #include "melee/melee-util.h"
 #include "metarun/metarun-meta-state.h"
 #include "monster/monster.h"
+#include "player/player-abilities.h"
 
 int challenge_check(monster_type* m_ptr)
 {
@@ -1424,10 +1425,10 @@ void calc_morale(monster_type* m_ptr)
     }
 
     // reduce morale for the Majesty ability
-    difference = MAX(p_ptr->skill_use[S_WIL] - monster_skill(m_ptr, S_WIL), 0);
+    int majesty_score = ability_score(S_WIL, WIL_MAJESTY);
+    difference = MAX(majesty_score - monster_skill(m_ptr, S_WIL), 0);
     if (c_info[p_ptr->pcharacter].flags_u & UNQ_WIL_FIN)
-        difference = MAX((3 * p_ptr->skill_use[S_WIL]) / 2
-            - monster_skill(m_ptr, S_WIL), 0);
+        difference = MAX((3 * majesty_score) / 2 - monster_skill(m_ptr, S_WIL), 0);
     if (p_ptr->active_ability[S_WIL][WIL_MAJESTY])
         morale -= difference / 2 * 10;
 

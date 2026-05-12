@@ -53,6 +53,9 @@ void object_wipe(object_type* o_ptr);
 void object_copy(object_type* o_ptr, const object_type* j_ptr);
 void object_prep(object_type* o_ptr, int k_idx);
 void object_refresh_weight(object_type* o_ptr);
+bool object_kind_allowed_by_active_challenges(int k_idx);
+bool object_allowed_by_active_challenges(const object_type* o_ptr);
+void object_release_rejected_artefact(object_type* o_ptr);
 void object_into_artefact(object_type* o_ptr, artefact_type* a_ptr);
 u32b object_kind_pval_flags1(const object_kind* k_ptr);
 u32b artefact_pval_flags1(const artefact_type* a_ptr);
@@ -112,4 +115,7 @@ int object_stack_limit(const object_type* o_ptr);
 bool build_object_kind_recall_ui_scene(app_ui_scene* scene, int k_idx,
     cptr prompt, bool overlay_dungeon);
 void reorder_pack(bool display_message);
+
+#define OBJECT_CHALLENGE_GENERATION_ATTEMPTS 100
+
 #endif /* INCLUDED_OBJECT_OBJECT_H */

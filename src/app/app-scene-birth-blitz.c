@@ -1095,19 +1095,19 @@ NavResult birth_blitz_configure_effects(void)
     return NAV_OK;
 }
 
-static void blitz_auto_assign_stats(int stats[A_MAX])
+static void blitz_auto_assign_stats(int stats[BIRTH_STAT_COUNT])
 {
     int cost = 0;
 
-    for (int i = 0; i < A_MAX; i++)
+    for (int i = 0; i < BIRTH_STAT_COUNT; i++)
         stats[i] = 0;
 
     while (cost < BIRTH_MAX_COST)
     {
-        int choices[A_MAX];
+        int choices[BIRTH_STAT_COUNT];
         int choice_count = 0;
 
-        for (int i = 0; i < A_MAX; i++)
+        for (int i = 0; i < BIRTH_STAT_COUNT; i++)
         {
             int next = stats[i] + 1;
             int next_cost;
@@ -1213,7 +1213,7 @@ static void blitz_auto_assign_skills(void)
 
 NavResult birth_blitz_auto_build_character(void)
 {
-    int stats[A_MAX];
+    int stats[BIRTH_STAT_COUNT];
 
     birth_prepare_character_extra();
     blitz_auto_assign_stats(stats);
@@ -1225,6 +1225,7 @@ NavResult birth_blitz_auto_build_character(void)
         p_ptr->stat_base[i] = stats[i] + bonus;
         p_ptr->stat_drain[i] = 0;
     }
+    p_ptr->lore = stats[BIRTH_STAT_LORE];
 
     p_ptr->update |= (PU_BONUS | PU_HP);
     update_stuff();

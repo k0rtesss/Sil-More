@@ -1,8 +1,8 @@
 {
   "metadata": {
     "schema_version": 1,
-    "status_date": "2026-04-18",
-    "notes": "Wave 8 final end-state closure baseline for oversized non-vendor source files after the continuation validation matrix completed successfully."
+    "status_date": "2026-05-12",
+    "notes": "Post quest/balance port baseline after the semantic ability detail split."
   },
   "policy": {
     "allowlist_globs": [
@@ -61,7 +61,7 @@
   "audits": {
     "source_size": {
       "label": "Source size audit",
-      "notes": "Wave 8 final-closure baseline for oversized non-vendor source files.",
+      "notes": "Post quest/balance port baseline for oversized non-vendor source files.",
       "metrics": {
         "c_files_over_2500": {
           "label": "non-vendor src/**/*.c files over 2500 lines",
@@ -86,29 +86,28 @@
         },
         "h_files_over_250": {
           "label": "non-vendor src/**/*.h files over 250 lines",
-          "files": 9,
-          "value": 7861,
+          "files": 8,
+          "value": 7494,
           "notes": "Tracks oversized headers that still act as broad ownership buckets.",
           "file_matches": {
-            "src/angband.h": 298,
-            "src/app/app-scene-dungeon.h": 271,
-            "src/app/app-ui.h": 280,
-            "src/config.h": 329,
-            "src/defines.h": 4012,
-            "src/level-generation/level-generation-internal.h": 412,
-            "src/metarun.h": 352,
-            "src/smithing/smithing-internal.h": 251,
-            "src/types.h": 1656
+            "src/angband.h": 271,
+            "src/app/app-scene-dungeon.h": 257,
+            "src/app/app-ui.h": 279,
+            "src/config.h": 289,
+            "src/defines.h": 4017,
+            "src/level-generation/level-generation-internal.h": 393,
+            "src/metarun.h": 317,
+            "src/types.h": 1671
           }
         },
         "h_files_over_1000": {
           "label": "non-vendor src/**/*.h files over 1000 lines",
           "files": 2,
-          "value": 5668,
+          "value": 5688,
           "notes": "Tracks the largest non-vendor headers that warrant dedicated refactor attention.",
           "file_matches": {
-            "src/defines.h": 4012,
-            "src/types.h": 1656
+            "src/defines.h": 4017,
+            "src/types.h": 1671
           }
         }
       }

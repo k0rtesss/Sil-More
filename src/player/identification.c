@@ -27,8 +27,21 @@ static bool player_has_ability_bonus(int skilltype, int abilitynum)
     if (abilitynum < 0 || abilitynum >= ABILITIES_MAX)
         return false;
 
-    return p_ptr->active_ability[skilltype][abilitynum]
-        || p_ptr->have_ability[skilltype][abilitynum];
+    return (p_ptr->active_ability[skilltype][abilitynum]
+            || p_ptr->have_ability[skilltype][abilitynum])
+        && ability_requirements_currently_met(skilltype, abilitynum);
+}
+
+static int player_ability_ident_bonus(
+    int skilltype, int abilitynum, int fallback_bonus)
+{
+    if (!player_has_ability_bonus(skilltype, abilitynum))
+        return 0;
+
+    if (ability_score_has_custom_weights(skilltype, abilitynum))
+        return ability_score(skilltype, abilitynum);
+
+    return fallback_bonus;
 }
 
 typedef enum
@@ -109,21 +122,25 @@ static int player_smithing_identify_skill(const object_type* o_ptr,
     int base_smt = p_ptr->skill_use[S_SMT] - p_ptr->skill_stat_mod[S_SMT];
     /* Basis for identification skill checks: start at -3 */
     int basis = -3;
-    int skill = base_per + base_smt + grace_bonus + basis;
+    int lore_bonus = p_ptr->lore * 5;
+    int skill = base_per + base_smt + grace_bonus + lore_bonus + basis;
 
-    int bonus_enchantment = player_has_ability_bonus(S_SMT, SMT_ENCHANTMENT) ? 5 : 0;
-    int bonus_artifice = player_has_ability_bonus(S_SMT, SMT_ARTEFACT) ? 7 : 0;
-    int bonus_curse_breaking = player_has_ability_bonus(S_WIL, WIL_CURSE_BREAKING) ? 7 : 0;
-    int bonus_quick_study = player_has_ability_bonus(S_PER, PER_QUICK_STUDY) ? 5 : 0;
+    int bonus_enchantment =
+        player_ability_ident_bonus(S_SMT, SMT_ENCHANTMENT, 5);
+    int bonus_artifice = player_ability_ident_bonus(S_SMT, SMT_ARTEFACT, 7);
+    int bonus_curse_breaking =
+        player_ability_ident_bonus(S_WIL, WIL_CURSE_BREAKING, 7);
+    int bonus_quick_study =
+        player_ability_ident_bonus(S_PER, PER_QUICK_STUDY, 5);
 
     int category_bonus = 0;
     smith_id_category cat = smith_id_category_for_object(o_ptr);
-    if (cat == SMITH_ID_CAT_WEAPON && player_has_ability_bonus(S_SMT, SMT_WEAPONSMITH))
-        category_bonus = 5;
-    if (cat == SMITH_ID_CAT_ARMOUR && player_has_ability_bonus(S_SMT, SMT_ARMOURSMITH))
-        category_bonus = 5;
-    if (cat == SMITH_ID_CAT_JEWELLERY && player_has_ability_bonus(S_SMT, SMT_JEWELLER))
-        category_bonus = 5;
+    if (cat == SMITH_ID_CAT_WEAPON)
+        category_bonus = player_ability_ident_bonus(S_SMT, SMT_WEAPONSMITH, 5);
+    if (cat == SMITH_ID_CAT_ARMOUR)
+        category_bonus = player_ability_ident_bonus(S_SMT, SMT_ARMOURSMITH, 5);
+    if (cat == SMITH_ID_CAT_JEWELLERY)
+        category_bonus = player_ability_ident_bonus(S_SMT, SMT_JEWELLER, 5);
 
     int bonus_equipped = is_equipped ? 3 : 0;
     int bonus_experienced = (o_ptr && (o_ptr->ident & IDENT_EXPERIENCED)) ? 5 : 0;
@@ -196,7 +213,7 @@ static int player_smithing_identify_skill(const object_type* o_ptr,
     }
 
     log_debug(
-        "smithing-ident: skill calc k_idx=%d tval=%d sval=%d name1=%d ego_pfx=%d ego_sfx=%d ident=0x%08X base(per_no_gra=%d smt_no_gra=%d gra=%d) abil(enchant=%d artifice=%d cursebreak=%d quick=%d) cat=%d cat_bonus=%d ctx(equip=%d exp=%d ego=%d) bonus=%d dist(apply=%d ignore=%d pen=%d curse_penalty=%d ident_diff=%d) => skill=%d",
+        "smithing-ident: skill calc k_idx=%d tval=%d sval=%d name1=%d ego_pfx=%d ego_sfx=%d ident=0x%08X base(per_no_gra=%d smt_no_gra=%d gra=%d lore=%d) abil(enchant=%d artifice=%d cursebreak=%d quick=%d) cat=%d cat_bonus=%d ctx(equip=%d exp=%d ego=%d) bonus=%d dist(apply=%d ignore=%d pen=%d curse_penalty=%d ident_diff=%d) => skill=%d",
         o_ptr ? o_ptr->k_idx : 0,
         o_ptr ? o_ptr->tval : 0,
         o_ptr ? o_ptr->sval : 0,
@@ -204,7 +221,7 @@ static int player_smithing_identify_skill(const object_type* o_ptr,
         o_ptr ? object_ego_prefix(o_ptr) : 0,
         o_ptr ? object_ego_suffix(o_ptr) : 0,
         (unsigned)(o_ptr ? o_ptr->ident : 0),
-        base_per, base_smt, grace_bonus,
+        base_per, base_smt, grace_bonus, lore_bonus,
         bonus_enchantment, bonus_artifice, bonus_curse_breaking, bonus_quick_study,
         (int)cat, category_bonus,
         bonus_equipped, bonus_experienced, bonus_known_ego,
@@ -228,14 +245,10 @@ bool player_auto_identifies_object(const object_type* o_ptr)
     if (object_uses_smithing_difficulty(o_ptr))
         return false;
 
-    bool alchemy = p_ptr->active_ability[S_PER][PER_ALCHEMY]
-        || p_ptr->have_ability[S_PER][PER_ALCHEMY];
-    bool channeling = p_ptr->active_ability[S_WIL][WIL_CHANNELING]
-        || p_ptr->have_ability[S_WIL][WIL_CHANNELING];
-    bool jeweller = p_ptr->active_ability[S_SMT][SMT_JEWELLER]
-        || p_ptr->have_ability[S_SMT][SMT_JEWELLER];
-    bool enchantment = p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT]
-        || p_ptr->have_ability[S_SMT][SMT_ENCHANTMENT];
+    bool alchemy = player_has_ability_bonus(S_PER, PER_ALCHEMY);
+    bool channeling = player_has_ability_bonus(S_WIL, WIL_CHANNELING);
+    bool jeweller = player_has_ability_bonus(S_SMT, SMT_JEWELLER);
+    bool enchantment = player_has_ability_bonus(S_SMT, SMT_ENCHANTMENT);
 
     bool is_potion = (o_ptr->tval == TV_POTION);
     bool is_herb = (o_ptr->tval == TV_FOOD) && (o_ptr->sval <= SV_FOOD_SICKNESS);
@@ -407,6 +420,7 @@ static void update_lore_aux(object_type* o_ptr)
                 new_exp = 100;
                 gain_exp(new_exp);
                 p_ptr->ident_exp += new_exp;
+                gain_knowledge_points(1, "An artefact is identified.");
                 object_desc(shorter_desc, sizeof(shorter_desc), o_ptr, true, 0);
                 msg_format("The hidden tale of %s rises before your thought, and 100 experience is won.",
                     shorter_desc);

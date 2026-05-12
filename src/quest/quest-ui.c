@@ -689,6 +689,10 @@ static int quest_status_collect_entries(quest_status_entry* entries,
             meta = "Rewarded";
             meta_attr = TERM_L_GREEN;
             break;
+        case VARDA_QUEST_FAILED:
+            meta = "Failed";
+            meta_attr = TERM_RED;
+            break;
         }
 
         (void)quest_status_append_entry(entries, &count, max_count,
@@ -1007,6 +1011,12 @@ static bool quest_status_build_entry_detail(app_ui_panel* panel,
             return quest_ui_panel_add_line(panel, TERM_L_GREEN,
                        "Completed by this character", true)
                 && quest_status_add_reward_detail(panel, entry->quest_id,
+                    true);
+        case VARDA_QUEST_FAILED:
+            return quest_ui_panel_add_line(panel, TERM_RED,
+                       "Failed - Duruin's Bastion was left behind", true)
+                && quest_ui_panel_add_line(panel, TERM_SLATE,
+                    "Leaving the first level reached after 500 ft without slaying Duruin ended Varda's quest.",
                     true);
         }
         break;
