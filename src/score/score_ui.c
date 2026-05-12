@@ -43,6 +43,8 @@ static bool build_meta_path(char* buf, size_t len, const char* filename)
 typedef struct run_history_entry {
     score_record_v1 record;
     s64b detail_offset;
+    u32b branch_flags;
+    u32b branch_aux;
     int rating;
 } run_history_entry;
 
@@ -1779,7 +1781,8 @@ static const char* score_run_status_label(score_record_status status)
     }
 }
 
-static bool run_history_skip_details(SDL_IOStream* file, s64b* detail_offset)
+static bool run_history_skip_details(SDL_IOStream* file, s64b* detail_offset,
+                                     u32b* branch_flags, u32b* branch_aux)
 {
     if (!file)
         return false;
@@ -1791,6 +1794,10 @@ static bool run_history_skip_details(SDL_IOStream* file, s64b* detail_offset)
 
     if (detail_offset)
         *detail_offset = (s64b)header_pos;
+    if (branch_flags)
+        *branch_flags = header.reserved2[0];
+    if (branch_aux)
+        *branch_aux = header.reserved2[1];
 
     return score_runs_skip_detail_payload(file, &header);
 }
@@ -1838,28 +1845,227 @@ static void run_history_format_timestamp(u32b utc, bool include_time,
     }
 }
 
+static bool run_history_branch_has_data(u32b flags, u32b aux)
+{
+    return ((flags & ~SCORE_BRANCH_STATE_MASK) != 0) ||
+        ((flags & SCORE_BRANCH_STATE_MASK) != METARUN_BRANCH_NONE) ||
+        (aux != 0);
+}
+
+static metarun_branch_state_type run_history_branch_state(u32b flags)
+{
+    u32b state = flags & SCORE_BRANCH_STATE_MASK;
+    if (state >= METARUN_BRANCH_STATE_MAX)
+        return METARUN_BRANCH_NONE;
+    return (metarun_branch_state_type)state;
+}
+
+static int run_history_count_scene_bits(u32b bits)
+{
+    int total = 0;
+    bits &= SCORE_BRANCH_AUX_LIGHT_SCENE_BITS;
+    while (bits) {
+        total += (bits & 1u) ? 1 : 0;
+        bits >>= 1;
+    }
+    return total;
+}
+
+static void run_history_format_allies(u32b aux, char* out, size_t out_len)
+{
+    byte mask = (byte)(aux & SCORE_BRANCH_AUX_UNLIGHT_ALLY_MASK);
+    bool first = true;
+
+    if (!out || out_len == 0)
+        return;
+
+    out[0] = '\0';
+
+    #define ADD_ALLY(bit, name) \
+        do { \
+            if (mask & (bit)) { \
+                if (!first) SDL_strlcat(out, ", ", out_len); \
+                SDL_strlcat(out, (name), out_len); \
+                first = false; \
+            } \
+        } while (0)
+
+    ADD_ALLY(METARUN_UNLIGHT_ALLY_GOTHMOG, "Gothmog");
+    ADD_ALLY(METARUN_UNLIGHT_ALLY_ANCALAGON, "Ancalagon");
+    ADD_ALLY(METARUN_UNLIGHT_ALLY_GLAURUNG, "Glaurung");
+
+    #undef ADD_ALLY
+
+    if (first)
+        SDL_strlcpy(out, "none", out_len);
+}
+
+static byte run_history_branch_color(u32b flags, u32b aux)
+{
+    if (flags & (SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN |
+                 SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED |
+                 SCORE_BRANCH_EVENT_UNLIGHT_FINAL_VICTORY))
+        return TERM_RED;
+    if (flags & (SCORE_BRANCH_EVENT_LIGHT_CHOSEN |
+                 SCORE_BRANCH_EVENT_LIGHT_SCENE_STARTED |
+                 SCORE_BRANCH_EVENT_LIGHT_SCENE_SUCCEEDED |
+                 SCORE_BRANCH_EVENT_LIGHT_SCENE_FELL))
+        return TERM_L_BLUE;
+    if (run_history_branch_has_data(flags, aux))
+        return TERM_YELLOW;
+    return TERM_L_DARK;
+}
+
+static void run_history_branch_label(u32b flags, u32b aux,
+                                     char* out, size_t out_len)
+{
+    metarun_branch_state_type state = run_history_branch_state(flags);
+    u32b success_mask = (aux >> SCORE_BRANCH_AUX_LIGHT_SUCCESS_SHIFT) &
+        SCORE_BRANCH_AUX_LIGHT_SCENE_BITS;
+    u32b fall_mask = (aux >> SCORE_BRANCH_AUX_LIGHT_FALL_SHIFT) &
+        SCORE_BRANCH_AUX_LIGHT_SCENE_BITS;
+
+    if (!out || out_len == 0)
+        return;
+
+    if ((flags & SCORE_BRANCH_EVENT_UNLIGHT_FINAL_VICTORY) ||
+        (state == METARUN_BRANCH_COMPLETE &&
+         (aux & SCORE_BRANCH_AUX_UNLIGHT_ALLY_MASK) == METARUN_UNLIGHT_ALLY_ALL)) {
+        SDL_strlcpy(out, "Unlight victory", out_len);
+    } else if (flags & (SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN |
+                        SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED)) {
+        SDL_strlcpy(out, "Unlight", out_len);
+    } else if (success_mask || fall_mask ||
+               (flags & SCORE_BRANCH_EVENT_LIGHT_SCENE_STARTED)) {
+        SDL_strlcpy(out, "Light echo", out_len);
+    } else if (flags & SCORE_BRANCH_EVENT_LIGHT_CHOSEN) {
+        SDL_strlcpy(out, "Light", out_len);
+    } else if (flags & SCORE_BRANCH_EVENT_MANWE_COMPLETED) {
+        SDL_strlcpy(out, "Manwe complete", out_len);
+    } else if (flags & SCORE_BRANCH_EVENT_MANWE_STARTED) {
+        SDL_strlcpy(out, "Manwe", out_len);
+    } else if (state == METARUN_BRANCH_MANWE_QUEST_PENDING) {
+        SDL_strlcpy(out, "Manwe pending", out_len);
+    } else if (state == METARUN_BRANCH_COMPLETE) {
+        SDL_strlcpy(out, "Branch complete", out_len);
+    } else {
+        out[0] = '\0';
+    }
+}
+
+static void run_history_branch_summary(u32b flags, u32b aux,
+                                       char* out, size_t out_len)
+{
+    metarun_branch_state_type state = run_history_branch_state(flags);
+    u32b success_mask = (aux >> SCORE_BRANCH_AUX_LIGHT_SUCCESS_SHIFT) &
+        SCORE_BRANCH_AUX_LIGHT_SCENE_BITS;
+    u32b fall_mask = (aux >> SCORE_BRANCH_AUX_LIGHT_FALL_SHIFT) &
+        SCORE_BRANCH_AUX_LIGHT_SCENE_BITS;
+    byte ally_mask = (byte)(aux & SCORE_BRANCH_AUX_UNLIGHT_ALLY_MASK);
+
+    if (!out || out_len == 0)
+        return;
+
+    if (!run_history_branch_has_data(flags, aux)) {
+        out[0] = '\0';
+        return;
+    }
+
+    if ((flags & SCORE_BRANCH_EVENT_UNLIGHT_FINAL_VICTORY) ||
+        (state == METARUN_BRANCH_COMPLETE &&
+         ally_mask == METARUN_UNLIGHT_ALLY_ALL)) {
+        SDL_strlcpy(out, "Unlight final victory at the Gates.", out_len);
+    } else if (success_mask || fall_mask ||
+               state == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE) {
+        int current_scene = (int)((aux & SCORE_BRANCH_AUX_LIGHT_SCENE_MASK) >>
+            SCORE_BRANCH_AUX_LIGHT_SCENE_SHIFT);
+        if ((aux & SCORE_BRANCH_AUX_LIGHT_SCENE_VALID) &&
+            (flags & SCORE_BRANCH_EVENT_LIGHT_SCENE_STARTED) &&
+            current_scene >= 0 && current_scene < METARUN_LIGHT_SCENE_MAX) {
+            strnfmt(out, out_len, "Light echoes: %d stood, %d fell; now %s.",
+                run_history_count_scene_bits(success_mask),
+                run_history_count_scene_bits(fall_mask),
+                metarun_light_scene_name((metarun_light_scene_id)current_scene));
+        } else {
+            strnfmt(out, out_len, "Light echoes: %d stood, %d fell.",
+                run_history_count_scene_bits(success_mask),
+                run_history_count_scene_bits(fall_mask));
+        }
+    } else if ((flags & (SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN |
+                         SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED)) ||
+               state == METARUN_BRANCH_UNLIGHT_CHOSEN ||
+               state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE) {
+        char allies[80];
+        run_history_format_allies(aux, allies, sizeof(allies));
+        strnfmt(out, out_len, "Unlight path; allies persuaded: %s%s",
+            allies, (ally_mask == METARUN_UNLIGHT_ALLY_ALL) ?
+            ". The Gates wait." : ".");
+    } else if (flags & SCORE_BRANCH_EVENT_LIGHT_CHOSEN) {
+        SDL_strlcpy(out, "Light path chosen.", out_len);
+    } else if (flags & SCORE_BRANCH_EVENT_MANWE_COMPLETED) {
+        SDL_strlcpy(out, "Manwe's charge completed.", out_len);
+    } else if (flags & SCORE_BRANCH_EVENT_MANWE_STARTED) {
+        SDL_strlcpy(out, "Manwe's hidden charge began.", out_len);
+    } else if (state == METARUN_BRANCH_MANWE_QUEST_PENDING) {
+        SDL_strlcpy(out, "Manwe's charge was waiting for a new hero.", out_len);
+    } else if (state == METARUN_BRANCH_COMPLETE) {
+        SDL_strlcpy(out, "Branch story complete.", out_len);
+    } else {
+        out[0] = '\0';
+    }
+}
+
+static void run_history_build_fate(const run_history_entry* entry,
+                                   char* out, size_t out_len)
+{
+    char branch[48];
+    const score_record_v1* rec = entry ? &entry->record : NULL;
+    const char* cause = (rec && rec->cause_of_death[0]) ?
+        rec->cause_of_death : NULL;
+
+    if (!out || out_len == 0)
+        return;
+
+    branch[0] = '\0';
+    if (entry)
+        run_history_branch_label(entry->branch_flags, entry->branch_aux,
+            branch, sizeof(branch));
+
+    if (branch[0] && cause) {
+        strnfmt(out, out_len, "%s: %s", branch, cause);
+    } else if (branch[0]) {
+        SDL_strlcpy(out, branch, out_len);
+    } else if (cause) {
+        SDL_strlcpy(out, cause, out_len);
+    } else {
+        SDL_strlcpy(out, "<unknown>", out_len);
+    }
+}
+
 static void run_history_build_summary(const char* player,
-                                      const score_record_v1* rec,
+                                      const run_history_entry* entry,
                                       char* out, size_t out_len)
 {
+    char fate[160];
+
     if (!out || out_len == 0) {
         return;
     }
 
-    if (!rec) {
+    if (!entry) {
         out[0] = '\0';
         return;
     }
 
     const char* name = (player && *player) ? player : NULL;
-    const char* cause = rec->cause_of_death[0] ? rec->cause_of_death : NULL;
+    run_history_build_fate(entry, fate, sizeof(fate));
 
-    if (name && cause) {
-        strnfmt(out, out_len, "%s: %s", name, cause);
+    if (name && fate[0]) {
+        strnfmt(out, out_len, "%s: %s", name, fate);
     } else if (name) {
         SDL_strlcpy(out, name, out_len);
-    } else if (cause) {
-        SDL_strlcpy(out, cause, out_len);
+    } else if (fate[0]) {
+        SDL_strlcpy(out, fate, out_len);
     } else {
         SDL_strlcpy(out, "<unknown>", out_len);
     }
@@ -1981,11 +2187,16 @@ static int collect_run_history(run_history_entry* out, int capacity)
     score_record_v1 temp;
     while (SDL_ReadIO(file, &temp, sizeof(temp)) == sizeof(temp)) {
         s64b detail_offset = (s64b)SDL_TellIO(file);
-        if (!run_history_skip_details(file, &detail_offset))
+        u32b branch_flags = 0;
+        u32b branch_aux = 0;
+        if (!run_history_skip_details(file, &detail_offset,
+                &branch_flags, &branch_aux))
             break;
         run_history_entry* slot = &ring[stored % capacity];
         slot->record = temp;
         slot->detail_offset = detail_offset;
+        slot->branch_flags = branch_flags;
+        slot->branch_aux = branch_aux;
         slot->rating = run_history_compute_rating(&temp);
         stored++;
     }
@@ -2035,17 +2246,22 @@ static bool run_history_find_by_record_id(u32b record_id,
     score_record_v1 temp;
     while (SDL_ReadIO(file, &temp, sizeof(temp)) == sizeof(temp)) {
         s64b detail_offset = (s64b)SDL_TellIO(file);
+        u32b branch_flags = 0;
+        u32b branch_aux = 0;
+
+        if (!run_history_skip_details(file, &detail_offset,
+                &branch_flags, &branch_aux))
+            break;
 
         if (temp.record_id == record_id) {
             out->record = temp;
             out->detail_offset = detail_offset;
+            out->branch_flags = branch_flags;
+            out->branch_aux = branch_aux;
             out->rating = run_history_compute_rating(&temp);
             SDL_CloseIO(file);
             return true;
         }
-
-        if (!run_history_skip_details(file, &detail_offset))
-            break;
     }
 
     SDL_CloseIO(file);
@@ -2370,7 +2586,12 @@ void do_cmd_run_history(void)
             int depth_ft = rec->exit_depth * 50;
 
             bool selected = (idx == highlight);
-            byte row_color = selected ? TERM_YELLOW : 
+            byte branch_color = run_history_branch_color(
+                entries[idx].branch_flags, entries[idx].branch_aux);
+            byte row_color = selected ? TERM_YELLOW :
+                           run_history_branch_has_data(
+                               entries[idx].branch_flags,
+                               entries[idx].branch_aux) ? branch_color :
                            (rec->status == SCORE_RECORD_ALIVE) ? TERM_L_GREEN :
                            (rec->silmarils > 0) ? TERM_VIOLET : TERM_WHITE;
 
@@ -2389,7 +2610,7 @@ void do_cmd_run_history(void)
                     c_prt(row_color, format("%1u", (unsigned)rec->silmarils),
                         row_y, col_sils);
                 if (summary_width > 0) {
-                    run_history_build_summary(player, rec, summary,
+                    run_history_build_summary(player, &entries[idx], summary,
                         sizeof(summary));
                     truncate_with_ellipsis(summary, summary_fit,
                         sizeof(summary_fit), summary_width);
@@ -2398,6 +2619,7 @@ void do_cmd_run_history(void)
                 }
             } else {
                 char cause[160];
+                char cause_fit[160];
                 char player_fit[32];
 
                 c_prt(row_color, score_run_status_label(rec->status), row_y,
@@ -2414,9 +2636,12 @@ void do_cmd_run_history(void)
                         player_fit);
                 }
                 if (fate_width > 0) {
-                    truncate_with_ellipsis(rec->cause_of_death, cause,
-                        sizeof(cause), fate_width);
-                    Term_putstr(col_fate, row_y, fate_width, row_color, cause);
+                    run_history_build_fate(&entries[idx], cause,
+                        sizeof(cause));
+                    truncate_with_ellipsis(cause, cause_fit,
+                        sizeof(cause_fit), fate_width);
+                    Term_putstr(col_fate, row_y, fate_width, row_color,
+                        cause_fit);
                 }
             }
         }
@@ -2837,6 +3062,20 @@ static int run_history_draw_general_panel(const score_record_v1* rec,
 
     strnfmt(line, sizeof(line), "Rating:      %d points", entry->rating);
     run_detail_text_view_put(&view, TERM_SLATE, line);
+
+    {
+        char branch[160];
+        run_history_branch_summary(entry->branch_flags, entry->branch_aux,
+            branch, sizeof(branch));
+        if (branch[0]) {
+            strnfmt(line, sizeof(line), "Branch:      %s", branch);
+            run_detail_text_view_put(&view,
+                run_history_branch_color(entry->branch_flags,
+                    entry->branch_aux),
+                line);
+        }
+    }
+
     run_detail_text_view_blank(&view);
 
     if (!current_run) {
@@ -3387,21 +3626,31 @@ static void run_history_show_detail(const run_history_entry* entry)
     if (!entry)
         return;
 
-    const score_record_v1* rec = &entry->record;
+    run_history_entry display_entry = *entry;
+    const score_record_v1* rec = &display_entry.record;
     score_run_detail_block details;
     memset(&details, 0, sizeof(details));
     bool have_details = (entry->detail_offset >= 0)
         && score_runs_load_details(entry->detail_offset, &details);
 
-    bool current_run = run_history_is_current(entry);
+    if (have_details) {
+        display_entry.branch_flags = details.header.reserved2[0];
+        display_entry.branch_aux = details.header.reserved2[1];
+    }
+
+    bool current_run = run_history_is_current(&display_entry);
     if ((!have_details || details.header.monster_count == 0
             || details.header.artefact_count == 0)
         && current_run) {
         score_runs_free_details(&details);
         memset(&details, 0, sizeof(details));
         have_details = score_runs_snapshot_details(&details);
-        if (!have_details)
+        if (have_details) {
+            display_entry.branch_flags = details.header.reserved2[0];
+            display_entry.branch_aux = details.header.reserved2[1];
+        } else {
             log_warn("run_history: unable to hydrate live detail payload");
+        }
     }
 
     char player[33];
@@ -3479,7 +3728,8 @@ static void run_history_show_detail(const run_history_entry* entry)
             c_prt(TERM_L_BLUE, format("=== Run #%u Details ===", rec->record_id), 2, 0);
             run_history_clamp_scroll(&view.general_top, text_rows,
                 general_total_lines);
-            general_total_lines = run_history_draw_general_panel(rec, entry,
+            general_total_lines = run_history_draw_general_panel(rec,
+                &display_entry,
                 player, race_name, status, created, completed, current_run,
                 view.general_top, term_hgt, term_wid);
             footer = steamdeck

@@ -2443,6 +2443,8 @@
     0x00080000 /* Monster was placed in an Unlight ally vault */
 #define MFLAG_UNLIGHT_ALLY_BOSS                                                \
     0x00100000 /* Monster is the persuaded Unlight ally boss */
+#define MFLAG_UNLIGHT_FINAL_ALLY                                               \
+    0x00200000 /* Monster fights on the player's side in the Unlight finale */
 
 /*
  * New monster race bit flags
@@ -4095,6 +4097,8 @@ typedef struct quest_mapping {
 #define QUEST_RESERVED_LIGHT_SCENE_STARTED  20
 #define QUEST_RESERVED_LIGHT_SCENE_FLAGS    21
 #define LIGHT_SCENE_FLAG_GONDOLIN_GOTHMOG_SLAIN 0x01
+#define QUEST_RESERVED_UNLIGHT_FINAL_FLAGS  22
+#define UNLIGHT_FINAL_FLAG_VICTORY          0x01
 #define QUEST_FLAG_GLOBAL          0x01
 #define QUEST_FLAG_OPTIONAL_CHAIN  0x02
 

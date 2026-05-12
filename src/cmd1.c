@@ -15,6 +15,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
+#include "story_branch.h"
 #include <math.h>
 
 static bool valorous_oath_blocks_auto_attack(monster_type* m_ptr);
@@ -6247,6 +6248,12 @@ void py_attack_aux(int y, int x, int attack_type)
     m_ptr = &mon_list[m_idx];
     r_ptr = &r_info[m_ptr->r_idx];
 
+    if (monster_is_unlight_final_ally(m_ptr))
+    {
+        msg_print("Your ally holds that ground.");
+        return;
+    }
+
     player_face_grid_before_attack(y, x);
 
     /*possibly update the monster health bar*/
@@ -7279,6 +7286,14 @@ void move_player(int dir)
     player_set_visual_facing_dir(dir);
     y = py + ddy[dir];
     x = px + ddx[dir];
+
+    if (story_branch_is_unlight_final_run() &&
+        !manwe_unlight_final_victory_this_run() &&
+        move_target_exits_gates(y, x))
+    {
+        msg_print("The Gates are barred until Morgoth falls.");
+        return;
+    }
 
     if (move_target_exits_gates(y, x))
     {

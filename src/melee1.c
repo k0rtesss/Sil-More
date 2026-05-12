@@ -640,6 +640,9 @@ bool make_attack_normal(monster_type* m_ptr)
 
     int dam_type;
 
+    if (monster_is_unlight_final_ally(m_ptr))
+        return (false);
+
     killer_mark_monster(m_ptr);
 
     /* Not allowed to attack */
@@ -2326,6 +2329,9 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
 
     /* Is the player blind? */
     bool blind = (p_ptr->blind ? true : false);
+
+    if (monster_is_unlight_final_ally(m_ptr))
+        return (false);
 
     /* Can the player see the monster casting the spell? */
     bool seen = (!blind && m_ptr->ml);

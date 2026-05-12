@@ -10772,7 +10772,12 @@ static void close_game_aux(void)
     int final_score = score_points(&the_score);
     if (!run_mode_is_blitz())
     {
-        if (manwe_light_cutscene_resolved_this_run())
+        if (manwe_unlight_final_victory_this_run())
+        {
+            log_info("Unlight final battle victory already recorded");
+            metarun_rollover_after_branch_complete();
+        }
+        else if (manwe_light_cutscene_resolved_this_run())
         {
             log_info("Light endgame cutscene outcome already recorded");
             metarun_rollover_after_branch_complete();

@@ -14,6 +14,7 @@
 #include "externs.h"
 #include "log/log.h"
 #include "meta_state.h"
+#include "story_branch.h"
 
 /*
  * Terrified monsters will turn to fight if they are slower than the
@@ -648,6 +649,9 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
     /* The grid is occupied by the player. */
     if (cave_m_idx[y][x] < 0)
     {
+        if (monster_is_unlight_final_ally(m_ptr))
+            return (0);
+
         /* Monster has no melee blows - character's grid is off-limits. */
         if (r_ptr->flags1 & (RF1_NEVER_BLOW))
             return (0);
@@ -3921,8 +3925,12 @@ static void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
     /* The grid is occupied by the player. */
     if (cave_m_idx[ny][nx] < 0)
     {
+        if (monster_is_unlight_final_ally(m_ptr))
+        {
+            do_move = false;
+        }
         // unalert monsters notice the player instead of attacking
-        if (m_ptr->alertness < ALERTNESS_ALERT)
+        else if (m_ptr->alertness < ALERTNESS_ALERT)
         {
             set_alertness(
                 m_ptr, rand_range(ALERTNESS_ALERT, ALERTNESS_ALERT + 5));
@@ -4851,6 +4859,254 @@ int get_chance_of_ranged_attack(monster_type* m_ptr)
     return chance;
 }
 
+static bool unlight_final_hostile(const monster_type* m_ptr)
+{
+    return m_ptr && m_ptr->r_idx && !monster_is_unlight_final_ally(m_ptr);
+}
+
+static int unlight_final_nearest_ally(const monster_type* m_ptr)
+{
+    int best_idx = 0;
+    int best_dist = 9999;
+    int self_idx;
+
+    if (!m_ptr)
+        return 0;
+
+    self_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
+
+    for (int i = 1; i < mon_max; i++)
+    {
+        monster_type* n_ptr = &mon_list[i];
+        int dist;
+
+        if (i == self_idx || !monster_is_unlight_final_ally(n_ptr))
+            continue;
+
+        dist = distance(m_ptr->fy, m_ptr->fx, n_ptr->fy, n_ptr->fx);
+        if (dist < best_dist)
+        {
+            best_dist = dist;
+            best_idx = i;
+        }
+    }
+
+    return best_idx;
+}
+
+static int unlight_final_nearest_hostile(const monster_type* m_ptr)
+{
+    int best_idx = 0;
+    int best_dist = 9999;
+    int morgoth_idx = 0;
+    int self_idx;
+
+    if (!m_ptr)
+        return 0;
+
+    self_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
+
+    for (int i = 1; i < mon_max; i++)
+    {
+        monster_type* n_ptr = &mon_list[i];
+        int dist;
+
+        if (i == self_idx || !unlight_final_hostile(n_ptr))
+            continue;
+
+        if (n_ptr->r_idx == R_IDX_MORGOTH)
+        {
+            morgoth_idx = i;
+            break;
+        }
+
+        dist = distance(m_ptr->fy, m_ptr->fx, n_ptr->fy, n_ptr->fx);
+        if (dist < best_dist)
+        {
+            best_dist = dist;
+            best_idx = i;
+        }
+    }
+
+    return morgoth_idx ? morgoth_idx : best_idx;
+}
+
+static bool unlight_final_monster_melee(monster_type* m_ptr, int target_idx)
+{
+    monster_type* target_ptr;
+    monster_race* r_ptr;
+    monster_race* tr_ptr;
+    monster_blow* blow;
+    char m_name[80];
+    char t_name[80];
+    int m_idx;
+    int att;
+    int evn;
+    int hit_result;
+    int dd, ds;
+    int dam, prt, net_dam;
+    int armor_dice, armor_sides;
+    bool seen;
+
+    if (!m_ptr || target_idx <= 0 || target_idx >= mon_max)
+        return false;
+
+    target_ptr = &mon_list[target_idx];
+    if (!target_ptr->r_idx)
+        return false;
+    if (monster_is_unlight_final_ally(m_ptr) ==
+        monster_is_unlight_final_ally(target_ptr))
+        return false;
+
+    r_ptr = &r_info[m_ptr->r_idx];
+    tr_ptr = &r_info[target_ptr->r_idx];
+    if (r_ptr->flags1 & RF1_NEVER_BLOW)
+        return false;
+    if (!r_ptr->blow[0].method)
+        return false;
+
+    m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
+    blow = &r_ptr->blow[0];
+    att = monster_scaled_value(m_ptr, blow->att);
+    if (m_ptr->stunned)
+        att -= 2;
+    evn = total_monster_evasion(target_ptr, false);
+    hit_result = hit_roll(att, evn, m_ptr, target_ptr, true);
+
+    monster_desc(m_name, sizeof(m_name), m_ptr, 0);
+    monster_desc(t_name, sizeof(t_name), target_ptr, 0);
+    seen = m_ptr->ml || target_ptr->ml;
+
+    if (hit_result <= 0)
+    {
+        if (seen)
+            msg_format("%^s misses %s.", m_name, t_name);
+        return true;
+    }
+
+    dd = blow->dd;
+    ds = blow->ds;
+    if (m_ptr->blow_dd_reduction[0] > 0)
+        dd = MAX(1, dd - m_ptr->blow_dd_reduction[0]);
+    if (m_ptr->blow_ds_reduction[0] > 0)
+        ds = MAX(1, ds - m_ptr->blow_ds_reduction[0]);
+    monster_scale_blow_damage(m_ptr, &dd, &ds);
+    dd += MAX(0, hit_result / 5);
+    if (dd < 1)
+        dd = 1;
+    if (ds < 1)
+        ds = 1;
+
+    dam = damroll(dd, ds);
+    armor_dice = monster_base_armour_dice(target_ptr) +
+        curse_flag_delta_cur(CUR_MON_ARM_DICE);
+    armor_sides = monster_base_armour_sides(target_ptr) +
+        curse_flag_delta_cur(CUR_MON_ARM_SIDE);
+    if (armor_dice < 0)
+        armor_dice = 0;
+    if (armor_sides < 1)
+        armor_sides = 1;
+    prt = damroll(armor_dice, armor_sides);
+    net_dam = MAX(0, dam - prt);
+
+    if (seen)
+        msg_format("%^s strikes %s.", m_name, t_name);
+
+    if (target_ptr->r_idx == R_IDX_MORGOTH)
+    {
+        (void)mon_take_hit(target_idx, net_dam, NULL, m_idx);
+        return true;
+    }
+
+    if (net_dam > 0)
+    {
+        target_ptr->hp -= net_dam;
+        target_ptr->mflag |= MFLAG_HIT_BY_MELEE;
+        set_alertness(target_ptr, ALERTNESS_ALERT);
+        if (p_ptr->health_who == target_idx)
+            p_ptr->redraw |= PR_HEALTHBAR;
+    }
+
+    if (target_ptr->hp <= 0)
+    {
+        if (seen)
+            msg_format("%^s is cast down.", t_name);
+        if (tr_ptr->flags1 & RF1_UNIQUE)
+            log_info("Unlight finale: %s was defeated by %s",
+                r_name + tr_ptr->name, r_name + r_ptr->name);
+        delete_monster_idx(target_idx);
+        p_ptr->window |= PW_MONLIST;
+        return true;
+    }
+
+    return true;
+}
+
+static bool unlight_final_advance_toward(monster_type* m_ptr, int target_idx)
+{
+    monster_type* target_ptr;
+    int ty, tx;
+    bool fear = false;
+    bool bash = false;
+
+    if (!m_ptr || target_idx <= 0 || target_idx >= mon_max)
+        return false;
+
+    target_ptr = &mon_list[target_idx];
+    if (!target_ptr->r_idx)
+        return false;
+
+    if (distance(m_ptr->fy, m_ptr->fx, target_ptr->fy, target_ptr->fx) <= 1)
+        return unlight_final_monster_melee(m_ptr, target_idx);
+
+    ty = target_ptr->fy;
+    tx = target_ptr->fx;
+    if (!make_move(m_ptr, &ty, &tx, fear, &bash))
+        return true;
+
+    process_move(m_ptr, ty, tx, bash);
+    return true;
+}
+
+static bool unlight_final_process_side_combat(monster_type* m_ptr)
+{
+    int target_idx;
+
+    if (!story_branch_is_unlight_final_run() || !m_ptr || !m_ptr->r_idx)
+        return false;
+
+    if (monster_is_unlight_final_ally(m_ptr))
+    {
+        target_idx = unlight_final_nearest_hostile(m_ptr);
+        if (!target_idx)
+            return false;
+
+        set_alertness(m_ptr, ALERTNESS_ALERT);
+        m_ptr->mflag |= MFLAG_ACTV;
+        return unlight_final_advance_toward(m_ptr, target_idx);
+    }
+
+    target_idx = unlight_final_nearest_ally(m_ptr);
+    if (!target_idx)
+        return false;
+
+    if (distance(m_ptr->fy, m_ptr->fx,
+            mon_list[target_idx].fy, mon_list[target_idx].fx) <= 1 &&
+        (m_ptr->r_idx == R_IDX_MORGOTH || m_ptr->cdis > 1))
+    {
+        return unlight_final_monster_melee(m_ptr, target_idx);
+    }
+
+    if (m_ptr->r_idx == R_IDX_MORGOTH &&
+        distance(m_ptr->fy, m_ptr->fx,
+            mon_list[target_idx].fy, mon_list[target_idx].fx) + 1 < m_ptr->cdis)
+    {
+        return unlight_final_advance_toward(m_ptr, target_idx);
+    }
+
+    return false;
+}
+
 /*
  * Monster takes its turn.
  */
@@ -4972,6 +5228,9 @@ static void process_monster(monster_type* m_ptr)
     }
     // put in a default for this turn
     m_ptr->previous_action[0] = ACTION_MISC;
+
+    if (unlight_final_process_side_combat(m_ptr))
+        return;
 
     // unwary but awake monsters can wander around the dungeon
     if (m_ptr->alertness < ALERTNESS_ALERT)

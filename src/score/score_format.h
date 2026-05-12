@@ -45,6 +45,33 @@ typedef enum score_run_flag {
 } score_run_flag;
 
 /*
+ * Branch analytics are stored in score_run_detail_header_v1.reserved2[] so
+ * the record size stays stable. reserved2[0] packs the current branch state in
+ * the low nibble plus event flags. reserved2[1] packs small branch counters.
+ */
+#define SCORE_BRANCH_STATE_MASK 0x0000000Fu
+
+typedef enum score_branch_event_flag {
+    SCORE_BRANCH_EVENT_MANWE_STARTED = 0x00000010u,
+    SCORE_BRANCH_EVENT_MANWE_COMPLETED = 0x00000020u,
+    SCORE_BRANCH_EVENT_LIGHT_CHOSEN = 0x00000040u,
+    SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN = 0x00000080u,
+    SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED = 0x00000100u,
+    SCORE_BRANCH_EVENT_LIGHT_SCENE_STARTED = 0x00000200u,
+    SCORE_BRANCH_EVENT_LIGHT_SCENE_SUCCEEDED = 0x00000400u,
+    SCORE_BRANCH_EVENT_LIGHT_SCENE_FELL = 0x00000800u,
+    SCORE_BRANCH_EVENT_UNLIGHT_FINAL_VICTORY = 0x00001000u,
+} score_branch_event_flag;
+
+#define SCORE_BRANCH_AUX_UNLIGHT_ALLY_MASK 0x000000FFu
+#define SCORE_BRANCH_AUX_LIGHT_SUCCESS_SHIFT 8
+#define SCORE_BRANCH_AUX_LIGHT_FALL_SHIFT 16
+#define SCORE_BRANCH_AUX_LIGHT_SCENE_SHIFT 24
+#define SCORE_BRANCH_AUX_LIGHT_SCENE_MASK 0x0F000000u
+#define SCORE_BRANCH_AUX_LIGHT_SCENE_VALID 0x80000000u
+#define SCORE_BRANCH_AUX_LIGHT_SCENE_BITS 0x0000001Fu
+
+/*
  * Phase 1 run-statistics record. These fields cover the full snapshot of a
  * single dungeon run so downstream systems (scoreboard UI, metarun summaries,
  * analytics) never have to rehydrate data from save files.

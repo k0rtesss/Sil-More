@@ -11,6 +11,7 @@
 #include "score/score_guid.h"
 #include "score/score_runs.h"
 #include "score/score_logic.h"
+#include "story_branch.h"
 
 #include <SDL3/SDL.h>
 #include <ctype.h>
@@ -871,6 +872,8 @@ static u16b score_runs_completed_quests(void)
     if (p_ptr->varda_quest == VARDA_QUEST_SUCCESS
         || p_ptr->varda_quest == VARDA_QUEST_REWARDED)
         count++;
+    if (p_ptr->manwe_quest >= QUEST_STATE_REWARDED)
+        count++;
     return count;
 }
 
@@ -1279,6 +1282,128 @@ static u16b score_runs_collect_milestones(score_run_milestone_v1* entries,
 
     return stored;
 }
+
+static void score_runs_mark_light_scene(u32b* flags, u32b* aux,
+                                        metarun_light_scene_id scene,
+                                        metarun_light_scene_result result)
+{
+    if (!flags || !aux || scene < 0 || scene >= METARUN_LIGHT_SCENE_MAX)
+        return;
+
+    u32b bit = 1u << (u32b)scene;
+
+    if (result == METARUN_LIGHT_SCENE_RESULT_SUCCESS) {
+        *aux |= bit << SCORE_BRANCH_AUX_LIGHT_SUCCESS_SHIFT;
+        *flags |= SCORE_BRANCH_EVENT_LIGHT_SCENE_SUCCEEDED;
+    } else if (result == METARUN_LIGHT_SCENE_RESULT_FALL) {
+        *aux |= bit << SCORE_BRANCH_AUX_LIGHT_FALL_SHIFT;
+        *flags |= SCORE_BRANCH_EVENT_LIGHT_SCENE_FELL;
+    }
+}
+
+static void score_runs_apply_branch_snapshot(score_run_detail_header_v1* header)
+{
+    if (!header)
+        return;
+
+    u32b flags = 0;
+    u32b aux = 0;
+    metarun_branch_state_type state = metarun_branch_state();
+    byte ally_mask = metarun_unlight_ally_mask();
+
+    flags |= ((u32b)state & SCORE_BRANCH_STATE_MASK);
+
+    if (p_ptr) {
+        u16b manwe_flags = p_ptr->manwe_deception_flags &
+            MANWE_DECEPTION_FLAG_MASK;
+
+        if (manwe_flags & MANWE_DECEPTION_MANWE_APPEARED_OFFERED)
+            flags |= SCORE_BRANCH_EVENT_MANWE_STARTED;
+
+        if (manwe_flags &
+            (MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED |
+             MANWE_DECEPTION_SAURON_BARGAIN_REFUSED |
+             MANWE_DECEPTION_SILMARIL_FORGED))
+            flags |= SCORE_BRANCH_EVENT_MANWE_COMPLETED;
+
+        if (manwe_flags & MANWE_DECEPTION_SAURON_BARGAIN_REFUSED)
+            flags |= SCORE_BRANCH_EVENT_LIGHT_CHOSEN;
+        if (manwe_flags & MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED)
+            flags |= SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN;
+    }
+
+    if (state == METARUN_BRANCH_MANWE_QUEST_ACTIVE)
+        flags |= SCORE_BRANCH_EVENT_MANWE_STARTED;
+    if (metarun_quest_completion_count(METARUN_QUEST_MANWE) > 0)
+        flags |= SCORE_BRANCH_EVENT_MANWE_COMPLETED;
+
+    if (state == METARUN_BRANCH_LIGHT_CHOSEN ||
+        state == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE)
+        flags |= SCORE_BRANCH_EVENT_LIGHT_CHOSEN;
+    if (state == METARUN_BRANCH_UNLIGHT_CHOSEN ||
+        state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE)
+        flags |= SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN;
+
+    aux |= (u32b)(ally_mask & SCORE_BRANCH_AUX_UNLIGHT_ALLY_MASK);
+    if (ally_mask)
+        flags |= SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED;
+
+    for (int i = 0; i < METARUN_LIGHT_SCENE_MAX; i++) {
+        metarun_light_scene_id scene = (metarun_light_scene_id)i;
+        if (metarun_light_scene_count(
+                scene, METARUN_LIGHT_SCENE_RESULT_SUCCESS) > 0) {
+            score_runs_mark_light_scene(&flags, &aux, scene,
+                METARUN_LIGHT_SCENE_RESULT_SUCCESS);
+        }
+        if (metarun_light_scene_count(
+                scene, METARUN_LIGHT_SCENE_RESULT_FALL) > 0) {
+            score_runs_mark_light_scene(&flags, &aux, scene,
+                METARUN_LIGHT_SCENE_RESULT_FALL);
+        }
+    }
+
+    if (p_ptr && story_branch_is_light_cutscene_run()) {
+        int scene_idx = p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_ID];
+        if (scene_idx < 0 || scene_idx >= METARUN_LIGHT_SCENE_MAX)
+            scene_idx = metarun_light_scene_current();
+
+        if (scene_idx >= 0 && scene_idx < METARUN_LIGHT_SCENE_MAX) {
+            aux |= SCORE_BRANCH_AUX_LIGHT_SCENE_VALID;
+            aux |= ((u32b)scene_idx << SCORE_BRANCH_AUX_LIGHT_SCENE_SHIFT) &
+                SCORE_BRANCH_AUX_LIGHT_SCENE_MASK;
+
+            if (p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_STARTED])
+                flags |= SCORE_BRANCH_EVENT_LIGHT_SCENE_STARTED;
+
+            byte result =
+                p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_RESOLVED];
+            if (result == METARUN_LIGHT_SCENE_RESULT_SUCCESS) {
+                score_runs_mark_light_scene(&flags, &aux,
+                    (metarun_light_scene_id)scene_idx,
+                    METARUN_LIGHT_SCENE_RESULT_SUCCESS);
+            } else if (result == METARUN_LIGHT_SCENE_RESULT_FALL ||
+                       (p_ptr->is_dead &&
+                        p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_STARTED])) {
+                score_runs_mark_light_scene(&flags, &aux,
+                    (metarun_light_scene_id)scene_idx,
+                    METARUN_LIGHT_SCENE_RESULT_FALL);
+            }
+        }
+    }
+
+    if ((state == METARUN_BRANCH_COMPLETE &&
+         ally_mask == METARUN_UNLIGHT_ALLY_ALL) ||
+        (p_ptr && story_branch_is_unlight_final_run() && p_ptr->escaped) ||
+        (state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE &&
+         p_ptr && p_ptr->morgoth_slain && p_ptr->is_dead)) {
+        flags |= SCORE_BRANCH_EVENT_UNLIGHT_FINAL_VICTORY |
+            SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN;
+    }
+
+    header->reserved2[0] = flags;
+    header->reserved2[1] = aux;
+}
+
 static bool score_runs_build_details(score_run_detail_block* block,
                                      u16b artefact_cap,
                                      u16b monster_cap)
@@ -1327,6 +1452,7 @@ static bool score_runs_build_details(score_run_detail_block* block,
         block->artefacts, block->header.artefact_capacity);
     block->header.monster_count = score_runs_collect_monster_entries(
         block->monsters, block->header.monster_capacity);
+    score_runs_apply_branch_snapshot(&block->header);
     return true;
 
 fail:

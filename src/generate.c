@@ -13066,7 +13066,10 @@ static bool connect_rooms_stairs(void)
  */
 static bool solid_rock_reduced_padding(int y1, int x1, int y2, int x2);
 static bool place_room_forced(int y0, int x0, vault_type* v_ptr);
+static bool place_room_forced_oriented(
+    int y0, int x0, vault_type* v_ptr, bool* used_flip_d);
 static bool mark_g_vault(int y0, int x0, int ymax, int xmax);
+static bool mark_g_vault_bounds(int y1, int x1, int y2, int x2);
 static bool try_quest_vault_type(int vault_type, bool *had_eligible_candidate);
 
 /*
@@ -14536,7 +14539,8 @@ static void compute_vault_bounds(
  * The caller can suppress failure logging when doing an exhaustive fit scan.
  */
 static bool place_room_forced_internal(
-    int y0, int x0, vault_type* v_ptr, bool flip_d, bool log_failures)
+    int y0, int x0, vault_type* v_ptr, bool flip_d, bool log_failures,
+    bool* used_flip_d)
 {
     int y1, x1, y2, x2;
 
@@ -14615,10 +14619,9 @@ static bool place_room_forced_internal(
     
     /* DEBUGGING: For quest vaults, do immediate verification */
     if (v_ptr->flags & VLT_QUEST) {
-        int verify_y1 = y0 - v_ptr->hgt / 2;
-        int verify_x1 = x0 - v_ptr->wid / 2;
-        int verify_y2 = verify_y1 + v_ptr->hgt - 1;
-        int verify_x2 = verify_x1 + v_ptr->wid - 1;
+        int verify_y1, verify_x1, verify_y2, verify_x2;
+        compute_vault_bounds(y0, x0, v_ptr, flip_d,
+            &verify_y1, &verify_x1, &verify_y2, &verify_x2);
         
         int post_walls = 0, post_floors = 0, post_features = 0, post_monsters = 0;
         int post_icky = 0, post_room = 0;
@@ -14655,6 +14658,9 @@ static bool place_room_forced_internal(
                   post_icky, post_room);
     }
 
+    if (used_flip_d)
+        *used_flip_d = flip_d;
+
     return (true);
 }
 
@@ -14663,15 +14669,20 @@ static bool place_room_forced_internal(
  * Prefer the legacy random orientation first, but also try the alternate orientation
  * before giving up so "must place" quest content does not miss obvious fits.
  */
-static bool place_room_forced(int y0, int x0, vault_type* v_ptr)
+static bool place_room_forced_oriented(
+    int y0, int x0, vault_type* v_ptr, bool* used_flip_d)
 {
     bool allow_flip = !(v_ptr->flags & (VLT_NO_ROTATION));
     bool preferred_flip = allow_flip ? one_in_(3) : false;
 
-    if (place_room_forced_internal(y0, x0, v_ptr, preferred_flip, true))
+    if (place_room_forced_internal(
+            y0, x0, v_ptr, preferred_flip, true, used_flip_d))
+    {
         return true;
+    }
 
-    if (allow_flip && place_room_forced_internal(y0, x0, v_ptr, !preferred_flip, false))
+    if (allow_flip && place_room_forced_internal(
+            y0, x0, v_ptr, !preferred_flip, false, used_flip_d))
     {
         log_trace("place_room_forced: Quest vault '%s' fit after trying alternate orientation at (%d,%d)",
             v_name + v_ptr->name, y0, x0);
@@ -14681,12 +14692,17 @@ static bool place_room_forced(int y0, int x0, vault_type* v_ptr)
     return false;
 }
 
+static bool place_room_forced(int y0, int x0, vault_type* v_ptr)
+{
+    return place_room_forced_oriented(y0, x0, v_ptr, NULL);
+}
+
 /*
  * Final fallback for "must place" quest vaults: scan the whole map for any fit.
  * This avoids regeneration loops caused by a handful of unlucky center-biased samples.
  */
-static bool place_room_forced_exhaustive(
-    vault_type* v_ptr, int* placed_y, int* placed_x)
+static bool place_room_forced_exhaustive_oriented(
+    vault_type* v_ptr, int* placed_y, int* placed_x, bool* used_flip_d)
 {
     bool allow_flip = !(v_ptr->flags & (VLT_NO_ROTATION));
 
@@ -14694,14 +14710,16 @@ static bool place_room_forced_exhaustive(
     {
         for (int x = 3; x < p_ptr->cur_map_wid - 3; x++)
         {
-            if (place_room_forced_internal(y, x, v_ptr, false, false))
+            if (place_room_forced_internal(
+                    y, x, v_ptr, false, false, used_flip_d))
             {
                 if (placed_y) *placed_y = y;
                 if (placed_x) *placed_x = x;
                 return true;
             }
 
-            if (allow_flip && place_room_forced_internal(y, x, v_ptr, true, false))
+            if (allow_flip && place_room_forced_internal(
+                    y, x, v_ptr, true, false, used_flip_d))
             {
                 if (placed_y) *placed_y = y;
                 if (placed_x) *placed_x = x;
@@ -14711,6 +14729,13 @@ static bool place_room_forced_exhaustive(
     }
 
     return false;
+}
+
+static bool place_room_forced_exhaustive(
+    vault_type* v_ptr, int* placed_y, int* placed_x)
+{
+    return place_room_forced_exhaustive_oriented(
+        v_ptr, placed_y, placed_x, NULL);
 }
 
 static bool place_room(int y0, int x0, vault_type* v_ptr)
@@ -15268,13 +15293,25 @@ typedef struct unlight_ally_vault_def {
     int r_idx;
     char token;
     const char* label;
+    const char* vault_name;
 } unlight_ally_vault_def;
 
 static const unlight_ally_vault_def unlight_ally_vaults[] = {
-    { METARUN_UNLIGHT_ALLY_GOTHMOG, R_IDX_GOTHMOG, 'R', "Gothmog" },
-    { METARUN_UNLIGHT_ALLY_ANCALAGON, R_IDX_ANCALAGON, 'K', "Ancalagon" },
-    { METARUN_UNLIGHT_ALLY_GLAURUNG, R_IDX_GLAURUNG, 'D', "Glaurung" },
+    { METARUN_UNLIGHT_ALLY_GOTHMOG, R_IDX_GOTHMOG, 'R', "Gothmog",
+        "Gothmog's hall" },
+    { METARUN_UNLIGHT_ALLY_ANCALAGON, R_IDX_ANCALAGON, 'K', "Ancalagon",
+        "Ancalagon's Aerie" },
+    { METARUN_UNLIGHT_ALLY_GLAURUNG, R_IDX_GLAURUNG, 'D', "Glaurung",
+        "Worm of Greed" },
 };
+
+static bool vault_template_name_contains(vault_type *v, const char* fragment)
+{
+    if (!v || !fragment)
+        return false;
+
+    return strstr(v_name + v->name, fragment) != NULL;
+}
 
 static bool vault_template_has_symbol(vault_type *v, char symbol)
 {
@@ -15327,8 +15364,21 @@ static bool vault_template_matches_unlight_ally(
         return false;
     if (v->max_depth != 0 && p_ptr->depth > v->max_depth)
         return false;
+    if (!vault_template_name_contains(v, ally->vault_name))
+        return false;
 
     return vault_template_has_symbol(v, ally->token);
+}
+
+static bool vault_template_is_unlight_ally_template(vault_type *v)
+{
+    for (size_t i = 0; i < N_ELEMENTS(unlight_ally_vaults); i++)
+    {
+        if (vault_template_name_contains(v, unlight_ally_vaults[i].vault_name))
+            return true;
+    }
+
+    return false;
 }
 
 /* Global variables to store quest vault coordinates for monitoring */
@@ -15503,13 +15553,23 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
     }
 }
 
+static void remember_quest_vault_bounds_rect(int y1, int x1, int y2, int x2)
+{
+    qv_stored_y1 = y1;
+    qv_stored_x1 = x1;
+    qv_stored_y2 = y2;
+    qv_stored_x2 = x2;
+    qv_placed_this_level = true;
+}
+
 static void remember_quest_vault_bounds(int y0, int x0, vault_type *qv)
 {
-    qv_stored_y1 = y0 - qv->hgt / 2;
-    qv_stored_x1 = x0 - qv->wid / 2;
-    qv_stored_y2 = qv_stored_y1 + qv->hgt - 1;
-    qv_stored_x2 = qv_stored_x1 + qv->wid - 1;
-    qv_placed_this_level = true;
+    int y1 = y0 - qv->hgt / 2;
+    int x1 = x0 - qv->wid / 2;
+    int y2 = y1 + qv->hgt - 1;
+    int x2 = x1 + qv->wid - 1;
+
+    remember_quest_vault_bounds_rect(y1, x1, y2, x2);
 }
 
 static bool vault_area_has_monster_race(int y0, int x0, vault_type *qv, int r_idx)
@@ -15626,20 +15686,18 @@ static void scale_unlight_ally_vault_monster(monster_type* m_ptr, bool boss)
 }
 
 static bool finalize_unlight_ally_vault_placement(
-    int y, int x, vault_type *qv, s16b v_idx,
+    int y, int x, vault_type *qv, s16b v_idx, bool flip_d,
     const unlight_ally_vault_def* ally)
 {
-    int y1 = y - qv->hgt / 2;
-    int x1 = x - qv->wid / 2;
-    int y2 = y1 + qv->hgt - 1;
-    int x2 = x1 + qv->wid - 1;
+    int y1, x1, y2, x2;
     int scaled = 0;
     bool boss_found = false;
 
-    remember_quest_vault_bounds(y, x, qv);
+    compute_vault_bounds(y, x, qv, flip_d, &y1, &x1, &y2, &x2);
+    remember_quest_vault_bounds_rect(y1, x1, y2, x2);
     record_forced_greater_vault(v_idx);
 
-    if (mark_g_vault(y, x, qv->hgt, qv->wid))
+    if (mark_g_vault_bounds(y1, x1, y2, x2))
     {
         SDL_strlcpy(g_vault_name, v_name + qv->name, sizeof(g_vault_name));
     }
@@ -15675,10 +15733,13 @@ static bool finalize_unlight_ally_vault_placement(
     }
 
     level_gen_debug_activate_quest_vault_name(v_name + qv->name);
-    genlog_quest("UNLIGHT ALLY VAULT PLACED: '%s' for %s at (%d,%d), scaled=%d",
-        v_name + qv->name, ally->label, y, x, scaled);
-    log_info("Unlight ally vault: placed %s vault '%s' at depth %d; scaled %d monsters",
-        ally->label, v_name + qv->name, p_ptr->depth, scaled);
+    genlog_quest(
+        "UNLIGHT ALLY VAULT PLACED: '%s' for %s at (%d,%d), flip_d=%d, scaled=%d",
+        v_name + qv->name, ally->label, y, x, flip_d ? 1 : 0, scaled);
+    log_info(
+        "Unlight ally vault: placed %s vault '%s' at depth %d; flip_d=%d; scaled %d monsters",
+        ally->label, v_name + qv->name, p_ptr->depth, flip_d ? 1 : 0,
+        scaled);
 
     return true;
 }
@@ -15689,6 +15750,7 @@ static bool place_unlight_ally_vault(void)
     vault_type* qv_ptr = NULL;
     s16b qv_idx = 0;
     int y, x;
+    bool flip_d = false;
 
     if (!ally)
         return true;
@@ -15722,18 +15784,18 @@ static bool place_unlight_ally_vault(void)
         y = MAX(qv_ptr->hgt / 2 + 3, MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
         x = MAX(qv_ptr->wid / 2 + 3, MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
 
-        if (place_room_forced(y, x, qv_ptr)) {
+        if (place_room_forced_oriented(y, x, qv_ptr, &flip_d)) {
             return finalize_unlight_ally_vault_placement(
-                y, x, qv_ptr, qv_idx, ally);
+                y, x, qv_ptr, qv_idx, flip_d, ally);
         }
     }
 
     log_trace("Unlight ally vault: random placement failed for '%s', scanning full map",
         v_name + qv_ptr->name);
-    if (place_room_forced_exhaustive(qv_ptr, &y, &x))
+    if (place_room_forced_exhaustive_oriented(qv_ptr, &y, &x, &flip_d))
     {
         return finalize_unlight_ally_vault_placement(
-            y, x, qv_ptr, qv_idx, ally);
+            y, x, qv_ptr, qv_idx, flip_d, ally);
     }
 
     log_warn("Unlight ally vault: failed to place '%s' for %s",
@@ -16039,7 +16101,7 @@ static bool build_type7(int y0, int x0)
  */
 static bool mark_g_vault(int y0, int x0, int ymax, int xmax)
 {
-    int y1, x1, y2, x2, y, x;
+    int y1, x1, y2, x2;
 
     /* Get the coordinates */
     y1 = y0 - ymax / 2;
@@ -16047,11 +16109,20 @@ static bool mark_g_vault(int y0, int x0, int ymax, int xmax)
     y2 = y1 + ymax - 1;
     x2 = x1 + xmax - 1;
 
+    return mark_g_vault_bounds(y1, x1, y2, x2);
+}
+
+static bool mark_g_vault_bounds(int y1, int x1, int y2, int x2)
+{
+    int y, x;
+
     /* Step 1 - Mark all grids inside that perimeter with the new flag */
     for (y = y1 + 1; y < y2; y++)
     {
         for (x = x1 + 1; x < x2; x++)
         {
+            if (!in_bounds_fully(y, x))
+                continue;
             cave_info[y][x] |= (CAVE_G_VAULT);
         }
     }
@@ -16086,6 +16157,11 @@ static bool vault_type8_is_eligible(s16b v_idx, bool test_only)
         return false;
     if (test_only && !(v_ptr->flags & VLT_TEST))
         return false;
+    if (story_branch_is_unlight_ally_run()
+        && vault_template_is_unlight_ally_template(v_ptr))
+    {
+        return false;
+    }
 
     return true;
 }
@@ -16186,8 +16262,6 @@ static bool build_type8(int y0, int x0)
     vault_type* v_ptr = NULL;
     int tries = 0;
     bool found = false;
-    bool repeated = false;
-    int i;
     s16b v_idx;
     bool prefer_test = any_eligible_type8_test_vault();
 
@@ -16213,20 +16287,9 @@ static bool build_type8(int y0, int x0)
         /* Surface vaults get exponentially rarer at depth */
         {
             /* Accept the first greater vault (but not quest vaults) */
-            if ((v_ptr->typ == 8) && (v_ptr->depth <= p_ptr->depth)
-                && (v_ptr->max_depth == 0 || p_ptr->depth <= v_ptr->max_depth)
-                && (one_in_(vault_type8_generation_rarity(v_ptr, p_ptr->depth))) && !(v_ptr->flags & VLT_QUEST))
-        {
-            repeated = false;
-            for (i = 0; i < MAX_GREATER_VAULTS; i++)
+            if (vault_type8_is_eligible(v_idx, false)
+                && one_in_(vault_type8_generation_rarity(v_ptr, p_ptr->depth)))
             {
-                if (v_idx == p_ptr->greater_vaults[i])
-                {
-                    repeated = true;
-                }
-            }
-
-            if (!repeated)
                 found = true;
             }
         }
@@ -18024,6 +18087,132 @@ static bool build_type10(int y0, int x0)
     }
 
     return (true);
+}
+
+static void prepare_unlight_final_monster(monster_type* n_ptr, int r_idx,
+    bool ally)
+{
+    monster_race* r_ptr = &r_info[r_idx];
+
+    memset(n_ptr, 0, sizeof(*n_ptr));
+    n_ptr->r_idx = (s16b)r_idx;
+    n_ptr->image_r_idx = (r_idx == R_IDX_MORGOTH) ? R_IDX_MORGOTH_HALLU :
+        (s16b)r_idx;
+    n_ptr->alertness = ALERTNESS_ALERT;
+    n_ptr->maxhp = r_ptr->hdice * (1 + r_ptr->hside) / 2;
+    if (n_ptr->maxhp < 1)
+        n_ptr->maxhp = 1;
+    n_ptr->hp = n_ptr->maxhp;
+    n_ptr->mana = MON_MANA_MAX;
+    n_ptr->song = SNG_NOTHING;
+    n_ptr->stance = STANCE_CONFIDENT;
+    n_ptr->energy = 0;
+    n_ptr->min_range = 0;
+    n_ptr->mflag = MFLAG_ACTV;
+    if (ally)
+        n_ptr->mflag |= MFLAG_UNLIGHT_FINAL_ALLY;
+}
+
+static bool place_unlight_final_monster_near(int anchor_y, int anchor_x,
+    int r_idx, bool ally, cptr label)
+{
+    monster_race* r_ptr;
+
+    if (r_idx <= 0 || r_idx >= z_info->r_max)
+        return false;
+
+    r_ptr = &r_info[r_idx];
+    if (!r_ptr->name)
+        return false;
+
+    for (int radius = 0; radius <= 16; radius++)
+    {
+        for (int y = anchor_y - radius; y <= anchor_y + radius; y++)
+        {
+            for (int x = anchor_x - radius; x <= anchor_x + radius; x++)
+            {
+                monster_type monster_type_body;
+                s16b m_idx;
+
+                if (distance(anchor_y, anchor_x, y, x) != radius)
+                    continue;
+                if (!in_bounds_fully(y, x))
+                    continue;
+                if (!cave_empty_bold(y, x))
+                    continue;
+                if (cave_glyph(y, x))
+                    continue;
+                if (!cave_exist_mon(r_ptr, y, x, false, false))
+                    continue;
+
+                prepare_unlight_final_monster(&monster_type_body, r_idx, ally);
+                m_idx = monster_place(y, x, &monster_type_body);
+                if (!m_idx)
+                    continue;
+
+                calc_monster_speed(y, x);
+                new_wandering_destination(&mon_list[m_idx], NULL);
+                update_mon(m_idx, true);
+                lite_spot(y, x);
+                log_info("Unlight finale: placed %s%s at (%d,%d)",
+                    ally ? "ally " : "", label, y, x);
+                return true;
+            }
+        }
+    }
+
+    log_warn("Unlight finale: failed to place %s%s near (%d,%d)",
+        ally ? "ally " : "", label, anchor_y, anchor_x);
+    return false;
+}
+
+static bool place_unlight_final_battle_participants(void)
+{
+    byte mask;
+    int center_x;
+    int morgoth_y;
+    int ally_y;
+    bool ok = true;
+
+    if (!story_branch_is_unlight_final_run())
+        return false;
+
+    mask = metarun_unlight_ally_mask();
+    if (mask != METARUN_UNLIGHT_ALLY_ALL)
+    {
+        log_warn("Unlight finale: refused to place final battle with incomplete ally mask 0x%02x",
+            mask);
+        return false;
+    }
+
+    center_x = p_ptr->cur_map_wid / 2;
+    morgoth_y = p_ptr->py + 20;
+    ally_y = p_ptr->py + 11;
+
+    p_ptr->on_the_run = false;
+    p_ptr->morgoth_second_wind = 0;
+    p_ptr->morgoth_state = 0;
+    p_ptr->morgoth_slain = false;
+
+    ok &= place_unlight_final_monster_near(
+        morgoth_y, center_x, R_IDX_MORGOTH, false, "Morgoth");
+    ok &= place_unlight_final_monster_near(
+        ally_y - 2, center_x, R_IDX_GORTHAUR, true, "Sauron");
+    ok &= place_unlight_final_monster_near(
+        ally_y, center_x - 5, R_IDX_GOTHMOG, true, "Gothmog");
+    ok &= place_unlight_final_monster_near(
+        ally_y + 1, center_x, R_IDX_ANCALAGON, true, "Ancalagon");
+    ok &= place_unlight_final_monster_near(
+        ally_y, center_x + 5, R_IDX_GLAURUNG, true, "Glaurung");
+
+    if (ok)
+    {
+        msg_print("Sauron and the powers you turned stand with you before the Iron Gates.");
+        msg_print("Morgoth comes forth to answer rebellion with ruin.");
+        log_info("Unlight finale: final battle participants placed");
+    }
+
+    return ok;
 }
 
 /*
@@ -20793,6 +20982,9 @@ static void gates_gen(void)
 
     /* Place the player */
     player_place(py, px);
+
+    if (story_branch_is_unlight_final_run())
+        (void)place_unlight_final_battle_participants();
 }
 
 /*

@@ -5506,10 +5506,11 @@ PlayResult play_game(void)
         playerturn = 0;
         min_depth_counter = 0;
 
-        /* Start player on level 1 */
-        p_ptr->depth = 1;
+        /* Start normal characters on level 1; the Unlight finale is fought at the Gates. */
+        p_ptr->depth = story_branch_is_unlight_final_run() ? 0 : 1;
 
-        log_debug("New game state initialized - starting at depth 1, turn 1");
+        log_debug("New game state initialized - starting at depth %d, turn 1",
+            p_ptr->depth);
         }
         }
 

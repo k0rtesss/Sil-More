@@ -32,7 +32,8 @@ story_branch_run_kind_type story_branch_run_kind(void)
         case METARUN_BRANCH_UNLIGHT_CHOSEN:
             return STORY_BRANCH_RUN_UNLIGHT_ALLY;
         case METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE:
-            return STORY_BRANCH_RUN_UNLIGHT_FINAL;
+            return (metarun_unlight_ally_mask() == METARUN_UNLIGHT_ALLY_ALL) ?
+                STORY_BRANCH_RUN_UNLIGHT_FINAL : STORY_BRANCH_RUN_UNLIGHT_ALLY;
         default:
             return STORY_BRANCH_RUN_NORMAL;
     }
@@ -79,6 +80,9 @@ int run_final_depth(void)
 
     if (story_branch_is_manwe_deception_run())
         return MANWE_DECEPTION_FINAL_DEPTH;
+
+    if (story_branch_is_unlight_final_run())
+        return 0;
 
     return MORGOTH_DEPTH;
 }

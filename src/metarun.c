@@ -153,6 +153,14 @@ static void metarun_sanitize_branch_fields(metarun *m)
         state = METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE;
     }
 
+    if (state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE &&
+        m->reserved_runtime[METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK] !=
+            METARUN_UNLIGHT_ALLY_ALL) {
+        m->reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_STATE] =
+            METARUN_BRANCH_UNLIGHT_CHOSEN;
+        state = METARUN_BRANCH_UNLIGHT_CHOSEN;
+    }
+
     if (metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS)) {
         m->reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS] &=
             METARUN_LIGHT_CONTINUATION_EAGLE_SEEN;
@@ -3948,6 +3956,42 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     bool allow_treachery = (character_flags | f_race) & RHF_TREACHERY;
     bool allow_kinslay   = (character_flags | f_race) & RHF_KINSLAYER;
 
+    if (died && metarun_branch_state() == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE)
+    {
+        log_info("Metarun: Unlight final battle defeat");
+
+        if (!has_gift_eru)
+            metarun_increment_deaths();
+
+        screen_save();
+        Term_clear();
+        print_heading_fade("The Gates Are Held", TERM_RED);
+        print_paragraph_fade(
+            "Morgoth's shadow breaks the assault before the Iron Gates.",
+            TERM_WHITE, 4);
+        print_paragraph_fade(
+            "Sauron withdraws into smoke and wrath, and the powers you gathered are scattered.",
+            TERM_L_RED, 7);
+        print_paragraph_fade(
+            "Yet the Unlight oath is not spent while your line can rise again.",
+            TERM_SLATE, 10);
+        wait_prompt(PROMPT_RETURN_MIDDLE_EARTH);
+        screen_load();
+
+        u32b pool_before = metar.fallen_score_total;
+        refresh_current_metar_score();
+        compute_blessing_pool();
+        if (final_score > 0 && metar.fallen_score_total == pool_before) {
+            metar.fallen_score_total += (u32b)final_score;
+            update_blessing_ledger(&metar);
+            (void)sync_current_metarun_slot(false);
+        }
+        announce_blessing_gain(blessing_points_before);
+        check_run_end();
+        save_metaruns();
+        return;
+    }
+
     bool escaped_with_sils = escaped && (sil_count > 0);
     bool fast_forward = false; // Track if user wants to skip fade effects
     bool morgoth_victory = (p_ptr->morgoth_slain && !escaped && !died);
@@ -6688,6 +6732,105 @@ static void adjust_blessing_threshold_menu(void)
     screen_load();
 }
 
+static int metarun_light_scene_total(metarun_light_scene_result result)
+{
+    int total = 0;
+    for (int i = 0; i < METARUN_LIGHT_SCENE_MAX; i++) {
+        total += metarun_light_scene_count((metarun_light_scene_id)i, result);
+    }
+    return total;
+}
+
+static void metarun_format_unlight_allies(char* out, size_t out_len)
+{
+    byte mask = metarun_unlight_ally_mask();
+    bool first = true;
+
+    if (!out || out_len == 0)
+        return;
+
+    out[0] = '\0';
+
+    #define ADD_ALLY(bit, name) \
+        do { \
+            if (mask & (bit)) { \
+                if (!first) SDL_strlcat(out, ", ", out_len); \
+                SDL_strlcat(out, (name), out_len); \
+                first = false; \
+            } \
+        } while (0)
+
+    ADD_ALLY(METARUN_UNLIGHT_ALLY_GOTHMOG, "Gothmog");
+    ADD_ALLY(METARUN_UNLIGHT_ALLY_ANCALAGON, "Ancalagon");
+    ADD_ALLY(METARUN_UNLIGHT_ALLY_GLAURUNG, "Glaurung");
+
+    #undef ADD_ALLY
+
+    if (first)
+        SDL_strlcpy(out, "none", out_len);
+}
+
+static bool metarun_branch_detail_text(char* out, size_t out_len, byte* attr)
+{
+    metarun_branch_state_type state = metarun_branch_state();
+
+    if (!out || out_len == 0)
+        return false;
+
+    out[0] = '\0';
+    if (attr)
+        *attr = TERM_SLATE;
+
+    switch (state) {
+        case METARUN_BRANCH_UNLIGHT_CHOSEN:
+        case METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE:
+        case METARUN_BRANCH_COMPLETE:
+            if (state == METARUN_BRANCH_COMPLETE &&
+                metarun_unlight_ally_mask() != METARUN_UNLIGHT_ALLY_ALL)
+                break;
+            {
+                char allies[96];
+                metarun_format_unlight_allies(allies, sizeof(allies));
+                if (state == METARUN_BRANCH_COMPLETE) {
+                    strnfmt(out, out_len,
+                        "Unlight final victory: Gates taken");
+                } else {
+                    strnfmt(out, out_len, "Unlight allies: %s%s",
+                        allies,
+                        (metarun_unlight_ally_mask() ==
+                         METARUN_UNLIGHT_ALLY_ALL) ?
+                        " (Gates ready)" : "");
+                }
+                if (attr)
+                    *attr = TERM_RED;
+                return true;
+            }
+        case METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE:
+            strnfmt(out, out_len, "Light echoes: %d stood, %d fell; current: %s",
+                metarun_light_scene_total(METARUN_LIGHT_SCENE_RESULT_SUCCESS),
+                metarun_light_scene_total(METARUN_LIGHT_SCENE_RESULT_FALL),
+                metarun_light_scene_name(metarun_light_scene_current()));
+            if (attr)
+                *attr = TERM_L_BLUE;
+            return true;
+        default:
+            if (metarun_light_scene_total(METARUN_LIGHT_SCENE_RESULT_SUCCESS) ||
+                metarun_light_scene_total(METARUN_LIGHT_SCENE_RESULT_FALL)) {
+                strnfmt(out, out_len, "Light echoes: %d stood, %d fell",
+                    metarun_light_scene_total(
+                        METARUN_LIGHT_SCENE_RESULT_SUCCESS),
+                    metarun_light_scene_total(
+                        METARUN_LIGHT_SCENE_RESULT_FALL));
+                if (attr)
+                    *attr = TERM_L_BLUE;
+                return true;
+            }
+            break;
+    }
+
+    return false;
+}
+
 /* Updated print_metarun_stats(): prettier layout, star & death bars, curses list */
 void print_metarun_stats(void)
 {
@@ -6762,6 +6905,10 @@ void print_metarun_stats(void)
     int spent_points = metar.blessing_points_spent;
     int available_points = earned_points - spent_points;
     bool startup_scene = (!character_generated || !p_ptr || !p_ptr->playing);
+    char branch_detail[160];
+    byte branch_detail_attr = TERM_SLATE;
+    bool has_branch_detail = metarun_branch_detail_text(branch_detail,
+        sizeof(branch_detail), &branch_detail_attr);
 
     if (!startup_scene)
         screen_save();
@@ -6844,6 +6991,11 @@ redraw_story_stats:
             snprintf(buf, sizeof buf, "Branch         : %s", branch_status);
             Term_putstr(col, row++, -1,
                 metarun_branch_is_unlight() ? TERM_RED : TERM_L_BLUE, buf);
+        }
+
+        if (has_branch_detail) {
+            snprintf(buf, sizeof buf, "Branch Detail  : %s", branch_detail);
+            Term_putstr(col, row++, -1, branch_detail_attr, buf);
         }
 
         snprintf(buf, sizeof buf, "Meta Score     : %lu", (unsigned long)metar.score);
@@ -6931,6 +7083,15 @@ redraw_story_stats:
             metarun_put_adaptive_line(col, &row, term_width,
                 metarun_branch_is_unlight() ? TERM_RED : TERM_L_BLUE,
                 line1, line2, line3, line4);
+        }
+
+        if (has_branch_detail && row < summary_row_limit) {
+            strnfmt(line1, sizeof(line1), "Branch Detail:%s", branch_detail);
+            strnfmt(line2, sizeof(line2), "%s", branch_detail);
+            strnfmt(line3, sizeof(line3), "%s", branch_detail);
+            strnfmt(line4, sizeof(line4), "Branch+");
+            metarun_put_adaptive_line(col, &row, term_width,
+                branch_detail_attr, line1, line2, line3, line4);
         }
 
         if (row < summary_row_limit) {

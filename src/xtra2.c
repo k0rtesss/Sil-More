@@ -2975,6 +2975,9 @@ void monster_death(int m_idx)
     ensure_niena_pacifist_active();
     ensure_varda_ungoliant_active();
 
+    if (manwe_unlight_on_ally_defeated(m_ptr))
+        return;
+
     /* Track monster death for Niena mercy quest */
     if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE && m_ptr->r_idx != R_IDX_NIENA) {
         p_ptr->niena_monsters_killed++;
@@ -3090,6 +3093,12 @@ void monster_death(int m_idx)
     if (manwe_light_cutscene_on_monster_slain(m_ptr->r_idx))
         return;
 
+    if (m_ptr->r_idx == R_IDX_MORGOTH &&
+        manwe_unlight_final_on_morgoth_slain())
+    {
+        return;
+    }
+
     // Special message and flag setting for killing Morgoth
     if (m_ptr->r_idx == R_IDX_MORGOTH)
     {
@@ -3135,7 +3144,6 @@ void monster_death(int m_idx)
         manwe_quest_on_ungoliant_slain(m_ptr->fy, m_ptr->fx);
     if (m_ptr->r_idx == R_IDX_GORTHAUR)
         manwe_quest_on_sauron_slain();
-    manwe_unlight_on_ally_defeated(m_ptr);
     
     /* Check for Orome quest completion */
     check_orome_quest_completion();
@@ -3340,9 +3348,20 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
 
         /* Extract monster name */
         monster_desc(m_name, sizeof(m_name), m_ptr, 0);
+        bool unlight_ally_defeat =
+            manwe_unlight_is_ally_defeat_target(m_ptr);
 
         /* Death by Missile/Spell attack */
-        if (note)
+        if (unlight_ally_defeat)
+        {
+            if (who < 0)
+                message_format(
+                    MSG_KILL, m_ptr->r_idx, "You have defeated %s.", m_name);
+            else
+                message_format(
+                    MSG_KILL, m_ptr->r_idx, "%^s has been defeated.", m_name);
+        }
+        else if (note)
         {
             /* Hack -- allow message suppression */
             if (strlen(note) <= 1)
@@ -3390,7 +3409,7 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
                     MSG_KILL, m_ptr->r_idx, "%^s has been slain.", m_name);
         }
 
-        if (who < 0)
+        if (who < 0 && !unlight_ally_defeat)
         {
             meta_monster_record_revenge_kill((u16b)m_ptr->r_idx);
             meta_monster_apply_runtime_overrides();
@@ -3883,6 +3902,9 @@ bool target_able(int m_idx)
 
     /* Monster must be visible */
     if (!m_ptr->ml)
+        return (false);
+
+    if (monster_is_unlight_final_ally(m_ptr))
         return (false);
 
     /* Monster must not be peaceful */
@@ -8014,6 +8036,121 @@ static void quest_status_put_wrapped(int col, int wid, int hgt, int *row,
     display_wrapped_text(col, row, text, color, wid);
 }
 
+static int quest_status_light_scene_total(metarun_light_scene_result result)
+{
+    int total = 0;
+    for (int i = 0; i < METARUN_LIGHT_SCENE_MAX; i++) {
+        total += metarun_light_scene_count((metarun_light_scene_id)i, result);
+    }
+    return total;
+}
+
+static void quest_status_format_unlight_allies(char* out, size_t out_len)
+{
+    byte mask = metarun_unlight_ally_mask();
+    bool first = true;
+
+    if (!out || out_len == 0)
+        return;
+
+    out[0] = '\0';
+
+    #define ADD_ALLY(bit, name) \
+        do { \
+            if (mask & (bit)) { \
+                if (!first) SDL_strlcat(out, ", ", out_len); \
+                SDL_strlcat(out, (name), out_len); \
+                first = false; \
+            } \
+        } while (0)
+
+    ADD_ALLY(METARUN_UNLIGHT_ALLY_GOTHMOG, "Gothmog");
+    ADD_ALLY(METARUN_UNLIGHT_ALLY_ANCALAGON, "Ancalagon");
+    ADD_ALLY(METARUN_UNLIGHT_ALLY_GLAURUNG, "Glaurung");
+
+    #undef ADD_ALLY
+
+    if (first)
+        SDL_strlcpy(out, "none yet", out_len);
+}
+
+static bool quest_status_put_branch_status(int col, int wid, int hgt, int *row)
+{
+    metarun_branch_state_type branch = metarun_branch_state();
+    cptr status = metarun_branch_status_text();
+    char buf[160];
+
+    if (run_mode_is_blitz() || branch == METARUN_BRANCH_NONE ||
+        !status || !status[0])
+        return false;
+
+    quest_status_put_line(col, hgt, row,
+        metarun_branch_is_unlight() ? TERM_RED : TERM_L_BLUE,
+        "Branch Story");
+    quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_SLATE, status);
+
+    switch (branch) {
+        case METARUN_BRANCH_MANWE_QUEST_PENDING:
+            quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_SLATE,
+                "The next story hero will be called beneath the known deeps.");
+            break;
+        case METARUN_BRANCH_MANWE_QUEST_ACTIVE:
+            if (p_ptr && (p_ptr->manwe_deception_flags &
+                    MANWE_DECEPTION_SILMARIL_FORGED)) {
+                quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_WHITE,
+                    "The stolen light has been forged; Sauron's bargain remains the hinge of the tale.");
+            } else if (p_ptr && (p_ptr->manwe_deception_flags &
+                    MANWE_DECEPTION_UNGOLIANT_SLAIN)) {
+                quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_WHITE,
+                    "Ungoliant has fallen; the Forge of Grond waits for the recovered light.");
+            } else {
+                quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_WHITE,
+                    "Seek the Forge of Grond below the known deeps.");
+            }
+            break;
+        case METARUN_BRANCH_LIGHT_CHOSEN:
+            quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_L_BLUE,
+                "The old Valar quest line continues, but the Light choice is now part of the metarun.");
+            break;
+        case METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE:
+        case METARUN_BRANCH_COMPLETE:
+            if (branch == METARUN_BRANCH_COMPLETE &&
+                metarun_unlight_ally_mask() == METARUN_UNLIGHT_ALLY_ALL) {
+                quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_RED,
+                    "The Unlight final victory is recorded at the Gates.");
+            } else if (branch == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE ||
+                quest_status_light_scene_total(METARUN_LIGHT_SCENE_RESULT_SUCCESS) ||
+                quest_status_light_scene_total(METARUN_LIGHT_SCENE_RESULT_FALL)) {
+                strnfmt(buf, sizeof(buf),
+                    "Light echoes: %d stood, %d fell.",
+                    quest_status_light_scene_total(
+                        METARUN_LIGHT_SCENE_RESULT_SUCCESS),
+                    quest_status_light_scene_total(
+                        METARUN_LIGHT_SCENE_RESULT_FALL));
+                quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_L_BLUE,
+                    buf);
+            }
+            break;
+        case METARUN_BRANCH_UNLIGHT_CHOSEN:
+        case METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE:
+            {
+                char allies[96];
+                quest_status_format_unlight_allies(allies, sizeof(allies));
+                quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_RED,
+                    "The Valar send no new quests, and their oath-givers will not appear.");
+                strnfmt(buf, sizeof(buf), "Allies persuaded: %s.", allies);
+                quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_SLATE,
+                    buf);
+            }
+            break;
+        default:
+            break;
+    }
+
+    quest_status_put_line(col, hgt, row, TERM_WHITE, "");
+    return true;
+}
+
 /*
  * Simple string search function - finds needle in haystack
  * Returns pointer to first occurrence, or NULL if not found
@@ -8428,16 +8565,8 @@ void do_cmd_quest_status(void)
     Term_get_size(&wid, &hgt);
     quest_status_reset_page(col, &row);
 
-    if (!run_mode_is_blitz() && metarun_branch_is_unlight())
-    {
+    if (quest_status_put_branch_status(col, wid, hgt, &row))
         any_quests = true;
-        quest_status_put_line(col, hgt, &row, TERM_RED,
-            "Unlight Path");
-        quest_status_put_wrapped(col + 2, wid, hgt, &row, TERM_SLATE,
-            "You are forgotten and nameless. The Valar send no new quests, "
-            "and their oath-givers will not appear.");
-        quest_status_put_line(col, hgt, &row, TERM_WHITE, "");
-    }
 
     /* Check Tulkas quest */
     if (p_ptr->tulkas_quest > TULKAS_QUEST_GIVER_PRESENT) {
@@ -10512,7 +10641,79 @@ static cptr manwe_unlight_ally_display_name(metarun_unlight_ally_bit ally)
     }
 }
 
-void manwe_unlight_on_ally_defeated(monster_type* m_ptr)
+bool monster_is_unlight_final_ally(const monster_type* m_ptr)
+{
+    if (!m_ptr || !m_ptr->r_idx)
+        return false;
+
+    return story_branch_is_unlight_final_run() &&
+        (m_ptr->mflag & MFLAG_UNLIGHT_FINAL_ALLY) != 0;
+}
+
+bool manwe_unlight_final_victory_this_run(void)
+{
+    return p_ptr &&
+        (p_ptr->quest_reserved[QUEST_RESERVED_UNLIGHT_FINAL_FLAGS] &
+            UNLIGHT_FINAL_FLAG_VICTORY) != 0;
+}
+
+bool manwe_unlight_final_on_morgoth_slain(void)
+{
+    cptr texts[4];
+
+    if (!p_ptr || !story_branch_is_unlight_final_run())
+        return false;
+
+    if (manwe_unlight_final_victory_this_run())
+        return true;
+
+    p_ptr->quest_reserved[QUEST_RESERVED_UNLIGHT_FINAL_FLAGS] |=
+        UNLIGHT_FINAL_FLAG_VICTORY;
+    p_ptr->morgoth_slain = true;
+    p_ptr->escaped = true;
+    p_ptr->is_dead = true;
+    p_ptr->playing = false;
+    p_ptr->leaving = true;
+    p_ptr->on_the_run = false;
+    SDL_strlcpy(p_ptr->died_from, "the Dark Lord beside Sauron",
+        sizeof(p_ptr->died_from));
+
+    texts[0] = "Morgoth falls before the Gates, not by mercy, but by rebellion.";
+    texts[1] = "Sauron kneels only long enough to name the world remade in shadow and stolen fire.";
+    texts[2] = "The powers you turned stand witness as the Black Foe's crown is broken.";
+    texts[3] = "You pass from the tale as a new Dark Lord beside Sauron.";
+    quest_typewriter_menu("The Lord In Unlight", texts, 4, TERM_RED, TERM_WHITE);
+
+    do_cmd_note("Overthrew Morgoth at the Gates and claimed the Unlight ending.",
+        p_ptr->depth);
+    metarun_set_branch_state(METARUN_BRANCH_COMPLETE);
+    save_metaruns();
+
+    p_ptr->redraw |= PR_MAP;
+    p_ptr->window |= PW_MESSAGE;
+    log_info("Unlight finale: Morgoth slain; branch complete");
+    return true;
+}
+
+bool manwe_unlight_is_ally_defeat_target(const monster_type* m_ptr)
+{
+    metarun_unlight_ally_bit ally;
+
+    if (!p_ptr || !m_ptr)
+        return false;
+    if (!story_branch_is_unlight_ally_run())
+        return false;
+    if (!(m_ptr->mflag & MFLAG_UNLIGHT_ALLY_BOSS))
+        return false;
+
+    ally = manwe_unlight_ally_for_r_idx(m_ptr->r_idx);
+    if (!ally)
+        return false;
+
+    return !(metarun_unlight_ally_mask() & ally);
+}
+
+bool manwe_unlight_on_ally_defeated(monster_type* m_ptr)
 {
     cptr ally_name;
     cptr texts[4];
@@ -10522,18 +10723,10 @@ void manwe_unlight_on_ally_defeated(monster_type* m_ptr)
     char note[160];
     metarun_unlight_ally_bit ally;
 
-    if (!p_ptr || !m_ptr)
-        return;
-    if (!story_branch_is_unlight_ally_run())
-        return;
-    if (!(m_ptr->mflag & MFLAG_UNLIGHT_ALLY_BOSS))
-        return;
+    if (!manwe_unlight_is_ally_defeat_target(m_ptr))
+        return false;
 
     ally = manwe_unlight_ally_for_r_idx(m_ptr->r_idx);
-    if (!ally)
-        return;
-    if (metarun_unlight_ally_mask() & ally)
-        return;
 
     ally_name = manwe_unlight_ally_display_name(ally);
     strnfmt(line0, sizeof(line0),
@@ -10564,9 +10757,10 @@ void manwe_unlight_on_ally_defeated(monster_type* m_ptr)
     }
 
     p_ptr->redraw |= PR_MAP;
-    p_ptr->window |= PW_MESSAGE;
+    p_ptr->window |= (PW_MESSAGE | PW_MONLIST);
     log_info("Unlight ally persuaded: %s (mask=0x%02x)",
         ally_name, metarun_unlight_ally_mask());
+    return true;
 }
 
 void manwe_quest_on_ungoliant_slain(int y, int x)
