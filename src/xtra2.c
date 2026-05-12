@@ -7160,6 +7160,7 @@ static u32b get_metarun_quest_flag(int quest_idx)
     if (streq(metarun_id, "METARUN_QUEST_TULKAS_MORGOTH")) return METARUN_QUEST_TULKAS_MORGOTH;
     if (streq(metarun_id, "METARUN_QUEST_VARDA_SHADOW")) return METARUN_QUEST_VARDA_SHADOW;
     if (streq(metarun_id, "METARUN_QUEST_VARDA_UNGOLIANT")) return METARUN_QUEST_VARDA_UNGOLIANT;
+    if (streq(metarun_id, "METARUN_QUEST_MANWE")) return METARUN_QUEST_MANWE;
     
     /* Unknown or future quest */
     log_debug("get_metarun_quest_flag: Unknown metarun_quest_id '%s' for quest_idx %d", metarun_id, quest_idx);

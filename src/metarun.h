@@ -44,15 +44,65 @@ extern curse_type* cu_info;
 #define METARUN_QUEST_TULKAS_MORGOTH (1UL << 13) /* Tulkas third quest (wound Morgoth) */
 #define METARUN_QUEST_VARDA_SHADOW (1UL << 14) /* Varda second quest (Shadow Bastion) */
 #define METARUN_QUEST_VARDA_UNGOLIANT (1UL << 15) /* Varda third quest (Ungoliant hunt) */
+#define METARUN_QUEST_MANWE (1UL << 16) /* Manwe/Sauron deception quest completed */
 #define METARUN_QUEST_SLOT_MAX 24           /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
-/* Additional quests can be added as (1UL << 16), (1UL << 17), etc. */
+/* Additional quests can be added as (1UL << 17), (1UL << 18), etc. */
 
 /* quest_reserved[] slots */
 #define METARUN_SLOT_MANDOS_RES_CHARGES 0      /* Stored resurrection charges from Mandos' final quest */
 #define METARUN_SLOT_OROME_GREAT_HUNT_MASK 1   /* Bitmask of slain uniques for Orome's great hunt */
 #define METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE 2 /* Flag: Orome great hunt quest is active */
 #define METARUN_SLOT_NIENA_CURSE_CLEANSE 3     /* Stored curse-cleansing charges from Niena's pacifist quest */
+
+/* reserved_runtime[] slot map.
+ * These bytes are part of meta.raw and must not be repurposed without a
+ * converter in metarun_legacy.*.
+ */
+#define METARUN_RUNTIME_SLOT_CHALLENGE_FLAGS 0      /* Challenge unlock bitmask */
+#define METARUN_RUNTIME_SLOT_CHALLENGE_COUNT_BASE 1 /* Challenge completion counts, slots 1..7 */
+#define METARUN_RUNTIME_SLOT_CHALLENGE_COUNT_LIMIT 8 /* One past the final challenge count slot */
+#define METARUN_RUNTIME_SLOT_BRANCH_STATE 8         /* metarun_branch_state_type */
+#define METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK 9    /* METARUN_UNLIGHT_ALLY_* bits */
+#define METARUN_RUNTIME_SLOT_LIGHT_SCENE_SUCCESS_BASE 10 /* One success counter per light scene, slots 10..14 */
+#define METARUN_RUNTIME_SLOT_LIGHT_SCENE_FALL_BASE 15    /* One fall counter per light scene, slots 15..19 */
+#define METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE 20    /* First free branch/runtime slot */
+
+typedef enum {
+    METARUN_BRANCH_NONE = 0,
+    METARUN_BRANCH_MANWE_QUEST_PENDING,
+    METARUN_BRANCH_MANWE_QUEST_ACTIVE,
+    METARUN_BRANCH_LIGHT_CHOSEN,
+    METARUN_BRANCH_UNLIGHT_CHOSEN,
+    METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE,
+    METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE,
+    METARUN_BRANCH_COMPLETE,
+    METARUN_BRANCH_STATE_MAX
+} metarun_branch_state_type;
+
+typedef enum {
+    METARUN_UNLIGHT_ALLY_GOTHMOG = 0x01,
+    METARUN_UNLIGHT_ALLY_ANCALAGON = 0x02,
+    METARUN_UNLIGHT_ALLY_GLAURUNG = 0x04,
+    METARUN_UNLIGHT_ALLY_ALL =
+        METARUN_UNLIGHT_ALLY_GOTHMOG |
+        METARUN_UNLIGHT_ALLY_ANCALAGON |
+        METARUN_UNLIGHT_ALLY_GLAURUNG
+} metarun_unlight_ally_bit;
+
+typedef enum {
+    METARUN_LIGHT_SCENE_FEANOR_GOTHMOG = 0,
+    METARUN_LIGHT_SCENE_FINGOLFIN_MORGOTH,
+    METARUN_LIGHT_SCENE_TURIN_GLAURUNG,
+    METARUN_LIGHT_SCENE_EARENDIL_ANCALAGON,
+    METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN,
+    METARUN_LIGHT_SCENE_MAX
+} metarun_light_scene_id;
+
+typedef enum {
+    METARUN_LIGHT_SCENE_RESULT_SUCCESS = 1,
+    METARUN_LIGHT_SCENE_RESULT_FALL = 2
+} metarun_light_scene_result;
 
 /* ------------------------------------------------------------------ */
 /*  Meta-run save-record                                              */
@@ -150,7 +200,7 @@ typedef struct metarun
     byte pending_blessing_count;      /* How many choices are currently pending (0-3)     */
     
     byte blessing_threshold_mode;     /* 0=normal (default), 1=easier, 2=harder          */
-    byte reserved_runtime[31];        /* Remaining runtime expansion space               */
+    byte reserved_runtime[31];        /* Persistent expansion bytes; see reserved_runtime[] slot map */
 
 } metarun;
 
@@ -231,6 +281,17 @@ bool metarun_challenge_torchlight_unlocked(void);   /* Has the Varda torchlight 
 void metarun_unlock_challenge_torchlight(void);     /* Unlock the Varda torchlight challenge for this metarun */
 int metarun_challenge_completion_count(int challenge_id); /* How many times a challenge run finished */
 void metarun_mark_challenge_completed(int challenge_id);  /* Record a finished challenge run */
+
+/* ------------------------------------------------------------------ */
+/*  Manwe/Sauron branch tracking                                      */
+/* ------------------------------------------------------------------ */
+metarun_branch_state_type metarun_branch_state(void);
+void metarun_set_branch_state(metarun_branch_state_type state);
+byte metarun_unlight_ally_mask(void);
+void metarun_mark_unlight_ally(metarun_unlight_ally_bit ally);
+void metarun_light_scene_record(metarun_light_scene_id scene, metarun_light_scene_result result);
+byte metarun_light_scene_count(metarun_light_scene_id scene, metarun_light_scene_result result);
+bool metarun_manwe_quest_unlocked(void);
 
 /* ------------------------------------------------------------------ */
 /*  Oath system tracking                                              */

@@ -1934,6 +1934,16 @@ static errr rd_extra(void)
         p_ptr->quest_reserved[0] = QUEST_MAX_INITIATED_PER_RUN;
     }
 
+    if (savefile_version_at_least(0, 9, 7, 3))
+    {
+        rd_u16b(&p_ptr->manwe_deception_flags);
+        p_ptr->manwe_deception_flags &= MANWE_DECEPTION_FLAG_MASK;
+    }
+    else
+    {
+        p_ptr->manwe_deception_flags = 0;
+    }
+
     /* Older saves may have an active Varda quest without the initiated counter. */
     if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE && p_ptr->quest_reserved[0] == 0) {
         p_ptr->quest_reserved[0] = 1;

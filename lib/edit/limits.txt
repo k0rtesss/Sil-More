@@ -25,7 +25,7 @@ M:K:600
 M:B:240
 
 # Maximum number of quests
-M:Q:18
+M:Q:19
 
 # Maximum number of oath types
 M:W:8

@@ -32,7 +32,8 @@ static const u32b metarun_known_quest_flags[] = {
     METARUN_QUEST_TULKAS_ORCS,
     METARUN_QUEST_TULKAS_MORGOTH,
     METARUN_QUEST_VARDA_SHADOW,
-    METARUN_QUEST_VARDA_UNGOLIANT
+    METARUN_QUEST_VARDA_UNGOLIANT,
+    METARUN_QUEST_MANWE
 };
 
 #define METARUN_KNOWN_QUEST_MASK \
@@ -42,7 +43,8 @@ static const u32b metarun_known_quest_flags[] = {
      METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_OROME_GREAT_HUNT | \
      METARUN_QUEST_NIENA_MORGOTH | METARUN_QUEST_NIENA_PACIFIST | \
      METARUN_QUEST_TULKAS_ORCS | METARUN_QUEST_TULKAS_MORGOTH | \
-     METARUN_QUEST_VARDA_SHADOW | METARUN_QUEST_VARDA_UNGOLIANT)
+     METARUN_QUEST_VARDA_SHADOW | METARUN_QUEST_VARDA_UNGOLIANT | \
+     METARUN_QUEST_MANWE)
 
 static int quest_slot_from_flag(u32b quest_flag)
 {
@@ -71,6 +73,7 @@ static int quest_id_from_slot(int slot)
         case 13: return QUEST_ID_TULKAS_MORGOTH;
         case 14: return QUEST_ID_VARDA_SHADOW;
         case 15: return QUEST_ID_VARDA_UNGOLIANT;
+        case 16: return QUEST_ID_MANWE_FORGE;
         default: return 0;
     }
 }
@@ -148,6 +151,7 @@ u32b quest_metarun_flag(int quest_id)
         case QUEST_ID_TULKAS_MORGOTH: return METARUN_QUEST_TULKAS_MORGOTH;
         case QUEST_ID_VARDA_SHADOW: return METARUN_QUEST_VARDA_SHADOW;
         case QUEST_ID_VARDA_UNGOLIANT: return METARUN_QUEST_VARDA_UNGOLIANT;
+        case QUEST_ID_MANWE_FORGE: return METARUN_QUEST_MANWE;
         default: return 0;
     }
 }

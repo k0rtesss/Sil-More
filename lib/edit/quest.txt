@@ -511,3 +511,28 @@ W:
 W:"Her hunger is ended at last. The Gloomweaver shall devour no more light."
 W:"Henceforth, every new venture of your line shall begin with a relic chosen under starlight."
 W:"Carry it well, and remember: the Queen of Stars sees the first step as surely as the last."
+
+# Quest of Manwe, The Forge of Grond
+Q:17:Manwe, The Forge of Grond
+T:The Elder King sends you below the known deeps
+C:Descend to the hidden forge, defeat Ungoliant, and recover the light she devoured
+O:0
+F:GLOBAL
+E:DEPTH_RANGE:23:23
+L:1
+Y:0
+R:manwe_quest
+M:METARUN_QUEST_MANWE
+S:0:0:0:0
+I:A cold wind moves through the black halls, though no door stands open.
+I:A tall figure robed in pale grey waits where the dark grows still.
+I:
+I:"The Valar have seen your line endure trials meant to break it.
+I:One more burden remains, hidden beneath even Morgoth's seat."
+I:
+I:"Seek the forge where the great hammer was made. There the devourer of light coils around what she stole.
+I:Overcome her, claim the light, and return before the deep closes behind you."
+W:The stolen radiance burns clear at last, fierce enough to drive back the crawling dark.
+W:The grey-clad lord studies it in silence, and for a moment his shadow seems longer than it should.
+W:
+W:"You have done what was asked. The forge is ready, and a greater choice now waits."

@@ -50,13 +50,13 @@
 
 /* =========================  constants  ========================= */
 #define CURSE_MENU_LINES  3
-#define METARUN_RUNTIME_CHALLENGE_FLAGS_IDX 0
+#define METARUN_RUNTIME_CHALLENGE_FLAGS_IDX METARUN_RUNTIME_SLOT_CHALLENGE_FLAGS
 #define METARUN_CHALLENGE_DISCON_FLAG 0x01
 #define METARUN_CHALLENGE_SINGLE_FLAG 0x02
 #define METARUN_CHALLENGE_FIXED_FLAG 0x04
 #define METARUN_CHALLENGE_TULKAS_BLUNT_FLAG 0x08
 #define METARUN_CHALLENGE_TORCHLIGHT_FLAG 0x10
-#define METARUN_RUNTIME_CHALLENGE_COUNT_BASE 1
+#define METARUN_RUNTIME_CHALLENGE_COUNT_BASE METARUN_RUNTIME_SLOT_CHALLENGE_COUNT_BASE
 
 /* =========================  globals  =========================== */
 static metarun *metaruns    = NULL;
@@ -74,10 +74,86 @@ static int popcount32(u32b value)
     return count;
 }
 
+static bool metarun_header_version_at_least(const meta_file_header *header,
+                                            byte major, byte minor,
+                                            byte patch, byte extra)
+{
+    if (!header) return false;
+    if (header->version_major != major)
+        return header->version_major > major;
+    if (header->version_minor != minor)
+        return header->version_minor > minor;
+    if (header->version_patch != patch)
+        return header->version_patch > patch;
+    return header->version_extra >= extra;
+}
+
 static void metarun_sync_runtime_byte(metarun *current, int idx)
 {
     if (!current || idx < 0 || idx >= (int)N_ELEMENTS(metar.reserved_runtime)) return;
     current->reserved_runtime[idx] = metar.reserved_runtime[idx];
+}
+
+static bool metarun_runtime_slot_valid(int idx)
+{
+    return idx >= 0 && idx < (int)N_ELEMENTS(metar.reserved_runtime);
+}
+
+static void metarun_sync_branch_runtime_slots(metarun *current)
+{
+    if (!current) return;
+
+    for (int i = METARUN_RUNTIME_SLOT_BRANCH_STATE;
+         i < METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE;
+         i++) {
+        metarun_sync_runtime_byte(current, i);
+    }
+}
+
+static void metarun_clear_branch_runtime_fields(metarun *m)
+{
+    if (!m) return;
+
+    for (int i = METARUN_RUNTIME_SLOT_BRANCH_STATE;
+         i < METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE;
+         i++) {
+        if (i >= 0 && i < (int)N_ELEMENTS(m->reserved_runtime)) {
+            m->reserved_runtime[i] = 0;
+        }
+    }
+}
+
+static void metarun_sanitize_branch_fields(metarun *m)
+{
+    if (!m) return;
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_BRANCH_STATE) ||
+        !metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK)) {
+        return;
+    }
+
+    byte state = m->reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_STATE];
+    if (state >= METARUN_BRANCH_STATE_MAX) {
+        metarun_clear_branch_runtime_fields(m);
+        return;
+    }
+
+    if (state == METARUN_BRANCH_NONE) {
+        metarun_clear_branch_runtime_fields(m);
+        return;
+    }
+
+    m->reserved_runtime[METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK] &=
+        METARUN_UNLIGHT_ALLY_ALL;
+}
+
+static void metarun_prepare_branch_fields_after_load(metarun *m,
+                                                     bool file_has_branch_runtime)
+{
+    if (!m) return;
+    if (!file_has_branch_runtime) {
+        metarun_clear_branch_runtime_fields(m);
+    }
+    metarun_sanitize_branch_fields(m);
 }
 
 static void metarun_sync_quest_reserved_byte(metarun *current, int idx)
@@ -240,6 +316,7 @@ static byte *challenge_count_slot(int challenge_id)
 {
     if (challenge_id <= CHALLENGE_NONE || challenge_id > CHALLENGE_MAX_TRACKED) return NULL;
     int idx = METARUN_RUNTIME_CHALLENGE_COUNT_BASE + (challenge_id - 1);
+    if (idx >= METARUN_RUNTIME_SLOT_CHALLENGE_COUNT_LIMIT) return NULL;
     if (idx < 0 || idx >= (int)N_ELEMENTS(metar.reserved_runtime)) return NULL;
     return &metar.reserved_runtime[idx];
 }
@@ -272,6 +349,174 @@ void metarun_mark_challenge_completed(int challenge_id)
     metarun_sync_runtime_byte(current, METARUN_RUNTIME_CHALLENGE_COUNT_BASE + (challenge_id - 1));
     save_metaruns();
     log_debug("metarun_mark_challenge_completed: challenge %d completions now %d", challenge_id, *slot);
+}
+
+metarun_branch_state_type metarun_branch_state(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return METARUN_BRANCH_NONE;
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_BRANCH_STATE))
+        return METARUN_BRANCH_NONE;
+
+    byte state = metar.reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_STATE];
+    if (state >= METARUN_BRANCH_STATE_MAX)
+        return METARUN_BRANCH_NONE;
+
+    return (metarun_branch_state_type)state;
+}
+
+void metarun_set_branch_state(metarun_branch_state_type state)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_set_branch_state: no current metarun");
+        return;
+    }
+    if (state < METARUN_BRANCH_NONE || state >= METARUN_BRANCH_STATE_MAX) {
+        log_warn("metarun_set_branch_state: invalid branch state %d", state);
+        return;
+    }
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_BRANCH_STATE)) {
+        log_warn("metarun_set_branch_state: branch state slot is invalid");
+        return;
+    }
+
+    byte old_slots[METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE - METARUN_RUNTIME_SLOT_BRANCH_STATE];
+    for (int i = METARUN_RUNTIME_SLOT_BRANCH_STATE;
+         i < METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE;
+         i++) {
+        old_slots[i - METARUN_RUNTIME_SLOT_BRANCH_STATE] =
+            metar.reserved_runtime[i];
+    }
+
+    byte old_state = metar.reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_STATE];
+    metar.reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_STATE] = (byte)state;
+    metarun_sanitize_branch_fields(&metar);
+    metarun_sync_branch_runtime_slots(current);
+
+    bool changed = false;
+    for (int i = METARUN_RUNTIME_SLOT_BRANCH_STATE;
+         i < METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE;
+         i++) {
+        if (old_slots[i - METARUN_RUNTIME_SLOT_BRANCH_STATE] !=
+            metar.reserved_runtime[i]) {
+            changed = true;
+            break;
+        }
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    save_metaruns();
+    log_debug("metarun_set_branch_state: branch state %d -> %d",
+              old_state, metar.reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_STATE]);
+}
+
+byte metarun_unlight_ally_mask(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK))
+        return 0;
+
+    return metar.reserved_runtime[METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK] &
+        METARUN_UNLIGHT_ALLY_ALL;
+}
+
+void metarun_mark_unlight_ally(metarun_unlight_ally_bit ally)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_mark_unlight_ally: no current metarun");
+        return;
+    }
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK)) {
+        log_warn("metarun_mark_unlight_ally: ally mask slot is invalid");
+        return;
+    }
+
+    byte ally_bit = ((byte)ally) & METARUN_UNLIGHT_ALLY_ALL;
+    if (!ally_bit) {
+        log_warn("metarun_mark_unlight_ally: invalid ally bit 0x%02x", ally);
+        return;
+    }
+
+    byte old_mask = metar.reserved_runtime[METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK] &
+        METARUN_UNLIGHT_ALLY_ALL;
+    byte new_mask = old_mask | ally_bit;
+
+    metar.reserved_runtime[METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK] = new_mask;
+    metarun_sync_runtime_byte(current, METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK);
+
+    if (new_mask == old_mask) {
+        return;
+    }
+
+    save_metaruns();
+    log_debug("metarun_mark_unlight_ally: ally mask 0x%02x -> 0x%02x",
+              old_mask, new_mask);
+}
+
+static int metarun_light_scene_counter_slot(metarun_light_scene_id scene,
+                                            metarun_light_scene_result result)
+{
+    if (scene < 0 || scene >= METARUN_LIGHT_SCENE_MAX)
+        return -1;
+
+    switch (result) {
+        case METARUN_LIGHT_SCENE_RESULT_SUCCESS:
+            return METARUN_RUNTIME_SLOT_LIGHT_SCENE_SUCCESS_BASE + scene;
+        case METARUN_LIGHT_SCENE_RESULT_FALL:
+            return METARUN_RUNTIME_SLOT_LIGHT_SCENE_FALL_BASE + scene;
+        default:
+            return -1;
+    }
+}
+
+void metarun_light_scene_record(metarun_light_scene_id scene,
+                                metarun_light_scene_result result)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_light_scene_record: no current metarun");
+        return;
+    }
+
+    int slot = metarun_light_scene_counter_slot(scene, result);
+    if (!metarun_runtime_slot_valid(slot)) {
+        log_warn("metarun_light_scene_record: invalid scene/result (%d/%d)",
+                 scene, result);
+        return;
+    }
+
+    byte *counter = &metar.reserved_runtime[slot];
+    if (*counter < 255) {
+        (*counter)++;
+    }
+    metarun_sync_runtime_byte(current, slot);
+    save_metaruns();
+    log_debug("metarun_light_scene_record: scene %d result %d count now %d",
+              scene, result, *counter);
+}
+
+byte metarun_light_scene_count(metarun_light_scene_id scene,
+                               metarun_light_scene_result result)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+
+    int slot = metarun_light_scene_counter_slot(scene, result);
+    if (!metarun_runtime_slot_valid(slot))
+        return 0;
+
+    return metar.reserved_runtime[slot];
+}
+
+bool metarun_manwe_quest_unlocked(void)
+{
+    return metarun_branch_state() != METARUN_BRANCH_NONE;
 }
 
 int metarun_mandos_resurrection_charges(void)
@@ -1556,6 +1801,7 @@ static bool sync_current_metarun_slot(bool stamp_time)
     }
 
     metarun_clamp_and_sync_quests(&metar);
+    metarun_sanitize_branch_fields(&metar);
     metaruns[current_run] = metar;
     return true;
 }
@@ -1886,6 +2132,8 @@ errr load_metaruns(bool create_if_missing)
                  header.version_major, header.version_minor, header.version_patch, header.version_extra,
                  METARUN_FILE_VERSION_MAJOR, METARUN_FILE_VERSION_MINOR, METARUN_FILE_VERSION_PATCH, METARUN_FILE_VERSION_EXTRA);
     }
+    bool file_has_branch_runtime =
+        metarun_header_version_at_least(&header, 0, 9, 7, 3);
 
     metarun_max = header.entry_count;
     size_t payload = (file_size >= (int)sizeof(meta_file_header))
@@ -1917,6 +2165,7 @@ errr load_metaruns(bool create_if_missing)
                     log_debug("Cleared pending blessing choices for metarun %d (loaded from v0.9.0.0)", i);
                 }
                 metarun_clamp_and_sync_quests(&metaruns[i]);
+                metarun_prepare_branch_fields_after_load(&metaruns[i], file_has_branch_runtime);
                 metarun_sanitize_blessing_economy(&metaruns[i]);
                 metarun_sanitize_major_blessing_bits(&metaruns[i]);
             }
@@ -1925,6 +2174,7 @@ errr load_metaruns(bool create_if_missing)
             sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v11_compact));
             for (s16b i = 0; i < metarun_max; i++) {
                 metarun_from_v11_compact(&metaruns[i], &legacy[i]);
+                metarun_prepare_branch_fields_after_load(&metaruns[i], file_has_branch_runtime);
             }
             legacy = mem_free(legacy);
             log_info("Loaded %d metarun entries from compact layout (8 quest slots)", metarun_max);
@@ -1933,6 +2183,7 @@ errr load_metaruns(bool create_if_missing)
             sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v10));
             for (s16b i = 0; i < metarun_max; i++) {
                 metarun_from_v10(&metaruns[i], &legacy[i]);
+                metarun_prepare_branch_fields_after_load(&metaruns[i], file_has_branch_runtime);
                 metarun_sanitize_major_blessing_bits(&metaruns[i]);
             }
             legacy = mem_free(legacy);
@@ -1941,6 +2192,7 @@ errr load_metaruns(bool create_if_missing)
             sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v9));
             for (s16b i = 0; i < metarun_max; i++) {
                 metarun_from_v9(&metaruns[i], &legacy[i]);
+                metarun_prepare_branch_fields_after_load(&metaruns[i], file_has_branch_runtime);
                 metarun_sanitize_major_blessing_bits(&metaruns[i]);
             }
             legacy = mem_free(legacy);
@@ -1949,6 +2201,7 @@ errr load_metaruns(bool create_if_missing)
             sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v8));
             for (s16b i = 0; i < metarun_max; i++) {
                 metarun_from_v8(&metaruns[i], &legacy[i]);
+                metarun_prepare_branch_fields_after_load(&metaruns[i], file_has_branch_runtime);
                 metarun_sanitize_major_blessing_bits(&metaruns[i]);
             }
             legacy = mem_free(legacy);
@@ -2023,10 +2276,14 @@ errr load_metaruns(bool create_if_missing)
 
     metar = metaruns[current_run];
     metarun_clamp_and_sync_quests(&metar);
+    metarun_sanitize_branch_fields(&metar);
     metaruns[current_run].completed_quests = metar.completed_quests;
     memcpy(metaruns[current_run].quest_completion_counts,
            metar.quest_completion_counts,
            sizeof(metar.quest_completion_counts));
+    memcpy(metaruns[current_run].reserved_runtime,
+           metar.reserved_runtime,
+           sizeof(metar.reserved_runtime));
     metarun_sanitize_blessing_economy(&metar);
     metaruns[current_run].fallen_score_pool = metar.fallen_score_pool;
     metaruns[current_run].blessing_points = metar.blessing_points;
@@ -2218,6 +2475,7 @@ errr save_metaruns(void)
               current_run, metar.id, metar.deaths, metar.silmarils, metar.score);
               
     metarun_clamp_and_sync_quests(&metar);
+    metarun_sanitize_branch_fields(&metar);
     metar.last_played      = current_time;
     metaruns[current_run] = metar;            /* safe: array is valid */
     

@@ -52,15 +52,15 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.7.2"
+#define VERSION_STRING "0.9.7.3"
 /*
- * Version components (0.9.7.2).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.7.3).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 7
-#define VERSION_EXTRA 2   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 3   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
@@ -4052,8 +4052,21 @@ typedef struct quest_mapping {
 #define QUEST_ID_TULKAS_MORGOTH 14
 #define QUEST_ID_VARDA_SHADOW 15
 #define QUEST_ID_VARDA_UNGOLIANT 16
+#define QUEST_ID_MANWE_FORGE 17
 #define OROME_GREAT_HUNT_TARGET_COUNT 6
 #define OROME_GREAT_HUNT_TARGET_MASK 0x3F
+
+/* Run-local Manwe deception quest flags (player_type.manwe_deception_flags). */
+#define MANWE_DECEPTION_MANWE_APPEARED_OFFERED    0x0001
+#define MANWE_DECEPTION_DEPTH23_VAULT_GENERATED   0x0002
+#define MANWE_DECEPTION_UNGOLIANT_SLAIN           0x0004
+#define MANWE_DECEPTION_LIGHT_OF_TREES_ACQUIRED   0x0008
+#define MANWE_DECEPTION_SILMARIL_FORGED           0x0010
+#define MANWE_DECEPTION_SAURON_REVEALED           0x0020
+#define MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED   0x0040
+#define MANWE_DECEPTION_SAURON_BARGAIN_REFUSED    0x0080
+#define MANWE_DECEPTION_MORGOTH_CHASE_TRIGGERED   0x0100
+#define MANWE_DECEPTION_FLAG_MASK                 0x01FF
 
 /* Generic quest state helpers for multi-stage quests. */
 #define QUEST_STATE_NOT_STARTED    0
@@ -4081,7 +4094,8 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_TULKAS_ORCS, "Tulkas, Orc-Bane" },
     { QUEST_ID_TULKAS_MORGOTH, "Tulkas, Black Foe's Scourge" },
     { QUEST_ID_VARDA_SHADOW, "Varda, Shadow's Bastion" },
-    { QUEST_ID_VARDA_UNGOLIANT, "Varda, Gloomweaver's Doom" }
+    { QUEST_ID_VARDA_UNGOLIANT, "Varda, Gloomweaver's Doom" },
+    { QUEST_ID_MANWE_FORGE, "Manwe, The Forge of Grond" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))

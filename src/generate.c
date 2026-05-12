@@ -1973,6 +1973,8 @@ static int get_metarun_quest_id(u32b id_name_offset) {
         return METARUN_QUEST_VARDA_SHADOW;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_VARDA_UNGOLIANT") == 0) {
         return METARUN_QUEST_VARDA_UNGOLIANT;
+    } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_MANWE") == 0) {
+        return METARUN_QUEST_MANWE;
     }
     
     return 0; /* Unknown metarun quest ID */
