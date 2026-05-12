@@ -2439,6 +2439,10 @@
 #define MFLAG_HIT_BY_RANGED 0x00020000 /* Monster has been hit with a spell */
 #define MFLAG_HIT_BY_MELEE                                                     \
     0x00040000 /* Monster was just meleed by player last turn */
+#define MFLAG_UNLIGHT_ALLY_VAULT                                               \
+    0x00080000 /* Monster was placed in an Unlight ally vault */
+#define MFLAG_UNLIGHT_ALLY_BOSS                                                \
+    0x00100000 /* Monster is the persuaded Unlight ally boss */
 
 /*
  * New monster race bit flags
@@ -4089,6 +4093,8 @@ typedef struct quest_mapping {
 #define QUEST_RESERVED_LIGHT_SCENE_ID       18
 #define QUEST_RESERVED_LIGHT_SCENE_RESOLVED 19
 #define QUEST_RESERVED_LIGHT_SCENE_STARTED  20
+#define QUEST_RESERVED_LIGHT_SCENE_FLAGS    21
+#define LIGHT_SCENE_FLAG_GONDOLIN_GOTHMOG_SLAIN 0x01
 #define QUEST_FLAG_GLOBAL          0x01
 #define QUEST_FLAG_OPTIONAL_CHAIN  0x02
 

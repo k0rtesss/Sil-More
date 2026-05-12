@@ -31,6 +31,36 @@ static bool quest_race_name_contains(const monster_race* r_ptr, cptr needle);
 static bool quest_dragon_kill_counts(const monster_race* r_ptr);
 static void check_tulkas_morgoth_damage(monster_type* m_ptr, int who);
 static void manwe_quest_on_sauron_slain(void);
+static metarun_light_scene_id manwe_light_cutscene_scene_for_run(void);
+
+static bool manwe_light_cutscene_gondolin_gothmog_slain(void)
+{
+    return p_ptr &&
+        (p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_FLAGS] &
+            LIGHT_SCENE_FLAG_GONDOLIN_GOTHMOG_SLAIN) != 0;
+}
+
+static void manwe_light_cutscene_mark_gondolin_gothmog_slain(void)
+{
+    if (!p_ptr)
+        return;
+
+    p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_FLAGS] |=
+        LIGHT_SCENE_FLAG_GONDOLIN_GOTHMOG_SLAIN;
+}
+
+static bool manwe_light_cutscene_blocks_vallach_death(int r_idx)
+{
+    if (!p_ptr || r_idx != R_IDX_VALLACH)
+        return false;
+    if (!story_branch_is_light_cutscene_run())
+        return false;
+    if (manwe_light_cutscene_scene_for_run() !=
+        METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN)
+        return false;
+
+    return !manwe_light_cutscene_gondolin_gothmog_slain();
+}
 
 static void look_prt(bool use_story_font, cptr text, int row, int col)
 {
@@ -3105,6 +3135,7 @@ void monster_death(int m_idx)
         manwe_quest_on_ungoliant_slain(m_ptr->fy, m_ptr->fx);
     if (m_ptr->r_idx == R_IDX_GORTHAUR)
         manwe_quest_on_sauron_slain();
+    manwe_unlight_on_ally_defeated(m_ptr);
     
     /* Check for Orome quest completion */
     check_orome_quest_completion();
@@ -3286,6 +3317,16 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
     /* It is dead now */
     if (m_ptr->hp <= 0)
     {
+        if (manwe_light_cutscene_blocks_vallach_death(m_ptr->r_idx))
+        {
+            m_ptr->hp = 1;
+            msg_print("Vallach's sudden flame recoils; Gothmog must fall before the last fire is faced.");
+            message_flush();
+            if (p_ptr->health_who == m_idx)
+                p_ptr->redraw |= (PR_HEALTHBAR);
+            return (false);
+        }
+
         if (m_ptr->r_idx == R_IDX_MORGOTH && !p_ptr->morgoth_second_wind &&
             !story_branch_is_light_cutscene_run())
         {
@@ -9538,9 +9579,9 @@ static bool manwe_light_cutscene_varda_boon(void)
 
 static bool manwe_light_cutscene_aule_boon(void)
 {
-    /* Aule currently has only the forge trial in data; treat that rewarded
-     * quest as the craft-line aid until a later Aule challenge exists. */
-    return metarun_quest_completion_count(METARUN_QUEST_AULE) > 0;
+    /* Stage 8 gates help on completed challenge lines. Aule has no tracked
+     * challenge yet, so this remains withheld until that line exists. */
+    return false;
 }
 
 static void manwe_light_cutscene_apply_boons(cptr lines[], int *line_count,
@@ -9621,13 +9662,19 @@ void manwe_light_cutscene_start_if_needed(void)
     p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_ID] = (byte)scene;
     p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_RESOLVED] = 0;
     p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_STARTED] = 1;
+    p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_FLAGS] = 0;
 
     strnfmt(intro, sizeof(intro),
             "You take up the mantle of %s, not as a new life but as an echo held in light.",
             metarun_light_scene_mantle(scene));
-    strnfmt(objective, sizeof(objective),
-            "Stand against %s. Victory or fall, the next memory will follow.",
-            metarun_light_scene_boss_name(scene));
+    if (scene == METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN) {
+        strnfmt(objective, sizeof(objective),
+                "Cast down Gothmog first, then face Vallach's sudden flame at the end.");
+    } else {
+        strnfmt(objective, sizeof(objective),
+                "Stand against %s. Victory or fall, the next memory will follow.",
+                metarun_light_scene_boss_name(scene));
+    }
 
     lines[line_count++] = intro;
     lines[line_count++] = objective;
@@ -9678,6 +9725,19 @@ bool manwe_light_cutscene_on_monster_slain(int r_idx)
         return true;
 
     metarun_light_scene_id scene = manwe_light_cutscene_scene_for_run();
+    if (scene == METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN &&
+        r_idx == R_IDX_GOTHMOG)
+    {
+        if (!manwe_light_cutscene_gondolin_gothmog_slain()) {
+            manwe_light_cutscene_mark_gondolin_gothmog_slain();
+            msg_print("Gothmog falls; the last flame of Gondolin now answers.");
+            do_cmd_note("Gothmog fell in the Light endgame echo of Gondolin.",
+                        p_ptr->depth);
+            log_info("Light endgame Gondolin prerequisite fulfilled: Gothmog slain");
+        }
+        return false;
+    }
+
     if (r_idx != metarun_light_scene_boss_r_idx(scene))
         return false;
 
@@ -10420,6 +10480,93 @@ void manwe_light_continuation_if_needed(void)
     p_ptr->redraw |= PR_MAP;
     p_ptr->window |= PW_MESSAGE;
     log_info("Manwe quest: Light continuation Eagle message shown");
+}
+
+static metarun_unlight_ally_bit manwe_unlight_ally_for_r_idx(int r_idx)
+{
+    switch (r_idx)
+    {
+        case R_IDX_GOTHMOG:
+            return METARUN_UNLIGHT_ALLY_GOTHMOG;
+        case R_IDX_ANCALAGON:
+            return METARUN_UNLIGHT_ALLY_ANCALAGON;
+        case R_IDX_GLAURUNG:
+            return METARUN_UNLIGHT_ALLY_GLAURUNG;
+        default:
+            return 0;
+    }
+}
+
+static cptr manwe_unlight_ally_display_name(metarun_unlight_ally_bit ally)
+{
+    switch (ally)
+    {
+        case METARUN_UNLIGHT_ALLY_GOTHMOG:
+            return "Gothmog";
+        case METARUN_UNLIGHT_ALLY_ANCALAGON:
+            return "Ancalagon";
+        case METARUN_UNLIGHT_ALLY_GLAURUNG:
+            return "Glaurung";
+        default:
+            return "the defeated power";
+    }
+}
+
+void manwe_unlight_on_ally_defeated(monster_type* m_ptr)
+{
+    cptr ally_name;
+    cptr texts[4];
+    char line0[160];
+    char line1[160];
+    char line2[160];
+    char note[160];
+    metarun_unlight_ally_bit ally;
+
+    if (!p_ptr || !m_ptr)
+        return;
+    if (!story_branch_is_unlight_ally_run())
+        return;
+    if (!(m_ptr->mflag & MFLAG_UNLIGHT_ALLY_BOSS))
+        return;
+
+    ally = manwe_unlight_ally_for_r_idx(m_ptr->r_idx);
+    if (!ally)
+        return;
+    if (metarun_unlight_ally_mask() & ally)
+        return;
+
+    ally_name = manwe_unlight_ally_display_name(ally);
+    strnfmt(line0, sizeof(line0),
+        "%s is beaten down, yet the last stroke is stayed.", ally_name);
+    strnfmt(line1, sizeof(line1),
+        "Sauron's promise finds a crack in old service, and %s turns from Morgoth's throne.",
+        ally_name);
+    strnfmt(line2, sizeof(line2),
+        "A placeholder oath waits in the Unlight path until the ally oaths are designed.");
+
+    texts[0] = line0;
+    texts[1] = line1;
+    texts[2] = line2;
+    quest_typewriter_menu("An Ally In Unlight", texts, 3, TERM_RED, TERM_WHITE);
+
+    metarun_mark_unlight_ally(ally);
+    metarun_note_unlight_ally_oath_hook(ally);
+
+    strnfmt(note, sizeof(note), "Persuaded %s to turn against Morgoth.",
+        ally_name);
+    do_cmd_note(note, p_ptr->depth);
+
+    if (metarun_unlight_ally_mask() == METARUN_UNLIGHT_ALLY_ALL)
+    {
+        msg_print("All three powers have turned. The Gates of Angband wait.");
+        do_cmd_note("All Unlight allies were persuaded; the Gates of Angband wait.",
+            p_ptr->depth);
+    }
+
+    p_ptr->redraw |= PR_MAP;
+    p_ptr->window |= PW_MESSAGE;
+    log_info("Unlight ally persuaded: %s (mask=0x%02x)",
+        ally_name, metarun_unlight_ally_mask());
 }
 
 void manwe_quest_on_ungoliant_slain(int y, int x)

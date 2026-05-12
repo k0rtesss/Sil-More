@@ -391,11 +391,7 @@ static void song_duel_reset_monster_stack(monster_type* m_ptr, int song)
 
 static int song_duel_armour_dice(const monster_type* m_ptr)
 {
-    const monster_race* r_ptr = &r_info[m_ptr->r_idx];
-    int dice = r_ptr->pd - m_ptr->song_armor_dice_penalty;
-
-    if (dice < 0)
-        dice = 0;
+    int dice = monster_base_armour_dice(m_ptr);
 
     dice += curse_flag_delta_cur(CUR_MON_ARM_DICE);
 
@@ -433,6 +429,8 @@ static void song_duel_blow_damage_dice(
 
     if (*ds > 0 && m_ptr->blow_ds_reduction[blow] > 0)
         *ds = MAX(1, *ds - m_ptr->blow_ds_reduction[blow]);
+
+    monster_scale_blow_damage(m_ptr, dd, ds);
 }
 
 static void song_duel_damage_dice_summary(

@@ -190,6 +190,41 @@ void delete_monster_idx(int i)
 /*
  * Return the monster's base protection sides after permanent reductions.
  */
+int monster_unlight_ally_scale_percent(const monster_type* m_ptr)
+{
+    if (!m_ptr)
+        return 100;
+
+    if (m_ptr->mflag & MFLAG_UNLIGHT_ALLY_BOSS)
+        return 150;
+
+    if (m_ptr->mflag & MFLAG_UNLIGHT_ALLY_VAULT)
+        return 130;
+
+    return 100;
+}
+
+int monster_scaled_value(const monster_type* m_ptr, int value)
+{
+    int percent = monster_unlight_ally_scale_percent(m_ptr);
+
+    if (percent <= 100 || value <= 0)
+        return value;
+
+    return (int)(((long)value * (long)percent + 50L) / 100L);
+}
+
+int monster_base_armour_dice(const monster_type* m_ptr)
+{
+    const monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    int base = r_ptr->pd - m_ptr->song_armor_dice_penalty;
+
+    if (base < 0)
+        base = 0;
+
+    return monster_scaled_value(m_ptr, base);
+}
+
 int monster_base_armour_sides(const monster_type* m_ptr)
 {
     const monster_race* r_ptr = &r_info[m_ptr->r_idx];
@@ -202,6 +237,17 @@ int monster_base_armour_sides(const monster_type* m_ptr)
         return 0;
 
     return base - m_ptr->armor_ps_reduction;
+}
+
+void monster_scale_blow_damage(const monster_type* m_ptr, int* dd, int* ds)
+{
+    if (!dd || !ds)
+        return;
+
+    if (*dd > 1)
+        *dd = monster_scaled_value(m_ptr, *dd);
+    else if (*ds > 1)
+        *ds = monster_scaled_value(m_ptr, *ds);
 }
 
 int monster_song_hp_loss(const monster_type* m_ptr)
@@ -1355,7 +1401,7 @@ int monster_skill(monster_type* m_ptr, int skill_type)
         }
     }
 
-    return (skill);
+    return monster_scaled_value(m_ptr, skill);
 }
 
 /*
@@ -1408,7 +1454,7 @@ int monster_stat(monster_type* m_ptr, int stat_type)
         break;
     }
 
-    return (stat);
+    return monster_scaled_value(m_ptr, stat);
 }
 
 /*

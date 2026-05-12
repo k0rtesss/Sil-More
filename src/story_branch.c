@@ -126,6 +126,7 @@ void story_branch_prepare_new_character(void)
                 (byte)metarun_light_scene_current();
             p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_RESOLVED] = 0;
             p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_STARTED] = 0;
+            p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_FLAGS] = 0;
             log_info("Story branch: light endgame cutscene run active for new character");
             break;
         case METARUN_BRANCH_UNLIGHT_CHOSEN:

@@ -145,6 +145,14 @@ static void metarun_sanitize_branch_fields(metarun *m)
     m->reserved_runtime[METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK] &=
         METARUN_UNLIGHT_ALLY_ALL;
 
+    if (state == METARUN_BRANCH_UNLIGHT_CHOSEN &&
+        m->reserved_runtime[METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK] ==
+            METARUN_UNLIGHT_ALLY_ALL) {
+        m->reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_STATE] =
+            METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE;
+        state = METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE;
+    }
+
     if (metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS)) {
         m->reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS] &=
             METARUN_LIGHT_CONTINUATION_EAGLE_SEEN;
@@ -604,6 +612,13 @@ void metarun_mark_unlight_ally(metarun_unlight_ally_bit ally)
     save_metaruns();
     log_debug("metarun_mark_unlight_ally: ally mask 0x%02x -> 0x%02x",
               old_mask, new_mask);
+
+    if (new_mask == METARUN_UNLIGHT_ALLY_ALL &&
+        metarun_branch_state() == METARUN_BRANCH_UNLIGHT_CHOSEN)
+    {
+        metarun_set_branch_state(METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE);
+        log_info("Unlight allies complete; final battle branch activated");
+    }
 }
 
 static cptr metarun_unlight_ally_name(metarun_unlight_ally_bit ally)

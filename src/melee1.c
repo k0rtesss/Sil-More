@@ -720,6 +720,7 @@ bool make_attack_normal(monster_type* m_ptr)
             else
                 ds = MAX(1, ds - ds_reduction);
         }
+        monster_scale_blow_damage(m_ptr, &dd, &ds);
 
         /* Hack -- no more attacks */
         // if (!method) break;  // Sil-y: not needed as this is no longer a loop
@@ -2345,7 +2346,7 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
     /*** Get some info. ***/
 
     /* Extract the monster's spell power.  Must be at least 1. */
-    spower = MAX(1, r_ptr->spell_power);
+    spower = MAX(1, monster_scaled_value(m_ptr, r_ptr->spell_power));
 
     /* Get the monster name (or "it") */
     monster_desc(m_name, sizeof(m_name), m_ptr, 0x00);
@@ -2375,6 +2376,8 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
     case 96 + 1:
     {
         int dd = (attack == 96 + 0) ? 1 : 2;
+        int ds = get_sides(attack);
+        monster_scale_blow_damage(m_ptr, &dd, &ds);
 
         disturb(1, 0);
         if (spower < 2)
@@ -2392,7 +2395,7 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
                 msg_format("%^s fires an arrow.", m_name);
         }
 
-        mon_bolt(m_idx, GF_ARROW, dd, get_sides(attack), -1);
+        mon_bolt(m_idx, GF_ARROW, dd, ds, -1);
 
         break;
     }
@@ -2408,7 +2411,8 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         else
             msg_format("%^s hurls a boulder at you.", m_name);
 
-        mon_bolt(m_idx, GF_BOULDER, 6, get_sides(attack), -1);
+        mon_bolt(m_idx, GF_BOULDER,
+            monster_scaled_value(m_ptr, 6), get_sides(attack), -1);
 
         break;
     }
@@ -2421,8 +2425,8 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
             msg_format("%^s breathes.", m_name);
         else
             msg_format("%^s breathes fire.", m_name);
-        mon_arc(m_idx, GF_FIRE, true, r_ptr->spell_power, get_sides(attack), -1,
-            r_ptr->spell_power / 2, 60);
+        mon_arc(m_idx, GF_FIRE, true, spower, get_sides(attack), -1,
+            spower / 2, 60);
 
         /* Make a lot of noise */
         update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
@@ -2439,8 +2443,8 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
             msg_format("%^s breathes.", m_name);
         else
             msg_format("%^s breathes frost.", m_name);
-        mon_arc(m_idx, GF_COLD, true, r_ptr->spell_power, get_sides(attack), -1,
-            r_ptr->spell_power / 2, 60);
+        mon_arc(m_idx, GF_COLD, true, spower, get_sides(attack), -1,
+            spower / 2, 60);
 
         /* Make a lot of noise */
         update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
@@ -2457,8 +2461,8 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
             msg_format("%^s breathes.", m_name);
         else
             msg_format("%^s breathes poisonous gas.", m_name);
-        mon_arc(m_idx, GF_POIS, true, r_ptr->spell_power, get_sides(attack), -1,
-            r_ptr->spell_power / 2, 90);
+        mon_arc(m_idx, GF_POIS, true, spower, get_sides(attack), -1,
+            spower / 2, 90);
 
         /* Make a lot of noise */
         update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
@@ -2474,8 +2478,8 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         if (blind)
             msg_format("%^s breathes.", m_name);
         msg_format("%^s breathes darkness.", m_name);
-        mon_arc(m_idx, GF_DARK, true, r_ptr->spell_power, get_sides(attack), -1,
-            r_ptr->spell_power / 2, 60);
+        mon_arc(m_idx, GF_DARK, true, spower, get_sides(attack), -1,
+            spower / 2, 60);
 
         /* Make a lot of noise */
         update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);

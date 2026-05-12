@@ -13501,7 +13501,8 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             }
 
             // chasms can't occur on the final level
-            if ((*t == '7') && (p_ptr->depth >= run_final_depth()))
+            if ((*t == '7') && (p_ptr->depth >= run_final_depth()) &&
+                !story_branch_is_unlight_ally_run())
             {
                 return (false);
             }
@@ -15262,6 +15263,74 @@ static bool vault_template_is_manwe_forge(vault_type *v) {
     return (strstr(name, "Forge of Grond") != NULL);
 }
 
+typedef struct unlight_ally_vault_def {
+    metarun_unlight_ally_bit ally;
+    int r_idx;
+    char token;
+    const char* label;
+} unlight_ally_vault_def;
+
+static const unlight_ally_vault_def unlight_ally_vaults[] = {
+    { METARUN_UNLIGHT_ALLY_GOTHMOG, R_IDX_GOTHMOG, 'R', "Gothmog" },
+    { METARUN_UNLIGHT_ALLY_ANCALAGON, R_IDX_ANCALAGON, 'K', "Ancalagon" },
+    { METARUN_UNLIGHT_ALLY_GLAURUNG, R_IDX_GLAURUNG, 'D', "Glaurung" },
+};
+
+static bool vault_template_has_symbol(vault_type *v, char symbol)
+{
+    if (!v || v->text == 0 || v->hgt == 0)
+        return false;
+
+    char *s = v_text + v->text;
+    for (int row = 0; row < v->hgt; ++row) {
+        if (strchr(s, symbol))
+            return true;
+        s += strlen(s) + 1;
+    }
+
+    return false;
+}
+
+static const unlight_ally_vault_def* choose_unlight_ally_vault(void)
+{
+    const unlight_ally_vault_def* choices[N_ELEMENTS(unlight_ally_vaults)];
+    int count = 0;
+    byte mask = metarun_unlight_ally_mask();
+
+    for (size_t i = 0; i < N_ELEMENTS(unlight_ally_vaults); i++) {
+        if (mask & unlight_ally_vaults[i].ally)
+            continue;
+        choices[count++] = &unlight_ally_vaults[i];
+    }
+
+    if (count == 0) {
+        if (metarun_branch_state() == METARUN_BRANCH_UNLIGHT_CHOSEN) {
+            metarun_set_branch_state(METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE);
+            log_info("Unlight ally vault: all allies already persuaded; final battle activated");
+        }
+        return NULL;
+    }
+
+    return choices[rand_int(count)];
+}
+
+static bool vault_template_matches_unlight_ally(
+    vault_type *v, const unlight_ally_vault_def* ally)
+{
+    if (!v || !ally)
+        return false;
+    if (v->typ != 8)
+        return false;
+    if (v->flags & VLT_QUEST)
+        return false;
+    if (v->depth > p_ptr->depth)
+        return false;
+    if (v->max_depth != 0 && p_ptr->depth > v->max_depth)
+        return false;
+
+    return vault_template_has_symbol(v, ally->token);
+}
+
 /* Global variables to store quest vault coordinates for monitoring */
 int qv_stored_y1 = -1, qv_stored_x1 = -1, qv_stored_y2 = -1, qv_stored_x2 = -1;
 bool qv_placed_this_level = false;  /* Track if quest vault actually placed this level */
@@ -15512,6 +15581,166 @@ static void finalize_manwe_forge_placement(int y, int x, vault_type *qv)
     pending_quest_states.manwe_forge_level = p_ptr->depth;
     pending_quest_states.manwe_forge_y = forge_y;
     pending_quest_states.manwe_forge_x = forge_x;
+}
+
+static void record_forced_greater_vault(s16b v_idx)
+{
+    if (v_idx <= 0)
+        return;
+
+    for (int i = 0; i < MAX_GREATER_VAULTS; i++)
+    {
+        if (p_ptr->greater_vaults[i] == v_idx)
+            return;
+        if (p_ptr->greater_vaults[i] == 0)
+        {
+            p_ptr->greater_vaults[i] = v_idx;
+            return;
+        }
+    }
+}
+
+static void scale_unlight_ally_vault_monster(monster_type* m_ptr, bool boss)
+{
+    int old_percent = monster_unlight_ally_scale_percent(m_ptr);
+
+    m_ptr->mflag |= MFLAG_UNLIGHT_ALLY_VAULT;
+    if (boss)
+        m_ptr->mflag |= MFLAG_UNLIGHT_ALLY_BOSS;
+
+    int new_percent = monster_unlight_ally_scale_percent(m_ptr);
+    if (new_percent <= old_percent)
+        return;
+
+    if (old_percent < 1)
+        old_percent = 100;
+
+    m_ptr->maxhp = (s16b)MAX(1,
+        ((long)m_ptr->maxhp * (long)new_percent + old_percent / 2) /
+            old_percent);
+    m_ptr->hp = (s16b)MAX(1,
+        ((long)m_ptr->hp * (long)new_percent + old_percent / 2) /
+            old_percent);
+    if (m_ptr->hp > m_ptr->maxhp)
+        m_ptr->hp = m_ptr->maxhp;
+}
+
+static bool finalize_unlight_ally_vault_placement(
+    int y, int x, vault_type *qv, s16b v_idx,
+    const unlight_ally_vault_def* ally)
+{
+    int y1 = y - qv->hgt / 2;
+    int x1 = x - qv->wid / 2;
+    int y2 = y1 + qv->hgt - 1;
+    int x2 = x1 + qv->wid - 1;
+    int scaled = 0;
+    bool boss_found = false;
+
+    remember_quest_vault_bounds(y, x, qv);
+    record_forced_greater_vault(v_idx);
+
+    if (mark_g_vault(y, x, qv->hgt, qv->wid))
+    {
+        SDL_strlcpy(g_vault_name, v_name + qv->name, sizeof(g_vault_name));
+    }
+
+    for (int yy = y1; yy <= y2; yy++)
+    {
+        for (int xx = x1; xx <= x2; xx++)
+        {
+            int m_idx;
+            monster_type* m_ptr;
+            bool boss;
+
+            if (!in_bounds_fully(yy, xx))
+                continue;
+
+            m_idx = cave_m_idx[yy][xx];
+            if (m_idx <= 0)
+                continue;
+
+            m_ptr = &mon_list[m_idx];
+            boss = (m_ptr->r_idx == ally->r_idx);
+            scale_unlight_ally_vault_monster(m_ptr, boss);
+            scaled++;
+            if (boss)
+                boss_found = true;
+        }
+    }
+
+    if (!boss_found) {
+        log_warn("Unlight ally vault: placed '%s' without expected boss %s",
+            v_name + qv->name, ally->label);
+        return false;
+    }
+
+    level_gen_debug_activate_quest_vault_name(v_name + qv->name);
+    genlog_quest("UNLIGHT ALLY VAULT PLACED: '%s' for %s at (%d,%d), scaled=%d",
+        v_name + qv->name, ally->label, y, x, scaled);
+    log_info("Unlight ally vault: placed %s vault '%s' at depth %d; scaled %d monsters",
+        ally->label, v_name + qv->name, p_ptr->depth, scaled);
+
+    return true;
+}
+
+static bool place_unlight_ally_vault(void)
+{
+    const unlight_ally_vault_def* ally = choose_unlight_ally_vault();
+    vault_type* qv_ptr = NULL;
+    s16b qv_idx = 0;
+    int y, x;
+
+    if (!ally)
+        return true;
+
+    for (int i = 0; i < z_info->v_max; i++)
+    {
+        vault_type* v_ptr = &v_info[i];
+        if (!vault_template_matches_unlight_ally(v_ptr, ally))
+            continue;
+
+        qv_ptr = v_ptr;
+        qv_idx = (s16b)i;
+        break;
+    }
+
+    if (!qv_ptr) {
+        log_warn("Unlight ally vault: no eligible vault template found for %s at depth %d",
+            ally->label, p_ptr->depth);
+        return false;
+    }
+
+    level_gen_debug_note_greater_vault_name(v_name + qv_ptr->name);
+
+    int center_y = p_ptr->cur_map_hgt / 2;
+    int center_x = p_ptr->cur_map_wid / 2;
+
+    for (int attempts = 0; attempts < 50; attempts++) {
+        y = center_y + rand_range(-p_ptr->cur_map_hgt / 8, p_ptr->cur_map_hgt / 8);
+        x = center_x + rand_range(-p_ptr->cur_map_wid / 8, p_ptr->cur_map_wid / 8);
+
+        y = MAX(qv_ptr->hgt / 2 + 3, MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+        x = MAX(qv_ptr->wid / 2 + 3, MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+        if (place_room_forced(y, x, qv_ptr)) {
+            return finalize_unlight_ally_vault_placement(
+                y, x, qv_ptr, qv_idx, ally);
+        }
+    }
+
+    log_trace("Unlight ally vault: random placement failed for '%s', scanning full map",
+        v_name + qv_ptr->name);
+    if (place_room_forced_exhaustive(qv_ptr, &y, &x))
+    {
+        return finalize_unlight_ally_vault_placement(
+            y, x, qv_ptr, qv_idx, ally);
+    }
+
+    log_warn("Unlight ally vault: failed to place '%s' for %s",
+        v_name + qv_ptr->name, ally->label);
+    genlog_quest("UNLIGHT ALLY VAULT FAILED: '%s' for %s could not be placed",
+        v_name + qv_ptr->name, ally->label);
+    return false;
 }
 
 /* Force placement of the Orc Stronghold quest vault when scheduled. */
@@ -19272,7 +19501,9 @@ static bool cave_gen(void)
                  is_guaranteed_forge_level ? "true" : "false");
     }
 
-    if (story_branch_is_manwe_deception_run() && current_depth_is_final_depth())
+    if ((story_branch_is_manwe_deception_run() ||
+         story_branch_is_unlight_ally_run()) &&
+        current_depth_is_final_depth())
     {
         is_guaranteed_forge_level = false;
     }
@@ -19317,6 +19548,17 @@ static bool cave_gen(void)
             return false;
         }
         log_trace("Manwe quest: === FORGE OF GROND SUCCESS === Placed successfully");
+    }
+
+    if (story_branch_is_unlight_ally_run() && current_depth_is_final_depth())
+    {
+        log_trace("Unlight ally vault: === FORCE PLACEMENT === Starting at depth %d",
+            p_ptr->depth);
+        if (!place_unlight_ally_vault()) {
+            log_trace("Unlight ally vault: === FAILED === Regenerating level");
+            return false;
+        }
+        log_trace("Unlight ally vault: === SUCCESS === Placed successfully");
     }
 
     if (allow_valar_quests &&

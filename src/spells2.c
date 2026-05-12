@@ -3548,7 +3548,6 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
             else if (cave_m_idx[y][x] > 0)
             {
                 monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
-                monster_race* r_ptr = &r_info[m_ptr->r_idx];
 
                 char m_name[80];
 
@@ -3556,10 +3555,8 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                 monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
                 /* Apply armor dice/sides curses/blessings */
-                int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty;
-                if (armor_dice_base < 0)
-                    armor_dice_base = 0;
-                int armor_dice = armor_dice_base + curse_flag_delta_cur(CUR_MON_ARM_DICE);
+                int armor_dice = monster_base_armour_dice(m_ptr)
+                    + curse_flag_delta_cur(CUR_MON_ARM_DICE);
                 int armor_sides = monster_base_armour_sides(m_ptr) + curse_flag_delta_cur(CUR_MON_ARM_SIDE);
                 if (armor_dice < 0) armor_dice = 0;
                 if (armor_sides < 1) armor_sides = 1;
@@ -3596,7 +3593,7 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                     if (!killed)
                     {
                         /*some creatures are resistant to stunning*/
-                        if (r_ptr->flags3 & RF3_NO_STUN)
+                        if (r_info[m_ptr->r_idx].flags3 & RF3_NO_STUN)
                         {
                             monster_lore* l_ptr = &l_list[m_ptr->r_idx];
 

@@ -945,6 +945,8 @@ int total_monster_attack(monster_type* m_ptr, int base)
     // unique bane penalty (player ability affecting monster)
     att -= unique_bane_bonus(m_ptr);
 
+    att = monster_scaled_value(m_ptr, att);
+
     // halve attack score for certain situations (and only halve positive
     // scores!)
     if (att > 0)
@@ -988,6 +990,8 @@ int total_monster_evasion(monster_type* m_ptr, bool archery)
 
     // unique bane penalty (player ability affecting monster)
     evn -= unique_bane_bonus(m_ptr);
+
+    evn = monster_scaled_value(m_ptr, evn);
 
     // halve evasion for certain situations (and only halve positive evasion!)
     if (evn > 0)
@@ -6556,10 +6560,8 @@ void py_attack_aux(int y, int x, int attack_type)
                 dam = total_dice * mds;
 
             /* Apply armor dice/sides curses/blessings */
-            int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty;
-            if (armor_dice_base < 0)
-                armor_dice_base = 0;
-            int armor_dice = armor_dice_base + curse_flag_delta_cur(CUR_MON_ARM_DICE);
+            int armor_dice = monster_base_armour_dice(m_ptr)
+                + curse_flag_delta_cur(CUR_MON_ARM_DICE);
             int armor_sides = monster_base_armour_sides(m_ptr) + curse_flag_delta_cur(CUR_MON_ARM_SIDE);
             if (armor_dice < 0) armor_dice = 0;
             if (armor_sides < 1) armor_sides = 1;
