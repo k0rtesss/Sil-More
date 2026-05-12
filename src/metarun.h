@@ -69,7 +69,7 @@ extern curse_type* cu_info;
  *   0.9.0.0 - Initial versioned format (quest support)
  *   0.9.0.1 - Persistent blessing choices added
  *   0.9.0.2 - Per-quest completion counters (capped) stored alongside bitmask
- *   0.9.7.0 - Current meta-file version (matches game release)
+ *   0.9.9.3 - Current meta-file version (matches game release)
  */
 #define METARUN_FILE_VERSION_MAJOR VERSION_MAJOR
 #define METARUN_FILE_VERSION_MINOR VERSION_MINOR

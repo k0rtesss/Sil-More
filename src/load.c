@@ -1798,7 +1798,7 @@ static errr rd_extra(void)
     rd_s16b(&p_ptr->tulkas_target_r_idx);
     rd_s16b(&p_ptr->tulkas_prize_a_idx);
     rd_byte(&p_ptr->tulkas_quest_complete);
-    if (savefile_version_at_least(0, 9, 7, 2))
+    if (savefile_version_at_least(0, 9, 9, 2))
     {
         rd_s16b(&p_ptr->tulkas_stronghold_level);
         rd_byte(&p_ptr->tulkas_stronghold_placed);
@@ -1830,7 +1830,7 @@ static errr rd_extra(void)
     rd_byte(&p_ptr->mandos_monsters_remaining);
     rd_s16b(&p_ptr->mandos_level);
     rd_s16b(&p_ptr->mandos_reserved);
-    if (savefile_version_at_least(0, 9, 7, 2))
+    if (savefile_version_at_least(0, 9, 9, 2))
     {
         rd_byte(&p_ptr->mandos_resurrection_primed);
         rd_byte(&p_ptr->mandos_resurrection_used);
@@ -1854,7 +1854,7 @@ static errr rd_extra(void)
     rd_s16b(&p_ptr->orome_spiders_killed);
     rd_s16b(&p_ptr->orome_serpents_killed);
     rd_s16b(&p_ptr->orome_vampires_killed);
-    if (savefile_version_at_least(0, 9, 7, 2))
+    if (savefile_version_at_least(0, 9, 9, 2))
     {
         rd_s16b(&p_ptr->orome_dragons_killed);
         rd_byte(&p_ptr->orome_great_hunt_mask);
@@ -1868,7 +1868,7 @@ static errr rd_extra(void)
         rd_byte(&p_ptr->varda_quest);
         rd_byte(&p_ptr->varda_vault_ready);
         rd_byte(&p_ptr->varda_vault_placed);
-        if (savefile_version_at_least(0, 9, 7, 2))
+        if (savefile_version_at_least(0, 9, 9, 2))
         {
             rd_byte(&p_ptr->varda_shadow_restricted);
             p_ptr->varda_reserved = 0;
@@ -1879,7 +1879,7 @@ static errr rd_extra(void)
             p_ptr->varda_shadow_restricted = 0;
         }
         rd_s16b(&p_ptr->varda_level);
-        if (savefile_version_at_least(0, 9, 7, 2))
+        if (savefile_version_at_least(0, 9, 9, 2))
         {
             rd_byte(&p_ptr->varda_shadow_ready);
             rd_byte(&p_ptr->varda_shadow_placed);
@@ -1906,7 +1906,7 @@ static errr rd_extra(void)
         p_ptr->varda_shadow_level = 0;
     }
 
-    if (savefile_version_at_least(0, 9, 7, 2))
+    if (savefile_version_at_least(0, 9, 9, 2))
     {
         for (int vi = 0; vi < VALA_MAX; vi++) rd_byte(&p_ptr->vala_quest_stage2[vi]);
         for (int vi = 0; vi < VALA_MAX; vi++) rd_byte(&p_ptr->vala_quest_stage3[vi]);
@@ -1920,8 +1920,8 @@ static errr rd_extra(void)
         }
     }
     rd_byte(&p_ptr->quest_vault_used);
-    /* quest_reserved grew to 15 in 0.9.1.3 and QUEST_SLOT_MAX in 0.9.7.2. */
-    int quest_reserved_len = savefile_version_at_least(0, 9, 7, 2) ? (int)N_ELEMENTS(p_ptr->quest_reserved) :
+    /* quest_reserved grew to 15 in 0.9.1.3 and later with QUEST_SLOT_MAX. */
+    int quest_reserved_len = savefile_version_at_least(0, 9, 9, 2) ? (int)N_ELEMENTS(p_ptr->quest_reserved) :
         (savefile_version_at_least(0, 9, 1, 3) ? 15 : 12);
     for (int qi = 0; qi < quest_reserved_len && qi < (int)N_ELEMENTS(p_ptr->quest_reserved); qi++) {
         rd_byte(&p_ptr->quest_reserved[qi]);
@@ -4263,8 +4263,8 @@ static errr rd_savefile_new_aux(void)
     savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);
     savefile_has_item_bonuses = savefile_version_at_least(0, 9, 5, 2);
     savefile_has_randart_bonuses = savefile_version_at_least(0, 9, 5, 3);
-    savefile_has_revenge_fields = savefile_version_at_least(0, 9, 7, 1);
-    savefile_has_legendary_area_map = savefile_version_at_least(0, 9, 7, 1);
+    savefile_has_revenge_fields = savefile_version_at_least(0, 9, 9, 1);
+    savefile_has_legendary_area_map = savefile_version_at_least(0, 9, 9, 1);
     savefile_has_morgoth_call_state = savefile_version_at_least(0, 9, 6, 4);
 
     /* Reset load byte offset counter */
@@ -4735,8 +4735,8 @@ bool load_player(void)
             savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);
             savefile_has_item_bonuses = savefile_version_at_least(0, 9, 5, 2);
             savefile_has_randart_bonuses = savefile_version_at_least(0, 9, 5, 3);
-            savefile_has_revenge_fields = savefile_version_at_least(0, 9, 7, 1);
-            savefile_has_legendary_area_map = savefile_version_at_least(0, 9, 7, 1);
+            savefile_has_revenge_fields = savefile_version_at_least(0, 9, 9, 1);
+            savefile_has_legendary_area_map = savefile_version_at_least(0, 9, 9, 1);
             savefile_has_morgoth_call_state = savefile_version_at_least(0, 9, 6, 4);
         }
 
