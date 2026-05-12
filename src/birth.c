@@ -17,6 +17,7 @@
 #include "sdl-config.h"
 #include "z-term.h"
 #include "metarun.h"
+#include "story_branch.h"
 
 /* Three-column layout constants (same as cmd4.c) */
 #define COL_SKILL 2
@@ -577,6 +578,7 @@ void player_wipe(void)
     /* Metarun completion is checked separately via metarun_is_quest_completed() */
     log_trace("Birth: All quest states initialized to NOT_STARTED for new character");
     for (i = 0; i < (int)N_ELEMENTS(p_ptr->quest_reserved); i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = initiated quest count; quest_reserved[1..n] = per-run quest completion markers */
+    p_ptr->manwe_quest = QUEST_STATE_NOT_STARTED;
     p_ptr->manwe_deception_flags = 0;
 
     /*re-set the thefts counter*/
@@ -6654,6 +6656,11 @@ static NavResult player_birth_aux(void)
     if (run_mode_is_blitz() && !blitz_oaths_enabled())
     {
         p_ptr->oath_type = 0;
+    }
+    else if (!story_branch_allows_oath_selection())
+    {
+        p_ptr->oath_type = 0;
+        log_debug("Skipping oath selection for Unlight branch run");
     }
     else
     {

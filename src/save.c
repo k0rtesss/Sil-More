@@ -1213,6 +1213,7 @@ static void wr_extra(void)
     wr_byte(p_ptr->quest_vault_used);
     for (i = 0; i < (int)N_ELEMENTS(p_ptr->quest_reserved); i++) wr_byte(p_ptr->quest_reserved[i]);
     wr_u16b(p_ptr->manwe_deception_flags & MANWE_DECEPTION_FLAG_MASK);
+    wr_byte(p_ptr->manwe_quest);
 #else
     /* Older versions (<=0.8.5) had no quest block; do not write marker */
 #endif

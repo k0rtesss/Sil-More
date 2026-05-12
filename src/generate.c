@@ -14,6 +14,7 @@
 #include "gen-log.h"
 #include "meta_state.h"
 #include "metarun.h"
+#include "story_branch.h"
 #include <SDL3/SDL.h>
 /* Ensure C library prototypes are visible for tools */
 #include <stdio.h>
@@ -1928,6 +1929,8 @@ static byte* get_quest_state_ptr(u32b var_name_offset) {
         return &p_ptr->vala_quest_stage2[VALA_VARDA - 1];
     } else if (SDL_strcasecmp(actual_name, "varda_third_quest") == 0) {
         return &p_ptr->vala_quest_stage3[VALA_VARDA - 1];
+    } else if (SDL_strcasecmp(actual_name, "manwe_quest") == 0) {
+        return &p_ptr->manwe_quest;
     }
     
     return NULL; /* Unknown quest state variable */
@@ -2223,6 +2226,15 @@ static void run_quest_lottery(void) {
     
     if (quest_lottery_resolved) {
         log_trace("Quest lottery: Already resolved for this level (winner=%d)", quest_lottery_winner);
+        if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
+        return;
+    }
+
+    if (!story_branch_allows_valar_quests()) {
+        log_trace("Quest lottery: SKIPPED - special story branch run kind=%d",
+                  story_branch_run_kind());
+        quest_lottery_winner = 0;
+        quest_lottery_resolved = true;
         if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
         return;
     }
@@ -17875,6 +17887,12 @@ static bool try_quest_vault_type(int v_type, bool *had_eligible_candidate)
     if (had_eligible_candidate)
         *had_eligible_candidate = false;
 
+    if (!story_branch_allows_valar_quests()) {
+        log_trace("Quest vault: skipped type %d - special story branch run kind=%d",
+                  v_type, story_branch_run_kind());
+        return false;
+    }
+
     if (!quest_can_initiate_more()) {
         log_trace("Quest vault: skipped type %d - initiated quest cap reached (%d/%d)",
                   v_type, quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN);
@@ -18788,6 +18806,7 @@ static bool cave_gen(void)
     bool shadow_bastion_forced = false;
     bool tulkas_stronghold_forced = false;
     bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
+    bool allow_valar_quests = story_branch_allows_valar_quests();
 
     reset_morgoth_layout_state(is_morgoth_level);
     
@@ -18816,13 +18835,13 @@ static bool cave_gen(void)
               p_ptr->varda_quest, quest_lottery_winner);
     
     /* Varda quest: flag forced bastion placement on first level deeper than 500ft */
-    if (!is_morgoth_level && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
+    if (allow_valar_quests && !is_morgoth_level && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
         if (!p_ptr->varda_vault_ready) {
             log_trace("Varda quest: Crossing 500ft, setting bastion_ready at depth %d", p_ptr->depth);
         }
         p_ptr->varda_vault_ready = 1;
     }
-    if (!is_morgoth_level && varda_shadow_state == QUEST_STATE_ACTIVE && !p_ptr->varda_shadow_placed && p_ptr->depth > 15) {
+    if (allow_valar_quests && !is_morgoth_level && varda_shadow_state == QUEST_STATE_ACTIVE && !p_ptr->varda_shadow_placed && p_ptr->depth > 15) {
         if (!p_ptr->varda_shadow_ready) {
             log_trace("Varda shadow quest: Crossing 750ft, setting shadow_bastion_ready at depth %d", p_ptr->depth);
         }
@@ -18955,7 +18974,8 @@ static bool cave_gen(void)
     log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
     log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
 
-    if (!is_morgoth_level &&
+    if (allow_valar_quests &&
+        !is_morgoth_level &&
         p_ptr->tulkas_stronghold_level > 0 &&
         p_ptr->depth == p_ptr->tulkas_stronghold_level &&
         !p_ptr->tulkas_stronghold_placed) {
@@ -18968,7 +18988,7 @@ static bool cave_gen(void)
         log_trace("Quest vault: === ORC STRONGHOLD SUCCESS === Placed successfully");
     }
 
-    if (!is_morgoth_level)
+    if (allow_valar_quests && !is_morgoth_level)
     {
         /* Quest vault determination - Allow re-placement during level regeneration */
         log_trace("Quest vault: ENTERING quest vault logic check (quest_vault_used=%d, force_forge=%s, qv_placed_this_level=%s)",
@@ -19465,7 +19485,8 @@ static bool cave_gen(void)
               quest_lottery_winner, QUEST_ID_VARDA, p_ptr->depth, p_ptr->varda_quest,
               quest_get_state(QUEST_ID_VARDA_SHADOW));
     
-    if (quest_lottery_winner == QUEST_ID_VARDA || quest_lottery_winner == QUEST_ID_VARDA_SHADOW) {
+    if (allow_valar_quests &&
+        (quest_lottery_winner == QUEST_ID_VARDA || quest_lottery_winner == QUEST_ID_VARDA_SHADOW)) {
         bool shadow_quest = (quest_lottery_winner == QUEST_ID_VARDA_SHADOW);
         log_trace("Varda spawn: === VARDA WON LOTTERY === Attempting spawn at depth %d for quest %d",
             p_ptr->depth, quest_lottery_winner);
@@ -19593,7 +19614,7 @@ static bool cave_gen(void)
              p_ptr->tulkas_quest, p_ptr->depth, tulkas_completions, quest_lottery_winner);
              
     /* Only attempt Tulkas spawning if it won the lottery */
-    if (quest_lottery_winner == 1) { /* Tulkas is quest ID 1 */
+    if (allow_valar_quests && quest_lottery_winner == 1) { /* Tulkas is quest ID 1 */
         log_trace("Tulkas spawn: Tulkas WON the lottery - attempting spawn");
         
         /* Try to find a room to spawn Tulkas in */
@@ -19695,7 +19716,7 @@ static bool cave_gen(void)
              p_ptr->niena_quest, p_ptr->depth, l, niena_completions, quest_lottery_winner);
              
     /* Only attempt Niena spawning if it won the lottery */
-    if (quest_lottery_winner == 4) { /* Niena is quest ID 4 */
+    if (allow_valar_quests && quest_lottery_winner == 4) { /* Niena is quest ID 4 */
         log_trace("Niena spawn: Niena WON the lottery - attempting spawn");
         
         /* Check level size requirement: must be maximum size (l >= 5) */
@@ -19878,7 +19899,7 @@ static bool cave_gen(void)
     if (orome_blocked) {
         log_trace("Orome spawn: blocked by metarun state (requires active oath or under cap)");
         quest_lottery_winner = 0; /* Treat level as quest-free if history blocks this quest */
-    } else if (quest_lottery_winner == 5) { /* Orome is quest ID 5 */
+    } else if (allow_valar_quests && quest_lottery_winner == 5) { /* Orome is quest ID 5 */
         log_trace("Orome spawn: Orome WON the lottery - attempting spawn");
         
         /* Try to find a room to spawn Orome in */
@@ -20192,6 +20213,12 @@ static void gates_gen(void)
  */
 static bool spawn_niena_morgoth_hall(void)
 {
+    if (!story_branch_allows_valar_quests()) {
+        log_trace("Niena Morgoth quest: skipped - special story branch run kind=%d",
+                  story_branch_run_kind());
+        return false;
+    }
+
     byte state = quest_get_state(QUEST_ID_NIENA_MORGOTH);
     bool has_pending_giver = (state == QUEST_STATE_GIVER_PRESENT);
 

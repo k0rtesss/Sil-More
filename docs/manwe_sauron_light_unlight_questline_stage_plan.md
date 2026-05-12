@@ -24,7 +24,7 @@ These are deliberately isolated so implementation can start without pretending t
 1. Unlight ally persuasion needs a peaceful/non-lethal resolution after defeating Gothmog, Ancalagon, and Glaurung.
 2. Unlight side oaths are not designed yet. Stage 9 should add placeholders and hooks, not final oath mechanics, unless those oaths are specified.
 3. The refusal flow after Ungoliant has one ambiguity: if the player refuses Manwe's request before forging, decide whether Sauron must be defeated before the forge can be used, or whether this refusal is an alternate immediate combat branch.
-4. The Light endgame "Fall of Gondolin" scene needs a specific boss/objective. Fall of Gondolin should have Gothmog as the first boss, and Balrog of Sudden Flame in the end. 
+4. The Light endgame "Fall of Gondolin" scene needs a specific boss/objective. Fall of Gondolin should have Gothmog as the first boss, and Balrog of Sudden Flame in the end.
 
 ## Agent Model Policy For This Work
 

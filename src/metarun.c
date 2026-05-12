@@ -331,6 +331,101 @@ int metarun_challenge_completion_count(int challenge_id)
     return *slot;
 }
 
+typedef struct metarun_vala_chain_requirement {
+    cptr vala_name;
+    u32b stage1_flag;
+    u32b stage2_flag;
+    u32b stage3_flag;
+    int challenge_id;
+} metarun_vala_chain_requirement;
+
+static const metarun_vala_chain_requirement metarun_manwe_unlock_requirements[] = {
+    {
+        "Tulkas",
+        METARUN_QUEST_TULKAS,
+        METARUN_QUEST_TULKAS_ORCS,
+        METARUN_QUEST_TULKAS_MORGOTH,
+        CHALLENGE_TULKAS_BLUNT
+    },
+    {
+        "Mandos",
+        METARUN_QUEST_MANDOS,
+        METARUN_QUEST_MANDOS_TRAITOR,
+        METARUN_QUEST_MANDOS_BETRAYER,
+        CHALLENGE_DISCONNECTED
+    },
+    {
+        "Nienna",
+        METARUN_QUEST_NIENA,
+        METARUN_QUEST_NIENA_MORGOTH,
+        METARUN_QUEST_NIENA_PACIFIST,
+        CHALLENGE_FIXED_50K_XP
+    },
+    {
+        "Orome",
+        METARUN_QUEST_OROME,
+        METARUN_QUEST_OROME_DRAGONS,
+        METARUN_QUEST_OROME_GREAT_HUNT,
+        CHALLENGE_SINGLE_STAIR
+    },
+    {
+        "Varda",
+        METARUN_QUEST_VARDA,
+        METARUN_QUEST_VARDA_SHADOW,
+        METARUN_QUEST_VARDA_UNGOLIANT,
+        CHALLENGE_TORCHLIGHT
+    }
+};
+
+static bool metarun_quest_flag_completed(u32b quest_flag)
+{
+    return metarun_quest_completion_count(quest_flag) > 0;
+}
+
+static const metarun_vala_chain_requirement *metarun_completed_vala_chain_requirement(void)
+{
+    for (size_t i = 0; i < N_ELEMENTS(metarun_manwe_unlock_requirements); i++) {
+        const metarun_vala_chain_requirement *req =
+            &metarun_manwe_unlock_requirements[i];
+
+        if (!metarun_quest_flag_completed(req->stage1_flag)) continue;
+        if (!metarun_quest_flag_completed(req->stage2_flag)) continue;
+        if (!metarun_quest_flag_completed(req->stage3_flag)) continue;
+        if (metarun_challenge_completion_count(req->challenge_id) <= 0) continue;
+
+        return req;
+    }
+
+    return NULL;
+}
+
+bool metarun_completed_any_vala_chain_with_challenge(void)
+{
+    return metarun_completed_vala_chain_requirement() != NULL;
+}
+
+void metarun_refresh_manwe_quest_unlock(cptr reason)
+{
+    const metarun_vala_chain_requirement *req;
+
+    if (!metarun_current())
+        return;
+
+    if (metarun_branch_state() != METARUN_BRANCH_NONE)
+        return;
+
+    req = metarun_completed_vala_chain_requirement();
+    if (!req)
+        return;
+
+    log_info("Manwe quest unlocked: %s chain stages 1-3 complete and challenge %d completed%s%s",
+             req->vala_name,
+             req->challenge_id,
+             reason ? " after " : "",
+             reason ? reason : "");
+    metarun_set_branch_state(METARUN_BRANCH_MANWE_QUEST_PENDING);
+}
+
 void metarun_mark_challenge_completed(int challenge_id)
 {
     metarun *current = metarun_current_mutable();
@@ -349,6 +444,7 @@ void metarun_mark_challenge_completed(int challenge_id)
     metarun_sync_runtime_byte(current, METARUN_RUNTIME_CHALLENGE_COUNT_BASE + (challenge_id - 1));
     save_metaruns();
     log_debug("metarun_mark_challenge_completed: challenge %d completions now %d", challenge_id, *slot);
+    metarun_refresh_manwe_quest_unlock("challenge completion");
 }
 
 metarun_branch_state_type metarun_branch_state(void)
@@ -2284,6 +2380,7 @@ errr load_metaruns(bool create_if_missing)
     memcpy(metaruns[current_run].reserved_runtime,
            metar.reserved_runtime,
            sizeof(metar.reserved_runtime));
+    metarun_refresh_manwe_quest_unlock("metarun load");
     metarun_sanitize_blessing_economy(&metar);
     metaruns[current_run].fallen_score_pool = metar.fallen_score_pool;
     metaruns[current_run].blessing_points = metar.blessing_points;
@@ -3411,6 +3508,70 @@ static void announce_blessing_gain(int previous_points)
     message_flush();
 }
 
+static cptr metarun_challenge_name(int challenge_id)
+{
+    switch (challenge_id) {
+        case CHALLENGE_DISCONNECTED: return "disconnected stairways";
+        case CHALLENGE_SINGLE_STAIR: return "single stairways";
+        case CHALLENGE_FIXED_50K_XP: return "fixed 50,000 experience";
+        case CHALLENGE_TULKAS_BLUNT: return "blunt weapons only";
+        case CHALLENGE_TORCHLIGHT: return "torchlight";
+        default: return "unknown challenge";
+    }
+}
+
+static bool metarun_option_enabled(int opt)
+{
+    return op_ptr && opt >= 0 && opt < OPT_MAX && op_ptr->opt[opt];
+}
+
+static bool metarun_challenge_option_active(int challenge_id)
+{
+    switch (challenge_id) {
+        case CHALLENGE_DISCONNECTED:
+            return metarun_option_enabled(OPT_birth_discon_stair) ||
+                metarun_option_enabled(OPT_adult_discon_stair);
+        case CHALLENGE_SINGLE_STAIR:
+            return metarun_option_enabled(OPT_birth_single_stair) ||
+                metarun_option_enabled(OPT_adult_single_stair);
+        case CHALLENGE_FIXED_50K_XP:
+            return metarun_option_enabled(OPT_birth_fixed_exp);
+        case CHALLENGE_TULKAS_BLUNT:
+            return metarun_option_enabled(OPT_birth_tulkas_blunt) ||
+                metarun_option_enabled(OPT_adult_tulkas_blunt);
+        case CHALLENGE_TORCHLIGHT:
+            return metarun_option_enabled(OPT_birth_torchlight) ||
+                metarun_option_enabled(OPT_adult_torchlight);
+        default:
+            return false;
+    }
+}
+
+static void metarun_record_successful_challenges(cptr outcome)
+{
+    static const int challenge_ids[] = {
+        CHALLENGE_DISCONNECTED,
+        CHALLENGE_SINGLE_STAIR,
+        CHALLENGE_FIXED_50K_XP,
+        CHALLENGE_TULKAS_BLUNT,
+        CHALLENGE_TORCHLIGHT
+    };
+
+    for (size_t i = 0; i < N_ELEMENTS(challenge_ids); i++) {
+        int challenge_id = challenge_ids[i];
+
+        if (!metarun_challenge_option_active(challenge_id))
+            continue;
+
+        log_info("Metarun: recording completed challenge run %d (%s)%s%s",
+                 challenge_id,
+                 metarun_challenge_name(challenge_id),
+                 outcome ? " after " : "",
+                 outcome ? outcome : "");
+        metarun_mark_challenge_completed(challenge_id);
+    }
+}
+
 void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_score)
 {
     if (run_mode_is_blitz())
@@ -3458,6 +3619,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     if (morgoth_victory)
     {
         log_info("Metarun: Morgoth victory branch (sil_count=%d)", sil_count);
+        metarun_record_successful_challenges("Morgoth victory");
         screen_save();
         Term_clear();
 
@@ -3592,6 +3754,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     /*        Enhanced Narrative Path - escaped with >=1 Silmaril     */
     /* ------------------------------------------------------------- */
     log_info("Player escaped with %d Silmarils - displaying victory narrative", sil_count);
+    metarun_record_successful_challenges("Silmaril escape");
     screen_save();
 
     /* ============================================================= */

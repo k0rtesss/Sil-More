@@ -1476,6 +1476,7 @@ struct player_type
     /* Generic quest/vault tracking */
     byte quest_vault_used;     /* Count of quest-designated vaults generated this game */
     byte quest_reserved[QUEST_SLOT_MAX];   /* quest_reserved[0] = initiated quest count; quest_reserved[1..n] mark quest completions recorded this run */
+    byte manwe_quest;          /* Generic quest state for Manwe's Forge of Grond */
     u16b manwe_deception_flags; /* Run-local Manwe deception quest flags */
 };
 

@@ -292,6 +292,8 @@ void metarun_mark_unlight_ally(metarun_unlight_ally_bit ally);
 void metarun_light_scene_record(metarun_light_scene_id scene, metarun_light_scene_result result);
 byte metarun_light_scene_count(metarun_light_scene_id scene, metarun_light_scene_result result);
 bool metarun_manwe_quest_unlocked(void);
+bool metarun_completed_any_vala_chain_with_challenge(void);
+void metarun_refresh_manwe_quest_unlock(cptr reason);
 
 /* ------------------------------------------------------------------ */
 /*  Oath system tracking                                              */

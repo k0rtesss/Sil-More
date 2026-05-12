@@ -19,6 +19,7 @@
 #include "score/score_ui.h"
 #include "sdl-config.h"
 #include "sdl-sound.h"
+#include "story_branch.h"
 #include "z-term.h"
 #include <time.h>
 #include <string.h>
@@ -5489,6 +5490,7 @@ PlayResult play_game(void)
             return PLAY_QUIT;
         }
         /* NAV_OK falls through */
+        story_branch_prepare_new_character();
 
         sdl_pointer_attack_reset_to_melee();
 

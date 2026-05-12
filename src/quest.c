@@ -81,6 +81,7 @@ static int quest_id_from_slot(int slot)
 static byte *quest_state_slot(int quest_id)
 {
     if (!p_ptr || quest_id <= 0) return NULL;
+    if (quest_id == QUEST_ID_MANWE_FORGE) return &p_ptr->manwe_quest;
     if (!z_info || quest_id >= z_info->quest_max) return NULL;
     if (!quest_info) return NULL;
 
@@ -431,6 +432,8 @@ void metarun_mark_quest_completed(u32b quest_flag)
         log_trace("Metarun: Quest 0x%x completion ignored (already at cap or recorded); mask=0x%08X",
                   quest_flag, metar.completed_quests);
     }
+
+    metarun_refresh_manwe_quest_unlock(changed ? "quest completion" : "quest completion check");
 }
 
 void metarun_check_and_update_quests(void)

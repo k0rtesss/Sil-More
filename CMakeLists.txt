@@ -230,6 +230,7 @@ set(SIL_MORE_SOURCES
     src/sdl-config.c
     src/sdl-sound.c
     src/sound-config.c
+    src/story_branch.c
     src/fs/io_sdl.c
     src/fs/path.c
     src/ui/colors.c
