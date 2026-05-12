@@ -9555,7 +9555,8 @@ extern int silmarils_possessed(void)
     for (i = 0; i < INVEN_TOTAL; i++)
     {
         if (((&inventory[i])->tval == TV_LIGHT)
-            && ((&inventory[i])->sval == SV_LIGHT_SILMARIL))
+            && ((&inventory[i])->sval == SV_LIGHT_SILMARIL)
+            && ((&inventory[i])->unused1 != MANWE_QUEST_SILMARIL_MARKER))
             silmarils += (&inventory[i])->number;
         if ((&inventory[i])->name1 == ART_MORGOTH_1)
             silmarils += 1;

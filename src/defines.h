@@ -4069,7 +4069,11 @@ typedef struct quest_mapping {
 #define MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED   0x0040
 #define MANWE_DECEPTION_SAURON_BARGAIN_REFUSED    0x0080
 #define MANWE_DECEPTION_MORGOTH_CHASE_TRIGGERED   0x0100
-#define MANWE_DECEPTION_FLAG_MASK                 0x01FF
+#define MANWE_DECEPTION_SAURON_DEFEATED           0x0200
+#define MANWE_DECEPTION_FLAG_MASK                 0x03FF
+
+/* Marks the quest-forged Silmaril so normal Silmaril escape/scoring ignores it. */
+#define MANWE_QUEST_SILMARIL_MARKER               0x4D515349L
 
 /* Generic quest state helpers for multi-stage quests. */
 #define QUEST_STATE_NOT_STARTED    0

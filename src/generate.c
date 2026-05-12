@@ -2583,9 +2583,11 @@ static void apply_pending_quest_states(void) {
     }
     if (pending_quest_states.has_manwe_forge_change) {
         p_ptr->manwe_deception_flags |= MANWE_DECEPTION_DEPTH23_VAULT_GENERATED;
+        p_ptr->aule_forge_y = (byte)pending_quest_states.manwe_forge_y;
+        p_ptr->aule_forge_x = (byte)pending_quest_states.manwe_forge_x;
         if (quest_get_state(QUEST_ID_MANWE_FORGE) == QUEST_STATE_NOT_STARTED)
             quest_set_state(QUEST_ID_MANWE_FORGE, QUEST_STATE_ACTIVE);
-        log_trace("Manwe quest: Forge of Grond placement APPLIED (deferred) at %d,%d depth=%d",
+        log_trace("Manwe quest: Forge of Grond placement APPLIED (deferred) at forge tile %d,%d depth=%d",
             pending_quest_states.manwe_forge_y,
             pending_quest_states.manwe_forge_x,
             pending_quest_states.manwe_forge_level);
@@ -15456,8 +15458,36 @@ static bool vault_area_has_monster_race(int y0, int x0, vault_type *qv, int r_id
     return false;
 }
 
+static bool find_manwe_forge_tile(int y, int x, vault_type *qv, int *forge_y, int *forge_x)
+{
+    int y1 = y - qv->hgt / 2;
+    int x1 = x - qv->wid / 2;
+    int y2 = y1 + qv->hgt - 1;
+    int x2 = x1 + qv->wid - 1;
+
+    for (int dy = y1; dy <= y2; dy++)
+    {
+        for (int dx = x1; dx <= x2; dx++)
+        {
+            if (!in_bounds_fully(dy, dx))
+                continue;
+            if (!cave_forge_bold(dy, dx))
+                continue;
+
+            *forge_y = dy;
+            *forge_x = dx;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static void finalize_manwe_forge_placement(int y, int x, vault_type *qv)
 {
+    int forge_y = y;
+    int forge_x = x;
+
     remember_quest_vault_bounds(y, x, qv);
     manwe_forge_placed_this_level = true;
 
@@ -15467,10 +15497,18 @@ static void finalize_manwe_forge_placement(int y, int x, vault_type *qv)
     }
 
     level_gen_debug_activate_quest_vault_name(v_name + qv->name);
+    if (!find_manwe_forge_tile(y, x, qv, &forge_y, &forge_x))
+    {
+        log_warn("Manwe quest: Forge of Grond vault placed without a forge tile; using vault center %d,%d",
+            y, x);
+    }
+
+    p_ptr->aule_forge_y = (byte)forge_y;
+    p_ptr->aule_forge_x = (byte)forge_x;
     pending_quest_states.has_manwe_forge_change = true;
     pending_quest_states.manwe_forge_level = p_ptr->depth;
-    pending_quest_states.manwe_forge_y = y;
-    pending_quest_states.manwe_forge_x = x;
+    pending_quest_states.manwe_forge_y = forge_y;
+    pending_quest_states.manwe_forge_x = forge_x;
 }
 
 /* Force placement of the Orc Stronghold quest vault when scheduled. */

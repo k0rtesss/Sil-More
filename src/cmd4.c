@@ -13280,6 +13280,9 @@ void do_cmd_smithing_screen(void)
     bool leave_menu = false;
     bool create = false;
 
+    if (manwe_quest_try_forge_silmaril())
+        return;
+
     // if (!cave_forge_bold(p_ptr->py, p_ptr->px))
     //{
     //	msg_print("You can only create items at a forge.");

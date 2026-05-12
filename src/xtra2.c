@@ -29,6 +29,7 @@ bool tulkas_orc_targets_alive(bool require_unspawned);
 static bool quest_race_name_contains(const monster_race* r_ptr, cptr needle);
 static bool quest_dragon_kill_counts(const monster_race* r_ptr);
 static void check_tulkas_morgoth_damage(monster_type* m_ptr, int who);
+static void manwe_quest_on_sauron_slain(void);
 
 static void look_prt(bool use_story_font, cptr text, int row, int col)
 {
@@ -3098,6 +3099,8 @@ void monster_death(int m_idx)
 
     if (m_ptr->r_idx == R_IDX_UNGOLIANT)
         manwe_quest_on_ungoliant_slain(m_ptr->fy, m_ptr->fx);
+    if (m_ptr->r_idx == R_IDX_GORTHAUR)
+        manwe_quest_on_sauron_slain();
     
     /* Check for Orome quest completion */
     check_orome_quest_completion();
@@ -9386,6 +9389,604 @@ static bool manwe_quest_drop_light_of_trees(int y, int x)
     return true;
 }
 
+static void manwe_quest_dialog(cptr title, byte title_color, byte text_color,
+    cptr line_a, cptr line_b, cptr line_c, cptr line_d)
+{
+    cptr lines[4];
+    int count = 0;
+
+    if (line_a) lines[count++] = line_a;
+    if (line_b) lines[count++] = line_b;
+    if (line_c) lines[count++] = line_c;
+    if (line_d) lines[count++] = line_d;
+
+    if (count > 0)
+        quest_typewriter_menu(title, lines, count, title_color, text_color);
+}
+
+static bool manwe_quest_at_quest_forge(void)
+{
+    return p_ptr && story_branch_is_manwe_deception_run()
+        && current_depth_is_final_depth()
+        && (p_ptr->manwe_deception_flags & MANWE_DECEPTION_DEPTH23_VAULT_GENERATED)
+        && (p_ptr->py == p_ptr->aule_forge_y)
+        && (p_ptr->px == p_ptr->aule_forge_x)
+        && cave_forge_bold(p_ptr->py, p_ptr->px);
+}
+
+static bool manwe_quest_inventory_light_matches(const object_type* o_ptr, int sval,
+    bool quest_silmaril_only)
+{
+    if (!o_ptr->k_idx)
+        return false;
+    if (o_ptr->tval != TV_LIGHT || o_ptr->sval != sval)
+        return false;
+    if (quest_silmaril_only)
+        return (sval == SV_LIGHT_SILMARIL)
+            && (o_ptr->unused1 == MANWE_QUEST_SILMARIL_MARKER);
+    return true;
+}
+
+static int manwe_quest_find_inventory_light(int sval, bool quest_silmaril_only)
+{
+    int i;
+
+    for (i = 0; i < INVEN_TOTAL; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+
+        if (manwe_quest_inventory_light_matches(o_ptr, sval, quest_silmaril_only))
+            return i;
+    }
+
+    return -1;
+}
+
+static bool manwe_quest_consume_inventory_light(int sval, bool quest_silmaril_only)
+{
+    int item = manwe_quest_find_inventory_light(sval, quest_silmaril_only);
+
+    if (item < 0)
+        return false;
+
+    inven_item_increase(item, -1);
+    inven_item_optimize(item);
+    p_ptr->update |= (PU_BONUS);
+    p_ptr->redraw |= (PR_MAP | PR_LIGHT);
+    p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0 | PW_MESSAGE);
+    return true;
+}
+
+static bool manwe_quest_create_forged_silmaril(void)
+{
+    object_type object_type_body;
+    object_type* o_ptr = &object_type_body;
+    char o_name[80];
+    s16b k_idx = lookup_kind(TV_LIGHT, SV_LIGHT_SILMARIL);
+    s16b slot;
+
+    if (k_idx <= 0)
+    {
+        log_error("Manwe quest: Silmaril object kind is missing");
+        return false;
+    }
+
+    object_wipe(o_ptr);
+    object_prep(o_ptr, k_idx);
+    o_ptr->number = 1;
+    o_ptr->pickup = true;
+    o_ptr->xtra1 = p_ptr->depth;
+    o_ptr->unused1 = MANWE_QUEST_SILMARIL_MARKER;
+    object_aware(o_ptr);
+    object_known(o_ptr);
+
+    slot = inven_carry(o_ptr, false);
+
+    if (slot == SUPPLIES_INDEX)
+    {
+        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+        msg_format("You add %s to your supplies.", o_name);
+        return true;
+    }
+
+    if (slot >= 0)
+    {
+        object_type* inv_ptr = &inventory[slot];
+
+        inv_ptr->xtra1 = p_ptr->depth;
+        inv_ptr->unused1 = MANWE_QUEST_SILMARIL_MARKER;
+        object_desc(o_name, sizeof(o_name), inv_ptr, true, 3);
+        msg_format("The forge answers. You have %s (%c).", o_name,
+            index_to_label(slot));
+        return true;
+    }
+
+    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+    if (drop_near(o_ptr, 0, p_ptr->py, p_ptr->px) > 0)
+    {
+        msg_format("The forge answers, but your pack is full; %s falls nearby.",
+            o_name);
+        return true;
+    }
+
+    log_error("Manwe quest: failed to place forged Silmaril");
+    msg_print("The forge flares, but the jewel is lost in the smoke.");
+    return false;
+}
+
+static bool manwe_quest_find_live_monster(int r_idx)
+{
+    int i;
+
+    for (i = 1; i < mon_max; i++)
+    {
+        if (mon_list[i].r_idx == r_idx)
+            return true;
+    }
+
+    return false;
+}
+
+static void manwe_quest_prepare_gorthaur(monster_type* m_ptr)
+{
+    monster_race* r_ptr = &r_info[R_IDX_GORTHAUR];
+
+    memset(m_ptr, 0, sizeof(*m_ptr));
+    m_ptr->r_idx = R_IDX_GORTHAUR;
+    m_ptr->image_r_idx = R_IDX_GORTHAUR;
+    m_ptr->alertness = ALERTNESS_ALERT;
+    m_ptr->maxhp = r_ptr->hdice * (1 + r_ptr->hside) / 2;
+    if (m_ptr->maxhp < 1)
+        m_ptr->maxhp = 1;
+    m_ptr->hp = m_ptr->maxhp;
+    m_ptr->mana = MON_MANA_MAX;
+    m_ptr->song = SNG_NOTHING;
+    m_ptr->stance = STANCE_CONFIDENT;
+    m_ptr->energy = 0;
+    m_ptr->min_range = 0;
+}
+
+static bool manwe_quest_place_gorthaur_near_player(void)
+{
+    monster_race* r_ptr = &r_info[R_IDX_GORTHAUR];
+    int radius;
+
+    if (r_ptr->max_num == 0 || r_ptr->cur_num >= r_ptr->max_num)
+    {
+        log_warn("Manwe quest: Gorthaur is unavailable for scripted reveal");
+        return false;
+    }
+
+    for (radius = 1; radius <= 8; radius++)
+    {
+        int y;
+
+        for (y = p_ptr->py - radius; y <= p_ptr->py + radius; y++)
+        {
+            int x;
+
+            for (x = p_ptr->px - radius; x <= p_ptr->px + radius; x++)
+            {
+                monster_type monster_type_body;
+                s16b m_idx;
+
+                if (!in_bounds(y, x))
+                    continue;
+                if (distance(p_ptr->py, p_ptr->px, y, x) < radius)
+                    continue;
+                if (!cave_empty_bold(y, x))
+                    continue;
+                if (cave_glyph(y, x))
+                    continue;
+                if (!cave_exist_mon(r_ptr, y, x, false, false))
+                    continue;
+
+                manwe_quest_prepare_gorthaur(&monster_type_body);
+                m_idx = monster_place(y, x, &monster_type_body);
+                if (!m_idx)
+                    continue;
+
+                calc_monster_speed(y, x);
+                new_wandering_destination(&mon_list[m_idx], NULL);
+                update_mon(m_idx, true);
+                lite_spot(y, x);
+                log_info("Manwe quest: placed Gorthaur for Sauron reveal at (%d,%d)",
+                    y, x);
+                return true;
+            }
+        }
+    }
+
+    log_warn("Manwe quest: could not place Gorthaur near the player");
+    return false;
+}
+
+static bool manwe_quest_transform_manwe_to_gorthaur(void)
+{
+    int i;
+    int manwe_idx = 0;
+    monster_race* manwe_r_ptr = &r_info[R_IDX_MANWE];
+    monster_race* gorthaur_r_ptr = &r_info[R_IDX_GORTHAUR];
+    monster_type* m_ptr;
+    int y;
+    int x;
+
+    if (manwe_quest_find_live_monster(R_IDX_GORTHAUR))
+    {
+        remove_quest_giver_silent(R_IDX_MANWE);
+        return true;
+    }
+
+    if (gorthaur_r_ptr->max_num == 0 ||
+        gorthaur_r_ptr->cur_num >= gorthaur_r_ptr->max_num)
+    {
+        log_warn("Manwe quest: Gorthaur is unavailable for Sauron reveal");
+        return false;
+    }
+
+    for (i = 1; i < mon_max; i++)
+    {
+        if (mon_list[i].r_idx == R_IDX_MANWE)
+        {
+            manwe_idx = i;
+            break;
+        }
+    }
+
+    if (!manwe_idx)
+        return false;
+
+    m_ptr = &mon_list[manwe_idx];
+    y = m_ptr->fy;
+    x = m_ptr->fx;
+
+    if (manwe_r_ptr->cur_num > 0)
+        manwe_r_ptr->cur_num--;
+    gorthaur_r_ptr->cur_num++;
+
+    memset(m_ptr, 0, sizeof(*m_ptr));
+    m_ptr->r_idx = R_IDX_GORTHAUR;
+    m_ptr->image_r_idx = R_IDX_GORTHAUR;
+    m_ptr->fy = y;
+    m_ptr->fx = x;
+    m_ptr->alertness = ALERTNESS_ALERT;
+    m_ptr->maxhp = gorthaur_r_ptr->hdice * (1 + gorthaur_r_ptr->hside) / 2;
+    m_ptr->hp = m_ptr->maxhp;
+    m_ptr->mana = MON_MANA_MAX;
+    m_ptr->song = SNG_NOTHING;
+    m_ptr->stance = STANCE_CONFIDENT;
+    m_ptr->energy = 0;
+
+    calc_monster_speed(y, x);
+    update_mon(manwe_idx, true);
+    lite_spot(y, x);
+
+    log_info("Manwe quest: transformed Manwe appearance into Gorthaur at (%d,%d)",
+        y, x);
+    return true;
+}
+
+static bool manwe_quest_ensure_sauron_present(void)
+{
+    if (manwe_quest_find_live_monster(R_IDX_GORTHAUR))
+    {
+        remove_quest_giver_silent(R_IDX_MANWE);
+        return true;
+    }
+
+    if (manwe_quest_transform_manwe_to_gorthaur())
+        return true;
+
+    return manwe_quest_place_gorthaur_near_player();
+}
+
+static bool manwe_quest_place_morgoth_near_player(void)
+{
+    int radius;
+
+    if (manwe_quest_find_live_monster(R_IDX_MORGOTH))
+        return true;
+
+    for (radius = 4; radius <= 10; radius++)
+    {
+        int y;
+
+        for (y = p_ptr->py - radius; y <= p_ptr->py + radius; y++)
+        {
+            int x;
+
+            for (x = p_ptr->px - radius; x <= p_ptr->px + radius; x++)
+            {
+                int m_idx;
+
+                if (!in_bounds(y, x))
+                    continue;
+                if (distance(p_ptr->py, p_ptr->px, y, x) < radius - 1)
+                    continue;
+                if (!cave_empty_bold(y, x))
+                    continue;
+
+                if (!place_monster_one(y, x, R_IDX_MORGOTH, false, true, NULL))
+                    continue;
+
+                m_idx = cave_m_idx[y][x];
+                if (m_idx > 0)
+                {
+                    mon_list[m_idx].alertness = ALERTNESS_ALERT;
+                    update_mon(m_idx, true);
+                }
+
+                log_info("Manwe quest: Morgoth summoned at (%d,%d)", y, x);
+                return true;
+            }
+        }
+    }
+
+    log_warn("Manwe quest: could not place Morgoth near the player; chase flag remains active");
+    return false;
+}
+
+static bool manwe_quest_reveal_sauron(bool trigger_combat)
+{
+    bool first_reveal =
+        !(p_ptr->manwe_deception_flags & MANWE_DECEPTION_SAURON_REVEALED);
+
+    if (first_reveal)
+    {
+        if (!manwe_quest_ensure_sauron_present())
+        {
+            remove_quest_giver_silent(R_IDX_MANWE);
+            msg_print("The false Manwe's shadow slips away before it can take form.");
+            log_warn("Manwe quest: Sauron reveal aborted because Gorthaur could not be placed");
+            return false;
+        }
+
+        p_ptr->manwe_deception_flags |= MANWE_DECEPTION_SAURON_REVEALED;
+
+        manwe_quest_dialog("Sauron Unveiled", TERM_RED, TERM_WHITE,
+            "The high wind dies. The grey mantle darkens and falls away.",
+            "\"No cry from Taniquetil brought you here. I wore that mercy as a mask.\"",
+            "\"You have carried the stolen light to the one place where it may be bound again.\"",
+            trigger_combat ?
+                "\"Defy me now, and learn what master taught me craft and ruin.\"" :
+                "\"Listen, and choose the shape of the war to come.\"");
+
+        do_cmd_note("Sauron cast off the guise of Manwe.", p_ptr->depth);
+        log_info("Manwe quest: Sauron revealed");
+    }
+    else if (trigger_combat)
+    {
+        manwe_quest_dialog("Sauron Unveiled", TERM_RED, TERM_WHITE,
+            "Sauron's shadow gathers again, patient and cold.",
+            "\"The forge still waits. Struggle if you must.\"",
+            NULL, NULL);
+    }
+
+    if (trigger_combat)
+    {
+        wake_all_monsters(0);
+        msg_print("The false Manwe turns all the dark around you against you.");
+        log_info("Manwe quest: first refusal triggered Sauron combat pressure");
+    }
+
+    return true;
+}
+
+static void manwe_quest_record_completion(void)
+{
+    quest_set_state(QUEST_ID_MANWE_FORGE, QUEST_STATE_REWARDED);
+    metarun_mark_quest_completed(METARUN_QUEST_MANWE);
+}
+
+static void manwe_quest_on_sauron_slain(void)
+{
+    if (!p_ptr || !story_branch_is_manwe_deception_run())
+        return;
+    if (!(p_ptr->manwe_deception_flags & MANWE_DECEPTION_SAURON_REVEALED))
+        return;
+    if (p_ptr->manwe_deception_flags &
+        (MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED |
+         MANWE_DECEPTION_SAURON_BARGAIN_REFUSED |
+         MANWE_DECEPTION_SAURON_DEFEATED))
+    {
+        return;
+    }
+
+    p_ptr->manwe_deception_flags |= MANWE_DECEPTION_SAURON_DEFEATED;
+    msg_print("Sauron's revealed shape is broken, but the forge still waits.");
+    do_cmd_note("Defeated Sauron before answering his bargain.", p_ptr->depth);
+    log_info("Manwe quest: Sauron defeated before branch choice");
+}
+
+static void manwe_quest_choose_unlight(void)
+{
+    metarun_branch_state_type state = metarun_branch_state();
+
+    if (state == METARUN_BRANCH_LIGHT_CHOSEN ||
+        (p_ptr->manwe_deception_flags & MANWE_DECEPTION_SAURON_BARGAIN_REFUSED))
+    {
+        msg_print("That choice has already been made.");
+        return;
+    }
+
+    p_ptr->manwe_deception_flags |=
+        MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED;
+    metarun_set_branch_state(METARUN_BRANCH_UNLIGHT_CHOSEN);
+    manwe_quest_record_completion();
+
+    /* This branch exit is not a normal Silmaril escape. */
+    (void)manwe_quest_consume_inventory_light(SV_LIGHT_SILMARIL, true);
+
+    manwe_quest_dialog("The Unlight Chosen", TERM_RED, TERM_WHITE,
+        "\"Then let Morgoth learn what his own servant can unmake.\"",
+        "The forged light vanishes into Sauron's hand, veiled but not quenched.",
+        "A road without the Valar opens before your line.",
+        NULL);
+
+    do_cmd_note("Accepted Sauron's bargain and turned toward the Unlight.",
+        p_ptr->depth);
+    log_info("Manwe quest: Unlight branch chosen");
+
+    SDL_strlcpy(p_ptr->died_from, "Sauron's bargain",
+        sizeof(p_ptr->died_from));
+    p_ptr->escaped = true;
+    p_ptr->is_dead = true;
+    p_ptr->playing = false;
+    p_ptr->leaving = true;
+    p_ptr->on_the_run = false;
+}
+
+static void manwe_quest_choose_light(void)
+{
+    metarun_branch_state_type state = metarun_branch_state();
+
+    if (state == METARUN_BRANCH_UNLIGHT_CHOSEN ||
+        (p_ptr->manwe_deception_flags & MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED))
+    {
+        msg_print("That choice has already been made.");
+        return;
+    }
+
+    p_ptr->manwe_deception_flags |=
+        MANWE_DECEPTION_SAURON_BARGAIN_REFUSED |
+        MANWE_DECEPTION_MORGOTH_CHASE_TRIGGERED;
+    metarun_set_branch_state(METARUN_BRANCH_LIGHT_CHOSEN);
+    manwe_quest_record_completion();
+
+    manwe_quest_dialog("The Light Chosen", TERM_L_BLUE, TERM_WHITE,
+        "\"Then you will carry your answer to Morgoth himself.\"",
+        "Sauron speaks a word that shakes the roots of the hidden forge.",
+        "Far above and below, something vast turns toward the light in your keeping.",
+        NULL);
+
+    do_cmd_note("Refused Sauron's bargain; Morgoth was summoned to the deeps.",
+        p_ptr->depth);
+    log_info("Manwe quest: Light branch chosen; Morgoth chase triggered");
+
+    p_ptr->on_the_run = true;
+    (void)manwe_quest_place_morgoth_near_player();
+    wake_all_monsters(0);
+
+    p_ptr->redraw |= (PR_STATE | PR_MAP);
+    p_ptr->window |= (PW_MESSAGE);
+}
+
+static void manwe_quest_choose_light_after_sauron_defeated(void)
+{
+    metarun_branch_state_type state = metarun_branch_state();
+
+    if (state == METARUN_BRANCH_UNLIGHT_CHOSEN ||
+        (p_ptr->manwe_deception_flags & MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED))
+    {
+        msg_print("That choice has already been made.");
+        return;
+    }
+
+    p_ptr->manwe_deception_flags |=
+        MANWE_DECEPTION_SAURON_BARGAIN_REFUSED |
+        MANWE_DECEPTION_MORGOTH_CHASE_TRIGGERED |
+        MANWE_DECEPTION_SAURON_DEFEATED;
+    metarun_set_branch_state(METARUN_BRANCH_LIGHT_CHOSEN);
+    manwe_quest_record_completion();
+
+    manwe_quest_dialog("The Light Kept", TERM_L_BLUE, TERM_WHITE,
+        "Sauron's broken shadow cannot bargain for what you have forged.",
+        "The hidden forge shakes as Morgoth feels the new light kindle.",
+        "The road that remains is open war.",
+        NULL);
+
+    do_cmd_note("Kept the forged light after defeating Sauron; Morgoth was summoned to the deeps.",
+        p_ptr->depth);
+    log_info("Manwe quest: Light branch chosen after Sauron was defeated");
+
+    p_ptr->on_the_run = true;
+    (void)manwe_quest_place_morgoth_near_player();
+    wake_all_monsters(0);
+
+    p_ptr->redraw |= (PR_STATE | PR_MAP);
+    p_ptr->window |= (PW_MESSAGE);
+}
+
+static void manwe_quest_offer_sauron_bargain(void)
+{
+    if (p_ptr->manwe_deception_flags &
+        (MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED |
+         MANWE_DECEPTION_SAURON_BARGAIN_REFUSED))
+    {
+        return;
+    }
+
+    if ((p_ptr->manwe_deception_flags & MANWE_DECEPTION_SAURON_DEFEATED) ||
+        !manwe_quest_find_live_monster(R_IDX_GORTHAUR))
+    {
+        manwe_quest_choose_light_after_sauron_defeated();
+        return;
+    }
+
+    manwe_quest_dialog("Sauron's Bargain", TERM_RED, TERM_WHITE,
+        "\"Morgoth hoards what he cannot understand. He breaks every tool he touches.\"",
+        "\"Stand with me. Let the Black Foe fall by craft, shadow, and stolen fire.\"",
+        "\"Refuse, and I will call him here. Let the old tyrant judge your new-made jewel.\"",
+        NULL);
+
+    if (get_check("Will you join Sauron against Morgoth? "))
+        manwe_quest_choose_unlight();
+    else
+        manwe_quest_choose_light();
+}
+
+bool manwe_quest_try_forge_silmaril(void)
+{
+    if (!manwe_quest_at_quest_forge())
+        return false;
+
+    if (p_ptr->manwe_deception_flags & MANWE_DECEPTION_SILMARIL_FORGED)
+    {
+        msg_print("The Forge of Grond has already spent its answer.");
+        if (!(p_ptr->manwe_deception_flags &
+              (MANWE_DECEPTION_SAURON_BARGAIN_ACCEPTED |
+               MANWE_DECEPTION_SAURON_BARGAIN_REFUSED)))
+        {
+            manwe_quest_offer_sauron_bargain();
+        }
+        return true;
+    }
+
+    if (!(p_ptr->manwe_deception_flags & MANWE_DECEPTION_UNGOLIANT_SLAIN))
+    {
+        msg_print("The forge waits for the stolen light still bound in Ungoliant's unlight.");
+        return true;
+    }
+
+    if (!(p_ptr->manwe_deception_flags & MANWE_DECEPTION_LIGHT_OF_TREES_ACQUIRED) ||
+        manwe_quest_find_inventory_light(SV_LIGHT_TREES, false) < 0)
+    {
+        msg_print("You must carry the Light of the Trees before this forge will answer.");
+        return true;
+    }
+
+    if (!get_check("Set the Light of the Trees within the forge? "))
+        return true;
+
+    msg_print("The black furnace opens without flame.");
+
+    if (!manwe_quest_create_forged_silmaril())
+        return true;
+
+    if (!manwe_quest_consume_inventory_light(SV_LIGHT_TREES, false))
+        log_warn("Manwe quest: forged Silmaril but could not consume the Light of the Trees");
+
+    p_ptr->manwe_deception_flags |= MANWE_DECEPTION_SILMARIL_FORGED;
+    quest_set_state(QUEST_ID_MANWE_FORGE, QUEST_STATE_SUCCESS);
+    do_cmd_note("Forged the stolen Light of the Trees into a Silmaril.",
+        p_ptr->depth);
+    log_info("Manwe quest: quest Silmaril forged at the Forge of Grond");
+
+    manwe_quest_reveal_sauron(false);
+    manwe_quest_offer_sauron_bargain();
+    return true;
+}
+
 void manwe_quest_offer_if_needed(void)
 {
     if (!p_ptr || !story_branch_is_manwe_deception_run())
@@ -9435,6 +10036,16 @@ void manwe_quest_on_ungoliant_slain(int y, int x)
         "Manwe Returns", TERM_WHITE, TERM_L_BLUE,
         "The Light of the Trees burns clear in your keeping.",
         "The grey-clad lord returns, and the forge waits for what comes next.");
+
+    if (get_check("Will you carry the stolen light to the forge? "))
+    {
+        msg_print("Use the Forge of Grond when you are ready.");
+    }
+    else
+    {
+        manwe_quest_reveal_sauron(true);
+        msg_print("The forge still waits for the Light of the Trees.");
+    }
 
     do_cmd_note("Recovered the Light of the Trees from Ungoliant.", p_ptr->depth);
     p_ptr->redraw |= PR_MAP;
