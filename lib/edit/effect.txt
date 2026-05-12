@@ -16,7 +16,7 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:1.2.0
 
 
 ##### Digits (0-9) #####
