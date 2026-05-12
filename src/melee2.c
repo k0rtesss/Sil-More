@@ -313,7 +313,7 @@ static void remove_invalid_spells(int m_idx, u32b* f4p)
     // In his throne hall, Morgoth should not waste turns on the door-closing
     // part of Song of Binding before the pursuit begins.
     if ((m_ptr->r_idx == R_IDX_MORGOTH)
-        && (p_ptr->depth == MORGOTH_DEPTH)
+        && current_depth_is_morgoth_throne()
         && p_ptr->morgoth_hall_entered
         && !p_ptr->on_the_run)
     {
@@ -1166,7 +1166,7 @@ static bool get_move_wander(monster_type* m_ptr, int* ty, int* tx)
         // level
         if ((r_ptr->flags2 & (RF2_SMART))
             && !(r_ptr->flags2 & (RF2_TERRITORIAL))
-            && (p_ptr->depth != MORGOTH_DEPTH)
+            && !current_depth_is_final_depth()
             && cave_stair_bold(m_ptr->fy, m_ptr->fx)
             && (m_ptr->wandering_dist == 0))
         {
@@ -5565,7 +5565,7 @@ void calc_morale(monster_type* m_ptr)
         morale += (r_ptr->level - p_ptr->depth) * 10;
 
         // make sure orcs etc in throne room don't have too low morale
-        if (p_ptr->depth == MORGOTH_DEPTH)
+        if (current_depth_is_morgoth_throne())
             morale = MAX(morale, 20);
     }
 

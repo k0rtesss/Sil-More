@@ -263,13 +263,13 @@ int min_depth(void)
     // bounds on the base
     if (min_depth_value < 1)
         min_depth_value = 1;
-    if (min_depth_value > MORGOTH_DEPTH)
-        min_depth_value = MORGOTH_DEPTH;
+    if (min_depth_value > run_final_depth())
+        min_depth_value = run_final_depth();
 
     // can't leave Morgoth's hall once entered
-    if ((p_ptr->depth == MORGOTH_DEPTH) && p_ptr->morgoth_hall_entered)
+    if (current_depth_is_morgoth_throne() && p_ptr->morgoth_hall_entered)
     {
-        min_depth_value = MORGOTH_DEPTH;
+        min_depth_value = run_morgoth_depth();
     }
 
     // no limits in the endgame
@@ -729,7 +729,7 @@ void do_cmd_go_up(void)
 
     /* At 1000ft, once locked in (by time or by entering Morgoth's hall),
      * you cannot retreat without a Silmaril. */
-    if ((p_ptr->depth == MORGOTH_DEPTH) && (min == MORGOTH_DEPTH)
+    if (current_depth_is_morgoth_throne() && (min == run_morgoth_depth())
         && (silmarils_possessed() == 0))
     {
         msg_print("You enter a maze of staircases, but cannot find your way.");
@@ -762,7 +762,7 @@ void do_cmd_go_up(void)
 
     // deal with most cases where you can't find your way
     if ((new < min)
-        && !((p_ptr->depth == MORGOTH_DEPTH) && (silmarils_possessed() > 0)))
+        && !(current_depth_is_morgoth_throne() && (silmarils_possessed() > 0)))
     {
         message(MSG_STAIRS, 0,
             "You enter a maze of up staircases, but cannot find your way.");
@@ -824,7 +824,7 @@ void do_cmd_go_up(void)
             message(MSG_STAIRS, 0, "The divine light reveals the way.");
         }
 
-        if ((p_ptr->depth == MORGOTH_DEPTH) && (silmarils_possessed() > 0))
+        if (current_depth_is_morgoth_throne() && (silmarils_possessed() > 0))
         {
             if (!p_ptr->morgoth_slain)
             {
@@ -1033,6 +1033,12 @@ void do_cmd_go_down(void)
         return;
     }
 
+    if (current_depth_is_final_depth())
+    {
+        msg_print("You find no way deeper.");
+        return;
+    }
+
     // warn player if they have an active Niena quest and are trying to leave
     if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE)
     {
@@ -1090,7 +1096,7 @@ void do_cmd_go_down(void)
 
     min = min_depth();
     if ((cave_feat[p_ptr->py][p_ptr->px] == FEAT_MORE_SHAFT)
-        && (p_ptr->depth < MORGOTH_DEPTH - 1))
+        && (p_ptr->depth < run_final_depth() - 1))
     {
         /* Create a way back (usually) */
         p_ptr->create_stair = FEAT_LESS_SHAFT;
@@ -1114,14 +1120,15 @@ void do_cmd_go_down(void)
     message(MSG_STAIRS, 0, "You enter a maze of down staircases.");
 
     // Can never return to the throne room...
-    if ((p_ptr->on_the_run) && (new == MORGOTH_DEPTH))
+    if (p_ptr->on_the_run && run_has_morgoth_throne_room()
+        && (new == run_morgoth_depth()))
     {
         message(MSG_STAIRS, 0,
             "Try though you might, you cannot find your way back to Morgoth's "
             "throne.");
         message(MSG_STAIRS, 0, "You emerge near where you began.");
         p_ptr->create_stair = FEAT_MORE;
-        new = MORGOTH_DEPTH - 1;
+        new = run_morgoth_depth() - 1;
     }
 
     // deal with trapped stairs

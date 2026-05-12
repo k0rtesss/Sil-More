@@ -3072,7 +3072,7 @@ static void process_player(void)
         }
 
         // Morgoth will announce a challenge if adjacent
-        if (p_ptr->truce && (p_ptr->depth == MORGOTH_DEPTH))
+        if (p_ptr->truce && current_depth_is_morgoth_throne())
         {
             int d, yy, xx;
 
@@ -3463,7 +3463,7 @@ static void process_player(void)
         handle_partition_entry(false, op_ptr->partition_narrative_mode);
         legendary_area_note_player_position();
 
-        bool in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH)
+        bool in_morgoth_vault = current_depth_is_morgoth_throne()
             && (cave_info[p_ptr->py][p_ptr->px] & (CAVE_G_VAULT));
 
         /* Check for greater vault squares */
@@ -3490,7 +3490,7 @@ static void process_player(void)
 
                     if (restore_player_position_after_denied_move(last_player_y, last_player_x))
                     {
-                        in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH)
+                        in_morgoth_vault = current_depth_is_morgoth_throne()
                             && (cave_info[p_ptr->py][p_ptr->px] & (CAVE_G_VAULT));
                     }
                 }
@@ -3545,7 +3545,7 @@ static void process_player(void)
             }
         }
 
-        in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH)
+        in_morgoth_vault = current_depth_is_morgoth_throne()
             && (cave_info[p_ptr->py][p_ptr->px] & (CAVE_G_VAULT));
 
         if (p_ptr->morgoth_hall_entered && was_in_morgoth_vault && !in_morgoth_vault
@@ -4335,7 +4335,7 @@ static void dungeon(void)
         ghost_challenge();
 
     // explain the truce for the final level
-    if ((p_ptr->depth == MORGOTH_DEPTH) && p_ptr->truce)
+    if (current_depth_is_morgoth_throne() && p_ptr->truce)
     {
         msg_print("There is a strange tension in the air.");
         if (p_ptr->skill_use[S_PER] >= 15)
@@ -4367,8 +4367,8 @@ static void dungeon(void)
 
     varda_quest_notice_bastion_level_entry();
 
-    was_in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH) && (cave_info[p_ptr->py][p_ptr->px] & CAVE_G_VAULT);
-    if ((p_ptr->depth == MORGOTH_DEPTH) && !p_ptr->morgoth_hall_entered
+    was_in_morgoth_vault = current_depth_is_morgoth_throne() && (cave_info[p_ptr->py][p_ptr->px] & CAVE_G_VAULT);
+    if (current_depth_is_morgoth_throne() && !p_ptr->morgoth_hall_entered
         && (was_in_morgoth_vault || (silmarils_possessed() > 0)))
     {
         p_ptr->morgoth_hall_entered = true;
@@ -4575,7 +4575,7 @@ static void dungeon(void)
         p_ptr->energy += extract_energy[p_ptr->pspeed];
 
         /* Give energy to all monsters */
-        bool freeze_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH)
+        bool freeze_morgoth_vault = current_depth_is_morgoth_throne()
             && !p_ptr->morgoth_hall_entered && (silmarils_possessed() == 0);
         for (i = mon_max - 1; i >= 1; i--)
         {

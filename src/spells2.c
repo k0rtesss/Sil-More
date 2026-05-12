@@ -3708,10 +3708,10 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                             feat = FEAT_FLOOR;
                     }
 
-                    // change the feature (unless it would be making a chasm at
-                    // 1000 ft)
+                    // change the feature (unless it would be making a chasm on
+                    // the final level)
                     if (!((feat == FEAT_CHASM)
-                            && (p_ptr->depth >= MORGOTH_DEPTH)))
+                            && (p_ptr->depth >= run_final_depth())))
                     {
                         cave_info[y][x] &= ~(CAVE_MARK);
 

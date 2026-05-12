@@ -11,6 +11,8 @@ typedef enum {
     STORY_BRANCH_RUN_UNLIGHT_FINAL
 } story_branch_run_kind_type;
 
+#define MANWE_DECEPTION_FINAL_DEPTH 23
+
 story_branch_run_kind_type story_branch_run_kind(void);
 bool story_branch_is_manwe_deception_run(void);
 bool story_branch_is_light_cutscene_run(void);
@@ -19,5 +21,10 @@ bool story_branch_is_unlight_final_run(void);
 bool story_branch_allows_valar_quests(void);
 bool story_branch_allows_oath_selection(void);
 void story_branch_prepare_new_character(void);
+int run_final_depth(void);
+int run_morgoth_depth(void);
+bool run_has_morgoth_throne_room(void);
+bool current_depth_is_final_depth(void);
+bool current_depth_is_morgoth_throne(void);
 
 #endif /* STORY_BRANCH_H */

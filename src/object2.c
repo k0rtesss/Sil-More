@@ -1588,15 +1588,17 @@ s16b get_obj_num(int level)
     /* Boost level */
     if (level > 0)
     {
+        int final_depth = run_final_depth();
+
         /* Occasional "boost" */
         if (one_in_(GREAT_OBJ))
         {
             // most of the time, choose a new deeper depth, weighted towards the
             // current depth
-            if (level < MORGOTH_DEPTH)
+            if (level < final_depth)
             {
-                int x = rand_range(level + 1, MORGOTH_DEPTH);
-                int y = rand_range(level + 1, MORGOTH_DEPTH);
+                int x = rand_range(level + 1, final_depth);
+                int y = rand_range(level + 1, final_depth);
 
                 level = MIN(x, y);
             }
@@ -2844,15 +2846,17 @@ static int make_special_item(object_type* o_ptr, bool only_good)
     /* Boost level (like with object base types) */
     if (level > 0)
     {
+        int final_depth = run_final_depth();
+
         /* Occasional "boost" */
         if (one_in_(GREAT_SPECIAL))
         {
             // most of the time, choose a new deeper depth, weighted towards the
             // current depth
-            if (level < MORGOTH_DEPTH)
+            if (level < final_depth)
             {
-                int x = rand_range(level + 1, MORGOTH_DEPTH);
-                int y = rand_range(level + 1, MORGOTH_DEPTH);
+                int x = rand_range(level + 1, final_depth);
+                int y = rand_range(level + 1, final_depth);
 
                 level = MIN(x, y);
             }

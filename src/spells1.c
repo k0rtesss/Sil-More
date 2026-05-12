@@ -1416,7 +1416,7 @@ void teleport_player_level()
     /*
      * the bottom of the dungeon.
      */
-    if (p_ptr->depth >= MORGOTH_DEPTH)
+    if (p_ptr->depth >= run_final_depth())
     {
         go_up = true;
     }
@@ -5807,7 +5807,7 @@ static bool project_m(
     else if (do_dist)
     {
         /* no teleporting on certain levels */
-        if ((p_ptr->depth != 0) && (p_ptr->depth != MORGOTH_DEPTH))
+        if ((p_ptr->depth != 0) && !current_depth_is_final_depth())
         {
             /* Obvious */
             if (seen)
@@ -7702,7 +7702,7 @@ void song_of_binding(monster_type* m_ptr)
     // Morgoth's throne-room fight should not revolve around him repeatedly
     // re-closing the hall's doors, but keep the song's slowing effect.
     if (!((m_ptr->r_idx == R_IDX_MORGOTH)
-            && (p_ptr->depth == MORGOTH_DEPTH)
+            && current_depth_is_morgoth_throne()
             && p_ptr->morgoth_hall_entered
             && !p_ptr->on_the_run))
     {

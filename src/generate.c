@@ -5698,9 +5698,9 @@ static bool carve_labyrinth_bounds(int y_min, int y_max, int x_min, int x_max,
             /* Alternate between up and down stairs */
             int feat = (s % 2 == 0) ? FEAT_MORE : FEAT_LESS;
             
-            /* At surface, only down; at Morgoth depth, only up */
+            /* At surface, only down; at the run's final depth, only up */
             if (p_ptr->depth == 0) feat = FEAT_MORE;
-            else if (p_ptr->depth >= MORGOTH_DEPTH) feat = FEAT_LESS;
+            else if (p_ptr->depth >= run_final_depth()) feat = FEAT_LESS;
             
             cave_set_feat(sy, sx, feat);
             stairs_placed++;
@@ -8781,7 +8781,7 @@ static int choose_up_stairs(void)
  */
 static int choose_down_stairs(void)
 {
-    if (p_ptr->depth < MORGOTH_DEPTH - 2)
+    if (p_ptr->depth < run_final_depth() - 2)
     {
         if (one_in_(2) || p_ptr->on_the_run)
             return (FEAT_MORE_SHAFT);
@@ -8838,7 +8838,7 @@ void place_random_stairs(int y, int x)
     {
         cave_set_feat(y, x, FEAT_MORE);
     }
-    else if (p_ptr->depth >= MORGOTH_DEPTH)
+    else if (p_ptr->depth >= run_final_depth())
     {
         if (one_in_(2))
             cave_set_feat(y, x, FEAT_LESS);
@@ -10543,7 +10543,7 @@ static void build_chasms(void)
         * (p_ptr->cur_map_wid / PANEL_WID_FIXED);
 
     // determine whether to add chasms, and how many
-    if ((p_ptr->depth > 2) && (p_ptr->depth < MORGOTH_DEPTH)
+    if ((p_ptr->depth > 2) && (p_ptr->depth < run_final_depth())
         && percent_chance(p_ptr->depth + 30))
     {
         // add some chasms
@@ -11750,7 +11750,7 @@ static bool alloc_stairs(int feat, int num)
         }
 
         /* Bottom -- must go up */
-        else if (p_ptr->depth >= MORGOTH_DEPTH)
+        else if (p_ptr->depth >= run_final_depth())
         {
             /* Clear previous contents, add up stairs */
             if (x != 0)
@@ -12450,7 +12450,7 @@ bool check_connectivity(void)
         for (x = 0; x < p_ptr->cur_map_wid; x++)
             cave_access[y][x] = false;
 
-    if (p_ptr->depth >= MORGOTH_DEPTH)
+    if (p_ptr->depth >= run_final_depth())
     {
         return (true);
     }
@@ -12511,7 +12511,7 @@ static bool connect_rooms_stairs(void)
     int initial_down = FEAT_MORE;
 
     bool joined;
-    bool no_down_stairs = (p_ptr->depth >= MORGOTH_DEPTH);
+    bool no_down_stairs = (p_ptr->depth >= run_final_depth());
     bool niena_level = (quest_lottery_winner == QUEST_ID_NIENA);
 
     /* Add backbone links across partition neighbors */
@@ -12919,8 +12919,8 @@ static bool connect_rooms_stairs(void)
                     cave_feat[yy + 1][xx] != FEAT_DOOR_HEAD &&
                     cave_feat[yy][xx + 1] != FEAT_DOOR_HEAD)
                 {
-                    int feat = (p_ptr->on_the_run) ? FEAT_MORE_SHAFT : 
-                              (down_placed == 0 || p_ptr->depth >= MORGOTH_DEPTH) ? FEAT_MORE : 
+                    int feat = (p_ptr->on_the_run) ? FEAT_MORE_SHAFT :
+                              (down_placed == 0 || p_ptr->depth >= run_final_depth()) ? FEAT_MORE :
                               choose_down_stairs();
                     cave_set_feat(yy, xx, feat);
                     down_placed++;
@@ -13060,8 +13060,8 @@ static bool build_type1(int y0, int x0)
 
     // Occasional light - chance of darkness starts very small and
     // increases quadratically until always dark at 950 ft
-    if ((p_ptr->depth < dieroll(MORGOTH_DEPTH - 1))
-        || (p_ptr->depth < dieroll(MORGOTH_DEPTH - 1)))
+    if ((p_ptr->depth < dieroll(run_final_depth() - 1))
+        || (p_ptr->depth < dieroll(run_final_depth() - 1)))
     {
         light = true;
     }
@@ -13159,7 +13159,7 @@ static bool build_type2(int y0, int x0)
 
     /* Occasional light - always at level 1 through to never at Morgoth's level
      */
-    if (p_ptr->depth < dieroll(MORGOTH_DEPTH))
+    if (p_ptr->depth < dieroll(run_final_depth()))
         light = true;
 
     /* Pick a room size */
@@ -13478,8 +13478,8 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 return (false);
             }
 
-            // chasms can't occur at 1000 ft
-            if ((*t == '7') && (p_ptr->depth >= MORGOTH_DEPTH))
+            // chasms can't occur on the final level
+            if ((*t == '7') && (p_ptr->depth >= run_final_depth()))
             {
                 return (false);
             }
@@ -13487,7 +13487,7 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     }
 
     // reflections
-    if ((p_ptr->depth > 0) && (p_ptr->depth < MORGOTH_DEPTH))
+    if ((p_ptr->depth > 0) && (p_ptr->depth < run_final_depth()))
     {
         // reflect it vertically half the time
         if (one_in_(2))
@@ -16091,7 +16091,7 @@ static void cave_set_feat_style(int y, int x, int feat, int style_idx)
 static void partition_theme_depth_band(int depth, int* min_depth, int* max_depth)
 {
     int min_level = MAX(1, depth - PARTITION_THEME_LEVEL_DELTA);
-    int max_level = MIN(MORGOTH_DEPTH + 3, depth + PARTITION_THEME_LEVEL_DELTA);
+    int max_level = MIN(run_final_depth() + 3, depth + PARTITION_THEME_LEVEL_DELTA);
 
     if (min_depth)
         *min_depth = min_level;
@@ -16285,8 +16285,8 @@ static s16b choose_partition_pool_monster(
         return 0;
     if (min_depth < 1)
         min_depth = 1;
-    if (max_depth > MORGOTH_DEPTH + 3)
-        max_depth = MORGOTH_DEPTH + 3;
+    if (max_depth > run_final_depth() + 3)
+        max_depth = run_final_depth() + 3;
     if (min_depth > max_depth)
         return 0;
 
@@ -16368,8 +16368,8 @@ static s16b choose_chasm_theme_monster(
 
     if (min_depth < 1)
         min_depth = 1;
-    if (max_depth > MORGOTH_DEPTH + 3)
-        max_depth = MORGOTH_DEPTH + 3;
+    if (max_depth > run_final_depth() + 3)
+        max_depth = run_final_depth() + 3;
     if (min_depth > max_depth)
         return 0;
 
@@ -18637,7 +18637,7 @@ static bool place_legendary_area_for_depth(void)
     int eligible = 0;
     int pick;
 
-    if (p_ptr->depth <= 0 || p_ptr->depth >= MORGOTH_DEPTH)
+    if (p_ptr->depth <= 0 || p_ptr->depth >= run_final_depth())
         return false;
     if (!meta_dungeon_load_for_current_metarun(&areas, &count))
         return false;
@@ -18805,7 +18805,7 @@ static bool cave_gen(void)
     bool duruin_bastion_forced = false;
     bool shadow_bastion_forced = false;
     bool tulkas_stronghold_forced = false;
-    bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
+    bool is_morgoth_level = current_depth_is_morgoth_throne();
     bool allow_valar_quests = story_branch_allows_valar_quests();
 
     reset_morgoth_layout_state(is_morgoth_level);
@@ -19377,7 +19377,7 @@ static bool cave_gen(void)
     squash_double_doors();
     prune_invalid_nonvault_doors();
 
-    if (morgoth_level_active)
+    if (current_depth_is_final_depth())
     {
         for (y = 0; y < p_ptr->cur_map_hgt; y++)
         {
@@ -20436,7 +20436,7 @@ void unring_a_bell(void)
 void generate_cave(void)
 {
     int y, x, i;
-    bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
+    bool is_morgoth_level = current_depth_is_morgoth_throne();
 
     log_info("generate_cave: Function entry - about to start");
     log_debug("generate_cave: Starting cave generation");

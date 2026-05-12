@@ -1185,7 +1185,7 @@ static void do_cmd_wiz_jump(void)
         char tmp_val[160];
 
         /* Prompt */
-        sprintf(ppp, "Jump to level (0-%d): ", MORGOTH_DEPTH);
+        sprintf(ppp, "Jump to level (0-%d): ", run_final_depth());
 
         /* Default */
         sprintf(tmp_val, "%d", p_ptr->depth);
@@ -1203,8 +1203,8 @@ static void do_cmd_wiz_jump(void)
         p_ptr->command_arg = 0;
 
     /* Paranoia */
-    if (p_ptr->command_arg > MORGOTH_DEPTH)
-        p_ptr->command_arg = MORGOTH_DEPTH;
+    if (p_ptr->command_arg > run_final_depth())
+        p_ptr->command_arg = run_final_depth();
 
     /* Accept request */
     msg_format("You jump to dungeon level %d.", p_ptr->command_arg);

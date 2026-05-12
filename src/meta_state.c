@@ -139,7 +139,7 @@ bool meta_dungeon_record_is_valid(const meta_dungeon_record* record,
         return false;
     if (record->song_id <= SNG_NOTHING || record->song_id >= SNG_MAX)
         return false;
-    if (record->depth <= 0 || record->depth >= MORGOTH_DEPTH)
+    if (record->depth <= 0 || record->depth >= run_final_depth())
         return false;
     if (record->hgt < 1 || record->hgt > META_DUNGEON_MAX_HGT)
         return false;
@@ -1034,7 +1034,7 @@ void legendary_song_observe_end(int song_id, int effective_score)
             effective_score, song_id);
         goto cleanup;
     }
-    if (!p_ptr || p_ptr->depth <= 0 || p_ptr->depth >= MORGOTH_DEPTH)
+    if (!p_ptr || p_ptr->depth <= 0 || p_ptr->depth >= run_final_depth())
         goto cleanup;
     if (!legendary_song_is_starting_song(song_id)) {
         log_trace("legendary song: song=%d is not a starting song for character=%d",

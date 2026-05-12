@@ -3519,8 +3519,9 @@ static errr rd_dungeon(void)
     header_py = py;
     header_px = px;
 
-    /* Ignore illegal dungeons */
-    if ((depth < 0) || (depth > MORGOTH_DEPTH))
+    /* Ignore illegal dungeons.  Depths past the normal Morgoth hall are legal
+     * only for run kinds that have extended the current final depth. */
+    if ((depth < 0) || (depth > run_final_depth()))
     {
         note(format("Ignoring illegal dungeon depth (%d)", depth));
         return (0);

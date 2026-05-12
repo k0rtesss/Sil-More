@@ -277,7 +277,7 @@ void new_wandering_flow(monster_type* m_ptr, int ty, int tx)
         // level
         if ((r_ptr->flags2 & (RF2_SMART))
             && !(r_ptr->flags2 & (RF2_TERRITORIAL))
-            && (p_ptr->depth != MORGOTH_DEPTH) && one_in_(5)
+            && !current_depth_is_final_depth() && one_in_(5)
             && random_stair_location(&y, &x) && (cave_m_idx[y][x] >= 0)
             && !(cave_info[y][x] & (CAVE_ICKY)))
         {
@@ -5098,7 +5098,7 @@ void hit_trap(int y, int x)
         // give several messages so the player has a chance to see it happen
         msg_print("You fall into the darkness!");
         message_flush();
-        if (p_ptr->depth >= MORGOTH_DEPTH)
+        if (p_ptr->depth >= run_final_depth())
         {
             msg_print("...and plunge into the abyss.");
             message_flush();
@@ -5127,7 +5127,7 @@ void hit_trap(int y, int x)
             note_lost_greater_vault();
 
             /* New depth */
-            p_ptr->depth = MIN(p_ptr->depth + 2, MORGOTH_DEPTH);
+            p_ptr->depth = MIN(p_ptr->depth + 2, run_final_depth());
 
             /* Leaving */
             p_ptr->leaving = true;
@@ -5158,7 +5158,7 @@ void hit_trap(int y, int x)
         note_lost_greater_vault();
 
         /* New depth */
-        p_ptr->depth++;
+        p_ptr->depth = MIN(p_ptr->depth + 1, run_final_depth());
 
         /* Leaving */
         p_ptr->leaving = true;
@@ -7474,7 +7474,7 @@ void move_player(int dir)
                         // confirm if the destination is in the chasm
                         else if (cave_feat[y_end][x_end] == FEAT_CHASM)
                         {
-                            if (p_ptr->depth >= MORGOTH_DEPTH)
+                            if (p_ptr->depth >= run_final_depth())
                             {
                                 strnfmt(prompt, sizeof(prompt),
                                     "Are you sure you wish to leap into the "
@@ -7564,7 +7564,7 @@ void move_player(int dir)
                     flush();
 
                     cptr prompt = "Step into the chasm? ";
-                    if (p_ptr->depth >= MORGOTH_DEPTH)
+                    if (p_ptr->depth >= run_final_depth())
                         prompt = "Step into the chasm? You will surely die. ";
 
                     if (!get_check(prompt))
@@ -7646,7 +7646,7 @@ void move_player(int dir)
                 return;
         }
 
-        if ((p_ptr->depth == MORGOTH_DEPTH) && p_ptr->morgoth_hall_entered
+        if (current_depth_is_morgoth_throne() && p_ptr->morgoth_hall_entered
             && (silmarils_possessed() == 0)
             && (cave_info[py][px] & CAVE_G_VAULT)
             && !(cave_info[y][x] & CAVE_G_VAULT))
@@ -7657,7 +7657,7 @@ void move_player(int dir)
             return;
         }
 
-        if ((p_ptr->depth == MORGOTH_DEPTH) && !p_ptr->morgoth_hall_entered
+        if (current_depth_is_morgoth_throne() && !p_ptr->morgoth_hall_entered
             && (cave_info[y][x] & CAVE_G_VAULT))
         {
             if (!preconfirm_enter_morgoth_hall())

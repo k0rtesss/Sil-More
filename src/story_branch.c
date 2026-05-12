@@ -71,6 +71,35 @@ bool story_branch_allows_oath_selection(void)
         state != METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE;
 }
 
+int run_final_depth(void)
+{
+    if (story_branch_is_manwe_deception_run())
+        return MANWE_DECEPTION_FINAL_DEPTH;
+
+    return MORGOTH_DEPTH;
+}
+
+int run_morgoth_depth(void)
+{
+    return MORGOTH_DEPTH;
+}
+
+bool run_has_morgoth_throne_room(void)
+{
+    return story_branch_run_kind() == STORY_BRANCH_RUN_NORMAL;
+}
+
+bool current_depth_is_final_depth(void)
+{
+    return p_ptr && p_ptr->depth == run_final_depth();
+}
+
+bool current_depth_is_morgoth_throne(void)
+{
+    return p_ptr && run_has_morgoth_throne_room()
+        && p_ptr->depth == run_morgoth_depth();
+}
+
 void story_branch_prepare_new_character(void)
 {
     if (run_mode_is_blitz() || !p_ptr)

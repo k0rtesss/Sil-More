@@ -440,6 +440,12 @@ static inline int player_generation_depth(void)
         return 1;
     return generation_depth_for_level(p_ptr->depth);
 }
+
+int run_final_depth(void);
+int run_morgoth_depth(void);
+bool run_has_morgoth_throne_room(void);
+bool current_depth_is_final_depth(void);
+bool current_depth_is_morgoth_throne(void);
 #endif
 
 /*
