@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "blitz.h"
 #include "externs.h"
 #include "log/log.h"
 #include "meta_state.h"
@@ -3056,6 +3057,9 @@ void monster_death(int m_idx)
      *   1. General monster death things
      */
 
+    if (manwe_light_cutscene_on_monster_slain(m_ptr->r_idx))
+        return;
+
     // Special message and flag setting for killing Morgoth
     if (m_ptr->r_idx == R_IDX_MORGOTH)
     {
@@ -3282,7 +3286,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
     /* It is dead now */
     if (m_ptr->hp <= 0)
     {
-        if (m_ptr->r_idx == R_IDX_MORGOTH && !p_ptr->morgoth_second_wind)
+        if (m_ptr->r_idx == R_IDX_MORGOTH && !p_ptr->morgoth_second_wind &&
+            !story_branch_is_light_cutscene_run())
         {
             log_info("Morgoth reached 0 HP; entering god state.");
             (void)morgoth_enter_final_stage(m_idx);
@@ -7328,6 +7333,31 @@ int get_quest_oath_id(int quest_idx)
     return q_ptr->oath_id;
 }
 
+static bool quest_is_valar_quest_id(int quest_idx)
+{
+    switch (quest_idx) {
+        case QUEST_ID_TULKAS:
+        case QUEST_ID_AULE:
+        case QUEST_ID_MANDOS:
+        case QUEST_ID_NIENA:
+        case QUEST_ID_OROME:
+        case QUEST_ID_VARDA:
+        case QUEST_ID_MANDOS_TRAITOR:
+        case QUEST_ID_MANDOS_BETRAYER:
+        case QUEST_ID_OROME_DRAGONS:
+        case QUEST_ID_OROME_GREAT_HUNT:
+        case QUEST_ID_NIENA_MORGOTH:
+        case QUEST_ID_NIENA_PACIFIST:
+        case QUEST_ID_TULKAS_ORCS:
+        case QUEST_ID_TULKAS_MORGOTH:
+        case QUEST_ID_VARDA_SHADOW:
+        case QUEST_ID_VARDA_UNGOLIANT:
+            return true;
+        default:
+            return false;
+    }
+}
+
 /*
  * Check quest eligibility based on E: field data and standard quest requirements
  * Includes metarun completion checks and quest state checks
@@ -7340,6 +7370,13 @@ bool check_quest_eligibility(int quest_idx, int depth)
     if (quest_idx <= 0 || quest_idx >= z_info->quest_max) return false;
     
     q_ptr = &quest_info[quest_idx];
+
+    if (quest_is_valar_quest_id(quest_idx) &&
+        !story_branch_allows_valar_quests()) {
+        log_trace("Quest %d eligibility: STORY_BRANCH_BLOCKED run_kind=%d",
+                  quest_idx, story_branch_run_kind());
+        return false;
+    }
     
     /* Debug quest 2 specifically - show what was actually loaded */
     if (quest_idx == 2) {
@@ -8350,6 +8387,17 @@ void do_cmd_quest_status(void)
     Term_get_size(&wid, &hgt);
     quest_status_reset_page(col, &row);
 
+    if (!run_mode_is_blitz() && metarun_branch_is_unlight())
+    {
+        any_quests = true;
+        quest_status_put_line(col, hgt, &row, TERM_RED,
+            "Unlight Path");
+        quest_status_put_wrapped(col + 2, wid, hgt, &row, TERM_SLATE,
+            "You are forgotten and nameless. The Valar send no new quests, "
+            "and their oath-givers will not appear.");
+        quest_status_put_line(col, hgt, &row, TERM_WHITE, "");
+    }
+
     /* Check Tulkas quest */
     if (p_ptr->tulkas_quest > TULKAS_QUEST_GIVER_PRESENT) {
         any_quests = true;
@@ -9194,6 +9242,61 @@ void remove_quest_giver(int quest_giver_r_idx)
     log_trace("Quest giver with R_IDX %d not found on current level", quest_giver_r_idx);
 }
 
+static bool quest_giver_is_valar_quest_giver(int quest_giver_r_idx)
+{
+    switch (quest_giver_r_idx) {
+        case R_IDX_TULKAS:
+        case R_IDX_AULE:
+        case R_IDX_MANDOS:
+        case R_IDX_NIENA:
+        case R_IDX_OROME:
+        case R_IDX_VARDA:
+        case R_IDX_MANWE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool story_branch_blocks_valar_quest_giver(int quest_giver_r_idx)
+{
+    if (!quest_giver_is_valar_quest_giver(quest_giver_r_idx))
+        return false;
+
+    /* Manwe is a special deception-quest appearance, not a normal Valar
+     * lottery/reward giver. Only close that route after Unlight is chosen. */
+    if (quest_giver_r_idx == R_IDX_MANWE)
+        return metarun_branch_is_unlight();
+
+    return !story_branch_allows_valar_quests();
+}
+
+static bool story_branch_blocks_valar_quest_flow(int quest_idx,
+    int quest_giver_r_idx, cptr context, bool notify)
+{
+    bool removed_giver = false;
+
+    if (!quest_is_valar_quest_id(quest_idx))
+        return false;
+    if (story_branch_allows_valar_quests())
+        return false;
+
+    if (quest_giver_r_idx > 0) {
+        remove_quest_giver_silent(quest_giver_r_idx);
+        removed_giver = true;
+    }
+
+    if (notify)
+        msg_print("No answer comes from the West; that path is closed.");
+
+    if (notify || removed_giver) {
+        log_info("%s blocked by story branch run kind=%d (quest_id=%d, r_idx=%d)",
+                 context ? context : "Valar quest flow",
+                 story_branch_run_kind(), quest_idx, quest_giver_r_idx);
+    }
+    return true;
+}
+
 /*
  * Check if a quest giver is present on the current level
  */
@@ -9227,6 +9330,12 @@ bool spawn_quest_giver_near_player(int quest_giver_r_idx)
     int y, x;
     
     log_trace("Attempting to spawn quest giver R_IDX %d near player", quest_giver_r_idx);
+
+    if (story_branch_blocks_valar_quest_giver(quest_giver_r_idx)) {
+        log_info("Blocked Valar quest giver spawn by story branch run kind=%d (r_idx=%d)",
+                 story_branch_run_kind(), quest_giver_r_idx);
+        return false;
+    }
     
     /* Try to find a suitable spot near the player */
     for (y = p_ptr->py - 3; y <= p_ptr->py + 3; y++)
@@ -9269,6 +9378,14 @@ static bool trigger_adjacent_quest_giver_interaction(
             monster_type* m_ptr = &mon_list[m_idx];
             if (m_ptr->r_idx == quest_giver_r_idx)
             {
+                if (story_branch_blocks_valar_quest_giver(quest_giver_r_idx)) {
+                    remove_quest_giver_silent(quest_giver_r_idx);
+                    msg_print("No answer comes from the West; that path is closed.");
+                    log_info("Removed Valar quest giver interaction by story branch run kind=%d (r_idx=%d)",
+                             story_branch_run_kind(), quest_giver_r_idx);
+                    return true;
+                }
+
                 log_trace("Found %s adjacent at (%d, %d), triggering interaction",
                     quest_giver_name ? quest_giver_name : "quest giver", y, x);
                 interaction();
@@ -9288,6 +9405,12 @@ static bool ensure_reward_quest_giver_near_player(
 
     if (spawn_y) *spawn_y = -1;
     if (spawn_x) *spawn_x = -1;
+
+    if (story_branch_blocks_valar_quest_giver(quest_giver_r_idx)) {
+        log_info("Blocked Valar reward giver spawn by story branch run kind=%d (r_idx=%d)",
+                 story_branch_run_kind(), quest_giver_r_idx);
+        return false;
+    }
 
     if (is_quest_giver_present(quest_giver_r_idx))
     {
@@ -9345,6 +9468,251 @@ static void quest_show_text_or_fallback(int quest_idx, bool completion,
         fallback[1] = fallback_b ? fallback_b : "The charge remains clear.";
         quest_typewriter_menu(menu_title, fallback, 2, title_color, text_color);
     }
+}
+
+static metarun_light_scene_id manwe_light_cutscene_scene_for_run(void)
+{
+    if (p_ptr &&
+        p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_ID] <
+            METARUN_LIGHT_SCENE_MAX) {
+        return (metarun_light_scene_id)
+            p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_ID];
+    }
+
+    return metarun_light_scene_current();
+}
+
+static bool manwe_light_cutscene_completed_line(u32b first, u32b second,
+                                                u32b third, int challenge)
+{
+    return metarun_quest_completion_count(first) > 0 &&
+        metarun_quest_completion_count(second) > 0 &&
+        metarun_quest_completion_count(third) > 0 &&
+        metarun_challenge_completion_count(challenge) > 0;
+}
+
+static bool manwe_light_cutscene_tulkas_boon(void)
+{
+    return manwe_light_cutscene_completed_line(
+        METARUN_QUEST_TULKAS,
+        METARUN_QUEST_TULKAS_ORCS,
+        METARUN_QUEST_TULKAS_MORGOTH,
+        CHALLENGE_TULKAS_BLUNT);
+}
+
+static bool manwe_light_cutscene_mandos_boon(void)
+{
+    return manwe_light_cutscene_completed_line(
+        METARUN_QUEST_MANDOS,
+        METARUN_QUEST_MANDOS_TRAITOR,
+        METARUN_QUEST_MANDOS_BETRAYER,
+        CHALLENGE_DISCONNECTED);
+}
+
+static bool manwe_light_cutscene_nienna_boon(void)
+{
+    return manwe_light_cutscene_completed_line(
+        METARUN_QUEST_NIENA,
+        METARUN_QUEST_NIENA_MORGOTH,
+        METARUN_QUEST_NIENA_PACIFIST,
+        CHALLENGE_FIXED_50K_XP);
+}
+
+static bool manwe_light_cutscene_orome_boon(void)
+{
+    return manwe_light_cutscene_completed_line(
+        METARUN_QUEST_OROME,
+        METARUN_QUEST_OROME_DRAGONS,
+        METARUN_QUEST_OROME_GREAT_HUNT,
+        CHALLENGE_SINGLE_STAIR);
+}
+
+static bool manwe_light_cutscene_varda_boon(void)
+{
+    return manwe_light_cutscene_completed_line(
+        METARUN_QUEST_VARDA,
+        METARUN_QUEST_VARDA_SHADOW,
+        METARUN_QUEST_VARDA_UNGOLIANT,
+        CHALLENGE_TORCHLIGHT);
+}
+
+static bool manwe_light_cutscene_aule_boon(void)
+{
+    /* Aule currently has only the forge trial in data; treat that rewarded
+     * quest as the craft-line aid until a later Aule challenge exists. */
+    return metarun_quest_completion_count(METARUN_QUEST_AULE) > 0;
+}
+
+static void manwe_light_cutscene_apply_boons(cptr lines[], int *line_count,
+                                             int max_lines)
+{
+    bool changed = false;
+
+    if (manwe_light_cutscene_tulkas_boon()) {
+        p_ptr->skill_base[S_MEL] += 2;
+        p_ptr->skill_base[S_EVN] += 1;
+        changed = true;
+        if (*line_count < max_lines)
+            lines[(*line_count)++] = "Tulkas lends battle-strength: melee and evasion rise for this echo.";
+    }
+
+    if (manwe_light_cutscene_aule_boon()) {
+        p_ptr->skill_base[S_SMT] += 2;
+        changed = true;
+        if (*line_count < max_lines)
+            lines[(*line_count)++] = "Aule's forge-trial answers: craft and gear-memory steady your hands.";
+    }
+
+    if (manwe_light_cutscene_mandos_boon()) {
+        p_ptr->mandos_resurrection_primed = 1;
+        p_ptr->mandos_resurrection_used = 0;
+        if (*line_count < max_lines)
+            lines[(*line_count)++] = "Mandos withholds one doom: the first death in this echo is stayed.";
+    }
+
+    if (manwe_light_cutscene_nienna_boon()) {
+        p_ptr->stat_base[A_CON] += 1;
+        changed = true;
+        if (*line_count < max_lines)
+            lines[(*line_count)++] = "Nienna's mercy deepens your endurance and restores your strength.";
+    }
+
+    if (manwe_light_cutscene_orome_boon()) {
+        p_ptr->skill_base[S_ARC] += 2;
+        p_ptr->skill_base[S_PER] += 1;
+        changed = true;
+        if (*line_count < max_lines)
+            lines[(*line_count)++] = "Orome's hunt rides with you: archery and perception sharpen.";
+    }
+
+    if (manwe_light_cutscene_varda_boon()) {
+        p_ptr->skill_base[S_WIL] += 2;
+        p_ptr->skill_base[S_SNG] += 1;
+        changed = true;
+        if (*line_count < max_lines)
+            lines[(*line_count)++] = "Varda's light gathers against darkness: will and song are lifted.";
+    }
+
+    if (changed) {
+        p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA);
+        update_stuff();
+        p_ptr->chp = p_ptr->mhp;
+        p_ptr->chp_frac = 0;
+        p_ptr->csp = p_ptr->msp;
+        p_ptr->csp_frac = 0;
+        p_ptr->redraw |= (PR_HP | PR_VOICE);
+    }
+}
+
+void manwe_light_cutscene_start_if_needed(void)
+{
+    if (!p_ptr || !story_branch_is_light_cutscene_run())
+        return;
+
+    if (p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_STARTED])
+        return;
+
+    metarun_light_scene_id scene = manwe_light_cutscene_scene_for_run();
+    cptr lines[12];
+    int line_count = 0;
+    char intro[160];
+    char objective[160];
+
+    p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_ID] = (byte)scene;
+    p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_RESOLVED] = 0;
+    p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_STARTED] = 1;
+
+    strnfmt(intro, sizeof(intro),
+            "You take up the mantle of %s, not as a new life but as an echo held in light.",
+            metarun_light_scene_mantle(scene));
+    strnfmt(objective, sizeof(objective),
+            "Stand against %s. Victory or fall, the next memory will follow.",
+            metarun_light_scene_boss_name(scene));
+
+    lines[line_count++] = intro;
+    lines[line_count++] = objective;
+    manwe_light_cutscene_apply_boons(lines, &line_count,
+                                     (int)N_ELEMENTS(lines));
+
+    if (line_count == 2)
+        lines[line_count++] = "No completed Valar challenge bends this echo; only your own strength answers.";
+
+    quest_typewriter_menu(metarun_light_scene_name(scene), lines, line_count,
+                          TERM_YELLOW, TERM_WHITE);
+    do_cmd_note(format("Entered the Light endgame echo: %s.",
+                       metarun_light_scene_name(scene)), p_ptr->depth);
+    log_info("Light endgame scene started: %d (%s)",
+             scene, metarun_light_scene_name(scene));
+}
+
+bool manwe_light_cutscene_resolved_this_run(void)
+{
+    return p_ptr &&
+        p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_RESOLVED] != 0;
+}
+
+static void manwe_light_cutscene_resolve(metarun_light_scene_result result)
+{
+    if (!p_ptr || manwe_light_cutscene_resolved_this_run())
+        return;
+
+    metarun_light_scene_id scene = manwe_light_cutscene_scene_for_run();
+    p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_RESOLVED] = (byte)result;
+
+    if (result == METARUN_LIGHT_SCENE_RESULT_SUCCESS) {
+        do_cmd_note(format("The Light endgame echo endured: %s.",
+                           metarun_light_scene_name(scene)), p_ptr->depth);
+    } else {
+        do_cmd_note(format("The Light endgame echo fell: %s.",
+                           metarun_light_scene_name(scene)), p_ptr->depth);
+    }
+
+    metarun_advance_light_scene(result);
+}
+
+bool manwe_light_cutscene_on_monster_slain(int r_idx)
+{
+    if (!p_ptr || !story_branch_is_light_cutscene_run())
+        return false;
+    if (manwe_light_cutscene_resolved_this_run())
+        return true;
+
+    metarun_light_scene_id scene = manwe_light_cutscene_scene_for_run();
+    if (r_idx != metarun_light_scene_boss_r_idx(scene))
+        return false;
+
+    msg_format("The echo of %s stands fulfilled.",
+               metarun_light_scene_mantle(scene));
+    message_flush();
+
+    SDL_strlcpy(p_ptr->died_from, "light endgame victory",
+        sizeof(p_ptr->died_from));
+    killer_mark_other(SCORE_KILLER_OTHER);
+    killer_commit(p_ptr->died_from);
+
+    p_ptr->escaped = true;
+    p_ptr->is_dead = true;
+    p_ptr->playing = false;
+    p_ptr->leaving = true;
+
+    manwe_light_cutscene_resolve(METARUN_LIGHT_SCENE_RESULT_SUCCESS);
+    log_info("Light endgame scene succeeded: %d (%s)",
+             scene, metarun_light_scene_name(scene));
+    return true;
+}
+
+bool manwe_light_cutscene_record_fall(void)
+{
+    if (!p_ptr || !story_branch_is_light_cutscene_run())
+        return false;
+    if (manwe_light_cutscene_resolved_this_run())
+        return true;
+
+    metarun_light_scene_id scene = manwe_light_cutscene_scene_for_run();
+    manwe_light_cutscene_resolve(METARUN_LIGHT_SCENE_RESULT_FALL);
+    log_info("Light endgame scene fell: %d (%s)",
+             scene, metarun_light_scene_name(scene));
+    return true;
 }
 
 static void manwe_quest_spawn_appearance(cptr arrival_message)
@@ -10008,6 +10376,52 @@ void manwe_quest_offer_if_needed(void)
     log_info("Manwe quest: initial offer shown and quest marked active");
 }
 
+void manwe_light_continuation_if_needed(void)
+{
+    int eagle_y = -1;
+    int eagle_x = -1;
+    bool placed_eagle = false;
+    cptr lines[4];
+
+    if (!p_ptr)
+        return;
+    if (metarun_branch_state() != METARUN_BRANCH_LIGHT_CHOSEN)
+        return;
+    if (metarun_light_continuation_seen())
+        return;
+    if (story_branch_is_manwe_deception_run())
+        return;
+
+    placed_eagle = ensure_reward_quest_giver_near_player(
+        R_IDX_EAGLE_OF_MANWE, 6, "Eagle of Manwe",
+        "A great eagle of Manwe descends through a shaft of clean air.",
+        &eagle_y, &eagle_x);
+
+    if (!placed_eagle)
+        msg_print("A great eagle of Manwe circles high above the stairs.");
+
+    lines[0] = "The Eagle of Manwe bows its bright head, but no hidden lord stands behind its words.";
+    lines[1] = "\"The deceiver wore pity as a cloak. The winds of the West did not command your theft.\"";
+    lines[2] = "\"Yet you refused him, and the light you kept is now a witness against the darkness.\"";
+    lines[3] = "The old charge returns: descend, endure, and let the Valar judge the end.";
+
+    quest_typewriter_menu("Eagle of Manwe", lines, 4, TERM_WHITE, TERM_L_BLUE);
+
+    do_cmd_note("An Eagle of Manwe revealed Sauron's deceit and restored the old charge.",
+        p_ptr->depth);
+    metarun_mark_light_continuation_seen();
+
+    if (placed_eagle && eagle_y >= 0 && eagle_x >= 0)
+    {
+        remove_quest_giver_silent(R_IDX_EAGLE_OF_MANWE);
+        msg_print("The Eagle of Manwe wheels upward and is gone.");
+    }
+
+    p_ptr->redraw |= PR_MAP;
+    p_ptr->window |= PW_MESSAGE;
+    log_info("Manwe quest: Light continuation Eagle message shown");
+}
+
 void manwe_quest_on_ungoliant_slain(int y, int x)
 {
     if (!p_ptr || !story_branch_is_manwe_deception_run())
@@ -10153,6 +10567,10 @@ static bool quest_followup_objective_complete(int quest_idx, int killed_r_idx)
 static bool quest_complete_followup_quest(int quest_idx, cptr menu_title,
     byte title_color, byte text_color, bool show_text)
 {
+    if (story_branch_blocks_valar_quest_flow(quest_idx, 0,
+            "Valar follow-up quest completion", false))
+        return false;
+
     if (quest_get_state(quest_idx) >= QUEST_STATE_REWARDED)
         return true;
 
@@ -10207,6 +10625,10 @@ static void valar_followup_quest_interaction(int quest_idx, int quest_giver_r_id
 
     last_turn = turn;
     last_quest = quest_idx;
+
+    if (story_branch_blocks_valar_quest_flow(quest_idx, quest_giver_r_idx,
+            "Valar follow-up quest interaction", true))
+        return;
 
     if (state == QUEST_STATE_GIVER_PRESENT)
     {
@@ -10290,6 +10712,10 @@ void check_niena_morgoth_interaction(void)
     if (quest_get_state(QUEST_ID_NIENA_MORGOTH) != QUEST_STATE_GIVER_PRESENT)
         return;
 
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_NIENA_MORGOTH,
+            R_IDX_NIENA, "Niena Morgoth quest interaction", true))
+        return;
+
     for (int y = p_ptr->py - 1; y <= p_ptr->py + 1; y++)
     {
         for (int x = p_ptr->px - 1; x <= p_ptr->px + 1; x++)
@@ -10333,6 +10759,14 @@ void ensure_niena_pacifist_active(void)
 {
     byte morgoth_state = quest_get_state(QUEST_ID_NIENA_MORGOTH);
     byte pacifist_state = quest_get_state(QUEST_ID_NIENA_PACIFIST);
+
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_NIENA_PACIFIST,
+            0, "Niena pacifist quest activation", false))
+    {
+        if (pacifist_state != QUEST_STATE_NOT_STARTED)
+            quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_NOT_STARTED);
+        return;
+    }
 
     if (morgoth_state == QUEST_STATE_SUCCESS &&
         !(p_ptr->niena_reserved & NIENA_FLAG_MORGOTH_ATTACKED))
@@ -10383,6 +10817,15 @@ void ensure_niena_pacifist_active(void)
 void ensure_tulkas_morgoth_active(void)
 {
     byte state = quest_get_state(QUEST_ID_TULKAS_MORGOTH);
+
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_TULKAS_MORGOTH,
+            0, "Tulkas Morgoth quest activation", false))
+    {
+        if (state != QUEST_STATE_NOT_STARTED)
+            quest_set_state(QUEST_ID_TULKAS_MORGOTH, QUEST_STATE_NOT_STARTED);
+        return;
+    }
+
     if (state == QUEST_STATE_SUCCESS)
     {
         quest_complete_global_quest(QUEST_ID_TULKAS_MORGOTH,
@@ -10443,6 +10886,15 @@ static void check_tulkas_morgoth_damage(monster_type* m_ptr, int who)
 void ensure_varda_ungoliant_active(void)
 {
     byte state = quest_get_state(QUEST_ID_VARDA_UNGOLIANT);
+
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_VARDA_UNGOLIANT,
+            0, "Varda Ungoliant quest activation", false))
+    {
+        if (state != QUEST_STATE_NOT_STARTED)
+            quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_NOT_STARTED);
+        return;
+    }
+
     if (state == QUEST_STATE_SUCCESS)
     {
         quest_complete_global_quest(QUEST_ID_VARDA_UNGOLIANT,
@@ -10510,6 +10962,10 @@ void tulkas_quest_interaction(void)
         return; /* Already handled this turn */
     }
     last_interaction_turn = turn;
+
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_TULKAS,
+            R_IDX_TULKAS, "Tulkas quest interaction", true))
+        return;
     
     /* Safety check - ensure valid quest state */
     if (p_ptr->tulkas_quest != TULKAS_QUEST_GIVER_PRESENT && 
@@ -11365,6 +11821,10 @@ void varda_quest_interaction(void)
     if (last_interaction_turn == turn) return;
     last_interaction_turn = turn;
 
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_VARDA,
+            R_IDX_VARDA, "Varda quest interaction", true))
+        return;
+
     if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT) {
         if (!quest_can_accept_more()) {
             msg_print("You are already committed to two quests. Finish one before accepting another.");
@@ -11447,6 +11907,10 @@ static void varda_shadow_quest_interaction(void)
 
     if (last_interaction_turn == turn) return;
     last_interaction_turn = turn;
+
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_VARDA_SHADOW,
+            R_IDX_VARDA, "Varda shadow quest interaction", true))
+        return;
 
     if (state == QUEST_STATE_GIVER_PRESENT)
     {
@@ -11658,6 +12122,10 @@ void aule_quest_interaction(void)
         return; /* Already handled this turn */
     }
     last_interaction_turn = turn;
+
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_AULE,
+            R_IDX_AULE, "Aule quest interaction", true))
+        return;
     
     /* Skip interaction if quest already rewarded */
     if (p_ptr->aule_quest == AULE_QUEST_REWARDED)
@@ -11798,6 +12266,10 @@ void mandos_quest_interaction(void)
         return; /* Already handled this turn */
     }
     last_interaction_turn = turn;
+
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_MANDOS,
+            R_IDX_MANDOS, "Mandos quest interaction", true))
+        return;
     
     /* Handle first encounter - initialize quest */
     if (p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED)
@@ -12163,6 +12635,10 @@ void niena_quest_interaction(void)
         return; /* Already handled this turn */
     }
     last_interaction_turn = turn;
+
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_NIENA,
+            R_IDX_NIENA, "Niena quest interaction", true))
+        return;
     
     /* Safety check - ensure valid quest state */
     if (p_ptr->niena_quest != NIENA_QUEST_GIVER_PRESENT && 
@@ -12418,6 +12894,10 @@ void orome_quest_interaction(void)
         return; /* Already handled this turn */
     }
     last_interaction_turn = turn;
+
+    if (story_branch_blocks_valar_quest_flow(QUEST_ID_OROME,
+            R_IDX_OROME, "Orome quest interaction", true))
+        return;
     
     /* Safety check - ensure valid quest state */
     if (p_ptr->orome_quest != OROME_QUEST_GIVER_PRESENT && 

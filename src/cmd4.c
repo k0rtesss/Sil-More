@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "blitz.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -5253,7 +5254,14 @@ void do_cmd_ability_screen(void)
                                 if ((ability_skilltype == S_WIL)
                                     && (abilitynum == WIL_OATH))
                                 {
-                                    while (!return_to_abilities)
+                                    if (!run_mode_is_blitz() &&
+                                        metarun_branch_is_unlight())
+                                    {
+                                        skip_purchase = false;
+                                        bell("No new Valar oath will answer you.");
+                                        skip_purchase = true;
+                                    }
+                                    else while (!return_to_abilities)
                                     {
                                         skip_purchase = false;
 
@@ -28344,6 +28352,7 @@ void do_cmd_knowledge_oaths(void)
 {
     SDL_IOStream* fff;
     char file_name[1024];
+    bool unlight_branch = !run_mode_is_blitz() && metarun_branch_is_unlight();
     
     /* Temporary file */
     if (!path_temp(file_name, sizeof(file_name)))
@@ -28357,6 +28366,12 @@ void do_cmd_knowledge_oaths(void)
 
     /* Scan the oaths */
     SDL_IOprintf(fff, "Oath Status\n\n");
+
+    if (unlight_branch)
+    {
+        SDL_IOprintf(fff, "Branch: Unlight\n");
+        SDL_IOprintf(fff, "  You are forgotten and nameless; new Valar oaths are closed.\n\n");
+    }
     
     /* Check current character oath */
     if (p_ptr->have_ability[S_SPC][SPC_OATH_MERCY])
@@ -28394,9 +28409,19 @@ void do_cmd_knowledge_oaths(void)
         else
             SDL_IOprintf(fff, "Current Oath: Oath of Valorous Heart (Broken)\n\n");
     }
+    else if (p_ptr->have_ability[S_SPC][SPC_OATH_LIGHT])
+    {
+        if (p_ptr->active_ability[S_SPC][SPC_OATH_LIGHT])
+            SDL_IOprintf(fff, "Current Oath: Oath of Light (Active)\n\n");
+        else
+            SDL_IOprintf(fff, "Current Oath: Oath of Light (Broken)\n\n");
+    }
     else
     {
-        SDL_IOprintf(fff, "Current Oath: None\n\n");
+        if (unlight_branch)
+            SDL_IOprintf(fff, "Current Oath: None (Valar oath selection disabled)\n\n");
+        else
+            SDL_IOprintf(fff, "Current Oath: None\n\n");
     }
     
     /* Display metarun oath status */
@@ -28448,11 +28473,40 @@ void do_cmd_knowledge_oaths(void)
         SDL_IOprintf(fff, "\n");
         has_unlocked = true;
     }
+
+    if (oath_unlocked(OATH_LIGHT))
+    {
+        SDL_IOprintf(fff, "  Oath of Light: Unlocked");
+        if (oath_banned(OATH_LIGHT))
+            SDL_IOprintf(fff, " (Banned this run)");
+        SDL_IOprintf(fff, "\n");
+        has_unlocked = true;
+    }
     
     if (!has_unlocked)
     {
         SDL_IOprintf(fff, "  No oaths unlocked yet.\n");
-        SDL_IOprintf(fff, "  Complete Valar quests to unlock new oaths.\n");
+        if (unlight_branch)
+            SDL_IOprintf(fff, "  The Valar no longer answer new vows.\n");
+        else
+            SDL_IOprintf(fff, "  Complete Valar quests to unlock new oaths.\n");
+    }
+
+    if (unlight_branch)
+    {
+        SDL_IOprintf(fff, "\nUnlight Ally Oath Hooks:\n");
+        SDL_IOprintf(fff, "  Gothmog: %s\n",
+            metarun_unlight_ally_oath_placeholder_unlocked(
+                METARUN_UNLIGHT_ALLY_GOTHMOG)
+                ? "placeholder unlocked" : "future placeholder");
+        SDL_IOprintf(fff, "  Ancalagon: %s\n",
+            metarun_unlight_ally_oath_placeholder_unlocked(
+                METARUN_UNLIGHT_ALLY_ANCALAGON)
+                ? "placeholder unlocked" : "future placeholder");
+        SDL_IOprintf(fff, "  Glaurung: %s\n",
+            metarun_unlight_ally_oath_placeholder_unlocked(
+                METARUN_UNLIGHT_ALLY_GLAURUNG)
+                ? "placeholder unlocked" : "future placeholder");
     }
     
     /* Close the file */

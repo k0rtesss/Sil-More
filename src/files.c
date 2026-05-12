@@ -3596,6 +3596,7 @@ static void display_player_misc_info(void)
 {
     /* Name */
     char name[40];
+    byte name_attr = TERM_L_BLUE;
     int wid = 80;
     int hgt = 24;
     int col = 20;
@@ -3604,9 +3605,13 @@ static void display_player_misc_info(void)
         sdl_story_font_enable();
     }
     
-    if (p_ptr->oaths_broken) {
+    if (!run_mode_is_blitz() && metarun_branch_is_unlight()) {
+        strnfmt(name, sizeof(name), "Nameless, Forgotten by the Valar");
+        name_attr = TERM_RED;
+    } else if (p_ptr->oaths_broken) {
         /* Show "the Oathbreaker" in red if any oath is broken */
         strnfmt(name, sizeof(name), "%s the Oathbreaker", op_ptr->full_name);
+        name_attr = TERM_RED;
     } else {
         /* Normal display with character title */
         strnfmt(name, sizeof(name), "%s%s", op_ptr->full_name, c_name + current_character_profile->alt_name);
@@ -3622,10 +3627,7 @@ static void display_player_misc_info(void)
             col = 0;
     }
 
-    if (p_ptr->oaths_broken)
-        c_put_str(TERM_RED, name, 0, col);
-    else
-        c_put_str(TERM_L_BLUE, name, 0, col);
+    c_put_str(name_attr, name, 0, col);
     
     if (story_character_enabled()) {
         sdl_story_font_disable();
@@ -10770,7 +10772,17 @@ static void close_game_aux(void)
     int final_score = score_points(&the_score);
     if (!run_mode_is_blitz())
     {
-        if (p_ptr->escaped)
+        if (manwe_light_cutscene_resolved_this_run())
+        {
+            log_info("Light endgame cutscene outcome already recorded");
+            metarun_rollover_after_branch_complete();
+        }
+        else if (manwe_light_cutscene_record_fall())
+        {
+            log_info("Light endgame cutscene fall recorded");
+            metarun_rollover_after_branch_complete();
+        }
+        else if (p_ptr->escaped)
         {
             int escaped_silmarils = parse_score_int(the_score.silmarils,
                 sizeof(the_score.silmarils), 0);

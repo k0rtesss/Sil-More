@@ -66,7 +66,11 @@ extern curse_type* cu_info;
 #define METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK 9    /* METARUN_UNLIGHT_ALLY_* bits */
 #define METARUN_RUNTIME_SLOT_LIGHT_SCENE_SUCCESS_BASE 10 /* One success counter per light scene, slots 10..14 */
 #define METARUN_RUNTIME_SLOT_LIGHT_SCENE_FALL_BASE 15    /* One fall counter per light scene, slots 15..19 */
-#define METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE 20    /* First free branch/runtime slot */
+#define METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS 20 /* METARUN_LIGHT_CONTINUATION_* bits */
+#define METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX 21   /* Current metarun_light_scene_id while LIGHT_ENDGAME_ACTIVE */
+#define METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE 22    /* First free branch/runtime slot */
+
+#define METARUN_LIGHT_CONTINUATION_EAGLE_SEEN 0x01  /* Eagle of Manwe explanation shown */
 
 typedef enum {
     METARUN_BRANCH_NONE = 0,
@@ -287,10 +291,26 @@ void metarun_mark_challenge_completed(int challenge_id);  /* Record a finished c
 /* ------------------------------------------------------------------ */
 metarun_branch_state_type metarun_branch_state(void);
 void metarun_set_branch_state(metarun_branch_state_type state);
+bool metarun_branch_is_unlight(void);
+bool metarun_branch_blocks_true_name(void);
+cptr metarun_branch_status_text(void);
 byte metarun_unlight_ally_mask(void);
 void metarun_mark_unlight_ally(metarun_unlight_ally_bit ally);
+bool metarun_unlight_ally_oath_placeholder_unlocked(metarun_unlight_ally_bit ally);
+void metarun_note_unlight_ally_oath_hook(metarun_unlight_ally_bit ally);
 void metarun_light_scene_record(metarun_light_scene_id scene, metarun_light_scene_result result);
 byte metarun_light_scene_count(metarun_light_scene_id scene, metarun_light_scene_result result);
+metarun_light_scene_id metarun_light_scene_current(void);
+void metarun_set_light_scene_current(metarun_light_scene_id scene);
+cptr metarun_light_scene_name(metarun_light_scene_id scene);
+cptr metarun_light_scene_mantle(metarun_light_scene_id scene);
+cptr metarun_light_scene_boss_name(metarun_light_scene_id scene);
+int metarun_light_scene_boss_r_idx(metarun_light_scene_id scene);
+void metarun_begin_light_endgame(void);
+void metarun_advance_light_scene(metarun_light_scene_result result);
+void metarun_rollover_after_branch_complete(void);
+bool metarun_light_continuation_seen(void);
+void metarun_mark_light_continuation_seen(void);
 bool metarun_manwe_quest_unlocked(void);
 bool metarun_completed_any_vala_chain_with_challenge(void);
 void metarun_refresh_manwe_quest_unlock(cptr reason);

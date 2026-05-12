@@ -5601,6 +5601,11 @@ PlayResult play_game(void)
     log_debug("play_game: character_generated set to true - character creation complete");
     ability_log_sync_missing();
     snapshot_run_history("character start");
+    if (new_game)
+    {
+        manwe_light_cutscene_start_if_needed();
+        manwe_light_continuation_if_needed();
+    }
     manwe_quest_offer_if_needed();
 
     /* If Tulkas quest was auto-completed on load, spawn Tulkas and show messages */

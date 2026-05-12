@@ -144,6 +144,22 @@ static void metarun_sanitize_branch_fields(metarun *m)
 
     m->reserved_runtime[METARUN_RUNTIME_SLOT_UNLIGHT_ALLY_MASK] &=
         METARUN_UNLIGHT_ALLY_ALL;
+
+    if (metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS)) {
+        m->reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS] &=
+            METARUN_LIGHT_CONTINUATION_EAGLE_SEEN;
+    }
+
+    if (metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX)) {
+        if (state == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE) {
+            if (m->reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX] >=
+                METARUN_LIGHT_SCENE_MAX) {
+                m->reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX] = 0;
+            }
+        } else {
+            m->reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX] = 0;
+        }
+    }
 }
 
 static void metarun_prepare_branch_fields_after_load(metarun *m,
@@ -510,6 +526,41 @@ void metarun_set_branch_state(metarun_branch_state_type state)
               old_state, metar.reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_STATE]);
 }
 
+bool metarun_branch_is_unlight(void)
+{
+    metarun_branch_state_type state = metarun_branch_state();
+
+    return state == METARUN_BRANCH_UNLIGHT_CHOSEN ||
+        state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE;
+}
+
+bool metarun_branch_blocks_true_name(void)
+{
+    return metarun_branch_is_unlight();
+}
+
+cptr metarun_branch_status_text(void)
+{
+    switch (metarun_branch_state()) {
+        case METARUN_BRANCH_MANWE_QUEST_PENDING:
+            return "Manwe's charge waits for the next hero.";
+        case METARUN_BRANCH_MANWE_QUEST_ACTIVE:
+            return "Manwe's hidden charge is active.";
+        case METARUN_BRANCH_LIGHT_CHOSEN:
+            return "Light path chosen; the Valar still remember you.";
+        case METARUN_BRANCH_UNLIGHT_CHOSEN:
+            return "Unlight path chosen; you are forgotten and nameless.";
+        case METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE:
+            return "Light endgame active.";
+        case METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE:
+            return "Unlight final battle active; you remain nameless.";
+        case METARUN_BRANCH_COMPLETE:
+            return "Branch story complete.";
+        default:
+            return "";
+    }
+}
+
 byte metarun_unlight_ally_mask(void)
 {
     const metarun *current = metarun_current();
@@ -553,6 +604,49 @@ void metarun_mark_unlight_ally(metarun_unlight_ally_bit ally)
     save_metaruns();
     log_debug("metarun_mark_unlight_ally: ally mask 0x%02x -> 0x%02x",
               old_mask, new_mask);
+}
+
+static cptr metarun_unlight_ally_name(metarun_unlight_ally_bit ally)
+{
+    switch (ally) {
+        case METARUN_UNLIGHT_ALLY_GOTHMOG:
+            return "Gothmog";
+        case METARUN_UNLIGHT_ALLY_ANCALAGON:
+            return "Ancalagon";
+        case METARUN_UNLIGHT_ALLY_GLAURUNG:
+            return "Glaurung";
+        default:
+            return "unknown ally";
+    }
+}
+
+bool metarun_unlight_ally_oath_placeholder_unlocked(metarun_unlight_ally_bit ally)
+{
+    byte ally_bit = ((byte)ally) & METARUN_UNLIGHT_ALLY_ALL;
+
+    if (!ally_bit || !metarun_branch_is_unlight())
+        return false;
+
+    return (metarun_unlight_ally_mask() & ally_bit) != 0;
+}
+
+void metarun_note_unlight_ally_oath_hook(metarun_unlight_ally_bit ally)
+{
+    byte ally_bit = ((byte)ally) & METARUN_UNLIGHT_ALLY_ALL;
+
+    if (!ally_bit) {
+        log_warn("Unlight oath hook: invalid ally bit 0x%02x", ally);
+        return;
+    }
+
+    if (!metarun_branch_is_unlight()) {
+        log_debug("Unlight oath hook for %s ignored outside Unlight branch",
+                  metarun_unlight_ally_name(ally));
+        return;
+    }
+
+    log_info("Unlight oath hook ready for %s; oath mechanics are placeholder-only",
+             metarun_unlight_ally_name(ally));
 }
 
 static int metarun_light_scene_counter_slot(metarun_light_scene_id scene,
@@ -608,6 +702,169 @@ byte metarun_light_scene_count(metarun_light_scene_id scene,
         return 0;
 
     return metar.reserved_runtime[slot];
+}
+
+metarun_light_scene_id metarun_light_scene_current(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return METARUN_LIGHT_SCENE_FEANOR_GOTHMOG;
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX))
+        return METARUN_LIGHT_SCENE_FEANOR_GOTHMOG;
+
+    byte scene = metar.reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX];
+    if (scene >= METARUN_LIGHT_SCENE_MAX)
+        return METARUN_LIGHT_SCENE_FEANOR_GOTHMOG;
+
+    return (metarun_light_scene_id)scene;
+}
+
+void metarun_set_light_scene_current(metarun_light_scene_id scene)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_set_light_scene_current: no current metarun");
+        return;
+    }
+    if (scene < 0 || scene >= METARUN_LIGHT_SCENE_MAX) {
+        log_warn("metarun_set_light_scene_current: invalid scene %d", scene);
+        return;
+    }
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX)) {
+        log_warn("metarun_set_light_scene_current: scene slot is invalid");
+        return;
+    }
+
+    byte old_scene = metar.reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX];
+    metar.reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX] = (byte)scene;
+    metarun_sync_runtime_byte(current, METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX);
+
+    if (old_scene == metar.reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX])
+        return;
+
+    save_metaruns();
+    log_debug("metarun_set_light_scene_current: scene %d -> %d",
+              old_scene, metar.reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX]);
+}
+
+cptr metarun_light_scene_name(metarun_light_scene_id scene)
+{
+    switch (scene) {
+        case METARUN_LIGHT_SCENE_FEANOR_GOTHMOG:
+            return "Feanor against Gothmog";
+        case METARUN_LIGHT_SCENE_FINGOLFIN_MORGOTH:
+            return "Fingolfin before Morgoth";
+        case METARUN_LIGHT_SCENE_TURIN_GLAURUNG:
+            return "Turin before Glaurung";
+        case METARUN_LIGHT_SCENE_EARENDIL_ANCALAGON:
+            return "Earendil beneath Ancalagon";
+        case METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN:
+            return "The Fall of Gondolin";
+        default:
+            return "Unknown light scene";
+    }
+}
+
+cptr metarun_light_scene_mantle(metarun_light_scene_id scene)
+{
+    switch (scene) {
+        case METARUN_LIGHT_SCENE_FEANOR_GOTHMOG:
+            return "Feanor";
+        case METARUN_LIGHT_SCENE_FINGOLFIN_MORGOTH:
+            return "Fingolfin";
+        case METARUN_LIGHT_SCENE_TURIN_GLAURUNG:
+            return "Turin Turambar";
+        case METARUN_LIGHT_SCENE_EARENDIL_ANCALAGON:
+            return "Earendil";
+        case METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN:
+            return "Glorfindel of Gondolin";
+        default:
+            return "the remembered hero";
+    }
+}
+
+cptr metarun_light_scene_boss_name(metarun_light_scene_id scene)
+{
+    switch (scene) {
+        case METARUN_LIGHT_SCENE_FEANOR_GOTHMOG:
+            return "Gothmog";
+        case METARUN_LIGHT_SCENE_FINGOLFIN_MORGOTH:
+            return "Morgoth";
+        case METARUN_LIGHT_SCENE_TURIN_GLAURUNG:
+            return "Glaurung";
+        case METARUN_LIGHT_SCENE_EARENDIL_ANCALAGON:
+            return "Ancalagon";
+        case METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN:
+            return "Vallach, Balrog of Sudden Flame";
+        default:
+            return "the enemy";
+    }
+}
+
+int metarun_light_scene_boss_r_idx(metarun_light_scene_id scene)
+{
+    switch (scene) {
+        case METARUN_LIGHT_SCENE_FEANOR_GOTHMOG:
+            return R_IDX_GOTHMOG;
+        case METARUN_LIGHT_SCENE_FINGOLFIN_MORGOTH:
+            return R_IDX_MORGOTH;
+        case METARUN_LIGHT_SCENE_TURIN_GLAURUNG:
+            return R_IDX_GLAURUNG;
+        case METARUN_LIGHT_SCENE_EARENDIL_ANCALAGON:
+            return R_IDX_ANCALAGON;
+        case METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN:
+            return R_IDX_VALLACH;
+        default:
+            return 0;
+    }
+}
+
+void metarun_begin_light_endgame(void)
+{
+    if (!metarun_current())
+        return;
+
+    metarun_set_branch_state(METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE);
+    metarun_set_light_scene_current(METARUN_LIGHT_SCENE_FEANOR_GOTHMOG);
+    log_info("Light endgame cutscene sequence activated");
+}
+
+bool metarun_light_continuation_seen(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return false;
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS))
+        return false;
+
+    return (metar.reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS] &
+        METARUN_LIGHT_CONTINUATION_EAGLE_SEEN) != 0;
+}
+
+void metarun_mark_light_continuation_seen(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_mark_light_continuation_seen: no current metarun");
+        return;
+    }
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS)) {
+        log_warn("metarun_mark_light_continuation_seen: continuation slot is invalid");
+        return;
+    }
+
+    byte old_flags =
+        metar.reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS];
+    byte new_flags = old_flags | METARUN_LIGHT_CONTINUATION_EAGLE_SEEN;
+
+    metar.reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS] =
+        new_flags;
+    metarun_sync_runtime_byte(current, METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS);
+
+    if (new_flags == old_flags)
+        return;
+
+    save_metaruns();
+    log_debug("metarun_mark_light_continuation_seen: flags 0x%02x -> 0x%02x",
+              old_flags, new_flags);
 }
 
 bool metarun_manwe_quest_unlocked(void)
@@ -3480,6 +3737,78 @@ static void wait_prompt(prompt_t id) {         /* tiny wrapper */
     wait_for_keypress_with_prompt(prompt_text[id]);
 }
 
+static void metarun_light_endgame_summary(void)
+{
+    int successes = 0;
+    int falls = 0;
+    char line[256];
+
+    for (int i = 0; i < METARUN_LIGHT_SCENE_MAX; i++) {
+        successes += metarun_light_scene_count(
+            (metarun_light_scene_id)i, METARUN_LIGHT_SCENE_RESULT_SUCCESS);
+        falls += metarun_light_scene_count(
+            (metarun_light_scene_id)i, METARUN_LIGHT_SCENE_RESULT_FALL);
+    }
+
+    screen_save();
+    Term_clear();
+
+    print_heading_fade("The Long Memory", TERM_YELLOW);
+    strnfmt(line, sizeof(line),
+            "Five mantles passed through your hands: %d stood, %d fell. "
+            "Their deeds gather around the name restored to you, bright and wounded alike.",
+            successes, falls);
+    print_paragraph_fade(line, TERM_WHITE, 4);
+
+    for (int i = 0; i < METARUN_LIGHT_SCENE_MAX; i++) {
+        metarun_light_scene_id scene = (metarun_light_scene_id)i;
+        byte won = metarun_light_scene_count(
+            scene, METARUN_LIGHT_SCENE_RESULT_SUCCESS);
+        byte lost = metarun_light_scene_count(
+            scene, METARUN_LIGHT_SCENE_RESULT_FALL);
+
+        strnfmt(line, sizeof(line), "%s: %s",
+                metarun_light_scene_name(scene),
+                won ? "the echo endured" :
+                lost ? "the echo fell" : "the echo was unanswered");
+        print_paragraph_fade(line, won ? TERM_L_GREEN : TERM_L_DARK, 8 + i * 2);
+    }
+
+    wait_for_keypress_with_prompt("[Press any key to begin anew]");
+    screen_load();
+}
+
+void metarun_advance_light_scene(metarun_light_scene_result result)
+{
+    if (metarun_branch_state() != METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE) {
+        log_debug("metarun_advance_light_scene ignored outside Light endgame");
+        return;
+    }
+
+    metarun_light_scene_id scene = metarun_light_scene_current();
+    metarun_light_scene_record(scene, result);
+
+    if (scene + 1 >= METARUN_LIGHT_SCENE_MAX) {
+        metarun_set_branch_state(METARUN_BRANCH_COMPLETE);
+        log_info("Light endgame cutscene sequence complete");
+        metarun_light_endgame_summary();
+        return;
+    }
+
+    metarun_set_light_scene_current((metarun_light_scene_id)(scene + 1));
+    log_info("Light endgame advanced to scene %d (%s)",
+             scene + 1,
+             metarun_light_scene_name((metarun_light_scene_id)(scene + 1)));
+}
+
+void metarun_rollover_after_branch_complete(void)
+{
+    if (metarun_branch_state() != METARUN_BRANCH_COMPLETE)
+        return;
+
+    start_new_metarun();
+}
+
 /* ------------------------------------------------------------------
  * metarun_update_on_exit() - v5, 30 Jul 2025
  * ------------------------------------------------------------------
@@ -4147,6 +4476,54 @@ void check_run_end(void)
         screen_load();
 
         start_new_metarun();
+        return;
+    }
+
+    if (!run_mode_is_blitz() && metarun_branch_blocks_true_name() &&
+        metar.silmarils >= win_goal) {
+        log_info("Metarun normal victory suppressed for Unlight branch (%d/%d Silmarils)",
+                 metar.silmarils, win_goal);
+        return;
+    }
+
+    if (!run_mode_is_blitz() &&
+        metarun_branch_state() == METARUN_BRANCH_LIGHT_CHOSEN &&
+        metar.silmarils >= win_goal) {
+        log_info("Metarun Light endgame unlocked: %d Silmarils collected (goal: %d)",
+                 metar.silmarils, win_goal);
+        screen_save();
+        Term_clear();
+
+        print_heading_fade("The Name Remembered", TERM_YELLOW);
+        print_paragraph_fade(
+            "The last Silmaril is counted, and the hidden name returns like dawn on a high place.",
+            TERM_WHITE, 4);
+        print_paragraph_fade(
+            "Before the tale can close, five elder echoes must be faced in the light you kept.",
+            TERM_L_BLUE, 7);
+        print_paragraph_fade(
+            "Each fall will be remembered, but none can unmake the path you chose.",
+            TERM_L_BLUE, 10);
+
+        wait_for_keypress_with_prompt("[Press any key to face the first echo]");
+        screen_load();
+
+        metarun_begin_light_endgame();
+        save_metaruns();
+        return;
+    }
+
+    if (!run_mode_is_blitz() &&
+        metarun_branch_state() == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE &&
+        metar.silmarils >= win_goal) {
+        log_info("Metarun normal victory suppressed while Light endgame is active");
+        return;
+    }
+
+    if (!run_mode_is_blitz() &&
+        metarun_branch_state() == METARUN_BRANCH_COMPLETE &&
+        metar.silmarils >= win_goal) {
+        log_info("Metarun normal victory suppressed after branch completion");
         return;
     }
 
@@ -6336,6 +6713,7 @@ void print_metarun_stats(void)
 
     const char *diff_name = "Unknown";
     int win_goal = WINCON_SILMARILS;
+    cptr branch_status = metarun_branch_status_text();
 
     if (runtype_info && metar.type < z_info->rt_max && runtype_info[metar.type].name[0])
     {
@@ -6447,6 +6825,12 @@ redraw_story_stats:
         snprintf(buf, sizeof buf, "Difficulty     : %s", diff_name);
         Term_putstr(col, row++, -1, TERM_L_BLUE, buf);
 
+        if (branch_status && branch_status[0]) {
+            snprintf(buf, sizeof buf, "Branch         : %s", branch_status);
+            Term_putstr(col, row++, -1,
+                metarun_branch_is_unlight() ? TERM_RED : TERM_L_BLUE, buf);
+        }
+
         snprintf(buf, sizeof buf, "Meta Score     : %lu", (unsigned long)metar.score);
         Term_putstr(col, row++, -1, TERM_WHITE, buf);
 
@@ -6521,6 +6905,17 @@ redraw_story_stats:
             strnfmt(line3, sizeof(line3), "ID:%u  Diff:%s", metar.id, diff_name);
             strnfmt(line4, sizeof(line4), "ID:%u %s", metar.id, diff_name);
             metarun_put_adaptive_line(col, &row, term_width, TERM_L_BLUE, line1, line2, line3, line4);
+        }
+
+        if (branch_status && branch_status[0] && row < summary_row_limit) {
+            strnfmt(line1, sizeof(line1), "Branch:%s", branch_status);
+            strnfmt(line2, sizeof(line2), "%s", branch_status);
+            strnfmt(line3, sizeof(line3), "%s", branch_status);
+            strnfmt(line4, sizeof(line4),
+                metarun_branch_is_unlight() ? "Nameless" : "Branch");
+            metarun_put_adaptive_line(col, &row, term_width,
+                metarun_branch_is_unlight() ? TERM_RED : TERM_L_BLUE,
+                line1, line2, line3, line4);
         }
 
         if (row < summary_row_limit) {
@@ -7527,6 +7922,11 @@ void metarun_unlock_oath(int oath_id)
         log_trace("Oath unlock: Invalid oath_id=%d", oath_id);
         return;
     }
+
+    if (!run_mode_is_blitz() && metarun_branch_is_unlight()) {
+        log_info("Oath unlock blocked in Unlight branch (oath_id=%d)", oath_id);
+        return;
+    }
     
     byte oath_bit = (1 << (oath_id - 1)); /* Convert 1-based oath_id to bitmask */
     
@@ -7592,6 +7992,11 @@ int get_available_oaths_mask(void)
     }
 
     if (current_run < 0 || current_run >= metarun_max) return 0;
+
+    if (!run_mode_is_blitz() && metarun_branch_is_unlight()) {
+        log_trace("Oath availability: none in Unlight branch");
+        return 0;
+    }
     
     byte unlocked = metaruns[current_run].unlocked_oaths;
     byte banned = metaruns[current_run].banned_oaths;

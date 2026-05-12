@@ -158,6 +158,9 @@ bool monster_special_vault_only_allowed_at(int y, int x)
     if (current_build_vault_type == 9)
         return true;
 
+    if (story_branch_is_light_cutscene_run())
+        return (cave_info[y][x] & CAVE_G_VAULT) != 0;
+
     return coord_in_morgoth_region(y, x, 0)
         && ((cave_info[y][x] & CAVE_G_VAULT) != 0);
 }
@@ -18974,6 +18977,143 @@ static bool morgoth_escape_spawn_path_ok(int y, int x, int distance_roll,
     return path_dist[y][x] <= distance_roll * 3;
 }
 
+static void light_cutscene_reset_layout_state(void)
+{
+    memset(dun, 0, sizeof(*dun));
+    layout_anchor_reset();
+    reset_morgoth_layout_state(false);
+    current_partition_rows = 0;
+    current_partition_cols = 0;
+    current_partition_count = 0;
+    current_labyrinth_partitions = 0;
+    reset_partition_population_metadata();
+
+    for (int i = 0; i < PARTITION_META_MAX; ++i) {
+        current_partition_modes[i] = QUAD_MODE_ROOMY;
+        current_partition_densities[i] = DENSITY_NORMAL;
+        current_partition_big_cave_types[i] = BIG_CAVE_NONE;
+    }
+}
+
+static void light_cutscene_mark_room(int y1, int x1, int y2, int x2)
+{
+    dun->corner[0].y1 = (byte)y1;
+    dun->corner[0].x1 = (byte)x1;
+    dun->corner[0].y2 = (byte)y2;
+    dun->corner[0].x2 = (byte)x2;
+    dun->cent[0].y = (byte)((y1 + y2) / 2);
+    dun->cent[0].x = (byte)((x1 + x2) / 2);
+    dun->kind[0] = 8;
+    dun->is_quest[0] = true;
+    dun->cent_n = 1;
+    dun->connection[0][0] = true;
+}
+
+static void light_cutscene_prepare_unique(int r_idx)
+{
+    if (!r_info || r_idx <= 0)
+        return;
+
+    if (r_info[r_idx].max_num < 1)
+        r_info[r_idx].max_num = 1;
+    r_info[r_idx].cur_num = 0;
+}
+
+static bool light_cutscene_place_monster(int y, int x, int r_idx)
+{
+    light_cutscene_prepare_unique(r_idx);
+    return place_monster_one(y, x, r_idx, false, true, NULL);
+}
+
+static bool light_cutscene_gen(void)
+{
+    metarun_light_scene_id scene = metarun_light_scene_current();
+    int y1, x1, y2, x2;
+    int py, px;
+    int by, bx;
+    int boss_r_idx = metarun_light_scene_boss_r_idx(scene);
+
+    level_gen_screen_set_stage(LEVEL_GEN_STAGE_FOUNDATIONS,
+        "Preparing a bounded Light endgame echo.");
+
+    quest_lottery_winner = 0;
+    qv_placed_this_level = false;
+    manwe_forge_placed_this_level = false;
+    light_cutscene_reset_layout_state();
+
+    p_ptr->cur_map_hgt = (3 * PANEL_HGT);
+    p_ptr->cur_map_wid = (3 * PANEL_WID_FIXED);
+
+    styles_init_for_level();
+    basic_granite();
+    set_perm_boundry();
+
+    y1 = 4;
+    x1 = 6;
+    y2 = p_ptr->cur_map_hgt - 5;
+    x2 = p_ptr->cur_map_wid - 7;
+
+    for (int y = y1; y <= y2; y++) {
+        for (int x = x1; x <= x2; x++) {
+            bool edge = (y == y1 || y == y2 || x == x1 || x == x2);
+            cave_set_feat(y, x, edge ? FEAT_WALL_OUTER : FEAT_FLOOR);
+            cave_info[y][x] |= (CAVE_ROOM | CAVE_GLOW | CAVE_MARK |
+                                CAVE_ICKY | CAVE_G_VAULT);
+        }
+    }
+
+    switch (scene) {
+        case METARUN_LIGHT_SCENE_FINGOLFIN_MORGOTH:
+            for (int x = x1 + 6; x <= x2 - 6; x += 6)
+                cave_set_feat((y1 + y2) / 2, x, FEAT_CHASM);
+            break;
+        case METARUN_LIGHT_SCENE_TURIN_GLAURUNG:
+            for (int y = y1 + 4; y <= y2 - 4; y += 5)
+                cave_set_feat(y, (x1 + x2) / 2, FEAT_WALL_INNER);
+            break;
+        case METARUN_LIGHT_SCENE_EARENDIL_ANCALAGON:
+            for (int y = y1 + 3; y <= y2 - 3; y++) {
+                cave_set_feat(y, x1 + 4, FEAT_CHASM);
+                cave_set_feat(y, x2 - 4, FEAT_CHASM);
+            }
+            break;
+        case METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN:
+            for (int x = x1 + 2; x <= x2 - 2; x += 4)
+                cave_set_feat(y1 + 5, x, FEAT_WALL_INNER);
+            break;
+        default:
+            break;
+    }
+
+    light_cutscene_mark_room(y1, x1, y2, x2);
+
+    py = (y1 + y2) / 2;
+    px = x1 + 4;
+    by = (y1 + y2) / 2;
+    bx = x2 - 5;
+
+    cave_set_feat(py, px, FEAT_FLOOR);
+    cave_set_feat(by, bx, FEAT_FLOOR);
+    player_place(py, px);
+
+    if (scene == METARUN_LIGHT_SCENE_FALL_OF_GONDOLIN) {
+        cave_set_feat(by - 3, bx - 4, FEAT_FLOOR);
+        (void)light_cutscene_place_monster(by - 3, bx - 4, R_IDX_GOTHMOG);
+    }
+
+    if (!light_cutscene_place_monster(by, bx, boss_r_idx)) {
+        log_warn("Light endgame: failed to place scene boss r_idx=%d for scene %d",
+                 boss_r_idx, scene);
+        return false;
+    }
+
+    good_item_flag = true;
+    feeling = 1;
+    genlog_summary("Light endgame scene generated: %s",
+                   metarun_light_scene_name(scene));
+    return true;
+}
+
 /*
  * Generate a new dungeon level
  */
@@ -18993,6 +19133,9 @@ static bool cave_gen(void)
     bool tulkas_stronghold_forced = false;
     bool is_morgoth_level = current_depth_is_morgoth_throne();
     bool allow_valar_quests = story_branch_allows_valar_quests();
+
+    if (story_branch_is_light_cutscene_run())
+        return light_cutscene_gen();
 
     reset_morgoth_layout_state(is_morgoth_level);
     

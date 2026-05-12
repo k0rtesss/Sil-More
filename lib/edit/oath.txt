@@ -130,3 +130,10 @@ M:The light within you gutters and fades as you embrace the shadowed gear. The s
 E:The flame you vowed to guard is smothered by your own hand. Your Oath of Light is forever broken, a testament to the radiance you forsook in this age.
 Q:You passed from the world with your light quenched by shadow. You will be remembered as one who bore the gift of starlight and cast it aside.
 Z:OATH OF LIGHT EXTINGUISHED - Thy hand has chosen shadow over starlight. The radiance of the Kindler has fled from thee, and no star shall answer thy call. The light you foreswore shall grant you no comfort in this age of the world. Marked forever as one who broke the light.
+
+# Unlight oath placeholders
+#
+# Future Unlight ally oaths are intentionally not selectable Valar oaths.
+# Their hooks live in metarun_unlight_ally_oath_placeholder_unlocked() and
+# metarun_note_unlight_ally_oath_hook(); Stage 10 can connect persuaded allies
+# to real mechanics without reusing the Valar oath picker.

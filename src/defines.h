@@ -296,6 +296,7 @@
 #define R_IDX_OROME 332
 #define R_IDX_DURUIN 126
 #define R_IDX_BELEGWATH 166
+#define R_IDX_EAGLE_OF_MANWE 306
 #define R_IDX_MANWE 320
 #define R_IDX_VARDA 321
 #define R_IDX_SPIDER_HATCHLING 32
@@ -321,11 +322,13 @@
 #define R_IDX_GOSTIR 215
 #define R_IDX_SHELOB 224
 #define R_IDX_THURINGWETHIL 234
+#define R_IDX_ANCALAGON 233 // the location of Ancalagon
 #define R_IDX_GOTHMOG 241 // the location of Gothmog
 #define R_IDX_UNGOLIANT 242 // the location of Ungoliant
 #define R_IDX_GLAURUNG 243 // the location of Glaurung
 #define R_IDX_GORTHAUR 244 // the location of Gorthaur
 #define R_IDX_MORGOTH 251 // the location of Morgoth
+#define R_IDX_VALLACH 206 // the location of Vallach, Balrog of Sudden Flame
 #define R_IDX_CARCHAROTH 253 // the location of Carcharoth
 #define R_IDX_MORGOTH_HALLU 401 // the location of Morgoth's hallucination image
 
@@ -4081,6 +4084,11 @@ typedef struct quest_mapping {
 #define QUEST_STATE_ACTIVE         2
 #define QUEST_STATE_SUCCESS        3
 #define QUEST_STATE_REWARDED       4
+
+/* Run-local quest_reserved[] slots used by the Light endgame cutscene framework. */
+#define QUEST_RESERVED_LIGHT_SCENE_ID       18
+#define QUEST_RESERVED_LIGHT_SCENE_RESOLVED 19
+#define QUEST_RESERVED_LIGHT_SCENE_STARTED  20
 #define QUEST_FLAG_GLOBAL          0x01
 #define QUEST_FLAG_OPTIONAL_CHAIN  0x02
 

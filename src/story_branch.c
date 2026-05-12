@@ -68,11 +68,15 @@ bool story_branch_allows_oath_selection(void)
     metarun_branch_state_type state = metarun_branch_state();
 
     return state != METARUN_BRANCH_UNLIGHT_CHOSEN &&
-        state != METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE;
+        state != METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE &&
+        state != METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE;
 }
 
 int run_final_depth(void)
 {
+    if (story_branch_is_light_cutscene_run())
+        return 1;
+
     if (story_branch_is_manwe_deception_run())
         return MANWE_DECEPTION_FINAL_DEPTH;
 
@@ -118,6 +122,10 @@ void story_branch_prepare_new_character(void)
             log_info("Story branch: repeating active Manwe deception run for new character");
             break;
         case METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE:
+            p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_ID] =
+                (byte)metarun_light_scene_current();
+            p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_RESOLVED] = 0;
+            p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_STARTED] = 0;
             log_info("Story branch: light endgame cutscene run active for new character");
             break;
         case METARUN_BRANCH_UNLIGHT_CHOSEN:

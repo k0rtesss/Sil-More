@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "blitz.h"
 #include "externs.h"
 #include "log/log.h"
 #include "meta_state.h"
@@ -718,6 +719,9 @@ static void get_player_panel_name(char* buf, size_t buf_len)
 
     if (!name)
         return;
+
+    if (!run_mode_is_blitz() && metarun_branch_is_unlight())
+        name = "Nameless";
 
     while (*name && isspace((unsigned char)*name))
         name++;
