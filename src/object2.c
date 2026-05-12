@@ -5324,9 +5324,10 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
 
     bool plural = false;
     const bool is_silmaril = (j_ptr->tval == TV_LIGHT) && (j_ptr->sval == SV_LIGHT_SILMARIL);
+    const bool is_light_trees = (j_ptr->tval == TV_LIGHT) && (j_ptr->sval == SV_LIGHT_TREES);
     const bool impact_is_floor =
         (cave_feat[y][x] == FEAT_FLOOR) || (cave_feat[y][x] == FEAT_SUNLIGHT);
-    const bool force_place = artefact_p(j_ptr) || is_silmaril || j_ptr->pickup;
+    const bool force_place = artefact_p(j_ptr) || is_silmaril || is_light_trees || j_ptr->pickup;
     const bool try_hard_place = force_place || impact_is_floor;
     const bool can_clobber = force_place;
     const int scan_radius = try_hard_place ? 10 : 4;
@@ -5528,7 +5529,9 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
             object_type* o_ptr = &o_list[cave_o_idx[ty][tx]];
             const bool o_is_silmaril =
                 (o_ptr->tval == TV_LIGHT) && (o_ptr->sval == SV_LIGHT_SILMARIL);
-            if (!artefact_p(o_ptr) && !o_is_silmaril)
+            const bool o_is_light_trees =
+                (o_ptr->tval == TV_LIGHT) && (o_ptr->sval == SV_LIGHT_TREES);
+            if (!artefact_p(o_ptr) && !o_is_silmaril && !o_is_light_trees)
             {
                 /* Delete the object */
                 delete_object_idx(cave_o_idx[ty][tx]);
@@ -5577,7 +5580,8 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
         const bool is_gauntlets = is_gloves && (j_ptr->sval == SV_SET_OF_GAUNTLETS);
 
         if (j_ptr->tval == TV_POTION || j_ptr->tval == TV_FLASK || j_ptr->tval == TV_GEM ||
-            (j_ptr->tval == TV_LIGHT && j_ptr->sval == SV_LIGHT_SILMARIL)) {
+            (j_ptr->tval == TV_LIGHT && (j_ptr->sval == SV_LIGHT_SILMARIL ||
+                                         j_ptr->sval == SV_LIGHT_TREES))) {
             drop_sound = MSG_DROP_GLASS;
         }
         else if (j_ptr->tval == TV_RING || j_ptr->tval == TV_AMULET ||

@@ -15,6 +15,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
+#include "story_branch.h"
 
 void niena_mark_morgoth_attack(void);
 void niena_revoke_temp_mercy_gift(bool silent);
@@ -3094,6 +3095,9 @@ void monster_death(int m_idx)
     
     /* Check for Varda quest completion */
     check_varda_quest_completion(m_ptr->r_idx);
+
+    if (m_ptr->r_idx == R_IDX_UNGOLIANT)
+        manwe_quest_on_ungoliant_slain(m_ptr->fy, m_ptr->fx);
     
     /* Check for Orome quest completion */
     check_orome_quest_completion();
@@ -9338,6 +9342,104 @@ static void quest_show_text_or_fallback(int quest_idx, bool completion,
         fallback[1] = fallback_b ? fallback_b : "The charge remains clear.";
         quest_typewriter_menu(menu_title, fallback, 2, title_color, text_color);
     }
+}
+
+static void manwe_quest_spawn_appearance(cptr arrival_message)
+{
+    if (!ensure_reward_quest_giver_near_player(
+            R_IDX_MANWE, 5, "Manwe", arrival_message, NULL, NULL))
+    {
+        log_warn("Manwe quest: failed to place Manwe near the player for appearance");
+    }
+}
+
+static bool manwe_quest_drop_light_of_trees(int y, int x)
+{
+    object_type object_type_body;
+    object_type* o_ptr = &object_type_body;
+    char o_name[80];
+    s16b k_idx = lookup_kind(TV_LIGHT, SV_LIGHT_TREES);
+    s16b o_idx;
+
+    if (k_idx <= 0)
+    {
+        log_error("Manwe quest: Light of the Trees object kind is missing");
+        return false;
+    }
+
+    object_wipe(o_ptr);
+    object_prep(o_ptr, k_idx);
+    o_ptr->number = 1;
+    o_ptr->pickup = true;
+    object_aware(o_ptr);
+    object_known(o_ptr);
+
+    o_idx = drop_near(o_ptr, 0, y, x);
+    if (o_idx <= 0)
+    {
+        log_error("Manwe quest: failed to place the Light of the Trees at (%d,%d)", y, x);
+        return false;
+    }
+
+    object_desc(o_name, sizeof(o_name), &o_list[o_idx], true, 3);
+    msg_format("%s falls free of Ungoliant's unlight.", o_name);
+    return true;
+}
+
+void manwe_quest_offer_if_needed(void)
+{
+    if (!p_ptr || !story_branch_is_manwe_deception_run())
+        return;
+
+    if (p_ptr->manwe_deception_flags & MANWE_DECEPTION_MANWE_APPEARED_OFFERED)
+        return;
+
+    manwe_quest_spawn_appearance("Manwe appears nearby, his mantle stirring in a wind you cannot feel.");
+
+    quest_show_text_or_fallback(QUEST_ID_MANWE_FORGE, false,
+        "Manwe, Lord of the Breath of Arda", TERM_WHITE, TERM_L_BLUE,
+        "A wind from beyond the circles of the world moves in the dark.",
+        "Manwe charges you to find the hidden Forge of Grond and reclaim the stolen light.");
+
+    p_ptr->manwe_deception_flags |= MANWE_DECEPTION_MANWE_APPEARED_OFFERED;
+    quest_set_state(QUEST_ID_MANWE_FORGE, QUEST_STATE_ACTIVE);
+    do_cmd_note("Manwe sent you beneath the known deeps to the Forge of Grond.", p_ptr->depth);
+    log_info("Manwe quest: initial offer shown and quest marked active");
+}
+
+void manwe_quest_on_ungoliant_slain(int y, int x)
+{
+    if (!p_ptr || !story_branch_is_manwe_deception_run())
+        return;
+
+    if (p_ptr->manwe_deception_flags & MANWE_DECEPTION_UNGOLIANT_SLAIN)
+        return;
+
+    p_ptr->manwe_deception_flags |= MANWE_DECEPTION_UNGOLIANT_SLAIN;
+    msg_print("Ungoliant's unlight collapses inward, and the stolen radiance burns free.");
+
+    if (manwe_quest_drop_light_of_trees(y, x))
+    {
+        p_ptr->manwe_deception_flags |= MANWE_DECEPTION_LIGHT_OF_TREES_ACQUIRED;
+    }
+    else
+    {
+        p_ptr->manwe_deception_flags |= MANWE_DECEPTION_LIGHT_OF_TREES_ACQUIRED;
+        msg_print("The Light of the Trees settles into your keeping.");
+    }
+
+    quest_set_state(QUEST_ID_MANWE_FORGE, QUEST_STATE_SUCCESS);
+
+    manwe_quest_spawn_appearance("Manwe returns in a rush of cold, high wind.");
+    quest_show_text_or_fallback(QUEST_ID_MANWE_FORGE, true,
+        "Manwe Returns", TERM_WHITE, TERM_L_BLUE,
+        "The Light of the Trees burns clear in your keeping.",
+        "The grey-clad lord returns, and the forge waits for what comes next.");
+
+    do_cmd_note("Recovered the Light of the Trees from Ungoliant.", p_ptr->depth);
+    p_ptr->redraw |= PR_MAP;
+    p_ptr->window |= PW_MESSAGE;
+    log_info("Manwe quest: Ungoliant slain, Light of the Trees acquired");
 }
 
 static void quest_accept_followup_side_effects(int quest_idx)

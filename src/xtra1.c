@@ -4722,6 +4722,8 @@ void calc_torch(void)
                 p_ptr->cur_light += RADIUS_FEANORIAN;
             else if (o_ptr->sval == SV_LIGHT_SILMARIL)
                 p_ptr->cur_light += RADIUS_SILMARIL;
+            else if (o_ptr->sval == SV_LIGHT_TREES)
+                p_ptr->cur_light += RADIUS_TREES;
 
             /* Torches (with fuel) provide some light */
             else if ((o_ptr->sval == SV_LIGHT_TORCH) && player_light_has_fuel(o_ptr))

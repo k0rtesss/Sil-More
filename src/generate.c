@@ -1601,15 +1601,18 @@ typedef struct {
     bool has_varda_change;
     bool has_varda_shadow_change;
     bool has_tulkas_change;
+    bool has_manwe_forge_change;
     int aule_level;
     int mandos_level;
     int varda_level;
     int varda_shadow_level;
     int tulkas_level;
+    int manwe_forge_level;
     int aule_forge_y, aule_forge_x;
     int mandos_vault_y, mandos_vault_x;
     int varda_vault_y, varda_vault_x;
     int varda_shadow_y, varda_shadow_x;
+    int manwe_forge_y, manwe_forge_x;
     int tulkas_next_state;
     bool tulkas_spawn_pending;
     int mandos_quest_id;
@@ -2402,11 +2405,13 @@ static void reset_pending_quest_states(void) {
     pending_quest_states.has_varda_change = false;
     pending_quest_states.has_varda_shadow_change = false;
     pending_quest_states.has_tulkas_change = false;
+    pending_quest_states.has_manwe_forge_change = false;
     pending_quest_states.aule_level = 0;
     pending_quest_states.mandos_level = 0;
     pending_quest_states.varda_level = 0;
     pending_quest_states.varda_shadow_level = 0;
     pending_quest_states.tulkas_level = 0;
+    pending_quest_states.manwe_forge_level = 0;
     pending_quest_states.aule_forge_y = 0;
     pending_quest_states.aule_forge_x = 0;
     pending_quest_states.mandos_vault_y = 0;
@@ -2415,6 +2420,8 @@ static void reset_pending_quest_states(void) {
     pending_quest_states.varda_vault_x = 0;
     pending_quest_states.varda_shadow_y = 0;
     pending_quest_states.varda_shadow_x = 0;
+    pending_quest_states.manwe_forge_y = 0;
+    pending_quest_states.manwe_forge_x = 0;
     pending_quest_states.tulkas_next_state = 0;
     pending_quest_states.tulkas_spawn_pending = false;
     pending_quest_states.mandos_quest_id = 0;
@@ -2573,6 +2580,15 @@ static void apply_pending_quest_states(void) {
             pending_quest_states.tulkas_level,
             quest_get_state(QUEST_ID_TULKAS_ORCS),
             p_ptr->tulkas_second_spawn_pending);
+    }
+    if (pending_quest_states.has_manwe_forge_change) {
+        p_ptr->manwe_deception_flags |= MANWE_DECEPTION_DEPTH23_VAULT_GENERATED;
+        if (quest_get_state(QUEST_ID_MANWE_FORGE) == QUEST_STATE_NOT_STARTED)
+            quest_set_state(QUEST_ID_MANWE_FORGE, QUEST_STATE_ACTIVE);
+        log_trace("Manwe quest: Forge of Grond placement APPLIED (deferred) at %d,%d depth=%d",
+            pending_quest_states.manwe_forge_y,
+            pending_quest_states.manwe_forge_x,
+            pending_quest_states.manwe_forge_level);
     }
     
     /* Reset pending changes after applying them */
@@ -13045,6 +13061,7 @@ static bool connect_rooms_stairs(void)
  */
 static bool solid_rock_reduced_padding(int y1, int x1, int y2, int x2);
 static bool place_room_forced(int y0, int x0, vault_type* v_ptr);
+static bool mark_g_vault(int y0, int x0, int ymax, int xmax);
 static bool try_quest_vault_type(int vault_type, bool *had_eligible_candidate);
 
 /*
@@ -15234,9 +15251,16 @@ static bool vault_template_is_orc_stronghold(vault_type *v) {
     return (strstr(name, "Orc Stronghold") != NULL);
 }
 
+static bool vault_template_is_manwe_forge(vault_type *v) {
+    if (!v) return false;
+    const char *name = v_name + v->name;
+    return (strstr(name, "Forge of Grond") != NULL);
+}
+
 /* Global variables to store quest vault coordinates for monitoring */
 int qv_stored_y1 = -1, qv_stored_x1 = -1, qv_stored_y2 = -1, qv_stored_x2 = -1;
 bool qv_placed_this_level = false;  /* Track if quest vault actually placed this level */
+static bool manwe_forge_placed_this_level = false;
 
 /* DEBUGGING: Function to check if quest vault still exists at monitored coordinates */
 static void check_quest_vault_integrity(const char* checkpoint_name) {
@@ -15405,6 +15429,50 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
     }
 }
 
+static void remember_quest_vault_bounds(int y0, int x0, vault_type *qv)
+{
+    qv_stored_y1 = y0 - qv->hgt / 2;
+    qv_stored_x1 = x0 - qv->wid / 2;
+    qv_stored_y2 = qv_stored_y1 + qv->hgt - 1;
+    qv_stored_x2 = qv_stored_x1 + qv->wid - 1;
+    qv_placed_this_level = true;
+}
+
+static bool vault_area_has_monster_race(int y0, int x0, vault_type *qv, int r_idx)
+{
+    int y1 = y0 - qv->hgt / 2;
+    int x1 = x0 - qv->wid / 2;
+    int y2 = y1 + qv->hgt - 1;
+    int x2 = x1 + qv->wid - 1;
+
+    for (int y = y1; y <= y2; y++) {
+        for (int x = x1; x <= x2; x++) {
+            int m_idx = cave_m_idx[y][x];
+            if (m_idx > 0 && mon_list[m_idx].r_idx == r_idx)
+                return true;
+        }
+    }
+
+    return false;
+}
+
+static void finalize_manwe_forge_placement(int y, int x, vault_type *qv)
+{
+    remember_quest_vault_bounds(y, x, qv);
+    manwe_forge_placed_this_level = true;
+
+    if (mark_g_vault(y, x, qv->hgt, qv->wid))
+    {
+        SDL_strlcpy(g_vault_name, v_name + qv->name, sizeof(g_vault_name));
+    }
+
+    level_gen_debug_activate_quest_vault_name(v_name + qv->name);
+    pending_quest_states.has_manwe_forge_change = true;
+    pending_quest_states.manwe_forge_level = p_ptr->depth;
+    pending_quest_states.manwe_forge_y = y;
+    pending_quest_states.manwe_forge_x = x;
+}
+
 /* Force placement of the Orc Stronghold quest vault when scheduled. */
 static bool place_orc_stronghold(void)
 {
@@ -15480,6 +15548,86 @@ static bool place_orc_stronghold(void)
 
     log_trace("Tulkas orc quest: Failed to place Orc Stronghold");
     genlog_quest("QUEST VAULT FAILED: '%s' could not be placed",
+        v_name + qv_ptr->name);
+    return false;
+}
+
+static bool place_manwe_forge(void)
+{
+    vault_type* qv_ptr = NULL;
+    int y, x;
+    bool require_ungoliant =
+        !(p_ptr->manwe_deception_flags & MANWE_DECEPTION_UNGOLIANT_SLAIN);
+
+    for (int i = 0; i < z_info->v_max; i++)
+    {
+        vault_type* v_ptr = &v_info[i];
+        if (!vault_template_is_manwe_forge(v_ptr)) continue;
+        if (!(v_ptr->flags & VLT_QUEST)) continue;
+        if (v_ptr->depth > p_ptr->depth) continue;
+        if (v_ptr->max_depth != 0 && p_ptr->depth > v_ptr->max_depth) continue;
+        qv_ptr = v_ptr;
+        break;
+    }
+
+    if (!qv_ptr) {
+        log_trace("Manwe quest: Forge of Grond template not found or not eligible at depth %d",
+            p_ptr->depth);
+        return false;
+    }
+
+    level_gen_debug_note_quest_vault_name(v_name + qv_ptr->name);
+
+    int center_y = p_ptr->cur_map_hgt / 2;
+    int center_x = p_ptr->cur_map_wid / 2;
+
+    for (int attempts = 0; attempts < 50; attempts++) {
+        y = center_y + rand_range(-p_ptr->cur_map_hgt / 8, p_ptr->cur_map_hgt / 8);
+        x = center_x + rand_range(-p_ptr->cur_map_wid / 8, p_ptr->cur_map_wid / 8);
+
+        y = MAX(qv_ptr->hgt / 2 + 3, MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+        x = MAX(qv_ptr->wid / 2 + 3, MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+        if (place_room_forced(y, x, qv_ptr)) {
+            if (require_ungoliant &&
+                !vault_area_has_monster_race(y, x, qv_ptr, R_IDX_UNGOLIANT))
+            {
+                log_trace("Manwe quest: Forge placed without Ungoliant; regenerating level");
+                return false;
+            }
+
+            finalize_manwe_forge_placement(y, x, qv_ptr);
+
+            log_trace("Manwe quest: Forge of Grond placed at (%d,%d) depth=%d on attempt %d",
+                y, x, p_ptr->depth, attempts + 1);
+            genlog_quest("MANWE FORGE PLACED: '%s' at (%d,%d)",
+                v_name + qv_ptr->name, y, x);
+            return true;
+        }
+    }
+
+    log_trace("Manwe quest: Random placement failed for '%s', scanning the full map for a guaranteed fit",
+        v_name + qv_ptr->name);
+    if (place_room_forced_exhaustive(qv_ptr, &y, &x))
+    {
+        if (require_ungoliant &&
+            !vault_area_has_monster_race(y, x, qv_ptr, R_IDX_UNGOLIANT))
+        {
+            log_trace("Manwe quest: Forge placed by exhaustive scan without Ungoliant; regenerating level");
+            return false;
+        }
+
+        finalize_manwe_forge_placement(y, x, qv_ptr);
+
+        log_trace("Manwe quest: Forge of Grond placed by exhaustive scan at (%d,%d) depth=%d",
+            y, x, p_ptr->depth);
+        genlog_quest("MANWE FORGE PLACED: '%s' at (%d,%d) after full-map scan",
+            v_name + qv_ptr->name, y, x);
+        return true;
+    }
+
+    log_trace("Manwe quest: Failed to place Forge of Grond");
+    genlog_quest("MANWE FORGE FAILED: '%s' could not be placed",
         v_name + qv_ptr->name);
     return false;
 }
@@ -18815,6 +18963,7 @@ static bool cave_gen(void)
     
     /* Reset quest vault monitoring variables for this level */
     qv_placed_this_level = false;
+    manwe_forge_placed_this_level = false;
     qv_stored_y1 = qv_stored_x1 = qv_stored_y2 = qv_stored_x2 = -1;
     
     /* Run quest lottery once per level to determine which quest (if any) gets this level */
@@ -18942,6 +19091,11 @@ static bool cave_gen(void)
                  is_guaranteed_forge_level ? "true" : "false");
     }
 
+    if (story_branch_is_manwe_deception_run() && current_depth_is_final_depth())
+    {
+        is_guaranteed_forge_level = false;
+    }
+
     if (cheat_room)
         msg_format("Guaranteed forge: %s.",
             is_guaranteed_forge_level ? "true" : "false");
@@ -18973,6 +19127,16 @@ static bool cave_gen(void)
     }
     log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
     log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
+
+    if (story_branch_is_manwe_deception_run() && current_depth_is_final_depth())
+    {
+        log_trace("Manwe quest: === FORGE OF GROND FORCE PLACEMENT === Starting at depth %d", p_ptr->depth);
+        if (!place_manwe_forge()) {
+            log_trace("Manwe quest: === FORGE OF GROND FAILED === Regenerating level");
+            return false;
+        }
+        log_trace("Manwe quest: === FORGE OF GROND SUCCESS === Placed successfully");
+    }
 
     if (allow_valar_quests &&
         !is_morgoth_level &&
@@ -20632,7 +20796,7 @@ if (playerturn == 0) {
                     (void)spawn_niena_morgoth_hall();
                 }
                 /* Check if quest vault was placed during this level generation */
-                if (qv_placed_this_level) {
+                if (qv_placed_this_level && !manwe_forge_placed_this_level) {
                     quest_vault_placed_this_attempt = true;
                 }
                 /* Also check if we have pending quest state changes that indicate a quest vault was placed */

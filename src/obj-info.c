@@ -2062,6 +2062,9 @@ static void object_lore_profile_for_object(const object_type* o_ptr,
         case SV_LIGHT_FEANORIAN:
             object_lore_add_keyword(profile, "feanorian_lamp");
             break;
+        case SV_LIGHT_TREES:
+            object_lore_add_keyword(profile, "light_of_trees");
+            break;
         default:
             break;
         }

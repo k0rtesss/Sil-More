@@ -1839,6 +1839,8 @@ extern void niena_revoke_temp_mercy_gift(bool silent);
 extern void ensure_niena_pacifist_active(void);
 extern void ensure_tulkas_morgoth_active(void);
 extern void ensure_varda_ungoliant_active(void);
+extern void manwe_quest_offer_if_needed(void);
+extern void manwe_quest_on_ungoliant_slain(int y, int x);
 extern void check_orome_quest_completion(void);
 extern void orome_quest_interaction(void);
 extern void check_orome_quest_interaction(void);

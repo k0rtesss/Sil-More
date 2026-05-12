@@ -3049,7 +3049,13 @@ Q:fc2a4a94f736d78d
 W:30:10
 G:V:v
 T:10:19
-F:UNIQUE | MALE
+I:2:28d4:0
+A:0:0:0:20
+P:[+0]
+F:UNIQUE | MALE | NEVER_MOVE | SMART | PEACEFUL | NEVER_BLOW | SPECIAL_GEN
+D:The Lord of the Breath of Arda appears in a grey mantle, still and
+D: terrible as wind before thunder. His command is quiet, but the air
+D: itself seems to wait upon his judgement.
 
 
 N:321:Varda, Lady of the Stars

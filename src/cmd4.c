@@ -30067,6 +30067,7 @@ static byte get_supply_item_color(int k_idx, bool aware)
                 case SV_LIGHT_LANTERN: return TERM_L_UMBER;
                 case SV_LIGHT_LESSER_JEWEL: return TERM_L_BLUE;
                 case SV_LIGHT_FEANORIAN: return TERM_WHITE;
+                case SV_LIGHT_TREES: return TERM_L_WHITE;
                 default:               return TERM_WHITE;
             }
 

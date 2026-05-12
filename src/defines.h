@@ -296,6 +296,7 @@
 #define R_IDX_OROME 332
 #define R_IDX_DURUIN 126
 #define R_IDX_BELEGWATH 166
+#define R_IDX_MANWE 320
 #define R_IDX_VARDA 321
 #define R_IDX_SPIDER_HATCHLING 32
 #define R_IDX_ORC_ARCHER 51
@@ -1461,6 +1462,7 @@
 #define SV_LIGHT_MALLORN 3
 #define SV_LIGHT_FEANORIAN 8
 #define SV_LIGHT_SILMARIL 9
+#define SV_LIGHT_TREES 10
 
 /* The radii for lights */
 #define RADIUS_TORCH 1
@@ -1470,6 +1472,7 @@
 #define RADIUS_FEANORIAN 4
 #define RADIUS_ARTEFACT 3
 #define RADIUS_SILMARIL 7
+#define RADIUS_TREES 5
 
 /* The "sval" codes for TV_AMULET */
 #define SV_AMULET_LAST_CHANCES 0
