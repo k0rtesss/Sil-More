@@ -61,6 +61,12 @@ bool story_branch_is_unlight_final_run(void)
 
 bool story_branch_allows_valar_quests(void)
 {
+    if (metarun_branch_state() == METARUN_BRANCH_LIGHT_CHOSEN &&
+        !metarun_light_continuation_seen())
+    {
+        return false;
+    }
+
     return story_branch_run_kind() == STORY_BRANCH_RUN_NORMAL;
 }
 

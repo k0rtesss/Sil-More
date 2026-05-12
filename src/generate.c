@@ -18113,10 +18113,49 @@ static void prepare_unlight_final_monster(monster_type* n_ptr, int r_idx,
         n_ptr->mflag |= MFLAG_UNLIGHT_FINAL_ALLY;
 }
 
+static bool place_unlight_final_monster_grid(int y, int x, int r_idx,
+    bool ally, cptr label)
+{
+    monster_race* r_ptr;
+    monster_type monster_type_body;
+    s16b m_idx;
+
+    if (r_idx <= 0 || r_idx >= z_info->r_max)
+        return false;
+
+    r_ptr = &r_info[r_idx];
+    if (!r_ptr->name)
+        return false;
+    if (!in_bounds_fully(y, x))
+        return false;
+    if (!cave_empty_bold(y, x))
+        return false;
+    if (cave_glyph(y, x))
+        return false;
+    if (!cave_exist_mon(r_ptr, y, x, false, false))
+        return false;
+
+    prepare_unlight_final_monster(&monster_type_body, r_idx, ally);
+    m_idx = monster_place(y, x, &monster_type_body);
+    if (!m_idx)
+        return false;
+
+    calc_monster_speed(y, x);
+    new_wandering_destination(&mon_list[m_idx], NULL);
+    update_mon(m_idx, true);
+    lite_spot(y, x);
+    log_info("Unlight finale: placed %s%s at (%d,%d)",
+        ally ? "ally " : "", label, y, x);
+    return true;
+}
+
 static bool place_unlight_final_monster_near(int anchor_y, int anchor_x,
     int r_idx, bool ally, cptr label)
 {
     monster_race* r_ptr;
+    int best_y = -1;
+    int best_x = -1;
+    int best_dist = 9999;
 
     if (r_idx <= 0 || r_idx >= z_info->r_max)
         return false;
@@ -18131,34 +18170,45 @@ static bool place_unlight_final_monster_near(int anchor_y, int anchor_x,
         {
             for (int x = anchor_x - radius; x <= anchor_x + radius; x++)
             {
-                monster_type monster_type_body;
-                s16b m_idx;
-
                 if (distance(anchor_y, anchor_x, y, x) != radius)
                     continue;
-                if (!in_bounds_fully(y, x))
-                    continue;
-                if (!cave_empty_bold(y, x))
-                    continue;
-                if (cave_glyph(y, x))
-                    continue;
-                if (!cave_exist_mon(r_ptr, y, x, false, false))
-                    continue;
-
-                prepare_unlight_final_monster(&monster_type_body, r_idx, ally);
-                m_idx = monster_place(y, x, &monster_type_body);
-                if (!m_idx)
-                    continue;
-
-                calc_monster_speed(y, x);
-                new_wandering_destination(&mon_list[m_idx], NULL);
-                update_mon(m_idx, true);
-                lite_spot(y, x);
-                log_info("Unlight finale: placed %s%s at (%d,%d)",
-                    ally ? "ally " : "", label, y, x);
-                return true;
+                if (place_unlight_final_monster_grid(y, x, r_idx, ally, label))
+                    return true;
             }
         }
+    }
+
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+    {
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+        {
+            int dist;
+
+            if (!in_bounds_fully(y, x))
+                continue;
+            if (!cave_empty_bold(y, x))
+                continue;
+            if (cave_glyph(y, x))
+                continue;
+            if (!cave_exist_mon(r_ptr, y, x, false, false))
+                continue;
+
+            dist = distance(anchor_y, anchor_x, y, x);
+            if (dist < best_dist)
+            {
+                best_dist = dist;
+                best_y = y;
+                best_x = x;
+            }
+        }
+    }
+
+    if (best_y >= 0 &&
+        place_unlight_final_monster_grid(best_y, best_x, r_idx, ally, label))
+    {
+        log_warn("Unlight finale: used fallback placement for %s%s",
+            ally ? "ally " : "", label);
+        return true;
     }
 
     log_warn("Unlight finale: failed to place %s%s near (%d,%d)",
@@ -20889,7 +20939,7 @@ static bool cave_gen(void)
 /*
  * Create the gates to Angband level
  */
-static void gates_gen(void)
+static bool gates_gen(void)
 {
     int y, x;
     int i;
@@ -20931,6 +20981,7 @@ static void gates_gen(void)
     if (!build_type10(17, 33))
     {
         log_error("gates_gen: failed to build Gates of Angband vault");
+        return false;
     }
 
     /* Find an up staircase */
@@ -20984,7 +21035,12 @@ static void gates_gen(void)
     player_place(py, px);
 
     if (story_branch_is_unlight_final_run())
-        (void)place_unlight_final_battle_participants();
+    {
+        if (!place_unlight_final_battle_participants())
+            return false;
+    }
+
+    return true;
 }
 
 /*
@@ -21390,7 +21446,11 @@ if (playerturn == 0) {
                 "Preparing the Gates.");
             level_gen_screen_set_stage(LEVEL_GEN_STAGE_SHAPING,
                 "Building the Gates of Angband.");
-            gates_gen();
+            if (!gates_gen())
+            {
+                okay = false;
+                why = "failed to prepare the Gates";
+            }
             level_gen_screen_set_stage(LEVEL_GEN_STAGE_FINALIZING,
                 "Final touches on the Gates.");
 

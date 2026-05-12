@@ -1285,7 +1285,8 @@ static u16b score_runs_collect_milestones(score_run_milestone_v1* entries,
 
 static void score_runs_mark_light_scene(u32b* flags, u32b* aux,
                                         metarun_light_scene_id scene,
-                                        metarun_light_scene_result result)
+                                        metarun_light_scene_result result,
+                                        bool mark_event)
 {
     if (!flags || !aux || scene < 0 || scene >= METARUN_LIGHT_SCENE_MAX)
         return;
@@ -1294,10 +1295,12 @@ static void score_runs_mark_light_scene(u32b* flags, u32b* aux,
 
     if (result == METARUN_LIGHT_SCENE_RESULT_SUCCESS) {
         *aux |= bit << SCORE_BRANCH_AUX_LIGHT_SUCCESS_SHIFT;
-        *flags |= SCORE_BRANCH_EVENT_LIGHT_SCENE_SUCCEEDED;
+        if (mark_event)
+            *flags |= SCORE_BRANCH_EVENT_LIGHT_SCENE_SUCCEEDED;
     } else if (result == METARUN_LIGHT_SCENE_RESULT_FALL) {
         *aux |= bit << SCORE_BRANCH_AUX_LIGHT_FALL_SHIFT;
-        *flags |= SCORE_BRANCH_EVENT_LIGHT_SCENE_FELL;
+        if (mark_event)
+            *flags |= SCORE_BRANCH_EVENT_LIGHT_SCENE_FELL;
     }
 }
 
@@ -1332,33 +1335,26 @@ static void score_runs_apply_branch_snapshot(score_run_detail_header_v1* header)
             flags |= SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN;
     }
 
-    if (state == METARUN_BRANCH_MANWE_QUEST_ACTIVE)
-        flags |= SCORE_BRANCH_EVENT_MANWE_STARTED;
-    if (metarun_quest_completion_count(METARUN_QUEST_MANWE) > 0)
-        flags |= SCORE_BRANCH_EVENT_MANWE_COMPLETED;
-
-    if (state == METARUN_BRANCH_LIGHT_CHOSEN ||
-        state == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE)
-        flags |= SCORE_BRANCH_EVENT_LIGHT_CHOSEN;
-    if (state == METARUN_BRANCH_UNLIGHT_CHOSEN ||
-        state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE)
-        flags |= SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN;
-
     aux |= (u32b)(ally_mask & SCORE_BRANCH_AUX_UNLIGHT_ALLY_MASK);
-    if (ally_mask)
+    if (p_ptr &&
+        (p_ptr->quest_reserved[QUEST_RESERVED_UNLIGHT_ALLY_RUN_MASK] &
+         METARUN_UNLIGHT_ALLY_ALL))
         flags |= SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED;
+
+    if (metarun_branch_unlight_final_victory())
+        aux |= SCORE_BRANCH_AUX_UNLIGHT_FINAL_COMPLETE;
 
     for (int i = 0; i < METARUN_LIGHT_SCENE_MAX; i++) {
         metarun_light_scene_id scene = (metarun_light_scene_id)i;
         if (metarun_light_scene_count(
                 scene, METARUN_LIGHT_SCENE_RESULT_SUCCESS) > 0) {
             score_runs_mark_light_scene(&flags, &aux, scene,
-                METARUN_LIGHT_SCENE_RESULT_SUCCESS);
+                METARUN_LIGHT_SCENE_RESULT_SUCCESS, false);
         }
         if (metarun_light_scene_count(
                 scene, METARUN_LIGHT_SCENE_RESULT_FALL) > 0) {
             score_runs_mark_light_scene(&flags, &aux, scene,
-                METARUN_LIGHT_SCENE_RESULT_FALL);
+                METARUN_LIGHT_SCENE_RESULT_FALL, false);
         }
     }
 
@@ -1380,22 +1376,19 @@ static void score_runs_apply_branch_snapshot(score_run_detail_header_v1* header)
             if (result == METARUN_LIGHT_SCENE_RESULT_SUCCESS) {
                 score_runs_mark_light_scene(&flags, &aux,
                     (metarun_light_scene_id)scene_idx,
-                    METARUN_LIGHT_SCENE_RESULT_SUCCESS);
+                    METARUN_LIGHT_SCENE_RESULT_SUCCESS, true);
             } else if (result == METARUN_LIGHT_SCENE_RESULT_FALL ||
                        (p_ptr->is_dead &&
                         p_ptr->quest_reserved[QUEST_RESERVED_LIGHT_SCENE_STARTED])) {
                 score_runs_mark_light_scene(&flags, &aux,
                     (metarun_light_scene_id)scene_idx,
-                    METARUN_LIGHT_SCENE_RESULT_FALL);
+                    METARUN_LIGHT_SCENE_RESULT_FALL, true);
             }
         }
     }
 
-    if ((state == METARUN_BRANCH_COMPLETE &&
-         ally_mask == METARUN_UNLIGHT_ALLY_ALL) ||
-        (p_ptr && story_branch_is_unlight_final_run() && p_ptr->escaped) ||
-        (state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE &&
-         p_ptr && p_ptr->morgoth_slain && p_ptr->is_dead)) {
+    if (p_ptr && manwe_unlight_final_victory_this_run()) {
+        aux |= SCORE_BRANCH_AUX_UNLIGHT_FINAL_COMPLETE;
         flags |= SCORE_BRANCH_EVENT_UNLIGHT_FINAL_VICTORY |
             SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN;
     }

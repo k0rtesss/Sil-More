@@ -1902,14 +1902,29 @@ static void run_history_format_allies(u32b aux, char* out, size_t out_len)
 
 static byte run_history_branch_color(u32b flags, u32b aux)
 {
+    metarun_branch_state_type state = run_history_branch_state(flags);
+    u32b success_mask = (aux >> SCORE_BRANCH_AUX_LIGHT_SUCCESS_SHIFT) &
+        SCORE_BRANCH_AUX_LIGHT_SCENE_BITS;
+    u32b fall_mask = (aux >> SCORE_BRANCH_AUX_LIGHT_FALL_SHIFT) &
+        SCORE_BRANCH_AUX_LIGHT_SCENE_BITS;
+
     if (flags & (SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN |
                  SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED |
                  SCORE_BRANCH_EVENT_UNLIGHT_FINAL_VICTORY))
+        return TERM_RED;
+    if ((aux & SCORE_BRANCH_AUX_UNLIGHT_FINAL_COMPLETE) ||
+        (aux & SCORE_BRANCH_AUX_UNLIGHT_ALLY_MASK) ||
+        state == METARUN_BRANCH_UNLIGHT_CHOSEN ||
+        state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE)
         return TERM_RED;
     if (flags & (SCORE_BRANCH_EVENT_LIGHT_CHOSEN |
                  SCORE_BRANCH_EVENT_LIGHT_SCENE_STARTED |
                  SCORE_BRANCH_EVENT_LIGHT_SCENE_SUCCEEDED |
                  SCORE_BRANCH_EVENT_LIGHT_SCENE_FELL))
+        return TERM_L_BLUE;
+    if (success_mask || fall_mask ||
+        state == METARUN_BRANCH_LIGHT_CHOSEN ||
+        state == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE)
         return TERM_L_BLUE;
     if (run_history_branch_has_data(flags, aux))
         return TERM_YELLOW;
@@ -1929,21 +1944,28 @@ static void run_history_branch_label(u32b flags, u32b aux,
         return;
 
     if ((flags & SCORE_BRANCH_EVENT_UNLIGHT_FINAL_VICTORY) ||
-        (state == METARUN_BRANCH_COMPLETE &&
-         (aux & SCORE_BRANCH_AUX_UNLIGHT_ALLY_MASK) == METARUN_UNLIGHT_ALLY_ALL)) {
+        (aux & SCORE_BRANCH_AUX_UNLIGHT_FINAL_COMPLETE)) {
         SDL_strlcpy(out, "Unlight victory", out_len);
-    } else if (flags & (SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN |
-                        SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED)) {
+    } else if (flags & SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED) {
+        SDL_strlcpy(out, "Unlight ally", out_len);
+    } else if ((flags & SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN) ||
+               state == METARUN_BRANCH_UNLIGHT_CHOSEN ||
+               state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE ||
+               (aux & SCORE_BRANCH_AUX_UNLIGHT_ALLY_MASK)) {
         SDL_strlcpy(out, "Unlight", out_len);
     } else if (success_mask || fall_mask ||
-               (flags & SCORE_BRANCH_EVENT_LIGHT_SCENE_STARTED)) {
+               (flags & SCORE_BRANCH_EVENT_LIGHT_SCENE_STARTED) ||
+               state == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE) {
         SDL_strlcpy(out, "Light echo", out_len);
-    } else if (flags & SCORE_BRANCH_EVENT_LIGHT_CHOSEN) {
+    } else if ((flags & SCORE_BRANCH_EVENT_LIGHT_CHOSEN) ||
+               state == METARUN_BRANCH_LIGHT_CHOSEN) {
         SDL_strlcpy(out, "Light", out_len);
     } else if (flags & SCORE_BRANCH_EVENT_MANWE_COMPLETED) {
         SDL_strlcpy(out, "Manwe complete", out_len);
     } else if (flags & SCORE_BRANCH_EVENT_MANWE_STARTED) {
         SDL_strlcpy(out, "Manwe", out_len);
+    } else if (state == METARUN_BRANCH_MANWE_QUEST_ACTIVE) {
+        SDL_strlcpy(out, "Manwe active", out_len);
     } else if (state == METARUN_BRANCH_MANWE_QUEST_PENDING) {
         SDL_strlcpy(out, "Manwe pending", out_len);
     } else if (state == METARUN_BRANCH_COMPLETE) {
@@ -1972,8 +1994,7 @@ static void run_history_branch_summary(u32b flags, u32b aux,
     }
 
     if ((flags & SCORE_BRANCH_EVENT_UNLIGHT_FINAL_VICTORY) ||
-        (state == METARUN_BRANCH_COMPLETE &&
-         ally_mask == METARUN_UNLIGHT_ALLY_ALL)) {
+        (aux & SCORE_BRANCH_AUX_UNLIGHT_FINAL_COMPLETE)) {
         SDL_strlcpy(out, "Unlight final victory at the Gates.", out_len);
     } else if (success_mask || fall_mask ||
                state == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE) {
@@ -1991,21 +2012,38 @@ static void run_history_branch_summary(u32b flags, u32b aux,
                 run_history_count_scene_bits(success_mask),
                 run_history_count_scene_bits(fall_mask));
         }
-    } else if ((flags & (SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN |
-                         SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED)) ||
+    } else if ((flags & SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED) ||
+               (flags & SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN) ||
                state == METARUN_BRANCH_UNLIGHT_CHOSEN ||
-               state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE) {
+               state == METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE ||
+               ally_mask) {
         char allies[80];
         run_history_format_allies(aux, allies, sizeof(allies));
-        strnfmt(out, out_len, "Unlight path; allies persuaded: %s%s",
-            allies, (ally_mask == METARUN_UNLIGHT_ALLY_ALL) ?
-            ". The Gates wait." : ".");
-    } else if (flags & SCORE_BRANCH_EVENT_LIGHT_CHOSEN) {
-        SDL_strlcpy(out, "Light path chosen.", out_len);
+        if (flags & SCORE_BRANCH_EVENT_UNLIGHT_ALLY_PERSUADED) {
+            strnfmt(out, out_len,
+                "Unlight ally persuaded this run; allies: %s%s",
+                allies, (ally_mask == METARUN_UNLIGHT_ALLY_ALL) ?
+                ". The Gates wait." : ".");
+        } else if (flags & SCORE_BRANCH_EVENT_UNLIGHT_CHOSEN) {
+            strnfmt(out, out_len,
+                "Unlight path chosen; allies persuaded: %s.", allies);
+        } else {
+            strnfmt(out, out_len, "Unlight path; allies persuaded: %s%s",
+                allies, (ally_mask == METARUN_UNLIGHT_ALLY_ALL) ?
+                ". The Gates wait." : ".");
+        }
+    } else if ((flags & SCORE_BRANCH_EVENT_LIGHT_CHOSEN) ||
+               state == METARUN_BRANCH_LIGHT_CHOSEN) {
+        SDL_strlcpy(out,
+            (flags & SCORE_BRANCH_EVENT_LIGHT_CHOSEN) ?
+            "Light path chosen." : "Light path active.",
+            out_len);
     } else if (flags & SCORE_BRANCH_EVENT_MANWE_COMPLETED) {
         SDL_strlcpy(out, "Manwe's charge completed.", out_len);
     } else if (flags & SCORE_BRANCH_EVENT_MANWE_STARTED) {
         SDL_strlcpy(out, "Manwe's hidden charge began.", out_len);
+    } else if (state == METARUN_BRANCH_MANWE_QUEST_ACTIVE) {
+        SDL_strlcpy(out, "Manwe's hidden charge was active.", out_len);
     } else if (state == METARUN_BRANCH_MANWE_QUEST_PENDING) {
         SDL_strlcpy(out, "Manwe's charge was waiting for a new hero.", out_len);
     } else if (state == METARUN_BRANCH_COMPLETE) {

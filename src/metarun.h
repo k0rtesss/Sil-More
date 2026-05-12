@@ -68,9 +68,12 @@ extern curse_type* cu_info;
 #define METARUN_RUNTIME_SLOT_LIGHT_SCENE_FALL_BASE 15    /* One fall counter per light scene, slots 15..19 */
 #define METARUN_RUNTIME_SLOT_LIGHT_CONTINUATION_FLAGS 20 /* METARUN_LIGHT_CONTINUATION_* bits */
 #define METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX 21   /* Current metarun_light_scene_id while LIGHT_ENDGAME_ACTIVE */
-#define METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE 22    /* First free branch/runtime slot */
+#define METARUN_RUNTIME_SLOT_BRANCH_OUTCOME_FLAGS 22 /* METARUN_BRANCH_OUTCOME_* bits */
+#define METARUN_RUNTIME_SLOT_BRANCH_NEXT_FREE 23    /* First free branch/runtime slot */
 
 #define METARUN_LIGHT_CONTINUATION_EAGLE_SEEN 0x01  /* Eagle of Manwe explanation shown */
+#define METARUN_BRANCH_OUTCOME_UNLIGHT_FINAL_VICTORY 0x01
+#define METARUN_BRANCH_OUTCOME_FLAG_MASK METARUN_BRANCH_OUTCOME_UNLIGHT_FINAL_VICTORY
 
 typedef enum {
     METARUN_BRANCH_NONE = 0,
@@ -296,6 +299,9 @@ bool metarun_branch_blocks_true_name(void);
 cptr metarun_branch_status_text(void);
 byte metarun_unlight_ally_mask(void);
 void metarun_mark_unlight_ally(metarun_unlight_ally_bit ally);
+byte metarun_branch_outcome_flags(void);
+void metarun_mark_branch_outcome(byte flags);
+bool metarun_branch_unlight_final_victory(void);
 bool metarun_unlight_ally_oath_placeholder_unlocked(metarun_unlight_ally_bit ally);
 void metarun_note_unlight_ally_oath_hook(metarun_unlight_ally_bit ally);
 void metarun_light_scene_record(metarun_light_scene_id scene, metarun_light_scene_result result);

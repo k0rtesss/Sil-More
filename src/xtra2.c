@@ -8085,7 +8085,8 @@ static bool quest_status_put_branch_status(int col, int wid, int hgt, int *row)
         return false;
 
     quest_status_put_line(col, hgt, row,
-        metarun_branch_is_unlight() ? TERM_RED : TERM_L_BLUE,
+        (metarun_branch_is_unlight() ||
+         metarun_branch_unlight_final_victory()) ? TERM_RED : TERM_L_BLUE,
         "Branch Story");
     quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_SLATE, status);
 
@@ -8115,7 +8116,7 @@ static bool quest_status_put_branch_status(int col, int wid, int hgt, int *row)
         case METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE:
         case METARUN_BRANCH_COMPLETE:
             if (branch == METARUN_BRANCH_COMPLETE &&
-                metarun_unlight_ally_mask() == METARUN_UNLIGHT_ALLY_ALL) {
+                metarun_branch_unlight_final_victory()) {
                 quest_status_put_wrapped(col + 2, wid, hgt, row, TERM_RED,
                     "The Unlight final victory is recorded at the Gates.");
             } else if (branch == METARUN_BRANCH_LIGHT_ENDGAME_ACTIVE ||
@@ -10686,6 +10687,7 @@ bool manwe_unlight_final_on_morgoth_slain(void)
 
     do_cmd_note("Overthrew Morgoth at the Gates and claimed the Unlight ending.",
         p_ptr->depth);
+    metarun_mark_branch_outcome(METARUN_BRANCH_OUTCOME_UNLIGHT_FINAL_VICTORY);
     metarun_set_branch_state(METARUN_BRANCH_COMPLETE);
     save_metaruns();
 
@@ -10743,6 +10745,8 @@ bool manwe_unlight_on_ally_defeated(monster_type* m_ptr)
     quest_typewriter_menu("An Ally In Unlight", texts, 3, TERM_RED, TERM_WHITE);
 
     metarun_mark_unlight_ally(ally);
+    p_ptr->quest_reserved[QUEST_RESERVED_UNLIGHT_ALLY_RUN_MASK] |=
+        ((byte)ally) & METARUN_UNLIGHT_ALLY_ALL;
     metarun_note_unlight_ally_oath_hook(ally);
 
     strnfmt(note, sizeof(note), "Persuaded %s to turn against Morgoth.",

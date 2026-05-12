@@ -176,6 +176,11 @@ static void metarun_sanitize_branch_fields(metarun *m)
             m->reserved_runtime[METARUN_RUNTIME_SLOT_LIGHT_SCENE_INDEX] = 0;
         }
     }
+
+    if (metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_BRANCH_OUTCOME_FLAGS)) {
+        m->reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_OUTCOME_FLAGS] &=
+            METARUN_BRANCH_OUTCOME_FLAG_MASK;
+    }
 }
 
 static void metarun_prepare_branch_fields_after_load(metarun *m,
@@ -571,6 +576,8 @@ cptr metarun_branch_status_text(void)
         case METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE:
             return "Unlight final battle active; you remain nameless.";
         case METARUN_BRANCH_COMPLETE:
+            if (metarun_branch_unlight_final_victory())
+                return "Unlight final victory recorded.";
             return "Branch story complete.";
         default:
             return "";
@@ -627,6 +634,60 @@ void metarun_mark_unlight_ally(metarun_unlight_ally_bit ally)
         metarun_set_branch_state(METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE);
         log_info("Unlight allies complete; final battle branch activated");
     }
+}
+
+byte metarun_branch_outcome_flags(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_BRANCH_OUTCOME_FLAGS))
+        return 0;
+
+    return metar.reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_OUTCOME_FLAGS] &
+        METARUN_BRANCH_OUTCOME_FLAG_MASK;
+}
+
+void metarun_mark_branch_outcome(byte flags)
+{
+    metarun *current = metarun_current_mutable();
+    byte masked = flags & METARUN_BRANCH_OUTCOME_FLAG_MASK;
+
+    if (!current) {
+        log_debug("metarun_mark_branch_outcome: no current metarun");
+        return;
+    }
+    if (!metarun_runtime_slot_valid(METARUN_RUNTIME_SLOT_BRANCH_OUTCOME_FLAGS)) {
+        log_warn("metarun_mark_branch_outcome: outcome slot is invalid");
+        return;
+    }
+    if (!masked) {
+        log_warn("metarun_mark_branch_outcome: invalid outcome flags 0x%02x",
+                 flags);
+        return;
+    }
+
+    byte old_flags =
+        metar.reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_OUTCOME_FLAGS] &
+        METARUN_BRANCH_OUTCOME_FLAG_MASK;
+    byte new_flags = old_flags | masked;
+
+    metar.reserved_runtime[METARUN_RUNTIME_SLOT_BRANCH_OUTCOME_FLAGS] =
+        new_flags;
+    metarun_sync_runtime_byte(current, METARUN_RUNTIME_SLOT_BRANCH_OUTCOME_FLAGS);
+
+    if (new_flags == old_flags) {
+        return;
+    }
+
+    save_metaruns();
+    log_debug("metarun_mark_branch_outcome: outcome flags 0x%02x -> 0x%02x",
+              old_flags, new_flags);
+}
+
+bool metarun_branch_unlight_final_victory(void)
+{
+    return (metarun_branch_outcome_flags() &
+        METARUN_BRANCH_OUTCOME_UNLIGHT_FINAL_VICTORY) != 0;
 }
 
 static cptr metarun_unlight_ally_name(metarun_unlight_ally_bit ally)
@@ -6786,7 +6847,7 @@ static bool metarun_branch_detail_text(char* out, size_t out_len, byte* attr)
         case METARUN_BRANCH_UNLIGHT_FINAL_ACTIVE:
         case METARUN_BRANCH_COMPLETE:
             if (state == METARUN_BRANCH_COMPLETE &&
-                metarun_unlight_ally_mask() != METARUN_UNLIGHT_ALLY_ALL)
+                !metarun_branch_unlight_final_victory())
                 break;
             {
                 char allies[96];

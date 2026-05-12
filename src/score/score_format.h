@@ -46,8 +46,9 @@ typedef enum score_run_flag {
 
 /*
  * Branch analytics are stored in score_run_detail_header_v1.reserved2[] so
- * the record size stays stable. reserved2[0] packs the current branch state in
- * the low nibble plus event flags. reserved2[1] packs small branch counters.
+ * the record size stays stable. reserved2[0] packs the branch state snapshot in
+ * the low nibble plus events from this run. reserved2[1] packs cumulative
+ * branch progress and durable branch outcomes.
  */
 #define SCORE_BRANCH_STATE_MASK 0x0000000Fu
 
@@ -68,6 +69,7 @@ typedef enum score_branch_event_flag {
 #define SCORE_BRANCH_AUX_LIGHT_FALL_SHIFT 16
 #define SCORE_BRANCH_AUX_LIGHT_SCENE_SHIFT 24
 #define SCORE_BRANCH_AUX_LIGHT_SCENE_MASK 0x0F000000u
+#define SCORE_BRANCH_AUX_UNLIGHT_FINAL_COMPLETE 0x40000000u
 #define SCORE_BRANCH_AUX_LIGHT_SCENE_VALID 0x80000000u
 #define SCORE_BRANCH_AUX_LIGHT_SCENE_BITS 0x0000001Fu
 
