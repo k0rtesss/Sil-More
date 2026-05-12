@@ -157,8 +157,6 @@ static bool sdl_round_movement_point_excluded(float window_x, float window_y)
         : NULL;
     s16b map_y = -1;
     s16b map_x = -1;
-    int row;
-    int col;
     int dy;
     int dx;
 
@@ -173,11 +171,6 @@ static bool sdl_round_movement_point_excluded(float window_x, float window_y)
     }
     if (!p_ptr)
         return false;
-
-    row = map_y - p_ptr->wy;
-    col = map_x - p_ptr->wx;
-    if (row <= 0 || col <= 0 || row >= SCREEN_HGT - 1 || col >= SCREEN_WID - 1)
-        return true;
 
     dy = ABS(map_y - p_ptr->py);
     dx = ABS(map_x - p_ptr->px);

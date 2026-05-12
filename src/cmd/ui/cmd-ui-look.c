@@ -18,6 +18,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "log/log.h"
+#include "platform-config.h"
 #include "platform-frame.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
@@ -183,9 +184,10 @@ static bool unified_look_snapshot_publish_menu_scene(unified_look_state* state)
     return true;
 }
 
-static char unified_look_inkey_with_wait_reason(void)
+static bool unified_look_wait_event_with_reason(
+    ui_information_scene_event* event)
 {
-    return (char)ui_information_scene_wait_choice_with_wait_reason(0,
+    return ui_information_scene_wait_event_with_wait_reason(event, 0,
         APP_WAIT_REASON_TARGETING, false);
 }
 
@@ -512,6 +514,186 @@ static void unified_look_sync_cursor_selection(unified_look_state* state)
     state->selected_entity = new_selection;
 }
 
+static void unified_look_clear_highlight(unified_look_state* state)
+{
+    if (!state)
+        return;
+
+    if (state->highlighted_y >= 0 && state->highlighted_x >= 0)
+    {
+        highlight_entity_on_map(state->highlighted_y, state->highlighted_x,
+            false);
+        state->highlighted_y = -1;
+        state->highlighted_x = -1;
+        state->highlighted_entity_type = 0;
+    }
+}
+
+static bool unified_look_command_map_cell(const app_ui_command* command,
+    int* out_y, int* out_x)
+{
+    int y;
+    int x;
+
+    if (!command || command->target.role != APP_UI_WIDGET_ROLE_MAP_CELL)
+        return false;
+
+    y = (int)command->target.payload0;
+    x = (int)command->target.payload1;
+    if (!p_ptr || y < 0 || x < 0
+        || y >= p_ptr->cur_map_hgt || x >= p_ptr->cur_map_wid
+        || !in_bounds_fully(y, x))
+    {
+        return false;
+    }
+
+    if (out_y)
+        *out_y = y;
+    if (out_x)
+        *out_x = x;
+    return true;
+}
+
+static bool unified_look_focus_map_cell(unified_look_state* state, int y,
+    int x)
+{
+    if (!state || !p_ptr || y < 0 || x < 0
+        || y >= p_ptr->cur_map_hgt || x >= p_ptr->cur_map_wid
+        || !in_bounds_fully(y, x))
+    {
+        return false;
+    }
+
+    unified_look_clear_highlight(state);
+    state->cursor_y = y;
+    state->cursor_x = x;
+    state->selected_entity = -1;
+    state->in_sidebar_mode = false;
+    state->square_cycling_mode = false;
+    state->current_square_entity = 0;
+    dungeon_note_cursor_relative(y, x);
+    return true;
+}
+
+static bool unified_look_adjust_main_view_scale(int delta)
+{
+    int current_scale;
+    int target_scale;
+
+    if (delta == 0)
+        return false;
+
+    current_scale = platform_main_view_scale();
+    target_scale = current_scale + delta;
+    target_scale = MIN(MAX(target_scale, 1), platform_max_scale());
+    if (target_scale == current_scale)
+        return false;
+
+    platform_set_main_view_scale(target_scale);
+    platform_apply_config();
+    if (p_ptr)
+    {
+        p_ptr->redraw |= PR_MAP;
+        p_ptr->window |= PW_OVERHEAD;
+    }
+    handle_stuff();
+    return true;
+}
+
+static bool unified_look_examine_map_cell(int y, int x, bool use_story_font)
+{
+    bool examined = false;
+
+    if (use_story_font)
+        platform_story_font_disable();
+
+    unified_look_snapshot_clear();
+    if (unified_look_can_show_marked_object_at(y, x))
+    {
+        unified_look_show_object_info(&o_list[cave_o_idx[y][x]]);
+        examined = true;
+    }
+    else if (unified_look_can_show_monster_at(y, x))
+    {
+        unified_look_show_monster_recall(&mon_list[cave_m_idx[y][x]]);
+        examined = true;
+    }
+
+    if (use_story_font)
+        platform_story_font_enable();
+
+    return examined;
+}
+
+static bool unified_look_target_map_cell(int y, int x, bool* done)
+{
+    int m_idx = cave_m_idx[y][x];
+
+    if ((m_idx > 0) && unified_look_can_show_monster_at(y, x))
+    {
+        char m_name[80];
+
+        target_set_monster(m_idx);
+        monster_desc(m_name, sizeof(m_name), &mon_list[m_idx], 0x80);
+        msg_format("Target set to %s.", m_name);
+        if (done)
+            *done = true;
+        return true;
+    }
+
+    return false;
+}
+
+static bool unified_look_handle_map_cell_command(unified_look_state* state,
+    const app_ui_command* command, bool use_story_font, bool* need_redraw,
+    bool* done)
+{
+    int y;
+    int x;
+
+    if (!unified_look_command_map_cell(command, &y, &x))
+        return false;
+
+    if (!unified_look_focus_map_cell(state, y, x))
+        return true;
+
+    if (need_redraw)
+        *need_redraw = true;
+
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS
+        || command->kind == APP_UI_COMMAND_KIND_HOVER)
+    {
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || command->target.action == APP_UI_WIDGET_ACTION_SCROLL)
+    {
+        int delta = (command->scroll_y > 0) ? 1
+            : ((command->scroll_y < 0) ? -1 : 0);
+        if (unified_look_adjust_main_view_scale(delta) && need_redraw)
+            *need_redraw = true;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_CONTEXT
+        || command->kind == APP_UI_COMMAND_KIND_INSPECT
+        || command->target.action == APP_UI_WIDGET_ACTION_INSPECT)
+    {
+        (void)unified_look_examine_map_cell(y, x, use_story_font);
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SELECT
+        || command->kind == APP_UI_COMMAND_KIND_ACTIVATE)
+    {
+        (void)unified_look_target_map_cell(y, x, done);
+        return true;
+    }
+
+    return true;
+}
+
 static void unified_look_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
 {
     if (!buf || !buflen)
@@ -587,6 +769,7 @@ void do_cmd_unified_look(void)
     bool done = false;
     bool need_redraw = true;
     int original_wy, original_wx; /* Store original viewport */
+    ui_information_scene_event input_event;
     
     /* Enable story font for unified look if the setting is on */
     bool use_story_font = story_look_enabled();
@@ -908,7 +1091,23 @@ void do_cmd_unified_look(void)
         }
         
         /* Get input */
-        query = unified_look_inkey_with_wait_reason();
+        if (!unified_look_wait_event_with_reason(&input_event))
+        {
+            query = ESCAPE;
+        }
+        else if (input_event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+            && unified_look_handle_map_cell_command(&state,
+                &input_event.command, use_story_font, &need_redraw, &done))
+        {
+            continue;
+        }
+        else
+        {
+            int choice = ui_information_scene_choice_from_event(&input_event);
+            if (!choice)
+                continue;
+            query = (char)choice;
+        }
         log_trace("Unified look key input: '%c' (%d) [char: %c, isupper: %d]", 
                  query, (int)query, (query >= 32 && query <= 126) ? query : '?', 
                  (query >= 'A' && query <= 'Z') ? 1 : 0);

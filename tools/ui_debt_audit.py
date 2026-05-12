@@ -30,6 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASELINE = REPO_ROOT / "tests" / "ui_debt_audit_baseline.json"
 SOURCE_SUFFIXES = {".c", ".h"}
 AUDIT_SUFFIXES = SOURCE_SUFFIXES
+EXCLUDED_SOURCE_DIR_NAMES = {".venv"}
 COMMENT_RE = re.compile(r"//.*?$|/\*.*?\*/", re.MULTILINE | re.DOTALL)
 PLATFORM_SDL_GLOBS = (
     "src/main-sdl.c",
@@ -359,6 +360,15 @@ def rel_path(path: Path) -> str:
     return path.relative_to(REPO_ROOT).as_posix()
 
 
+def is_excluded_source_path(path: Path) -> bool:
+    try:
+        relative = path.relative_to(REPO_ROOT / "src")
+    except ValueError:
+        return False
+
+    return bool(relative.parts and relative.parts[0] in EXCLUDED_SOURCE_DIR_NAMES)
+
+
 def path_matches(path: Path, pattern: str) -> bool:
     return PurePosixPath(rel_path(path)).match(pattern)
 
@@ -369,6 +379,8 @@ def iter_scope_files(scope: tuple[str, ...]) -> Iterable[Path]:
     for pattern in scope:
         for path in sorted(REPO_ROOT.glob(pattern)):
             if not is_audited_file(path):
+                continue
+            if is_excluded_source_path(path):
                 continue
 
             relative = rel_path(path)

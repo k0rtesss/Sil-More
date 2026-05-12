@@ -41,6 +41,7 @@ SDL_IO_USAGE_RE = re.compile(
 CMAKE_SOURCE_RE = re.compile(r"src/[A-Za-z0-9_./-]+\.c")
 SCANNED_SOURCE_SUFFIXES = {".c", ".h"}
 COMPILED_INCLUDE_SUFFIXES = {".inc"}
+EXCLUDED_SOURCE_DIR_NAMES = {".venv"}
 
 
 @dataclass(frozen=True)
@@ -95,11 +96,21 @@ def matches_any(path: str, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
 
 
+def is_excluded_source_path(path: Path) -> bool:
+    try:
+        relative = path.relative_to(REPO_ROOT / "src")
+    except ValueError:
+        return False
+
+    return bool(relative.parts and relative.parts[0] in EXCLUDED_SOURCE_DIR_NAMES)
+
+
 def src_files(suffixes: set[str]) -> list[Path]:
     return sorted(
         path
         for path in (REPO_ROOT / "src").rglob("*")
         if path.is_file() and path.suffix in suffixes
+        and not is_excluded_source_path(path)
     )
 
 

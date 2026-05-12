@@ -33,6 +33,7 @@ bool sdl_touch_controls_zone_handle_pointer_motion(float x, float y,
     SDL_FingerID finger_id);
 bool sdl_touch_controls_zone_handle_pointer_up(float x, float y,
     SDL_FingerID finger_id);
+bool sdl_touch_controls_point_blocks_map(float x, float y);
 void sdl_touch_controls_handle_pointer_canceled(SDL_FingerID finger_id);
 void sdl_touch_controls_render(int canvas_w, int canvas_h);
 void sdl_touch_controls_set_top_panel_open(bool open);

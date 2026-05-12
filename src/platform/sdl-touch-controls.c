@@ -115,6 +115,8 @@ static bool sdl_touch_top_panel_compute_layout_for_screen(
     const SDL_Rect* screen, SDL_FRect* button_rects, SDL_FRect* out_panel);
 static bool sdl_touch_top_panel_compute_layout(SDL_FRect* button_rects,
     SDL_FRect* out_panel);
+static bool sdl_touch_top_panel_compute_reopen_rect(SDL_FRect* out_rect);
+static bool sdl_touch_top_panel_point_to_reopen(float x, float y);
 static int sdl_touch_top_panel_first_visible_slot(void);
 static int sdl_touch_top_panel_visible_button_count(void);
 static bool sdl_touch_top_panel_point_to_slot(float x, float y, int* out_slot);
@@ -1026,6 +1028,48 @@ static bool sdl_touch_top_panel_compute_layout(SDL_FRect* button_rects,
         out_panel);
 }
 
+static bool sdl_touch_top_panel_compute_reopen_rect(SDL_FRect* out_rect)
+{
+    SDL_Rect screen;
+    SDL_FRect panel;
+    float reopen_w;
+    float reopen_h;
+
+    if (!out_rect)
+        return false;
+
+    *out_rect = (SDL_FRect){ 0 };
+    if (g_touch_top_panel_open)
+        return false;
+    if (!sdl_touch_top_panel_layout_visible())
+        return false;
+    if (!sdl_touch_main_view_screen_rect(&screen))
+        return false;
+    if (!sdl_touch_top_panel_compute_layout_for_screen(&screen, NULL, &panel))
+        return false;
+
+    reopen_w = sdl_touch_clampf(panel.w * 0.20f, 72.0f, 150.0f);
+    reopen_h = sdl_touch_clampf(panel.h * 0.58f, 24.0f, 42.0f);
+    *out_rect = (SDL_FRect){
+        .x = panel.x + (panel.w - reopen_w) * 0.5f,
+        .y = panel.y,
+        .w = reopen_w,
+        .h = reopen_h,
+    };
+    return true;
+}
+
+static bool sdl_touch_top_panel_point_to_reopen(float x, float y)
+{
+    SDL_FRect rect;
+
+    if (!sdl_touch_top_panel_compute_reopen_rect(&rect))
+        return false;
+
+    return x >= rect.x && x < rect.x + rect.w
+        && y >= rect.y && y < rect.y + rect.h;
+}
+
 static bool sdl_touch_top_panel_point_to_slot(float x, float y, int* out_slot)
 {
     SDL_FRect button_rects[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
@@ -1173,11 +1217,29 @@ static void sdl_touch_top_panel_render_buttons(const SDL_FRect* button_rects)
 static void sdl_touch_top_panel_render_for_screen(const SDL_Rect* screen)
 {
     SDL_FRect button_rects[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+    SDL_FRect reopen_rect;
 
-    if (!screen || !g_touch_top_panel_open)
+    if (!screen)
         return;
     if (!sdl_touch_top_panel_layout_visible()) {
         sdl_touch_controls_cancel_top_panel_press();
+        return;
+    }
+    if (!g_touch_top_panel_open) {
+        if (sdl_touch_top_panel_compute_reopen_rect(&reopen_rect)) {
+            SDL_Color frame = g_state.palette[TERM_L_BLUE];
+            SDL_Color label = frame;
+
+            SDL_SetRenderDrawColor(g_state.renderer, frame.r, frame.g,
+                frame.b, 48);
+            SDL_RenderFillRect(g_state.renderer, &reopen_rect);
+            SDL_SetRenderDrawColor(g_state.renderer, frame.r, frame.g,
+                frame.b, 140);
+            SDL_RenderRect(g_state.renderer, &reopen_rect);
+            label.a = 180;
+            sdl_touch_pane_draw_button_text(&reopen_rect, "Top", "^",
+                label);
+        }
         return;
     }
     if (!sdl_touch_top_panel_compute_layout_for_screen(screen, button_rects,
@@ -1221,8 +1283,14 @@ static bool sdl_touch_top_panel_handle_pointer_down(float x, float y,
 {
     int slot = -1;
 
-    if (!sdl_touch_top_panel_layout_visible() || !g_touch_top_panel_open)
+    if (!sdl_touch_top_panel_layout_visible())
         return false;
+    if (!g_touch_top_panel_open) {
+        if (!sdl_touch_top_panel_point_to_reopen(x, y))
+            return false;
+        sdl_touch_top_panel_set_open(true);
+        return true;
+    }
     if (sdl_menu_hit_test(x, y))
         return false;
     if (!sdl_touch_top_panel_point_to_slot(x, y, &slot) || slot < 0)
@@ -1417,6 +1485,26 @@ bool sdl_touch_controls_zone_handle_pointer_up(float x, float y,
 {
     return sdl_touch_zone_handle_pointer_up(x, y, finger_id);
 }
+
+bool sdl_touch_controls_point_blocks_map(float x, float y)
+{
+    int slot = -1;
+    int zone = -1;
+
+    if (sdl_touch_top_panel_layout_visible()) {
+        if (g_touch_top_panel_open) {
+            if (sdl_touch_top_panel_point_to_slot(x, y, &slot) && slot >= 0)
+                return true;
+        } else if (sdl_touch_top_panel_point_to_reopen(x, y)) {
+            return true;
+        }
+    }
+
+    return sdl_touch_zone_controls_active()
+        && sdl_touch_zone_point_to_zone(x, y, &zone)
+        && zone >= 0;
+}
+
 void sdl_touch_controls_handle_pointer_canceled(SDL_FingerID finger_id)
 {
     if (g_touch_zone_press.active && g_touch_zone_press.finger_id == finger_id)

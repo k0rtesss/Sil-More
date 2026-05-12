@@ -65,6 +65,8 @@ bool ui_information_scene_wait_event_with_wait_reason(
 bool ui_information_scene_wait_dismissal(u16b ignored_flags);
 bool ui_information_scene_wait_dismissal_with_wait_reason(u16b ignored_flags,
     u16b reason, bool hidden_cursor);
+int ui_information_scene_choice_from_event(
+    const ui_information_scene_event* event);
 int ui_information_scene_wait_choice(u16b ignored_flags);
 int ui_information_scene_wait_choice_with_wait_reason(u16b ignored_flags,
     u16b reason, bool hidden_cursor);

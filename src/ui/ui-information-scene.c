@@ -209,6 +209,37 @@ static bool ui_information_scene_command_waitable(
         || command->kind == APP_UI_COMMAND_KIND_SCROLL;
 }
 
+int ui_information_scene_choice_from_event(
+    const ui_information_scene_event* event)
+{
+    app_session* session = app_session_current();
+
+    if (!event)
+        return 0;
+
+    if (event->kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        return event->key;
+
+    if (event->kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+        return 0;
+
+    if (event->command.kind == APP_UI_COMMAND_KIND_FOCUS
+        || event->command.kind == APP_UI_COMMAND_KIND_SCROLL
+        || event->command.kind == APP_UI_COMMAND_KIND_CONTEXT
+        || !event->command.target.action_key)
+    {
+        return ui_information_scene_bridge_keyless_command(session,
+            &event->command);
+    }
+
+    if ((int)(event->command.target.action_key & 0xFFu) == ESCAPE) {
+        log_debug("[metarun-esc-trace] ui_information_scene_choice_from_event ui-command esc flags=0x%04x kind=%d",
+            (unsigned)event->command.input_flags,
+            (int)event->command.kind);
+    }
+    return (int)(event->command.target.action_key & 0xFFu);
+}
+
 static app_menu_snapshot* ui_information_scene_clone_menu_snapshot(
     const app_menu_snapshot* snapshot)
 {
@@ -583,38 +614,16 @@ bool ui_information_scene_wait_dismissal_with_wait_reason(u16b ignored_flags,
 
 static int ui_information_scene_wait_choice_internal(u16b ignored_flags)
 {
-    app_session* session = app_session_current();
     ui_information_scene_event event;
 
-    if (!ui_information_scene_supported() || !session)
+    if (!ui_information_scene_supported())
         return ESCAPE;
 
     while (ui_information_scene_wait_event(&event, ignored_flags))
     {
-        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
-            return event.key;
-
-        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
-            continue;
-
-        if (event.command.kind == APP_UI_COMMAND_KIND_FOCUS
-            || event.command.kind == APP_UI_COMMAND_KIND_SCROLL
-            || event.command.kind == APP_UI_COMMAND_KIND_CONTEXT
-            || !event.command.target.action_key)
-        {
-            int bridge_key = ui_information_scene_bridge_keyless_command(
-                session, &event.command);
-            if (bridge_key)
-                return bridge_key;
-            continue;
-        }
-
-        if ((int)(event.command.target.action_key & 0xFFu) == ESCAPE) {
-            log_debug("[metarun-esc-trace] ui_information_scene_wait_key_internal ui-command esc flags=0x%04x kind=%d",
-                (unsigned)event.command.input_flags,
-                (int)event.command.kind);
-        }
-        return (int)(event.command.target.action_key & 0xFFu);
+        int choice = ui_information_scene_choice_from_event(&event);
+        if (choice)
+            return choice;
     }
 
     return ESCAPE;

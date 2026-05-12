@@ -19,6 +19,7 @@
 #include "../cmd/world/cmd-world.h"
 #include "../platform-input.h"
 #include "../sdl-main-internal.h"
+#include "../platform/sdl-touch-controls.h"
 
 typedef struct sdl_map_pointer_press {
     bool active;
@@ -64,6 +65,7 @@ static s16b g_map_pointer_path_queue_x[SDL_MAP_POINTER_PATH_QUEUE_MAX];
 static bool g_map_pointer_path_preview_active = false;
 static s16b g_map_pointer_path_preview_target_y = -1;
 static s16b g_map_pointer_path_preview_target_x = -1;
+static u64b g_map_pointer_ui_sequence = 0;
 
 static void sdl_map_pointer_clear_path_preview(void);
 static void sdl_map_pointer_update_path_preview(s16b map_y, s16b map_x);
@@ -156,6 +158,30 @@ static bool sdl_map_pointer_command_wait_active(void)
         && reason == APP_WAIT_REASON_COMMAND_INPUT;
 }
 
+static bool sdl_map_pointer_look_interaction_active(void)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+    const app_wait_state* wait_state;
+    const app_interaction_state* interaction;
+
+    if (!character_dungeon || !session || !g_views[0].ready)
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
+        return false;
+    if (!app_session_dungeon_snapshot(session))
+        return false;
+
+    wait_state = app_session_wait_state(session);
+    if (!wait_state || wait_state->reason != APP_WAIT_REASON_TARGETING)
+        return false;
+
+    interaction = app_session_interaction(session);
+    return interaction && interaction->kind == APP_INTERACTION_KIND_LOOK;
+}
+
 static bool sdl_map_pointer_event_xy(const SDL_Event* ev, float* out_x,
     float* out_y)
 {
@@ -217,11 +243,17 @@ static bool sdl_map_pointer_hit_test(float window_x, float window_y,
         window_x, window_y, out_map_y, out_map_x);
 }
 
+static s16b sdl_map_pointer_widget_id(s16b map_y, s16b map_x)
+{
+    u16b y = ((u16b)map_y) & 0x7fu;
+    u16b x = ((u16b)map_x) & 0xffu;
+
+    return (s16b)((y << 8) | x);
+}
+
 static void sdl_map_pointer_widget_ref(s16b map_y, s16b map_x, u16b action,
     app_ui_widget_ref* out_ref)
 {
-    int local_y = p_ptr ? map_y - p_ptr->wy : 0;
-    int local_x = p_ptr ? map_x - p_ptr->wx : 0;
 
     if (!out_ref)
         return;
@@ -229,7 +261,7 @@ static void sdl_map_pointer_widget_ref(s16b map_y, s16b map_x, u16b action,
     app_ui_widget_ref_clear(out_ref);
     out_ref->scene_kind = APP_SCENE_KIND_DUNGEON;
     out_ref->target_kind = APP_UI_WIDGET_ROLE_MAP_CELL;
-    out_ref->widget_id = (s16b)(local_y * SCREEN_WID + local_x);
+    out_ref->widget_id = sdl_map_pointer_widget_id(map_y, map_x);
     out_ref->role = APP_UI_WIDGET_ROLE_MAP_CELL;
     out_ref->action = action;
     out_ref->flags = APP_UI_INTERACTION_FLAG_POINTER_ENABLED
@@ -240,6 +272,60 @@ static void sdl_map_pointer_widget_ref(s16b map_y, s16b map_x, u16b action,
     SDL_strlcpy(out_ref->label, "Dungeon map cell", sizeof(out_ref->label));
     SDL_strlcpy(out_ref->tooltip, "Inspect dungeon map cell",
         sizeof(out_ref->tooltip));
+}
+
+static u16b sdl_map_pointer_modifiers_from_keymod(SDL_Keymod mod)
+{
+    u16b modifiers = 0;
+
+    if (mod & SDL_KMOD_SHIFT)
+        modifiers |= APP_INPUT_MODIFIER_SHIFT;
+    if (mod & SDL_KMOD_CTRL)
+        modifiers |= APP_INPUT_MODIFIER_CTRL;
+    if (mod & SDL_KMOD_ALT)
+        modifiers |= APP_INPUT_MODIFIER_ALT;
+    if (mod & SDL_KMOD_GUI)
+        modifiers |= APP_INPUT_MODIFIER_META;
+    if (mod & SDL_KMOD_CAPS)
+        modifiers |= APP_INPUT_MODIFIER_CAPS_LOCK;
+    if (mod & SDL_KMOD_NUM)
+        modifiers |= APP_INPUT_MODIFIER_NUM_LOCK;
+
+    return modifiers;
+}
+
+static bool sdl_map_pointer_submit_cell_command(s16b map_y, s16b map_x,
+    u16b command_kind, u16b widget_action, u16b device, u16b input_type,
+    u16b input_flags, float x, float y, float dx, float dy,
+    s32b scroll_x, s32b scroll_y, u16b button, u16b clicks)
+{
+    app_session* session = app_session_current();
+    app_ui_command command;
+
+    if (!session)
+        return false;
+
+    app_ui_command_clear(&command);
+    command.kind = command_kind;
+    command.device = device;
+    command.input_type = input_type;
+    command.input_flags = input_flags;
+    command.modifiers = sdl_map_pointer_modifiers_from_keymod(
+        SDL_GetModState());
+    command.x = (s32b)x;
+    command.y = (s32b)y;
+    command.dx = (s32b)dx;
+    command.dy = (s32b)dy;
+    command.scroll_x = scroll_x;
+    command.scroll_y = scroll_y;
+    command.button = button;
+    command.clicks = clicks;
+    command.sequence = ++g_map_pointer_ui_sequence;
+    command.timestamp_usec = SDL_GetTicksNS() / 1000ULL;
+    sdl_map_pointer_widget_ref(map_y, map_x, widget_action,
+        &command.target);
+
+    return app_session_submit_ui_command(session, &command);
 }
 
 static void sdl_map_pointer_note_focus(s16b map_y, s16b map_x, u16b device,
@@ -1082,6 +1168,38 @@ static void sdl_map_pointer_update_touch_motion(float x, float y,
         g_map_pointer_press.long_press_eligible = false;
 }
 
+static bool sdl_map_pointer_delegate_touch_swipe(float x, float y,
+    SDL_FingerID finger_id)
+{
+    float dx;
+    float dy;
+    float threshold;
+    float start_x;
+    float start_y;
+
+    if (!g_map_pointer_press.active
+        || g_map_pointer_press.device != APP_INPUT_DEVICE_TOUCH
+        || g_map_pointer_press.finger_id != finger_id)
+    {
+        return false;
+    }
+
+    dx = x - g_map_pointer_press.start_x;
+    dy = y - g_map_pointer_press.start_y;
+    threshold = sdl_touch_swipe_threshold_px();
+    if (dx * dx + dy * dy <= threshold * threshold)
+        return false;
+
+    start_x = g_map_pointer_press.start_x;
+    start_y = g_map_pointer_press.start_y;
+    if (!sdl_touch_swipe_handle_pointer_down(start_x, start_y, finger_id))
+        return false;
+
+    sdl_map_pointer_cancel_press();
+    (void)sdl_touch_swipe_handle_pointer_motion(x, y, finger_id);
+    return true;
+}
+
 static bool sdl_map_pointer_begin_press(u16b device, u16b button,
     SDL_FingerID finger_id, float x, float y, s16b map_y, s16b map_x)
 {
@@ -1167,6 +1285,136 @@ bool sdl_map_pointer_flush_pending_long_press(Uint64 now_ns)
     return true;
 }
 
+static bool sdl_map_pointer_handle_look_interaction_event(const SDL_Event* ev)
+{
+    float x;
+    float y;
+    s16b map_y;
+    s16b map_x;
+
+    if (!ev || !sdl_map_pointer_look_interaction_active())
+        return false;
+
+    if (ev->type == SDL_EVENT_MOUSE_MOTION)
+    {
+        if (ev->motion.which == SDL_TOUCH_MOUSEID)
+            return false;
+        if (!sdl_map_pointer_event_xy(ev, &x, &y))
+            return false;
+        if (!sdl_map_pointer_hit_test(x, y, &map_y, &map_x))
+            return false;
+        sdl_map_pointer_note_hover(map_y, map_x, APP_INPUT_DEVICE_POINTER);
+        return sdl_map_pointer_submit_cell_command(map_y, map_x,
+            APP_UI_COMMAND_KIND_FOCUS, APP_UI_WIDGET_ACTION_NONE,
+            APP_INPUT_DEVICE_POINTER, APP_INPUT_TYPE_POINTER_MOTION,
+            0, x, y, 0.0f, 0.0f, 0, 0, 0, 0);
+    }
+
+    if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+    {
+        if (ev->button.which == SDL_TOUCH_MOUSEID)
+            return false;
+        if (ev->button.button != SDL_BUTTON_LEFT
+            && ev->button.button != SDL_BUTTON_RIGHT)
+        {
+            return false;
+        }
+        if (!sdl_map_pointer_event_xy(ev, &x, &y))
+            return false;
+        if (!sdl_map_pointer_hit_test(x, y, &map_y, &map_x))
+            return false;
+        sdl_map_pointer_note_focus(map_y, map_x, APP_INPUT_DEVICE_POINTER,
+            true, APP_UI_WIDGET_ACTION_SELECT);
+        return true;
+    }
+
+    if (ev->type == SDL_EVENT_MOUSE_BUTTON_UP)
+    {
+        u16b kind;
+        u16b action;
+
+        if (ev->button.which == SDL_TOUCH_MOUSEID)
+            return false;
+        if (ev->button.button != SDL_BUTTON_LEFT
+            && ev->button.button != SDL_BUTTON_RIGHT)
+        {
+            return false;
+        }
+        if (!sdl_map_pointer_event_xy(ev, &x, &y))
+            return false;
+        if (!sdl_map_pointer_hit_test(x, y, &map_y, &map_x))
+            return false;
+
+        kind = (ev->button.button == SDL_BUTTON_RIGHT)
+            ? APP_UI_COMMAND_KIND_CONTEXT
+            : APP_UI_COMMAND_KIND_SELECT;
+        action = (ev->button.button == SDL_BUTTON_RIGHT)
+            ? APP_UI_WIDGET_ACTION_INSPECT
+            : APP_UI_WIDGET_ACTION_SELECT;
+        sdl_map_pointer_note_focus(map_y, map_x, APP_INPUT_DEVICE_POINTER,
+            false, action);
+        return sdl_map_pointer_submit_cell_command(map_y, map_x, kind, action,
+            APP_INPUT_DEVICE_POINTER, APP_INPUT_TYPE_POINTER_BUTTON,
+            APP_INPUT_FLAG_RELEASE, x, y, 0.0f, 0.0f, 0, 0,
+            ev->button.button, ev->button.clicks);
+    }
+
+    if (ev->type == SDL_EVENT_MOUSE_WHEEL)
+    {
+        x = ev->wheel.mouse_x;
+        y = ev->wheel.mouse_y;
+        sdl_map_pointer_window_point_to_pixels(&x, &y);
+        if (!sdl_map_pointer_hit_test(x, y, &map_y, &map_x))
+            return false;
+        return sdl_map_pointer_submit_cell_command(map_y, map_x,
+            APP_UI_COMMAND_KIND_SCROLL, APP_UI_WIDGET_ACTION_SCROLL,
+            APP_INPUT_DEVICE_POINTER, APP_INPUT_TYPE_POINTER_WHEEL,
+            0, x, y, ev->wheel.x, ev->wheel.y,
+            (s32b)ev->wheel.x, (s32b)ev->wheel.y, 0, 0);
+    }
+
+    if (ev->type == SDL_EVENT_FINGER_DOWN)
+    {
+        if (!sdl_map_pointer_event_xy(ev, &x, &y))
+            return false;
+        if (!sdl_map_pointer_hit_test(x, y, &map_y, &map_x))
+            return false;
+        sdl_map_pointer_note_focus(map_y, map_x, APP_INPUT_DEVICE_TOUCH,
+            true, APP_UI_WIDGET_ACTION_SELECT);
+        return true;
+    }
+
+    if (ev->type == SDL_EVENT_FINGER_MOTION)
+    {
+        if (!sdl_map_pointer_event_xy(ev, &x, &y))
+            return false;
+        if (!sdl_map_pointer_hit_test(x, y, &map_y, &map_x))
+            return false;
+        sdl_map_pointer_note_hover(map_y, map_x, APP_INPUT_DEVICE_TOUCH);
+        return sdl_map_pointer_submit_cell_command(map_y, map_x,
+            APP_UI_COMMAND_KIND_FOCUS, APP_UI_WIDGET_ACTION_NONE,
+            APP_INPUT_DEVICE_TOUCH, APP_INPUT_TYPE_POINTER_MOTION,
+            0, x, y, 0.0f, 0.0f, 0, 0, 0, 0);
+    }
+
+    if (ev->type == SDL_EVENT_FINGER_UP)
+    {
+        if (!sdl_map_pointer_event_xy(ev, &x, &y))
+            return false;
+        if (!sdl_map_pointer_hit_test(x, y, &map_y, &map_x))
+            return false;
+        sdl_map_pointer_note_focus(map_y, map_x, APP_INPUT_DEVICE_TOUCH,
+            false, APP_UI_WIDGET_ACTION_SELECT);
+        return sdl_map_pointer_submit_cell_command(map_y, map_x,
+            APP_UI_COMMAND_KIND_SELECT, APP_UI_WIDGET_ACTION_SELECT,
+            APP_INPUT_DEVICE_TOUCH, APP_INPUT_TYPE_POINTER_BUTTON,
+            APP_INPUT_FLAG_RELEASE, x, y, 0.0f, 0.0f, 0, 0,
+            SDL_BUTTON_LEFT, 1);
+    }
+
+    return false;
+}
+
 bool sdl_map_pointer_handle_event(const SDL_Event* ev)
 {
     float x;
@@ -1177,8 +1425,19 @@ bool sdl_map_pointer_handle_event(const SDL_Event* ev)
     if (!ev)
         return false;
 
+    if (sdl_map_pointer_handle_look_interaction_event(ev))
+        return true;
+
     if (sdl_map_pointer_handle_consumed_touch_release(ev))
         return true;
+
+    if (ev->type == SDL_EVENT_FINGER_DOWN)
+    {
+        if (!sdl_map_pointer_event_xy(ev, &x, &y))
+            return false;
+        if (sdl_touch_controls_point_blocks_map(x, y))
+            return false;
+    }
 
     sdl_map_pointer_cancel_travel_for_input_event(ev);
 
@@ -1280,6 +1539,8 @@ bool sdl_map_pointer_handle_event(const SDL_Event* ev)
             return false;
         }
         if (!sdl_map_pointer_event_xy(ev, &x, &y))
+            return true;
+        if (sdl_map_pointer_delegate_touch_swipe(x, y, ev->tfinger.fingerID))
             return true;
         if (!sdl_map_pointer_hit_test(x, y, &map_y, &map_x))
         {
