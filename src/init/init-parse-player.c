@@ -673,6 +673,7 @@ errr parse_c_info(char* buf, header* head)
 
         /* Initialize power to default value 1 (average) */
         ph_ptr->power = 1;
+        ph_ptr->revenge_mark_count = 0;
 
         /* Store the name offset */
         if (!(ph_ptr->name = add_name(head, name_text)))
@@ -697,6 +698,11 @@ errr parse_c_info(char* buf, header* head)
             ph_ptr->start_items[slot].sval = 0;
             ph_ptr->start_items[slot].min = 0;
             ph_ptr->start_items[slot].max = 0;
+        }
+        for (slot = 0; slot < (int)N_ELEMENTS(ph_ptr->revenge_monster_guid); slot++)
+        {
+            ph_ptr->revenge_monster_guid[slot] = score_guid_from_u64(0);
+            ph_ptr->revenge_reason[slot] = 0;
         }
         log_debug("  start_items array initialized");
     }
@@ -847,6 +853,36 @@ errr parse_c_info(char* buf, header* head)
 
             s = t;
         }
+    }
+
+    /* Process 'R' for a character-specific revenge monster marker */
+    else if (buf[0] == 'R')
+    {
+        u64b guid = 0;
+        int slot;
+
+        if (!ph_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        s = strchr(buf + 2, ':');
+        if (!s)
+            return (PARSE_ERROR_GENERIC);
+
+        *s++ = '\0';
+        if (!*s)
+            return (PARSE_ERROR_GENERIC);
+
+        if (!parse_u64b_hex(buf + 2, &guid))
+            return (PARSE_ERROR_GENERIC);
+
+        slot = ph_ptr->revenge_mark_count;
+        if (slot >= (int)N_ELEMENTS(ph_ptr->revenge_monster_guid))
+            return (PARSE_ERROR_TOO_MANY_ALLOCATIONS);
+
+        ph_ptr->revenge_monster_guid[slot] = score_guid_from_u64(guid);
+        if (!add_text(&(ph_ptr->revenge_reason[slot]), head, s))
+            return (PARSE_ERROR_OUT_OF_MEMORY);
+        ph_ptr->revenge_mark_count++;
     }
 
         /* Process 'E' for "Starting Equipment" */
