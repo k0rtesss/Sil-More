@@ -16,10 +16,10 @@ High-signal repo guidance for coding agents (Codex CLI, Copilot, etc.). This is 
 
 ## Repo Map (Where Things Live)
 - `src/`: engine + frontend
-  - Core loop / dungeon: `src/dungeon.c`, generation: `src/generate.c`, map: `src/cave.c`
+  - Core loop / dungeon: `src/dungeon.c`, generation: `src/generate.c`, map: `src/cave/`
   - Commands (player input -> actions): `src/cmd1.c` ... `src/cmd6.c`
   - Monsters/combat/spells: `src/monster1.c`, `src/monster2.c`, `src/melee1.c`, `src/melee2.c`, `src/spells1.c`, `src/spells2.c`
-  - Objects/inventory: `src/object1.c`, `src/object2.c`, `src/obj-info.c`
+  - Objects/inventory: `src/object/` (`object-desc.c`, `object-inventory.c`, `object-make.c`, `object-ui-*.c`, etc.)
   - Save/load + file/path init: `src/save.c`, `src/load.c`, `src/init2.c`, `src/files.c`
   - UI plumbing: `src/z-term.c` (key queue/Term), `src/pane.c` (subwindows), `src/format.c`, `src/ui/`
   - Metarun + scoring: `src/metarun.c`, `src/metarun_legacy.c`, `src/score/`
@@ -28,7 +28,7 @@ High-signal repo guidance for coding agents (Codex CLI, Copilot, etc.). This is 
 - `lib/`: runtime data + assets
   - Templates: `lib/edit/*.txt` (monsters/vaults/objects/etc)
   - Generated binaries: `*.raw` under `ANGBAND_DIR_DATA` (do not edit; normally not committed)
-  - Preferences: `lib/pref/*.prf`, defaults: `lib/pref/sound.json`
+  - Preferences: JSON defaults in `lib/pref/` (`sound.json`, `palette_presets.json`, object text colors); legacy `.prf` files are removed
   - Assets: `lib/xtra/` (graf/font/music/sound)
 - `tools/`: one-off developer utilities
   - Stable GUID generation for templates: `tools/make_guid.py`

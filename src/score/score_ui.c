@@ -515,12 +515,13 @@ static void score_ui_build_halls_footer(char* footer, size_t footer_len,
                                         bool steamdeck, int term_wid,
                                         int page, int total_pages,
                                         const char* open_label,
+                                        const char* history_label,
                                         const char* order_label,
                                         const char* layout_label,
                                         const char* exit_label)
 {
-    char full[192];
-    char medium[160];
+    char full[224];
+    char medium[192];
     char short1[128];
     char short2[96];
     char tiny[64];
@@ -533,42 +534,70 @@ static void score_ui_build_halls_footer(char* footer, size_t footer_len,
 
     footer[0] = '\0';
 
-    if (steamdeck)
+    if (sdl_touch_only_device_active())
+    {
+        /* Keep Runs/Order/Layout/Prev/Next present so the consumer's tappable
+         * tokens still register on touch (it scans this footer for them). */
+        if (total_pages > 1)
+        {
+            strnfmt(full, sizeof(full),
+                "Tap a row to view  Runs  Order  Layout  Prev/Next  "
+                "tap away to exit  %d/%d", page + 1, total_pages);
+            strnfmt(medium, sizeof(medium),
+                "Tap view  Runs  Order  Layout  Prev/Next  %d/%d",
+                page + 1, total_pages);
+        }
+        else
+        {
+            strnfmt(full, sizeof(full),
+                "Tap a row to view  Runs  Order  Layout  "
+                "tap away to exit  %d/%d", page + 1, total_pages);
+            strnfmt(medium, sizeof(medium),
+                "Tap view  Runs  Order  Layout  %d/%d", page + 1, total_pages);
+        }
+        strnfmt(short1, sizeof(short1), "Tap view  Runs  Order  %d/%d",
+            page + 1, total_pages);
+        SDL_strlcpy(short2, short1, sizeof(short2));
+        SDL_strlcpy(tiny, short1, sizeof(tiny));
+        strnfmt(minimum, sizeof(minimum), "%d/%d", page + 1, total_pages);
+    }
+    else if (steamdeck)
     {
         strnfmt(full, sizeof(full),
-            "[%s] Open  [%s] Order  [%s] Layout  [%s] Exit  D-pad Move  N/P Page %d/%d",
-            open_label, order_label, layout_label, exit_label, page + 1,
-            total_pages);
+            "[%s] Open  [%s] Runs  [%s] Order  [%s] Layout  [%s] Exit  D-pad Move %d/%d",
+            open_label, history_label, order_label, layout_label, exit_label,
+            page + 1, total_pages);
         strnfmt(medium, sizeof(medium),
-            "[%s] Open  [%s] Order  [%s] Layout  [%s] Exit  D-pad  %d/%d",
-            open_label, order_label, layout_label, exit_label, page + 1,
-            total_pages);
+            "[%s] Open  [%s] Runs  [%s] Order  [%s] Layout  [%s] Exit  %d/%d",
+            open_label, history_label, order_label, layout_label, exit_label,
+            page + 1, total_pages);
         strnfmt(short1, sizeof(short1),
-            "[%s] Open  [%s] Ord  [%s] Lay  [%s] Exit  %d/%d",
-            open_label, order_label, layout_label, exit_label, page + 1,
-            total_pages);
-        strnfmt(short2, sizeof(short2), "[%s] Open  [%s] Exit  %d/%d",
-            open_label, exit_label, page + 1, total_pages);
-        strnfmt(tiny, sizeof(tiny), "[%s] Open  %d/%d", open_label, page + 1,
-            total_pages);
+            "[%s] Open  [%s] Runs  [%s] Ord  [%s] Lay  [%s] Exit  %d/%d",
+            open_label, history_label, order_label, layout_label, exit_label,
+            page + 1, total_pages);
+        strnfmt(short2, sizeof(short2),
+            "[%s] Open  [%s] Runs  [%s] Exit  %d/%d", open_label,
+            history_label, exit_label, page + 1, total_pages);
+        strnfmt(tiny, sizeof(tiny), "[%s] Open  [%s] Runs  %d/%d",
+            open_label, history_label, page + 1, total_pages);
         strnfmt(minimum, sizeof(minimum), "%d/%d", page + 1, total_pages);
     }
     else
     {
         strnfmt(full, sizeof(full),
-            "[Enter/Right] Open  [S] Order  [L] Layout  [Esc] Exit  [Up/Down] Move  [N] Next  [P] Prev %d/%d",
+            "Dir Move/Open  N/P Page  Enter Open  R Runs  S Order  L Layout  Esc Exit %d/%d",
             page + 1, total_pages);
         strnfmt(medium, sizeof(medium),
-            "Enter Open  S Order  L Layout  Esc Exit  Up/Down Move  N/P Page %d/%d",
+            "Enter Open  R Runs  S Order  L Layout  Esc Exit  N/P Page %d/%d",
             page + 1, total_pages);
         strnfmt(short1, sizeof(short1),
-            "Enter Open  S Order  L Layout  Esc Exit  Up/Down  N/P %d/%d",
+            "Enter Open  R Runs  S Ord  L Lay  Esc Exit  N/P %d/%d",
             page + 1, total_pages);
         strnfmt(short2, sizeof(short2),
-            "Enter Open  S Order  L Layout  Esc Exit  %d/%d",
+            "Enter Open  R Runs  Esc Exit  %d/%d",
             page + 1, total_pages);
-        strnfmt(tiny, sizeof(tiny), "Enter Open  Esc Exit  %d/%d", page + 1,
-            total_pages);
+        strnfmt(tiny, sizeof(tiny), "R Runs  Enter Open  Esc Exit  %d/%d",
+            page + 1, total_pages);
         strnfmt(minimum, sizeof(minimum), "%d/%d", page + 1, total_pages);
     }
 
@@ -1140,13 +1169,15 @@ static char display_scores_pages(const high_score* entries, int count,
         SCORE_CLICK_EXIT = -3,
         SCORE_CLICK_OPEN = -4,
         SCORE_CLICK_PREV = -5,
-        SCORE_CLICK_NEXT = -6
+        SCORE_CLICK_NEXT = -6,
+        SCORE_CLICK_HISTORY = -7
     };
     bool steamdeck = steamdeck_controls_active();
     char order_label[16] = "";
     char layout_label[16] = "";
     char exit_label[16] = "";
     char open_label[16] = "";
+    char history_label[16] = "";
     int term_wid = 80;
     int term_hgt = 24;
     int footer_row;
@@ -1159,6 +1190,7 @@ static char display_scores_pages(const high_score* entries, int count,
         score_prompt_label(steamdeck_alt_action_key(), "X", layout_label, sizeof(layout_label));
         score_prompt_label(steamdeck_back_key(), "B", exit_label, sizeof(exit_label));
         score_prompt_label(steamdeck_confirm_key(), "A", open_label, sizeof(open_label));
+        score_prompt_label(steamdeck_info_key(), "RS", history_label, sizeof(history_label));
     }
 
     score_ui_get_term_size(&term_wid, &term_hgt);
@@ -1173,24 +1205,38 @@ static char display_scores_pages(const high_score* entries, int count,
     {
         c_put_str(TERM_L_BLUE, "               Halls of Mandos", 1, 0);
         c_put_str(TERM_SLATE, "No recorded heroes yet.", 3, 0);
-        if (steamdeck) {
-            char hint_buf[48];
-            strnfmt(hint_buf, sizeof(hint_buf), "(press %s)", exit_label);
-            score_ui_put_fit(TERM_L_WHITE, hint_buf, footer_row, 2, term_wid);
-        } else {
-            score_ui_put_fit(TERM_L_WHITE, "(press any key)", footer_row, 2,
-                term_wid);
-        }
+        char hint_buf[96];
+        if (sdl_touch_only_device_active())
+            SDL_strlcpy(hint_buf, "Tap Run History  tap away to exit",
+                sizeof(hint_buf));
+        else if (steamdeck)
+            strnfmt(hint_buf, sizeof(hint_buf), "[%s] Run History  [%s] Exit",
+                history_label, exit_label);
+        else
+            SDL_strlcpy(hint_buf, "[R] Run History  [Esc] Exit",
+                sizeof(hint_buf));
+        score_ui_put_fit(TERM_L_WHITE, hint_buf, footer_row, 2, term_wid);
         ui_menu_click_begin();
         ui_menu_click_set_outside_cancel_enabled(true);
-        ui_menu_click_add_full_row(SCORE_CLICK_EXIT, footer_row);
+        ui_menu_click_add_text_token(SCORE_CLICK_HISTORY, 2, footer_row,
+            hint_buf, "Run");
+        ui_menu_click_add_text_token(SCORE_CLICK_HISTORY, 2, footer_row,
+            hint_buf, "History");
+        ui_menu_click_add_text_token(SCORE_CLICK_HISTORY, 2, footer_row,
+            hint_buf, "[R]");
+        ui_menu_click_add_text_token(SCORE_CLICK_EXIT, 2, footer_row,
+            hint_buf, "Exit");
+        ui_menu_click_add_text_token(SCORE_CLICK_EXIT, 2, footer_row,
+            hint_buf, "Esc");
         while (true)
         {
             int clicked_choice = 0;
             int click_action = UI_MENU_CLICK_PRIMARY;
+            char ch;
+            bool click_generated_command = false;
             bool saved_hide_cursor = hide_cursor;
             hide_cursor = true;
-            (void)inkey();
+            ch = inkey();
             hide_cursor = saved_hide_cursor;
 
             if (ui_menu_click_take_action(&clicked_choice, &click_action))
@@ -1198,7 +1244,21 @@ static char display_scores_pages(const high_score* entries, int count,
                 ui_menu_click_clear();
                 if (click_action == UI_MENU_CLICK_HOVER)
                     continue;
+                if (clicked_choice == SCORE_CLICK_HISTORY)
+                    return 'r';
+                click_generated_command = true;
                 break;
+            }
+
+            if (ch == UI_MENU_CLICK_WAKE_KEY)
+                continue;
+            if (!click_generated_command)
+                ch = (char)steamdeck_menu_key(ch, 0, 0);
+            if ((steamdeck && ch == steamdeck_info_key())
+                || ch == 'r' || ch == 'R' || ch == 'h' || ch == 'H')
+            {
+                ui_menu_click_clear();
+                return 'r';
             }
 
             ui_menu_click_clear();
@@ -1294,10 +1354,10 @@ static char display_scores_pages(const high_score* entries, int count,
             }
         }
 
-        char footer[192];
+        char footer[224];
         score_ui_build_halls_footer(footer, sizeof(footer), steamdeck,
-            term_wid, page, total_pages, open_label, order_label,
-            layout_label, exit_label);
+            term_wid, page, total_pages, open_label, history_label,
+            order_label, layout_label, exit_label);
         score_ui_put_fit(TERM_L_WHITE, footer, footer_row, 1, term_wid);
         ui_menu_click_add_text_token(SCORE_CLICK_OPEN, 1, footer_row, footer,
             "Open");
@@ -1305,6 +1365,14 @@ static char display_scores_pages(const high_score* entries, int count,
             "open");
         ui_menu_click_add_text_token(SCORE_CLICK_OPEN, 1, footer_row, footer,
             "Enter");
+        ui_menu_click_add_text_token(SCORE_CLICK_HISTORY, 1, footer_row,
+            footer, "Runs");
+        ui_menu_click_add_text_token(SCORE_CLICK_HISTORY, 1, footer_row,
+            footer, "Run");
+        ui_menu_click_add_text_token(SCORE_CLICK_HISTORY, 1, footer_row,
+            footer, "History");
+        ui_menu_click_add_text_token(SCORE_CLICK_HISTORY, 1, footer_row,
+            footer, "[R]");
         ui_menu_click_add_text_token(SCORE_CLICK_ORDER, 1, footer_row, footer,
             "Order");
         ui_menu_click_add_text_token(SCORE_CLICK_ORDER, 1, footer_row, footer,
@@ -1346,6 +1414,7 @@ static char display_scores_pages(const high_score* entries, int count,
         hide_cursor = true;
         char ch = inkey();
         hide_cursor = saved_hide_cursor;
+        bool click_generated_command = false;
         prt("", footer_row, 0);
 
         {
@@ -1370,12 +1439,13 @@ static char display_scores_pages(const high_score* entries, int count,
 
                 switch (clicked_choice)
                 {
-                case SCORE_CLICK_ORDER: ch = 's'; break;
-                case SCORE_CLICK_LAYOUT: ch = 'l'; break;
-                case SCORE_CLICK_EXIT: ch = ESCAPE; break;
-                case SCORE_CLICK_OPEN: ch = '\r'; break;
-                case SCORE_CLICK_PREV: ch = 'p'; break;
-                case SCORE_CLICK_NEXT: ch = 'n'; break;
+                case SCORE_CLICK_ORDER: ch = 's'; click_generated_command = true; break;
+                case SCORE_CLICK_LAYOUT: ch = 'l'; click_generated_command = true; break;
+                case SCORE_CLICK_EXIT: ch = ESCAPE; click_generated_command = true; break;
+                case SCORE_CLICK_OPEN: ch = '\r'; click_generated_command = true; break;
+                case SCORE_CLICK_HISTORY: ch = 'r'; click_generated_command = true; break;
+                case SCORE_CLICK_PREV: ch = 'p'; click_generated_command = true; break;
+                case SCORE_CLICK_NEXT: ch = 'n'; click_generated_command = true; break;
                 default: break;
                 }
             }
@@ -1385,6 +1455,9 @@ static char display_scores_pages(const high_score* entries, int count,
 
         if (ch == UI_MENU_CLICK_WAKE_KEY)
             continue;
+
+        if (!click_generated_command)
+            ch = (char)steamdeck_menu_key(ch, 'p', 'n');
 
         if (steamdeck) {
             int back_key = steamdeck_back_key();
@@ -1396,6 +1469,8 @@ static char display_scores_pages(const high_score* entries, int count,
                 return ESCAPE;  /* B = back */
             if (ch == confirm_key)
                 ch = '\r';  /* A = open */
+            if (ch == steamdeck_info_key())
+                ch = 'r';  /* RS = run history */
             if (ch == alt_key)
                 ch = 'l';  /* X = layout toggle */
             if (ch == secondary_key)
@@ -1404,6 +1479,8 @@ static char display_scores_pages(const high_score* entries, int count,
 
         if (ch == ESCAPE)
             return ESCAPE;
+        if (ch == 'r' || ch == 'R' || ch == 'h' || ch == 'H')
+            return 'r';
         if (ch == 's' || ch == 'S' || ch == 'o' || ch == 'O')
             return ch;
         if (ch == 'l' || ch == 'L')
@@ -1585,6 +1662,9 @@ void show_scores(bool longscore)
              p_ptr->is_dead ? 1 : 0,
              preview_allowed ? 1 : 0);
 
+    sdl_suspend_main_view_zoom_for_saved_screen();
+    sdl_push_terminal_menu_scale();
+
     high_score ordered_by_score[MAX_HISCORES + 1];
     high_score ordered_by_time[MAX_HISCORES + 1];
 
@@ -1648,6 +1728,12 @@ void show_scores(bool longscore)
                   count, highlight ? *highlight : -1);
 
         char response = display_scores_pages(list, count, highlight, order, detailed, page_size);
+        if (response == 'r' || response == 'R')
+        {
+            log_info("Halls of Mandos: opening Run History");
+            do_cmd_run_history();
+            continue;
+        }
         if (response == 's' || response == 'S' || response == 'o' || response == 'O')
         {
             high_score selected;
@@ -1688,7 +1774,19 @@ void show_scores(bool longscore)
         }
         break;
     }
+    /* If the player is quitting the program from in-game (leaving, no longer
+     * playing, not dead, not returning to the title menu), the teardown below
+     * restores and repaints the dungeon view, which flashes on screen for a
+     * frame just before the window closes.  Suppress presentation so the score
+     * screen stays visible until the process exits. */
+    if (p_ptr->leaving && !p_ptr->playing && !p_ptr->is_dead
+        && !p_ptr->quit_to_menu)
+    {
+        sdl_set_present_suppressed(true);
+    }
     screen_pop_supporting_panes_hidden();
+    sdl_pop_terminal_menu_scale();
+    sdl_resume_main_view_zoom_for_saved_screen();
 
     forced_highlight_active = false;
     score_last_layout_short = !detailed;
@@ -2176,6 +2274,7 @@ void do_cmd_run_history(void)
 
     screen_save();
     screen_push_supporting_panes_hidden();
+    sdl_push_terminal_menu_scale();
 
     while (!done) {
         int term_wid = 80;
@@ -2205,6 +2304,7 @@ void do_cmd_run_history(void)
         Term_clear();
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
+        ui_menu_click_set_outside_cancel_enabled(true);
         ui_scroll_area_clear();
 
         if (steamdeck) {
@@ -2423,10 +2523,20 @@ void do_cmd_run_history(void)
 
         if (steamdeck) {
             char footer[160];
+            char footer_full[160];
+            char footer_short[120];
+            const char* variants[2];
 
-            strnfmt(footer, sizeof(footer),
-                "[%s] details  [%s] sort  [%s] back  [Up/Down] move  [Left/Right] page",
+            strnfmt(footer_full, sizeof(footer_full),
+                "D-pad move/page  [%s] details  [%s] sort  [%s] back",
                 confirm_label, sort_label, back_label);
+            strnfmt(footer_short, sizeof(footer_short),
+                "[%s] details  [%s] sort  [%s] back",
+                confirm_label, sort_label, back_label);
+            variants[0] = footer_full;
+            variants[1] = footer_short;
+            terminal_prompt_pick_variant(footer, sizeof(footer), term_wid,
+                false, variants, N_ELEMENTS(variants));
             score_ui_put_fit(TERM_L_DARK, footer, footer_row, 0, term_wid);
             ui_menu_click_add_text_token(RUN_HISTORY_CLICK_DETAILS, 0,
                 footer_row, footer, "details");
@@ -2438,10 +2548,27 @@ void do_cmd_run_history(void)
                 footer_row, footer, "Left");
             ui_menu_click_add_text_token(RUN_HISTORY_CLICK_NEXT, 0,
                 footer_row, footer, "Right");
-        } else {
-            const char *footer =
-                "[Space/Enter/Right] details  [R] sort  [Esc] back  [Up/Down] move  [N/P/3/7] page";
+        } else if (sdl_touch_only_device_active()) {
+            char footer[160];
+            const char* variants[] = {
+                "Tap a row to view, tap away to exit",
+                "Tap to view, tap away to exit",
+                "Tap to view"
+            };
 
+            terminal_prompt_pick_variant(footer, sizeof(footer), term_wid,
+                false, variants, N_ELEMENTS(variants));
+            score_ui_put_fit(TERM_L_DARK, footer, footer_row, 0, term_wid);
+        } else {
+            char footer[160];
+            const char* variants[] = {
+                "Dir move/page  Enter details  R sort  Esc back",
+                "Enter details  R sort  Esc back",
+                "Enter details  Esc back"
+            };
+
+            terminal_prompt_pick_variant(footer, sizeof(footer), term_wid,
+                false, variants, N_ELEMENTS(variants));
             score_ui_put_fit(TERM_L_DARK, footer, footer_row, 0, term_wid);
             ui_menu_click_add_text_token(RUN_HISTORY_CLICK_DETAILS, 0,
                 footer_row, footer, "details");
@@ -2462,6 +2589,7 @@ void do_cmd_run_history(void)
         hide_cursor = true;
         int ch = inkey();
         hide_cursor = saved_hide_cursor;
+        bool click_generated_command = false;
 
         {
             int clicked_choice = 0;
@@ -2498,6 +2626,7 @@ void do_cmd_run_history(void)
                     case RUN_HISTORY_CLICK_NEXT: ch = 'n'; break;
                     default: break;
                     }
+                    click_generated_command = true;
                 }
             }
             else {
@@ -2505,6 +2634,9 @@ void do_cmd_run_history(void)
                 ui_scroll_area_clear();
             }
         }
+
+        if (!click_generated_command)
+            ch = steamdeck_menu_key(ch, 'p', 'n');
 
         if (steamdeck) {
             if (ch == steamdeck_back_key())
@@ -2605,6 +2737,7 @@ void do_cmd_run_history(void)
         }
     }
 
+    sdl_pop_terminal_menu_scale();
     screen_pop_supporting_panes_hidden();
     ui_menu_click_clear();
     ui_scroll_area_clear();
@@ -3437,6 +3570,7 @@ static void run_history_show_detail(const run_history_entry* entry)
     int stats_total_lines = 0;
 
     screen_save();
+    sdl_push_terminal_menu_scale();
 
     while (!done) {
         bool steamdeck = steamdeck_controls_active();
@@ -3453,6 +3587,7 @@ static void run_history_show_detail(const run_history_entry* entry)
         Term_clear();
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
+        ui_menu_click_set_outside_cancel_enabled(true);
         ui_scroll_area_clear();
 
         if (steamdeck) {
@@ -3484,11 +3619,11 @@ static void run_history_show_detail(const run_history_entry* entry)
                 view.general_top, term_hgt, term_wid);
             footer = steamdeck
                 ? ((general_total_lines > text_rows)
-                    ? "[Up/Down] scroll  [Left/Right] view  [%s] back"
-                    : "[Left/Right] view  [%s] back")
+                    ? "D-pad scroll/view  [%s] back"
+                    : "D-pad view  [%s] back")
                 : ((general_total_lines > text_rows)
-                    ? "[Up/Down] scroll  [Left/Right] view  [Esc] back"
-                    : "[Left/Right] view  [Esc] back");
+                    ? "Dir scroll/view  Esc back"
+                    : "Left/Right view  Esc back");
             scroll_first_row = 3;
             scroll_rows = text_rows;
             enable_scroll_area = true;
@@ -3501,11 +3636,11 @@ static void run_history_show_detail(const run_history_entry* entry)
                 view.stats_top, term_hgt, term_wid);
             footer = steamdeck
                 ? ((stats_total_lines > text_rows)
-                    ? "[Up/Down] scroll  [Left/Right] view  [%s] back"
-                    : "[Left/Right] view  [%s] back")
+                    ? "D-pad scroll/view  [%s] back"
+                    : "D-pad view  [%s] back")
                 : ((stats_total_lines > text_rows)
-                    ? "[Up/Down] scroll  [Left/Right] view  [Esc] back"
-                    : "[Left/Right] view  [Esc] back");
+                    ? "Dir scroll/view  Esc back"
+                    : "Left/Right view  Esc back");
             scroll_first_row = 3;
             scroll_rows = text_rows;
             enable_scroll_area = true;
@@ -3513,8 +3648,8 @@ static void run_history_show_detail(const run_history_entry* entry)
         case RUN_PANEL_ABILITIES:
             ability_rows = run_history_draw_abilities_panel(&details, &view.abilities, term_hgt);
             footer = steamdeck
-                ? "[Up/Down] navigate  [Left/Right] view  [%s] back"
-                : "[Up/Down] navigate  [Left/Right] view  [Esc] back";
+                ? "D-pad navigate/view  [%s] back"
+                : "Dir navigate/view  Esc back";
             active_list_rows = ability_rows;
             active_list_total = run_history_detail_panel_total(&details, panel);
             scroll_first_row = 5;
@@ -3524,8 +3659,8 @@ static void run_history_show_detail(const run_history_entry* entry)
         case RUN_PANEL_MILESTONES:
             milestone_rows = run_history_draw_milestones_panel(&details, &view.milestones, term_hgt);
             footer = steamdeck
-                ? "[Up/Down] navigate  [Left/Right] view  [%s] back"
-                : "[Up/Down] navigate  [Left/Right] view  [Esc] back";
+                ? "D-pad navigate/view  [%s] back"
+                : "Dir navigate/view  Esc back";
             active_list_rows = milestone_rows;
             active_list_total = run_history_detail_panel_total(&details, panel);
             scroll_first_row = 5;
@@ -3535,8 +3670,8 @@ static void run_history_show_detail(const run_history_entry* entry)
         case RUN_PANEL_ARTEFACTS:
             artefact_rows = run_history_draw_artefact_panel(&details, &view.artefacts, term_hgt);
             footer = steamdeck
-                ? "[Up/Down] navigate  [Left/Right] view  [%s] inspect  [%s] back"
-                : "[Up/Down] navigate  [Space/Enter] inspect  [Left/Right] view  [Esc] back";
+                ? "D-pad navigate/view  [%s] inspect  [%s] back"
+                : "Dir navigate/view  Enter inspect  Esc back";
             active_list_rows = artefact_rows;
             active_list_total = run_history_detail_panel_total(&details, panel);
             scroll_first_row = 5;
@@ -3547,8 +3682,8 @@ static void run_history_show_detail(const run_history_entry* entry)
             monster_rows = run_history_draw_monster_panel(&details, &view.monsters,
                 view.monster_sort_mode, term_hgt);
             footer = steamdeck
-                ? "[Up/Down] navigate  [Left/Right] view  [%s] inspect  [%s] sort  [%s] back"
-                : "[Up/Down] navigate  [Space/Enter] inspect  [S] sort  [Left/Right] view  [Esc] back";
+                ? "D-pad navigate/view  [%s] inspect  [%s] sort  [%s] back"
+                : "Dir navigate/view  Enter inspect  S sort  Esc back";
             active_list_rows = monster_rows;
             active_list_total = run_history_detail_panel_total(&details, panel);
             scroll_first_row = 5;
@@ -3560,7 +3695,11 @@ static void run_history_show_detail(const run_history_entry* entry)
         }
 
         if (footer) {
-            if (steamdeck) {
+            if (sdl_touch_only_device_active()) {
+                SDL_strlcpy(footer_buf,
+                    "Swipe to scroll, tap a tab to switch, tap away to close",
+                    sizeof(footer_buf));
+            } else if (steamdeck) {
                 if (panel == RUN_PANEL_GENERAL || panel == RUN_PANEL_STATS ||
                     panel == RUN_PANEL_ABILITIES || panel == RUN_PANEL_MILESTONES) {
                     strnfmt(footer_buf, sizeof(footer_buf), footer, back_label);
@@ -3607,6 +3746,7 @@ static void run_history_show_detail(const run_history_entry* entry)
         int ch = inkey();
         hide_cursor = saved_hide_cursor;
         bool skip_command = false;
+        bool click_generated_command = false;
 
         {
             int clicked_choice = 0;
@@ -3655,18 +3795,23 @@ static void run_history_show_detail(const run_history_entry* entry)
                     switch (clicked_choice) {
                     case RUN_DETAIL_CLICK_BACK:
                         ch = ESCAPE;
+                        click_generated_command = true;
                         break;
                     case RUN_DETAIL_CLICK_PREV_PANEL:
                         ch = '4';
+                        click_generated_command = true;
                         break;
                     case RUN_DETAIL_CLICK_NEXT_PANEL:
                         ch = '6';
+                        click_generated_command = true;
                         break;
                     case RUN_DETAIL_CLICK_INSPECT:
                         ch = '\r';
+                        click_generated_command = true;
                         break;
                     case RUN_DETAIL_CLICK_SORT:
                         ch = 's';
+                        click_generated_command = true;
                         break;
                     default:
                         skip_command = true;
@@ -3683,6 +3828,9 @@ static void run_history_show_detail(const run_history_entry* entry)
 
         if (skip_command)
             continue;
+
+        if (!click_generated_command)
+            ch = steamdeck_menu_key(ch, '4', '6');
 
         if (steamdeck) {
             if (ch == steamdeck_back_key())
@@ -3784,5 +3932,6 @@ static void run_history_show_detail(const run_history_entry* entry)
     if (have_details)
         score_runs_free_details(&details);
 
+    sdl_pop_terminal_menu_scale();
     screen_load();
 }

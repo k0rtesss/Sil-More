@@ -17,6 +17,7 @@
 
 term_pre_fresh_hook_func g_term_pre_fresh_hook = NULL;
 term_clear_hook_func g_term_clear_hook = NULL;
+term_get_size_hook_func g_term_get_size_hook = NULL;
 
 /*
  * This file provides a generic, efficient, terminal window package,
@@ -521,6 +522,10 @@ void Term_queue_char(int x, int y, byte a, char c, byte ta, char tc)
         nsf = STORY_FLAG_USE;
         if (Term->story_font_grid)
             nsf |= STORY_FLAG_CELL_ALIGN;
+        if (Term->story_font_slot == 1)
+            nsf |= STORY_FLAG_SLOT2;
+        if (Term->story_pixel_pack)
+            nsf |= STORY_FLAG_PIXEL_PACK;
     }
     if (nsf) {
         log_trace("Term_queue_char: story-font ACTIVE y=%d x=%d char='%c' attr=%d story_flag=0x%02x",
@@ -601,6 +606,10 @@ void Term_queue_chars(int x, int y, int n, byte a, cptr s)
         nsf = STORY_FLAG_USE;
         if (Term->story_font_grid)
             nsf |= STORY_FLAG_CELL_ALIGN;
+        if (Term->story_font_slot == 1)
+            nsf |= STORY_FLAG_SLOT2;
+        if (Term->story_pixel_pack)
+            nsf |= STORY_FLAG_PIXEL_PACK;
     }
     if (nsf && n > 0) {
         log_trace("Term_queue_chars: story-font ACTIVE y=%d x=%d n=%d text='%.*s' story_flag=0x%02x",
@@ -1570,8 +1579,8 @@ errr Term_set_extra_cursor(bool v, int x, int y, bool big)
 
     Term->extra_cursor = v;
     Term->extra_cursor_big = v ? big : false;
-    Term->extra_cursor_x = v ? (byte)x : 0;
-    Term->extra_cursor_y = v ? (byte)y : 0;
+    Term->extra_cursor_x = v ? x : 0;
+    Term->extra_cursor_y = v ? y : 0;
 
     /* Success */
     return (0);
@@ -1818,7 +1827,7 @@ errr Term_erase(int x, int y, int n)
     /* Log for line 0 */
     if (y == 0)
     {
-        log_debug("Term_erase: row=0 x=%d n=%d story_font_active=%d", x, n, Term->story_font_active ? 1 : 0);
+        log_trace("Term_erase: row=0 x=%d n=%d story_font_active=%d", x, n, Term->story_font_active ? 1 : 0);
     }
 
     /* Scan every column */
@@ -2006,9 +2015,17 @@ errr Term_get_cursor(bool* v)
  */
 errr Term_get_size(int* w, int* h)
 {
+    if (!Term)
+        return (-1);
+
+    if (g_term_get_size_hook && g_term_get_size_hook(Term, w, h))
+        return (0);
+
     /* Access the cursor */
-    (*w) = Term->wid;
-    (*h) = Term->hgt;
+    if (w)
+        (*w) = Term->wid;
+    if (h)
+        (*h) = Term->hgt;
 
     /* Success */
     return (0);
@@ -2078,22 +2095,23 @@ errr Term_flush(void)
 errr Term_keypress(int k)
 {
     /* Hack -- Refuse to enqueue non-keys */
-    if (!k)
+    if (k <= 0 || k > 255)
         return (-1);
 
-    /* Store the char, advance the queue */
-    Term->key_queue[Term->key_head++] = k;
+    int next = Term->key_head + 1;
 
     /* Circular queue, handle wrap */
-    if (Term->key_head == Term->key_size)
-        Term->key_head = 0;
+    if (next == Term->key_size)
+        next = 0;
 
-    /* Success (unless overflow) */
-    if (Term->key_head != Term->key_tail)
-        return (0);
+    if (next == Term->key_tail)
+        return (1);
 
-    /* Problem */
-    return (1);
+    /* Store the char, advance the queue */
+    Term->key_queue[Term->key_head] = k;
+    Term->key_head = next;
+
+    return (0);
 }
 
 /*
@@ -2102,22 +2120,22 @@ errr Term_keypress(int k)
 errr Term_key_push(int k)
 {
     /* Hack -- Refuse to enqueue non-keys */
-    if (!k)
+    if (k <= 0 || k > 255)
         return (-1);
 
-    /* Hack -- Overflow may induce circular queue */
-    if (Term->key_tail == 0)
-        Term->key_tail = Term->key_size;
+    int prev = Term->key_tail;
+    if (prev == 0)
+        prev = Term->key_size;
+    prev--;
+
+    if (prev == Term->key_head)
+        return (1);
 
     /* Back up, Store the char */
-    Term->key_queue[--Term->key_tail] = k;
+    Term->key_tail = prev;
+    Term->key_queue[Term->key_tail] = k;
 
-    /* Success (unless overflow) */
-    if (Term->key_head != Term->key_tail)
-        return (0);
-
-    /* Problem */
-    return (1);
+    return (0);
 }
 
 /*
@@ -2324,8 +2342,8 @@ errr Term_resize(int w, int h)
 
     int wid, hgt;
 
-    byte* hold_x1;
-    byte* hold_x2;
+    int* hold_x1;
+    int* hold_x2;
 
     term_win* hold_old;
     term_win* hold_scr;
@@ -2365,8 +2383,8 @@ errr Term_resize(int w, int h)
     hold_tmp = Term->tmp;
 
     /* Create new scanners */
-    Term->x1 = mem_alloc_array(h, byte);
-    Term->x2 = mem_alloc_array(h, byte);
+    Term->x1 = mem_alloc_array(h, int);
+    Term->x2 = mem_alloc_array(h, int);
 
     /* Create new window */
     Term->old = mem_alloc(term_win);
@@ -2628,8 +2646,8 @@ errr term_init(term* t, int w, int h, int k)
     t->hgt = h;
 
     /* Allocate change arrays */
-    t->x1 = mem_alloc_array(h, byte);
-    t->x2 = mem_alloc_array(h, byte);
+    t->x1 = mem_alloc_array(h, int);
+    t->x2 = mem_alloc_array(h, int);
 
     /* Allocate "displayed" */
     t->old = mem_alloc(term_win);

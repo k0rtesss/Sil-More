@@ -7,6 +7,7 @@
 
 static run_mode g_pending_run_mode = RUN_MODE_STORY;
 static run_mode g_current_run_mode = RUN_MODE_STORY;
+static bool g_blitz_launch_requested = false;
 
 static blitz_setup g_blitz_setup = {
     BLITZ_CHARACTER_RANDOM,
@@ -69,6 +70,21 @@ run_mode run_mode_current(void)
 bool run_mode_is_blitz(void)
 {
     return g_current_run_mode == RUN_MODE_BLITZ;
+}
+
+void blitz_request_launch(void)
+{
+    g_blitz_launch_requested = true;
+}
+
+bool blitz_launch_requested(void)
+{
+    return g_blitz_launch_requested;
+}
+
+void blitz_launch_clear(void)
+{
+    g_blitz_launch_requested = false;
 }
 
 const char* active_score_filename(void)
@@ -194,7 +210,8 @@ void blitz_show_end_summary(byte sil_count)
         strnfmt(result_line, sizeof(result_line), "%u Silmarils were stolen.",
             (unsigned)sil_count);
 
-    c_put_str(TERM_L_WHITE, result_line, row, MAX((wid - (int)strlen(result_line)) / 2, 0));
+    c_put_str(TERM_L_WHITE, result_line, row,
+        MAX((wid - utf8_display_width_n(result_line, (int)strlen(result_line))) / 2, 0));
     c_put_str(TERM_L_BLUE, "Press any key to continue.", MIN(row + 3, hgt - 1), 2);
     Term_fresh();
     (void)inkey();

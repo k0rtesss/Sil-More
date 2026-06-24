@@ -29,10 +29,10 @@ extern curse_type* cu_info;
 /*  Quest completion tracking                                         */
 /* ------------------------------------------------------------------ */
 #define METARUN_QUEST_TULKAS   (1UL << 0)   /* Tulkas quest completed */
-#define METARUN_QUEST_AULE     (1UL << 1)   /* Aule quest completed   */
+#define METARUN_QUEST_AULE     (1UL << 1)   /* Aulë quest completed   */
 #define METARUN_QUEST_MANDOS   (1UL << 2)   /* Mandos quest completed */
-#define METARUN_QUEST_NIENA    (1UL << 3)   /* Niena quest completed  */
-#define METARUN_QUEST_OROME    (1UL << 4)   /* Orome quest completed  */
+#define METARUN_QUEST_NIENA    (1UL << 3)   /* Nienna quest completed  */
+#define METARUN_QUEST_OROME    (1UL << 4)   /* Oromë quest completed  */
 #define METARUN_QUEST_VARDA    (1UL << 5)   /* Varda quest completed  */
 #define METARUN_QUEST_MANDOS_TRAITOR (1UL << 6) /* Mandos second quest completed */
 #define METARUN_QUEST_MANDOS_BETRAYER (1UL << 7) /* Mandos third quest completed */
@@ -123,11 +123,11 @@ typedef struct metarun
     u32b persistent_options[8];  /* Persistent options across the metarun */
     byte persistent_delay_factor; /* Persistent delay factor */
     byte persistent_hitpoint_warn; /* Persistent hitpoint warning */
-    u32b persistent_window_flags[ANGBAND_TERM_MAX]; /* Persistent window flags */
+    u32b persistent_window_flags[SAVE_WINDOW_TERM_MAX]; /* Persistent window flags */
     byte persistent_options_initialized; /* Flag to track if persistent options are set */
 
     /* ----- quest completion tracking --------------------------- */
-    u32b completed_quests;      /* Bitmask of completed quests (bit 0=Tulkas, bit 1=Aule, etc.) */
+    u32b completed_quests;      /* Bitmask of completed quests (bit 0=Tulkas, bit 1=Aulë, etc.) */
     byte quest_completion_counts[METARUN_QUEST_SLOT_MAX]; /* Times each quest has been completed this metarun (capped) */
     
     /* ----- oath system tracking -------------------------------- */
@@ -154,7 +154,7 @@ typedef struct metarun
 
 } metarun;
 
-/* The *current* meta-run - defined once in metarun.c */
+/* The *current* meta-run - defined once in variable.c */
 extern metarun metar;
 
 int8_t* active_curse_stacks(void);
@@ -337,7 +337,7 @@ static inline int CURSE_BLESSING_CAP(int id)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Public helpers implemented in metarun.c                           */
+/*  Public helpers implemented by the metarun subsystem                */
 /* ------------------------------------------------------------------ */
 extern bool metarun_created;           /* Flag set when new metarun file created */
 void cleanup_old_game_files(void);     /* Clean save/score files on fresh start */
@@ -354,6 +354,7 @@ void choose_difficulty_level(void);   /* Difficulty selection menu    */
 u32b curse_flag_mask(void);            /* bitmask of active flags      */
 int  curse_flag_count_rhf(u32b rhf_flag);  /* #curses with RHF bit  */
 int  curse_flag_count_cur(u32b cur_flag);  /* #curses with CUR bit  */
+int  curse_flag_delta_cur(u32b cur_flag);  /* signed CUR curse/blessing delta */
 int  any_curse_flag_active(u32b flag);     /* CUR-only helper      */
 void metarun_clear_blessing_runtime_fields(metarun *m); /* Reset runtime blessing fields */
 void metarun_sanitize_blessing_economy(metarun *m);     /* Clamp blessing totals */

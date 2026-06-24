@@ -3,11 +3,16 @@
 #include <stdbool.h>
 #include <SDL3/SDL_gamepad.h>
 #include "pane.h"
+#include "support/movement-input.h"
 
 #define GAMEPAD_TRIGGER_COUNT 2
 #define GAMEPAD_STICK_DIR_COUNT 4
 #define TOUCH_SWIPE_DIR_COUNT 4
 #define GAMEPAD_MODIFIER_COUNT 3
+#define SDL_KEYMAP_MODE_COUNT 4
+#define SDL_KEYMAP_KEY_COUNT 256
+#define SDL_KEYMAP_ACTION_LEN 16
+#define SDL_MOVEMENT_BINDING_MAX 96
 
 #define GAMEPAD_MODIFIER_SHIFT 0
 #define GAMEPAD_MODIFIER_CTRL 1
@@ -41,6 +46,12 @@
 #define SDL_MOUSE_MOVEMENT_OFF 1
 #define SDL_MOUSE_MOVEMENT_RIGHT_ONLY 2
 
+#define SDL_MOVEMENT_PRESET_NONE 0
+#define SDL_MOVEMENT_PRESET_MODERN_ARROWS 1
+#define SDL_MOVEMENT_PRESET_MODERN_WASD_QEZC 2
+#define SDL_MOVEMENT_PRESET_VI_KEYS 3
+#define SDL_MOVEMENT_PRESET_CLASSIC_SIL 4
+
 #define GAMEPAD_BIND_NONE -1
 #define GAMEPAD_BIND_SHIFT -2
 #define GAMEPAD_BIND_CTRL -3
@@ -49,6 +60,9 @@
 #define TOUCH_PANE_BIND_INHERIT -6
 #define TOUCH_BIND_TOP_PANEL_OPEN -7
 #define TOUCH_BIND_TOP_PANEL_CLOSE -8
+#define TOUCH_BIND_MAIN_MENU_KNOWLEDGE -9
+#define TOUCH_BIND_MAIN_MENU_HINTS_QUESTS -10
+#define TOUCH_BIND_TOGGLE_TILES -11
 
 #define SDL_TOUCH_PANE_BUTTON_COLS 3
 #define SDL_TOUCH_PANE_BUTTON_ROWS 8
@@ -82,8 +96,27 @@
 #define SDL_TOUCH_TOP_PANEL_MODE_LONG 1
 #define SDL_TOUCH_TOP_PANEL_MODE_COUNT 2
 #define SDL_TOUCH_TOP_PANEL_SHORT_BUTTON_COUNT 4
-#define SDL_TOUCH_TOP_PANEL_BUTTON_COUNT 6
+#define SDL_TOUCH_TOP_PANEL_BUTTON_COUNT 8
+#define SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_MIN 0
+#define SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_DEFAULT 8
+#define SDL_TOUCH_TOP_PANEL_TILE_SCALE_MIN 1
+#define SDL_TOUCH_TOP_PANEL_TILE_SCALE_MAX 8
+#if defined(__ANDROID__) || defined(SIL_IOS)
+#define SDL_TOUCH_TOP_PANEL_TILE_SCALE_DEFAULT 3
+#else
+#define SDL_TOUCH_TOP_PANEL_TILE_SCALE_DEFAULT 6
+#endif
+#define SDL_TOUCH_THUMB_BUTTON_COUNT 2
 #define SDL_PANE_PROFILE_COUNT 2
+#define SDL_LEFT_PANEL_COMPACT_COLUMN 0
+#define SDL_LEFT_PANEL_COMPACT_ROW 1
+#define SDL_LEFT_PANEL_COMPACT_COUNT 2
+#define SDL_MAIN_VIEW_MIN_SCALE 1
+#define SDL_MAIN_VIEW_PREFERRED_MIN_SCALE 2
+#define SDL_MAIN_VIEW_MAX_SCALE 20
+#define SDL_DICE_ROLL_LOCK_DEFAULT_MS 3000
+#define SDL_DICE_ROLL_OVERLAY_DEFAULT_MS 5000
+#define SDL_DICE_ROLL_TIMING_MAX_MS 10000
 
 enum sdl_min_terminal_mode {
     SDL_MIN_TERMINAL_NORMAL = 0,
@@ -108,8 +141,8 @@ struct sdl_pane_profile {
 // SDL-specific configuration structure
 struct sdl_config {
     int main_view_scale;
-    // Default supporting-pane font size. Zero means auto from the main pane's
-    // visible font/cell height.
+    // Default supporting-pane font size. Zero means auto from the configured
+    // main view scale, independent of temporary main-map zoom.
     int aux_view_font_size;
     int margin;
     bool fullscreen;
@@ -118,9 +151,12 @@ struct sdl_config {
     bool enable_right_panes;
     bool enable_bottom_panes;
     bool show_pane_borders;
-    bool hide_left_panel;
-    int hidden_left_panel_mode;
+    bool left_panel_expanded_on_launch;
+    int left_panel_compact_mode;
     int min_terminal_mode;
+    int log_pane_display_filter;
+    int dice_roll_lock_ms;
+    int dice_roll_overlay_ms;
     
     // Window position and size for windowed mode
     int window_x;
@@ -130,6 +166,7 @@ struct sdl_config {
     
     // Custom fonts
     char story_font[256];      // Font for story/narrative text (non-monospace, e.g., "lib/xtra/font/Story.ttf")
+    char story_font2[256];     // Second story font, used by select UI contexts (e.g. menus, log, quest book)
     char monospace_font[256];  // Font for regular game text (monospace, default: VictorMono-Medium.ttf)
     
     // Monospace font rendering options
@@ -149,6 +186,24 @@ struct sdl_config {
     int story_hinting;         // TTF hinting mode: 0=normal, 1=light, 2=mono, 3=none, 4=light_subpixel
     bool story_kerning;        // Enable kerning (default: true)
     int story_outline;         // Outline width in pixels (0=none)
+
+    // Second story font rendering options (slot 1)
+    bool story2_bold;          // Apply bold style to second story font
+    bool story2_italic;        // Apply italic style to second story font
+    bool story2_underline;     // Apply underline style to second story font
+    bool story2_strikethrough; // Apply strikethrough style to second story font
+    int story2_hinting;        // TTF hinting mode: 0=normal, 1=light, 2=mono, 3=none, 4=light_subpixel
+    bool story2_kerning;       // Enable kerning (default: true)
+    int story2_outline;        // Outline width in pixels (0=none)
+
+    // Palette and keyboard keymaps persisted in sil_sdl.json.
+    char palette_preset[64];
+    char keymap_actions[SDL_KEYMAP_MODE_COUNT][SDL_KEYMAP_KEY_COUNT]
+        [SDL_KEYMAP_ACTION_LEN];
+    bool movement_keyboard_present;
+    u16b movement_keyboard_preset;
+    u16b movement_binding_count;
+    movement_input_binding movement_bindings[SDL_MOVEMENT_BINDING_MAX];
 
     // Gamepad/controller settings
     bool gamepad_enabled;                 // Enable gamepad input
@@ -188,11 +243,18 @@ struct sdl_config {
     int touch_corner_action_bindings[SDL_TOUCH_CORNER_ACTION_BINDING_COUNT];
     int touch_top_panel_mode;
     bool touch_top_panel_default_open;
+    int touch_top_panel_button_count;
+    int touch_top_panel_tile_scale;
     int touch_top_panel_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
     int touch_top_panel_long_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+    bool touch_thumb_enabled;
+    int touch_thumb_bindings[SDL_TOUCH_THUMB_BUTTON_COUNT];
+    int touch_thumb_long_bindings[SDL_TOUCH_THUMB_BUTTON_COUNT];
     bool touch_swipe_enabled;
     int touch_swipe_bindings[TOUCH_SWIPE_DIR_COUNT];
 };
+
+extern struct sdl_config config;
 
 // Load SDL configuration from JSON file
 enum sdl_config_load_status sdl_config_load(const char* filename,
@@ -205,6 +267,26 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
 
 // Set default configuration values
 void sdl_config_set_defaults(struct sdl_config* config);
+void sdl_config_apply_keyboard_keymaps(const struct sdl_config* config);
+
+// Keyboard movement bindings persisted in sil_sdl.json.
+const char* sdl_config_movement_preset_label(u16b preset_id);
+u16b sdl_config_next_movement_preset(u16b preset_id);
+void sdl_config_clear_movement_bindings(struct sdl_config* config);
+void sdl_config_set_default_movement_bindings(struct sdl_config* config,
+    u16b preset_id);
+bool sdl_config_append_movement_binding(struct sdl_config* config,
+    const movement_input_binding* binding);
+bool sdl_config_set_movement_binding(struct sdl_config* config, u16b action,
+    u16b direction, const movement_input_binding* binding);
+bool sdl_config_resolve_movement_binding(const struct sdl_config* config,
+    u16b context, u32b trigger, u32b trigger_aux, u16b modifiers,
+    movement_input_command* out_command);
+// True when a movement preset binds this letter scancode as a plain (no
+// modifier) move, i.e. it shadows that letter's normal command. Used to offer
+// Alt+<letter> as the relocated command for WASD/Vi-style presets.
+bool sdl_config_scancode_is_plain_move_letter(const struct sdl_config* config,
+    u32b scancode);
 
 // Set default gamepad bindings (does not touch other fields)
 void sdl_config_set_default_gamepad_bindings(struct sdl_config* config);
@@ -215,7 +297,7 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* config);
 // Clear custom touch pane labels (does not touch other fields)
 void sdl_config_clear_touch_pane_labels(struct sdl_config* config);
 
-// Set default configuration values based on screen resolution
+// Set first-run configuration values. Resolution presets are not applied.
 bool sdl_config_set_defaults_for_resolution(struct sdl_config* config,
                                             struct pane_config* pane_configs,
                                             int* pane_count,
@@ -228,10 +310,15 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv);
 
 // Load/save app-wide game options from/to the SDL JSON config file.
 void sdl_config_load_app_options(const char* filename);
+void sdl_config_reset_app_options_to_defaults(void);
 bool sdl_config_should_force_intro_flame(void);
 void sdl_config_mark_intro_seen(void);
 bool sdl_config_touch_tutorial_seen(void);
 void sdl_config_mark_touch_tutorial_seen(void);
 bool sdl_config_mouse_tutorial_seen(void);
 void sdl_config_mark_mouse_tutorial_seen(void);
+bool sdl_config_character_wheel_tutorial_seen(void);
+void sdl_config_mark_character_wheel_tutorial_seen(void);
+bool sdl_config_keyboard_preset_prompt_seen(void);
+void sdl_config_mark_keyboard_preset_prompt_seen(void);
 bool option_is_app_persistent(int opt);

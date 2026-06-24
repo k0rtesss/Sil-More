@@ -208,7 +208,7 @@ static drop_category drop_category_for_kind(const object_kind* k_ptr)
     case TV_AMULET:
         return DROP_CAT_JEWELRY;
     case TV_LIGHT:
-        /* All non-Feanorian light sources are treated as supply. */
+        /* All non-Fëanorian light sources are treated as supply. */
         if (k_ptr->sval == SV_LIGHT_FEANORIAN || k_ptr->sval == SV_LIGHT_SILMARIL)
             return DROP_CAT_JEWELRY;
         if (k_ptr->sval == SV_LIGHT_TORCH || k_ptr->sval == SV_LIGHT_MALLORN
@@ -750,7 +750,7 @@ bool object_uses_smithing_difficulty(const object_type* o_ptr)
         return true;
 
     case TV_LIGHT:
-        /* Non-Feanorian lights are treated as supply, except Grace lesser jewels. */
+        /* Non-Fëanorian lights are treated as supply, except Grace lesser jewels. */
         if (o_ptr->sval == SV_LIGHT_FEANORIAN || o_ptr->sval == SV_LIGHT_SILMARIL)
             return true;
         if (o_ptr->sval == SV_LIGHT_LESSER_JEWEL && object_has_ego_idx(o_ptr, EGO_GRACE))
@@ -943,6 +943,8 @@ static int smithing_difficulty_baseline(const object_type* o_ptr)
         dif_inc += 3;  /* Paired weapon bonus */
     if (f4 & TR4_SUBTLETY_THROW)
         dif_inc += 15;
+    if (f4 & TR4_LIGHT_ARMOR)
+        dif_inc += 2;  /* Light armour tag (e.g. the (Light) ego) */
 
     /* pval-based bonuses */
     if (f1 & TR1_TUNNEL)
@@ -1110,6 +1112,10 @@ static int smithing_difficulty_baseline(const object_type* o_ptr)
         dif_inc += 6;
     if (f3 & TR3_MEDIC)
         dif_inc += 4;
+    if (f3 & TR3_OATH_BOOST)
+        dif_inc += 5;
+    if (f3 & TR3_OATH_NEGATE)
+        dif_dec += 5;
 
     if (f2 & TR2_RES_COLD)
         dif_inc += 5;
@@ -1352,6 +1358,12 @@ static void add_drop_entry(const object_type* proto, drop_category cat,
         if (new_cap < g_drop_count + 1)
             new_cap = g_drop_count + 1;
         drop_entry* new_buf = mem_alloc_array(new_cap, drop_entry);
+        if (!new_buf)
+        {
+            log_error("drop_system: failed to grow drop catalog to %zu entries",
+                new_cap);
+            return;
+        }
         if (g_drop_entries && g_drop_count)
             memcpy(new_buf, g_drop_entries, g_drop_count * sizeof(drop_entry));
         mem_free_null(g_drop_entries);
@@ -2415,7 +2427,7 @@ void drop_system_init(void)
     log_debug("drop_system_init: checking against '%s'", txt_path);
     need_rebuild |= (check_modification_date_sdl(raw_path, txt_path) != 0);
     
-    path_build(txt_path, sizeof(txt_path), ANGBAND_DIR_EDIT, "artifact.txt");
+    path_build(txt_path, sizeof(txt_path), ANGBAND_DIR_EDIT, "artefact.txt");
     log_debug("drop_system_init: checking against '%s'", txt_path);
     need_rebuild |= (check_modification_date_sdl(raw_path, txt_path) != 0);
     

@@ -193,7 +193,7 @@ term* angband_term[ANGBAND_TERM_MAX];
  */
 char angband_term_name[ANGBAND_TERM_MAX][16]
     = { VERSION_NAME, "Inventory", "Equipment", "Combat Rolls", "Recall",
-          "Character", "Messages", "Monster List" };
+          "Character", "Messages", "Monster List", "Supply" };
 
 int max_macrotrigger = 0;
 cptr macro_template = NULL;
@@ -388,6 +388,14 @@ byte (*cave_feat)[MAX_DUNGEON_WID];
  * Array[DUNGEON_HGT][DUNGEON_WID] of cave grid color codes
  */
 byte (*cave_color)[MAX_DUNGEON_WID];
+
+/*
+ * Array[DUNGEON_HGT][DUNGEON_WID] of rewired-trap difficulty.
+ * 0 = trap (if any) is not rewired; >0 = the trap on this grid has been
+ * rewired by the player to catch monsters, and the value is the difficulty a
+ * monster must beat to notice/disarm it (derived from the player's rewire roll).
+ */
+byte (*cave_rewired)[MAX_DUNGEON_WID];
 
 /*
  * Active legendary dungeon area map.  Zero means ordinary terrain; non-zero

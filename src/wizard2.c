@@ -11,7 +11,11 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "mem/alloc.h"
 #include "metarun.h"
+#include "sdl-config.h"
+#include "ui/menu-click.h"
+#include "ui/question.h"
 
 #ifdef ALLOW_DEBUG
 
@@ -20,8 +24,572 @@
  */
 static void do_cmd_debug_complete_quest(void);
 static void do_cmd_debug_orome_status(void);
+static void do_cmd_debug_quest_texts(void);
 static void do_cmd_debug_spawn_quest_valar(void);
 static void do_cmd_debug_identify_all_items(void);
+static char do_cmd_debug_choose(void);
+static void do_cmd_debug_execute(char cmd);
+
+typedef struct debug_menu_entry {
+    char key;
+    char command;
+    cptr label;
+    byte attr;
+} debug_menu_entry;
+
+typedef struct debug_menu_page {
+    char key;
+    cptr label;
+    cptr desc;
+    const debug_menu_entry* entries;
+    int count;
+} debug_menu_page;
+
+#define DEBUG_OVERLAY_PAGE_SIZE 24
+#define DEBUG_NUMBER_ACCEPT    2001
+#define DEBUG_NUMBER_PLUS_1    2002
+#define DEBUG_NUMBER_MINUS_1   2003
+#define DEBUG_NUMBER_PLUS_10   2004
+#define DEBUG_NUMBER_MINUS_10  2005
+#define DEBUG_NUMBER_PLUS_100  2006
+#define DEBUG_NUMBER_MINUS_100 2007
+#define DEBUG_NUMBER_DEFAULT   2008
+#define DEBUG_NUMBER_CANCEL    2009
+
+static int debug_overlay_choose_index(cptr title, cptr desc,
+    const debug_menu_entry* entries, int count)
+{
+    int page = 0;
+    int page_count;
+    cptr base_desc = desc;
+
+    if (!entries || count <= 0)
+        return -1;
+
+    page_count = (count + DEBUG_OVERLAY_PAGE_SIZE - 1)
+        / DEBUG_OVERLAY_PAGE_SIZE;
+
+    while (true)
+    {
+        ui_question_option options[26];
+        int option_to_entry[26];
+        char nav_labels[2][96];
+        char page_desc[480];
+        int start = page * DEBUG_OVERLAY_PAGE_SIZE;
+        int visible = MIN(DEBUG_OVERLAY_PAGE_SIZE, count - start);
+        int option_count = 0;
+        int choice;
+
+        for (int i = 0; i < visible; i++)
+        {
+            options[option_count].key = entries[start + i].key;
+            options[option_count].label = entries[start + i].label;
+            options[option_count].attr = entries[start + i].attr;
+            option_to_entry[option_count] = start + i;
+            option_count++;
+        }
+
+        if (page_count > 1 && page > 0)
+        {
+            strnfmt(nav_labels[0], sizeof(nav_labels[0]),
+                "Previous page (%d/%d)", page, page_count);
+            options[option_count].key = '<';
+            options[option_count].label = nav_labels[0];
+            options[option_count].attr = TERM_SLATE;
+            option_to_entry[option_count] = -2;
+            option_count++;
+        }
+
+        if (page_count > 1 && page + 1 < page_count)
+        {
+            strnfmt(nav_labels[1], sizeof(nav_labels[1]),
+                "Next page (%d/%d)", page + 2, page_count);
+            options[option_count].key = '>';
+            options[option_count].label = nav_labels[1];
+            options[option_count].attr = TERM_SLATE;
+            option_to_entry[option_count] = -3;
+            option_count++;
+        }
+
+        if (page_count > 1)
+        {
+            if (base_desc && base_desc[0])
+            {
+                strnfmt(page_desc, sizeof(page_desc), "%s Page %d of %d.",
+                    base_desc, page + 1, page_count);
+            }
+            else
+            {
+                strnfmt(page_desc, sizeof(page_desc), "Page %d of %d.",
+                    page + 1, page_count);
+            }
+            desc = page_desc;
+        }
+        else
+        {
+            desc = base_desc;
+        }
+
+        choice = ui_question_ask(title, desc, options, option_count,
+            UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
+
+        if (choice < 0)
+            return -1;
+
+        if (option_to_entry[choice] == -2)
+        {
+            page--;
+            continue;
+        }
+
+        if (option_to_entry[choice] == -3)
+        {
+            page++;
+            continue;
+        }
+
+        return option_to_entry[choice];
+    }
+}
+
+static char debug_overlay_choose_command(cptr title, cptr desc,
+    const debug_menu_entry* entries, int count)
+{
+    int choice = debug_overlay_choose_index(title, desc, entries, count);
+
+    if (choice < 0)
+        return 0;
+
+    return entries[choice].command;
+}
+
+static bool debug_overlay_parse_long(cptr text, long min, long max,
+    long* out)
+{
+    char* end = NULL;
+    long value;
+    bool has_max = (max >= min);
+
+    if (!text || !text[0] || streq(text, "-"))
+        return false;
+
+    value = strtol(text, &end, 10);
+    if (end == text)
+        return false;
+
+    while (end && *end)
+    {
+        if (!isspace((unsigned char)*end))
+            return false;
+        end++;
+    }
+
+    if (value < min)
+        value = min;
+    if (has_max && value > max)
+        value = max;
+
+    *out = value;
+    return true;
+}
+
+static long debug_overlay_clamp_long(long value, long min, long max)
+{
+    if (value < min)
+        value = min;
+    if (max >= min && value > max)
+        value = max;
+    return value;
+}
+
+static void debug_overlay_number_draw(cptr title, cptr desc, long current,
+    long initial, long min, long max, cptr entry)
+{
+    char line[96];
+    char desc_buf[480];
+    bool has_max = (max >= min);
+
+    ui_menu_click_begin();
+    ui_menu_click_set_hover_enabled(true);
+    ui_menu_click_set_outside_cancel_enabled(true);
+    ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
+
+    sdl_question_menu_begin(title);
+
+    if (has_max)
+    {
+        strnfmt(desc_buf, sizeof(desc_buf), "%s%sRange: %ld to %ld.",
+            desc && desc[0] ? desc : "",
+            desc && desc[0] ? " " : "", min, max);
+    }
+    else
+    {
+        strnfmt(desc_buf, sizeof(desc_buf), "%s%sMinimum: %ld.",
+            desc && desc[0] ? desc : "",
+            desc && desc[0] ? " " : "", min);
+    }
+    sdl_question_menu_set_desc(desc_buf);
+
+    strnfmt(line, sizeof(line), "Set to %s%ld",
+        entry && entry[0] ? "typed " : "", current);
+    sdl_question_menu_add_entry(DEBUG_NUMBER_ACCEPT, "", line, TERM_L_BLUE);
+
+    sdl_question_menu_add_entry(DEBUG_NUMBER_PLUS_1, "+)", "+1",
+        TERM_L_WHITE);
+    sdl_question_menu_add_entry(DEBUG_NUMBER_MINUS_1, "-)", "-1",
+        TERM_L_WHITE);
+    sdl_question_menu_add_entry(DEBUG_NUMBER_PLUS_10, "", "+10",
+        TERM_L_WHITE);
+    sdl_question_menu_add_entry(DEBUG_NUMBER_MINUS_10, "", "-10",
+        TERM_L_WHITE);
+    sdl_question_menu_add_entry(DEBUG_NUMBER_PLUS_100, "", "+100",
+        TERM_L_WHITE);
+    sdl_question_menu_add_entry(DEBUG_NUMBER_MINUS_100, "", "-100",
+        TERM_L_WHITE);
+
+    strnfmt(line, sizeof(line), "Reset to %ld", initial);
+    sdl_question_menu_add_entry(DEBUG_NUMBER_DEFAULT, "r)", line,
+        TERM_SLATE);
+    sdl_question_menu_add_entry(DEBUG_NUMBER_CANCEL, "", "Cancel",
+        TERM_SLATE);
+
+    sdl_question_menu_set_highlight(DEBUG_NUMBER_ACCEPT);
+    sdl_question_menu_finish();
+
+    Term_fresh();
+}
+
+static bool debug_overlay_get_long(cptr title, cptr desc, long initial,
+    long min, long max, long* out)
+{
+    long current = debug_overlay_clamp_long(initial, min, max);
+    char entry[32] = "";
+    int entry_len = 0;
+    bool saved_hide_cursor = hide_cursor;
+    bool canceled = false;
+    bool done = false;
+
+    if (!out)
+        return false;
+
+    hide_cursor = true;
+
+    while (!done)
+    {
+        int ch;
+
+        debug_overlay_number_draw(title, desc, current,
+            debug_overlay_clamp_long(initial, min, max), min, max, entry);
+
+        ch = inkey();
+
+        {
+            int clicked_choice = 0;
+            int click_action = UI_MENU_CLICK_PRIMARY;
+
+            if (ui_menu_click_take_action(&clicked_choice, &click_action))
+            {
+                if (click_action == UI_MENU_CLICK_HOVER)
+                    continue;
+
+                switch (clicked_choice)
+                {
+                case DEBUG_NUMBER_ACCEPT:
+                    ch = '\r';
+                    break;
+                case DEBUG_NUMBER_PLUS_1:
+                    current = debug_overlay_clamp_long(current + 1, min, max);
+                    entry_len = 0;
+                    entry[0] = '\0';
+                    continue;
+                case DEBUG_NUMBER_MINUS_1:
+                    current = debug_overlay_clamp_long(current - 1, min, max);
+                    entry_len = 0;
+                    entry[0] = '\0';
+                    continue;
+                case DEBUG_NUMBER_PLUS_10:
+                    current = debug_overlay_clamp_long(current + 10, min, max);
+                    entry_len = 0;
+                    entry[0] = '\0';
+                    continue;
+                case DEBUG_NUMBER_MINUS_10:
+                    current = debug_overlay_clamp_long(current - 10, min, max);
+                    entry_len = 0;
+                    entry[0] = '\0';
+                    continue;
+                case DEBUG_NUMBER_PLUS_100:
+                    current = debug_overlay_clamp_long(current + 100, min, max);
+                    entry_len = 0;
+                    entry[0] = '\0';
+                    continue;
+                case DEBUG_NUMBER_MINUS_100:
+                    current = debug_overlay_clamp_long(current - 100, min, max);
+                    entry_len = 0;
+                    entry[0] = '\0';
+                    continue;
+                case DEBUG_NUMBER_DEFAULT:
+                    current = debug_overlay_clamp_long(initial, min, max);
+                    entry_len = 0;
+                    entry[0] = '\0';
+                    continue;
+                case DEBUG_NUMBER_CANCEL:
+                    ch = ESCAPE;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+
+        switch (ch)
+        {
+        case UI_MENU_CLICK_WAKE_KEY:
+            break;
+
+        case ESCAPE:
+            canceled = true;
+            done = true;
+            break;
+
+        case '\r':
+        case '\n':
+        case ' ':
+#ifdef KC_ENTER
+        case KC_ENTER:
+#endif
+            done = true;
+            break;
+
+        case '+':
+        case '=':
+            current = debug_overlay_clamp_long(current + 1, min, max);
+            entry_len = 0;
+            entry[0] = '\0';
+            break;
+
+        case '-':
+        case '_':
+            if (min < 0 && entry_len == 0)
+            {
+                entry[entry_len++] = '-';
+                entry[entry_len] = '\0';
+                current = 0;
+            }
+            else
+            {
+                current = debug_overlay_clamp_long(current - 1, min, max);
+                entry_len = 0;
+                entry[0] = '\0';
+            }
+            break;
+
+        case '\b':
+        case 0x7F:
+            if (entry_len > 0)
+            {
+                long parsed = 0;
+
+                entry[--entry_len] = '\0';
+                if (debug_overlay_parse_long(entry, min, max, &parsed))
+                    current = parsed;
+                else
+                    current = 0;
+            }
+            else
+            {
+                bell("Nothing to erase.");
+            }
+            break;
+
+        case 'r':
+        case 'R':
+            current = debug_overlay_clamp_long(initial, min, max);
+            entry_len = 0;
+            entry[0] = '\0';
+            break;
+
+        default:
+            if (isdigit((unsigned char)ch))
+            {
+                long parsed = 0;
+
+                if (entry_len < (int)sizeof(entry) - 1)
+                {
+                    entry[entry_len++] = (char)ch;
+                    entry[entry_len] = '\0';
+                    if (debug_overlay_parse_long(entry, min, max, &parsed))
+                        current = parsed;
+                }
+                else
+                {
+                    bell("Number too large.");
+                }
+            }
+            else
+            {
+                bell("Illegal response to number prompt!");
+            }
+            break;
+        }
+    }
+
+    hide_cursor = saved_hide_cursor;
+    sdl_question_menu_clear();
+    ui_menu_click_clear();
+    Term_fresh();
+
+    if (canceled)
+        return false;
+
+    *out = current;
+    return true;
+}
+
+static bool debug_overlay_get_int(cptr title, cptr desc, int initial,
+    int min, int max, int* out)
+{
+    long value;
+
+    if (!debug_overlay_get_long(title, desc, initial, min, max, &value))
+        return false;
+
+    *out = (int)value;
+    return true;
+}
+
+static bool debug_overlay_arg_or_int(cptr title, cptr desc, int initial,
+    int min, int max, int* out)
+{
+    if (p_ptr->command_arg > 0)
+    {
+        *out = (int)debug_overlay_clamp_long(p_ptr->command_arg, min, max);
+        return true;
+    }
+
+    return debug_overlay_get_int(title, desc, initial, min, max, out);
+}
+
+static bool debug_overlay_arg_or_long(cptr title, cptr desc, long initial,
+    long min, long max, long* out)
+{
+    if (p_ptr->command_arg > 0)
+    {
+        *out = debug_overlay_clamp_long(p_ptr->command_arg, min, max);
+        return true;
+    }
+
+    return debug_overlay_get_long(title, desc, initial, min, max, out);
+}
+
+static int debug_overlay_choose_artefact(void)
+{
+    debug_menu_entry* entries;
+    char* labels;
+    int* indices;
+    int count = 0;
+    int choice;
+    int result = 0;
+
+    if (!z_info || z_info->art_max <= 1)
+        return 0;
+
+    entries = mem_alloc_array(z_info->art_max, debug_menu_entry);
+    labels = mem_alloc_array(z_info->art_max * 96, char);
+    indices = mem_alloc_array(z_info->art_max, int);
+    if (!entries || !labels || !indices)
+    {
+        mem_free_null(entries);
+        mem_free_null(labels);
+        mem_free_null(indices);
+        return 0;
+    }
+
+    for (int i = 1; i < z_info->art_max; i++)
+    {
+        artefact_type* a_ptr = &a_info[i];
+
+        if (!a_ptr->name[0])
+            continue;
+        if (a_ptr->tval + a_ptr->sval == 0)
+            continue;
+
+        char* label = labels + (count * 96);
+
+        strnfmt(label, 96, "%s (%d)", a_ptr->name, i);
+        entries[count].key = 0;
+        entries[count].command = 0;
+        entries[count].label = label;
+        entries[count].attr = a_ptr->cur_num ? TERM_SLATE : TERM_L_WHITE;
+        indices[count] = i;
+        count++;
+    }
+
+    choice = debug_overlay_choose_index("Create Artefact",
+        "Choose the artefact to create.", entries, count);
+    if (choice >= 0)
+        result = indices[choice];
+
+    mem_free_null(entries);
+    mem_free_null(labels);
+    mem_free_null(indices);
+
+    return result;
+}
+
+static int debug_overlay_choose_monster_race(void)
+{
+    debug_menu_entry* entries;
+    char* labels;
+    int* indices;
+    int count = 0;
+    int choice;
+    int result = 0;
+
+    if (!z_info || z_info->r_max <= 1)
+        return 0;
+
+    entries = mem_alloc_array(z_info->r_max, debug_menu_entry);
+    labels = mem_alloc_array(z_info->r_max * 96, char);
+    indices = mem_alloc_array(z_info->r_max, int);
+    if (!entries || !labels || !indices)
+    {
+        mem_free_null(entries);
+        mem_free_null(labels);
+        mem_free_null(indices);
+        return 0;
+    }
+
+    for (int i = 1; i < z_info->r_max; i++)
+    {
+        monster_race* r_ptr = &r_info[i];
+
+        if (!r_ptr->name)
+            continue;
+
+        char* label = labels + (count * 96);
+
+        strnfmt(label, 96, "%s (%d)", r_name + r_ptr->name, i);
+        entries[count].key = 0;
+        entries[count].command = 0;
+        entries[count].label = label;
+        entries[count].attr = (r_ptr->flags1 & RF1_UNIQUE)
+            ? TERM_VIOLET
+            : TERM_L_WHITE;
+        indices[count] = i;
+        count++;
+    }
+
+    choice = debug_overlay_choose_index("Summon Named Monster",
+        "Choose the monster race to place.", entries, count);
+    if (choice >= 0)
+        result = indices[choice];
+
+    mem_free_null(entries);
+    mem_free_null(labels);
+    mem_free_null(indices);
+
+    return result;
+}
 
 /*
  * Display the dungeon light levels.
@@ -40,6 +608,9 @@ void display_light_map(void)
         for (x = p_ptr->wx; x < p_ptr->wx + SCREEN_WID; x++)
         {
             byte a;
+
+            if (!in_bounds(y, x))
+                continue;
 
             int light = cave_light[y][x];
 
@@ -82,6 +653,9 @@ void display_scent_map(void)
     {
         for (x = p_ptr->wx; x < p_ptr->wx + SCREEN_WID; x++)
         {
+            if (!in_bounds(y, x))
+                continue;
+
             age = get_scent(y, x);
 
             /* Must have scent */
@@ -267,12 +841,14 @@ static void prt_binary(u32b flags, int row, int col)
  */
 static void do_cmd_wiz_bamf(void)
 {
-    /* Must have a target */
-    if (target_okay(0))
-    {
-        /* Teleport to the target */
-        teleport_player_to(p_ptr->target_row, p_ptr->target_col);
-    }
+    int y;
+    int x;
+
+    if (!target_select_location("Teleport", &y, &x))
+        return;
+
+    teleport_player_to(y, x);
+    target_set_monster(0);
 }
 
 /*
@@ -282,77 +858,60 @@ static void do_cmd_wiz_change_aux(void)
 {
     int i;
 
-    int tmp_int;
-
-    long tmp_long;
-
-    char tmp_val[160];
-
     char ppp[80];
 
     /* Query the stats */
     for (i = 0; i < A_MAX; i++)
     {
+        int tmp_int;
+
         /* Prompt */
-        strnfmt(ppp, sizeof(ppp), "%s (%d to %d): ", stat_names[i],
-            BASE_STAT_MIN, BASE_STAT_MAX);
+        strnfmt(ppp, sizeof(ppp), "%s", stat_names[i]);
 
-        /* Default */
-        sprintf(tmp_val, "%d", p_ptr->stat_base[i]);
-
-        /* Query */
-        if (!term_get_string(ppp, tmp_val, 4))
+        if (!debug_overlay_get_int(ppp, "Set base stat.",
+                p_ptr->stat_base[i], BASE_STAT_MIN, BASE_STAT_MAX,
+                &tmp_int))
+        {
             return;
-
-        /* Extract */
-        tmp_int = atoi(tmp_val);
-
-        /* Verify */
-        if (tmp_int > BASE_STAT_MAX)
-            tmp_int = BASE_STAT_MAX;
-        else if (tmp_int < BASE_STAT_MIN)
-            tmp_int = BASE_STAT_MIN;
+        }
 
         /* Save it */
         p_ptr->stat_base[i] = tmp_int;
         p_ptr->stat_drain[i] = 0;
     }
 
-    /* Default */
-    sprintf(tmp_val, "%ld", (long)(p_ptr->new_exp));
+    {
+        long tmp_long;
 
-    /* Query */
-    if (!term_get_string("Experience Pool: ", tmp_val, 10))
-        return;
+        if (!debug_overlay_get_long("Experience Pool",
+                "Set unspent experience.", p_ptr->new_exp, 0, -1,
+                &tmp_long))
+        {
+            return;
+        }
 
-    /* Extract */
-    tmp_long = atol(tmp_val);
+        /* Update total Exp */
+        p_ptr->exp += tmp_long - p_ptr->new_exp;
 
-    /* Verify */
-    if (tmp_long < 0)
-        tmp_long = 0L;
+        /* Save */
+        p_ptr->new_exp = tmp_long;
 
-    /* Update total Exp */
-    p_ptr->exp += tmp_long - p_ptr->new_exp;
+        /* Update */
+        check_experience();
+    }
 
-    /* Save */
-    p_ptr->new_exp = tmp_long;
+    {
+        long tmp_long;
 
-    /* Update */
-    check_experience();
+        if (!debug_overlay_get_long("Game Type", "Set game type flag value.",
+                p_ptr->game_type, 0, -1, &tmp_long))
+        {
+            return;
+        }
 
-    /* Default */
-    sprintf(tmp_val, "%ld", (long)(p_ptr->game_type));
-
-    /* Query */
-    if (!term_get_string("Game Type: ", tmp_val, 10))
-        return;
-
-    /* Extract */
-    tmp_long = atol(tmp_val);
-
-    /* Update game type */
-    p_ptr->game_type = tmp_long;
+        /* Update game type */
+        p_ptr->game_type = tmp_long;
+    }
 }
 
 /*
@@ -518,57 +1077,32 @@ static const tval_desc tvals[] = { { TV_SWORD, "Sword" },
  */
 static int wiz_create_itemtype(void)
 {
-    int i, num, max_num;
-    int col, row;
+    int i, num;
     int tval;
-
     cptr tval_desc;
-    char ch;
-
+    debug_menu_entry type_entries[60];
+    debug_menu_entry kind_entries[60];
+    char kind_labels[60][80];
     int choice[60];
-    static const char choice_name[] = "abcdefghijklmnopqrst"
-                                      "ABCDEFGHIJKLMNOPQRST"
-                                      "0123456789:;<=>?@%&*";
-    const char* cp;
 
-    char buf[160];
-
-    /* Clear screen */
-    Term_clear();
-
-    /* Print all tval's and their descriptions */
+    /* Choose the base object type. */
     for (num = 0; (num < 60) && tvals[num].tval; num++)
     {
-        row = 2 + (num % 20);
-        col = 30 * (num / 20);
-        ch = choice_name[num];
-        prt(format("[%c] %s", ch, tvals[num].desc), row, col);
+        type_entries[num].key = (num < 26) ? (char)('a' + num) : 0;
+        type_entries[num].command = 0;
+        type_entries[num].label = tvals[num].desc;
+        type_entries[num].attr = TERM_L_WHITE;
     }
 
-    /* We need to know the maximal possible tval_index */
-    max_num = num;
-
-    /* Choose! */
-    if (!get_com("Create what type of object? ", &ch))
+    num = debug_overlay_choose_index("Create Object Type", NULL,
+        type_entries, num);
+    if (num < 0)
         return (0);
 
-    /* Analyze choice */
-    num = -1;
-    if ((cp = strchr(choice_name, ch)) != NULL)
-        num = cp - choice_name;
-
-    /* Bail out if choice is illegal */
-    if ((num < 0) || (num >= max_num))
-        return (0);
-
-    /* Base object type chosen, fill in tval */
     tval = tvals[num].tval;
     tval_desc = tvals[num].desc;
 
     /*** And now we go for k_idx ***/
-
-    /* Clear screen */
-    Term_clear();
 
     /* We have to search the whole itemlist. */
     for (num = 0, i = 1; (num < 60) && (i < z_info->k_max); i++)
@@ -582,36 +1116,23 @@ static int wiz_create_itemtype(void)
             if (k_ptr->flags3 & (TR3_INSTA_ART))
                 continue;
 
-            /* Prepare it */
-            row = 2 + (num % 20);
-            col = 30 * (num / 20);
-            ch = choice_name[num];
-
             /* Get the "name" of object "i" */
-            strip_name(buf, i);
-
-            /* Print it */
-            prt(format("[%c] %s", ch, buf), row, col);
+            strip_name(kind_labels[num], i);
 
             /* Remember the object index */
-            choice[num++] = i;
+            choice[num] = i;
+
+            kind_entries[num].key = 0;
+            kind_entries[num].command = 0;
+            kind_entries[num].label = kind_labels[num];
+            kind_entries[num].attr = TERM_L_WHITE;
+            num++;
         }
     }
 
-    /* Me need to know the maximal possible remembered object_index */
-    max_num = num;
-
-    /* Choose! */
-    if (!get_com(format("What Kind of %s? ", tval_desc), &ch))
-        return (0);
-
-    /* Analyze choice */
-    num = -1;
-    if ((cp = strchr(choice_name, ch)) != NULL)
-        num = cp - choice_name;
-
-    /* Bail out if choice is "illegal" */
-    if ((num < 0) || (num >= max_num))
+    num = debug_overlay_choose_index(format("Create %s", tval_desc), NULL,
+        kind_entries, num);
+    if (num < 0)
         return (0);
 
     /* And return successful */
@@ -623,39 +1144,34 @@ static int wiz_create_itemtype(void)
  */
 static void wiz_tweak_item(object_type* o_ptr)
 {
-    cptr p;
-    char tmp_val[80];
+    int value;
 
     /* Hack -- leave artefacts alone */
     if (artefact_p(o_ptr))
         return;
 
-    p = "Enter new 'att' setting: ";
-    sprintf(tmp_val, "%d", o_ptr->att);
-    if (!term_get_string(p, tmp_val, 6))
+    if (!debug_overlay_get_int("Attack Bonus", "Set item att value.",
+            o_ptr->att, -99, 99, &value))
         return;
-    o_ptr->att = atoi(tmp_val);
+    o_ptr->att = value;
     wiz_display_item(o_ptr);
 
-    p = "Enter new 'evn' setting: ";
-    sprintf(tmp_val, "%d", o_ptr->evn);
-    if (!term_get_string(p, tmp_val, 6))
+    if (!debug_overlay_get_int("Evasion Bonus", "Set item evn value.",
+            o_ptr->evn, -99, 99, &value))
         return;
-    o_ptr->evn = atoi(tmp_val);
+    o_ptr->evn = value;
     wiz_display_item(o_ptr);
 
-    p = "Enter new 'pval' setting: ";
-    sprintf(tmp_val, "%d", o_ptr->pval);
-    if (!term_get_string(p, tmp_val, 6))
+    if (!debug_overlay_get_int("Pval", "Set item pval.", o_ptr->pval,
+            -99, 99, &value))
         return;
-    o_ptr->pval = atoi(tmp_val);
+    o_ptr->pval = value;
     wiz_display_item(o_ptr);
 
-    p = "Enter new weight: ";
-    sprintf(tmp_val, "%d", o_ptr->weight);
-    if (!term_get_string(p, tmp_val, 6))
+    if (!debug_overlay_get_int("Weight", "Set item weight.", o_ptr->weight,
+            0, 99999, &value))
         return;
-    o_ptr->weight = atoi(tmp_val);
+    o_ptr->weight = value;
     wiz_display_item(o_ptr);
 }
 
@@ -684,11 +1200,20 @@ static void wiz_reroll_item(object_type* o_ptr)
     /* Main loop. Ask for magification and artefactification */
     while (true)
     {
+        static const debug_menu_entry reroll_entries[] = {
+            { 'a', 'a', "Accept current item", TERM_L_BLUE },
+            { 'n', 'n', "Apply normal magic", TERM_L_WHITE },
+            { 'g', 'g', "Apply good magic", TERM_L_GREEN },
+            { 'e', 'e', "Apply excellent magic", TERM_YELLOW },
+        };
+
         /* Display full item debug information */
         wiz_display_item(i_ptr);
 
         /* Ask wizard what to do. */
-        if (!get_com("[a]ccept, [n]ormal, [g]ood, [e]xcellent? ", &ch))
+        ch = debug_overlay_choose_command("Reroll Item", NULL,
+            reroll_entries, (int)N_ELEMENTS(reroll_entries));
+        if (!ch)
             break;
 
         /* Create/change it! */
@@ -778,13 +1303,19 @@ static void wiz_statistics(object_type* o_ptr)
     /* Interact */
     while (true)
     {
-        cptr pmt = "Roll for [n]ormal, [g]ood, or [e]xcellent treasure? ";
+        static const debug_menu_entry stat_entries[] = {
+            { 'n', 'n', "Normal treasure", TERM_L_WHITE },
+            { 'g', 'g', "Good treasure", TERM_L_GREEN },
+            { 'e', 'e', "Excellent treasure", TERM_YELLOW },
+        };
 
         /* Display item */
         wiz_display_item(o_ptr);
 
         /* Get choices */
-        if (!get_com(pmt, &ch))
+        ch = debug_overlay_choose_command("Roll Item Statistics", NULL,
+            stat_entries, (int)N_ELEMENTS(stat_entries));
+        if (!ch)
             break;
 
         if (ch == 'n' || ch == 'N')
@@ -908,30 +1439,16 @@ static void wiz_quantity_item(object_type* o_ptr)
 {
     int tmp_int;
 
-    char tmp_val[8]; /* Increased buffer size to prevent truncation warnings */
-
     /* Never duplicate artefacts */
     if (artefact_p(o_ptr))
         return;
 
-    /* Default */
-    snprintf(tmp_val, sizeof(tmp_val), "%d", o_ptr->number);
+    if (!debug_overlay_get_int("Quantity", "Set item stack size.",
+            o_ptr->number, 1, 99, &tmp_int))
+        return;
 
-    /* Query */
-    if (term_get_string("Quantity: ", tmp_val, sizeof(tmp_val) - 1))
-    {
-        /* Extract */
-        tmp_int = atoi(tmp_val);
-
-        /* Paranoia */
-        if (tmp_int < 1)
-            tmp_int = 1;
-        if (tmp_int > 99)
-            tmp_int = 99;
-
-        /* Accept modifications */
-        o_ptr->number = tmp_int;
-    }
+    /* Accept modifications */
+    o_ptr->number = tmp_int;
 }
 
 /*
@@ -959,7 +1476,8 @@ static void do_cmd_wiz_play(void)
     /* Get an item */
     q = "Play with which object? ";
     s = "You have nothing to play with.";
-    if (!get_item(&item, q, s, (USE_EQUIP | USE_INVEN | USE_FLOOR)))
+    if (!open_inventory_item_select_menu(USE_EQUIP | USE_INVEN | USE_FLOOR,
+            q, s, &item))
         return;
 
     /* Get the item (in the pack) */
@@ -986,12 +1504,21 @@ static void do_cmd_wiz_play(void)
     /* The main loop */
     while (true)
     {
+        static const debug_menu_entry play_entries[] = {
+            { 'a', 'a', "Accept changes", TERM_L_BLUE },
+            { 's', 's', "Statistics", TERM_L_WHITE },
+            { 'r', 'r', "Reroll", TERM_YELLOW },
+            { 't', 't', "Tweak values", TERM_L_WHITE },
+            { 'q', 'q', "Quantity", TERM_L_WHITE },
+        };
+
         /* Display the item */
         wiz_display_item(i_ptr);
 
         /* Get choice */
-        if (!get_com(
-                "[a]ccept [s]tatistics [r]eroll [t]weak [q]uantity? ", &ch))
+        ch = debug_overlay_choose_command("Play With Item", NULL,
+            play_entries, (int)N_ELEMENTS(play_entries));
+        if (!ch)
             break;
 
         if (ch == 'A' || ch == 'a')
@@ -1180,22 +1707,15 @@ static void do_cmd_wiz_jump(void)
     /* Ask for level */
     if (p_ptr->command_arg <= 0)
     {
-        char ppp[80];
-
-        char tmp_val[160];
-
-        /* Prompt */
-        sprintf(ppp, "Jump to level (0-%d): ", MORGOTH_DEPTH);
-
-        /* Default */
-        sprintf(tmp_val, "%d", p_ptr->depth);
+        int level;
 
         /* Ask for a level */
-        if (!term_get_string(ppp, tmp_val, 11))
+        if (!debug_overlay_get_int("Jump To Level", NULL, p_ptr->depth, 0,
+                MORGOTH_DEPTH, &level))
             return;
 
         /* Extract request */
-        p_ptr->command_arg = atoi(tmp_val);
+        p_ptr->command_arg = level;
     }
 
     /* Paranoia */
@@ -1869,75 +2389,47 @@ static void do_cmd_wiz_query(void)
 
     int y, x;
 
-    char cmd;
-
     u16b mask = 0x00;
+    static const debug_menu_entry query_entries[] = {
+        { 'u', 0, "Unknown / unmarked grids", TERM_SLATE },
+        { '0', 0, "Raw cave bit 0", TERM_L_WHITE },
+        { '1', 0, "Raw cave bit 1", TERM_L_WHITE },
+        { '2', 0, "Raw cave bit 2", TERM_L_WHITE },
+        { '3', 0, "Raw cave bit 3", TERM_L_WHITE },
+        { '4', 0, "Raw cave bit 4", TERM_L_WHITE },
+        { '5', 0, "Raw cave bit 5", TERM_L_WHITE },
+        { '6', 0, "Raw cave bit 6", TERM_L_WHITE },
+        { '7', 0, "Raw cave bit 7", TERM_L_WHITE },
+        { 'm', 0, "Marked grids", TERM_L_BLUE },
+        { 'g', 0, "Glowing grids", TERM_YELLOW },
+        { 'r', 0, "Room grids", TERM_L_WHITE },
+        { 'i', 0, "Icky grids", TERM_ORANGE },
+        { 'h', 0, "Hidden grids", TERM_L_WHITE },
+        { 's', 0, "Seen grids", TERM_L_GREEN },
+        { 'v', 0, "View grids", TERM_L_BLUE },
+        { 't', 0, "Temp grids", TERM_L_WHITE },
+        { 'w', 0, "Wall grids", TERM_SLATE },
+        { 'f', 0, "Fire grids", TERM_L_RED },
+        { 0, 0, "Greater vault grids (V)", TERM_VIOLET },
+    };
+    static const u16b query_masks[] = {
+        0,
+        (1 << 0), (1 << 1), (1 << 2), (1 << 3),
+        (1 << 4), (1 << 5), (1 << 6), (1 << 7),
+        CAVE_MARK, CAVE_GLOW, CAVE_ROOM, CAVE_ICKY, CAVE_HIDDEN,
+        CAVE_SEEN, CAVE_VIEW, CAVE_TEMP, CAVE_WALL, CAVE_FIRE,
+        CAVE_G_VAULT,
+    };
 
-    /* Get a "debug command" */
-    if (!get_com("Debug Command Query: ", &cmd))
-        return;
-
-    /* Extract a flag */
-    switch (cmd)
     {
-    case '0':
-        mask = (1 << 0);
-        break;
-    case '1':
-        mask = (1 << 1);
-        break;
-    case '2':
-        mask = (1 << 2);
-        break;
-    case '3':
-        mask = (1 << 3);
-        break;
-    case '4':
-        mask = (1 << 4);
-        break;
-    case '5':
-        mask = (1 << 5);
-        break;
-    case '6':
-        mask = (1 << 6);
-        break;
-    case '7':
-        mask = (1 << 7);
-        break;
+        int choice = debug_overlay_choose_index("Query Dungeon",
+            "Choose which cave flag to visualize.", query_entries,
+            (int)N_ELEMENTS(query_entries));
 
-    case 'm':
-        mask |= (CAVE_MARK);
-        break;
-    case 'g':
-        mask |= (CAVE_GLOW);
-        break;
-    case 'r':
-        mask |= (CAVE_ROOM);
-        break;
-    case 'i':
-        mask |= (CAVE_ICKY);
-        break;
-    case 'h':
-        mask |= (CAVE_HIDDEN);
-        break;
-    case 's':
-        mask |= (CAVE_SEEN);
-        break;
-    case 'v':
-        mask |= (CAVE_VIEW);
-        break;
-    case 't':
-        mask |= (CAVE_TEMP);
-        break;
-    case 'w':
-        mask |= (CAVE_WALL);
-        break;
-    case 'f':
-        mask |= (CAVE_FIRE);
-        break;
-    case 'V':
-        mask |= (CAVE_G_VAULT);
-        break;
+        if (choice < 0)
+            return;
+
+        mask = query_masks[choice];
     }
 
     /* Scan map */
@@ -1994,7 +2486,7 @@ static void do_cmd_wiz_unlock_all_oaths(void)
     int i;
     int count = 0;
     int already_unlocked = 0;
-    
+
     /* Unlock oaths 1 through oath_max-1 (OATH_MERCY, OATH_SILENCE, OATH_IRON, OATH_SMITH, OATH_VALOROUS) */
     for (i = 1; z_info && i < z_info->oath_max; i++)
     {
@@ -2008,13 +2500,13 @@ static void do_cmd_wiz_unlock_all_oaths(void)
             already_unlocked++;
         }
     }
-    
+
     /* Give feedback to the user */
     if (count > 0)
     {
         if (already_unlocked > 0)
         {
-            msg_format("Unlocked %d oath%s (%d already unlocked).", 
+            msg_format("Unlocked %d oath%s (%d already unlocked).",
                       count, (count == 1) ? "" : "s", already_unlocked);
         }
         else
@@ -2043,11 +2535,11 @@ void do_cmd_wiz_look(void)
 static void do_cmd_debug_complete_quest(void)
 {
     bool quest_found = false;
-    
+
     /* Check for active quests and complete them */
     if (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED && p_ptr->tulkas_quest < TULKAS_QUEST_REWARDED) {
         msg_print("Completing Tulkas quest...");
-        
+
         /* If quest is already in COMPLETE state, just give reward */
         if (p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE) {
             /* Tulkas is spawn-based (Y:1) - spawn quest giver near player for reward */
@@ -2069,49 +2561,49 @@ static void do_cmd_debug_complete_quest(void)
                 }
             }
             /* Trigger proper quest interaction instead of just applying rewards */
-            tulkas_quest_interaction(); 
+            tulkas_quest_interaction();
             quest_found = true;
             log_debug("Debug: Completed Tulkas quest with full interaction");
         }
     }
-    
+
     if (p_ptr->aule_quest > AULE_QUEST_NOT_STARTED && p_ptr->aule_quest < AULE_QUEST_REWARDED) {
-        msg_print("Completing Aule quest...");
-        
+        msg_print("Completing Aulë quest...");
+
         /* If quest is already in SUCCESS state, just give reward */
         if (p_ptr->aule_quest == AULE_QUEST_SUCCESS) {
-            /* Aule is vault-based (Y:0) - check if quest giver is present */
+            /* Aulë is vault-based (Y:0) - check if quest giver is present */
             if (!is_quest_giver_present(R_IDX_AULE)) {
-                msg_print("Warning: Aule is not present in this vault. Go to Aule's forge vault to receive your reward.");
+                msg_print("Warning: Aulë is not present in this vault. Go to Aulë's forge vault to receive your reward.");
                 quest_found = true;
-                log_debug("Debug: Aule quest ready for reward but Aule not present - go to vault");
+                log_debug("Debug: Aulë quest ready for reward but Aulë not present - go to vault");
             } else {
                 /* Trigger quest interaction to give reward */
                 aule_quest_interaction();
                 quest_found = true;
-                log_debug("Debug: Triggered Aule quest reward interaction");
+                log_debug("Debug: Triggered Aulë quest reward interaction");
             }
         } else {
             /* Quest not completed yet - mark as complete and check for giver */
             if (!is_quest_giver_present(R_IDX_AULE)) {
-                msg_print("Warning: Aule is not present in this vault. Go to Aule's forge vault to receive your reward.");
+                msg_print("Warning: Aulë is not present in this vault. Go to Aulë's forge vault to receive your reward.");
                 /* Still mark quest as complete for the challenge completion */
                 p_ptr->aule_quest = AULE_QUEST_SUCCESS;
                 quest_found = true;
-                log_debug("Debug: Marked Aule quest complete but Aule not present - go to vault for reward");
+                log_debug("Debug: Marked Aulë quest complete but Aulë not present - go to vault for reward");
             } else {
                 p_ptr->aule_quest = AULE_QUEST_SUCCESS;
                 /* Trigger proper quest interaction instead of just applying rewards */
                 aule_quest_interaction();
                 quest_found = true;
-                log_debug("Debug: Completed Aule quest with full interaction");
+                log_debug("Debug: Completed Aulë quest with full interaction");
             }
         }
     }
-    
+
     if (p_ptr->mandos_quest > MANDOS_QUEST_NOT_STARTED && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED) {
         msg_print("Completing Mandos quest...");
-        
+
         /* If quest is already in SUCCESS state, just give reward */
         if (p_ptr->mandos_quest == MANDOS_QUEST_SUCCESS) {
             /* Mandos is vault-based (Y:0) - check if quest giver is present */
@@ -2142,52 +2634,52 @@ static void do_cmd_debug_complete_quest(void)
             }
         }
     }
-    
+
     if (p_ptr->niena_quest > NIENA_QUEST_NOT_STARTED && p_ptr->niena_quest < NIENA_QUEST_REWARDED) {
-        msg_print("Completing Niena quest...");
-        
+        msg_print("Completing Nienna quest...");
+
         /* If quest is already in SUCCESS state, just give reward */
         if (p_ptr->niena_quest == NIENA_QUEST_SUCCESS) {
-            /* Niena is spawn-based (Y:1) - spawn quest giver near player for reward */
+            /* Nienna is spawn-based (Y:1) - spawn quest giver near player for reward */
             if (!is_quest_giver_present(R_IDX_NIENA)) {
                 if (!spawn_quest_giver_near_player(R_IDX_NIENA)) {
-                    msg_print("Warning: Could not spawn Niena for reward - completing anyway.");
+                    msg_print("Warning: Could not spawn Nienna for reward - completing anyway.");
                 }
             }
             /* Trigger quest interaction to give reward */
             niena_quest_interaction();
             quest_found = true;
-            log_debug("Debug: Triggered Niena quest reward interaction");
+            log_debug("Debug: Triggered Nienna quest reward interaction");
         } else {
             /* Quest not completed yet - mark as complete and spawn giver */
             p_ptr->niena_quest = NIENA_QUEST_SUCCESS;
             if (!is_quest_giver_present(R_IDX_NIENA)) {
                 if (!spawn_quest_giver_near_player(R_IDX_NIENA)) {
-                    msg_print("Warning: Could not spawn Niena for reward - completing anyway.");
+                    msg_print("Warning: Could not spawn Nienna for reward - completing anyway.");
                 }
             }
             /* Trigger proper quest interaction */
             niena_quest_interaction();
             quest_found = true;
-            log_debug("Debug: Completed Niena quest with full interaction");
+            log_debug("Debug: Completed Nienna quest with full interaction");
         }
     }
-    
+
     if (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED && p_ptr->orome_quest < OROME_QUEST_REWARDED) {
-        msg_print("Completing Orome quest...");
-        
+        msg_print("Completing Oromë quest...");
+
         /* If quest is already in SUCCESS state, just give reward */
         if (p_ptr->orome_quest == OROME_QUEST_SUCCESS) {
-            /* Orome is spawn-based (Y:1) - spawn quest giver near player for reward */
+            /* Oromë is spawn-based (Y:1) - spawn quest giver near player for reward */
             if (!is_quest_giver_present(R_IDX_OROME)) {
                 if (!spawn_quest_giver_near_player(R_IDX_OROME)) {
-                    msg_print("Warning: Could not spawn Orome for reward - completing anyway.");
+                    msg_print("Warning: Could not spawn Oromë for reward - completing anyway.");
                 }
             }
             /* Trigger quest interaction to give reward */
             orome_quest_interaction();
             quest_found = true;
-            log_debug("Debug: Triggered Orome quest reward interaction");
+            log_debug("Debug: Triggered Oromë quest reward interaction");
         } else {
             /* Quest not completed yet - mark as complete and spawn giver */
             p_ptr->orome_quest = OROME_QUEST_SUCCESS;
@@ -2195,16 +2687,16 @@ static void do_cmd_debug_complete_quest(void)
             p_ptr->orome_killed_count = p_ptr->orome_target_count;
             if (!is_quest_giver_present(R_IDX_OROME)) {
                 if (!spawn_quest_giver_near_player(R_IDX_OROME)) {
-                    msg_print("Warning: Could not spawn Orome for reward - completing anyway.");
+                    msg_print("Warning: Could not spawn Oromë for reward - completing anyway.");
                 }
             }
             /* Trigger proper quest interaction */
             orome_quest_interaction();
             quest_found = true;
-            log_debug("Debug: Completed Orome quest with full interaction");
+            log_debug("Debug: Completed Oromë quest with full interaction");
         }
     }
-    
+
     if (!quest_found) {
         msg_print("No active quests found to complete.");
     } else {
@@ -2213,42 +2705,42 @@ static void do_cmd_debug_complete_quest(void)
 }
 
 /*
- * Debug function: Show Orome quest status and spawn probability
+ * Debug function: Show Oromë quest status and spawn probability
  */
 static void do_cmd_debug_orome_status(void)
 {
     char buf[1024];
-    quest_type *q_ptr = &quest_info[5]; /* Orome is quest 5 */
-    
-    /* Show Orome quest state */
-    strnfmt(buf, sizeof(buf), "Orome Quest Status: %d (0=NOT_STARTED, 1=GIVEN, 2=ACTIVE, 3=COMPLETE, 4=REWARDED)", 
+    quest_type *q_ptr = &quest_info[5]; /* Oromë is quest 5 */
+
+    /* Show Oromë quest state */
+    strnfmt(buf, sizeof(buf), "Oromë Quest Status: %d (0=NOT_STARTED, 1=GIVEN, 2=ACTIVE, 3=COMPLETE, 4=REWARDED)",
             p_ptr->orome_quest);
     msg_print(buf);
-    
+
     /* Show current depth */
-    strnfmt(buf, sizeof(buf), "Current depth: %d (Orome depth range: %d-%d)", 
+    strnfmt(buf, sizeof(buf), "Current depth: %d (Oromë depth range: %d-%d)",
             p_ptr->depth, q_ptr->depth_min, q_ptr->depth_max);
     msg_print(buf);
-    
+
     /* Show formula details */
     strnfmt(buf, sizeof(buf), "Formula type: %d (4=LINEAR_INTERPOLATE), params=[%.3f, %.3f, %.3f, %.3f]",
             q_ptr->formula_type,
-            q_ptr->formula_params[0], q_ptr->formula_params[1], 
+            q_ptr->formula_params[0], q_ptr->formula_params[1],
             q_ptr->formula_params[2], q_ptr->formula_params[3]);
     msg_print(buf);
-    
-    /* Check if we're at the right depth for Orome */
+
+    /* Check if we're at the right depth for Oromë */
     if (p_ptr->depth >= q_ptr->depth_min && p_ptr->depth <= q_ptr->depth_max) {
-        msg_print("Depth is in valid range for Orome spawning.");
+        msg_print("Depth is in valid range for Oromë spawning.");
     } else {
-        msg_print("Depth is NOT in valid range for Orome spawning.");
+        msg_print("Depth is NOT in valid range for Oromë spawning.");
     }
-    
+
     /* Manually trigger quest lottery to see what happens */
     msg_print("Triggering quest lottery manually...");
     debug_run_quest_roulette();
     int winner = debug_get_quest_lottery_winner();
-    strnfmt(buf, sizeof(buf), "Quest lottery result: %d (0=none, 1=Tulkas, 4=Niena, 5=Orome)", winner);
+    strnfmt(buf, sizeof(buf), "Quest lottery result: %d (0=none, 1=Tulkas, 4=Nienna, 5=Oromë)", winner);
     msg_print(buf);
 }
 
@@ -2259,27 +2751,27 @@ static void do_cmd_debug_identify_all_items(void)
 {
     int i;
     int count = 0;
-    
+
     /* Iterate through all floor objects */
     for (i = 1; i < o_max; i++)
     {
         object_type* o_ptr = &o_list[i];
-        
+
         /* Skip dead objects */
         if (!o_ptr->k_idx)
             continue;
-        
+
         /* Skip held objects (in monster inventory) */
         if (o_ptr->held_m_idx)
             continue;
-        
+
         /* Identify the object */
         object_aware(o_ptr);
         object_known(o_ptr);
-        
+
         count++;
     }
-    
+
     /* Report result */
     if (count > 0)
     {
@@ -2289,29 +2781,280 @@ static void do_cmd_debug_identify_all_items(void)
     {
         msg_print("No items found on the dungeon floor.");
     }
-    
+
     /* Redraw map to show identified items */
     p_ptr->redraw |= (PR_MAP);
-    
+
     /* Window stuff */
     p_ptr->window |= (PW_INVEN | PW_EQUIP);
 }
 
+static cptr debug_quest_name(int quest_idx)
+{
+    quest_type* q_ptr;
+
+    if (!z_info || !quest_info || !quest_name_text)
+        return "Unknown Quest";
+
+    if (quest_idx <= 0 || quest_idx >= z_info->quest_max)
+        return "Unknown Quest";
+
+    q_ptr = &quest_info[quest_idx];
+
+    if (q_ptr->name)
+        return quest_name_text + q_ptr->name;
+
+    if (q_ptr->title_text && q_text)
+        return q_text + q_ptr->title_text;
+
+    return "Unknown Quest";
+}
+
+static void do_cmd_debug_show_quest_text(int quest_idx, bool completion)
+{
+    int text_count = 0;
+    cptr* texts;
+    char title[160];
+
+    texts = completion
+        ? extract_quest_completion_texts(quest_idx, &text_count)
+        : extract_quest_init_texts(quest_idx, &text_count);
+
+    if (!texts || text_count <= 0)
+    {
+        msg_format("Quest %d has no %s text.", quest_idx,
+            completion ? "completion" : "intro");
+        free_quest_texts(texts, text_count);
+        return;
+    }
+
+    strnfmt(title, sizeof(title), "Quest %d %s: %s", quest_idx,
+        completion ? "Completion" : "Intro", debug_quest_name(quest_idx));
+
+    quest_typewriter_menu(title, texts, text_count,
+        completion ? TERM_L_GREEN : TERM_YELLOW, TERM_WHITE);
+
+    free_quest_texts(texts, text_count);
+}
+
 /*
- * Ask for and parse a "debug command"
+ * Debug function: show quest intro/completion text from quest.txt.
+ */
+static void do_cmd_debug_quest_texts(void)
+{
+    int quest_idx;
+    int max_quest;
+    int first_quest;
+    int last_quest;
+    bool show_intro = false;
+    bool show_completion = false;
+    char mode;
+
+    if (!z_info || !quest_info || z_info->quest_max <= 1)
+    {
+        msg_print("Quest data is not loaded.");
+        return;
+    }
+
+    max_quest = z_info->quest_max - 1;
+
+    if (p_ptr->command_arg > 0)
+    {
+        quest_idx = p_ptr->command_arg;
+        p_ptr->command_arg = 0;
+    }
+    else
+    {
+        int choice;
+
+        if (!debug_overlay_get_int("Quest ID",
+                "Use 0 to show text for every quest.", 1, 0, max_quest,
+                &choice))
+        {
+            return;
+        }
+
+        quest_idx = choice;
+    }
+
+    if (quest_idx < 0 || quest_idx > max_quest)
+    {
+        msg_format("Quest id must be 0-%d.", max_quest);
+        return;
+    }
+
+    {
+        static const debug_menu_entry text_entries[] = {
+            { 'i', 'i', "Intro text", TERM_L_WHITE },
+            { 'c', 'c', "Completion text", TERM_L_WHITE },
+            { 'b', 'b', "Both", TERM_L_BLUE },
+        };
+
+        mode = debug_overlay_choose_command("Quest Text", NULL, text_entries,
+            (int)N_ELEMENTS(text_entries));
+        if (!mode)
+            return;
+    }
+
+    switch (mode)
+    {
+    case 'i':
+    case 'I':
+        show_intro = true;
+        break;
+
+    case 'c':
+    case 'C':
+    case 'w':
+    case 'W':
+        show_completion = true;
+        break;
+
+    case 'b':
+    case 'B':
+    case 'a':
+    case 'A':
+        show_intro = true;
+        show_completion = true;
+        break;
+
+    default:
+        msg_print("Invalid quest text choice.");
+        return;
+    }
+
+    first_quest = (quest_idx == 0) ? 1 : quest_idx;
+    last_quest = (quest_idx == 0) ? max_quest : quest_idx;
+
+    for (int i = first_quest; i <= last_quest; i++)
+    {
+        if (show_intro)
+            do_cmd_debug_show_quest_text(i, false);
+
+        if (show_completion)
+            do_cmd_debug_show_quest_text(i, true);
+    }
+}
+
+static const debug_menu_entry debug_menu_character[] = {
+    { 'a', 'a', "Cure all maladies (a)", TERM_L_GREEN },
+    { 'e', 'e', "Edit character (e)", TERM_L_WHITE },
+    { 'i', 'i', "Identify item (i)", TERM_L_WHITE },
+    { 0, 'I', "Identify all floor items (I)", TERM_L_WHITE },
+    { 'k', 'k', "Self-knowledge (k)", TERM_L_BLUE },
+    { 'x', 'x', "Increase experience (x)", TERM_YELLOW },
+    { 'y', 'y', "Grant Unique Bane ability (y)", TERM_VIOLET },
+    { 'U', 'U', "Unlock all metarun oaths (U)", TERM_YELLOW },
+};
+
+static const debug_menu_entry debug_menu_map[] = {
+    { 'b', 'b', "Teleport to target (b)", TERM_L_BLUE },
+    { 'p', 'p', "Phase door (p)", TERM_L_BLUE },
+    { 't', 't', "Teleport (t)", TERM_L_BLUE },
+    { 'j', 'j', "Go up or down in the dungeon (j)", TERM_YELLOW },
+    { 'd', 'd', "Detect everything (d)", TERM_L_GREEN },
+    { 'f', 'f', "Forget items, map, and monster memory (f)", TERM_ORANGE },
+    { 'm', 'm', "Magic mapping (m)", TERM_L_GREEN },
+    { 'w', 'w', "Light the level (w)", TERM_L_GREEN },
+    { 'l', 'l', "Wizard look (l)", TERM_L_WHITE },
+    { 'q', 'q', "Query the dungeon (q)", TERM_L_WHITE },
+};
+
+static const debug_menu_entry debug_menu_objects[] = {
+    { 'c', 'c', "Create any object (c)", TERM_YELLOW },
+    { 0, 'C', "Create artefact (C)", TERM_YELLOW },
+    { 'g', 'g', "Create good objects (g)", TERM_L_GREEN },
+    { 'v', 'v', "Create very good objects (v)", TERM_L_GREEN },
+    { 'n', 'n', "Summon named monster (n)", TERM_ORANGE },
+    { 's', 's', "Summon random monsters (s)", TERM_ORANGE },
+    { 'o', 'o', "Object playing routines (o)", TERM_L_WHITE },
+};
+
+static const debug_menu_entry debug_menu_monsters[] = {
+    { 'u', 'u', "Un-hide all monsters (u)", TERM_L_WHITE },
+    { 'z', 'z', "Zap monsters / banishment (z)", TERM_L_RED },
+    { 'T', 'T', "Test tiles (T)", TERM_L_BLUE },
+};
+
+static const debug_menu_entry debug_menu_system[] = {
+    { '?', '?', "Help (?)", TERM_L_BLUE },
+    { 'O', 'O', "Debug options (O)", TERM_L_WHITE },
+    { 'Q', 'Q', "Show quest intro/completion text (Q)", TERM_YELLOW },
+    { '2', '2', "Complete current quest (2)", TERM_L_RED },
+    { '3', '3', "Check Orome quest status (3)", TERM_L_WHITE },
+    { '4', '4', "Spawn all quest Valar for tile inspection (4)", TERM_ORANGE },
+#ifdef ALLOW_SPOILERS
+    { '"', '"', "Generate spoilers (\")", TERM_YELLOW },
+#endif
+};
+
+static const debug_menu_page debug_menu_pages[] = {
+    { '1', "Character", "Edit or inspect the player and run flags.",
+        debug_menu_character, (int)N_ELEMENTS(debug_menu_character) },
+    { '2', "Map and Travel", "Move, reveal, inspect, or alter the current level.",
+        debug_menu_map, (int)N_ELEMENTS(debug_menu_map) },
+    { '3', "Objects and Summons", "Create objects or spawn monsters.",
+        debug_menu_objects, (int)N_ELEMENTS(debug_menu_objects) },
+    { '4', "Monsters and Tiles", "Monster visibility, banishment, and tile tests.",
+        debug_menu_monsters, (int)N_ELEMENTS(debug_menu_monsters) },
+    { '5', "System and Quests", "Debug options, help, spoilers, and quest tools.",
+        debug_menu_system, (int)N_ELEMENTS(debug_menu_system) },
+};
+
+static char do_cmd_debug_choose_from_page(const debug_menu_page* page)
+{
+    int choice;
+
+    if (!page)
+        return 0;
+
+    choice = debug_overlay_choose_index(page->label, page->desc, page->entries,
+        page->count);
+    if (choice < 0)
+        return 0;
+
+    return page->entries[choice].command;
+}
+
+static char do_cmd_debug_choose(void)
+{
+    debug_menu_entry pages[N_ELEMENTS(debug_menu_pages)];
+
+    for (int i = 0; i < (int)N_ELEMENTS(debug_menu_pages); i++)
+    {
+        pages[i].key = debug_menu_pages[i].key;
+        pages[i].command = (char)i;
+        pages[i].label = debug_menu_pages[i].label;
+        pages[i].attr = TERM_L_WHITE;
+    }
+
+    while (true)
+    {
+        int page = debug_overlay_choose_index("Debug Commands",
+            "Choose a command group. Escape closes this menu; Escape inside a group returns here.",
+            pages, (int)N_ELEMENTS(pages));
+
+        if (page < 0)
+            return 0;
+
+        {
+            char cmd = do_cmd_debug_choose_from_page(&debug_menu_pages[page]);
+
+            if (cmd)
+                return cmd;
+        }
+    }
+}
+
+/*
+ * Execute a debug command chosen by the SDL overlay menu.
  *
  * The "p_ptr->command_arg" may have been set.
  */
-void do_cmd_debug(void)
+static void do_cmd_debug_execute(char cmd)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;
-
-    char cmd;
-
-    /* Get a "debug command" */
-    if (!get_com("Debug Command: ", &cmd))
-        return;
 
     /* Trace which debug command was requested and current flags */
     log_debug("do_cmd_debug: received '%c' (wizard=%d, noscore=0x%04X)",
@@ -2364,16 +3107,29 @@ void do_cmd_debug(void)
     /* Create any object */
     case 'c':
     {
-        if (p_ptr->command_arg <= 0)
-            p_ptr->command_arg = 1;
-        wiz_create_item(p_ptr->command_arg);
+        int amount;
+
+        if (!debug_overlay_arg_or_int("Create Objects",
+                "Choose how many copies to create.", 1, 1, 99, &amount))
+        {
+            break;
+        }
+
+        wiz_create_item(amount);
         break;
     }
 
     /* Create an artefact */
     case 'C':
     {
-        wiz_create_artefact(p_ptr->command_arg);
+        int a_idx = (p_ptr->command_arg > 0)
+            ? p_ptr->command_arg
+            : debug_overlay_choose_artefact();
+
+        if (a_idx <= 0)
+            break;
+
+        wiz_create_artefact(a_idx);
         break;
     }
 
@@ -2406,9 +3162,15 @@ void do_cmd_debug(void)
     /* Good Objects */
     case 'g':
     {
-        if (p_ptr->command_arg <= 0)
-            p_ptr->command_arg = 1;
-        acquirement(py, px, p_ptr->command_arg, DROP_QUALITY_GOOD);
+        int amount;
+
+        if (!debug_overlay_arg_or_int("Good Objects",
+                "Choose how many objects to create.", 1, 1, 99, &amount))
+        {
+            break;
+        }
+
+        acquirement(py, px, amount, DROP_QUALITY_GOOD);
         break;
     }
 
@@ -2457,7 +3219,14 @@ void do_cmd_debug(void)
     /* Summon Named Monster */
     case 'n':
     {
-        do_cmd_wiz_named(p_ptr->command_arg, true);
+        int r_idx = (p_ptr->command_arg > 0)
+            ? p_ptr->command_arg
+            : debug_overlay_choose_monster_race();
+
+        if (r_idx <= 0)
+            break;
+
+        do_cmd_wiz_named(r_idx, true);
         break;
     }
 
@@ -2491,12 +3260,26 @@ void do_cmd_debug(void)
         break;
     }
 
+    /* Show quest intro/completion text */
+    case 'Q':
+    {
+        do_cmd_debug_quest_texts();
+        break;
+    }
+
     /* Summon Random Monster(s) */
     case 's':
     {
-        if (p_ptr->command_arg <= 0)
-            p_ptr->command_arg = 1;
-        do_cmd_wiz_summon(p_ptr->command_arg);
+        int amount;
+
+        if (!debug_overlay_arg_or_int("Summon Monsters",
+                "Choose how many random monsters to summon.", 1, 1, 99,
+                &amount))
+        {
+            break;
+        }
+
+        do_cmd_wiz_summon(amount);
         break;
     }
 
@@ -2517,9 +3300,15 @@ void do_cmd_debug(void)
     /* Un-hide all monsters */
     case 'u':
     {
-        if (p_ptr->command_arg <= 0)
-            p_ptr->command_arg = 255;
-        do_cmd_wiz_unhide(p_ptr->command_arg);
+        int distance;
+
+        if (!debug_overlay_arg_or_int("Un-hide Monsters",
+                "Choose maximum distance.", 255, 0, 255, &distance))
+        {
+            break;
+        }
+
+        do_cmd_wiz_unhide(distance);
         break;
     }
 
@@ -2533,9 +3322,15 @@ void do_cmd_debug(void)
     /* Very Good Objects */
     case 'v':
     {
-        if (p_ptr->command_arg <= 0)
-            p_ptr->command_arg = 1;
-        acquirement(py, px, p_ptr->command_arg, DROP_QUALITY_GREAT);
+        int amount;
+
+        if (!debug_overlay_arg_or_int("Very Good Objects",
+                "Choose how many objects to create.", 1, 1, 99, &amount))
+        {
+            break;
+        }
+
+        acquirement(py, px, amount, DROP_QUALITY_GREAT);
         break;
     }
 
@@ -2549,14 +3344,15 @@ void do_cmd_debug(void)
     /* Increase Experience */
     case 'x':
     {
-        if (p_ptr->command_arg)
+        long amount;
+
+        if (!debug_overlay_arg_or_long("Increase Experience",
+                "Choose experience to grant.", p_ptr->exp, 0, -1, &amount))
         {
-            gain_exp(p_ptr->command_arg);
+            break;
         }
-        else
-        {
-            gain_exp(p_ptr->exp);
-        }
+
+        gain_exp(amount);
         break;
     }
 
@@ -2570,9 +3366,16 @@ void do_cmd_debug(void)
     /* Zap Monsters (Banishment) */
     case 'z':
     {
-        if (p_ptr->command_arg <= 0)
-            p_ptr->command_arg = MAX_SIGHT;
-        do_cmd_wiz_zap(p_ptr->command_arg);
+        int distance;
+
+        if (!debug_overlay_arg_or_int("Zap Monsters",
+                "Choose banishment distance.", MAX_SIGHT, 0, 255,
+                &distance))
+        {
+            break;
+        }
+
+        do_cmd_wiz_zap(distance);
         break;
     }
 
@@ -2583,7 +3386,7 @@ void do_cmd_debug(void)
         break;
     }
 
-    /* Check Orome quest status */
+    /* Check Oromë quest status */
     case '3':
     {
         do_cmd_debug_orome_status();
@@ -2604,6 +3407,16 @@ void do_cmd_debug(void)
         break;
     }
     }
+}
+
+void do_cmd_debug(void)
+{
+    char cmd = do_cmd_debug_choose();
+
+    if (!cmd)
+        return;
+
+    do_cmd_debug_execute(cmd);
 }
 
 #else

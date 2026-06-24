@@ -81,6 +81,11 @@ for %%f in (
 REM Copy game data
 if not exist sil-more-windows-sdl3\lib xcopy /E /I /Y /K lib sil-more-windows-sdl3\lib
 
+REM Always update lib/xtra/font folder to ensure latest fonts are deployed
+REM (e.g. EBGaramond-Regular.ttf and any newly added typefaces)
+if exist sil-more-windows-sdl3\lib\xtra\font rmdir /S /Q sil-more-windows-sdl3\lib\xtra\font
+xcopy /E /I /Y /K lib\xtra\font sil-more-windows-sdl3\lib\xtra\font
+
 REM Exclude non-OFL fallback font from deployment; public releases use the
 REM documented redistributable font set.
 if exist sil-more-windows-sdl3\lib\xtra\font\InputMono-Bold.ttf del /Q sil-more-windows-sdl3\lib\xtra\font\InputMono-Bold.ttf
@@ -89,7 +94,7 @@ REM Always update lib/edit folder to ensure latest data files
 if exist sil-more-windows-sdl3\lib\edit rmdir /S /Q sil-more-windows-sdl3\lib\edit
 xcopy /E /I /Y /K lib\edit sil-more-windows-sdl3\lib\edit
 
-REM Always update lib/pref folder to ensure latest preference files
+REM Always update lib/pref folder to ensure latest default JSON configs
 if exist sil-more-windows-sdl3\lib\pref rmdir /S /Q sil-more-windows-sdl3\lib\pref
 xcopy /E /I /Y /K lib\pref sil-more-windows-sdl3\lib\pref
 
@@ -174,6 +179,11 @@ for %%f in (
 REM Copy game data
 if not exist sil-more-windows-sdl3-portable\lib xcopy /E /I /Y /K lib sil-more-windows-sdl3-portable\lib
 
+REM Always update lib/xtra/font folder to ensure latest fonts are deployed
+REM (e.g. EBGaramond-Regular.ttf and any newly added typefaces)
+if exist sil-more-windows-sdl3-portable\lib\xtra\font rmdir /S /Q sil-more-windows-sdl3-portable\lib\xtra\font
+xcopy /E /I /Y /K lib\xtra\font sil-more-windows-sdl3-portable\lib\xtra\font
+
 REM Exclude non-OFL fallback font from deployment; public releases use the
 REM documented redistributable font set.
 if exist sil-more-windows-sdl3-portable\lib\xtra\font\InputMono-Bold.ttf del /Q sil-more-windows-sdl3-portable\lib\xtra\font\InputMono-Bold.ttf
@@ -182,7 +192,7 @@ REM Always update lib/edit folder to ensure latest data files
 if exist sil-more-windows-sdl3-portable\lib\edit rmdir /S /Q sil-more-windows-sdl3-portable\lib\edit
 xcopy /E /I /Y /K lib\edit sil-more-windows-sdl3-portable\lib\edit
 
-REM Always update lib/pref folder to ensure latest preference files
+REM Always update lib/pref folder to ensure latest default JSON configs
 if exist sil-more-windows-sdl3-portable\lib\pref rmdir /S /Q sil-more-windows-sdl3-portable\lib\pref
 xcopy /E /I /Y /K lib\pref sil-more-windows-sdl3-portable\lib\pref
 REM Always update lib/xtra/sound folder to ensure latest sound configuration
