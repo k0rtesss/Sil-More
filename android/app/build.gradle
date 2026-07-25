@@ -8,18 +8,23 @@ def versionMatcher = (definesHeader.text =~ /#define\s+VERSION_STRING\s+"([^"]+)
 if (!versionMatcher.find()) {
     throw new RuntimeException("Could not find VERSION_STRING in src/defines.h")
 }
+def versionExtraMatcher = (definesHeader.text =~ /#define\s+VERSION_EXTRA\s+(\d+)/)
+if (!versionExtraMatcher.find()) {
+    throw new RuntimeException("Could not find VERSION_EXTRA in src/defines.h")
+}
 
 def gameVersion = versionMatcher.group(1)
 def gameVersionParts = gameVersion.tokenize('.').collect { it as int }
-while (gameVersionParts.size() < 4) {
-    gameVersionParts << 0
+if (gameVersionParts.size() != 3) {
+    throw new RuntimeException("VERSION_STRING must contain major.minor.patch")
 }
+def gameVersionExtra = versionExtraMatcher.group(1) as int
 
 def gameVersionCode =
         (gameVersionParts[0] * 1000000) +
         (gameVersionParts[1] * 10000) +
         (gameVersionParts[2] * 100) +
-        gameVersionParts[3]
+        gameVersionExtra
 
 def readOptionalBuildValue = { String name ->
     def propertyValue = project.findProperty(name)

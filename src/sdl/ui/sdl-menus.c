@@ -480,13 +480,15 @@ int sdl_narrative_banner_top_center_panes_bottom(void)
         enum pane_placement where = pane_config[i].where;
 
         /*
-         * Both orientations may place persistent HUD panes across the top of
-         * the map.  Clear every live top stack vertically; trying to reserve a
+         * In portrait, clear every live top stack vertically: reserving the
          * wide top-right log horizontally can collapse the banner on a narrow
-         * screen, and still lets a landscape banner cover the other panes.
+         * screen.  Landscape has room beside its left and right stacks, so
+         * only the top-center stack should push the banner down.  Otherwise a
+         * tall character pane leaves the banner stranded near mid-screen.
          */
-        if (where != PLACE_TOP_LEFT && where != PLACE_TOP_CENTER
-            && where != PLACE_TOP_RIGHT)
+        if (where != PLACE_TOP_CENTER
+            && (!sdl_mobile_portrait_layout_active()
+                || (where != PLACE_TOP_LEFT && where != PLACE_TOP_RIGHT)))
         {
             continue;
         }
