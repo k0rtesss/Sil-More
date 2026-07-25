@@ -151,6 +151,10 @@ $configureArgs = @(
     "-DANDROID_ABI=$Abi",
     "-DANDROID_PLATFORM=$Platform",
     '-DSIL_BUILD_WITH_SDL_SOURCES=ON',
+    # Purge legacy libavif cache entries left by older SDL_image revisions.
+    # Current libavif warns whenever these deprecated AVIF_LOCAL_* entries
+    # survive an in-place reconfigure, even though SDL_image uses AVIF_* now.
+    '-UAVIF_LOCAL_*',
     '-Wno-dev',
     '-Wno-deprecated',
     '--log-level=WARNING'

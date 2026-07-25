@@ -3027,46 +3027,42 @@ void do_cmd_help(void)
 
         ch = steamdeck_menu_key(ch, '4', '6');
 
-        /* Enhanced navigation */
-        if (ch != EOF)
+        /* Quit commands */
+        if ((ch == 'q') || (ch == 'Q') || (ch == ESCAPE))
         {
-            /* Quit commands */
-            if ((ch == 'q') || (ch == 'Q') || (ch == ESCAPE))
+            break;
+        }
+        /* Previous page */
+        else if ((ch == '8') || (ch == '-') || (ch == '4'))
+        {
+            i--;
+            if (i < 1)
+                i = 1;
+        }
+        /* Next page */
+        else if ((ch == '2') || (ch == '6') || (ch == ' ') || (ch == '\r') || (ch == '\n'))
+        {
+            i++;
+        }
+        /* Direct page navigation with 'x' prefix */
+        else if (ch == 'x' || ch == 'X')
+        {
+            char prompt[32];
+            char tmp[8];
+            strnfmt(prompt, sizeof(prompt), "Page (1-%d): ", total_pages);
+            prt(prompt, nav_row, 0);
+            SDL_strlcpy(tmp, "1", sizeof(tmp));
+            if (askfor_aux(tmp, sizeof(tmp)))
             {
-                break;
+                int target = atoi(tmp);
+                if ((target >= 1) && (target <= total_pages))
+                    i = target;
             }
-            /* Previous page */
-            else if ((ch == '8') || (ch == '-') || (ch == '4'))
-            {
-                i--;
-                if (i < 1)
-                    i = 1;
-            }
-            /* Next page */
-            else if ((ch == '2') || (ch == '6') || (ch == ' ') || (ch == '\r') || (ch == '\n'))
-            {
-                i++;
-            }
-            /* Direct page navigation with 'x' prefix */
-            else if (ch == 'x' || ch == 'X')
-            {
-                char prompt[32];
-                char tmp[8];
-                strnfmt(prompt, sizeof(prompt), "Page (1-%d): ", total_pages);
-                prt(prompt, nav_row, 0);
-                SDL_strlcpy(tmp, "1", sizeof(tmp));
-                if (askfor_aux(tmp, sizeof(tmp)))
-                {
-                    int target = atoi(tmp);
-                    if ((target >= 1) && (target <= total_pages))
-                        i = target;
-                }
-            }
-            /* Default: next page */
-            else
-            {
-                i++;
-            }
+        }
+        /* Default: next page */
+        else
+        {
+            i++;
         }
 
         /* Done */

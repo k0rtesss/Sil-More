@@ -1004,7 +1004,13 @@ bool sdl_narrative_banner_handle_pointer(float x, float y)
     }
 
     (void)dismiss_active_narrative_banner();
-    do_cmd_redraw();
+    /*
+     * Closing this composited overlay must not rebuild the supporting panes:
+     * their intermediate terminal frames are visible as a brief blink.
+     */
+    p_ptr->redraw |= PR_MAP;
+    redraw_stuff();
+    Term_fresh();
     g_state.need_present = true;
     return true;
 }

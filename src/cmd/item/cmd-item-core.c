@@ -294,7 +294,8 @@ cptr item_use_action_name(const object_type* o_ptr, int item)
         return (item >= INVEN_WIELD && item < INVEN_TOTAL) ? "Activate"
                                                            : "Wield";
     case TV_HORN:
-        return "Play";
+        return (item >= INVEN_WIELD && item < INVEN_TOTAL) ? "Play"
+                                                           : "Wield";
     case TV_POTION:
         return "Quaff";
     case TV_FOOD:
@@ -1034,7 +1035,12 @@ void do_cmd_use_item_by_index(int item)
     }
     case TV_HORN:
     {
-        do_cmd_play_instrument(o_ptr, item);
+        /* Like a staff, a horn must be equipped before unified Use performs
+         * its activation.  Packed and floor horns therefore equip first. */
+        if (item >= INVEN_WIELD && item < INVEN_TOTAL)
+            do_cmd_play_instrument(o_ptr, item);
+        else
+            do_cmd_wield(o_ptr, item);
         break;
     }
     case TV_POTION:

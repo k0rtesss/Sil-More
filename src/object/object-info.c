@@ -2801,7 +2801,6 @@ static char object_info_screen_capture_view(
     const object_info_screen_action* actions, int action_count)
 {
     int scroll = 0;
-    bool overlay_active = false;
     char result = 0;
 
     if (!capture)
@@ -2825,7 +2824,6 @@ static char object_info_screen_capture_view(
         {
             break;
         }
-        overlay_active = true;
         if (scroll > max_scroll)
             scroll = max_scroll;
         ui_scroll_area_begin(0, MAX(0, term_hgt - 1),
@@ -2879,8 +2877,6 @@ static char object_info_screen_capture_view(
         }
     }
 
-    if (overlay_active)
-        sdl_description_overlay_clear();
     sdl_description_overlay_clear_footer_actions();
     sdl_description_overlay_set_footer(NULL, false);
     ui_scroll_area_clear();
@@ -2964,7 +2960,6 @@ char object_info_screen_multi_with_actions(const object_type** objects,
         result = object_info_screen_capture_view(&capture, footer,
             effective_action_count ? effective_actions : NULL,
             effective_action_count);
-        object_info_screen_capture_free(&capture);
     }
     else
     {
@@ -2972,6 +2967,18 @@ char object_info_screen_multi_with_actions(const object_type** objects,
     }
 
     character_icky--;
+
+    /*
+     * Clear and present the SDL overlay only after leaving the modal state.
+     * Mobile pane visibility depends on character_icky, so presenting while
+     * it is still incremented leaves the gameplay UI hidden until another
+     * input happens to request a frame.
+     */
+    if (have_capture)
+    {
+        sdl_description_overlay_clear();
+        object_info_screen_capture_free(&capture);
+    }
 
     text_out_hook = text_out_to_screen;
     text_out_wrap = 0;

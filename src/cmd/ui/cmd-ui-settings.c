@@ -8729,8 +8729,8 @@ static void do_cmd_mouse_settings(bool* settings_changed)
             static const char* const mouse_setting_desc[MOUSE_SETTING_COUNT] = {
                 [MOUSE_SETTING_ENABLE] = "Turn mouse input on or off.",
                 [MOUSE_SETTING_MOVEMENT] =
-                    "How clicking the map moves you: walk to the clicked spot, "
-                    "single step toward it, or disabled.",
+                    ("How clicking the map moves you: walk to the clicked spot, "
+                     "single step toward it, or disabled."),
                 [MOUSE_SETTING_TILE_POINTER] =
                     "Use tile row 12, column 31 as the mouse pointer.",
                 [MOUSE_SETTING_TUTORIAL] =

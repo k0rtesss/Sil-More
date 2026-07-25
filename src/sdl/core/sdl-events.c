@@ -838,7 +838,14 @@ static bool sdl_narrative_banner_consume_input_event(const SDL_Event* ev)
 
     if (sdl_event_starts_touch_round_input(ev)) {
         clear_active_narrative_banner();
-        do_cmd_redraw();
+        /*
+         * The banner is composited over the gameplay frame.  Refreshing every
+         * terminal here exposes intermediate left/combat pane frames while
+         * the banner closes; only the covered map needs repainting.
+         */
+        p_ptr->redraw |= PR_MAP;
+        redraw_stuff();
+        Term_fresh();
         g_state.need_present = true;
         /* Wake request_command() out of its banner-dismissal inkey().  The
          * finger-down continues below so the matching release can submit the
@@ -848,7 +855,9 @@ static bool sdl_narrative_banner_consume_input_event(const SDL_Event* ev)
     }
 
     clear_active_narrative_banner();
-    do_cmd_redraw();
+    p_ptr->redraw |= PR_MAP;
+    redraw_stuff();
+    Term_fresh();
     g_state.need_present = true;
     /* The event itself is consumed, so provide the sentinel that lets the
      * banner-dismissal inkey() finish instead of swallowing the next input. */

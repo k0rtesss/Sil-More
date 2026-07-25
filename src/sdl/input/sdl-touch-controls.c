@@ -5088,17 +5088,17 @@ static void sdl_touch_top_panel_render_icon(const SDL_FRect* button_rect,
     float icon_size;
     float max_icon;
     float grow;
-    float configured_size;
 
     if (!button_rect)
         return;
 
-    configured_size = get_sdl_touch_top_panel_size();
 #if SIL_SDL_MOBILE_BUILD
     icon_size = MIN(button_rect->w, button_rect->h) * 0.68f;
     max_icon = MIN(button_rect->w, button_rect->h)
         - sdl_touch_pane_clampf(button_rect->w * 0.14f, 8.0f, 18.0f);
 #else
+    float configured_size = get_sdl_touch_top_panel_size();
+
     icon_size = (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
         ? MIN(button_rect->w, button_rect->h) * 0.68f
         : (float)TILE_SIZE * configured_size;
