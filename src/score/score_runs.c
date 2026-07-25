@@ -55,6 +55,13 @@ static bool score_runs_write_record(SDL_IOStream* file,
                                     const score_run_detail_block* details);
 static bool score_runs_write_header(SDL_IOStream* file,
                                     const score_db_header* header);
+static bool score_runs_read_detail_header(SDL_IOStream* file,
+                                          score_run_detail_header_v1* header);
+static bool score_runs_rewrite_record(const char* path, SDL_IOStream** source,
+                                      const score_db_header* header,
+                                      Sint64 replace_offset,
+                                      const score_record_v1* replacement,
+                                      const score_run_detail_block* details);
 
 static bool score_runs_legacy_checked = false;
 
@@ -116,6 +123,175 @@ bool score_runs_get_legacy_link(const struct high_score* legacy_score,
     if (out_record_id)
         *out_record_id = (u32b)value;
     return true;
+}
+
+static bool score_runs_legacy_name_matches(const high_score* legacy,
+                                           const score_record_v1* record)
+{
+    char legacy_name[sizeof(legacy->who) + 1];
+    char record_name[sizeof(legacy->who) + 1];
+
+    if (!legacy || !record)
+        return false;
+    parse_score_string(legacy->who, sizeof(legacy->who), legacy_name,
+        sizeof(legacy_name));
+    strnfmt(record_name, sizeof(record_name), "%-.15s",
+        record->player_name[0] ? record->player_name : record->savefile_hint);
+    return streq(legacy_name, record_name);
+}
+
+/* Locate the runs.db row linked to a legacy live score.  New score rows carry
+ * an exact record ID.  Older rows fall back to the same Tale, hero template,
+ * and truncated name, preferring the most advanced live snapshot. */
+static bool score_runs_find_legacy_record(SDL_IOStream* file,
+    const high_score* legacy, score_record_v1* out, Sint64* out_offset)
+{
+    u32b linked_id = SCORE_RUNS_METARUN_UNKNOWN;
+    bool has_link = score_runs_get_legacy_link(legacy, &linked_id);
+    u32b expected_metarun = run_mode_is_blitz()
+        ? SCORE_RUNS_METARUN_UNKNOWN : metar.id;
+    int expected_race = parse_score_int(legacy->p_r, sizeof(legacy->p_r), -1);
+    int expected_character = parse_score_int(legacy->p_h,
+        sizeof(legacy->p_h), -1);
+    bool found = false;
+    score_record_v1 best;
+    Sint64 best_offset = -1;
+
+    if (!file || !legacy)
+        return false;
+    if (SDL_SeekIO(file, sizeof(score_db_header), SDL_IO_SEEK_SET) < 0)
+        return false;
+
+    while (true) {
+        Sint64 offset = SDL_TellIO(file);
+        score_record_v1 record;
+        score_run_detail_header_v1 detail;
+
+        if (offset < 0
+            || SDL_ReadIO(file, &record, sizeof(record)) != sizeof(record))
+            break;
+        if (!score_runs_read_detail_header(file, &detail)
+            || !score_runs_skip_detail_payload(file, &detail))
+            break;
+
+        if (record.status != SCORE_RECORD_ALIVE)
+            continue;
+        if (has_link && record.record_id == linked_id) {
+            best = record;
+            best_offset = offset;
+            found = true;
+            break;
+        }
+        if (has_link)
+            continue;
+        if (record.metarun_id != expected_metarun
+            || record.race_id != expected_race
+            || record.character_id != expected_character
+            || !score_runs_legacy_name_matches(legacy, &record))
+            continue;
+        if (!found || record.turns_spent > best.turns_spent) {
+            best = record;
+            best_offset = offset;
+            found = true;
+        }
+    }
+
+    if (!found)
+        return false;
+    if (out)
+        *out = best;
+    if (out_offset)
+        *out_offset = best_offset;
+    return true;
+}
+
+bool score_runs_get_recorded_turns(const struct high_score* legacy_score,
+                                   u32b* out_turns)
+{
+    char path[1024];
+    score_db_header header;
+    score_record_v1 record;
+    bool found = false;
+
+    if (out_turns)
+        *out_turns = 0;
+    if (!legacy_score || !out_turns
+        || !build_meta_path(path, sizeof(path), SCORE_RUNS_DB_FILENAME))
+        return false;
+
+    safe_setuid_grab();
+    SDL_IOStream* file = SDL_IOFromFile(path, "rb");
+    safe_setuid_drop();
+    if (!file)
+        return false;
+    if (SDL_ReadIO(file, &header, sizeof(header)) == sizeof(header)
+        && memcmp(header.magic, SCORE_DB_MAGIC, sizeof(header.magic)) == 0
+        && header.version == SCORE_RUNS_DB_VERSION)
+    {
+        found = score_runs_find_legacy_record(file, legacy_score, &record,
+            NULL);
+    }
+    SDL_CloseIO(file);
+
+    if (!found)
+        return false;
+    *out_turns = record.turns_spent;
+    return true;
+}
+
+bool score_runs_resolve_legacy_entry(const struct high_score* legacy_score,
+                                     score_record_status status,
+                                     const char* cause)
+{
+    char path[1024];
+    score_db_header header;
+    score_record_v1 record;
+    Sint64 offset = -1;
+    bool success = false;
+
+    if (!legacy_score
+        || (status != SCORE_RECORD_DEAD && status != SCORE_RECORD_REMOVED)
+        || !build_meta_path(path, sizeof(path), SCORE_RUNS_DB_FILENAME))
+        return false;
+
+    safe_setuid_grab();
+    SDL_IOStream* file = SDL_IOFromFile(path, "r+b");
+    safe_setuid_drop();
+    if (!file)
+        return false;
+    if (SDL_ReadIO(file, &header, sizeof(header)) != sizeof(header)
+        || memcmp(header.magic, SCORE_DB_MAGIC, sizeof(header.magic)) != 0
+        || header.version != SCORE_RUNS_DB_VERSION
+        || !score_runs_find_legacy_record(file, legacy_score, &record, &offset))
+    {
+        SDL_CloseIO(file);
+        return false;
+    }
+
+    record.status = status;
+    time_t now = time(NULL);
+    if (now != (time_t)-1)
+        record.completed_utc = (u32b)now;
+    record.killer_kind = (status == SCORE_RECORD_DEAD)
+        ? SCORE_KILLER_SELF : SCORE_KILLER_OTHER;
+    SDL_strlcpy(record.cause_of_death,
+        (cause && cause[0]) ? cause : "their own hand",
+        sizeof(record.cause_of_death));
+    SDL_strlcpy(record.killer_name, record.cause_of_death,
+        sizeof(record.killer_name));
+
+    if (SDL_SeekIO(file, offset, SDL_IO_SEEK_SET) >= 0
+        && SDL_WriteIO(file, &record, sizeof(record)) == sizeof(record)
+        && SDL_FlushIO(file))
+    {
+        success = true;
+    }
+    SDL_CloseIO(file);
+    if (success) {
+        log_info("score_runs: recovery changed record #%u to status %d",
+            record.record_id, (int)record.status);
+    }
+    return success;
 }
 
 static s32b score_runs_parse_int_field(const char* field, size_t len)
@@ -552,6 +728,13 @@ bool score_runs_skip_detail_payload(SDL_IOStream* file,
     if (!file || !header)
         return false;
 
+    if (header->version == 0 || header->version > SCORE_RUN_DETAIL_VERSION ||
+        header->artefact_count > header->artefact_capacity ||
+        header->artefact_capacity > SCORE_RUN_ARTEFACT_CAP_MAX ||
+        header->monster_count > header->monster_capacity ||
+        header->monster_capacity > SCORE_RUN_MONSTER_CAP_MAX)
+        return false;
+
     if (header->version >= 2) {
         u16b stats_count = 0;
         u16b skills_count = 0;
@@ -560,12 +743,16 @@ bool score_runs_skip_detail_payload(SDL_IOStream* file,
 
         if (SDL_ReadIO(file, &stats_count, sizeof(stats_count)) != sizeof(stats_count))
             return false;
+        if (stats_count > 256)
+            return false;
         if (SDL_SeekIO(file,
                        (Sint64)stats_count * (Sint64)sizeof(score_run_stat_v1),
                        SDL_IO_SEEK_CUR) < 0)
             return false;
 
         if (SDL_ReadIO(file, &skills_count, sizeof(skills_count)) != sizeof(skills_count))
+            return false;
+        if (skills_count > 256)
             return false;
         if (SDL_SeekIO(file,
                        (Sint64)skills_count * (Sint64)sizeof(score_run_skill_v1),
@@ -574,12 +761,16 @@ bool score_runs_skip_detail_payload(SDL_IOStream* file,
 
         if (SDL_ReadIO(file, &ability_count, sizeof(ability_count)) != sizeof(ability_count))
             return false;
+        if (ability_count > 4096)
+            return false;
         if (SDL_SeekIO(file,
                        (Sint64)ability_count * (Sint64)sizeof(score_run_ability_v1),
                        SDL_IO_SEEK_CUR) < 0)
             return false;
 
         if (SDL_ReadIO(file, &milestone_count, sizeof(milestone_count)) != sizeof(milestone_count))
+            return false;
+        if (milestone_count > SCORE_RUN_MILESTONE_CAP_MAX)
             return false;
         if (SDL_SeekIO(file,
                        (Sint64)milestone_count * (Sint64)sizeof(score_run_milestone_v1),
@@ -609,6 +800,128 @@ static bool score_runs_read_detail_header_at(SDL_IOStream* file, Sint64 record_o
                    SDL_IO_SEEK_SET) < 0)
         return false;
     return score_runs_read_detail_header(file, header);
+}
+
+static bool score_runs_copy_range(SDL_IOStream* source, SDL_IOStream* target,
+                                  Sint64 start, Sint64 length)
+{
+    byte buffer[16384];
+
+    if (!source || !target || start < 0 || length < 0)
+        return false;
+    if (SDL_SeekIO(source, start, SDL_IO_SEEK_SET) < 0)
+        return false;
+
+    while (length > 0) {
+        size_t amount = (size_t)MIN(length, (Sint64)sizeof(buffer));
+        if (SDL_ReadIO(source, buffer, amount) != amount)
+            return false;
+        if (SDL_WriteIO(target, buffer, amount) != amount)
+            return false;
+        length -= (Sint64)amount;
+    }
+    return true;
+}
+
+/* Rebuild rather than overwrite when a variable-size detail payload changes. */
+static bool score_runs_rewrite_record(const char* path, SDL_IOStream** source,
+                                      const score_db_header* header,
+                                      Sint64 replace_offset,
+                                      const score_record_v1* replacement,
+                                      const score_run_detail_block* details)
+{
+    char temp_path[1100];
+    char backup_path[1100];
+    bool replaced = false;
+    bool ok = false;
+
+    if (!path || !source || !*source || !header || !replacement || !details)
+        return false;
+    if (strlen(path) + 5 > sizeof(temp_path) ||
+        strlen(path) + 5 > sizeof(backup_path))
+        return false;
+    strnfmt(temp_path, sizeof(temp_path), "%s.tmp", path);
+    strnfmt(backup_path, sizeof(backup_path), "%s.bak", path);
+
+    if (SDL_GetPathInfo(temp_path, NULL))
+        (void)SDL_RemovePath(temp_path);
+    else
+        SDL_ClearError();
+
+    SDL_IOStream* target = SDL_IOFromFile(temp_path, "w+b");
+    if (!target)
+        return false;
+    if (!score_runs_write_header(target, header))
+        goto done;
+
+    if (SDL_SeekIO(*source, sizeof(score_db_header), SDL_IO_SEEK_SET) < 0)
+        goto done;
+
+    while (true) {
+        Sint64 record_start = SDL_TellIO(*source);
+        score_record_v1 record;
+        score_run_detail_header_v1 detail_header;
+        if (record_start < 0)
+            goto done;
+        if (SDL_ReadIO(*source, &record, sizeof(record)) != sizeof(record))
+            break;
+        if (!score_runs_read_detail_header(*source, &detail_header) ||
+            !score_runs_skip_detail_payload(*source, &detail_header))
+            goto done;
+        Sint64 record_end = SDL_TellIO(*source);
+        if (record_end < record_start)
+            goto done;
+
+        if (record_start == replace_offset) {
+            if (!score_runs_write_record(target, replacement, details))
+                goto done;
+            replaced = true;
+        } else if (!score_runs_copy_range(*source, target, record_start,
+                       record_end - record_start)) {
+            goto done;
+        }
+
+        if (SDL_SeekIO(*source, record_end, SDL_IO_SEEK_SET) < 0)
+            goto done;
+    }
+
+    if (!replaced || !SDL_FlushIO(target))
+        goto done;
+    ok = true;
+
+done:
+    SDL_CloseIO(target);
+    if (!ok) {
+        (void)SDL_RemovePath(temp_path);
+        return false;
+    }
+
+    SDL_CloseIO(*source);
+    *source = NULL;
+
+    if (SDL_GetPathInfo(backup_path, NULL))
+        (void)SDL_RemovePath(backup_path);
+    else
+        SDL_ClearError();
+
+    if (!SDL_RenamePath(path, backup_path)) {
+        log_warn("score_runs: unable to preserve database before rewrite: %s",
+            SDL_GetError());
+        (void)SDL_RemovePath(temp_path);
+        return false;
+    }
+    if (!SDL_RenamePath(temp_path, path)) {
+        log_warn("score_runs: unable to install rewritten database: %s",
+            SDL_GetError());
+        (void)SDL_RenamePath(backup_path, path);
+        (void)SDL_RemovePath(temp_path);
+        return false;
+    }
+
+    (void)SDL_RemovePath(backup_path);
+    log_info("score_runs: rewrote runs.db safely for record #%u",
+        replacement->record_id);
+    return true;
 }
 
 static bool score_runs_write_record(SDL_IOStream* file,
@@ -689,6 +1002,32 @@ static bool score_runs_write_record(SDL_IOStream* file,
     }
 
     return true;
+}
+
+static Sint64 score_runs_serialized_record_size(
+    const score_run_detail_block* details)
+{
+    if (!details)
+        return -1;
+
+    Sint64 size = (Sint64)sizeof(score_record_v1) +
+        (Sint64)sizeof(score_run_detail_header_v1);
+    if (details->header.version >= 2) {
+        size += 4 * (Sint64)sizeof(u16b);
+        size += (Sint64)details->stats_count *
+            (Sint64)sizeof(score_run_stat_v1);
+        size += (Sint64)details->skills_count *
+            (Sint64)sizeof(score_run_skill_v1);
+        size += (Sint64)details->ability_count *
+            (Sint64)sizeof(score_run_ability_v1);
+        size += (Sint64)details->milestone_count *
+            (Sint64)sizeof(score_run_milestone_v1);
+    }
+    size += (Sint64)details->header.artefact_capacity *
+        (Sint64)sizeof(score_run_artefact_v1);
+    size += (Sint64)details->header.monster_capacity *
+        (Sint64)sizeof(score_run_monster_v1);
+    return size;
 }
 
 static SDL_IOStream* score_runs_open_db(const char* path, score_db_header* header,
@@ -1544,6 +1883,8 @@ bool score_runs_record_current_run_with_id(const struct high_score* legacy_score
 
     score_run_detail_header_v1 existing_detail;
     bool details_ready = false;
+    bool record_only_update = false;
+    Sint64 existing_record_size = -1;
     if (found) {
         if (!score_runs_read_detail_header_at(db, offset, &existing_detail)) {
             log_warn("score_runs: detail header missing for record_id=%u, appending new entry",
@@ -1551,10 +1892,15 @@ bool score_runs_record_current_run_with_id(const struct high_score* legacy_score
             found = false;
         } else if (existing_detail.version != SCORE_RUN_DETAIL_VERSION) {
             log_warn("score_runs: detail payload version mismatch for record_id=%u "
-                "(stored=%u, expected=%u) - rebuilding with defaults",
+                "(stored=%u, expected=%u) - updating fixed record only",
                 existing.record_id, (unsigned)existing_detail.version,
                 (unsigned)SCORE_RUN_DETAIL_VERSION);
-            details_ready = false;
+            record_only_update = true;
+            details_ready = true;
+        } else if (!score_runs_skip_detail_payload(db, &existing_detail)) {
+            log_warn("score_runs: invalid detail payload for record_id=%u, "
+                "appending new entry", existing.record_id);
+            found = false;
         } else if (!score_runs_build_details(&details,
                                              existing_detail.artefact_capacity,
                                              existing_detail.monster_capacity)) {
@@ -1564,6 +1910,7 @@ bool score_runs_record_current_run_with_id(const struct high_score* legacy_score
             safe_setuid_drop();
             return false;
         } else {
+            existing_record_size = SDL_TellIO(db) - offset;
             details_ready = true;
         }
     }
@@ -1582,13 +1929,31 @@ bool score_runs_record_current_run_with_id(const struct high_score* legacy_score
     if (found) {
         record.record_id = existing.record_id;
         record.chronological_idx = existing.chronological_idx;
-        if (SDL_SeekIO(db, offset, SDL_IO_SEEK_SET) >= 0 &&
-            score_runs_write_record(db, &record, &details)) {
-            success = true;
-        } else {
-            log_warn("score_runs: failed to update record_id=%u", record.record_id);
+        Sint64 replacement_size = score_runs_serialized_record_size(&details);
+        bool size_changed = !record_only_update &&
+            replacement_size != existing_record_size;
+
+        if (size_changed) {
+            success = score_runs_rewrite_record(path, &db, &header, offset,
+                &record, &details);
+            if (!success) {
+                log_warn("score_runs: failed to resize record_id=%u safely",
+                    record.record_id);
+            }
+        } else if (SDL_SeekIO(db, offset, SDL_IO_SEEK_SET) >= 0) {
+            if (record_only_update) {
+                success = (SDL_WriteIO(db, &record, sizeof(record))
+                    == sizeof(record));
+            } else {
+                success = score_runs_write_record(db, &record, &details);
+            }
+            if (success)
+                SDL_FlushIO(db);
         }
-        SDL_SeekIO(db, 0, SDL_IO_SEEK_END);
+        if (!success)
+            log_warn("score_runs: failed to update record_id=%u", record.record_id);
+        if (db)
+            SDL_SeekIO(db, 0, SDL_IO_SEEK_END);
     } else {
         record.record_id = header.record_count;
         record.chronological_idx = (u32b)score_runs_count_for_metarun(db, record.metarun_id);
@@ -1606,7 +1971,8 @@ bool score_runs_record_current_run_with_id(const struct high_score* legacy_score
     }
 
     score_runs_release_detail_block(&details);
-    SDL_CloseIO(db);
+    if (db)
+        SDL_CloseIO(db);
     safe_setuid_drop();
 
     if (success) {

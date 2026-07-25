@@ -1,5 +1,6 @@
 /* Quest tracking helpers split from metarun.c */
 #include "angband.h"
+#include "blitz.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -203,6 +204,7 @@ static void mark_quest_completion_recorded_for_run(u32b quest_flag)
 
 int metarun_quest_completion_count(u32b quest_flag)
 {
+    if (run_mode_is_blitz()) return 0;
     if (metarun_current_index() < 0) return 0;
 
     int slot = quest_slot_from_flag(quest_flag);
@@ -216,6 +218,7 @@ int metarun_quest_completion_count(u32b quest_flag)
 
 bool metarun_is_quest_completed(u32b quest_flag)
 {
+    if (run_mode_is_blitz()) return false;
     /* Only check the current metarun, not all metaruns */
     const metarun *current = metarun_current();
     s16b current_idx = metarun_current_index();
@@ -238,6 +241,7 @@ bool metarun_is_quest_completed(u32b quest_flag)
 
 void metarun_mark_quest_completed(u32b quest_flag)
 {
+    if (run_mode_is_blitz()) return;
     metarun *current = metarun_current_mutable();
     if (!current) return;
     if (!quest_flag) return;
@@ -277,6 +281,7 @@ void metarun_mark_quest_completed(u32b quest_flag)
 
 void metarun_check_and_update_quests(void)
 {
+    if (run_mode_is_blitz()) return;
     s16b current_idx = metarun_current_index();
     log_trace("Metarun quest check: Entry - current_run=%d, metarun_max=%d", current_idx, metarun_entry_count());
     
@@ -295,7 +300,7 @@ void metarun_check_and_update_quests(void)
     }
     
     if (p_ptr->aule_quest == AULE_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_AULE)) {
-        log_trace("Metarun: Marking Aule quest as completed (rewarded)");
+        log_trace("Metarun: Marking Aulë quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_AULE);
     }
 
@@ -310,7 +315,7 @@ void metarun_check_and_update_quests(void)
     }
 
     if (p_ptr->orome_quest == OROME_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_OROME)) {
-        log_trace("Metarun: Marking Orome quest as completed (rewarded)");
+        log_trace("Metarun: Marking Oromë quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_OROME);
     }
     
@@ -341,11 +346,11 @@ void metarun_restore_quest_states(void)
         mark_quest_completion_recorded_for_run(METARUN_QUEST_TULKAS);
     }
     
-    /* Restore Aule quest state */
+    /* Restore Aulë quest state */
     if (metarun_quest_completion_count(METARUN_QUEST_AULE) > 0) {
         if (p_ptr->aule_quest < AULE_QUEST_REWARDED) {
             p_ptr->aule_quest = AULE_QUEST_REWARDED;
-            log_trace("Metarun restore: Aule quest set to REWARDED (%d)", AULE_QUEST_REWARDED);
+            log_trace("Metarun restore: Aulë quest set to REWARDED (%d)", AULE_QUEST_REWARDED);
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_AULE);
     }
@@ -359,21 +364,21 @@ void metarun_restore_quest_states(void)
         mark_quest_completion_recorded_for_run(METARUN_QUEST_MANDOS);
     }
     
-    /* Restore Niena quest state */
+    /* Restore Nienna quest state */
     if (metarun_quest_completion_count(METARUN_QUEST_NIENA) > 0) {
         if (p_ptr->niena_quest < NIENA_QUEST_REWARDED) {
             p_ptr->niena_quest = NIENA_QUEST_REWARDED;
             p_ptr->niena_level = 0; /* Clear depth for previous run attribution */
-            log_trace("Metarun restore: Niena quest set to REWARDED (%d)", NIENA_QUEST_REWARDED);
+            log_trace("Metarun restore: Nienna quest set to REWARDED (%d)", NIENA_QUEST_REWARDED);
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_NIENA);
     }
     
-    /* Restore Orome quest state */
+    /* Restore Oromë quest state */
     if (metarun_quest_completion_count(METARUN_QUEST_OROME) > 0) {
         if (p_ptr->orome_quest < OROME_QUEST_REWARDED) {
             p_ptr->orome_quest = OROME_QUEST_REWARDED;
-            log_trace("Metarun restore: Orome quest set to REWARDED (%d)", OROME_QUEST_REWARDED);
+            log_trace("Metarun restore: Oromë quest set to REWARDED (%d)", OROME_QUEST_REWARDED);
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_OROME);
     }
@@ -387,6 +392,6 @@ void metarun_restore_quest_states(void)
         mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA);
     }
     
-    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d, Niena: %d, Orome: %d, Varda: %d",
+    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aulë: %d, Mandos: %d, Nienna: %d, Oromë: %d, Varda: %d",
               p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->varda_quest);
 }

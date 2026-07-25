@@ -29,10 +29,10 @@ extern curse_type* cu_info;
 /*  Quest completion tracking                                         */
 /* ------------------------------------------------------------------ */
 #define METARUN_QUEST_TULKAS   (1UL << 0)   /* Tulkas quest completed */
-#define METARUN_QUEST_AULE     (1UL << 1)   /* Aule quest completed   */
+#define METARUN_QUEST_AULE     (1UL << 1)   /* Aulë quest completed   */
 #define METARUN_QUEST_MANDOS   (1UL << 2)   /* Mandos quest completed */
-#define METARUN_QUEST_NIENA    (1UL << 3)   /* Niena quest completed  */
-#define METARUN_QUEST_OROME    (1UL << 4)   /* Orome quest completed  */
+#define METARUN_QUEST_NIENA    (1UL << 3)   /* Nienna quest completed  */
+#define METARUN_QUEST_OROME    (1UL << 4)   /* Oromë quest completed  */
 #define METARUN_QUEST_VARDA    (1UL << 5)   /* Varda quest completed  */
 #define METARUN_QUEST_SLOT_MAX 8            /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
@@ -107,11 +107,11 @@ typedef struct metarun
     u32b persistent_options[8];  /* Persistent options across the metarun */
     byte persistent_delay_factor; /* Persistent delay factor */
     byte persistent_hitpoint_warn; /* Persistent hitpoint warning */
-    u32b persistent_window_flags[ANGBAND_TERM_MAX]; /* Persistent window flags */
+    u32b persistent_window_flags[SAVE_WINDOW_TERM_MAX]; /* Persistent window flags */
     byte persistent_options_initialized; /* Flag to track if persistent options are set */
 
     /* ----- quest completion tracking --------------------------- */
-    u32b completed_quests;      /* Bitmask of completed quests (bit 0=Tulkas, bit 1=Aule, etc.) */
+    u32b completed_quests;      /* Bitmask of completed quests (bit 0=Tulkas, bit 1=Aulë, etc.) */
     byte quest_completion_counts[METARUN_QUEST_SLOT_MAX]; /* Times each quest has been completed this metarun (capped) */
     
     /* ----- oath system tracking -------------------------------- */
@@ -138,7 +138,7 @@ typedef struct metarun
 
 } metarun;
 
-/* The *current* meta-run - defined once in metarun.c */
+/* The *current* meta-run - defined once in variable.c */
 extern metarun metar;
 
 int8_t* active_curse_stacks(void);
@@ -161,6 +161,22 @@ void metarun_update_on_exit(bool died,
  * the run ends and persists everything.                              */
 
 void check_run_end(void);                        /* Check win/loss conditions */
+void metarun_show_poetry_scene(cptr title, byte title_attr, cptr body,
+                               byte body_attr, cptr transition,
+                               byte transition_attr, cptr prompt);
+void metarun_show_poetry_blocks(cptr title, byte title_attr,
+                                cptr blocks[], const byte block_attrs[],
+                                const bool block_outcome_reveals[],
+                                int block_count, cptr prompt, int hold_ms,
+                                bool wait_for_key, bool immediate,
+                                bool *fast_forward);
+void metarun_debug_show_run_result(bool victory, int silmarils, int alive,
+                                   int required_survivors);
+void metarun_debug_show_run_summary(int silmarils, int stolen_silmarils,
+                                    bool show_treachery,
+                                    int kinslaying_attempt);
+int metarun_debug_preview_curse_menu(void);
+int metarun_debug_choose_escape_curses(int n, int out[4]);
 void metarun_increment_deaths(void);             /* Shortcut: +1 death      */
 void metarun_gain_silmarils(byte n);             /* Shortcut: +n Silmarils  */
 
@@ -174,6 +190,10 @@ metarun *metarun_entry_mutable(s16b idx);        /* Bounds-checked mutable acces
 s16b metarun_current_index(void);                /* Current metarun index or -1 */
 s16b metarun_entry_count(void);                  /* Total metarun entries loaded */
 int metarun_completed_count(void);              /* Count finished metaruns */
+bool metarun_tale_management_available(void);   /* No active character/story save */
+bool metarun_tale_recovery_required(void);      /* Story ledger needs restart recovery */
+bool metarun_activate_tale(s16b idx);            /* Make a recorded tale current */
+bool metarun_create_tale(void);                  /* Create/select a fresh tale */
 
 /* ------------------------------------------------------------------ */
 /*  Quest completion tracking                                         */
@@ -299,7 +319,7 @@ static inline int CURSE_BLESSING_CAP(int id)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Public helpers implemented in metarun.c                           */
+/*  Public helpers implemented by the metarun subsystem                */
 /* ------------------------------------------------------------------ */
 extern bool metarun_created;           /* Flag set when new metarun file created */
 void cleanup_old_game_files(void);     /* Clean save/score files on fresh start */
@@ -316,6 +336,7 @@ void choose_difficulty_level(void);   /* Difficulty selection menu    */
 u32b curse_flag_mask(void);            /* bitmask of active flags      */
 int  curse_flag_count_rhf(u32b rhf_flag);  /* #curses with RHF bit  */
 int  curse_flag_count_cur(u32b cur_flag);  /* #curses with CUR bit  */
+int  curse_flag_delta_cur(u32b cur_flag);  /* signed CUR curse/blessing delta */
 int  any_curse_flag_active(u32b flag);     /* CUR-only helper      */
 void metarun_clear_blessing_runtime_fields(metarun *m); /* Reset runtime blessing fields */
 void metarun_sanitize_blessing_economy(metarun *m);     /* Clamp blessing totals */

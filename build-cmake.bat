@@ -2,7 +2,11 @@
 setlocal
 REM Build Sil-More for native Windows with pinned SDL source submodules.
 REM This script uses MSYS2's MinGW64 environment for the toolchain.
-REM Builds TWO versions: standard (user folder) and local build (SIL_USE_LOCAL_DATA)
+REM Builds standard, portable, or both versions (SIL_USE_LOCAL_DATA controls portable mode).
+
+set "BUILD_TARGET=%~1"
+if "%BUILD_TARGET%"=="" set "BUILD_TARGET=all"
+if /I not "%BUILD_TARGET%"=="all" if /I not "%BUILD_TARGET%"=="standard" if /I not "%BUILD_TARGET%"=="portable" goto :invalid_target
 
 echo Building Sil-More for Windows with pinned SDL sources using CMake...
 echo.
@@ -22,6 +26,8 @@ echo.
 REM ========================================
 REM BUILD 1: Standard build (user folder mode)
 REM ========================================
+if /I "%BUILD_TARGET%"=="portable" goto :build_portable
+
 echo [1/2] Building standard version (user folder mode)...
 echo.
 
@@ -81,6 +87,11 @@ for %%f in (
 REM Copy game data
 if not exist sil-more-windows-sdl3\lib xcopy /E /I /Y /K lib sil-more-windows-sdl3\lib
 
+REM Always update lib/xtra/font folder to ensure latest fonts are deployed
+REM (e.g. EBGaramond-Regular.ttf and any newly added typefaces)
+if exist sil-more-windows-sdl3\lib\xtra\font rmdir /S /Q sil-more-windows-sdl3\lib\xtra\font
+xcopy /E /I /Y /K lib\xtra\font sil-more-windows-sdl3\lib\xtra\font
+
 REM Exclude non-OFL fallback font from deployment; public releases use the
 REM documented redistributable font set.
 if exist sil-more-windows-sdl3\lib\xtra\font\InputMono-Bold.ttf del /Q sil-more-windows-sdl3\lib\xtra\font\InputMono-Bold.ttf
@@ -89,7 +100,7 @@ REM Always update lib/edit folder to ensure latest data files
 if exist sil-more-windows-sdl3\lib\edit rmdir /S /Q sil-more-windows-sdl3\lib\edit
 xcopy /E /I /Y /K lib\edit sil-more-windows-sdl3\lib\edit
 
-REM Always update lib/pref folder to ensure latest preference files
+REM Always update lib/pref folder to ensure latest default JSON configs
 if exist sil-more-windows-sdl3\lib\pref rmdir /S /Q sil-more-windows-sdl3\lib\pref
 xcopy /E /I /Y /K lib\pref sil-more-windows-sdl3\lib\pref
 
@@ -112,9 +123,12 @@ echo.
 echo Standard version complete: sil-more-windows-sdl3\sil-more.exe
 echo.
 
+if /I "%BUILD_TARGET%"=="standard" goto :build_complete
+
 REM ========================================
 REM BUILD 2: Local build (SIL_USE_LOCAL_DATA mode)
 REM ========================================
+:build_portable
 echo [2/2] Building local version (SIL_USE_LOCAL_DATA mode)...
 echo.
 
@@ -174,6 +188,11 @@ for %%f in (
 REM Copy game data
 if not exist sil-more-windows-sdl3-portable\lib xcopy /E /I /Y /K lib sil-more-windows-sdl3-portable\lib
 
+REM Always update lib/xtra/font folder to ensure latest fonts are deployed
+REM (e.g. EBGaramond-Regular.ttf and any newly added typefaces)
+if exist sil-more-windows-sdl3-portable\lib\xtra\font rmdir /S /Q sil-more-windows-sdl3-portable\lib\xtra\font
+xcopy /E /I /Y /K lib\xtra\font sil-more-windows-sdl3-portable\lib\xtra\font
+
 REM Exclude non-OFL fallback font from deployment; public releases use the
 REM documented redistributable font set.
 if exist sil-more-windows-sdl3-portable\lib\xtra\font\InputMono-Bold.ttf del /Q sil-more-windows-sdl3-portable\lib\xtra\font\InputMono-Bold.ttf
@@ -182,7 +201,7 @@ REM Always update lib/edit folder to ensure latest data files
 if exist sil-more-windows-sdl3-portable\lib\edit rmdir /S /Q sil-more-windows-sdl3-portable\lib\edit
 xcopy /E /I /Y /K lib\edit sil-more-windows-sdl3-portable\lib\edit
 
-REM Always update lib/pref folder to ensure latest preference files
+REM Always update lib/pref folder to ensure latest default JSON configs
 if exist sil-more-windows-sdl3-portable\lib\pref rmdir /S /Q sil-more-windows-sdl3-portable\lib\pref
 xcopy /E /I /Y /K lib\pref sil-more-windows-sdl3-portable\lib\pref
 REM Always update lib/xtra/sound folder to ensure latest sound configuration
@@ -203,6 +222,9 @@ copy /Y lib\xtra\graf\16x16.png sil-more-windows-sdl3-portable\lib\xtra\graf\
 echo.
 echo Local version complete: sil-more-windows-sdl3-portable\sil-more.exe
 echo.
+
+if /I "%BUILD_TARGET%"=="portable" goto :build_complete
+
 echo ========================================
 echo Both builds complete!
 echo ========================================
@@ -211,7 +233,16 @@ echo Standard (user folder): sil-more-windows-sdl3\sil-more.exe
 echo Local (lib folder):     sil-more-windows-sdl3-portable\sil-more.exe
 echo.
 
+:build_complete
+if /I "%BUILD_TARGET%"=="standard" echo Standard build and deployment complete.
+if /I "%BUILD_TARGET%"=="portable" echo Portable build and deployment complete.
+exit /b 0
+
 goto :EOF
+
+:invalid_target
+echo Usage: build-cmake.bat [all^|standard^|portable]
+exit /b 2
 
 :StripWavFiles
 if exist "%~1" (

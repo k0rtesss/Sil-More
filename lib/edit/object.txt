@@ -82,7 +82,7 @@
 
 # Version stamp (required)
 
-V:0.9.6
+V:0.9.7
 
 
 ##### Non-kind (contains the 'pile' picture) #####
@@ -303,7 +303,7 @@ W:1:0:30:4
 P:0:0d0:1:1d0
 R:EVN:2
 A:3/60
-F:ENCHANTABLE | MORE_SPECIAL
+F:ENCHANTABLE | MORE_SPECIAL | LIGHT_ARMOR
 D:[neutral]A robe of plain but serviceable cloth, such as a healer, a
 D: house-servant, or some learned man among the Edain might wear in hall
 D: or by the fire. It is soft, unarmoured, and easily mended, fit to
@@ -328,6 +328,7 @@ P:0:0d0:-1:1d4
 R:EVN:0
 R:PS:5
 A:1/100
+F:LIGHT_ARMOR
 D:[neutral]Armour of tanned hide, plain and weatherworthy, such as
 D: huntsmen, scouts, and hard-travelling folk might wear when iron would
 D: burden them too greatly. It is practical gear for rain, thicket, and
@@ -1078,6 +1079,7 @@ W:2:0:20:3
 P:0:0d0:1:1d0
 R:EVN:2
 A:2/60:10/100
+F:LIGHT_ARMOR
 D:[neutral]A cloak of serviceable wool, such as a traveller, watchman,
 D: or hunter among the Edain might wear against drizzle, ash, and the
 D: chill before dawn. It promises no splendour, only shelter, plain
@@ -1096,7 +1098,7 @@ W:12:0:10:4000
 P:0:0d0:3:1d0
 R:EVN:4
 A:12/15
-F:DARKNESS | STEALTH
+F:DARKNESS | STEALTH | LIGHT_ARMOR
 D:A cloak woven of the deepest darkness, its fabric seeming
 D: to drink the light around it. It wraps the wearer in
 D: shadow, and in the lightless halls of Angband, one who
@@ -1182,7 +1184,7 @@ D: and distant slaughter, where the archer need not hear the cry of what
 D: he strikes.
 
 
-# Modelled on Earendil's bow
+# Modelled on Eärendil's bow
 
 N:112:& Dragon-horn Bow~
 G:}:U1
@@ -1236,7 +1238,7 @@ P:0:0d0:0:1d1
 R:EVN:1
 R:PS:2
 A:1/100
-F:LESS_SPECIAL
+F:LESS_SPECIAL | LIGHT_ARMOR
 D:[neutral]Sturdy leather boots for the road, fit for rain, mud, and the
 D: daily wear of long going. They are the sort a traveller, hunter, or
 D: common scout might prize for dry feet and sound footing rather than
@@ -1310,6 +1312,7 @@ P:0:0d0:0:1d0
 R:EVN:1
 R:PS:1
 A:1/100
+F:LIGHT_ARMOR
 D:[neutral]Light leather gloves, made to keep the hands from cold, damp,
 D: and chafing work. They are ordinary useful things for riding, drawing
 D: a bow, handling rope, or labouring in rough weather, with no greater
@@ -1416,7 +1419,7 @@ D: flask uses one slot and holds up to 2,500 turns.
 
 # Mallorn Torch is at index 411
 
-N:130:& Feanorian Lamp~
+N:130:& Fëanorian Lamp~
 G:~:B
 T:2:31
 I:39:8:0
@@ -1424,7 +1427,7 @@ W:12:0:10:1000
 P:0:0d0:0:0d0:0
 A:14/5:18/10
 F:MITHRIL | NOBLE_ITEM
-D:A lamp wrought in the manner of Feanor, the most gifted
+D:A lamp wrought in the manner of Fëanor, the most gifted
 D: of all the smiths of the Noldor. It is set with lesser
 D: jewels that hold a captured radiance, and shines with a
 D: light that no wind may quench.
@@ -1440,14 +1443,14 @@ W:25:0:1:100000
 P:0:0d0:0:0d0
 F:SEE_INVIS | SUST_GRA | EASY_KNOW
 F:IGNORE_ALL | NO_SMITHING | INSTA_ART | BREAKS_PERMA_CURSE
-D:One of the three great jewels wrought by Feanor in the
+D:One of the three great jewels wrought by Fëanor in the
 D: Blessed Realm, in which he captured the mingled light of
 D: the Two Trees of Valinor before their darkening. Morgoth
 D: stole the Silmarils and set them in his Iron Crown, and for
 D: their recovery the Noldor waged their long and ruinous war.
 D: Their radiance is holy, and no mortal hand may hold them
 D: without pain unless their cause be just. Its holy light can break
-D: the Oath of Feanor that binds cursed items.
+D: the Oath of Fëanor that binds cursed items.
 D: You can equip it as a light source with a radius of 7 squares.
 D: It will shine forever.
 
@@ -1499,7 +1502,7 @@ D: poise to thought and bearing, as though the heart had been taught to
 D: answer the world with less confusion. ||
 D:[noble]An amulet of fair and lucid making, in which grace seems not
 D: merely sharpened but ennobled. It heightens the inward light by which
-D: the Children of Iluvatar perceive what is hidden, and gives the sense
+D: the Children of Ilúvatar perceive what is hidden, and gives the sense
 D: of a spirit more nearly attuned to clean song and truth.
 
 
@@ -1600,7 +1603,7 @@ D:An amulet of dull grey metal, stamped with a brand of
 D: thralldom from Angband's slave-pits, where countless
 D: Elves and Men were broken to labour in the sunless
 D: dark. Those who survived were hardened beyond reckoning,
-D: their bodies inured to every suffering - yet their
+D: their bodies inured to every suffering—yet their
 D: spirits were diminished, worn to shadow by years
 D: without hope or the memory of stars.
 
@@ -1616,7 +1619,7 @@ F:STEALTH | UNLIGHT | NO_SMITHING | EVIL_ITEM | MIN_DEPTH_SPEED
 D:An amulet of dull black stone, worn by the spies and
 D: scouts of Morgoth who crept through the passes of the
 D: Ered Gorgoroth under cover of night. The bearer moves
-D: as a shadow among shadows, silent and unseen - yet a
+D: as a shadow among shadows, silent and unseen—yet a
 D: faint dimming of the light clings ever to the wearer,
 D: as to all things that have dwelt too long in the
 D: service of the Enemy.
@@ -1929,7 +1932,7 @@ M:GRA:-1
 D:A ring of crude iron, stamped with the rune of Angband.
 D: Orc-captains wore such rings to master their companies
 D: by brute force alone. The strength it grants is real
-D: enough - yet the spirit withers under its influence,
+D: enough—yet the spirit withers under its influence,
 D: for it was made without art and without love.
 
 
@@ -1944,7 +1947,7 @@ F:PERCEPTION | HUNGER | LIGHT_CURSE | NO_SMITHING | FEAR | EVIL_ITEM | MIN_DEPTH
 D:A ring set with a dim red stone, given to the thralls
 D: who kept watch in the dark passages of Angband for
 D: spies and intruders. It sharpens the senses beyond
-D: their wont - yet the hunger of the pits gnaws
+D: their wont—yet the hunger of the pits gnaws
 D: ceaselessly at the wearer, as it gnawed at those who
 D: first bore it in the darkness beneath the mountains.
 
@@ -1975,7 +1978,7 @@ A:10/30
 F:WILL | AGGRAVATE | LIGHT_CURSE | NO_SMITHING | EVIL_ITEM | MIN_DEPTH_SPEED
 D:A ring of cold iron, graven with runes of command in the
 D: Black Speech of Angband. The will of the Dark Lord
-D: echoes faintly within it - the wearer's resolve grows
+D: echoes faintly within it—the wearer's resolve grows
 D: unyielding as stone, and fear itself recoils from them.
 D: Yet the ring's malice radiates outward like a burning
 D: brand, and all creatures nearby are roused to fury
@@ -2032,7 +2035,7 @@ P:0:0d0:0:0d0
 R:PVAL:3
 A:15/10
 F:DEX | SUST_DEX | RES_CONFU | NOBLE_ITEM
-D:Wrought by Curufin son of Feanor, greatest smith among
+D:Wrought by Curufin son of Fëanor, greatest smith among
 D: the living Noldor, for the hunters who guarded the Pass
 D: of Aglon under his brother Celegorm the Fair. Those
 D: scouts tracked Morgoth's servants through the tangled
@@ -2577,6 +2580,7 @@ D:A small wooden chest, plain and serviceable, such as a
 D: traveller, householder, or petty captain might use for
 D: coin, letters, and keepsakes. Its boards are worn by
 D: long handling, and it promises little beyond what it holds.
+D: Even so, the items within tend to be of good quality.
 
 
 N:373:& Small steel chest~
@@ -2591,6 +2595,7 @@ D:A small chest bound in steel, made to resist rough hands
 D: and the wear of hard roads. Such coffers were kept for
 D: coin, seals, and other things a prudent keeper would not
 D: trust to wood alone.
+D: The items within tend to be of great quality.
 
 
 N:374:& Small jewelled chest~
@@ -2605,6 +2610,7 @@ D:A little casket adorned with bright stones and cunning
 D: metalwork. It has the look of a gift from some richer
 D: hall, or of a lord's keepsake-box, made for treasures too
 D: small to bear openly and too precious to neglect.
+D: The treasures within tend to be of superb quality.
 
 
 N:375:& Large wooden chest~
@@ -2618,6 +2624,8 @@ D:A large wooden chest with a stout lid and broad sides, fit
 D: for the storing of garments, household gear, or a
 D: wanderer's gathered wealth. It is humble work, but deep
 D: enough to hide something of worth from a casual eye.
+D: It holds more than a smaller chest, though its contents are
+D: still only of good quality.
 
 
 N:376:& Large steel chest~
@@ -2632,6 +2640,8 @@ D:A great chest of steel, grim and weighty, such as might
 D: stand in an armoury, treasury, or strong-room. Its very
 D: make speaks of distrust, as though what lies within were
 D: worth guarding against both thief and fire.
+D: Larger than the smaller sort, it holds several items, and
+D: those within tend to be of great quality.
 
 
 N:377:& Large jewelled chest~
@@ -2646,6 +2656,8 @@ D:A lordly coffer overlaid with bright metal and gems, wrought
 D: less for burden than for display. Such chests were set in
 D: rich chambers to hold heirlooms, jewels, and other tokens
 D: of rank that lesser folk might behold only from afar.
+D: Largest of its kind, it holds several treasures, and those
+D: within tend to be of superb quality.
 
 
 N:378:& Finely wrapped present~
@@ -2659,6 +2671,7 @@ D:A gift wrapped with uncommon care in bright cloth and cord.
 D: Its outward cheer sits strangely in the dark places of the
 D: world, and for that very reason it stirs a little wonder
 D: concerning the hand that prepared it.
+D: Whatever lies within is sure to be of superb quality.
 
 
 
@@ -2763,7 +2776,7 @@ A:8/50
 F:EASY_KNOW
 D:An herb of strange and perilous power, whose leaves shimmer
 D: with faint iridescence. Those who eat of it are plunged into
-D: waking dreams, seeing things that are not there - yet
+D: waking dreams, seeing things that are not there—yet
 D: sometimes the veil of blindness is lifted thereby. It causes
 D: you to hallucinate for 80d4 turns, but cures blindness in
 D: the process. Herbs provide nourishment for about 250 turns

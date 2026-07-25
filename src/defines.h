@@ -52,15 +52,15 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.6.8"
+#define VERSION_STRING "0.9.7"
 /*
- * Version components (0.9.6.7).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.7).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
-#define VERSION_PATCH 6
-#define VERSION_EXTRA 8   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_PATCH 7
+#define VERSION_EXTRA 5   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
@@ -116,19 +116,26 @@
 #define PANEL_WID_FIXED 33
 #define PANEL_WID (use_bigtile ? 16 : PANEL_WID_FIXED)
 
-#define SIL_UI_TOP_STATUS_LINE (op_ptr && op_ptr->opt[OPT_top_status_line])
+/*
+ * SDL renders messages, status, and the depth/menu affordance through panes or
+ * overlays.  The main terminal does not reserve classic message/status rows,
+ * so row 0 is available for map rendering.
+ */
+#define SIL_UI_MESSAGE_ROW_COUNT 0
+#define SIL_UI_STATUS_ROW_COUNT 0
 
-#define ROW_MAP 1
+#define ROW_MAP SIL_UI_MESSAGE_ROW_COUNT
 #define LEFT_PANEL_CONTENT_WID 12
 #define LEFT_PANEL_SEPARATOR_WID 1
 #define LEFT_PANEL_WID (LEFT_PANEL_CONTENT_WID + LEFT_PANEL_SEPARATOR_WID)
-#define COL_MAP (g_hide_left_panel ? 0 : LEFT_PANEL_WID)
-#define ROW_STATUS (SIL_UI_TOP_STATUS_LINE ? 0 : (Term->hgt - 1))
+#define COL_MAP 0
+#define ROW_STATUS \
+    (SIL_UI_STATUS_ROW_COUNT ? (Term->hgt - 1) : Term->hgt)
 
 /*
  * Number of grids in each screen (vertically)
  */
-#define SCREEN_HGT (Term->hgt - ROW_MAP - (SIL_UI_TOP_STATUS_LINE ? 0 : 1) - (op_ptr ? op_ptr->main_combat_rolls : 0))
+#define SCREEN_HGT (Term->hgt - ROW_MAP - SIL_UI_STATUS_ROW_COUNT)
 
 /*
  * Number of grids in each screen (horizontally)
@@ -165,7 +172,13 @@
 /*
  * Maximum amount of Angband windows.
  */
-#define ANGBAND_TERM_MAX 8
+#define ANGBAND_TERM_MAX 9
+
+/*
+ * Savefiles still store the legacy set of terminal window flags.  Keep this
+ * count stable when adding runtime-only SDL panes.
+ */
+#define SAVE_WINDOW_TERM_MAX 8
 
 /*
  * Maximum length of the character's notes (for notes_buffer).
@@ -334,7 +347,15 @@
 #define THRALL_QUEST_POTION_CLARITY 11
 #define THRALL_QUEST_FLASK_OIL 12
 #define THRALL_QUEST_WOODEN_TORCH 13
-#define THRALL_QUEST_MAX 14
+#define THRALL_QUEST_DARK_BREAD 14
+#define THRALL_QUEST_DRIED_MEAT 15
+#define THRALL_QUEST_LEMBAS 16
+#define THRALL_QUEST_MAX 17
+
+/* Per-monster thrall quest progress (monster_type.thrall_quest_completed). */
+#define THRALL_QUEST_STATE_ACTIVE 0
+#define THRALL_QUEST_STATE_REWARDED 1
+#define THRALL_QUEST_STATE_REWARD_PENDING 2
 
 /*
  * Artefact "seen" flags (a_info[].seen).
@@ -355,14 +376,22 @@
 #define DISC_LORE_BIG_CAVE_POIS 0x10
 
 /*
- * Maximum size of the "view" array (see "cave.c")
+ * Run-wide Quick Access offers (player_type.quick_access_prompt_flags).
+ */
+#define QUICK_ACCESS_PROMPT_STAFF 0x01
+#define QUICK_ACCESS_PROMPT_HORN  0x02
+#define QUICK_ACCESS_PROMPT_MASK  \
+    (QUICK_ACCESS_PROMPT_STAFF | QUICK_ACCESS_PROMPT_HORN)
+
+/*
+ * Maximum size of the "view" array (see "cave/cave-view.c")
  * Note that the "view radius" will NEVER exceed 20, and even if the "view"
  * was octagonal, we would never require more than 1520 entries in the array.
  */
 #define VIEW_MAX 1536
 
 /*
- * Maximum size of the "temp" array (see "cave.c")
+ * Maximum size of the "temp" array (see "cave/cave-view.c")
  * Note that we must be as large as "VIEW_MAX" for proper functioning
  * of the "update_view()" function, and we must also be as large as the
  * largest illuminatable room, but no room is larger than 800 grids.  We
@@ -421,6 +450,14 @@
  */
 #define MAX_COMBAT_HISTORY 100
 
+/*
+ * Filters for the unified message/combat history viewer
+ */
+#define LOG_HISTORY_FILTER_ALL 0
+#define LOG_HISTORY_FILTER_MESSAGES 1
+#define LOG_HISTORY_FILTER_COMBAT 2
+#define LOG_HISTORY_FILTER_NOTES 3
+
 // Types of combat roll storage
 #define COMBAT_ROLL_NONE 0
 #define COMBAT_ROLL_ROLL 1
@@ -439,32 +476,49 @@
 #define ACTION_MISC 10
 #define ACTION_ARCHERY 11
 #define ACTION_BASH 12
+#define ACTION_READY_MELEE 13
 
 /*
- * OPTION: Maximum number of macros (see "util.c")
+ * Active weapon modes.  These intentionally match the SDL pointer attack
+ * modes so the old selector can become gameplay state without translation.
+ */
+#define PLAYER_ACTIVE_WEAPON_NONE 0
+#define PLAYER_ACTIVE_WEAPON_MELEE 1
+#define PLAYER_ACTIVE_WEAPON_RANGED_1 2
+#define PLAYER_ACTIVE_WEAPON_RANGED_2 3
+
+/*
+ * Internal command queued by pointer/touch UI for exact active-mode changes.
+ * Must avoid ascii 29/30/31, which inkey() strips as special "magic" keys
+ * (see support/input.c), so KTRL('V') (0x16) is used instead.
+ */
+#define CMD_ACTIVE_WEAPON_MODE KTRL('V')
+
+/*
+ * OPTION: Maximum number of macros (see "support/macro.c")
  * Default: assume at most 256 macros are used
  */
 #define MACRO_MAX 256
 
 /*
- * OPTION: Maximum number of "quarks" (see "util.c")
+ * OPTION: Maximum number of "quarks" (see "support/quark.c")
  * Default: assume at most 512 different inscriptions are used
  */
 #define QUARK_MAX 512
 
 /*
- * OPTION: Maximum number of autoinscriptions(see "object1.c")
+ * OPTION: Maximum number of autoinscriptions(see "object/object-desc.c")
  */
 #define AUTOINSCRIPTIONS_MAX 216
 
 /*
- * OPTION: Maximum number of messages to remember (see "util.c")
+ * OPTION: Maximum number of messages to remember (see "support/message.c")
  * Default: assume maximal memorization of 2048 total messages
  */
 #define MESSAGE_MAX 2048
 
 /*
- * OPTION: Maximum space for the message text buffer (see "util.c")
+ * OPTION: Maximum space for the message text buffer (see "support/message.c")
  * Default: assume that each of the 2048 messages is repeated an
  * average of three times, and has an average length of 48
  */
@@ -497,7 +551,7 @@
 /*
  * There is a 1 in 7 chance that special items with an inflated base-level are
  * generated when an object is turned into an special item (see
- * make_special_item() in object2.c). As above, lower values yield better
+ * make_special_item() in object/object-make.c). As above, lower values yield better
  * special items more often.
  */
 #define GREAT_SPECIAL 7
@@ -589,6 +643,8 @@
 #define MEL_TWO_WEAPON 12
 #define MEL_RAPID_ATTACK 13
 #define MEL_STR 14
+#define MEL_WARDEN 15
+#define MEL_POWER_THROW 16
 
 /*
  * Archery abilities
@@ -602,6 +658,7 @@
 #define ARC_CRIPPLING 6
 #define ARC_DEADLY_HAIL 7
 #define ARC_DEX 8
+#define ARC_SKIRMISHING 9
 
 /*
  * Evasion abilities
@@ -642,6 +699,7 @@
 #define PER_LISTEN 7
 #define PER_MASTER_HUNTER 8
 #define PER_GRA 9
+#define PER_REWIRE_TRAPS 10
 
 /*
  * Will abilities
@@ -948,7 +1006,7 @@
 #define COL_TERRAIN 61 /* "Web" or "Pit" or "Sun" */
 
 #define ROW_PARTITION ROW_STATUS
-#define COL_PARTITION 66 /* "Room"/"Ruin"/"Cave"/"BigCa"/"Labir"/"Chasm" */
+#define COL_PARTITION 66 /* "Room"/"Ruin"/"Caves"/"BigCa"/"Labir"/"Chasm" */
 
 #define ROW_DEPTH ROW_STATUS
 #define COL_DEPTH 72 /* "Lev NNN" / "NNNN ft" */
@@ -1145,7 +1203,7 @@
 #define KEYMAP_MODE_ANGBAND 2 // The Angband-like keyset
 #define KEYMAP_MODE_ANGBAND_HJKL 3 // The Angband-like keyset with hjkl movement
 
-/*** Icons mapped in "lib/edit/graf-new.prf" ***/
+/*** Effect icons mapped in "lib/edit/effect.txt" ***/
 
 #define ICON_UNKNOWN_ENEMY 0x0A
 #define ICON_ALERT 0x0B
@@ -1234,6 +1292,14 @@
 #define FEAT_FORGE_GOOD_TAIL 0x4B /*  */
 #define FEAT_FORGE_UNIQUE_HEAD 0x4C /*  */
 #define FEAT_FORGE_UNIQUE_TAIL 0x4F /*  */
+
+/* Tunneling thresholds shared by terrain interaction and forge sabotage. */
+#define TUNNEL_DIFFICULTY_RUBBLE 1
+#define TUNNEL_DIFFICULTY_QUARTZ 2
+#define TUNNEL_DIFFICULTY_GRANITE 3
+
+/* Reward for denying a normal or enchanted forge to Morgoth's army. */
+#define FORGE_DESTROY_EXP 75
 
 // Vaults
 #define MAX_GREATER_VAULTS 8
@@ -1347,6 +1413,9 @@
 /* The "sval" codes for TV_METAL */
 #define SV_METAL_MITHRIL 0 /*  */
 #define SV_METAL_STAR_IRON 1 /*  */
+
+/* Earliest depth at which cave quartz can yield mithril. */
+#define MITHRIL_VEIN_MIN_DEPTH 12
 
 /* The "sval" codes for TV_ARROW */
 #define SV_NORMAL_ARROW 1 /*  */
@@ -1596,41 +1665,12 @@
 
 #define SV_CHEST_PRESENT 4
 
-/*Squelch Modes for k_info->squelch*/
-
-#define SQUELCH_NEVER 0 /*allow pickup, but defer to OPT_always_pickup*/
-#define NO_SQUELCH_NEVER_PICKUP 1 /*never pickup, override OPT_always_pickup*/
-#define NO_SQUELCH_ALWAYS_PICKUP                                               \
-    2 /*always pickup, override pickup and floor query options*/
-#define SQUELCH_ALWAYS 3 /*destroy when player walks over*/
-#define SQUELCH_HEAD 0
-#define SQUELCH_TAIL 3
-
 /*
- * These are the various levels of quality squelching supported by the game.
- * Less concisely:
- * 0 ---> No squelching
- * 1 ---> Squelch cursed items
- * 2 ---> Squelch average and worse items
- * 3 ---> Squelch good and worse items
- * 4 ---> squelch all but artefacts
- * 5 ---> squelch open chests
+ * The squelch subsystem has been removed.  The savefile still reserves this
+ * many zero bytes where the item-quality squelch array used to live so that
+ * old and new saves stay byte-compatible.
  */
-
-#define SQUELCH_NONE 0
-#define SQUELCH_CURSED 1
-#define SQUELCH_AVERAGE 2
-#define SQUELCH_GOOD_STRONG 3
-#define SQUELCH_GOOD_WEAK 4
-#define SQUELCH_ALL 5
-#define SQUELCH_OPENED_CHESTS 6 /*chests*/
-
-/*others are defines in squelch.c, static int do_qual_squelch,
- *but this one is used in chest opening. JG*/
-#define CHEST_INDEX 20
-
-/*number of bytes used in squelch sub-quality array*/
-#define SQUELCH_BYTES 24
+#define LEGACY_ITEM_QUALITY_BYTES 24
 
 /*
  * Special "sval" value -- unknown "sval"
@@ -1737,6 +1777,15 @@
 #define TARGET_UNIFIED 0x80
 
 /*
+ * Pointer events reported by the SDL layer to the aim-select targeting UI
+ * (see sdl_pointer_aim_select_take_event)
+ */
+#define AIM_SELECT_EVENT_HOVER 1
+#define AIM_SELECT_EVENT_CLICK 2
+#define AIM_SELECT_EVENT_TAP 3
+#define AIM_SELECT_EVENT_PAN 4
+
+/*
  * Bit flags for the "monster_desc" function
  */
 #define MDESC_OBJE 0x01 /* Objective (or Reflexive) */
@@ -1829,6 +1878,7 @@
 #define PW_MESSAGE 0x00000080L /* Display messages */
 #define PW_OVERHEAD 0x00000100L /* Display overhead view */
 #define PW_MONLIST 0x00000200L /* Display monster list */
+#define PW_SUPPLY 0x00000400L /* Display supply cache */
 
 #define PW_MAX_FLAGS 16
 
@@ -1843,6 +1893,7 @@
 #define WINDOW_PLAYER_0 5
 #define WINDOW_MESSAGE 6
 #define WINDOW_MONLIST 7
+#define WINDOW_SUPPLY 8
 
 /*** Cave flags ***/
 
@@ -1911,9 +1962,12 @@
     0x00010000 /* Dropped by a unique; used for skeleton-note hoard text */
 #define IDENT_CHASM_SANCTUM_DROP                                              \
     0x00020000 /* Generated in a chasm sanctum; persists after ambush trigger */
-#define IDENT_UNUSED_XXX4XXXX 0x00040000 /* Unused */
-#define IDENT_UNUSED_XXX8XXXX 0x00080000 /* Unused */
-#define IDENT_UNUSED_XX1XXXXX 0x00100000 /* Unused */
+#define IDENT_CHEST_LOOKED                                                   \
+    0x00040000 /* Chest trap inspection attempted at the stored Perception base */
+#define IDENT_CHEST_TRAP_PRESENT                                            \
+    0x00080000 /* Inspection established that a chest trap is present */
+#define IDENT_CHEST_TRAP_FULL                                               \
+    0x00100000 /* Inspection revealed the exact chest trap mechanism */
 #define IDENT_UNUSED_XX2XXXXX 0x00200000 /* Unused */
 #define IDENT_UNUSED_XX4XXXXX 0x00400000 /* Unused */
 #define IDENT_UNUSED_XX8XXXXX 0x00800000 /* Unused */
@@ -2080,7 +2134,7 @@
 #define TR3_TWO_HANDED 0x10000000L /* Item is a two handed weapon */
 #define TR3_LIGHT_CURSE 0x20000000L /* Item has Light Curse */
 #define TR3_HEAVY_CURSE 0x40000000L /* Item has Heavy Curse */
-#define TR3_PERMA_CURSE 0x80000000L /* Item bound by Oath of Feanor (broken by items with BREAKS_PERMA_CURSE) */
+#define TR3_PERMA_CURSE 0x80000000L /* Item bound by Oath of Fëanor (broken by items with BREAKS_PERMA_CURSE) */
 
 /*TR3 Uber-Flags*/
 #define TR3_IGNORE_ALL                                                         \
@@ -2092,7 +2146,7 @@
 #define TR4_DEPTH_SCALE_PS 0x00000004L /* Protection sides scale with depth */
 #define TR4_PAIRED      0x00000008L /* Part of a matched weapon pair (no off-hand penalty) */
 #define TR4_SUBTLETY_THROW 0x00000010L /* Allows Subtlety ability to work when throwing this weapon */
-#define TR4_BREAKS_PERMA_CURSE 0x00000020L /* Can break items bound by Oath of Feanor (PERMA_CURSE) */
+#define TR4_BREAKS_PERMA_CURSE 0x00000020L /* Can break items bound by Oath of Fëanor (PERMA_CURSE) */
 #define TR4_LESS_SPECIAL    0x00000040L /* Item reduces ego rarity weighting (-20 flat) */
 #define TR4_NOBLE_ITEM      0x00000080L /* Noble-aligned item with source gating handled by generation rules */
 #define TR4_EVIL_ITEM       0x00000100L /* Item belongs to evil alignment for ego/chest composition rules */
@@ -2110,6 +2164,7 @@
 #define TR4_PROT_COLD      0x00100000L /* Item protection counts against cold attacks */
 #define TR4_PROT_POIS      0x00200000L /* Item protection counts against poison attacks */
 #define TR4_PROT_DARK      0x00400000L /* Item protection counts against dark attacks */
+#define TR4_LIGHT_ARMOR    0x00800000L /* Light armour (robe/leather/boots/gloves/cloaks; via (Light) ego on shields/helms) */
 #define TR4_MIN_DEPTH_SPEED TR4_DEEP_CALL /* Compatibility alias */
 
 /*
@@ -2725,7 +2780,7 @@
  * These values are hard-coded by savefiles.
  */
 #define OPT_hjkl_movement 0
-#define OPT_quick_messages 1
+#define OPT_quick_messages 1 /* obsolete 0.9.7: reusable setting slot */
 #define OPT_angband_keyset 2
 // reserved legacy slot: carry_query
 #define OPT_stop_singing_on_rest 4
@@ -2733,7 +2788,7 @@
 #define OPT_forgo_attacking_unwary 6
 #define OPT_delay_factor 10
 #define OPT_hitpoint_warning 11
-#define OPT_main_combat_rolls 12
+#define OPT_main_combat_rolls 12 /* obsolete 0.9.7: reusable setting slot */
 // reserved legacy slot: always_repeat
 // reserved legacy slot: depth_in_feet
 // reserved legacy slot: stack_force_notes
@@ -2742,7 +2797,7 @@
 // reserved legacy slot: show_weights
 // reserved legacy slot: show_choices
 // reserved legacy slot: show_details
-#define OPT_system_beep 14
+#define OPT_system_beep 14 /* obsolete 0.9.7: reusable setting slot */
 // reserved legacy slot: show_flavors
 #define OPT_run_ignore_stairs 16
 #define OPT_run_ignore_doors 17
@@ -2772,6 +2827,8 @@
 #define OPT_assassination_over_charge (OPT_GAME_PLAY + 4)
 /* Confirm before making direct attacks; useful for pacifist runs */
 #define OPT_pacifist_attack_warning (OPT_GAME_PLAY + 5)
+/* Confirm before spending a turn to switch between melee and ranged weapons */
+#define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
 // reserved legacy slot: auto_haggle
 // reserved legacy slot: auto_scum
 // reserved legacy slot: allow_themed_levels
@@ -2804,15 +2861,17 @@
 // reserved legacy slot: easy_open
 // reserved legacy slot: easy_alter
 // reserved legacy slot: easy_floor
-#define OPT_instant_run 67
+#define OPT_running_delay 67
+/* Stable legacy name for the option slot formerly used by instant_run. */
+#define OPT_instant_run OPT_running_delay
 #define OPT_center_player 68
 #define OPT_run_avoid_center 69
 // reserved legacy slot: scroll_target
-#define OPT_auto_more 71
+#define OPT_auto_more 71 /* obsolete 0.9.7: reusable setting slot */
 #define OPT_know_monster_info 72
 // reserved legacy slot: auto_display_lists
 #define OPT_artifact_unique_color 74
-#define OPT_easy_main_menu 75
+#define OPT_easy_main_menu 75 /* obsolete: Esc always opens the main menu */
 #define OPT_story_lists 76
 #define OPT_story_lists_inven 77
 #define OPT_story_lists_equip 78
@@ -2826,47 +2885,79 @@
 #define OPT_smaller_level_size 86
 #define OPT_more_stairs 87
 #define OPT_unidentified_items_slate 88
-#define OPT_space_acts_as_comma 89
+#define OPT_space_acts_as_comma 89 /* obsolete 0.9.7: reusable setting slot */
 #define OPT_show_level_entry_banner 90
-#define OPT_ability_desc_mode 91
+// reserved legacy slot: ability_desc_mode
 #define OPT_vault_drop_frequency 92
 #define OPT_show_smithing_difficulty 93
 #define OPT_show_smithing_difficulty_look 94
 #define OPT_intro_style 95
 #define OPT_show_partition_narrative 96
 #define OPT_noble_item_spawn_mode 97
-#define OPT_hide_left_panel 98
-#define OPT_banner_message_stairs 99
+#define OPT_hide_left_panel 98 /* obsolete 0.9.7: reusable setting slot */
+// reserved legacy slot: banner_message_stairs
 #define OPT_show_level_generation_debug 100
 #define OPT_unlock_blitz_mode 101
 #define OPT_look_objects_sort_by_difficulty 102
 #define OPT_look_nearby_filter_default 103
 #define OPT_show_elemental_item_rolls 104
-#define OPT_hidden_left_panel_mode 105
-#define OPT_top_status_line 106
+#define OPT_hidden_left_panel_mode 105 /* obsolete 0.9.7: reusable setting slot */
+#define OPT_top_status_line 106 /* obsolete 0.9.7: reusable setting slot */
 #define OPT_hide_supporting_panes_fullscreen 107
 #define OPT_narrative_banner_turns 108
 #define OPT_min_depth_timer_mode 109
 #define OPT_song_list_sort_by_recent 110
-#define OPT_inventory_selection_square 111
+// reserved legacy slot: inventory_selection_square
 #define OPT_supply_menu_random_icons 112
 #define OPT_supply_menu_hide_flavor_compact 113
 #define OPT_load_blitz_by_default 114
 #define OPT_mirror_player_tile_facing 115
 #define OPT_handcrafted_player_tile_facing 116
+#define OPT_story_object_desc 117
+#define OPT_hide_secondary_action_ring 118
+#define OPT_mirror_monster_tile_facing 119
+#define OPT_styled_player_health_bar 120
+#define OPT_styled_monster_health_bars 121
+#define OPT_styled_monster_tile_health_bars 122
+#define OPT_pixel_monster_status_icons 123
+#define OPT_lockpick_minigame 124
+#define OPT_chest_trap_minigame 125
+
+#define MONSTER_TILE_HEALTH_BARS_SHOW 0
+#define MONSTER_TILE_HEALTH_BARS_DAMAGED_ONLY 1
+#define MONSTER_TILE_HEALTH_BARS_OFF 2
+#define MONSTER_TILE_HEALTH_BARS_MAX MONSTER_TILE_HEALTH_BARS_OFF
+
+/*
+ * Settings retired by the 0.9.7 interface refactor. These are not legacy
+ * reserves; keep the names only long enough to clear old saves/metasaves.
+ */
+#define SIL_OBSOLETE_OPTION_097_SLOTS(X) \
+    X(OPT_quick_messages) \
+    X(OPT_main_combat_rolls) \
+    X(OPT_system_beep) \
+    X(OPT_auto_more) \
+    X(OPT_space_acts_as_comma) \
+    X(OPT_hidden_left_panel_mode) \
+    X(OPT_top_status_line)
 
 #define PLAYER_TILE_FACING_OFF         0
 #define PLAYER_TILE_FACING_MIRROR      1
 #define PLAYER_TILE_FACING_HANDCRAFTED 2
 #define PLAYER_TILE_FACING_MAX         PLAYER_TILE_FACING_HANDCRAFTED
 
+#define MONSTER_TILE_FACING_NONE  0
+#define MONSTER_TILE_FACING_LEFT  1
+#define MONSTER_TILE_FACING_RIGHT 2
+#define MONSTER_TILE_FACING_RANDOM 3
+
 /* Intro screen style constants */
-#define INTRO_STYLE_FLAME       0   /* Flame Imperishable (Ainulindale) */
-#define INTRO_STYLE_FEANOR      1   /* Oath of Feanor */
+#define INTRO_STYLE_FLAME       0   /* Flame Imperishable (Ainulindalë) */
+#define INTRO_STYLE_FEANOR      1   /* Oath of Fëanor */
 #define INTRO_STYLE_TWILIGHT    2   /* Twilight of Valinor */
-#define INTRO_STYLE_LUTHIEN     3   /* Song of Luthien */
-#define INTRO_STYLE_HURIN       4   /* Words of Hurin */
-#define INTRO_STYLE_STARLIGHT   5   /* Starlight on Cuivienen */
+#define INTRO_STYLE_LUTHIEN     3   /* Song of Lúthien */
+#define INTRO_STYLE_HURIN       4   /* Words of Húrin */
+#define INTRO_STYLE_STARLIGHT   5   /* Starlight on Cuiviénen */
 #define INTRO_STYLE_NOLDOLANTE  6   /* Lament of the Noldor */
 #define INTRO_STYLE_RANDOM      7   /* Random each launch */
 #define INTRO_STYLE_MAX         7   /* Highest fixed variant index (6) + 1 for random */
@@ -2876,8 +2967,6 @@
 #define MIN_DEPTH_TIMER_MODE_HARSH    2
 #define MIN_DEPTH_TIMER_MODE_MAX      MIN_DEPTH_TIMER_MODE_HARSH
 
-#define HIDDEN_LEFT_PANEL_TOP_LEFT 0
-#define HIDDEN_LEFT_PANEL_TOPLINE  1
 // reserved legacy slot: birth_point_based
 // reserved legacy slot: birth_auto_roller
 // reserved legacy slot: birth_maximize
@@ -2936,7 +3025,7 @@
     true // Sil: we might want to change this for a handheld version
 
 #define hjkl_movement op_ptr->opt[OPT_hjkl_movement]
-#define quick_messages op_ptr->opt[OPT_quick_messages]
+#define quick_messages false
 #define angband_keyset op_ptr->opt[OPT_angband_keyset]
 // reserved legacy slot: carry_query
 #define stop_singing_on_rest op_ptr->opt[OPT_stop_singing_on_rest]
@@ -2949,8 +3038,12 @@
 #define sleep_icon op_ptr->opt[OPT_sleep_icon]
 #define mirror_player_tile_facing op_ptr->opt[OPT_mirror_player_tile_facing]
 #define handcrafted_player_tile_facing op_ptr->opt[OPT_handcrafted_player_tile_facing]
+#define mirror_monster_tile_facing op_ptr->opt[OPT_mirror_monster_tile_facing]
 #define assassination_over_charge op_ptr->opt[OPT_assassination_over_charge]
 #define pacifist_attack_warning op_ptr->opt[OPT_pacifist_attack_warning]
+#define active_weapon_switch_confirm op_ptr->opt[OPT_active_weapon_switch_confirm]
+#define lockpick_minigame op_ptr->opt[OPT_lockpick_minigame]
+#define chest_trap_minigame op_ptr->opt[OPT_chest_trap_minigame]
 #define load_blitz_by_default op_ptr->opt[OPT_load_blitz_by_default]
 #define depth_in_feet op_ptr->opt[OPT_depth_in_feet]
 // reserved legacy slot: stack_force_notes
@@ -2958,7 +3051,7 @@
 // reserved legacy slot: show_labels
 // reserved legacy slot: show_choices
 #define show_details op_ptr->opt[OPT_show_details]
-#define system_beep op_ptr->opt[OPT_system_beep]
+#define system_beep false
 #define show_flavors op_ptr->opt[OPT_show_flavors]
 #define run_ignore_stairs op_ptr->opt[OPT_run_ignore_stairs]
 #define run_ignore_doors op_ptr->opt[OPT_run_ignore_doors]
@@ -3011,20 +3104,22 @@
 // reserved legacy slot: easy_open
 // reserved legacy slot: easy_alter
 // reserved legacy slot: easy_floor
-#define instant_run op_ptr->opt[OPT_instant_run]
+#define DEFAULT_RUNNING_DELAY_MS 17
+#define MAX_RUNNING_DELAY_MS 100
+#define running_step_delay_ms op_ptr->running_delay_ms
+#define instant_run (running_step_delay_ms == 0)
 #define center_player op_ptr->opt[OPT_center_player]
 #define run_avoid_center op_ptr->opt[OPT_run_avoid_center]
 // reserved legacy slot: scroll_target
-#define auto_more op_ptr->opt[OPT_auto_more]
+#define auto_more false
 #define know_monster_info op_ptr->opt[OPT_know_monster_info]
 #define artifact_unique_color op_ptr->opt[OPT_artifact_unique_color]
 #define unidentified_items_slate op_ptr->opt[OPT_unidentified_items_slate]
-#define easy_main_menu op_ptr->opt[OPT_easy_main_menu]
+#define easy_main_menu true
 #define show_level_generation_debug op_ptr->opt[OPT_show_level_generation_debug]
 #define look_objects_sort_by_difficulty op_ptr->opt[OPT_look_objects_sort_by_difficulty]
 #define look_nearby_filter_default op_ptr->opt[OPT_look_nearby_filter_default]
 #define song_list_sort_by_recent op_ptr->opt[OPT_song_list_sort_by_recent]
-#define inventory_selection_square op_ptr->opt[OPT_inventory_selection_square]
 #define supply_menu_random_icons op_ptr->opt[OPT_supply_menu_random_icons]
 #define supply_menu_hide_flavor_compact op_ptr->opt[OPT_supply_menu_hide_flavor_compact]
 #define show_elemental_item_rolls op_ptr->opt[OPT_show_elemental_item_rolls]
@@ -3035,13 +3130,20 @@
 #define story_equipment_lists_pane op_ptr->opt[OPT_story_lists_equip_pane]
 #define story_monster_desc_main op_ptr->opt[OPT_story_monster_desc]
 #define story_monster_desc_pane op_ptr->opt[OPT_story_monster_desc_pane]
+#define story_object_desc op_ptr->opt[OPT_story_object_desc]
+#define hide_secondary_action_ring op_ptr->opt[OPT_hide_secondary_action_ring]
+#define styled_player_health_bar op_ptr->opt[OPT_styled_player_health_bar]
+#define styled_monster_health_bars op_ptr->opt[OPT_styled_monster_health_bars]
+#define styled_monster_tile_health_bars \
+    (op_ptr->monster_tile_health_bar_mode != MONSTER_TILE_HEALTH_BARS_OFF)
+#define pixel_monster_status_icons op_ptr->opt[OPT_pixel_monster_status_icons]
 #define disable_skeleton_note_tutorial                                           \
     op_ptr->opt[OPT_disable_skeleton_note_tutorial]
 #define smaller_level_size op_ptr->opt[OPT_smaller_level_size]
 #define more_stairs op_ptr->opt[OPT_more_stairs]
 #define display_hits op_ptr->opt[OPT_display_hits]
 #define story_character_sheet op_ptr->opt[OPT_story_character_sheet]
-#define space_acts_as_comma op_ptr->opt[OPT_space_acts_as_comma]
+#define space_acts_as_comma true
 /* Level entry narrative display modes. Keep 0 as banner for old save compatibility. */
 #define LEVEL_ENTRY_NARRATIVE_BANNER_DELAY    0
 #define LEVEL_ENTRY_NARRATIVE_BANNER          1
@@ -3052,6 +3154,7 @@
 #define PARTITION_NARRATIVE_BANNER            0
 #define PARTITION_NARRATIVE_MESSAGE           1
 #define PARTITION_NARRATIVE_OFF               2
+#define PARTITION_NARRATIVE_BANNER_DELAY      3
 
 /* Narrative banner visibility after it is shown.
  * 0 means the next command input only dismisses the banner. */
@@ -3149,8 +3252,8 @@
 /*
  * Information for "do_cmd_options()".
  */
-#define OPT_PAGE_MAX 8
-#define OPT_PAGE_PER 20
+#define OPT_PAGE_MAX 7
+#define OPT_PAGE_PER 24
 
 /*
  *  Break things into pages
@@ -3158,11 +3261,10 @@
 #define INTERFACE_PAGE 0
 #define TEXT_PAGE 1
 #define GAMEPLAY_PAGE 2
-#define EFFICIENCY_PAGE 3
-#define VISUAL_PAGE 4
-#define SOUND_PAGE 7
-#define CHALLENGE_PAGE 5
-#define DEBUG_PAGE 6
+#define VISUAL_PAGE 3
+#define CHALLENGE_PAGE 4
+#define DEBUG_PAGE 5
+#define SOUND_PAGE 6
 
 /*** Macro Definitions ***/
 
@@ -3404,7 +3506,8 @@
  * Pre-storing this into a cave_info flag would be nice.  XXX XXX
  */
 #define panel_contains(Y, X)                                                   \
-    (((unsigned)((Y)-p_ptr->wy) < (unsigned)(SCREEN_HGT))                      \
+    (in_bounds((Y), (X))                                                       \
+        && ((unsigned)((Y)-p_ptr->wy) < (unsigned)(SCREEN_HGT))                \
         && ((unsigned)((X)-p_ptr->wx) < (unsigned)(SCREEN_WID)))
 
 /*
@@ -3434,6 +3537,7 @@
  */
 #define cave_empty_bold(Y, X)                                                  \
     (cave_floor_bold(Y, X) && (cave_feat[Y][X] != FEAT_CHASM)                  \
+        && (cave_feat[Y][X] != FEAT_RUBBLE)                                    \
         && (cave_m_idx[Y][X] == 0))
 
 /*
@@ -3617,6 +3721,7 @@
 #define TERM_L_UMBER 15 /* 'U' */ /* 3,2,1 */
 
 #define TERM_SHADE 16 // added onto a colour N times to produce shade N
+#define TERM_UI_SELECTED 192 /* SDL reverse-video attrs; add background color */
 
 #define MSG_GENERIC 0
 #define MSG_HIT 1
@@ -3880,13 +3985,6 @@
 #define MAX_SHADES 8
 
 /*
- * These are the return values of squelch_itemp()
- */
-#define SQUELCH_FAILED -1
-#define SQUELCH_NO 0
-#define SQUELCH_YES 1
-
-/*
  * Flags for the Oath skill
  */
 #define OATH_MERCY_FLAG 1
@@ -3915,15 +4013,15 @@
 #define TULKAS_QUEST_COMPLETE 3
 #define TULKAS_QUEST_REWARDED 4
 
-/* States for the Aule forging quest */
+/* States for the Aulë forging quest */
 #define AULE_QUEST_NOT_STARTED 0
-#define AULE_QUEST_FORGE_PRESENT 1  /* Entered Aule's forge vault */
+#define AULE_QUEST_FORGE_PRESENT 1  /* Entered Aulë's forge vault */
 #define AULE_QUEST_ACTIVE 2         /* Accepted quest: must forge qualifying artifact at this forge */
 #define AULE_QUEST_SUCCESS 3        /* Forged qualifying artifact (reward granted) */
 /* Retain old value 4 for save compatibility (quest no longer fails) */
 #define AULE_QUEST_FAILED 4         /* Legacy: previously used for failure; now unused */
 #define AULE_QUEST_REWARDED 5       /* Reward has been granted to prevent repeated interactions */
-/* Minimum smithing skill required for Aule quest vault to spawn */
+/* Minimum smithing skill required for Aulë quest vault to spawn */
 #define AULE_SMITH_REQ 10
 
 /* States for the Mandos clearing quest */
@@ -3933,22 +4031,22 @@
 #define MANDOS_QUEST_SUCCESS 3        /* Cleared all monsters (reward granted) */
 #define MANDOS_QUEST_REWARDED 4       /* Reward given, quest fully complete */
 
-/* States for the Niena mercy quest */
+/* States for the Nienna mercy quest */
 #define NIENA_QUEST_NOT_STARTED 0
-#define NIENA_QUEST_GIVER_PRESENT 1  /* Niena spawned on maximum-size level */
+#define NIENA_QUEST_GIVER_PRESENT 1  /* Nienna spawned on maximum-size level */
 #define NIENA_QUEST_ACTIVE 2         /* Accepted quest: must reach stairs down without killing */
 #define NIENA_QUEST_SUCCESS 3        /* Reached stairs without killing (reward granted) */
 #define NIENA_QUEST_REWARDED 4       /* Reward given, quest fully complete */
 #define NIENA_QUEST_FAILED 5         /* Failed by taking a life during the quest */
 
-/* Orome quest states */
+/* Oromë quest states */
 #define OROME_QUEST_NOT_STARTED 0
-#define OROME_QUEST_GIVER_PRESENT 1  /* Orome spawned on hunting grounds level */
+#define OROME_QUEST_GIVER_PRESENT 1  /* Oromë spawned on hunting grounds level */
 #define OROME_QUEST_ACTIVE 2         /* Accepted quest: must hunt specified monsters */
 #define OROME_QUEST_SUCCESS 3        /* Completed hunt (reward granted) */
 #define OROME_QUEST_REWARDED 4       /* Reward given, quest fully complete */
 
-/* Orome quest monster types */
+/* Oromë quest monster types */
 #define OROME_TARGET_WOLF 1
 #define OROME_TARGET_SPIDER 2
 #define OROME_TARGET_SERPENT 3
@@ -3990,19 +4088,19 @@ typedef struct quest_mapping {
 
 /* Quest ID mappings - modify this to add new quests */
 #define QUEST_ID_TULKAS  1  /* Tulkas quest in quest.txt */
-#define QUEST_ID_AULE    2  /* Aule quest in quest.txt */
+#define QUEST_ID_AULE    2  /* Aulë quest in quest.txt */
 #define QUEST_ID_MANDOS  3  /* Mandos quest in quest.txt */
-#define QUEST_ID_NIENA   4  /* Niena quest in quest.txt */
-#define QUEST_ID_OROME   5  /* Orome quest in quest.txt */
+#define QUEST_ID_NIENA   4  /* Nienna quest in quest.txt */
+#define QUEST_ID_OROME   5  /* Oromë quest in quest.txt */
 #define QUEST_ID_VARDA   6  /* Varda quest in quest.txt */
 
 /* Quest mapping table - used by extract_quest_init_texts() and related functions */
 static const quest_mapping quest_id_map[] = {
     { QUEST_ID_TULKAS, "Tulkas the Strong" },
-    { QUEST_ID_AULE,   "Aule the Smith" },
+    { QUEST_ID_AULE,   "Aulë the Smith" },
     { QUEST_ID_MANDOS, "Mandos the Doomsman" },
-    { QUEST_ID_NIENA,  "Niena, Lady of Pity" },
-    { QUEST_ID_OROME,  "Orome the Hunter" },
+    { QUEST_ID_NIENA,  "Nienna, Lady of Pity" },
+    { QUEST_ID_OROME,  "Oromë the Hunter" },
     { QUEST_ID_VARDA,  "Varda, Lady of the Stars" }
 };
 

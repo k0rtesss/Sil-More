@@ -16,6 +16,8 @@
 /* Story font bit-flags stored per cell in term_win::story */
 #define STORY_FLAG_USE        0x01  /* Render this cell with the story font */
 #define STORY_FLAG_CELL_ALIGN 0x02  /* Snap story glyphs to cell boundaries */
+#define STORY_FLAG_SLOT2      0x04  /* Use the secondary story font (slot 1) */
+#define STORY_FLAG_PIXEL_PACK 0x08  /* Row is a proportionally packed, right-aligned line (combat rolls) */
 
 /*
  * A term_win is a "window" for a Term
@@ -38,7 +40,8 @@ typedef struct term_win term_win;
 struct term_win
 {
     bool cu, cv;
-    byte cx, cy;
+    bool cursor_big;
+    int cx, cy;
 
     byte** a;
     char** c;
@@ -55,6 +58,10 @@ struct term_win
     /* Story font flags per cell (see STORY_FLAG_* definitions) */
     byte** story;
     byte* vstory;
+
+    /* Styled health-bar fill (0 = ordinary cell, 1..255 = fill level). */
+    byte** health;
+    byte* vhealth;
 };
 
 /*
@@ -124,8 +131,8 @@ struct term_win
  *	- Keypress Queue -- pending keys
  *
  *
- *	- Window Width (max 255)
- *	- Window Height (max 255)
+ *	- Window Width
+ *	- Window Height
  *
  *	- Minimum modified row
  *	- Maximum modified row
@@ -183,7 +190,11 @@ struct term
     bool never_frosh;
     bool story_font_active;   /* Current queueing mode */
     bool story_font_grid;     /* Whether queued story text should snap to cell columns */
+    bool story_pixel_pack;    /* Whether queued story cells form a pixel-packed, right-aligned line */
+    int story_font_slot;      /* Which story-font slot queued story text uses (0 or 1) */
     bool story_chunk_active;  /* Mode for the chunk being flushed */
+    bool health_bar_active;   /* Whether queued cells form a styled health bar */
+    byte health_bar_level;    /* Quantized fill for queued health-bar cells */
     bool extra_cursor;        /* Draw a cursor-style frame without moving the cursor */
     bool extra_cursor_big;
 
@@ -197,16 +208,16 @@ struct term
     u16b key_xtra;
     u16b key_size;
 
-    byte wid;
-    byte hgt;
+    int wid;
+    int hgt;
 
-    byte y1;
-    byte y2;
-    byte extra_cursor_x;
-    byte extra_cursor_y;
+    int y1;
+    int y2;
+    int extra_cursor_x;
+    int extra_cursor_y;
 
-    byte* x1;
-    byte* x2;
+    int* x1;
+    int* x2;
 
     term_win* old;
     term_win* scr;
@@ -276,8 +287,10 @@ struct term
 extern term* Term;
 typedef void (*term_pre_fresh_hook_func)(void);
 typedef void (*term_clear_hook_func)(term* t);
+typedef bool (*term_get_size_hook_func)(term* t, int* w, int* h);
 extern term_pre_fresh_hook_func g_term_pre_fresh_hook;
 extern term_clear_hook_func g_term_clear_hook;
+extern term_get_size_hook_func g_term_get_size_hook;
 
 /**** Available Functions ****/
 
@@ -290,7 +303,10 @@ extern void Term_queue_chars(int x, int y, int n, byte a, cptr s);
 extern errr Term_fresh(void);
 extern errr Term_set_cursor(bool v);
 extern errr Term_set_extra_cursor(bool v, int x, int y, bool big);
+extern void Term_health_bar_begin(int current, int max);
+extern void Term_health_bar_end(void);
 extern errr Term_gotoxy(int x, int y);
+extern errr Term_gotoxy_big(int x, int y);
 extern errr Term_draw(int x, int y, byte a, char c);
 extern errr Term_addch(byte a, char c);
 extern errr Term_addstr(int n, byte a, cptr s);

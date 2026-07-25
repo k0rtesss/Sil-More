@@ -128,13 +128,6 @@
 /* #define VERIFY_SAVEFILE */
 
 /*
- * OPTION: Enable anti-cheat logic that marks characters as dead when
- * savefiles are missing. Set to 0 to disable this behavior (recommended
- * during development to avoid losing characters due to file issues).
- */
-#define ANTICHEAT 0
-
-/*
  * OPTION: Hack -- Compile in support for "Debug Commands"
  */
 #define ALLOW_DEBUG
@@ -143,21 +136,6 @@
  * OPTION: Hack -- Compile in support for "Spoiler Generation"
  */
 #define ALLOW_SPOILERS
-
-/*
- * OPTION: Allow "do_cmd_colors" at run-time
- */
-#define ALLOW_COLORS
-
-/*
- * OPTION: Allow "do_cmd_visuals" at run-time
- */
-#define ALLOW_VISUALS
-
-/*
- * OPTION: Allow "do_cmd_macros" at run-time
- */
-#define ALLOW_MACROS
 
 /*
  * OPTION: Allow characteres to be "auto-rolled"

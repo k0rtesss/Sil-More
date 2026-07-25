@@ -7,6 +7,7 @@
 
 static run_mode g_pending_run_mode = RUN_MODE_STORY;
 static run_mode g_current_run_mode = RUN_MODE_STORY;
+static bool g_blitz_launch_requested = false;
 
 static blitz_setup g_blitz_setup = {
     BLITZ_CHARACTER_RANDOM,
@@ -54,11 +55,13 @@ void run_mode_activate_pending(void)
     g_current_run_mode = g_pending_run_mode;
     if (g_current_run_mode != RUN_MODE_BLITZ)
         blitz_runtime_reset();
+    metarun_apply_runtime_effects();
 }
 
 void run_mode_set_current(run_mode mode)
 {
     g_current_run_mode = mode;
+    metarun_apply_runtime_effects();
 }
 
 run_mode run_mode_current(void)
@@ -69,6 +72,21 @@ run_mode run_mode_current(void)
 bool run_mode_is_blitz(void)
 {
     return g_current_run_mode == RUN_MODE_BLITZ;
+}
+
+void blitz_request_launch(void)
+{
+    g_blitz_launch_requested = true;
+}
+
+bool blitz_launch_requested(void)
+{
+    return g_blitz_launch_requested;
+}
+
+void blitz_launch_clear(void)
+{
+    g_blitz_launch_requested = false;
 }
 
 const char* active_score_filename(void)
@@ -165,38 +183,33 @@ void blitz_runtime_restore(const int8_t* stacks, u64b seen)
     g_blitz_end_summary_shown = false;
 }
 
-void blitz_show_end_summary(byte sil_count)
+static void blitz_present_end_summary(byte sil_count)
 {
-    int wid = 80;
-    int hgt = 24;
-    int row = 4;
     char result_line[64];
 
-    if (g_blitz_end_summary_shown)
-        return;
-
-    g_blitz_end_summary_shown = true;
-
-    Term_get_size(&wid, &hgt);
-    if (wid < 1)
-        wid = 80;
-    if (hgt < 1)
-        hgt = 24;
-
     screen_save();
-    Term_clear();
-
-    c_put_str(TERM_YELLOW, "Blitz Result", 1, MAX((wid - 12) / 2, 0));
-
     if (sil_count == 1)
         SDL_strlcpy(result_line, "1 Silmaril was stolen.", sizeof(result_line));
     else
         strnfmt(result_line, sizeof(result_line), "%u Silmarils were stolen.",
             (unsigned)sil_count);
 
-    c_put_str(TERM_L_WHITE, result_line, row, MAX((wid - (int)strlen(result_line)) / 2, 0));
-    c_put_str(TERM_L_BLUE, "Press any key to continue.", MIN(row + 3, hgt - 1), 2);
-    Term_fresh();
-    (void)inkey();
+    metarun_show_poetry_scene("Blitz Result", TERM_YELLOW,
+        result_line, TERM_L_WHITE, "", TERM_L_BLUE,
+        "[Press any key to continue]");
     screen_load();
+}
+
+void blitz_show_end_summary(byte sil_count)
+{
+    if (g_blitz_end_summary_shown)
+        return;
+
+    g_blitz_end_summary_shown = true;
+    blitz_present_end_summary(sil_count);
+}
+
+void blitz_debug_show_end_summary(byte sil_count)
+{
+    blitz_present_end_summary(sil_count);
 }

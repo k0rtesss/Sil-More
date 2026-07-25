@@ -9,23 +9,14 @@
 #include "log/log.h"
 #include "mem/alloc.h"
 #include "metarun.h"
+#include "object/object-ui-select.h"
 #include "supplies.h"
 #include "thrall_quest.h"
+#include "ui/question.h"
 
 static s16b get_upgrade_kind(const object_type* o_ptr);
 static byte damaged_ego_index(const object_type* o_ptr, bool* is_prefix);
 static bool damaged_ego_is_repairable(byte e_idx);
-
-static void thrall_prompt_label(int binding, const char* fallback, char* buf,
-    size_t buflen)
-{
-    if (!buf || !buflen)
-        return;
-
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
-    if (!buf[0] || streq(buf, "(unbound)") || streq(buf, "Multiple"))
-        SDL_strlcpy(buf, fallback ? fallback : "", buflen);
-}
 
 /*
  * Probability weights for each item type by thrall race
@@ -35,45 +26,43 @@ static const int human_thrall_weights[THRALL_QUEST_MAX] = {
     0,   /* NONE - not used */
     32,  /* SHOVEL - tools to pry/delve */
     26,  /* LANTERN - light against the dark */
-    18,  /* HERB_HEALING - common healing */
+    8,   /* HERB_HEALING - uncommon healing */
     6,   /* MALLORN - rarer, but prized */
     10,  /* POTION_HEALING - valuable healing */
     24,  /* DAGGER - last defence, cut bonds */
     18,  /* CLOAK - warmth and concealment */
     22,  /* BOOTS - escape over stone */
-    30,  /* HERB_SUSTENANCE - hunger is a chain */
-    12,  /* HERB_RESTORATION - recover strength */
+    8,   /* HERB_SUSTENANCE - rare respite from hunger */
+    5,   /* HERB_RESTORATION - rare recovery */
     16,  /* POTION_CLARITY - endure fear and glamour */
     24,  /* FLASK_OIL - precious lamp fuel */
-    20   /* WOODEN_TORCH - simple light for escape */
+    20,  /* WOODEN_TORCH - simple light for escape */
+    28,  /* DARK_BREAD - familiar, lasting food */
+    24,  /* DRIED_MEAT - strength for escape */
+    0    /* LEMBAS - requested only by elven thralls */
 };
 
 static const int elf_thrall_weights[THRALL_QUEST_MAX] = {
     0,   /* NONE - not used */
     8,   /* SHOVEL - seldom asked of the Eldar */
     18,  /* LANTERN - practical light */
-    26,  /* HERB_HEALING - lore of herbs */
+    10,  /* HERB_HEALING - uncommon healing lore */
     32,  /* MALLORN - light of fair make */
     10,  /* POTION_HEALING - costly draughts */
     18,  /* DAGGER - keen blade, cut bonds */
     26,  /* CLOAK - to move unseen */
     24,  /* BOOTS - to tread in silence */
-    6,   /* HERB_SUSTENANCE - still needed in torment */
-    18,  /* HERB_RESTORATION - recover spirit/strength */
+    3,   /* HERB_SUSTENANCE - rare respite from hunger */
+    7,   /* HERB_RESTORATION - rare recovery */
     14,  /* POTION_CLARITY - lift veils from the mind */
     12,  /* FLASK_OIL - clean fuel for a guarded flame */
-    14   /* WOODEN_TORCH - light in the pits */
+    14,  /* WOODEN_TORCH - light in the pits */
+    0,   /* DARK_BREAD - requested only by human thralls */
+    0,   /* DRIED_MEAT - requested only by human thralls */
+    24   /* LEMBAS - a remembered taste of home */
 };
 
-#define THRALL_REWARD_MENU_BASE_ROW 5
 #define THRALL_ARTEFACT_REVEAL_COUNT 3
-
-enum
-{
-    THRALL_QUEST_STATE_ACTIVE = 0,
-    THRALL_QUEST_STATE_REWARDED = 1,
-    THRALL_QUEST_STATE_REWARD_PENDING = 2
-};
 
 enum
 {
@@ -335,7 +324,7 @@ static const char* human_thanks_texts[] = {
 };
 
 static const char* elf_thanks_texts[] = {
-    "Elen sila lumenn' omentielvo! You have my deepest thanks.\n"
+    "Elen síla lúmenn' omentielvo! You have my deepest thanks.\n"
     "\n"
     "Long have I lacked such kindness in this forsaken place. May the stars shine upon your road, and may your hand be swift and your heart steadfast.\n"
     "\n"
@@ -359,7 +348,7 @@ static const char* elf_thanks_texts[] = {
     "\n"
     "Come - let me share what lore I have. It is poor coin for such a gift, but it is all I possess.",
 
-    "Gi nathlam h\xc3\xad. You honour me beyond all deserving.\n"
+    "Gi nathlam hí. You honour me beyond all deserving.\n"
     "\n"
     "In the long dark I have felt my fea diminish, a candle guttering in a gale. Yet your gift has steadied the flame, if only for a breath.\n"
     "\n"
@@ -443,9 +432,71 @@ static cptr get_thrall_quest_reason(monster_type* m_ptr, byte quest_item)
                 ? "With it I could carry one honest flame into the black ways, and not go wholly blind beneath the earth."
                 : "With it I could find a gate, a crack, any path not barred by iron, before the dark swallows my nerve.";
 
+        case THRALL_QUEST_DARK_BREAD:
+            return "With it I could quiet the hunger that hollows my strength, and keep enough life in my limbs to endure the next labour.";
+
+        case THRALL_QUEST_DRIED_MEAT:
+            return "With it I could put strength back into my body; the scraps our masters cast us scarcely keep a man standing.";
+
+        case THRALL_QUEST_LEMBAS:
+            return "I ask only to taste it once more, and remember the clean air beneath the trees before iron and darkness became all my world.";
+
         default:
             return "With it I might yet endure a little longer, and do some small good before all light is quenched.";
     }
+}
+
+static void format_thrall_quest_text(monster_type* m_ptr, const char* fmt_text,
+    char* text_buf, size_t buflen)
+{
+    cptr item_name = get_thrall_quest_item_name(m_ptr->thrall_quest_item);
+    cptr reason = get_thrall_quest_reason(m_ptr, m_ptr->thrall_quest_item);
+
+    if (!text_buf || !buflen)
+        return;
+
+    /* Format the text with item name */
+    strnfmt(text_buf, buflen, fmt_text, item_name, reason);
+}
+
+static void thrall_text_to_prompt_desc(cptr src, char* dst, size_t dstsz)
+{
+    size_t di = 0;
+    bool pending_space = false;
+
+    if (!dst || !dstsz)
+        return;
+
+    dst[0] = '\0';
+    if (!src)
+        return;
+
+    while (*src && di + 1 < dstsz)
+    {
+        unsigned char ch = (unsigned char)*src++;
+
+        if (ch == '\n' || ch == '\r' || ch == '\t' || ch == ' ')
+        {
+            pending_space = true;
+            continue;
+        }
+
+        if (pending_space && di > 0 && di + 1 < dstsz)
+            dst[di++] = ' ';
+        pending_space = false;
+
+        dst[di++] = (char)ch;
+    }
+
+    dst[di] = '\0';
+}
+
+static void thrall_print_collapsed_message(cptr text)
+{
+    char msg_buf[512];
+
+    thrall_text_to_prompt_desc(text, msg_buf, sizeof(msg_buf));
+    msg_print(msg_buf);
 }
 
 static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text)
@@ -454,15 +505,10 @@ static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text)
     cptr texts[1];
     cptr title;
     byte title_color;
-    
-    cptr item_name = get_thrall_quest_item_name(m_ptr->thrall_quest_item);
-    cptr reason = get_thrall_quest_reason(m_ptr, m_ptr->thrall_quest_item);
-    
-    /* Format the text with item name */
-    strnfmt(text_buf, sizeof(text_buf), fmt_text, item_name, reason);
-    
+
+    format_thrall_quest_text(m_ptr, fmt_text, text_buf, sizeof(text_buf));
     texts[0] = text_buf;
-    
+
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
     {
         title = "An Elven Thrall";
@@ -473,8 +519,11 @@ static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text)
         title = "A Human Thrall";
         title_color = TERM_YELLOW;
     }
-    
-    quest_typewriter_menu(title, texts, 1, title_color, TERM_WHITE);
+
+    /* This is one short conversation, not a multi-page quest chronicle.  Keep
+     * its paragraph spacing, but fit the request onto one coherent book page
+     * instead of distributing individual sentences across three pages. */
+    quest_typewriter_menu_pages(title, texts, 1, title_color, TERM_WHITE, 1);
 }
 
 #define THRALL_TEXT_VARIANTS 6
@@ -492,11 +541,63 @@ static void thrall_request_dialog(monster_type* m_ptr)
 static void thrall_thanks_dialog(monster_type* m_ptr)
 {
     int variant = rand_int(THRALL_TEXT_VARIANTS);
+    char text_buf[1024];
+    char msg_buf[220];
+    cptr text;
 
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
-        show_thrall_dialog(m_ptr, elf_thanks_texts[variant]);
+        text = elf_thanks_texts[variant];
     else
-        show_thrall_dialog(m_ptr, human_thanks_texts[variant]);
+        text = human_thanks_texts[variant];
+
+    format_thrall_quest_text(m_ptr, text, text_buf, sizeof(text_buf));
+    thrall_text_to_prompt_desc(text_buf, msg_buf, sizeof(msg_buf));
+    msg_print(msg_buf);
+}
+
+static void thrall_pre_give_desc(monster_type* m_ptr, char* desc,
+    size_t desc_sz)
+{
+    int variant = rand_int(THRALL_TEXT_VARIANTS);
+    char text_buf[1024];
+    cptr text;
+
+    if (!desc || !desc_sz)
+        return;
+
+    if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
+        text = elf_pre_give_texts[variant];
+    else
+        text = human_pre_give_texts[variant];
+
+    format_thrall_quest_text(m_ptr, text, text_buf, sizeof(text_buf));
+    thrall_text_to_prompt_desc(text_buf, desc, desc_sz);
+}
+
+static int thrall_give_item_question(monster_type* m_ptr, cptr prompt_desc)
+{
+    ui_question_option options[2];
+    char title[80];
+    char desc[160];
+    cptr desc_to_use;
+    cptr item_name;
+
+    if (!m_ptr)
+        return -1;
+
+    item_name = get_thrall_quest_item_name(m_ptr->thrall_quest_item);
+    strnfmt(title, sizeof(title), "Give %s?", item_name);
+    strnfmt(desc, sizeof(desc),
+        "Give it for a reward, or refuse for now.");
+    desc_to_use = (prompt_desc && prompt_desc[0]) ? prompt_desc : desc;
+
+    options[0]
+        = (ui_question_option){ 'g', "Give it", TERM_L_WHITE, false };
+    options[1]
+        = (ui_question_option){ 'n', "Not now", TERM_WHITE, false };
+
+    return ui_question_ask(title, desc_to_use, options, 2, m_ptr->fy,
+        m_ptr->fx, 0);
 }
 
 /*
@@ -596,6 +697,9 @@ cptr get_thrall_quest_item_name(byte quest_item)
         case THRALL_QUEST_POTION_CLARITY:    return "a potion of clarity";
         case THRALL_QUEST_FLASK_OIL:         return "a flask of oil";
         case THRALL_QUEST_WOODEN_TORCH:      return "a full wooden torch";
+        case THRALL_QUEST_DARK_BREAD:         return "a piece of dark bread";
+        case THRALL_QUEST_DRIED_MEAT:         return "a strip of dried meat";
+        case THRALL_QUEST_LEMBAS:             return "a fragment of lembas";
         default:                             return "something";
     }
 }
@@ -649,6 +753,15 @@ static bool item_matches_quest(object_type* o_ptr, byte quest_item)
         case THRALL_QUEST_WOODEN_TORCH:
             return (o_ptr->tval == TV_LIGHT && o_ptr->sval == SV_LIGHT_TORCH
                     && player_light_fuel(o_ptr) >= 1000);
+
+        case THRALL_QUEST_DARK_BREAD:
+            return (o_ptr->tval == TV_FOOD && o_ptr->sval == SV_FOOD_BREAD);
+
+        case THRALL_QUEST_DRIED_MEAT:
+            return (o_ptr->tval == TV_FOOD && o_ptr->sval == SV_FOOD_MEAT);
+
+        case THRALL_QUEST_LEMBAS:
+            return (o_ptr->tval == TV_FOOD && o_ptr->sval == SV_FOOD_LEMBAS);
             
         default:
             return false;
@@ -662,6 +775,111 @@ static bool supply_item_matches_quest(object_type* o_ptr, byte quest_item)
             && player_lamp_oil() > 0;
 
     return item_matches_quest(o_ptr, quest_item);
+}
+
+static bool thrall_quest_slot_can_be_given(int item_slot, byte quest_item)
+{
+    object_type* o_ptr;
+
+    if (item_slot >= SUPPLIES_INDEX)
+    {
+        o_ptr = supplies_entry_at(item_slot - SUPPLIES_INDEX);
+        return o_ptr && o_ptr->k_idx
+            && supply_item_matches_quest(o_ptr, quest_item);
+    }
+
+    if (item_slot < 0 || item_slot >= INVEN_TOTAL)
+        return false;
+
+    o_ptr = &inventory[item_slot];
+    if (!o_ptr->k_idx || !item_matches_quest(o_ptr, quest_item))
+        return false;
+
+    /* An equipped cursed item cannot be willingly handed over. */
+    if (item_slot >= INVEN_WIELD && cursed_p(o_ptr))
+        return false;
+
+    return true;
+}
+
+static int collect_thrall_quest_item_choices(byte quest_item,
+    object_choice_entry entries[], int capacity)
+{
+    int count = 0;
+
+    for (int i = 0; i < INVEN_PACK && count < capacity; i++)
+    {
+        if (!thrall_quest_slot_can_be_given(i, quest_item))
+            continue;
+
+        object_choice_entry_make(&entries[count], i, &inventory[i], NULL,
+            NULL);
+        count++;
+    }
+
+    for (int i = INVEN_WIELD; i < INVEN_TOTAL && count < capacity; i++)
+    {
+        if (!thrall_quest_slot_can_be_given(i, quest_item))
+            continue;
+
+        object_choice_entry_make(&entries[count], i, &inventory[i], NULL,
+            NULL);
+        count++;
+    }
+
+    for (int i = 0; i < supplies_entry_count() && count < capacity; i++)
+    {
+        int item_slot = SUPPLIES_INDEX + i;
+        object_type* o_ptr;
+
+        if (!thrall_quest_slot_can_be_given(item_slot, quest_item))
+            continue;
+
+        o_ptr = supplies_entry_at(i);
+        object_choice_entry_make(&entries[count], item_slot, o_ptr, NULL,
+            NULL);
+        count++;
+    }
+
+    return count;
+}
+
+static bool choose_thrall_quest_item(monster_type* m_ptr, int* out_slot)
+{
+    object_choice_entry entries[OBJECT_CHOICE_MAX_ENTRIES];
+    int count;
+    int selected = -1;
+    char title[80];
+    char desc[160];
+    cptr item_name;
+
+    if (!m_ptr || !out_slot)
+        return false;
+
+    *out_slot = -1;
+    count = collect_thrall_quest_item_choices(m_ptr->thrall_quest_item,
+        entries, N_ELEMENTS(entries));
+    if (count <= 0)
+        return false;
+
+    if (count == 1)
+    {
+        *out_slot = entries[0].item;
+        return true;
+    }
+
+    item_name = get_thrall_quest_item_name(m_ptr->thrall_quest_item);
+    SDL_strlcpy(title, "Give which item?", sizeof(title));
+    strnfmt(desc, sizeof(desc),
+        "Choose which matching item to give to the thrall (%s).", item_name);
+
+    if (!object_choice_overlay(title, desc, entries, count, 0, &selected))
+        return false;
+    if (selected < 0 || selected >= count)
+        return false;
+
+    *out_slot = entries[selected].item;
+    return true;
 }
 
 static object_type* thrall_quest_slot_object(int item_slot, int* supply_idx)
@@ -716,8 +934,8 @@ static void identify_thrall_quest_item_before_offer(byte quest_item, int item_sl
 }
 
 /*
- * Check if player has the requested item in inventory
- * Returns the inventory slot if found, -1 otherwise
+ * Check if player has a requested item that can be given away.
+ * Returns the inventory/equipment slot if found, -1 otherwise.
  */
 int player_has_thrall_quest_item(byte quest_item)
 {
@@ -726,26 +944,21 @@ int player_has_thrall_quest_item(byte quest_item)
     /* Search inventory */
     for (i = 0; i < INVEN_PACK; i++)
     {
-        object_type* o_ptr = &inventory[i];
-        
-        /* Skip empty slots */
-        if (!o_ptr->k_idx) continue;
-        
-        if (item_matches_quest(o_ptr, quest_item))
-        {
+        if (thrall_quest_slot_can_be_given(i, quest_item))
             return i;
-        }
+    }
+
+    /* Search equipment */
+    for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+    {
+        if (thrall_quest_slot_can_be_given(i, quest_item))
+            return i;
     }
 
     /* Search supplies (herbs/potions/gems cache) */
     for (i = 0; i < supplies_entry_count(); i++)
     {
-        object_type* o_ptr = supplies_entry_at(i);
-
-        if (!o_ptr || !o_ptr->k_idx)
-            continue;
-
-        if (supply_item_matches_quest(o_ptr, quest_item))
+        if (thrall_quest_slot_can_be_given(SUPPLIES_INDEX + i, quest_item))
             return SUPPLIES_INDEX + i;
     }
     
@@ -1035,8 +1248,8 @@ static bool choose_broken_item_to_upgrade(int* out_slot)
 
     item_tester_hook = item_tester_hook_broken_item;
 
-    if (!get_item(&slot, "Repair which item? ",
-            "You have nothing broken to mend.", (USE_EQUIP | USE_INVEN)))
+    if (!open_inventory_item_select_menu(USE_EQUIP | USE_INVEN,
+            "Repair which item? ", "You have nothing broken to mend.", &slot))
     {
         item_tester_hook = NULL;
         return false;
@@ -1186,9 +1399,9 @@ static bool choose_item_to_sanctify(int* out_slot)
 
     item_tester_hook = item_tester_hook_sanctifiable_item;
 
-    if (!get_item(&slot, "Sanctify which item? ",
-            "You have nothing fit for sanctification.",
-            (USE_EQUIP | USE_INVEN)))
+    if (!open_inventory_item_select_menu(USE_EQUIP | USE_INVEN,
+            "Sanctify which item? ",
+            "You have nothing fit for sanctification.", &slot))
     {
         item_tester_hook = NULL;
         return false;
@@ -1286,7 +1499,6 @@ static bool identify_elven_carried_items(void)
 {
     int hidden_count = count_elven_identify_targets();
     char dialog_text[512];
-    cptr texts[1];
 
     if (hidden_count <= 0)
         return false;
@@ -1316,8 +1528,7 @@ static bool identify_elven_carried_items(void)
         "The elven thrall names old scents, colors, and hidden virtues with a memory no darkness has wholly broken.\n\n"
         "Your carried potions, gems, and herbs are revealed.");
 
-    texts[0] = dialog_text;
-    quest_typewriter_menu("Revelation", texts, 1, TERM_L_BLUE, TERM_WHITE);
+    thrall_print_collapsed_message(dialog_text);
 
     return true;
 }
@@ -1447,8 +1658,7 @@ bool upgrade_broken_item(int slot)
         "It is remade as %s!",
         old_name, new_name);
 
-    cptr texts[1] = { dialog_text };
-    quest_typewriter_menu("Restoration", texts, 1, TERM_YELLOW, TERM_WHITE);
+    thrall_print_collapsed_message(dialog_text);
 
     return true;
 }
@@ -1557,10 +1767,7 @@ static bool sanctify_item(int slot)
             o_name);
     }
 
-    {
-        cptr texts[1] = { dialog_text };
-        quest_typewriter_menu("Sanctification", texts, 1, TERM_L_BLUE, TERM_WHITE);
-    }
+    thrall_print_collapsed_message(dialog_text);
 
     return true;
 }
@@ -1576,11 +1783,7 @@ bool reveal_random_artifact(void)
     int reveal_count;
     int selected[THRALL_ARTEFACT_REVEAL_COUNT];
     char o_names[THRALL_ARTEFACT_REVEAL_COUNT][120];
-    char name_list[512];
-    char dialog_text[2048];
-    cptr texts[1 + THRALL_ARTEFACT_REVEAL_COUNT];
-    int text_count = 1;
-    
+
     /* Count unrevealed artifacts */
     count = count_revealable_artifacts();
     
@@ -1615,9 +1818,6 @@ bool reveal_random_artifact(void)
 
     mem_free(candidates);
 
-    name_list[0] = '\0';
-    texts[0] = dialog_text;
-
     for (i = 0; i < reveal_count; i++)
     {
         artefact_type* a_ptr = &a_info[selected[i]];
@@ -1646,21 +1846,13 @@ bool reveal_random_artifact(void)
             SDL_strlcpy(o_names[i],
                 a_ptr->name[0] ? a_ptr->name : "a nameless artefact",
                 sizeof(o_names[i]));
-
-        SDL_strlcat(name_list, "\n  ", sizeof(name_list));
-        SDL_strlcat(name_list, o_names[i], sizeof(name_list));
-
-        if (a_ptr->text)
-            texts[text_count++] = a_text + a_ptr->text;
     }
 
-    strnfmt(dialog_text, sizeof(dialog_text),
-        "The thrall leans close and speaks in a voice scarcely more than breath.\n\n"
-        "You learn of %d ancient %s:%s\n\n"
-        "These names will remain known to later heroes in this metarun.",
-        reveal_count, reveal_count == 1 ? "thing" : "things", name_list);
-
-    quest_typewriter_menu("Ancient Knowledge", texts, text_count, TERM_L_BLUE, TERM_WHITE);
+    msg_format("The thrall speaks of %d ancient %s.",
+        reveal_count, reveal_count == 1 ? "thing" : "things");
+    for (i = 0; i < reveal_count; i++)
+        msg_format("You learn of %s.", o_names[i]);
+    msg_print("These names will remain known to later heroes in this tale.");
 
     for (i = 0; i < reveal_count; i++)
         desc_art_fake(selected[i]);
@@ -1668,40 +1860,14 @@ bool reveal_random_artifact(void)
     return true;
 }
 
-static int next_thrall_reward_selection(const thrall_reward_option options[],
-    int option_count, int current, int dir)
-{
-    int next = current;
-
-    if (option_count <= 0)
-        return current;
-
-    do
-    {
-        next = (next + dir + option_count) % option_count;
-        if (options[next].enabled)
-            return next;
-    } while (next != current);
-
-    return current;
-}
-
 static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 {
     thrall_reward_option options[6];
+    ui_question_option question_options[6];
     int option_count = 0;
-    int selected;
-    int term_wid = 80;
-    int term_hgt = 24;
-    bool compact;
-    int title_row = 0;
-    int intro_row = 1;
-    int list_row;
-    int info_row;
-    int prompt_row;
-    char key;
-    bool steamdeck = steamdeck_controls_active();
-    bool menu_letters = sdl_menu_letters_enabled();
+    int default_index = -1;
+    char title[80];
+    char desc[240];
 
     if (!m_ptr)
         return THRALL_REWARD_LATER;
@@ -1735,248 +1901,37 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
             THRALL_REWARD_LATER, later_hotkey, "Come later", true };
     }
 
-    selected = next_thrall_reward_selection(options, option_count, option_count - 1, 1);
-
-    if (Term)
-        Term_get_size(&term_wid, &term_hgt);
-
-    if (term_wid < 1)
-        term_wid = 1;
-    if (term_hgt < 1)
-        term_hgt = 1;
-
-    compact = (term_wid < 60) || (term_hgt < 16);
-    list_row = compact ? 3 : THRALL_REWARD_MENU_BASE_ROW;
-    prompt_row = MAX(0, term_hgt - 1);
-    info_row = prompt_row - 1;
-
-    screen_save();
-
-    while (true)
+    for (int i = 0; i < option_count; i++)
     {
-        Term_clear();
-        ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
+        question_options[i] = (ui_question_option){ options[i].hotkey,
+            options[i].label, TERM_L_WHITE, !options[i].enabled };
+        if (default_index < 0 && options[i].enabled)
+            default_index = i;
+    }
 
-        if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
-            Term_putstr(0, title_row, term_wid, TERM_L_BLUE,
-                compact ? "Elven Thrall" : "An Elven Thrall");
-        else
-            Term_putstr(0, title_row, term_wid, TERM_YELLOW,
-                compact ? "Human Thrall" : "A Human Thrall");
+    strnfmt(title, sizeof(title), "%s thrall's reward",
+        pending_reward ? "Claim the" : "Choose the");
+    if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
+    {
+        strnfmt(desc, sizeof(desc), "%s Grey choices are unavailable.",
+            pending_reward
+                ? "The elven thrall still waits to grant the boon you earned."
+                : "Choose what gift the elven thrall will grant you.");
+    }
+    else
+    {
+        strnfmt(desc, sizeof(desc), "%s Grey choices are unavailable.",
+            pending_reward
+                ? "The human thrall still waits to grant the boon you earned."
+                : "Choose what gift the human thrall will grant you.");
+    }
 
-        if (pending_reward)
-            Term_putstr(0, intro_row, term_wid, TERM_L_WHITE,
-                compact ? "Choose your reward." :
-                "The boon you earned is still yours to claim.");
-        else
-            Term_putstr(0, intro_row, term_wid, TERM_L_WHITE,
-                compact ? "Choose your reward." :
-                "Choose what gift the thrall will grant you.");
+    {
+        int selected = ui_question_ask(title, desc, question_options,
+            option_count, m_ptr->fy, m_ptr->fx, default_index);
 
-        for (int i = 0; i < option_count; i++)
-        {
-            int row = list_row + i;
-            byte attr = options[i].enabled
-                ? ((i == selected) ? TERM_L_WHITE : TERM_WHITE)
-                : TERM_L_DARK;
-
-            if (row >= info_row)
-                break;
-
-            Term_putstr(0, row, term_wid,
-                (i == selected) ? TERM_L_BLUE : TERM_SLATE,
-                (i == selected) ? "> " : "  ");
-
-            Term_putstr(2, row, MAX(0, term_wid - 2), attr,
-                menu_letters ? format("%c) %s", options[i].hotkey,
-                                   options[i].label)
-                             : format("   %s", options[i].label));
-            ui_menu_click_add(i, 0, row, term_wid);
-        }
-
-        if (info_row > intro_row)
-        {
-            Term_putstr(0, info_row, term_wid, TERM_L_DARK,
-                compact ? "Grey = unavailable." :
-                "Greyed options need a suitable carried item or unrevealed artefact.");
-        }
-
-        if (steamdeck)
-        {
-            char confirm_label[16];
-            char back_label[16];
-            char prompt_buf[120];
-
-            thrall_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
-                sizeof(confirm_label));
-            thrall_prompt_label(steamdeck_back_key(), "B", back_label,
-                sizeof(back_label));
-            strnfmt(prompt_buf, sizeof(prompt_buf),
-                compact ? "D-pad move  %s choose  %s later"
-                        : "D-pad navigate  %s accept  %s later",
-                confirm_label, back_label);
-            Term_putstr(0, prompt_row, term_wid, TERM_L_DARK, prompt_buf);
-            ui_menu_click_add_text_token(-2, 0, prompt_row, prompt_buf,
-                "choose");
-            ui_menu_click_add_text_token(-2, 0, prompt_row, prompt_buf,
-                "accept");
-            ui_menu_click_add_text_token(-1, 0, prompt_row, prompt_buf,
-                "later");
-        }
-        else if (menu_letters)
-        {
-            cptr prompt_text = compact ? "8/2 move  Enter choose  ESC later"
-                : "8/2 or arrows navigate  Enter accept  Letter select  ESC later";
-
-            Term_putstr(0, prompt_row, term_wid, TERM_L_DARK, prompt_text);
-            ui_menu_click_add_text_token(-2, 0, prompt_row, prompt_text,
-                "choose");
-            ui_menu_click_add_text_token(-2, 0, prompt_row, prompt_text,
-                "accept");
-            ui_menu_click_add_text_token(-1, 0, prompt_row, prompt_text,
-                "later");
-        }
-        else
-        {
-            cptr prompt_text = compact ? "8/2 move  Enter choose  ESC later"
-                : "8/2 or arrows navigate  Enter accept  ESC later";
-
-            Term_putstr(0, prompt_row, term_wid, TERM_L_DARK, prompt_text);
-            ui_menu_click_add_text_token(-2, 0, prompt_row, prompt_text,
-                "choose");
-            ui_menu_click_add_text_token(-2, 0, prompt_row, prompt_text,
-                "accept");
-            ui_menu_click_add_text_token(-1, 0, prompt_row, prompt_text,
-                "later");
-        }
-
-        Term_fresh();
-
-        hide_cursor = true;
-        key = inkey();
-        hide_cursor = false;
-
-        {
-            int clicked_choice = 0;
-            int click_action = UI_MENU_CLICK_PRIMARY;
-
-            if (ui_menu_click_take_action(&clicked_choice, &click_action))
-            {
-                ui_menu_click_clear();
-                if (clicked_choice >= 0 && clicked_choice < option_count)
-                {
-                    if (click_action == UI_MENU_CLICK_HOVER
-                        || clicked_choice != selected)
-                    {
-                        selected = clicked_choice;
-                        continue;
-                    }
-                    key = '\r';
-                }
-                else if (click_action == UI_MENU_CLICK_HOVER)
-                    continue;
-                else if (clicked_choice == -1)
-                    key = ESCAPE;
-                else if (clicked_choice == -2)
-                    key = '\r';
-            }
-        }
-
-        if (steamdeck && key == steamdeck_back_key())
-        {
-            ui_menu_click_clear();
-            screen_load();
-            return THRALL_REWARD_LATER;
-        }
-
-        switch (key)
-        {
-        case ESCAPE:
-            ui_menu_click_clear();
-            screen_load();
-            return THRALL_REWARD_LATER;
-
-        case '8':
-        case 'k':
-        case 'K':
-#ifdef ARROW_UP
-        case ARROW_UP:
-#endif
-            selected = next_thrall_reward_selection(options, option_count,
-                selected, -1);
-            break;
-
-        case '2':
-        case 'j':
-        case 'J':
-#ifdef ARROW_DOWN
-        case ARROW_DOWN:
-#endif
-            selected = next_thrall_reward_selection(options, option_count,
-                selected, 1);
-            break;
-
-        case '\r':
-        case '\n':
-        case ' ':
-#ifdef KC_ENTER
-        case KC_ENTER:
-#endif
-            if (!options[selected].enabled)
-            {
-                bell("That reward is not available.");
-                break;
-            }
-
-            ui_menu_click_clear();
-            screen_load();
-            return options[selected].reward;
-
-        default:
-            if (steamdeck && key == steamdeck_back_key())
-            {
-                ui_menu_click_clear();
-                screen_load();
-                return THRALL_REWARD_LATER;
-            }
-
-            if (steamdeck && key == steamdeck_confirm_key())
-            {
-                if (!options[selected].enabled)
-                {
-                    bell("That reward is not available.");
-                    break;
-                }
-
-                ui_menu_click_clear();
-                screen_load();
-                return options[selected].reward;
-            }
-
-            if (!menu_letters)
-                break;
-
-            key = (char)tolower((unsigned char)key);
-
-            for (int i = 0; i < option_count; i++)
-            {
-                if (key != options[i].hotkey)
-                    continue;
-
-                if (!options[i].enabled)
-                {
-                    bell("That reward is not available.");
-                    break;
-                }
-
-                ui_menu_click_clear();
-                screen_load();
-                return options[i].reward;
-            }
-
-            break;
-        }
+        return (selected < 0) ? THRALL_REWARD_LATER
+                              : options[selected].reward;
     }
 }
 
@@ -2109,6 +2064,7 @@ bool handle_thrall_interaction(monster_type* m_ptr)
 {
     char m_name[80];
     int item_slot;
+    bool showed_request = false;
     
     /* Only handle alert thralls */
     if (!is_alert_thrall(m_ptr)) return false;
@@ -2142,7 +2098,7 @@ bool handle_thrall_interaction(monster_type* m_ptr)
     {
         thrall_request_dialog(m_ptr);
         m_ptr->thrall_quest_requested = 1;
-        return true;
+        showed_request = true;
     }
     
     /* Check if player has the item */
@@ -2151,37 +2107,43 @@ bool handle_thrall_interaction(monster_type* m_ptr)
     if (item_slot >= 0)
     {
         /* Player has the item - offer to give it */
-        
-        /* Show Pre-Give Dialog */
-        int variant = rand_int(THRALL_TEXT_VARIANTS);
+        char prompt_desc[480];
+
+        /* If multiple matching items are carried or equipped, let the player
+         * decide which one the thrall receives. */
+        if (!choose_thrall_quest_item(m_ptr, &item_slot)) {
+            if (showed_request)
+                sdl_popup_notification_show("New thrall quest added");
+            return true;
+        }
 
         identify_thrall_quest_item_before_offer(
             m_ptr->thrall_quest_item, item_slot);
 
-        if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
-            show_thrall_dialog(m_ptr, elf_pre_give_texts[variant]);
-        else
-            show_thrall_dialog(m_ptr, human_pre_give_texts[variant]);
+        thrall_pre_give_desc(m_ptr, prompt_desc, sizeof(prompt_desc));
 
-        char prompt[200];
-        strnfmt(prompt, sizeof(prompt), 
-            "Give %s? ",
-            get_thrall_quest_item_name(m_ptr->thrall_quest_item));
-        
-        if (get_check(prompt))
+        switch (thrall_give_item_question(m_ptr, prompt_desc))
         {
+        case 0:
             complete_thrall_quest(m_ptr, item_slot);
-        }
-        else
-        {
+            break;
+        case 1:
             msg_format("%^s sinks back into the shadows, and the light in those eyes grows dim.", m_name);
+            break;
+        default:
+            break;
         }
     }
     else
     {
-        /* Player doesn't have the item - repeat the request */
-        thrall_request_dialog(m_ptr);
+        /* Player doesn't have the item - remind without reopening the book. */
+        if (!showed_request)
+            msg_format("%^s waits for %s.", m_name,
+                get_thrall_quest_item_name(m_ptr->thrall_quest_item));
     }
-    
+
+    if (showed_request)
+        sdl_popup_notification_show("New thrall quest added");
+
     return true;
 }

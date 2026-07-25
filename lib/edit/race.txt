@@ -45,9 +45,9 @@
 
 # Version stamp (required)
 
-V:0.9.6
+V:0.9.7
 
-N:0:Feanorians
+N:0:Fëanorians
 Q:2444d18db905ccd7
 S:0:1:2:2
 I:1:20:4865
@@ -78,7 +78,7 @@ E:39:0:3:3     # ~ Wooden Torches (3)
 E:80:37:3:3    # , Fragment of Lembas (3)
 E:23:10:1:1    # | Short sword (1)
 D:Valiant and steadfast people, following Fingolfin's bright banner 
-D:through cold Helcaraxe's treacherous ice to realms darkened by war. 
+D:through cold Helcaraxë's treacherous ice to realms darkened by war. 
 D:Their courage tested against Morgoth's might beneath northern skies, 
 D:enduring loss bravely, hearts unbowed even in bitterest defeat. 
 D:Foreshadowing doom upon Anfauglith's fields, bravery unmatched, 

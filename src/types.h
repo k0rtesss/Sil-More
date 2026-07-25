@@ -1,5 +1,8 @@
 /* File: types.h */
 
+#ifndef INCLUDED_TYPES_H
+#define INCLUDED_TYPES_H
+
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
  *
@@ -262,9 +265,7 @@ struct object_kind
 
     bool tried; /* The player has "tried" one of the items */
 
-    byte squelch; /* Squelch setting for the particular item */
-
-    bool everseen; /* Used to despoilify squelch menus */
+    bool everseen; /* Tracks whether the item kind has appeared this run */
 };
 
 /*
@@ -402,8 +403,7 @@ struct ego_item_type
     bool skill_bonus_set[S_MAX];
 
     bool aware; /* Has its type been detected this game? */
-    bool everseen; /* Do not spoil squelch menus */
-    bool squelch; /* Squelch this special item */
+    bool everseen; /* Tracks whether the ego type has appeared this run */
 };
 
 /*
@@ -483,6 +483,7 @@ struct monster_race
 
     byte x_attr; /* Desired monster attribute */
     char x_char; /* Desired monster character */
+    byte tile_facing; /* Source tile horizontal facing, if any */
 
     byte max_num; /* Maximum population allowed per level */
     byte cur_num; /* Monster population on current level */
@@ -534,6 +535,7 @@ struct vault_type
     u32b name; /* Name (offset) */
     u32b text; /* Text (offset) */
     u32b message; /* Entry message text (offset) */
+    u32b skeleton_hint; /* Unique skeleton hint text (offset) */
 
     byte typ; /* Vault type */
 
@@ -644,7 +646,7 @@ struct object_type
     s32b unused1; // Smithing marker: 0=found, 1=forged by player, 2=reforged by player
     s32b unused2; // Ego prefix index (0 = none); see object_ego_prefix()
     s32b unused3; // Room for expansion without breaking savefiles
-    s32b unused4; // Room for expansion without breaking savefiles
+    s32b unused4; // Runtime payload; chests store last inspected Perception base
 };
 
 /*
@@ -736,6 +738,8 @@ struct monster_type
 
     byte previous_action[ACTION_MAX]; /* What the monster did on its previous
                                          turns */
+    byte visual_facing_dir; /* Cosmetic tile facing direction (not saved) */
+    byte visual_random_facing; /* Stable random tile facing (not saved) */
 
     /* Thrall quest system */
     byte thrall_quest_item;      /* Item the thrall wants: see THRALL_QUEST_* */
@@ -845,8 +849,8 @@ struct player_race
  */
 struct character_profile
 {
-    u32b name;         /* Name (offset) eg 'Feanor' */
-    u32b alt_name;     /* Alternate Name (offset) eg 'Character of Feanor' */
+    u32b name;         /* Name (offset) eg 'Fëanor' */
+    u32b alt_name;     /* Alternate Name (offset) eg 'Character of Fëanor' */
     u32b start_string; /* Short Name (offset) */
     u32b text;         /* Description (offset) */
     guid64 guid;       /* Stable identifier for score plumbing */
@@ -1052,16 +1056,17 @@ struct player_other
     byte hitpoint_warn; /* Hitpoint warning (0 to 9) */
 
     byte delay_factor; /* Delay factor (0 to 9) */
+    byte running_delay_ms; /* Delay between steps while running */
 
-    byte main_combat_rolls; /* Main terminal combat rolls (0-3) */
-    byte ability_desc_mode; /* Ability description display (0=D+E, 1=E+D, 2=E only) */
+    byte main_combat_rolls; /* Legacy save byte; panes own combat display */
     byte vault_drop_frequency; /* Vault drop frequency mode (VDF_*) */
     byte intro_style; /* Welcome screen variant (INTRO_STYLE_*) */
-    byte level_entry_narrative_mode; /* Initial partition text (banner with delay/banner without delay/message/off) */
-    byte partition_narrative_mode; /* Transition text between partitions */
+    byte level_entry_narrative_mode; /* Initial partition text (banner with animation/banner without animation/message/off) */
+    byte partition_narrative_mode; /* Transition text between partitions (banner with animation/banner without animation/message/off) */
     byte narrative_banner_turns; /* Banner visibility (0=dismiss on next input, 1-3=player turns) */
     byte noble_item_spawn_mode; /* Noble item sources (NOBLE_ITEM_SPAWN_*) */
     byte min_depth_timer_mode; /* Minimum-depth timer pace (MIN_DEPTH_TIMER_MODE_*) */
+    byte monster_tile_health_bar_mode; /* Map tile monster health bars (MONSTER_TILE_HEALTH_BARS_*) */
 };
 
 /*
@@ -1102,6 +1107,7 @@ struct player_type
     s32b descent_exp; /* Total experience from descending to new levels */
     s32b ident_exp; /* Total experience from identifying objects */
     byte discovery_lore_flags; /* Run-wide discovery XP awards already claimed */
+    byte quick_access_prompt_flags; /* Run-wide item shortcut offers already made */
 
     s16b mhp; /* Max hit pts */
     s16b chp; /* Cur hit pts */
@@ -1171,6 +1177,7 @@ struct player_type
 
     byte stealth_mode; /* Stealth mode */
     byte climbing; /* The player is climbing over a chasm */
+    byte active_weapon_mode; /* PLAYER_ACTIVE_WEAPON_* */
 
     byte self_made_arts; /* Number of self-made artefacts so far */
 
@@ -1390,10 +1397,10 @@ struct player_type
     s16b tulkas_target_r_idx; /* Target unique monster for Tulkas quest */
     s16b tulkas_prize_a_idx; /* Artifact prize for Tulkas quest */
     byte tulkas_quest_complete; /* Whether quest is completed but reward not given */
-    /* Aule quest tracking */
-    byte aule_quest;           /* Aule quest state (AULE_QUEST_*) */
-    byte aule_forge_y;         /* Y coord of Aule's forge (for validation) */
-    byte aule_forge_x;         /* X coord of Aule's forge */
+    /* Aulë quest tracking */
+    byte aule_quest;           /* Aulë quest state (AULE_QUEST_*) */
+    byte aule_forge_y;         /* Y coord of Aulë's forge (for validation) */
+    byte aule_forge_x;         /* X coord of Aulë's forge */
     byte aule_reserved;        /* padding */
     s16b aule_level;           /* Dungeon depth where forge resides */
     s16b aule_last_object_diff;/* Difficulty of last forged object (for logging) */
@@ -1404,19 +1411,19 @@ struct player_type
     byte mandos_monsters_remaining; /* Number of monsters left to clear */
     s16b mandos_level;         /* Dungeon depth where vault resides */
     s16b mandos_reserved;      /* padding */
-    /* Niena quest tracking */
-    byte niena_quest;          /* Niena quest state (NIENA_QUEST_*) */
+    /* Nienna quest tracking */
+    byte niena_quest;          /* Nienna quest state (NIENA_QUEST_*) */
     byte niena_monsters_seen;  /* Number of monsters seen during quest */
     byte niena_monsters_killed; /* Number of monsters killed during quest */
     byte niena_reserved;       /* padding */
     s16b niena_level;          /* Dungeon depth where quest is active */
     s16b niena_reserved2;      /* padding */
-    /* Orome quest tracking */
-    byte orome_quest;          /* Orome quest state (OROME_QUEST_*) */
+    /* Oromë quest tracking */
+    byte orome_quest;          /* Oromë quest state (OROME_QUEST_*) */
     byte orome_target_type;    /* Monster type to hunt (1=wolf, 2=spider, 3=serpent, 4=vampire) */
     s16b orome_killed_count;   /* Number of target monsters killed */
     s16b orome_target_count;   /* Required number to kill (100/80/60/30) */
-    /* New global monster type counters for Orome quest */
+    /* New global monster type counters for Oromë quest */
     s16b orome_wolves_killed;  /* Total wolves killed (any type) */
     s16b orome_spiders_killed; /* Total spiders killed (any type) */
     s16b orome_serpents_killed; /* Total serpents killed (any type) */
@@ -1504,6 +1511,29 @@ typedef struct high_score high_score;
 /* C89-friendly compile-time size check (negative array size => error) */
 typedef char high_score_size_must_be_133[(sizeof(struct high_score) == 133) ? 1 : -1];
 
+typedef struct skill_roll_details skill_roll_details;
+
+struct skill_roll_details
+{
+    int skill;             /* Adjusted skill used by the check */
+    int difficulty;        /* Adjusted difficulty used by the check */
+    int skill_sides;       /* Sides on the skill die */
+    int difficulty_sides;  /* Sides on the difficulty die */
+    int skill_die;         /* Final die used on the skill side */
+    int difficulty_die;    /* Final die used on the difficulty side */
+    int skill_die_primary; /* First skill-side die */
+    int difficulty_die_primary; /* First difficulty-side die */
+    int skill_die_alt;     /* Alternate skill-side die for curses */
+    int difficulty_die_alt; /* Alternate difficulty-side die for curses */
+    int skill_total;
+    int difficulty_total;
+    int result;
+    bool skill_curse_active;
+    bool difficulty_curse_active;
+    bool skill_alt_used;
+    bool difficulty_alt_used;
+};
+
 
 
 typedef struct combat_roll combat_roll;
@@ -1520,13 +1550,18 @@ struct combat_roll
     byte defender_attr; /* Default attribute of the defender */
     bool is_attacker_player; /* TRUE if the attacker is the player */
     bool is_defender_player; /* TRUE if the defender is the player */
+    u32b sequence; /* Unified message/combat log ordering */
     int att; /* The attack bonus */
     int att_roll; /* The attack roll (d20 value) */
     int evn; /* The evasion bonus */
     int evn_roll; /* The evasion roll (d20 value */
+    bool no_damage; /* This attack contest has no damage-roll phase */
+    bool force_damage; /* Show combined damage even if this contest missed */
 
     int dd; /* The number of damage dice */
     int ds; /* The number of damage sides */
+    int dd2; /* Optional second damage dice pool for combined attacks */
+    int ds2; /* Optional second damage sides for combined attacks */
     int dam; /* The total damage rolled */
     int pd; /* The number of protection dice */
     int ps; /* The number of protection sides */
@@ -1536,6 +1571,23 @@ struct combat_roll
                         normally) */
     bool melee; /* Was it a melee attack? (used for working out if blocking is
                    effective) */
+};
+
+/*
+ * One drawable piece of a combat-roll line (a colored text run, or an inline
+ * tile).  These are emitted independently of the term cell grid so the full
+ * line survives even when the visible panel is too few cells wide to hold it.
+ */
+#define COMBAT_ROLL_MAX_TOKENS 48
+
+typedef struct combat_roll_token combat_roll_token;
+
+struct combat_roll_token
+{
+    bool is_tile;     /* TRUE: draw tile_char/attr as a sprite; FALSE: text */
+    byte attr;        /* text fg attr, or tile attr */
+    char tile_char;   /* tile sprite char (is_tile only) */
+    char text[20];    /* NUL-terminated text run (text tokens only) */
 };
 
 typedef struct combat_history_round combat_history_round;
@@ -1639,6 +1691,8 @@ struct flag_name
     int set; /* The set into which the flag is to be sent. */
     u32b flag; /* The flag being set. */
 };
+
+#endif /* INCLUDED_TYPES_H */
 
 
 
