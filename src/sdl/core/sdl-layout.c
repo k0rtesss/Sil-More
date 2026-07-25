@@ -5428,8 +5428,12 @@ bool sdl_prompt_reset_sdl_defaults(const char* issue_summary,
     sdl_apply_stored_pane_profile(config.min_terminal_mode);
     sdl_ensure_touch_pane_config_present();
     sdl_touch_pane_ensure_main_panel_confirm();
-    sdl_config_save(config_file_path, &config, g_pane_profiles,
-        SDL_PANE_PROFILE_COUNT);
+    if (!sdl_config_save(config_file_path, &config, g_pane_profiles,
+            SDL_PANE_PROFILE_COUNT)) {
+        log_warn("Startup recovery: failed to persist default SDL config at %s",
+            config_file_path);
+        return false;
+    }
     log_info("Startup recovery: reset SDL config to defaults at %s",
         config_file_path);
     return true;

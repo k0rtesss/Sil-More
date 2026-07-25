@@ -287,8 +287,23 @@ static bool score_file_upgrade_to_current(score_file_ctx* ctx,
 SDL_IOStream* score_file_open(const char *filepath, int mode)
 {
     score_file_ctx* ctx = score_file_active_ctx();
+    SDL_PathInfo path_info;
+    bool path_exists;
+
     score_file_reset_ctx(ctx);
     bool exists = score_file_load_header(ctx, filepath);
+    path_exists = SDL_GetPathInfo(filepath, &path_info);
+
+    if (!exists && path_exists) {
+        if (path_info.type != SDL_PATHTYPE_FILE) {
+            log_error("score_file_open: score path is not a regular file: %s",
+                filepath);
+        } else {
+            log_error("score_file_open: refusing to replace malformed or incompatible score file: %s",
+                filepath);
+        }
+        return NULL;
+    }
 
     /* If file doesn't exist and caller allows creation, bootstrap header */
     if (!exists && (mode & O_CREAT)) {
@@ -301,23 +316,40 @@ SDL_IOStream* score_file_open(const char *filepath, int mode)
         header.entry_count  = 0;
 
         log_debug("score_file_open: file doesn't exist, creating with header at '%s'", filepath);
-        FILE* new_file = fopen(filepath, "wb");
+        SDL_IOStream* new_file = SDL_IOFromFile(filepath, "w+b");
         if (new_file) {
-            fwrite(&header, sizeof(header), 1, new_file);
-            fclose(new_file);
+            bool initialized =
+                SDL_WriteIO(new_file, &header, sizeof(header)) == sizeof(header)
+                && SDL_FlushIO(new_file);
+            bool closed = SDL_CloseIO(new_file);
+            if (!initialized || !closed) {
+                (void)SDL_RemovePath(filepath);
+                log_error("score_file_open: failed to initialize score file header at %s",
+                    filepath);
+                return NULL;
+            }
+
             exists = score_file_load_header(ctx, filepath);
-            log_info("score_file_open: initialized new scores file header at %s", filepath);
+            if (exists) {
+                log_info("score_file_open: initialized new scores file header at %s",
+                    filepath);
+            }
         } else {
             log_error("score_file_open: failed to create scores file header at %s (errno=%d: %s)", 
                       filepath, errno, strerror(errno));
         }
     }
 
+    if (!exists)
+        return NULL;
+
     if (exists && (mode & (O_RDWR | O_WRONLY))) {
         score_file_upgrade_to_curses(ctx, filepath);
-        score_file_load_header(ctx, filepath);
+        if (!score_file_load_header(ctx, filepath))
+            return NULL;
         score_file_upgrade_to_current(ctx, filepath);
-        score_file_load_header(ctx, filepath);
+        if (!score_file_load_header(ctx, filepath))
+            return NULL;
     }
 
     SDL_IOStream* file = NULL;
@@ -325,9 +357,6 @@ SDL_IOStream* score_file_open(const char *filepath, int mode)
 
     if (mode_str == NULL) {
         file = SDL_IOFromFile(filepath, "r+b");
-        if (!file) {
-            file = SDL_IOFromFile(filepath, "w+b");
-        }
     } else {
         file = SDL_IOFromFile(filepath, mode_str);
     }

@@ -254,6 +254,7 @@ void sdl_handle_renderer_reset(void)
     sdl_select_page_turn_free();
     sdl_left_panel_canvas_destroy();
     sdl_minimap_map_texture_cache_clear();
+    sdl_side_map_pane_texture_cache_clear();
     sdl_mono_font_cache_clear();
 
     // Recreate all view canvases
@@ -328,12 +329,81 @@ void sdl_handle_renderer_reset(void)
 }
 
 #if SIL_SDL_MOBILE_BUILD
+enum {
+    SDL_MOBILE_LIFECYCLE_EVENT_COUNT = 6
+};
+
+static Uint32 g_mobile_lifecycle_dispatch_event;
+static SDL_AtomicInt g_mobile_lifecycle_dispatch_serial;
+static SDL_AtomicInt
+    g_mobile_lifecycle_failed_serial[SDL_MOBILE_LIFECYCLE_EVENT_COUNT];
+static int g_mobile_lifecycle_last_dispatch_serial;
+
+static int sdl_mobile_lifecycle_event_index(Uint32 type)
+{
+    switch (type)
+    {
+    case SDL_EVENT_WILL_ENTER_BACKGROUND:
+        return 0;
+    case SDL_EVENT_DID_ENTER_BACKGROUND:
+        return 1;
+    case SDL_EVENT_TERMINATING:
+        return 2;
+    case SDL_EVENT_WILL_ENTER_FOREGROUND:
+        return 3;
+    case SDL_EVENT_DID_ENTER_FOREGROUND:
+        return 4;
+    case SDL_EVENT_LOW_MEMORY:
+        return 5;
+    default:
+        return -1;
+    }
+}
+
 bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
 {
+    bool dispatched;
+    int event_index;
+    int serial = 0;
+    Uint32 type;
+
     if (!ev)
         return false;
 
-    switch (ev->type)
+    dispatched = (g_mobile_lifecycle_dispatch_event != 0
+        && ev->type == g_mobile_lifecycle_dispatch_event);
+    type = ev->type;
+    if (dispatched)
+    {
+        type = (Uint32)ev->user.code;
+        serial = (int)(intptr_t)ev->user.data1;
+    }
+    event_index = sdl_mobile_lifecycle_event_index(type);
+    if (event_index < 0)
+        return false;
+
+    /*
+     * Once the watch is installed, its private event is the sole owner of
+     * lifecycle state changes.  SDL may also enqueue the original lifecycle
+     * event; consume that duplicate without saving or changing foreground
+     * state.  Sequence numbers also reject a delayed private event from an
+     * older background/foreground transition.
+     */
+    if (!dispatched && g_mobile_lifecycle_watch_registered)
+    {
+        serial = SDL_SetAtomicInt(
+            &g_mobile_lifecycle_failed_serial[event_index], 0);
+        if (serial == 0)
+            return true;
+    }
+    if (serial != 0)
+    {
+        if (serial <= g_mobile_lifecycle_last_dispatch_serial)
+            return true;
+        g_mobile_lifecycle_last_dispatch_serial = serial;
+    }
+
+    switch (type)
     {
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
         if (!g_mobile_lifecycle_autosaved
@@ -352,8 +422,11 @@ bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_TERMINATING:
-        if (mobile_autosave_game("terminating"))
+        if (!g_mobile_lifecycle_autosaved
+            && mobile_autosave_game("terminating"))
+        {
             g_mobile_lifecycle_autosaved = true;
+        }
         return true;
 
     case SDL_EVENT_WILL_ENTER_FOREGROUND:
@@ -372,8 +445,39 @@ bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
 
 bool SDLCALL sdl_mobile_lifecycle_event_watch(void* userdata, SDL_Event* ev)
 {
+    SDL_Event dispatch;
+    int event_index;
+    int serial;
+
     (void)userdata;
-    (void)sdl_mobile_lifecycle_handle_event(ev);
+    if (!ev || g_mobile_lifecycle_dispatch_event == 0)
+    {
+        return true;
+    }
+    event_index = sdl_mobile_lifecycle_event_index(ev->type);
+    if (event_index < 0)
+        return true;
+
+    /*
+     * SDL may invoke event watches from a non-game thread.  Never inspect or
+     * mutate game state here: post a private wake event so autosave and score
+     * persistence run from the normal SDL/game event loop.
+     */
+    SDL_zero(dispatch);
+    dispatch.type = g_mobile_lifecycle_dispatch_event;
+    dispatch.user.code = (Sint32)ev->type;
+    serial = SDL_AddAtomicInt(&g_mobile_lifecycle_dispatch_serial, 1) + 1;
+    dispatch.user.data1 = (void*)(intptr_t)serial;
+    if (!SDL_PushEvent(&dispatch))
+    {
+        /*
+         * The original lifecycle event may still reach the normal queue.
+         * Mark its serial so that main-thread handling can safely fall back
+         * without allowing an older private event to undo a newer transition.
+         */
+        SDL_SetAtomicInt(&g_mobile_lifecycle_failed_serial[event_index],
+            serial);
+    }
     return true;
 }
 
@@ -381,6 +485,15 @@ void sdl_mobile_lifecycle_register(void)
 {
     if (g_mobile_lifecycle_watch_registered)
         return;
+
+    if (g_mobile_lifecycle_dispatch_event == 0)
+        g_mobile_lifecycle_dispatch_event = SDL_RegisterEvents(1);
+    if (g_mobile_lifecycle_dispatch_event == 0)
+    {
+        log_warn("Failed to register mobile lifecycle dispatch event: %s",
+            SDL_GetError());
+        return;
+    }
 
     if (SDL_AddEventWatch(sdl_mobile_lifecycle_event_watch, NULL))
     {

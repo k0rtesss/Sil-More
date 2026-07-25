@@ -4,7 +4,9 @@
 #include "angband.h"
 
 int select_tulkas_quest_target(void);
+int select_tulkas_quest_target_for_depth(int depth);
 int select_tulkas_quest_prize(int target_level);
+bool tulkas_target_race_valid(const monster_race* r_ptr);
 u32b get_metarun_quest_flag(int quest_idx);
 int get_quest_oath_id(int quest_idx);
 cptr get_oath_name_from_id(byte oath_id);

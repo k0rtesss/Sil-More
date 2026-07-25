@@ -21,6 +21,8 @@ extern struct sound_config g_sound_config;
 
 #define MAIN_MENU_LABEL_WIDTH 21
 #define MAIN_MENU_SHORTCUT_WIDTH 6
+#define SIL_MORE_PRIVACY_POLICY_URL \
+    "https://k0rtesss.github.io/Sil-More/privacy-policy.html"
 
 typedef struct main_menu_about_line
 {
@@ -52,6 +54,7 @@ cptr main_menu_title(int choice)
     case MAIN_MENU_OPTIONS: return "Options";
     case MAIN_MENU_HELP: return "Help";
     case MAIN_MENU_ABOUT: return "About";
+    case MAIN_MENU_PRIVACY_POLICY: return "Privacy policy";
     case MAIN_MENU_SAVE: return "Save";
     case MAIN_MENU_SAVE_QUIT:
         return death_spectator_active() ? "Quit" : "Quit with save";
@@ -78,6 +81,7 @@ int main_menu_keyboard_key(int choice)
     case MAIN_MENU_OPTIONS: return 'o';
     case MAIN_MENU_HELP: return 'h';
     case MAIN_MENU_ABOUT: return 'b';
+    case MAIN_MENU_PRIVACY_POLICY: return 'p';
     case MAIN_MENU_SAVE: return 's';
     case MAIN_MENU_SAVE_QUIT: return 'q';
     case MAIN_MENU_RETURN_GAME: return 'r';
@@ -274,6 +278,7 @@ int main_menu_choice_from_key(int key)
     case 'o': return MAIN_MENU_OPTIONS;
     case 'h': return MAIN_MENU_HELP;
     case 'b': return MAIN_MENU_ABOUT;
+    case 'p': return MAIN_MENU_PRIVACY_POLICY;
     case 's':
         if (death_spectator_active())
             return 0;
@@ -1595,6 +1600,15 @@ static bool do_cmd_main_menu_execute_choice_impl(int actiontype,
     case MAIN_MENU_ABOUT: // About (b)
     {
         main_menu_about();
+        return true;
+    }
+    case MAIN_MENU_PRIVACY_POLICY: // Privacy policy (p)
+    {
+        if (!SDL_OpenURL(SIL_MORE_PRIVACY_POLICY_URL))
+        {
+            msg_format("Could not open the privacy policy (%s)",
+                SDL_GetError());
+        }
         return true;
     }
     case MAIN_MENU_SAVE: // Save (s)

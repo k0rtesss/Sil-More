@@ -3,7 +3,7 @@
 """
 Calculate smithing difficulty for each artefact in artefact.txt and special.txt
 
-Based on the REAL object_difficulty() function in src/cmd4.c (lines 3980+)
+Based on smithing_difficulty_baseline() in src/drop_system.c.
 which includes proper costs for flags like slays, brands, sharpness, etc.
 """
 
@@ -420,7 +420,7 @@ def parse_special_file(filepath):
 
 def calculate_difficulty(art):
     """
-    Calculate smithing difficulty using the REAL formula from src/cmd4.c object_difficulty().
+    Calculate smithing difficulty using src/drop_system.c.
     This accounts for all flags, slays, brands, sharpness, etc.
     
     For normal items: Use the actual stats from the generated variant.
@@ -439,27 +439,15 @@ def calculate_difficulty(art):
     is_normal = (art['type'] == 'normal')
     is_dual_ego = (art['type'] == 'dual_ego')
 
-    # For non-jewelry items (special/dual-ego/artefact), strip base flags and add back specific ones
-    # This mirrors smithing-difficulty.c lines 139-180
+    # object_flags4() includes intrinsic base-kind flags. Generated normal,
+    # special, and dual-ego variants already carry those flags; parsed
+    # artefacts need their base flags merged here.
     is_artefact = (art['type'] == 'artefact')
-    if (is_special or is_dual_ego or is_artefact) and tval not in [45, 40]:  # Not ring or amulet
-        # Get base item flags from the OBJECTS_BY_TYPE lookup
+    if is_artefact:
         base_key = (tval, sval)
         if base_key in OBJECTS_BY_TYPE:
             base_obj_flags = set(OBJECTS_BY_TYPE[base_key].get('flags', []))
-            # For artefacts, ADD base flags first (special/ego already have them combined at line 1315)
-            # This mirrors how object_flags4() in C code combines base + artefact flags
-            if is_artefact:
-                flags = flags | base_obj_flags
-            # Strip base item flags
-            flags = flags - base_obj_flags
-            # Add back specific flags that should always count
-            add_back_flags = {'TUNNEL', 'STL', 'STEALTH', 'ACCURATE', 'SHARPNESS', 'SHARPNESS2',
-                              'DAMAGE_SIDES', 'REGEN', 'RES_COLD', 'RES_FIRE',
-                              'CHEAT_DEATH', 'STAND_FAST', 'ENCHANTABLE'}
-            for flag in add_back_flags:
-                if flag in base_obj_flags:
-                    flags.add(flag)
+            flags |= base_obj_flags
 
     # Get base item stats
     if is_special or is_normal or is_dual_ego:
@@ -507,11 +495,7 @@ def calculate_difficulty(art):
     if tval not in [45, 40]:  # Not ring or amulet
         dif_inc += base_level // 2
 
-    # Horn items add (level - 1) difficulty (cmd4.c:4593-4613)
-    if tval == 47:  # TV_HORN
-        dif_inc += base_level - 1
-
-    # Weight factor calculation (cmd4.c:4663-4671)
+    # Weight factor calculation
     # Unusual weight items (lighter or heavier than base) get difficulty bonus
     item_weight = art.get('weight', 0)
     base_weight = get_base_weight(tval, sval)
@@ -829,7 +813,7 @@ def calculate_difficulty(art):
     # === SLOT MULTIPLIER ===
     # Minor slots get +20% difficulty
     slot = get_slot(art['tval'])
-    if slot in ['ring', 'light', 'cloak', 'gloves', 'boots', 'arrow']:
+    if slot in ['ring', 'light', 'cloak', 'gloves', 'boots', 'arrow', 'horn']:
         dif_mult += 20
 
     # === ENCHANTABILITY BONUS ===
@@ -1741,20 +1725,8 @@ def generate_dual_ego_variants(specials_raw, objects):
 
 
 def get_base_flags(tval, sval):
-    """Get base flags for items from object.txt that should be subtracted."""
-    # For non-jewelry items, base flags don't count toward difficulty
-    # But TUNNEL and STEALTH are added back in (see cmd4.c lines 4072-4077)
-    base_flags = {
-        # Digging tools have TUNNEL flag
-        (20, 1): {'TUNNEL'},  # Shovel
-        (20, 3): {'TUNNEL'},  # Mattock
-        # Items with ENCHANTABLE flag (for -30% difficulty multiplier)
-        (36, 2): {'ENCHANTABLE'},  # Robe
-        (21, 3): {'ENCHANTABLE'},  # Quarterstaff
-        (30, 3): {'ENCHANTABLE', 'STAND_FAST'},  # Mithril Greaves
-        (31, 3): {'ENCHANTABLE', 'REGEN'},  # Mithril Gauntlets
-    }
-    return base_flags.get((tval, sval), set())
+    """Get current intrinsic flags for an object kind from object.txt."""
+    return set(OBJECTS_BY_TYPE.get((tval, sval), {}).get('flags', []))
 
 
 def get_slot(tval):
@@ -1767,6 +1739,7 @@ def get_slot(tval):
         31: 'gloves',
         30: 'boots',
         17: 'arrow',
+        66: 'horn',
     }
     return slots.get(tval, 'major')
 
@@ -1791,6 +1764,7 @@ def get_tval_name(tval):
         39: 'Light',
         40: 'Amulet',
         45: 'Ring',
+        66: 'Horn',
     }
     return tval_names.get(tval, f'Unknown({tval})')
 
@@ -2260,7 +2234,7 @@ def main(argv=None):
     
     print()
     print("=" * 120)
-    print("DIFFICULTY FORMULA (from src/cmd4.c object_difficulty()):")
+    print("DIFFICULTY FORMULA (from src/drop_system.c smithing_difficulty_baseline()):")
     print("  - Base item level / 2")
     print("  - Attack bonus: weapons +3/point, others +6/point; negatives reduce at half rate")
     print("  - Evasion bonus: +6/point armor, +9/point others; negatives reduce at half rate")
@@ -2277,7 +2251,7 @@ def main(argv=None):
     print("  - Free Action: +7, Light: +8, Radiance: +6, Regen: +4, See Invis: +4")
     print("  - Speed: +40, Cheat Death: +13, Accurate: +15, Vampiric: +6")
     print("  - Abilities: +6 each (5 + level/3)")
-    print("  - Minor slots (ring/cloak/gloves/boots/light/arrow): +20% multiplier")
+    print("  - Minor slots (ring/cloak/gloves/boots/light/arrow/horn): +20% multiplier")
     print("  - Artefact arrows: difficulty halved")
     print("=" * 120)
     print()

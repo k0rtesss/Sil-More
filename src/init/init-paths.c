@@ -8,11 +8,13 @@
 #include "item_set.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "metarun_legacy.h"
 #include "score/score_guid.h"
 #include "sdl-sound.h"
 #include "init2-internal.h"
 #include "init-lifecycle.h"
 #include <SDL3/SDL_filesystem.h>
+#include <limits.h>
 #include <stdio.h>
 #define SIL_USER_ROOT "sil-more"
 #define SIL_USER_DATA_DIR "data"
@@ -307,14 +309,11 @@ static bool copy_leaf_if_needed(const char* src_dir, const char* dst_dir, const 
     }
     return true;
 }
+#endif
 
-static bool has_valid_metarun_data(const char* meta_dir)
+static bool metarun_file_has_valid_payload(const char* meta_path)
 {
-    if (!meta_dir || !*meta_dir)
-        return false;
-
-    char meta_path[1024];
-    if (!path_build(meta_path, sizeof(meta_path), meta_dir, META_RAW))
+    if (!meta_path || !*meta_path)
         return false;
 
     SDL_PathInfo info;
@@ -326,15 +325,131 @@ static bool has_valid_metarun_data(const char* meta_dir)
     if (!fd)
         return false;
 
-    /* Check if it has valid header */
-    meta_file_header header;
-    bool valid = (SDL_ReadIO(fd, &header, sizeof(header)) == sizeof(header))
-        && header.entry_count > 0;
+    meta_file_header header = { 0 };
+    Sint64 file_size = SDL_GetIOSize(fd);
+    bool header_read =
+        SDL_ReadIO(fd, &header, sizeof(header)) == sizeof(header);
+    u32b file_version = ((u32b)header.version_major << 24)
+        | ((u32b)header.version_minor << 16)
+        | ((u32b)header.version_patch << 8)
+        | (u32b)header.version_extra;
+    u32b current_version = ((u32b)METARUN_FILE_VERSION_MAJOR << 24)
+        | ((u32b)METARUN_FILE_VERSION_MINOR << 16)
+        | ((u32b)METARUN_FILE_VERSION_PATCH << 8)
+        | (u32b)METARUN_FILE_VERSION_EXTRA;
+    bool version_supported = header_read && file_version <= current_version;
+    bool valid = header_read
+        && version_supported
+        && header.entry_count > 0
+        && header.entry_count <= SHRT_MAX
+        && file_size >= (Sint64)sizeof(header);
+
+    if (valid)
+    {
+        Sint64 payload = file_size - (Sint64)sizeof(header);
+        Sint64 entry_size = payload / (Sint64)header.entry_count;
+        valid = payload % (Sint64)header.entry_count == 0
+            && (entry_size == (Sint64)sizeof(metarun)
+                || entry_size == (Sint64)METARUN_V10_SIZE
+                || entry_size == (Sint64)METARUN_V9_SIZE
+                || entry_size == (Sint64)METARUN_V8_SIZE);
+    }
 
     sdl_fclose(fd);
     return valid;
 }
 
+static bool files_have_same_contents(const char* first, const char* second)
+{
+    SDL_IOStream* left = NULL;
+    SDL_IOStream* right = NULL;
+    bool same = false;
+
+    if (!first || !second)
+        return false;
+
+    left = sdl_fopen(first, "rb");
+    right = sdl_fopen(second, "rb");
+    if (!left || !right)
+        goto done;
+
+    Sint64 left_size = SDL_GetIOSize(left);
+    Sint64 right_size = SDL_GetIOSize(right);
+    if (left_size < 0 || left_size != right_size)
+        goto done;
+
+    same = true;
+    char left_buf[8192];
+    char right_buf[8192];
+    while (left_size > 0)
+    {
+        size_t amount = (size_t)MIN(left_size, (Sint64)sizeof(left_buf));
+        if (SDL_ReadIO(left, left_buf, amount) != amount
+            || SDL_ReadIO(right, right_buf, amount) != amount
+            || memcmp(left_buf, right_buf, amount) != 0)
+        {
+            same = false;
+            break;
+        }
+        left_size -= (Sint64)amount;
+    }
+
+done:
+    if (left)
+        sdl_fclose(left);
+    if (right)
+        sdl_fclose(right);
+    return same;
+}
+
+#if !defined(__ANDROID__) && !defined(SIL_IOS)
+static bool has_valid_metarun_data(const char* meta_dir)
+{
+    if (!meta_dir || !*meta_dir)
+        return false;
+
+    char meta_path[1024];
+    if (!path_build(meta_path, sizeof(meta_path), meta_dir, META_RAW))
+        return false;
+
+    return metarun_file_has_valid_payload(meta_path);
+}
+#endif
+
+static bool preserve_invalid_metarun_file(const char* path, char* preserved,
+    size_t preserved_len)
+{
+    if (!path || !preserved || preserved_len == 0
+        || strlen(path) + 13 >= preserved_len)
+        return false;
+
+    for (int suffix = 0; suffix < 1000; suffix++)
+    {
+        if (suffix == 0)
+            strnfmt(preserved, preserved_len, "%s.invalid", path);
+        else
+            strnfmt(preserved, preserved_len, "%s.invalid.%d", path, suffix);
+
+        SDL_PathInfo info;
+        if (SDL_GetPathInfo(preserved, &info))
+            continue;
+        SDL_ClearError();
+
+        if (!SDL_RenamePath(path, preserved))
+        {
+            log_warn("init_file_paths: failed to preserve invalid metarun file '%s': %s",
+                path, SDL_GetError());
+            return false;
+        }
+        return true;
+    }
+
+    log_warn("init_file_paths: no available preservation name for invalid metarun file '%s'",
+        path);
+    return false;
+}
+
+#if !defined(__ANDROID__) && !defined(SIL_IOS)
 static void seed_user_meta_from_install(const char* user_meta_dir, const char* user_metarun_dir)
 {
     (void)user_metarun_dir;
@@ -649,21 +764,60 @@ static void migrate_legacy_metarun_layout(const char* meta_root, const char* met
 
     if (target_exists)
     {
-        if (!SDL_RemovePath(legacy))
+        if (metarun_file_has_valid_payload(target))
         {
-            log_warn("init_file_paths: failed to remove legacy metarun file '%s': %s",
-                legacy, SDL_GetError());
-        }
-        else
-        {
-            log_info("init_file_paths: removed duplicate legacy metarun file '%s'", legacy);
-
-            /* Try to remove the now-empty metaruns directory */
-            if (SDL_RemovePath(metarun_dir))
+            if (!metarun_file_has_valid_payload(legacy))
             {
-                log_info("init_file_paths: removed empty legacy metaruns directory '%s'", metarun_dir);
+                log_warn("init_file_paths: destination metarun is valid but legacy copy is invalid; preserving both");
+                return;
             }
+            if (!files_have_same_contents(target, legacy))
+            {
+                log_warn("init_file_paths: destination and legacy metarun files are both valid but differ; preserving both");
+                return;
+            }
+
+            if (!SDL_RemovePath(legacy))
+            {
+                log_warn("init_file_paths: failed to remove legacy metarun file '%s': %s",
+                    legacy, SDL_GetError());
+            }
+            else
+            {
+                log_info("init_file_paths: removed duplicate legacy metarun file '%s'", legacy);
+
+                /* Try to remove the now-empty metaruns directory */
+                if (SDL_RemovePath(metarun_dir))
+                {
+                    log_info("init_file_paths: removed empty legacy metaruns directory '%s'", metarun_dir);
+                }
+            }
+            return;
         }
+
+        if (!metarun_file_has_valid_payload(legacy))
+        {
+            log_warn("init_file_paths: both destination and legacy metarun files are invalid; preserving both");
+            return;
+        }
+
+        char preserved[1100];
+        if (!preserve_invalid_metarun_file(target, preserved,
+                sizeof(preserved)))
+            return;
+
+        if (!SDL_RenamePath(legacy, target))
+        {
+            log_warn("init_file_paths: failed to recover valid legacy metarun file '%s' -> '%s': %s",
+                legacy, target, SDL_GetError());
+            if (!SDL_RenamePath(preserved, target))
+                log_error("init_file_paths: failed to restore invalid destination '%s' from '%s': %s",
+                    target, preserved, SDL_GetError());
+            return;
+        }
+
+        log_warn("init_file_paths: recovered legacy metarun file; preserved invalid destination as '%s'",
+            preserved);
         return;
     }
 

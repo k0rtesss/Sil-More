@@ -1024,8 +1024,12 @@ static char display_scores_pages(const high_score* entries, int count,
                 ui_menu_click_clear();
                 if (clicked_choice >= 0 && clicked_choice < count)
                 {
+                    bool same_choice = (*highlight_index == clicked_choice);
+
                     *highlight_index = clicked_choice;
                     if (click_action == UI_MENU_CLICK_HOVER)
+                        continue;
+                    if (!same_choice)
                         continue;
                     sdl_halls_screen_hide();
                     if (!show_run_history_detail_for_score(&entries[*highlight_index]))

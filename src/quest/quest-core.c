@@ -9,11 +9,19 @@
 /*
  * Select a suitable unique monster for the Tulkas quest
  */
-static bool tulkas_target_valid(int r_idx, const monster_race* r_ptr, int depth)
+bool tulkas_target_race_valid(const monster_race* r_ptr)
 {
     if (!r_ptr) return false;
-
     if (!(r_ptr->flags1 & RF1_UNIQUE)) return false;
+    if (r_ptr->flags1 & (RF1_PEACEFUL | RF1_NEVER_BLOW | RF1_SPECIAL_GEN))
+        return false;
+
+    return true;
+}
+
+static bool tulkas_target_valid(int r_idx, const monster_race* r_ptr, int depth)
+{
+    if (!tulkas_target_race_valid(r_ptr)) return false;
     if (r_ptr->max_num <= 0) return false;
     if (r_ptr->level < depth) return false;
     if (r_ptr->level > MORGOTH_DEPTH) return false;
@@ -36,13 +44,14 @@ static bool tulkas_has_valid_target(int depth)
     return false;
 }
 
-int select_tulkas_quest_target(void)
+int select_tulkas_quest_target_for_depth(int depth)
 {
     int i;
     int valid_targets[50];
     int count = 0;
 
-    log_trace("select_tulkas_quest_target: z_info=%p, r_max=%d", z_info, z_info ? z_info->r_max : -1);
+    log_trace("select_tulkas_quest_target_for_depth: depth=%d, z_info=%p, r_max=%d",
+        depth, z_info, z_info ? z_info->r_max : -1);
 
     if (!z_info)
     {
@@ -63,7 +72,7 @@ int select_tulkas_quest_target(void)
 
         /* Must be unique, alive (max_num > 0), and at appropriate depth */
         /* Exclude Tulkas himself and Morgoth from being targets */
-        if (tulkas_target_valid(i, r_ptr, p_ptr->depth))
+        if (tulkas_target_valid(i, r_ptr, depth))
         {
             valid_targets[count] = i;
             count++;
@@ -78,6 +87,11 @@ int select_tulkas_quest_target(void)
 
     log_trace("select_tulkas_quest_target: Found %d valid unique targets", count);
     return valid_targets[rand_int(count)];
+}
+
+int select_tulkas_quest_target(void)
+{
+    return select_tulkas_quest_target_for_depth(p_ptr->depth);
 }
 
 /*

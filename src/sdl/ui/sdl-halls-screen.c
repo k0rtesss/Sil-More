@@ -41,6 +41,12 @@ typedef struct sdl_halls_action {
 typedef struct sdl_halls_state {
     bool active;
     bool detailed;
+    bool touch_press_active;
+    bool touch_press_dragged;
+    SDL_FingerID touch_press_finger_id;
+    int touch_press_choice;
+    float touch_press_start_x;
+    float touch_press_start_y;
     int entry_count;
     int action_count;
     int hover_choice;
@@ -1098,6 +1104,106 @@ static bool sdl_halls_pointer_press(float x, float y, int action)
     return true;
 }
 
+static void sdl_halls_touch_press_cancel(void)
+{
+    g_sdl_halls.touch_press_active = false;
+    g_sdl_halls.touch_press_dragged = false;
+    g_sdl_halls.touch_press_finger_id = 0;
+    g_sdl_halls.touch_press_choice = INT_MIN;
+    g_sdl_halls.touch_press_start_x = 0.0f;
+    g_sdl_halls.touch_press_start_y = 0.0f;
+}
+
+static bool sdl_halls_touch_press_begin(float x, float y,
+    SDL_FingerID finger_id)
+{
+    int choice;
+
+    if (g_sdl_halls.touch_press_active)
+        return true;
+
+    choice = sdl_halls_hit_at(x, y);
+    if (choice == INT_MIN)
+        choice = g_sdl_halls.outside_choice;
+
+    g_sdl_halls.touch_press_active = true;
+    g_sdl_halls.touch_press_dragged = false;
+    g_sdl_halls.touch_press_finger_id = finger_id;
+    g_sdl_halls.touch_press_choice = choice;
+    g_sdl_halls.touch_press_start_x = x;
+    g_sdl_halls.touch_press_start_y = y;
+    g_sdl_halls.hover_choice = choice;
+    g_state.need_present = true;
+    return true;
+}
+
+static bool sdl_halls_touch_press_motion(float x, float y,
+    SDL_FingerID finger_id)
+{
+    float dx;
+    float dy;
+    int choice;
+
+    if (!g_sdl_halls.touch_press_active
+        || g_sdl_halls.touch_press_finger_id != finger_id)
+    {
+        return true;
+    }
+
+    dx = x - g_sdl_halls.touch_press_start_x;
+    dy = y - g_sdl_halls.touch_press_start_y;
+    if (dx < 0.0f)
+        dx = -dx;
+    if (dy < 0.0f)
+        dy = -dy;
+    if (dx > sdl_touch_swipe_threshold_px()
+        || dy > sdl_touch_swipe_threshold_px())
+    {
+        g_sdl_halls.touch_press_dragged = true;
+    }
+
+    choice = sdl_halls_hit_at(x, y);
+    if (choice == INT_MIN)
+        choice = g_sdl_halls.outside_choice;
+    if (choice != g_sdl_halls.hover_choice)
+    {
+        g_sdl_halls.hover_choice = choice;
+        g_state.need_present = true;
+    }
+    return true;
+}
+
+static bool sdl_halls_touch_press_finish(float x, float y,
+    SDL_FingerID finger_id)
+{
+    bool dragged;
+    int pressed_choice;
+    int release_choice;
+
+    if (!g_sdl_halls.touch_press_active
+        || g_sdl_halls.touch_press_finger_id != finger_id)
+    {
+        return true;
+    }
+
+    dragged = g_sdl_halls.touch_press_dragged;
+    pressed_choice = g_sdl_halls.touch_press_choice;
+    release_choice = sdl_halls_hit_at(x, y);
+    if (release_choice == INT_MIN)
+        release_choice = g_sdl_halls.outside_choice;
+    sdl_halls_touch_press_cancel();
+
+    if (dragged || release_choice == INT_MIN
+        || release_choice != pressed_choice)
+    {
+        g_sdl_halls.hover_choice = INT_MIN;
+        g_state.need_present = true;
+        return true;
+    }
+
+    return sdl_halls_pointer_press(x, y, UI_MENU_CLICK_PRIMARY);
+}
+
 bool sdl_halls_screen_handle_pointer_event(const SDL_Event* ev)
 {
     float x;
@@ -1140,18 +1246,35 @@ bool sdl_halls_screen_handle_pointer_event(const SDL_Event* ev)
             return true;
         sdl_note_touch_event_device(ev->tfinger.touchID);
         if (sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
-            return sdl_halls_pointer_press(x, y, UI_MENU_CLICK_PRIMARY);
+            return sdl_halls_touch_press_begin(x, y,
+                ev->tfinger.fingerID);
         return true;
 
     case SDL_EVENT_FINGER_MOTION:
         if (ev->tfinger.windowID != SDL_GetWindowID(g_state.window))
             return true;
         if (sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
-            return sdl_halls_pointer_motion(x, y);
+            return sdl_halls_touch_press_motion(x, y,
+                ev->tfinger.fingerID);
         return true;
 
     case SDL_EVENT_FINGER_UP:
+        if (ev->tfinger.windowID != SDL_GetWindowID(g_state.window))
+            return true;
+        if (sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
+            return sdl_halls_touch_press_finish(x, y,
+                ev->tfinger.fingerID);
+        sdl_halls_touch_press_cancel();
+        return true;
+
     case SDL_EVENT_FINGER_CANCELED:
+        if (g_sdl_halls.touch_press_active
+            && g_sdl_halls.touch_press_finger_id == ev->tfinger.fingerID)
+        {
+            sdl_halls_touch_press_cancel();
+            g_sdl_halls.hover_choice = INT_MIN;
+            g_state.need_present = true;
+        }
         return true;
 
     default:

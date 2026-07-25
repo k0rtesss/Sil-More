@@ -9308,6 +9308,7 @@ static bool sdl_character_sheet_select_scroll_motion(float x, float y,
     float dx;
     float dy;
     float total_dy;
+    int scroll_delta;
     int scroll;
 
     if (!drag->active || drag->finger_id != finger_id)
@@ -9329,6 +9330,7 @@ static bool sdl_character_sheet_select_scroll_motion(float x, float y,
 
     dy = y - drag->last_y;
     drag->last_y = y;
+    drag->accum_y += dy;
     if (total_dy > sdl_touch_swipe_threshold_px())
     {
         drag->dragged = true;
@@ -9339,8 +9341,22 @@ static bool sdl_character_sheet_select_scroll_motion(float x, float y,
     if (total_dy < 3.0f && !drag->dragged)
         return true;
 
-    scroll = g_sdl_character_sheet_screen.sheet_scroll - (int)dy;
-    (void)sdl_character_sheet_set_scroll(scroll);
+    scroll_delta = (int)drag->accum_y;
+    if (scroll_delta == 0)
+        return true;
+    drag->accum_y -= (float)scroll_delta;
+    scroll = g_sdl_character_sheet_screen.sheet_scroll - scroll_delta;
+    if (sdl_character_sheet_set_scroll(scroll) && !drag->dragged)
+    {
+        /*
+         * Once content has moved, this gesture can no longer be a tap.  The
+         * old code scrolled after three pixels but kept tap ownership until
+         * the much larger swipe threshold, activating the row on release.
+         */
+        drag->dragged = true;
+        g_sdl_character_sheet_screen.hover_choice = SDL_CHAR_SHEET_NO_HOVER;
+        ui_menu_click_clear_pending_hover();
+    }
     return true;
 }
 

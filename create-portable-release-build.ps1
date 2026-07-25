@@ -96,16 +96,13 @@ $requiredDlls = @(
     'libiconv-2.dll'
 )
 
-# Step 1: Build portable (if not already built)
+# Step 1: Always rebuild portable so the executable matches packaged data.
 Write-Host ""
-Write-Host "Checking for portable build..." -ForegroundColor Yellow
-if (-not (Test-Path $buildPortableExePath)) {
-    Write-Host "Portable build not found. Building now..." -ForegroundColor Cyan
-    & $buildScriptPath portable
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Build failed!" -ForegroundColor Red
-        exit 1
-    }
+Write-Host "Building fresh portable deployment..." -ForegroundColor Yellow
+& $buildScriptPath portable
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Build failed!" -ForegroundColor Red
+    exit 1
 }
 Write-Host "  [OK] Portable build found"
 
@@ -155,8 +152,9 @@ foreach ($dll in $requiredDlls) {
 
 Write-Host "  [OK] Copied $copiedDlls DLLs"
 if ($missingDlls.Count -gt 0) {
-    Write-Host "  [WARN] Missing DLLs:" -ForegroundColor Yellow
+    Write-Host "  [ERROR] Missing DLLs:" -ForegroundColor Red
     $missingDlls | ForEach-Object { Write-Host "    - $_" }
+    exit 1
 }
 
 # Step 5: Create lib folder structure

@@ -849,10 +849,11 @@ extern void create_smithing_item(void);
 #define MAIN_MENU_OPTIONS 12
 #define MAIN_MENU_HELP 13
 #define MAIN_MENU_ABOUT 14
-#define MAIN_MENU_SAVE 15
-#define MAIN_MENU_SAVE_QUIT 16
-#define MAIN_MENU_RETURN_GAME 17
-#define MAIN_MENU_MAX 17
+#define MAIN_MENU_PRIVACY_POLICY 15
+#define MAIN_MENU_SAVE 16
+#define MAIN_MENU_SAVE_QUIT 17
+#define MAIN_MENU_RETURN_GAME 18
+#define MAIN_MENU_MAX 18
 extern cptr main_menu_title(int choice);
 extern int main_menu_keyboard_key(int choice);
 extern void main_menu_shortcut_label(int choice, char* buf, size_t buflen);

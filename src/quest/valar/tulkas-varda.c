@@ -325,6 +325,56 @@ void validate_tulkas_quest_on_load(void)
 
     r_ptr = &r_info[p_ptr->tulkas_target_r_idx];
 
+    /*
+     * Repair saves created before target selection excluded peaceful,
+     * non-attacking, and special-generation uniques.  Such a target cannot
+     * satisfy the normal exact-death completion path.
+     */
+    if (!tulkas_target_race_valid(r_ptr))
+    {
+        int replacement_depth = MIN(p_ptr->depth, r_ptr->level);
+        int replacement_r_idx =
+            select_tulkas_quest_target_for_depth(replacement_depth);
+        if (replacement_r_idx == 0 && replacement_depth > 0)
+            replacement_r_idx = select_tulkas_quest_target_for_depth(0);
+
+        log_warn("validate_tulkas_quest_on_load: found impossible target %d (%s)",
+            p_ptr->tulkas_target_r_idx,
+            r_ptr->name ? r_name + r_ptr->name : "(unnamed)");
+
+        /*
+         * The original encounter already consumed one of this run's quest
+         * initiations.  Keep the accepted quest and its prize, replacing only
+         * the impossible target so no second roulette encounter is required.
+         */
+        if (replacement_r_idx > 0)
+        {
+            log_warn("validate_tulkas_quest_on_load: replacing target %d with %d (%s)",
+                p_ptr->tulkas_target_r_idx, replacement_r_idx,
+                r_name + r_info[replacement_r_idx].name);
+            p_ptr->tulkas_target_r_idx = replacement_r_idx;
+            return;
+        }
+
+        /*
+         * No eligible unique remains.  Release the abandoned quest and its
+         * initiation slot rather than leaving the character permanently
+         * blocked at the per-run cap.
+         */
+        if (valar_reserved_artifacts && p_ptr->tulkas_prize_a_idx > 0
+            && p_ptr->tulkas_prize_a_idx < z_info->art_max)
+        {
+            valar_reserved_artifacts[p_ptr->tulkas_prize_a_idx] = false;
+        }
+        if (p_ptr->quest_reserved[0] > 0)
+            p_ptr->quest_reserved[0]--;
+        p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
+        p_ptr->tulkas_target_r_idx = 0;
+        p_ptr->tulkas_prize_a_idx = 0;
+        p_ptr->tulkas_quest_complete = 0;
+        return;
+    }
+
     /* Check if the target unique is already dead (max_num == 0) */
     if (r_ptr->max_num == 0)
     {

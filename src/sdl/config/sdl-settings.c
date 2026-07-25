@@ -118,8 +118,12 @@ void get_sdl_config_info(char* buf, size_t size)
 bool save_pane_config_to_json(void)
 {
     sdl_store_active_pane_profile(config.min_terminal_mode);
-    sdl_config_save(config_file_path, &config, g_pane_profiles, SDL_PANE_PROFILE_COUNT);
-    log_info("Pane configuration saved to: %s", config_file_path);
+    if (!sdl_config_save(config_file_path, &config, g_pane_profiles,
+            SDL_PANE_PROFILE_COUNT)) {
+        log_warn("Failed to save pane configuration to: %s",
+            config_file_path);
+        return false;
+    }
     return true;
 }
 
@@ -734,10 +738,14 @@ void sdl_reset_interface_settings_to_defaults(void)
 
     if (config_file_path[0] != '\0')
     {
-        sdl_config_save(config_file_path, &config, g_pane_profiles,
-            SDL_PANE_PROFILE_COUNT);
-        log_info("Reset all SDL/interface settings, including landscape and portrait profiles, to defaults: %s",
-            config_file_path);
+        if (sdl_config_save(config_file_path, &config, g_pane_profiles,
+                SDL_PANE_PROFILE_COUNT)) {
+            log_info("Reset all SDL/interface settings, including landscape and portrait profiles, to defaults: %s",
+                config_file_path);
+        } else {
+            log_warn("Failed to persist reset SDL/interface settings to: %s",
+                config_file_path);
+        }
     }
 }
 

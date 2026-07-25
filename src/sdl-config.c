@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "externs.h"
+#include "fs/path.h"
 #include "sdl-config.h"
 #include "log/log.h"
 #include "pane.h"
@@ -4641,7 +4642,7 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
     return SDL_CONFIG_LOAD_OK;
 }
 
-void sdl_config_save(const char* filename, const struct sdl_config* config,
+bool sdl_config_save(const char* filename, const struct sdl_config* config,
                      const struct sdl_pane_profile* pane_profiles, int profile_count)
 {
     int active_mode = config->min_terminal_mode;
@@ -4652,7 +4653,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     cJSON* root = cJSON_CreateObject();
     if (!root) {
         log_error("Failed to create JSON root object");
-        return;
+        return false;
     }
     
     // Create SDL settings object
@@ -4660,7 +4661,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     if (!sdl) {
         cJSON_Delete(root);
         log_error("Failed to create SDL settings object");
-        return;
+        return false;
     }
     
     cJSON_AddNumberToObject(sdl, "mainViewScale", config->main_view_scale);
@@ -4773,7 +4774,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
         if (!panes) {
             cJSON_Delete(root);
             log_error("Failed to create panes array");
-            return;
+            return false;
         }
 
         cJSON_AddItemToObject(root, "panes", panes);
@@ -4785,7 +4786,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
         if (!pane_profiles_obj) {
             cJSON_Delete(root);
             log_error("Failed to create paneProfiles object");
-            return;
+            return false;
         }
 
         for (int orientation = 0;
@@ -5121,23 +5122,58 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     if (!json_string) {
         cJSON_Delete(root);
         log_error("Failed to print JSON");
-        return;
+        return false;
     }
-    
-    FILE* f = fopen(filename, "w");
-    if (!f) {
-        log_error("Could not write JSON file: %s", filename);
+
+    char temporary[1200];
+    if (!filename || !filename[0]
+        || strlen(filename) + 5 > sizeof(temporary)) {
+        log_error("Invalid SDL configuration filename");
         cJSON_free(json_string);
         cJSON_Delete(root);
-        return;
+        return false;
     }
-    
-    fprintf(f, "%s\n", json_string);
-    fclose(f);
+    strnfmt(temporary, sizeof(temporary), "%s.tmp", filename);
+
+    SDL_PathInfo temporary_info;
+    if (SDL_GetPathInfo(temporary, &temporary_info))
+        (void)SDL_RemovePath(temporary);
+    else
+        SDL_ClearError();
+
+    FILE* f = fopen(temporary, "wb");
+    if (!f) {
+        log_error("Could not write temporary JSON file: %s", temporary);
+        cJSON_free(json_string);
+        cJSON_Delete(root);
+        return false;
+    }
+
+    bool write_ok = fprintf(f, "%s\n", json_string) >= 0;
+    if (write_ok)
+        write_ok = fflush(f) == 0;
+    if (fclose(f) != 0)
+        write_ok = false;
+
     cJSON_free(json_string);
     cJSON_Delete(root);
-    
+
+    if (!write_ok) {
+        log_error("Failed writing or closing SDL configuration: %s",
+            temporary);
+        (void)SDL_RemovePath(temporary);
+        return false;
+    }
+
+    if (!fd_move(temporary, filename)) {
+        log_error("Failed to atomically replace SDL configuration: %s",
+            filename);
+        (void)SDL_RemovePath(temporary);
+        return false;
+    }
+
     log_info("Saved SDL configuration to: %s", filename);
+    return true;
 }
 
 void sdl_config_set_default_gamepad_bindings(struct sdl_config* config)

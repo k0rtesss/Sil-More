@@ -334,8 +334,9 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
     int profile_count, struct sdl_config_load_info* load_info);
 
 // Save SDL configuration to JSON file
-void sdl_config_save(const char* filename, const struct sdl_config* config,
-                     const struct sdl_pane_profile* pane_profiles, int profile_count);
+bool sdl_config_save(const char* filename, const struct sdl_config* config,
+                     const struct sdl_pane_profile* pane_profiles,
+                     int profile_count);
 
 /* Seed a profile with the portrait HUD defaults formerly imposed at render
  * time.  Once seeded, the values remain ordinary editable pane settings. */

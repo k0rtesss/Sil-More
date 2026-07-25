@@ -54,7 +54,13 @@ static bool score_runs_write_record(SDL_IOStream* file,
                                     const score_record_v1* record,
                                     const score_run_detail_block* details);
 static bool score_runs_write_header(SDL_IOStream* file,
-                                    const score_db_header* header);
+                                     const score_db_header* header);
+static bool score_runs_validate_db(SDL_IOStream* file,
+                                   score_db_header* header);
+static bool score_runs_restore_backup(const char* path);
+static bool score_runs_preserve_invalid_db(const char* path,
+                                           char* preserved,
+                                           size_t preserved_len);
 static bool score_runs_read_detail_header(SDL_IOStream* file,
                                           score_run_detail_header_v1* header);
 static bool score_runs_rewrite_record(const char* path, SDL_IOStream** source,
@@ -643,6 +649,76 @@ static bool score_runs_write_header(SDL_IOStream* file, const score_db_header* h
     return SDL_WriteIO(file, header, sizeof(*header)) == sizeof(*header);
 }
 
+static bool score_runs_restore_backup(const char* path)
+{
+    char backup_path[1100];
+    score_db_header header;
+
+    if (!path || strlen(path) + 5 > sizeof(backup_path))
+        return false;
+    strnfmt(backup_path, sizeof(backup_path), "%s.bak", path);
+
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(backup_path, &info) ||
+        info.type != SDL_PATHTYPE_FILE) {
+        SDL_ClearError();
+        return false;
+    }
+
+    SDL_IOStream* backup = SDL_IOFromFile(backup_path, "rb");
+    if (!backup)
+        return false;
+    bool valid = score_runs_validate_db(backup, &header);
+    SDL_CloseIO(backup);
+    if (!valid) {
+        log_warn("score_runs: refusing invalid recovery backup %s",
+            backup_path);
+        return false;
+    }
+
+    if (!SDL_RenamePath(backup_path, path)) {
+        log_warn("score_runs: unable to restore %s from %s: %s",
+            path, backup_path, SDL_GetError());
+        return false;
+    }
+
+    log_info("score_runs: restored interrupted rewrite backup %s",
+        backup_path);
+    return true;
+}
+
+static bool score_runs_preserve_invalid_db(const char* path,
+                                           char* preserved,
+                                           size_t preserved_len)
+{
+    if (!path || !preserved || preserved_len == 0
+        || strlen(path) + 13 >= preserved_len)
+        return false;
+
+    for (int suffix = 0; suffix < 1000; suffix++) {
+        if (suffix == 0)
+            strnfmt(preserved, preserved_len, "%s.invalid", path);
+        else
+            strnfmt(preserved, preserved_len, "%s.invalid.%d", path,
+                suffix);
+
+        SDL_PathInfo info;
+        if (SDL_GetPathInfo(preserved, &info))
+            continue;
+        SDL_ClearError();
+
+        if (!SDL_RenamePath(path, preserved)) {
+            log_warn("score_runs: unable to preserve invalid database %s: %s",
+                path, SDL_GetError());
+            return false;
+        }
+        return true;
+    }
+
+    log_warn("score_runs: no available preservation name for %s", path);
+    return false;
+}
+
 static u16b score_runs_choose_artefact_capacity(void)
 {
     if (!z_info)
@@ -788,6 +864,37 @@ bool score_runs_skip_detail_payload(SDL_IOStream* file,
     if (skip < 0)
         return false;
     return SDL_SeekIO(file, skip, SDL_IO_SEEK_CUR) >= 0;
+}
+
+static bool score_runs_validate_db(SDL_IOStream* file,
+                                   score_db_header* header)
+{
+    if (!file || !header || !score_runs_read_header(file, header)
+        || header->version != SCORE_RUNS_DB_VERSION)
+        return false;
+
+    Sint64 file_size = SDL_GetIOSize(file);
+    Sint64 minimum_record_size = (Sint64)sizeof(score_record_v1)
+        + (Sint64)sizeof(score_run_detail_header_v1);
+    if (file_size < (Sint64)sizeof(*header)
+        || minimum_record_size <= 0
+        || (Sint64)header->record_count
+            > (file_size - (Sint64)sizeof(*header)) / minimum_record_size)
+        return false;
+
+    if (SDL_SeekIO(file, sizeof(*header), SDL_IO_SEEK_SET) < 0)
+        return false;
+
+    for (u32b i = 0; i < header->record_count; i++) {
+        score_record_v1 record;
+        score_run_detail_header_v1 detail_header;
+        if (SDL_ReadIO(file, &record, sizeof(record)) != sizeof(record)
+            || !score_runs_read_detail_header(file, &detail_header)
+            || !score_runs_skip_detail_payload(file, &detail_header))
+            return false;
+    }
+
+    return SDL_TellIO(file) == file_size;
 }
 
 static bool score_runs_read_detail_header_at(SDL_IOStream* file, Sint64 record_offset,
@@ -1033,9 +1140,30 @@ static Sint64 score_runs_serialized_record_size(
 static SDL_IOStream* score_runs_open_db(const char* path, score_db_header* header,
                                         bool* created)
 {
+    SDL_PathInfo path_info;
+    bool path_exists;
+
     if (created)
         *created = false;
+
+    path_exists = SDL_GetPathInfo(path, &path_info);
+    if (path_exists && path_info.type != SDL_PATHTYPE_FILE) {
+        log_warn("score_runs: database path is not a file: %s", path);
+        return NULL;
+    }
+
     SDL_IOStream* file = SDL_IOFromFile(path, "r+b");
+    if (!file) {
+        if (path_exists) {
+            log_warn("score_runs: unable to open existing database %s: %s",
+                path, SDL_GetError());
+            return NULL;
+        }
+
+        SDL_ClearError();
+        if (score_runs_restore_backup(path))
+            file = SDL_IOFromFile(path, "r+b");
+    }
     if (!file) {
         file = SDL_IOFromFile(path, "w+b");
         if (!file)
@@ -1046,30 +1174,48 @@ static SDL_IOStream* score_runs_open_db(const char* path, score_db_header* heade
 
     if (created && *created) {
         score_runs_init_header(header);
-        (void)score_runs_write_header(file, header);
+        if (!score_runs_write_header(file, header) || !SDL_FlushIO(file)) {
+            SDL_CloseIO(file);
+            (void)SDL_RemovePath(path);
+            return NULL;
+        }
         SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
         return file;
     }
 
     bool need_reset = false;
-    if (!score_runs_read_header(file, header) ||
-        header->version != SCORE_RUNS_DB_VERSION) {
-        log_warn("score_runs: invalid or legacy header in %s, recreating", path);
+    if (!score_runs_validate_db(file, header)) {
+        log_warn("score_runs: invalid or incompatible database at %s, recreating safely",
+            path);
         need_reset = true;
     }
 
     if (need_reset) {
         SDL_CloseIO(file);
-        file = SDL_IOFromFile(path, "w+b");
-        if (!file)
+        file = NULL;
+
+        char preserved[1200];
+        if (!score_runs_preserve_invalid_db(path, preserved,
+                sizeof(preserved))) {
             return NULL;
+        }
+
+        file = SDL_IOFromFile(path, "w+b");
+        if (!file) {
+            (void)SDL_RenamePath(preserved, path);
+            return NULL;
+        }
         if (created)
             *created = true;
         score_runs_init_header(header);
-        if (SDL_WriteIO(file, header, sizeof(*header)) != sizeof(*header)) {
+        if (!score_runs_write_header(file, header) || !SDL_FlushIO(file)) {
             SDL_CloseIO(file);
+            (void)SDL_RemovePath(path);
+            (void)SDL_RenamePath(preserved, path);
             return NULL;
         }
+        log_warn("score_runs: preserved incompatible database as %s",
+            preserved);
     }
 
     SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
