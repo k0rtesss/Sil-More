@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "ui/question.h"
 
 static term g_left_panel_source_term;
 static bool g_left_panel_source_term_ready = false;
@@ -1667,6 +1668,12 @@ bool sdl_left_panel_compact_light_span_for_term(const term* t,
 int sdl_left_panel_compact_source_row_width_for_view(
     const sdl_view* view, int source_row, bool row_mode)
 {
+    if (!row_mode && source_row == ROW_NAME + 1
+        && get_sdl_left_panel_compact_health_bar())
+    {
+        return 12;
+    }
+
     if (row_mode && source_row == ROW_LIGHT) {
         sdl_left_panel_compact_light_span span;
         const term* source_term;
@@ -1690,7 +1697,8 @@ int sdl_left_panel_compact_source_row_width_for_view(
 void sdl_left_panel_compact_metrics_for_view(const sdl_view* view,
     sdl_left_panel_metrics* metrics)
 {
-    const int source_rows[] = { ROW_HP, ROW_SP, ROW_LIGHT };
+    int source_rows[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
+    int source_row_count = 0;
     int next_col = 0;
     int max_cols = 0;
     bool row_mode;
@@ -1699,9 +1707,14 @@ void sdl_left_panel_compact_metrics_for_view(const sdl_view* view,
         return;
 
     row_mode = sdl_left_panel_compact_row_mode();
+    if (!row_mode && get_sdl_left_panel_compact_health_bar())
+        source_rows[source_row_count++] = ROW_NAME + 1;
+    source_rows[source_row_count++] = ROW_HP;
+    source_rows[source_row_count++] = ROW_SP;
+    source_rows[source_row_count++] = ROW_LIGHT;
     metrics->collapsed = true;
     metrics->compact_row = row_mode;
-    metrics->compact_segment_count = (int)N_ELEMENTS(source_rows);
+    metrics->compact_segment_count = source_row_count;
 
     for (int i = 0; i < metrics->compact_segment_count; i++) {
         int width = sdl_left_panel_compact_source_row_width_for_view(view,
@@ -1875,7 +1888,12 @@ bool sdl_left_panel_metrics_for_view(const sdl_view* view,
     }
     connected_to_combat = sdl_combat_overlay_connected_to_left_panel(
         &combat_below);
-    top_padding_h = (connected_to_combat && !combat_below) ? 0 : cell_w;
+    top_padding_h = (connected_to_combat && !combat_below)
+            || (sdl_left_panel_pane_collapsed()
+                && !local_metrics.compact_row
+                && get_sdl_left_panel_compact_health_bar())
+        ? 0
+        : cell_w;
     bottom_padding_h = (connected_to_combat && combat_below) ? 0 : cell_w;
     {
         int available_padding_h = source_h - panel_render_h;
@@ -3614,6 +3632,7 @@ enum {
     SDL_MOUSE_POINTER_FRAME_GROW,
     SDL_MOUSE_POINTER_FRAME_PEAK,
     SDL_MOUSE_POINTER_FRAME_COUNT,
+    SDL_MOUSE_POINTER_ALPHA = 192,
     SDL_MOUSE_POINTER_PULSE_STEP_NS = 40000000,
     SDL_MOUSE_POINTER_RELEASE_DURATION_NS =
         SDL_MOUSE_POINTER_PULSE_STEP_NS * 2,
@@ -3628,7 +3647,7 @@ static bool g_tile_mouse_cursor_releasing = false;
 
 static int sdl_tile_mouse_cursor_base_size(void)
 {
-    int scale = config.main_view_scale;
+    int scale = config.main_view_scale - 1;
 
     if (scale < 1)
         scale = 1;
@@ -3665,11 +3684,34 @@ static int sdl_tile_mouse_cursor_frame(Uint64 now_ns)
 
 static int sdl_tile_mouse_cursor_frame_size(int base_size, int frame)
 {
-    if (frame == SDL_MOUSE_POINTER_FRAME_PEAK)
-        return base_size + MAX(3, base_size / 8);
-    if (frame == SDL_MOUSE_POINTER_FRAME_GROW)
-        return base_size + MAX(2, base_size / 16);
+    /*
+     * Keep pixel-art cursor frames at whole-tile scale factors.  The normal
+     * frame is one scale step below the configured main view when possible;
+     * pressed frames grow by one whole tile-scale step.
+     */
+    if (frame == SDL_MOUSE_POINTER_FRAME_PEAK
+        || frame == SDL_MOUSE_POINTER_FRAME_GROW)
+    {
+        return base_size + TILE_SIZE;
+    }
     return base_size;
+}
+
+static bool sdl_tile_mouse_cursor_apply_alpha(SDL_Surface* surface)
+{
+    for (int y = 0; y < surface->h; y++) {
+        for (int x = 0; x < surface->w; x++) {
+            Uint8 r, g, b, a;
+
+            if (!SDL_ReadSurfacePixel(surface, x, y, &r, &g, &b, &a))
+                return false;
+            a = (Uint8)(((unsigned int)a * SDL_MOUSE_POINTER_ALPHA + 127)
+                / 255);
+            if (!SDL_WriteSurfacePixel(surface, x, y, r, g, b, a))
+                return false;
+        }
+    }
+    return true;
 }
 
 static void sdl_tile_mouse_cursor_cache_clear(void)
@@ -3742,6 +3784,11 @@ static SDL_Cursor* sdl_tile_mouse_cursor_create(int base_size, int frame)
             cursor_surface, &destination_rect, SDL_SCALEMODE_NEAREST))
     {
         log_warn("Could not copy tile mouse pointer surface: %s",
+            SDL_GetError());
+        goto cleanup;
+    }
+    if (!sdl_tile_mouse_cursor_apply_alpha(cursor_surface)) {
+        log_warn("Could not make tile mouse pointer semitransparent: %s",
             SDL_GetError());
         goto cleanup;
     }
@@ -5411,7 +5458,7 @@ bool sdl_prompt_reset_sdl_defaults(const char* issue_summary,
         return false;
 
     strnfmt(message, sizeof(message),
-        "Sil-more adjusted your SDL settings so the game can start:\n\n%s\n\nLoad default SDL settings now? You can keep the recovered settings and change them later from SDL Pane Settings.",
+        "Sil-more adjusted your SDL settings so the game can start:\n\n%s\n\nLoad default SDL settings now? You can keep the recovered settings and change them later from General Settings.",
         issue_summary);
 
     if (!SDL_ShowMessageBox(&messagebox, &button_id)) {
@@ -5467,7 +5514,7 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
         .message =
             "Choose how Sil-More should use your screen.\n\n"
             "Landscape is recommended. Portrait mode is experimental.\n\n"
-            "You can change this later in Options > Pane Settings > "
+            "You can change this later in Options > General Settings > "
             "Portrait Mode.",
         .numbuttons = (int)(sizeof(buttons) / sizeof(buttons[0])),
         .buttons = buttons,
@@ -5487,6 +5534,39 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
     }
 
     log_info("First-start mobile orientation: landscape");
+    return false;
+}
+
+bool sdl_prompt_mobile_startup_large_list_menus(void)
+{
+    const ui_question_option options[] = {
+        {
+            .key = 'n',
+            .label = "No - use the usual menu size",
+            .attr = TERM_WHITE,
+            .disabled = false,
+        },
+        {
+            .key = 'y',
+            .label = "Yes - make list menus larger",
+            .attr = TERM_WHITE,
+            .disabled = false,
+        },
+    };
+    int choice = ui_question_ask_overlay("List Menu Size",
+        "Do you want your list menus to scale bigger than usual?\n\n"
+        "Useful for small handhelds.\n\n"
+        "You can always change this later in Options > General Settings > "
+        "Menu Scale.",
+        options, (int)N_ELEMENTS(options), UI_QUESTION_GLOBAL,
+        UI_QUESTION_GLOBAL, 0);
+
+    if (choice == 1) {
+        log_info("First-start mobile list-menu scale offset: 0");
+        return true;
+    }
+
+    log_info("First-start mobile list-menu scale offset: -1");
     return false;
 }
 #endif

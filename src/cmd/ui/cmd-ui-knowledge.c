@@ -468,6 +468,22 @@ static cptr supply_group_text[SUPPLY_GROUP_MAX + 1] = {
     NULL
 };
 
+static cptr supply_group_browser_text(int group)
+{
+    if (!get_sdl_compact_inventory_menus())
+        return supply_group_text[group];
+
+    switch (group)
+    {
+    case SUPPLY_GROUP_LIGHTS:
+        return "Light/Oil";
+    case SUPPLY_GROUP_JEWELRY_PRESETS:
+        return "Jewelry";
+    default:
+        return supply_group_text[group];
+    }
+}
+
 void do_cmd_note(char* note, int what_depth)
 {
     char buf[120];
@@ -2976,7 +2992,7 @@ static void display_supply_group_list(int col, int row, int wid,
             draw_supply_icon(col, row + i, &icons[grp].obj);
         if (text_w > 0)
             supply_put_fitted(text_col, row + i, text_w, attr,
-                supply_group_text[grp]);
+                supply_group_browser_text(grp));
 
         strnfmt(buf, sizeof(buf), "%3d", group_totals[grp]);
         if (wid >= 3)
@@ -3800,6 +3816,24 @@ static cptr equipment_slot_text(int slot)
     }
 }
 
+static cptr equipment_slot_browser_text(int slot)
+{
+    if (!get_sdl_compact_inventory_menus())
+        return equipment_slot_text(slot);
+
+    switch (slot)
+    {
+    case EQUIPMENT_MENU_ALL:
+        return "All";
+    case INVEN_STAFF:
+        return "Staff";
+    case INVEN_BODY:
+        return "Armour";
+    default:
+        return equipment_slot_text(slot);
+    }
+}
+
 /* Compact labels for the optional Where column. */
 static cptr equipment_slot_where_text(int slot)
 {
@@ -3846,7 +3880,8 @@ static int equipment_slot_group_width(void)
 
     for (int i = 0; i < EQUIPMENT_MENU_SLOT_COUNT; i++)
     {
-        int len = (int)strlen(equipment_slot_text(equipment_menu_slots[i])) + 5;
+        int len = (int)strlen(
+            equipment_slot_browser_text(equipment_menu_slots[i])) + 5;
         if (len > width)
             width = len;
     }
@@ -4401,7 +4436,7 @@ static void display_equipment_group_list(int col, int row, int wid,
 
         if (text_w > 0)
             supply_put_fitted(text_col, row + i, text_w, attr,
-                equipment_slot_text(slot));
+                equipment_slot_browser_text(slot));
 
         strnfmt(buf, sizeof(buf), "%3d", totals[grp_pos]);
         if (wid >= 3)
@@ -5359,6 +5394,28 @@ static cptr inventory_browser_group_text(inventory_menu_group group)
     }
 }
 
+static cptr inventory_browser_group_label(inventory_menu_group group)
+{
+    if (!get_sdl_compact_inventory_menus())
+        return inventory_browser_group_text(group);
+
+    switch (group)
+    {
+    case INVENTORY_MENU_GROUP_ALL:
+        return "All";
+    case INVENTORY_MENU_GROUP_THROWABLES:
+        return "Thrown";
+    case INVENTORY_MENU_GROUP_CLOAKS:
+        return "Cloaks";
+    case INVENTORY_MENU_GROUP_HEADGEAR:
+        return "Head";
+    case INVENTORY_MENU_GROUP_LIGHTS:
+        return "Light/Oil";
+    default:
+        return inventory_browser_group_text(group);
+    }
+}
+
 static bool inventory_browser_object_matches_group(
     inventory_menu_group group, const object_type* o_ptr)
 {
@@ -5504,7 +5561,7 @@ static int inventory_browser_group_width(void)
     for (int i = 0; i < INVENTORY_BROWSER_GROUP_COUNT; i++)
     {
         int len = (int)strlen(
-            inventory_browser_group_text(inventory_browser_groups[i])) + 5;
+            inventory_browser_group_label(inventory_browser_groups[i])) + 5;
         if (len > width)
             width = len;
     }
@@ -5975,7 +6032,7 @@ static void display_inventory_browser_group_list(int col, int row, int wid,
 
         if (text_w > 0)
             supply_put_fitted(text_col, row + i, text_w, attr,
-                inventory_browser_group_text(group));
+                inventory_browser_group_label(group));
 
         strnfmt(buf, sizeof(buf), "%3d", totals[grp_pos]);
         if (wid >= 3)
@@ -7269,6 +7326,20 @@ static void knowledge_expand_active_column(knowledge_browser_layout* layout)
     layout->divider_col = -1;
     layout->list_col = 0;
     layout->list_w = layout->term_wid;
+}
+
+static void knowledge_expand_entry_view(knowledge_browser_layout* layout)
+{
+    if (!layout)
+        return;
+
+    knowledge_expand_active_column(layout);
+    layout->stacked = false;
+    layout->group_w = 0;
+    layout->group_rows = 0;
+    layout->entry_header_row = layout->header_row;
+    layout->entry_row = layout->list_row;
+    layout->entry_rows = layout->list_rows;
 }
 
 static void knowledge_draw_tabs(const knowledge_browser_layout* layout, int page,
@@ -9885,7 +9956,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
     for (i = 0; i < SUPPLY_GROUP_MAX; i++)
     {
-        int len = strlen(supply_group_text[i]) + 5;
+        int len = strlen(supply_group_browser_text(i)) + 5;
         if (len > max)
             max = len;
         grp_idx[i] = i;
@@ -9927,6 +9998,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             int entry_page_rows;
             int max_entry_top;
             bool touch_only;
+            bool compact_entry_only;
 
             prepare_equipment_group_icons(equip_icons);
             compute_equipment_group_totals(equip_totals);
@@ -9947,9 +10019,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             selected_slot = equipment_menu_slots[equip_grp_cur];
             equip_entry_cnt = collect_equipment_entries_for_slot(selected_slot,
                 equip_entries, equip_capacity);
-            equipment_entry_init_columns(&layout, equip_entries,
-                equip_entry_cnt, selected_slot == EQUIPMENT_MENU_ALL,
-                &entry_cols);
 
             if (equip_entry_cnt == 0)
             {
@@ -9964,12 +10033,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     equip_entry_cur = equip_entry_cnt - 1;
                 if (equip_entry_cur < 0)
                     equip_entry_cur = 0;
-                equipment_entry_adjust_top(equip_entries, equip_entry_cnt,
-                    equip_entry_cur, layout.entry_rows, &entry_cols, touch_only,
-                    &equip_entry_top);
             }
-            max_entry_top = equipment_entry_last_page_top(equip_entries,
-                equip_entry_cnt, layout.entry_rows, &entry_cols);
             supply_preview_focus_entry_column(desc_overlay_on, equip_entry_cnt,
                 &equip_column);
 
@@ -9991,6 +10055,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (equip_grp_top < 0)
                 equip_grp_top = 0;
 
+            compact_entry_only = get_sdl_compact_inventory_menus()
+                && equip_column && equip_entry_cnt > 0;
+            if (compact_entry_only)
+                knowledge_expand_entry_view(&layout);
+
+            equipment_entry_init_columns(&layout, equip_entries,
+                equip_entry_cnt, selected_slot == EQUIPMENT_MENU_ALL,
+                &entry_cols);
+            if (equip_entry_cnt > 0)
+            {
+                equipment_entry_adjust_top(equip_entries, equip_entry_cnt,
+                    equip_entry_cur, layout.entry_rows, &entry_cols, touch_only,
+                    &equip_entry_top);
+            }
+            max_entry_top = equipment_entry_last_page_top(equip_entries,
+                equip_entry_cnt, layout.entry_rows, &entry_cols);
+
             (void)Term_set_extra_cursor(false, 0, 0, false);
             ui_menu_click_begin();
             ui_menu_click_set_hover_enabled(true);
@@ -9999,11 +10080,20 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             ui_menu_click_set_touch_category(
                 SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
 
-            knowledge_begin_split_touch_scroll_areas(&layout,
-                SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
-                &equip_grp_top,
-                MAX(0, EQUIPMENT_MENU_SLOT_COUNT - layout.group_rows),
-                &equip_entry_top, max_entry_top);
+            if (compact_entry_only)
+            {
+                knowledge_begin_touch_scroll_area_offset(&layout,
+                    SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
+                    &equip_entry_top, max_entry_top);
+            }
+            else
+            {
+                knowledge_begin_split_touch_scroll_areas(&layout,
+                    SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
+                    &equip_grp_top,
+                    MAX(0, EQUIPMENT_MENU_SLOT_COUNT - layout.group_rows),
+                    &equip_entry_top, max_entry_top);
+            }
 
             Term_clear();
             supply_draw_page_header(&layout, page,
@@ -10048,6 +10138,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             supply_register_page_tabs(&layout);
 
+            if (!compact_entry_only)
             {
                 int group_selection_w = layout.group_w;
 
@@ -10514,6 +10605,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             byte status_attr = TERM_L_BLUE;
             bool touch_only;
             bool show_source;
+            bool compact_entry_only;
 
             prepare_inventory_browser_group_icons(inventory_icons);
             if (replacement_mode)
@@ -10643,8 +10735,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             /* Normal inventory rows only mark exceptional locations inline.
              * Destination picking still needs its protected slot column. */
             show_source = slot_pick_mode;
-            equipment_entry_init_columns(&layout, equip_entries,
-                inventory_entry_cnt, show_source, &entry_cols);
 
             if (!replacement_mode && !slot_pick_mode && !item_select_mode
                 && focus_floor_o_idx > 0)
@@ -10674,12 +10764,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     inv_entry_cur = inventory_entry_cnt - 1;
                 if (inv_entry_cur < 0)
                     inv_entry_cur = 0;
-                equipment_entry_adjust_top(equip_entries,
-                    inventory_entry_cnt, inv_entry_cur, layout.entry_rows,
-                    &entry_cols, touch_only, &inv_entry_top);
             }
-            max_entry_top = equipment_entry_last_page_top(equip_entries,
-                inventory_entry_cnt, layout.entry_rows, &entry_cols);
             supply_preview_focus_entry_column(desc_overlay_on,
                 inventory_entry_cnt, &inv_column);
 
@@ -10701,6 +10786,22 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (inv_grp_top < 0)
                 inv_grp_top = 0;
 
+            compact_entry_only = get_sdl_compact_inventory_menus()
+                && inv_column && !slot_pick_mode && inventory_entry_cnt > 0;
+            if (compact_entry_only)
+                knowledge_expand_entry_view(&layout);
+
+            equipment_entry_init_columns(&layout, equip_entries,
+                inventory_entry_cnt, show_source, &entry_cols);
+            if (inventory_entry_cnt > 0)
+            {
+                equipment_entry_adjust_top(equip_entries,
+                    inventory_entry_cnt, inv_entry_cur, layout.entry_rows,
+                    &entry_cols, touch_only, &inv_entry_top);
+            }
+            max_entry_top = equipment_entry_last_page_top(equip_entries,
+                inventory_entry_cnt, layout.entry_rows, &entry_cols);
+
             (void)Term_set_extra_cursor(false, 0, 0, false);
             ui_menu_click_begin();
             ui_menu_click_set_hover_enabled(true);
@@ -10709,7 +10810,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             ui_menu_click_set_touch_category(
                 SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
 
-            if (slot_pick_mode)
+            if (slot_pick_mode || compact_entry_only)
             {
                 knowledge_begin_touch_scroll_area_offset(&layout,
                     SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
@@ -10801,7 +10902,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (!replacement_mode && !slot_pick_mode && !item_select_mode)
                 supply_register_page_tabs(&layout);
 
-            if (!slot_pick_mode)
+            if (!slot_pick_mode && !compact_entry_only)
             {
                 int group_selection_w = layout.group_w;
 
@@ -11669,6 +11770,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         int max_name_len;
         bool compact_width;
         bool compact_draw_names;
+        bool compact_menu;
         int entry_page_rows;
         int max_entry_top;
         int selected_entry_row_offset;
@@ -11750,7 +11852,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             grp_top = 0;
 
         full_layout = layout;
-        knowledge_expand_active_column(&full_layout);
+        knowledge_expand_entry_view(&full_layout);
         supply_init_columns(&layout, grp_idx[grp_cur], &split_cols);
         supply_init_columns(&full_layout, grp_idx[grp_cur], &full_cols);
         split_name_w = split_cols.name_w;
@@ -11764,9 +11866,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         if (split_name_w > 1)
             split_name_w--;
 
-        single_column = !layout.stacked
-            && knowledge_should_use_single_column_for_names(split_name_w,
-                full_name_w, max_name_len);
+        compact_menu = get_sdl_compact_inventory_menus();
+        single_column = (compact_menu && column)
+            || (!layout.stacked
+                && knowledge_should_use_single_column_for_names(split_name_w,
+                    full_name_w, max_name_len));
         draw_layout = single_column ? full_layout : layout;
         draw_cols = single_column ? full_cols : split_cols;
         selected_entry_row_offset = 0;

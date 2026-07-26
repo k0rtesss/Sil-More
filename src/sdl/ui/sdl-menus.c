@@ -469,7 +469,7 @@ bool sdl_narrative_banner_top_center_pane_rect(
     return sdl_narrative_banner_pane_rect(pc, out);
 }
 
-int sdl_narrative_banner_top_center_panes_bottom(void)
+static int sdl_narrative_banner_top_panes_bottom(bool include_side_stacks)
 {
     float bottom = 0.0f;
     SDL_FRect menu_button;
@@ -479,15 +479,8 @@ int sdl_narrative_banner_top_center_panes_bottom(void)
         float pane_bottom;
         enum pane_placement where = pane_config[i].where;
 
-        /*
-         * In portrait, clear every live top stack vertically: reserving the
-         * wide top-right log horizontally can collapse the banner on a narrow
-         * screen.  Landscape has room beside its left and right stacks, so
-         * only the top-center stack should push the banner down.  Otherwise a
-         * tall character pane leaves the banner stranded near mid-screen.
-         */
         if (where != PLACE_TOP_CENTER
-            && (!sdl_mobile_portrait_layout_active()
+            && (!include_side_stacks
                 || (where != PLACE_TOP_LEFT && where != PLACE_TOP_RIGHT)))
         {
             continue;
@@ -513,8 +506,19 @@ int sdl_narrative_banner_top_center_panes_bottom(void)
     return (int)(bottom + 0.5f);
 }
 
-void sdl_narrative_banner_apply_top_center_avoidance(SDL_Rect* rect,
-    int min_h)
+int sdl_narrative_banner_top_center_panes_bottom(void)
+{
+    /*
+     * Portrait always clears every live top stack vertically: reserving the
+     * wide top-right log horizontally can collapse the banner on a narrow
+     * screen.  Normal landscape banners only need to clear the center stack.
+     */
+    return sdl_narrative_banner_top_panes_bottom(
+        sdl_mobile_portrait_layout_active());
+}
+
+static void sdl_narrative_banner_apply_top_pane_avoidance(SDL_Rect* rect,
+    int min_h, bool include_side_stacks)
 {
     int pane_bottom;
     int rect_bottom;
@@ -524,7 +528,7 @@ void sdl_narrative_banner_apply_top_center_avoidance(SDL_Rect* rect,
     if (min_h < 1)
         min_h = 1;
 
-    pane_bottom = sdl_narrative_banner_top_center_panes_bottom();
+    pane_bottom = sdl_narrative_banner_top_panes_bottom(include_side_stacks);
     if (pane_bottom <= rect->y)
         return;
 
@@ -535,6 +539,13 @@ void sdl_narrative_banner_apply_top_center_avoidance(SDL_Rect* rect,
     rect->h = rect_bottom - rect->y;
     if (rect->h < min_h)
         rect->h = min_h;
+}
+
+void sdl_narrative_banner_apply_top_center_avoidance(SDL_Rect* rect,
+    int min_h)
+{
+    sdl_narrative_banner_apply_top_pane_avoidance(rect, min_h,
+        sdl_mobile_portrait_layout_active());
 }
 
 /*
@@ -575,9 +586,8 @@ void sdl_narrative_banner_apply_overlay_log_avoidance(SDL_Rect* rect)
         return;
     if (!sdl_overlay_log_pane_current_rect(&log_rect))
         return;
-    if (sdl_mobile_portrait_layout_active()
-        && (log_rect.y + log_rect.h <= rect->y
-            || log_rect.y >= rect->y + rect->h))
+    if (log_rect.y + log_rect.h <= rect->y
+        || log_rect.y >= rect->y + rect->h)
     {
         return;
     }
@@ -600,6 +610,8 @@ bool sdl_narrative_banner_base_rect(SDL_Rect* out)
 {
     const sdl_view* view = &g_views[PANE_MAIN];
     SDL_Rect rect;
+    SDL_Rect full_rect;
+    int min_h;
 
     if (!out)
         return false;
@@ -609,6 +621,7 @@ bool sdl_narrative_banner_base_rect(SDL_Rect* out)
     {
         int reserved_top = view->cell_h * ROW_MAP;
 
+        min_h = view->cell_h;
         rect = (SDL_Rect){
             .x = view->rect.x + view->margin_x,
             .y = view->rect.y + view->margin_y + reserved_top,
@@ -618,16 +631,33 @@ bool sdl_narrative_banner_base_rect(SDL_Rect* out)
         };
         if (rect.h < view->cell_h)
             rect.h = view->cell_h;
-        sdl_narrative_banner_apply_top_center_avoidance(&rect,
-            view->cell_h);
+        sdl_narrative_banner_apply_top_center_avoidance(&rect, min_h);
     }
     else
     {
+        min_h = 1;
         rect = sdl_get_layout_screen_rect();
-        sdl_narrative_banner_apply_top_center_avoidance(&rect, 1);
+        sdl_narrative_banner_apply_top_center_avoidance(&rect, min_h);
     }
 
+    full_rect = rect;
     sdl_narrative_banner_apply_overlay_log_avoidance(&rect);
+    /*
+     * On a short handheld display, symmetric log avoidance can collapse the
+     * banner corridor to a narrow strip.  A compact strip looks detached when
+     * it begins below Menu but alongside the taller left/right HUD stacks.
+     * Reposition the full-width area beneath every live top stack, then avoid
+     * the log again only if its painted rectangle still overlaps vertically.
+     * Wider landscape banners keep the center-only rule so a tall side pane
+     * cannot strand them near mid-screen.
+     */
+    if (!sdl_mobile_portrait_layout_active()
+        && rect.w * 2 < full_rect.w)
+    {
+        rect = full_rect;
+        sdl_narrative_banner_apply_top_pane_avoidance(&rect, min_h, true);
+        sdl_narrative_banner_apply_overlay_log_avoidance(&rect);
+    }
 
     if (rect.w <= 0 || rect.h <= 0)
         return false;

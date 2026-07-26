@@ -895,7 +895,12 @@ static void story_book_show_sdl(bool startup_scene)
         tales_page = sdl_character_sheet_screen_book_contents_page(
             STORY_BOOK_METARUNS);
         tales_section = tales_page >= 0 && page >= tales_page;
-        if (tales_section
+        if (steamdeck_controls_active() && page < page_count - 1
+            && key == steamdeck_alt_action_key())
+        {
+            sdl_character_sheet_screen_begin_page_turn_to(page_count - 1);
+        }
+        else if (tales_section
             && ((key == 'n' || key == 'N')
                 || (steamdeck_controls_active()
                     && key == steamdeck_secondary_key()))

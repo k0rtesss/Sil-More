@@ -840,6 +840,32 @@ static void sdl_touch_tutorial_prompt_label(int binding, const char* fallback,
         SDL_strlcpy(buf, fallback, buflen);
 }
 
+/*
+ * Reserve enough room for both footer lines plus a real bottom margin.  The
+ * old percentage clamp topped out at exactly two line advances, so the second
+ * line's glyphs could extend below the screen at large window sizes.
+ */
+static float sdl_touch_tutorial_footer_height(const SDL_Rect* screen)
+{
+    int font_px;
+    float line_h;
+    float bottom_pad;
+    float legacy_h;
+
+    if (!screen)
+        return 0.0f;
+
+    font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
+        22.0f, 30.0f);
+    line_h = (float)font_px * 1.30f;
+    bottom_pad = sdl_touch_pane_clampf((float)screen->h * 0.008f,
+        6.0f, 10.0f);
+    legacy_h = sdl_touch_pane_clampf((float)screen->h * 0.090f,
+        54.0f, 78.0f);
+
+    return MAX(legacy_h, line_h * 2.0f + bottom_pad);
+}
+
 void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
     bool single_page)
 {
@@ -857,7 +883,7 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
         22.0f, 30.0f);
     line_h = (float)font_px * 1.30f;
     y = (float)(screen->y + screen->h)
-        - sdl_touch_pane_clampf((float)screen->h * 0.090f, 54.0f, 78.0f);
+        - sdl_touch_tutorial_footer_height(screen);
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
@@ -1155,7 +1181,7 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
         return;
 
     footer_top = (float)(screen->y + screen->h)
-        - sdl_touch_pane_clampf((float)screen->h * 0.090f, 54.0f, 78.0f)
+        - sdl_touch_tutorial_footer_height(screen)
         - 10.0f;
     available_h = footer_top - min_y - 8.0f;
     if (available_h < 56.0f)
@@ -1421,8 +1447,7 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
 
     box = (SDL_FRect){ .x = x, .y = y, .w = w, .h = h };
     footer_top = (float)(screen->y + screen->h)
-        - sdl_touch_pane_clampf((float)screen->h * 0.090f,
-            54.0f, 78.0f) - pad;
+        - sdl_touch_tutorial_footer_height(screen) - pad;
     if (box.y + box.h > footer_top)
         box.y = footer_top - box.h;
     sdl_touch_tutorial_clamp_box_to_screen(&box, screen, pad);
@@ -2638,7 +2663,7 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     SDL_FRect shadow;
     float pad = sdl_touch_pane_clampf((float)screen->h * 0.017f, 12.0f, 22.0f);
     float footer_top = (float)(screen->y + screen->h)
-        - sdl_touch_pane_clampf((float)screen->h * 0.090f, 54.0f, 78.0f) - pad;
+        - sdl_touch_tutorial_footer_height(screen) - pad;
     float max_box_w;
     float natural_box_w;
     float box_w;

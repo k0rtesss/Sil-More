@@ -12,6 +12,9 @@ void get_sdl_config_info(char* buf, size_t size)
         "Terminal Menu Scale Offset: %+d\n",
         config.terminal_menu_scale_offset);
     offset += (size_t)strnfmt(buf + offset, size - offset,
+        "Compact Inventory Menus: %s\n",
+        config.compact_inventory_menus ? "Yes" : "No");
+    offset += (size_t)strnfmt(buf + offset, size - offset,
         "Mobile Starting Zoom Offset: %+d\n",
         config.mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -42,6 +45,9 @@ void get_sdl_config_info(char* buf, size_t size)
         "Left Panel Compact Mode: %s\n",
         (get_sdl_left_panel_compact_mode() == SDL_LEFT_PANEL_COMPACT_ROW)
             ? "Row" : "Column");
+    offset += (size_t)strnfmt(buf + offset, size - offset,
+        "Compact Column Health Bar: %s\n",
+        config.left_panel_compact_health_bar ? "Yes" : "No");
     offset += (size_t)strnfmt(buf + offset, size - offset,
         "Quick Access Size: %s\nQuick Access Grid: %d x %d\n\n",
         (config.touch_top_panel_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
@@ -174,6 +180,16 @@ void set_sdl_terminal_menu_scale_offset(int value)
             g_terminal_menu_scale_stack[i] = target_scale;
     }
     g_terminal_menu_scale_override = target_scale;
+}
+
+bool get_sdl_compact_inventory_menus(void)
+{
+    return config.compact_inventory_menus;
+}
+
+void set_sdl_compact_inventory_menus(bool value)
+{
+    config.compact_inventory_menus = value;
 }
 
 int get_sdl_mobile_starting_zoom_offset(void)
@@ -509,18 +525,35 @@ void set_sdl_margin(int value)
         config.margin = value;
 }
 
-int get_sdl_camera_center_clearance(void)
-{
-    return config.camera_center_clearance;
-}
-
-void set_sdl_camera_center_clearance(int value)
+static int clamp_sdl_camera_center_clearance(int value)
 {
     if (value < SDL_CAMERA_CENTER_CLEARANCE_MIN)
         value = SDL_CAMERA_CENTER_CLEARANCE_MIN;
     if (value > SDL_CAMERA_CENTER_CLEARANCE_MAX)
         value = SDL_CAMERA_CENTER_CLEARANCE_MAX;
-    config.camera_center_clearance = value;
+    return value;
+}
+
+int get_sdl_camera_center_clearance_vertical(void)
+{
+    return config.camera_center_clearance_vertical;
+}
+
+void set_sdl_camera_center_clearance_vertical(int value)
+{
+    config.camera_center_clearance_vertical =
+        clamp_sdl_camera_center_clearance(value);
+}
+
+int get_sdl_camera_center_clearance_horizontal(void)
+{
+    return config.camera_center_clearance_horizontal;
+}
+
+void set_sdl_camera_center_clearance_horizontal(int value)
+{
+    config.camera_center_clearance_horizontal =
+        clamp_sdl_camera_center_clearance(value);
 }
 
 bool get_sdl_fullscreen(void)
@@ -771,7 +804,7 @@ int get_pane_config_count(void)
 
 /*
  * Accessors for the active pane configuration.
- * These are used by the interactive pane settings menu (cmd4.c).
+ * These are used by the interactive general settings menu (cmd4.c).
  */
 int get_sdl_pane_type(int index)
 {
@@ -1346,6 +1379,21 @@ void set_sdl_left_panel_compact_mode(int mode)
         return;
 
     config.left_panel_compact_mode = mode;
+    sdl_update_left_panel_pane_rect();
+    g_state.need_present = true;
+}
+
+bool get_sdl_left_panel_compact_health_bar(void)
+{
+    return config.left_panel_compact_health_bar;
+}
+
+void set_sdl_left_panel_compact_health_bar(bool value)
+{
+    if (config.left_panel_compact_health_bar == value)
+        return;
+
+    config.left_panel_compact_health_bar = value;
     sdl_update_left_panel_pane_rect();
     g_state.need_present = true;
 }

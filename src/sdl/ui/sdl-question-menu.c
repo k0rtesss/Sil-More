@@ -657,9 +657,15 @@ void sdl_question_menu_clear_nonblocking(void)
 
 void sdl_question_menu_begin(cptr title)
 {
+    /* The game rebuilds blocking questions after pointer-hover wakeups.  Keep
+     * frontend-only close chrome stable until the overlay is actually cleared. */
+    bool close_hover = g_question_menu.active
+        && g_question_menu.close_hover;
+
     memset(&g_question_menu, 0, sizeof(g_question_menu));
     g_question_menu.active = true;
     g_question_menu.highlight = -1;
+    g_question_menu.close_hover = close_hover;
     if (title)
         SDL_strlcpy(g_question_menu.title, title,
             sizeof(g_question_menu.title));

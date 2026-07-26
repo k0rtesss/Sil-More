@@ -6364,6 +6364,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             char next_label[16];
             char confirm_label[16];
             char back_label[16];
+            char last_label[16];
 
             sdl_gamepad_action_binding_short_label(steamdeck_prev_page_key(),
                 prev_label, sizeof(prev_label));
@@ -6384,6 +6385,10 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
                 back_label, sizeof(back_label));
             if (streq(back_label, "(unbound)") || streq(back_label, "Multiple"))
                 SDL_strlcpy(back_label, "B", sizeof(back_label));
+            sdl_gamepad_action_binding_short_label(steamdeck_alt_action_key(),
+                last_label, sizeof(last_label));
+            if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
+                SDL_strlcpy(last_label, "X", sizeof(last_label));
 
             if (final_page)
             {
@@ -6402,13 +6407,15 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             else if (page > 0)
             {
                 strnfmt(prompt, sizeof(prompt),
-                    "%s previous  %s/%s next  %s back", prev_label,
-                    next_label, confirm_label, back_label);
+                    "%s previous  %s/%s next  %s last page  %s back",
+                    prev_label, next_label, confirm_label, last_label,
+                    back_label);
             }
             else
             {
-                strnfmt(prompt, sizeof(prompt), "%s/%s next  %s back",
-                    next_label, confirm_label, back_label);
+                strnfmt(prompt, sizeof(prompt),
+                    "%s/%s next  %s last page  %s back", next_label,
+                    confirm_label, last_label, back_label);
             }
         }
         else
@@ -6493,9 +6500,28 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         SDL_FRect r = { content_x + content_w - bw, prompt_y, bw, bh };
         byte a = (hov == SDL_SELECT_CLICK_PAGE_NEXT)
             ? TERM_WHITE : TERM_L_BLUE;
+        char controller_label[64];
+        cptr next_page_label = "Turn the page \xe2\x80\xba";
 
-        (void)sdl_char_sheet_draw_text(prompt_font,
-            "Turn the page \xe2\x80\xba", a,
+        if (steamdeck_controls_active())
+        {
+            char next_label[16];
+            char last_label[16];
+
+            sdl_gamepad_action_binding_short_label(steamdeck_next_page_key(),
+                next_label, sizeof(next_label));
+            if (streq(next_label, "(unbound)") || streq(next_label, "Multiple"))
+                SDL_strlcpy(next_label, "R1", sizeof(next_label));
+            sdl_gamepad_action_binding_short_label(steamdeck_alt_action_key(),
+                last_label, sizeof(last_label));
+            if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
+                SDL_strlcpy(last_label, "X", sizeof(last_label));
+            strnfmt(controller_label, sizeof(controller_label),
+                "%s next  %s last page", next_label, last_label);
+            next_page_label = controller_label;
+        }
+
+        (void)sdl_char_sheet_draw_text(prompt_font, next_page_label, a,
             content_x + content_w - bw, prompt_y, bw, bh, true);
         sdl_char_sheet_add_select_button_hit(r,
             SDL_SELECT_CLICK_PAGE_NEXT);
@@ -6549,8 +6575,22 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         byte a = (hov == SDL_SELECT_CLICK_CLOSE) ? TERM_WHITE
             : (jump_to_last_page ? TERM_L_BLUE
                 : (emphasized_close ? TERM_L_GREEN : TERM_SLATE));
+        char controller_jump_label[48];
         cptr label = jump_to_last_page
             ? "Jump to last page" : display_close_label;
+
+        if (jump_to_last_page && steamdeck_controls_active())
+        {
+            char last_label[16];
+
+            sdl_gamepad_action_binding_short_label(steamdeck_alt_action_key(),
+                last_label, sizeof(last_label));
+            if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
+                SDL_strlcpy(last_label, "X", sizeof(last_label));
+            strnfmt(controller_jump_label, sizeof(controller_jump_label),
+                "%s Jump to last page", last_label);
+            label = controller_jump_label;
+        }
 
         if (emphasized_close)
         {

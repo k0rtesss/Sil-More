@@ -123,14 +123,12 @@
 #define SDL_MAIN_VIEW_MIN_SCALE 1
 #define SDL_MAIN_VIEW_PREFERRED_MIN_SCALE 2
 #define SDL_MAIN_VIEW_MAX_SCALE 20
-#define SDL_TERMINAL_MENU_SCALE_OFFSET_MIN \
-    (SDL_MAIN_VIEW_MIN_SCALE - SDL_MAIN_VIEW_MAX_SCALE)
+#define SDL_TERMINAL_MENU_SCALE_OFFSET_MIN (-3)
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT (-1)
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_MAX 0
 #define SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN 0
 #define SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT 2
-#define SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX \
-    (SDL_MAIN_VIEW_MAX_SCALE - SDL_MAIN_VIEW_MIN_SCALE)
+#define SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX 5
 #define SDL_DICE_ROLL_LOCK_DEFAULT_MS 2000
 #define SDL_DICE_ROLL_OVERLAY_DEFAULT_MS 2500
 #define SDL_DICE_ROLL_TIMING_MAX_MS 10000
@@ -181,6 +179,7 @@ struct sdl_pane_profile {
     bool show_main_menu_button;
     bool left_panel_expanded_on_launch;
     int left_panel_compact_mode;
+    bool left_panel_compact_health_bar;
     int log_pane_display_filter;
     int dice_roll_lock_ms;
     int dice_roll_overlay_ms;
@@ -201,6 +200,8 @@ struct sdl_config {
     int main_view_scale;
     // Scale steps relative to the largest terminal-menu scale that fits.
     int terminal_menu_scale_offset;
+    // Use focus-dependent compact layouts for Inventory-style browsers.
+    bool compact_inventory_menus;
     // Extra scale steps applied when mobile gameplay first appears.
     int mobile_starting_zoom_offset;
     // On mobile, request a real portrait device orientation.  Landscape
@@ -220,13 +221,15 @@ struct sdl_config {
     bool show_overlay_log_border;
     bool left_panel_expanded_on_launch;
     int left_panel_compact_mode;
+    bool left_panel_compact_health_bar;
     int min_terminal_mode;
     int log_pane_display_filter;
     int dice_roll_lock_ms;
     int dice_roll_overlay_ms;
     int popup_notification_ms;
     bool show_main_menu_button;
-    int camera_center_clearance;
+    int camera_center_clearance_vertical;
+    int camera_center_clearance_horizontal;
     
     // Window position and size for windowed mode
     int window_x;
@@ -339,7 +342,7 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
                      int profile_count);
 
 /* Seed a profile with the portrait HUD defaults formerly imposed at render
- * time.  Once seeded, the values remain ordinary editable pane settings. */
+ * time.  Once seeded, the values remain ordinary editable general settings. */
 void sdl_pane_config_apply_portrait_default(struct pane_config* pane);
 void sdl_pane_profile_apply_portrait_defaults(
     struct sdl_pane_profile* profile);

@@ -2379,6 +2379,8 @@ static void sdl_config_copy_pane_profile(struct sdl_pane_profile* dest,
     dest->left_panel_expanded_on_launch =
         src->left_panel_expanded_on_launch;
     dest->left_panel_compact_mode = src->left_panel_compact_mode;
+    dest->left_panel_compact_health_bar =
+        src->left_panel_compact_health_bar;
     dest->log_pane_display_filter = src->log_pane_display_filter;
     dest->dice_roll_lock_ms = src->dice_roll_lock_ms;
     dest->dice_roll_overlay_ms = src->dice_roll_overlay_ms;
@@ -2527,6 +2529,8 @@ static void sdl_config_init_pane_profiles_from_legacy(const struct sdl_config* c
             config->left_panel_expanded_on_launch;
         pane_profiles[mode].left_panel_compact_mode =
             config->left_panel_compact_mode;
+        pane_profiles[mode].left_panel_compact_health_bar =
+            config->left_panel_compact_health_bar;
         pane_profiles[mode].log_pane_display_filter =
             config->log_pane_display_filter;
         pane_profiles[mode].dice_roll_lock_ms = config->dice_roll_lock_ms;
@@ -2617,6 +2621,11 @@ static void sdl_config_load_pane_profile(cJSON* profile_obj,
                 ? SDL_LEFT_PANEL_COMPACT_ROW
                 : SDL_LEFT_PANEL_COMPACT_COLUMN;
     }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "leftPanelCompactHealthBar");
+    if (cJSON_IsBool(item))
+        profile->left_panel_compact_health_bar = cJSON_IsTrue(item);
 
     item = cJSON_GetObjectItemCaseSensitive(profile_obj,
         "logPaneDisplayFilter");
@@ -3063,6 +3072,8 @@ static cJSON* sdl_config_create_pane_profile_object(
         profile->left_panel_expanded_on_launch);
     cJSON_AddStringToObject(profile_obj, "leftPanelCompactMode",
         left_panel_compact_mode_to_string(profile->left_panel_compact_mode));
+    cJSON_AddBoolToObject(profile_obj, "leftPanelCompactHealthBar",
+        profile->left_panel_compact_health_bar);
     cJSON_AddNumberToObject(profile_obj, "logPaneDisplayFilter",
         profile->log_pane_display_filter);
     cJSON_AddNumberToObject(profile_obj, "diceRollLockMs",
@@ -3192,6 +3203,14 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "compactInventoryMenus");
+        if (cJSON_IsBool(item)) {
+            config->compact_inventory_menus = cJSON_IsTrue(item);
+            log_debug("Loaded compactInventoryMenus: %s",
+                config->compact_inventory_menus ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
             "mobileStartingZoomOffset");
         if (cJSON_IsNumber(item)) {
             config->mobile_starting_zoom_offset = item->valueint;
@@ -3252,21 +3271,66 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         item = cJSON_GetObjectItemCaseSensitive(sdl,
             "cameraCenterClearance");
         if (cJSON_IsNumber(item)) {
-            config->camera_center_clearance = item->valueint;
-            if (config->camera_center_clearance
+            config->camera_center_clearance_vertical = item->valueint;
+            config->camera_center_clearance_horizontal = item->valueint;
+            if (config->camera_center_clearance_vertical
                 < SDL_CAMERA_CENTER_CLEARANCE_MIN)
             {
-                config->camera_center_clearance =
+                config->camera_center_clearance_vertical =
+                    SDL_CAMERA_CENTER_CLEARANCE_MIN;
+                config->camera_center_clearance_horizontal =
                     SDL_CAMERA_CENTER_CLEARANCE_MIN;
             }
-            if (config->camera_center_clearance
+            if (config->camera_center_clearance_vertical
                 > SDL_CAMERA_CENTER_CLEARANCE_MAX)
             {
-                config->camera_center_clearance =
+                config->camera_center_clearance_vertical =
+                    SDL_CAMERA_CENTER_CLEARANCE_MAX;
+                config->camera_center_clearance_horizontal =
                     SDL_CAMERA_CENTER_CLEARANCE_MAX;
             }
             log_debug("Loaded cameraCenterClearance: %d",
-                config->camera_center_clearance);
+                config->camera_center_clearance_vertical);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "cameraCenterClearanceVertical");
+        if (cJSON_IsNumber(item)) {
+            config->camera_center_clearance_vertical = item->valueint;
+            if (config->camera_center_clearance_vertical
+                < SDL_CAMERA_CENTER_CLEARANCE_MIN)
+            {
+                config->camera_center_clearance_vertical =
+                    SDL_CAMERA_CENTER_CLEARANCE_MIN;
+            }
+            if (config->camera_center_clearance_vertical
+                > SDL_CAMERA_CENTER_CLEARANCE_MAX)
+            {
+                config->camera_center_clearance_vertical =
+                    SDL_CAMERA_CENTER_CLEARANCE_MAX;
+            }
+            log_debug("Loaded cameraCenterClearanceVertical: %d",
+                config->camera_center_clearance_vertical);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "cameraCenterClearanceHorizontal");
+        if (cJSON_IsNumber(item)) {
+            config->camera_center_clearance_horizontal = item->valueint;
+            if (config->camera_center_clearance_horizontal
+                < SDL_CAMERA_CENTER_CLEARANCE_MIN)
+            {
+                config->camera_center_clearance_horizontal =
+                    SDL_CAMERA_CENTER_CLEARANCE_MIN;
+            }
+            if (config->camera_center_clearance_horizontal
+                > SDL_CAMERA_CENTER_CLEARANCE_MAX)
+            {
+                config->camera_center_clearance_horizontal =
+                    SDL_CAMERA_CENTER_CLEARANCE_MAX;
+            }
+            log_debug("Loaded cameraCenterClearanceHorizontal: %d",
+                config->camera_center_clearance_horizontal);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "fullscreen");
@@ -3357,6 +3421,14 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             log_debug("Loaded numeric leftPanelCompactMode: %s",
                 left_panel_compact_mode_to_string(
                     config->left_panel_compact_mode));
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "leftPanelCompactHealthBar");
+        if (cJSON_IsBool(item)) {
+            config->left_panel_compact_health_bar = cJSON_IsTrue(item);
+            log_debug("Loaded leftPanelCompactHealthBar: %s",
+                config->left_panel_compact_health_bar ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "minTerminalMode");
@@ -4667,6 +4739,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
     cJSON_AddNumberToObject(sdl, "mainViewScale", config->main_view_scale);
     cJSON_AddNumberToObject(sdl, "terminalMenuScaleOffset",
         config->terminal_menu_scale_offset);
+    cJSON_AddBoolToObject(sdl, "compactInventoryMenus",
+        config->compact_inventory_menus);
     cJSON_AddNumberToObject(sdl, "mobileStartingZoomOffset",
         config->mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -4676,8 +4750,10 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
 #endif
     cJSON_AddNumberToObject(sdl, "auxViewFontSize", config->aux_view_font_size);
     cJSON_AddNumberToObject(sdl, "margin", config->margin);
-    cJSON_AddNumberToObject(sdl, "cameraCenterClearance",
-        config->camera_center_clearance);
+    cJSON_AddNumberToObject(sdl, "cameraCenterClearanceVertical",
+        config->camera_center_clearance_vertical);
+    cJSON_AddNumberToObject(sdl, "cameraCenterClearanceHorizontal",
+        config->camera_center_clearance_horizontal);
     cJSON_AddBoolToObject(sdl, "fullscreen", config->fullscreen);
     cJSON_AddBoolToObject(sdl, "tiles", config->tiles);
     cJSON_AddStringToObject(sdl, "palettePreset", config->palette_preset);
@@ -4693,6 +4769,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         config->left_panel_expanded_on_launch);
     cJSON_AddStringToObject(sdl, "leftPanelCompactMode",
         left_panel_compact_mode_to_string(config->left_panel_compact_mode));
+    cJSON_AddBoolToObject(sdl, "leftPanelCompactHealthBar",
+        config->left_panel_compact_health_bar);
     cJSON_AddStringToObject(sdl, "minTerminalMode", min_terminal_mode_to_string(config->min_terminal_mode));
     cJSON_AddNumberToObject(sdl, "logPaneDisplayFilter",
         config->log_pane_display_filter);
@@ -5320,12 +5398,16 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->main_view_scale = SDL_MAIN_VIEW_PREFERRED_MIN_SCALE;
     config->terminal_menu_scale_offset =
         SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT;
+    config->compact_inventory_menus = false;
     config->mobile_starting_zoom_offset =
         SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT;
     config->mobile_portrait_mode = false;
     config->aux_view_font_size = 0;
     config->margin = 4;
-    config->camera_center_clearance = SDL_CAMERA_CENTER_CLEARANCE_DEFAULT;
+    config->camera_center_clearance_vertical =
+        SDL_CAMERA_CENTER_CLEARANCE_DEFAULT;
+    config->camera_center_clearance_horizontal =
+        SDL_CAMERA_CENTER_CLEARANCE_DEFAULT;
     config->fullscreen = true;
     config->tiles = true;
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -5348,6 +5430,7 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->left_panel_expanded_on_launch = true;
 #endif
     config->left_panel_compact_mode = SDL_LEFT_PANEL_COMPACT_COLUMN;
+    config->left_panel_compact_health_bar = false;
 #if defined(__ANDROID__) || defined(SIL_IOS)
     config->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
 #else

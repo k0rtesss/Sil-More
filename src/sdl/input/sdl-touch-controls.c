@@ -4501,6 +4501,47 @@ static bool sdl_touch_top_panel_top_placement(
         || where == PLACE_TOP_RIGHT;
 }
 
+static bool sdl_touch_top_panel_fixed_overlaps_left_combat(
+    const SDL_Rect* screen, const SDL_Rect* anchor, enum pane_placement where,
+    float panel_w, float panel_h)
+{
+#if SIL_SDL_MOBILE_BUILD
+    SDL_Rect combat;
+    SDL_FRect panel;
+    float combat_center;
+    float panel_center;
+
+    if (!screen || !anchor || sdl_mobile_portrait_layout_active())
+        return false;
+    if (!sdl_combat_overlay_pane_current_rect(&combat)
+        || combat.w <= 0 || combat.h <= 0)
+    {
+        return false;
+    }
+
+    panel = sdl_overlay_panel_rect(anchor, where,
+        (int)(panel_w + 0.5f), (int)(panel_h + 0.5f), screen);
+    if (panel.x + panel.w <= (float)combat.x
+        || panel.x >= (float)(combat.x + combat.w)
+        || panel.y + panel.h <= (float)combat.y
+        || panel.y >= (float)(combat.y + combat.h))
+    {
+        return false;
+    }
+
+    combat_center = (float)combat.x + (float)combat.w * 0.5f;
+    panel_center = panel.x + panel.w * 0.5f;
+    return combat_center <= panel_center;
+#else
+    (void)screen;
+    (void)anchor;
+    (void)where;
+    (void)panel_w;
+    (void)panel_h;
+    return false;
+#endif
+}
+
 static void sdl_touch_top_panel_avoid_status_depth(
     enum pane_placement where, const SDL_Rect* screen, SDL_FRect* panel)
 {
@@ -4608,6 +4649,25 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
     sdl_touch_top_panel_button_metrics_for_size(configured_size,
         &button_size, &gap);
 
+    /*
+     * A fixed landscape panel is normally scaled with the main view.  If that
+     * footprint reaches into the left-side Combat pane, use Stretch for this
+     * layout so Quick Access fills the measured clear span beside Combat.
+     * Keep the saved fixed size intact for layouts where it fits.
+     */
+    if (!vertical && configured_size != SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+        float fixed_panel_w = button_size * (float)columns
+            + gap * (float)(columns - 1);
+        float fixed_panel_h = button_size * (float)rows
+            + gap * (float)(rows - 1);
+
+        if (sdl_touch_top_panel_fixed_overlaps_left_combat(screen, anchor,
+                where, fixed_panel_w, fixed_panel_h))
+        {
+            configured_size = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+        }
+    }
+
     if (vertical) {
         float fit_size;
 
@@ -4679,8 +4739,8 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
     panel = sdl_overlay_panel_rect(anchor, where, (int)(panel_w + 0.5f),
         (int)(panel_h + 0.5f), screen);
     if (!vertical) {
-        float clear_left;
-        float clear_right;
+        float clear_left = panel.x;
+        float clear_right = panel.x + panel.w;
 
         (void)sdl_touch_top_panel_available_width(screen, anchor, where,
             panel_h, gap, &clear_left, &clear_right);

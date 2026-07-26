@@ -1468,14 +1468,14 @@ enum iface_pane_field {
     IFACE_PANE_FIELD_BUTTONS,
     IFACE_PANE_FIELD_LP_LAUNCH,
     IFACE_PANE_FIELD_LP_COMPACT,
+    IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR,
     IFACE_PANE_FIELD_LP_TOUCH_EDGE,
     IFACE_PANE_FIELD_LOG_ROWS,
     IFACE_PANE_FIELD_OVERLAY_LOG_BORDER,
     IFACE_PANE_FIELD_DICE_LOCK,
     IFACE_PANE_FIELD_DICE_OVERLAY,
     IFACE_PANE_FIELD_MAIN_MENU_BUTTON,
-    IFACE_PANE_FIELD_POPUP_NOTIFICATION,
-    IFACE_PANE_FIELD_CAMERA_CENTER_CLEARANCE
+    IFACE_PANE_FIELD_POPUP_NOTIFICATION
 };
 
 struct iface_pane_row {
@@ -2776,7 +2776,7 @@ extern void do_cmd_options_aux(int page, cptr info)
 }
 
 /*
- * Display and manage SDL pane settings
+ * Display and manage SDL general settings
  * Interactive menu to edit SDL configuration
  */
 static int get_supporting_pane_config_count(void);
@@ -2919,7 +2919,10 @@ void do_cmd_pane_settings(void)
         PANE_SETTING_MIN_TERMINAL_SIZE = 0,
         PANE_SETTING_MAIN_VIEW_SCALE,
         PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET,
+        PANE_SETTING_COMPACT_INVENTORY_MENUS,
         PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET,
+        PANE_SETTING_CAMERA_VERTICAL_DISTANCE,
+        PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE,
 #if defined(__ANDROID__) || defined(SIL_IOS)
         PANE_SETTING_MOBILE_PORTRAIT_MODE,
 #endif
@@ -2970,7 +2973,7 @@ void do_cmd_pane_settings(void)
     {
         int row_width;
         int label_hint;
-        settings_semantic_menu_begin("SDL Pane Settings", k);
+        settings_semantic_menu_begin("General Settings", k);
 
         /* Display current settings */
         char buf[96];
@@ -3029,7 +3032,18 @@ void do_cmd_pane_settings(void)
         ADD_PANE_SETTING_ROW(PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET, 2, a,
             buf);
 
-        /* Option 3: extra zoom applied when mobile gameplay starts. */
+        a = (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
+            ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Compact Inventory Menus",
+                "Compact Item Menus",
+                "Compact Menus"),
+            get_sdl_compact_inventory_menus() ? "yes" : "no",
+            row_width, 3);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_COMPACT_INVENTORY_MENUS, 3, a, buf);
+
+        /* Extra zoom applied when mobile gameplay starts. */
         a = (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             ? TERM_L_BLUE : TERM_WHITE;
         strnfmt(value_buf, sizeof(value_buf), "%+d",
@@ -3041,6 +3055,31 @@ void do_cmd_pane_settings(void)
                 "Start Zoom"),
             value_buf, row_width, 4);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET, 3, a,
+            buf);
+
+        a = (k == PANE_SETTING_CAMERA_VERTICAL_DISTANCE)
+            ? TERM_L_BLUE : TERM_WHITE;
+        strnfmt(value_buf, sizeof(value_buf), "%d",
+            get_sdl_camera_center_clearance_vertical());
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Camera Vertical Recenter Distance",
+                "Camera Vertical Distance",
+                "Camera Vertical"),
+            value_buf, row_width, 3);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_CAMERA_VERTICAL_DISTANCE, 4, a, buf);
+
+        a = (k == PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE)
+            ? TERM_L_BLUE : TERM_WHITE;
+        strnfmt(value_buf, sizeof(value_buf), "%d",
+            get_sdl_camera_center_clearance_horizontal());
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Camera Horizontal Recenter Distance",
+                "Camera Horizontal Distance",
+                "Camera Horizontal"),
+            value_buf, row_width, 3);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE, 5, a,
             buf);
 
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -3206,10 +3245,24 @@ void do_cmd_pane_settings(void)
                     "Scale of full-screen terminal menus relative to the "
                     "largest scale that fits. Set to 0 for the maximum; -1 "
                     "uses one step below it.",
+                [PANE_SETTING_COMPACT_INVENTORY_MENUS] =
+                    "Use shorter category names in Equipped, Inventory, and "
+                    "Supplies. When focus moves to the item list, hide the "
+                    "category pane and use its space for item names.",
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
                     "Extra zoom steps applied when gameplay starts on mobile. "
                     "Set to 0 to start at the configured main-map scale. The "
                     "result is limited to what the screen can display.",
+                [PANE_SETTING_CAMERA_VERTICAL_DISTANCE] =
+                    "Recenter when the player comes within this many rows of "
+                    "a horizontal screen edge or visible overlay. This also "
+                    "sets the vertical camera lead. The default is 5 on "
+                    "desktop and 3 on mobile.",
+                [PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE] =
+                    "Recenter when the player comes within this many columns "
+                    "of a vertical screen edge or visible overlay. This also "
+                    "sets the horizontal camera lead. The default is 5 on "
+                    "desktop and 3 on mobile.",
 #if defined(__ANDROID__) || defined(SIL_IOS)
                 [PANE_SETTING_MOBILE_PORTRAIT_MODE] =
                     "Use the device's real portrait orientation. Turning it "
@@ -3304,9 +3357,21 @@ void do_cmd_pane_settings(void)
                         set_sdl_terminal_menu_scale_offset(
                             def.terminal_menu_scale_offset);
                         break;
+                    case PANE_SETTING_COMPACT_INVENTORY_MENUS:
+                        set_sdl_compact_inventory_menus(
+                            def.compact_inventory_menus);
+                        break;
                     case PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET:
                         set_sdl_mobile_starting_zoom_offset(
                             def.mobile_starting_zoom_offset);
+                        break;
+                    case PANE_SETTING_CAMERA_VERTICAL_DISTANCE:
+                        set_sdl_camera_center_clearance_vertical(
+                            def.camera_center_clearance_vertical);
+                        break;
+                    case PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE:
+                        set_sdl_camera_center_clearance_horizontal(
+                            def.camera_center_clearance_horizontal);
                         break;
 #if defined(__ANDROID__) || defined(SIL_IOS)
                     case PANE_SETTING_MOBILE_PORTRAIT_MODE:
@@ -3509,6 +3574,12 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
+            else if (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
+            {
+                set_sdl_compact_inventory_menus(
+                    !get_sdl_compact_inventory_menus());
+                settings_changed = true;
+            }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             {
                 int old_value = get_sdl_mobile_starting_zoom_offset();
@@ -3522,6 +3593,38 @@ void do_cmd_pane_settings(void)
                     && value != old_value)
                 {
                     set_sdl_mobile_starting_zoom_offset(value);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_VERTICAL_DISTANCE)
+            {
+                int old_value = get_sdl_camera_center_clearance_vertical();
+                int value = old_value;
+
+                if (settings_pick_integer_range(
+                        "Camera Vertical Recenter Distance", NULL,
+                        SDL_CAMERA_CENTER_CLEARANCE_MIN,
+                        SDL_CAMERA_CENTER_CLEARANCE_MAX, old_value, false,
+                        &value)
+                    && value != old_value)
+                {
+                    set_sdl_camera_center_clearance_vertical(value);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE)
+            {
+                int old_value = get_sdl_camera_center_clearance_horizontal();
+                int value = old_value;
+
+                if (settings_pick_integer_range(
+                        "Camera Horizontal Recenter Distance", NULL,
+                        SDL_CAMERA_CENTER_CLEARANCE_MIN,
+                        SDL_CAMERA_CENTER_CLEARANCE_MAX, old_value, false,
+                        &value)
+                    && value != old_value)
+                {
+                    set_sdl_camera_center_clearance_horizontal(value);
                     settings_changed = true;
                 }
             }
@@ -3644,12 +3747,38 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
+            else if (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
+            {
+                if (!get_sdl_compact_inventory_menus())
+                {
+                    set_sdl_compact_inventory_menus(true);
+                    settings_changed = true;
+                }
+            }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             {
                 val = get_sdl_mobile_starting_zoom_offset();
                 if (val < SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX)
                 {
                     set_sdl_mobile_starting_zoom_offset(val + 1);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_VERTICAL_DISTANCE)
+            {
+                val = get_sdl_camera_center_clearance_vertical();
+                if (val < SDL_CAMERA_CENTER_CLEARANCE_MAX)
+                {
+                    set_sdl_camera_center_clearance_vertical(val + 1);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE)
+            {
+                val = get_sdl_camera_center_clearance_horizontal();
+                if (val < SDL_CAMERA_CENTER_CLEARANCE_MAX)
+                {
+                    set_sdl_camera_center_clearance_horizontal(val + 1);
                     settings_changed = true;
                 }
             }
@@ -3756,12 +3885,38 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
+            else if (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
+            {
+                if (get_sdl_compact_inventory_menus())
+                {
+                    set_sdl_compact_inventory_menus(false);
+                    settings_changed = true;
+                }
+            }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             {
                 val = get_sdl_mobile_starting_zoom_offset();
                 if (val > SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN)
                 {
                     set_sdl_mobile_starting_zoom_offset(val - 1);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_VERTICAL_DISTANCE)
+            {
+                val = get_sdl_camera_center_clearance_vertical();
+                if (val > SDL_CAMERA_CENTER_CLEARANCE_MIN)
+                {
+                    set_sdl_camera_center_clearance_vertical(val - 1);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE)
+            {
+                val = get_sdl_camera_center_clearance_horizontal();
+                if (val > SDL_CAMERA_CENTER_CLEARANCE_MIN)
+                {
+                    set_sdl_camera_center_clearance_horizontal(val - 1);
                     settings_changed = true;
                 }
             }
@@ -3852,7 +4007,7 @@ void do_cmd_pane_settings(void)
 
         default:
         {
-            bell("Illegal command for pane settings!");
+            bell("Illegal command for general settings!");
             break;
         }
         }
@@ -4306,17 +4461,6 @@ static int build_interface_pane_rows(struct iface_pane_row* rows, int max_rows,
     {
         rows[row_count].pane_cfg_index = -1;
         rows[row_count].type = PANE_MAX;
-        rows[row_count].field = IFACE_PANE_FIELD_CAMERA_CENTER_CLEARANCE;
-        markers[mark_count].setting_id = IFACE_PANE_ROW_BASE + row_count;
-        markers[mark_count].label = "Camera";
-        mark_count++;
-        row_count++;
-    }
-
-    if (row_count + 1 <= max_rows)
-    {
-        rows[row_count].pane_cfg_index = -1;
-        rows[row_count].type = PANE_MAX;
         rows[row_count].field = IFACE_PANE_FIELD_MAIN_MENU_BUTTON;
         markers[mark_count].setting_id = IFACE_PANE_ROW_BASE + row_count;
         markers[mark_count].label = "Main Menu";
@@ -4337,6 +4481,7 @@ static int build_interface_pane_rows(struct iface_pane_row* rows, int max_rows,
         {
             fields[field_count++] = IFACE_PANE_FIELD_LP_LAUNCH;
             fields[field_count++] = IFACE_PANE_FIELD_LP_COMPACT;
+            fields[field_count++] = IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR;
             fields[field_count++] = IFACE_PANE_FIELD_LP_TOUCH_EDGE;
             fields[field_count++] = IFACE_PANE_FIELD_FONT;
         }
@@ -4440,6 +4585,8 @@ static cptr iface_pane_row_label(const struct iface_pane_row* row)
     case IFACE_PANE_FIELD_BUTTONS: return "Assignments";
     case IFACE_PANE_FIELD_LP_LAUNCH: return "Launch State";
     case IFACE_PANE_FIELD_LP_COMPACT: return "Compact Mode";
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+        return "Compact Health Bar";
     case IFACE_PANE_FIELD_LP_TOUCH_EDGE: return "Touch Left Edge";
     case IFACE_PANE_FIELD_LOG_ROWS: return "Lines";
     case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER: return "White Border";
@@ -4447,8 +4594,6 @@ static cptr iface_pane_row_label(const struct iface_pane_row* row)
     case IFACE_PANE_FIELD_DICE_OVERLAY: return "Result Time";
     case IFACE_PANE_FIELD_MAIN_MENU_BUTTON: return "Show Fixed Button";
     case IFACE_PANE_FIELD_POPUP_NOTIFICATION: return "Display Time";
-    case IFACE_PANE_FIELD_CAMERA_CENTER_CLEARANCE:
-        return "Recenter Distance";
     default: return "?";
     }
 }
@@ -4463,15 +4608,6 @@ static cptr iface_pane_row_description(const struct iface_pane_row* row)
         return "Show the fixed Menu button at the top center during play. "
             "Top-center panes begin directly below it while enabled. This is "
             "saved separately for portrait and landscape.";
-    }
-
-    if (row->field == IFACE_PANE_FIELD_CAMERA_CENTER_CLEARANCE)
-    {
-        return "Recenter the player within the relevant visible map zone "
-            "when they come within this many cells of a screen edge or any "
-            "visible overlay. The same distance shifts the player behind "
-            "their travel direction to show more map ahead. The default is "
-            "5 on desktop and 3 on mobile.";
     }
 
     if (row->field == IFACE_PANE_FIELD_PLACEMENT)
@@ -4509,6 +4645,14 @@ static cptr iface_pane_row_description(const struct iface_pane_row* row)
             "portrait and landscape.";
     }
 
+    if (row->field == IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR)
+    {
+        return "Show the player health bar above the vertical compact Left "
+            "Panel. It begins flush with the pane's top edge and has no top "
+            "padding. Row compact mode and the full panel are unchanged. "
+            "This is saved separately for portrait and landscape.";
+    }
+
     if (row->field == IFACE_PANE_FIELD_LOG_ROWS)
     {
         return "Set the requested number of visible Overlay Log lines for "
@@ -4525,6 +4669,7 @@ static cptr iface_pane_row_description(const struct iface_pane_row* row)
         || row->field == IFACE_PANE_FIELD_QA_LAUNCH
         || row->field == IFACE_PANE_FIELD_LP_LAUNCH
         || row->field == IFACE_PANE_FIELD_LP_COMPACT
+        || row->field == IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR
         || row->field == IFACE_PANE_FIELD_LP_TOUCH_EDGE
         || row->field == IFACE_PANE_FIELD_LOG_ROWS
         || row->field == IFACE_PANE_FIELD_OVERLAY_LOG_BORDER
@@ -4615,6 +4760,10 @@ static void iface_pane_row_value(const struct iface_pane_row* row, char* buf,
                 ? "row" : "column",
             buflen);
         break;
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+        SDL_strlcpy(buf, get_sdl_left_panel_compact_health_bar()
+            ? "on" : "off", buflen);
+        break;
     case IFACE_PANE_FIELD_LP_TOUCH_EDGE:
         SDL_strlcpy(buf, get_sdl_left_overlays_touch_screen_edge()
             ? "on" : "off", buflen);
@@ -4639,9 +4788,6 @@ static void iface_pane_row_value(const struct iface_pane_row* row, char* buf,
     case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
         iface_format_ms_value(buf, buflen, get_sdl_popup_notification_ms());
         break;
-    case IFACE_PANE_FIELD_CAMERA_CENTER_CLEARANCE:
-        strnfmt(buf, buflen, "%d", get_sdl_camera_center_clearance());
-        break;
     default:
         SDL_strlcpy(buf, "", buflen);
         break;
@@ -4654,6 +4800,7 @@ static void iface_pane_row_apply_change(const struct iface_pane_row* row)
     {
     case IFACE_PANE_FIELD_LP_LAUNCH:
     case IFACE_PANE_FIELD_LP_COMPACT:
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
     case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER:
         sdl_request_redraw();
         break;
@@ -4677,8 +4824,6 @@ static bool iface_pane_pick_from_choices(const struct iface_pane_row* row,
 
     if (row->field == IFACE_PANE_FIELD_MAIN_MENU_BUTTON)
         group = "Main Menu";
-    else if (row->field == IFACE_PANE_FIELD_CAMERA_CENTER_CLEARANCE)
-        group = "Camera";
     else if (row->field == IFACE_PANE_FIELD_POPUP_NOTIFICATION)
         group = "Popup Notifications";
     else if (row->type == PANE_MAX)
@@ -4901,6 +5046,17 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
         }
         break;
 
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+        value = get_sdl_left_panel_compact_health_bar() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, off_on_choices,
+                (int)N_ELEMENTS(off_on_choices), value, &value, handled)
+            && value != (get_sdl_left_panel_compact_health_bar() ? 1 : 0))
+        {
+            set_sdl_left_panel_compact_health_bar(value != 0);
+            changed = true;
+        }
+        break;
+
     case IFACE_PANE_FIELD_LP_TOUCH_EDGE:
         value = get_sdl_left_overlays_touch_screen_edge() ? 1 : 0;
         if (iface_pane_pick_from_choices(row, off_on_choices,
@@ -4958,35 +5114,6 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
             changed = true;
         }
         break;
-
-    case IFACE_PANE_FIELD_CAMERA_CENTER_CLEARANCE:
-    {
-        struct settings_value_choice choices[
-            SDL_CAMERA_CENTER_CLEARANCE_MAX
-            - SDL_CAMERA_CENTER_CLEARANCE_MIN + 1];
-        char labels[
-            SDL_CAMERA_CENTER_CLEARANCE_MAX
-            - SDL_CAMERA_CENTER_CLEARANCE_MIN + 1][8];
-        int count = 0;
-        int current = get_sdl_camera_center_clearance();
-
-        for (int distance = SDL_CAMERA_CENTER_CLEARANCE_MIN;
-             distance <= SDL_CAMERA_CENTER_CLEARANCE_MAX; distance++)
-        {
-            strnfmt(labels[count], sizeof(labels[count]), "%d", distance);
-            choices[count].value = distance;
-            choices[count].label = labels[count];
-            count++;
-        }
-        if (iface_pane_pick_from_choices(row, choices, count, current, &value,
-                handled)
-            && value != current)
-        {
-            set_sdl_camera_center_clearance(value);
-            changed = true;
-        }
-        break;
-    }
 
     case IFACE_PANE_FIELD_DICE_LOCK:
     case IFACE_PANE_FIELD_DICE_OVERLAY:
@@ -5192,6 +5319,17 @@ static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
                 : SDL_LEFT_PANEL_COMPACT_ROW);
         changed = true;
         break;
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+    {
+        bool cur = get_sdl_left_panel_compact_health_bar();
+        bool next = (delta == 0) ? !cur : (delta > 0);
+
+        if (next != cur) {
+            set_sdl_left_panel_compact_health_bar(next);
+            changed = true;
+        }
+        break;
+    }
     case IFACE_PANE_FIELD_LP_TOUCH_EDGE:
     {
         bool cur = get_sdl_left_overlays_touch_screen_edge();
@@ -5238,15 +5376,6 @@ static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
             set_sdl_show_main_menu_button(next);
             changed = true;
         }
-        break;
-    }
-    case IFACE_PANE_FIELD_CAMERA_CENTER_CLEARANCE:
-    {
-        int value = get_sdl_camera_center_clearance();
-        int next = value + ((delta < 0) ? -1 : 1);
-
-        set_sdl_camera_center_clearance(next);
-        changed = (get_sdl_camera_center_clearance() != value);
         break;
     }
     case IFACE_PANE_FIELD_DICE_LOCK:
@@ -5409,6 +5538,15 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
             changed = true;
         }
         break;
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+        if (get_sdl_left_panel_compact_health_bar()
+            != def.left_panel_compact_health_bar)
+        {
+            set_sdl_left_panel_compact_health_bar(
+                def.left_panel_compact_health_bar);
+            changed = true;
+        }
+        break;
     case IFACE_PANE_FIELD_LP_TOUCH_EDGE:
         if (get_sdl_left_overlays_touch_screen_edge()
             != def.left_overlays_touch_screen_edge)
@@ -5468,14 +5606,6 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
         if (get_sdl_popup_notification_ms() != def.popup_notification_ms)
         {
             set_sdl_popup_notification_ms(def.popup_notification_ms);
-            changed = true;
-        }
-        break;
-    case IFACE_PANE_FIELD_CAMERA_CENTER_CLEARANCE:
-        if (get_sdl_camera_center_clearance()
-            != def.camera_center_clearance)
-        {
-            set_sdl_camera_center_clearance(def.camera_center_clearance);
             changed = true;
         }
         break;
@@ -9131,7 +9261,7 @@ int options_menu(int* highlight)
     } while (0)
 
     ADD_OPTIONS_MENU_ROW(1, 'a', "Input Options");
-    ADD_OPTIONS_MENU_ROW(2, 'b', "Pane Settings");
+    ADD_OPTIONS_MENU_ROW(2, 'b', "General Settings");
     ADD_OPTIONS_MENU_ROW(3, 'c', "Interface Options");
     ADD_OPTIONS_MENU_ROW(4, 'd', "Visual Options");
     ADD_OPTIONS_MENU_ROW(5, 'e', "Text Options");

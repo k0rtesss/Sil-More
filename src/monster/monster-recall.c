@@ -291,6 +291,9 @@ static int monster_recall_screen_capture_view(
         ui_scroll_area_set_tap_key(ESCAPE);
 
         ch = inkey();
+        if (ch == UI_MENU_CLICK_WAKE_KEY)
+            continue;
+
         dir = target_dir(ch);
         if ((dir == 8) || (dir == 2))
             ch = I2D(dir);

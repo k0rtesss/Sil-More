@@ -408,6 +408,7 @@ static bool sdl_render_left_panel_player_health_bar(int source_row,
     float inset_x;
     float inset_y;
     float fraction;
+    bool flush_top;
 
     if (!p_ptr || !op_ptr || !styled_player_health_bar || p_ptr->mhp <= 0)
         return false;
@@ -426,8 +427,12 @@ static bool sdl_render_left_panel_player_health_bar(int source_row,
     inset_x = (float)cell_w * 0.12f;
     if (inset_x < 1.0f)
         inset_x = 1.0f;
-    inset_y = (float)cell_h * 0.24f;
-    if (inset_y < 1.0f)
+    flush_top = get_sdl_left_panel_compact_health_bar()
+        && sdl_left_panel_pane_collapsed()
+        && !sdl_left_panel_compact_row_mode()
+        && dest_row == 0;
+    inset_y = flush_top ? 0.0f : (float)cell_h * 0.24f;
+    if (!flush_top && inset_y < 1.0f)
         inset_y = 1.0f;
 
     bar.x = content_x

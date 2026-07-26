@@ -12,7 +12,14 @@
 enum {
     SDL_HALLS_MAX_ENTRIES = 12,
     SDL_HALLS_MAX_ACTIONS = 8,
-    SDL_HALLS_TEXT_LEN = 256
+    SDL_HALLS_TEXT_LEN = 256,
+    SDL_HALLS_DESKTOP_FULL_MIN_ENTRIES = 3,
+    SDL_HALLS_DESKTOP_BRIEF_MIN_ENTRIES = 7,
+    SDL_HALLS_MOBILE_LANDSCAPE_FULL_ENTRIES = 2,
+    SDL_HALLS_MOBILE_LANDSCAPE_BRIEF_ENTRIES = 5,
+    SDL_HALLS_MOBILE_LANDSCAPE_HI_FULL_ENTRIES = 3,
+    SDL_HALLS_MOBILE_LANDSCAPE_HI_BRIEF_ENTRIES = 7,
+    SDL_HALLS_MOBILE_LANDSCAPE_HI_SHORT_SIDE = 1200
 };
 
 typedef struct sdl_halls_entry {
@@ -201,9 +208,38 @@ static int sdl_halls_capacity_for_layout(const SDL_Rect* canvas,
     if (!canvas || !layout)
         return 1;
 
+    /*
+     * Every mobile presentation shares the mobile Halls density.  Landscape
+     * has explicit low- and high-resolution page sizes; portrait retains its
+     * independent height-based calculation below.
+     */
+    if (sdl_halls_mobile_layout() && canvas->w >= canvas->h)
+    {
+        bool high_resolution =
+            sdl_halls_short_side(canvas)
+            >= (float)SDL_HALLS_MOBILE_LANDSCAPE_HI_SHORT_SIDE;
+
+        if (high_resolution)
+            return detailed
+                ? SDL_HALLS_MOBILE_LANDSCAPE_HI_FULL_ENTRIES
+                : SDL_HALLS_MOBILE_LANDSCAPE_HI_BRIEF_ENTRIES;
+
+        return detailed
+            ? SDL_HALLS_MOBILE_LANDSCAPE_FULL_ENTRIES
+            : SDL_HALLS_MOBILE_LANDSCAPE_BRIEF_ENTRIES;
+    }
+
     target_card_h = sdl_halls_target_card_h(canvas, detailed);
     capacity = (int)((layout->body_h + layout->gap)
         / (target_card_h + layout->gap));
+    if (!sdl_halls_mobile_layout())
+    {
+        int desktop_min = detailed
+            ? SDL_HALLS_DESKTOP_FULL_MIN_ENTRIES
+            : SDL_HALLS_DESKTOP_BRIEF_MIN_ENTRIES;
+
+        capacity = MAX(capacity, desktop_min);
+    }
     return sdl_halls_clampi(capacity, 1, SDL_HALLS_MAX_ENTRIES);
 }
 

@@ -13,15 +13,51 @@ struct map_pane_span {
     int y2;
 };
 
+/* Clearance from hidden space in each direction from the player. */
+struct map_clearance {
+    int top;
+    int bottom;
+    int left;
+    int right;
+};
+
 #define MAP_OVERLAY_SPAN_MAX (MAX_PANE_CONFIGS + 4)
 
-static int map_center_clearance(void)
+static int map_center_clearance_vertical(void)
 {
 #ifdef USE_SDL
-    return get_sdl_camera_center_clearance();
+    return get_sdl_camera_center_clearance_vertical();
 #else
     return SDL_CAMERA_CENTER_CLEARANCE_DEFAULT;
 #endif
+}
+
+static int map_center_clearance_horizontal(void)
+{
+#ifdef USE_SDL
+    return get_sdl_camera_center_clearance_horizontal();
+#else
+    return SDL_CAMERA_CENTER_CLEARANCE_DEFAULT;
+#endif
+}
+
+static struct map_clearance map_center_clearance_for_travel(int travel_y,
+    int travel_x)
+{
+    int vertical = map_center_clearance_vertical();
+    int horizontal = map_center_clearance_horizontal();
+    struct map_clearance clearance;
+
+    /*
+     * Keep the configured buffer ahead of travel, but do not let hidden space
+     * behind the player pinch the destination zone.  With no directional
+     * recenter this remains the original symmetric safe zone.
+     */
+    clearance.top = (travel_y > 0) ? 0 : vertical;
+    clearance.bottom = (travel_y < 0) ? 0 : vertical;
+    clearance.left = (travel_x > 0) ? 0 : horizontal;
+    clearance.right = (travel_x < 0) ? 0 : horizontal;
+    return clearance;
 }
 
 /* Collect every live SDL overlay which currently obscures the map. */
@@ -63,14 +99,23 @@ static int clamp_screen_center(int value, int size)
 }
 
 static bool map_pane_span_contains(const struct map_pane_span* s, int y,
-    int x, int clearance)
+    int x, const struct map_clearance* clearance)
 {
-    return s && x >= s->x1 - clearance && x < s->x2 + clearance
-        && y >= s->y1 - clearance && y < s->y2 + clearance;
+    /*
+     * The side of an overlay facing a direction is the hidden boundary for
+     * travel in the opposite screen direction: a top overlay's bottom edge,
+     * for example, uses the topward clearance.
+     */
+    return s && clearance
+        && x >= s->x1 - clearance->right
+        && x < s->x2 + clearance->left
+        && y >= s->y1 - clearance->bottom
+        && y < s->y2 + clearance->top;
 }
 
 static bool map_center_clear(int y, int x,
-    const struct map_pane_span* spans, int span_count, int clearance)
+    const struct map_pane_span* spans, int span_count,
+    const struct map_clearance* clearance)
 {
     for (int i = 0; i < span_count; i++)
     {
@@ -82,10 +127,11 @@ static bool map_center_clear(int y, int x,
 }
 
 static bool map_zone_cell_clear(int y, int x, int screen_h, int screen_w,
-    const struct map_pane_span* spans, int span_count, int clearance)
+    const struct map_pane_span* spans, int span_count,
+    const struct map_clearance* clearance)
 {
-    if (x < clearance || x >= screen_w - clearance
-        || y < clearance || y >= screen_h - clearance)
+    if (x < clearance->left || x >= screen_w - clearance->right
+        || y < clearance->top || y >= screen_h - clearance->bottom)
         return false;
 
     return map_center_clear(y, x, spans, span_count, clearance);
@@ -96,17 +142,21 @@ static int* map_zone_queue = NULL;
 static int map_zone_capacity = 0;
 static int map_zone_cached_h = 0;
 static int map_zone_cached_w = 0;
-static int map_zone_cached_clearance = 0;
+static struct map_clearance map_zone_cached_clearance;
 static int map_zone_cached_span_count = 0;
 static struct map_pane_span map_zone_cached_spans[MAP_OVERLAY_SPAN_MAX];
 static bool map_zone_cache_valid = false;
 
-static bool map_zone_cache_matches(int screen_h, int screen_w, int clearance,
-    const struct map_pane_span* spans, int span_count)
+static bool map_zone_cache_matches(int screen_h, int screen_w,
+    const struct map_clearance* clearance, const struct map_pane_span* spans,
+    int span_count)
 {
     if (!map_zone_cache_valid || screen_h != map_zone_cached_h
         || screen_w != map_zone_cached_w
-        || clearance != map_zone_cached_clearance
+        || clearance->top != map_zone_cached_clearance.top
+        || clearance->bottom != map_zone_cached_clearance.bottom
+        || clearance->left != map_zone_cached_clearance.left
+        || clearance->right != map_zone_cached_clearance.right
         || span_count != map_zone_cached_span_count)
         return false;
 
@@ -149,8 +199,9 @@ static bool map_zone_cache_reserve(int cell_count)
 
 /* Label each connected region left after screen edges and live overlays have
  * been expanded by the configured recenter distance. */
-static bool map_zone_cache_build(int screen_h, int screen_w, int clearance,
-    const struct map_pane_span* spans, int span_count)
+static bool map_zone_cache_build(int screen_h, int screen_w,
+    const struct map_clearance* clearance, const struct map_pane_span* spans,
+    int span_count)
 {
     static const int step_y[4] = { -1, 0, 1, 0 };
     static const int step_x[4] = { 0, 1, 0, -1 };
@@ -213,7 +264,7 @@ static bool map_zone_cache_build(int screen_h, int screen_w, int clearance,
 
     map_zone_cached_h = screen_h;
     map_zone_cached_w = screen_w;
-    map_zone_cached_clearance = clearance;
+    map_zone_cached_clearance = *clearance;
     map_zone_cached_span_count = span_count;
     for (int i = 0; i < span_count; i++)
         map_zone_cached_spans[i] = spans[i];
@@ -230,7 +281,10 @@ static void map_safe_center(int* center_y, int* center_x,
 {
     int screen_h = SCREEN_HGT;
     int screen_w = SCREEN_WID;
-    int clearance = map_center_clearance();
+    int vertical = map_center_clearance_vertical();
+    int horizontal = map_center_clearance_horizontal();
+    struct map_clearance clearance =
+        map_center_clearance_for_travel(travel_y, travel_x);
     int cy = clamp_screen_center(screen_h / 2, screen_h);
     int cx = clamp_screen_center(screen_w / 2, screen_w);
     int zone_label = 0;
@@ -241,9 +295,9 @@ static void map_safe_center(int* center_y, int* center_x,
     long long center_distance = 0;
     bool have_zone_center = false;
 
-    if (!map_zone_cache_matches(screen_h, screen_w, clearance, spans,
+    if (!map_zone_cache_matches(screen_h, screen_w, &clearance, spans,
             span_count)
-        && !map_zone_cache_build(screen_h, screen_w, clearance, spans,
+        && !map_zone_cache_build(screen_h, screen_w, &clearance, spans,
             span_count))
         goto finish;
 
@@ -307,9 +361,9 @@ static void map_safe_center(int* center_y, int* center_x,
             /* Compare to the exact rational lead target without rounding it
              * into an overlay or another disconnected zone. */
             dy = (long long)y * zone_cells - sum_y
-                + (long long)travel_y * clearance * zone_cells;
+                + (long long)travel_y * vertical * zone_cells;
             dx = (long long)x * zone_cells - sum_x
-                + (long long)travel_x * clearance * zone_cells;
+                + (long long)travel_x * horizontal * zone_cells;
             distance = dy * dy + dx * dx;
             if (!have_zone_center || distance < center_distance)
             {
@@ -332,28 +386,34 @@ finish:
 static bool map_cell_near_hidden(int y, int x,
     const struct map_pane_span* spans, int span_count)
 {
-    int clearance = map_center_clearance();
+    int vertical = map_center_clearance_vertical();
+    int horizontal = map_center_clearance_horizontal();
+    struct map_clearance clearance =
+        map_center_clearance_for_travel(0, 0);
 
-    if (x < clearance
-        || x >= SCREEN_WID - clearance
-        || y < clearance
-        || y >= SCREEN_HGT - clearance)
+    if (x < horizontal
+        || x >= SCREEN_WID - horizontal
+        || y < vertical
+        || y >= SCREEN_HGT - vertical)
     {
         return true;
     }
 
-    return !map_center_clear(y, x, spans, span_count, clearance);
+    return !map_center_clear(y, x, spans, span_count, &clearance);
 }
 
 static bool map_travel_points_toward_hidden(int y, int x, int travel_y,
     int travel_x, const struct map_pane_span* spans, int span_count)
 {
-    int clearance = map_center_clearance();
+    int vertical = map_center_clearance_vertical();
+    int horizontal = map_center_clearance_horizontal();
+    struct map_clearance clearance =
+        map_center_clearance_for_travel(0, 0);
 
-    if ((travel_x < 0 && x < clearance)
-        || (travel_x > 0 && x >= SCREEN_WID - clearance)
-        || (travel_y < 0 && y < clearance)
-        || (travel_y > 0 && y >= SCREEN_HGT - clearance))
+    if ((travel_x < 0 && x < horizontal)
+        || (travel_x > 0 && x >= SCREEN_WID - horizontal)
+        || (travel_y < 0 && y < vertical)
+        || (travel_y > 0 && y >= SCREEN_HGT - vertical))
     {
         return true;
     }
@@ -362,7 +422,7 @@ static bool map_travel_points_toward_hidden(int y, int x, int travel_y,
     {
         const struct map_pane_span* s = &spans[i];
 
-        if (!map_pane_span_contains(s, y, x, clearance))
+        if (!map_pane_span_contains(s, y, x, &clearance))
             continue;
 
         if ((x < s->x1 && travel_x > 0)

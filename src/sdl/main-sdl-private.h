@@ -273,6 +273,8 @@ typedef struct sdl_view {
     bool term_ready;
 } sdl_view;
 
+#define SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX 4
+
 typedef struct sdl_left_panel_metrics {
     bool collapsed;
     bool compact_row;
@@ -290,10 +292,10 @@ typedef struct sdl_left_panel_metrics {
     int visual_rows;
     int source_h;
     int compact_segment_count;
-    int compact_source_rows[3];
-    int compact_output_cols[3];
-    int compact_output_rows[3];
-    int compact_widths[3];
+    int compact_source_rows[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
+    int compact_output_cols[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
+    int compact_output_rows[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
+    int compact_widths[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
 } sdl_left_panel_metrics;
 
 typedef struct sdl_left_panel_compact_light_span {
@@ -3258,6 +3260,8 @@ int get_sdl_effective_main_view_scale(void);
 int get_sdl_min_main_view_scale(void);
 int get_sdl_terminal_menu_scale_offset(void);
 void set_sdl_terminal_menu_scale_offset(int value);
+bool get_sdl_compact_inventory_menus(void);
+void set_sdl_compact_inventory_menus(bool value);
 int get_sdl_mobile_starting_zoom_offset(void);
 void set_sdl_mobile_starting_zoom_offset(int value);
 bool get_sdl_mobile_portrait_mode(void);
@@ -3274,8 +3278,10 @@ int get_sdl_effective_aux_view_font_size(void);
 void set_sdl_aux_view_font_size(int value);
 int get_sdl_margin(void);
 void set_sdl_margin(int value);
-int get_sdl_camera_center_clearance(void);
-void set_sdl_camera_center_clearance(int value);
+int get_sdl_camera_center_clearance_vertical(void);
+void set_sdl_camera_center_clearance_vertical(int value);
+int get_sdl_camera_center_clearance_horizontal(void);
+void set_sdl_camera_center_clearance_horizontal(int value);
 bool get_sdl_fullscreen(void);
 void set_sdl_fullscreen(bool value);
 bool get_sdl_tiles(void);
@@ -3324,6 +3330,8 @@ bool get_sdl_left_panel_expanded_on_launch(void);
 void set_sdl_left_panel_expanded_on_launch(bool value);
 int get_sdl_left_panel_compact_mode(void);
 void set_sdl_left_panel_compact_mode(int mode);
+bool get_sdl_left_panel_compact_health_bar(void);
+void set_sdl_left_panel_compact_health_bar(bool value);
 int get_sdl_intro_style(void);
 void set_sdl_intro_style(int style);
 void sdl_gamepad_load_default_bindings(void);
@@ -4168,6 +4176,7 @@ bool sdl_prompt_reset_sdl_defaults(const char* issue_summary,
     int screen_width, int screen_height);
 #if SIL_SDL_MOBILE_BUILD
 bool sdl_prompt_mobile_startup_portrait_mode(void);
+bool sdl_prompt_mobile_startup_large_list_menus(void);
 #endif
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD
 bool sdl_is_desktop_handheld_resolution(int width, int height);

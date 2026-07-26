@@ -212,6 +212,8 @@ static void sdl_capture_pane_profile(struct sdl_pane_profile* profile)
     profile->left_panel_expanded_on_launch =
         config.left_panel_expanded_on_launch;
     profile->left_panel_compact_mode = config.left_panel_compact_mode;
+    profile->left_panel_compact_health_bar =
+        config.left_panel_compact_health_bar;
     profile->log_pane_display_filter = config.log_pane_display_filter;
     profile->dice_roll_lock_ms = config.dice_roll_lock_ms;
     profile->dice_roll_overlay_ms = config.dice_roll_overlay_ms;
@@ -281,6 +283,8 @@ void sdl_apply_stored_pane_profile(int mode)
     config.left_panel_expanded_on_launch =
         profile->left_panel_expanded_on_launch;
     config.left_panel_compact_mode = profile->left_panel_compact_mode;
+    config.left_panel_compact_health_bar =
+        profile->left_panel_compact_health_bar;
     config.log_pane_display_filter = profile->log_pane_display_filter;
     config.dice_roll_lock_ms = profile->dice_roll_lock_ms;
     config.dice_roll_overlay_ms = profile->dice_roll_overlay_ms;

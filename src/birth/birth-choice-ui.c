@@ -340,6 +340,13 @@ int get_player_choice(birth_menu* choices, int num, int def,
             if (final_page < 0)
                 final_page = 0;
 
+            if (steamdeck && bpage < final_page
+                && c == steamdeck_alt_action_key())
+            {
+                sdl_character_sheet_screen_begin_page_turn_to(final_page);
+                continue;
+            }
+
             if (bpage > 0 && c == '4')
             {
                 sdl_character_sheet_screen_begin_page_turn(-1);

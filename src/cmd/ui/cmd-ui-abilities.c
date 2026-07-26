@@ -5795,6 +5795,7 @@ void do_cmd_ability_screen(void)
         int hover_choice;
         int skill_hover = -1;
         bool train_hovered = false;
+        bool viewport_scrolled;
         int ch;
         bool steamdeck = steamdeck_controls_active();
 
@@ -5828,14 +5829,14 @@ void do_cmd_ability_screen(void)
                 entry_cur = 0;
         }
 
-        if (sdl_touch_only_device_active())
+        viewport_scrolled = ui_scroll_area_take_touch_scrolled();
+        if (sdl_touch_only_device_active() || viewport_scrolled)
         {
-            /* Touch-only menus are viewport-driven: dragging pans the list,
+            /* Pointer scrolling is viewport-driven: dragging pans the list,
              * and tapping selects.  Do not let the off-screen selection pull
-             * the viewport back on the next redraw. */
+             * the viewport back on the redraw caused by that drag. */
             int max_entry_top = MAX(0,
                 entry_count - ability_visible_entries);
-            (void)ui_scroll_area_take_touch_scrolled();
             if (entry_top > max_entry_top)
                 entry_top = max_entry_top;
         }
@@ -5874,13 +5875,10 @@ void do_cmd_ability_screen(void)
             layout.ability_row + layout.ability_rows - 1,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
         ui_scroll_area_set_keys('8', '2', '6', '4');
-        if (sdl_touch_only_device_active())
-        {
-            /* Touch-only: drag pans the ability list without moving the
-             * selection (tap an ability to pick it). */
-            ui_scroll_area_set_offset_target(&entry_top,
-                MAX(0, entry_count - ability_visible_entries));
-        }
+        /* A drag in the left (or portrait top) region pans the ability
+         * viewport without moving the selected ability. */
+        ui_scroll_area_set_offset_target(&entry_top,
+            MAX(0, entry_count - ability_visible_entries));
         if (layout.desc_w > 0)
         {
             (void)ui_scroll_area_add_cols(layout.desc_col,
@@ -5888,8 +5886,9 @@ void do_cmd_ability_screen(void)
                 layout.desc_row + layout.desc_rows - 1,
                 SDL_TOUCH_MENU_CATEGORY_OTHER);
             ui_scroll_area_set_keys('8', '2', '6', '4');
-            if (sdl_touch_only_device_active())
-                ui_scroll_area_set_offset_target(&desc_top, desc_max_top);
+            /* A drag in the right (or portrait bottom) region scrolls only
+             * the description belonging to the selected ability. */
+            ui_scroll_area_set_offset_target(&desc_top, desc_max_top);
         }
 
         if (ui_menu_click_get_hover_choice(&hover_choice)
