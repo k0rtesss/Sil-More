@@ -846,9 +846,10 @@ bool sdl_pointer_attack_flush_pending_press(Uint64 now_ns)
     y = g_pointer_attack.touch_start_y;
     sdl_pointer_attack_cancel_touch_press();
     sdl_pointer_attack_clear_touch_selection();
-
-    if (!sdl_mouse_recall_handle_right_click(x, y))
-        sdl_pointer_attack_clear_hover();
+    /* Long-press switches from attacking to recall.  Clear the hover too so
+     * its red target does not reappear after the recall overlay closes. */
+    sdl_pointer_attack_clear_hover();
+    (void)sdl_mouse_recall_handle_right_click(x, y);
 
     return true;
 }

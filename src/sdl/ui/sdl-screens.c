@@ -6329,7 +6329,14 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
     float content_x, float content_w, float prompt_y, float prompt_h,
     int page, int page_count)
 {
-    float bw = MIN(content_w * 0.34f, prompt_h * 9.0f);
+    /*
+     * Keep three portrait controls inside distinct thirds of the prompt row.
+     * The landscape proportions intentionally overlap slightly, which is
+     * harmless with its wider canvas but lets adjacent portrait labels touch.
+     */
+    float control_width_fraction =
+        g_sdl_narrative_portrait_rendering ? 0.32f : 0.34f;
+    float bw = MIN(content_w * control_width_fraction, prompt_h * 9.0f);
     float bh = prompt_h;
     int hov = g_sdl_character_sheet_screen.hover_choice;
 #if SIL_SDL_MOBILE_BUILD
@@ -6564,7 +6571,9 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         float close_h = emphasized_close ? bh * 1.12f : bh;
         float close_y = prompt_y - (close_h - bh) * 0.5f;
         float cw = long_close_label
-            ? MIN(content_w * (emphasized_close ? 0.34f : 0.30f),
+            ? MIN(content_w
+                    * (emphasized_close
+                        ? control_width_fraction : 0.30f),
                 close_h * 9.0f)
             : MIN(content_w * 0.22f, bh * 6.0f);
         float ccx = content_x + (content_w - cw) * 0.5f;

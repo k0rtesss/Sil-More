@@ -4176,7 +4176,6 @@ bool sdl_prompt_reset_sdl_defaults(const char* issue_summary,
     int screen_width, int screen_height);
 #if SIL_SDL_MOBILE_BUILD
 bool sdl_prompt_mobile_startup_portrait_mode(void);
-bool sdl_prompt_mobile_startup_large_list_menus(void);
 #endif
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD
 bool sdl_is_desktop_handheld_resolution(int width, int height);

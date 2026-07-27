@@ -1775,6 +1775,14 @@ static const char* hint_message_title(int index)
     return "";
 }
 
+static bool hint_message_is_skeleton_body_separator(const char* line)
+{
+    return streq(line, "A second warning follows:")
+        || streq(line, "Another line follows:")
+        || streq(line, "More scratched below:")
+        || streq(line, "Another warning follows:");
+}
+
 static void hint_message_body_text(int index, char* out, size_t out_sz)
 {
     byte line_count = hint_messages_message_line_count(index);
@@ -1808,7 +1816,12 @@ static void hint_message_body_text(int index, char* out, size_t out_sz)
             continue;
         }
         if (out[0])
-            SDL_strlcat(out, " ", out_sz);
+        {
+            SDL_strlcat(out,
+                hint_message_is_skeleton_body_separator(line)
+                    ? "\n\n" : " ",
+                out_sz);
+        }
         SDL_strlcat(out, line, out_sz);
     }
 

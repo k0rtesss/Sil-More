@@ -645,6 +645,9 @@ void sdl_reset_config_to_resolution_defaults(int screen_width,
         &pane_config_count, MAX_PANE_CONFIGS, screen_width, screen_height);
 
     config.main_view_scale = default_main_scales[config.min_terminal_mode];
+    config.terminal_menu_scale_offset =
+        SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
+            config.main_view_scale);
     config.aux_view_font_size = 0;
     config.enable_right_panes = false;
 #if SIL_SDL_MOBILE_BUILD

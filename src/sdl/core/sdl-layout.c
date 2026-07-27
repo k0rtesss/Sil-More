@@ -5054,6 +5054,9 @@ bool sdl_apply_default_main_scale_for_layout(const char* reason)
         config.min_terminal_mode);
 
     config.main_view_scale = new_scale;
+    config.terminal_menu_scale_offset =
+        SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
+            config.main_view_scale);
     g_main_view_zoom_scale = 0;
 
     if (old_scale != new_scale) {
@@ -5537,38 +5540,6 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
     return false;
 }
 
-bool sdl_prompt_mobile_startup_large_list_menus(void)
-{
-    const ui_question_option options[] = {
-        {
-            .key = 'n',
-            .label = "No - use the usual menu size",
-            .attr = TERM_WHITE,
-            .disabled = false,
-        },
-        {
-            .key = 'y',
-            .label = "Yes - make list menus larger",
-            .attr = TERM_WHITE,
-            .disabled = false,
-        },
-    };
-    int choice = ui_question_ask_overlay("List Menu Size",
-        "Do you want your list menus to scale bigger than usual?\n\n"
-        "Useful for small handhelds.\n\n"
-        "You can always change this later in Options > General Settings > "
-        "Menu Scale.",
-        options, (int)N_ELEMENTS(options), UI_QUESTION_GLOBAL,
-        UI_QUESTION_GLOBAL, 0);
-
-    if (choice == 1) {
-        log_info("First-start mobile list-menu scale offset: 0");
-        return true;
-    }
-
-    log_info("First-start mobile list-menu scale offset: -1");
-    return false;
-}
 #endif
 
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD

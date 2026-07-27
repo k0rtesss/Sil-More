@@ -3200,6 +3200,10 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             }
             log_debug("Loaded terminalMenuScaleOffset: %d",
                 config->terminal_menu_scale_offset);
+        } else {
+            config->terminal_menu_scale_offset =
+                SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
+                    config->main_view_scale);
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl,
@@ -5397,7 +5401,8 @@ void sdl_config_set_defaults(struct sdl_config* config)
 {
     config->main_view_scale = SDL_MAIN_VIEW_PREFERRED_MIN_SCALE;
     config->terminal_menu_scale_offset =
-        SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT;
+        SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
+            config->main_view_scale);
     config->compact_inventory_menus = false;
     config->mobile_starting_zoom_offset =
         SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT;

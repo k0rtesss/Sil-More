@@ -3355,7 +3355,8 @@ void do_cmd_pane_settings(void)
                         break;
                     case PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET:
                         set_sdl_terminal_menu_scale_offset(
-                            def.terminal_menu_scale_offset);
+                            SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
+                                get_sdl_main_view_scale()));
                         break;
                     case PANE_SETTING_COMPACT_INVENTORY_MENUS:
                         set_sdl_compact_inventory_menus(

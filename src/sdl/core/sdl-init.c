@@ -535,19 +535,6 @@ errr init_sdl(int argc, char **argv)
     }
     sdl_queue_main_view_scale_neighbors_prewarm("startup");
 
-#if SIL_SDL_MOBILE_BUILD
-    if (!config_exists
-        && g_startup_device_class == SDL_STARTUP_DEVICE_ANDROID_HANDHELD)
-    {
-        bool large_list_menus =
-            sdl_prompt_mobile_startup_large_list_menus();
-
-        config.terminal_menu_scale_offset = large_list_menus
-            ? 0 : SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT;
-        config.compact_inventory_menus = large_list_menus;
-    }
-#endif
-
     if (config_exists && startup_issue_summary[0]) {
         bool old_fullscreen = config.fullscreen;
 
