@@ -82,7 +82,10 @@ if ($AllowDowngrade) {
     $installParams['AllowDowngrade'] = $true
 }
 
-& $installScript @installParams
+[string]$targetSerial = & $installScript @installParams
+if ([string]::IsNullOrWhiteSpace($targetSerial)) {
+    throw 'Android installer did not return a target device serial.'
+}
 
 if ($LaunchApp) {
     $adb = if ($AdbPath) {
@@ -101,18 +104,17 @@ if ($LaunchApp) {
     }
 
     $applicationId = Get-AndroidApplicationId -Delivery $Delivery -Config $Config
-    $launchArgs = @()
-    if ($Serial) {
-        $launchArgs += @('-s', $Serial)
-    }
-    $launchArgs += @('shell', 'am', 'start', '-n', "$applicationId/com.silqh.silmore.SilMoreActivity")
+    $launchArgs = @(
+        '-s', $targetSerial,
+        'shell', 'am', 'start', '-n', "$applicationId/com.silqh.silmore.SilMoreActivity"
+    )
 
     & $adb @launchArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to launch app via adb (exit code $LASTEXITCODE)"
     }
 
-    Write-Host "Launched $applicationId." -ForegroundColor Green
+    Write-Host "Launched $applicationId on $targetSerial." -ForegroundColor Green
 }
 
 Write-Host "Deploy complete for $Delivery $Config." -ForegroundColor Green

@@ -3125,7 +3125,7 @@ static int display_supply_list_wrapped(
 static int display_supply_list(const knowledge_browser_layout* layout, int row,
     int per_page, supply_list_entry entries[], int entry_cnt, int entry_cur,
     int entry_top, int current_group, int column,
-    const supply_list_columns* cols, bool compact_names)
+    const supply_list_columns* cols, bool compact_names, bool wrap_names)
 {
     int i;
 
@@ -3238,7 +3238,7 @@ static int display_supply_list(const knowledge_browser_layout* layout, int row,
         return rendered_entries;
     }
 
-    if (layout->stacked)
+    if (wrap_names)
     {
         return display_supply_list_wrapped(layout, row, per_page, entries,
             entry_cnt, entry_cur, entry_top, current_group, column, cols,
@@ -3683,7 +3683,7 @@ static void knowledge_touch_scroll_region(
     }
 
     ui_scroll_area_set_keys('8', '2', '6', '4');
-    if (sdl_touch_only_device_active() && offset)
+    if (sdl_touch_tutorial_device_available() && offset)
         ui_scroll_area_set_offset_target(offset, max_offset);
 }
 
@@ -5763,6 +5763,12 @@ static int count_inventory_browser_group_entries(inventory_menu_group group)
 
     if (group == INVENTORY_MENU_GROUP_ALL)
     {
+        for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+        {
+            if (inventory[i].k_idx)
+                count++;
+        }
+
         for (int i = 0; i < INVEN_PACK; i++)
         {
             if (inventory[i].k_idx)
@@ -6157,8 +6163,7 @@ static int collect_inventory_page_entries(inventory_menu_group group,
     for (int i = 0; i < capacity; i++)
         equipment_entry_clear(&entries[i]);
 
-    if (group != INVENTORY_MENU_GROUP_ALL
-        || (select_mode && (request->item_select_flags & USE_EQUIP)))
+    if (!select_mode || (request->item_select_flags & USE_EQUIP))
     {
         for (int i = INVEN_WIELD; i < INVEN_TOTAL && count < capacity; i++)
         {
@@ -9708,20 +9713,6 @@ static void supply_overlay_avoid_entries(
         layout->term_wid, rendered_rows);
 }
 
-static bool supply_overlay_handle_scroll_key(char ch)
-{
-    if (ch == '8')
-        return sdl_description_overlay_scroll_by(-1);
-    if (ch == '2')
-        return sdl_description_overlay_scroll_by(1);
-    if (ch == '9')
-        return sdl_description_overlay_scroll_page(-1);
-    if (ch == '3')
-        return sdl_description_overlay_scroll_page(1);
-
-    return false;
-}
-
 static bool supply_touch_preview_entry_select_only(bool desc_overlay_on,
     int click_action, bool modal_select_mode, bool explicit_action_mode)
 {
@@ -9796,11 +9787,128 @@ static void supply_set_interaction_mode(supply_overlay_cache* overlay_cache,
     supply_overlay_cache_reset(overlay_cache);
 }
 
-static void supply_preview_focus_entry_column(bool desc_overlay_on,
-    int entry_cnt, int* column)
+static bool supply_controller_info_binding_available(int binding)
 {
-    if (desc_overlay_on && entry_cnt > 0 && column)
-        *column = 1;
+    if (binding == GAMEPAD_BIND_NONE || binding == ESCAPE)
+        return false;
+
+    /*
+     * The browser already assigns these actions.  Since the command queue
+     * carries the configured binding rather than the originating physical
+     * control, reusing one would make the two controls indistinguishable.
+     */
+    return binding != steamdeck_confirm_key()
+        && binding != steamdeck_back_key()
+        && binding != steamdeck_prev_page_key()
+        && binding != steamdeck_next_page_key()
+        && binding != steamdeck_alt_action_key()
+        && binding != 'f' && binding != 'z';
+}
+
+/*
+ * Choose an Info control that exists on the controller currently being used.
+ * Prefer unambiguously reported buttons; use a reported stick only when no
+ * suitable button is available.
+ */
+static int supply_controller_info_key(char* label, size_t label_len,
+    bool allow_secondary)
+{
+    int binding =
+        get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK);
+    if (sdl_gamepad_control_available(GAMEPAD_CAPTURE_BUTTON,
+            SDL_GAMEPAD_BUTTON_BACK)
+        && supply_controller_info_binding_available(binding))
+    {
+        if (label && label_len)
+            controller_prompt_label(binding, "Back", label, label_len);
+        return binding;
+    }
+
+    binding = steamdeck_secondary_key();
+    if (allow_secondary
+        && sdl_gamepad_control_available(GAMEPAD_CAPTURE_BUTTON,
+            SDL_GAMEPAD_BUTTON_NORTH)
+        && supply_controller_info_binding_available(binding))
+    {
+        if (label && label_len)
+            controller_prompt_label(binding, "Y", label, label_len);
+        return binding;
+    }
+
+    /*
+     * Android controller descriptors can map ambiguous RX/RY or Z/RZ motion
+     * ranges to RIGHTX/RIGHTY even on handhelds with no physical right stick.
+     * Buttons have unambiguous presence data; do not advertise a stick-derived
+     * prompt on that backend.  Other backends may use it as a last resort.
+     */
+#if !defined(SDL_PLATFORM_ANDROID)
+    binding = steamdeck_info_key();
+    if (sdl_gamepad_control_available(GAMEPAD_CAPTURE_RIGHT_STICK,
+            GAMEPAD_STICK_DIR_RIGHT)
+        && supply_controller_info_binding_available(binding))
+    {
+        if (label && label_len)
+            controller_prompt_label(binding, "RS Right", label, label_len);
+        return binding;
+    }
+#endif
+
+    if (label && label_len)
+        label[0] = '\0';
+    return GAMEPAD_BIND_NONE;
+}
+
+static char supply_controller_menu_key(char ch, int prev_page_key,
+    int next_page_key, bool drop_available, bool allow_secondary_info)
+{
+    int info_key;
+
+    if (!steamdeck_controls_active())
+        return ch;
+
+    info_key = supply_controller_info_key(NULL, 0, allow_secondary_info);
+    if (info_key != GAMEPAD_BIND_NONE && ch == info_key)
+        return 'x';
+
+    /*
+     * The normal controller profile binds B to 'f'.  Item browsers use that
+     * action as Drop and reserve Start/Escape for Back, so translate it before
+     * applying the remaining menu actions.  Modal pickers still use the
+     * generic B-to-cancel contract.
+     */
+    if (drop_available)
+    {
+        if (ch == 'f')
+            return 'z';
+        if (ch == steamdeck_confirm_key())
+            return '\r';
+        if (prev_page_key && ch == steamdeck_prev_page_key())
+            return (char)prev_page_key;
+        if (next_page_key && ch == steamdeck_next_page_key())
+            return (char)next_page_key;
+        return ch;
+    }
+
+    return (char)steamdeck_menu_key(ch, prev_page_key, next_page_key);
+}
+
+static void supply_browser_cursor_move(char ch, int* column, int* grp_cur,
+    int grp_cnt, int* list_cur, int list_cnt, int page_rows, bool wrap_rows,
+    supply_overlay_cache* overlay_cache, bool* desc_overlay_on,
+    bool* drop_click_mode, bool* delete_click_mode)
+{
+    int old_column = column ? *column : 0;
+
+    browser_cursor_with_rows(ch, column, grp_cur, grp_cnt, list_cur, list_cnt,
+        page_rows, wrap_rows);
+
+    /* Returning to categories also leaves item-preview mode. */
+    if (column && old_column && !*column && desc_overlay_on
+        && *desc_overlay_on)
+    {
+        supply_set_interaction_mode(overlay_cache, desc_overlay_on,
+            drop_click_mode, delete_click_mode, SUPPLY_INTERACTION_NONE);
+    }
 }
 
 static void supply_touch_preview_restore_group_focus(bool touch_generated,
@@ -9842,6 +9950,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     int inv_entry_top = 0;
     int inv_column = 0;
     supply_menu_page page = SUPPLY_MENU_PAGE_SUPPLIES;
+    supply_menu_page interaction_page;
     int column = 0;
     bool flag = false;
     bool redraw = true;
@@ -9953,6 +10062,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             *request->item_select_item_out = -1;
         }
     }
+    interaction_page = page;
 
     for (i = 0; i < SUPPLY_GROUP_MAX; i++)
     {
@@ -9986,6 +10096,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
     while (!flag)
     {
+        if (page != interaction_page)
+        {
+            supply_set_interaction_mode(&overlay_cache, &desc_overlay_on,
+                &drop_click_mode, &delete_click_mode,
+                SUPPLY_INTERACTION_NONE);
+            interaction_page = page;
+        }
+
         if (page == SUPPLY_MENU_PAGE_EQUIPPED)
         {
             int equip_entry_cnt;
@@ -9998,6 +10116,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             int entry_page_rows;
             int max_entry_top;
             bool touch_only;
+            bool preserve_touch_view;
             bool compact_entry_only;
 
             prepare_equipment_group_icons(equip_icons);
@@ -10008,8 +10127,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (entry_page_rows < 1)
                 entry_page_rows = 1;
             touch_only = sdl_touch_only_device_active();
-            if (touch_only)
-                (void)ui_scroll_area_take_touch_scrolled();
+            preserve_touch_view = touch_only;
+            if (sdl_touch_tutorial_device_available()
+                && ui_scroll_area_take_touch_scrolled())
+            {
+                preserve_touch_view = true;
+            }
 
             if (equip_grp_cur >= EQUIPMENT_MENU_SLOT_COUNT)
                 equip_grp_cur = EQUIPMENT_MENU_SLOT_COUNT - 1;
@@ -10034,10 +10157,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (equip_entry_cur < 0)
                     equip_entry_cur = 0;
             }
-            supply_preview_focus_entry_column(desc_overlay_on, equip_entry_cnt,
-                &equip_column);
-
-            if (touch_only)
+            if (preserve_touch_view)
             {
                 int max_grp_top = MAX(0,
                     EQUIPMENT_MENU_SLOT_COUNT - layout.group_rows);
@@ -10066,8 +10186,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (equip_entry_cnt > 0)
             {
                 equipment_entry_adjust_top(equip_entries, equip_entry_cnt,
-                    equip_entry_cur, layout.entry_rows, &entry_cols, touch_only,
-                    &equip_entry_top);
+                    equip_entry_cur, layout.entry_rows, &entry_cols,
+                    preserve_touch_view, &equip_entry_top);
             }
             max_entry_top = equipment_entry_last_page_top(equip_entries,
                 equip_entry_cnt, layout.entry_rows, &entry_cols);
@@ -10182,6 +10302,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 char prev_label[16];
                 char next_label[16];
+                char info_label[16];
                 char use_label[16];
                 char confirm_label[16];
                 char drop_label[16];
@@ -10191,11 +10312,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 char prompt_mid[128];
                 char prompt_short[96];
                 const char* variants[3];
+                bool info_available;
 
                 controller_prompt_label(steamdeck_prev_page_key(), "L1",
                     prev_label, sizeof(prev_label));
                 controller_prompt_label(steamdeck_next_page_key(), "R1",
                     next_label, sizeof(next_label));
+                info_available = supply_controller_info_key(info_label,
+                    sizeof(info_label), true) != GAMEPAD_BIND_NONE;
                 controller_prompt_label(steamdeck_alt_action_key(), "X",
                     use_label, sizeof(use_label));
                 controller_prompt_label(steamdeck_confirm_key(), "A",
@@ -10204,16 +10328,29 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     sizeof(drop_label));
                 controller_prompt_label(ESCAPE, "Start", back_label,
                     sizeof(back_label));
-                strnfmt(prompt_full, sizeof(prompt_full),
-                    "D-pad move  [%s/%s] page  [%s/%s] equip  [%s] drop  [%s] back",
-                    prev_label, next_label, use_label, confirm_label,
-                    drop_label, back_label);
-                strnfmt(prompt_mid, sizeof(prompt_mid),
-                    "[%s/%s] page  [%s/%s] equip  [%s] drop",
-                    prev_label, next_label, use_label, confirm_label,
-                    drop_label);
+                if (info_available)
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] equip  [%s] drop  [%s] back",
+                        prev_label, next_label, info_label, use_label,
+                        confirm_label, drop_label, back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s] info  [%s/%s] equip  [%s] drop",
+                        info_label, use_label, confirm_label, drop_label);
+                }
+                else
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s/%s] equip  [%s] drop  [%s] back",
+                        prev_label, next_label, use_label, confirm_label,
+                        drop_label, back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s/%s] equip  [%s] drop",
+                        use_label, confirm_label, drop_label);
+                }
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "[%s] equip  [%s] drop", confirm_label, drop_label);
+                    "D-pad nav  [%s] equip  [%s] drop", confirm_label,
+                    drop_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_mid;
                 variants[2] = prompt_short;
@@ -10223,6 +10360,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     TERM_L_DARK, prompt_buf);
                 supply_register_prompt_clicks(&layout, prompt_buf, NULL,
                     use_label, confirm_label, drop_label, back_label);
+                if (info_available)
+                    ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
+                        layout.prompt_row, prompt_buf, info_label);
             }
             else if (sdl_touch_only_device_active())
             {
@@ -10425,18 +10565,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 continue;
 
             if (!click_generated_command)
-                ch = (char)steamdeck_menu_key(ch,
+                ch = supply_controller_menu_key(ch,
                     SUPPLY_BROWSER_PREV_PAGE_KEY,
-                    SUPPLY_BROWSER_NEXT_PAGE_KEY);
-
-            if (steamdeck_controls_active() && ch == 'f')
-                ch = 'z';
-
-            if (desc_overlay_on && overlay_cache.active
-                && supply_overlay_handle_scroll_key(ch))
-            {
-                continue;
-            }
+                    SUPPLY_BROWSER_NEXT_PAGE_KEY, true, true);
 
             if (!click_generated_command)
             {
@@ -10453,7 +10584,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if ((ch == '\r' || ch == '\n'
                     || (steamdeck_controls_active()
                         && ch == steamdeck_confirm_key()))
-                && equip_column && equip_entry_cnt)
+                && equip_entry_cnt)
             {
                 ch = (forced_action == SUPPLY_MENU_ACTION_DROP) ? 'z' : 'u';
             }
@@ -10496,10 +10627,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'X':
             case 'x':
-            case '6':
-#ifdef ARROW_RIGHT
-            case ARROW_RIGHT:
-#endif
             {
                 bool preview_was_open = desc_overlay_on;
 
@@ -10577,9 +10704,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 break;
 
             default:
-                browser_cursor_with_rows(ch, &equip_column, &equip_grp_cur,
+                supply_browser_cursor_move(ch, &equip_column, &equip_grp_cur,
                     EQUIPMENT_MENU_SLOT_COUNT, &equip_entry_cur,
-                    equip_entry_cnt, entry_page_rows, true);
+                    equip_entry_cnt, entry_page_rows, true, &overlay_cache,
+                    &desc_overlay_on, &drop_click_mode, &delete_click_mode);
                 break;
             }
             continue;
@@ -10604,6 +10732,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             byte picker_heading_attr = TERM_L_WHITE + TERM_SHADE;
             byte status_attr = TERM_L_BLUE;
             bool touch_only;
+            bool preserve_touch_view;
             bool show_source;
             bool compact_entry_only;
 
@@ -10701,8 +10830,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (entry_page_rows < 1)
                 entry_page_rows = 1;
             touch_only = sdl_touch_only_device_active();
-            if (touch_only)
-                (void)ui_scroll_area_take_touch_scrolled();
+            preserve_touch_view = touch_only;
+            if (sdl_touch_tutorial_device_available()
+                && ui_scroll_area_take_touch_scrolled())
+            {
+                preserve_touch_view = true;
+            }
 
             if (inv_grp_cur >= INVENTORY_BROWSER_GROUP_COUNT)
                 inv_grp_cur = INVENTORY_BROWSER_GROUP_COUNT - 1;
@@ -10765,10 +10898,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (inv_entry_cur < 0)
                     inv_entry_cur = 0;
             }
-            supply_preview_focus_entry_column(desc_overlay_on,
-                inventory_entry_cnt, &inv_column);
-
-            if (touch_only)
+            if (preserve_touch_view)
             {
                 int max_grp_top = MAX(0,
                     INVENTORY_BROWSER_GROUP_COUNT - layout.group_rows);
@@ -10797,7 +10927,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 equipment_entry_adjust_top(equip_entries,
                     inventory_entry_cnt, inv_entry_cur, layout.entry_rows,
-                    &entry_cols, touch_only, &inv_entry_top);
+                    &entry_cols, preserve_touch_view, &inv_entry_top);
             }
             max_entry_top = equipment_entry_last_page_top(equip_entries,
                 inventory_entry_cnt, layout.entry_rows, &entry_cols);
@@ -10983,11 +11113,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     controller_prompt_label(steamdeck_back_key(), "B",
                         back_label, sizeof(back_label));
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "Replace: D-pad move  [%s] select  [%s] cancel",
+                        "Replace: D-pad nav  [%s] select  [%s] cancel",
                         confirm_label, back_label);
                     strnfmt(prompt_short, sizeof(prompt_short),
-                        "Replace: [%s] select  [%s] cancel", confirm_label,
-                        back_label);
+                        "D-pad nav  [%s] select  [%s] cancel",
+                        confirm_label, back_label);
                     variants[0] = prompt_full;
                     variants[1] = prompt_short;
                     terminal_prompt_pick_variant(prompt, sizeof(prompt),
@@ -11038,11 +11168,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     controller_prompt_label(steamdeck_back_key(), "B",
                         back_label, sizeof(back_label));
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "Place: D-pad move  [%s] select  [%s] cancel",
+                        "Place: D-pad nav  [%s] select  [%s] cancel",
                         confirm_label, back_label);
                     strnfmt(prompt_short, sizeof(prompt_short),
-                        "Place: [%s] select  [%s] cancel", confirm_label,
-                        back_label);
+                        "D-pad nav  [%s] select  [%s] cancel",
+                        confirm_label, back_label);
                     variants[0] = prompt_full;
                     variants[1] = prompt_short;
                     terminal_prompt_pick_variant(prompt, sizeof(prompt),
@@ -11089,22 +11219,35 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     char prompt_mid[128];
                     char prompt_short[96];
                     const char* variants[3];
+                    bool info_available;
 
-                    controller_prompt_label(steamdeck_info_key(), "RS Right",
-                        preview_label, sizeof(preview_label));
+                    info_available = supply_controller_info_key(preview_label,
+                        sizeof(preview_label), true) != GAMEPAD_BIND_NONE;
                     controller_prompt_label(steamdeck_confirm_key(), "A",
                         confirm_label, sizeof(confirm_label));
                     controller_prompt_label(steamdeck_back_key(), "B",
                         back_label, sizeof(back_label));
-                    strnfmt(prompt_full, sizeof(prompt_full),
-                        "Choose: D-pad move  [%s] select  [%s] preview  [%s] cancel",
-                        confirm_label, preview_label, back_label);
-                    strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "Choose: [%s] select  [%s] preview  [%s] cancel",
-                        confirm_label, preview_label, back_label);
+                    if (info_available)
+                    {
+                        strnfmt(prompt_full, sizeof(prompt_full),
+                            "Choose: D-pad nav  [%s] select  [%s] info  [%s] cancel",
+                            confirm_label, preview_label, back_label);
+                        strnfmt(prompt_mid, sizeof(prompt_mid),
+                            "D-pad nav  [%s] select  [%s] info  [%s] cancel",
+                            confirm_label, preview_label, back_label);
+                    }
+                    else
+                    {
+                        strnfmt(prompt_full, sizeof(prompt_full),
+                            "Choose: D-pad nav  [%s] select  [%s] cancel",
+                            confirm_label, back_label);
+                        strnfmt(prompt_mid, sizeof(prompt_mid),
+                            "D-pad nav  [%s] select  [%s] cancel",
+                            confirm_label, back_label);
+                    }
                     strnfmt(prompt_short, sizeof(prompt_short),
-                        "[%s] select  [%s] cancel", confirm_label,
-                        back_label);
+                        "D-pad nav  [%s] select  [%s] cancel",
+                        confirm_label, back_label);
                     variants[0] = prompt_full;
                     variants[1] = prompt_mid;
                     variants[2] = prompt_short;
@@ -11142,6 +11285,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     layout.prompt_row, prompt, "preview");
                 ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
                     layout.prompt_row, prompt, "x preview");
+                ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
+                    layout.prompt_row, prompt, "info");
             }
             else if (steamdeck_controls_active())
             {
@@ -11157,13 +11302,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 char prompt_mid[128];
                 char prompt_short[96];
                 const char* variants[3];
+                bool info_available;
 
                 controller_prompt_label(steamdeck_prev_page_key(), "L1",
                     prev_label, sizeof(prev_label));
                 controller_prompt_label(steamdeck_next_page_key(), "R1",
                     next_label, sizeof(next_label));
-                controller_prompt_label(steamdeck_info_key(), "RS Right",
-                    preview_label, sizeof(preview_label));
+                info_available = supply_controller_info_key(preview_label,
+                    sizeof(preview_label), true) != GAMEPAD_BIND_NONE;
                 controller_prompt_label(steamdeck_alt_action_key(), "X",
                     use_label, sizeof(use_label));
                 controller_prompt_label(steamdeck_confirm_key(), "A",
@@ -11172,16 +11318,28 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     sizeof(drop_label));
                 controller_prompt_label(ESCAPE, "Start", back_label,
                     sizeof(back_label));
-                strnfmt(prompt_full, sizeof(prompt_full),
-                    "D-pad move  [%s/%s] page  [%s] preview  [%s/%s] use  [%s] drop  [%s] back",
-                    prev_label, next_label, preview_label, use_label,
-                    confirm_label, drop_label, back_label);
-                strnfmt(prompt_mid, sizeof(prompt_mid),
-                    "[%s/%s] page  [%s/%s] use  [%s] drop",
-                    prev_label, next_label, use_label, confirm_label,
-                    drop_label);
+                if (info_available)
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] use  [%s] drop  [%s] back",
+                        prev_label, next_label, preview_label, use_label,
+                        confirm_label, drop_label, back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s] info  [%s/%s] use  [%s] drop",
+                        preview_label, use_label, confirm_label, drop_label);
+                }
+                else
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s/%s] use  [%s] drop  [%s] back",
+                        prev_label, next_label, use_label, confirm_label,
+                        drop_label, back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s/%s] use  [%s] drop",
+                        use_label, confirm_label, drop_label);
+                }
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "[%s/%s] use  [%s] drop", use_label, confirm_label,
+                    "D-pad nav  [%s] use  [%s] drop", confirm_label,
                     drop_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_mid;
@@ -11192,8 +11350,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     TERM_L_DARK, prompt_buf);
                 supply_register_prompt_clicks(&layout, prompt_buf, NULL,
                     use_label, confirm_label, drop_label, back_label);
-                ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
-                    layout.prompt_row, prompt_buf, preview_label);
+                if (info_available)
+                    ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
+                        layout.prompt_row, prompt_buf, preview_label);
                 if (drop_click_mode)
                     supply_highlight_prompt_token(&layout, prompt_buf, "drop",
                         TERM_YELLOW);
@@ -11437,18 +11596,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 continue;
 
             if (!click_generated_command)
-                ch = (char)steamdeck_menu_key(ch,
+                ch = supply_controller_menu_key(ch,
                     SUPPLY_BROWSER_PREV_PAGE_KEY,
-                    SUPPLY_BROWSER_NEXT_PAGE_KEY);
-
-            if (steamdeck_controls_active() && ch == 'f')
-                ch = 'z';
-
-            if (desc_overlay_on && overlay_cache.active
-                && supply_overlay_handle_scroll_key(ch))
-            {
-                continue;
-            }
+                    SUPPLY_BROWSER_NEXT_PAGE_KEY,
+                    !replacement_mode && !slot_pick_mode
+                        && !item_select_mode, true);
 
             if (!click_generated_command)
             {
@@ -11547,10 +11699,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'X':
             case 'x':
-            case '6':
-#ifdef ARROW_RIGHT
-            case ARROW_RIGHT:
-#endif
             {
                 bool preview_was_open = desc_overlay_on;
 
@@ -11739,9 +11887,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 break;
 
             default:
-                browser_cursor_with_rows(ch, &inv_column, &inv_grp_cur,
+                supply_browser_cursor_move(ch, &inv_column, &inv_grp_cur,
                     INVENTORY_BROWSER_GROUP_COUNT, &inv_entry_cur,
-                    inventory_entry_cnt, entry_page_rows, true);
+                    inventory_entry_cnt, entry_page_rows, true,
+                    &overlay_cache, &desc_overlay_on, &drop_click_mode,
+                    &delete_click_mode);
                 break;
             }
             continue;
@@ -11771,6 +11921,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         bool compact_width;
         bool compact_draw_names;
         bool compact_menu;
+        bool wrap_entry_names;
         int entry_page_rows;
         int max_entry_top;
         int selected_entry_row_offset;
@@ -11778,13 +11929,18 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         cptr list_label;
         cptr title_label;
         bool touch_only;
+        bool preserve_touch_view;
 
         prepare_supply_group_icons(group_icons, group_icon_kinds);
         compute_supply_group_totals(group_totals);
         knowledge_init_inventory_portrait_layout(&layout, max, true, 0);
         touch_only = sdl_touch_only_device_active();
-        if (touch_only)
-            (void)ui_scroll_area_take_touch_scrolled();
+        preserve_touch_view = touch_only;
+        if (sdl_touch_tutorial_device_available()
+            && ui_scroll_area_take_touch_scrolled())
+        {
+            preserve_touch_view = true;
+        }
         used_weight = supplies_limit_weight();
         light_item_weight = supplies_carried_light_item_weight();
         light_oil_weight = player_lamp_oil_weight();
@@ -11832,9 +11988,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (entry_top < 0)
                 entry_top = 0;
         }
-        supply_preview_focus_entry_column(desc_overlay_on, entry_cnt, &column);
-
-        if (touch_only)
+        if (preserve_touch_view)
         {
             int max_grp_top = MAX(0, grp_cnt - layout.group_rows);
 
@@ -11851,8 +12005,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         if (grp_top < 0)
             grp_top = 0;
 
+        compact_menu = get_sdl_compact_inventory_menus();
         full_layout = layout;
-        knowledge_expand_entry_view(&full_layout);
+        if (compact_menu && column)
+            knowledge_expand_entry_view(&full_layout);
+        else
+            knowledge_expand_active_column(&full_layout);
         supply_init_columns(&layout, grp_idx[grp_cur], &split_cols);
         supply_init_columns(&full_layout, grp_idx[grp_cur], &full_cols);
         split_name_w = split_cols.name_w;
@@ -11866,13 +12024,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         if (split_name_w > 1)
             split_name_w--;
 
-        compact_menu = get_sdl_compact_inventory_menus();
-        single_column = (compact_menu && column)
-            || (!layout.stacked
+        single_column = compact_menu
+            ? (column != 0)
+            : (!layout.stacked
                 && knowledge_should_use_single_column_for_names(split_name_w,
                     full_name_w, max_name_len));
         draw_layout = single_column ? full_layout : layout;
         draw_cols = single_column ? full_cols : split_cols;
+        wrap_entry_names = compact_menu || draw_layout.stacked;
         selected_entry_row_offset = 0;
         selected_entry_rows = 1;
 
@@ -11888,7 +12047,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             max_entry_top = MAX(0, entry_cnt - entry_page_rows);
             if (entry_cnt > 0)
             {
-                if (touch_only)
+                if (preserve_touch_view)
                 {
                     if (entry_top > max_entry_top)
                         entry_top = max_entry_top;
@@ -11905,11 +12064,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 * entry_row_stride;
             selected_entry_rows = entry_row_stride;
         }
-        else if (draw_layout.stacked)
+        else if (wrap_entry_names)
         {
             supply_entry_adjust_top(&draw_layout, &draw_cols, entries,
                 entry_cnt, entry_cur, grp_idx[grp_cur], compact_draw_names,
-                touch_only, &entry_top);
+                preserve_touch_view, &entry_top);
             max_entry_top = supply_entry_last_page_top(&draw_layout,
                 &draw_cols, entries, entry_cnt, grp_idx[grp_cur],
                 compact_draw_names);
@@ -11932,7 +12091,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             max_entry_top = MAX(0, entry_cnt - entry_page_rows);
             if (entry_cnt > 0)
             {
-                if (touch_only)
+                if (preserve_touch_view)
                 {
                     if (entry_top > max_entry_top)
                         entry_top = max_entry_top;
@@ -12105,7 +12264,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             entry_page_rows = display_supply_list(&draw_layout,
                 draw_layout.entry_row,
                 draw_layout.entry_rows, entries, entry_cnt, entry_cur, entry_top,
-                grp_idx[grp_cur], column, &draw_cols, compact_draw_names);
+                grp_idx[grp_cur], column, &draw_cols, compact_draw_names,
+                wrap_entry_names);
             if (entry_page_rows < 1)
                 entry_page_rows = 1;
         }
@@ -12119,7 +12279,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         if (steamdeck_controls_active()) {
             char prev_label[16];
             char next_label[16];
-            char recall_label[16];
+            char info_label[16];
             char use_label[16];
             char confirm_label[16];
             char drop_label[16];
@@ -12129,28 +12289,99 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             char prompt_mid[128];
             char prompt_short[96];
             const char* variants[3];
+            bool jewelry_presets =
+                grp_idx[grp_cur] == SUPPLY_GROUP_JEWELRY_PRESETS;
+            bool info_available;
 
-            /* Steam Deck UI: RS Right=recall, X=use, A=confirm, B=drop, Start=back */
             controller_prompt_label(steamdeck_prev_page_key(), "L1",
                 prev_label, sizeof(prev_label));
             controller_prompt_label(steamdeck_next_page_key(), "R1",
                 next_label, sizeof(next_label));
-            controller_prompt_label(steamdeck_info_key(), "RS Right", recall_label, sizeof(recall_label));
+            info_available = supply_controller_info_key(info_label,
+                sizeof(info_label), !jewelry_presets) != GAMEPAD_BIND_NONE;
             controller_prompt_label(steamdeck_alt_action_key(), "X", use_label, sizeof(use_label));
             controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
             controller_prompt_label('f', "B", drop_label, sizeof(drop_label));
             controller_prompt_label(ESCAPE, "Start", back_label, sizeof(back_label));
 
-            strnfmt(prompt_full, sizeof(prompt_full),
-                "D-pad move  [%s/%s] page  [%s] recall  [%s/%s] use  [%s] drop  [%s] back",
-                prev_label, next_label, recall_label, use_label, confirm_label,
-                drop_label, back_label);
-            strnfmt(prompt_mid, sizeof(prompt_mid),
-                "[%s/%s] page  [%s/%s] use  [%s] drop",
-                prev_label, next_label, use_label, confirm_label, drop_label);
-            strnfmt(prompt_short, sizeof(prompt_short),
-                "[%s/%s] use  [%s] drop", use_label, confirm_label,
-                drop_label);
+            if (jewelry_presets)
+            {
+                char save_label[16];
+                bool save_available = sdl_gamepad_control_available(
+                    GAMEPAD_CAPTURE_BUTTON, SDL_GAMEPAD_BUTTON_NORTH);
+
+                controller_prompt_label(steamdeck_secondary_key(), "Y",
+                    save_label, sizeof(save_label));
+                if (info_available && save_available)
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] equip  [%s] save  [%s] back",
+                        prev_label, next_label, info_label, use_label,
+                        confirm_label, save_label, back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s] info  [%s] equip  [%s] save",
+                        info_label, confirm_label, save_label);
+                }
+                else if (info_available)
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] equip  [%s] back",
+                        prev_label, next_label, info_label, use_label,
+                        confirm_label, back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s] info  [%s] equip",
+                        info_label, confirm_label);
+                }
+                else if (save_available)
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s/%s] equip  [%s] save  [%s] back",
+                        prev_label, next_label, use_label, confirm_label,
+                        save_label, back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s] equip  [%s] save",
+                        confirm_label, save_label);
+                }
+                else
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s/%s] equip  [%s] back",
+                        prev_label, next_label, use_label, confirm_label,
+                        back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s] equip", confirm_label);
+                }
+                strnfmt(prompt_short, sizeof(prompt_short),
+                    save_available ? "[%s] equip  [%s] save"
+                                   : "[%s] equip",
+                    confirm_label, save_label);
+            }
+            else
+            {
+                if (info_available)
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] use  [%s] drop  [%s] back",
+                        prev_label, next_label, info_label, use_label,
+                        confirm_label, drop_label, back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s] info  [%s/%s] use  [%s] drop",
+                        info_label, use_label, confirm_label, drop_label);
+                }
+                else
+                {
+                    strnfmt(prompt_full, sizeof(prompt_full),
+                        "D-pad nav  [%s/%s] page  [%s/%s] use  [%s] drop  [%s] back",
+                        prev_label, next_label, use_label, confirm_label,
+                        drop_label, back_label);
+                    strnfmt(prompt_mid, sizeof(prompt_mid),
+                        "D-pad nav  [%s/%s] use  [%s] drop",
+                        use_label, confirm_label, drop_label);
+                }
+                strnfmt(prompt_short, sizeof(prompt_short),
+                    "D-pad nav  [%s] use  [%s] drop", confirm_label,
+                    drop_label);
+            }
             variants[0] = prompt_full;
             variants[1] = prompt_mid;
             variants[2] = prompt_short;
@@ -12159,7 +12390,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             Term_putstr(0, draw_layout.prompt_row, draw_layout.term_wid,
                 TERM_L_DARK, prompt_buf);
             supply_register_prompt_clicks(&draw_layout, prompt_buf,
-                recall_label, use_label, confirm_label, drop_label,
+                info_available ? info_label : NULL, use_label, confirm_label,
+                jewelry_presets ? NULL : drop_label,
                 back_label);
             if (drop_click_mode)
                 supply_highlight_prompt_token(&draw_layout, prompt_buf, "drop",
@@ -12366,17 +12598,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             continue;
 
         if (!click_generated_command)
-            ch = (char)steamdeck_menu_key(ch, SUPPLY_BROWSER_PREV_PAGE_KEY,
-                SUPPLY_BROWSER_NEXT_PAGE_KEY);
-
-        if (steamdeck_controls_active() && ch == 'f')
-            ch = 'z';
-
-        if (desc_overlay_on && overlay_cache.active
-            && supply_overlay_handle_scroll_key(ch))
-        {
-            continue;
-        }
+            ch = supply_controller_menu_key(ch,
+                SUPPLY_BROWSER_PREV_PAGE_KEY,
+                SUPPLY_BROWSER_NEXT_PAGE_KEY, true,
+                grp_idx[grp_cur] != SUPPLY_GROUP_JEWELRY_PRESETS);
 
         if (ch == '-' && entry_cnt)
         {
@@ -12410,7 +12635,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             }
         }
 
-        if ((ch == '\r' || ch == '\n' || (steamdeck_controls_active() && ch == steamdeck_confirm_key())) && column && entry_cnt)
+        if ((ch == '\r' || ch == '\n'
+                || (steamdeck_controls_active()
+                    && ch == steamdeck_confirm_key()))
+            && entry_cnt)
         {
             if (forced_action == SUPPLY_MENU_ACTION_USE)
                 ch = 'u';
@@ -12454,10 +12682,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
         case 'X':
         case 'x':
-        case '6':
-#ifdef ARROW_RIGHT
-        case ARROW_RIGHT:
-#endif
         {
             bool preview_was_open = desc_overlay_on;
 
@@ -12708,8 +12932,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             break;
 
         default:
-            browser_cursor_with_rows(ch, &column, &grp_cur, grp_cnt, &entry_cur,
-                entry_cnt, entry_page_rows, true);
+            supply_browser_cursor_move(ch, &column, &grp_cur, grp_cnt,
+                &entry_cur, entry_cnt, entry_page_rows, true, &overlay_cache,
+                &desc_overlay_on, &drop_click_mode, &delete_click_mode);
             break;
         }
     }

@@ -2501,6 +2501,7 @@ extern int get_sdl_gamepad_default_shoulder_combo_binding(void);
 extern void sdl_gamepad_reset_bindings_to_default(void);
 extern void sdl_gamepad_action_binding_label(int binding, char* buf, size_t buflen);
 extern void sdl_gamepad_action_binding_short_label(int binding, char* buf, size_t buflen);
+extern bool sdl_gamepad_control_available(int type, int id);
 extern int get_sdl_mouse_movement_mode(void);
 extern void set_sdl_mouse_movement_mode(int mode);
 extern int get_sdl_mouse_movement_default_mode(void);

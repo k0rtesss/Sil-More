@@ -879,14 +879,15 @@ bool ui_scroll_area_is_page_mode(void)
 /*
  * Register a menu-owned viewport offset that touch dragging should scroll
  * directly, instead of moving the highlighted/selected row.  This lets a
- * touch-only drag pan the list without changing the selection: the list
- * scrolls under the finger and the user picks an entry by tapping it.
+ * touch drag pan the list without changing the selection: the list scrolls
+ * under the finger and the user picks an entry by tapping it.  Hybrid
+ * controller/touch handhelds use the same behavior as touch-only devices.
  *
  * The pointer must remain valid until the next ui_scroll_area_begin()/clear();
  * menus typically re-register it every frame.  Passing a NULL pointer disables
  * offset scrolling and the drag falls back to the cursor-moving key behaviour.
  * A zero max is still a valid target: the drag is consumed without moving the
- * cursor, which keeps touch-only menus from changing selection while panning a
+ * cursor, which keeps touch menus from changing selection while panning a
  * short or edge-clamped list.
  */
 void ui_scroll_area_set_offset_target(int* offset, int max_offset)

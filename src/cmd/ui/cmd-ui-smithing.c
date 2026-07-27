@@ -150,7 +150,6 @@ static int smith_ui_scroll_top[SMITH_SCROLL_MAX];
 static int smith_ui_touch_drag_sink;
 
 #define SMITH_CLICK_BACK 33000
-#define SMITH_ROOT_BACK_LABEL "Smithing Esc"
 
 static int smith_ui_term_wid(void)
 {
@@ -182,7 +181,19 @@ static int smith_ui_content_bottom_row(void)
     int bottom = smith_ui_term_hgt() - 1
         - sdl_touch_menu_button_reserved_rows();
 
+    /* Keyboard/controller Smithing uses the same dedicated bottom prompt row
+     * as Inventory and Abilities.  Touch-only layouts use their floating
+     * Exit/Back button instead and retain the extra content row. */
+    if (!sdl_touch_only_device_active())
+        bottom--;
+
     return MAX(0, bottom);
+}
+
+static int smith_ui_prompt_row(void)
+{
+    return MAX(0, smith_ui_term_hgt() - 1
+        - sdl_touch_menu_button_reserved_rows());
 }
 
 static int smith_ui_primary_submenu_col(void)
@@ -903,6 +914,36 @@ static void smith_ui_add_back_click_target(int col, int row, cptr text)
     ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "ESC");
     ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "back");
     ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "return");
+    ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "exit");
+}
+
+static void smith_ui_draw_navigation_prompt(bool root_menu)
+{
+    char prompt[48];
+    int row;
+
+    if (sdl_touch_only_device_active())
+        return;
+
+    row = smith_ui_prompt_row();
+    if (steamdeck_controls_active())
+    {
+        char back_label[16];
+
+        controller_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        strnfmt(prompt, sizeof(prompt), "[%s] %s", back_label,
+            root_menu ? "Exit" : "Back");
+    }
+    else
+    {
+        strnfmt(prompt, sizeof(prompt), "Esc %s",
+            root_menu ? "Exit" : "Back");
+    }
+
+    Term_erase(0, row, smith_ui_term_wid());
+    Term_putstr(0, row, smith_ui_term_wid(), TERM_SLATE, prompt);
+    smith_ui_add_back_click_target(0, row, prompt);
 }
 
 static void smith_ui_begin_touch_scroll_area(bool root_menu)
@@ -1040,7 +1081,7 @@ static void smith_ui_put_header(int col, int row, cptr label)
 static void smith_ui_put_section_header(int col, int row, cptr label)
 {
     smith_ui_put_header(col, row, label);
-    smith_ui_add_back_click_target(COL_SMT1, 1, SMITH_ROOT_BACK_LABEL);
+    smith_ui_draw_navigation_prompt(false);
 }
 
 /*
@@ -8157,7 +8198,7 @@ static int smith_root_draw_header(void)
     int row = 0;
     int used;
 
-    SDL_strlcpy(title, "Smithing Esc - Work of the Forge", sizeof(title));
+    SDL_strlcpy(title, "Smithing - Work of the Forge", sizeof(title));
     if (smith_ui_portrait_layout())
         used = smith_ui_put_wrapped(col, row, width,
             MAX(1, smith_ui_content_bottom_row() - row + 1),
@@ -8342,6 +8383,8 @@ static int smith_root_draw(int highlight, const bool valid[SMT_MENU_MAX],
     if (highlight >= 1 && highlight <= SMT_MENU_MAX)
         smith_root_draw_detail(highlight, detail_col, list_w, action_row,
             valid[highlight - 1], labels[highlight - 1]);
+
+    smith_ui_draw_navigation_prompt(true);
 
     return action_row;
 }

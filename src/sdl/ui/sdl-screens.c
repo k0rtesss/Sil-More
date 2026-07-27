@@ -11437,6 +11437,8 @@ static bool sdl_char_sheet_book_choice_page_fits(int px, float content_w,
 {
     cptr frame_bottom = g_sdl_character_sheet_screen.select_frame_bottom;
     int row_count = g_sdl_character_sheet_screen.select_row_count;
+    bool full_choice_page = mobile_pages
+        && !g_sdl_narrative_portrait_rendering;
     TTF_Font* f = sdl_story_font_for_height_slot(px,
         SDL_STORY_FONT_SLOT_CHAR_SELECT);
     float lh;
@@ -11453,8 +11455,8 @@ static bool sdl_char_sheet_book_choice_page_fits(int px, float content_w,
     lh = sdl_char_sheet_line_h(f, px, 1.28f);
     list_lh = lh * 1.35f;
     choice_w = sdl_char_sheet_race_book_text_width(px, content_w,
-        mobile_pages);
-    avail = mobile_pages
+        full_choice_page);
+    avail = full_choice_page
         ? region_h : region_h - 2.0f * (lh * SDL_BOOK_MARGIN_V);
     fb_lines = (show_charge && frame_bottom && frame_bottom[0])
         ? sdl_char_sheet_wrap_text(f, frame_bottom, choice_w, NULL, 0) : 0;
@@ -11462,7 +11464,7 @@ static bool sdl_char_sheet_book_choice_page_fits(int px, float content_w,
         g_sdl_character_sheet_screen.select_description, choice_w);
     list_h = (float)row_count * list_lh;
 
-    if (mobile_pages) {
+    if (full_choice_page) {
         int split = sdl_char_sheet_book_second_heading_index();
         float col_gap = lh * 1.15f;
         float col_w = (choice_w - col_gap) * 0.5f;

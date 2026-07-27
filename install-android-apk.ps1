@@ -94,7 +94,7 @@ function Invoke-ExternalCommand {
 function Get-ConnectedDevices {
     param([string]$Adb)
 
-    $deviceResult = Invoke-ExternalCommand -FilePath $Adb -Arguments @('devices')
+    $deviceResult = Invoke-ExternalCommand -FilePath $Adb -Arguments @('devices', '-l')
     if ($deviceResult.ExitCode -ne 0) {
         $details = $deviceResult.Output
         if ($details) {
@@ -107,11 +107,49 @@ function Get-ConnectedDevices {
     return @($deviceOutput | Where-Object {
         $_ -is [string] -and $_ -match '^(?<serial>\S+)\s+device(\s|$)'
     } | ForEach-Object {
+        $serial = $Matches.serial
         [PSCustomObject]@{
-            Serial = $Matches.serial
+            Serial = $serial
             Line   = $_
         }
     })
+}
+
+function Select-TargetDeviceSerial {
+    param([object[]]$ConnectedDevices)
+
+    Write-Host 'Multiple Android devices are available:' -ForegroundColor Yellow
+    for ($index = 0; $index -lt $ConnectedDevices.Count; $index++) {
+        $device = $ConnectedDevices[$index]
+        $details = ($device.Line -replace ('^{0}\s+device\s*' -f [regex]::Escape($device.Serial)), '').Trim()
+        $label = if ($details) {
+            "$($device.Serial)  $details"
+        } else {
+            $device.Serial
+        }
+        Write-Host ("  [{0}] {1}" -f ($index + 1), $label)
+    }
+
+    while ($true) {
+        $choice = Read-Host "Choose a device [1-$($ConnectedDevices.Count)] or enter its serial"
+        if ($null -eq $choice) {
+            throw 'No device selection was provided. Re-run with -Serial <device-serial>.'
+        }
+        $choice = $choice.Trim()
+        $choiceNumber = 0
+        if ([int]::TryParse($choice, [ref]$choiceNumber) -and
+            $choiceNumber -ge 1 -and
+            $choiceNumber -le $ConnectedDevices.Count) {
+            return $ConnectedDevices[$choiceNumber - 1].Serial
+        }
+
+        $serialMatch = @($ConnectedDevices | Where-Object { $_.Serial -eq $choice })
+        if ($serialMatch.Count -eq 1) {
+            return $serialMatch[0].Serial
+        }
+
+        Write-Warning "Invalid device selection '$choice'."
+    }
 }
 
 function Resolve-TargetDeviceSerial {
@@ -134,8 +172,7 @@ function Resolve-TargetDeviceSerial {
     }
 
     if ($ConnectedDevices.Count -gt 1) {
-        $available = ($ConnectedDevices | ForEach-Object { $_.Serial }) -join ', '
-        throw "Multiple adb devices detected ($available). Re-run with -Serial <device-serial>."
+        return Select-TargetDeviceSerial -ConnectedDevices $ConnectedDevices
     }
 
     return $ConnectedDevices[0].Serial
@@ -300,3 +337,8 @@ if ($installResult.Output) {
 }
 
 Write-Host "Installed APK: $apk" -ForegroundColor Green
+
+# Let deploy-android.ps1 reuse the exact interactive selection for its launch
+# step. Write-Host output stays visible while this is the sole success-stream
+# value returned by the installer.
+Write-Output $targetSerial

@@ -644,15 +644,17 @@ bool sdl_narrative_banner_base_rect(SDL_Rect* out)
     sdl_narrative_banner_apply_overlay_log_avoidance(&rect);
     /*
      * On a short handheld display, symmetric log avoidance can collapse the
-     * banner corridor to a narrow strip.  A compact strip looks detached when
-     * it begins below Menu but alongside the taller left/right HUD stacks.
+     * banner corridor to a narrow, portrait-shaped strip.  A compact strip
+     * looks detached when it begins below Menu but alongside the taller
+     * left/right HUD stacks.
      * Reposition the full-width area beneath every live top stack, then avoid
      * the log again only if its painted rectangle still overlaps vertically.
      * Wider landscape banners keep the center-only rule so a tall side pane
      * cannot strand them near mid-screen.
-     */
+    */
     if (!sdl_mobile_portrait_layout_active()
-        && rect.w * 2 < full_rect.w)
+        && rect.w * 2 < full_rect.w
+        && rect.w < rect.h)
     {
         rect = full_rect;
         sdl_narrative_banner_apply_top_pane_avoidance(&rect, min_h, true);

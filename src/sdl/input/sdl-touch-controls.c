@@ -735,6 +735,8 @@ static void sdl_touch_thumb_collect_buttons(touch_thumb_button_set* set)
         if (ranged || quick_throw) {
             sdl_touch_thumb_append_button(set,
                 SDL_TOUCH_THUMB_BIND_FIRE_SELECTED, GAMEPAD_BIND_NONE);
+            sdl_touch_thumb_append_button(
+                set, ESCAPE, GAMEPAD_BIND_NONE);
         }
         return;
     }
@@ -1384,6 +1386,10 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
             buflen);
         return;
     }
+    if (binding == ESCAPE && sdl_touch_thumb_fire_targeting_active()) {
+        SDL_strlcpy(buf, "Cancel", buflen);
+        return;
+    }
     if (binding == SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER) {
         SDL_strlcpy(buf,
             (player_selected_ranged_quiver_number() == 2)
@@ -1430,24 +1436,35 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
 }
 
 static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
-    bool pressed)
+    bool pressed, bool flashed)
 {
     SDL_Color frame = g_state.palette[TERM_WHITE];
     SDL_Color text = g_state.palette[TERM_WHITE];
+    SDL_Color selected = g_state.palette[TERM_YELLOW];
+    bool active = pressed || flashed;
     int tap_binding = sdl_touch_thumb_button_binding(index, false);
     int long_binding = sdl_touch_thumb_button_binding(index, true);
     char label[32];
     char* detail;
 
     /* Translucent body + border, in the style of the movement button-wheel. */
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, pressed ? 200 : 150);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, active ? 200 : 150);
     SDL_RenderFillRect(g_state.renderer, rect);
 
-    frame.a = pressed ? 230 : 185;
+    if (pressed) {
+        selected.a = 72;
+        SDL_SetRenderDrawColor(g_state.renderer, selected.r, selected.g,
+            selected.b, selected.a);
+        SDL_RenderFillRect(g_state.renderer, rect);
+        frame = g_state.palette[TERM_YELLOW];
+        text = g_state.palette[TERM_YELLOW];
+    }
+
+    frame.a = pressed ? 242 : (flashed ? 230 : 185);
     SDL_SetRenderDrawColor(g_state.renderer, frame.r, frame.g, frame.b, frame.a);
     SDL_RenderRect(g_state.renderer, rect);
 
-    text.a = pressed ? 255 : 245;
+    text.a = active ? 255 : 245;
     sdl_touch_context_label_for_binding(tap_binding, label, sizeof(label));
     detail = sdl_touch_thumb_description_open() ? strstr(label, " (") : NULL;
 
@@ -1463,7 +1480,7 @@ static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
 
         sdl_touch_context_label_for_binding(long_binding, long_label,
             sizeof(long_label));
-        hint.a = pressed ? 240 : 215;
+        hint.a = active ? 240 : 215;
 
         sdl_touch_pane_draw_button_text_scaled(&main_rect, NULL, label, text,
             0.40f, 0.60f);
@@ -1479,7 +1496,7 @@ static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
         main_rect.h = rect->h * 0.60f;
         detail_rect.y = rect->y + rect->h * 0.56f;
         detail_rect.h = rect->h * 0.44f;
-        hint.a = pressed ? 240 : 215;
+        hint.a = active ? 240 : 215;
 
         sdl_touch_pane_draw_button_text_scaled(&main_rect, NULL, label, text,
             0.40f, 0.60f);
@@ -1513,14 +1530,15 @@ void sdl_touch_thumb_render(void)
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     for (int i = 0; i < button_count; i++) {
         bool pressed;
+        bool flashed;
 
         if (!sdl_touch_thumb_button_has_binding(i))
             continue;
         if (rects[i].w <= 0.0f || rects[i].h <= 0.0f)
             continue;
-        pressed = (g_touch_thumb_pressed_button == i)
-            || (g_touch_thumb_flash_button == i);
-        sdl_touch_thumb_render_button(&rects[i], i, pressed);
+        pressed = g_touch_thumb_pressed_button == i;
+        flashed = g_touch_thumb_flash_button == i;
+        sdl_touch_thumb_render_button(&rects[i], i, pressed, flashed);
     }
 }
 
@@ -5446,7 +5464,7 @@ void sdl_touch_top_panel_render_buttons(
         bool hovered = slot == g_touch_top_panel_hover_slot;
         bool pressed = slot == g_touch_top_panel_pressed_slot;
         bool flashed = slot == g_touch_top_panel_flash_slot;
-        bool active = hovered || pressed || flashed || toggled;
+        bool selected_active = hovered || pressed || toggled;
 
         shadow.x += 2.0f;
         shadow.y += 2.0f;
@@ -5457,10 +5475,14 @@ void sdl_touch_top_panel_render_buttons(
             SDL_SetRenderDrawColor(g_state.renderer, 26, 26, 26, 250);
             icon_color = muted;
             border_color = hovered ? selected : muted;
-        } else if (active) {
+        } else if (selected_active) {
             SDL_SetRenderDrawColor(g_state.renderer, 34, 34, 34, 252);
             icon_color = selected;
             border_color = selected;
+        } else if (flashed) {
+            SDL_SetRenderDrawColor(g_state.renderer, 48, 48, 48, 252);
+            icon_color = frame;
+            border_color = frame;
         } else {
             SDL_SetRenderDrawColor(g_state.renderer, 34, 34, 34, 250);
             icon_color = frame;
@@ -5473,7 +5495,7 @@ void sdl_touch_top_panel_render_buttons(
         SDL_RenderRect(g_state.renderer, &button_rects[slot]);
 
         sdl_touch_top_panel_render_icon(&button_rects[slot], binding,
-            icon_color, active);
+            icon_color, selected_active || flashed);
 
         if (hovered || pressed) {
             tooltip_slot = slot;

@@ -2,6 +2,8 @@
 #include "sdl/main-sdl-private.h"
 #include "ui/menu-click.h"
 
+static SDL_JoystickID g_active_gamepad_id;
+
 bool sdl_gamepad_shift_active(void)
 {
     return g_gamepad_state.shift_held > 0;
@@ -1272,6 +1274,65 @@ bool sdl_gamepad_action_binding_equals(int lhs, int rhs)
     return lhs == rhs;
 }
 
+static SDL_Gamepad* sdl_gamepad_active_pad(void)
+{
+    for (int i = 0; i < g_gamepad_state.pad_count; i++) {
+        if (g_gamepad_state.pads[i].id == g_active_gamepad_id)
+            return g_gamepad_state.pads[i].pad;
+    }
+
+    if (g_gamepad_state.pad_count > 0)
+        return g_gamepad_state.pads[0].pad;
+
+    return NULL;
+}
+
+bool sdl_gamepad_control_available(int type, int id)
+{
+    SDL_Gamepad* pad = sdl_gamepad_active_pad();
+    SDL_GamepadAxis axis = SDL_GAMEPAD_AXIS_INVALID;
+
+    if (!pad)
+        return false;
+
+    switch (type) {
+    case GAMEPAD_CAPTURE_BUTTON:
+        if (id < 0 || id >= SDL_GAMEPAD_BUTTON_COUNT)
+            return false;
+        return SDL_GamepadHasButton(pad, (SDL_GamepadButton)id);
+
+    case GAMEPAD_CAPTURE_TRIGGER:
+        if (id == 0)
+            axis = SDL_GAMEPAD_AXIS_LEFT_TRIGGER;
+        else if (id == 1)
+            axis = SDL_GAMEPAD_AXIS_RIGHT_TRIGGER;
+        break;
+
+    case GAMEPAD_CAPTURE_LEFT_STICK:
+        if (id == GAMEPAD_STICK_DIR_LEFT || id == GAMEPAD_STICK_DIR_RIGHT)
+            axis = SDL_GAMEPAD_AXIS_LEFTX;
+        else if (id == GAMEPAD_STICK_DIR_UP || id == GAMEPAD_STICK_DIR_DOWN)
+            axis = SDL_GAMEPAD_AXIS_LEFTY;
+        break;
+
+    case GAMEPAD_CAPTURE_RIGHT_STICK:
+        if (id == GAMEPAD_STICK_DIR_LEFT || id == GAMEPAD_STICK_DIR_RIGHT)
+            axis = SDL_GAMEPAD_AXIS_RIGHTX;
+        else if (id == GAMEPAD_STICK_DIR_UP || id == GAMEPAD_STICK_DIR_DOWN)
+            axis = SDL_GAMEPAD_AXIS_RIGHTY;
+        break;
+
+    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
+        return SDL_GamepadHasButton(pad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)
+            && SDL_GamepadHasButton(pad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+
+    default:
+        return false;
+    }
+
+    return axis != SDL_GAMEPAD_AXIS_INVALID && SDL_GamepadHasAxis(pad, axis);
+}
+
 int sdl_gamepad_direct_binding_count(int binding, int* out_type, int* out_id)
 {
     int count = 0;
@@ -1586,6 +1647,9 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
     SDL_GamepadButton button = (SDL_GamepadButton)ev->button;
     bool down = ev->down;
 
+    if (down)
+        g_active_gamepad_id = ev->which;
+
     if (button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) {
         g_gamepad_state.left_shoulder_down = down;
     } else if (button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) {
@@ -1808,6 +1872,9 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
 {
     if (!ev)
         return;
+
+    if (abs((int)ev->value) > MAX(config.gamepad_deadzone, 0))
+        g_active_gamepad_id = ev->which;
 
     if (g_gamepad_capture_active) {
         bool capture_armed = (SDL_GetTicksNS() >= g_gamepad_capture_arm_time);
@@ -2079,6 +2146,8 @@ void sdl_gamepad_open(SDL_JoystickID id)
     g_gamepad_state.pads[g_gamepad_state.pad_count].id = id;
     g_gamepad_state.pads[g_gamepad_state.pad_count].pad = pad;
     g_gamepad_state.pad_count++;
+    if (!g_active_gamepad_id)
+        g_active_gamepad_id = id;
 
     log_info("Gamepad opened id %d (%s)", (int)id, SDL_GetGamepadName(pad));
     sdl_gamepad_mark_auto_ui();
@@ -2091,6 +2160,11 @@ void sdl_gamepad_close(SDL_JoystickID id)
             SDL_CloseGamepad(g_gamepad_state.pads[i].pad);
             g_gamepad_state.pads[i] = g_gamepad_state.pads[g_gamepad_state.pad_count - 1];
             g_gamepad_state.pad_count--;
+            if (g_active_gamepad_id == id) {
+                g_active_gamepad_id = (g_gamepad_state.pad_count > 0)
+                    ? g_gamepad_state.pads[0].id
+                    : 0;
+            }
             log_info("Gamepad closed id %d", (int)id);
             break;
         }

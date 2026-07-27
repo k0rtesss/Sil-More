@@ -46,17 +46,20 @@ static struct map_clearance map_center_clearance_for_travel(int travel_y,
 {
     int vertical = map_center_clearance_vertical();
     int horizontal = map_center_clearance_horizontal();
+    int trailing = SDL_CAMERA_CENTER_CLEARANCE_MIN;
     struct map_clearance clearance;
 
     /*
-     * Keep the configured buffer ahead of travel, but do not let hidden space
-     * behind the player pinch the destination zone.  With no directional
-     * recenter this remains the original symmetric safe zone.
+     * Keep the configured buffer ahead of travel, but relax hidden space
+     * behind the player so it cannot pinch the destination zone.  Retaining
+     * one trailing cell prevents directional lead from putting the player on
+     * the outermost screen row/column.  With no directional recenter this
+     * remains the original symmetric safe zone.
      */
-    clearance.top = (travel_y > 0) ? 0 : vertical;
-    clearance.bottom = (travel_y < 0) ? 0 : vertical;
-    clearance.left = (travel_x > 0) ? 0 : horizontal;
-    clearance.right = (travel_x < 0) ? 0 : horizontal;
+    clearance.top = (travel_y > 0) ? trailing : vertical;
+    clearance.bottom = (travel_y < 0) ? trailing : vertical;
+    clearance.left = (travel_x > 0) ? trailing : horizontal;
+    clearance.right = (travel_x < 0) ? trailing : horizontal;
     return clearance;
 }
 
@@ -623,22 +626,28 @@ void verify_panel(void)
     bool do_center = center_player && (!p_ptr->running || !run_avoid_center);
     bool near_hidden = map_cell_near_hidden(
         py - wy, px - wx, spans, span_count);
-    bool lead_recenter;
+    bool boundary_recenter;
 
     map_player_travel_direction(py, px, &travel_y, &travel_x);
-    lead_recenter = near_hidden && !do_center
-        && map_travel_points_toward_hidden(py - wy, px - wx,
-            travel_y, travel_x, spans, span_count);
+    boundary_recenter = near_hidden && !do_center
+        && ((travel_y == 0 && travel_x == 0)
+            || map_travel_points_toward_hidden(py - wy, px - wx,
+                travel_y, travel_x, spans, span_count));
 
     /* Always-center mode retains its stable meaning.  Normal boundary
      * recentering instead leads in the actual travel direction. */
     map_safe_center(&center_y, &center_x, spans, span_count,
-        py - wy, px - wx, lead_recenter ? travel_y : 0,
-        lead_recenter ? travel_x : 0);
+        py - wy, px - wx, boundary_recenter ? travel_y : 0,
+        boundary_recenter ? travel_x : 0);
 
-    /* One rule for every camera boundary: once the player is within the
-     * configured distance of a screen edge or live overlay, shift both axes. */
-    if (do_center || near_hidden)
+    /*
+     * A directional recenter deliberately leaves less clearance behind the
+     * player.  Do not immediately recenter again merely because that trailing
+     * edge is within the normal trigger distance: wait until movement points
+     * toward hidden space.  With no usable travel direction (layout change,
+     * teleport, or level transition), use the symmetric safe center.
+     */
+    if (do_center || boundary_recenter)
     {
         wy = py - center_y;
         wx = px - center_x;

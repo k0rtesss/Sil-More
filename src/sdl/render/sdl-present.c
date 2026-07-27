@@ -431,14 +431,15 @@ static bool sdl_render_left_panel_player_health_bar(int source_row,
         && sdl_left_panel_pane_collapsed()
         && !sdl_left_panel_compact_row_mode()
         && dest_row == 0;
-    inset_y = flush_top ? 0.0f : (float)cell_h * 0.24f;
-    if (!flush_top && inset_y < 1.0f)
+    inset_y = (float)cell_h * 0.24f;
+    if (inset_y < 1.0f)
         inset_y = 1.0f;
 
     bar.x = content_x
         + (float)(dest_col + bar_col - source_col) * (float)cell_w
         + inset_x;
-    bar.y = content_y + (float)dest_row * (float)cell_h + inset_y;
+    bar.y = content_y + (float)dest_row * (float)cell_h
+        + (flush_top ? 0.0f : inset_y);
     bar.w = (float)(bar_cells * cell_w) - 2.0f * inset_x;
     bar.h = (float)cell_h - 2.0f * inset_y;
     if (bar.w < 2.0f || bar.h < 2.0f)

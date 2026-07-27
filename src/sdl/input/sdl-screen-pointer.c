@@ -3078,10 +3078,12 @@ bool sdl_menu_scroll_handle_pointer_motion(float x, float y,
     if (ui_scroll_area_has_offset_target())
     {
         /*
-         * Touch-only list menus register a viewport offset: drag the list
-         * itself without moving (or committing) the selection.  A positive
-         * vertical key normally moves the cursor up one row, which reveals
-         * earlier entries, i.e. a one-row decrease of the viewport offset.
+         * Touch-list menus register a viewport offset: drag the grabbed list
+         * itself without moving (or committing) the selection.  This applies
+         * to hybrid controller/touch handhelds as well as touch-only devices.
+         * A positive vertical key normally moves the cursor up one row, which
+         * reveals earlier entries, i.e. a one-row decrease of the viewport
+         * offset.
          */
         while (g_menu_scroll_drag.accum_y >= (float)cell_h)
         {
