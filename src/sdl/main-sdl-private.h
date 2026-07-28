@@ -1485,6 +1485,8 @@ extern int pane_config_count;
 extern struct sdl_pane_profile g_pane_profiles[SDL_PANE_PROFILE_COUNT];
 extern int g_platform_max_main_view_scale[SDL_MIN_TERMINAL_MODE_COUNT];
 extern sdl_startup_device_class g_startup_device_class;
+extern bool g_android_controller_present;
+extern bool g_mobile_touch_tablet;
 extern bool g_touch_tutorial_requested_from_settings;
 extern bool g_mouse_tutorial_requested_from_settings;
 extern bool g_character_wheel_tutorial_requested_from_settings;
@@ -1787,6 +1789,7 @@ bool sdl_left_panel_pane_map_coverage(int* start_col, int* cols, int* start_row,
 bool sdl_combat_overlay_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
 bool sdl_overlay_log_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
 int sdl_map_overlay_map_coverages(int max_rects, int* start_cols, int* cols, int* start_rows, int* rows);
+bool sdl_overlay_stack_visible_rect(enum pane_type pane, SDL_Rect* out);
 bool sdl_overlay_log_pane_current_rect(SDL_Rect* out_rect);
 void sdl_reset_top_right_overlay_offset(void);
 void sdl_apply_top_right_overlay_offset(void);
@@ -1803,6 +1806,8 @@ void sdl_apply_startup_input_defaults_to_config( struct sdl_config* target, sdl_
 void sdl_set_touch_pane_config_enabled(bool enabled);
 void sdl_apply_first_start_device_defaults( sdl_startup_device_class device);
 sdl_startup_device_class sdl_detect_startup_device_class( int screen_width, int screen_height);
+bool sdl_mobile_device_is_tablet(void);
+void sdl_apply_mobile_tablet_default_profiles(void);
 struct pane_config* sdl_find_pane_config_entry(struct pane_config* configs, int count, enum pane_type pane);
 void sdl_mobile_reset_default_pane_configs(struct pane_config* configs, int count);
 void sdl_mobile_set_touch_pane_enabled(struct pane_config* configs, int count, bool enabled);
@@ -2912,12 +2917,12 @@ int sdl_touch_top_panel_cell_count_normalized(int count);
 int sdl_touch_top_panel_columns_normalized(int columns);
 int sdl_touch_top_panel_rows_normalized(int rows);
 int sdl_touch_top_panel_visible_button_count(void);
+int sdl_touch_top_panel_reserved_stack_height(const SDL_Rect* screen);
 bool sdl_touch_top_panel_current_anchor(SDL_Rect* out_screen,
     SDL_Rect* out_anchor, enum pane_placement* out_where);
 bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
     const SDL_Rect* anchor, enum pane_placement where,
     SDL_FRect* button_rects, SDL_FRect* out_panel);
-bool sdl_touch_top_panel_compute_layout_for_screen( const SDL_Rect* screen, SDL_FRect* button_rects, SDL_FRect* out_panel);
 bool sdl_touch_top_panel_point_to_slot(float x, float y, int* out_slot);
 bool sdl_touch_top_panel_pointer_claims_point(float x, float y);
 bool sdl_touch_top_panel_handle_secondary_pointer(float x, float y);
@@ -3327,11 +3332,15 @@ bool get_sdl_hide_left_panel(void);
 void sdl_push_saved_screen_left_panel_pane(void);
 void sdl_pop_saved_screen_left_panel_pane(void);
 bool get_sdl_left_panel_expanded_on_launch(void);
+bool get_sdl_left_panel_expanded_default_on_launch(void);
 void set_sdl_left_panel_expanded_on_launch(bool value);
 int get_sdl_left_panel_compact_mode(void);
 void set_sdl_left_panel_compact_mode(int mode);
 bool get_sdl_left_panel_compact_health_bar(void);
 void set_sdl_left_panel_compact_health_bar(bool value);
+bool get_sdl_quick_touch_buttons_on_left(void);
+void set_sdl_quick_touch_buttons_on_left(bool value);
+bool get_sdl_quick_touch_buttons_default_on_left(void);
 int get_sdl_intro_style(void);
 void set_sdl_intro_style(int style);
 void sdl_gamepad_load_default_bindings(void);
@@ -3343,10 +3352,10 @@ bool sdl_touch_only_device_active(void);
 bool portable_controls_active(void);
 bool get_sdl_gamepad_enabled(void);
 void set_sdl_gamepad_enabled(bool value);
-bool get_sdl_gamepad_auto_mode(void);
-void set_sdl_gamepad_auto_mode(bool value);
-bool get_sdl_steamdeck_mode(void);
-void set_sdl_steamdeck_mode(bool value);
+int get_sdl_input_ui_mode(void);
+void set_sdl_input_ui_mode(int mode);
+const char* get_sdl_input_ui_mode_label(int mode);
+int get_sdl_input_ui_default_mode(void);
 bool get_sdl_steamdeck_inv_equip_same_button_cycle(void);
 void set_sdl_steamdeck_inv_equip_same_button_cycle(bool value);
 bool get_sdl_gamepad_use_dpad(void);
@@ -3354,8 +3363,6 @@ void set_sdl_gamepad_use_dpad(bool value);
 bool get_sdl_gamepad_use_left_stick(void);
 void set_sdl_gamepad_use_left_stick(bool value);
 bool get_sdl_gamepad_default_enabled(void);
-bool get_sdl_gamepad_default_auto_mode(void);
-bool get_sdl_steamdeck_default_mode(void);
 bool get_sdl_steamdeck_default_inv_equip_same_button_cycle(void);
 bool get_sdl_gamepad_default_use_dpad(void);
 bool get_sdl_gamepad_default_use_left_stick(void);
@@ -4046,13 +4053,12 @@ float sdl_touch_top_panel_size_normalized(float size);
 int sdl_touch_top_panel_cell_count_normalized(int count);
 int sdl_touch_top_panel_columns_normalized(int columns);
 int sdl_touch_top_panel_rows_normalized(int rows);
+int sdl_touch_top_panel_reserved_stack_height(const SDL_Rect* screen);
 bool sdl_touch_top_panel_current_anchor(SDL_Rect* out_screen,
     SDL_Rect* out_anchor, enum pane_placement* out_where);
 bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
     const SDL_Rect* anchor, enum pane_placement where,
     SDL_FRect* button_rects, SDL_FRect* out_panel);
-bool sdl_touch_top_panel_compute_layout_for_screen(
-    const SDL_Rect* screen, SDL_FRect* button_rects, SDL_FRect* out_panel);
 bool sdl_touch_top_panel_compute_layout(SDL_FRect* button_rects,
     SDL_FRect* out_panel);
 bool sdl_touch_top_panel_compute_layout_for_display(SDL_FRect* button_rects,

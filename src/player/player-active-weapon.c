@@ -218,15 +218,37 @@ static bool confirm_active_weapon_switch(int new_mode)
     return get_check(prompt);
 }
 
+static void ranged_quiver_choice_name(char* buf, size_t buflen, int quiver)
+{
+    int slot = (quiver == 2) ? INVEN_QUIVER2 : INVEN_QUIVER1;
+    object_type* o_ptr = &inventory[slot];
+    char object_name[120];
+
+    if (o_ptr->k_idx)
+    {
+        object_desc(object_name, sizeof(object_name), o_ptr, false, 4);
+        strnfmt(buf, buflen, "Quiver %d: %s", quiver, object_name);
+    }
+    else
+    {
+        strnfmt(buf, buflen, "Quiver %d: empty", quiver);
+    }
+}
+
 static int confirm_active_weapon_switch_to_ranged(int default_mode)
 {
-    const ui_question_option options[] = {
-        { '1', "Quiver 1", TERM_L_WHITE, false },
-        { '2', "Quiver 2", TERM_L_WHITE, false }
+    char quiver_1_name[160];
+    char quiver_2_name[160];
+    ui_question_option options[] = {
+        { '1', quiver_1_name, TERM_L_WHITE, false },
+        { '2', quiver_2_name, TERM_L_WHITE, false }
     };
     int default_index = (default_mode == PLAYER_ACTIVE_WEAPON_RANGED_2)
         ? 1 : 0;
     int choice;
+
+    ranged_quiver_choice_name(quiver_1_name, sizeof(quiver_1_name), 1);
+    ranged_quiver_choice_name(quiver_2_name, sizeof(quiver_2_name), 2);
 
     msg_print("Switching between melee and ranged takes one turn; inactive weapon attack, damage, evasion, and armour bonuses do not apply.");
     msg_print("This confirmation can be removed in Gameplay Options.");

@@ -1219,6 +1219,38 @@ static int parse_left_panel_compact_mode(const char* value)
     return SDL_LEFT_PANEL_COMPACT_COLUMN;
 }
 
+static const char* input_ui_mode_to_string(int mode)
+{
+    switch (mode) {
+    case SDL_INPUT_UI_MODE_PLATFORM:
+#if SIL_SDL_MOBILE_BUILD
+        return "TOUCH";
+#else
+        return "KEYBOARD";
+#endif
+    case SDL_INPUT_UI_MODE_CONTROLLER:
+        return "CONTROLLER";
+    case SDL_INPUT_UI_MODE_AUTO:
+    default:
+        return "AUTO";
+    }
+}
+
+static int parse_input_ui_mode(const char* value)
+{
+    if (!value)
+        return SDL_INPUT_UI_MODE_AUTO;
+    if (strcmp(value, "TOUCH") == 0
+        || strcmp(value, "KEYBOARD") == 0
+        || strcmp(value, "PLATFORM") == 0)
+    {
+        return SDL_INPUT_UI_MODE_PLATFORM;
+    }
+    if (strcmp(value, "CONTROLLER") == 0)
+        return SDL_INPUT_UI_MODE_CONTROLLER;
+    return SDL_INPUT_UI_MODE_AUTO;
+}
+
 static const char* touch_profile_to_string(int profile)
 {
     switch (profile) {
@@ -2381,6 +2413,8 @@ static void sdl_config_copy_pane_profile(struct sdl_pane_profile* dest,
     dest->left_panel_compact_mode = src->left_panel_compact_mode;
     dest->left_panel_compact_health_bar =
         src->left_panel_compact_health_bar;
+    dest->quick_touch_buttons_on_left =
+        src->quick_touch_buttons_on_left;
     dest->log_pane_display_filter = src->log_pane_display_filter;
     dest->dice_roll_lock_ms = src->dice_roll_lock_ms;
     dest->dice_roll_overlay_ms = src->dice_roll_overlay_ms;
@@ -2531,6 +2565,8 @@ static void sdl_config_init_pane_profiles_from_legacy(const struct sdl_config* c
             config->left_panel_compact_mode;
         pane_profiles[mode].left_panel_compact_health_bar =
             config->left_panel_compact_health_bar;
+        pane_profiles[mode].quick_touch_buttons_on_left =
+            config->quick_touch_buttons_on_left;
         pane_profiles[mode].log_pane_display_filter =
             config->log_pane_display_filter;
         pane_profiles[mode].dice_roll_lock_ms = config->dice_roll_lock_ms;
@@ -2626,6 +2662,11 @@ static void sdl_config_load_pane_profile(cJSON* profile_obj,
         "leftPanelCompactHealthBar");
     if (cJSON_IsBool(item))
         profile->left_panel_compact_health_bar = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "quickTouchButtonsOnLeft");
+    if (cJSON_IsBool(item))
+        profile->quick_touch_buttons_on_left = cJSON_IsTrue(item);
 
     item = cJSON_GetObjectItemCaseSensitive(profile_obj,
         "logPaneDisplayFilter");
@@ -2886,6 +2927,139 @@ void sdl_pane_profile_apply_portrait_defaults(
     sdl_pane_profile_apply_portrait_stack_migration(profile);
 }
 
+static bool sdl_config_profile_pane_has_stack_order(enum pane_type pane)
+{
+    return pane != PANE_MAIN && pane != PANE_MAIN_MENU
+        && pane != PANE_DESCRIPTION;
+}
+
+static void sdl_config_profile_set_pane_where_order(
+    struct sdl_pane_profile* profile, int index,
+    enum pane_placement where, int order)
+{
+    struct pane_config moving;
+    int reduced_count;
+    int placement_count = 0;
+    int insertion_index = -1;
+    int last_placement_index = -1;
+
+    if (!profile || index < 0 || index >= profile->pane_count)
+        return;
+    if (!pane_type_allows_placement(profile->pane_configs[index].pane, where))
+        return;
+
+    moving = profile->pane_configs[index];
+    moving.where = where;
+    reduced_count = profile->pane_count - 1;
+    if (index < reduced_count) {
+        memmove(&profile->pane_configs[index],
+            &profile->pane_configs[index + 1],
+            sizeof(profile->pane_configs[0]) * (reduced_count - index));
+    }
+
+    for (int i = 0; i < reduced_count; i++) {
+        if (!sdl_config_profile_pane_has_stack_order(
+                profile->pane_configs[i].pane)
+            || profile->pane_configs[i].where != where)
+        {
+            continue;
+        }
+        placement_count++;
+        last_placement_index = i;
+    }
+
+    if (order < 1)
+        order = 1;
+    if (order > placement_count + 1)
+        order = placement_count + 1;
+
+    if (placement_count == 0) {
+        insertion_index = (index < reduced_count) ? index : reduced_count;
+    } else if (order > placement_count) {
+        insertion_index = last_placement_index + 1;
+    } else {
+        int seen = 0;
+
+        for (int i = 0; i < reduced_count; i++) {
+            if (!sdl_config_profile_pane_has_stack_order(
+                    profile->pane_configs[i].pane)
+                || profile->pane_configs[i].where != where)
+            {
+                continue;
+            }
+            seen++;
+            if (seen == order) {
+                insertion_index = i;
+                break;
+            }
+        }
+    }
+
+    if (insertion_index < 0)
+        insertion_index = reduced_count;
+    if (insertion_index < reduced_count) {
+        memmove(&profile->pane_configs[insertion_index + 1],
+            &profile->pane_configs[insertion_index],
+            sizeof(profile->pane_configs[0])
+                * (reduced_count - insertion_index));
+    }
+    profile->pane_configs[insertion_index] = moving;
+}
+
+static void sdl_config_profile_set_pane(
+    struct sdl_pane_profile* profile, enum pane_type pane,
+    bool enabled, enum pane_placement where, int order)
+{
+    int index = sdl_config_profile_find_pane(profile, pane);
+
+    if (index < 0)
+        return;
+    profile->pane_configs[index].enabled = enabled;
+    sdl_config_profile_set_pane_where_order(profile, index, where, order);
+}
+
+void sdl_pane_profile_apply_tablet_defaults(
+    struct sdl_pane_profile* profile, int orientation)
+{
+    int rolls_index;
+
+    if (!profile)
+        return;
+
+    profile->left_panel_compact_health_bar = true;
+    if (orientation == SDL_PANE_ORIENTATION_PORTRAIT) {
+        sdl_pane_profile_apply_portrait_defaults(profile);
+        profile->left_panel_expanded_on_launch = true;
+        profile->quick_touch_buttons_on_left = true;
+    } else {
+        int quick_access_index;
+
+        profile->left_panel_expanded_on_launch = false;
+        profile->quick_touch_buttons_on_left = false;
+        sdl_config_profile_set_pane(profile, PANE_DEPTH, true,
+            PLACE_BOTTOM_RIGHT, 1);
+        sdl_config_profile_set_pane(profile, PANE_STATUS_DEPTH, false,
+            PLACE_BOTTOM_RIGHT, 2);
+        sdl_config_profile_set_pane(profile, PANE_STATUS, true,
+            PLACE_BOTTOM_CENTER, 1);
+        /*
+         * Status now owns Bottom Center 1.  Reinsert Quick Access explicitly
+         * at 2 so its dynamic renderer consumes the shifted stack anchor
+         * instead of retaining the old first-slot geometry.
+         */
+        quick_access_index = sdl_config_profile_find_pane(profile,
+            PANE_OVERLAY_MENU);
+        if (quick_access_index >= 0) {
+            sdl_config_profile_set_pane_where_order(profile,
+                quick_access_index, PLACE_BOTTOM_CENTER, 2);
+        }
+    }
+
+    rolls_index = sdl_config_profile_find_pane(profile, PANE_ROLLS);
+    if (rolls_index >= 0)
+        profile->pane_configs[rolls_index].rect.rows = 8;
+}
+
 static bool sdl_config_profile_has_enabled_bottom_pane(
     const struct sdl_pane_profile* profile)
 {
@@ -3074,6 +3248,8 @@ static cJSON* sdl_config_create_pane_profile_object(
         left_panel_compact_mode_to_string(profile->left_panel_compact_mode));
     cJSON_AddBoolToObject(profile_obj, "leftPanelCompactHealthBar",
         profile->left_panel_compact_health_bar);
+    cJSON_AddBoolToObject(profile_obj, "quickTouchButtonsOnLeft",
+        profile->quick_touch_buttons_on_left);
     cJSON_AddNumberToObject(profile_obj, "logPaneDisplayFilter",
         profile->log_pane_display_filter);
     cJSON_AddNumberToObject(profile_obj, "diceRollLockMs",
@@ -3180,6 +3356,20 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             log_debug("Loaded mainViewScale: %d", config->main_view_scale);
         } else {
             log_warn("mainViewScale not found or not a number");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "inputUiMode");
+        if (cJSON_IsString(item) && item->valuestring) {
+            config->input_ui_mode = parse_input_ui_mode(item->valuestring);
+            log_debug("Loaded inputUiMode: %s",
+                input_ui_mode_to_string(config->input_ui_mode));
+        } else if (cJSON_IsNumber(item)
+            && item->valueint >= SDL_INPUT_UI_MODE_AUTO
+            && item->valueint < SDL_INPUT_UI_MODE_COUNT)
+        {
+            config->input_ui_mode = item->valueint;
+            log_debug("Loaded legacy numeric inputUiMode: %s",
+                input_ui_mode_to_string(config->input_ui_mode));
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl,
@@ -3433,6 +3623,14 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             config->left_panel_compact_health_bar = cJSON_IsTrue(item);
             log_debug("Loaded leftPanelCompactHealthBar: %s",
                 config->left_panel_compact_health_bar ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "quickTouchButtonsOnLeft");
+        if (cJSON_IsBool(item)) {
+            config->quick_touch_buttons_on_left = cJSON_IsTrue(item);
+            log_debug("Loaded quickTouchButtonsOnLeft: %s",
+                config->quick_touch_buttons_on_left ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "minTerminalMode");
@@ -3930,18 +4128,6 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         if (cJSON_IsBool(item)) {
             config->gamepad_enabled = cJSON_IsTrue(item);
             log_debug("Loaded gamepad.enabled: %s", config->gamepad_enabled ? "true" : "false");
-        }
-
-        item = cJSON_GetObjectItemCaseSensitive(gamepad, "autoMode");
-        if (cJSON_IsBool(item)) {
-            config->gamepad_auto_mode = cJSON_IsTrue(item);
-            log_debug("Loaded gamepad.autoMode: %s", config->gamepad_auto_mode ? "true" : "false");
-        }
-
-        item = cJSON_GetObjectItemCaseSensitive(gamepad, "steamdeckMode");
-        if (cJSON_IsBool(item)) {
-            config->steamdeck_mode = cJSON_IsTrue(item);
-            log_debug("Loaded gamepad.steamdeckMode: %s", config->steamdeck_mode ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "steamdeckInvEquipSameButtonCycle");
@@ -4775,6 +4961,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         left_panel_compact_mode_to_string(config->left_panel_compact_mode));
     cJSON_AddBoolToObject(sdl, "leftPanelCompactHealthBar",
         config->left_panel_compact_health_bar);
+    cJSON_AddBoolToObject(sdl, "quickTouchButtonsOnLeft",
+        config->quick_touch_buttons_on_left);
     cJSON_AddStringToObject(sdl, "minTerminalMode", min_terminal_mode_to_string(config->min_terminal_mode));
     cJSON_AddNumberToObject(sdl, "logPaneDisplayFilter",
         config->log_pane_display_filter);
@@ -4785,6 +4973,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         config->popup_notification_ms);
     cJSON_AddBoolToObject(sdl, "showMainMenuButton",
         config->show_main_menu_button);
+    cJSON_AddStringToObject(sdl, "inputUiMode",
+        input_ui_mode_to_string(config->input_ui_mode));
     
     // Save window position and size for windowed mode
     cJSON_AddNumberToObject(sdl, "windowX", config->window_x);
@@ -4917,8 +5107,6 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             cJSON* right_stick = NULL;
 
             cJSON_AddBoolToObject(gamepad, "enabled", config->gamepad_enabled);
-            cJSON_AddBoolToObject(gamepad, "autoMode", config->gamepad_auto_mode);
-            cJSON_AddBoolToObject(gamepad, "steamdeckMode", config->steamdeck_mode);
             cJSON_AddBoolToObject(gamepad, "steamdeckInvEquipSameButtonCycle",
                 config->steamdeck_inv_equip_same_button_cycle);
             cJSON_AddBoolToObject(gamepad, "useDpad", config->gamepad_use_dpad);
@@ -5435,7 +5623,8 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->left_panel_expanded_on_launch = true;
 #endif
     config->left_panel_compact_mode = SDL_LEFT_PANEL_COMPACT_COLUMN;
-    config->left_panel_compact_health_bar = false;
+    config->left_panel_compact_health_bar = true;
+    config->quick_touch_buttons_on_left = false;
 #if defined(__ANDROID__) || defined(SIL_IOS)
     config->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
 #else
@@ -5491,9 +5680,8 @@ void sdl_config_set_defaults(struct sdl_config* config)
         SDL_MOVEMENT_PRESET_CLASSIC_SIL);
 
     // Default gamepad settings
+    config->input_ui_mode = SDL_INPUT_UI_MODE_AUTO;
     config->gamepad_enabled = true;
-    config->gamepad_auto_mode = true;
-    config->steamdeck_mode = false;
     config->steamdeck_inv_equip_same_button_cycle = true;
     config->gamepad_use_dpad = true;
     config->gamepad_use_left_stick = true;

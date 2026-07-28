@@ -274,7 +274,7 @@ This builds only the native library through CMake and does not create an install
 This is not required for personal sideloading. For a Play Store app bundle, use the default release/upload env file at `%USERPROFILE%\.sil-more\play-upload-keystore.env.ps1` and keystore at `%USERPROFILE%\.sil-more\play-upload-keystore.jks` with alias `upload`, or override it through `SIL_MORE_RELEASE_*` environment variables, then run:
 
 ```powershell
-.\build-android-bundle.ps1 -CompileSdk 35
+.\build-android-bundle.ps1
 ```
 
 The Play Store app bundle script always builds the Play delivery flavor and keeps package ID `com.silmore.myapp`.

@@ -20,6 +20,9 @@ extern void sdl_log_pane_set_rows(enum pane_type pane, int rows);
 #include "ui/question.h"
 #include <SDL3/SDL_keyboard.h>
 
+#define SIL_MORE_PRIVACY_POLICY_URL \
+    "https://k0rtesss.github.io/Sil-More/privacy-policy.html"
+
 enum {
     SETTINGS_PREV_OPTION_PAGE = -1001,
     SETTINGS_NEXT_OPTION_PAGE = -1002
@@ -1470,6 +1473,7 @@ enum iface_pane_field {
     IFACE_PANE_FIELD_LP_COMPACT,
     IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR,
     IFACE_PANE_FIELD_LP_TOUCH_EDGE,
+    IFACE_PANE_FIELD_QUICK_TOUCH_SIDE,
     IFACE_PANE_FIELD_LOG_ROWS,
     IFACE_PANE_FIELD_OVERLAY_LOG_BORDER,
     IFACE_PANE_FIELD_DICE_LOCK,
@@ -4469,6 +4473,19 @@ static int build_interface_pane_rows(struct iface_pane_row* rows, int max_rows,
         row_count++;
     }
 
+#if SIL_SDL_MOBILE_BUILD
+    if (row_count + 1 <= max_rows)
+    {
+        rows[row_count].pane_cfg_index = -1;
+        rows[row_count].type = PANE_MAX;
+        rows[row_count].field = IFACE_PANE_FIELD_QUICK_TOUCH_SIDE;
+        markers[mark_count].setting_id = IFACE_PANE_ROW_BASE + row_count;
+        markers[mark_count].label = "Quick Touch";
+        mark_count++;
+        row_count++;
+    }
+#endif
+
     for (int i = 0; i < total; i++)
     {
         enum pane_type type = (enum pane_type)get_sdl_pane_type(i);
@@ -4589,6 +4606,7 @@ static cptr iface_pane_row_label(const struct iface_pane_row* row)
     case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
         return "Compact Health Bar";
     case IFACE_PANE_FIELD_LP_TOUCH_EDGE: return "Touch Left Edge";
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE: return "Button Side";
     case IFACE_PANE_FIELD_LOG_ROWS: return "Lines";
     case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER: return "White Border";
     case IFACE_PANE_FIELD_DICE_LOCK: return "Lock Time";
@@ -4654,6 +4672,13 @@ static cptr iface_pane_row_description(const struct iface_pane_row* row)
             "This is saved separately for portrait and landscape.";
     }
 
+    if (row->field == IFACE_PANE_FIELD_QUICK_TOUCH_SIDE)
+    {
+        return "Choose the screen side used by the portrait Quick Touch "
+            "buttons. The Button Wheel uses the opposite side. This is saved "
+            "separately for portrait and landscape.";
+    }
+
     if (row->field == IFACE_PANE_FIELD_LOG_ROWS)
     {
         return "Set the requested number of visible Overlay Log lines for "
@@ -4672,6 +4697,7 @@ static cptr iface_pane_row_description(const struct iface_pane_row* row)
         || row->field == IFACE_PANE_FIELD_LP_COMPACT
         || row->field == IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR
         || row->field == IFACE_PANE_FIELD_LP_TOUCH_EDGE
+        || row->field == IFACE_PANE_FIELD_QUICK_TOUCH_SIDE
         || row->field == IFACE_PANE_FIELD_LOG_ROWS
         || row->field == IFACE_PANE_FIELD_OVERLAY_LOG_BORDER
         || row->field == IFACE_PANE_FIELD_MAIN_MENU_BUTTON
@@ -4769,6 +4795,10 @@ static void iface_pane_row_value(const struct iface_pane_row* row, char* buf,
         SDL_strlcpy(buf, get_sdl_left_overlays_touch_screen_edge()
             ? "on" : "off", buflen);
         break;
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
+        SDL_strlcpy(buf, get_sdl_quick_touch_buttons_on_left()
+            ? "left" : "right", buflen);
+        break;
     case IFACE_PANE_FIELD_LOG_ROWS:
         strnfmt(buf, buflen, "%d", sdl_log_pane_current_rows(PANE_ROLLS));
         break;
@@ -4802,6 +4832,7 @@ static void iface_pane_row_apply_change(const struct iface_pane_row* row)
     case IFACE_PANE_FIELD_LP_LAUNCH:
     case IFACE_PANE_FIELD_LP_COMPACT:
     case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
     case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER:
         sdl_request_redraw();
         break;
@@ -4825,6 +4856,8 @@ static bool iface_pane_pick_from_choices(const struct iface_pane_row* row,
 
     if (row->field == IFACE_PANE_FIELD_MAIN_MENU_BUTTON)
         group = "Main Menu";
+    else if (row->field == IFACE_PANE_FIELD_QUICK_TOUCH_SIDE)
+        group = "Quick Touch";
     else if (row->field == IFACE_PANE_FIELD_POPUP_NOTIFICATION)
         group = "Popup Notifications";
     else if (row->type == PANE_MAX)
@@ -4862,6 +4895,10 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
     static const struct settings_value_choice compact_mode_choices[] = {
         { SDL_LEFT_PANEL_COMPACT_COLUMN, "column" },
         { SDL_LEFT_PANEL_COMPACT_ROW, "row" }
+    };
+    static const struct settings_value_choice left_right_choices[] = {
+        { 1, "left" },
+        { 0, "right" }
     };
 
     if (handled)
@@ -5065,6 +5102,17 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
             && value != (get_sdl_left_overlays_touch_screen_edge() ? 1 : 0))
         {
             set_sdl_left_overlays_touch_screen_edge(value != 0);
+            changed = true;
+        }
+        break;
+
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
+        value = get_sdl_quick_touch_buttons_on_left() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, left_right_choices,
+                (int)N_ELEMENTS(left_right_choices), value, &value, handled)
+            && value != (get_sdl_quick_touch_buttons_on_left() ? 1 : 0))
+        {
+            set_sdl_quick_touch_buttons_on_left(value != 0);
             changed = true;
         }
         break;
@@ -5342,6 +5390,17 @@ static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
         }
         break;
     }
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
+    {
+        bool cur = get_sdl_quick_touch_buttons_on_left();
+        bool next = (delta == 0) ? !cur : (delta < 0);
+
+        if (next != cur) {
+            set_sdl_quick_touch_buttons_on_left(next);
+            changed = true;
+        }
+        break;
+    }
     case IFACE_PANE_FIELD_LOG_ROWS:
     {
         int value = sdl_log_pane_current_rows(PANE_ROLLS);
@@ -5525,10 +5584,10 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
     }
     case IFACE_PANE_FIELD_LP_LAUNCH:
         if (get_sdl_left_panel_expanded_on_launch()
-            != def.left_panel_expanded_on_launch)
+            != get_sdl_left_panel_expanded_default_on_launch())
         {
             set_sdl_left_panel_expanded_on_launch(
-                def.left_panel_expanded_on_launch);
+                get_sdl_left_panel_expanded_default_on_launch());
             changed = true;
         }
         break;
@@ -5557,6 +5616,16 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
             changed = true;
         }
         break;
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
+    {
+        bool d = get_sdl_quick_touch_buttons_default_on_left();
+
+        if (get_sdl_quick_touch_buttons_on_left() != d) {
+            set_sdl_quick_touch_buttons_on_left(d);
+            changed = true;
+        }
+        break;
+    }
     case IFACE_PANE_FIELD_LOG_ROWS:
     {
         int d = get_sdl_pane_default_rows(idx);
@@ -9045,7 +9114,7 @@ static bool other_options_choice_is_disabled(int choice)
 static int other_options_menu(int* highlight)
 {
     int ch;
-    int options = 4;
+    int options = 5;
     int clicked_choice = 0;
     bool death_view = death_spectator_active();
 
@@ -9071,8 +9140,10 @@ static int other_options_menu(int* highlight)
     ADD_OTHER_OPTIONS_ROW(3, "s) Suicide",
         death_view ? TERM_L_DARK
                    : ((*highlight == 3) ? TERM_L_BLUE : TERM_WHITE));
-    ADD_OTHER_OPTIONS_ROW(4, "o) Return to Options",
+    ADD_OTHER_OPTIONS_ROW(4, "p) Privacy Policy",
         (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE);
+    ADD_OTHER_OPTIONS_ROW(5, "o) Return to Options",
+        (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE);
 
 #undef ADD_OTHER_OPTIONS_ROW
 
@@ -9084,9 +9155,10 @@ static int other_options_menu(int* highlight)
             "Choose the color palette used throughout the game.",
             "Write a note into your character's journal.",
             "End your current character permanently.",
+            "Open the Sil-More privacy policy in your web browser.",
             "Return to the Options menu.",
         };
-        cptr d = (*highlight >= 1 && *highlight <= 4)
+        cptr d = (*highlight >= 1 && *highlight <= 5)
             ? other_options_row_desc[*highlight] : NULL;
 
         sdl_character_sheet_screen_set_select_description(d ? d : verbuf);
@@ -9105,11 +9177,11 @@ static int other_options_menu(int* highlight)
             if (click_action == UI_MENU_CLICK_HOVER && clicked_choice < 0)
                 return (0);
             if (clicked_choice == -1)
-                clicked_choice = 4;
+                clicked_choice = 5;
             else if (clicked_choice == -2)
                 clicked_choice = *highlight;
             if (clicked_choice == SETTINGS_CLICK_RETURN)
-                clicked_choice = 7;
+                clicked_choice = 5;
             if (clicked_choice < 1 || clicked_choice > options)
                 return (0);
             *highlight = clicked_choice;
@@ -9150,11 +9222,17 @@ static int other_options_menu(int* highlight)
         return (3);
     }
 
-    if ((ch == 'o') || (ch == 'O') || (ch == 'q') || (ch == 'Q')
-        || (ch == ESCAPE))
+    if ((ch == 'p') || (ch == 'P'))
     {
         *highlight = 4;
         return (4);
+    }
+
+    if ((ch == 'o') || (ch == 'O') || (ch == 'q') || (ch == 'Q')
+        || (ch == ESCAPE))
+    {
+        *highlight = 5;
+        return (5);
     }
 
     if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
@@ -9222,6 +9300,16 @@ static void do_cmd_other_options(void)
             break;
         }
         case 4:
+        {
+            if (!SDL_OpenURL(SIL_MORE_PRIVACY_POLICY_URL))
+            {
+                msg_format("Could not open the privacy policy (%s)",
+                    SDL_GetError());
+            }
+            Term_clear();
+            break;
+        }
+        case 5:
         {
             settings_semantic_menu_hide();
             return_to_options = true;
@@ -9556,6 +9644,7 @@ static void do_cmd_keyboard_input_settings(void)
 
 enum input_option_action {
     INPUT_OPTION_NONE = 0,
+    INPUT_OPTION_UI_MODE,
     INPUT_OPTION_KEYBOARD,
     INPUT_OPTION_CONTROLLER,
     INPUT_OPTION_TOUCH_TUTORIAL,
@@ -9568,7 +9657,7 @@ enum input_option_action {
 struct input_option_row {
     enum input_option_action action;
     char key;
-    cptr label;
+    char label[64];
     cptr description;
 };
 
@@ -9582,34 +9671,54 @@ static int input_option_rows_collect(struct input_option_row* rows,
         if (count < max_rows) {                                                \
             rows[count].action = (ACTION);                                    \
             rows[count].key = (KEY);                                          \
-            rows[count].label = (LABEL);                                      \
+            SDL_strlcpy(rows[count].label, (LABEL),                           \
+                sizeof(rows[count].label));                                   \
             rows[count].description = (DESCRIPTION);                          \
             count++;                                                          \
         }                                                                      \
     } while (0)
 
+    {
+        char mode_label[64];
+
+        strnfmt(mode_label, sizeof(mode_label), "Input UI: %s",
+            get_sdl_input_ui_mode_label(get_sdl_input_ui_mode()));
+#if SIL_SDL_MOBILE_BUILD
+        ADD_INPUT_OPTION(INPUT_OPTION_UI_MODE, 'a', mode_label,
+            "Choose Auto, Touch, or Controller presentation. Auto leaves the "
+            "choice to the game's device and input detection. Touch and "
+            "Controller force an override. Left/Right or Enter changes the "
+            "mode; R resets Auto.");
+#else
+        ADD_INPUT_OPTION(INPUT_OPTION_UI_MODE, 'a', mode_label,
+            "Choose Auto, Keyboard, or Controller presentation. Auto leaves "
+            "the choice to the game's device and input detection. Keyboard "
+            "and Controller force an override. Left/Right or Enter changes "
+            "the mode; R resets Auto.");
+#endif
+    }
     if (SDL_HasKeyboard()) {
-        ADD_INPUT_OPTION(INPUT_OPTION_KEYBOARD, 'a', "Keyboard Input",
+        ADD_INPUT_OPTION(INPUT_OPTION_KEYBOARD, 'b', "Keyboard Input",
             "Keyboard movement presets, the Angband keyset, and key "
             "rebinding.");
     }
     if (SDL_HasGamepad()) {
-        ADD_INPUT_OPTION(INPUT_OPTION_CONTROLLER, 'b', "Controller Settings",
+        ADD_INPUT_OPTION(INPUT_OPTION_CONTROLLER, 'c', "Controller Settings",
             "Set up the connected game controller or Steam Deck: button "
             "mapping, sticks, and deadzones.");
     }
     if (sdl_touch_tutorial_device_available()) {
-        ADD_INPUT_OPTION(INPUT_OPTION_TOUCH_TUTORIAL, 'c', "Touch Tutorial",
+        ADD_INPUT_OPTION(INPUT_OPTION_TOUCH_TUTORIAL, 'd', "Touch Tutorial",
             "Replay the touch-controls tutorial.");
     }
     if (SDL_HasMouse()) {
-        ADD_INPUT_OPTION(INPUT_OPTION_MOUSE, 'd', "Mouse Input",
+        ADD_INPUT_OPTION(INPUT_OPTION_MOUSE, 'e', "Mouse Input",
             "Mouse behavior, including click-to-move and pointer options.");
     }
-    ADD_INPUT_OPTION(INPUT_OPTION_WHEEL_TUTORIAL, 'e',
+    ADD_INPUT_OPTION(INPUT_OPTION_WHEEL_TUTORIAL, 'f',
         "Character Wheel Tutorial",
         "Replay the player action-wheel tutorial.");
-    ADD_INPUT_OPTION(INPUT_OPTION_ZONES_TUTORIAL, 'f', "Zones Tutorial",
+    ADD_INPUT_OPTION(INPUT_OPTION_ZONES_TUTORIAL, 'g', "Zones Tutorial",
         "Replay the screen-zones tutorial.");
     ADD_INPUT_OPTION(INPUT_OPTION_RETURN, 'o', "Return to Options",
         "Return to the Options menu.");
@@ -9621,7 +9730,7 @@ static int input_option_rows_collect(struct input_option_row* rows,
 
 static enum input_option_action input_options_menu(int* highlight)
 {
-    struct input_option_row rows[7];
+    struct input_option_row rows[8];
     int options = input_option_rows_collect(rows, (int)N_ELEMENTS(rows));
     int ch;
     int clicked_choice = 0;
@@ -9677,6 +9786,23 @@ static enum input_option_action input_options_menu(int* highlight)
     }
 
     ch = settings_menu_key(ch, '8', '2', false);
+
+    if (rows[*highlight - 1].action == INPUT_OPTION_UI_MODE
+        && (ch == '4' || ch == '6' || ch == 'r' || ch == 'R'))
+    {
+        int mode = get_sdl_input_ui_mode();
+
+        if (ch == 'r' || ch == 'R') {
+            mode = get_sdl_input_ui_default_mode();
+        } else {
+            int delta = (ch == '4') ? -1 : 1;
+
+            mode = (mode + delta + SDL_INPUT_UI_MODE_COUNT)
+                % SDL_INPUT_UI_MODE_COUNT;
+        }
+        set_sdl_input_ui_mode(mode);
+        return INPUT_OPTION_NONE;
+    }
 
     if (menu_letters) {
         for (int i = 0; i < options; i++) {
@@ -9743,6 +9869,11 @@ static void do_cmd_input_options_submenu(int* highlight)
 
         switch (choice)
         {
+        case INPUT_OPTION_UI_MODE:
+            set_sdl_input_ui_mode((get_sdl_input_ui_mode() + 1)
+                % SDL_INPUT_UI_MODE_COUNT);
+            Term_clear();
+            break;
         case INPUT_OPTION_KEYBOARD:
             settings_semantic_menu_hide();
             do_cmd_keyboard_input_settings();
@@ -11139,8 +11270,6 @@ typedef enum controller_entry_type {
 
 typedef enum controller_toggle_id {
     CONTROLLER_TOGGLE_ENABLED = 0,
-    CONTROLLER_TOGGLE_AUTO_MODE,
-    CONTROLLER_TOGGLE_STEAMDECK_MODE,
     CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE,
     CONTROLLER_TOGGLE_DPAD,
     CONTROLLER_TOGGLE_LEFT_STICK,
@@ -11965,12 +12094,6 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
         case CONTROLLER_TOGGLE_ENABLED:
             SDL_strlcpy(buf, get_sdl_gamepad_enabled() ? "On" : "Off", buflen);
             break;
-        case CONTROLLER_TOGGLE_AUTO_MODE:
-            SDL_strlcpy(buf, get_sdl_gamepad_auto_mode() ? "On" : "Off", buflen);
-            break;
-        case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-            SDL_strlcpy(buf, get_sdl_steamdeck_mode() ? "On" : "Off", buflen);
-            break;
         case CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE:
             SDL_strlcpy(buf,
                 get_sdl_steamdeck_inv_equip_same_button_cycle() ? "On" : "Off",
@@ -12002,12 +12125,6 @@ static void controller_set_toggle(int toggle_id, bool value)
     case CONTROLLER_TOGGLE_ENABLED:
         set_sdl_gamepad_enabled(value);
         break;
-    case CONTROLLER_TOGGLE_AUTO_MODE:
-        set_sdl_gamepad_auto_mode(value);
-        break;
-    case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-        set_sdl_steamdeck_mode(value);
-        break;
     case CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE:
         set_sdl_steamdeck_inv_equip_same_button_cycle(value);
         break;
@@ -12027,10 +12144,6 @@ static bool controller_toggle_default_value(int toggle_id)
     switch (toggle_id) {
     case CONTROLLER_TOGGLE_ENABLED:
         return get_sdl_gamepad_default_enabled();
-    case CONTROLLER_TOGGLE_AUTO_MODE:
-        return get_sdl_gamepad_default_auto_mode();
-    case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-        return get_sdl_steamdeck_default_mode();
     case CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE:
         return get_sdl_steamdeck_default_inv_equip_same_button_cycle();
     case CONTROLLER_TOGGLE_DPAD:
@@ -12263,8 +12376,6 @@ void do_cmd_controller_settings(void)
 
     static const controller_entry entries[] = {
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_ENABLED, "Controller Input" },
-        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_AUTO_MODE, "Auto Controller Mode" },
-        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_STEAMDECK_MODE, "Controller UI Mode" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE, "Inv/Equip Same-Button Cycle" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_DPAD, "D-pad Movement" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_LEFT_STICK, "Left Stick Movement" },
@@ -12376,15 +12487,6 @@ void do_cmd_controller_settings(void)
                 switch (entries[highlight].id) {
                 case CONTROLLER_TOGGLE_ENABLED:
                     toggle_desc = "Turn controller input on or off.";
-                    break;
-                case CONTROLLER_TOGGLE_AUTO_MODE:
-                    toggle_desc =
-                        "Automatically switch to the controller UI when a "
-                        "controller is connected or used.";
-                    break;
-                case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-                    toggle_desc =
-                        "Use the Steam Deck / controller-oriented UI layout.";
                     break;
                 case CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE:
                     toggle_desc =

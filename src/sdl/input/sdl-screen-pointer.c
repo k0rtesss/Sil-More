@@ -122,7 +122,13 @@ bool sdl_main_screen_point_over_overlay_pane(float x, float y)
     {
         return true;
     }
-    if (sdl_status_pane_current_rect(&rect, NULL)
+    /*
+     * PANE_STATUS is measured and painted inside its allocation anchor.  On
+     * mobile that anchor can cover most of the map, so hit-testing the anchor
+     * makes ordinary map squares look obscured whenever standalone Status is
+     * enabled.  Use the same live rectangle as rendering and stack reflow.
+     */
+    if (sdl_overlay_stack_visible_rect(PANE_STATUS, &rect)
         && sdl_point_in_rect(&rect, x, y))
     {
         return true;

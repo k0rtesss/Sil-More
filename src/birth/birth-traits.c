@@ -109,7 +109,7 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
         [SNG_ELVENESS]      = "Song of Elveness",
         [SNG_STAYING]       = "Song of Staying",
         [SNG_DISGUISE]      = "Song of Disguise",
-        [SNG_LORIEN]        = "Song of LÃ³rien",
+        [SNG_LORIEN]        = "Song of Lórien",
         [SNG_SHATTERING]    = "Song of Shattering",
         [SNG_MASTERY]       = "Song of Mastery",
         [SNG_CONTEST]       = "Song of Contest",
@@ -118,7 +118,7 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
     },
     [S_SPC] = {
         [SPC_MANDOS] = "Mandos' Doom", /* immunity reward */
-        [SPC_AULE] = "AulÃ«'s Forge", /* improved masterpiece forging */
+        [SPC_AULE] = "Aulë's Forge", /* improved masterpiece forging */
         [SPC_OATH_MERCY] = "Oath of Mercy",
         [SPC_OATH_SILENCE] = "Oath of Silence",
         [SPC_OATH_IRON] = "Oath of Iron",
@@ -323,7 +323,7 @@ int collect_character_trait_lines(int race, int character, bool short_labels,
     HANDLE_UNIQUE_U_EX("Shadow Walker", "Shadow Walk", "Shadow Walker", UNQ_SNG_TURGON, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Chosen of Ulmo", "Ulmo's Chosen", "Chosen of Ulmo", UNQ_WIL_TUOR, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Indomitable Will", "Indom. Will", "Indomitable Will", UNQ_EARENDIL, TERM_VIOLET);
-    HANDLE_UNIQUE_U_EX("OromÃ« Himself", "OromÃ«", "Himself", UNQ_WIL_FIN, TERM_VIOLET);
+    HANDLE_UNIQUE_U_EX("Oromë Himself", "Oromë", "Himself", UNQ_WIL_FIN, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Songs of Power", "Songs of Power", "Songs of Power", UNQ_SNG_FIN, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Elven Dance", "Elven Dance", "Elven Dance", UNQ_SNG_LUT, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Girdle of Melian", "Melian's Girdle", "Girdle of Melian", UNQ_SNG_MEL, TERM_VIOLET);

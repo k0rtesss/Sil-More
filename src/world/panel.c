@@ -41,25 +41,21 @@ static int map_center_clearance_horizontal(void)
 #endif
 }
 
-static struct map_clearance map_center_clearance_for_travel(int travel_y,
-    int travel_x)
+static struct map_clearance map_center_clearance(void)
 {
     int vertical = map_center_clearance_vertical();
     int horizontal = map_center_clearance_horizontal();
-    int trailing = SDL_CAMERA_CENTER_CLEARANCE_MIN;
     struct map_clearance clearance;
 
     /*
-     * Keep the configured buffer ahead of travel, but relax hidden space
-     * behind the player so it cannot pinch the destination zone.  Retaining
-     * one trailing cell prevents directional lead from putting the player on
-     * the outermost screen row/column.  With no directional recenter this
-     * remains the original symmetric safe zone.
+     * Recenter Distance is a hard lower bound on every side of the player.
+     * Directional lead is applied when selecting a point within this safe
+     * zone; it must not relax the trailing boundary to make that point fit.
      */
-    clearance.top = (travel_y > 0) ? trailing : vertical;
-    clearance.bottom = (travel_y < 0) ? trailing : vertical;
-    clearance.left = (travel_x > 0) ? trailing : horizontal;
-    clearance.right = (travel_x < 0) ? trailing : horizontal;
+    clearance.top = vertical;
+    clearance.bottom = vertical;
+    clearance.left = horizontal;
+    clearance.right = horizontal;
     return clearance;
 }
 
@@ -286,8 +282,7 @@ static void map_safe_center(int* center_y, int* center_x,
     int screen_w = SCREEN_WID;
     int vertical = map_center_clearance_vertical();
     int horizontal = map_center_clearance_horizontal();
-    struct map_clearance clearance =
-        map_center_clearance_for_travel(travel_y, travel_x);
+    struct map_clearance clearance = map_center_clearance();
     int cy = clamp_screen_center(screen_h / 2, screen_h);
     int cx = clamp_screen_center(screen_w / 2, screen_w);
     int zone_label = 0;
@@ -389,20 +384,10 @@ finish:
 static bool map_cell_near_hidden(int y, int x,
     const struct map_pane_span* spans, int span_count)
 {
-    int vertical = map_center_clearance_vertical();
-    int horizontal = map_center_clearance_horizontal();
-    struct map_clearance clearance =
-        map_center_clearance_for_travel(0, 0);
+    struct map_clearance clearance = map_center_clearance();
 
-    if (x < horizontal
-        || x >= SCREEN_WID - horizontal
-        || y < vertical
-        || y >= SCREEN_HGT - vertical)
-    {
-        return true;
-    }
-
-    return !map_center_clear(y, x, spans, span_count, &clearance);
+    return !map_zone_cell_clear(y, x, SCREEN_HGT, SCREEN_WID, spans,
+        span_count, &clearance);
 }
 
 static bool map_travel_points_toward_hidden(int y, int x, int travel_y,
@@ -410,8 +395,7 @@ static bool map_travel_points_toward_hidden(int y, int x, int travel_y,
 {
     int vertical = map_center_clearance_vertical();
     int horizontal = map_center_clearance_horizontal();
-    struct map_clearance clearance =
-        map_center_clearance_for_travel(0, 0);
+    struct map_clearance clearance = map_center_clearance();
 
     if ((travel_x < 0 && x < horizontal)
         || (travel_x > 0 && x >= SCREEN_WID - horizontal)
@@ -624,11 +608,12 @@ void verify_panel(void)
     int wy = p_ptr->wy;
     int wx = p_ptr->wx;
     bool do_center = center_player && (!p_ptr->running || !run_avoid_center);
-    bool near_hidden = map_cell_near_hidden(
-        py - wy, px - wx, spans, span_count);
+    bool near_hidden;
     bool boundary_recenter;
 
     map_player_travel_direction(py, px, &travel_y, &travel_x);
+    /* Test the same configured safe zone used to choose a boundary center. */
+    near_hidden = map_cell_near_hidden(py - wy, px - wx, spans, span_count);
     boundary_recenter = near_hidden && !do_center
         && ((travel_y == 0 && travel_x == 0)
             || map_travel_points_toward_hidden(py - wy, px - wx,
@@ -641,11 +626,9 @@ void verify_panel(void)
         boundary_recenter ? travel_x : 0);
 
     /*
-     * A directional recenter deliberately leaves less clearance behind the
-     * player.  Do not immediately recenter again merely because that trailing
-     * edge is within the normal trigger distance: wait until movement points
-     * toward hidden space.  With no usable travel direction (layout change,
-     * teleport, or level transition), use the symmetric safe center.
+     * Directional recentering moves the target behind the zone center without
+     * crossing the configured safe boundary.  With no usable travel direction
+     * (layout change, teleport, or level transition), use the zone center.
      */
     if (do_center || boundary_recenter)
     {

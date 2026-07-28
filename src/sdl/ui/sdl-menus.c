@@ -429,7 +429,8 @@ static bool sdl_narrative_banner_pane_rect(
         break;
 
     case PANE_OVERLAY_MENU:
-        return sdl_touch_top_panel_compute_layout(NULL, out);
+        /* Quick Access is calculated after the narrative and other panes. */
+        return false;
 
     case PANE_DESCRIPTION:
         return false;
@@ -606,15 +607,19 @@ void sdl_narrative_banner_apply_overlay_log_avoidance(SDL_Rect* rect)
     rect->w -= 2 * right_reserve;
 }
 
-bool sdl_narrative_banner_base_rect(SDL_Rect* out)
+static bool sdl_narrative_banner_base_layout(SDL_Rect* out,
+    bool* out_span_width)
 {
     const sdl_view* view = &g_views[PANE_MAIN];
     SDL_Rect rect;
     SDL_Rect full_rect;
     int min_h;
+    bool span_width = false;
 
     if (!out)
         return false;
+    if (out_span_width)
+        *out_span_width = false;
 
     if (view->term_ready && view->cell_w > 0 && view->cell_h > 0
         && view->cols > 0 && view->rows > 0)
@@ -651,21 +656,38 @@ bool sdl_narrative_banner_base_rect(SDL_Rect* out)
      * the log again only if its painted rectangle still overlaps vertically.
      * Wider landscape banners keep the center-only rule so a tall side pane
      * cannot strand them near mid-screen.
-    */
+     */
     if (!sdl_mobile_portrait_layout_active()
         && rect.w * 2 < full_rect.w
         && rect.w < rect.h)
     {
+        SDL_Rect repositioned_rect;
+
         rect = full_rect;
         sdl_narrative_banner_apply_top_pane_avoidance(&rect, min_h, true);
+        repositioned_rect = rect;
         sdl_narrative_banner_apply_overlay_log_avoidance(&rect);
+        /*
+         * When clearing the top stacks also clears the log vertically, tell
+         * the renderer to stretch the visible panel across that full-width
+         * safe area rather than fitting it back around the text.
+         */
+        span_width = rect.x == repositioned_rect.x
+            && rect.w == repositioned_rect.w;
     }
 
     if (rect.w <= 0 || rect.h <= 0)
         return false;
 
     *out = rect;
+    if (out_span_width)
+        *out_span_width = span_width;
     return true;
+}
+
+bool sdl_narrative_banner_base_rect(SDL_Rect* out)
+{
+    return sdl_narrative_banner_base_layout(out, NULL);
 }
 
 int sdl_narrative_banner_font_px(const SDL_Rect* rect)
@@ -843,12 +865,13 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
     float top_gap;
     SDL_FRect panel;
     int overlay_log_left;
+    bool span_width;
 
     if (!sdl_narrative_banner_overlay_enabled())
         return false;
     if (!active_narrative_banner_visible() || character_icky > 0)
         return false;
-    if (!sdl_narrative_banner_base_rect(&rect))
+    if (!sdl_narrative_banner_base_layout(&rect, &span_width))
         return false;
 
     font_px = sdl_narrative_banner_font_px(&rect);
@@ -888,7 +911,14 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
         panel_w = (float)rect.w;
 
     overlay_log_left = sdl_narrative_banner_overlay_log_left();
-    if (overlay_log_left > rect.x
+    if (span_width) {
+        float centered_text_pad = (max_panel_w - max_text_w) * 0.5f;
+
+        panel_w = max_panel_w;
+        if (centered_text_pad > pad_x)
+            pad_x = centered_text_pad;
+    }
+    else if (overlay_log_left > rect.x
         && overlay_log_left <= rect.x + rect.w + 2
         && panel_w < max_panel_w)
     {

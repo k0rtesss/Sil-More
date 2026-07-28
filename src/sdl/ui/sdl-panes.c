@@ -1581,86 +1581,6 @@ static int sdl_status_depth_pane_pack(TTF_Font* font,
 
 static bool g_status_depth_pane_layout_computing;
 
-static bool sdl_status_depth_pane_top_edge(enum pane_placement where)
-{
-    return where == PLACE_TOP_LEFT || where == PLACE_TOP_CENTER
-        || where == PLACE_TOP_RIGHT;
-}
-
-static bool sdl_status_depth_pane_same_horizontal_edge(
-    enum pane_placement first, enum pane_placement second)
-{
-    return (sdl_left_panel_pane_placement_is_bottom(first)
-            && sdl_left_panel_pane_placement_is_bottom(second))
-        || (sdl_status_depth_pane_top_edge(first)
-            && sdl_status_depth_pane_top_edge(second));
-}
-
-/* Keep the Status & Depth anchor fixed while finding how far its line may
- * extend before reaching Quick Access.  Returning less than min_panel_w tells
- * the caller that side-by-side layout is impossible; in that case both panes
- * retain their widths and the vertical collision resolver stacks them. */
-static int sdl_status_depth_pane_width_before_quick(
-    const SDL_Rect* anchor, const SDL_Rect* screen,
-    enum pane_placement where, int min_panel_w, int min_panel_h,
-    int max_panel_w, const SDL_FRect* quick)
-{
-    SDL_FRect probe;
-    float allowed = (float)max_panel_w;
-    float quick_left;
-    float quick_right;
-    float gap;
-
-    if (!anchor || !screen || !quick || min_panel_w <= 0
-        || max_panel_w <= 0 || quick->w <= 0.0f || quick->h <= 0.0f)
-    {
-        return max_panel_w;
-    }
-
-    probe = sdl_overlay_panel_rect(anchor, where, min_panel_w, min_panel_h,
-        screen);
-    if (probe.y >= quick->y + quick->h
-        || probe.y + probe.h <= quick->y)
-    {
-        return max_panel_w;
-    }
-    quick_left = quick->x;
-    quick_right = quick->x + quick->w;
-    gap = (float)sdl_overlay_inner_gap_px();
-
-    if (sdl_left_panel_pane_placement_is_right(where)) {
-        float fixed_right = probe.x + probe.w;
-
-        if (quick_left >= fixed_right)
-            return max_panel_w;
-        allowed = quick_right <= fixed_right
-            ? fixed_right - quick_right - gap : 0.0f;
-    } else if (sdl_left_panel_pane_placement_is_horizontal_center(where)) {
-        float fixed_center = probe.x + probe.w * 0.5f;
-
-        if (quick_right <= fixed_center) {
-            allowed = (fixed_center - quick_right - gap) * 2.0f;
-        } else if (quick_left >= fixed_center) {
-            allowed = (quick_left - gap - fixed_center) * 2.0f;
-        } else {
-            allowed = 0.0f;
-        }
-    } else {
-        float fixed_left = probe.x;
-
-        if (quick_right <= fixed_left)
-            return max_panel_w;
-        allowed = quick_left >= fixed_left
-            ? quick_left - gap - fixed_left : 0.0f;
-    }
-
-    if (allowed < 0.0f)
-        allowed = 0.0f;
-    if (allowed > (float)max_panel_w)
-        allowed = (float)max_panel_w;
-    return (int)allowed;
-}
-
 static bool sdl_status_depth_pane_layout_compute(
     status_depth_pane_layout* out)
 {
@@ -1671,9 +1591,6 @@ static bool sdl_status_depth_pane_layout_compute(
     status_pane_entry entries[SDL_STATUS_PANE_MAX_ENTRIES];
     SDL_Rect anchor;
     SDL_Rect screen;
-    SDL_Rect quick_anchor;
-    SDL_Rect quick_screen;
-    SDL_FRect quick_panel = { 0 };
     TTF_Font* font;
     char depth_label[64];
     int count;
@@ -1689,9 +1606,6 @@ static bool sdl_status_depth_pane_layout_compute(
     int row_count = 0;
     int panel_w;
     int panel_h;
-    int min_panel_w;
-    enum pane_placement quick_where = PLACE_BOTTOM_CENTER;
-    bool have_quick_panel = false;
     Uint64 layout_hash = 1469598103934665603ULL;
 
     if (!out)
@@ -1718,19 +1632,6 @@ static bool sdl_status_depth_pane_layout_compute(
         font_px = 8;
     screen = sdl_get_layout_screen_rect();
 
-    /* Quick Access keeps its configured geometry.  Status & Depth consumes
-     * only the side span before it and wraps into additional rows.  When even
-     * the depth token cannot fit beside Quick Access, the later vertical
-     * collision pass stacks the two full-width panes instead. */
-    if (sdl_touch_top_panel_current_anchor(&quick_screen, &quick_anchor,
-            &quick_where)
-        && sdl_status_depth_pane_same_horizontal_edge(pc->where, quick_where)
-        && sdl_touch_top_panel_compute_layout(NULL, &quick_panel)
-        && quick_panel.w > 0.0f && quick_panel.h > 0.0f)
-    {
-        have_quick_panel = true;
-    }
-
     layout_hash = sdl_status_pane_hash_bytes(layout_hash, &anchor,
         sizeof(anchor));
     layout_hash = sdl_status_pane_hash_bytes(layout_hash, &screen,
@@ -1739,14 +1640,6 @@ static bool sdl_status_depth_pane_layout_compute(
         sizeof(pc->where));
     layout_hash = sdl_status_pane_hash_bytes(layout_hash, &font_px,
         sizeof(font_px));
-    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &have_quick_panel,
-        sizeof(have_quick_panel));
-    if (have_quick_panel) {
-        layout_hash = sdl_status_pane_hash_bytes(layout_hash, &quick_where,
-            sizeof(quick_where));
-        layout_hash = sdl_status_pane_hash_bytes(layout_hash, &quick_panel,
-            sizeof(quick_panel));
-    }
     layout_hash = sdl_status_pane_hash_bytes(layout_hash,
         &g_state.system_scale, sizeof(g_state.system_scale));
     layout_hash = sdl_status_pane_hash_bytes(layout_hash,
@@ -1790,18 +1683,6 @@ static bool sdl_status_depth_pane_layout_compute(
     if (max_panel_w <= 0 || max_panel_h <= 0)
         return false;
 
-    min_panel_w = out->pad_x * 2
-        + sdl_status_pane_text_width(font, depth_label);
-    if (min_panel_w > max_panel_w)
-        min_panel_w = max_panel_w;
-    if (have_quick_panel) {
-        int side_panel_w = sdl_status_depth_pane_width_before_quick(
-            &anchor, &screen, pc->where, min_panel_w,
-            out->pad_y * 2 + out->row_h, max_panel_w, &quick_panel);
-
-        if (side_panel_w >= min_panel_w && side_panel_w < max_panel_w)
-            max_panel_w = side_panel_w;
-    }
     max_content_w = max_panel_w - out->pad_x * 2;
     max_rows = (max_panel_h - out->pad_y * 2) / out->row_h;
     if (max_content_w <= 0 || max_rows <= 0)

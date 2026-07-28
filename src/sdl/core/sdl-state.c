@@ -86,6 +86,8 @@ int g_platform_max_main_view_scale[SDL_MIN_TERMINAL_MODE_COUNT] = {
 };
 sdl_startup_device_class g_startup_device_class =
     SDL_STARTUP_DEVICE_DESKTOP;
+bool g_android_controller_present = false;
+bool g_mobile_touch_tablet = false;
 bool g_touch_tutorial_requested_from_settings = false;
 bool g_mouse_tutorial_requested_from_settings = false;
 bool g_character_wheel_tutorial_requested_from_settings = false;
@@ -214,6 +216,8 @@ static void sdl_capture_pane_profile(struct sdl_pane_profile* profile)
     profile->left_panel_compact_mode = config.left_panel_compact_mode;
     profile->left_panel_compact_health_bar =
         config.left_panel_compact_health_bar;
+    profile->quick_touch_buttons_on_left =
+        config.quick_touch_buttons_on_left;
     profile->log_pane_display_filter = config.log_pane_display_filter;
     profile->dice_roll_lock_ms = config.dice_roll_lock_ms;
     profile->dice_roll_overlay_ms = config.dice_roll_overlay_ms;
@@ -285,6 +289,8 @@ void sdl_apply_stored_pane_profile(int mode)
     config.left_panel_compact_mode = profile->left_panel_compact_mode;
     config.left_panel_compact_health_bar =
         profile->left_panel_compact_health_bar;
+    config.quick_touch_buttons_on_left =
+        profile->quick_touch_buttons_on_left;
     config.log_pane_display_filter = profile->log_pane_display_filter;
     config.dice_roll_lock_ms = profile->dice_roll_lock_ms;
     config.dice_roll_overlay_ms = profile->dice_roll_overlay_ms;
@@ -331,6 +337,38 @@ void sdl_seed_all_pane_profiles_from_active(void)
         g_pane_profiles[portrait] = base;
         sdl_pane_profile_apply_portrait_defaults(
             &g_pane_profiles[portrait]);
+    }
+}
+
+void sdl_apply_mobile_tablet_default_profiles(void)
+{
+    if (!g_mobile_touch_tablet
+        || g_startup_device_class != SDL_STARTUP_DEVICE_MOBILE_TOUCH)
+    {
+        return;
+    }
+
+    /*
+     * Portrait always exposes the wheel at runtime, but landscape obeys this
+     * persisted switch.  Keep it enabled in the tablet default scheme or the
+     * corner-touch profile claims most landscape map squares before tap
+     * movement can see them.
+     */
+    config.touch_profile = SDL_TOUCH_PROFILE_ROUND_WHEEL;
+    config.touch_movement_mode = SDL_TOUCH_MOVEMENT_ON;
+    config.touch_round_movement_enabled = true;
+    config.touch_zone_overlay_mode = SDL_TOUCH_ZONE_OVERLAY_OFF;
+
+    for (int orientation = 0;
+         orientation < SDL_PANE_ORIENTATION_COUNT;
+         orientation++)
+    {
+        for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
+            int profile_index = SDL_PANE_PROFILE_INDEX(orientation, mode);
+
+            sdl_pane_profile_apply_tablet_defaults(
+                &g_pane_profiles[profile_index], orientation);
+        }
     }
 }
 

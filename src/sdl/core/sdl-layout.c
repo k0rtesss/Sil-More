@@ -184,12 +184,15 @@ bool sdl_android_has_controller_device(void)
     enum {
         ANDROID_SOURCE_GAMEPAD = 0x00000401,
         ANDROID_SOURCE_JOYSTICK = 0x01000010,
+        ANDROID_KEYBOARD_TYPE_ALPHABETIC = 2,
     };
     JNIEnv* env = (JNIEnv*)SDL_GetAndroidJNIEnv();
     jclass input_device_class = NULL;
     jmethodID get_device_ids = NULL;
     jmethodID get_device = NULL;
     jmethodID get_sources = NULL;
+    jmethodID get_keyboard_type = NULL;
+    jmethodID is_virtual = NULL;
     jintArray ids = NULL;
     jint* id_values = NULL;
     jsize count = 0;
@@ -210,10 +213,16 @@ bool sdl_android_has_controller_device(void)
         "getDevice", "(I)Landroid/view/InputDevice;");
     get_sources = (*env)->GetMethodID(env, input_device_class,
         "getSources", "()I");
+    get_keyboard_type = (*env)->GetMethodID(env, input_device_class,
+        "getKeyboardType", "()I");
+    is_virtual = (*env)->GetMethodID(env, input_device_class,
+        "isVirtual", "()Z");
     if (!get_device_ids || !get_device || !get_sources) {
         sdl_android_clear_pending_exception(env);
         goto cleanup;
     }
+    if (!get_keyboard_type || !is_virtual)
+        sdl_android_clear_pending_exception(env);
 
     ids = (jintArray)(*env)->CallStaticObjectMethod(env, input_device_class,
         get_device_ids);
@@ -233,6 +242,8 @@ bool sdl_android_has_controller_device(void)
         jobject device = (*env)->CallStaticObjectMethod(env, input_device_class,
             get_device, id_values[i]);
         jint sources;
+        jint keyboard_type = 0;
+        jboolean virtual_device = JNI_FALSE;
 
         if ((*env)->ExceptionCheck(env)) {
             sdl_android_clear_pending_exception(env);
@@ -247,11 +258,32 @@ bool sdl_android_has_controller_device(void)
             (*env)->DeleteLocalRef(env, device);
             continue;
         }
+        if (get_keyboard_type) {
+            keyboard_type = (*env)->CallIntMethod(env, device,
+                get_keyboard_type);
+            if ((*env)->ExceptionCheck(env)) {
+                sdl_android_clear_pending_exception(env);
+                keyboard_type = 0;
+            }
+        }
+        if (is_virtual) {
+            virtual_device = (*env)->CallBooleanMethod(env, device,
+                is_virtual);
+            if ((*env)->ExceptionCheck(env)) {
+                sdl_android_clear_pending_exception(env);
+                virtual_device = JNI_FALSE;
+            }
+        }
 
-        /* Phones commonly expose a virtual keyboard with SOURCE_DPAD.  That is
-         * navigation input, not evidence of a handheld/gamepad profile. */
-        if (((sources & ANDROID_SOURCE_GAMEPAD) == ANDROID_SOURCE_GAMEPAD)
-            || ((sources & ANDROID_SOURCE_JOYSTICK) == ANDROID_SOURCE_JOYSTICK))
+        /* Android and SDL can expose tablet keyboard covers as gamepad-like
+         * devices because they include navigation source bits.  An alphabetic
+         * hardware keyboard (or a virtual device) is still keyboard input and
+         * must not select the controller presentation. */
+        if (virtual_device != JNI_TRUE
+            && keyboard_type != ANDROID_KEYBOARD_TYPE_ALPHABETIC
+            && (((sources & ANDROID_SOURCE_GAMEPAD) == ANDROID_SOURCE_GAMEPAD)
+                || ((sources & ANDROID_SOURCE_JOYSTICK)
+                    == ANDROID_SOURCE_JOYSTICK)))
         {
             has_controller = true;
             (*env)->DeleteLocalRef(env, device);
@@ -616,7 +648,7 @@ int sdl_main_menu_button_height_for_screen(const SDL_Rect* screen)
     return MAX((int)(height + 0.5f), 1);
 }
 
-static bool sdl_overlay_stack_visible_rect(enum pane_type pane,
+bool sdl_overlay_stack_visible_rect(enum pane_type pane,
     SDL_Rect* out);
 
 bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
@@ -629,6 +661,8 @@ bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
     int available_w;
     int left_w;
     int right_w;
+    int wheel_w;
+    int quick_touch_w;
     int bottom;
     int overlay_bottom;
     int maximum_h;
@@ -672,12 +706,65 @@ bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
             continue;
         if (pane_type <= PANE_MAIN || pane_type >= PANE_MAX)
             continue;
-        /* The interactive description popup sizes itself around the portrait
-         * thumb controls, so it cannot also define those controls' lane. */
+        /* Description sizes itself around the portrait controls, so it cannot
+         * also define their lane. */
         if (pane_type == PANE_DESCRIPTION)
             continue;
-        if (!sdl_overlay_stack_visible_rect(pane_type, &pane))
+        /*
+         * Quick Access is resolved after the wheel, but its configured
+         * nominal stack row still belongs to the bottom pane stack.  Reserve
+         * that settings-owned row without asking for Quick Access's final
+         * dynamic rectangle, so Stretch never feeds back into wheel
+         * placement.
+        */
+        if (pane_type == PANE_OVERLAY_MENU) {
+            SDL_Rect quick_anchor;
+            SDL_Rect quick_screen;
+            enum pane_placement quick_where;
+            int reserved_h;
+            int pane_bottom;
+
+            if (!sdl_touch_top_panel_layout_visible()
+                || (config.touch_top_panel_arrows_visible
+                    && !g_touch_top_panel_open))
+            {
+                continue;
+            }
+            reserved_h = sdl_touch_top_panel_reserved_stack_height(&screen);
+            if (reserved_h <= 0)
+                continue;
+
+            /*
+             * The nominal allocator can leave Quick Access with a zero-sized
+             * rectangle after allocating earlier panes.  Resolve its bottom
+             * edge from configured stack order and the preceding live pane,
+             * using the same settings-derived anchor as the final renderer.
+             */
+            if (sdl_left_panel_pane_placement_is_bottom(where)
+                && sdl_touch_top_panel_current_anchor(&quick_screen,
+                    &quick_anchor, &quick_where)
+                && quick_where == where && sdl_rect_has_area(&quick_anchor))
+            {
+                pane_bottom = quick_anchor.y + quick_anchor.h;
+                pane = (SDL_Rect){
+                    .x = quick_anchor.x,
+                    .y = pane_bottom - reserved_h,
+                    .w = quick_anchor.w,
+                    .h = reserved_h,
+                };
+            } else {
+                pane = g_pane_rects[pane_type];
+                if (!sdl_rect_has_area(&pane))
+                    continue;
+                if (reserved_h > pane.h) {
+                    pane_bottom = pane.y + pane.h;
+                    pane.y = pane_bottom - reserved_h;
+                    pane.h = reserved_h;
+                }
+            }
+        } else if (!sdl_overlay_stack_visible_rect(pane_type, &pane)) {
             continue;
+        }
         if (pane.y >= screen.y + screen.h
             || pane.y + pane.h <= screen.y)
         {
@@ -702,21 +789,29 @@ bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
     if (maximum_h < 112)
         return false;
 
-    right_w = available_w * 26 / 100;
-    left_w = available_w - gap - right_w;
+    quick_touch_w = available_w * 26 / 100;
+    wheel_w = available_w - gap - quick_touch_w;
+    if (config.quick_touch_buttons_on_left) {
+        left_w = quick_touch_w;
+        right_w = wheel_w;
+    } else {
+        left_w = wheel_w;
+        right_w = quick_touch_w;
+    }
     if (left_w < 56 || right_w < 56)
         return false;
     /* Preserve the normal square control dock while there is room.  Bottom
      * overlays therefore move it upward without resizing it; only a collision
      * with the upper overlay boundary is allowed to compress the dock. */
-    dock_h = left_w;
+    dock_h = wheel_w;
     if (dock_h > maximum_h)
         dock_h = maximum_h;
     if (dock_h < 112)
         return false;
     dock_y = bottom - dock_h;
 
-    /* The wheel owns every available pixel left of the two-button column. */
+    /* Keep the physical left/right regions stable while allowing the
+     * orientation profile to choose which one owns Quick Touch. */
     if (out_left) {
         *out_left = (SDL_Rect){
             .x = screen.x + margin,
@@ -2607,7 +2702,7 @@ static void sdl_frect_to_covering_rect(const SDL_FRect* source,
 /* Return the rectangle that is actually painted for a configurable overlay.
  * Several SDL overlays deliberately shrink their configured anchor to live
  * content, so the nominal pane rectangle is not enough to pack a stack. */
-static bool sdl_overlay_stack_visible_rect(enum pane_type pane,
+bool sdl_overlay_stack_visible_rect(enum pane_type pane,
     SDL_Rect* out)
 {
     SDL_FRect frect;
@@ -2799,6 +2894,22 @@ static bool sdl_overlay_placement_is_left(
         || where == PLACE_BOTTOM_LEFT;
 }
 
+/*
+ * Stack order comes entirely from pane_config.  Quick Access is calculated
+ * after the other panes and the wheel, so stack reflow uses only its
+ * configured anchor and never asks for its final dynamic rectangle.
+ */
+static bool sdl_overlay_stack_order_rect(enum pane_type pane, SDL_Rect* out)
+{
+    if (!out || pane <= PANE_MAIN || pane >= PANE_MAX)
+        return false;
+    if (pane == PANE_OVERLAY_MENU) {
+        *out = g_pane_rects[pane];
+        return sdl_rect_has_area(out);
+    }
+    return sdl_overlay_stack_visible_rect(pane, out);
+}
+
 static void sdl_overlay_shared_side_edges(int* out_left,
     bool* out_have_left, int* out_right, bool* out_have_right)
 {
@@ -2816,7 +2927,7 @@ static void sdl_overlay_shared_side_edges(int* out_left,
             continue;
         if (pane <= PANE_MAIN || pane >= PANE_MAX)
             continue;
-        if (!sdl_overlay_stack_visible_rect(pane, &visible))
+        if (!sdl_overlay_stack_order_rect(pane, &visible))
             continue;
 
         if (!have_left && sdl_overlay_placement_is_left(where)) {
@@ -2888,11 +2999,9 @@ static void sdl_apply_overlay_stack_layout(void)
         bool right = sdl_left_panel_pane_placement_is_right(where);
         bool center = sdl_left_panel_pane_placement_is_horizontal_center(
             where);
-        /* Dynamic overlays can change shape after a neighbour moves.  Quick
-         * Access, for example, expands into horizontal space returned by a
-         * pane that has just moved above it.  Reflow the whole slot a few
-         * times so those new measurements feed back into the stack instead
-         * of recreating an overlap after the one-pass placement. */
+        /* Dynamic overlays can change shape after a neighbour moves.  Reflow
+         * the whole slot a few times so those new measurements feed back into
+         * the stack instead of recreating an overlap after one pass. */
         for (int pass = 0; pass < 3; pass++) {
             bool have_first = false;
             int cursor_y = 0;
@@ -2905,7 +3014,7 @@ static void sdl_apply_overlay_stack_layout(void)
                     continue;
                 if (pane <= PANE_MAIN || pane >= PANE_MAX)
                     continue;
-                if (!sdl_overlay_stack_visible_rect(pane, &visible))
+                if (!sdl_overlay_stack_order_rect(pane, &visible))
                     continue;
 
                 {
@@ -2925,7 +3034,7 @@ static void sdl_apply_overlay_stack_layout(void)
                 /* Re-read the live rectangle after moving its anchor.
                  * Dynamic panels can clamp to the safe screen or change
                  * their packing. */
-                if (!sdl_overlay_stack_visible_rect(pane, &visible))
+                if (!sdl_overlay_stack_order_rect(pane, &visible))
                     continue;
                 cursor_y = bottom ? visible.y : visible.y + visible.h;
                 have_first = true;
@@ -3123,9 +3232,8 @@ void sdl_apply_startup_input_defaults_to_config(
     if (!target)
         return;
 
-    target->gamepad_enabled = controller_ui;
-    target->gamepad_auto_mode = controller_ui;
-    target->steamdeck_mode = controller_ui;
+    target->input_ui_mode = SDL_INPUT_UI_MODE_AUTO;
+    target->gamepad_enabled = true;
     target->mouse_enabled = !controller_ui
         && (device == SDL_STARTUP_DEVICE_DESKTOP);
 
@@ -3176,11 +3284,13 @@ void sdl_apply_first_start_device_defaults(
     sdl_apply_startup_input_defaults_to_config(&config, device);
     sdl_set_touch_pane_config_enabled(touch_pane_enabled);
 
-    log_info("First-start device defaults: profile=%s controller_input=%s "
-             "controller_ui=%s mouse=%s touch_pane=%s menu_letters=%s",
+    log_info("First-start device defaults: profile=%s input_ui=%s "
+             "controller_input=%s controller_ui=%s mouse=%s touch_pane=%s "
+             "menu_letters=%s",
         sdl_startup_device_class_name(device),
+        get_sdl_input_ui_mode_label(config.input_ui_mode),
         config.gamepad_enabled ? "on" : "off",
-        config.steamdeck_mode ? "on" : "off",
+        steamdeck_controls_active() ? "on" : "off",
         config.mouse_enabled ? "on" : "off",
         touch_pane_enabled ? "on" : "off",
         (device == SDL_STARTUP_DEVICE_DESKTOP) ? "on" : "off");
@@ -3199,12 +3309,15 @@ sdl_startup_device_class sdl_detect_startup_device_class(
 
 #if defined(SDL_PLATFORM_ANDROID)
     android_has_controller = sdl_android_has_controller_device();
+    g_android_controller_present = android_has_controller;
     if (android_has_controller && !has_gamepad) {
         log_info("Android InputDevice reports a controller before SDL has an opened gamepad");
+    } else if (!android_has_controller && has_gamepad) {
+        log_info("Ignoring SDL gamepad classification because Android InputDevice reports no non-keyboard controller");
     }
 #endif
 
-    return (has_gamepad || android_has_controller)
+    return android_has_controller
         ? SDL_STARTUP_DEVICE_ANDROID_HANDHELD
         : SDL_STARTUP_DEVICE_MOBILE_TOUCH;
 #elif defined(SIL_IOS)
@@ -3216,6 +3329,15 @@ sdl_startup_device_class sdl_detect_startup_device_class(
     (void)screen_width;
     (void)screen_height;
     return SDL_STARTUP_DEVICE_DESKTOP;
+}
+
+bool sdl_mobile_device_is_tablet(void)
+{
+#if SIL_SDL_MOBILE_BUILD
+    return SDL_IsTablet();
+#else
+    return false;
+#endif
 }
 
 #if SIL_SDL_HANDHELD_DEFAULTS_BUILD
@@ -3408,9 +3530,7 @@ bool sdl_touch_pane_is_left_placement(void)
 bool sdl_touch_only_mobile_device_active(void)
 {
 #if SIL_SDL_MOBILE_BUILD
-    return g_direct_touch_present
-        && g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH
-        && !steamdeck_controls_active();
+    return g_direct_touch_present && !steamdeck_controls_active();
 #else
     return false;
 #endif
@@ -5475,6 +5595,7 @@ bool sdl_prompt_reset_sdl_defaults(const char* issue_summary,
 
     sdl_reset_config_to_resolution_defaults(screen_width, screen_height);
     sdl_ensure_default_pane_profiles_present(false);
+    sdl_apply_mobile_tablet_default_profiles();
     sdl_apply_stored_pane_profile(config.min_terminal_mode);
     sdl_ensure_touch_pane_config_present();
     sdl_touch_pane_ensure_main_panel_confirm();

@@ -738,6 +738,7 @@ void sdl_reset_interface_settings_to_defaults(void)
 
     sdl_reset_config_to_resolution_defaults(screen_w, screen_h);
     sdl_ensure_default_pane_profiles_present(false);
+    sdl_apply_mobile_tablet_default_profiles();
 #if SIL_SDL_MOBILE_BUILD
     /* Reset both orientation profiles, then remain in the orientation from
      * which Reset was requested instead of jumping to landscape defaults. */
@@ -996,8 +997,20 @@ static int sdl_pane_default_config_index(int index)
 bool get_sdl_pane_default_enabled(int index)
 {
     int di = sdl_pane_default_config_index(index);
+
     if (di < 0)
         return get_sdl_pane_enabled(index);
+#if SIL_SDL_MOBILE_BUILD
+    if (g_mobile_touch_tablet && !config.mobile_portrait_mode) {
+        if (pane_config[index].pane == PANE_DEPTH
+            || pane_config[index].pane == PANE_STATUS)
+        {
+            return true;
+        }
+        if (pane_config[index].pane == PANE_STATUS_DEPTH)
+            return false;
+    }
+#endif
     return default_pane_config[di].enabled;
 }
 
@@ -1006,6 +1019,13 @@ int get_sdl_pane_default_where(int index)
     int di = sdl_pane_default_config_index(index);
     if (di < 0)
         return get_sdl_pane_where(index);
+#if SIL_SDL_MOBILE_BUILD
+    if (g_mobile_touch_tablet && !config.mobile_portrait_mode
+        && pane_config[index].pane == PANE_STATUS)
+    {
+        return (int)PLACE_BOTTOM_CENTER;
+    }
+#endif
     if (pane_config[index].pane == PANE_STATUS)
         return (int)sdl_default_status_pane_placement(pane_config,
             pane_config_count);
@@ -1018,6 +1038,8 @@ int get_sdl_pane_default_rows(int index)
     if (di < 0)
         return 0;
 #if SIL_SDL_MOBILE_BUILD
+    if (g_mobile_touch_tablet && pane_config[index].pane == PANE_ROLLS)
+        return 8;
     if (config.mobile_portrait_mode
         && pane_config[index].pane == PANE_ROLLS)
     {
@@ -1360,6 +1382,18 @@ bool get_sdl_left_panel_expanded_on_launch(void)
     return config.left_panel_expanded_on_launch;
 }
 
+bool get_sdl_left_panel_expanded_default_on_launch(void)
+{
+    struct sdl_config defaults;
+
+    sdl_config_set_defaults(&defaults);
+#if SIL_SDL_MOBILE_BUILD
+    if (g_mobile_touch_tablet && config.mobile_portrait_mode)
+        return true;
+#endif
+    return defaults.left_panel_expanded_on_launch;
+}
+
 void set_sdl_left_panel_expanded_on_launch(bool value)
 {
     config.left_panel_expanded_on_launch = value;
@@ -1396,6 +1430,31 @@ void set_sdl_left_panel_compact_health_bar(bool value)
     config.left_panel_compact_health_bar = value;
     sdl_update_left_panel_pane_rect();
     g_state.need_present = true;
+}
+
+bool get_sdl_quick_touch_buttons_on_left(void)
+{
+    return config.quick_touch_buttons_on_left;
+}
+
+void set_sdl_quick_touch_buttons_on_left(bool value)
+{
+    if (config.quick_touch_buttons_on_left == value)
+        return;
+
+    config.quick_touch_buttons_on_left = value;
+    sdl_touch_thumb_cancel_press();
+    sdl_touch_round_cancel_press();
+    g_state.need_present = true;
+}
+
+bool get_sdl_quick_touch_buttons_default_on_left(void)
+{
+#if SIL_SDL_MOBILE_BUILD
+    return g_mobile_touch_tablet && config.mobile_portrait_mode;
+#else
+    return false;
+#endif
 }
 
 /* Intro style: -1 = random (INTRO_STYLE_RANDOM), 0-6 = fixed variant. */
@@ -1521,22 +1580,27 @@ void sdl_touch_pane_load_default_bindings(void)
 
 bool steamdeck_controls_active(void)
 {
-    if (config.steamdeck_mode)
+    int mode = get_sdl_input_ui_mode();
+
+    if (mode == SDL_INPUT_UI_MODE_CONTROLLER)
         return true;
-    if (!config.gamepad_enabled)
-        return false;
-    if (!config.gamepad_auto_mode)
+    if (mode == SDL_INPUT_UI_MODE_PLATFORM)
         return false;
 
+#if defined(SDL_PLATFORM_ANDROID)
+    return g_android_controller_present;
+#else
     return g_gamepad_auto_ui || (g_gamepad_state.pad_count > 0);
+#endif
 }
 
 bool sdl_menu_letters_enabled(void)
 {
-    if (g_startup_device_class != SDL_STARTUP_DEVICE_DESKTOP)
-        return false;
-
+#if SIL_SDL_MOBILE_BUILD
+    return false;
+#else
     return !steamdeck_controls_active();
+#endif
 }
 
 bool sdl_touch_only_device_active(void)
@@ -1558,6 +1622,54 @@ bool portable_controls_active(void)
 bool get_sdl_gamepad_enabled(void)
 {
     return config.gamepad_enabled;
+}
+
+int get_sdl_input_ui_mode(void)
+{
+    if (config.input_ui_mode < SDL_INPUT_UI_MODE_AUTO
+        || config.input_ui_mode >= SDL_INPUT_UI_MODE_COUNT)
+    {
+        return SDL_INPUT_UI_MODE_AUTO;
+    }
+
+    return config.input_ui_mode;
+}
+
+void set_sdl_input_ui_mode(int mode)
+{
+    if (mode < SDL_INPUT_UI_MODE_AUTO || mode >= SDL_INPUT_UI_MODE_COUNT)
+        mode = SDL_INPUT_UI_MODE_AUTO;
+    if (config.input_ui_mode == mode)
+        return;
+
+    config.input_ui_mode = mode;
+    sdl_touch_cancel_all_inputs();
+    if (g_state.window) {
+        sdl_resize_for_current_layout();
+        sdl_request_redraw();
+    }
+}
+
+const char* get_sdl_input_ui_mode_label(int mode)
+{
+    switch (mode) {
+    case SDL_INPUT_UI_MODE_PLATFORM:
+#if SIL_SDL_MOBILE_BUILD
+        return "Touch";
+#else
+        return "Keyboard";
+#endif
+    case SDL_INPUT_UI_MODE_CONTROLLER:
+        return "Controller";
+    case SDL_INPUT_UI_MODE_AUTO:
+    default:
+        return "Auto";
+    }
+}
+
+int get_sdl_input_ui_default_mode(void)
+{
+    return SDL_INPUT_UI_MODE_AUTO;
 }
 
 void set_sdl_gamepad_enabled(bool value)
@@ -1592,26 +1704,6 @@ void set_sdl_gamepad_enabled(bool value)
         sdl_touch_top_panel_cancel_press();
         sdl_touch_round_cancel_press();
     }
-}
-
-bool get_sdl_gamepad_auto_mode(void)
-{
-    return config.gamepad_auto_mode;
-}
-
-void set_sdl_gamepad_auto_mode(bool value)
-{
-    config.gamepad_auto_mode = value;
-}
-
-bool get_sdl_steamdeck_mode(void)
-{
-    return config.steamdeck_mode;
-}
-
-void set_sdl_steamdeck_mode(bool value)
-{
-    config.steamdeck_mode = value;
 }
 
 bool get_sdl_steamdeck_inv_equip_same_button_cycle(void)
@@ -1687,20 +1779,6 @@ bool get_sdl_gamepad_default_enabled(void)
     struct sdl_config defaults;
     sdl_gamepad_toggle_defaults(&defaults);
     return defaults.gamepad_enabled;
-}
-
-bool get_sdl_gamepad_default_auto_mode(void)
-{
-    struct sdl_config defaults;
-    sdl_gamepad_toggle_defaults(&defaults);
-    return defaults.gamepad_auto_mode;
-}
-
-bool get_sdl_steamdeck_default_mode(void)
-{
-    struct sdl_config defaults;
-    sdl_gamepad_toggle_defaults(&defaults);
-    return defaults.steamdeck_mode;
 }
 
 bool get_sdl_steamdeck_default_inv_equip_same_button_cycle(void)

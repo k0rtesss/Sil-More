@@ -40,8 +40,14 @@ def readOptionalBuildValue = { String name ->
     return null
 }
 
-def androidCompileSdk = (readOptionalBuildValue('SIL_MORE_COMPILE_SDK') ?: '34') as Integer
-def androidTargetSdk = (readOptionalBuildValue('SIL_MORE_TARGET_SDK') ?: '34') as Integer
+def androidCompileSdk = (readOptionalBuildValue('SIL_MORE_COMPILE_SDK') ?: '36') as Integer
+def androidTargetSdk = (readOptionalBuildValue('SIL_MORE_TARGET_SDK') ?: '36') as Integer
+
+if (androidCompileSdk < androidTargetSdk) {
+    throw new GradleException(
+            "Compile SDK ($androidCompileSdk) must be at least the target SDK ($androidTargetSdk)."
+    )
+}
 
 def releaseStoreFile = readOptionalBuildValue('SIL_MORE_RELEASE_STORE_FILE')
 def releaseStorePassword = readOptionalBuildValue('SIL_MORE_RELEASE_STORE_PASSWORD')

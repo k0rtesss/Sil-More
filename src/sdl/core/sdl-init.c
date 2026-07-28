@@ -136,6 +136,9 @@ errr init_sdl(int argc, char **argv)
     enum sdl_config_load_status config_load_status = SDL_CONFIG_LOAD_OK;
     struct sdl_config_load_info config_load_info = { 0 };
     char startup_issue_summary[SDL_STARTUP_ISSUE_MAX];
+#if SIL_SDL_DESKTOP_HANDHELD_BUILD
+    bool desktop_input_prompted = false;
+#endif
 
     startup_issue_summary[0] = '\0';
 
@@ -346,10 +349,15 @@ errr init_sdl(int argc, char **argv)
 
     g_startup_device_class = sdl_detect_startup_device_class(screen_pixels_w,
         screen_pixels_h);
+    g_mobile_touch_tablet =
+        g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH
+        && g_gamepad_state.pad_count == 0
+        && sdl_mobile_device_is_tablet();
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD
     if (!config_exists && g_gamepad_state.pad_count > 0
         && g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP)
     {
+        desktop_input_prompted = true;
         g_startup_device_class =
             sdl_prompt_desktop_startup_input_device(screen_pixels_w,
                 screen_pixels_h);
@@ -361,6 +369,12 @@ errr init_sdl(int argc, char **argv)
         g_gamepad_state.pad_count,
         (g_gamepad_state.pad_count == 1) ? "" : "s",
         config_exists ? ", loaded config" : ", first start");
+#if SIL_SDL_MOBILE_BUILD
+    if (g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH) {
+        log_info("Mobile touch device form factor: %s (logical display %dx%d)",
+            g_mobile_touch_tablet ? "tablet" : "phone", screen.w, screen.h);
+    }
+#endif
 
     /* Builds between the round-wheel rollout and full touch-config
      * persistence saved a partial touchControl object.  On touch-only mobile
@@ -407,9 +421,21 @@ errr init_sdl(int argc, char **argv)
                     &g_pane_profiles[profile_index]);
             }
         }
+        sdl_apply_mobile_tablet_default_profiles();
         sdl_apply_stored_pane_profile(config.min_terminal_mode);
 #endif
         sdl_apply_first_start_device_defaults(g_startup_device_class);
+#if SIL_SDL_DESKTOP_HANDHELD_BUILD
+        if (desktop_input_prompted) {
+            config.input_ui_mode =
+                (g_startup_device_class
+                    == SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER)
+                ? SDL_INPUT_UI_MODE_CONTROLLER
+                : SDL_INPUT_UI_MODE_PLATFORM;
+            log_info("First-start desktop input selection: input_ui=%s",
+                get_sdl_input_ui_mode_label(config.input_ui_mode));
+        }
+#endif
 #if SIL_SDL_MOBILE_BUILD
         {
             int quick_access_count = get_sdl_touch_top_panel_cell_count();

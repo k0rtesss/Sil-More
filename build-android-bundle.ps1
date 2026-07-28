@@ -1,10 +1,9 @@
 param(
     [ValidateRange(1, 100)]
-    [int]$TargetSdk = 35,
+    [int]$TargetSdk = 36,
 
-    # Leave at 0 to use android/app/build.gradle's default compile SDK.
-    [ValidateRange(0, 100)]
-    [int]$CompileSdk = 0,
+    [ValidateRange(1, 100)]
+    [int]$CompileSdk = 36,
 
     [string]$KeystorePath = $env:SIL_MORE_RELEASE_STORE_FILE,
 
@@ -228,13 +227,14 @@ function Set-ProcessEnvironmentValue {
     [Environment]::SetEnvironmentVariable($Name, $Value, 'Process')
 }
 
-if ($TargetSdk -lt 35) {
-    Write-Warning "Target SDK $TargetSdk is below the current Google Play phone/tablet requirement of API 35."
+if ($TargetSdk -lt 36) {
+    Write-Warning "Target SDK $TargetSdk is below the Google Play requirement of API 36 effective August 30, 2026."
 }
 
-if ($CompileSdk -gt 0) {
-    Assert-AndroidPlatformInstalled -ApiLevel $CompileSdk
+if ($CompileSdk -lt $TargetSdk) {
+    throw "Compile SDK $CompileSdk must be at least the target SDK $TargetSdk."
 }
+Assert-AndroidPlatformInstalled -ApiLevel $CompileSdk
 
 $androidDir = Join-Path $PSScriptRoot 'android'
 if (-not (Test-Path $androidDir)) {
@@ -313,9 +313,7 @@ try {
         '-PSIL_MORE_REQUIRE_RELEASE_SIGNING=true'
     )
 
-    if ($CompileSdk -gt 0) {
-        $gradleArgs += "-PSIL_MORE_COMPILE_SDK=$CompileSdk"
-    }
+    $gradleArgs += "-PSIL_MORE_COMPILE_SDK=$CompileSdk"
 
     if ($Clean) {
         $gradleArgs += 'clean'
@@ -326,11 +324,7 @@ try {
     Write-Host "Building Play Store app bundle..." -ForegroundColor Cyan
     Write-Host "Version: $version" -ForegroundColor Cyan
     Write-Host "Target SDK: $TargetSdk" -ForegroundColor Cyan
-    if ($CompileSdk -gt 0) {
-        Write-Host "Compile SDK: $CompileSdk" -ForegroundColor Cyan
-    } else {
-        Write-Host 'Compile SDK: project default' -ForegroundColor Cyan
-    }
+    Write-Host "Compile SDK: $CompileSdk" -ForegroundColor Cyan
     Write-Host "Keystore: $keystoreFile" -ForegroundColor Cyan
     Write-Host "Key alias: $KeystoreAlias" -ForegroundColor Cyan
 

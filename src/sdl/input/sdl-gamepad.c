@@ -86,8 +86,21 @@ int sdl_gamepad_combo_binding_for_input(int modifier, int type, int id)
 
 void sdl_gamepad_mark_auto_ui(void)
 {
-    if (config.gamepad_auto_mode)
-        g_gamepad_auto_ui = true;
+    if (get_sdl_input_ui_mode() != SDL_INPUT_UI_MODE_AUTO
+        || g_gamepad_auto_ui)
+    {
+        return;
+    }
+
+#if defined(SDL_PLATFORM_ANDROID)
+    /* SDL treats some Android keyboard covers with navigation keys as
+     * gamepads.  Only a non-keyboard Android controller may enable the
+     * controller presentation automatically. */
+    if (!sdl_android_has_controller_device())
+        return;
+#endif
+
+    g_gamepad_auto_ui = true;
 }
 
 void sdl_gamepad_apply_modifier(int binding, bool down)
@@ -2181,6 +2194,16 @@ void sdl_gamepad_handle_device(const SDL_GamepadDeviceEvent* ev)
     } else if (ev->type == SDL_EVENT_GAMEPAD_REMOVED) {
         sdl_gamepad_close(ev->which);
     }
+#if defined(SDL_PLATFORM_ANDROID)
+    g_android_controller_present = sdl_android_has_controller_device();
+    if (!g_android_controller_present) {
+        g_gamepad_auto_ui = false;
+        if (g_direct_touch_present)
+            g_startup_device_class = SDL_STARTUP_DEVICE_MOBILE_TOUCH;
+    } else if (g_direct_touch_present) {
+        g_startup_device_class = SDL_STARTUP_DEVICE_ANDROID_HANDHELD;
+    }
+#endif
 }
 
 void sdl_gamepad_init(void)

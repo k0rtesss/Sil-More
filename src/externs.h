@@ -849,11 +849,10 @@ extern void create_smithing_item(void);
 #define MAIN_MENU_OPTIONS 12
 #define MAIN_MENU_HELP 13
 #define MAIN_MENU_ABOUT 14
-#define MAIN_MENU_PRIVACY_POLICY 15
-#define MAIN_MENU_SAVE 16
-#define MAIN_MENU_SAVE_QUIT 17
-#define MAIN_MENU_RETURN_GAME 18
-#define MAIN_MENU_MAX 18
+#define MAIN_MENU_SAVE 15
+#define MAIN_MENU_SAVE_QUIT 16
+#define MAIN_MENU_RETURN_GAME 17
+#define MAIN_MENU_MAX 17
 extern cptr main_menu_title(int choice);
 extern int main_menu_keyboard_key(int choice);
 extern void main_menu_shortcut_label(int choice, char* buf, size_t buflen);
@@ -2415,11 +2414,15 @@ extern byte g_left_panel_quiver_attack_end_cols[2];
 extern bool get_sdl_hide_left_panel(void);
 extern bool sdl_left_panel_pane_renders_character_panel(void);
 extern bool get_sdl_left_panel_expanded_on_launch(void);
+extern bool get_sdl_left_panel_expanded_default_on_launch(void);
 extern void set_sdl_left_panel_expanded_on_launch(bool value);
 extern int get_sdl_left_panel_compact_mode(void);
 extern void set_sdl_left_panel_compact_mode(int mode);
 extern bool get_sdl_left_panel_compact_health_bar(void);
 extern void set_sdl_left_panel_compact_health_bar(bool value);
+extern bool get_sdl_quick_touch_buttons_on_left(void);
+extern void set_sdl_quick_touch_buttons_on_left(bool value);
+extern bool get_sdl_quick_touch_buttons_default_on_left(void);
 extern void redraw_hidden_left_panel_overlay(void);
 extern int get_sdl_pane_type(int index);
 extern int get_sdl_pane_where(int index);
@@ -2464,10 +2467,10 @@ extern bool sdl_menu_letters_enabled(void);
 extern bool portable_controls_active(void);
 extern bool get_sdl_gamepad_enabled(void);
 extern void set_sdl_gamepad_enabled(bool value);
-extern bool get_sdl_gamepad_auto_mode(void);
-extern void set_sdl_gamepad_auto_mode(bool value);
-extern bool get_sdl_steamdeck_mode(void);
-extern void set_sdl_steamdeck_mode(bool value);
+extern int get_sdl_input_ui_mode(void);
+extern void set_sdl_input_ui_mode(int mode);
+extern const char* get_sdl_input_ui_mode_label(int mode);
+extern int get_sdl_input_ui_default_mode(void);
 extern bool get_sdl_steamdeck_inv_equip_same_button_cycle(void);
 extern void set_sdl_steamdeck_inv_equip_same_button_cycle(bool value);
 extern bool get_sdl_gamepad_use_dpad(void);
@@ -2475,8 +2478,6 @@ extern void set_sdl_gamepad_use_dpad(bool value);
 extern bool get_sdl_gamepad_use_left_stick(void);
 extern void set_sdl_gamepad_use_left_stick(bool value);
 extern bool get_sdl_gamepad_default_enabled(void);
-extern bool get_sdl_gamepad_default_auto_mode(void);
-extern bool get_sdl_steamdeck_default_mode(void);
 extern bool get_sdl_steamdeck_default_inv_equip_same_button_cycle(void);
 extern bool get_sdl_gamepad_default_use_dpad(void);
 extern bool get_sdl_gamepad_default_use_left_stick(void);

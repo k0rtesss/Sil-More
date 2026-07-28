@@ -54,6 +54,11 @@
 #define SDL_MOVEMENT_PRESET_VI_KEYS 3
 #define SDL_MOVEMENT_PRESET_CLASSIC_SIL 4
 
+#define SDL_INPUT_UI_MODE_AUTO 0
+#define SDL_INPUT_UI_MODE_PLATFORM 1
+#define SDL_INPUT_UI_MODE_CONTROLLER 2
+#define SDL_INPUT_UI_MODE_COUNT 3
+
 #define GAMEPAD_BIND_NONE -1
 #define GAMEPAD_BIND_SHIFT -2
 #define GAMEPAD_BIND_CTRL -3
@@ -182,6 +187,7 @@ struct sdl_pane_profile {
     bool left_panel_expanded_on_launch;
     int left_panel_compact_mode;
     bool left_panel_compact_health_bar;
+    bool quick_touch_buttons_on_left;
     int log_pane_display_filter;
     int dice_roll_lock_ms;
     int dice_roll_overlay_ms;
@@ -280,10 +286,9 @@ struct sdl_config {
     u16b movement_binding_count;
     movement_input_binding movement_bindings[SDL_MOVEMENT_BINDING_MAX];
 
-    // Gamepad/controller settings
+    // Input presentation and gamepad/controller settings
+    int input_ui_mode;                   // Auto, platform-native touch/keyboard, or controller UI
     bool gamepad_enabled;                 // Enable gamepad input
-    bool gamepad_auto_mode;               // Auto-enable controller UI when gamepad is present/used
-    bool steamdeck_mode;                  // Controller UI mode setting
     bool steamdeck_inv_equip_same_button_cycle; // In controller UI, pressing inventory/equipment again cycles to the other menu
     bool gamepad_use_dpad;                // Use d-pad for movement
     bool gamepad_use_left_stick;          // Use left stick for movement
@@ -325,6 +330,7 @@ struct sdl_config {
     int touch_top_panel_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
     int touch_top_panel_long_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
     bool touch_thumb_enabled;
+    bool quick_touch_buttons_on_left;
     int touch_thumb_bindings[SDL_TOUCH_THUMB_BUTTON_COUNT];
     int touch_thumb_long_bindings[SDL_TOUCH_THUMB_BUTTON_COUNT];
     bool touch_swipe_enabled;
@@ -348,6 +354,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
 void sdl_pane_config_apply_portrait_default(struct pane_config* pane);
 void sdl_pane_profile_apply_portrait_defaults(
     struct sdl_pane_profile* profile);
+void sdl_pane_profile_apply_tablet_defaults(
+    struct sdl_pane_profile* profile, int orientation);
 
 // Set default configuration values
 void sdl_config_set_defaults(struct sdl_config* config);
