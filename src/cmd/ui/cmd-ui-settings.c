@@ -3091,10 +3091,10 @@ void do_cmd_pane_settings(void)
             ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
-                "Portrait Mode",
-                "Portrait Mode",
-                "Portrait"),
-            get_sdl_mobile_portrait_mode() ? "yes" : "no",
+                "Orientation",
+                "Orientation",
+                "Orient."),
+            get_sdl_mobile_portrait_mode() ? "portrait" : "landscape",
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MOBILE_PORTRAIT_MODE, 4,
             a, buf);
@@ -3269,8 +3269,8 @@ void do_cmd_pane_settings(void)
                     "desktop and 3 on mobile.",
 #if defined(__ANDROID__) || defined(SIL_IOS)
                 [PANE_SETTING_MOBILE_PORTRAIT_MODE] =
-                    "Use the device's real portrait orientation. Turning it "
-                    "off returns the game to landscape. Pane and overlay "
+                    "Choose the device's real portrait or landscape "
+                    "orientation. Pane and overlay "
                     "layouts are saved separately for portrait and landscape.",
 #endif
                 [PANE_SETTING_ENABLE_SIDE_PANES] =

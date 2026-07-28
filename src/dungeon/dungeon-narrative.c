@@ -326,6 +326,42 @@ static cptr partition_display_name(level_partition_kind kind)
     }
 }
 
+static cptr partition_popup_name(level_partition_kind kind)
+{
+    switch (kind)
+    {
+    case LEVEL_PART_ROOMY:
+        return "Rooms";
+    case LEVEL_PART_CAVEY:
+        return "Caves";
+    case LEVEL_PART_RUINED:
+        return "Ruins";
+    case LEVEL_PART_LABYRINTH:
+        return "Labyrinth";
+    case LEVEL_PART_CHASM:
+        return "Chasm";
+    case LEVEL_PART_BIG_CAVE:
+        if (p_ptr)
+        {
+            switch (level_partition_big_cave_type_for_point(
+                p_ptr->py, p_ptr->px))
+            {
+            case BIG_CAVE_FIRE:
+                return "Fire";
+            case BIG_CAVE_ICE:
+                return "Cold";
+            case BIG_CAVE_POIS:
+                return "Poison";
+            default:
+                break;
+            }
+        }
+        return "Big Cave";
+    default:
+        return NULL;
+    }
+}
+
 static byte partition_discovery_lore_flag(level_partition_kind kind)
 {
     if (!p_ptr)
@@ -489,6 +525,7 @@ void handle_partition_entry(bool force_message, int narrative_mode)
     if ((pi >= 0) && (pi != last_partition_pi) && !p_ptr->restoring)
     {
         cptr name = partition_display_name(kind);
+        cptr popup_name = partition_popup_name(kind);
         if (name)
         {
             char entry_message[80];
@@ -496,6 +533,8 @@ void handle_partition_entry(bool force_message, int narrative_mode)
                 "You have entered a %s partition.", name);
             queue_message_recall_only(entry_message);
         }
+        if (popup_name)
+            sdl_popup_notification_show(popup_name);
     }
 
     /*

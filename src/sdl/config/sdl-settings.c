@@ -19,8 +19,8 @@ void get_sdl_config_info(char* buf, size_t size)
         config.mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)
     offset += (size_t)strnfmt(buf + offset, size - offset,
-        "Mobile Portrait Mode: %s\n",
-        config.mobile_portrait_mode ? "Yes" : "No");
+        "Orientation: %s\n",
+        config.mobile_portrait_mode ? "portrait" : "landscape");
 #endif
     offset += (size_t)strnfmt(buf + offset, size - offset, "Minimum Terminal Size: %s (%dx%d)\n",
         sdl_min_terminal_mode_name(config.min_terminal_mode),
@@ -207,20 +207,6 @@ void set_sdl_mobile_starting_zoom_offset(int value)
     config.mobile_starting_zoom_offset = value;
 }
 
-void sdl_set_mobile_orientation_hint(bool portrait)
-{
-#if defined(__ANDROID__) || defined(SIL_IOS)
-    const char* orientations = portrait
-        ? "Portrait PortraitUpsideDown"
-        : "LandscapeLeft LandscapeRight";
-
-    if (!SDL_SetHint(SDL_HINT_ORIENTATIONS, orientations))
-        log_warn("Could not set SDL mobile orientation hint to %s", orientations);
-#else
-    (void)portrait;
-#endif
-}
-
 #if defined(__ANDROID__)
 static void sdl_android_request_orientation(bool portrait)
 {
@@ -261,6 +247,26 @@ cleanup:
 }
 #endif
 
+void sdl_set_mobile_orientation_hint(bool portrait)
+{
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    const char* orientations = portrait
+        ? "Portrait PortraitUpsideDown"
+        : "LandscapeLeft LandscapeRight";
+
+    if (!SDL_SetHint(SDL_HINT_ORIENTATIONS, orientations))
+        log_warn("Could not set SDL mobile orientation hint to %s", orientations);
+#if defined(__ANDROID__)
+    /* Android 16 may not consume a changed SDL hint after its activity has
+     * already been created.  Apply the saved orientation through the activity
+     * bridge at startup as well as when the setting changes. */
+    sdl_android_request_orientation(portrait);
+#endif
+#else
+    (void)portrait;
+#endif
+}
+
 bool get_sdl_mobile_portrait_mode(void)
 {
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -288,9 +294,7 @@ void set_sdl_mobile_portrait_mode(bool value)
     sdl_set_mobile_orientation_hint(value);
     g_main_view_zoom_scale = saved_zoom_scale;
 
-#if defined(__ANDROID__)
-    sdl_android_request_orientation(value);
-#elif defined(SIL_IOS)
+#if defined(SIL_IOS)
     sdl_ios_request_orientation(value);
 #endif
 

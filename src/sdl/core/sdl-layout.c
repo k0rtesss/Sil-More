@@ -5627,7 +5627,7 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
         {
             0,
             SDL_STARTUP_ORIENTATION_PORTRAIT,
-            "Portrait (Experimental)",
+            "Portrait",
         },
     };
     SDL_MessageBoxData messagebox = {
@@ -5637,9 +5637,8 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
         .title = "Choose Orientation",
         .message =
             "Choose how Sil-More should use your screen.\n\n"
-            "Landscape is recommended. Portrait mode is experimental.\n\n"
             "You can change this later in Options > General Settings > "
-            "Portrait Mode.",
+            "Orientation.",
         .numbuttons = (int)(sizeof(buttons) / sizeof(buttons[0])),
         .buttons = buttons,
         .colorScheme = NULL,
@@ -5653,7 +5652,7 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
     }
 
     if (button_id == SDL_STARTUP_ORIENTATION_PORTRAIT) {
-        log_info("First-start mobile orientation: portrait (experimental)");
+        log_info("First-start mobile orientation: portrait");
         return true;
     }
 

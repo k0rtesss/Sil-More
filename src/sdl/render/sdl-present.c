@@ -1730,9 +1730,7 @@ bool sdl_render_current_window_frame(void)
         sdl_combat_overlay_pane_render();
         sdl_status_pane_render();
         sdl_status_depth_pane_render();
-        sdl_popup_notification_render();
         sdl_depth_menu_pane_render();
-        sdl_narrative_banner_render();
         sdl_object_tooltip_render();
         sdl_player_exchange_render();
         sdl_player_action_menu_render();
@@ -1831,8 +1829,8 @@ bool sdl_render_current_window_frame(void)
     sdl_touch_pane_render();
     if (!hide_main_menu_overlays)
         sdl_touch_zone_render_markers();
-    if (!g_touch_tutorial_suppress_runtime_top_panel)
-        sdl_touch_top_panel_render();
+    if (!hide_main_menu_overlays)
+        sdl_popup_notification_render();
     sdl_touch_hidden_indicator_render();
     /* The Main Menu is the topmost gameplay pane.  Draw it after pane borders
      * and touch controls so neither can obscure its panel or labels. */
@@ -1850,6 +1848,10 @@ bool sdl_render_current_window_frame(void)
      * buttons stay on top and visible while a description is open. */
     if (!hide_main_menu_overlays)
         sdl_touch_thumb_render();
+    if (!hide_main_menu_overlays)
+        sdl_narrative_banner_render();
+    if (!g_touch_tutorial_suppress_runtime_top_panel)
+        sdl_touch_top_panel_render();
     sdl_touch_exit_button_render();
 
     return true;

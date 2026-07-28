@@ -11,6 +11,9 @@ import android.view.WindowManager;
 import org.libsdl.app.SDLActivity;
 
 public class SilMoreActivity extends SDLActivity {
+	private volatile int gameRequestedOrientation =
+			ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -21,6 +24,7 @@ public class SilMoreActivity extends SDLActivity {
 	protected void onResume() {
 		super.onResume();
 		applyFullscreenLayout();
+		applyGameOrientation();
 	}
 
 	@Override
@@ -33,22 +37,57 @@ public class SilMoreActivity extends SDLActivity {
 
 	@Override
 	public void setOrientationBis(int w, int h, boolean resizable, String hint) {
-		// SDL_HINT_ORIENTATIONS is the source of truth for initial orientation
-		// and any SDL-owned orientation update.
-		super.setOrientationBis(w, h, resizable, hint);
+		int orientation = getGameOrientationFromHint(hint);
+
+		if (orientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+			requestGameOrientation(
+					orientation == ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT);
+		} else if (gameRequestedOrientation !=
+				ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+			applyGameOrientation();
+		} else {
+			super.setOrientationBis(w, h, resizable, hint);
+		}
 	}
 
     /** Called from native code after it updates SDL_HINT_ORIENTATIONS. */
     public void requestGameOrientation(final boolean portrait) {
+		gameRequestedOrientation = portrait
+				? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+				: ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE;
+		applyGameOrientation();
+    }
+
+	private int getGameOrientationFromHint(String hint) {
+		if (hint == null) {
+			return ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+		}
+
+		boolean landscape = hint.contains("LandscapeLeft")
+				|| hint.contains("LandscapeRight");
+		boolean portrait = hint.contains("Portrait");
+
+		if (landscape == portrait) {
+			return ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+		}
+		return portrait
+				? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+				: ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE;
+	}
+
+	private void applyGameOrientation() {
+		final int orientation = gameRequestedOrientation;
+		if (orientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+			return;
+		}
+
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                setRequestedOrientation(portrait
-                        ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
-                        : ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE);
+                setRequestedOrientation(orientation);
             }
         });
-    }
+	}
 
 	private void applyFullscreenLayout() {
 		View decorView = getWindow().getDecorView();
