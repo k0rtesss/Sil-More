@@ -5071,7 +5071,7 @@ int numbers_menu_aux(int* highlight)
                 *highlight == i + 1);
         }
     }
-    if (alloy_applicable)
+    if (smith_alloy.type != SMITH_ALLOY_NONE)
     {
         byte info_attr = has_alloy_mastery ? TERM_SLATE : TERM_L_DARK;
         if (!has_alloy_mastery)
@@ -5093,7 +5093,8 @@ int numbers_menu_aux(int* highlight)
         smith_ui_put_wrapped(COL_SMT2, last_row + 1,
             smith_ui_column_width(COL_SMT2), 2, info_attr, buf);
     }
-    else if (!has_alloy_mastery)
+    else if ((k_info[smith_o_ptr->k_idx].flags3 & (TR3_MITHRIL | TR3_STAR_IRON))
+        && !has_alloy_mastery)
     {
         smith_ui_put_wrapped(COL_SMT2, last_row + 1,
             smith_ui_column_width(COL_SMT2), 2, TERM_L_DARK,

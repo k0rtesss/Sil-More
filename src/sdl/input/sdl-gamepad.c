@@ -1164,7 +1164,7 @@ const char* sdl_gamepad_button_label(int button)
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4 (Right Paddle 1)";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5 (Right Paddle 2)";
     case SDL_GAMEPAD_BUTTON_START: return "Start (Menu)";
-    case SDL_GAMEPAD_BUTTON_BACK: return "Back (View)";
+    case SDL_GAMEPAD_BUTTON_BACK: return "View / Select";
     case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "Left Stick Click";
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "Right Stick Click";
     case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide (Steam)";
@@ -1197,7 +1197,7 @@ const char* sdl_gamepad_button_short_label(int button)
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5";
     case SDL_GAMEPAD_BUTTON_START: return "Start";
-    case SDL_GAMEPAD_BUTTON_BACK: return "Back";
+    case SDL_GAMEPAD_BUTTON_BACK: return "View";
     case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "L3";
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "R3";
     case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide";
@@ -1636,8 +1636,12 @@ int steamdeck_menu_key(int key, int prev_page_key, int next_page_key)
 
 int steamdeck_info_key(void)
 {
-    /* RS Right - for info/recall in menus */
-    return get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_RIGHT);
+    /*
+     * View/Select is present on conventional and stickless handheld
+     * controllers.  Keep optional stick directions available for gameplay,
+     * but never require one for menu information or recall.
+     */
+    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK);
 }
 
 int steamdeck_alt_action_key(void)

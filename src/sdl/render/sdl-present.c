@@ -1520,6 +1520,10 @@ bool sdl_render_current_window_frame(void)
         /* The yes/no confirm is modal and must stay visible above any
          * full-screen surface (see sdl_yes_no_prompt_handle_modal_event). */
         sdl_touch_pane_render_yes_no_prompt();
+        /* Save recovery can open a shared question overlay while the startup
+         * loading surface is still active.  Keep that modal above Loading
+         * rather than returning with it hidden behind the welcome screen. */
+        sdl_question_menu_render();
         return true;
     }
 
@@ -1731,7 +1735,9 @@ bool sdl_render_current_window_frame(void)
         sdl_status_pane_render();
         sdl_status_depth_pane_render();
         sdl_depth_menu_pane_render();
-        sdl_object_tooltip_render();
+        if (!sdl_question_menu_context_hint_active()
+            || !sdl_object_tooltip_uses_screen_rect())
+            sdl_object_tooltip_render();
         sdl_player_exchange_render();
         sdl_player_action_menu_render();
         sdl_touch_round_render();
@@ -1842,12 +1848,17 @@ bool sdl_render_current_window_frame(void)
     sdl_unified_look_sidebar_render();
     sdl_unified_look_prompt_render();
     sdl_song_menu_render();
-    sdl_question_menu_render();
     sdl_description_overlay_render();
     /* Drawn after the description popup (and its dimming backdrop) so the thumb
      * buttons stay on top and visible while a description is open. */
     if (!hide_main_menu_overlays)
         sdl_touch_thumb_render();
+    /* Question/roll popups are opaque foreground panels.  Keep them above
+     * Quick Touch so contextual controls cannot obscure their contents. */
+    sdl_question_menu_render();
+    if (sdl_question_menu_context_hint_active()
+        && sdl_object_tooltip_uses_screen_rect())
+        sdl_object_tooltip_render();
     if (!hide_main_menu_overlays)
         sdl_narrative_banner_render();
     if (!g_touch_tutorial_suppress_runtime_top_panel)

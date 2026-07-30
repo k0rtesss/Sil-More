@@ -825,11 +825,11 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
     if (p_ptr->stealth_mode)
         sdl_status_pane_add(entries, max_entries, &count, "Stealth",
             "", TERM_L_BLUE);
-    /* Waiting marks every character as focused, but the state only has a
-     * gameplay effect for Focused Attack or Polearm Mastery. */
+    /* Waiting marks every character as focused.  Only expose that shared
+     * state as "Focused" when the player actually has Focused Attack;
+     * Polearm Mastery consumes it for a separate reaction mechanic. */
     if (p_ptr->focused
-        && (p_ptr->active_ability[S_PER][PER_FOCUSED_ATTACK]
-            || p_ptr->active_ability[S_MEL][MEL_POLEARMS]))
+        && p_ptr->active_ability[S_PER][PER_FOCUSED_ATTACK])
         sdl_status_pane_add(entries, max_entries, &count, "Focused",
             "", TERM_L_BLUE);
     if (p_ptr->active_ability[S_PER][PER_CONCENTRATION]

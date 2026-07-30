@@ -106,6 +106,17 @@ static void finish_command_cursor_state(void)
 
     (void)Term_set_extra_cursor(false, 0, 0, false);
     (void)Term_set_cursor(false);
+
+    /*
+     * Movement queues PU_PANEL after changing the player's grid.  Presenting
+     * here before that update is handled briefly shows the moved player
+     * against the old panel, followed by a second frame with the recentered
+     * map.  Apply the pending camera update and its redraw first so movement
+     * and recentering reach the display as one completed frame.
+     */
+    if (p_ptr->update & PU_PANEL)
+        handle_stuff();
+
     Term_fresh();
 }
 
@@ -241,6 +252,20 @@ void process_command(void)
     case CMD_ACTIVE_WEAPON_MODE:
     {
         do_cmd_pending_active_weapon_mode();
+        break;
+    }
+
+    /* Direct floor-item action from the desktop context shortcut popup */
+    case CMD_CONTEXT_FLOOR_ACTION:
+    {
+        do_cmd_context_floor_item_action();
+        break;
+    }
+
+    /* Temporarily hide desktop square-action shortcut popups */
+    case CMD_SUPPRESS_CONTEXT_POPUPS:
+    {
+        do_cmd_suppress_context_square_popups();
         break;
     }
 

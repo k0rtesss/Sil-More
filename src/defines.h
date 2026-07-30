@@ -495,6 +495,20 @@
 #define CMD_ACTIVE_WEAPON_MODE KTRL('V')
 
 /*
+ * Internal command queued by the desktop context shortcut popup.  Unlike the
+ * generic 'u' command, this acts on the floor item that supplied the popup
+ * instead of reopening the inventory browser.
+ */
+#define CMD_CONTEXT_FLOOR_ACTION KTRL('U')
+
+/*
+ * Internal command queued by the minus button on the desktop context popup.
+ * It temporarily suppresses further square-action popups without consuming a
+ * player turn.
+ */
+#define CMD_SUPPRESS_CONTEXT_POPUPS KTRL('B')
+
+/*
  * OPTION: Maximum number of macros (see "support/macro.c")
  * Default: assume at most 256 macros are used
  */

@@ -1474,20 +1474,24 @@ static void target_mode_prompt(
     {
         char confirm_label[24];
         char toggle_label[24];
+        char back_label[24];
 
-        target_prompt_label(INPUT_BIND_CONFIRM, "A", confirm_label,
+        target_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
             sizeof(confirm_label));
-        target_prompt_label('s', "Y", toggle_label, sizeof(toggle_label));
+        target_prompt_label(steamdeck_secondary_key(), "Y", toggle_label,
+            sizeof(toggle_label));
+        target_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
 
         if (valid_target)
         {
-            strnfmt(info, info_len, "%s=target, %s=%s, <dir>",
-                confirm_label, toggle_label, toggle_name);
+            strnfmt(info, info_len, "%s=target, %s=%s, %s=cancel, <dir>",
+                confirm_label, toggle_label, toggle_name, back_label);
         }
         else
         {
-            strnfmt(info, info_len, "%s=%s, <dir>", toggle_label,
-                toggle_name);
+            strnfmt(info, info_len, "%s=%s, %s=cancel, <dir>",
+                toggle_label, toggle_name, back_label);
         }
 
         return;
@@ -1605,6 +1609,7 @@ bool target_set_interactive(int mode, int range)
             query = target_set_interactive_aux(y, x, mode, info, use_story_look);
             if (use_story_look)
                 sdl_story_font_disable();
+            query = steamdeck_menu_key(query, 0, 0);
 
             /* Remove the path */
             if (mode & (TARGET_KILL))
@@ -1795,6 +1800,7 @@ bool target_set_interactive(int mode, int range)
                 use_story_look);
             if (use_story_look)
                 sdl_story_font_disable();
+            query = steamdeck_menu_key(query, 0, 0);
 
             /* Remove the path */
             if (mode & (TARGET_KILL))
@@ -1942,6 +1948,7 @@ bool target_set_interactive(int mode, int range)
 
             /* Describe and Prompt (enable "TARGET_LOOK") */
             query = target_set_interactive_aux(y, x, mode | TARGET_LOOK, info, use_story_look);
+            query = steamdeck_menu_key(query, 0, 0);
 
             /* Remove the path */
             if (mode & (TARGET_KILL))

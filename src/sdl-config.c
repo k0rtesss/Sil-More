@@ -3029,7 +3029,7 @@ void sdl_pane_profile_apply_tablet_defaults(
     profile->left_panel_compact_health_bar = true;
     if (orientation == SDL_PANE_ORIENTATION_PORTRAIT) {
         sdl_pane_profile_apply_portrait_defaults(profile);
-        profile->left_panel_expanded_on_launch = true;
+        profile->left_panel_expanded_on_launch = false;
         profile->quick_touch_buttons_on_left = true;
     } else {
         int quick_access_index;
@@ -3704,6 +3704,14 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             config->show_main_menu_button = cJSON_IsTrue(item);
             log_debug("Loaded showMainMenuButton: %s",
                 config->show_main_menu_button ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "showContextSquarePopups");
+        if (cJSON_IsBool(item)) {
+            config->show_context_square_popups = cJSON_IsTrue(item);
+            log_debug("Loaded showContextSquarePopups: %s",
+                config->show_context_square_popups ? "true" : "false");
         }
         
         // Window position and size for windowed mode
@@ -4973,6 +4981,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         config->popup_notification_ms);
     cJSON_AddBoolToObject(sdl, "showMainMenuButton",
         config->show_main_menu_button);
+    cJSON_AddBoolToObject(sdl, "showContextSquarePopups",
+        config->show_context_square_popups);
     cJSON_AddStringToObject(sdl, "inputUiMode",
         input_ui_mode_to_string(config->input_ui_mode));
     
@@ -5635,6 +5645,7 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->dice_roll_overlay_ms = SDL_DICE_ROLL_OVERLAY_DEFAULT_MS;
     config->popup_notification_ms = SDL_POPUP_NOTIFICATION_DEFAULT_MS;
     config->show_main_menu_button = true;
+    config->show_context_square_popups = true;
     
     // Default window position and size (will be overridden by actual screen size)
     config->window_x = -1;  // -1 means centered

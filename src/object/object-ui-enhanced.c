@@ -87,13 +87,16 @@ static bool enhanced_menu_format_prompt(char* out, size_t out_size,
 
         inventory_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
             sizeof(confirm_label));
-        inventory_prompt_label(steamdeck_info_key(), "RS Right", desc_label,
+        inventory_prompt_label(steamdeck_info_key(), "View", desc_label,
             sizeof(desc_label));
 
         if (current_menu_command == 'u' || current_menu_command == 'x')
         {
-            inventory_prompt_label(current_menu_command,
-                current_menu_command == 'u' ? "X" : "RS Right",
+            int cycle_binding = (current_menu_command == 'u')
+                ? current_menu_command : steamdeck_info_key();
+
+            inventory_prompt_label(cycle_binding,
+                current_menu_command == 'u' ? "X" : "View",
                 cycle_label, sizeof(cycle_label));
             show_cycle = true;
         }
@@ -1404,12 +1407,13 @@ void show_inven_enhanced(void)
         
         /* Get a key */
         which = inkey();
+        bool click_taken = false;
 
         {
             int clicked_row = -1;
             int click_action = UI_MENU_CLICK_PRIMARY;
 
-            bool click_taken =
+            click_taken =
                 ui_menu_click_take_action(&clicked_row, &click_action);
 
             if (click_taken && clicked_row == ENHANCED_MENU_CLICK_SWITCH)
@@ -1482,6 +1486,11 @@ void show_inven_enhanced(void)
                 continue;
         }
         which = steamdeck_menu_key(which, 'e', 'i');
+        if (controller_controls && !click_taken
+            && which == steamdeck_info_key())
+        {
+            which = 'x';
+        }
         
         log_trace("show_inven_enhanced: Key pressed: %d ('%c')", which, (which >= 32 && which <= 126) ? which : '?');
         
@@ -2076,12 +2085,13 @@ void show_equip_enhanced(void)
         
         /* Get a key */
         which = inkey();
+        bool click_taken = false;
 
         {
             int clicked_row = -1;
             int click_action = UI_MENU_CLICK_PRIMARY;
 
-            bool click_taken =
+            click_taken =
                 ui_menu_click_take_action(&clicked_row, &click_action);
 
             if (click_taken && clicked_row == ENHANCED_MENU_CLICK_SWITCH)
@@ -2139,6 +2149,11 @@ void show_equip_enhanced(void)
                 continue;
         }
         which = steamdeck_menu_key(which, 'e', 'i');
+        if (controller_controls && !click_taken
+            && which == steamdeck_info_key())
+        {
+            which = 'x';
+        }
         
         log_trace("show_equip_enhanced: Key pressed: %d ('%c')", which, (which >= 32 && which <= 126) ? which : '?');
         

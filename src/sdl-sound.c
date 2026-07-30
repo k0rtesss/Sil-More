@@ -1112,10 +1112,32 @@ void sdl_sound_reload(void)
         return;
     }
 
-    /* Result cues are timer-driven; avoid a first-use decode at cue time. */
+    /*
+     * Combat cues run on the input/render thread.  Decode their small sample
+     * sets during sound initialization so the first swing, shot, or monster
+     * attack cannot stall gameplay on slow storage.
+     */
     if (g_sound_config.enabled && sound_state.bank_loaded) {
-        sdl_sound_preload_event(MSG_HIT);
-        sdl_sound_preload_event(MSG_ARMOR);
+        static const int combat_preload_events[] = {
+            MSG_HIT,
+            MSG_ARMOR,
+            MSG_MISS,
+            MSG_SHOOT,
+            MSG_WEAPON_SLASH_LIGHT,
+            MSG_WEAPON_SLASH_MEDIUM,
+            MSG_WEAPON_SLASH_HEAVY,
+            MSG_WEAPON_THRUST,
+            MSG_WEAPON_BLUNT,
+            MSG_WEAPON_UNARMED,
+            MSG_MONSTER_ATTACK,
+            MSG_MONSTER_ATTACK_RANGED,
+            MSG_MONSTER_ATTACK_BREATH
+        };
+
+        for (int i = 0; i < (int)N_ELEMENTS(combat_preload_events); i++) {
+            if (is_sound_enabled(combat_preload_events[i]))
+                sdl_sound_preload_event(combat_preload_events[i]);
+        }
     }
 
     sdl_music_update_volumes();

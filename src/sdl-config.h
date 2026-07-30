@@ -38,7 +38,7 @@
 #define SDL_TOUCH_PROFILE_ROUND_WHEEL 2
 #define SDL_TOUCH_PROFILE_COUNT 3
 
-#define SDL_PORTRAIT_OVERLAY_LOG_PANE_DEFAULT_ROWS 7
+#define SDL_PORTRAIT_OVERLAY_LOG_PANE_DEFAULT_ROWS 8
 
 #define SDL_TOUCH_MOVEMENT_ON 0
 #define SDL_TOUCH_MOVEMENT_OFF 1
@@ -135,6 +135,7 @@
     ((scale) <= 3 ? 0 : SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT)
 #define SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN 0
 #define SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT 2
+#define SDL_MOBILE_TABLET_STARTING_ZOOM_OFFSET_DEFAULT 1
 #define SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX 5
 #define SDL_DICE_ROLL_LOCK_DEFAULT_MS 2000
 #define SDL_DICE_ROLL_OVERLAY_DEFAULT_MS 2500
@@ -236,6 +237,7 @@ struct sdl_config {
     int dice_roll_overlay_ms;
     int popup_notification_ms;
     bool show_main_menu_button;
+    bool show_context_square_popups;
     int camera_center_clearance_vertical;
     int camera_center_clearance_horizontal;
     

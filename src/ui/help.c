@@ -2316,14 +2316,17 @@ static void show_help_screen_legacy(int source_page, int display_page,
         /* Movement and Action Controls */
         col = 1;
         help_emit_heading("MOVEMENT & ACTION", row, col); row += 2;
-        put_role(ROLE_KEY, "D-pad / Left Stick", row, col);
+        put_role(ROLE_KEY, "D-pad (stick optional)", row, col);
         put_role(ROLE_BODY, " - Movement", row, col + 22); row++;
 
         char action_buf[96];
+        char gameplay_action[64];
         int binding = 0;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_SOUTH);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        binding_action_label(binding, gameplay_action, sizeof(gameplay_action));
+        strnfmt(action_buf, sizeof(action_buf), "Confirm in menus; %s in play",
+            gameplay_action);
         put_role(ROLE_KEY, "A", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
@@ -2338,7 +2341,9 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        binding_action_label(binding, gameplay_action, sizeof(gameplay_action));
+        strnfmt(action_buf, sizeof(action_buf), "Back in menus; %s in play",
+            gameplay_action);
         put_role(ROLE_KEY, "B", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
@@ -2354,9 +2359,12 @@ static void show_help_screen_legacy(int source_page, int display_page,
             binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_RIGHT), rs_right, sizeof(rs_right));
             strnfmt(rs_line, sizeof(rs_line), "Up:%s  Down:%s  Left:%s  Right:%s",
                     rs_up, rs_down, rs_left, rs_right);
-            put_role(ROLE_KEY, "Right Stick", row, col);
-            put_role(ROLE_BODY, " - ", row, col + 11);
-            put_role(ROLE_BODY, rs_line, row, col + 14);
+            cptr stick_label = "Right Stick (optional)";
+            int stick_text_col = col + (int)strlen(stick_label);
+
+            put_role(ROLE_KEY, stick_label, row, col);
+            put_role(ROLE_BODY, " - ", row, stick_text_col);
+            put_role(ROLE_BODY, rs_line, row, stick_text_col + 3);
             row++;
         }
 
@@ -2460,7 +2468,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK);
         binding_action_label(binding, action_buf, sizeof(action_buf));
-        input = "Back (View)";
+        input = "View / Select";
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
         put_role(ROLE_BODY, " - ", row, text_col);

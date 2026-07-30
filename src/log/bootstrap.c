@@ -26,7 +26,16 @@ void init_logger(bool quiet, const char* exe_path)
 #endif
 
     const char* log_level_str = getenv("SIL_LOG_LEVEL");
-    int level = LOG_DEBUG; /* Default to DEBUG level */
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    /*
+     * Mobile storage can make the logger's flush-after-every-line policy
+     * visible as gameplay stalls.  Keep diagnostics available through
+     * SIL_LOG_LEVEL, but do not enable hot-path DEBUG logging by default.
+     */
+    int level = LOG_INFO;
+#else
+    int level = LOG_DEBUG;
+#endif
     char log_path[1024];
     
     if (log_level_str && strlen(log_level_str) > 0)

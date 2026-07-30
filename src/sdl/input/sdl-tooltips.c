@@ -270,6 +270,11 @@ void sdl_object_tooltip_clear(void)
     g_state.need_present = true;
 }
 
+bool sdl_object_tooltip_uses_screen_rect(void)
+{
+    return g_object_tooltip.active && g_object_tooltip.screen_rect;
+}
+
 /*
  * Dismiss a persistent touch popup on the next press, the way moving the mouse
  * dismisses the hovered right-click popup.  Returns true if one was cleared.
@@ -1559,6 +1564,11 @@ void sdl_description_overlay_set_footer(cptr text, bool always)
     }
 }
 
+void sdl_description_overlay_set_footer_gap(bool enabled)
+{
+    g_description_overlay.footer_gap = enabled;
+}
+
 void sdl_description_overlay_clear_footer_actions(void)
 {
     g_description_overlay.footer_action_count = 0;
@@ -1861,6 +1871,7 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     int max_cols;
     int target_cols;
     int footer_cols = 0;
+    int footer_gap = 0;
     int header_rows;
     int text_px;
     int visible_cols;
@@ -1930,7 +1941,11 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
 
     for (int pass = 0; pass < 2; pass++)
     {
-        max_rows = max_rows_no_footer - (footer ? 1 : 0);
+        footer_gap = (footer && overlay->footer_gap)
+            ? MAX(2, cell_h / 4) : 0;
+        max_rows = (max_panel_h - pad_y * 2
+            - header_rows * cell_h
+            - (footer ? cell_h + footer_gap : 0)) / cell_h;
         if (max_rows < 1)
             max_rows = 1;
 
@@ -1967,7 +1982,7 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
 
         panel_w = (float)(text_px + pad_x * 2);
         panel_h = (float)((header_rows + visible_rows + (footer ? 1 : 0))
-            * cell_h + pad_y * 2);
+            * cell_h + pad_y * 2 + footer_gap);
         panel_x = (float)anchor.x + ((float)anchor.w - panel_w) * 0.5f;
         panel_y = (float)anchor.y + ((float)anchor.h - panel_h) * 0.5f;
 
@@ -2010,6 +2025,8 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     out->text_y = out->panel.y + (float)pad_y
         + (float)(header_rows * cell_h);
     out->footer_y = out->text_y + (float)(visible_rows * cell_h);
+    if (footer)
+        out->footer_y += (float)footer_gap;
     if (out->close_button)
     {
         float close_size = (float)cell_h;

@@ -639,6 +639,7 @@ void process_player(void)
             char out_val[160];
             char o_name[80];
             object_type* o_ptr;
+            bool context_popup_handled = false;
 
             // build an object description
             if (cave_o_idx[p_ptr->py][p_ptr->px])
@@ -650,9 +651,25 @@ void process_player(void)
                 strnfmt(out_val, sizeof(out_val), "Pick up %s? ", o_name);
             }
 
+#if !defined(__ANDROID__) && !defined(SIL_IOS)
+            /*
+             * Desktop has no always-visible Quick Touch strip.  After a real
+             * move onto a context-sensitive square, show its equivalent
+             * actions in a popup anchored to the player.
+             */
+            if ((p_ptr->previous_action[1] >= 1)
+                && (p_ptr->previous_action[1] <= 9)
+                && (p_ptr->previous_action[1] != 5))
+            {
+                context_popup_handled =
+                    do_cmd_context_square_action_popup();
+            }
+#endif
+
             // always offer to pickup if the mode is on, there is an object
             // present, and you have just moved
-            if (always_pickup && cave_o_idx[p_ptr->py][p_ptr->px]
+            if (!context_popup_handled && always_pickup
+                && cave_o_idx[p_ptr->py][p_ptr->px]
                 && (o_ptr->tval != TV_NOTE) && (p_ptr->previous_action[1] >= 1)
                 && (p_ptr->previous_action[1] <= 9)
                 && (p_ptr->previous_action[1] != 5))
@@ -684,6 +701,7 @@ void process_player(void)
 
                 /* Get a command (normal) */
                 TIME_PHASE("request_command", request_command());
+                sdl_question_menu_clear_context_hint();
                 if (p_ptr->leaving)
                 {
                     log_debug("process_player: leaving set while waiting for command; command=%d playing=%d",

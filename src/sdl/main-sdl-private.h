@@ -79,7 +79,7 @@ enum {
     SDL_NARRATIVE_BANNER_MAX_LINES = 8,
     SDL_NARRATIVE_BANNER_LINE_LEN = 220,
     SDL_LOG_PANE_DEFAULT_ROWS = 5,
-    SDL_OVERLAY_LOG_PANE_DEFAULT_ROWS = 5,
+    SDL_OVERLAY_LOG_PANE_DEFAULT_ROWS = 8,
     SDL_OVERLAY_LOG_PANE_ALPHA = 220,
     SDL_LOG_PANE_MIN_ROWS = 1,
     SDL_LOG_PANE_MAX_ROWS = 20,
@@ -909,6 +909,7 @@ typedef struct description_overlay_state {
     int avoid_term_wid;
     int avoid_term_hgt;
     bool footer_always;
+    bool footer_gap;
     int footer_hover_key;
     bool close_hover;
     int footer_action_count;
@@ -1037,7 +1038,9 @@ typedef struct sdl_question_menu_state {
     bool active;
     bool blocking_input;
     bool nonblocking;
+    bool context_hint;
     bool close_hover;
+    bool suppress_hover;
     bool scroll_follow_highlight;
     bool has_anchor;
     int anchor_y; /* map grid the question is about (local placement) */
@@ -2453,6 +2456,7 @@ bool sdl_mouse_grid_has_visible_monster(int y, int x, int* out_m_idx);
 bool sdl_mouse_monster_is_friendly(int m_idx);
 bool sdl_mouse_grid_has_marked_object(int y, int x, object_type** out_obj);
 void sdl_object_tooltip_clear(void);
+bool sdl_object_tooltip_uses_screen_rect(void);
 void sdl_object_tooltip_begin_persistent(void);
 void sdl_object_tooltip_end_persistent(void);
 bool sdl_object_tooltip_dismiss_persistent_on_press(void);
@@ -2481,6 +2485,7 @@ int sdl_description_overlay_visible_cols(void);
 SDL_Color sdl_description_overlay_attr_color(byte attr);
 cptr sdl_description_overlay_footer_text( const description_overlay_state* overlay);
 void sdl_description_overlay_set_footer(cptr text, bool always);
+void sdl_description_overlay_set_footer_gap(bool enabled);
 void sdl_description_overlay_clear_footer_actions(void);
 void sdl_description_overlay_add_footer_action(int key, cptr token);
 bool sdl_description_overlay_has_footer_action(int key);
@@ -3267,6 +3272,8 @@ int get_sdl_terminal_menu_scale_offset(void);
 void set_sdl_terminal_menu_scale_offset(int value);
 bool get_sdl_compact_inventory_menus(void);
 void set_sdl_compact_inventory_menus(bool value);
+bool get_sdl_show_context_square_popups(void);
+void set_sdl_show_context_square_popups(bool value);
 int get_sdl_mobile_starting_zoom_offset(void);
 void set_sdl_mobile_starting_zoom_offset(int value);
 bool get_sdl_mobile_portrait_mode(void);
@@ -3740,6 +3747,9 @@ bool sdl_question_menu_blocks_input(void);
 bool sdl_question_menu_captures_pointer(void);
 void sdl_question_menu_clear_nonblocking(void);
 void sdl_question_menu_set_nonblocking(bool nonblocking);
+void sdl_question_menu_set_context_hint(void);
+void sdl_question_menu_clear_context_hint(void);
+bool sdl_question_menu_context_hint_active(void);
 void sdl_question_menu_set_timeout_ms(int ms);
 int sdl_question_menu_pending_timeout_ms(Uint64 now_ns);
 bool sdl_question_menu_flush_expired(Uint64 now_ns);

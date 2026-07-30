@@ -760,6 +760,9 @@ extern bool do_cmd_delete_item_by_index(int item);
 extern void do_cmd_observe(void);
 extern void do_cmd_observe_enhanced(void);
 extern cptr item_use_action_name(const object_type* o_ptr, int item);
+extern bool do_cmd_context_square_action_popup(void);
+extern void do_cmd_context_floor_item_action(void);
+extern void do_cmd_suppress_context_square_popups(void);
 extern bool touch_shortcut_context_action(int binding, bool description_open,
     int* out_key, char* label, size_t label_len);
 extern void do_cmd_uninscribe(void);
@@ -2279,6 +2282,8 @@ extern int get_sdl_terminal_menu_scale_offset(void);
 extern void set_sdl_terminal_menu_scale_offset(int value);
 extern bool get_sdl_compact_inventory_menus(void);
 extern void set_sdl_compact_inventory_menus(bool value);
+extern bool get_sdl_show_context_square_popups(void);
+extern void set_sdl_show_context_square_popups(bool value);
 extern int get_sdl_mobile_starting_zoom_offset(void);
 extern void set_sdl_mobile_starting_zoom_offset(int value);
 extern bool get_sdl_mobile_portrait_mode(void);
@@ -2305,6 +2310,7 @@ extern bool sdl_description_overlay_present(const byte* attrs,
     int target_cols, int scroll, bool interactive, int* out_visible_rows,
     int* out_max_scroll);
 extern void sdl_description_overlay_set_footer(cptr text, bool always);
+extern void sdl_description_overlay_set_footer_gap(bool enabled);
 extern void sdl_description_overlay_clear_footer_actions(void);
 extern void sdl_description_overlay_add_footer_action(int key, cptr token);
 extern void sdl_description_overlay_set_avoid_term_rect(int col, int row,
@@ -2337,6 +2343,9 @@ extern bool sdl_question_menu_take_touch_scrolled(void);
 extern void sdl_question_menu_set_blocking_input(bool blocking);
 extern bool sdl_question_menu_blocks_input(void);
 extern void sdl_question_menu_set_nonblocking(bool nonblocking);
+extern void sdl_question_menu_set_context_hint(void);
+extern void sdl_question_menu_clear_context_hint(void);
+extern bool sdl_question_menu_context_hint_active(void);
 extern void sdl_question_menu_set_timeout_ms(int ms);
 extern void sdl_hint_quest_menu_begin(hint_quest_page page, cptr title,
     cptr section, bool show_tabs, bool center_body, int selected_choice);
@@ -2635,7 +2644,7 @@ extern int steamdeck_confirm_key(void);   /* A button (SOUTH) - for confirm/ok *
 extern int steamdeck_prev_page_key(void); /* L1 button - for previous page/tab */
 extern int steamdeck_next_page_key(void); /* R1 button - for next page/tab */
 extern int steamdeck_menu_key(int key, int prev_page_key, int next_page_key);
-extern int steamdeck_info_key(void);      /* RS Right - for info/recall */
+extern int steamdeck_info_key(void);      /* View/Select - info/recall */
 extern int steamdeck_alt_action_key(void);/* X button (WEST) - for alternate action */
 extern int steamdeck_secondary_key(void); /* Y button (NORTH) - for secondary action */
 #define GAMEPAD_CAPTURE_BUTTON 0

@@ -518,6 +518,18 @@ void set_sdl_show_main_menu_button(bool value)
         (void)sdl_ensure_main_menu_access();
 }
 
+bool get_sdl_show_context_square_popups(void)
+{
+    return config.show_context_square_popups;
+}
+
+void set_sdl_show_context_square_popups(bool value)
+{
+    config.show_context_square_popups = value;
+    if (!value)
+        sdl_question_menu_clear_context_hint();
+}
+
 int get_sdl_margin(void)
 {
     return config.margin;

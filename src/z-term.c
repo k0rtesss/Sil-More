@@ -691,6 +691,19 @@ void Term_queue_chars(int x, int y, int n, byte a, cptr s)
 /*** Refresh routines ***/
 
 /*
+ * Mixed text/tile terminals use the high bit in both the attribute and
+ * character to identify tiles.  Tile attributes have the bit pattern
+ * 10xxxxxx because tile indices use only the lower six bits.  Attributes in
+ * the 11xxxxxx range are reserved for UI/extended colors, so do not mistake
+ * selected UTF-8 bytes for tiles.  Attribute 255 remains the bigtile
+ * continuation sentinel.
+ */
+static bool term_attr_is_tile(byte a)
+{
+    return (a == 255) || ((a & 0xC0) == 0x80);
+}
+
+/*
  * Flush a row of the current window (see "Term_fresh")
  *
  * Display text using "Term_pict()"
@@ -909,7 +922,7 @@ static void Term_fresh_row_both(int y, int x1, int x2)
         old_health[x] = nhf;
 
         /* Handle high-bit attr/chars */
-        if ((na & 0x80) && (nc & 0x80))
+        if (term_attr_is_tile(na) && (((byte)nc) & 0x80))
         {
             /* 2nd byte of bigtile */
             if ((na == 255) && ((byte)nc == 255))
@@ -1392,7 +1405,8 @@ errr Term_fresh(void)
             }
 
             /* Hack -- use "Term_pict()" sometimes */
-            else if (Term->higher_pict && (oa & 0x80) && (oc & 0x80))
+            else if (Term->higher_pict && term_attr_is_tile(oa)
+                && (((byte)oc) & 0x80))
             {
                 (void)((*Term->pict_hook)(tx, ty, 1, &oa, &oc, &ota, &otc));
                 restored_as_pict = true;

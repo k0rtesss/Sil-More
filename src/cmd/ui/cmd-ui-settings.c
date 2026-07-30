@@ -1479,6 +1479,7 @@ enum iface_pane_field {
     IFACE_PANE_FIELD_DICE_LOCK,
     IFACE_PANE_FIELD_DICE_OVERLAY,
     IFACE_PANE_FIELD_MAIN_MENU_BUTTON,
+    IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS,
     IFACE_PANE_FIELD_POPUP_NOTIFICATION
 };
 
@@ -4473,6 +4474,19 @@ static int build_interface_pane_rows(struct iface_pane_row* rows, int max_rows,
         row_count++;
     }
 
+#if !SIL_SDL_MOBILE_BUILD
+    if (row_count + 1 <= max_rows)
+    {
+        rows[row_count].pane_cfg_index = -1;
+        rows[row_count].type = PANE_MAX;
+        rows[row_count].field = IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS;
+        markers[mark_count].setting_id = IFACE_PANE_ROW_BASE + row_count;
+        markers[mark_count].label = "Square Action Popups";
+        mark_count++;
+        row_count++;
+    }
+#endif
+
 #if SIL_SDL_MOBILE_BUILD
     if (row_count + 1 <= max_rows)
     {
@@ -4612,6 +4626,7 @@ static cptr iface_pane_row_label(const struct iface_pane_row* row)
     case IFACE_PANE_FIELD_DICE_LOCK: return "Lock Time";
     case IFACE_PANE_FIELD_DICE_OVERLAY: return "Result Time";
     case IFACE_PANE_FIELD_MAIN_MENU_BUTTON: return "Show Fixed Button";
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS: return "Show Popups";
     case IFACE_PANE_FIELD_POPUP_NOTIFICATION: return "Display Time";
     default: return "?";
     }
@@ -4627,6 +4642,13 @@ static cptr iface_pane_row_description(const struct iface_pane_row* row)
         return "Show the fixed Menu button at the top center during play. "
             "Top-center panes begin directly below it while enabled. This is "
             "saved separately for portrait and landscape.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS)
+    {
+        return "Show compact action shortcuts after entering a square with an "
+            "item, stair, forge, or other available square action. The minus "
+            "button hides these popups for 10 player turns.";
     }
 
     if (row->field == IFACE_PANE_FIELD_PLACEMENT)
@@ -4816,6 +4838,10 @@ static void iface_pane_row_value(const struct iface_pane_row* row, char* buf,
         SDL_strlcpy(buf, get_sdl_show_main_menu_button() ? "on" : "off",
             buflen);
         break;
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
+        SDL_strlcpy(buf, get_sdl_show_context_square_popups() ? "on" : "off",
+            buflen);
+        break;
     case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
         iface_format_ms_value(buf, buflen, get_sdl_popup_notification_ms());
         break;
@@ -4839,6 +4865,7 @@ static void iface_pane_row_apply_change(const struct iface_pane_row* row)
     case IFACE_PANE_FIELD_DICE_LOCK:
     case IFACE_PANE_FIELD_DICE_OVERLAY:
     case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
     case IFACE_PANE_FIELD_BUTTONS:
         break;
     default:
@@ -4856,6 +4883,8 @@ static bool iface_pane_pick_from_choices(const struct iface_pane_row* row,
 
     if (row->field == IFACE_PANE_FIELD_MAIN_MENU_BUTTON)
         group = "Main Menu";
+    else if (row->field == IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS)
+        group = "Square Action Popups";
     else if (row->field == IFACE_PANE_FIELD_QUICK_TOUCH_SIDE)
         group = "Quick Touch";
     else if (row->field == IFACE_PANE_FIELD_POPUP_NOTIFICATION)
@@ -5164,6 +5193,17 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
         }
         break;
 
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
+        value = get_sdl_show_context_square_popups() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, off_on_choices,
+                (int)N_ELEMENTS(off_on_choices), value, &value, handled)
+            && value != (get_sdl_show_context_square_popups() ? 1 : 0))
+        {
+            set_sdl_show_context_square_popups(value != 0);
+            changed = true;
+        }
+        break;
+
     case IFACE_PANE_FIELD_DICE_LOCK:
     case IFACE_PANE_FIELD_DICE_OVERLAY:
     case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
@@ -5438,6 +5478,17 @@ static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
         }
         break;
     }
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
+    {
+        bool cur = get_sdl_show_context_square_popups();
+        bool next = (delta == 0) ? !cur : (delta > 0);
+        if (next != cur)
+        {
+            set_sdl_show_context_square_popups(next);
+            changed = true;
+        }
+        break;
+    }
     case IFACE_PANE_FIELD_DICE_LOCK:
     {
         int value = get_sdl_dice_roll_lock_ms();
@@ -5672,6 +5723,15 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
         }
         break;
     }
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
+        if (get_sdl_show_context_square_popups()
+            != def.show_context_square_popups)
+        {
+            set_sdl_show_context_square_popups(
+                def.show_context_square_popups);
+            changed = true;
+        }
+        break;
     case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
         if (get_sdl_popup_notification_ms() != def.popup_notification_ms)
         {
@@ -11310,7 +11370,7 @@ static const char* controller_gamepad_button_label(int button)
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4 (Right Paddle 1)";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5 (Right Paddle 2)";
     case SDL_GAMEPAD_BUTTON_START: return "Start (Menu)";
-    case SDL_GAMEPAD_BUTTON_BACK: return "Back (View)";
+    case SDL_GAMEPAD_BUTTON_BACK: return "View / Select";
     case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "Left Stick Click";
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "Right Stick Click";
     case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide (Steam)";
@@ -11343,7 +11403,7 @@ static const char* controller_gamepad_button_short_label(int button)
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5";
     case SDL_GAMEPAD_BUTTON_START: return "Start";
-    case SDL_GAMEPAD_BUTTON_BACK: return "Back";
+    case SDL_GAMEPAD_BUTTON_BACK: return "View";
     case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "L3";
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "R3";
     case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide";

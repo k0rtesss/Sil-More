@@ -5637,6 +5637,9 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
         .title = "Choose Orientation",
         .message =
             "Choose how Sil-More should use your screen.\n\n"
+            "Portrait is recommended for a more book-style appearance and "
+            "one-handed movement.\n"
+            "Landscape offers more traditional two-handed gameplay.\n\n"
             "You can change this later in Options > General Settings > "
             "Orientation.",
         .numbuttons = (int)(sizeof(buttons) / sizeof(buttons[0])),

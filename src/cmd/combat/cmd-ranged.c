@@ -1891,8 +1891,8 @@ void do_cmd_throw(bool automatic)
     /* Check for "target request" */
     if (dir == 5)
     {
-        log_debug("do_cmd_throw: dir=5, checking target_okay(tdis=%d)", tdis);
-        log_debug("do_cmd_throw: BEFORE target_okay: target_row=%d target_col=%d target_who=%d",
+        log_trace("do_cmd_throw: dir=5, checking target_okay(tdis=%d)", tdis);
+        log_trace("do_cmd_throw: BEFORE target_okay: target_row=%d target_col=%d target_who=%d",
             p_ptr->target_row, p_ptr->target_col, p_ptr->target_who);
         
         if (!target_okay(tdis))
@@ -1901,7 +1901,7 @@ void do_cmd_throw(bool automatic)
             return;
         }
 
-        log_debug("do_cmd_throw: AFTER target_okay: target_row=%d target_col=%d target_who=%d",
+        log_trace("do_cmd_throw: AFTER target_okay: target_row=%d target_col=%d target_who=%d",
             p_ptr->target_row, p_ptr->target_col, p_ptr->target_who);
 
         ty = p_ptr->target_row;
@@ -2035,7 +2035,7 @@ void do_cmd_throw(bool automatic)
         path_flg = 0;
 
     /* DEBUG: Log throw parameters before path calculation */
-    log_debug("do_cmd_throw: dir=%d py=%d px=%d ty=%d tx=%d tdis=%d spatial=%d",
+    log_trace("do_cmd_throw: dir=%d py=%d px=%d ty=%d tx=%d tdis=%d spatial=%d",
         dir, p_ptr->py, p_ptr->px, ty, tx, tdis, spatial_target ? 1 : 0);
 
     /* Calculate the path */
@@ -2044,10 +2044,10 @@ void do_cmd_throw(bool automatic)
     path_n = ABS(path_n);
 
     /* DEBUG: Log path result */
-    log_debug("do_cmd_throw: path_n=%d after project_path", path_n);
+    log_trace("do_cmd_throw: path_n=%d after project_path", path_n);
     if (path_n > 0)
     {
-        log_debug("do_cmd_throw: first grid=(%d,%d) last grid=(%d,%d)",
+        log_trace("do_cmd_throw: first grid=(%d,%d) last grid=(%d,%d)",
             GRID_Y(path_g[0]), GRID_X(path_g[0]),
             GRID_Y(path_g[path_n-1]), GRID_X(path_g[path_n-1]));
     }
@@ -2744,7 +2744,7 @@ void do_cmd_throw(bool automatic)
         j /= 4;
 
     /* DEBUG: Log final drop position */
-    log_debug("do_cmd_throw: dropping at y=%d x=%d (player at %d,%d) hit_body=%d",
+    log_trace("do_cmd_throw: dropping at y=%d x=%d (player at %d,%d) hit_body=%d",
         y, x, p_ptr->py, p_ptr->px, hit_body ? 1 : 0);
 
     /* Drop (or break) near that location */

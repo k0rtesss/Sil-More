@@ -1379,6 +1379,16 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
+        /*
+         * Context shortcut popups own every pixel in their panel.  Let them
+         * replace or clear hover help before the map tooltip path sees the
+         * same coordinates.
+         */
+        if (sdl_question_menu_handle_hover_pointer((float)ev->motion.x,
+            (float)ev->motion.y))
+        {
+            return;
+        }
         sdl_object_tooltip_handle_mouse_motion((float)ev->motion.x,
             (float)ev->motion.y);
         if (g_touch_pane_yes_no_prompt_active
@@ -1458,11 +1468,6 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         }
         if (sdl_song_menu_handle_hover_pointer((float)ev->motion.x,
-            (float)ev->motion.y))
-        {
-            return;
-        }
-        if (sdl_question_menu_handle_hover_pointer((float)ev->motion.x,
             (float)ev->motion.y))
         {
             return;
@@ -2018,6 +2023,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
+        /* Question/roll popups are drawn above Quick Touch.  Give their
+         * visible panel first refusal so an obscured thumb button cannot
+         * activate through the popup. */
+        if (sdl_question_menu_handle_pointer(x, y, UI_MENU_CLICK_PRIMARY))
+            return;
         /* The thumb button remains visible during fire targeting and item
          * descriptions. Claim it before aim-map handling, and before the
          * later "tap away to cancel" path, so tapping the button fires the
@@ -2078,8 +2088,6 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         }
         if (sdl_song_menu_handle_pointer(x, y, UI_MENU_CLICK_PRIMARY))
-            return;
-        if (sdl_question_menu_handle_pointer(x, y, UI_MENU_CLICK_PRIMARY))
             return;
         if (sdl_touch_hidden_indicator_handle_pointer_down(x, y, true))
             return;

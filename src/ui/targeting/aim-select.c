@@ -43,18 +43,30 @@ static void aim_select_show_prompt(bool manual, bool allow_vertical,
 {
     char fire_label[24];
     char cancel_label[24];
+    char manual_label[24];
     char fire_full[40];
     char cancel_full[40];
+    char manual_full[40];
     char up_full[16];
     char up_tiny[8];
     char up_key = aim_select_up_key();
 
     if (location_mode)
     {
-        target_prompt_label(INPUT_BIND_CONFIRM, "Space", fire_label,
-            sizeof(fire_label));
-        target_prompt_label(ESCAPE, "Esc", cancel_label,
-            sizeof(cancel_label));
+        if (steamdeck_controls_active())
+        {
+            target_prompt_label(steamdeck_confirm_key(), "A", fire_label,
+                sizeof(fire_label));
+            target_prompt_label(steamdeck_back_key(), "B", cancel_label,
+                sizeof(cancel_label));
+        }
+        else
+        {
+            target_prompt_label(INPUT_BIND_CONFIRM, "Space", fire_label,
+                sizeof(fire_label));
+            target_prompt_label(ESCAPE, "Esc", cancel_label,
+                sizeof(cancel_label));
+        }
         strnfmt(fire_full, sizeof(fire_full), "%s %s", fire_label,
             action ? action : "Select");
         strnfmt(cancel_full, sizeof(cancel_full), "%s Cancel", cancel_label);
@@ -63,7 +75,7 @@ static void aim_select_show_prompt(bool manual, bool allow_vertical,
         sdl_unified_look_prompt_add('t', fire_full,
             fire_full, fire_full, fire_label);
         sdl_unified_look_prompt_add(
-            ESCAPE, cancel_full, cancel_full, "Esc", "Esc");
+            ESCAPE, cancel_full, cancel_full, cancel_label, cancel_label);
         sdl_unified_look_prompt_finish();
         return;
     }
@@ -71,25 +83,32 @@ static void aim_select_show_prompt(bool manual, bool allow_vertical,
     /* Gamepad binding labels only when controller controls are active */
     if (steamdeck_controls_active())
     {
-        target_prompt_label('f', "f", fire_label, sizeof(fire_label));
-        target_prompt_label(ESCAPE, "Esc", cancel_label, sizeof(cancel_label));
+        target_prompt_label(steamdeck_confirm_key(), "A", fire_label,
+            sizeof(fire_label));
+        target_prompt_label(steamdeck_back_key(), "B", cancel_label,
+            sizeof(cancel_label));
+        target_prompt_label(steamdeck_alt_action_key(), "X", manual_label,
+            sizeof(manual_label));
     }
     else
     {
         SDL_strlcpy(fire_label, "f", sizeof(fire_label));
         SDL_strlcpy(cancel_label, "Esc", sizeof(cancel_label));
+        SDL_strlcpy(manual_label, "x", sizeof(manual_label));
     }
 
     strnfmt(fire_full, sizeof(fire_full), "%s Fire", fire_label);
     strnfmt(cancel_full, sizeof(cancel_full), "%s Cancel", cancel_label);
+    strnfmt(manual_full, sizeof(manual_full), "%s %s", manual_label,
+        manual ? "Targets" : "Manual");
     strnfmt(up_full, sizeof(up_full), "%c Up", up_key);
     strnfmt(up_tiny, sizeof(up_tiny), "%c", up_key);
 
     sdl_unified_look_prompt_begin(aim_select_prompt_row());
     sdl_unified_look_prompt_add(
         'f', fire_full, fire_full, fire_full, fire_label);
-    sdl_unified_look_prompt_add('x', manual ? "x Targets" : "x Manual",
-        manual ? "x Targets" : "x Manual", manual ? "x Tgt" : "x Man", "x");
+    sdl_unified_look_prompt_add('x', manual_full, manual_full,
+        manual_full, manual_label);
     if (allow_vertical)
     {
         sdl_unified_look_prompt_add(up_key, up_full, up_full, up_full,
@@ -97,7 +116,7 @@ static void aim_select_show_prompt(bool manual, bool allow_vertical,
         sdl_unified_look_prompt_add('d', "d Down", "d Down", "d Down", "d");
     }
     sdl_unified_look_prompt_add(
-        ESCAPE, cancel_full, cancel_full, "Esc", "Esc");
+        ESCAPE, cancel_full, cancel_full, cancel_label, cancel_label);
     sdl_unified_look_prompt_finish();
 }
 
@@ -204,6 +223,7 @@ static bool target_select(int range, bool allow_vertical, bool location_mode,
     int chosen_dir = 0;
     bool manual = location_mode;
     bool done = false;
+    const bool controller_controls = steamdeck_controls_active();
     char up_key = aim_select_up_key();
     char query;
 
@@ -233,6 +253,7 @@ static bool target_select(int range, bool allow_vertical, bool location_mode,
     while (!done)
     {
         int d = 0;
+        bool click_generated = false;
 
         /* In target mode the selection follows the list entry */
         if (!manual && temp_n)
@@ -275,7 +296,20 @@ static bool target_select(int range, bool allow_vertical, bool location_mode,
             int clicked = 0;
 
             if (ui_menu_click_take(&clicked))
+            {
                 query = (char)clicked;
+                click_generated = true;
+            }
+        }
+
+        if (!click_generated && controller_controls)
+        {
+            if (query == steamdeck_back_key())
+                query = ESCAPE;
+            else if (query == steamdeck_confirm_key())
+                query = '\r';
+            else if (query == steamdeck_alt_action_key())
+                query = 'x';
         }
 
         if (query == UI_MENU_CLICK_WAKE_KEY)

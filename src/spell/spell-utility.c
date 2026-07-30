@@ -432,6 +432,7 @@ static void self_knowledge_capture_view(self_knowledge_capture* capture)
         }
 
         sdl_description_overlay_set_footer(footer, true);
+        sdl_description_overlay_set_footer_gap(true);
         sdl_description_overlay_clear_footer_actions();
         sdl_description_overlay_add_footer_action(ESCAPE, "Esc close");
 
@@ -529,6 +530,7 @@ static void self_knowledge_capture_view(self_knowledge_capture* capture)
 
     sdl_description_overlay_clear();
     sdl_description_overlay_clear_footer_actions();
+    sdl_description_overlay_set_footer_gap(false);
     sdl_description_overlay_set_footer(NULL, false);
     hide_cursor = saved_hide_cursor;
     ui_menu_click_clear();

@@ -559,45 +559,40 @@ int sdl_render_story_text_free_px(sdl_view* d, TTF_Font* font, float x_px, int y
     }
     text_buf[len] = '\0';
 
-    SDL_Surface* text_surface = TTF_RenderText_Blended(font, text_buf, 0, col);
-    if (!text_surface)
+    int texture_w = 0;
+    int texture_h = 0;
+    SDL_Texture* text_texture = sdl_ui_text_texture(font, text_buf, col,
+        &texture_w, &texture_h);
+    if (!text_texture)
         return 0;
 
     int adv_w_unscaled = 0;
     TTF_MeasureString(font, text_buf, len, 0, &adv_w_unscaled, NULL);
 
     float cell_h_f = (float)d->cell_h;
-    float surf_h_f = (float)text_surface->h;
-    float scale = (surf_h_f > 0.0f) ? (cell_h_f / surf_h_f) : 1.0f;
+    float texture_h_f = (float)texture_h;
+    float scale = (texture_h_f > 0.0f) ? (cell_h_f / texture_h_f) : 1.0f;
     float advance_w = (float)adv_w_unscaled * scale;
-    float render_w = (float)text_surface->w * scale;
+    float render_w = (float)texture_w * scale;
 
     if (max_w_px > 0.0f && advance_w > max_w_px)
         advance_w = max_w_px;
 
-    SDL_Texture* text_texture = SDL_CreateTextureFromSurface(g_state.renderer, text_surface);
-    if (text_texture)
-    {
-        SDL_FRect dst = {
-            x_px,
-            (float)(y * d->cell_h),
-            render_w,
-            cell_h_f
-        };
-        SDL_FRect clip = {
-            x_px,
-            (float)(y * d->cell_h),
-            max_w_px,
-            cell_h_f
-        };
+    SDL_FRect dst = {
+        x_px,
+        (float)(y * d->cell_h),
+        render_w,
+        cell_h_f
+    };
+    SDL_FRect clip = {
+        x_px,
+        (float)(y * d->cell_h),
+        max_w_px,
+        cell_h_f
+    };
 
-        SDL_SetTextureBlendMode(text_texture, SDL_BLENDMODE_BLEND);
-        sdl_render_texture_with_clip(text_texture, &dst,
-            max_w_px > 0.0f ? &clip : NULL);
-        SDL_DestroyTexture(text_texture);
-    }
-
-    SDL_DestroySurface(text_surface);
+    sdl_render_texture_with_clip(text_texture, &dst,
+        max_w_px > 0.0f ? &clip : NULL);
     return (int)advance_w;
 }
 

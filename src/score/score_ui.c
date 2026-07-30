@@ -1073,7 +1073,7 @@ static char display_scores_pages(const high_score* entries, int count,
             if (ch == confirm_key)
                 ch = '\r';  /* A = open */
             if (ch == steamdeck_info_key())
-                ch = 'r';  /* RS = run history */
+                ch = 'r';  /* View/Select = run history */
             if (ch == alt_key)
                 ch = 'l';  /* X = layout toggle */
             if (ch == secondary_key)

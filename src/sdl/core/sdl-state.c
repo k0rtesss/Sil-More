@@ -358,6 +358,8 @@ void sdl_apply_mobile_tablet_default_profiles(void)
     config.touch_movement_mode = SDL_TOUCH_MOVEMENT_ON;
     config.touch_round_movement_enabled = true;
     config.touch_zone_overlay_mode = SDL_TOUCH_ZONE_OVERLAY_OFF;
+    config.mobile_starting_zoom_offset =
+        SDL_MOBILE_TABLET_STARTING_ZOOM_OFFSET_DEFAULT;
 
     for (int orientation = 0;
          orientation < SDL_PANE_ORIENTATION_COUNT;

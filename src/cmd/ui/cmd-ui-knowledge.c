@@ -9807,20 +9807,20 @@ static bool supply_controller_info_binding_available(int binding)
 
 /*
  * Choose an Info control that exists on the controller currently being used.
- * Prefer unambiguously reported buttons; use a reported stick only when no
- * suitable button is available.
+ * View/Select is the common information button; Y is the contextual fallback
+ * when that screen has no secondary action.  Neither choice requires a stick.
  */
 static int supply_controller_info_key(char* label, size_t label_len,
     bool allow_secondary)
 {
-    int binding =
-        get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK);
+    int binding = steamdeck_info_key();
+
     if (sdl_gamepad_control_available(GAMEPAD_CAPTURE_BUTTON,
             SDL_GAMEPAD_BUTTON_BACK)
         && supply_controller_info_binding_available(binding))
     {
         if (label && label_len)
-            controller_prompt_label(binding, "Back", label, label_len);
+            controller_prompt_label(binding, "View", label, label_len);
         return binding;
     }
 
@@ -9834,24 +9834,6 @@ static int supply_controller_info_key(char* label, size_t label_len,
             controller_prompt_label(binding, "Y", label, label_len);
         return binding;
     }
-
-    /*
-     * Android controller descriptors can map ambiguous RX/RY or Z/RZ motion
-     * ranges to RIGHTX/RIGHTY even on handhelds with no physical right stick.
-     * Buttons have unambiguous presence data; do not advertise a stick-derived
-     * prompt on that backend.  Other backends may use it as a last resort.
-     */
-#if !defined(SDL_PLATFORM_ANDROID)
-    binding = steamdeck_info_key();
-    if (sdl_gamepad_control_available(GAMEPAD_CAPTURE_RIGHT_STICK,
-            GAMEPAD_STICK_DIR_RIGHT)
-        && supply_controller_info_binding_available(binding))
-    {
-        if (label && label_len)
-            controller_prompt_label(binding, "RS Right", label, label_len);
-        return binding;
-    }
-#endif
 
     if (label && label_len)
         label[0] = '\0';
@@ -9871,22 +9853,14 @@ static char supply_controller_menu_key(char ch, int prev_page_key,
         return 'x';
 
     /*
-     * The normal controller profile binds B to 'f'.  Item browsers use that
-     * action as Drop and reserve Start/Escape for Back, so translate it before
-     * applying the remaining menu actions.  Modal pickers still use the
-     * generic B-to-cancel contract.
+     * Keep the shared menu contract here too: A confirms and B backs out.
+     * Drop is the contextual X action, so the browser remains usable without
+     * Start, sticks, or extra rear controls.
      */
     if (drop_available)
     {
-        if (ch == 'f')
+        if (ch == steamdeck_alt_action_key())
             return 'z';
-        if (ch == steamdeck_confirm_key())
-            return '\r';
-        if (prev_page_key && ch == steamdeck_prev_page_key())
-            return (char)prev_page_key;
-        if (next_page_key && ch == steamdeck_next_page_key())
-            return (char)next_page_key;
-        return ch;
     }
 
     return (char)steamdeck_menu_key(ch, prev_page_key, next_page_key);
@@ -10303,7 +10277,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 char prev_label[16];
                 char next_label[16];
                 char info_label[16];
-                char use_label[16];
                 char confirm_label[16];
                 char drop_label[16];
                 char back_label[16];
@@ -10320,33 +10293,31 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     next_label, sizeof(next_label));
                 info_available = supply_controller_info_key(info_label,
                     sizeof(info_label), true) != GAMEPAD_BIND_NONE;
-                controller_prompt_label(steamdeck_alt_action_key(), "X",
-                    use_label, sizeof(use_label));
                 controller_prompt_label(steamdeck_confirm_key(), "A",
                     confirm_label, sizeof(confirm_label));
-                controller_prompt_label('f', "B", drop_label,
-                    sizeof(drop_label));
-                controller_prompt_label(ESCAPE, "Start", back_label,
+                controller_prompt_label(steamdeck_alt_action_key(), "X",
+                    drop_label, sizeof(drop_label));
+                controller_prompt_label(steamdeck_back_key(), "B", back_label,
                     sizeof(back_label));
                 if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] equip  [%s] drop  [%s] back",
-                        prev_label, next_label, info_label, use_label,
-                        confirm_label, drop_label, back_label);
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s] equip  [%s] drop  [%s] back",
+                        prev_label, next_label, info_label, confirm_label,
+                        drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] info  [%s/%s] equip  [%s] drop",
-                        info_label, use_label, confirm_label, drop_label);
+                        "D-pad nav  [%s] info  [%s] equip  [%s] drop",
+                        info_label, confirm_label, drop_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s/%s] equip  [%s] drop  [%s] back",
-                        prev_label, next_label, use_label, confirm_label,
+                        "D-pad nav  [%s/%s] page  [%s] equip  [%s] drop  [%s] back",
+                        prev_label, next_label, confirm_label,
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s/%s] equip  [%s] drop",
-                        use_label, confirm_label, drop_label);
+                        "D-pad nav  [%s] equip  [%s] drop",
+                        confirm_label, drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
                     "D-pad nav  [%s] equip  [%s] drop", confirm_label,
@@ -10359,7 +10330,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_L_DARK, prompt_buf);
                 supply_register_prompt_clicks(&layout, prompt_buf, NULL,
-                    use_label, confirm_label, drop_label, back_label);
+                    NULL, confirm_label, drop_label, back_label);
                 if (info_available)
                     ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
                         layout.prompt_row, prompt_buf, info_label);
@@ -11293,7 +11264,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 char prev_label[16];
                 char next_label[16];
                 char preview_label[16];
-                char use_label[16];
                 char confirm_label[16];
                 char drop_label[16];
                 char back_label[16];
@@ -11310,33 +11280,31 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     next_label, sizeof(next_label));
                 info_available = supply_controller_info_key(preview_label,
                     sizeof(preview_label), true) != GAMEPAD_BIND_NONE;
-                controller_prompt_label(steamdeck_alt_action_key(), "X",
-                    use_label, sizeof(use_label));
                 controller_prompt_label(steamdeck_confirm_key(), "A",
                     confirm_label, sizeof(confirm_label));
-                controller_prompt_label('f', "B", drop_label,
-                    sizeof(drop_label));
-                controller_prompt_label(ESCAPE, "Start", back_label,
+                controller_prompt_label(steamdeck_alt_action_key(), "X",
+                    drop_label, sizeof(drop_label));
+                controller_prompt_label(steamdeck_back_key(), "B", back_label,
                     sizeof(back_label));
                 if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] use  [%s] drop  [%s] back",
-                        prev_label, next_label, preview_label, use_label,
-                        confirm_label, drop_label, back_label);
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s] use  [%s] drop  [%s] back",
+                        prev_label, next_label, preview_label, confirm_label,
+                        drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] info  [%s/%s] use  [%s] drop",
-                        preview_label, use_label, confirm_label, drop_label);
+                        "D-pad nav  [%s] info  [%s] use  [%s] drop",
+                        preview_label, confirm_label, drop_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s/%s] use  [%s] drop  [%s] back",
-                        prev_label, next_label, use_label, confirm_label,
+                        "D-pad nav  [%s/%s] page  [%s] use  [%s] drop  [%s] back",
+                        prev_label, next_label, confirm_label,
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s/%s] use  [%s] drop",
-                        use_label, confirm_label, drop_label);
+                        "D-pad nav  [%s] use  [%s] drop",
+                        confirm_label, drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
                     "D-pad nav  [%s] use  [%s] drop", confirm_label,
@@ -11349,7 +11317,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_L_DARK, prompt_buf);
                 supply_register_prompt_clicks(&layout, prompt_buf, NULL,
-                    use_label, confirm_label, drop_label, back_label);
+                    NULL, confirm_label, drop_label, back_label);
                 if (info_available)
                     ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
                         layout.prompt_row, prompt_buf, preview_label);
@@ -12280,7 +12248,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             char prev_label[16];
             char next_label[16];
             char info_label[16];
-            char use_label[16];
             char confirm_label[16];
             char drop_label[16];
             char back_label[16];
@@ -12299,10 +12266,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 next_label, sizeof(next_label));
             info_available = supply_controller_info_key(info_label,
                 sizeof(info_label), !jewelry_presets) != GAMEPAD_BIND_NONE;
-            controller_prompt_label(steamdeck_alt_action_key(), "X", use_label, sizeof(use_label));
             controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
-            controller_prompt_label('f', "B", drop_label, sizeof(drop_label));
-            controller_prompt_label(ESCAPE, "Start", back_label, sizeof(back_label));
+            controller_prompt_label(steamdeck_alt_action_key(), "X",
+                drop_label, sizeof(drop_label));
+            controller_prompt_label(steamdeck_back_key(), "B", back_label,
+                sizeof(back_label));
 
             if (jewelry_presets)
             {
@@ -12315,9 +12283,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (info_available && save_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] equip  [%s] save  [%s] back",
-                        prev_label, next_label, info_label, use_label,
-                        confirm_label, save_label, back_label);
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s] equip  [%s] save  [%s] back",
+                        prev_label, next_label, info_label, confirm_label,
+                        save_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
                         "D-pad nav  [%s] info  [%s] equip  [%s] save",
                         info_label, confirm_label, save_label);
@@ -12325,9 +12293,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 else if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] equip  [%s] back",
-                        prev_label, next_label, info_label, use_label,
-                        confirm_label, back_label);
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s] equip  [%s] back",
+                        prev_label, next_label, info_label, confirm_label,
+                        back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
                         "D-pad nav  [%s] info  [%s] equip",
                         info_label, confirm_label);
@@ -12335,9 +12303,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 else if (save_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s/%s] equip  [%s] save  [%s] back",
-                        prev_label, next_label, use_label, confirm_label,
-                        save_label, back_label);
+                        "D-pad nav  [%s/%s] page  [%s] equip  [%s] save  [%s] back",
+                        prev_label, next_label, confirm_label, save_label,
+                        back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
                         "D-pad nav  [%s] equip  [%s] save",
                         confirm_label, save_label);
@@ -12345,9 +12313,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s/%s] equip  [%s] back",
-                        prev_label, next_label, use_label, confirm_label,
-                        back_label);
+                        "D-pad nav  [%s/%s] page  [%s] equip  [%s] back",
+                        prev_label, next_label, confirm_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
                         "D-pad nav  [%s] equip", confirm_label);
                 }
@@ -12361,22 +12328,22 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s/%s] use  [%s] drop  [%s] back",
-                        prev_label, next_label, info_label, use_label,
-                        confirm_label, drop_label, back_label);
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s] use  [%s] drop  [%s] back",
+                        prev_label, next_label, info_label, confirm_label,
+                        drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] info  [%s/%s] use  [%s] drop",
-                        info_label, use_label, confirm_label, drop_label);
+                        "D-pad nav  [%s] info  [%s] use  [%s] drop",
+                        info_label, confirm_label, drop_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s/%s] use  [%s] drop  [%s] back",
-                        prev_label, next_label, use_label, confirm_label,
-                        drop_label, back_label);
+                        "D-pad nav  [%s/%s] page  [%s] use  [%s] drop  [%s] back",
+                        prev_label, next_label, confirm_label, drop_label,
+                        back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s/%s] use  [%s] drop",
-                        use_label, confirm_label, drop_label);
+                        "D-pad nav  [%s] use  [%s] drop",
+                        confirm_label, drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
                     "D-pad nav  [%s] use  [%s] drop", confirm_label,
@@ -12390,7 +12357,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             Term_putstr(0, draw_layout.prompt_row, draw_layout.term_wid,
                 TERM_L_DARK, prompt_buf);
             supply_register_prompt_clicks(&draw_layout, prompt_buf,
-                info_available ? info_label : NULL, use_label, confirm_label,
+                info_available ? info_label : NULL, NULL, confirm_label,
                 jewelry_presets ? NULL : drop_label,
                 back_label);
             if (drop_click_mode)
@@ -12600,7 +12567,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         if (!click_generated_command)
             ch = supply_controller_menu_key(ch,
                 SUPPLY_BROWSER_PREV_PAGE_KEY,
-                SUPPLY_BROWSER_NEXT_PAGE_KEY, true,
+                SUPPLY_BROWSER_NEXT_PAGE_KEY,
+                grp_idx[grp_cur] != SUPPLY_GROUP_JEWELRY_PRESETS,
                 grp_idx[grp_cur] != SUPPLY_GROUP_JEWELRY_PRESETS);
 
         if (ch == '-' && entry_cnt)
@@ -12640,10 +12608,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     && ch == steamdeck_confirm_key()))
             && entry_cnt)
         {
-            if (forced_action == SUPPLY_MENU_ACTION_USE)
-                ch = 'u';
-            else if (forced_action == SUPPLY_MENU_ACTION_DROP)
+            if (forced_action == SUPPLY_MENU_ACTION_DROP)
                 ch = 'z';
+            else
+                ch = 'u';
         }
 
         switch (ch)

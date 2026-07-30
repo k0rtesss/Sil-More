@@ -634,11 +634,16 @@ static void unified_look_print_controller_prompt(
         sizeof(prev_label));
     unified_look_prompt_label(steamdeck_next_page_key(), "R1", next_label,
         sizeof(next_label));
-    unified_look_prompt_label(' ', "A", exam_label, sizeof(exam_label));
-    unified_look_prompt_label('f', "B", target_label, sizeof(target_label));
-    unified_look_prompt_label('u', "X", obj_label, sizeof(obj_label));
-    unified_look_prompt_label('s', "Y", mode_label, sizeof(mode_label));
-    unified_look_prompt_label(ESCAPE, "Esc", back_label, sizeof(back_label));
+    unified_look_prompt_label(steamdeck_confirm_key(), "A", exam_label,
+        sizeof(exam_label));
+    unified_look_prompt_label(steamdeck_alt_action_key(), "X", target_label,
+        sizeof(target_label));
+    unified_look_prompt_label(steamdeck_info_key(), "View", obj_label,
+        sizeof(obj_label));
+    unified_look_prompt_label(steamdeck_secondary_key(), "Y", mode_label,
+        sizeof(mode_label));
+    unified_look_prompt_label(steamdeck_back_key(), "B", back_label,
+        sizeof(back_label));
 
     strnfmt(prev_full, sizeof(prev_full), "%s Prev", prev_label);
     strnfmt(next_full, sizeof(next_full), "%s Next", next_label);
@@ -1329,12 +1334,19 @@ void do_cmd_unified_look(void)
         
         /* Get input */
         query = inkey();
-        query = steamdeck_menu_key(query, 'e', 'i');
+        bool pointer_click_pending = ui_menu_click_has_pending();
+
+        if (!pointer_click_pending)
+        {
+            query = steamdeck_menu_key(query, 'e', 'i');
+            if (controller_controls && query == steamdeck_alt_action_key())
+                query = 't';
+            else if (controller_controls && query == steamdeck_info_key())
+                query = 'u';
+        }
         log_trace("Unified look key input: '%c' (%d) [char: %c, isupper: %d]", 
                  query, (int)query, (query >= 32 && query <= 126) ? query : '?', 
                  (query >= 'A' && query <= 'Z') ? 1 : 0);
-
-        bool pointer_click_pending = ui_menu_click_has_pending();
 
         /* Keep the overlay live while cycling sidebar selection to avoid
          * flashing back to the map between adjacent redraws. */

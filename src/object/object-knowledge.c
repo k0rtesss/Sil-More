@@ -26,7 +26,12 @@ void object_known(object_type* o_ptr)
 void object_aware(object_type* o_ptr)
 {
     bool flag = k_info[o_ptr->k_idx].aware;
-    bool quiet_awareness = !character_generated || character_xtra || character_icky;
+    /*
+     * Saved-screen menus and description overlays set character_icky while
+     * normal gameplay actions are still allowed.  Do not let that UI state
+     * suppress identification experience.
+     */
+    bool quiet_awareness = !character_generated || character_xtra;
 
     /* Fully aware of the effects */
     k_info[o_ptr->k_idx].aware = true;

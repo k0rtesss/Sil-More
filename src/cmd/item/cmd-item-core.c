@@ -305,6 +305,131 @@ cptr item_use_action_name(const object_type* o_ptr, int item)
     }
 }
 
+enum {
+    CONTEXT_SQUARE_POPUP_SUPPRESS_TURNS = 10
+};
+
+static s64b context_square_popup_suppressed_at = -1;
+static s64b context_square_popup_suppressed_until = -1;
+
+static bool context_square_popup_is_suppressed(void)
+{
+    s64b current_turn = (s64b)playerturn;
+
+    if (context_square_popup_suppressed_at < 0)
+        return false;
+
+    /*
+     * A loaded or newly created character can move the full-turn counter
+     * backwards.  Temporary UI suppression belongs only to the run in which
+     * it was requested.
+     */
+    if (current_turn < context_square_popup_suppressed_at
+        || current_turn >= context_square_popup_suppressed_until)
+    {
+        context_square_popup_suppressed_at = -1;
+        context_square_popup_suppressed_until = -1;
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * Show the desktop counterpart of Quick Touch after the player enters a
+ * context-sensitive square.  This is a compact, nonblocking shortcut palette:
+ * its buttons perform the same actions as the Quick Touch controls.
+ *
+ * Return true when a hint was shown.
+ */
+bool do_cmd_context_square_action_popup(void)
+{
+    char context_label[32];
+    int floor_item = first_floor_item_under_player();
+    char title[80];
+
+    if (!get_sdl_show_context_square_popups()
+        || context_square_popup_is_suppressed())
+    {
+        return false;
+    }
+
+    if (!touch_shortcut_context_action(' ', false, NULL,
+            context_label, sizeof(context_label))
+        || strcmp(context_label, "Confirm") == 0)
+    {
+        return false;
+    }
+
+    if (cave_stair_bold(p_ptr->py, p_ptr->px)
+        || cave_forge_bold(p_ptr->py, p_ptr->px))
+    {
+        cptr feature_name = f_name + f_info[
+            cave_feat[p_ptr->py][p_ptr->px]].name;
+
+        strnfmt(title, sizeof(title), "%^s", feature_name);
+    }
+    else if (floor_item)
+    {
+        object_type* o_ptr = &o_list[0 - floor_item];
+
+        if (!o_ptr->k_idx)
+            return false;
+
+        object_desc(title, sizeof(title), o_ptr, true, 3);
+    }
+    else
+    {
+        return false;
+    }
+
+    sdl_question_menu_begin(title);
+    sdl_question_menu_set_anchor_grid(p_ptr->py, p_ptr->px);
+
+    if (floor_item && !cave_stair_bold(p_ptr->py, p_ptr->px)
+        && !cave_forge_bold(p_ptr->py, p_ptr->px))
+    {
+        object_type* o_ptr = &o_list[0 - floor_item];
+
+        if (o_ptr->tval != TV_SKELETON)
+            sdl_question_menu_add_button('x', "Description", TERM_L_BLUE);
+        sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_ACTION,
+            item_use_action_name(o_ptr, floor_item), TERM_L_GREEN);
+        if (o_ptr->tval != TV_SKELETON)
+            sdl_question_menu_add_button('g', "Pick Up", TERM_L_WHITE);
+    }
+    else
+    {
+        sdl_question_menu_add_button(' ', context_label, TERM_L_GREEN);
+    }
+
+    sdl_question_menu_finish();
+    sdl_question_menu_set_context_hint();
+    Term_fresh();
+    return true;
+}
+
+void do_cmd_suppress_context_square_popups(void)
+{
+    context_square_popup_suppressed_at = (s64b)playerturn;
+    context_square_popup_suppressed_until =
+        (s64b)playerturn + CONTEXT_SQUARE_POPUP_SUPPRESS_TURNS;
+    sdl_question_menu_clear_context_hint();
+}
+
+/*
+ * Perform the action promised by the desktop square-context popup without
+ * reopening the generic inventory browser.  The popup is cleared whenever the
+ * player enters another command, so its floor item is still on this square.
+ */
+void do_cmd_context_floor_item_action(void)
+{
+    int floor_item = first_floor_item_under_player();
+
+    if (floor_item)
+        do_cmd_use_item_by_index(floor_item);
+}
+
 /*
  * Perform the targeted floor interaction promised by the unified Use action.
  * This is deliberately limited to the player's square: carried chests and
