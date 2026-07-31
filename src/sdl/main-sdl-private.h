@@ -2340,9 +2340,11 @@ byte sdl_mouse_path_route_state(int dir, int chain);
 int sdl_mouse_path_route_state_dir(byte state);
 int sdl_mouse_path_route_state_chain(byte state);
 bool sdl_mouse_path_dirs_sprint_compatible(int newer_dir, int older_dir);
+bool sdl_mouse_path_grid_is_leapable_obstacle(int y, int x);
 bool sdl_mouse_path_grid_is_safe_leap_landing(int y, int x);
 bool sdl_mouse_path_state_has_run_up(int y, int x, int dir, byte state);
-bool sdl_mouse_path_can_step_into_chasm(int y, int x, int dir, byte state);
+bool sdl_mouse_path_can_step_into_leapable_obstacle(int y, int x, int dir,
+    byte state);
 byte sdl_mouse_path_initial_route_state(bool sprint_enabled);
 byte sdl_mouse_path_next_route_state(byte state, int dir, bool sprint_enabled);
 int sdl_mouse_path_route_edge_cost(byte state, int dir, bool sprint_enabled);

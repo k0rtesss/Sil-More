@@ -57,12 +57,7 @@ static bool floor_entry_perform_action(int floor_idx,
     }
 }
 
-static bool touch_click_needs_confirmation(bool click_generated_command)
-{
-    return click_generated_command && sdl_touch_only_device_active();
-}
-
-static bool confirm_touch_object_action(cptr action, const object_type* o_ptr,
+static bool confirm_object_action(cptr action, const object_type* o_ptr,
     bool floor)
 {
     char o_name[80];
@@ -80,7 +75,7 @@ static bool confirm_touch_object_action(cptr action, const object_type* o_ptr,
     return get_check(prompt);
 }
 
-static bool confirm_touch_supply_entry_action(cptr action,
+static bool confirm_supply_entry_action(cptr action,
     const supply_list_entry* entry)
 {
     object_type* o_ptr = NULL;
@@ -110,10 +105,10 @@ static bool confirm_touch_supply_entry_action(cptr action,
         floor = true;
     }
 
-    return confirm_touch_object_action(action, o_ptr, floor);
+    return confirm_object_action(action, o_ptr, floor);
 }
 
-static bool confirm_touch_drop_amount(const object_type* o_ptr, int amt)
+static bool confirm_drop_amount(const object_type* o_ptr, int amt)
 {
     object_type prompt_obj;
     char prompt_name[80];
@@ -211,7 +206,7 @@ static bool supplies_menu_gem_animates_map(const supply_list_entry* entry)
         || o_ptr->sval == SV_GEM_SHADOWS;
 }
 
-static bool supplies_menu_drop_entry(supply_list_entry* entry, bool confirm)
+static bool supplies_menu_drop_entry(supply_list_entry* entry)
 {
     if (!entry)
         return false;
@@ -227,8 +222,7 @@ static bool supplies_menu_drop_entry(supply_list_entry* entry, bool confirm)
     {
         if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
         {
-            return do_cmd_drop_item_by_index_confirm(entry->equip_idx,
-                confirm);
+            return do_cmd_drop_item_by_index_confirm(entry->equip_idx, true);
         }
         return false;
     }
@@ -249,7 +243,7 @@ static bool supplies_menu_drop_entry(supply_list_entry* entry, bool confirm)
     int actual_amt = get_quantity_action(quantity_prompt, "Drop", max_amt);
     if (actual_amt <= 0)
         return false;
-    if (confirm && !confirm_touch_drop_amount(o_ptr, actual_amt))
+    if (!confirm_drop_amount(o_ptr, actual_amt))
         return false;
     supplies_begin_action(entry->supply_idx);
     bool dropped = supplies_drop_amount(entry->supply_idx, actual_amt);
@@ -5193,7 +5187,7 @@ static cptr floor_touch_action_text(supply_floor_action floor_action,
     }
 }
 
-static bool confirm_touch_equipment_entry_action(cptr action,
+static bool confirm_equipment_entry_action(cptr action,
     const equipment_list_entry* entry)
 {
     object_type* o_ptr;
@@ -5204,11 +5198,11 @@ static bool confirm_touch_equipment_entry_action(cptr action,
 
     o_ptr = equipment_entry_object(entry);
     floor = entry->floor_idx > 0 && entry->floor_idx < o_max;
-    return confirm_touch_object_action(action, o_ptr, floor);
+    return confirm_object_action(action, o_ptr, floor);
 }
 
 static bool equipment_menu_use_entry(equipment_list_entry* entry,
-    int selected_slot, supply_floor_action floor_action, bool confirm)
+    int selected_slot, supply_floor_action floor_action)
 {
     object_type* o_ptr;
 
@@ -5217,8 +5211,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
 
     if (entry->floor_idx > 0 && entry->floor_idx < o_max)
     {
-        if (confirm
-            && !confirm_touch_equipment_entry_action(
+        if (!confirm_equipment_entry_action(
                 floor_touch_action_text(floor_action,
                     &o_list[entry->floor_idx], entry->floor_idx), entry))
         {
@@ -5230,8 +5223,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
-        if (confirm
-            && !confirm_touch_equipment_entry_action(
+        if (!confirm_equipment_entry_action(
                 browser_item_use_action_text(
                     &inventory[entry->equip_idx], entry->equip_idx), entry))
         {
@@ -5247,8 +5239,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
 
     if (entry->supply_idx >= 0)
     {
-        if (confirm
-            && !confirm_touch_equipment_entry_action("Equip", entry))
+        if (!confirm_equipment_entry_action("Equip", entry))
         {
             return false;
         }
@@ -5263,8 +5254,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
     {
-        if (confirm
-            && !confirm_touch_equipment_entry_action("Equip", entry))
+        if (!confirm_equipment_entry_action("Equip", entry))
         {
             return false;
         }
@@ -5278,7 +5268,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
     return false;
 }
 
-static bool equipment_menu_drop_entry(equipment_list_entry* entry, bool confirm)
+static bool equipment_menu_drop_entry(equipment_list_entry* entry)
 {
     object_type* o_ptr;
 
@@ -5286,10 +5276,10 @@ static bool equipment_menu_drop_entry(equipment_list_entry* entry, bool confirm)
         return false;
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
-        return do_cmd_drop_item_by_index_confirm(entry->equip_idx, confirm);
+        return do_cmd_drop_item_by_index_confirm(entry->equip_idx, true);
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
-        return do_cmd_drop_item_by_index_confirm(entry->item_idx, confirm);
+        return do_cmd_drop_item_by_index_confirm(entry->item_idx, true);
 
     if (entry->supply_idx < 0)
         return false;
@@ -5312,7 +5302,7 @@ static bool equipment_menu_drop_entry(equipment_list_entry* entry, bool confirm)
 
         if (actual_amt <= 0)
             return false;
-        if (confirm && !confirm_touch_drop_amount(o_ptr, actual_amt))
+        if (!confirm_drop_amount(o_ptr, actual_amt))
             return false;
 
         supplies_begin_action(entry->supply_idx);
@@ -6632,7 +6622,7 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
 }
 
 static bool inventory_page_use_entry(equipment_list_entry* entry,
-    supply_floor_action floor_action, bool confirm)
+    supply_floor_action floor_action)
 {
     supply_list_entry supply_entry = {0};
 
@@ -6641,8 +6631,7 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
 
     if (entry->floor_idx > 0 && entry->floor_idx < o_max)
     {
-        if (confirm
-            && !confirm_touch_equipment_entry_action(
+        if (!confirm_equipment_entry_action(
                 inventory_page_use_action_text(entry, floor_action), entry))
         {
             return false;
@@ -6652,8 +6641,7 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
-        if (confirm
-            && !confirm_touch_equipment_entry_action(
+        if (!confirm_equipment_entry_action(
                 inventory_page_use_action_text(entry, floor_action), entry))
         {
             return false;
@@ -6664,8 +6652,7 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
     {
-        if (confirm
-            && !confirm_touch_equipment_entry_action(
+        if (!confirm_equipment_entry_action(
                 inventory_page_use_action_text(entry, floor_action), entry))
         {
             return false;
@@ -6676,8 +6663,7 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
 
     if (entry->supply_idx >= 0)
     {
-        if (confirm
-            && !confirm_touch_equipment_entry_action(
+        if (!confirm_equipment_entry_action(
                 inventory_page_use_action_text(entry, floor_action), entry))
         {
             return false;
@@ -6693,7 +6679,7 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
     return false;
 }
 
-static bool inventory_page_drop_entry(equipment_list_entry* entry, bool confirm)
+static bool inventory_page_drop_entry(equipment_list_entry* entry)
 {
     supply_list_entry supply_entry = {0};
 
@@ -6701,10 +6687,10 @@ static bool inventory_page_drop_entry(equipment_list_entry* entry, bool confirm)
         return false;
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
-        return do_cmd_drop_item_by_index_confirm(entry->equip_idx, confirm);
+        return do_cmd_drop_item_by_index_confirm(entry->equip_idx, true);
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
-        return do_cmd_drop_item_by_index_confirm(entry->item_idx, confirm);
+        return do_cmd_drop_item_by_index_confirm(entry->item_idx, true);
 
     if (entry->supply_idx >= 0)
     {
@@ -6713,7 +6699,7 @@ static bool inventory_page_drop_entry(equipment_list_entry* entry, bool confirm)
         supply_entry.equip_idx = -1;
         supply_entry.preset_idx = -1;
         supply_entry.floor_idx = -1;
-        return supplies_menu_drop_entry(&supply_entry, confirm);
+        return supplies_menu_drop_entry(&supply_entry);
     }
 
     return false;
@@ -10638,9 +10624,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     }
 
                     if (equipment_menu_use_entry(&equip_entries[equip_entry_cur],
-                            selected_slot, floor_action,
-                            touch_click_needs_confirmation(
-                                click_generated_command)))
+                            selected_slot, floor_action))
                     {
                         acted = true;
                         refresh_after_close = true;
@@ -10663,9 +10647,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         break;
                     }
 
-                    if (equipment_menu_drop_entry(&equip_entries[equip_entry_cur],
-                            touch_click_needs_confirmation(
-                                click_generated_command)))
+                    if (equipment_menu_drop_entry(
+                            &equip_entries[equip_entry_cur]))
                     {
                         acted = true;
                         refresh_after_close = true;
@@ -11791,9 +11774,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     }
 
                     if (inventory_page_use_entry(&equip_entries[inv_entry_cur],
-                            floor_action,
-                            touch_click_needs_confirmation(
-                                click_generated_command)))
+                            floor_action))
                     {
                         acted = true;
                         refresh_after_close = true;
@@ -11818,9 +11799,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         break;
                     }
 
-                    if (inventory_page_drop_entry(&equip_entries[inv_entry_cur],
-                            touch_click_needs_confirmation(
-                                click_generated_command)))
+                    if (inventory_page_drop_entry(
+                            &equip_entries[inv_entry_cur]))
                     {
                         acted = true;
                         refresh_after_close = true;
@@ -12706,8 +12686,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         : supply_item_use_action_text(action_o_ptr,
                             SUPPLIES_INDEX);
 
-                    if (touch_click_needs_confirmation(click_generated_command)
-                        && !confirm_touch_supply_entry_action(action, entry))
+                    if (!confirm_supply_entry_action(action, entry))
                     {
                         break;
                     }
@@ -12735,8 +12714,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 {
                     object_type* o_ptr = &inventory[entry->item_idx];
 
-                    if (touch_click_needs_confirmation(click_generated_command)
-                        && !confirm_touch_supply_entry_action(
+                    if (!confirm_supply_entry_action(
                             supply_item_use_action_text(o_ptr,
                                 entry->item_idx), entry))
                     {
@@ -12812,23 +12790,17 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                 if (entry->item_idx == SUPPLIES_INDEX && entry->supply_idx >= 0)
                 {
-                    dropped = supplies_menu_drop_entry(entry,
-                        touch_click_needs_confirmation(
-                            click_generated_command));
+                    dropped = supplies_menu_drop_entry(entry);
                 }
                 else if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
                 {
                     dropped = do_cmd_drop_item_by_index_confirm(
-                        entry->equip_idx,
-                        touch_click_needs_confirmation(
-                            click_generated_command));
+                        entry->equip_idx, true);
                 }
                 else if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
                 {
                     dropped = do_cmd_drop_item_by_index_confirm(
-                        entry->item_idx,
-                        touch_click_needs_confirmation(
-                            click_generated_command));
+                        entry->item_idx, true);
                 }
                 else
                 {

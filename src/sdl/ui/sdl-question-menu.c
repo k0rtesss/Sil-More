@@ -1817,23 +1817,12 @@ bool sdl_question_menu_handle_hover_pointer(float x, float y)
             g_question_menu.highlight = choice;
             g_state.need_present = true;
         }
-        {
-            sdl_question_menu_layout_info layout;
-
-            if (sdl_question_menu_layout(&layout))
-            {
-                for (int i = 0; i < layout.button_count; i++)
-                {
-                    if (!sdl_point_in_frect(&layout.buttons[i], x, y))
-                        continue;
-
-                    (void)sdl_object_tooltip_show_text_at_rect(
-                        &layout.buttons[i],
-                        g_question_menu.buttons[i].text, false);
-                    break;
-                }
-            }
-        }
+        /*
+         * Labeled action buttons explain themselves.  Keep their hover
+         * highlight but clear the map tooltip instead of repeating labels
+         * such as "Wield" in a second popup.
+         */
+        sdl_object_tooltip_clear();
         return true;
     }
     if (g_question_menu.nonblocking)

@@ -706,29 +706,37 @@ void monster_swap(int y1, int x1, int y2, int x2)
 
         object_flags(o_ptr, &f1, &f2, &f3);
 
-        if (!forgo_attacking_unwary || (m_ptr->alertness >= ALERTNESS_ALERT))
+        if ((distance(y1, x1, p_ptr->py, p_ptr->px) > 1)
+            && (distance(y2, x2, p_ptr->py, p_ptr->px) == 1)
+            && !p_ptr->truce && !p_ptr->confused && !p_ptr->afraid
+            && (f3 & (TR3_POLEARM))
+            && (p_ptr->focused
+                || p_ptr->previous_action[0] == ACTION_READY_MELEE))
         {
-            if ((distance(y1, x1, p_ptr->py, p_ptr->px) > 1)
-                && (distance(y2, x2, p_ptr->py, p_ptr->px) == 1)
-                && !p_ptr->truce && !p_ptr->confused && !p_ptr->afraid
-                && (f3 & (TR3_POLEARM)) && p_ptr->focused)
+            char o_name[80];
+
+            /* Get the basic name of the object */
+            object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
+
+            if (forgo_attacking_unwary
+                && (m_ptr->alertness < ALERTNESS_ALERT))
             {
-                char o_name[80];
-
-                /* Get the basic name of the object */
-                object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-
-                if (valorous_oath_auto_attack_safety && chosen_oath(OATH_VALOROUS)
-                    && !oath_invalid(OATH_VALOROUS)
-                    && (m_ptr->stance == STANCE_FLEEING))
-                {
-                    msg_format("%^s comes into reach of your %s, but you hold back.", m_name, o_name);
-                }
-                else
-                {
-                    msg_format("%^s comes into reach of your %s.", m_name, o_name);
-                    py_attack_aux(y2, x2, ATT_POLEARM);
-                }
+                msg_format("%^s comes into reach of your %s, but you hold back "
+                           "from attacking an unwary foe.",
+                    m_name, o_name);
+            }
+            else if (valorous_oath_auto_attack_safety
+                && chosen_oath(OATH_VALOROUS) && !oath_invalid(OATH_VALOROUS)
+                && (m_ptr->stance == STANCE_FLEEING))
+            {
+                msg_format("%^s comes into reach of your %s, but you hold back.",
+                    m_name, o_name);
+            }
+            else
+            {
+                msg_format(
+                    "%^s comes into reach of your %s.", m_name, o_name);
+                py_attack_aux(y2, x2, ATT_POLEARM);
             }
         }
     }

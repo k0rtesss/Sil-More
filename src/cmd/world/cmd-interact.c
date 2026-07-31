@@ -499,7 +499,7 @@ typedef enum door_minigame_choice
 #define DOOR_JAM_CHANCE_PER_MISS 10
 #define DOOR_JAM_CHANCE_MAX 75
 #define DOOR_LOCKPICK_BASE_DIFFICULTY 8
-#define FLOOR_TRAP_DISARM_BASE_DIFFICULTY 3
+#define FLOOR_TRAP_DISARM_BASE_DIFFICULTY 6
 
 static door_minigame_retry_state door_retry;
 

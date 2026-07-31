@@ -4595,11 +4595,12 @@ typedef struct chest_minigame_retry_state
 static chest_minigame_retry_state chest_retry;
 
 #define CHEST_LOOK_DIE_SIDES 5
-#define CHEST_FULL_DETECTION_DISARM_BONUS 5
+#define CHEST_UNDETECTED_TRAP_DISARM_PENALTY 5
+#define CHEST_UNIDENTIFIED_TRAP_DISARM_PENALTY 3
 #define CHEST_MINIGAME_RETRY_DELAY_MS 1000
 #define CHEST_LOCK_BASE_DIFFICULTY 8
 #define CHEST_LOOK_BASE_DIFFICULTY 8
-#define CHEST_DISARM_BASE_DIFFICULTY 6
+#define CHEST_DISARM_BASE_DIFFICULTY 7
 #define CHEST_CONCEALED_TRAP_BASE_DIFFICULTY 18
 
 static bool chest_was_inspected(const object_type* o_ptr)
@@ -4695,9 +4696,15 @@ static int chest_disarm_difficulty(const object_type* o_ptr)
 {
     int level = o_ptr ? ABS(o_ptr->pval) : 0;
     int power = 1 + (level / 4);
-
-    return power + (level / 4) + CHEST_DISARM_BASE_DIFFICULTY
+    int difficulty = power + (level / 4) + CHEST_DISARM_BASE_DIFFICULTY
         + chest_condition_penalty();
+
+    if (!chest_trap_presence_known(o_ptr))
+        difficulty += CHEST_UNDETECTED_TRAP_DISARM_PENALTY;
+    else if (!chest_trap_fully_known(o_ptr))
+        difficulty += CHEST_UNIDENTIFIED_TRAP_DISARM_PENALTY;
+
+    return difficulty;
 }
 
 static void chest_trap_effect_desc(char* buf, size_t buf_size,
@@ -4912,8 +4919,6 @@ static bool do_cmd_chest_minigame(int y, int x, s16b o_idx)
     score = p_ptr->skill_use[S_PER];
     if (p_ptr->active_ability[S_PER][PER_REWIRE_TRAPS])
         score += 5;
-    if (fully_known)
-        score += CHEST_FULL_DETECTION_DISARM_BONUS;
     strnfmt(disarm_label, sizeof(disarm_label), "Disarm: %d%%",
         player_skill_check_success_percent(
             score, chest_disarm_difficulty(o_ptr), 10, 10));
@@ -5012,8 +5017,6 @@ static bool do_cmd_chest_minigame(int y, int x, s16b o_idx)
         score = p_ptr->skill_use[S_PER];
         if (p_ptr->active_ability[S_PER][PER_REWIRE_TRAPS])
             score += 5;
-        if (fully_known)
-            score += CHEST_FULL_DETECTION_DISARM_BONUS;
         difficulty = chest_disarm_difficulty(o_ptr);
         result = show_interaction_skill_roll_animation("Disarming the chest",
             "Testing the trap mechanism", y, x, score, difficulty, &roll);

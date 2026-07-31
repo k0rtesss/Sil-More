@@ -232,6 +232,12 @@ bool sdl_mouse_path_dirs_sprint_compatible(int newer_dir, int older_dir)
         || (newer_dir == cycle[chome[older_dir] + 1]);
 }
 
+bool sdl_mouse_path_grid_is_leapable_obstacle(int y, int x)
+{
+    return sdl_mouse_feature_known_for_action(y, x)
+        && player_grid_is_leapable_obstacle(y, x);
+}
+
 bool sdl_mouse_path_grid_is_safe_leap_landing(int y, int x)
 {
     int m_idx;
@@ -258,7 +264,7 @@ bool sdl_mouse_path_state_has_run_up(int y, int x, int dir, byte state)
     return sdl_mouse_path_dirs_sprint_compatible(dir, previous_dir);
 }
 
-bool sdl_mouse_path_can_step_into_chasm(int y, int x, int dir,
+bool sdl_mouse_path_can_step_into_leapable_obstacle(int y, int x, int dir,
     byte state)
 {
     int mid_y;
@@ -284,9 +290,7 @@ bool sdl_mouse_path_can_step_into_chasm(int y, int x, int dir,
 
     if (!in_bounds(mid_y, mid_x) || !in_bounds(land_y, land_x))
         return false;
-    if (cave_feat[mid_y][mid_x] != FEAT_CHASM)
-        return false;
-    if (!sdl_mouse_feature_known_for_action(mid_y, mid_x))
+    if (!sdl_mouse_path_grid_is_leapable_obstacle(mid_y, mid_x))
         return false;
 
     return sdl_mouse_path_grid_is_safe_leap_landing(land_y, land_x);
@@ -603,7 +607,7 @@ bool sdl_mouse_path_build_from_search(int target_y, int target_x,
     byte state = target_state;
     int reverse_len = 0;
 
-    while (here != start) {
+    while (true) {
         int y = GRID_Y(here);
         int x = GRID_X(here);
         size_t idx;
@@ -614,14 +618,21 @@ bool sdl_mouse_path_build_from_search(int target_y, int target_x,
             return false;
         if (state >= SDL_MOUSE_PATH_ROUTE_STATE_COUNT)
             return false;
-        if (reverse_len >= SDL_MOUSE_PATH_MAX_GRIDS)
-            return false;
-
         idx = sdl_mouse_path_search_grid_state_index(here, state);
         parent = g_mouse_path_search.parent_grid[idx];
         parent_state = g_mouse_path_search.parent_state[idx];
 
-        if ((parent == here) && (parent_state == state))
+        /* A run-up route may leave the player's starting grid and return to it
+         * with a different direction state before crossing the obstacle.  The
+         * grid alone therefore does not identify the search root.  Stop only
+         * at the self-parented root state; otherwise retain the revisited
+         * starting grid and its preceding run-up steps in the path. */
+        if ((parent == here) && (parent_state == state)) {
+            if (here != start)
+                return false;
+            break;
+        }
+        if (reverse_len >= SDL_MOUSE_PATH_MAX_GRIDS)
             return false;
         if (!in_bounds(GRID_Y(parent), GRID_X(parent)))
             return false;
@@ -693,7 +704,7 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
             int dir = dirs[i];
             int ny = y + ddy[dir];
             int nx = x + ddx[dir];
-            bool chasm_step = false;
+            bool leap_step = false;
             byte next_state;
             u16b next_grid;
             size_t next_idx;
@@ -702,7 +713,7 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
 
             if (!in_bounds(ny, nx))
                 continue;
-            if (cave_feat[y][x] == FEAT_CHASM) {
+            if (sdl_mouse_path_grid_is_leapable_obstacle(y, x)) {
                 int previous_dir = sdl_mouse_path_route_state_dir(state);
 
                 if (dir != previous_dir)
@@ -710,9 +721,12 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
                 if (!sdl_mouse_path_grid_is_safe_leap_landing(ny, nx))
                     continue;
             } else if (!sdl_mouse_path_grid_walkable(ny, nx)) {
-                if (!sdl_mouse_path_can_step_into_chasm(y, x, dir, state))
+                if (!sdl_mouse_path_can_step_into_leapable_obstacle(
+                        y, x, dir, state))
+                {
                     continue;
-                chasm_step = true;
+                }
+                leap_step = true;
             }
 
             next_state = sdl_mouse_path_next_route_state(
@@ -724,7 +738,7 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
             next_cost =
                 base_cost + sdl_mouse_path_route_edge_cost(
                     state, dir, sprint_enabled);
-            if (chasm_step)
+            if (leap_step)
                 next_cost += SDL_MOUSE_PATH_COST_NORMAL;
 
             if (next_cost >= g_mouse_path_search.cost[next_idx])

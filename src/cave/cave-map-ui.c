@@ -136,6 +136,8 @@ void move_cursor_relative(int y, int x)
  */
 void print_rel(char c, byte a, int y, int x)
 {
+    byte ta = 0;
+    char tc = 0;
     int ky, kx;
     int vy, vx;
     int cell_w;
@@ -167,8 +169,22 @@ void print_rel(char c, byte a, int y, int x)
     if (hidden_left_panel_masked_span(vy, vx, cell_w))
         return;
 
+    /*
+     * Transparent tile animations need the real dungeon terrain beneath
+     * them.  Without it, a thrown weapon is composited over an opaque blank
+     * cell for every frame instead of flying cleanly across the map.
+     */
+    if (!graphics_are_ascii() && (a & TILE_FLAG)
+        && (((byte)c) & TILE_FLAG))
+    {
+        byte ignored_a;
+        char ignored_c;
+
+        map_info(y, x, &ignored_a, &ignored_c, &ta, &tc);
+    }
+
     /* Hack -- Queue it */
-    Term_queue_char(vx, vy, a, c, 0, 0);
+    Term_queue_char(vx, vy, a, c, ta, tc);
 
     if (use_bigtile)
     {

@@ -708,6 +708,7 @@ extern void do_cmd_spike(void);
 extern void chest_release_contents(struct object_type* o_ptr, int y, int x,
     int destroy_typ);
 extern bool do_cmd_walk_test(int y, int x);
+extern bool player_grid_is_leapable_obstacle(int y, int x);
 extern void do_cmd_walk(void);
 extern void do_cmd_jump(void);
 extern void do_cmd_run(void);

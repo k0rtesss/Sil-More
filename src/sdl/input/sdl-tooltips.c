@@ -143,7 +143,7 @@ bool sdl_mouse_path_take_step_command(int* command, int* dir)
     next_y = GRID_Y(g_mouse_path.path[0]);
     next_x = GRID_X(g_mouse_path.path[0]);
     attack_step = sdl_mouse_grid_has_visible_monster(next_y, next_x, NULL);
-    if (cave_feat[next_y][next_x] == FEAT_CHASM)
+    if (sdl_mouse_path_grid_is_leapable_obstacle(next_y, next_x))
         sdl_mouse_note_feature_for_action(next_y, next_x);
 
     *command = ';';

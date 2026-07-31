@@ -830,6 +830,7 @@ N:52:of the Longbeards
 W:0:30:0:1000
 C:0:0:0:0:0:0:0
 T:20:3:3
+M:STR:2
 F:STR | NOBLE_ITEM
 D:[mattock]The grave strength of the Longbeards is in it still, fit for
 D: long delving where lesser folk would have laid tool and will aside.

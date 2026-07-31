@@ -29,6 +29,18 @@ static bool player_take_trap_step_allowance(int y, int x)
     return allowed;
 }
 
+bool player_grid_is_leapable_obstacle(int y, int x)
+{
+    if (!in_bounds(y, x))
+        return false;
+    if (cave_feat[y][x] == FEAT_CHASM)
+        return true;
+
+    return cave_trap_bold(y, x) && !cave_floorlike_bold(y, x)
+        && !cave_rewired[y][x] && cave_feat[y][x] != FEAT_TRAP_ROOST
+        && cave_feat[y][x] != FEAT_TRAP_WEB;
+}
+
 static bool move_target_exits_gates(int y, int x)
 {
     if (!p_ptr || (p_ptr->depth != 0))
@@ -307,11 +319,7 @@ void move_player(int dir)
         {
             // leapable things: chasms, traps (except roosts and webs).
             // A trap the player has rewired is safe for them -- no leap prompt.
-            if ((cave_feat[y][x] == FEAT_CHASM)
-                || (((cave_trap_bold(y, x)) && !cave_floorlike_bold(y, x))
-                    && !cave_rewired[y][x]
-                    && !(cave_feat[y][x] == FEAT_TRAP_ROOST
-                        || cave_feat[y][x] == FEAT_TRAP_WEB)))
+            if (player_grid_is_leapable_obstacle(y, x))
             {
                 char prompt[80];
                 int i;

@@ -375,6 +375,8 @@ bool do_cmd_context_square_action_popup(void)
 
         if (!o_ptr->k_idx)
             return false;
+        if (o_ptr->tval == TV_CHEST && o_ptr->pval == 0)
+            return false;
 
         object_desc(title, sizeof(title), o_ptr, true, 3);
     }
@@ -390,12 +392,14 @@ bool do_cmd_context_square_action_popup(void)
         && !cave_forge_bold(p_ptr->py, p_ptr->px))
     {
         object_type* o_ptr = &o_list[0 - floor_item];
+        bool action_only = o_ptr->tval == TV_SKELETON
+            || o_ptr->tval == TV_CHEST;
 
-        if (o_ptr->tval != TV_SKELETON)
+        if (!action_only)
             sdl_question_menu_add_button('x', "Description", TERM_L_BLUE);
         sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_ACTION,
             item_use_action_name(o_ptr, floor_item), TERM_L_GREEN);
-        if (o_ptr->tval != TV_SKELETON)
+        if (!action_only)
             sdl_question_menu_add_button('g', "Pick Up", TERM_L_WHITE);
     }
     else

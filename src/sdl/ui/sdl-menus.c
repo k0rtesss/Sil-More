@@ -339,6 +339,7 @@ bool sdl_depth_menu_pane_handle_pointer(float x, float y)
 
 int sdl_touch_pane_yes_no_prompt_font_px(float cell_h, int screen_h)
 {
+#if SIL_SDL_MOBILE_BUILD
     int font_px = (int)(cell_h * 2.15f);
 
     if (font_px < 32)
@@ -351,6 +352,18 @@ int sdl_touch_pane_yes_no_prompt_font_px(float cell_h, int screen_h)
         font_px = 34;
     if (screen_h < 260 && font_px > 28)
         font_px = 28;
+#else
+    int font_px = (int)(cell_h * 1.35f);
+
+    if (font_px < 20)
+        font_px = 20;
+    if (font_px > 36)
+        font_px = 36;
+    if (screen_h < 480 && font_px > 30)
+        font_px = 30;
+    if (screen_h < 360 && font_px > 24)
+        font_px = 24;
+#endif
 
     return font_px;
 }
@@ -715,6 +728,29 @@ float sdl_narrative_banner_line_h(TTF_Font* font, int font_px)
     return line_h * 1.08f;
 }
 
+static float sdl_narrative_banner_close_size(float line_h)
+{
+    return sdl_touch_pane_clampf(line_h, 22.0f, 44.0f);
+}
+
+static float sdl_narrative_banner_close_gap(float line_h)
+{
+    return sdl_touch_pane_clampf(line_h * 0.35f, 5.0f, 10.0f);
+}
+
+static SDL_FRect sdl_narrative_banner_close_rect(const SDL_FRect* panel,
+    float pad_y, float line_h)
+{
+    float size = sdl_narrative_banner_close_size(line_h);
+
+    return (SDL_FRect){
+        .x = panel->x + panel->w - pad_y - size,
+        .y = panel->y + pad_y,
+        .w = size,
+        .h = size,
+    };
+}
+
 float sdl_narrative_banner_max_text_w(const SDL_Rect* rect, int font_px)
 {
     float max_w;
@@ -732,6 +768,19 @@ float sdl_narrative_banner_max_text_w(const SDL_Rect* rect, int font_px)
     if (max_w < 80.0f)
         max_w = (float)rect->w;
 
+    return max_w;
+}
+
+static float sdl_narrative_banner_wrapped_text_w(const SDL_Rect* rect,
+    TTF_Font* font, int font_px)
+{
+    float line_h = sdl_narrative_banner_line_h(font, font_px);
+    float max_w = sdl_narrative_banner_max_text_w(rect, font_px)
+        - sdl_narrative_banner_close_size(line_h)
+        - sdl_narrative_banner_close_gap(line_h);
+
+    if (max_w < (float)font_px * 4.0f)
+        max_w = (float)font_px * 4.0f;
     return max_w;
 }
 
@@ -826,6 +875,7 @@ int sdl_narrative_banner_line_count(void)
     SDL_Rect rect;
     int font_px;
     TTF_Font* font;
+    float max_text_w;
     char lines[SDL_NARRATIVE_BANNER_MAX_LINES][SDL_NARRATIVE_BANNER_LINE_LEN];
 
     if (!active_narrative_banner_visible())
@@ -837,9 +887,10 @@ int sdl_narrative_banner_line_count(void)
     font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_MENU);
     if (!font)
         return 0;
+    max_text_w = sdl_narrative_banner_wrapped_text_w(&rect, font, font_px);
 
     return sdl_narrative_banner_wrap_lines(active_narrative_banner_text(),
-        font, sdl_narrative_banner_max_text_w(&rect, font_px), lines,
+        font, max_text_w, lines,
         SDL_NARRATIVE_BANNER_MAX_LINES);
 }
 
@@ -866,6 +917,9 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
     SDL_FRect panel;
     int overlay_log_left;
     bool span_width;
+    float close_size;
+    float close_gap;
+    float close_reserve;
 
     if (!sdl_narrative_banner_overlay_enabled())
         return false;
@@ -879,7 +933,14 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
     if (!font)
         return false;
 
-    max_text_w = sdl_narrative_banner_max_text_w(&rect, font_px);
+    pad_x = sdl_touch_pane_clampf((float)font_px * 0.78f, 12.0f, 28.0f);
+    pad_y = sdl_touch_pane_clampf((float)font_px * 0.42f, 7.0f, 17.0f);
+    line_h = sdl_narrative_banner_line_h(font, font_px);
+    close_size = sdl_narrative_banner_close_size(line_h);
+    close_gap = sdl_narrative_banner_close_gap(line_h);
+    close_reserve = close_size + close_gap;
+
+    max_text_w = sdl_narrative_banner_wrapped_text_w(&rect, font, font_px);
     line_count = sdl_narrative_banner_wrap_lines(active_narrative_banner_text(),
         font, max_text_w, lines, max_lines);
     if (line_count <= 0)
@@ -895,15 +956,11 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
             max_line_w = width;
     }
 
-    pad_x = sdl_touch_pane_clampf((float)font_px * 0.78f, 12.0f, 28.0f);
-    pad_y = sdl_touch_pane_clampf((float)font_px * 0.42f, 7.0f, 17.0f);
-    line_h = sdl_narrative_banner_line_h(font, font_px);
-
-    panel_w = (float)max_line_w + pad_x * 2.0f;
-    if (panel_w > max_text_w + pad_x * 2.0f)
-        panel_w = max_text_w + pad_x * 2.0f;
-    if (panel_w < (float)font_px * 10.0f)
-        panel_w = (float)font_px * 10.0f;
+    panel_w = (float)max_line_w + pad_x * 2.0f + close_reserve;
+    if (panel_w > max_text_w + pad_x * 2.0f + close_reserve)
+        panel_w = max_text_w + pad_x * 2.0f + close_reserve;
+    if (panel_w < (float)font_px * 10.0f + close_reserve)
+        panel_w = (float)font_px * 10.0f + close_reserve;
     max_panel_w = (float)rect.w - 8.0f;
     if (panel_w > max_panel_w)
         panel_w = max_panel_w;
@@ -912,7 +969,8 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
 
     overlay_log_left = sdl_narrative_banner_overlay_log_left();
     if (span_width) {
-        float centered_text_pad = (max_panel_w - max_text_w) * 0.5f;
+        float centered_text_pad =
+            (max_panel_w - max_text_w - close_reserve) * 0.5f;
 
         panel_w = max_panel_w;
         if (centered_text_pad > pad_x)
@@ -931,6 +989,8 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
     }
 
     panel_h = pad_y * 2.0f + line_h * (float)shown_lines;
+    if (panel_h < pad_y * 2.0f + close_size)
+        panel_h = pad_y * 2.0f + close_size;
     top_gap = sdl_touch_pane_clampf((float)rect.h * 0.018f, 5.0f, 18.0f);
 
     panel = (SDL_FRect){
@@ -1003,6 +1063,41 @@ static Uint8 sdl_narrative_banner_scaled_alpha(Uint8 alpha)
         + SDL_ALPHA_OPAQUE / 2) / SDL_ALPHA_OPAQUE);
 }
 
+static void sdl_narrative_banner_render_close(const SDL_FRect* panel,
+    float pad_y, float line_h)
+{
+    SDL_FRect rect = sdl_narrative_banner_close_rect(panel, pad_y, line_h);
+    Uint8 fill_alpha = sdl_narrative_banner_scaled_alpha(116);
+    Uint8 border_alpha = sdl_narrative_banner_scaled_alpha(150);
+    Uint8 icon_alpha = sdl_narrative_banner_scaled_alpha(SDL_ALPHA_OPAQUE);
+    float pad = rect.w * 0.31f;
+    int repeats = (int)sdl_touch_pane_clampf(rect.w / 12.0f, 1.0f, 3.0f);
+
+    if (fill_alpha > 0) {
+        SDL_SetRenderDrawColor(g_state.renderer, 12, 14, 18, fill_alpha);
+        SDL_RenderFillRect(g_state.renderer, &rect);
+    }
+    if (border_alpha > 0) {
+        SDL_SetRenderDrawColor(g_state.renderer, 255, 184, 94,
+            border_alpha);
+        SDL_RenderRect(g_state.renderer, &rect);
+    }
+    if (icon_alpha == 0)
+        return;
+
+    SDL_SetRenderDrawColor(g_state.renderer, 255, 224, 190, icon_alpha);
+    for (int i = 0; i < repeats; i++) {
+        float offset = (float)i - ((float)repeats - 1.0f) * 0.5f;
+
+        SDL_RenderLine(g_state.renderer, rect.x + pad,
+            rect.y + pad + offset, rect.x + rect.w - pad,
+            rect.y + rect.h - pad + offset);
+        SDL_RenderLine(g_state.renderer, rect.x + pad,
+            rect.y + rect.h - pad + offset, rect.x + rect.w - pad,
+            rect.y + pad + offset);
+    }
+}
+
 void sdl_narrative_banner_render(void)
 {
     TTF_Font* font;
@@ -1015,6 +1110,8 @@ void sdl_narrative_banner_render(void)
     SDL_Color text_color;
     Uint8 panel_alpha;
     Uint8 border_alpha;
+    float close_reserve;
+    float text_w;
 
     if (!sdl_narrative_banner_layout(&panel, &pad_x, &pad_y, &line_h,
             &shown_lines, lines, SDL_NARRATIVE_BANNER_MAX_LINES, &font))
@@ -1041,13 +1138,19 @@ void sdl_narrative_banner_render(void)
         angband_color_table[TERM_ORANGE][3],
         sdl_narrative_banner_scaled_alpha(SDL_ALPHA_OPAQUE),
     };
+    close_reserve = sdl_narrative_banner_close_size(line_h)
+        + sdl_narrative_banner_close_gap(line_h);
+    text_w = panel.w - pad_x * 2.0f - close_reserve;
+    if (text_w < 1.0f)
+        text_w = 1.0f;
 
     for (int i = 0; i < shown_lines; i++) {
         sdl_narrative_banner_draw_line(font, lines[i], text_color,
             panel.x + pad_x,
             panel.y + pad_y + line_h * (float)i,
-            panel.w - pad_x * 2.0f, line_h);
+            text_w, line_h);
     }
+    sdl_narrative_banner_render_close(&panel, pad_y, line_h);
 }
 
 bool sdl_narrative_banner_handle_pointer(float x, float y)
@@ -1282,11 +1385,19 @@ bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect,
     prompt_font = sdl_story_font_for_height_slot(prompt_font_px, SDL_STORY_FONT_SLOT_MENU);
     prompt_text_w = sdl_touch_pane_story_text_width(prompt_font, prompt_text);
 
+#if SIL_SDL_MOBILE_BUILD
     margin = sdl_touch_pane_clampf(cell_h * 1.45f, 24.0f, 46.0f);
     button_gap = sdl_touch_pane_clampf(cell_w * 1.90f, 18.0f, 34.0f);
     row_gap = sdl_touch_pane_clampf(cell_h * 1.10f, 18.0f, 34.0f);
     button_w = sdl_touch_pane_clampf(cell_w * 13.50f, 136.0f, 220.0f);
     button_h = sdl_touch_pane_clampf(cell_h * 3.80f, 72.0f, 112.0f);
+#else
+    margin = sdl_touch_pane_clampf(cell_h * 0.75f, 12.0f, 24.0f);
+    button_gap = sdl_touch_pane_clampf(cell_w, 10.0f, 18.0f);
+    row_gap = sdl_touch_pane_clampf(cell_h * 0.55f, 10.0f, 18.0f);
+    button_w = sdl_touch_pane_clampf(cell_w * 8.0f, 84.0f, 140.0f);
+    button_h = sdl_touch_pane_clampf(cell_h * 2.0f, 38.0f, 60.0f);
+#endif
 
     max_panel_w = (float)screen.w * 0.94f;
     if (max_panel_w > cell_w * 82.0f)
@@ -1323,9 +1434,15 @@ bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect,
 
     prompt_line_count = sdl_touch_pane_wrap_prompt_lines(prompt_text, prompt_font,
         prompt_w, prompt_lines, SDL_TOUCH_YES_NO_MAX_LINES);
+#if SIL_SDL_MOBILE_BUILD
     prompt_line_h = (float)prompt_font_px * 1.42f;
     if (prompt_line_h < 24.0f)
         prompt_line_h = 24.0f;
+#else
+    prompt_line_h = (float)prompt_font_px * 1.25f;
+    if (prompt_line_h < 20.0f)
+        prompt_line_h = 20.0f;
+#endif
     prompt_h = prompt_line_h * (float)prompt_line_count;
 
     /* Let the panel grow to fit every wrapped line at the fixed font size.

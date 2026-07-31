@@ -99,7 +99,7 @@ static bool drop_object_is_damaged(const object_type* o_ptr)
 
 static const char* DROP_RAW_FILE = "drops";
 static const u32b DROP_RAW_MAGIC = 0x44525053; /* 'DRPS' */
-static const u32b DROP_RAW_VERSION = 22;
+static const u32b DROP_RAW_VERSION = 23;
 static const int DROP_MIN_DIFFICULTY = -15;
 
 typedef struct
@@ -1625,8 +1625,12 @@ static void build_normal_variants(int k_idx)
 
     drop_group_kind group_kind = (cat == DROP_CAT_JEWELRY) ? DROP_GROUP_EGO : DROP_GROUP_NORMAL;
 
-    /* Supply items: no smithing variants, use new allocation semantics. */
-    if (cat == DROP_CAT_SUPPLY)
+    /* Normal arrows start in the weapon category so ego arrows remain
+     * weapons, but ordinary arrow variants are later overridden to supply
+     * by add_drop_entry().  Include them here so their rarity scaling is
+     * applied before that category override. */
+    if (cat == DROP_CAT_SUPPLY
+        || (k_ptr->tval == TV_ARROW && group_kind == DROP_GROUP_NORMAL))
     {
         if (k_ptr->tval == TV_ARROW)
         {

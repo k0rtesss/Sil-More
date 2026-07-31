@@ -690,17 +690,104 @@ void Term_queue_chars(int x, int y, int n, byte a, cptr s)
 
 /*** Refresh routines ***/
 
-/*
- * Mixed text/tile terminals use the high bit in both the attribute and
- * character to identify tiles.  Tile attributes have the bit pattern
- * 10xxxxxx because tile indices use only the lower six bits.  Attributes in
- * the 11xxxxxx range are reserved for UI/extended colors, so do not mistake
- * selected UTF-8 bytes for tiles.  Attribute 255 remains the bigtile
- * continuation sentinel.
- */
-static bool term_attr_is_tile(byte a)
+static int term_utf8_lead_length(byte c)
 {
-    return (a == 255) || ((a & 0xC0) == 0x80);
+    if ((c >= 0xC2) && (c <= 0xDF))
+        return 2;
+    if ((c >= 0xE0) && (c <= 0xEF))
+        return 3;
+    if ((c >= 0xF0) && (c <= 0xF4))
+        return 4;
+    return 0;
+}
+
+static bool term_utf8_sequence_valid(const term_win* win, int y, int x,
+    int len)
+{
+    byte attr = win->a[y][x];
+    byte lead = (byte)win->c[y][x];
+    byte second;
+
+    if ((len < 2) || (x + len > Term->wid))
+        return false;
+
+    for (int i = 1; i < len; i++)
+    {
+        byte c = (byte)win->c[y][x + i];
+
+        if ((win->a[y][x + i] != attr) || ((c & 0xC0) != 0x80))
+            return false;
+    }
+
+    second = (byte)win->c[y][x + 1];
+    if ((lead == 0xE0) && (second < 0xA0))
+        return false;
+    if ((lead == 0xED) && (second > 0x9F))
+        return false;
+    if ((lead == 0xF0) && (second < 0x90))
+        return false;
+    if ((lead == 0xF4) && (second > 0x8F))
+        return false;
+
+    return true;
+}
+
+/*
+ * Selected text and glowing tiles both use attributes in the 11xxxxxx range:
+ * selected text adds a background color to 0xC0, while a tile sets 0x80 and
+ * may add the 0x40 glow flag.  Distinguish selected UTF-8 by validating the
+ * complete byte sequence around this cell.  A lone high-bit tile character
+ * (such as a glowing thrown weapon) is not valid UTF-8 and remains a tile.
+ */
+static bool term_cell_is_selected_utf8(const term_win* win, int y, int x)
+{
+    byte attr;
+    int first;
+
+    if (!win || (y < 0) || (y >= Term->hgt) || (x < 0) || (x >= Term->wid))
+        return false;
+
+    attr = win->a[y][x];
+    if ((attr & 0xC0) != 0xC0)
+        return false;
+
+    first = (x >= 3) ? x - 3 : 0;
+    for (int start = x; start >= first; start--)
+    {
+        int len;
+
+        if (win->a[y][start] != attr)
+            break;
+
+        len = term_utf8_lead_length((byte)win->c[y][start]);
+        if (!len || (x >= start + len))
+            continue;
+        if (term_utf8_sequence_valid(win, y, start, len))
+            return true;
+    }
+
+    return false;
+}
+
+/*
+ * Mixed text/tile terminals identify tiles with the high bit in both the
+ * attribute and character.  Keep valid selected UTF-8 text on the text path,
+ * but accept 11xxxxxx tile attributes carrying the graphical glow flag.
+ * Attribute 255 remains the bigtile continuation sentinel.
+ */
+static bool term_cell_is_tile(const term_win* win, int y, int x)
+{
+    byte a = win->a[y][x];
+    byte c = (byte)win->c[y][x];
+
+    if (!(c & 0x80))
+        return false;
+    if (a == 255)
+        return true;
+    if ((a & 0xC0) == 0x80)
+        return true;
+    return ((a & 0xC0) == 0xC0)
+        && !term_cell_is_selected_utf8(win, y, x);
 }
 
 /*
@@ -922,7 +1009,7 @@ static void Term_fresh_row_both(int y, int x1, int x2)
         old_health[x] = nhf;
 
         /* Handle high-bit attr/chars */
-        if (term_attr_is_tile(na) && (((byte)nc) & 0x80))
+        if (term_cell_is_tile(Term->scr, y, x))
         {
             /* 2nd byte of bigtile */
             if ((na == 255) && ((byte)nc == 255))
@@ -1405,8 +1492,8 @@ errr Term_fresh(void)
             }
 
             /* Hack -- use "Term_pict()" sometimes */
-            else if (Term->higher_pict && term_attr_is_tile(oa)
-                && (((byte)oc) & 0x80))
+            else if (Term->higher_pict
+                && term_cell_is_tile(Term->old, ty, tx))
             {
                 (void)((*Term->pict_hook)(tx, ty, 1, &oa, &oc, &ota, &otc));
                 restored_as_pict = true;
