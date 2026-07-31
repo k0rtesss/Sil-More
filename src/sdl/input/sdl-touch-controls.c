@@ -4314,16 +4314,32 @@ static bool sdl_touch_top_panel_ordered_anchor(const SDL_Rect* screen,
 
     anchor = *screen;
     edge = bottom ? screen->y + screen->h : screen->y;
-    for (int i = 0; i < quick_index; i++) {
+    for (int i = 0; i < pane_config_count; i++) {
         enum pane_type pane = pane_config[i].pane;
+        enum pane_placement pane_where = pane_config[i].where;
         SDL_Rect visible;
+        bool same_stack;
+        bool docked_edge;
 
-        if (!pane_config[i].enabled || pane_config[i].where != where
+        if (!pane_config[i].enabled
             || pane <= PANE_MAIN || pane >= PANE_MAX
             || pane == PANE_OVERLAY_MENU)
         {
             continue;
         }
+
+        /* Earlier members of Quick Access's own configured stack. */
+        same_stack = i < quick_index && pane_where == where;
+        /*
+         * Docked pane groups own real layout rows at the screen edge, so a
+         * bottom-edge overlay has to start above them however it is placed.
+         * Without this the anchor keeps the full screen height, the panel
+         * lands on top of a full-width docked pane such as the log, and the
+         * side-collision pass below collapses its span to nothing.
+         */
+        docked_edge = bottom && pane_placement_is_bottom(pane_where);
+        if (!same_stack && !docked_edge)
+            continue;
         if (!sdl_overlay_stack_visible_rect(pane, &visible))
             continue;
 
@@ -4665,6 +4681,15 @@ static float sdl_touch_top_panel_available_width(const SDL_Rect* screen,
         p_mid = (p_left + p_right) * 0.5f;
 
         if (p_bottom <= band_top || p_top >= band_bottom)
+            continue;
+        /*
+         * A pane that covers the whole remaining span leaves no side to move
+         * to.  Treating it as a left or right neighbour pushes the edges past
+         * each other and reports a one pixel span, which fails the layout and
+         * leaves Quick Access invisible with no way to reopen it.  Such a pane
+         * has to be cleared vertically by the anchor instead.
+         */
+        if (p_left <= left && p_right >= right)
             continue;
         if (p_mid <= center) {
             if (p_right + gap > left)
