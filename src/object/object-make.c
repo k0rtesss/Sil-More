@@ -611,7 +611,7 @@ static void a_m_aux_4(object_type* o_ptr, int level, bool fine, bool special)
         /* Hack -- Torches -- random fuel */
         if (o_ptr->sval == SV_LIGHT_TORCH)
         {
-            int spawn_fuel = 1000;
+            int spawn_fuel = FUEL_TORCH_DEFAULT;
             int min_fuel = 250;
 
             if (one_in_(3))
@@ -645,11 +645,11 @@ static void a_m_aux_4(object_type* o_ptr, int level, bool fine, bool special)
         {
             if (one_in_(3))
             {
-                o_ptr->timeout = rand_range(40, 100);
+                o_ptr->timeout = rand_range(40, FUEL_MALLORN_DEFAULT);
             }
             else
             {
-                o_ptr->timeout = 100;
+                o_ptr->timeout = FUEL_MALLORN_DEFAULT;
             }
         }
         break;

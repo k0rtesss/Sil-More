@@ -11,10 +11,18 @@
 
 static int sdl_touch_context_binding(int binding);
 static void sdl_touch_top_panel_set_hover_slot(int slot);
+static void sdl_touch_top_panel_close_description(void);
 static SDL_FRect g_touch_top_panel_cached_buttons[
     SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
 static Uint64 g_touch_top_panel_cached_generation;
 static bool g_touch_top_panel_cached_layout_valid;
+static int g_touch_top_panel_description_slot = -1;
+static SDL_FRect g_touch_top_panel_description_box;
+static SDL_FRect g_touch_top_panel_description_hover_bridge;
+static SDL_FRect g_touch_top_panel_description_change_rect;
+static SDL_FRect g_touch_top_panel_description_close_rect;
+static int g_touch_top_panel_description_hover;
+static bool g_touch_top_panel_description_layout_valid;
 
 /* Run a main-menu action that opens a modal screen inline (Quick Access / thumb
  * / swipe buttons bound to a main-menu choice).  Those screens call inkey(),
@@ -4063,6 +4071,7 @@ bool sdl_touch_top_panel_handle_secondary_pointer(float x, float y)
         return false;
 
     sdl_touch_top_panel_cancel_press();
+    sdl_touch_top_panel_close_description();
     sdl_touch_top_panel_set_hover_slot(-1);
     sdl_touch_run_quick_access_picker(slot);
     return true;
@@ -4358,6 +4367,36 @@ static void sdl_touch_top_panel_set_hover_slot(int slot)
     g_state.need_present = true;
 }
 
+static void sdl_touch_top_panel_close_description(void)
+{
+    if (g_touch_top_panel_description_slot < 0
+        && !g_touch_top_panel_description_layout_valid)
+    {
+        return;
+    }
+
+    g_touch_top_panel_description_slot = -1;
+    g_touch_top_panel_description_box = (SDL_FRect){ 0 };
+    g_touch_top_panel_description_hover_bridge = (SDL_FRect){ 0 };
+    g_touch_top_panel_description_change_rect = (SDL_FRect){ 0 };
+    g_touch_top_panel_description_close_rect = (SDL_FRect){ 0 };
+    g_touch_top_panel_description_hover = 0;
+    g_touch_top_panel_description_layout_valid = false;
+    g_state.need_present = true;
+}
+
+static void sdl_touch_top_panel_open_description(int slot)
+{
+    if (slot < 0 || slot >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        return;
+
+    g_touch_top_panel_description_slot = slot;
+    g_touch_top_panel_description_hover = 0;
+    g_touch_top_panel_description_layout_valid = false;
+    sdl_touch_top_panel_set_hover_slot(-1);
+    g_state.need_present = true;
+}
+
 void sdl_touch_top_panel_set_open(bool open)
 {
     if (g_touch_top_panel_open == open)
@@ -4365,8 +4404,10 @@ void sdl_touch_top_panel_set_open(bool open)
 
     g_touch_top_panel_open = open;
     sdl_touch_top_panel_cancel_press();
-    if (!open)
+    if (!open) {
+        sdl_touch_top_panel_close_description();
         sdl_touch_top_panel_set_hover_slot(-1);
+    }
     g_state.need_present = true;
 }
 
@@ -5530,13 +5571,24 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
     buf[0] = '\0';
     if (touch_shortcut_context_action(context_binding,
             sdl_touch_thumb_description_open(), NULL, label, sizeof(label))) {
-        strnfmt(buf, buflen, "%s.", label);
+        if (context_binding == ' ')
+            strnfmt(buf, buflen,
+                "%s: confirm the current prompt or interact with what is on your square.",
+                label);
+        else if (context_binding == 'u')
+            strnfmt(buf, buflen,
+                "%s: perform the available action for the item on your square.",
+                label);
+        else
+            strnfmt(buf, buflen,
+                "%s: show details for the item on your square.", label);
         return;
     }
 
     switch (binding) {
     case GAMEPAD_BIND_NONE:
-        SDL_strlcpy(buf, "Unbound.", buflen);
+        SDL_strlcpy(buf,
+            "Unbound: this Quick Access cell has no command.", buflen);
         return;
     case TOUCH_BIND_TOP_PANEL_OPEN:
         SDL_strlcpy(buf, "Overlay menu: open the shortcut menu.", buflen);
@@ -5553,12 +5605,56 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
             buflen);
         return;
     case TOUCH_BIND_TOGGLE_TILES:
-        strnfmt(buf, buflen, "%s.", get_sdl_tiles() ? "Change to ASCII"
-                                                     : "Change to Tiles");
+        strnfmt(buf, buflen, "%s: change how the dungeon map is displayed.",
+            get_sdl_tiles() ? "Change to ASCII" : "Change to Tiles");
+        return;
+    case 'm':
+        SDL_strlcpy(buf,
+            "Main Menu: open the main menu and its game, character, and settings actions.",
+            buflen);
+        return;
+    case 'e':
+        SDL_strlcpy(buf,
+            "Equipment: view your worn and wielded items and choose actions for them.",
+            buflen);
+        return;
+    case 'i':
+        SDL_strlcpy(buf,
+            "Inventory: view your carried items and choose actions for them.",
+            buflen);
         return;
     case 'j':
         SDL_strlcpy(buf, "Supply: open supplies and carried resources.",
             buflen);
+        return;
+    case 's':
+        SDL_strlcpy(buf,
+            "Song: choose a song, begin singing, or stop your current song.",
+            buflen);
+        return;
+    case 'f':
+        SDL_strlcpy(buf,
+            "Shoot: fire ammunition from your first quiver at a chosen target.",
+            buflen);
+        return;
+    case 'F':
+        SDL_strlcpy(buf,
+            "Second Quiver: fire ammunition from your second quiver at a chosen target.",
+            buflen);
+        return;
+    case KTRL('F'):
+        SDL_strlcpy(buf,
+            "Swap Quiver: exchange the ammunition assigned to your two quivers.",
+            buflen);
+        return;
+    case 'a':
+        SDL_strlcpy(buf,
+            "Staff: choose and use a staff from your inventory or equipment.",
+            buflen);
+        return;
+    case KTRL('A'):
+        SDL_strlcpy(buf,
+            "Swap Staff: change which staff is ready for quick use.", buflen);
         return;
     case '0':
         SDL_strlcpy(buf, "Smithing: open the forge crafting screen.", buflen);
@@ -5571,10 +5667,97 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         SDL_strlcpy(buf, "Weapon: change active melee or ranged weapon.", buflen);
         return;
     case 'y':
-        SDL_strlcpy(buf, "Abilities: open the ability screen.", buflen);
+        SDL_strlcpy(buf,
+            "Abilities: open the ability screen to review learned abilities.",
+            buflen);
         return;
     case 'M':
         SDL_strlcpy(buf, "Map: view the full dungeon map.", buflen);
+        return;
+    case 'h':
+        SDL_strlcpy(buf,
+            "Character: open your character sheet, skills, attributes, and status details.",
+            buflen);
+        return;
+    case 'z':
+        SDL_strlcpy(buf,
+            "Wait: spend one turn in place without moving or taking another action.",
+            buflen);
+        return;
+    case 'Z':
+        SDL_strlcpy(buf,
+            "Rest: wait repeatedly until recovered or interrupted by danger.",
+            buflen);
+        return;
+    case 'g':
+        SDL_strlcpy(buf,
+            "Pick Up: collect an item from your current square.", buflen);
+        return;
+    case 'o':
+        SDL_strlcpy(buf,
+            "Open: choose an adjacent door or chest and attempt to open it.",
+            buflen);
+        return;
+    case 'c':
+        SDL_strlcpy(buf,
+            "Close: choose an adjacent open door and close it.", buflen);
+        return;
+    case 'D':
+        SDL_strlcpy(buf,
+            "Disarm: choose an adjacent known trap and attempt to disarm it.",
+            buflen);
+        return;
+    case 'X':
+        SDL_strlcpy(buf,
+            "Exchange Places: swap positions with an adjacent creature when allowed.",
+            buflen);
+        return;
+    case '-':
+        SDL_strlcpy(buf,
+            "Fletchery: make arrows while you have the required materials and ability.",
+            buflen);
+        return;
+    case 't':
+        SDL_strlcpy(buf,
+            "Throw: choose an item and throw it in a selected direction.", buflen);
+        return;
+    case 'p':
+        SDL_strlcpy(buf,
+            "Horn: choose and sound a horn from your carried items.", buflen);
+        return;
+    case 'q':
+        SDL_strlcpy(buf,
+            "Quaff: choose and drink a potion from your carried items.", buflen);
+        return;
+    case 'S':
+        SDL_strlcpy(buf,
+            "Stealth: enter or leave stealth mode.", buflen);
+        return;
+    case 'b':
+        SDL_strlcpy(buf,
+            "Bash: choose an adjacent obstacle and attempt to bash it.", buflen);
+        return;
+    case KTRL('Q'):
+        SDL_strlcpy(buf,
+            "Combat Rolls: open the detailed history of recent combat rolls.",
+            buflen);
+        return;
+    case KTRL('Y'):
+        SDL_strlcpy(buf,
+            "Debug Command: open the developer command menu.", buflen);
+        return;
+    case 'J':
+        SDL_strlcpy(buf,
+            "Jewel Set: choose a saved jewel set to equip.", buflen);
+        return;
+    case '?':
+        SDL_strlcpy(buf,
+            "Help: open the in-game help and control reference.", buflen);
+        return;
+    case 'O':
+        SDL_strlcpy(buf,
+            "Options: open game, interface, input, and display settings.",
+            buflen);
         return;
     default:
         break;
@@ -5583,13 +5766,13 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
     label[0] = '\0';
     binding_action_short(binding, label, sizeof(label));
     if (label[0])
-        strnfmt(buf, buflen, "%s.", label);
+        strnfmt(buf, buflen, "%s: run this bound command.", label);
     else
-        strnfmt(buf, buflen, "Action %d.", binding);
+        strnfmt(buf, buflen, "Action %d: run this bound command.", binding);
 }
 
-static void sdl_touch_top_panel_description_for_slot(int slot, char* buf,
-    size_t buflen)
+static void sdl_touch_top_panel_description_for_slot(int slot, bool persistent,
+    char* buf, size_t buflen)
 {
     int tap_binding;
     char tap_desc[192];
@@ -5610,11 +5793,80 @@ static void sdl_touch_top_panel_description_for_slot(int slot, char* buf,
     }
     sdl_touch_top_panel_description_for_binding(tap_binding, tap_desc,
         sizeof(tap_desc));
-    strnfmt(buf, buflen, "Tap: %s\nHold: edit this button.", tap_desc);
+    if (persistent)
+        SDL_strlcpy(buf, tap_desc, buflen);
+    else
+        strnfmt(buf, buflen, "Tap: %s\nHold: open description.", tap_desc);
+}
+
+static void sdl_touch_top_panel_render_description_button(
+    const SDL_FRect* rect, bool change, bool hover)
+{
+    SDL_Color icon = hover ? (SDL_Color){125, 185, 255, 255}
+                           : (SDL_Color){220, 224, 232, 235};
+    SDL_Color outline = hover ? (SDL_Color){125, 185, 255, 220}
+                              : (SDL_Color){210, 216, 226, 150};
+    float pad;
+    float stroke;
+    int repeats;
+
+    if (!rect || rect->w <= 0.0f || rect->h <= 0.0f)
+        return;
+
+    SDL_SetRenderDrawColor(g_state.renderer, hover ? 26 : 12,
+        hover ? 38 : 18, hover ? 58 : 24, hover ? 245 : 220);
+    SDL_RenderFillRect(g_state.renderer, rect);
+    SDL_SetRenderDrawColor(g_state.renderer, outline.r, outline.g,
+        outline.b, outline.a);
+    SDL_RenderRect(g_state.renderer, rect);
+
+    pad = rect->w * 0.22f;
+    stroke = rect->w / 11.0f;
+    if (stroke < 1.0f)
+        stroke = 1.0f;
+    if (stroke > 4.0f)
+        stroke = 4.0f;
+    repeats = (int)stroke;
+    if (repeats < 1)
+        repeats = 1;
+
+    SDL_SetRenderDrawColor(g_state.renderer, icon.r, icon.g, icon.b, icon.a);
+    if (change) {
+        SDL_FRect square = {
+            .x = rect->x + pad,
+            .y = rect->y + pad,
+            .w = rect->w - pad * 2.0f,
+            .h = rect->h - pad * 2.0f,
+        };
+
+        for (int i = 0; i < repeats; i++) {
+            float inset = (float)i;
+            SDL_FRect line = {
+                .x = square.x + inset,
+                .y = square.y + inset,
+                .w = square.w - inset * 2.0f,
+                .h = square.h - inset * 2.0f,
+            };
+
+            if (line.w > 0.0f && line.h > 0.0f)
+                SDL_RenderRect(g_state.renderer, &line);
+        }
+        return;
+    }
+
+    for (int i = 0; i < repeats; i++) {
+        float offset = (float)i - ((float)repeats - 1.0f) * 0.5f;
+        SDL_RenderLine(g_state.renderer, rect->x + pad,
+            rect->y + pad + offset, rect->x + rect->w - pad,
+            rect->y + rect->h - pad + offset);
+        SDL_RenderLine(g_state.renderer, rect->x + pad,
+            rect->y + rect->h - pad + offset, rect->x + rect->w - pad,
+            rect->y + pad + offset);
+    }
 }
 
 static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
-    int slot)
+    int slot, bool persistent)
 {
     SDL_Rect screen;
     TTF_Font* font;
@@ -5629,6 +5881,9 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
     float screen_margin;
     float max_box_w;
     float max_text_w;
+    float controls_gap = 0.0f;
+    float controls_w = 0.0f;
+    float control_size = 0.0f;
     int font_px;
     int text_w = 0;
     int text_h = 0;
@@ -5636,7 +5891,7 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
     if (!anchor)
         return;
 
-    sdl_touch_top_panel_description_for_slot(slot, description,
+    sdl_touch_top_panel_description_for_slot(slot, persistent, description,
         sizeof(description));
     if (!description[0])
         return;
@@ -5656,19 +5911,40 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
     screen_margin = sdl_touch_pane_clampf(g_state.system_scale * 4.0f,
         4.0f, 10.0f);
     max_box_w = (float)screen.w - screen_margin * 2.0f;
-    if (max_box_w > 420.0f)
+    if (persistent) {
+        if (max_box_w > 640.0f)
+            max_box_w = 640.0f;
+    } else if (max_box_w > 420.0f) {
         max_box_w = 420.0f;
+    }
     if (max_box_w <= pad * 2.0f)
         return;
 
+    if (persistent) {
+#if SIL_SDL_MOBILE_BUILD
+        control_size = MAX(anchor->h * 0.82f, (float)font_px * 2.20f);
+        control_size = sdl_touch_pane_clampf(control_size, 48.0f, 72.0f);
+#else
+        control_size = (float)font_px * 1.55f;
+        control_size = sdl_touch_pane_clampf(control_size, 30.0f, 42.0f);
+#endif
+        controls_gap = sdl_touch_pane_clampf((float)font_px * 0.22f,
+            4.0f, 8.0f);
+        controls_w = control_size * 2.0f + controls_gap;
+    }
+
     max_text_w = max_box_w - pad * 2.0f;
+    if (max_text_w < 64.0f)
+        return;
     texture = sdl_ui_wrapped_text_texture(font, description,
         MAX(1, (int)(max_text_w + 0.5f)), text_color, &text_w, &text_h);
     if (!texture)
         return;
 
-    box.w = (float)text_w + pad * 2.0f;
+    box.w = persistent ? max_box_w : (float)text_w + pad * 2.0f;
     box.h = (float)text_h + pad * 2.0f;
+    if (persistent)
+        box.h += control_size + gap;
     box.x = anchor->x + anchor->w * 0.5f - box.w * 0.5f;
     box.y = anchor->y - box.h - gap;
     if (box.y < (float)screen.y + screen_margin)
@@ -5691,7 +5967,8 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
 
     text_dst = (SDL_FRect){
         .x = box.x + pad,
-        .y = box.y + pad,
+        .y = persistent ? box.y + pad + control_size + gap
+                        : box.y + pad,
         .w = (float)text_w,
         .h = (float)text_h,
     };
@@ -5704,6 +5981,107 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
     SDL_RenderRect(g_state.renderer, &box);
 
     SDL_RenderTexture(g_state.renderer, texture, NULL, &text_dst);
+
+    if (persistent) {
+        float controls_x = box.x + box.w - pad - controls_w;
+        float controls_y = box.y + pad;
+        float box_bottom = box.y + box.h;
+        float anchor_bottom = anchor->y + anchor->h;
+
+        g_touch_top_panel_description_box = box;
+        g_touch_top_panel_description_hover_bridge = (SDL_FRect){ 0 };
+        if (box_bottom < anchor->y) {
+            g_touch_top_panel_description_hover_bridge = (SDL_FRect){
+                .x = box.x,
+                .y = box_bottom,
+                .w = box.w,
+                .h = anchor->y - box_bottom,
+            };
+        } else if (anchor_bottom < box.y) {
+            g_touch_top_panel_description_hover_bridge = (SDL_FRect){
+                .x = box.x,
+                .y = anchor_bottom,
+                .w = box.w,
+                .h = box.y - anchor_bottom,
+            };
+        }
+        g_touch_top_panel_description_change_rect = (SDL_FRect){
+            .x = controls_x,
+            .y = controls_y,
+            .w = control_size,
+            .h = control_size,
+        };
+        g_touch_top_panel_description_close_rect = (SDL_FRect){
+            .x = controls_x + control_size + controls_gap,
+            .y = controls_y,
+            .w = control_size,
+            .h = control_size,
+        };
+        g_touch_top_panel_description_layout_valid = true;
+
+        sdl_touch_top_panel_render_description_button(
+            &g_touch_top_panel_description_change_rect, true,
+            g_touch_top_panel_description_hover == 1);
+        sdl_touch_top_panel_render_description_button(
+            &g_touch_top_panel_description_close_rect, false,
+            g_touch_top_panel_description_hover == 2);
+    }
+}
+
+bool sdl_touch_top_panel_handle_description_hover(float x, float y)
+{
+    int hover = 0;
+
+    if (g_touch_top_panel_description_slot < 0
+        && g_touch_top_panel_hover_slot < 0)
+    {
+        return false;
+    }
+    if (!g_touch_top_panel_description_layout_valid)
+    {
+        return false;
+    }
+
+    if (sdl_point_in_frect(&g_touch_top_panel_description_change_rect, x, y))
+        hover = 1;
+    else if (sdl_point_in_frect(&g_touch_top_panel_description_close_rect,
+                 x, y))
+        hover = 2;
+
+    if (hover != g_touch_top_panel_description_hover) {
+        g_touch_top_panel_description_hover = hover;
+        g_state.need_present = true;
+    }
+
+    return sdl_point_in_frect(&g_touch_top_panel_description_box, x, y)
+        || sdl_point_in_frect(&g_touch_top_panel_description_hover_bridge,
+            x, y);
+}
+
+bool sdl_touch_top_panel_handle_description_pointer(float x, float y)
+{
+    int slot = (g_touch_top_panel_description_slot >= 0)
+        ? g_touch_top_panel_description_slot : g_touch_top_panel_hover_slot;
+
+    if (slot < 0
+        || !g_touch_top_panel_description_layout_valid)
+    {
+        return false;
+    }
+
+    if (sdl_point_in_frect(&g_touch_top_panel_description_change_rect, x, y)) {
+        sdl_touch_top_panel_close_description();
+        sdl_touch_top_panel_set_hover_slot(-1);
+        sdl_touch_run_quick_access_picker(slot);
+        return true;
+    }
+    if (sdl_point_in_frect(&g_touch_top_panel_description_close_rect, x, y)) {
+        sdl_touch_top_panel_close_description();
+        sdl_touch_top_panel_set_hover_slot(-1);
+        return true;
+    }
+
+    return sdl_point_in_frect(&g_touch_top_panel_description_box, x, y);
 }
 
 void sdl_touch_top_panel_render_buttons(
@@ -5736,9 +6114,12 @@ void sdl_touch_top_panel_render_buttons(
         int binding = sdl_touch_top_panel_display_binding_for_slot(slot);
         bool toggled = sdl_pointer_attack_binding_toggled(binding);
         bool hovered = slot == g_touch_top_panel_hover_slot;
+        bool described = slot == g_touch_top_panel_description_slot;
         bool pressed = slot == g_touch_top_panel_pressed_slot;
         bool flashed = slot == g_touch_top_panel_flash_slot;
-        bool selected_active = hovered || pressed || toggled;
+        bool pending_touch = pressed && g_touch_top_panel_press.active
+            && g_touch_top_panel_press.finger_id != 0;
+        bool selected_active = hovered || described || pressed || toggled;
 
         shadow.x += 2.0f;
         shadow.y += 2.0f;
@@ -5771,14 +6152,31 @@ void sdl_touch_top_panel_render_buttons(
         sdl_touch_top_panel_render_icon(&button_rects[slot], binding,
             icon_color, selected_active || flashed);
 
-        if (hovered || pressed) {
+        /* A touch hold needs time to become a long press.  Keep the button's
+         * pressed highlight during that interval, but do not flash the old
+         * hover tooltip before the persistent description replaces it. */
+        if ((hovered || pressed) && !pending_touch
+            && g_touch_top_panel_description_slot < 0)
+        {
             tooltip_slot = slot;
             tooltip_rect = &button_rects[slot];
         }
     }
 
-    if (tooltip_slot >= 0)
-        sdl_touch_top_panel_render_tooltip(tooltip_rect, tooltip_slot);
+    g_touch_top_panel_description_layout_valid = false;
+    if (g_touch_top_panel_description_slot >= 0) {
+        int slot = g_touch_top_panel_description_slot;
+
+        if (slot < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT
+            && button_rects[slot].w > 0.0f && button_rects[slot].h > 0.0f)
+        {
+            sdl_touch_top_panel_render_tooltip(&button_rects[slot], slot, true);
+        } else {
+            sdl_touch_top_panel_close_description();
+        }
+    } else if (tooltip_slot >= 0) {
+        sdl_touch_top_panel_render_tooltip(tooltip_rect, tooltip_slot, true);
+    }
 }
 
 void sdl_touch_top_panel_render(void)
@@ -5786,6 +6184,7 @@ void sdl_touch_top_panel_render(void)
     if (!sdl_touch_top_panel_layout_visible()) {
         g_touch_top_panel_cached_layout_valid = false;
         sdl_touch_top_panel_cancel_press();
+        sdl_touch_top_panel_close_description();
         sdl_touch_top_panel_set_hover_slot(-1);
         return;
     }
@@ -5817,14 +6216,15 @@ void sdl_touch_top_panel_send_slot(int slot, bool long_press)
     if (!sdl_main_screen_click_shortcuts_active())
         return;
 
-    /* A press or mouse hover displays the button description.  Clear it
-     * before the selected command can open its own prompt or modal screen. */
-    sdl_touch_top_panel_set_hover_slot(-1);
-
     if (long_press) {
-        sdl_touch_run_quick_access_picker(slot);
+        sdl_touch_top_panel_open_description(slot);
         return;
     }
+
+    /* A press or mouse hover displays the button description.  Clear it
+     * before the selected command can open its own prompt or modal screen. */
+    sdl_touch_top_panel_close_description();
+    sdl_touch_top_panel_set_hover_slot(-1);
 
     sdl_touch_pane_send_binding(sdl_touch_context_binding(binding), false,
         false);

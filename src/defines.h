@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 7
-#define VERSION_EXTRA 6   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 7   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
@@ -577,6 +577,8 @@
 #define FUEL_LAMP 5000 /* Maximum amount of fuel in a lantern */
 #define FUEL_FLASK 2500 /* Maximum amount of fuel in a flask of oil */
 #define FUEL_MALLORN 200 /* Maximum amount of fuel in a mallorn torch */
+#define FUEL_TORCH_DEFAULT 1000 /* Normal starting fuel for a wooden torch */
+#define FUEL_MALLORN_DEFAULT 100 /* Normal starting fuel for a mallorn torch */
 
 /*
  * More maximum values

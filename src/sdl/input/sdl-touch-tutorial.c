@@ -1554,7 +1554,7 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
             if (section >= 0 && legend_n < (int)N_ELEMENTS(legend_lines)) {
                 legend_lines[legend_n++] = mouse
                     ? "<t>Quick:</t> <a>click</a> a command; <a>right-click</a> to edit it."
-                    : "<t>Quick:</t> <a>tap</a> a command; <a>hold</a> to edit it.";
+                    : "<t>Quick:</t> <a>tap</a> a command; <a>hold</a> for its description and edit control.";
             }
         }
     }
@@ -1685,7 +1685,7 @@ void sdl_touch_tutorial_draw_main_screen_zones(
                 "Quick access",
                 mouse
                     ? "<a>Click</a> an icon for its command; <a>right-click</a> to edit it.\n<n>Default placement: bottom center.</n> Item descriptions open above this anchor. Edit buttons in <t>Touch Settings</t>."
-                    : "<a>Tap</a> an icon for its command; <a>hold</a> to edit it.\n<n>Default placement: bottom center.</n> Item descriptions open above this anchor. Edit buttons in <t>Touch Settings</t>.");
+                    : "<a>Tap</a> an icon for its command; <a>hold</a> for its description. The square changes it; the cross closes the description.\n<n>Default placement: bottom center.</n> Item descriptions open above this anchor. Edit buttons in <t>Touch Settings</t>.");
         }
     }
     if (sdl_touch_tutorial_status_rect(&rect)) {
@@ -2036,7 +2036,7 @@ void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
 
     sdl_touch_tutorial_draw_info_panel(screen,
         panel_x, panel_y, panel_w, "Button wheel controls",
-        "<t>Outer arrows:</t> <a>tap</a> a direction to step.\n<t>Inner wheel:</t> <a>press and drag</a> toward a direction, then release. Drag 1.3x the centre-to-arrow distance until <g>Run</g> appears to run on release.\n<t>Center:</t> <a>tap</a> to repeat the last direction.\n<a>Swipe edge:</a> reveal or hide the touch pane.\n<t>Quick access:</t> <a>tap</a> a button for its command; <a>hold</a> it to edit that button.\n<t>Status changes:</t> the wheel re-centres and shrinks inside the open lane as the condition panel grows.\nDescription cards open above the bottom-center quick-access overlay.");
+        "<t>Outer arrows:</t> <a>tap</a> a direction to step.\n<t>Inner wheel:</t> <a>press and drag</a> toward a direction, then release. Drag 1.3x the centre-to-arrow distance until <g>Run</g> appears to run on release.\n<t>Center:</t> <a>tap</a> to repeat the last direction.\n<a>Swipe edge:</a> reveal or hide the touch pane.\n<t>Quick access:</t> <a>tap</a> a button for its command; <a>hold</a> for its description. The square changes it; the cross closes the description.\n<t>Status changes:</t> the wheel re-centres and shrinks inside the open lane as the condition panel grows.\nDescription cards open above the bottom-center quick-access overlay.");
 
     (void)sdl_touch_tutorial_draw_header(screen, header_title, header_body,
         page, page_count);

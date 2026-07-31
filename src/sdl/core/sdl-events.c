@@ -1389,6 +1389,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
+        if (sdl_touch_top_panel_handle_description_hover(
+                (float)ev->motion.x, (float)ev->motion.y))
+        {
+            return;
+        }
         sdl_object_tooltip_handle_mouse_motion((float)ev->motion.x,
             (float)ev->motion.y);
         if (g_touch_pane_yes_no_prompt_active
@@ -1538,6 +1543,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         if (ev->button.button == SDL_BUTTON_LEFT
             && ev->button.which != SDL_TOUCH_MOUSEID)
         {
+            if (sdl_touch_top_panel_handle_description_pointer(
+                    (float)ev->button.x, (float)ev->button.y))
+            {
+                return;
+            }
             if (sdl_description_overlay_handle_close_pointer(
                     (float)ev->button.x, (float)ev->button.y))
             {
@@ -1952,6 +1962,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         sdl_note_touch_event_device(ev->tfinger.touchID);
         if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
+            return;
+        if (sdl_touch_top_panel_handle_description_pointer(x, y))
             return;
         /* A persistent long-press popup stays up until the next press; dismiss
          * it here so any touch clears it, mirroring the mouse right-click. */

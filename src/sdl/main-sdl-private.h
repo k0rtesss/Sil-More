@@ -2933,6 +2933,8 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
 bool sdl_touch_top_panel_point_to_slot(float x, float y, int* out_slot);
 bool sdl_touch_top_panel_pointer_claims_point(float x, float y);
 bool sdl_touch_top_panel_handle_secondary_pointer(float x, float y);
+bool sdl_touch_top_panel_handle_description_hover(float x, float y);
+bool sdl_touch_top_panel_handle_description_pointer(float x, float y);
 int sdl_touch_top_panel_binding_for_slot(int slot, bool long_press);
 void sdl_touch_top_panel_label_for_slot(int slot, bool long_press, char* buf, size_t buflen);
 void sdl_touch_top_panel_render_buttons( const SDL_FRect* button_rects);
@@ -4080,6 +4082,8 @@ void sdl_touch_top_panel_render_buttons(
 bool sdl_touch_top_panel_point_to_slot(float x, float y, int* out_slot);
 bool sdl_touch_top_panel_pointer_claims_point(float x, float y);
 bool sdl_touch_top_panel_handle_secondary_pointer(float x, float y);
+bool sdl_touch_top_panel_handle_description_hover(float x, float y);
+bool sdl_touch_top_panel_handle_description_pointer(float x, float y);
 void sdl_touch_top_panel_render(void);
 bool sdl_touch_top_panel_handle_pointer_down(float x, float y,
     SDL_FingerID finger_id);

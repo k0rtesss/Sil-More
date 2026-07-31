@@ -1351,8 +1351,8 @@ static const hint_platform_text_rule hint_platform_text_rules[] = {
     {
         "You can hide or unhide the right panel by Alt+'i'.",
         "You can show or hide side panes in Options > Window Options.",
-        "Tap a Quick Access button to use it; hold the button to change its "
-            "command."
+        "Tap a Quick Access button to use it; hold the button for its "
+            "description, then use the square button to change its command."
     },
     {
         "You can hide or unhide the bottom panel by Alt+'l'.",

@@ -617,6 +617,8 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
 
         if (o_ptr->tval == TV_LIGHT && player_light_has_fuel(o_ptr))
         {
+            int fuel_loss = damroll(20, 20);
+
             if (o_ptr->sval == SV_LIGHT_TORCH
                 || o_ptr->sval == SV_LIGHT_MALLORN)
                 msg_print("Your torch sputters.");
@@ -624,7 +626,18 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
                 msg_print("Your lantern sputters.");
             message_flush();
 
-            player_light_add_fuel(o_ptr, -damroll(20, 20));
+            /*
+             * Keep the wooden torch's existing 20d20 loss, and apply the
+             * same percentage range to a mallorn torch's smaller default
+             * fuel reserve.
+             */
+            if (o_ptr->sval == SV_LIGHT_MALLORN)
+            {
+                fuel_loss = (fuel_loss * FUEL_MALLORN_DEFAULT
+                    + (FUEL_TORCH_DEFAULT / 2)) / FUEL_TORCH_DEFAULT;
+            }
+
+            player_light_add_fuel(o_ptr, -fuel_loss);
             if (player_light_fuel(o_ptr) < 1)
                 player_light_set_fuel(o_ptr, 1);
         }
