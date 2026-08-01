@@ -1598,8 +1598,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             int needed = inventory_limit_additional_space_for_object(o_ptr);
             int left = MAX(limit - used, 0);
 
-            msg_format("No room in %s: %d.%d/%d.%d V used (%d.%d V left); "
-                       "this item needs %d.%d V.",
+            msg_format("No room in %s: %d.%d/%d.%d L used (%d.%d L left); "
+                       "this item needs %d.%d L.",
                 inventory_limit_group_name(group), used / 10, used % 10,
                 limit / 10, limit % 10, left / 10, left % 10,
                 needed / 10, needed % 10);

@@ -1561,7 +1561,7 @@ D: the dark towers of Thangorodrim.
 N:84:of Nan Elmoth
 Q:69606c66c1c7fa8c
 I:22:1:0
-Y:HARNESS:30
+Y:HARNESS:20
 W:14:15:20:45000
 P:2:1d8:0:0d0
 F:BRAND_POIS | THROWING | DARKNESS | EVIL_ITEM
@@ -1582,7 +1582,7 @@ D: that night. For this murder Eol was cast from Caragdur.
 N:85:'Dugrakh'
 Q:1df2f87f537baa23
 I:22:1:-1
-Y:HARNESS:30
+Y:HARNESS:25
 W:12:20:25:50000
 P:1:1d11:1:0d0
 F:SLAY_RAUKO | SLAY_MAN_OR_ELF | SEE_INVIS | FREE_ACT | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -1653,7 +1653,7 @@ D: for its chill brings death to the undead and all fell spirits.
 N:88:'Tuilindor'
 Q:104c05d13dbd4f07
 I:22:1:1
-Y:HARNESS:30
+Y:HARNESS:20
 W:10:25:30:20000
 P:2:1d10:0:0d0
 F:DEX | THROWING | NOBLE_ITEM
@@ -2305,7 +2305,7 @@ N:129:'Mornpilin'
 Q:a8d1e5f3b7c29046
 G:-:D
 I:17:1:2
-Y:HARNESS:10
+Y:HARNESS:20
 S:24
 W:16:20:1:15000
 P:+5:0d0:0:0d0
@@ -2585,7 +2585,7 @@ N:150:'Dailir'
 Q:e8840ae097bbec79
 G:-:u
 I:17:1:0
-Y:HARNESS:10
+Y:HARNESS:2
 W:10:15:1:20000
 P:+12:0d0:0:0d0
 F:NOBLE_ITEM

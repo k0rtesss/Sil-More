@@ -1625,6 +1625,7 @@ static bool select_throw_slot(int* item)
      */
     {
         ui_question_option options[THROW_CANDIDATE_MAX];
+        const object_type* object_icons[THROW_CANDIDATE_MAX];
         char labels[THROW_CANDIDATE_MAX][80];
         int i;
         int choice;
@@ -1646,12 +1647,16 @@ static bool select_throw_slot(int* item)
 
             options[i].key = (char)('a' + i);
             options[i].label = labels[i];
-            options[i].attr = TERM_L_WHITE;
+            options[i].attr = weapon_glows(o_ptr)
+                ? object_display_color(o_ptr, TERM_L_BLUE)
+                : object_display_color(o_ptr,
+                      tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
             options[i].disabled = false;
+            object_icons[i] = o_ptr;
         }
 
-        choice = ui_question_ask("Throw", "Choose what to hurl.", options,
-            count, p_ptr->py, p_ptr->px, 0);
+        choice = ui_question_ask_objects("Throw", "Choose what to hurl.",
+            options, object_icons, count, p_ptr->py, p_ptr->px, 0);
 
         if (choice < 0 || choice >= count)
             return false;
@@ -1948,6 +1953,12 @@ void do_cmd_throw(bool automatic)
             return;
         }
     }
+
+    /* Eligibility was first checked before targeting.  Revalidate the
+     * authoritative ownership/readiness state before arming the combined
+     * attack so a stale candidate can never reach combat resolution. */
+    if (power_throw_candidate && !player_power_throw_ready())
+        power_throw_candidate = false;
 
     if (power_throw_candidate)
     {

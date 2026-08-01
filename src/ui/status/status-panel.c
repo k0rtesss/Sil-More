@@ -621,16 +621,11 @@ void prt_mel(void)
     int offhand_attack = 0;
     int offhand_dd = 0;
     int offhand_ds = 0;
-    bool has_main = player_active_weapon_stats_preview(
-        PLAYER_ACTIVE_WEAPON_MELEE, &main_attack, &main_dd, &main_ds, NULL);
-    bool has_offhand = player_active_weapon_offhand_stats_preview(
-        &offhand_attack, &offhand_dd, &offhand_ds);
+    bool has_main;
+    bool has_offhand;
     bool can_use_offhand_row = (ROW_MEL - 1) != ROW_LIGHT;
     int main_row = ROW_MEL;
     byte melee_bg_attr = pointer_attack_panel_bg_attr(SDL_POINTER_ATTACK_MELEE);
-
-    if (has_offhand && can_use_offhand_row)
-        main_row = ROW_MEL - 1;
 
     /*
      * Clear the secondary melee row only when it is not reserved for the light
@@ -640,6 +635,17 @@ void prt_mel(void)
     if (can_use_offhand_row)
         Term_erase(COL_MEL, ROW_MEL - 1, 12);
     Term_erase(COL_MEL, ROW_MEL, 12);
+
+    /* The combat panel presents only the active combat set. */
+    if (!player_active_weapon_is_melee())
+        return;
+
+    has_main = player_active_weapon_stats_preview(
+        PLAYER_ACTIVE_WEAPON_MELEE, &main_attack, &main_dd, &main_ds, NULL);
+    has_offhand = player_active_weapon_offhand_stats_preview(
+        &offhand_attack, &offhand_dd, &offhand_ds);
+    if (has_offhand && can_use_offhand_row)
+        main_row = ROW_MEL - 1;
 
     /* Melee attacks */
     int meleeColour
@@ -679,6 +685,10 @@ void prt_arc(void)
 
     /* Clear the line so shorter values don't leave stale characters */
     Term_erase(COL_ARC, ROW_ARC, 12);
+
+    /* Inactive ranged equipment belongs to the Harness, not this panel. */
+    if (!player_active_weapon_is_ranged())
+        return;
 
     /* Range attacks */
     if (pointer_attack_ranged_display_stats(&attack, &dd, &ds, &throwing))
@@ -733,31 +743,21 @@ void prt_arc(void)
 
 }
 
-/*
- * Prints current quiver and belt status.
- * Right-aligned to 12 character width, like other stats
- * Same type: icon in middle between counts
- * Different: icon before each count
- */
+/* Print the active Quiver status, right-aligned like the other combat rows. */
 void prt_quiver(void)
 {
-    char buf1[16];
-    char buf2[16];
+    char buf[16];
     object_type* q1_ptr = &inventory[INVEN_QUIVER1];
-    object_type* q2_ptr = &inventory[INVEN_BELT];
     int q1_current = 0;
     int q1_max = 0;
-    int q2_current = 0;
-    int q2_max = 0;
-    bool same_type = false;
     int total_width;
     int start_col;
+    int q1_start;
+    int col;
     byte q1_text_attr = pointer_attack_quiver_panel_attr(
         SDL_POINTER_ATTACK_RANGED_1, TERM_L_WHITE);
-    byte q2_text_attr = TERM_L_WHITE;
     byte q1_bg_attr = pointer_attack_quiver_panel_bg_attr(
         SDL_POINTER_ATTACK_RANGED_1);
-    byte q2_bg_attr = 0;
 
     for (int i = 0; i < 2; i++)
     {
@@ -769,108 +769,28 @@ void prt_quiver(void)
     /* Clear the entire line (12 characters) */
     Term_erase(COL_QUIVER, ROW_QUIVER, 12);
 
-    /* Get quiver 1 info */
-    if (q1_ptr->k_idx)
-    {
-        q1_current = q1_ptr->number;
-        q1_max = object_stack_limit(q1_ptr);
-    }
+    /* Belt throws use t and inactive Quiver contents belong to the Harness. */
+    if (!player_active_weapon_is_ranged() || !q1_ptr->k_idx)
+        return;
 
-    /* Get belt info; the belt always has one physical place. */
-    if (q2_ptr->k_idx)
-    {
-        q2_current = q2_ptr->number;
-        q2_max = 1;
-    }
+    q1_current = q1_ptr->number;
+    q1_max = object_stack_limit(q1_ptr);
+    strnfmt(buf, sizeof(buf), "%d/%d", q1_current, q1_max);
+    total_width = 2 + (int)strlen(buf);
 
-    /* A quiver stack and belt weapon may still share an icon. */
-    if (q1_ptr->k_idx && q2_ptr->k_idx)
-    {
-        if (q1_ptr->tval == q2_ptr->tval && q1_ptr->sval == q2_ptr->sval)
-        {
-            same_type = true;
-        }
-    }
-
-    /* Format the count strings */
-    strnfmt(buf1, sizeof(buf1), "%d/%d", q1_current, q1_max);
-    strnfmt(buf2, sizeof(buf2), "%d/%d", q2_current, q2_max);
-
-    /* Calculate total width */
-    if (same_type)
-    {
-        /* Layout: "11/48[->][->]7/7" */
-        total_width = strlen(buf1) + (use_bigtile ? 2 : 2) + strlen(buf2);
-    }
-    else
-    {
-        /* Layout: "[|][|]11/48[/][/]7/7" */
-        total_width = 0;
-        if (q1_ptr->k_idx)
-            total_width += (use_bigtile ? 2 : 2) + strlen(buf1);
-        if (q2_ptr->k_idx)
-            total_width += (use_bigtile ? 2 : 2) + strlen(buf2);
-    }
-
-    /* Right-align: start at column that makes it end at column 11 */
     start_col = COL_QUIVER + 12 - total_width;
-    if (start_col < COL_QUIVER) start_col = COL_QUIVER;
+    if (start_col < COL_QUIVER)
+        start_col = COL_QUIVER;
 
-    int col = start_col;
-
-    if (same_type)
-    {
-        /* Same type: counts with icon in middle */
-        byte shared_icon_bg_attr = q1_bg_attr ? q1_bg_attr : q2_bg_attr;
-        int q1_start;
-
-        /* Q1 count */
-        q1_start = col;
-        Term_putstr(col, ROW_QUIVER, -1, q1_text_attr, buf1);
-        col += strlen(buf1);
-        g_left_panel_quiver_attack_modes[0] = SDL_POINTER_ATTACK_RANGED_1;
-        g_left_panel_quiver_attack_start_cols[0] = (byte)q1_start;
-        g_left_panel_quiver_attack_end_cols[0] = (byte)col;
-
-        /* Icon in middle */
-        col += left_panel_put_object_icon(q1_ptr, ROW_QUIVER, col, false,
-            shared_icon_bg_attr);
-
-        /* Q2 count */
-        Term_putstr(col, ROW_QUIVER, -1, q2_text_attr, buf2);
-        col += strlen(buf2);
-        /* Belt contents are displayed, but are never an active ranged mode. */
-    }
-    else
-    {
-        /* Different types: icon before each count */
-        if (q1_ptr->k_idx)
-        {
-            /* Q1: "[icon][icon]cur/max" */
-            int q1_start;
-
-            col += left_panel_put_object_icon(q1_ptr, ROW_QUIVER, col, false,
-                q1_bg_attr);
-
-            q1_start = col;
-            Term_putstr(col, ROW_QUIVER, -1, q1_text_attr, buf1);
-            col += strlen(buf1);
-            g_left_panel_quiver_attack_modes[0] = SDL_POINTER_ATTACK_RANGED_1;
-            g_left_panel_quiver_attack_start_cols[0] = (byte)q1_start;
-            g_left_panel_quiver_attack_end_cols[0] = (byte)col;
-        }
-
-        if (q2_ptr->k_idx)
-        {
-            /* Q2: "[icon][icon]cur/max" */
-            col += left_panel_put_object_icon(q2_ptr, ROW_QUIVER, col, false,
-                q2_bg_attr);
-
-            Term_putstr(col, ROW_QUIVER, -1, q2_text_attr, buf2);
-            col += strlen(buf2);
-            /* Belt contents are displayed, but are thrown via t. */
-        }
-    }
+    col = start_col;
+    col += left_panel_put_object_icon(q1_ptr, ROW_QUIVER, col, false,
+        q1_bg_attr);
+    q1_start = col;
+    Term_putstr(col, ROW_QUIVER, -1, q1_text_attr, buf);
+    col += strlen(buf);
+    g_left_panel_quiver_attack_modes[0] = SDL_POINTER_ATTACK_RANGED_1;
+    g_left_panel_quiver_attack_start_cols[0] = (byte)q1_start;
+    g_left_panel_quiver_attack_end_cols[0] = (byte)col;
 }
 
 /*
@@ -1641,6 +1561,7 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
         }
     }
 
+    if (player_active_weapon_is_melee())
     {
         const object_type* icon_obj = left_panel_melee_display_object();
         int toggle_mode = player_opposite_active_weapon_mode();
@@ -1709,6 +1630,7 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
         }
     }
 
+    if (player_active_weapon_is_ranged())
     {
         int toggle_mode = player_opposite_active_weapon_mode();
         int arc_attack = 0;
@@ -1748,11 +1670,10 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
         }
     }
 
+    if (player_active_weapon_is_ranged())
     {
         hidden_left_panel_add_quiver_line(lines, &count, max_lines,
             &inventory[INVEN_QUIVER1], SDL_POINTER_ATTACK_RANGED_1);
-        hidden_left_panel_add_quiver_line(lines, &count, max_lines,
-            &inventory[INVEN_BELT], SDL_POINTER_ATTACK_NONE);
     }
 
     {

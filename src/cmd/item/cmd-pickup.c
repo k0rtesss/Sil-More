@@ -694,8 +694,8 @@ static void format_inventory_limit_reason(char* buf, size_t max,
             needed = inventory_limit_space_for_object(incoming);
         shortage = MAX(used + needed - limit, 0);
         strnfmt(buf, max,
-            "No room in %s: %d.%d/%d.%d V used (%d.%d V left). "
-            "Incoming needs %d.%d V; short by %d.%d V.",
+            "No room in %s: %d.%d/%d.%d L used (%d.%d L left). "
+            "Incoming needs %d.%d L; short by %d.%d L.",
             inventory_limit_group_name(group), used / 10, used % 10,
             limit / 10, limit % 10, left / 10, left % 10,
             needed / 10, needed % 10, shortage / 10, shortage % 10);
@@ -1447,6 +1447,7 @@ void do_cmd_pickup_from_pile(void)
         int floor_num;
 
         ui_question_option options[MAX_FLOOR_STACK];
+        const object_type* object_icons[MAX_FLOOR_STACK];
         char names[MAX_FLOOR_STACK][80];
 
         /*start with everything updated*/
@@ -1474,12 +1475,16 @@ void do_cmd_pickup_from_pile(void)
             object_desc(names[i], sizeof(names[i]), o_ptr, true, 3);
             options[i].key = (i < 26) ? (char)('a' + i) : 0;
             options[i].label = names[i];
-            options[i].attr = TERM_L_WHITE;
+            options[i].attr = weapon_glows(o_ptr)
+                ? object_display_color(o_ptr, TERM_L_BLUE)
+                : object_display_color(o_ptr,
+                      tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
             options[i].disabled = false;
+            object_icons[i] = o_ptr;
         }
 
-        item = ui_question_ask("Pick up which object?", NULL, options,
-            floor_num, p_ptr->py, p_ptr->px, 0);
+        item = ui_question_ask_objects("Pick up which object?", NULL,
+            options, object_icons, floor_num, p_ptr->py, p_ptr->px, 0);
 
         /*player chose escape*/
         if (item < 0)
@@ -1516,8 +1521,8 @@ static void report_pack_limit_failure(const char* o_name, bool still)
             int used = inventory_limit_usage_for_group(group);
             int left = MAX(limit - used, 0);
 
-            msg_format("Your %s %s full: %d.%d/%d.%d V used "
-                       "(%d.%d V left).",
+            msg_format("Your %s %s full: %d.%d/%d.%d L used "
+                       "(%d.%d L left).",
                 inventory_limit_group_name(group), still ? "is still" : "is",
                 used / 10, used % 10, limit / 10, limit % 10,
                 left / 10, left % 10);
@@ -1630,7 +1635,7 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
 
         if (incoming_space > limit)
         {
-            msg_format("It needs %d.%d V, more than the %d.%d V maximum; "
+            msg_format("It needs %d.%d L, more than the %d.%d L maximum; "
                        "it cannot fit even when this pool is empty.",
                 incoming_space / 10, incoming_space % 10,
                 limit / 10, limit % 10);

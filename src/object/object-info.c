@@ -1589,7 +1589,9 @@ static bool describe_potion_throw(const object_type* o_ptr)
 static bool describe_inventory_volume(const object_type* o_ptr)
 {
     enum inventory_limit_group group;
+    cptr ability_name;
     cptr pool;
+    int intrinsic;
     int volume;
 
     if (!o_ptr || !o_ptr->k_idx)
@@ -1603,18 +1605,41 @@ static bool describe_inventory_volume(const object_type* o_ptr)
     else
         return false;
 
+    intrinsic = inventory_limit_intrinsic_space_for_object(o_ptr);
     volume = inventory_limit_space_for_object(o_ptr);
     if (volume <= 0)
         return false;
 
+    ability_name = inventory_limit_carriage_ability_name_for_object(o_ptr);
+    if (intrinsic > volume && ability_name)
+    {
+        if (o_ptr->number > 1)
+        {
+            p_text_out(format(
+                "Together they occupy %d.%d L. Your learned %s carriage "
+                "efficiency reduces their %s use to %d.%d L.",
+                intrinsic / 10, intrinsic % 10, ability_name, pool,
+                volume / 10, volume % 10));
+        }
+        else
+        {
+            p_text_out(format(
+                "It occupies %d.%d L. Your learned %s carriage efficiency "
+                "reduces its %s use to %d.%d L.",
+                intrinsic / 10, intrinsic % 10, ability_name, pool,
+                volume / 10, volume % 10));
+        }
+        return true;
+    }
+
     if (o_ptr->number > 1)
     {
-        p_text_out(format("Together they occupy %d.%d V in your %s.",
+        p_text_out(format("Together they occupy %d.%d L in your %s.",
             volume / 10, volume % 10, pool));
     }
     else
     {
-        p_text_out(format("It occupies %d.%d V in your %s.",
+        p_text_out(format("It occupies %d.%d L in your %s.",
             volume / 10, volume % 10, pool));
     }
 

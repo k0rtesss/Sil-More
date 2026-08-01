@@ -292,6 +292,8 @@ struct ability_type
     byte abilitynum; /* Ability number within a skill */
 
     byte level; /* Prerequisite skill level */
+    byte carriage_target; /* ABILITY_CARRIAGE_* target, if any */
+    byte carriage_reduction_percent; /* Learned ability reduction */
     byte prereqs; /* Number of prerequisite abilities */
     byte prereq_skilltype[4]; /* Skill type (for prerequisites) */
     byte prereq_abilitynum[4]; /* The ability within that skill (for
@@ -378,7 +380,8 @@ struct ego_item_type
 
     s32b cost; /* Ego-item "cost" */
 
-    s16b volume_adjustment; /* Signed per-item volume change, in tenths */
+    /* Percentage change; reductions do not stack. */
+    s16b volume_adjustment_percent;
 
     u32b flags1; /* Ego-Item Flags, set 1 */
     u32b flags2; /* Ego-Item Flags, set 2 */

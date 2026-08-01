@@ -13,7 +13,7 @@
 # C: max att : plus damage dice : plus damage sides : max evn : 
 #    plus prot dice: plus prot sides : pval : min pval (optional)
 # W: depth : rarity_percent : max_depth : cost
-# Y: signed per-item volume adjustment in tenths
+# Y: percentage volume reduction (for example, Y:-20 reduces volume by 20%)
 # A: depth/rarity_percent : depth/rarity_percent : etc
 # T: tval : min_sval : max_sval
 # F: flag | flag | etc
@@ -38,8 +38,9 @@
 #     and max_pval > 0, min_pval defaults to 1 (forbidding 0 pval items).
 #     Set min_pval to 0 explicitly to allow 0 pval items.
 #
-# 'Y' adjusts the base item's stowed volume in tenths. The final volume
-#     of a volume-bearing item is never allowed below 0.1 V.
+# 'Y' reduces the base item's stowed volume by a percentage. Multiple
+#     volume-reducing egos do not stack; only the strongest reduction applies.
+#     The final volume of a volume-bearing item is never below 0.1 L.
 #
 # 'F' is for flags. These are fairly self-explanatory. As many F:
 #     lines may be used as are needed to specify all the flags and flags
@@ -1612,12 +1613,13 @@ D: or ash. When the hammer strikes, the hidden fire in the metal seems
 D: to wake again, as though the forge itself had judged the blow.
 
 
-# Daggers and hand axes only
+# Daggers, spears, and hand axes only
 # (ability 0/3 is Throwing)
 # The Gaurwaith were the outlaw band of Túrin, living by their wits and weapons in the wild.
 
 N:149:of the Gaurwaith
 W:4:75:0:1500
+Y:-20
 C:0:0:0:0:0:0:0
 T:23:4:4
 T:22:1:1
@@ -2134,7 +2136,7 @@ D: step, and sudden turning had entered into quiet agreement.
 
 N:185:(Light)
 W:0:40:0:800
-Y:-10
+Y:-20
 C:0:0:0:1:0:0:0
 T:34:0:99
 T:32:0:99

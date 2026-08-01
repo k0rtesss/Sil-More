@@ -1850,7 +1850,7 @@ static void queue_legacy_belt_migration_messages(
 
         if (limit >= 0 && used > limit)
         {
-            msg_format("This older save is over %s capacity (%d.%d/%d.%d V). All items were preserved; make room before carrying more.",
+            msg_format("This older save is over %s capacity (%d.%d/%d.%d L). All items were preserved; make room before carrying more.",
                 inventory_limit_group_name((enum inventory_limit_group)group),
                 used / 10, used % 10, limit / 10, limit % 10);
         }

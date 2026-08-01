@@ -190,7 +190,7 @@ static void object_choice_append_volume(char* text, size_t text_size,
     if (volume <= 0)
         return;
 
-    strnfmt(suffix, sizeof(suffix), "  %d.%d V", volume / 10, volume % 10);
+    strnfmt(suffix, sizeof(suffix), "  %d.%d L", volume / 10, volume % 10);
     suffix_len = strlen(suffix);
     if (suffix_len + 1 >= text_size)
         return;
@@ -344,8 +344,16 @@ static void object_choice_show(cptr title, cptr desc,
 
     for (int i = 0; i < count; i++)
     {
-        sdl_question_menu_add_entry(i, entries[i].label, entries[i].text,
-            entries[i].attr);
+        if (entries[i].o_ptr && entries[i].o_ptr->k_idx)
+        {
+            sdl_question_menu_add_object_entry(i, entries[i].label,
+                entries[i].text, entries[i].attr, entries[i].o_ptr);
+        }
+        else
+        {
+            sdl_question_menu_add_entry(i, entries[i].label,
+                entries[i].text, entries[i].attr);
+        }
     }
 
     sdl_question_menu_set_highlight(highlight);

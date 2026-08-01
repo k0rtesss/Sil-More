@@ -12,6 +12,7 @@
 # N: ability number : ability name
 # I: skill number : ability value : level requirement
 # P: prerequisite skill number / prerequisite ability value : ...
+# Y: carriage target : percentage reduction when personally learned
 # D: description (poetic/lore text)
 # E: effect (mechanical description)
 #
@@ -22,6 +23,10 @@
 #     and the level requirement for the ability
 #
 # 'P' is the prerequisite abilities if any
+#
+# 'Y' grants learned carriage efficiency. Supported targets are THROWING
+#     and ARROWS. The percentage does not stack with an item's own volume
+#     reduction; only the strongest applicable reduction is used.
 #
 # 'D' is a poetic/lore description of the ability
 #
@@ -65,8 +70,9 @@ T:34:0:99  # Shields
 
 N:3:Throwing
 I:0:3:4
+Y:THROWING:20
 D:Recalling the deadly casts of spears by the Sindar in the defense of Doriath's borders. The march-wardens of Thingol were trained to hurl their javelins with lethal accuracy across great distances, striking down intruders before they could set foot beneath the enchanted trees of Neldoreth.
-E:+1 attack when throwing from the quiver. Distance penalties halved. Thrown criticals easier. Quivered daggers can be quick-thrown when the active weapon is a one-handed or one-and-a-half-handed melee weapon, or a bow. Your first active weapon change before your next action is free when changing between throwing weapons. With Warden, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between bow and throwing or between bows. With both Warden and Versatility, it may be any active weapon change.
+E:+1 attack when throwing from the quiver. Distance penalties halved. Thrown criticals easier. Personally learning Throwing reduces the Harness use of throwing weapons by 20%. Quivered daggers can be quick-thrown when the active weapon is a one-handed or one-and-a-half-handed melee weapon, or a bow. Your first active weapon change before your next action is free when changing between throwing weapons. With Warden, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between bow and throwing or between bows. With both Warden and Versatility, it may be any active weapon change.
 T:21:0:99  # Hafted
 T:22:0:99  # Polearms
 T:23:0:99  # Swords
@@ -202,8 +208,9 @@ T:19:0:99  # Bows
 
 N:21:Fletchery
 I:1:1:3
+Y:ARROWS:20
 D:Crafting arrows with the skill of the Green-elves of Ossiriand, who fashioned shafts from the woods of their forested realm. The Laiquendi were renowned for the quality of their arrows, each one shaped with patient care from the straight-grained wood of birch and ash, fletched with feathers gathered from the banks of Gelion.
-E:Use '-' to craft arrows to +3 without changing their affixes (one turn each). Carve 3 arrows from torches, 6 from staves.
+E:Use '-' to craft arrows to +3 without changing their affixes (one turn each). Carve 3 arrows from torches, 6 from staves. Personally learning Fletchery reduces the Harness use of arrows by 20%.
 T:31:1:1   # Gloves (leather gloves only)
 T:45:0:99  # Ring
 

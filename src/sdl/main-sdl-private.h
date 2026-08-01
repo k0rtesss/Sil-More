@@ -1012,7 +1012,7 @@ enum {
     SDL_QUESTION_MENU_MAX_ENTRIES = 320,
     SDL_QUESTION_MENU_MAX_BUTTONS = 4,
     SDL_QUESTION_MENU_LETTER_LEN = 4,
-    SDL_QUESTION_MENU_TEXT_LEN = 96,
+    SDL_QUESTION_MENU_TEXT_LEN = 256,
     SDL_QUESTION_MENU_TITLE_LEN = 80,
     SDL_QUESTION_MENU_DESC_LEN = 480
 };
@@ -1020,6 +1020,9 @@ enum {
 typedef struct sdl_question_menu_entry_state {
     int choice;
     byte text_attr;
+    byte icon_attr;
+    char icon_char;
+    bool has_icon;
     char letter[SDL_QUESTION_MENU_LETTER_LEN];
     char text[SDL_QUESTION_MENU_TEXT_LEN];
 } sdl_question_menu_entry_state;

@@ -119,20 +119,20 @@ errr parse_e_info(char* buf, header* head)
         e_ptr->cost = cost;
     }
 
-    /* Process 'Y' for a signed per-item volume adjustment in tenths. */
+    /* Process 'Y' for a percentage volume reduction. */
     else if (buf[0] == 'Y')
     {
-        int adjustment;
+        int percentage;
         char trailing;
 
         if (!e_ptr)
             return (PARSE_ERROR_MISSING_RECORD_HEADER);
-        if (1 != sscanf(buf + 2, "%d%c", &adjustment, &trailing))
+        if (1 != sscanf(buf + 2, "%d%c", &percentage, &trailing))
             return (PARSE_ERROR_GENERIC);
-        if (adjustment < -32768 || adjustment > 32767)
+        if (percentage < -99 || percentage > 0)
             return (PARSE_ERROR_GENERIC);
 
-        e_ptr->volume_adjustment = (s16b)adjustment;
+        e_ptr->volume_adjustment_percent = (s16b)percentage;
     }
 
     /* Process 'A' for "Allocation" (one line only) */

@@ -1296,6 +1296,8 @@ extern void object_copy(object_type* o_ptr, const object_type* j_ptr);
 extern byte object_chest_trap_flags(const object_type* o_ptr);
 extern void object_prep(object_type* o_ptr, int k_idx);
 extern int object_effective_volume(const object_type* o_ptr);
+extern int object_effective_volume_with_reduction(const object_type* o_ptr,
+    int extra_reduction_percent);
 extern void object_refresh_weight(object_type* o_ptr);
 extern void object_into_artefact(object_type* o_ptr, artefact_type* a_ptr);
 extern u32b object_kind_pval_flags1(const object_kind* k_ptr);
@@ -1488,6 +1490,14 @@ extern bool inventory_limit_info_for_object(const object_type* o_ptr,
 extern int inventory_limit_usage_for_group(enum inventory_limit_group group);
 extern int inventory_limit_limit_for_group(enum inventory_limit_group group);
 extern int inventory_limit_space_for_object(const object_type* o_ptr);
+extern int inventory_limit_intrinsic_space_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_carriage_savings_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_carriage_savings_for_group(
+    enum inventory_limit_group group);
+extern cptr inventory_limit_carriage_ability_name_for_object(
+    const object_type* o_ptr);
 extern int inventory_limit_additional_space_for_object(
     const object_type* o_ptr);
 extern int inventory_limit_removal_space_for_object(
@@ -1982,6 +1992,8 @@ extern cptr get_ext_color_name(byte ext_color);
 
 /* Player/status/upkeep modules */
 extern bool player_in_combat(void);
+extern bool player_pack_item_action_blocked(const object_type* o_ptr);
+extern cptr player_pack_item_action_restriction_message(void);
 extern bool player_pack_item_action_allowed(const object_type* o_ptr);
 extern byte total_mdd(const object_type* o_ptr);
 extern byte strength_modified_ds(const object_type* o_ptr, int str_adjustment);
@@ -2344,6 +2356,8 @@ extern void sdl_question_menu_set_anchor_grid(int y, int x);
 extern void sdl_question_menu_set_desc(cptr text);
 extern void sdl_question_menu_add_entry(int choice, cptr letter, cptr text,
     byte attr);
+extern void sdl_question_menu_add_object_entry(int choice, cptr letter,
+    cptr text, byte attr, const object_type* o_ptr);
 extern void sdl_question_menu_add_button(int choice, cptr text, byte attr);
 extern void sdl_question_menu_add_text(cptr text, byte attr);
 extern void sdl_question_menu_set_highlight(int choice);

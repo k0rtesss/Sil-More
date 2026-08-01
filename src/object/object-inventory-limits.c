@@ -77,6 +77,71 @@ static int arrow_bundle_count(int arrows)
         / INVENTORY_ARROW_VOLUME_BUNDLE;
 }
 
+static const ability_type* learned_carriage_ability(byte target)
+{
+    const ability_type* best = NULL;
+
+    if (!p_ptr || !z_info || !b_info || target == ABILITY_CARRIAGE_NONE)
+        return NULL;
+
+    for (int i = 0; i < z_info->b_max; i++)
+    {
+        const ability_type* b_ptr = &b_info[i];
+
+        if (b_ptr->carriage_target != target
+            || b_ptr->carriage_reduction_percent == 0)
+        {
+            continue;
+        }
+        if (b_ptr->skilltype >= S_MAX || b_ptr->abilitynum >= ABILITIES_MAX)
+            continue;
+        if (!p_ptr->innate_ability[b_ptr->skilltype][b_ptr->abilitynum])
+            continue;
+        if (!best || b_ptr->carriage_reduction_percent
+                > best->carriage_reduction_percent)
+        {
+            best = b_ptr;
+        }
+    }
+
+    return best;
+}
+
+static const ability_type* carriage_ability_for_object(
+    const object_type* o_ptr)
+{
+    u32b f1, f2, f3;
+
+    if (!o_ptr || !o_ptr->k_idx
+        || volume_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
+    {
+        return NULL;
+    }
+
+    if (o_ptr->tval == TV_ARROW)
+        return learned_carriage_ability(ABILITY_CARRIAGE_ARROWS);
+
+    object_flags(o_ptr, &f1, &f2, &f3);
+    if (f3 & TR3_THROWING)
+        return learned_carriage_ability(ABILITY_CARRIAGE_THROWING);
+
+    return NULL;
+}
+
+static int carried_unit_volume(const object_type* o_ptr,
+    enum inventory_limit_group group, bool apply_carriage_efficiency)
+{
+    const ability_type* b_ptr = NULL;
+    int reduction = 0;
+
+    if (apply_carriage_efficiency && group == INV_LIMIT_HARNESS)
+        b_ptr = carriage_ability_for_object(o_ptr);
+    if (b_ptr)
+        reduction = 0 - b_ptr->carriage_reduction_percent;
+
+    return object_effective_volume_with_reduction(o_ptr, reduction);
+}
+
 static int inventory_volume_last_slot(enum inventory_limit_group group)
 {
     /* Worn Pack apparel is outside the backpack.  Harness objects remain on
@@ -84,28 +149,10 @@ static int inventory_volume_last_slot(enum inventory_limit_group group)
     return group == INV_LIMIT_HARNESS ? INVEN_TOTAL - 1 : INVEN_PACK;
 }
 
-static int inventory_harness_arrow_count(void)
-{
-    int arrows = 0;
-
-    for (int i = 0; i <= inventory_volume_last_slot(INV_LIMIT_HARNESS); i++)
-    {
-        const object_type* o_ptr = &inventory[i];
-
-        if (!o_ptr->k_idx || o_ptr->number <= 0 || o_ptr->tval != TV_ARROW)
-            continue;
-        if (volume_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
-            continue;
-
-        arrows += o_ptr->number;
-    }
-
-    return arrows;
-}
-
-static int projected_inventory_volume_usage(enum inventory_limit_group group,
-    const object_type* removed, int remove_quantity,
-    const object_type* incoming)
+static int projected_inventory_volume_usage_internal(
+    enum inventory_limit_group group, const object_type* removed,
+    int remove_quantity, const object_type* incoming,
+    bool apply_carriage_efficiency)
 {
     int usage = 0;
     int arrows = 0;
@@ -127,7 +174,8 @@ static int projected_inventory_volume_usage(enum inventory_limit_group group,
         if (volume_group_for_object(o_ptr) != group)
             continue;
 
-        volume = object_effective_volume(o_ptr);
+        volume = carried_unit_volume(o_ptr, group,
+            apply_carriage_efficiency);
         if (group == INV_LIMIT_HARNESS && o_ptr->tval == TV_ARROW)
         {
             arrows += number;
@@ -143,7 +191,8 @@ static int projected_inventory_volume_usage(enum inventory_limit_group group,
         && volume_group_for_object(incoming) == group)
     {
         int number = MAX(incoming->number, 1);
-        int volume = object_effective_volume(incoming);
+        int volume = carried_unit_volume(incoming, group,
+            apply_carriage_efficiency);
 
         if (group == INV_LIMIT_HARNESS && incoming->tval == TV_ARROW)
         {
@@ -158,6 +207,14 @@ static int projected_inventory_volume_usage(enum inventory_limit_group group,
 
     usage += arrow_bundle_count(arrows) * arrow_volume;
     return usage;
+}
+
+static int projected_inventory_volume_usage(enum inventory_limit_group group,
+    const object_type* removed, int remove_quantity,
+    const object_type* incoming)
+{
+    return projected_inventory_volume_usage_internal(group, removed,
+        remove_quantity, incoming, true);
 }
 
 static int inventory_volume_usage(enum inventory_limit_group group)
@@ -178,7 +235,7 @@ static bool get_inventory_limit_info(const object_type* o_ptr,
     if (limit)
         *limit = volume_limit_for_group(local_group);
     if (cost)
-        *cost = object_effective_volume(o_ptr);
+        *cost = carried_unit_volume(o_ptr, local_group, true);
 
     return true;
 }
@@ -306,45 +363,30 @@ bool player_light_capacity_okay(const object_type* o_ptr, bool record_failure)
 int inventory_limit_additional_space_for_object(const object_type* o_ptr)
 {
     enum inventory_limit_group group;
-    int volume;
-    int number;
+    int current;
+    int projected;
 
-    if (!get_inventory_limit_info(o_ptr, &group, NULL, &volume))
+    if (!get_inventory_limit_info(o_ptr, &group, NULL, NULL))
         return 0;
 
-    number = MAX(o_ptr->number, 1);
-    if (group == INV_LIMIT_HARNESS && o_ptr->tval == TV_ARROW)
-    {
-        int current = inventory_harness_arrow_count();
-        int old_bundles = arrow_bundle_count(current);
-        int new_bundles = arrow_bundle_count(current + number);
-
-        return (new_bundles - old_bundles) * volume;
-    }
-
-    return volume * number;
+    current = inventory_volume_usage(group);
+    projected = projected_inventory_volume_usage(group, NULL, 0, o_ptr);
+    return MAX(projected - current, 0);
 }
 
 int inventory_limit_removal_space_for_object(const object_type* o_ptr)
 {
     enum inventory_limit_group group;
-    int volume;
-    int number;
+    int current;
+    int projected;
 
-    if (!get_inventory_limit_info(o_ptr, &group, NULL, &volume))
+    if (!get_inventory_limit_info(o_ptr, &group, NULL, NULL))
         return 0;
 
-    number = MAX(o_ptr->number, 1);
-    if (group == INV_LIMIT_HARNESS && o_ptr->tval == TV_ARROW)
-    {
-        int current = inventory_harness_arrow_count();
-        int old_bundles = arrow_bundle_count(current);
-        int new_bundles = arrow_bundle_count(MAX(0, current - number));
-
-        return (old_bundles - new_bundles) * volume;
-    }
-
-    return volume * number;
+    current = inventory_volume_usage(group);
+    projected = projected_inventory_volume_usage(group, o_ptr,
+        MAX(o_ptr->number, 1), NULL);
+    return MAX(current - projected, 0);
 }
 
 int inventory_limit_usage_after_replacing(const object_type* incoming,
@@ -515,13 +557,13 @@ void inven_enforce_current_pack_limits(void)
             {
                 if (enforce_limit > limit)
                 {
-                    msg_format("Your legacy %s overage cannot increase beyond %d.%d V; choose what to drop.",
+                    msg_format("Your legacy %s overage cannot increase beyond %d.%d L; choose what to drop.",
                         group == INV_LIMIT_PACK ? "Pack" : "Harness",
                         enforce_limit / 10, enforce_limit % 10);
                 }
                 else
                 {
-                    msg_format("Your %s capacity is now %d.%d V; choose what to drop.",
+                    msg_format("Your %s capacity is now %d.%d L; choose what to drop.",
                         group == INV_LIMIT_PACK ? "Pack" : "Harness",
                         limit / 10, limit % 10);
                 }
@@ -686,7 +728,8 @@ int inventory_limit_usage_for_group(enum inventory_limit_group group)
     return 0;
 }
 
-int inventory_limit_space_for_object(const object_type* o_ptr)
+static int inventory_limit_space_for_object_internal(
+    const object_type* o_ptr, bool apply_carriage_efficiency)
 {
     enum inventory_limit_group group;
     int cost;
@@ -698,11 +741,62 @@ int inventory_limit_space_for_object(const object_type* o_ptr)
         return 0;
     }
 
+    if (inventory_limit_is_volume_group(group))
+        cost = carried_unit_volume(o_ptr, group, apply_carriage_efficiency);
+
     number = MAX(o_ptr->number, 1);
     if (group == INV_LIMIT_HARNESS && o_ptr->tval == TV_ARROW)
         return arrow_bundle_count(number) * cost;
 
     return cost * number;
+}
+
+int inventory_limit_space_for_object(const object_type* o_ptr)
+{
+    return inventory_limit_space_for_object_internal(o_ptr, true);
+}
+
+int inventory_limit_intrinsic_space_for_object(const object_type* o_ptr)
+{
+    return inventory_limit_space_for_object_internal(o_ptr, false);
+}
+
+int inventory_limit_carriage_savings_for_object(const object_type* o_ptr)
+{
+    int intrinsic = inventory_limit_intrinsic_space_for_object(o_ptr);
+    int carried = inventory_limit_space_for_object(o_ptr);
+
+    return MAX(intrinsic - carried, 0);
+}
+
+int inventory_limit_carriage_savings_for_group(
+    enum inventory_limit_group group)
+{
+    int intrinsic;
+    int carried;
+
+    if (!inventory_limit_is_volume_group(group))
+        return 0;
+
+    intrinsic = projected_inventory_volume_usage_internal(group, NULL, 0,
+        NULL, false);
+    carried = inventory_volume_usage(group);
+    return MAX(intrinsic - carried, 0);
+}
+
+cptr inventory_limit_carriage_ability_name_for_object(
+    const object_type* o_ptr)
+{
+    const ability_type* b_ptr;
+
+    if (inventory_limit_carriage_savings_for_object(o_ptr) <= 0)
+        return NULL;
+
+    b_ptr = carriage_ability_for_object(o_ptr);
+    if (!b_ptr || !b_name || !b_ptr->name)
+        return NULL;
+
+    return b_name + b_ptr->name;
 }
 
 int inventory_limit_limit_for_group(enum inventory_limit_group group)

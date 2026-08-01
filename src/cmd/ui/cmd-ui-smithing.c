@@ -9028,8 +9028,19 @@ void create_smithing_item(void)
     // Get the slot of the forged item
     slot = inven_carry(smith_o_ptr, true);
 
+    /* Supply items are absorbed into the separate supplies store.  inven_carry
+     * wipes smith_o_ptr after that transfer, so the returned value is not a
+     * real inventory slot and must not be used to index inventory[]. */
+    if (slot == SUPPLIES_INDEX)
+    {
+        char label = supplies_label_char();
+        if (!label)
+            label = 'a';
+        msg_format("You add %s to your supplies (%c).", o_name, label);
+    }
+
     // Check if the item couldn't fit in inventory (e.g., group limit)
-    if (slot < 0)
+    else if (slot < 0)
     {
         // Drop it on the floor instead
         log_debug("Smithed item couldn't fit in inventory, dropping to floor");

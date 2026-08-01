@@ -684,6 +684,11 @@
 #define ARC_DEX 8
 #define ARC_SKIRMISHING 9
 
+/* Data-driven ability carriage-efficiency targets. */
+#define ABILITY_CARRIAGE_NONE 0
+#define ABILITY_CARRIAGE_THROWING 1
+#define ABILITY_CARRIAGE_ARROWS 2
+
 /*
  * Evasion abilities
  */

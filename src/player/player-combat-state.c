@@ -44,13 +44,23 @@ bool player_in_combat(void)
     return false;
 }
 
+bool player_pack_item_action_blocked(const object_type* o_ptr)
+{
+    return o_ptr && o_ptr->k_idx
+        && o_ptr->storage == OBJECT_STORAGE_PACK
+        && player_in_combat();
+}
+
+cptr player_pack_item_action_restriction_message(void)
+{
+    return "You cannot use or rearrange Pack items while in combat.";
+}
+
 bool player_pack_item_action_allowed(const object_type* o_ptr)
 {
-    if (!o_ptr || !o_ptr->k_idx || o_ptr->storage != OBJECT_STORAGE_PACK)
-        return true;
-    if (!player_in_combat())
+    if (!player_pack_item_action_blocked(o_ptr))
         return true;
 
-    msg_print("You cannot use or rearrange Pack items while in combat.");
+    msg_print(player_pack_item_action_restriction_message());
     return false;
 }

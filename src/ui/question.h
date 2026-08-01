@@ -39,6 +39,13 @@ typedef struct ui_question_button {
 int ui_question_ask(cptr title, cptr desc, const ui_question_option* options,
     int count, int anchor_y, int anchor_x, int default_index);
 
+/* As above, with an optional inventory-style object icon for each row. */
+struct object_type;
+int ui_question_ask_objects(cptr title, cptr desc,
+    const ui_question_option* options,
+    const struct object_type* const object_icons[], int count, int anchor_y,
+    int anchor_x, int default_index);
+
 /*
  * Same modal overlay, but preserves whatever screen/menu is already painted
  * behind it.  Use this for in-menu value pickers; ui_question_ask() still

@@ -163,10 +163,12 @@ void object_prep(object_type* o_ptr, int k_idx)
         o_ptr->ident |= (IDENT_CURSED);
 }
 
-/* Return effective per-item volume after data-driven ego adjustments. */
-int object_effective_volume(const object_type* o_ptr)
+/* Return per-item volume after ego and optional carriage reductions. */
+int object_effective_volume_with_reduction(const object_type* o_ptr,
+    int extra_reduction_percent)
 {
     int volume;
+    int strongest_reduction = MIN(extra_reduction_percent, 0);
     byte egos[2];
 
     if (!o_ptr || !o_ptr->k_idx || o_ptr->storage == OBJECT_STORAGE_NONE
@@ -179,11 +181,26 @@ int object_effective_volume(const object_type* o_ptr)
     for (int i = 0; i < 2; i++)
     {
         if (z_info && e_info && egos[i] > 0 && egos[i] < z_info->e_max)
-            volume += e_info[egos[i]].volume_adjustment;
+        {
+            int reduction = e_info[egos[i]].volume_adjustment_percent;
+
+            if (reduction < strongest_reduction)
+                strongest_reduction = reduction;
+        }
     }
 
-    /* A volume-bearing item always occupies at least 0.1 V. */
+    /* Apply one base-relative reduction; prefix and suffix do not stack. */
+    if (strongest_reduction < 0)
+        volume = (volume * (100 + strongest_reduction) + 50) / 100;
+
+    /* A volume-bearing item always occupies at least 0.1 L. */
     return MAX(1, volume);
+}
+
+/* Return intrinsic per-item volume after data-driven ego adjustments. */
+int object_effective_volume(const object_type* o_ptr)
+{
+    return object_effective_volume_with_reduction(o_ptr, 0);
 }
 
 /*

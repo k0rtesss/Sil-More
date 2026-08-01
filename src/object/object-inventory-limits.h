@@ -20,7 +20,7 @@ enum inventory_limit_group
 };
 #endif
 
-/* Pack and harness capacity is stored in tenths of a volume unit. */
+/* Pack and Harness capacity is stored in tenths of a litre. */
 #define INVENTORY_PACK_VOLUME_CAP 300
 #define INVENTORY_HARNESS_VOLUME_CAP 240
 #define INVENTORY_HEAVY_ARMOUR_VOLUME_BONUS 60
@@ -39,6 +39,12 @@ bool inventory_limit_info_for_object(const object_type* o_ptr,
 int inventory_limit_usage_for_group(enum inventory_limit_group group);
 int inventory_limit_limit_for_group(enum inventory_limit_group group);
 int inventory_limit_space_for_object(const object_type* o_ptr);
+int inventory_limit_intrinsic_space_for_object(const object_type* o_ptr);
+int inventory_limit_carriage_savings_for_object(const object_type* o_ptr);
+int inventory_limit_carriage_savings_for_group(
+    enum inventory_limit_group group);
+cptr inventory_limit_carriage_ability_name_for_object(
+    const object_type* o_ptr);
 int inventory_limit_additional_space_for_object(const object_type* o_ptr);
 int inventory_limit_removal_space_for_object(const object_type* o_ptr);
 int inventory_limit_usage_after_replacing(const object_type* incoming,

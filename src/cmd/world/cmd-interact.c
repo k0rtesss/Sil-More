@@ -10,6 +10,7 @@
 #include <SDL3/SDL_timer.h>
 
 #define INTERACTION_ROLL_ANIM_FRAME_MS 250
+#define INTERACTION_ROLL_BASH_REDUCTION_MS 1000
 
 static bool is_open(int feat) { return (feat == FEAT_OPEN); }
 
@@ -243,7 +244,8 @@ void show_interaction_skill_roll_status(cptr title, int y, int x,
 static int show_interaction_skill_roll_animation_actor_sided(
     monster_type* actor, cptr title,
     cptr action, int y, int x, int skill, int difficulty,
-    int skill_sides, int difficulty_sides, skill_roll_details* roll)
+    int skill_sides, int difficulty_sides, skill_roll_details* roll,
+    int lock_adjust_ms)
 {
     skill_roll_details local_roll;
     skill_roll_details preview_roll;
@@ -284,6 +286,9 @@ static int show_interaction_skill_roll_animation_actor_sided(
     saved_hide_cursor = hide_cursor;
     hide_cursor = true;
     lock_ms = get_sdl_dice_roll_lock_ms();
+    lock_ms += lock_adjust_ms;
+    if (lock_ms < 0)
+        lock_ms = 0;
     overlay_ms = get_sdl_dice_roll_overlay_ms();
     visual_seed = interaction_roll_visual_seed(title, action, y, x, skill,
         difficulty);
@@ -322,7 +327,7 @@ int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
     skill_roll_details* roll)
 {
     return show_interaction_skill_roll_animation_actor_sided(actor, title,
-        action, y, x, skill, difficulty, 10, 10, roll);
+        action, y, x, skill, difficulty, 10, 10, roll, 0);
 }
 
 /*
@@ -334,7 +339,7 @@ int show_interaction_skill_roll_animation(cptr title, cptr action, int y,
     int x, int skill, int difficulty, skill_roll_details* roll)
 {
     return show_interaction_skill_roll_animation_actor_sided(
-        PLAYER, title, action, y, x, skill, difficulty, 10, 10, roll);
+        PLAYER, title, action, y, x, skill, difficulty, 10, 10, roll, 0);
 }
 
 int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
@@ -342,7 +347,16 @@ int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
     int difficulty_sides, skill_roll_details* roll)
 {
     return show_interaction_skill_roll_animation_actor_sided(PLAYER, title,
-        action, y, x, skill, difficulty, skill_sides, difficulty_sides, roll);
+        action, y, x, skill, difficulty, skill_sides, difficulty_sides, roll,
+        0);
+}
+
+static int show_interaction_skill_roll_animation_bash(cptr title, cptr action,
+    int y, int x, int skill, int difficulty, skill_roll_details* roll)
+{
+    return show_interaction_skill_roll_animation_actor_sided(PLAYER, title,
+        action, y, x, skill, difficulty, 10, 10, roll,
+        -INTERACTION_ROLL_BASH_REDUCTION_MS);
 }
 
 /*
@@ -3060,7 +3074,7 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
         difficulty = 0;
         difficulty += power;
 
-        result = show_interaction_skill_roll_animation("Bashing the door",
+        result = show_interaction_skill_roll_animation_bash("Bashing the door",
             "Putting your shoulder into it", y, x, score, difficulty, &roll);
         if (out_roll)
             *out_roll = roll;

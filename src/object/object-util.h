@@ -12,5 +12,7 @@ byte object_chest_trap_flags(const object_type* o_ptr);
 int random_k_idx(void);
 void object_prep(object_type* o_ptr, int k_idx);
 int object_effective_volume(const object_type* o_ptr);
+int object_effective_volume_with_reduction(const object_type* o_ptr,
+    int extra_reduction_percent);
 
 #endif /* INCLUDED_OBJECT_UTIL_H */

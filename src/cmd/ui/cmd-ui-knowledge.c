@@ -69,7 +69,7 @@ static bool confirm_object_action(cptr action, const object_type* o_ptr,
     /* Picking up and floor deletion are deliberately outside the initial
      * combat restriction; Pack use/equip/remove stops before confirmation. */
     if (!(floor && (streq(action, "Pick up") || streq(action, "Delete")))
-        && !player_pack_item_action_allowed(o_ptr))
+        && player_pack_item_action_blocked(o_ptr))
     {
         return false;
     }
@@ -4526,10 +4526,13 @@ typedef struct equipment_entry_columns
 {
     int name_col;
     int name_w;
+    int volume_col;
+    int volume_w;
     int weight_col;
     int weight_w;
     int source_col;
     int source_w;
+    bool show_volume;
     bool show_weight;
     bool show_source;
 } equipment_entry_columns;
@@ -4538,6 +4541,7 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
     equipment_list_entry entries[], int entry_cnt, bool show_source,
     equipment_entry_columns* cols)
 {
+    const int volume_w = 8;
     const int weight_w = 8;
     const int min_name_w = 6;
     int sym_w = use_bigtile ? 2 : 1;
@@ -4562,6 +4566,10 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
     cols->show_weight =
         (list_right - cols->name_col) >= (min_name_w + 1 + weight_w);
     cols->weight_w = cols->show_weight ? weight_w : 0;
+    cols->show_volume =
+        (list_right - cols->name_col)
+            >= (min_name_w + 1 + volume_w + 1 + weight_w);
+    cols->volume_w = cols->show_volume ? volume_w : 0;
 
     if (show_source && entries)
     {
@@ -4606,6 +4614,21 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
         else
         {
             right_edge = cols->weight_col - 1;
+        }
+    }
+
+    if (cols->show_volume)
+    {
+        cols->volume_col = right_edge - cols->volume_w;
+        if (cols->volume_col < cols->name_col + min_name_w + 1)
+        {
+            cols->show_volume = false;
+            cols->volume_w = 0;
+            cols->volume_col = 0;
+        }
+        else
+        {
+            right_edge = cols->volume_col - 1;
         }
     }
 
@@ -4735,7 +4758,7 @@ static bool equipment_entry_volume_text(const object_type* o_ptr, char* buf,
     if (volume <= 0)
         return false;
 
-    strnfmt(buf, buflen, " [%d.%d V]", volume / 10, volume % 10);
+    strnfmt(buf, buflen, "%3d.%1d L", volume / 10, volume % 10);
     return true;
 }
 
@@ -4796,15 +4819,11 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
         return false;
 
     *display_obj = o_ptr;
-    *base_attr = object_display_color(o_ptr,
-        tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+    *base_attr = weapon_glows(o_ptr)
+        ? object_display_color(o_ptr, TERM_L_BLUE)
+        : object_display_color(o_ptr,
+              tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
     object_desc(name, sizeof(name), o_ptr, true, 3);
-    {
-        char volume[24];
-
-        if (equipment_entry_volume_text(o_ptr, volume, sizeof(volume)))
-            SDL_strlcat(name, volume, sizeof(name));
-    }
     if (entry->equipped && !show_source)
         SDL_strlcat(name, " [equipped]", sizeof(name));
     else if (entry->floor_idx > 0 && entry->floor_idx < o_max && !show_source)
@@ -5038,6 +5057,17 @@ static int display_equipment_slot_entries_wrapped(
             supply_put_fitted(cols->weight_col, row + used_rows,
                 cols->weight_w, base_attr, weight_buf);
         }
+        if (cols->show_volume && o_ptr)
+        {
+            char volume_buf[16];
+
+            if (equipment_entry_volume_text(o_ptr, volume_buf,
+                    sizeof(volume_buf)))
+            {
+                supply_put_fitted(cols->volume_col, row + used_rows,
+                    cols->volume_w, base_attr, volume_buf);
+            }
+        }
         used_rows += display_rows;
         visible_entries++;
     }
@@ -5258,6 +5288,37 @@ static cptr floor_touch_action_text(supply_floor_action floor_action,
     }
 }
 
+static bool equipment_entry_carried_pack_action_blocked(
+    const equipment_list_entry* entry)
+{
+    if (!entry)
+        return false;
+
+    if (!((entry->equip_idx >= INVEN_WIELD
+                && entry->equip_idx < INVEN_TOTAL)
+            || (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)))
+    {
+        return false;
+    }
+
+    return player_pack_item_action_blocked(equipment_entry_object(entry));
+}
+
+static bool equipment_entry_use_pack_action_blocked(
+    const equipment_list_entry* entry, supply_floor_action floor_action)
+{
+    if (!entry)
+        return false;
+
+    if (entry->floor_idx > 0 && entry->floor_idx < o_max
+        && floor_action == SUPPLY_FLOOR_ACTION_DEFAULT)
+    {
+        return false;
+    }
+
+    return player_pack_item_action_blocked(equipment_entry_object(entry));
+}
+
 static bool confirm_equipment_entry_action(cptr action,
     const equipment_list_entry* entry)
 {
@@ -5344,6 +5405,10 @@ static bool equipment_menu_drop_entry(equipment_list_entry* entry)
     object_type* o_ptr;
 
     if (!entry)
+        return false;
+
+    o_ptr = equipment_entry_object(entry);
+    if (equipment_entry_carried_pack_action_blocked(entry))
         return false;
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
@@ -5556,6 +5621,7 @@ static void inventory_browser_group_limit_status(inventory_menu_group group,
     int limit;
     int used;
     int left;
+    int saved;
 
     if (!buf || buflen == 0)
         return;
@@ -5574,19 +5640,40 @@ static void inventory_browser_group_limit_status(inventory_menu_group group,
 
     used = inventory_limit_usage_for_group(limit_group);
     left = limit - used;
+    saved = inventory_limit_carriage_savings_for_group(limit_group);
     if (left >= 0)
     {
-        strnfmt(buf, buflen, "%d.%d/%d.%d V (%d.%d V left)",
-            used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
-            left / 10, left % 10);
+        if (saved > 0)
+        {
+            strnfmt(buf, buflen,
+                "%d.%d/%d.%d L (%d.%d L left; carriage saves %d.%d L)",
+                used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
+                left / 10, left % 10, saved / 10, saved % 10);
+        }
+        else
+        {
+            strnfmt(buf, buflen, "%d.%d/%d.%d L (%d.%d L left)",
+                used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
+                left / 10, left % 10);
+        }
     }
     else
     {
         int over = 0 - left;
 
-        strnfmt(buf, buflen, "%d.%d/%d.%d V (%d.%d V over)",
-            used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
-            over / 10, over % 10);
+        if (saved > 0)
+        {
+            strnfmt(buf, buflen,
+                "%d.%d/%d.%d L (%d.%d L over; carriage saves %d.%d L)",
+                used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
+                over / 10, over % 10, saved / 10, saved % 10);
+        }
+        else
+        {
+            strnfmt(buf, buflen, "%d.%d/%d.%d L (%d.%d L over)",
+                used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
+                over / 10, over % 10);
+        }
     }
 }
 
@@ -6392,8 +6479,8 @@ static void inventory_replacement_volume_status(
             if (candidate->number > 1)
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d V; incoming %d.%d V; selected drops "
-                    "%d and frees %d.%d V; %d.%d V still needed.",
+                    "%s %d.%d/%d.%d L; incoming %d.%d L; selected drops "
+                    "%d and frees %d.%d L; %d.%d L still needed.",
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, remove_amount, saved / 10, saved % 10,
@@ -6402,8 +6489,8 @@ static void inventory_replacement_volume_status(
             else
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d V; incoming %d.%d V; selected frees "
-                    "%d.%d V; %d.%d V still needed.",
+                    "%s %d.%d/%d.%d L; incoming %d.%d L; selected frees "
+                    "%d.%d L; %d.%d L still needed.",
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, saved / 10, saved % 10, remaining / 10,
@@ -6417,8 +6504,8 @@ static void inventory_replacement_volume_status(
             if (candidate->number > 1)
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d V; incoming %d.%d V; selected drops "
-                    "%d and frees %d.%d V; %d.%d V left after replacement.",
+                    "%s %d.%d/%d.%d L; incoming %d.%d L; selected drops "
+                    "%d and frees %d.%d L; %d.%d L left after replacement.",
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, remove_amount, saved / 10, saved % 10,
@@ -6427,8 +6514,8 @@ static void inventory_replacement_volume_status(
             else
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d V; incoming %d.%d V; selected frees "
-                    "%d.%d V; %d.%d V left after replacement.",
+                    "%s %d.%d/%d.%d L; incoming %d.%d L; selected frees "
+                    "%d.%d L; %d.%d L left after replacement.",
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, saved / 10, saved % 10, left_after / 10,
@@ -6439,8 +6526,8 @@ static void inventory_replacement_volume_status(
     else
     {
         strnfmt(buf, buflen,
-            "%s: %d replacement candidate%s. %d.%d/%d.%d V used; "
-            "incoming needs %d.%d V; short by %d.%d V.",
+            "%s: %d replacement candidate%s. %d.%d/%d.%d L used; "
+            "incoming needs %d.%d L; short by %d.%d L.",
             inventory_browser_group_text(selected_group), candidate_count,
             (candidate_count == 1) ? "" : "s", used / 10, used % 10,
             limit / 10, limit % 10, needed / 10, needed % 10,
@@ -6661,8 +6748,13 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
 static bool inventory_page_drop_entry(equipment_list_entry* entry)
 {
     supply_list_entry supply_entry = {0};
+    object_type* o_ptr;
 
     if (!entry)
+        return false;
+
+    o_ptr = equipment_entry_object(entry);
+    if (equipment_entry_carried_pack_action_blocked(entry))
         return false;
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
@@ -6689,6 +6781,8 @@ static bool inventory_page_delete_entry(equipment_list_entry* entry)
     int item = inventory_select_entry_item(entry);
 
     if (item == INVENTORY_SELECT_INVALID)
+        return false;
+    if (item >= 0 && equipment_entry_carried_pack_action_blocked(entry))
         return false;
 
     return do_cmd_delete_item_by_index(item);
@@ -9896,6 +9990,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     supply_menu_action forced_action = SUPPLY_MENU_ACTION_NONE;
     bool acted = false;
     bool refresh_after_close = false;
+    bool pack_combat_notice = false;
     bool drop_click_mode = false;
     bool delete_click_mode = false;
     bool desc_overlay_on = false;
@@ -10167,6 +10262,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 knowledge_draw_stacked_entry_divider(&layout);
                 Term_putstr(0, layout.entry_header_row, layout.term_wid,
                     TERM_SLATE, equipment_slot_text(selected_slot));
+                if (entry_cols.show_volume)
+                    Term_putstr(entry_cols.volume_col, layout.entry_header_row,
+                        entry_cols.volume_w, TERM_SLATE, "Volume");
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.entry_header_row,
                         entry_cols.weight_w, TERM_SLATE, "Weight");
@@ -10180,6 +10278,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     "Slot");
                 Term_putstr(layout.list_col, layout.header_row, layout.list_w,
                     TERM_SLATE, equipment_slot_text(selected_slot));
+                if (entry_cols.show_volume)
+                    Term_putstr(entry_cols.volume_col, layout.header_row,
+                        entry_cols.volume_w, TERM_SLATE, "Volume");
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.header_row,
                         entry_cols.weight_w, TERM_SLATE, "Weight");
@@ -10234,7 +10335,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             strnfmt(status_buf, sizeof(status_buf), "%s: %d choice%s.",
                 equipment_slot_text(selected_slot), equip_entry_cnt,
                 (equip_entry_cnt == 1) ? "" : "s");
-            knowledge_draw_status(&layout, TERM_L_BLUE, status_buf);
+            if (pack_combat_notice)
+            {
+                knowledge_draw_status(&layout, TERM_ORANGE,
+                    player_pack_item_action_restriction_message());
+            }
+            else
+            {
+                knowledge_draw_status(&layout, TERM_L_BLUE, status_buf);
+            }
 
             Term_erase(0, layout.prompt_row, 255);
             if (steamdeck_controls_active())
@@ -10392,6 +10501,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             char ch = inkey();
             bool click_generated_command = false;
+            pack_combat_notice = false;
             {
                 int clicked_choice = -1;
                 int click_action = UI_MENU_CLICK_PRIMARY;
@@ -10609,6 +10719,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         refresh_after_close = true;
                         flag = true;
                     }
+                    else if (equipment_entry_use_pack_action_blocked(
+                            &equip_entries[equip_entry_cur], floor_action))
+                    {
+                        pack_combat_notice = true;
+                    }
                 }
                 break;
 
@@ -10632,6 +10747,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         acted = true;
                         refresh_after_close = true;
                         flag = true;
+                    }
+                    else if (equipment_entry_carried_pack_action_blocked(
+                            &equip_entries[equip_entry_cur]))
+                    {
+                        pack_combat_notice = true;
                     }
                 }
                 break;
@@ -10930,6 +11050,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     replacement_mode ? "Replacement candidates"
                     : item_select_mode ? "Matching items"
                     : inventory_browser_group_text(selected_group));
+                if (entry_cols.show_volume)
+                    Term_putstr(entry_cols.volume_col, layout.entry_header_row,
+                        entry_cols.volume_w, TERM_SLATE, "Volume");
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.entry_header_row,
                         entry_cols.weight_w, TERM_SLATE, "Weight");
@@ -10947,6 +11070,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     : slot_pick_mode ? "Destination slots"
                     : item_select_mode ? "Matching items"
                     : inventory_browser_group_text(selected_group));
+                if (entry_cols.show_volume)
+                    Term_putstr(entry_cols.volume_col, layout.header_row,
+                        entry_cols.volume_w, TERM_SLATE, "Volume");
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.header_row,
                         entry_cols.weight_w, TERM_SLATE, "Weight");
@@ -11031,7 +11157,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     status_buf, sizeof(status_buf));
                 status_attr = inventory_browser_status_attr(selected_group);
             }
-            knowledge_draw_status(&layout, status_attr, status_buf);
+            if (pack_combat_notice)
+            {
+                knowledge_draw_status(&layout, TERM_ORANGE,
+                    player_pack_item_action_restriction_message());
+            }
+            else
+            {
+                knowledge_draw_status(&layout, status_attr, status_buf);
+            }
 
             Term_erase(0, layout.prompt_row, 255);
             if (replacement_mode)
@@ -11406,6 +11540,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             char ch = inkey();
             bool click_generated_command = false;
+            pack_combat_notice = false;
             {
                 int clicked_choice = -1;
                 int click_action = UI_MENU_CLICK_PRIMARY;
@@ -11764,6 +11899,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         refresh_after_close = true;
                         flag = true;
                     }
+                    else if (equipment_entry_use_pack_action_blocked(
+                            &equip_entries[inv_entry_cur], floor_action))
+                    {
+                        pack_combat_notice = true;
+                    }
                 }
                 break;
 
@@ -11790,6 +11930,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         refresh_after_close = true;
                         flag = true;
                     }
+                    else if (equipment_entry_carried_pack_action_blocked(
+                            &equip_entries[inv_entry_cur]))
+                    {
+                        pack_combat_notice = true;
+                    }
                 }
                 break;
 
@@ -11814,6 +11959,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         acted = true;
                         refresh_after_close = true;
                         flag = true;
+                    }
+                    else if (equipment_entry_carried_pack_action_blocked(
+                            &equip_entries[inv_entry_cur]))
+                    {
+                        pack_combat_notice = true;
                     }
                 }
                 break;
@@ -12204,7 +12354,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
         describe_supply_group_status(grp_idx[grp_cur],
             draw_layout.term_wid, status_buf, sizeof(status_buf));
-        knowledge_draw_status(&draw_layout, TERM_L_BLUE, status_buf);
+        if (pack_combat_notice)
+        {
+            knowledge_draw_status(&draw_layout, TERM_ORANGE,
+                player_pack_item_action_restriction_message());
+        }
+        else
+        {
+            knowledge_draw_status(&draw_layout, TERM_L_BLUE, status_buf);
+        }
 
         /* Bottom bar: grey text with white first letters */
         Term_erase(0, draw_layout.prompt_row, 255);
@@ -12426,6 +12584,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
         char ch = inkey();
         bool click_generated_command = false;
+        pack_combat_notice = false;
         {
             int clicked_choice = -1;
             int click_action = UI_MENU_CLICK_PRIMARY;
@@ -12672,6 +12831,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                     if (!confirm_supply_entry_action(action, entry))
                     {
+                        if (!(entry->floor_idx > 0
+                                && entry->floor_idx < o_max
+                                && floor_action
+                                    == SUPPLY_FLOOR_ACTION_DEFAULT)
+                            && player_pack_item_action_blocked(action_o_ptr))
+                        {
+                            pack_combat_notice = true;
+                        }
                         break;
                     }
 
@@ -12702,6 +12869,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                             supply_item_use_action_text(o_ptr,
                                 entry->item_idx), entry))
                     {
+                        if (player_pack_item_action_blocked(o_ptr))
+                            pack_combat_notice = true;
                         break;
                     }
 
@@ -12778,11 +12947,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 else if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
                 {
+                    if (player_pack_item_action_blocked(
+                            &inventory[entry->equip_idx]))
+                    {
+                        pack_combat_notice = true;
+                        break;
+                    }
                     dropped = do_cmd_drop_item_by_index_confirm(
                         entry->equip_idx, true);
                 }
                 else if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
                 {
+                    if (player_pack_item_action_blocked(
+                            &inventory[entry->item_idx]))
+                    {
+                        pack_combat_notice = true;
+                        break;
+                    }
                     dropped = do_cmd_drop_item_by_index_confirm(
                         entry->item_idx, true);
                 }
