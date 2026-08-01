@@ -849,14 +849,15 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
         }
     }
     {
-        int power_throw_slot = player_power_throw_quiver_slot();
+        bool belt = player_can_power_throw_from_quiver(INVEN_BELT);
+        bool quiver = player_can_power_throw_from_quiver(INVEN_QUIVER1);
 
-        if (power_throw_slot)
+        if (belt || quiver)
         {
-            cptr quiver = (power_throw_slot == INVEN_QUIVER2)
-                ? "2nd quiver" : "1st quiver";
+            cptr source = (belt && quiver) ? "choose"
+                : belt ? "belt" : "quiver";
             sdl_status_pane_add(entries, max_entries, &count, "Power Throw",
-                quiver, TERM_YELLOW);
+                source, TERM_YELLOW);
         }
     }
     if (sdl_status_pane_current_song_detail(detail, sizeof(detail)))

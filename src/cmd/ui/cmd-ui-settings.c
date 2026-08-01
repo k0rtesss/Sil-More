@@ -6276,10 +6276,10 @@ static void touch_corner_action_label(int binding, char* buf, size_t buflen)
 
     switch (binding) {
     case 'f':
-        SDL_strlcpy(buf, "Shoot", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     case 'F':
-        SDL_strlcpy(buf, "Shoot 2", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     default:
         touch_pane_action_label_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, binding,
@@ -6783,10 +6783,10 @@ static bool touch_top_widget_binding_label(int row, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Horn", buflen);
         break;
     case 'f':
-        SDL_strlcpy(buf, "Fire 1st quiver", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
         break;
     case 'F':
-        SDL_strlcpy(buf, "Fire 2nd quiver", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
         break;
     case 'Z':
         SDL_strlcpy(buf, "Rest", buflen);
@@ -10985,8 +10985,8 @@ void do_cmd_keybinds(void)
         {'h', "H@", "Character sheet (h / H / @)", "h", false},
         {'\t', NULL, "Change active weapon", "Tab", false},
         {'y', NULL, "Abilities", "y", false},
-        {'f', NULL, "Fire 1st quiver", "f", false},
-        {'F', NULL, "Fire 2nd quiver", "F", false},
+        {'f', NULL, "Ranged attack (active Quiver)", "f", false},
+        {'F', NULL, "Ranged attack (active Quiver)", "F", false},
         {'l', NULL, "Look around", "l", false},
         {'T', NULL, "Tunnel / dig", "T", false},
         {'b', NULL, "Bash door", "b", false},
@@ -10997,7 +10997,6 @@ void do_cmd_keybinds(void)
         {'w', NULL, "Wear / wield equipment", "w", false},
         {'r', NULL, "Remove equipment", "r", false},
         {'g', NULL, "Pick up items", "g", false},
-        {KTRL('F'), NULL, "Swap quivers", "\006", false},
         {'o', NULL, "Open door / chest", "o", false},
         {'c', NULL, "Close door", "c", false},
         {'D', NULL, "Disarm trap / chest", "D", false},
@@ -12454,9 +12453,8 @@ void do_cmd_controller_settings(void)
         { CONTROLLER_ENTRY_ACTION, 's', "Sing / change song" },
         { CONTROLLER_ENTRY_ACTION, 'S', "Toggle stealth" },
         { CONTROLLER_ENTRY_ACTION, 'h', "Character sheet" },
-        { CONTROLLER_ENTRY_ACTION, 'f', "Fire 1st quiver" },
-        { CONTROLLER_ENTRY_ACTION, 'F', "Fire 2nd quiver" },
-        { CONTROLLER_ENTRY_ACTION, KTRL('F'), "Swap quivers" },
+        { CONTROLLER_ENTRY_ACTION, 'f', "Ranged attack (active Quiver)" },
+        { CONTROLLER_ENTRY_ACTION, 'F', "Ranged attack (active Quiver)" },
         { CONTROLLER_ENTRY_ACTION, 'l', "Look around" },
         { CONTROLLER_ENTRY_ACTION, 'T', "Tunnel / dig" },
         { CONTROLLER_ENTRY_ACTION, 'b', "Bash door" },

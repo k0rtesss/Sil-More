@@ -3354,9 +3354,9 @@ static bool ability_inactive_reason(int skilltype, int abilitynum,
             else if (!player_power_throw_weapon_eligible(
                          &inventory[INVEN_QUIVER1])
                 && !player_power_throw_weapon_eligible(
-                    &inventory[INVEN_QUIVER2]))
+                    &inventory[INVEN_BELT]))
             {
-                reason = "Requires a spear or hand axe in a quiver.";
+                reason = "Requires a spear or hand axe in the quiver, or a hand axe at the belt.";
             }
             break;
         case MEL_TWO_WEAPON:

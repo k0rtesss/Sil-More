@@ -10,21 +10,8 @@
 enum inventory_limit_group
 {
     INV_LIMIT_NONE = 0,
-    INV_LIMIT_ARROW,
-    INV_LIMIT_BOW,
-    INV_LIMIT_STAFF,
-    INV_LIMIT_HORN,
-    INV_LIMIT_DIGGING,
-    INV_LIMIT_BOOTS,
-    INV_LIMIT_GLOVES,
-    INV_LIMIT_HELM_CROWN,
-    INV_LIMIT_ROUND_SHIELD,
-    INV_LIMIT_OTHER_SHIELD,
-    INV_LIMIT_CLOAK,
-    INV_LIMIT_SOFT_ARMOUR,
-    INV_LIMIT_MAIL,
-    INV_LIMIT_MELEE_WEAPON,
-    INV_LIMIT_THROWABLE,
+    INV_LIMIT_PACK,
+    INV_LIMIT_HARNESS,
     INV_LIMIT_SUPPLY_WEIGHT,
     INV_LIMIT_TORCHES,
     INV_LIMIT_BRASS_LAMPS,
@@ -32,6 +19,12 @@ enum inventory_limit_group
     INV_LIMIT_FEANORIAN_LAMP
 };
 #endif
+
+/* Pack and harness capacity is stored in tenths of a volume unit. */
+#define INVENTORY_PACK_VOLUME_CAP 300
+#define INVENTORY_HARNESS_VOLUME_CAP 240
+#define INVENTORY_HEAVY_ARMOUR_VOLUME_BONUS 60
+#define INVENTORY_ARROW_VOLUME_BUNDLE 12
 
 bool inven_carry_limit_failed(void);
 enum inventory_limit_group inven_carry_limit_group(void);
@@ -46,10 +39,15 @@ bool inventory_limit_info_for_object(const object_type* o_ptr,
 int inventory_limit_usage_for_group(enum inventory_limit_group group);
 int inventory_limit_limit_for_group(enum inventory_limit_group group);
 int inventory_limit_space_for_object(const object_type* o_ptr);
+int inventory_limit_additional_space_for_object(const object_type* o_ptr);
+int inventory_limit_removal_space_for_object(const object_type* o_ptr);
+int inventory_limit_usage_after_replacing(const object_type* incoming,
+    const object_type* removed, int remove_quantity);
 bool inventory_limit_object_matches_group(enum inventory_limit_group group,
     const object_type* o_ptr);
 cptr inventory_limit_group_name(enum inventory_limit_group group);
 void inven_enforce_current_pack_limits(void);
+void inventory_limit_grandfather_current_overflow(void);
 int object_stack_limit(const object_type* o_ptr);
 
 #endif /* INCLUDED_OBJECT_INVENTORY_LIMITS_H */

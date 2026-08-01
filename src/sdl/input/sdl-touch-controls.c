@@ -1399,8 +1399,7 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
             return;
         }
         SDL_strlcpy(buf,
-            (player_selected_ranged_quiver_number() == 2)
-                ? "Fire 2nd quiver" : "Fire 1st quiver",
+            "Ranged attack (active Quiver)",
             buflen);
         return;
     }
@@ -1409,11 +1408,7 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         return;
     }
     if (binding == SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER) {
-        SDL_strlcpy(buf,
-            (player_selected_ranged_quiver_number() == 2)
-                ? "Change to 1st quiver"
-                : "Change to 2nd quiver",
-            buflen);
+        SDL_strlcpy(buf, "Change active weapon", buflen);
         return;
     }
     if (binding == SDL_TOUCH_THUMB_BIND_QUICK_THROW) {
@@ -1430,11 +1425,11 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         return;
     }
     if (binding == 'f') {
-        SDL_strlcpy(buf, "Fire 1st quiver", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
         return;
     }
     if (binding == 'F') {
-        SDL_strlcpy(buf, "Fire 2nd quiver", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
         return;
     }
     if (binding == 'g') {
@@ -1573,11 +1568,7 @@ void sdl_touch_thumb_cancel_press(void)
 
 static void sdl_touch_thumb_queue_quiver_change(void)
 {
-    int next_quiver = (player_selected_ranged_quiver_number() == 2) ? 1 : 2;
-
-    player_queue_ranged_quiver_mode(
-        player_active_weapon_mode_for_quiver(next_quiver));
-    sdl_enqueue_bypassed_command(CMD_ACTIVE_WEAPON_MODE);
+    sdl_enqueue_bypassed_command('\t');
 }
 
 static bool sdl_touch_thumb_send_internal_binding(int binding)
@@ -1591,8 +1582,7 @@ static bool sdl_touch_thumb_send_internal_binding(int binding)
         sdl_touch_pane_send_binding(key, false, false);
         return true;
     case SDL_TOUCH_THUMB_BIND_FIRE_SELECTED:
-        Term_keypress(
-            (player_selected_ranged_quiver_number() == 2) ? 'F' : 'f');
+        Term_keypress('f');
         return true;
     case SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER:
         sdl_touch_thumb_queue_quiver_change();
@@ -3437,10 +3427,10 @@ void sdl_touch_corner_action_binding_label(int binding, char* buf,
         SDL_strlcpy(buf, "Zoom -", buflen);
         return;
     case 'f':
-        SDL_strlcpy(buf, "Shoot", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     case 'F':
-        SDL_strlcpy(buf, "Shoot 2", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     default:
         binding_action_short(binding, buf, buflen);
@@ -5659,17 +5649,17 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         return;
     case 'f':
         SDL_strlcpy(buf,
-            "Shoot: fire ammunition from your first quiver at a chosen target.",
+            "Ranged attack: fire or throw the active Quiver weapon at a chosen target.",
             buflen);
         return;
     case 'F':
         SDL_strlcpy(buf,
-            "Second Quiver: fire ammunition from your second quiver at a chosen target.",
+            "Ranged attack: fire or throw the active Quiver weapon at a chosen target.",
             buflen);
         return;
     case KTRL('F'):
         SDL_strlcpy(buf,
-            "Swap Quiver: exchange the ammunition assigned to your two quivers.",
+            "Quiver and belt cannot be swapped.",
             buflen);
         return;
     case 'a':

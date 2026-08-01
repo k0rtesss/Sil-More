@@ -467,24 +467,24 @@ void process_command(void)
         break;
     }
 
-    /* Swap the 1st and 2nd quivers */
+    /* Compatibility key: the quiver and belt cannot be swapped. */
     case KTRL('F'):
     {
         do_cmd_swap_quivers();
         break;
     }
 
-    /* Fire an arrow from the 1st quiver */
+    /* Make a ranged attack with the active Quiver weapon. */
     case 'f':
     {
         do_cmd_fire(1);
         break;
     }
 
-    /* Fire an arrow from the 2nd quiver */
+    /* Shift-f is an alias for the same active-Quiver ranged attack. */
     case 'F':
     {
-        do_cmd_fire(2);
+        do_cmd_fire(1);
         break;
     }
 

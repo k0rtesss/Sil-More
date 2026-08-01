@@ -758,6 +758,8 @@ void object_into_artefact(object_type* o_ptr, artefact_type* a_ptr)
     o_ptr->pd = a_ptr->pd;
     o_ptr->ps = a_ptr->ps;
     o_ptr->weight = a_ptr->weight;
+    o_ptr->storage = a_ptr->storage;
+    o_ptr->volume = a_ptr->volume;
 
     // add the abilities
     for (i = 0; i < a_ptr->abilities; i++)

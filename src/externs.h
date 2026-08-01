@@ -734,7 +734,7 @@ extern void do_cmd_inven_direct(void);
 extern void do_cmd_equip(void);
 extern void do_cmd_equip_direct(void);
 extern void do_cmd_wield(object_type* default_o_ptr, int default_item);
-extern void do_cmd_wield_to_slot(
+extern bool do_cmd_wield_to_slot(
     object_type* default_o_ptr, int default_item, int forced_slot);
 extern void do_cmd_wield_wrapper(void);
 extern void do_cmd_wield_enhanced(void);
@@ -1295,6 +1295,7 @@ extern void object_wipe(object_type* o_ptr);
 extern void object_copy(object_type* o_ptr, const object_type* j_ptr);
 extern byte object_chest_trap_flags(const object_type* o_ptr);
 extern void object_prep(object_type* o_ptr, int k_idx);
+extern int object_effective_volume(const object_type* o_ptr);
 extern void object_refresh_weight(object_type* o_ptr);
 extern void object_into_artefact(object_type* o_ptr, artefact_type* a_ptr);
 extern u32b object_kind_pval_flags1(const object_kind* k_ptr);
@@ -1454,6 +1455,8 @@ extern void floor_item_increase(int item, int num);
 extern void floor_item_optimize(int item);
 extern void check_pack_overflow(void);
 extern bool inven_carry_okay(const object_type* o_ptr);
+extern bool inventory_type_slot_available(const object_type* o_ptr,
+    bool record_failure);
 extern bool inven_carry_okay_after_removing(
     const object_type* o_ptr, int remove_item, int remove_amt);
 extern bool inven_carry_limit_failed(void);
@@ -1462,21 +1465,8 @@ extern bool inven_carry_limit_failed(void);
 enum inventory_limit_group
 {
     INV_LIMIT_NONE = 0,
-    INV_LIMIT_ARROW,
-    INV_LIMIT_BOW,
-    INV_LIMIT_STAFF,
-    INV_LIMIT_HORN,
-    INV_LIMIT_DIGGING,
-    INV_LIMIT_BOOTS,
-    INV_LIMIT_GLOVES,
-    INV_LIMIT_HELM_CROWN,
-    INV_LIMIT_ROUND_SHIELD,
-    INV_LIMIT_OTHER_SHIELD,
-    INV_LIMIT_CLOAK,
-    INV_LIMIT_SOFT_ARMOUR,
-    INV_LIMIT_MAIL,
-    INV_LIMIT_MELEE_WEAPON,
-    INV_LIMIT_THROWABLE,
+    INV_LIMIT_PACK,
+    INV_LIMIT_HARNESS,
     INV_LIMIT_SUPPLY_WEIGHT,
     INV_LIMIT_TORCHES,
     INV_LIMIT_BRASS_LAMPS,
@@ -1498,6 +1488,12 @@ extern bool inventory_limit_info_for_object(const object_type* o_ptr,
 extern int inventory_limit_usage_for_group(enum inventory_limit_group group);
 extern int inventory_limit_limit_for_group(enum inventory_limit_group group);
 extern int inventory_limit_space_for_object(const object_type* o_ptr);
+extern int inventory_limit_additional_space_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_removal_space_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_usage_after_replacing(const object_type* incoming,
+    const object_type* removed, int remove_quantity);
 extern bool inventory_limit_object_matches_group(
     enum inventory_limit_group group, const object_type* o_ptr);
 extern cptr inventory_limit_group_name(enum inventory_limit_group group);
@@ -1506,6 +1502,7 @@ extern s16b inven_carry(object_type* o_ptr, bool combine_ammo);
 extern s16b inven_takeoff(int item, int amt);
 extern void inven_drop(int item, int amt);
 extern void inven_enforce_current_pack_limits(void);
+extern void inventory_limit_grandfather_current_overflow(void);
 extern void combine_pack(void);
 extern void reorder_pack(bool display_message);
 extern void steal_object_from_monster(int y, int x);
@@ -1984,6 +1981,8 @@ extern int editing_buffer_put_str(
 extern cptr get_ext_color_name(byte ext_color);
 
 /* Player/status/upkeep modules */
+extern bool player_in_combat(void);
+extern bool player_pack_item_action_allowed(const object_type* o_ptr);
 extern byte total_mdd(const object_type* o_ptr);
 extern byte strength_modified_ds(const object_type* o_ptr, int str_adjustment);
 extern byte total_mds(const object_type* o_ptr, int str_adjustment);
@@ -2000,6 +1999,10 @@ extern byte total_ads_for_weapon_mode(const object_type* j_ptr, int mode);
 extern int player_active_weapon_mode(void);
 extern bool player_active_weapon_is_melee(void);
 extern bool player_active_weapon_is_ranged(void);
+extern bool player_active_weapon_stats_preview(int mode, int* attack,
+    int* dd, int* ds, bool* throwing);
+extern bool player_active_weapon_offhand_stats_preview(int* attack,
+    int* dd, int* ds);
 extern bool player_active_weapon_mode_is_ranged(int mode);
 extern int player_active_weapon_mode_for_quiver(int quiver);
 extern int player_last_ranged_weapon_mode(void);
@@ -2007,6 +2010,13 @@ extern int player_selected_ranged_quiver_number(void);
 extern int player_opposite_active_weapon_mode(void);
 extern int player_active_weapon_quiver_slot(void);
 extern int player_active_weapon_quiver_number(void);
+extern void player_active_weapon_sync_loaded_state(void);
+extern int player_active_weapon_kind(void);
+extern bool player_active_weapon_change_is_free(int old_kind, int new_kind);
+extern bool player_active_weapon_wield_change_is_free(
+    int slot, const object_type* incoming, bool combine);
+extern void player_active_weapon_free_change_commit(void);
+extern void player_active_weapon_begin_player_turn(void);
 extern bool player_set_active_weapon_mode(
     int mode, bool confirm, bool take_turn);
 extern void do_cmd_toggle_active_weapon(void);
@@ -2017,7 +2027,9 @@ extern bool player_weapon_slot_combat_bonuses_active(
     int slot, const object_type* o_ptr);
 extern bool player_weapon_slot_combat_bonuses_active_for_mode(
     int mode, int slot, const object_type* o_ptr);
+extern bool player_equipment_slot_is_active(int slot);
 extern bool player_shield_counts_for_active_weapon(const object_type* o_ptr);
+extern bool object_is_belt_weapon(const object_type* o_ptr);
 extern bool player_can_quick_throw_from_quiver(int slot);
 extern int player_quick_throw_quiver_slot(void);
 extern bool player_power_throw_weapon_eligible(const object_type* o_ptr);

@@ -679,6 +679,10 @@ errr rd_item(object_type* o_ptr)
     o_ptr->tval = k_ptr->tval;
     o_ptr->sval = k_ptr->sval;
 
+    /* Storage metadata is template-derived, not persisted in savefiles. */
+    o_ptr->storage = k_ptr->storage;
+    o_ptr->volume = k_ptr->volume;
+
     /* Hack -- notice "broken" items */
     if (k_ptr->cost <= 0)
         o_ptr->ident |= (IDENT_BROKEN);
@@ -836,6 +840,10 @@ errr rd_item(object_type* o_ptr)
 
         /* Get the new artefact weight */
         o_ptr->weight = a_ptr->weight;
+
+        /* Get the artefact's explicit storage metadata. */
+        o_ptr->storage = a_ptr->storage;
+        o_ptr->volume = a_ptr->volume;
 
         /* Ensure artefact-granted abilities are present (some generators may omit them). */
         for (int ai = 0; ai < a_ptr->abilities && o_ptr->abilities < (int)N_ELEMENTS(o_ptr->skilltype); ai++)
@@ -1620,6 +1628,233 @@ static void legacy_supply_drop_object(object_type* drop,
 
     drop_near(drop, 0, p_ptr->py, p_ptr->px);
     legacy_supply_record_counts(report->dropped, drop, drop->number);
+}
+
+typedef struct legacy_belt_migration_report
+{
+    bool changed;
+    bool kept_belt_weapon;
+    bool active_mode_changed;
+    int moved_to_quiver;
+    int moved_to_harness;
+    int dropped;
+} legacy_belt_migration_report;
+
+/*
+ * Move as much of a former second-quiver stack as possible into the one
+ * remaining quiver.  This deliberately bypasses volume limits: migration
+ * preserves an old save's possessions and lets the normal pickup rules keep
+ * an over-limit character from adding more.
+ */
+static void legacy_belt_move_to_quiver(object_type* moving,
+    legacy_belt_migration_report* report)
+{
+    object_type* quiver;
+    int before;
+
+    if (!moving || !moving->k_idx || moving->number <= 0)
+        return;
+    if (moving->tval != TV_ARROW
+        && !player_can_treat_as_throwing(moving))
+    {
+        return;
+    }
+
+    quiver = &inventory[INVEN_QUIVER1];
+    before = moving->number;
+
+    if (!quiver->k_idx)
+    {
+        int placed = MIN(moving->number, object_stack_limit(moving));
+
+        object_copy(quiver, moving);
+        quiver->number = placed;
+        quiver->pickup = false;
+        quiver->pickup_slot = -1;
+        quiver->ident |= IDENT_HANDLED;
+        moving->number -= placed;
+        p_ptr->equip_cnt++;
+    }
+    else if (object_similar(quiver, moving))
+    {
+        object_absorb(quiver, moving);
+        quiver->pickup = false;
+        quiver->pickup_slot = -1;
+        quiver->ident |= IDENT_HANDLED;
+    }
+
+    report->moved_to_quiver += before - MAX(moving->number, 0);
+}
+
+/*
+ * Carry legacy overflow in the physical pack even when the new Pack/Harness
+ * volume is already exceeded.  Technical slot and stack limits still apply.
+ */
+static void legacy_belt_move_to_harness(object_type* moving,
+    legacy_belt_migration_report* report)
+{
+    int before;
+
+    if (!moving || !moving->k_idx || moving->number <= 0)
+        return;
+
+    before = moving->number;
+    for (int i = 0; i < INVEN_PACK && moving->number > 0; i++)
+    {
+        object_type* pack = &inventory[i];
+
+        if (pack->k_idx && object_similar(pack, moving))
+            object_absorb(pack, moving);
+    }
+
+    if (moving->number > 0)
+    {
+        for (int i = 0; i < INVEN_PACK; i++)
+        {
+            object_type* pack = &inventory[i];
+
+            if (pack->k_idx)
+                continue;
+
+            object_copy(pack, moving);
+            pack->pickup = false;
+            pack->pickup_slot = -1;
+            p_ptr->inven_cnt++;
+            moving->number = 0;
+            break;
+        }
+    }
+
+    report->moved_to_harness += before - MAX(moving->number, 0);
+}
+
+static void migrate_legacy_second_quiver_to_belt(
+    legacy_belt_migration_report* report)
+{
+    object_type moving;
+    object_type* belt = &inventory[INVEN_BELT];
+    bool valid_belt_weapon;
+
+    memset(report, 0, sizeof(*report));
+
+    if (belt->k_idx && belt->number > 0)
+    {
+        valid_belt_weapon = object_is_belt_weapon(belt);
+        object_copy(&moving, belt);
+        moving.pickup = false;
+        moving.pickup_slot = -1;
+
+        if (valid_belt_weapon)
+        {
+            report->kept_belt_weapon = true;
+            belt->number = 1;
+            moving.number--;
+        }
+        else
+        {
+            object_wipe(belt);
+            p_ptr->equip_cnt = MAX(p_ptr->equip_cnt - 1, 0);
+        }
+
+        if (!valid_belt_weapon || moving.number > 0)
+        {
+            report->changed = true;
+            legacy_belt_move_to_quiver(&moving, report);
+            legacy_belt_move_to_harness(&moving, report);
+
+            if (moving.number > 0)
+            {
+                int amount = moving.number;
+
+                drop_near(&moving, 0, p_ptr->py, p_ptr->px);
+                report->dropped += amount;
+                moving.number = 0;
+            }
+        }
+    }
+
+    {
+        byte old_mode = p_ptr->active_weapon_mode;
+
+        player_active_weapon_sync_loaded_state();
+        if (p_ptr->active_weapon_mode != old_mode)
+        {
+            report->active_mode_changed = true;
+            report->changed = true;
+        }
+    }
+
+    /*
+     * Old thrown arrows and spears may still remember slot 38 as their
+     * recovery destination.  Only belt-eligible weapons keep that destination;
+     * everything else returns to the remaining quiver.
+     */
+    for (int i = 0; i < INVEN_TOTAL; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+
+        if (o_ptr->k_idx && o_ptr->pickup_slot == INVEN_BELT
+            && !object_is_belt_weapon(o_ptr))
+        {
+            o_ptr->pickup_slot = INVEN_QUIVER1;
+        }
+    }
+    for (int i = 1; i < o_max; i++)
+    {
+        object_type* o_ptr = &o_list[i];
+
+        if (o_ptr->k_idx && o_ptr->pickup_slot == INVEN_BELT
+            && !object_is_belt_weapon(o_ptr))
+        {
+            o_ptr->pickup_slot = INVEN_QUIVER1;
+        }
+    }
+}
+
+static void queue_legacy_belt_migration_messages(
+    const legacy_belt_migration_report* report)
+{
+    msg_print("Your former second quiver is now a belt, holding one dagger or hand axe.");
+
+    if (report->changed)
+    {
+        if (report->kept_belt_weapon)
+            msg_print("One suitable weapon remains at your belt; the rest was relocated.");
+        else if (report->moved_to_quiver > 0
+            || report->moved_to_harness > 0 || report->dropped > 0)
+        {
+            msg_print("The former second-quiver contents did not fit the belt and were relocated.");
+        }
+
+        if (report->moved_to_quiver > 0)
+            msg_format("%d item%s moved to your quiver.",
+                report->moved_to_quiver,
+                report->moved_to_quiver == 1 ? "" : "s");
+        if (report->moved_to_harness > 0)
+            msg_format("%d item%s moved to your Harness, even if that leaves it over capacity.",
+                report->moved_to_harness,
+                report->moved_to_harness == 1 ? "" : "s");
+        if (report->dropped > 0)
+            msg_format("%d item%s placed at your feet because every inventory slot was occupied.",
+                report->dropped, report->dropped == 1 ? " was" : "s were");
+        if (report->active_mode_changed)
+            msg_print("Your active weapon was adjusted to a valid slot.");
+    }
+
+    for (int group = INV_LIMIT_PACK; group <= INV_LIMIT_HARNESS; group++)
+    {
+        int used = inventory_limit_usage_for_group(
+            (enum inventory_limit_group)group);
+        int limit = inventory_limit_limit_for_group(
+            (enum inventory_limit_group)group);
+
+        if (limit >= 0 && used > limit)
+        {
+            msg_format("This older save is over %s capacity (%d.%d/%d.%d V). All items were preserved; make room before carrying more.",
+                inventory_limit_group_name((enum inventory_limit_group)group),
+                used / 10, used % 10, limit / 10, limit % 10);
+        }
+    }
 }
 
 static bool legacy_pack_permanent_light_matches(const object_type* o_ptr)
@@ -3102,6 +3337,25 @@ bool load_player(void)
                 p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
             }
             queue_oil_container_migration_messages(&oil_report);
+        }
+
+        {
+            legacy_belt_migration_report belt_report;
+            bool legacy_belt_save = !savefile_version_at_least(0, 9, 7, 8);
+
+            migrate_legacy_second_quiver_to_belt(&belt_report);
+            if (belt_report.changed)
+            {
+                p_ptr->notice |= (PN_COMBINE | PN_REORDER);
+                p_ptr->update |= (PU_BONUS | PU_MANA);
+                p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST | PR_MAP
+                    | PR_QUIVER | PR_MEL | PR_ARC);
+                p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
+            }
+            if (legacy_belt_save)
+                queue_legacy_belt_migration_messages(&belt_report);
+            else if (belt_report.changed)
+                msg_print("Invalid Belt contents were safely relocated.");
         }
 
         /* Success */

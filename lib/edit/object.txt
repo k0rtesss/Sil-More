@@ -14,6 +14,7 @@
 # T: tile row : tile column
 # I: tval : sval : pval
 # W: depth : rarity_weight (legacy) : weight : cost
+# Y: storage pool (NONE, PACK, or HARNESS) : volume in tenths
 # P: plus to-hit : damage dice : plus to-evasion : protection dice
 # R: STAT : max_value
 # A: depth/rarity_weight : depth/rarity_weight : etc
@@ -47,6 +48,11 @@
 #     weight field preserved for compatibility; object spawn weighting comes
 #     from the A: allocation lines. Weight is in tenth-pounds and cost is the
 #     item's base value.
+#
+# 'Y' is for stowage. PACK is the back-carried load; HARNESS is gear
+#     secured to belts, scabbards, slings, and similar ready carriage.
+#     Volume is measured in tenths (Y:PACK:40 means 4.0 V). Supply kinds
+#     omit Y and continue to use the separate Supply system.
 #
 # 'P' is for power information. The item's bonuses to attack and evasion
 #     as well as its damage and protection dice. Note that adding damage dice to
@@ -125,6 +131,7 @@ G:&:w
 N:1:& Serpentine Ring~
 G:=:g1
 I:45:32:0
+Y:HARNESS:1
 W:1:0:1:65000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -139,6 +146,7 @@ D: not for display alone but for memory, oath, and inheritance.
 N:2:& Ring~
 G:=:D
 I:45:30:0
+Y:HARNESS:1
 W:1:0:1:65000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -153,6 +161,7 @@ D: better felt than boasted.
 N:3:& Amulet~
 G:":D
 I:40:10:0
+Y:HARNESS:1
 W:1:0:1:65000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -167,6 +176,7 @@ D: starlight, and song met together.
 N:4:& Pearl~
 G:":w
 I:40:13:1
+Y:HARNESS:1
 W:1:0:1:100000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -180,6 +190,7 @@ D: gathered from deep waters and long remembered.
 N:5:& Jewel~
 G:":g
 I:40:16:1
+Y:HARNESS:1
 W:1:0:1:50000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -193,6 +204,7 @@ D: healing and youth have somehow been remembered.
 N:6:& Necklace~
 G:":y
 I:40:12:1
+Y:HARNESS:1
 W:1:0:1:75000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -208,6 +220,7 @@ D: master-craft rather than mere display.
 N:7:& Ring~
 G:=:D
 I:45:31:0
+Y:HARNESS:1
 W:1:0:1:1000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -222,6 +235,7 @@ N:10:& Ring~
 G:=:W
 T:11:29
 I:45:40:0
+Y:HARNESS:1
 W:1:0:1:1000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -238,6 +252,7 @@ N:11:& Amulet~
 G:":W
 T:11:27
 I:40:40:0
+Y:HARNESS:1
 W:1:0:1:1000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -254,6 +269,7 @@ N:19:& Mighty Hammer~
 G:\:D
 T:6:19
 I:21:50:0
+Y:HARNESS:180
 W:20:0:1000:1000
 P:-7:6d5:0:0d0
 F:INSTA_ART | TWO_HANDED | EVIL_ITEM
@@ -269,6 +285,7 @@ N:20:& Massive Iron Crown~
 G:]:D
 T:5:28
 I:33:50:0
+Y:PACK:360
 W:20:0:4000:1000
 P:0:0d0:0:0d0
 F:INSTA_ART | EVIL_ITEM
@@ -299,6 +316,7 @@ N:22:& Robe~
 G:(:b
 T:5:4
 I:36:2:0
+Y:PACK:40
 W:1:0:30:4
 P:0:0d0:1:1d0
 R:EVN:2
@@ -323,6 +341,7 @@ N:23:Leather Armour~
 G:(:U
 T:5:12
 I:36:4:0
+Y:PACK:100
 W:1:0:70:18
 P:0:0d0:-1:1d4
 R:EVN:0
@@ -347,6 +366,7 @@ N:26:Studded Leather~
 G:(:U1
 T:5:13
 I:36:7:0
+Y:PACK:120
 W:2:0:130:200
 P:0:0d0:-2:1d6
 R:EVN:-1
@@ -370,6 +390,7 @@ N:27:Galvorn Armour~
 G:(:D
 T:9:17
 I:36:11:0
+Y:PACK:100
 W:17:0:70:200
 P:0:0d0:0:1d9
 R:EVN:0
@@ -385,6 +406,7 @@ N:30:& Mail Corslet~
 G:[:W
 T:5:15
 I:37:4:0
+Y:PACK:120
 W:5:0:270:750
 P:-1:0d0:-3:2d4
 R:ATT:0
@@ -410,6 +432,7 @@ N:31:& Hauberk~
 G:[:s1
 T:5:14
 I:37:6:0
+Y:PACK:180
 W:7:0:350:900
 P:-2:0d0:-4:2d5
 R:ATT:-1
@@ -436,6 +459,7 @@ N:38:& Mithril Corslet~
 G:[:B
 T:5:16
 I:37:20:0
+Y:PACK:120
 W:16:0:150:7000
 P:0:0d0:-1:2d5
 R:EVN:1
@@ -456,6 +480,7 @@ N:40:& Orc Skeleton~
 G:~:w
 T:3:28
 I:3:0:0
+Y:PACK:240
 W:1:1:130:0
 P:0:0d0:0:0d0
 A:1/1
@@ -470,6 +495,7 @@ N:41:& Human Skeleton~
 G:~:w
 T:3:29
 I:3:1:0
+Y:PACK:240
 W:8:5:120:0
 P:0:0d0:0:0d0
 A:3/3:6/3
@@ -484,6 +510,7 @@ N:42:& Elf Skeleton~
 G:~:w
 T:3:30
 I:3:2:0
+Y:PACK:240
 W:10:5:110:0
 P:0:0d0:0:0d0
 A:9/3:12/3
@@ -500,6 +527,7 @@ N:43:& Round Shield~
 G:):s
 T:5:17
 I:34:3:0
+Y:HARNESS:60
 W:3:0:50:50
 P:0:0d0:0:1d3
 X:25
@@ -525,6 +553,7 @@ N:44:& Kite Shield~
 G:):W
 T:5:18
 I:34:5:0
+Y:HARNESS:80
 W:6:0:80:200
 P:-2:0d0:0:1d6
 X:50
@@ -551,6 +580,7 @@ N:46:& Mithril Shield~
 G:):B
 T:5:19
 I:34:10:1
+Y:HARNESS:80
 W:16:0:40:10000
 P:0:0d0:0:1d7
 X:50
@@ -574,6 +604,7 @@ N:56:& Dagger~
 G:|:w
 T:6:0
 I:23:4:0
+Y:HARNESS:5
 W:1:0:5:10
 P:0:1d5:0:0d0
 R:ATT:1
@@ -598,6 +629,7 @@ N:57:& Curved Sword~
 G:|:s
 T:6:1
 I:23:7:0
+Y:HARNESS:20
 W:2:0:40:10
 P:-1:2d5:1:0d0
 R:ATT:0
@@ -614,6 +646,7 @@ N:60:& Shortsword~
 G:|:w
 T:6:2
 I:23:10:0
+Y:HARNESS:15
 W:1:0:20:90
 P:0:1d7:1:0d0
 R:ATT:1
@@ -637,6 +670,7 @@ N:64:& Longsword~
 G:|:W
 T:6:3
 I:23:17:0
+Y:HARNESS:25
 W:4:0:30:300
 P:0:2d5:1:0d0
 R:ATT:1
@@ -655,6 +689,7 @@ N:67:& Bastard Sword~
 G:|:W
 T:6:7
 I:23:21:0
+Y:HARNESS:30
 W:6:0:40:350
 P:-2:3d3:1:0d0
 R:ATT:-1
@@ -679,6 +714,7 @@ N:68:& Greatsword~
 G:|:W
 T:6:5
 I:23:25:0
+Y:HARNESS:40
 W:4:0:60:775
 P:-2:3d5:1:0d0
 R:ATT:-1
@@ -703,6 +739,7 @@ N:69:& Elven Mithril Sword~
 G:|:B
 T:6:4
 I:23:28:0
+Y:HARNESS:25
 W:15:0:35:5000
 P:-1:3d4:1:0d0
 R:ATT:0
@@ -720,6 +757,7 @@ N:70:& Star-Iron Greatsword~
 G:|:B
 T:6:6
 I:23:30:0
+Y:HARNESS:40
 W:20:0:70:7000
 P:-2:3d6:1:0d0
 R:ATT:-1
@@ -739,6 +777,7 @@ N:71:& Spear~
 G:/:U
 T:6:9
 I:22:1:0
+Y:HARNESS:30
 W:1:0:30:36
 P:0:1d9:0:0d0
 R:ATT:1
@@ -762,6 +801,7 @@ N:72:& Great Spear~
 G:/:u
 T:6:10
 I:22:2:0
+Y:HARNESS:40
 W:4:0:60:36
 P:1:1d13:1:0d0
 R:ATT:2
@@ -786,6 +826,7 @@ N:74:& Glaive~
 G:/:s
 T:6:11
 I:22:4:0
+Y:HARNESS:50
 W:8:0:70:363
 P:-1:2d9:1:0d0
 R:ATT:0
@@ -810,6 +851,7 @@ N:76:& Hand Axe~
 G:/:s
 T:6:13
 I:22:11:0
+Y:HARNESS:15
 W:2:0:10:150
 P:-1:4d2:0:0d0
 R:ATT:0
@@ -834,6 +876,7 @@ N:77:& Battle Axe~
 G:/:s
 T:6:14
 I:22:12:0
+Y:HARNESS:30
 W:4:0:45:304
 P:-3:3d4:0:0d0
 R:ATT:-2
@@ -858,6 +901,7 @@ N:81:& Great Axe~
 G:/:s
 T:6:15
 I:22:13:0
+Y:HARNESS:45
 W:8:0:80:334
 P:-4:4d4:0:0d0
 R:ATT:-3
@@ -885,6 +929,7 @@ N:86:& Quarterstaff~
 G:\:U
 T:6:8
 I:21:3:0
+Y:HARNESS:40
 W:1:0:50:200
 P:0:2d5:2:0d0
 R:ATT:1
@@ -906,6 +951,7 @@ N:89:& War Hammer~
 G:\:D1
 T:6:12
 I:21:8:0
+Y:HARNESS:25
 W:6:0:50:225
 P:-2:4d1:0:0d0
 R:ATT:-1
@@ -933,6 +979,7 @@ N:96:& Shovel~
 G:\:s
 T:6:16
 I:20:1:1
+Y:PACK:40
 W:5:0:50:10
 P:-3:2d2:0:0d0
 R:ATT:-2
@@ -954,6 +1001,7 @@ N:98:& Mattock~
 G:\:D
 T:6:17
 I:20:3:2
+Y:PACK:50
 W:10:0:100:700
 P:-5:5d2:0:0d0
 R:ATT:-4
@@ -981,6 +1029,7 @@ N:100:& Helm~
 G:]:s1
 T:5:23
 I:32:5:0
+Y:PACK:60
 W:3:0:50:75
 P:0:0d0:-1:1d2
 R:EVN:0
@@ -1004,6 +1053,7 @@ N:101:& Great Helm~
 G:]:W
 T:5:24
 I:32:6:0
+Y:PACK:80
 W:5:0:80:200
 P:0:0d0:-2:1d3
 R:EVN:-1
@@ -1027,6 +1077,7 @@ N:102:& Dwarf Mask~
 G:]:s
 T:5:26
 I:32:7:0
+Y:PACK:80
 W:10:0:80:300
 P:0:0d0:-2:1d2
 R:EVN:-1
@@ -1044,6 +1095,7 @@ N:103:& Mithril Helm~
 G:]:B
 T:5:25
 I:32:8:0
+Y:PACK:60
 W:14:0:35:500
 P:0:0d0:0:1d4
 R:EVN:1
@@ -1060,6 +1112,7 @@ N:104:& Crown~
 G:]:y
 T:1:9
 I:33:11:0
+Y:PACK:30
 W:7:0:30:1000
 P:0:0d0:0:1d0
 F:INSTA_ART
@@ -1075,6 +1128,7 @@ N:106:& Cloak~
 G:(:g
 T:5:2
 I:35:1:0
+Y:PACK:40
 W:2:0:20:3
 P:0:0d0:1:1d0
 R:EVN:2
@@ -1094,6 +1148,7 @@ N:107:& Shadow Cloak~
 G:(:D
 T:5:3
 I:35:6:2
+Y:PACK:40
 W:12:0:10:4000
 P:0:0d0:3:1d0
 R:EVN:4
@@ -1110,6 +1165,7 @@ N:108:& Wolf-Hame~
 G:(:W
 T:11:7
 I:35:20:0
+Y:PACK:120
 W:20:0:130:1000
 P:-3:0d0:-3:1d6
 F:INSTA_ART | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -1123,6 +1179,7 @@ N:109:& Bat-Fell~
 G:(:D1
 T:6:18
 I:35:21:0
+Y:PACK:70
 W:23:0:50:1000
 P:-1:0d0:+2:0d0
 F:INSTA_ART | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -1138,6 +1195,7 @@ N:110:& Shortbow~
 G:}:u
 T:5:29
 I:19:12:0
+Y:HARNESS:35
 W:1:0:15:50
 P:0:1d7:0:0d0
 R:ATT:1
@@ -1162,6 +1220,7 @@ N:111:& Longbow~
 G:}:U
 T:5:30
 I:19:13:0
+Y:HARNESS:45
 W:6:0:30:120
 P:0:2d4:0:0d0
 R:ATT:1
@@ -1190,6 +1249,7 @@ N:112:& Dragon-horn Bow~
 G:}:U1
 T:5:31
 I:19:14:0
+Y:HARNESS:50
 W:15:0:45:500
 P:0:4d2:0:0d0
 R:ATT:1
@@ -1209,6 +1269,7 @@ N:116:& Arrow~
 G:-:U
 T:5:27
 I:17:1:0
+Y:HARNESS:10
 W:1:0:1:1
 P:0:0d0:0:0d0
 R:ATT:3
@@ -1233,6 +1294,7 @@ N:122:& Pair~ of Boots
 G:]:U
 T:5:9
 I:30:1:0
+Y:PACK:40
 W:1:0:20:7
 P:0:0d0:0:1d1
 R:EVN:1
@@ -1257,6 +1319,7 @@ N:123:& Pair~ of Greaves
 G:]:s
 T:5:10
 I:30:2:0
+Y:PACK:60
 W:4:0:80:19
 P:0:0d0:-1:1d2
 R:EVN:0
@@ -1281,6 +1344,7 @@ N:124:& Pair~ of Mithril Greaves
 G:]:B
 T:5:11
 I:30:3:0
+Y:PACK:60
 W:14:0:40:50
 P:0:0d0:1:1d3
 R:EVN:2
@@ -1307,6 +1371,7 @@ N:125:& Set~ of Gloves
 G:]:U
 T:5:20
 I:31:1:0
+Y:PACK:10
 W:1:0:5:3
 P:0:0d0:0:1d0
 R:EVN:1
@@ -1331,6 +1396,7 @@ N:126:& Set~ of Gauntlets
 G:]:W
 T:5:21
 I:31:2:0
+Y:PACK:20
 W:3:0:30:35
 P:-1:0d0:0:1d1
 R:ATT:0
@@ -1356,6 +1422,7 @@ N:127:& Set~ of Mithril Gauntlets
 G:]:B
 T:5:22
 I:31:3:0
+Y:PACK:20
 W:12:0:15:100
 P:0:0d0:0:1d2
 R:EVN:1
@@ -1439,6 +1506,7 @@ N:131:& Silmaril~
 G:*:w
 T:12:16
 I:39:9:0
+Y:HARNESS:1
 W:25:0:1:100000
 P:0:0d0:0:0d0
 F:SEE_INVIS | SUST_GRA | EASY_KNOW
@@ -1460,6 +1528,7 @@ D: It will shine forever.
 N:132:Last Chances
 G:":d
 I:40:0:0
+Y:HARNESS:1
 W:7:0:1:20
 P:0:0d0:0:0d0
 A:10/10
@@ -1473,6 +1542,7 @@ D: the proud.
 N:133:Constitution
 G:":d
 I:40:1:1
+Y:HARNESS:1
 W:8:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:1
@@ -1491,6 +1561,7 @@ D: living stone, kept against wasting by a cleaner power.
 N:134:Grace
 G:":d
 I:40:2:1
+Y:HARNESS:1
 W:10:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:1
@@ -1509,6 +1580,7 @@ D: of a spirit more nearly attuned to clean song and truth.
 N:135:Regeneration
 G:":d
 I:40:3:0
+Y:HARNESS:1
 W:12:0:1:600
 P:0:0d0:0:0d0
 A:6/40
@@ -1526,6 +1598,7 @@ D: and renewed.
 N:136:Preservation
 G:":d
 I:40:4:0
+Y:HARNESS:1
 W:14:0:1:20000
 P:0:0d0:0:0d0
 A:5/40
@@ -1559,6 +1632,7 @@ D: the long road seem less eager to consume what is good.
 N:138:Haunted Dreams
 G:":d
 I:40:6:0
+Y:HARNESS:1
 W:9:0:1:0
 P:0:0d0:0:0d0
 A:7/80
@@ -1573,6 +1647,7 @@ D: this world.
 N:139:the Vigilant Eye
 G:":d
 I:40:7:1
+Y:HARNESS:1
 W:4:0:1:1
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1592,6 +1667,7 @@ D: to prevail against a mind resolved in cleaner light.
 N:140:the Slave Pits
 G:":d
 I:40:8:0
+Y:HARNESS:1
 W:5:0:1:0
 P:0:0d0:0:0d0
 A:7/100:14/0
@@ -1611,6 +1687,7 @@ D: without hope or the memory of stars.
 N:141:the Shadow
 G:":d
 I:40:9:1
+Y:HARNESS:1
 W:6:0:1:100
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1628,6 +1705,7 @@ D: service of the Enemy.
 N:142:the Orc-captain
 G:":d
 I:40:10:0
+Y:HARNESS:1
 W:7:0:1:0
 P:2:0d0:2:0d0
 A:7/70
@@ -1644,6 +1722,7 @@ D: whose makers had no thought of grace nor beauty.
 N:143:the Earth-delver
 G:":d
 I:40:11:2
+Y:HARNESS:1
 W:10:0:1:2000
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1663,6 +1742,7 @@ D: needed them fewer still.
 N:144:the Hidden Realm
 G:":d
 I:40:14:2
+Y:HARNESS:1
 W:12:0:1:2000
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1685,6 +1765,7 @@ D: heart while it is worn.
 N:150:Secrets
 G:=:d
 I:45:0:1
+Y:HARNESS:1
 W:15:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1704,6 +1785,7 @@ D: rather than mere suspicion had been set in the stone.
 N:151:Ered Luin
 G:=:d
 I:45:1:1
+Y:HARNESS:1
 W:8:0:1:150
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1720,6 +1802,7 @@ D: lingers in this ring.
 N:152:Evasion
 G:=:d
 I:45:2:0
+Y:HARNESS:1
 W:8:0:1:500
 P:0:0d0:1:0d0
 R:EVN:3
@@ -1738,6 +1821,7 @@ D: courtesy instead of naked fear.
 N:153:Protection
 G:":d
 I:40:15:0
+Y:HARNESS:1
 W:7:0:1:500
 P:0:0d0:0:1d1
 R:PS:3
@@ -1755,6 +1839,7 @@ D: more gently and more surely turned aside.
 N:154:Strength
 G:=:d
 I:45:4:1
+Y:HARNESS:1
 W:9:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:1
@@ -1773,6 +1858,7 @@ D: and steadfast deeds.
 N:155:Dexterity
 G:=:d
 I:45:5:1
+Y:HARNESS:1
 W:10:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:1
@@ -1791,6 +1877,7 @@ D: can only imitate.
 N:156:Frost
 G:=:d
 I:45:6:0
+Y:HARNESS:1
 W:9:0:1:250
 P:0:0d0:0:0d0
 A:12/50
@@ -1803,6 +1890,7 @@ D: the Enemy.
 N:157:Warmth
 G:=:d
 I:45:7:0
+Y:HARNESS:1
 W:10:0:1:250
 P:0:0d0:0:0d0
 A:11/70
@@ -1815,6 +1903,7 @@ D: shields the wearer from the bitter cold of the north.
 N:158:Accuracy
 G:=:d
 I:45:8:0
+Y:HARNESS:1
 W:12:0:1:500
 P:1:0d0:0:0d0
 R:ATT:3
@@ -1830,6 +1919,7 @@ D: and held, so that hand and eye agree with unusual certainty.
 N:159:Free Action
 G:=:d
 I:45:9:0
+Y:HARNESS:1
 W:12:0:1:1500
 P:0:0d0:0:0d0
 A:12/20
@@ -1848,6 +1938,7 @@ D: stood against the binding malice of Morgoth.
 N:160:Cowardice
 G:=:d
 I:45:10:0
+Y:HARNESS:1
 W:7:0:1:0
 P:0:0d0:1:0d0
 A:5/100
@@ -1862,6 +1953,7 @@ D: nimble.
 N:161:Bauglir's Vanguard
 G:=:d
 I:45:11:0
+Y:HARNESS:1
 W:6:0:1:300
 P:0:0d0:0:1d2
 A:5/80
@@ -1876,6 +1968,7 @@ D: earth cannot sate.
 N:162:Venom's End
 G:=:d
 I:45:12:0
+Y:HARNESS:1
 W:6:0:1:1000
 P:0:0d0:0:0d0
 A:10/30
@@ -1892,6 +1985,7 @@ D: more readily denied to one who wears it.
 N:163:Angband's Forge
 G:=:d
 I:45:13:0
+Y:HARNESS:1
 W:5:0:1:100
 P:0:0d0:0:1d2
 A:4/80
@@ -1907,6 +2001,7 @@ D: bitter cold of Utumno straight to their heart.
 N:164:the Deep Cold of Utumno
 G:=:d
 I:45:14:0
+Y:HARNESS:1
 W:5:0:1:100
 P:0:0d0:0:1d2
 A:3/70
@@ -1922,6 +2017,7 @@ D: defenseless, searing them with magnified fury.
 N:165:the Iron Fist
 G:=:d
 I:45:15:0
+Y:HARNESS:1
 W:6:0:1:0
 P:0:0d0:0:0d0
 A:8/60
@@ -1939,6 +2035,7 @@ D: for it was made without art and without love.
 N:166:the Watchful Slave
 G:=:d
 I:45:16:1
+Y:HARNESS:1
 W:4:0:1:0
 P:0:0d0:0:0d0
 R:PVAL:2
@@ -1955,6 +2052,7 @@ D: first bore it in the darkness beneath the mountains.
 N:167:Venom
 G:=:d
 I:45:17:0
+Y:HARNESS:1
 W:4:0:1:0
 P:0:0d0:0:1d2
 A:2/80
@@ -1971,6 +2069,7 @@ D: to the will of their cruel masters.
 N:168:Morgoth's Dominion
 G:=:d
 I:45:18:1
+Y:HARNESS:1
 W:12:0:1:300
 P:0:0d0:0:0d0
 R:PVAL:2
@@ -1988,6 +2087,7 @@ D: by its presence.
 N:169:Fell Voices
 G:=:d
 I:45:19:1
+Y:HARNESS:1
 W:7:0:1:0
 P:0:0d0:0:0d0
 R:PVAL:2
@@ -2007,6 +2107,7 @@ D: is worn.
 N:171:the Laiquendi
 G:=:d
 I:45:21:1
+Y:HARNESS:1
 W:8:0:1:1000
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -2030,6 +2131,7 @@ D: hunters: swift of step and keen with the bow.
 N:173:the Keen Hand
 G:=:d
 I:45:22:2
+Y:HARNESS:1
 W:13:0:1:2000
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -2049,6 +2151,7 @@ D: wearer's purpose.
 N:174:the Iron Guard
 G:=:d
 I:45:23:2
+Y:HARNESS:1
 W:12:0:1:2000
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -2071,6 +2174,7 @@ D: where others would be broken.
 N:191:Imprisonment
 G:_:d
 I:55:1:0
+Y:HARNESS:40
 W:6:0:50:400
 P:0:0d0:0:0d0
 A:5/50
@@ -2162,6 +2266,7 @@ D: on the level.
 N:200:Slumber
 G:_:d
 I:55:10:0
+Y:HARNESS:40
 W:11:0:50:400
 P:0:0d0:0:0d0
 A:8/30
@@ -2173,6 +2278,7 @@ D: great weariness in all monsters in line of sight.
 N:201:Majesty
 G:_:d
 I:55:11:0
+Y:HARNESS:40
 W:9:0:50:400
 P:0:0d0:0:0d0
 A:8/30
@@ -2208,6 +2314,7 @@ D: opponents have difficulty crossing.
 N:204:Dismay
 G:_:d
 I:55:14:0
+Y:HARNESS:40
 W:13:0:50:400
 P:0:0d0:0:0d0
 A:6/70
@@ -2230,6 +2337,7 @@ D: a staff.
 N:210:Summoning
 G:_:d
 I:55:17:0
+Y:HARNESS:40
 W:7:0:50:0
 P:0:0d0:0:0d0
 A:3/70
@@ -2256,6 +2364,7 @@ D: add your Will to your stealth.
 N:240:Terror
 G:?:d
 I:66:0:0
+Y:HARNESS:10
 W:7:0:10:100
 P:0:0d0:0:0d0
 A:7/50
@@ -2269,6 +2378,7 @@ D: enemies.
 N:241:Thunder
 G:?:d
 I:66:1:0
+Y:HARNESS:10
 W:10:0:10:100
 P:0:0d0:0:0d0
 A:10/30
@@ -2281,6 +2391,7 @@ D: enemies.
 N:242:Force
 G:?:d
 I:66:2:0
+Y:HARNESS:10
 W:12:0:10:100
 P:0:0d0:0:0d0
 A:12/30
@@ -2292,6 +2403,7 @@ D: the mountains. Its sound blows your enemies back.
 N:243:Blasting
 G:?:d
 I:66:3:0
+Y:HARNESS:10
 W:13:0:10:100
 P:0:0d0:0:0d0
 A:13/10
@@ -2306,6 +2418,7 @@ D: hjkl movement) or down (d).
 N:250:Warning
 G:?:d
 I:66:4:0
+Y:HARNESS:10
 W:7:0:10:0
 P:0:0d0:0:0d0
 A:7/80
@@ -2573,6 +2686,7 @@ N:372:& Small wooden chest~
 G:~:D1
 T:1:0
 I:7:1:0
+Y:PACK:180
 W:5:0:200:20
 P:0:0d0:0:0d0
 A:5/4
@@ -2587,6 +2701,7 @@ N:373:& Small steel chest~
 G:~:s
 T:1:2
 I:7:2:0
+Y:PACK:180
 W:12:0:250:200
 P:0:0d0:0:0d0
 A:12/4
@@ -2602,6 +2717,7 @@ N:374:& Small jewelled chest~
 G:~:v1
 T:1:4
 I:7:3:0
+Y:PACK:180
 W:19:0:750:250
 P:0:0d0:0:0d0
 A:19/8
@@ -2617,6 +2733,7 @@ N:375:& Large wooden chest~
 G:~:u
 T:1:1
 I:7:11:0
+Y:PACK:480
 W:10:0:500:60
 P:0:0d0:0:0d0
 A:10/8
@@ -2632,6 +2749,7 @@ N:376:& Large steel chest~
 G:~:W
 T:1:3
 I:7:12:0
+Y:PACK:480
 W:17:0:750:250
 P:0:0d0:0:0d0
 A:17/8
@@ -2648,6 +2766,7 @@ N:377:& Large jewelled chest~
 G:~:v
 T:1:5
 I:7:13:0
+Y:PACK:480
 W:24:0:750:250
 P:0:0d0:0:0d0
 A:24/8
@@ -2664,6 +2783,7 @@ N:378:& Finely wrapped present~
 G:~:r
 T:1:6
 I:7:4:0
+Y:PACK:100
 W:25:0:100:250
 P:0:0d0:0:0d0
 F:IGNORE_ALL | EASY_KNOW
@@ -2891,6 +3011,7 @@ N:410:& Piece~ of Mithril
 G:~:B
 T:1:21
 I:4:0:0
+Y:PACK:1
 W:15:5:1:100
 P:0:0d0:0:0d0
 A:15/10
@@ -2932,6 +3053,7 @@ N:491:& Piece~ of Star Iron
 G:~:B
 T:19:5
 I:4:1:0
+Y:PACK:1
 W:20:5:1:120
 P:0:0d0:0:0d0
 A:20/10

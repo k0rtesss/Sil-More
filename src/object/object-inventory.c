@@ -368,24 +368,31 @@ bool inven_carry_okay(const object_type* o_ptr)
     if (!player_light_capacity_okay(o_ptr, true))
         return false;
 
+    /* Quiver and Belt contents are Harness contents too.  Check the complete
+     * incoming quantity before any auto-return or stack shortcut can accept
+     * it; moving it into an equipment slot does not make its volume vanish. */
+    if (!inventory_limit_is_stack_counted(o_ptr)
+        && !inventory_type_slot_available(o_ptr, true))
+    {
+        return false;
+    }
+
     // Check for combining in quiver first
     if (o_ptr->tval == TV_ARROW)
     {
         int empty_quiver = 0;
-
-        for (j = INVEN_QUIVER1; j <= INVEN_QUIVER2; j++)
         {
-            object_type* j_ptr = &inventory[j];
+            object_type* j_ptr = &inventory[INVEN_QUIVER1];
 
             if (!j_ptr->k_idx)
             {
-                if (empty_quiver == 0)
-                    empty_quiver = j;
-                continue;
+                empty_quiver = INVEN_QUIVER1;
             }
-
-            if (object_similar(j_ptr, o_ptr))
-                return (true);
+            else if (object_similar(j_ptr, o_ptr))
+            {
+                if (j_ptr->number < object_stack_limit(j_ptr))
+                    return (true);
+            }
         }
 
         if ((empty_quiver > 0) && o_ptr->pickup)
@@ -397,31 +404,33 @@ bool inven_carry_okay(const object_type* o_ptr)
     if (player_can_treat_as_throwing(o_ptr))
     {
         int empty_quiver = 0;
-        bool has_desired_slot = (o_ptr->pickup_slot == INVEN_QUIVER1) || 
-                                (o_ptr->pickup_slot == INVEN_QUIVER2);
-        
-        for (j = INVEN_QUIVER1; j <= INVEN_QUIVER2; j++)
+        bool wants_quiver = (o_ptr->pickup_slot == INVEN_QUIVER1);
+        bool wants_belt = (o_ptr->pickup_slot == INVEN_BELT)
+            && object_is_belt_weapon(o_ptr);
+
+        if (wants_belt && !inventory[INVEN_BELT].k_idx)
+            return true;
+
         {
-            object_type* j_ptr = &inventory[j];
+            object_type* j_ptr = &inventory[INVEN_QUIVER1];
 
             if (!j_ptr->k_idx)
             {
-                if (empty_quiver == 0)
-                    empty_quiver = j;
-                continue;
+                empty_quiver = INVEN_QUIVER1;
             }
-
-            if (object_similar(j_ptr, o_ptr))
-                return (true);
+            else if (object_similar(j_ptr, o_ptr))
+            {
+                if (j_ptr->number < object_stack_limit(j_ptr))
+                    return (true);
+            }
         }
         
         /* Thrown items can go back to an empty quiver slot */
         if ((empty_quiver > 0) && o_ptr->pickup)
-            return (true);
-            
-        /* Or specifically to their original slot if it's empty */
-        if (has_desired_slot && (inventory[o_ptr->pickup_slot].k_idx == 0))
-            return (true);
+            return true;
+
+        if (wants_quiver && !inventory[INVEN_QUIVER1].k_idx)
+            return true;
     }
 
     /*
@@ -429,12 +438,6 @@ bool inven_carry_okay(const object_type* o_ptr)
      * extra copies inside an existing stack. Stack-counted gear waits until
      * after similar-stack merges so one pack still counts as one unit.
      */
-    if (!inventory_limit_is_stack_counted(o_ptr)
-        && !inventory_type_slot_available(o_ptr, true))
-    {
-        return (false);
-    }
-
     /* Similar slot? */
     for (j = 0; j < INVEN_PACK; j++)
     {
@@ -567,6 +570,15 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
     if (!player_light_capacity_okay(o_ptr, true))
         return (-1);
 
+    /* Enforce Pack/Harness volume before any direct Quiver/Belt placement or
+     * stack merge.  Several creation and recovery paths call inven_carry()
+     * directly rather than probing with inven_carry_okay() first. */
+    if (!inventory_limit_is_stack_counted(o_ptr)
+        && !inventory_type_slot_available(o_ptr, true))
+    {
+        return (-1);
+    }
+
     if (supplies_is_supply_object(o_ptr))
     {
         object_type copy;
@@ -583,19 +595,24 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
 
     int desired_slot = o_ptr->pickup_slot;
     bool wanted_auto_recover = o_ptr->pickup ? true : false;
-    bool wants_throw_slot = (desired_slot == INVEN_QUIVER1) || (desired_slot == INVEN_QUIVER2);
+    bool wants_throw_slot = (desired_slot == INVEN_QUIVER1)
+        || (desired_slot == INVEN_BELT);
 
     if (wants_throw_slot)
     {
         object_type* d_ptr = &inventory[desired_slot];
         bool is_throwing = player_can_treat_as_throwing(o_ptr);
         bool is_arrow = (o_ptr->tval == TV_ARROW);
+        bool slot_accepts = (desired_slot == INVEN_QUIVER1)
+            ? (is_throwing || is_arrow)
+            : object_is_belt_weapon(o_ptr);
 
-        if (is_throwing || is_arrow)
+        if (slot_accepts)
         {
             if (d_ptr->k_idx == 0)
             {
-                int limit = object_stack_limit(o_ptr);
+                int limit = (desired_slot == INVEN_BELT)
+                    ? 1 : object_stack_limit(o_ptr);
                 int placed = MIN(o_ptr->number, limit);
                 object_copy(d_ptr, o_ptr);
                 d_ptr->number = placed;
@@ -618,7 +635,8 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
                 o_ptr->pickup = wanted_auto_recover;
                 o_ptr->pickup_slot = -1;
             }
-            else if (object_similar(d_ptr, o_ptr))
+            else if (desired_slot == INVEN_QUIVER1
+                && object_similar(d_ptr, o_ptr))
             {
                 object_absorb(d_ptr, o_ptr);
                 d_ptr->pickup = false;
@@ -646,8 +664,8 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
         int empty_quiver = 0;
 
         // arrows combine with similar arrows
-        for (j = INVEN_QUIVER1; j <= INVEN_QUIVER2; j++)
         {
+            j = INVEN_QUIVER1;
             j_ptr = &inventory[j];
 
             /* Skip non-objects */
@@ -656,11 +674,8 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
                 // keep track of the first empty quiver
                 if (empty_quiver == 0)
                     empty_quiver = j;
-                continue;
             }
-
-            /* Check if the two items can be combined */
-            if (object_similar(j_ptr, o_ptr))
+            else if (object_similar(j_ptr, o_ptr))
             {
                 /* Combine the items */
                 object_absorb(j_ptr, o_ptr);
@@ -714,18 +729,15 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
         int empty_quiver = 0;
 
         /* Check for combining with existing throwing weapons in quiver */
-        for (j = INVEN_QUIVER1; j <= INVEN_QUIVER2; j++)
         {
+            j = INVEN_QUIVER1;
             j_ptr = &inventory[j];
 
             if (!j_ptr->k_idx)
             {
-                if (empty_quiver == 0)
-                    empty_quiver = j;
-                continue;
+                empty_quiver = j;
             }
-
-            if (object_similar(j_ptr, o_ptr))
+            else if (object_similar(j_ptr, o_ptr))
             {
                 object_absorb(j_ptr, o_ptr);
                 j_ptr->ident |= IDENT_HANDLED;
@@ -738,7 +750,6 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
                 char j_name[80];
                 object_desc(j_name, sizeof(j_name), j_ptr, true, 3);
                 msg_format("You combine some with %s (%c).", j_name, index_to_label(j));
-                break;
             }
         }
 
@@ -773,12 +784,6 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
      * identical pack stack exists. Stack-counted gear gets checked after the
      * combine pass so adding to an existing pack does not consume a new unit.
      */
-    if (!inventory_limit_is_stack_counted(o_ptr)
-        && !inventory_type_slot_available(o_ptr, true))
-    {
-        return (-1);
-    }
-
     /* Check for combining */
     for (j = 0; j < INVEN_PACK; j++)
     {
@@ -1084,10 +1089,13 @@ s16b inven_takeoff(int item, int amt)
         act = "You were holding";
     }
 
-    /* Took off arrows */
-    else if ((item == INVEN_QUIVER1) || (item == INVEN_QUIVER2))
+    else if (item == INVEN_QUIVER1)
     {
         act = "You have removed from your quiver";
+    }
+    else if (item == INVEN_BELT)
+    {
+        act = "You have removed from your belt";
     }
     else if (item == INVEN_HORN)
     {
@@ -1164,8 +1172,17 @@ s16b inven_takeoff(int item, int amt)
     {
         cptr label = inven_carry_limit_label();
         int limit = inven_carry_limit_value();
+        enum inventory_limit_group group = inven_carry_limit_group();
 
-        if (label)
+        if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
+        {
+            int used = inventory_limit_usage_for_group(group);
+
+            msg_format("Your %s has no room (%d.%d/%d.%d V used).",
+                inventory_limit_group_name(group), used / 10, used % 10,
+                limit / 10, limit % 10);
+        }
+        else if (label)
             msg_format("Your pack cannot hold more %s (limit %d).", label, limit);
         else
             msg_print("You have no room in your pack.");

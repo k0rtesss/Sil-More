@@ -3233,10 +3233,8 @@ int sdl_left_panel_quiver_attack_mode_at_col(int col)
     }
 
     if (!has_any_span) {
-        if (inventory[INVEN_QUIVER1].k_idx && !inventory[INVEN_QUIVER2].k_idx)
+        if (inventory[INVEN_QUIVER1].k_idx)
             return SDL_POINTER_ATTACK_RANGED_1;
-        if (!inventory[INVEN_QUIVER1].k_idx && inventory[INVEN_QUIVER2].k_idx)
-            return SDL_POINTER_ATTACK_RANGED_2;
     }
 
     return SDL_POINTER_ATTACK_NONE;
@@ -3419,10 +3417,8 @@ cptr sdl_character_panel_attack_tooltip_text(int attack_mode, bool quiver_only)
 {
     if (quiver_only)
     {
-        if (attack_mode == SDL_POINTER_ATTACK_RANGED_2)
-            return "Click: select Quiver 2 for ranged attacks.";
         if (attack_mode == SDL_POINTER_ATTACK_RANGED_1)
-            return "Click: select Quiver 1 for ranged attacks.";
+            return "Click: select the quiver for ranged attacks.";
         return NULL;
     }
 

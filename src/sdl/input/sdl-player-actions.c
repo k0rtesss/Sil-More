@@ -115,7 +115,7 @@ static cptr sdl_player_action_menu_description_for_kind(int kind)
     case SDL_PLAYER_ACTION_REST:
         return "Rest: rest until disturbed or fully recovered.";
     case SDL_PLAYER_ACTION_SWAP_QUIVERS:
-        return "Swap quivers: exchange your 1st and 2nd quivers.";
+        return "Quiver and belt: these different carriers cannot be swapped.";
     case SDL_PLAYER_ACTION_CHANGE_STAFF:
         return "Swap staff: exchange your staff with one from your pack.";
     case SDL_PLAYER_ACTION_CLOSE_DOOR:
@@ -144,7 +144,7 @@ cptr sdl_player_action_menu_fallback_for_kind(int kind)
     case SDL_PLAYER_ACTION_QUICK_THROW:
         return "Throw";
     case SDL_PLAYER_ACTION_REST: return "Rest";
-    case SDL_PLAYER_ACTION_SWAP_QUIVERS: return "Swap";
+    case SDL_PLAYER_ACTION_SWAP_QUIVERS: return "No swap";
     case SDL_PLAYER_ACTION_CHANGE_STAFF: return "Swap";
     case SDL_PLAYER_ACTION_CLOSE_DOOR: return "Close";
     case SDL_PLAYER_ACTION_BASH_DOOR: return "Bash";
@@ -300,8 +300,7 @@ static bool sdl_player_can_ready_weapon_entry(void)
         return true;
 
     return (inventory[INVEN_BOW].k_idx && inventory[INVEN_BOW].tval == TV_BOW)
-        || inventory[INVEN_QUIVER1].k_idx
-        || inventory[INVEN_QUIVER2].k_idx;
+        || inventory[INVEN_QUIVER1].k_idx;
 }
 
 /* Whether an adjacent known grid satisfies the given feature test. */
@@ -439,8 +438,6 @@ int sdl_player_action_menu_collect_secondary(int primary_kind,
             sdl_player_action_menu_add_entry(entries, &count,
                 SDL_PLAYER_ACTION_FLETCH, '-', "Fletch");
         }
-        sdl_player_action_menu_add_entry(entries, &count,
-            SDL_PLAYER_ACTION_SWAP_QUIVERS, KTRL('F'), "Quivers");
         break;
     case SDL_PLAYER_ACTION_STEALTH:
         if (p_ptr && p_ptr->active_ability[S_STL][STL_EXCHANGE_PLACES]) {

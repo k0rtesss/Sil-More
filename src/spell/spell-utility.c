@@ -840,7 +840,7 @@ void uncurse_object(object_type* o_ptr)
     {
         int slot = (int)(o_ptr - inventory);
 
-        if ((slot == INVEN_QUIVER1) || (slot == INVEN_QUIVER2))
+        if ((slot == INVEN_QUIVER1) || (slot == INVEN_BELT))
             p_ptr->redraw |= (PR_QUIVER);
         else if (slot == INVEN_LITE)
             p_ptr->redraw |= (PR_LIGHT);
@@ -1079,12 +1079,12 @@ void self_knowledge(void)
 
         {
             bool is_quiver1 = (k == INVEN_QUIVER1);
-            bool is_quiver2 = (k == INVEN_QUIVER2);
+            bool is_belt = (k == INVEN_BELT);
             bool is_throwing_item = player_can_treat_as_throwing_flags(o_ptr, t3);
 
             if (is_quiver1)
                 continue;
-            if (is_quiver2 && !is_throwing_item)
+            if (is_belt && !is_throwing_item)
                 continue;
         }
         f2 |= t2; f3 |= t3;

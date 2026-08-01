@@ -3,8 +3,7 @@
 
 bool sdl_pointer_attack_mode_is_ranged(int mode)
 {
-    return mode == SDL_POINTER_ATTACK_RANGED_1
-        || mode == SDL_POINTER_ATTACK_RANGED_2;
+    return mode == SDL_POINTER_ATTACK_RANGED_1;
 }
 
 bool sdl_pointer_attack_manual_modifier_active(void)
@@ -144,7 +143,7 @@ const char* sdl_pointer_attack_mode_name(int mode)
     case SDL_POINTER_ATTACK_RANGED_1:
         return "Ranged";
     case SDL_POINTER_ATTACK_RANGED_2:
-        return "Ranged 2";
+        return "Ranged";
     default:
         return "Pointer attack";
     }
@@ -178,11 +177,10 @@ void sdl_pointer_attack_reset_to_melee(void)
 
 void sdl_pointer_attack_set_mode(int mode)
 {
-    int power_throw_slot;
-    bool power_throw_mode;
-
     if (mode == SDL_POINTER_ATTACK_NONE)
         mode = SDL_POINTER_ATTACK_MELEE;
+    if (mode == SDL_POINTER_ATTACK_RANGED_2)
+        mode = SDL_POINTER_ATTACK_RANGED_1;
 
     if (sdl_pointer_attack_current_mode() == mode) {
         g_pointer_attack.panel_hover_mode = SDL_POINTER_ATTACK_NONE;
@@ -198,19 +196,9 @@ void sdl_pointer_attack_set_mode(int mode)
     sdl_pointer_attack_cancel_touch_press();
     sdl_mouse_path_cancel();
 
-    power_throw_slot = (p_ptr && character_generated)
-        ? player_power_throw_quiver_slot() : 0;
-    power_throw_mode = (power_throw_slot == INVEN_QUIVER1
-            && mode == SDL_POINTER_ATTACK_RANGED_1)
-        || (power_throw_slot == INVEN_QUIVER2
-            && mode == SDL_POINTER_ATTACK_RANGED_2);
-
     if (p_ptr && character_generated) {
-        if (!power_throw_mode)
-        {
-            player_queue_active_weapon_mode(mode);
-            sdl_enqueue_bypassed_command(CMD_ACTIVE_WEAPON_MODE);
-        }
+        player_queue_active_weapon_mode(mode);
+        sdl_enqueue_bypassed_command(CMD_ACTIVE_WEAPON_MODE);
     }
     else
         msg_format("%s pointer mode.", sdl_pointer_attack_mode_name(mode));
@@ -298,8 +286,7 @@ int sdl_pointer_attack_ranged_range(int mode)
     if (!sdl_pointer_attack_mode_is_ranged(mode))
         return 0;
 
-    ammo = &inventory[(mode == SDL_POINTER_ATTACK_RANGED_2)
-        ? INVEN_QUIVER2 : INVEN_QUIVER1];
+    ammo = &inventory[INVEN_QUIVER1];
     if (!ammo->k_idx)
         return 0;
 
@@ -1056,7 +1043,7 @@ bool sdl_pointer_attack_take_command(int* command, int* dir)
 
         target_set_location(target_y, target_x);
         health_track(0);
-        *command = (mode == SDL_POINTER_ATTACK_RANGED_2) ? 'F' : 'f';
+        *command = 'f';
         *dir = 5;
         return true;
     }
@@ -1102,7 +1089,7 @@ bool sdl_pointer_attack_take_command(int* command, int* dir)
     health_track(m_idx);
     if (sdl_pointer_attack_mode_is_ranged(mode)) {
         target_set_monster(m_idx);
-        *command = (mode == SDL_POINTER_ATTACK_RANGED_2) ? 'F' : 'f';
+        *command = 'f';
         *dir = 5;
     } else {
         *command = ';';

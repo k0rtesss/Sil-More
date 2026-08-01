@@ -557,6 +557,9 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
+    if (!player_pack_item_action_allowed(o_ptr))
+        return;
+
     if (reject_broken_item_use(o_ptr))
         return;
 
@@ -703,6 +706,9 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
+    if (!player_pack_item_action_allowed(o_ptr))
+        return;
+
     if (reject_broken_item_use(o_ptr))
         return;
 
@@ -810,6 +816,9 @@ void do_cmd_play_instrument(object_type* default_o_ptr, int default_item)
         msg_print("You can only sound a horn.");
         return;
     }
+
+    if (!player_pack_item_action_allowed(o_ptr))
+        return;
 
     if (reject_broken_item_use(o_ptr))
         return;
@@ -944,6 +953,9 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
         msg_print("You can only activate a staff.");
         return;
     }
+
+    if (!player_pack_item_action_allowed(o_ptr))
+        return;
 
     if (reject_broken_item_use(o_ptr))
         return;
@@ -1140,6 +1152,9 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
+    if (!player_pack_item_action_allowed(o_ptr))
+        return;
+
     if (reject_broken_item_use(o_ptr))
         return;
 
@@ -1280,6 +1295,9 @@ void do_cmd_activate(void)
     {
         o_ptr = &o_list[0 - item];
     }
+
+    if (!player_pack_item_action_allowed(o_ptr))
+        return;
 
     if (reject_broken_item_use(o_ptr))
         return;

@@ -206,63 +206,7 @@ void do_cmd_exchange(void)
 
 void do_cmd_swap_quivers(void)
 {
-    object_type* q1_ptr = &inventory[INVEN_QUIVER1];
-    object_type* q2_ptr = &inventory[INVEN_QUIVER2];
-    object_type tmp;
-    int i;
-
-    if (!q1_ptr->k_idx && !q2_ptr->k_idx)
-    {
-        msg_print("Both quivers are empty.");
-        return;
-    }
-
-    if ((q1_ptr->k_idx && cursed_p(q1_ptr))
-        || (q2_ptr->k_idx && cursed_p(q2_ptr)))
-    {
-        msg_print("You cannot bear to rearrange your quiver.");
-        return;
-    }
-
-    p_ptr->energy_use = 100;
-    p_ptr->previous_action[0] = ACTION_MISC;
-
-    object_copy(&tmp, q1_ptr);
-    object_copy(q1_ptr, q2_ptr);
-    object_copy(q2_ptr, &tmp);
-
-    if (!q1_ptr->k_idx)
-        object_wipe(q1_ptr);
-    if (!q2_ptr->k_idx)
-        object_wipe(q2_ptr);
-
-    if (q2_ptr->k_idx)
-    {
-        if (player_can_treat_as_throwing(q2_ptr))
-        {
-            ident_on_wield(q2_ptr);
-
-            for (i = 0; i < q2_ptr->abilities; i++)
-            {
-                int skill = q2_ptr->skilltype[i];
-                int ability = q2_ptr->abilitynum[i];
-
-                if (!p_ptr->have_ability[skill][ability])
-                {
-                    p_ptr->have_ability[skill][ability] = true;
-                    p_ptr->active_ability[skill][ability] = true;
-                }
-            }
-        }
-    }
-
-    msg_print("You swap your first and second quivers.");
-
-    p_ptr->update |= (PU_BONUS | PU_MANA);
-    p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST | PR_MAP | PR_QUIVER | PR_ARC);
-    p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
-
-    handle_stuff();
+    msg_print("Your quiver and belt serve different purposes and cannot be swapped.");
 }
 
 

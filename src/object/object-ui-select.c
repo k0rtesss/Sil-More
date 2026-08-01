@@ -169,6 +169,44 @@ static void object_choice_append_weight(char* text, size_t text_size,
     SDL_strlcat(text, suffix, text_size);
 }
 
+static void object_choice_append_volume(char* text, size_t text_size,
+    const object_type* o_ptr)
+{
+    enum inventory_limit_group group;
+    char suffix[24];
+    size_t text_len;
+    size_t suffix_len;
+    size_t keep_len;
+    int volume;
+
+    if (!text || text_size == 0 || !o_ptr || !o_ptr->k_idx)
+        return;
+
+    group = inventory_limit_group_for_object(o_ptr);
+    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
+        return;
+
+    volume = inventory_limit_space_for_object(o_ptr);
+    if (volume <= 0)
+        return;
+
+    strnfmt(suffix, sizeof(suffix), "  %d.%d V", volume / 10, volume % 10);
+    suffix_len = strlen(suffix);
+    if (suffix_len + 1 >= text_size)
+        return;
+
+    text_len = strlen(text);
+    if (text_len + suffix_len >= text_size)
+    {
+        keep_len = text_size - suffix_len - 1;
+        while (keep_len > 0 && isspace((unsigned char)text[keep_len - 1]))
+            keep_len--;
+        text[keep_len] = '\0';
+    }
+
+    SDL_strlcat(text, suffix, text_size);
+}
+
 static void object_choice_copy_title(char* out, size_t out_size, cptr title)
 {
     size_t len;
@@ -251,6 +289,7 @@ void object_choice_entry_make(object_choice_entry* entry, int item,
     if (o_ptr && o_ptr->k_idx)
         weight = o_ptr->weight * MAX(o_ptr->number, 1);
     object_choice_append_weight(text, sizeof(text), weight);
+    object_choice_append_volume(text, sizeof(text), o_ptr);
     SDL_strlcpy(entry->text, text, sizeof(entry->text));
 }
 

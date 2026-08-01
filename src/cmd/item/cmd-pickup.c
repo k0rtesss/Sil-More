@@ -59,7 +59,7 @@ void give_player_item(object_type * o_ptr)
     msg_format("You have %s (%c).", o_name, index_to_label(slot));
 
     /* Update quiver display if this was a throwing weapon or arrow */
-    if ((slot == INVEN_QUIVER1 || slot == INVEN_QUIVER2) ||
+    if ((slot == INVEN_QUIVER1 || slot == INVEN_BELT) ||
         (copy.tval == TV_ARROW))
     {
         p_ptr->redraw |= (PR_QUIVER);
@@ -78,8 +78,17 @@ static bool item_tester_limit_group(const object_type* o_ptr);
 static bool pack_item_matches_replacement_type(const object_type* incoming,
                                                const object_type* candidate)
 {
+    enum inventory_limit_group incoming_group;
+
     if (!incoming || !candidate || !candidate->k_idx)
         return false;
+
+    incoming_group = inventory_limit_group_for_object(incoming);
+    if (incoming_group == INV_LIMIT_PACK
+        || incoming_group == INV_LIMIT_HARNESS)
+    {
+        return inventory_limit_group_for_object(candidate) == incoming_group;
+    }
 
     if (player_oil_container_object(incoming)
         && player_oil_container_object(candidate))
@@ -570,6 +579,9 @@ static bool queue_deferred_pickup_pack_drop(int item, int amount,
     if (!drop_ptr->k_idx)
         return false;
 
+    if (!player_pack_item_action_allowed(drop_ptr))
+        return false;
+
     if (amount > drop_ptr->number)
         amount = drop_ptr->number;
 
@@ -611,6 +623,36 @@ static bool queue_deferred_pickup_pack_drop(int item, int amount,
     return true;
 }
 
+static bool queue_deferred_pickup_equipment_drop(int item, int amount)
+{
+    object_type* drop_ptr;
+
+    if (item < INVEN_WIELD || item >= INVEN_TOTAL || amount <= 0)
+        return false;
+
+    drop_ptr = &inventory[item];
+    if (!drop_ptr->k_idx || cursed_p(drop_ptr))
+        return false;
+
+    if (!player_pack_item_action_allowed(drop_ptr))
+        return false;
+    if (amount > drop_ptr->number)
+        amount = drop_ptr->number;
+
+    if (!queue_deferred_pickup_drop(drop_ptr, amount, 0, false))
+        return false;
+
+    inven_item_increase(item, -amount);
+    inven_item_describe(item);
+    inven_item_optimize(item);
+    p_ptr->update |= (PU_BONUS | PU_MANA);
+    p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST | PR_MAP | PR_QUIVER
+        | PR_MEL | PR_ARC);
+    p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
+    handle_stuff();
+    return true;
+}
+
 static bool confirm_oil_pickup_overflow_with_bonus(const object_type* o_ptr,
     int oil_amount, int lantern_bonus)
 {
@@ -633,25 +675,6 @@ static bool confirm_oil_pickup_overflow(const object_type* o_ptr, int oil_amount
     return confirm_oil_pickup_overflow_with_bonus(o_ptr, oil_amount, 0);
 }
 
-static bool pack_has_two_slot_throwable(void)
-{
-    for (int item = 0; item <= INVEN_PACK; item++)
-    {
-        const object_type* o_ptr = &inventory[item];
-
-        if (!o_ptr->k_idx)
-            continue;
-
-        if (inventory_limit_group_for_object(o_ptr) == INV_LIMIT_THROWABLE
-            && inventory_limit_space_for_object(o_ptr) == 2)
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 static void format_inventory_limit_reason(char* buf, size_t max,
     const object_type* incoming, cptr label, int limit)
 {
@@ -660,25 +683,22 @@ static void format_inventory_limit_reason(char* buf, size_t max,
     if (!buf || max == 0)
         return;
 
-    if (group == INV_LIMIT_THROWABLE)
+    if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
     {
         int used = inventory_limit_usage_for_group(group);
-        int needed = inventory_limit_space_for_object(incoming);
+        int needed = inventory_limit_additional_space_for_object(incoming);
+        int left = MAX(limit - used, 0);
+        int shortage;
 
-        if (pack_has_two_slot_throwable())
-        {
-            strnfmt(buf, max,
-                "No room: %d/%d throwable slots used. Your spear stack uses "
-                "2 slots; this item needs %d slot%s.",
-                used, limit, needed, (needed == 1) ? "" : "s");
-        }
-        else
-        {
-            strnfmt(buf, max,
-                "No room: %d/%d throwable slots used; this item needs %d "
-                "slot%s.",
-                used, limit, needed, (needed == 1) ? "" : "s");
-        }
+        if (needed <= 0)
+            needed = inventory_limit_space_for_object(incoming);
+        shortage = MAX(used + needed - limit, 0);
+        strnfmt(buf, max,
+            "No room in %s: %d.%d/%d.%d V used (%d.%d V left). "
+            "Incoming needs %d.%d V; short by %d.%d V.",
+            inventory_limit_group_name(group), used / 10, used % 10,
+            limit / 10, limit % 10, left / 10, left % 10,
+            needed / 10, needed % 10, shortage / 10, shortage % 10);
     }
     else if (label)
     {
@@ -724,7 +744,7 @@ static pickup_failure_result prompt_replace_light_limit_item(
         if (menu_group != INVENTORY_MENU_GROUP_ALL)
         {
             bool chose_replacement;
-            char reason[160];
+            char reason[240];
 
             format_inventory_limit_reason(reason, sizeof(reason), incoming,
                 label, limit);
@@ -880,7 +900,11 @@ static pickup_failure_result prompt_replace_light_limit_item(
             }
 
             if (item >= INVEN_WIELD)
+            {
+                if (!player_pack_item_action_allowed(drop_ptr))
+                    continue;
                 inven_drop(item, remove_amt);
+            }
         }
 
         p_ptr->notice |= (PN_COMBINE | PN_REORDER);
@@ -1485,20 +1509,18 @@ static void report_pack_limit_failure(const char* o_name, bool still)
         cptr label = inven_carry_limit_label();
         int limit = inven_carry_limit_value();
 
-        if (inven_carry_limit_group() == INV_LIMIT_THROWABLE)
+        if (inven_carry_limit_group() == INV_LIMIT_PACK
+            || inven_carry_limit_group() == INV_LIMIT_HARNESS)
         {
-            int used = inventory_limit_usage_for_group(INV_LIMIT_THROWABLE);
+            enum inventory_limit_group group = inven_carry_limit_group();
+            int used = inventory_limit_usage_for_group(group);
+            int left = MAX(limit - used, 0);
 
-            if (pack_has_two_slot_throwable())
-            {
-                msg_format("Your pack's throwable slots are full (%d/%d); "
-                           "your spear stack uses 2 slots.", used, limit);
-            }
-            else
-            {
-                msg_format("Your pack's throwable slots are full (%d/%d).",
-                           used, limit);
-            }
+            msg_format("Your %s %s full: %d.%d/%d.%d V used "
+                       "(%d.%d V left).",
+                inventory_limit_group_name(group), still ? "is still" : "is",
+                used / 10, used % 10, limit / 10, limit % 10,
+                left / 10, left % 10);
             return;
         }
 
@@ -1596,13 +1618,29 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
     if (sdl_is_story_font_enabled())
         sdl_story_font_disable();
 
-    if (inven_carry_limit_group() == INV_LIMIT_THROWABLE)
+    if (inven_carry_limit_group() == INV_LIMIT_PACK
+        || inven_carry_limit_group() == INV_LIMIT_HARNESS)
     {
-        char reason[160];
+        char reason[200];
+        int incoming_space = inventory_limit_space_for_object(incoming);
 
         format_inventory_limit_reason(reason, sizeof(reason), incoming, label,
             limit);
         msg_print(reason);
+
+        if (incoming_space > limit)
+        {
+            msg_format("It needs %d.%d V, more than the %d.%d V maximum; "
+                       "it cannot fit even when this pool is empty.",
+                incoming_space / 10, incoming_space % 10,
+                limit / 10, limit % 10);
+            inventory_menu_set_expand_supplies(old_expand_supplies);
+            replacement_filter_incoming = old_filter;
+            item_tester_hook = old_item_tester_hook;
+            item_tester_tval = old_item_tester_tval;
+            item_tester_full = old_item_tester_full;
+            return false;
+        }
     }
     else if (label)
         msg_format("You already carry %s (limit %d).", label, limit);
@@ -1617,14 +1655,16 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
         if (menu_group != INVENTORY_MENU_GROUP_ALL)
         {
             bool chose_replacement;
-            char reason[160];
+            char reason[240];
 
             format_inventory_limit_reason(reason, sizeof(reason), incoming,
                 label, limit);
 
             msg_print("What to replace?");
             chose_replacement = open_inventory_replacement_menu(menu_group,
-                incoming, false, false, reason, &menu_item);
+                incoming,
+                inven_carry_limit_group() == INV_LIMIT_HARNESS,
+                false, reason, &menu_item);
 
             if (!chose_replacement)
             {
@@ -1678,7 +1718,8 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
                 continue;
             }
         }
-        else if ((item < 0) || (item >= INVEN_PACK))
+        else if ((item < 0) || (item >= INVEN_TOTAL)
+            || (item >= INVEN_PACK && item < INVEN_WIELD))
         {
             bell("Illegal object choice!");
             continue;
@@ -1723,14 +1764,40 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
         }
         else
         {
+            enum inventory_limit_group group = inven_carry_limit_group();
+
             if (item >= SUPPLIES_INDEX)
             {
                 msg_print("That will not make enough room.");
                 continue;
             }
 
-            if (!queue_deferred_pickup_pack_drop(item, drop_ptr->number, false))
+            remove_amt = drop_ptr->number;
+            if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
+            {
+                for (int amount = 1; amount <= drop_ptr->number; amount++)
+                {
+                    int projected = inventory_limit_usage_after_replacing(
+                        incoming, drop_ptr, amount);
+
+                    if (projected >= 0 && projected <= limit)
+                    {
+                        remove_amt = amount;
+                        break;
+                    }
+                }
+            }
+
+            if (item >= INVEN_WIELD)
+            {
+                if (!queue_deferred_pickup_equipment_drop(item, remove_amt))
+                    continue;
+            }
+            else if (!queue_deferred_pickup_pack_drop(item, remove_amt,
+                         false))
+            {
                 continue;
+            }
         }
 
         p_ptr->notice |= (PN_COMBINE | PN_REORDER);

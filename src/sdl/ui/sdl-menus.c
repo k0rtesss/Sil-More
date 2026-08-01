@@ -3603,7 +3603,7 @@ void sdl_touch_pane_default_label_for_panel_slot(int panel, int index, char* buf
             break;
         case 8:
             if (binding == 'F') {
-                SDL_strlcpy(buf, "Shoot 2", buflen);
+                SDL_strlcpy(buf, "Ranged", buflen);
                 return;
             }
             break;

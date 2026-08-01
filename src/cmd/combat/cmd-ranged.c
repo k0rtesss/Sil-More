@@ -436,61 +436,27 @@ void do_cmd_fire(int quiver)
     bool warding_girdle_active = false;
     bool clear_location_target = false;
 
-    // Determine the projectile in the requested quiver
-    if (quiver == 1)
+    /* Both f and F attack with the active Quiver weapon.  The Belt is only a
+     * Quick Throw or Power Throw source. */
+    if (quiver != 1
+        || player_active_weapon_mode() != PLAYER_ACTIVE_WEAPON_RANGED_1)
     {
-        o_ptr = &inventory[INVEN_QUIVER1];
-        item = INVEN_QUIVER1;
-
-        if (!o_ptr->k_idx)
-        {
-            msg_print("You have nothing in your 1st quiver.");
-            return;
-        }
+        msg_print("You must ready a Quiver weapon before making a ranged attack.");
+        return;
     }
-    else
-    {
-        o_ptr = &inventory[INVEN_QUIVER2];
-        item = INVEN_QUIVER2;
 
-        if (!o_ptr->k_idx)
-        {
-            msg_print("You have nothing in your 2nd quiver.");
-            return;
-        }
+    o_ptr = &inventory[INVEN_QUIVER1];
+    item = INVEN_QUIVER1;
+    if (!o_ptr->k_idx)
+    {
+        msg_print("You have nothing in your quiver.");
+        return;
     }
 
     returning_arrow = false;
 
     /* Determine whether the item should be thrown directly */
     object_flags4(o_ptr, &ammo_f1, &ammo_f2, &ammo_f3, &ammo_f4);
-
-    if (player_can_power_throw_from_quiver(item))
-    {
-        do_cmd_throw_from_slot(item);
-        return;
-    }
-
-    {
-        int requested_mode = player_active_weapon_mode_for_quiver(quiver);
-        bool quick_throw = player_can_quick_throw_from_quiver(item)
-            && player_can_treat_as_throwing_flags(o_ptr, ammo_f3);
-
-        if (player_active_weapon_mode() != requested_mode)
-        {
-            if (player_active_weapon_is_melee() && quick_throw)
-            {
-                do_cmd_throw_from_slot(item);
-                return;
-            }
-
-            if (!player_set_active_weapon_mode(requested_mode, true, true))
-                return;
-
-            if (p_ptr->energy_use > 0)
-                return;
-        }
-    }
 
     if (player_can_treat_as_throwing_flags(o_ptr, ammo_f3))
     {
@@ -1544,7 +1510,7 @@ static bool quiver_slot_can_be_thrown(int slot)
     object_type* o_ptr;
     u32b f1 = 0, f2 = 0, f3 = 0, f4 = 0;
 
-    if (slot != INVEN_QUIVER1 && slot != INVEN_QUIVER2)
+    if (slot != INVEN_QUIVER1 && slot != INVEN_BELT)
         return false;
 
     o_ptr = &inventory[slot];
@@ -1564,13 +1530,14 @@ static object_type* throw_item_object(int item)
     return NULL;
 }
 
-/* Whether a resolved slot is a legal source for the Quick Throw command. */
-static bool quick_throw_slot_is_valid(int item)
+/* Whether a resolved slot is a legal source for t's throw command. */
+static bool throw_command_slot_is_valid(int item)
 {
     object_type* o_ptr;
 
-    if (item == INVEN_QUIVER1 || item == INVEN_QUIVER2)
-        return player_can_quick_throw_from_quiver(item);
+    if (item == INVEN_QUIVER1 || item == INVEN_BELT)
+        return player_can_quick_throw_from_quiver(item)
+            || player_can_power_throw_from_quiver(item);
 
     o_ptr = throw_item_object(item);
     if (!o_ptr || !o_ptr->k_idx)
@@ -1583,9 +1550,9 @@ static bool quick_throw_slot_is_valid(int item)
 }
 
 /*
- * Build the list of inventory slots the player may quick-throw: eligible
- * quivered daggers, plus carried potions with real thrown effects when Alchemy
- * is known.  General throwing weapons remain on f/F.
+ * Build the list of inventory slots available to t: Quick Throw daggers,
+ * currently eligible Power Throw weapons, and carried potions with real thrown
+ * effects when Alchemy is known.  General Quiver attacks remain on f/F.
  * Returns the number of candidates written to "slots".
  */
 static int collect_throw_candidates(int* slots, int max)
@@ -1596,10 +1563,12 @@ static int collect_throw_candidates(int* slots, int max)
     if (!slots || max <= 0)
         return 0;
 
-    if ((n < max) && player_can_quick_throw_from_quiver(INVEN_QUIVER1))
+    if ((n < max) && (player_can_quick_throw_from_quiver(INVEN_BELT)
+            || player_can_power_throw_from_quiver(INVEN_BELT)))
+        slots[n++] = INVEN_BELT;
+    if ((n < max) && (player_can_quick_throw_from_quiver(INVEN_QUIVER1)
+            || player_can_power_throw_from_quiver(INVEN_QUIVER1)))
         slots[n++] = INVEN_QUIVER1;
-    if ((n < max) && player_can_quick_throw_from_quiver(INVEN_QUIVER2))
-        slots[n++] = INVEN_QUIVER2;
 
     if (player_can_throw_potions())
     {
@@ -1625,8 +1594,8 @@ static int collect_throw_candidates(int* slots, int max)
 }
 
 /*
- * Item-tester hook used by the throw chooser overlay: accept only quick-throw
- * candidates (eligible daggers and, with Alchemy, effective thrown potions).
+ * Choose a Quick Throw or Power Throw source.  When both Belt and Quiver are
+ * eligible, neither is automatic: the player chooses the physical source.
  */
 static bool select_throw_slot(int* item)
 {
@@ -1650,7 +1619,7 @@ static bool select_throw_slot(int* item)
     }
 
     /*
-     * More than one possibility (daggers in both quivers and/or potions):
+     * More than one possibility (belt/quiver daggers and/or potions):
      * choose from a small overlay anchored at the player, like the trap and
      * door interaction popups.  This never draws on the message row.
      */
@@ -1669,9 +1638,9 @@ static bool select_throw_slot(int* item)
                 return false;
             object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
             if (slots[i] == INVEN_QUIVER1)
-                strnfmt(labels[i], sizeof(labels[i]), "%s (1st quiver)", o_name);
-            else if (slots[i] == INVEN_QUIVER2)
-                strnfmt(labels[i], sizeof(labels[i]), "%s (2nd quiver)", o_name);
+                strnfmt(labels[i], sizeof(labels[i]), "%s (quiver)", o_name);
+            else if (slots[i] == INVEN_BELT)
+                strnfmt(labels[i], sizeof(labels[i]), "%s (belt)", o_name);
             else
                 strnfmt(labels[i], sizeof(labels[i]), "%s", o_name);
 
@@ -1681,7 +1650,7 @@ static bool select_throw_slot(int* item)
             options[i].disabled = false;
         }
 
-        choice = ui_question_ask("Quick throw", "Choose what to hurl.", options,
+        choice = ui_question_ask("Throw", "Choose what to hurl.", options,
             count, p_ptr->py, p_ptr->px, 0);
 
         if (choice < 0 || choice >= count)
@@ -1766,10 +1735,10 @@ void do_cmd_throw(bool automatic)
     {
         item = preset_item;
         automatic = false;
-        if (item != INVEN_QUIVER1 && item != INVEN_QUIVER2)
+        if (item != INVEN_QUIVER1 && item != INVEN_BELT)
         {
             throw_pending_slot = THROW_PENDING_NONE;
-            msg_print("You can only throw items from a quiver.");
+            msg_print("You can only throw items from your quiver or belt.");
             return;
         }
     }
@@ -1779,9 +1748,9 @@ void do_cmd_throw(bool automatic)
     if (!preset && !select_throw_slot(&item))
         return;
 
-    /* f/F may preset any throwing weapon; t only accepts Quick Throw items. */
+    /* Preset callers may use a normal Quiver throw; t is Quick/Power Throw. */
     if ((preset && !quiver_slot_can_be_thrown(item))
-        || (!preset && !quick_throw_slot_is_valid(item)))
+        || (!preset && !throw_command_slot_is_valid(item)))
     {
         msg_print("You cannot throw that.");
         return;
@@ -1873,9 +1842,10 @@ void do_cmd_throw(bool automatic)
 
     int original_slot = (!from_supplies && item >= INVEN_WIELD) ? item : -1;
 
-    /* If we're throwing from equipment (including quivers), set redraw flag */
+    /* If throwing from the quiver or belt, update their shared status row. */
     bool throwing_from_equipment = (original_slot >= INVEN_WIELD);
-    if (throwing_from_equipment && (original_slot == INVEN_QUIVER1 || original_slot == INVEN_QUIVER2))
+    if (throwing_from_equipment
+        && (original_slot == INVEN_QUIVER1 || original_slot == INVEN_BELT))
     {
         p_ptr->redraw |= (PR_QUIVER);
     }
@@ -2003,15 +1973,19 @@ void do_cmd_throw(bool automatic)
         }
     }
 
+    if (!preset && power_throw_candidate && !power_throw_attack)
+    {
+        msg_print("Power Throw requires an adjacent enemy.");
+        return;
+    }
+
     /*
-     * A Power Throw is made from melee stance.  Other quivered throws switch
+     * A Power Throw is made from melee stance.  Other readied throws switch
      * to their ranged mode unless they qualify for the dagger quick-throw.
      */
-    if (item == INVEN_QUIVER1 || item == INVEN_QUIVER2)
+    if (item == INVEN_QUIVER1)
     {
-        int requested_mode = (item == INVEN_QUIVER2)
-            ? PLAYER_ACTIVE_WEAPON_RANGED_2
-            : PLAYER_ACTIVE_WEAPON_RANGED_1;
+        int requested_mode = PLAYER_ACTIVE_WEAPON_RANGED_1;
 
         if (player_active_weapon_mode() != requested_mode
             && !power_throw_attack
@@ -2067,9 +2041,9 @@ void do_cmd_throw(bool automatic)
     /* Single object */
     i_ptr->number = 1;
 
-    /* Set pickup on thrown quiver weapons so they can return to the quiver. */
+    /* Remember the quiver or belt so a surviving weapon can return there. */
     i_ptr->pickup = true;
-    if ((original_slot == INVEN_QUIVER1) || (original_slot == INVEN_QUIVER2))
+    if ((original_slot == INVEN_QUIVER1) || (original_slot == INVEN_BELT))
         i_ptr->pickup_slot = original_slot;
     else
         i_ptr->pickup_slot = -1;
@@ -2084,7 +2058,7 @@ void do_cmd_throw(bool automatic)
         inven_item_increase(item, -1);
         inven_item_describe(item);
         inven_item_optimize(item);
-        if ((item == INVEN_QUIVER1 || item == INVEN_QUIVER2)
+        if ((item == INVEN_QUIVER1 || item == INVEN_BELT)
             && inventory[item].k_idx && inventory[item].number <= 0)
         {
             if (p_ptr->equip_cnt > 0)

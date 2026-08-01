@@ -450,6 +450,13 @@ PlayResult play_game(void)
         break;
     }
 
+    /*
+     * Preserve loaded Pack/Harness overage without granting room for more.
+     * Fresh characters simply establish a zero allowance.
+     */
+    player_active_weapon_sync_loaded_state();
+    inventory_limit_grandfather_current_overflow();
+
     /* Normal machine (process player name) */
     if (savefile[0])
     {

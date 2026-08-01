@@ -73,6 +73,14 @@ typedef struct monster_race monster_race;
 typedef struct monster_lore monster_lore;
 typedef struct vault_type vault_type;
 typedef struct object_type object_type;
+
+/* Data-driven stowage pools used by the carried-volume system. */
+typedef enum object_storage_type
+{
+    OBJECT_STORAGE_NONE = 0,
+    OBJECT_STORAGE_PACK,
+    OBJECT_STORAGE_HARNESS
+} object_storage_type;
 typedef struct monster_type monster_type;
 typedef struct alloc_entry alloc_entry;
 typedef struct owner_type owner_type;
@@ -232,6 +240,9 @@ struct object_kind
 
     s16b weight; /* Weight */
 
+    byte storage; /* OBJECT_STORAGE_* pool (NONE for Supply) */
+    s16b volume; /* Stowed volume per item, in tenths */
+
     s32b cost; /* Object "base cost" */
 
     u32b flags1; /* Flags, set 1 */
@@ -325,6 +336,9 @@ struct artefact_type
 
     s16b weight; /* Weight */
 
+    byte storage; /* OBJECT_STORAGE_* pool (NONE for Supply) */
+    s16b volume; /* Stowed volume per item, in tenths */
+
     s32b cost; /* Artefact "cost" */
 
     u32b flags1; /* Artefact Flags, set 1 */
@@ -363,6 +377,8 @@ struct ego_item_type
     u32b text; /* Description (offset) */
 
     s32b cost; /* Ego-item "cost" */
+
+    s16b volume_adjustment; /* Signed per-item volume change, in tenths */
 
     u32b flags1; /* Ego-Item Flags, set 1 */
     u32b flags2; /* Ego-Item Flags, set 2 */
@@ -610,6 +626,9 @@ struct object_type
     byte number; /* Number of items */
 
     s16b weight; /* Item weight */
+
+    byte storage; /* Runtime OBJECT_STORAGE_* pool */
+    s16b volume; /* Base per-item stowed volume, in tenths */
 
     byte name1; /* Artefact type, if any */
     byte name2; /* Ego suffix index, if any (see object_ego_suffix()) */

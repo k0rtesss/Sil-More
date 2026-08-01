@@ -430,7 +430,7 @@ cptr option_desc[OPT_MAX] = {
     "Show an overlay icon on sleeping monsters", /* OPT_sleep_icon */
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */
     "Warn before making direct attacks (useful for pacifist runs)", /* OPT_pacifist_attack_warning */
-    "Confirm before switching between melee and ranged weapons", /* OPT_active_weapon_switch_confirm */
+    "Confirm before paid melee/ranged active switches", /* OPT_active_weapon_switch_confirm */
     NULL, /* reserved legacy slot: view_torch_grids */
     NULL, /* reserved legacy slot: dungeon_align */
     NULL, /* reserved legacy slot: dungeon_stair */

@@ -515,8 +515,8 @@ static void elemental_debug_slot_desc(
     case INVEN_QUIVER1:
         strnfmt(buf, buf_size, "quiver1");
         return;
-    case INVEN_QUIVER2:
-        strnfmt(buf, buf_size, "quiver2");
+    case INVEN_BELT:
+        strnfmt(buf, buf_size, "belt");
         return;
     case INVEN_HORN:
         strnfmt(buf, buf_size, "horn");
@@ -1082,7 +1082,7 @@ static int elemental_item_unit_size(const object_type* o_ptr,
     if ((location == ELEMENTAL_CANDIDATE_INVENTORY)
         && (index >= INVEN_WIELD) && (index < INVEN_TOTAL)
         && ((f3 & TR3_THROWING) || (index == INVEN_QUIVER1)
-            || (index == INVEN_QUIVER2)))
+            || (index == INVEN_BELT)))
     {
         return 1;
     }
@@ -1599,7 +1599,7 @@ static bool elemental_slot_uses_pack_like_factor(int slot,
         return true;
 
     return (slot < INVEN_PACK) || (slot == INVEN_LITE)
-        || (slot == INVEN_QUIVER1) || (slot == INVEN_QUIVER2);
+        || (slot == INVEN_QUIVER1) || (slot == INVEN_BELT);
 }
 
 static double elemental_item_slot_factor(int slot,
@@ -1631,7 +1631,7 @@ static double elemental_item_slot_factor(int slot,
         return 0.85;
     case INVEN_LITE:
     case INVEN_QUIVER1:
-    case INVEN_QUIVER2:
+    case INVEN_BELT:
         return 0.70;
     default:
         return 1.00;

@@ -294,12 +294,11 @@ void calc_torch(void)
         if (i == INVEN_QUIVER1)
             continue;
 
-        /* Skip quiver 2 unless item is an arrow or throwing item */
-        if (i == INVEN_QUIVER2)
+        /* A valid belt weapon retains its passive light. */
+        if (i == INVEN_BELT)
         {
             bool is_throwing = player_can_treat_as_throwing_flags(o_ptr, f3);
-            bool is_arrow = (o_ptr->tval == TV_ARROW);
-            if (!is_throwing && !is_arrow)
+            if (!is_throwing)
                 continue;
         }
 
@@ -370,8 +369,8 @@ void calc_torch(void)
         p_ptr->cur_light++;
     if (weapon_glows(&inventory[INVEN_ARM]))
         p_ptr->cur_light++;
-    /* Quiver 2 retains passive bonuses even when it is not the active quiver. */
-    if (weapon_glows(&inventory[INVEN_QUIVER2]))
+    /* The weapon at the belt retains passive bonuses while stowed. */
+    if (weapon_glows(&inventory[INVEN_BELT]))
         p_ptr->cur_light++;
 
     /* Player is darkened */

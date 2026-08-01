@@ -136,12 +136,11 @@ static int damage_sides_bonus_for_weapon_mode(int mode)
         object_flags(o_ptr, &f1, &f2, &f3);
         is_throwing_item = player_can_treat_as_throwing_flags(o_ptr, f3);
 
-        /* Match calc_bonuses(): the first quiver contributes no equipment
-         * flags, and the second only does so for arrows or throwing items. */
+        /* Match calc_bonuses(): the quiver contributes no equipment flags;
+         * a valid throwing weapon at the belt does. */
         if (i == INVEN_QUIVER1)
             continue;
-        if (i == INVEN_QUIVER2 && !is_throwing_item
-            && o_ptr->tval != TV_ARROW)
+        if (i == INVEN_BELT && !is_throwing_item)
         {
             continue;
         }

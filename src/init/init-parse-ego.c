@@ -119,6 +119,22 @@ errr parse_e_info(char* buf, header* head)
         e_ptr->cost = cost;
     }
 
+    /* Process 'Y' for a signed per-item volume adjustment in tenths. */
+    else if (buf[0] == 'Y')
+    {
+        int adjustment;
+        char trailing;
+
+        if (!e_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+        if (1 != sscanf(buf + 2, "%d%c", &adjustment, &trailing))
+            return (PARSE_ERROR_GENERIC);
+        if (adjustment < -32768 || adjustment > 32767)
+            return (PARSE_ERROR_GENERIC);
+
+        e_ptr->volume_adjustment = (s16b)adjustment;
+    }
+
     /* Process 'A' for "Allocation" (one line only) */
     else if (buf[0] == 'A')
     {

@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 7
-#define VERSION_EXTRA 7   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 8   /* Belt migration; slot 38 remains save-compatible. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
@@ -485,7 +485,15 @@
 #define PLAYER_ACTIVE_WEAPON_NONE 0
 #define PLAYER_ACTIVE_WEAPON_MELEE 1
 #define PLAYER_ACTIVE_WEAPON_RANGED_1 2
-#define PLAYER_ACTIVE_WEAPON_RANGED_2 3
+#define PLAYER_ACTIVE_WEAPON_BELT 3
+/* Serialized compatibility name for saves written with two quivers. */
+#define PLAYER_ACTIVE_WEAPON_RANGED_2 PLAYER_ACTIVE_WEAPON_BELT
+
+/* Physical active-weapon kinds used by readiness ability rules. */
+#define PLAYER_ACTIVE_WEAPON_KIND_NONE 0
+#define PLAYER_ACTIVE_WEAPON_KIND_MELEE 1
+#define PLAYER_ACTIVE_WEAPON_KIND_BOW 2
+#define PLAYER_ACTIVE_WEAPON_KIND_THROWING 3
 
 /*
  * Internal command queued by pointer/touch UI for exact active-mode changes.
@@ -847,7 +855,9 @@
 #define INVEN_HANDS 35
 #define INVEN_FEET 36
 #define INVEN_QUIVER1 37
-#define INVEN_QUIVER2 38
+#define INVEN_BELT 38
+/* Slot 38 was the second quiver and must never be renumbered in savefiles. */
+#define INVEN_QUIVER2 INVEN_BELT
 #define INVEN_HORN 39
 
 /*
@@ -2843,7 +2853,7 @@
 #define OPT_assassination_over_charge (OPT_GAME_PLAY + 4)
 /* Confirm before making direct attacks; useful for pacifist runs */
 #define OPT_pacifist_attack_warning (OPT_GAME_PLAY + 5)
-/* Confirm before spending a turn to switch between melee and ranged weapons */
+/* Confirm before paid melee/ranged active switches */
 #define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
 // reserved legacy slot: auto_haggle
 // reserved legacy slot: auto_scum

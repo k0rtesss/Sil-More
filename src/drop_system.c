@@ -1195,7 +1195,7 @@ static int smithing_difficulty_baseline(const object_type* o_ptr)
     case INVEN_HANDS:
     case INVEN_FEET:
     case INVEN_QUIVER1:
-    case INVEN_QUIVER2:
+    case INVEN_BELT:
     case INVEN_HORN:
         dif_mult += 20;
         break;

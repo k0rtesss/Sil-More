@@ -110,14 +110,15 @@ static void story_prepare_equipment_desc(char* dest, size_t dest_size, cptr src,
 
     SDL_strlcpy(dest, src, dest_size);
 
-    if (slot == INVEN_QUIVER2 && !has_object)
+    if (slot == INVEN_BELT && !has_object)
     {
         char base[160];
         SDL_strlcpy(base, dest, sizeof(base));
         if (base[0])
-            strnfmt(dest, dest_size, "%s (keeps passive bonuses)", base);
+            strnfmt(dest, dest_size, "%s (belt items keep passive bonuses)",
+                base);
         else
-            SDL_strlcpy(dest, "(keeps passive bonuses)", dest_size);
+            SDL_strlcpy(dest, "(belt items keep passive bonuses)", dest_size);
     }
 
     if (max_cols > 0 && sdl_is_story_font_enabled())
@@ -875,17 +876,9 @@ s16b wield_slot(const object_type* o_ptr)
 
     case TV_ARROW:
     {
-        // Use the first similar quiver if there is one
+        /* There is one quiver; the belt never accepts arrows. */
         if (object_similar(&inventory[INVEN_QUIVER1], o_ptr))
             return (INVEN_QUIVER1);
-        if (object_similar(&inventory[INVEN_QUIVER2], o_ptr))
-            return (INVEN_QUIVER2);
-
-        // Use the 2nd quiver if it is the only empty one
-        if (!inventory[INVEN_QUIVER2].k_idx && inventory[INVEN_QUIVER1].k_idx)
-            return (INVEN_QUIVER2);
-
-        // Use the 1st quiver otherwise
         return (INVEN_QUIVER1);
     }
     }
@@ -944,10 +937,10 @@ cptr describe_empty_slot(int i)
         p = "(no boots)";
         break;
     case INVEN_QUIVER1:
-        p = "(empty 1st quiver)";
+        p = "(empty quiver)";
         break;
-    case INVEN_QUIVER2:
-        p = "(empty 2nd quiver)";
+    case INVEN_BELT:
+        p = "(empty belt)";
         break;
     case INVEN_HORN:
         p = "(no horn)";
@@ -1011,10 +1004,10 @@ cptr mention_use(int i)
         p = "On feet";
         break;
     case INVEN_QUIVER1:
-        p = "1st quiver";
+        p = "Quiver";
         break;
-    case INVEN_QUIVER2:
-        p = "2nd quiver";
+    case INVEN_BELT:
+        p = "Belt";
         break;
     case INVEN_HORN:
         p = "Horn";
@@ -1080,8 +1073,8 @@ cptr describe_use(int i)
     case INVEN_QUIVER1:
         p = "carrying in your quiver";
         break;
-    case INVEN_QUIVER2:
-        p = "carrying in your quiver";
+    case INVEN_BELT:
+        p = "carrying at your belt";
         break;
     case INVEN_HORN:
         p = "carrying at your side";
@@ -1404,6 +1397,14 @@ void display_equip(void)
     {
         /* Examine the item */
         o_ptr = &inventory[i];
+
+        /* The equipment subwindow presents the active combat set.  Inactive
+         * reserved weapon slots are shown on the Harness inventory page. */
+        if (!player_equipment_slot_is_active(i))
+        {
+            Term_erase(0, i - INVEN_WIELD, 255);
+            continue;
+        }
         
         /* Start with an empty "index" */
         tmp_val[0] = tmp_val[1] = tmp_val[2] = ' ';
@@ -2667,10 +2668,11 @@ void show_equip(void)
                 c_put_str(out_color[j], weight_buf, j + 1, weight_col);
         }
 
-        if (i == INVEN_QUIVER2)
+        if (i == INVEN_BELT)
         {
             int note_col = col + 12 + 2 + (int)strlen(out_desc[j]);
-            c_put_str(TERM_L_DARK, " (keeps passive bonuses)", j + 1, note_col);
+            c_put_str(TERM_L_DARK, " (belt; keeps passive bonuses)", j + 1,
+                note_col);
         }
 
         /* Print the item letter at the end */

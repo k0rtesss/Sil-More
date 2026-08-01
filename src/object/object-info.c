@@ -917,7 +917,10 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     {
         good[gc++] = (format(
             "can be thrown effectively (%d squares)", throwing_range(o_ptr)));
-        good[gc++] = "can be placed in quiver (passive abilities remain active for 2nd quiver)";
+        if (object_is_belt_weapon(o_ptr))
+            good[gc++] = "can be placed in the quiver or belt (belt passive abilities remain active)";
+        else
+            good[gc++] = "can be placed in the quiver";
     }
 
     /* Collect stuff which can't be categorized */
@@ -1583,6 +1586,41 @@ static bool describe_potion_throw(const object_type* o_ptr)
     return true;
 }
 
+static bool describe_inventory_volume(const object_type* o_ptr)
+{
+    enum inventory_limit_group group;
+    cptr pool;
+    int volume;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    group = inventory_limit_group_for_object(o_ptr);
+    if (group == INV_LIMIT_PACK)
+        pool = "Pack";
+    else if (group == INV_LIMIT_HARNESS)
+        pool = "Harness";
+    else
+        return false;
+
+    volume = inventory_limit_space_for_object(o_ptr);
+    if (volume <= 0)
+        return false;
+
+    if (o_ptr->number > 1)
+    {
+        p_text_out(format("Together they occupy %d.%d V in your %s.",
+            volume / 10, volume % 10, pool));
+    }
+    else
+    {
+        p_text_out(format("It occupies %d.%d V in your %s.",
+            volume / 10, volume % 10, pool));
+    }
+
+    return true;
+}
+
 bool object_info_out(const object_type* o_ptr)
 {
     u32b f1, f2, f3, f4;
@@ -1605,6 +1643,8 @@ bool object_info_out(const object_type* o_ptr)
     if (describe_consumable_healing(o_ptr))
         something = true;
     if (describe_potion_throw(o_ptr))
+        something = true;
+    if (describe_inventory_volume(o_ptr))
         something = true;
     if (describe_stats(o_ptr, f1))
         something = true;

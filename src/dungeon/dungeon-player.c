@@ -220,6 +220,8 @@ void process_player(void)
     int regen_multiplier;
     int depth_counter_increment;
 
+    player_active_weapon_begin_player_turn();
+
     // reset the number of times you have riposted since last turn
     p_ptr->ripostes = 0;
 

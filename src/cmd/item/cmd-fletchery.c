@@ -421,11 +421,27 @@ static void distribute_fletchered_arrows(const object_type* arrows)
 
     log_fletchery_object_state("distribute_input", arrows, -1);
 
+    /* Crafted arrows add Harness volume just like found arrows.  Check before
+     * the direct stack-merging passes below, which intentionally do not call
+     * inven_carry() until after existing stacks have been topped up. */
+    if (!inven_carry_okay(arrows))
+    {
+        object_type dropped;
+
+        object_copy(&dropped, arrows);
+        if (drop_fletchered_arrows_near(&dropped))
+            msg_print("The crafted arrows do not fit your Harness and spill to the ground.");
+        else
+            msg_print("You lose track of the crafted arrows.");
+        return;
+    }
+
     object_type leftover = *arrows;
     bool combined_existing = false;
 
     /* Try to top up quiver slots first */
-    for (int slot = INVEN_QUIVER1; slot <= INVEN_QUIVER2 && leftover.number > 0; slot++)
+    for (int slot = INVEN_QUIVER1;
+         slot <= INVEN_QUIVER1 && leftover.number > 0; slot++)
     {
         object_type* slot_obj = &inventory[slot];
         if (!slot_obj->k_idx)
@@ -467,7 +483,7 @@ static void distribute_fletchered_arrows(const object_type* arrows)
     /* Finally, attempt to add to any other equipped stacks */
     for (int slot = INVEN_WIELD; slot < INVEN_TOTAL && leftover.number > 0; slot++)
     {
-        if (slot >= INVEN_QUIVER1 && slot <= INVEN_QUIVER2)
+        if (slot == INVEN_QUIVER1 || slot == INVEN_BELT)
             continue;
         object_type* slot_obj = &inventory[slot];
         if (!slot_obj->k_idx)

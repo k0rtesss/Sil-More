@@ -262,8 +262,8 @@ static void append_description_slot(int* slots, int* count, int capacity,
  * could occupy.  An item is comparable against another item only when their
  * groups overlap, so the description compares "things you could equip in its
  * place".  Most items belong to a single group, but a throwing weapon belongs
- * to both its melee group and the quiver/ammo group (it can be wielded or
- * thrown), which is why a dagger compares against both weapons and the quiver.
+ * to both its melee group and the quiver/ammo group.  Daggers and hand axes
+ * can additionally occupy the belt.
  */
 #define DESC_GRP_MELEE      0x00000001u
 #define DESC_GRP_BOW        0x00000002u
@@ -281,6 +281,7 @@ static void append_description_slot(int* slots, int* count, int capacity,
 #define DESC_GRP_HORN       0x00002000u
 #define DESC_GRP_CONSUMABLE 0x00004000u
 #define DESC_GRP_MATERIAL   0x00008000u
+#define DESC_GRP_BELT       0x00010000u
 
 static u32b description_groups_for_object(const object_type* o_ptr)
 {
@@ -292,6 +293,8 @@ static u32b description_groups_for_object(const object_type* o_ptr)
     /* Throwing-capable weapons can also be placed in the quiver. */
     if (player_can_treat_as_throwing(o_ptr))
         groups |= DESC_GRP_AMMO;
+    if (object_is_belt_weapon(o_ptr))
+        groups |= DESC_GRP_BELT;
 
     if (supplies_group_matches_object(SUPPLY_GROUP_LIGHTS, o_ptr))
         groups |= DESC_GRP_LIGHT;
@@ -496,8 +499,11 @@ static char describe_item_with_comparisons_aux(int item_index,
         {
             append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
                 INVEN_QUIVER1);
-            append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
-                INVEN_QUIVER2);
+            if (object_is_belt_weapon(base_obj))
+            {
+                append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
+                    INVEN_BELT);
+            }
         }
 
         for (int i = 0; i < slot_count; i++)
@@ -969,8 +975,9 @@ void show_inven_enhanced(void)
                 else if (highlighted_obj->tval == TV_ARROW)
                 {
                     append_compare_slot(slot_candidates, &slot_count, INVEN_QUIVER1);
-                    append_compare_slot(slot_candidates, &slot_count, INVEN_QUIVER2);
                 }
+                else if (object_is_belt_weapon(highlighted_obj))
+                    append_compare_slot(slot_candidates, &slot_count, INVEN_BELT);
 
                 for (int idx = 0; idx < slot_count; idx++)
                 {
@@ -2058,11 +2065,12 @@ void show_equip_enhanced(void)
                     c_put_str(line_attr, tmp_val, display_row, weight_col);
                 }
                 
-                if (highlighted_slot == INVEN_QUIVER2)
+                if (highlighted_slot == INVEN_BELT)
                 {
                     /* Account for potential tile offset when calculating note position */
                     int note_col = text_col + (int)strlen(out_desc[highlight_index]);
-                    c_put_str(TERM_L_DARK, " (keeps passive bonuses)", display_row, note_col);
+                    c_put_str(TERM_L_DARK, " (belt; keeps passive bonuses)",
+                        display_row, note_col);
                 }
 
                 /* Print the item letter at the end with highlight */

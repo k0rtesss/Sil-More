@@ -5,6 +5,7 @@
 
 void calc_hitpoints(void);
 void calc_bonuses(void);
+void calc_bonuses_for_preview(void);
 void calc_stats(void);
 void update_lore(u32b update_flags);
 int bow_bonus(const object_type* o_ptr);

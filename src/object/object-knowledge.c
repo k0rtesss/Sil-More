@@ -739,10 +739,10 @@ void object_absorb(object_type* o_ptr, object_type* j_ptr)
         bool pickup = o_pickup || j_pickup;
         bool o_slot_valid = o_pickup
             && ((o_ptr->pickup_slot == INVEN_QUIVER1)
-                || (o_ptr->pickup_slot == INVEN_QUIVER2));
+                || (o_ptr->pickup_slot == INVEN_BELT));
         bool j_slot_valid = j_pickup
             && ((j_ptr->pickup_slot == INVEN_QUIVER1)
-                || (j_ptr->pickup_slot == INVEN_QUIVER2));
+                || (j_ptr->pickup_slot == INVEN_BELT));
         s16b pickup_slot = -1;
 
         if (o_slot_valid && j_slot_valid)

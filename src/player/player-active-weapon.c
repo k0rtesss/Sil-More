@@ -1,16 +1,21 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "object/object-ui-select.h"
+#include "player/player-upkeep-internal.h"
 #include "ui/question.h"
 
 static byte last_ranged_weapon_mode = PLAYER_ACTIVE_WEAPON_RANGED_1;
 static byte pending_active_weapon_mode = PLAYER_ACTIVE_WEAPON_NONE;
 static bool pending_ranged_quiver_only = false;
+static bool free_active_weapon_change_used = false;
+
+static bool active_weapon_mode_preview_text(int mode, char* buf,
+    size_t buflen);
 
 bool player_active_weapon_mode_is_ranged(int mode)
 {
-    return mode == PLAYER_ACTIVE_WEAPON_RANGED_1
-        || mode == PLAYER_ACTIVE_WEAPON_RANGED_2;
+    return mode == PLAYER_ACTIVE_WEAPON_RANGED_1;
 }
 
 static int normalize_active_weapon_mode(int mode)
@@ -19,8 +24,10 @@ static int normalize_active_weapon_mode(int mode)
     {
     case PLAYER_ACTIVE_WEAPON_MELEE:
     case PLAYER_ACTIVE_WEAPON_RANGED_1:
-    case PLAYER_ACTIVE_WEAPON_RANGED_2:
         return mode;
+    case PLAYER_ACTIVE_WEAPON_RANGED_2:
+        /* Compatibility with saves/configuration written for two quivers. */
+        return PLAYER_ACTIVE_WEAPON_RANGED_1;
     default:
         return PLAYER_ACTIVE_WEAPON_MELEE;
     }
@@ -48,8 +55,8 @@ bool player_active_weapon_is_ranged(void)
 
 int player_active_weapon_mode_for_quiver(int quiver)
 {
-    return (quiver == 2) ? PLAYER_ACTIVE_WEAPON_RANGED_2
-                         : PLAYER_ACTIVE_WEAPON_RANGED_1;
+    (void)quiver;
+    return PLAYER_ACTIVE_WEAPON_RANGED_1;
 }
 
 int player_last_ranged_weapon_mode(void)
@@ -66,8 +73,7 @@ int player_last_ranged_weapon_mode(void)
 
 int player_selected_ranged_quiver_number(void)
 {
-    return (player_last_ranged_weapon_mode()
-        == PLAYER_ACTIVE_WEAPON_RANGED_2) ? 2 : 1;
+    return 1;
 }
 
 int player_opposite_active_weapon_mode(void)
@@ -78,47 +84,159 @@ int player_opposite_active_weapon_mode(void)
 
 int player_active_weapon_quiver_slot(void)
 {
-    switch (player_active_weapon_mode())
-    {
-    case PLAYER_ACTIVE_WEAPON_RANGED_1:
-        return INVEN_QUIVER1;
-    case PLAYER_ACTIVE_WEAPON_RANGED_2:
-        return INVEN_QUIVER2;
-    default:
-        return 0;
-    }
+    return player_active_weapon_mode() == PLAYER_ACTIVE_WEAPON_RANGED_1
+        ? INVEN_QUIVER1 : 0;
 }
 
 int player_active_weapon_quiver_number(void)
 {
-    return (player_active_weapon_mode() == PLAYER_ACTIVE_WEAPON_RANGED_2)
-        ? 2 : 1;
+    return 1;
+}
+
+static int active_weapon_kind_for_mode(int mode)
+{
+    const object_type* ammo;
+
+    mode = normalize_active_weapon_mode(mode);
+    if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
+        return PLAYER_ACTIVE_WEAPON_KIND_MELEE;
+
+    ammo = &inventory[INVEN_QUIVER1];
+    if (ammo->k_idx && player_can_treat_as_throwing(ammo))
+        return PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+
+    return PLAYER_ACTIVE_WEAPON_KIND_BOW;
+}
+
+int player_active_weapon_kind(void)
+{
+    return active_weapon_kind_for_mode(player_active_weapon_mode());
+}
+
+bool player_active_weapon_change_is_free(int old_kind, int new_kind)
+{
+    bool warden;
+    bool versatility;
+    bool throwing;
+    bool rapid_attack;
+    bool skirmishing;
+
+    if (free_active_weapon_change_used)
+        return false;
+
+    warden = p_ptr->active_ability[S_MEL][MEL_WARDEN] != 0;
+    versatility = p_ptr->active_ability[S_ARC][ARC_VERSATILITY] != 0;
+    throwing = p_ptr->active_ability[S_MEL][MEL_THROWING] != 0;
+    rapid_attack = p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK] != 0;
+    skirmishing = p_ptr->active_ability[S_ARC][ARC_SKIRMISHING] != 0;
+
+    /* Rows are current M/B/T; columns are destination M/B/T.
+     * M: Rapid | W(T|V), W, WT
+     * B: V, Skirmishing | V(T|W), VT
+     * T: WT, VT, Throwing */
+
+    switch (old_kind)
+    {
+    case PLAYER_ACTIVE_WEAPON_KIND_MELEE:
+        if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_MELEE)
+            return rapid_attack || (warden && (throwing || versatility));
+        if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_BOW)
+            return warden;
+        if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
+            return warden && throwing;
+        break;
+
+    case PLAYER_ACTIVE_WEAPON_KIND_BOW:
+        if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_MELEE)
+            return versatility;
+        if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_BOW)
+            return skirmishing || (versatility && (throwing || warden));
+        if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
+            return versatility && throwing;
+        break;
+
+    case PLAYER_ACTIVE_WEAPON_KIND_THROWING:
+        if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_MELEE)
+            return warden && throwing;
+        if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_BOW)
+            return versatility && throwing;
+        if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
+            return throwing;
+        break;
+    }
+
+    return false;
+}
+
+bool player_active_weapon_wield_change_is_free(int slot,
+    const object_type* incoming, bool combine)
+{
+    int old_kind = player_active_weapon_kind();
+    int new_kind = PLAYER_ACTIVE_WEAPON_KIND_NONE;
+
+    if (!incoming || !incoming->k_idx || combine)
+        return false;
+
+    if (player_active_weapon_is_melee())
+    {
+        if (slot != INVEN_WIELD)
+            return false;
+        if (incoming->tval != TV_SWORD && incoming->tval != TV_POLEARM
+            && incoming->tval != TV_HAFTED && incoming->tval != TV_DIGGING)
+        {
+            return false;
+        }
+        new_kind = PLAYER_ACTIVE_WEAPON_KIND_MELEE;
+    }
+    else if (slot == INVEN_BOW
+        && old_kind == PLAYER_ACTIVE_WEAPON_KIND_BOW
+        && incoming->tval == TV_BOW)
+    {
+        new_kind = PLAYER_ACTIVE_WEAPON_KIND_BOW;
+    }
+    else if (slot == INVEN_QUIVER1)
+    {
+        if (player_can_treat_as_throwing(incoming))
+            new_kind = PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+        else if (incoming->tval == TV_ARROW)
+            new_kind = PLAYER_ACTIVE_WEAPON_KIND_BOW;
+    }
+
+    return new_kind != PLAYER_ACTIVE_WEAPON_KIND_NONE
+        && player_active_weapon_change_is_free(old_kind, new_kind);
+}
+
+void player_active_weapon_free_change_commit(void)
+{
+    free_active_weapon_change_used = true;
+}
+
+void player_active_weapon_begin_player_turn(void)
+{
+    free_active_weapon_change_used = false;
+}
+
+void player_active_weapon_sync_loaded_state(void)
+{
+    int saved_mode = p_ptr->active_weapon_mode;
+    int mode = normalize_active_weapon_mode(saved_mode);
+
+    if (saved_mode == PLAYER_ACTIVE_WEAPON_BELT)
+        mode = (inventory[INVEN_QUIVER1].k_idx || inventory[INVEN_BOW].k_idx)
+            ? PLAYER_ACTIVE_WEAPON_RANGED_1 : PLAYER_ACTIVE_WEAPON_MELEE;
+
+    p_ptr->active_weapon_mode = (byte)mode;
+    last_ranged_weapon_mode = player_active_weapon_mode_is_ranged(mode)
+        ? (byte)mode : PLAYER_ACTIVE_WEAPON_RANGED_1;
+    pending_active_weapon_mode = PLAYER_ACTIVE_WEAPON_NONE;
+    pending_ranged_quiver_only = false;
+    free_active_weapon_change_used = false;
 }
 
 static bool player_switch_needs_turn(int old_mode, int new_mode)
 {
-    bool old_ranged = player_active_weapon_mode_is_ranged(old_mode);
-    bool new_ranged = player_active_weapon_mode_is_ranged(new_mode);
-
-    return old_ranged != new_ranged;
-}
-
-static bool player_switch_is_free(int old_mode, int new_mode)
-{
-    /* Versatility: readying the melee weapon after ranged is free. */
-    if (player_active_weapon_mode_is_ranged(old_mode)
-        && new_mode == PLAYER_ACTIVE_WEAPON_MELEE
-        && p_ptr->active_ability[S_ARC][ARC_VERSATILITY])
-        return true;
-
-    /* Warden: readying a ranged weapon after melee is free, whether
-     * loosing arrows or throwing.  The reverse still takes a turn. */
-    if (old_mode == PLAYER_ACTIVE_WEAPON_MELEE
-        && player_active_weapon_mode_is_ranged(new_mode)
-        && p_ptr->active_ability[S_MEL][MEL_WARDEN])
-        return true;
-
-    return false;
+    return normalize_active_weapon_mode(old_mode)
+        != normalize_active_weapon_mode(new_mode);
 }
 
 static const char* active_weapon_mode_log_name(int mode)
@@ -129,8 +247,6 @@ static const char* active_weapon_mode_log_name(int mode)
         return "melee";
     case PLAYER_ACTIVE_WEAPON_RANGED_1:
         return "ranged quiver 1";
-    case PLAYER_ACTIVE_WEAPON_RANGED_2:
-        return "ranged quiver 2";
     default:
         return "unknown";
     }
@@ -163,15 +279,10 @@ static void active_weapon_mode_prompt_name(char* buf, size_t buflen, int mode)
         }
         return;
 
-    case PLAYER_ACTIVE_WEAPON_RANGED_2:
-        quiver_ptr = &inventory[INVEN_QUIVER2];
-        quiver_label = "2nd quiver";
-        break;
-
     case PLAYER_ACTIVE_WEAPON_RANGED_1:
     default:
         quiver_ptr = &inventory[INVEN_QUIVER1];
-        quiver_label = "1st quiver";
+        quiver_label = "quiver";
         break;
     }
 
@@ -209,58 +320,590 @@ static void active_weapon_mode_prompt_name(char* buf, size_t buflen, int mode)
 static bool confirm_active_weapon_switch(int new_mode)
 {
     char target[160];
-    char prompt[200];
+    char preview[64];
+    char prompt[260];
 
-    msg_print("Switching between melee and ranged takes one turn; inactive weapon attack, damage, evasion, and armour bonuses do not apply.");
+    msg_print("Changing the active weapon takes one turn unless an ability makes it free; inactive weapon attack, damage, evasion, and armour bonuses do not apply.");
     msg_print("This confirmation can be removed in Gameplay Options.");
     active_weapon_mode_prompt_name(target, sizeof(target), new_mode);
-    strnfmt(prompt, sizeof(prompt), "Change active weapon to %s? ", target);
+    if (active_weapon_mode_preview_text(new_mode, preview, sizeof(preview)))
+    {
+        strnfmt(prompt, sizeof(prompt),
+            "Change active weapon to %s? Expected %s. ", target, preview);
+    }
+    else
+    {
+        strnfmt(prompt, sizeof(prompt), "Change active weapon to %s? ",
+            target);
+    }
     return get_check(prompt);
 }
 
-static void ranged_quiver_choice_name(char* buf, size_t buflen, int quiver)
+static void ranged_slot_choice_name(char* buf, size_t buflen, int slot)
 {
-    int slot = (quiver == 2) ? INVEN_QUIVER2 : INVEN_QUIVER1;
     object_type* o_ptr = &inventory[slot];
     char object_name[120];
+    cptr label = "Quiver";
 
     if (o_ptr->k_idx)
     {
         object_desc(object_name, sizeof(object_name), o_ptr, false, 4);
-        strnfmt(buf, buflen, "Quiver %d: %s", quiver, object_name);
+        strnfmt(buf, buflen, "%s: %s", label, object_name);
     }
     else
     {
-        strnfmt(buf, buflen, "Quiver %d: empty", quiver);
+        strnfmt(buf, buflen, "%s: empty", label);
     }
 }
 
-static int confirm_active_weapon_switch_to_ranged(int default_mode)
+typedef struct active_weapon_choice
 {
-    char quiver_1_name[160];
-    char quiver_2_name[160];
-    ui_question_option options[] = {
-        { '1', quiver_1_name, TERM_L_WHITE, false },
-        { '2', quiver_2_name, TERM_L_WHITE, false }
-    };
-    int default_index = (default_mode == PLAYER_ACTIVE_WEAPON_RANGED_2)
-        ? 1 : 0;
-    int choice;
+    int item;
+    object_type* o_ptr;
+    int mode;
+    int kind;
+    int target_slot;
+    char label[240];
+} active_weapon_choice;
 
-    ranged_quiver_choice_name(quiver_1_name, sizeof(quiver_1_name), 1);
-    ranged_quiver_choice_name(quiver_2_name, sizeof(quiver_2_name), 2);
+#define ACTIVE_WEAPON_MAX_CHOICES (2 * (INVEN_PACK + 3))
 
-    msg_print("Switching between melee and ranged takes one turn; inactive weapon attack, damage, evasion, and armour bonuses do not apply.");
-    msg_print("This confirmation can be removed in Gameplay Options.");
-    choice = ui_question_ask("Change active weapon to ranged?",
-        "Choose the quiver to ready.", options, N_ELEMENTS(options),
-        UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, default_index);
+typedef struct active_weapon_preview
+{
+    int attack;
+    int dd;
+    int ds;
+    bool throwing;
+    bool has_offhand;
+    int offhand_attack;
+    int offhand_dd;
+    int offhand_ds;
+} active_weapon_preview;
 
-    if (choice == 0)
-        return PLAYER_ACTIVE_WEAPON_RANGED_1;
-    if (choice == 1)
-        return PLAYER_ACTIVE_WEAPON_RANGED_2;
-    return PLAYER_ACTIVE_WEAPON_NONE;
+static int active_weapon_preview_curse_adjusted_ds(int ds)
+{
+    int shift = curse_flag_delta_cur(CUR_MDS_SHIFT);
+
+    if (ds > 0 && shift != 0)
+        ds = MAX(1, ds - shift);
+
+    return ds;
+}
+
+static void active_weapon_preview_stow(const object_type* o_ptr,
+    int preferred_slot)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return;
+
+    if (preferred_slot >= 0 && preferred_slot <= INVEN_PACK
+        && !inventory[preferred_slot].k_idx)
+    {
+        object_copy(&inventory[preferred_slot], o_ptr);
+        return;
+    }
+
+    for (int i = 0; i <= INVEN_PACK; i++)
+    {
+        if (!inventory[i].k_idx)
+        {
+            object_copy(&inventory[i], o_ptr);
+            return;
+        }
+    }
+}
+
+static void active_weapon_preview_move_to_slot(int item, int target_slot)
+{
+    object_type candidate;
+    object_type displaced;
+
+    if (item == target_slot)
+        return;
+
+    object_copy(&candidate, &inventory[item]);
+    object_copy(&displaced, &inventory[target_slot]);
+    object_copy(&inventory[target_slot], &candidate);
+
+    if (item <= INVEN_PACK)
+    {
+        if (displaced.k_idx)
+            object_copy(&inventory[item], &displaced);
+        else
+            object_wipe(&inventory[item]);
+    }
+    else
+    {
+        object_wipe(&inventory[item]);
+        active_weapon_preview_stow(&displaced, -1);
+    }
+}
+
+static void active_weapon_preview_activate_item_abilities(
+    const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return;
+
+    /* do_cmd_wield() activates abilities granted by the newly wielded item
+     * before its PU_BONUS calculation. */
+    for (int i = 0; i < o_ptr->abilities; i++)
+    {
+        int skill = o_ptr->skilltype[i];
+        int ability = o_ptr->abilitynum[i];
+
+        if (skill < 0 || skill >= S_MAX || ability < 0
+            || ability >= ABILITIES_MAX)
+        {
+            continue;
+        }
+        /* Match do_cmd_wield(): equipping only auto-activates an ability the
+         * player did not already have.  Preserve an intentional off toggle. */
+        if (!p_ptr->have_ability[skill][ability])
+        {
+            p_ptr->have_ability[skill][ability] = true;
+            p_ptr->active_ability[skill][ability] = true;
+        }
+    }
+}
+
+static void active_weapon_preview_prepare_melee_equipment(void)
+{
+    object_type* weapon = &inventory[INVEN_WIELD];
+    object_type* offhand = &inventory[INVEN_ARM];
+    u32b f1 = 0, f2 = 0, f3 = 0;
+
+    if (!weapon->k_idx)
+        return;
+
+    object_flags(weapon, &f1, &f2, &f3);
+    if (!offhand->k_idx)
+        return;
+
+    if ((f3 & TR3_TWO_HANDED)
+        || (offhand->tval != TV_SHIELD
+            && !p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]))
+    {
+        object_type removed;
+
+        object_copy(&removed, offhand);
+        object_wipe(offhand);
+        active_weapon_preview_stow(&removed, -1);
+    }
+}
+
+static bool active_weapon_choice_preview(int mode, int item, int target_slot,
+    active_weapon_preview* preview)
+{
+    player_type player_snapshot;
+    object_type inventory_snapshot[INVEN_TOTAL];
+    byte last_ranged_snapshot = last_ranged_weapon_mode;
+    const object_type* weapon;
+    const object_type* ammo;
+    bool available = false;
+
+    if (!preview || !p_ptr || item < 0 || item >= INVEN_TOTAL
+        || target_slot < INVEN_WIELD || target_slot >= INVEN_TOTAL)
+    {
+        return false;
+    }
+
+    memset(preview, 0, sizeof(*preview));
+    player_snapshot = *p_ptr;
+    SDL_memcpy(inventory_snapshot, inventory, sizeof(inventory_snapshot));
+
+    active_weapon_preview_move_to_slot(item, target_slot);
+
+    p_ptr->active_weapon_mode = (byte)normalize_active_weapon_mode(mode);
+    if (target_slot != INVEN_QUIVER1 && target_slot != INVEN_BELT)
+        active_weapon_preview_activate_item_abilities(
+            &inventory[target_slot]);
+    if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
+        active_weapon_preview_prepare_melee_equipment();
+    calc_bonuses_for_preview();
+
+    if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
+    {
+        weapon = &inventory[INVEN_WIELD];
+        if (weapon->k_idx)
+        {
+            preview->attack = p_ptr->skill_use[S_MEL];
+            preview->dd = p_ptr->mdd;
+            preview->ds = p_ptr->mds;
+            if (p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]
+                && inventory[INVEN_ARM].k_idx
+                && inventory[INVEN_ARM].tval != TV_SHIELD)
+            {
+                preview->has_offhand = true;
+                preview->offhand_attack = p_ptr->skill_use[S_MEL]
+                    + p_ptr->offhand_mel_mod;
+                preview->offhand_dd = p_ptr->mdd2;
+                preview->offhand_ds = p_ptr->mds2;
+            }
+            available = true;
+        }
+    }
+    else if (normalize_active_weapon_mode(mode)
+        == PLAYER_ACTIVE_WEAPON_RANGED_1)
+    {
+        object_type* bow = &inventory[INVEN_BOW];
+        u32b f1 = 0, f2 = 0, f3 = 0, f4 = 0;
+
+        ammo = &inventory[INVEN_QUIVER1];
+        if (ammo->k_idx)
+            object_flags4(ammo, &f1, &f2, &f3, &f4);
+
+        if (ammo->k_idx && player_can_treat_as_throwing_flags(ammo, f3))
+        {
+            preview->attack = p_ptr->skill_use[S_MEL] + ammo->att
+                + axe_bonus(ammo) + polearm_bonus(ammo);
+            if (p_ptr->active_ability[S_MEL][MEL_THROWING]
+                || object_grants_ability(ammo, S_MEL, MEL_THROWING))
+            {
+                preview->attack++;
+            }
+            preview->dd = total_mdd(ammo);
+            preview->ds = active_weapon_preview_curse_adjusted_ds(
+                total_mds_for_weapon_mode(ammo, 0,
+                    PLAYER_ACTIVE_WEAPON_RANGED_1));
+            preview->throwing = true;
+            available = true;
+        }
+        else if (bow->k_idx)
+        {
+            preview->attack = p_ptr->skill_use[S_ARC]
+                + ((ammo->k_idx && ammo->tval == TV_ARROW) ? ammo->att : 0);
+            preview->dd = p_ptr->add;
+            preview->ds = p_ptr->ads;
+            available = true;
+        }
+    }
+
+    *p_ptr = player_snapshot;
+    SDL_memcpy(inventory, inventory_snapshot, sizeof(inventory_snapshot));
+    last_ranged_weapon_mode = last_ranged_snapshot;
+    return available;
+}
+
+bool player_active_weapon_stats_preview(int mode, int* attack, int* dd,
+    int* ds, bool* throwing)
+{
+    active_weapon_preview preview;
+    int item;
+    int target_slot;
+
+    mode = normalize_active_weapon_mode(mode);
+    if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
+    {
+        item = INVEN_WIELD;
+        target_slot = INVEN_WIELD;
+    }
+    else if (mode == PLAYER_ACTIVE_WEAPON_RANGED_1)
+    {
+        item = INVEN_BOW;
+        target_slot = INVEN_BOW;
+    }
+    else
+    {
+        return false;
+    }
+
+    if (!active_weapon_choice_preview(mode, item, target_slot, &preview))
+        return false;
+    if (attack)
+        *attack = preview.attack;
+    if (dd)
+        *dd = preview.dd;
+    if (ds)
+        *ds = preview.ds;
+    if (throwing)
+        *throwing = preview.throwing;
+    return true;
+}
+
+bool player_active_weapon_offhand_stats_preview(int* attack, int* dd,
+    int* ds)
+{
+    active_weapon_preview preview;
+
+    if (!active_weapon_choice_preview(PLAYER_ACTIVE_WEAPON_MELEE,
+            INVEN_WIELD, INVEN_WIELD, &preview)
+        || !preview.has_offhand)
+    {
+        return false;
+    }
+
+    if (attack)
+        *attack = preview.offhand_attack;
+    if (dd)
+        *dd = preview.offhand_dd;
+    if (ds)
+        *ds = preview.offhand_ds;
+    return true;
+}
+
+static bool active_weapon_mode_preview_text(int mode, char* buf,
+    size_t buflen)
+{
+    active_weapon_preview preview;
+    int item;
+    int target_slot;
+
+    if (!buf || buflen == 0)
+        return false;
+    buf[0] = '\0';
+
+    mode = normalize_active_weapon_mode(mode);
+    if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
+    {
+        item = INVEN_WIELD;
+        target_slot = INVEN_WIELD;
+    }
+    else if (mode == PLAYER_ACTIVE_WEAPON_RANGED_1)
+    {
+        item = INVEN_BOW;
+        target_slot = INVEN_BOW;
+    }
+    else
+    {
+        return false;
+    }
+
+    if (!active_weapon_choice_preview(mode, item, target_slot, &preview))
+        return false;
+
+    strnfmt(buf, buflen, "Atk %+d, Dam %dd%d", preview.attack,
+        preview.dd, preview.ds);
+    return true;
+}
+
+static bool object_is_melee_combat_weapon(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    return o_ptr->tval == TV_SWORD || o_ptr->tval == TV_POLEARM
+        || o_ptr->tval == TV_HAFTED || o_ptr->tval == TV_DIGGING;
+}
+
+static bool object_is_harness_weapon(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx || object_has_broken_prefix(o_ptr))
+        return false;
+    if (inventory_limit_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
+        return false;
+
+    return object_is_melee_combat_weapon(o_ptr) || o_ptr->tval == TV_BOW;
+}
+
+static char active_weapon_choice_key(int index)
+{
+    static cptr keys = "13579abcdefghilmnopqrstuvwyz";
+    size_t key_count = strlen(keys);
+
+    if (index >= 0 && (size_t)index < key_count)
+        return keys[index];
+
+    return 0;
+}
+
+static void active_weapon_object_choice_name(char* buf, size_t buflen,
+    const object_type* o_ptr, cptr location)
+{
+    char object_name[120];
+    int volume;
+
+    if (!buf || buflen == 0)
+        return;
+
+    if (!o_ptr || !o_ptr->k_idx)
+    {
+        strnfmt(buf, buflen, "%s: no bow", location);
+        return;
+    }
+
+    object_desc(object_name, sizeof(object_name), o_ptr, true, 3);
+    volume = object_effective_volume(o_ptr);
+    strnfmt(buf, buflen, "%s: %s (%d.%d V)", location, object_name,
+        volume / 10, volume % 10);
+}
+
+static bool add_active_weapon_choice(active_weapon_choice choices[],
+    ui_question_option options[], int* count, int item, object_type* o_ptr,
+    int mode, int target_slot, cptr label)
+{
+    active_weapon_choice* choice;
+    active_weapon_preview preview;
+
+    if (!choices || !count || *count < 0
+        || *count >= ACTIVE_WEAPON_MAX_CHOICES || !o_ptr)
+    {
+        return false;
+    }
+
+    choice = &choices[*count];
+    choice->item = item;
+    choice->o_ptr = o_ptr;
+    choice->mode = mode;
+    choice->kind = active_weapon_kind_for_mode(mode);
+    choice->target_slot = target_slot;
+    if (active_weapon_choice_preview(mode, item, target_slot, &preview))
+    {
+        strnfmt(choice->label, sizeof(choice->label),
+            "Atk %+d, Dam %dd%d - %s", preview.attack, preview.dd,
+            preview.ds, label ? label : "Weapon");
+    }
+    else
+    {
+        SDL_strlcpy(choice->label, label ? label : "Weapon",
+            sizeof(choice->label));
+    }
+    options[*count].key = active_weapon_choice_key(*count);
+    options[*count].label = choice->label;
+    options[*count].attr = TERM_L_WHITE;
+    options[*count].disabled = false;
+    (*count)++;
+    return true;
+}
+
+static void add_ranged_active_weapon_choices(active_weapon_choice choices[],
+    ui_question_option options[], int* count, int item, object_type* bow,
+    cptr location, int* default_index)
+{
+    int active_mode = player_active_weapon_mode();
+    const object_type* quiver_ptr = &inventory[INVEN_QUIVER1];
+    bool bow_compatible = !quiver_ptr->k_idx
+        || quiver_ptr->tval == TV_ARROW;
+    bool quiver_throw = quiver_ptr->k_idx && !bow_compatible;
+    char bow_name[160];
+    char quiver_name[160];
+    char label[240];
+
+    /* A stored bow can only be readied with the one actual quiver. */
+    if ((bow_compatible && bow && bow->k_idx)
+        || (quiver_throw && item == INVEN_BOW))
+    {
+        int choice_index = *count;
+        int choice_item = item;
+        int choice_slot = INVEN_BOW;
+        object_type* choice_object = bow;
+
+        ranged_slot_choice_name(quiver_name, sizeof(quiver_name),
+            INVEN_QUIVER1);
+        if (bow_compatible)
+        {
+            active_weapon_object_choice_name(bow_name, sizeof(bow_name), bow,
+                location);
+            strnfmt(label, sizeof(label), "Ranged - %s; %s", bow_name,
+                quiver_name);
+        }
+        else
+        {
+            strnfmt(label, sizeof(label), "Ranged - %s", quiver_name);
+            choice_item = INVEN_QUIVER1;
+            choice_slot = INVEN_QUIVER1;
+            choice_object = &inventory[INVEN_QUIVER1];
+        }
+        if (!add_active_weapon_choice(choices, options, count, choice_item,
+                choice_object, PLAYER_ACTIVE_WEAPON_RANGED_1, choice_slot,
+                label))
+        {
+            return;
+        }
+
+        if (item == INVEN_BOW
+            && active_mode == PLAYER_ACTIVE_WEAPON_RANGED_1 && default_index)
+        {
+            *default_index = choice_index;
+        }
+    }
+
+}
+
+static bool choose_active_weapon(active_weapon_choice* selected)
+{
+    active_weapon_choice choices[ACTIVE_WEAPON_MAX_CHOICES];
+    ui_question_option options[ACTIVE_WEAPON_MAX_CHOICES];
+    int count = 0;
+    int default_index = 0;
+    int selected_index = -1;
+    int current_mode = player_active_weapon_mode();
+
+    if (!selected)
+        return false;
+
+    if (object_is_melee_combat_weapon(&inventory[INVEN_WIELD]))
+    {
+        char label[200];
+        int choice_index = count;
+
+        active_weapon_object_choice_name(label, sizeof(label),
+            &inventory[INVEN_WIELD], "Melee - equipped");
+        add_active_weapon_choice(choices, options, &count, INVEN_WIELD,
+            &inventory[INVEN_WIELD], PLAYER_ACTIVE_WEAPON_MELEE,
+            INVEN_WIELD, label);
+        if (current_mode == PLAYER_ACTIVE_WEAPON_MELEE)
+            default_index = choice_index;
+    }
+
+    if (object_is_melee_combat_weapon(&inventory[INVEN_ARM]))
+    {
+        char label[200];
+
+        active_weapon_object_choice_name(label, sizeof(label),
+            &inventory[INVEN_ARM], "Melee - off-hand");
+        add_active_weapon_choice(choices, options, &count, INVEN_ARM,
+            &inventory[INVEN_ARM], PLAYER_ACTIVE_WEAPON_MELEE,
+            INVEN_WIELD, label);
+    }
+
+    for (int i = 0; i < INVEN_PACK; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+        char label[200];
+
+        if (!object_is_harness_weapon(o_ptr)
+            || !object_is_melee_combat_weapon(o_ptr))
+        {
+            continue;
+        }
+
+        active_weapon_object_choice_name(label, sizeof(label), o_ptr,
+            "Melee - Harness");
+        add_active_weapon_choice(choices, options, &count, i, o_ptr,
+            PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, label);
+    }
+
+    add_ranged_active_weapon_choices(choices, options, &count, INVEN_BOW,
+        &inventory[INVEN_BOW], "equipped", &default_index);
+
+    for (int i = 0; i < INVEN_PACK; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+
+        if (!object_is_harness_weapon(o_ptr) || o_ptr->tval != TV_BOW)
+            continue;
+
+        add_ranged_active_weapon_choices(choices, options, &count, i, o_ptr,
+            "Harness", &default_index);
+    }
+
+    if (count <= 0)
+    {
+        msg_print("You have no combat weapon to ready.");
+        return false;
+    }
+
+    selected_index = ui_question_ask("Change active weapon",
+            "Choose an equipped or Harness weapon to ready. Atk and Dam are the expected figures after switching; ranged choices use the quiver. Changing the active weapon takes one turn unless an ability makes your first change before your next action free.",
+            options, count, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL,
+            default_index);
+
+    if (selected_index < 0 || selected_index >= count)
+        return false;
+
+    *selected = choices[selected_index];
+    return true;
 }
 
 static void mark_active_weapon_changed(void)
@@ -308,6 +951,15 @@ static bool object_is_dagger(const object_type* o_ptr)
 {
     return o_ptr && o_ptr->k_idx && o_ptr->tval == TV_SWORD
         && (o_ptr->sval == SV_DAGGER || o_ptr->sval == SV_CHIPPED_DAGGER);
+}
+
+bool object_is_belt_weapon(const object_type* o_ptr)
+{
+    if (object_is_dagger(o_ptr))
+        return true;
+
+    return o_ptr && o_ptr->k_idx && o_ptr->tval == TV_POLEARM
+        && o_ptr->sval == SV_HAND_AXE;
 }
 
 bool player_power_throw_weapon_eligible(const object_type* o_ptr)
@@ -379,7 +1031,7 @@ int player_power_throw_target_m_idx(void)
 
 bool player_can_power_throw_from_quiver(int slot)
 {
-    if (slot != INVEN_QUIVER1 && slot != INVEN_QUIVER2)
+    if (slot != INVEN_QUIVER1 && slot != INVEN_BELT)
         return false;
     if (!player_power_throw_ready())
         return false;
@@ -391,20 +1043,23 @@ bool player_can_power_throw_from_quiver(int slot)
 
 int player_power_throw_quiver_slot(void)
 {
-    if (player_can_power_throw_from_quiver(INVEN_QUIVER1))
-        return INVEN_QUIVER1;
-    if (player_can_power_throw_from_quiver(INVEN_QUIVER2))
-        return INVEN_QUIVER2;
-    return 0;
+    bool belt = player_can_power_throw_from_quiver(INVEN_BELT);
+    bool quiver = player_can_power_throw_from_quiver(INVEN_QUIVER1);
+
+    /* A zero result when both qualify means the source must be chosen. */
+    if (belt == quiver)
+        return 0;
+    return belt ? INVEN_BELT : INVEN_QUIVER1;
 }
 
 bool player_can_quick_throw_from_quiver(int slot)
 {
     object_type* o_ptr;
 
-    if (slot != INVEN_QUIVER1 && slot != INVEN_QUIVER2)
+    if (slot != INVEN_QUIVER1 && slot != INVEN_BELT)
         return false;
-    if (!p_ptr->active_ability[S_MEL][MEL_THROWING])
+    if (slot == INVEN_QUIVER1
+        && !p_ptr->active_ability[S_MEL][MEL_THROWING])
         return false;
     if (!player_active_weapon_allows_quick_throw())
         return false;
@@ -415,10 +1070,10 @@ bool player_can_quick_throw_from_quiver(int slot)
 
 int player_quick_throw_quiver_slot(void)
 {
+    if (player_can_quick_throw_from_quiver(INVEN_BELT))
+        return INVEN_BELT;
     if (player_can_quick_throw_from_quiver(INVEN_QUIVER1))
         return INVEN_QUIVER1;
-    if (player_can_quick_throw_from_quiver(INVEN_QUIVER2))
-        return INVEN_QUIVER2;
     return 0;
 }
 
@@ -509,8 +1164,8 @@ bool player_weapon_slot_combat_bonuses_active_for_mode(int mode, int slot,
         return mode == PLAYER_ACTIVE_WEAPON_MELEE;
     case INVEN_QUIVER1:
         return mode == PLAYER_ACTIVE_WEAPON_RANGED_1;
-    case INVEN_QUIVER2:
-        return mode == PLAYER_ACTIVE_WEAPON_RANGED_2;
+    case INVEN_BELT:
+        return false;
     default:
         return true;
     }
@@ -521,6 +1176,31 @@ bool player_weapon_slot_combat_bonuses_active(int slot,
 {
     return player_weapon_slot_combat_bonuses_active_for_mode(
         player_active_weapon_mode(), slot, o_ptr);
+}
+
+bool player_equipment_slot_is_active(int slot)
+{
+    int mode = player_active_weapon_mode();
+
+    if (slot < INVEN_WIELD || slot >= INVEN_TOTAL)
+        return false;
+
+    switch (slot)
+    {
+    case INVEN_WIELD:
+        return mode == PLAYER_ACTIVE_WEAPON_MELEE;
+    case INVEN_BOW:
+    case INVEN_QUIVER1:
+        return mode == PLAYER_ACTIVE_WEAPON_RANGED_1;
+    case INVEN_ARM:
+        return inventory[slot].k_idx
+            ? player_weapon_slot_combat_bonuses_active(slot, &inventory[slot])
+            : mode == PLAYER_ACTIVE_WEAPON_MELEE;
+    case INVEN_BELT:
+        return false;
+    default:
+        return true;
+    }
 }
 
 static void player_polearm_switch_attack(void)
@@ -584,6 +1264,8 @@ static void player_polearm_switch_attack(void)
 bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
 {
     int old_mode = player_active_weapon_mode();
+    int old_kind = player_active_weapon_kind();
+    int new_kind;
     bool needs_turn;
     bool free_switch;
 
@@ -591,10 +1273,11 @@ bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
     if (old_mode == mode)
         return true;
 
+    new_kind = active_weapon_kind_for_mode(mode);
     needs_turn = player_switch_needs_turn(old_mode, mode);
-    free_switch = player_switch_is_free(old_mode, mode);
+    free_switch = player_active_weapon_change_is_free(old_kind, new_kind);
 
-    if (confirm && needs_turn && active_weapon_switch_confirm
+    if (confirm && needs_turn && !free_switch && active_weapon_switch_confirm
         && !confirm_active_weapon_switch(mode))
     {
         return false;
@@ -606,10 +1289,8 @@ bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
 
     if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
         msg_print("Your active weapon is now your melee weapon.");
-    else if (mode == PLAYER_ACTIVE_WEAPON_RANGED_2)
-        msg_print("Your active weapon is now your ranged weapon with the 2nd quiver.");
     else
-        msg_print("Your active weapon is now your ranged weapon with the 1st quiver.");
+        msg_print("Your active weapon is now your ranged weapon with the quiver.");
 
     log_info("Active weapon changed: %s -> %s",
         active_weapon_mode_log_name(old_mode), active_weapon_mode_log_name(mode));
@@ -634,6 +1315,7 @@ bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
     {
         p_ptr->energy_use = 0;
         p_ptr->previous_action[0] = ACTION_NOTHING;
+        player_active_weapon_free_change_commit();
     }
 
     return true;
@@ -657,31 +1339,204 @@ static void player_select_ranged_quiver_mode(int mode)
         return;
 
     last_ranged_weapon_mode = (byte)mode;
-    msg_format("Your ranged weapon will use the %s quiver.",
-        (mode == PLAYER_ACTIVE_WEAPON_RANGED_2) ? "2nd" : "1st");
+    msg_print("Your ranged weapon will use the quiver.");
     p_ptr->redraw |= PR_ARC | PR_QUIVER;
     p_ptr->window |= PW_PLAYER_0;
     handle_stuff();
 }
 
-void do_cmd_toggle_active_weapon(void)
+static bool active_weapon_same_physical_item(const object_type* a,
+    const object_type* b)
 {
-    int old_mode = player_active_weapon_mode();
-    int new_mode = player_opposite_active_weapon_mode();
+    if (!a || !b || !a->k_idx || !b->k_idx)
+        return false;
 
-    /* Tab toggles between melee and ranged. */
-    if (old_mode == PLAYER_ACTIVE_WEAPON_MELEE
-        && active_weapon_switch_confirm)
+    return a->k_idx == b->k_idx && a->name1 == b->name1
+        && object_ego_prefix(a) == object_ego_prefix(b)
+        && object_ego_suffix(a) == object_ego_suffix(b)
+        && a->weight == b->weight && a->att == b->att && a->evn == b->evn
+        && a->dd == b->dd && a->ds == b->ds && a->pd == b->pd
+        && a->ps == b->ps && a->pval == b->pval
+        && memcmp(a->stat_bonus, b->stat_bonus, sizeof(a->stat_bonus)) == 0
+        && memcmp(a->skill_bonus, b->skill_bonus, sizeof(a->skill_bonus)) == 0;
+}
+
+static bool active_weapon_is_one_handed(const object_type* o_ptr)
+{
+    u32b f1 = 0, f2 = 0, f3 = 0;
+
+    if (!object_is_melee_combat_weapon(o_ptr))
+        return false;
+
+    object_flags(o_ptr, &f1, &f2, &f3);
+    return !(f3 & TR3_TWO_HANDED);
+}
+
+static bool active_weapon_shield_candidate(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->tval != TV_SHIELD)
+        return false;
+    if (object_has_broken_prefix(o_ptr))
+        return false;
+
+    return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS;
+}
+
+static bool active_weapon_wield_to_slot(const object_type* source, int item,
+    int slot)
+{
+    object_type wanted;
+    bool wielded;
+
+    if (!source || !source->k_idx || slot < INVEN_WIELD
+        || slot >= INVEN_TOTAL)
     {
-        new_mode = confirm_active_weapon_switch_to_ranged(new_mode);
-        if (!player_active_weapon_mode_is_ranged(new_mode))
-            return;
+        return false;
+    }
 
-        (void)player_set_active_weapon_mode(new_mode, false, true);
+    object_copy(&wanted, source);
+    wielded = do_cmd_wield_to_slot((object_type*)source, item, slot);
+
+    return wielded
+        && active_weapon_same_physical_item(&wanted, &inventory[slot]);
+}
+
+static bool active_weapon_offer_shield(void)
+{
+    object_choice_entry entries[INVEN_PACK];
+    int items[INVEN_PACK];
+    int count = 0;
+    int selected = -1;
+    char shield_name[120];
+    char prompt[180];
+
+    if (!active_weapon_is_one_handed(&inventory[INVEN_WIELD]))
+        return false;
+    if (inventory[INVEN_ARM].k_idx
+        && inventory[INVEN_ARM].tval == TV_SHIELD)
+    {
+        return false;
+    }
+    if (inventory[INVEN_ARM].k_idx && cursed_p(&inventory[INVEN_ARM]))
+        return false;
+    if (c_info[p_ptr->pcharacter].flags_u & UNQ_MEL_MAEDHROS)
+        return false;
+
+    for (int i = 0; i < INVEN_PACK; i++)
+    {
+        char label[OBJECT_CHOICE_LABEL_LEN];
+        char key;
+
+        if (!active_weapon_shield_candidate(&inventory[i]))
+            continue;
+
+        key = active_weapon_choice_key(count);
+        if (key)
+            strnfmt(label, sizeof(label), "%c)", key);
+        else
+            label[0] = '\0';
+        object_choice_entry_make(&entries[count], i, &inventory[i], label,
+            "Harness");
+        items[count++] = i;
+    }
+
+    if (count <= 0)
+        return false;
+
+    if (count == 1)
+    {
+        object_desc(shield_name, sizeof(shield_name), &inventory[items[0]],
+            true, 3);
+        strnfmt(prompt, sizeof(prompt), "Add %s to your active weapon? ",
+            shield_name);
+        if (!get_check(prompt))
+            return false;
+        selected = 0;
+    }
+    else if (!object_choice_overlay("Add a shield?",
+                 "Choose a Harness shield, or cancel to leave your off hand unchanged.",
+                 entries, count, 0, &selected))
+    {
+        return false;
+    }
+
+    if (selected < 0 || selected >= count)
+        return false;
+
+    return active_weapon_wield_to_slot(&inventory[items[selected]],
+        items[selected], INVEN_ARM);
+}
+
+static void apply_active_weapon_choice(const active_weapon_choice* choice)
+{
+    int old_mode;
+    int old_kind;
+    bool free_choice;
+    bool wielded_item = false;
+    bool wielded_shield = false;
+
+    if (!choice || !choice->o_ptr)
+        return;
+
+    old_mode = player_active_weapon_mode();
+    old_kind = player_active_weapon_kind();
+    free_choice = player_active_weapon_change_is_free(old_kind, choice->kind);
+
+    if (choice->item != choice->target_slot)
+    {
+        wielded_item = active_weapon_wield_to_slot(choice->o_ptr,
+            choice->item, choice->target_slot);
+        if (!wielded_item)
+            return;
+    }
+
+    if (choice->mode == PLAYER_ACTIVE_WEAPON_MELEE)
+        wielded_shield = active_weapon_offer_shield();
+
+    if (old_mode == choice->mode)
+    {
+        if (wielded_item && !wielded_shield && free_choice)
+        {
+            p_ptr->energy_use = 0;
+            p_ptr->previous_action[0] = ACTION_NOTHING;
+            player_active_weapon_free_change_commit();
+        }
         return;
     }
 
-    (void)player_set_active_weapon_mode(new_mode, true, true);
+    if (wielded_item || wielded_shield)
+    {
+        int wield_energy = p_ptr->energy_use;
+
+        (void)player_set_active_weapon_mode(choice->mode, false, false);
+        if (free_choice && !wielded_shield)
+        {
+            p_ptr->energy_use = 0;
+            p_ptr->previous_action[0] = ACTION_NOTHING;
+            player_active_weapon_free_change_commit();
+        }
+        else
+        {
+            p_ptr->energy_use = wield_energy;
+            p_ptr->previous_action[0]
+                = (choice->mode == PLAYER_ACTIVE_WEAPON_MELEE
+                    && player_active_weapon_mode_is_ranged(old_mode))
+                ? ACTION_READY_MELEE : ACTION_MISC;
+        }
+        return;
+    }
+
+    (void)player_set_active_weapon_mode(choice->mode, false, true);
+}
+
+void do_cmd_toggle_active_weapon(void)
+{
+    active_weapon_choice choice;
+
+    if (!choose_active_weapon(&choice))
+        return;
+
+    apply_active_weapon_choice(&choice);
 }
 
 void player_queue_active_weapon_mode(int mode)
