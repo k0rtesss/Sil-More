@@ -3428,6 +3428,9 @@ cptr sdl_character_panel_click_tooltip_text(int click_action)
 
 cptr sdl_character_panel_attack_tooltip_text(int attack_mode, bool quiver_only)
 {
+    static char text[640];
+    char active_weapon[256];
+
     if (quiver_only)
     {
         if (attack_mode == SDL_POINTER_ATTACK_RANGED_1)
@@ -3440,7 +3443,12 @@ cptr sdl_character_panel_attack_tooltip_text(int attack_mode, bool quiver_only)
     case SDL_POINTER_ATTACK_MELEE:
     case SDL_POINTER_ATTACK_RANGED_1:
     case SDL_POINTER_ATTACK_RANGED_2:
-        return "Click: change active weapon.";
+        player_active_weapon_name(active_weapon, sizeof(active_weapon));
+        strnfmt(text, sizeof(text),
+            "Click: change active weapon.\n"
+            "Current active weapon: %s.",
+            active_weapon);
+        return text;
     default:
         return NULL;
     }

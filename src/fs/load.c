@@ -1728,6 +1728,68 @@ static void legacy_belt_move_to_harness(object_type* moving,
     report->moved_to_harness += before - MAX(moving->number, 0);
 }
 
+typedef struct retired_activatable_slot_report
+{
+    bool changed;
+    int moved_to_harness;
+    int dropped;
+} retired_activatable_slot_report;
+
+static void migrate_retired_activatable_slots(
+    retired_activatable_slot_report* report)
+{
+    static const int retired_slots[] = { INVEN_STAFF, INVEN_HORN };
+
+    if (!report)
+        return;
+
+    memset(report, 0, sizeof(*report));
+
+    for (int i = 0; i < (int)N_ELEMENTS(retired_slots); i++)
+    {
+        int slot = retired_slots[i];
+        object_type moving;
+        legacy_belt_migration_report carry_report = {0};
+
+        if (!inventory[slot].k_idx || inventory[slot].number <= 0)
+            continue;
+
+        object_copy(&moving, &inventory[slot]);
+        moving.pickup = false;
+        moving.pickup_slot = -1;
+        object_wipe(&inventory[slot]);
+        p_ptr->equip_cnt = MAX(p_ptr->equip_cnt - 1, 0);
+        report->changed = true;
+
+        legacy_belt_move_to_harness(&moving, &carry_report);
+        report->moved_to_harness += carry_report.moved_to_harness;
+
+        if (moving.number > 0)
+        {
+            int amount = moving.number;
+
+            drop_near(&moving, 0, p_ptr->py, p_ptr->px);
+            report->dropped += amount;
+        }
+    }
+}
+
+static void queue_retired_activatable_slot_messages(
+    const retired_activatable_slot_report* report)
+{
+    if (!report || !report->changed)
+        return;
+
+    msg_print("Staves and horns are now kept in your Harness, not equipped.");
+    if (report->dropped > 0)
+    {
+        msg_format("With no free inventory slot, %d item%s from the retired "
+                   "slots %s placed at your feet.",
+            report->dropped, report->dropped == 1 ? "" : "s",
+            report->dropped == 1 ? "was" : "were");
+    }
+}
+
 static void migrate_legacy_second_quiver_to_belt(
     legacy_belt_migration_report* report)
 {
@@ -1850,7 +1912,7 @@ static void queue_legacy_belt_migration_messages(
 
         if (limit >= 0 && used > limit)
         {
-            msg_format("This older save is over %s capacity (%d.%d/%d.%d L). All items were preserved; make room before carrying more.",
+            msg_format("This older save is over %s capacity (%d.%d/%d.%d qt). All items were preserved; make room before carrying more.",
                 inventory_limit_group_name((enum inventory_limit_group)group),
                 used / 10, used % 10, limit / 10, limit % 10);
         }
@@ -3356,6 +3418,20 @@ bool load_player(void)
                 queue_legacy_belt_migration_messages(&belt_report);
             else if (belt_report.changed)
                 msg_print("Invalid Belt contents were safely relocated.");
+        }
+
+        {
+            retired_activatable_slot_report activatable_report;
+
+            migrate_retired_activatable_slots(&activatable_report);
+            if (activatable_report.changed)
+            {
+                p_ptr->notice |= (PN_COMBINE | PN_REORDER);
+                p_ptr->update |= (PU_BONUS | PU_MANA);
+                p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST);
+                p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
+            }
+            queue_retired_activatable_slot_messages(&activatable_report);
         }
 
         /* Success */

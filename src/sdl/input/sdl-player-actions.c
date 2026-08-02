@@ -47,16 +47,28 @@ bool sdl_main_view_point_is_player_grid(float x, float y)
     return map_y == p_ptr->py && map_x == p_ptr->px;
 }
 
-bool sdl_player_has_equipped_staff(void)
+static object_type* sdl_player_first_harness_activatable(int tval)
 {
-    return inventory[INVEN_STAFF].k_idx
-        && inventory[INVEN_STAFF].tval == TV_STAFF;
+    for (int i = 0; i < INVEN_PACK; i++) {
+        object_type* o_ptr = &inventory[i];
+
+        if (o_ptr->k_idx && o_ptr->tval == tval
+            && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS) {
+            return o_ptr;
+        }
+    }
+
+    return NULL;
 }
 
-bool sdl_player_has_equipped_horn(void)
+bool sdl_player_has_harness_staff(void)
 {
-    return inventory[INVEN_HORN].k_idx
-        && inventory[INVEN_HORN].tval == TV_HORN;
+    return sdl_player_first_harness_activatable(TV_STAFF) != NULL;
+}
+
+bool sdl_player_has_harness_horn(void)
+{
+    return sdl_player_first_harness_activatable(TV_HORN) != NULL;
 }
 
 bool sdl_player_has_singable_song(void)
@@ -105,9 +117,9 @@ static cptr sdl_player_action_menu_description_for_kind(int kind)
     case SDL_PLAYER_ACTION_EXAMINE:
         return "Examine: look at your square or inspect the floor item.";
     case SDL_PLAYER_ACTION_ACTIVATE:
-        return "Staff: activate your equipped staff.";
+        return "Staff: choose and activate a staff from your Harness.";
     case SDL_PLAYER_ACTION_HORN:
-        return "Horn: blow your equipped horn.";
+        return "Horn: choose and sound a horn from your Harness.";
     case SDL_PLAYER_ACTION_SHOOT:
         return "Ready: switch between melee and ranged weapons.";
     case SDL_PLAYER_ACTION_QUICK_THROW:
@@ -117,7 +129,7 @@ static cptr sdl_player_action_menu_description_for_kind(int kind)
     case SDL_PLAYER_ACTION_SWAP_QUIVERS:
         return "Quiver and belt: these different carriers cannot be swapped.";
     case SDL_PLAYER_ACTION_CHANGE_STAFF:
-        return "Swap staff: exchange your staff with one from your pack.";
+        return "Staff: choose and activate a staff from your Harness.";
     case SDL_PLAYER_ACTION_CLOSE_DOOR:
         return "Close: shut an adjacent open door. Doors open automatically "
                "when you move into them.";
@@ -145,7 +157,7 @@ cptr sdl_player_action_menu_fallback_for_kind(int kind)
         return "Throw";
     case SDL_PLAYER_ACTION_REST: return "Rest";
     case SDL_PLAYER_ACTION_SWAP_QUIVERS: return "No swap";
-    case SDL_PLAYER_ACTION_CHANGE_STAFF: return "Swap";
+    case SDL_PLAYER_ACTION_CHANGE_STAFF: return "Staff";
     case SDL_PLAYER_ACTION_CLOSE_DOOR: return "Close";
     case SDL_PLAYER_ACTION_BASH_DOOR: return "Bash";
     default: return "";
@@ -236,9 +248,9 @@ void sdl_player_action_menu_tile_for_kind(int kind, byte* out_attr,
         break;
     case SDL_PLAYER_ACTION_CHANGE_STAFF:
     {
-        object_type* icon_obj = &inventory[INVEN_STAFF];
+        object_type* icon_obj = sdl_player_first_harness_activatable(TV_STAFF);
 
-        if (icon_obj->k_idx)
+        if (icon_obj && icon_obj->k_idx)
         {
             if (out_attr)
                 *out_attr = object_attr(icon_obj);
@@ -407,11 +419,11 @@ int sdl_player_action_menu_collect(player_action_menu_entry* entries)
         sdl_player_action_menu_add_entry(entries, &count,
             SDL_PLAYER_ACTION_BASH_DOOR, 'b', "Bash");
     }
-    if (sdl_player_has_equipped_staff()) {
+    if (sdl_player_has_harness_staff()) {
         sdl_player_action_menu_add_entry(entries, &count,
             SDL_PLAYER_ACTION_ACTIVATE, 'a', "Staff");
     }
-    if (sdl_player_has_equipped_horn()) {
+    if (sdl_player_has_harness_horn()) {
         sdl_player_action_menu_add_entry(entries, &count,
             SDL_PLAYER_ACTION_HORN, 'p', "Horn");
     }
@@ -445,10 +457,6 @@ int sdl_player_action_menu_collect_secondary(int primary_kind,
                 SDL_PLAYER_ACTION_EXCHANGE, 'X', "Xchg");
         }
         break;
-    case SDL_PLAYER_ACTION_ACTIVATE:
-        sdl_player_action_menu_add_entry(entries, &count,
-            SDL_PLAYER_ACTION_CHANGE_STAFF, KTRL('A'), "Swap");
-        break;
     case SDL_PLAYER_ACTION_CLOSE_DOOR:
         if (sdl_player_has_adjacent_closed_door()) {
             sdl_player_action_menu_add_entry(entries, &count,
@@ -473,8 +481,6 @@ int sdl_player_action_menu_secondary_owner(int kind)
         return SDL_PLAYER_ACTION_SHOOT;
     case SDL_PLAYER_ACTION_EXCHANGE:
         return SDL_PLAYER_ACTION_STEALTH;
-    case SDL_PLAYER_ACTION_CHANGE_STAFF:
-        return SDL_PLAYER_ACTION_ACTIVATE;
     case SDL_PLAYER_ACTION_BASH_DOOR:
         /* Bash is Close's secondary only when Close is on the ring (an open
          * door is adjacent); otherwise Bash is itself a promoted primary. */
@@ -1484,7 +1490,7 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
         command = KTRL('F');
         break;
     case SDL_PLAYER_ACTION_CHANGE_STAFF:
-        command = KTRL('A');
+        command = 'a';
         break;
     case SDL_PLAYER_ACTION_CLOSE_DOOR:
         command = 'c';
@@ -2107,18 +2113,6 @@ static bool sdl_player_action_menu_can_draw_tiles(void)
     return g_state.use_tiles && g_state.tileset;
 }
 
-static void sdl_player_action_menu_render_crossed_icon(
-    const player_action_menu_entry* entry, const SDL_FRect* rect)
-{
-    if (!entry || !rect)
-        return;
-
-    sdl_draw_tileset_sprite_ex(entry->tile_attr, entry->tile_char, rect,
-        false, SDL_FLIP_NONE);
-    sdl_draw_tileset_sprite_ex(entry->tile_attr, entry->tile_char, rect,
-        false, SDL_FLIP_HORIZONTAL);
-}
-
 static void sdl_player_action_menu_render_icon(
     const player_action_menu_entry* entry, bool hover)
 {
@@ -2141,13 +2135,8 @@ static void sdl_player_action_menu_render_icon(
             SDL_SetTextureAlphaMod(g_state.tileset, 255);
         else
             SDL_SetTextureAlphaMod(g_state.tileset, 226);
-        if (entry->kind == SDL_PLAYER_ACTION_CHANGE_STAFF)
-        {
-            sdl_player_action_menu_render_crossed_icon(entry, &rect);
-        } else {
-            sdl_draw_tileset_sprite(entry->tile_attr, entry->tile_char, &rect,
-                false);
-        }
+        sdl_draw_tileset_sprite(entry->tile_attr, entry->tile_char, &rect,
+            false);
         sdl_restore_tileset_mod();
     } else {
         sdl_touch_pane_draw_button_text_scaled(&rect, NULL,

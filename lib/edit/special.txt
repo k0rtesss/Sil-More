@@ -40,7 +40,7 @@
 #
 # 'Y' reduces the base item's stowed volume by a percentage. Multiple
 #     volume-reducing egos do not stack; only the strongest reduction applies.
-#     The final volume of a volume-bearing item is never below 0.1 L.
+#     The final volume of a volume-bearing item is never below 0.1 qt.
 #
 # 'F' is for flags. These are fairly self-explanatory. As many F:
 #     lines may be used as are needed to specify all the flags and flags
@@ -2147,4 +2147,38 @@ D: still weave and turn as freely as the unarmoured. ||
 D:[helm]It has been beaten thin and fitted near to the brow, sparing of
 D: weight where lesser smiths would pile on iron, so that the head stays
 D: light and the wearer quick to slip aside.
+
+
+##### Additional Dagger Slaying Egos #####
+
+
+# Daggers only
+
+N:186:of the Haladin
+W:2:20:0:2500
+C:0:0:0:0:0:0:0
+T:23:4:4
+F:SLAY_ORC | SLAY_WOLF | SLAY_SPIDER | NOBLE_ITEM
+D:[dagger]The Haladin learned knife-craft behind timber walls and beneath
+D: close boughs. Orcs pressed their stockades, the wolves of the Enemy ran
+D: with his raiders, and the spawn of Nan Dungortheb haunted their westward
+D: road. Their broad, short blades cleared web, flew quickly at a springing
+D: wolf, and found the joints of Orc-mail when fighting became too close for
+D: spear or bow.
+
+
+# Daggers only
+
+N:187:of Tevildo's Thralls
+W:15:30:0:2500
+C:0:0:0:0:0:0:0
+T:23:4:4
+F:SLAY_WOLF | SLAY_CAT | NOBLE_ITEM
+D:[dagger]The thralls of Tevildo were watched by the great Cats of his
+D: household, while the wolves of Angamandi hunted those who fled. Denied
+D: all weapons, they altered the knives of kitchen and slaughter-house:
+D: stiffening the point so it would not turn on a wolf's ribs and weighting
+D: the blade for a sudden cast at a leaping Cat. To a gaoler's eye they
+D: remained tools; in a captive's hand, they became the first stroke of
+D: escape.
 

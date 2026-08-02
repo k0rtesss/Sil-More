@@ -1616,16 +1616,16 @@ static bool describe_inventory_volume(const object_type* o_ptr)
         if (o_ptr->number > 1)
         {
             p_text_out(format(
-                "Together they occupy %d.%d L. Your learned %s carriage "
-                "efficiency reduces their %s use to %d.%d L.",
+                "Together they occupy %d.%d qt. Your learned %s carriage "
+                "efficiency reduces their %s use to %d.%d qt.",
                 intrinsic / 10, intrinsic % 10, ability_name, pool,
                 volume / 10, volume % 10));
         }
         else
         {
             p_text_out(format(
-                "It occupies %d.%d L. Your learned %s carriage efficiency "
-                "reduces its %s use to %d.%d L.",
+                "It occupies %d.%d qt. Your learned %s carriage efficiency "
+                "reduces its %s use to %d.%d qt.",
                 intrinsic / 10, intrinsic % 10, ability_name, pool,
                 volume / 10, volume % 10));
         }
@@ -1634,12 +1634,12 @@ static bool describe_inventory_volume(const object_type* o_ptr)
 
     if (o_ptr->number > 1)
     {
-        p_text_out(format("Together they occupy %d.%d L in your %s.",
+        p_text_out(format("Together they occupy %d.%d qt in your %s.",
             volume / 10, volume % 10, pool));
     }
     else
     {
-        p_text_out(format("It occupies %d.%d L in your %s.",
+        p_text_out(format("It occupies %d.%d qt in your %s.",
             volume / 10, volume % 10, pool));
     }
 

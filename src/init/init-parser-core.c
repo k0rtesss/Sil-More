@@ -37,7 +37,7 @@ errr parse_tile_line(const char* buf, byte* x_attr, char* x_char)
     return 0;
 }
 
-/* Parse Y:<NONE|PACK|HARNESS>:<tenths> storage metadata. */
+/* Parse Y:<NONE|PACK|HARNESS>:<tenths of an imperial quart> storage metadata. */
 errr parse_object_storage_line(
     const char* buf, byte* storage, s16b* volume)
 {

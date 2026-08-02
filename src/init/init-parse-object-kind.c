@@ -214,7 +214,8 @@ errr parse_k_info(char* buf, header* head)
         k_ptr->cost = cost;
     }
 
-    /* Process 'Y' for storage pool and per-item volume in tenths. */
+    /* Process 'Y' for storage pool and per-item volume in tenths of an
+     * imperial quart. */
     else if (buf[0] == 'Y')
     {
         if (!k_ptr)

@@ -352,7 +352,7 @@ N:8:of Daeron
 Q:d62b22a1d37ec972
 G:]:g
 I:33:11:5
-Y:PACK:30
+Y:PACK:25
 W:14:20:5:600000
 P:0:0d0:0:1d0
 F:SONG | INSTA_ART | NOBLE_ITEM
@@ -373,7 +373,7 @@ D: music for breaking of the heart.'
 N:9:of Fëanor
 Q:9c8638ee3bc2e0cd
 I:33:11:3
-Y:PACK:30
+Y:PACK:25
 W:20:20:35:300000
 P:0:0d0:0:1d1
 F:WILL | RES_FIRE | SEE_INVIS | LIGHT | SMITHING | NOBLE_ITEM
@@ -394,7 +394,7 @@ D: well-bought.  For the price could be no other."
 N:10:of Maedhros
 Q:4dca93d7e5f9681f
 I:33:11:2
-Y:PACK:30
+Y:PACK:25
 W:8:25:30:30000
 P:0:0d0:0:1d1
 F:WILL | RES_FEAR | NOBLE_ITEM
@@ -416,7 +416,7 @@ D: feels the full measure of his endurance.
 N:11:of Felagund
 Q:9410717193cb5f59
 I:33:11:3
-Y:PACK:30
+Y:PACK:25
 W:15:20:25:40000
 P:0:0d0:0:1d1
 F:WILL | RES_FEAR | INSTA_ART | SONG | NOBLE_ITEM
@@ -447,7 +447,7 @@ D: It remembers his defiant song and stirs the same courage in its bearer.
 N:20:of Andreth
 Q:61f2dc4d9b137f8d
 I:36:2:2
-Y:PACK:40
+Y:PACK:35
 W:4:35:30:25000
 P:0:0d0:2:1d0
 F:SONG | SUST_GRA | PERCEPTION | NOBLE_ITEM
@@ -466,7 +466,7 @@ N:21:of Aredhel
 Q:69dffd266c3288b7
 G:(:w
 I:36:2:1
-Y:PACK:40
+Y:PACK:35
 W:12:30:30:25000
 P:0:0d0:4:1d0
 F:FREE_ACT | GRA | DANGER | NOBLE_ITEM
@@ -485,7 +485,7 @@ D: the robe remembers her freedom and quickens the wearer's step.
 N:22:of Idril Celebrindal
 Q:e1ce1abd314a6676
 I:36:2:3
-Y:PACK:40
+Y:PACK:35
 W:18:10:30:25000
 P:0:0d0:0:1d0
 F:SPEED | PERCEPTION | NOBLE_ITEM
@@ -507,7 +507,7 @@ D: of Manwë, who watched over the Hidden City from afar.
 N:24:of Gorlim
 Q:0c356c916543f02e
 I:36:4:0
-Y:PACK:100
+Y:PACK:90
 W:3:30:70:45000
 P:0:0d0:1:1d5
 F:FEAR | EVIL_ITEM
@@ -529,7 +529,7 @@ D: slain, and this armour has been black with shame ever since.
 N:25:of Haldad
 Q:7559ace339e7a494
 I:36:4:1
-Y:PACK:100
+Y:PACK:90
 W:6:35:40:45000
 P:0:0d0:0:1d5
 F:STR | RES_FEAR | FREE_ACT | NOBLE_ITEM
@@ -548,7 +548,7 @@ D: that desperate stand, it lends courage to those who must hold the line.
 N:26:'Catskin'
 Q:3db8dce4573c9d47
 I:36:4:0
-Y:PACK:100
+Y:PACK:90
 W:10:30:50:45000
 P:0:0d0:2:1d3
 F:EVIL_ITEM
@@ -569,7 +569,7 @@ D: a predator's desire to hunt awakening within.
 N:28:of Beor
 Q:0407dffb49b4a27d
 I:36:7:0
-Y:PACK:120
+Y:PACK:105
 W:8:30:120:35000
 P:0:0d0:-1:1d6
 F:RES_POIS | SUST_GRA | NOBLE_ITEM
@@ -591,7 +591,7 @@ D: in the dark places of the world.
 N:29:of Aegnor
 Q:dcae44eb6f2391eb
 I:36:7:2
-Y:PACK:120
+Y:PACK:105
 W:8:30:100:35000
 P:1:0d0:0:1d6
 F:WILL | ARCHERY | NOBLE_ITEM
@@ -612,7 +612,7 @@ D: remained forever unfulfilled. This armour lends his fierce determination.
 N:32:of Maeglin
 Q:809256172b50901d
 I:36:11:1
-Y:PACK:100
+Y:PACK:90
 W:15:1:70:45000
 P:0:0d0:1:1d10
 F:DEX | RES_POIS
@@ -638,7 +638,7 @@ D: one day doom the Hidden City.
 N:34:of Fingon
 Q:f07e8758fb5bdc60
 I:37:4:1
-Y:PACK:120
+Y:PACK:105
 W:8:25:260:105000
 P:0:0d0:-1:2d4
 F:RES_FEAR | CON | GRA | NOBLE_ITEM
@@ -658,7 +658,7 @@ D: fills the wearer with the courage that defied Morgoth's shadow.
 N:35:of Durin
 Q:882df4c55a64c16e
 I:37:4:0
-Y:PACK:120
+Y:PACK:105
 W:13:1:280:105000
 P:0:0d0:-2:3d1
 F:RES_FIRE | RES_COLD | REGEN | DEPTH_SCALE_PS | NOBLE_ITEM
@@ -679,7 +679,7 @@ D: the hurts of battle as Durin's line endures through the ages.
 N:36:of Maedhros
 Q:5003ac23ea4cf5ae
 I:37:6:2
-Y:PACK:180
+Y:PACK:160
 W:13:20:330:105000
 P:-1:0d0:-3:2d6
 F:RES_FIRE | RES_POIS | CON | PERMA_CURSE | NOBLE_ITEM
@@ -698,7 +698,7 @@ D: the full measure of his endurance.
 N:37:of Amon Rudh
 Q:baf073f28de85cee
 I:37:6:3
-Y:PACK:180
+Y:PACK:160
 W:13:30:300:25000
 P:-1:0d0:-3:2d6
 F:STAND_FAST | WILL
@@ -716,7 +716,7 @@ D: stubbornness of that doomed hill, where defiance outlasted hope.
 N:38:of Finwë
 Q:d1921f00bca8218e
 I:37:20:3
-Y:PACK:120
+Y:PACK:105
 W:18:12:150:70000
 P:0:0d0:0:2d5
 F:GRA | ENCHANTABLE | NOBLE_ITEM
@@ -737,7 +737,7 @@ D: Shadow that claimed its bearer.
 N:39:of Gundor
 Q:e69bba03f7491ec1
 I:37:4:1
-Y:PACK:120
+Y:PACK:105
 W:5:30:350:25000
 P:-1:0d0:-2:2d4
 F:STR | NOBLE_ITEM
@@ -757,7 +757,7 @@ D: This corslet grants strength to those who must stand against many foes.
 N:40:of Nevrast
 Q:70695395df6f28ec
 I:37:6:0
-Y:PACK:180
+Y:PACK:160
 W:11:20:500:25000
 P:-2:0d0:-4:2d8
 F:SUST_GRA | SUST_STR | NOBLE_ITEM
@@ -776,7 +776,7 @@ D: blows that might cleave through a lesser suit.
 N:41:'Starlight'
 Q:7124e9ac2a2ee593
 I:37:20:3
-Y:PACK:120
+Y:PACK:105
 W:16:30:120:50000
 P:0:0d0:-1:2d5
 F:PERCEPTION | SONG | NOBLE_ITEM
@@ -799,7 +799,7 @@ D: close, this mail gleams with their remembered light.
 N:42:of the Bloody Hand
 Q:95a76b3c41240652
 I:34:3:1
-Y:HARNESS:60
+Y:HARNESS:55
 W:8:35:60:25000
 P:0:0d0:0:1d5
 F:STR | DAMAGE_SIDES | TRAITOR | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -819,7 +819,7 @@ D: to it, for those who bore this sign thought nothing of betraying their own.
 N:43:of Glorfindel
 Q:0458ebd0894d3b4e
 I:34:3:0
-Y:HARNESS:60
+Y:HARNESS:55
 W:8:20:60:25000
 P:1:0d0:1:1d4
 F:CHEAT_DEATH | NOBLE_ITEM
@@ -841,7 +841,7 @@ D: the Valar for his valour.
 N:44:'Thandrach'
 Q:482251606c98fd7a
 I:34:3:2
-Y:HARNESS:60
+Y:HARNESS:55
 W:3:20:40:15000
 P:1:0d0:0:1d3
 F:WILL | NOBLE_ITEM
@@ -863,7 +863,7 @@ N:45:of Hador
 Q:e9bb5583356475c3
 G:):r
 I:34:5:1
-Y:HARNESS:80
+Y:HARNESS:70
 W:8:30:110:25000
 P:-2:0d0:0:1d8
 F:RES_FIRE | RES_COLD | STR | NOBLE_ITEM
@@ -882,7 +882,7 @@ N:46:of Fingolfin
 Q:4f697a66b227588e
 G:):b1
 I:34:5:2
-Y:HARNESS:80
+Y:HARNESS:70
 W:13:20:60:25000
 P:0:0d0:0:1d7
 F:DEX | LIGHT | NOBLE_ITEM
@@ -902,7 +902,7 @@ N:47:of Valinor
 Q:24fd840a203880d2
 G:):w
 I:34:10:0
-Y:HARNESS:80
+Y:HARNESS:70
 W:16:25:40:25000
 P:0:0d0:1:1d7
 F:LIGHT | NOBLE_ITEM
@@ -923,7 +923,7 @@ N:48:of the Swan
 Q:23b24536a89160b3
 G:):b
 I:34:5:2
-Y:HARNESS:80
+Y:HARNESS:70
 W:10:20:70:25000
 P:-2:0d0:0:1d7
 F:WILL | SUST_CON | SUST_DEX | NOBLE_ITEM
@@ -946,7 +946,7 @@ D: wearer endurance against the breaking of the heart.
 N:49:of Mablung
 Q:5b3647df851ca660
 I:23:4:2
-Y:HARNESS:5
+Y:HARNESS:4
 W:6:30:5:25000
 P:+1:1d6:+1:0d0
 F:SLAY_WOLF | NOBLE_ITEM
@@ -965,7 +965,7 @@ D: pitiless against wolves, and it lends the keen-eyed focus of its master.
 N:50:of Azaghal
 Q:6b54c5d5947af589
 I:23:4:0
-Y:HARNESS:5
+Y:HARNESS:4
 W:14:25:5:25000
 P:0:1d7:0:0d0
 F:RES_FIRE | SLAY_DRAGON | SHARPNESS | NOBLE_ITEM
@@ -987,7 +987,7 @@ D: with dragon-blood and burns with the wrath of Belegost.
 N:51:of Túrin
 Q:2e2f01e1c4bb7031
 I:23:4:3
-Y:HARNESS:5
+Y:HARNESS:4
 W:7:30:5:15000
 P:+1:1d5:0:0d0
 F:FREE_ACT | WILL | NOBLE_ITEM
@@ -1005,7 +1005,7 @@ D: to be ensnared or held.
 N:52:of Nargil
 Q:e1168ee12ae06dd3
 I:23:4:0
-Y:HARNESS:5
+Y:HARNESS:4
 W:10:20:5:50000
 P:5:1d5:0:0d0
 F:SHARPNESS | NOBLE_ITEM
@@ -1026,7 +1026,7 @@ D: in the songs of those days.
 N:53:'Thorn'
 Q:9e3a620a7a6e9e64
 I:23:4:2
-Y:HARNESS:5
+Y:HARNESS:4
 W:7:30:5:5000
 P:0:1d6:0:0d0
 F:THROWING
@@ -1046,7 +1046,7 @@ D: bear it grow pale and hungry, yet find their footsteps grow ever lighter.
 N:54:'Angrist'
 Q:ff06d6f02950e2c8
 I:23:4:0
-Y:HARNESS:5
+Y:HARNESS:4
 W:14:15:5:100000
 P:0:1d5:0:0d0
 F:SHARPNESS2 | NOBLE_ITEM
@@ -1107,7 +1107,7 @@ D: terrible hunger within them and clouds their mind with red thoughts.
 N:57:of Mim
 Q:630037a7078e37ca
 I:23:10:3
-Y:HARNESS:15
+Y:HARNESS:13
 W:10:35:15:30000
 P:+1:1d7:1:0d0
 F:BRAND_POIS | STEALTH | LIGHT_CURSE | EVIL_ITEM
@@ -1128,7 +1128,7 @@ D: people and the treachery that brought their line to ruin.
 N:58:of Amrod
 Q:70239c6076a16a6c
 I:23:10:2
-Y:HARNESS:15
+Y:HARNESS:13
 W:8:30:15:15000
 P:1:1d7:1:0d0
 B:1/5
@@ -1150,7 +1150,7 @@ D: the hunter's step.
 N:59:'Dagmor'
 Q:ccc03f8fe91d16f5
 I:23:17:1
-Y:HARNESS:25
+Y:HARNESS:20
 W:12:25:15:15000
 P:2:2d6:1:0d0
 F:RES_FEAR | GRA | LIGHT | NOBLE_ITEM
@@ -1170,7 +1170,7 @@ D: Morgoth. It sheds a pale light that heartens the bearer in dark places.
 N:60:of Galadriel
 Q:bdbfd7ba293cb847
 I:23:10:0
-Y:HARNESS:15
+Y:HARNESS:13
 W:9:25:20:30000
 P:0:1d8:3:0d0
 F:SUST_GRA | NOBLE_ITEM
@@ -1190,7 +1190,7 @@ D: of her own to rule. The blade remembers both her valour and her sorrow.
 N:61:'Sting'
 Q:cee0841d40850850
 I:23:10:0
-Y:HARNESS:15
+Y:HARNESS:13
 W:12:20:15:40000
 P:+2:1d8:+2:0d0
 B:4/5/3
@@ -1211,7 +1211,7 @@ D: fate is woven about it, and it will yet play a part in tales unwritten.
 N:62:of Idril
 Q:6f68639f97c67e3a
 I:23:10:1
-Y:HARNESS:15
+Y:HARNESS:13
 W:14:20:15:25000
 P:0:1d7:+2:0d0
 B:7/11:7/3
@@ -1231,7 +1231,7 @@ D: to its bearer, and no snare or enchantment can easily hold them.
 N:63:of Amras
 Q:17173e277d13b237
 I:23:10:2
-Y:HARNESS:15
+Y:HARNESS:13
 W:8:30:15:15000
 P:1:1d7:1:0d0
 B:1/4
@@ -1251,7 +1251,7 @@ D: the mastery of two weapons, striking with the swift accord of the twins.
 N:64:'Orcrist'
 Q:5ee28c5262c0629d
 I:23:17:2
-Y:HARNESS:25
+Y:HARNESS:20
 W:8:20:20:40000
 P:2:2d6:1:0d0
 F:SLAY_ORC | SLAY_TROLL | PERCEPTION | PAIRED | NOBLE_ITEM
@@ -1272,7 +1272,7 @@ D: the lords of Gondolin bore them against the hosts of Morgoth.
 N:65:'Glamdring'
 Q:ace66e723fa1853c
 I:23:21:2
-Y:HARNESS:30
+Y:HARNESS:25
 W:12:20:30:40000
 P:-1:3d4:2:0d0
 F:SLAY_ORC | SLAY_TROLL | SLAY_DRAGON | SLAY_RAUKO | WILL | PAIRED | NOBLE_ITEM
@@ -1292,7 +1292,7 @@ D: in the Elder Days.
 N:66:'Narsil'
 Q:d318979631de5c94
 I:23:21:0
-Y:HARNESS:30
+Y:HARNESS:25
 W:16:20:40:80000
 P:-1:3d4:2:0d0
 F:LIGHT
@@ -1313,7 +1313,7 @@ D: written upon it than any tale of the Elder Days may tell.
 N:67:'Aranruth'
 Q:84c03beca3481e17
 I:23:17:3
-Y:HARNESS:25
+Y:HARNESS:20
 W:12:20:40:50000
 P:2:2d6:2:0d0
 F:WILL | RES_FEAR | NOBLE_ITEM
@@ -1336,7 +1336,7 @@ N:69:'Anglachel'
 Q:0f4f2f6c9a7c2a12
 G:|:D
 I:23:30:0
-Y:HARNESS:40
+Y:HARNESS:35
 W:18:20:50:130000
 P:0:3d6:1:0d0
 F:DANGER | TRAITOR | LIGHT_CURSE | WILL_DRAIN | SLAY_DRAGON 
@@ -1352,7 +1352,7 @@ D: blade passes—as though it remembers every death it has dealt.
 N:70:'Gurthang'
 Q:9439894019d8ad49
 I:23:30:0
-Y:HARNESS:40
+Y:HARNESS:35
 W:20:15:50:80000
 P:0:3d7:1:0d0
 F:SLAY_DRAGON | VAMPIRIC | DANGER | HUNGER | LIGHT_CURSE | TRAITOR | WILL_DRAIN
@@ -1369,7 +1369,7 @@ N:71:'Anguirel'
 Q:561e97194377c828
 G:|:D
 I:23:30:2
-Y:HARNESS:40
+Y:HARNESS:35
 W:18:20:50:100000
 P:0:3d6:1:0d0
 F:TRAITOR | STEALTH | PERCEPTION | LIGHT_CURSE | DANGER
@@ -1390,7 +1390,7 @@ N:72:'Luinmegil'
 Q:17e64b10c6cadabb
 G:|:b
 I:23:21:0
-Y:HARNESS:30
+Y:HARNESS:25
 W:10:30:40:10000
 P:-2:3d4:1:0d0
 F:ACCURATE | RES_COLD | FREE_ACT | NOBLE_ITEM
@@ -1412,7 +1412,7 @@ D: It strikes swift and true as the sea-birds of that coast.
 N:74:'Glend'
 Q:7ca60848c56a1766
 I:23:25:1
-Y:HARNESS:40
+Y:HARNESS:35
 W:12:1:120:100000
 P:-1:3d6:1:0d0
 F:STR | SUST_STR
@@ -1433,7 +1433,7 @@ D: it cleaves through armour and bone alike, impaling foes upon its length.
 N:75:of Saithnar
 Q:45bcfed71908e92d
 I:23:25:0
-Y:HARNESS:40
+Y:HARNESS:35
 W:10:20:60:100000
 P:0:3d5:2:0d0
 F:SHARPNESS | SLAY_UNDEAD | HAUNTED | SEE_INVIS | ENCHANTABLE | NOBLE_ITEM
@@ -1455,7 +1455,7 @@ N:76:'Calris'
 Q:beae903f6ce4c39a
 G:|:r
 I:23:25:1
-Y:HARNESS:40
+Y:HARNESS:35
 W:20:1:110:100000
 P:-5:3d8:1:0d0
 F:CON | BRAND_FIRE | LIGHT | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -1477,7 +1477,7 @@ D: the Valaraukar themselves, cold-killing and terrible to behold.
 N:80:'Celeg Aithorn'
 Q:1bc2e7bebb53ce64
 I:23:28:0
-Y:HARNESS:25
+Y:HARNESS:20
 W:20:8:20:50000
 P:1:3d4:1:0d0
 F:BRAND_ELEC | SHARPNESS | ENCHANTABLE | NOBLE_ITEM
@@ -1497,7 +1497,7 @@ D: leaping falchion, even Celeg Aithorn that shall cleave the world.'
 N:81:'Ringil'
 Q:60481d9734ec7f44
 I:23:28:1
-Y:HARNESS:25
+Y:HARNESS:20
 W:20:15:20:300000
 P:1:3d4:3:0d0
 F:BRAND_COLD | LIGHT | ENCHANTABLE | NOBLE_ITEM
@@ -1517,7 +1517,7 @@ D: bitter cold burns the servants of darkness.
 N:82:'Ungoliant's Lament'
 Q:42620c8e830db082
 I:23:28:0
-Y:HARNESS:25
+Y:HARNESS:20
 W:12:25:20:30000
 P:0:3d5:1:0d0
 F:SLAY_SPIDER | LIGHT | FREE_ACT | RES_POIS | NOBLE_ITEM
@@ -1541,7 +1541,7 @@ D: a bane to all who crawled forth from that lightless brood.
 N:83:of Ingwe
 Q:5500fcd97371611e
 I:22:2:0
-Y:HARNESS:40
+Y:HARNESS:35
 W:20:15:20:60000
 P:3:1d15:0:0d0
 F:THROWING | LIGHT | MITHRIL | NOBLE_ITEM
@@ -1582,7 +1582,7 @@ D: that night. For this murder Eol was cast from Caragdur.
 N:85:'Dugrakh'
 Q:1df2f87f537baa23
 I:22:1:-1
-Y:HARNESS:25
+Y:HARNESS:20
 W:12:20:25:50000
 P:1:1d11:1:0d0
 F:SLAY_RAUKO | SLAY_MAN_OR_ELF | SEE_INVIS | FREE_ACT | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -1607,7 +1607,7 @@ N:86:of Boldog
 Q:7c7e9467ef42e721
 G:/:s
 I:22:1:0
-Y:HARNESS:30
+Y:HARNESS:25
 W:8:1:50:30000
 P:1:1d11:0:0d0
 F:RES_FEAR | SLAY_WOLF | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -1630,7 +1630,7 @@ D: remembering their dread captain's wrath.
 N:87:'Aeglos'
 Q:5593da7115696f45
 I:22:1:0
-Y:HARNESS:30
+Y:HARNESS:25
 W:14:15:30:140000
 P:1:1d11:0:0d0
 F:BRAND_COLD | SLAY_UNDEAD | NOBLE_ITEM
@@ -1675,7 +1675,7 @@ D: rained death upon the encroaching dark.
 N:89:of Ogbar
 Q:54acb59fd73799c0
 I:22:2:0
-Y:HARNESS:40
+Y:HARNESS:35
 W:12:20:50:60000
 P:2:1d14:2:0d0
 F:SHARPNESS | SLAY_SPIDER
@@ -1696,7 +1696,7 @@ N:90:of Melkor
 Q:029f16601ad85d6e
 G:/:D
 I:22:2:-2
-Y:HARNESS:40
+Y:HARNESS:35
 W:20:8:80:100000
 P:2:1d16:1:0d0
 F:GRA | BRAND_POIS
@@ -1720,7 +1720,7 @@ D: feel the cold of the Unlight that once shrouded the land in darkness.
 N:91:'Binahkram'
 Q:a629c29b94ad02eb
 I:22:11:1
-Y:HARNESS:15
+Y:HARNESS:13
 W:6:20:10:1000
 P:0:4d3:0:0d0
 F:CON | SLAY_ORC | SLAY_SPIDER | NOBLE_ITEM
@@ -1740,7 +1740,7 @@ D: deep into orc-flesh and spider-hide alike.
 N:92:of Durin
 Q:cb741e5a68f137b7
 I:22:12:1
-Y:HARNESS:30
+Y:HARNESS:25
 W:18:10:60:105000
 P:-3:3d6:0:0d0
 F:STR | ACCURATE | MITHRIL | NOBLE_ITEM
@@ -1759,7 +1759,7 @@ D: light in hand and bolsters the hearts of those who delve deep.
 N:93:'Dramborleg'
 Q:4e03187e2cfedeeb
 I:22:12:0
-Y:HARNESS:30
+Y:HARNESS:25
 W:14:15:40:21000
 P:-2:3d6:0:0d0
 F:SLAY_RAUKO | SLAY_ORC | SLAY_TROLL | SLAY_RAUKO | ARMOR_SHATTER | NOBLE_ITEM
@@ -1778,7 +1778,7 @@ D: countless orcs and trolls defending Idril and his son Eärendil.
 N:94:of Mothers' Woe
 Q:230ed3b186a485d6
 I:22:12:2
-Y:HARNESS:30
+Y:HARNESS:25
 W:15:20:60:90000
 P:-3:3d5:0:0d0
 F:STR | HAUNTED | VAMPIRIC | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -1798,7 +1798,7 @@ D: the slain—mothers weeping over fallen sons in the wars of Beleriand.
 N:95:of Dolmed
 Q:804941f50768ee1b
 I:22:13:2
-Y:HARNESS:45
+Y:HARNESS:40
 W:18:25:110:150000
 P:-3:4d5:0:0d0
 F:SLAY_RAUKO
@@ -1819,7 +1819,7 @@ D: blood to face the Balrogs and their kin.
 N:96:'Mazarbulbark'
 Q:5840dd2b984f8860
 I:22:13:3
-Y:HARNESS:45
+Y:HARNESS:40
 W:10:25:90:10000
 P:-3:4d4:0:0d0
 F:WILL | SLAY_TROLL | NOBLE_ITEM
@@ -1838,7 +1838,7 @@ D: 'the axe that is written upon', and it fills its wielder with vengeance.
 N:97:of Gothmog
 Q:0b69f9fcb6938709
 I:22:13:0
-Y:HARNESS:45
+Y:HARNESS:40
 W:20:8:100:120000
 P:-4:4d7:0:0d0
 B:0/9
@@ -1857,7 +1857,7 @@ D: burns with an evil will, rousing wrath and noise, loath to be put aside.
 N:98:of Maeglin
 Q:541e02a07278fdc6
 I:22:11:1
-Y:HARNESS:15
+Y:HARNESS:13
 W:15:20:20:20000
 P:2:4d3:0:0d0
 F:SHARPNESS | TRAITOR | STAR_IRON | THROWING | EVIL_ITEM
@@ -1876,7 +1876,7 @@ D: promise of Idril. This axe remembers that treachery in its very edge.
 N:99:of Gaurin
 Q:1f1d480a59061d97
 I:22:4:3
-Y:HARNESS:50
+Y:HARNESS:45
 W:14:12:80:50000
 P:-1:2d10:1:0d0
 F:TUNNEL | SHARPNESS | ENCHANTABLE | NOBLE_ITEM
@@ -1899,7 +1899,7 @@ D: whose gleaming stroke did rive the rocks of Rodrim's hall.'
 N:100:of the Sirion
 Q:c91ab059ea160d1a
 I:22:4:3
-Y:HARNESS:50
+Y:HARNESS:45
 W:10:20:70:50000
 P:0:2d10:1:0d0
 B:0/10:3/4
@@ -1918,7 +1918,7 @@ D: blade flows around defences and strikes where foes least expect.
 N:101:'Celebrist'
 Q:3c148901d441f0ac
 I:22:4:1
-Y:HARNESS:50
+Y:HARNESS:45
 W:12:25:50:22000
 P:0:2d10:2:0d0
 F:DEX | FREE_ACT | NEG_CON | MITHRIL | ACCURATE | NOBLE_ITEM
@@ -1942,7 +1942,7 @@ D: spirit bound within it feeds on the wielder's strength.
 N:104:of Halmir
 Q:12c70b837b72dc6c
 I:21:3:1
-Y:HARNESS:40
+Y:HARNESS:35
 W:1:35:40:250000
 P:0:2d5:3:0d0
 F:RES_POIS | WILL | NOBLE_ITEM
@@ -1963,7 +1963,7 @@ D: will against the Shadow.
 N:105:of Turgon
 Q:b27bd25386ffd110
 I:21:3:3
-Y:HARNESS:40
+Y:HARNESS:35
 W:16:10:50:30000
 P:0:2d5:3:0d0
 F:WILL | GRA | NOBLE_ITEM
@@ -1984,7 +1984,7 @@ D: Hidden King who defied Morgoth until the very end.
 N:107:of Telchar
 Q:6dcfc128b65b235a
 I:21:8:2
-Y:HARNESS:25
+Y:HARNESS:20
 W:11:20:45:250000
 P:0:4d2:0:0d0
 F:SUST_STR | RES_FIRE | SMITHING | NOBLE_ITEM
@@ -2004,7 +2004,7 @@ D: halls of the Dwarves.
 N:108:of Aulë's Wrath
 Q:64071707c6c71002
 I:21:8:2
-Y:HARNESS:25
+Y:HARNESS:20
 W:20:20:70:250000
 P:0:4d2:0:0d0
 F:STR | SLAY_RAUKO | DANGER | AGGRAVATE | ARMOR_SHATTER | NOBLE_ITEM
@@ -2025,7 +2025,7 @@ D: sundering armour and bone alike.
 N:114:'Burkfelek'
 Q:0e925d2e4ebc303e
 I:20:3:3
-Y:PACK:50
+Y:PACK:45
 W:35:15:110:30000
 P:-4:6d2:0:0d0
 F:TUNNEL | NOBLE_ITEM
@@ -2048,7 +2048,7 @@ D: delved by this tool, and many the foes it has broken.
 N:117:of Angrod
 Q:e5b985e791d87213
 I:32:5:0
-Y:PACK:60
+Y:PACK:55
 W:8:25:45:4500
 P:0:0d0:0:1d3
 B:7/8
@@ -2068,7 +2068,7 @@ D: places and the courage needed to face the terror of Morgoth's flames.
 N:118:of Curufin
 Q:da59d9a9973c610b
 I:32:5:4
-Y:PACK:60
+Y:PACK:55
 W:14:30:35:45000
 P:0:0d0:0:1d2
 F:STEALTH | DANGER | PERMA_CURSE
@@ -2087,7 +2087,7 @@ D: craft and guile, but its treacherous whispers can never be silenced.
 N:119:of the Oathbreaker
 Q:fef42b5664300761
 I:32:5:0
-Y:PACK:60
+Y:PACK:55
 W:8:35:15:45000
 P:0:0d0:0:1d4
 F:TRAITOR | LIGHT_CURSE | OATH_NEGATE | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -2107,7 +2107,7 @@ D: sway over one who wears it.
 N:120:of Dor-Lomin
 Q:78709ce76f94ccd0
 I:32:6:2
-Y:PACK:80
+Y:PACK:70
 W:20:25:90:300000
 P:0:0d0:-1:1d4
 F:STR | RES_FEAR | RES_STUN | NOBLE_ITEM
@@ -2127,7 +2127,7 @@ N:121:of Utumno
 Q:934b7cc796cf8d65
 G:]:D
 I:32:6:-3
-Y:PACK:80
+Y:PACK:70
 W:20:20:100:10000
 P:0:0d0:-2:1d4
 F:GRA | VUL_FIRE | LIGHT_CURSE | WILL | RES_COLD | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -2149,7 +2149,7 @@ D: and will, yet bends the wearer's purpose toward its first dark master.
 N:122:of the Dwarrowdelf
 Q:44b1c756d39a54ba
 I:32:7:2
-Y:PACK:80
+Y:PACK:70
 W:10:20:70:6000
 P:0:0d0:-1:1d3
 F:WILL | MITHRIL | NOBLE_ITEM
@@ -2172,7 +2172,7 @@ N:123:of Ecthelion
 Q:799e45f6a345a4eb
 G:]:w
 I:32:8:2
-Y:PACK:60
+Y:PACK:55
 W:16:25:40:25000
 P:1:0d0:0:1d4
 F:SONG | RES_FEAR | NOBLE_ITEM
@@ -2190,7 +2190,7 @@ D: still echoes with the music of falling water.
 N:124:of Vinyamar
 Q:6f708192a3b4c5d6
 I:32:6:3
-Y:PACK:80
+Y:PACK:70
 W:12:20:95:55000
 P:0:0d0:-1:1d5
 F:RES_FEAR | PERCEPTION | NOBLE_ITEM
@@ -2214,7 +2214,7 @@ D: for it was touched by the will of Ulmo himself.
 N:125:'Falchrist'
 Q:7e3a91f4c6b20d58
 I:23:17:3
-Y:HARNESS:25
+Y:HARNESS:20
 W:14:20:30:50000
 P:1:2d6:2:0d0
 F:SLAY_DRAGON | RES_FEAR | WILL | NOBLE_ITEM
@@ -2236,7 +2236,7 @@ D: Ancalagon the Black above the towers of Thangorodrim.
 N:126:'Tirthand'
 Q:d4f8a2e1b9c37065
 I:34:10:1
-Y:HARNESS:80
+Y:HARNESS:70
 W:16:20:80:35000
 P:0:0d0:0:1d7
 F:RES_BLEED | WILL | MEDIC | REGEN | NOBLE_ITEM
@@ -2260,7 +2260,7 @@ D: Vingilot to plead before the Valar.
 N:127:'Gilceleb'
 Q:b5e9d0c8a7f61324
 I:37:20:1
-Y:PACK:120
+Y:PACK:105
 W:15:20:150:55000
 P:0:0d0:-1:2d6
 F:GRA | SUST_GRA | FREE_ACT | WILL | NOBLE_ITEM
@@ -2282,7 +2282,7 @@ D: craft of both Gondolin and Doriath in its making.
 N:128:'Thoronthaul'
 Q:c6f2a3d9e8b40751
 I:32:6:2
-Y:PACK:80
+Y:PACK:70
 W:12:20:80:45000
 P:0:0d0:-1:1d4
 F:PERCEPTION | WILL | NOBLE_ITEM
@@ -2331,7 +2331,7 @@ N:131:of Maglor
 Q:9f001e6ddf8f0db2
 G:(:b
 I:35:1:3
-Y:PACK:40
+Y:PACK:35
 W:15:10:20:35000
 P:0:0d0:2:0d0
 F:SONG | PERMA_CURSE | NOBLE_ITEM
@@ -2352,7 +2352,7 @@ N:132:of Thingol
 Q:f223c5778091737b
 G:(:s
 I:35:1:1
-Y:PACK:40
+Y:PACK:35
 W:20:20:15:35000
 P:0:0d0:2:0d0
 F:RES_FIRE | RES_COLD | FREE_ACT | CON | NOBLE_ITEM
@@ -2370,7 +2370,7 @@ N:133:of Ulmo
 Q:8192a3b4c5d6e7f8
 G:(:b
 I:35:6:3
-Y:PACK:40
+Y:PACK:35
 W:12:20:15:45000
 P:0:0d0:4:0d0
 F:STEALTH | RES_COLD | FREE_ACT | NOBLE_ITEM
@@ -2392,7 +2392,7 @@ D: cold of deep places.
 N:134:of Lúthien
 Q:c3b8dbdc3f360c7d
 I:35:6:4
-Y:PACK:40
+Y:PACK:35
 W:13:25:10:45000
 P:0:0d0:4:0d0
 F:STEALTH | SUST_GRA | NOBLE_ITEM
@@ -2413,7 +2413,7 @@ D: the shadows around the wearer and lull the watchful into sleep.
 N:137:of Draugluin
 Q:08bf3f716e6bae68
 I:35:20:2
-Y:PACK:120
+Y:PACK:105
 W:20:1:130:500000
 P:-2:0d0:-3:2d4
 B:3/0
@@ -2436,7 +2436,7 @@ D: gates of Angband, and its dread shape may still deceive the Enemy.
 N:138:of Thuringwethil
 Q:f807c25435fc4111
 I:35:21:2
-Y:PACK:70
+Y:PACK:60
 W:23:1:50:500000
 P:-1:0d0:+3:0d0
 B:3/0
@@ -2458,7 +2458,7 @@ D: hold dark power, and servants of the Enemy may mistake its wearer for kin.
 N:142:of Celegorm
 Q:c0f5aa949a70ac3b
 I:19:12:-1
-Y:HARNESS:35
+Y:HARNESS:30
 W:10:25:20:9000
 P:2:1d9:0:0d0
 F:GRA | PERMA_CURSE | NEG_DEX
@@ -2478,7 +2478,7 @@ D: the bow clings to its bearer as the curse clung to him.
 N:143:'Death's Sting'
 Q:a5a2e301a3a95bc8
 I:19:12:0
-Y:HARNESS:35
+Y:HARNESS:30
 W:5:30:10:9000
 P:1:1d8:0:0d0
 B:1/6
@@ -2501,7 +2501,7 @@ N:145:'Belthronding'
 Q:792beedcd8af6104
 G:}:D
 I:19:13:2
-Y:HARNESS:45
+Y:HARNESS:40
 W:16:20:40:35000
 P:2:2d6:0:0d0
 F:ARCHERY | PERCEPTION | NOBLE_ITEM
@@ -2521,7 +2521,7 @@ D: own hand. When paired with Dailir, the bow's power awakens fully.
 N:146:'Tawarcun'
 Q:aad12cd72387f68d
 I:19:13:0
-Y:HARNESS:45
+Y:HARNESS:40
 W:10:25:20:3500
 P:2:2d5:0:0d0
 F:FREE_ACT | ACCURATE | NOBLE_ITEM
@@ -2538,7 +2538,7 @@ D: arrows fly straight and swift, unhindered by enchantment or shadow.
 N:147:of the Heavenly Arch
 Q:8c9a35404b9ef6bb
 I:19:13:1
-Y:HARNESS:45
+Y:HARNESS:40
 W:15:25:30:40000
 P:1:2d5:0:0d0
 F:DEX | LIGHT | NOBLE_ITEM
@@ -2560,7 +2560,7 @@ D: steady, and each shot flies where a deft will sends it.
 N:148:'Amlugrist'
 Q:4a5fc05927236048
 I:19:14:2
-Y:HARNESS:50
+Y:HARNESS:45
 W:19:20:50:35000
 P:1:4d4:0:0d0
 B:4/5/8
@@ -2603,7 +2603,7 @@ D: above all his arrows. When loosed from Belthronding, its power is greatest.
 N:154:of Finrod
 Q:22a000d1c9cd4749
 I:30:1:1
-Y:PACK:40
+Y:PACK:35
 W:16:20:20:40000
 P:0:0d0:3:1d1
 F:FREE_ACT | DEX NOBLE_ITEM
@@ -2623,7 +2623,7 @@ D: them pass through battle as a dance and slip free of any binding.
 N:155:of Taur-nu-Fuin
 Q:5117e067a79503a3
 I:30:1:2
-Y:PACK:40
+Y:PACK:35
 W:12:25:20:25000
 P:0:0d0:1:1d1
 F:STEALTH | PERCEPTION
@@ -2646,7 +2646,7 @@ D: carry some charm against the forest's spite.
 N:156:of the Mole
 Q:d16df76845463ad1
 I:30:1:0
-Y:PACK:40
+Y:PACK:35
 W:5:30:15:25000
 P:0:0d0:1:1d2
 B:3/5:2/0
@@ -2665,7 +2665,7 @@ D: moleskin, and their wearer moves silent as shadow through the deep.
 N:158:of Orodreth
 Q:b652ae5e70d86207
 I:30:2:1
-Y:PACK:60
+Y:PACK:55
 W:10:20:70:12000
 P:0:0d0:0:1d2
 F:DEX | RES_FIRE | NOBLE_ITEM
@@ -2684,7 +2684,7 @@ D: of Dragons brought upon the Hidden Kingdom of the Narog.
 N:159:of the Helcaraxe
 Q:3e6e5a5754c18458
 I:30:2:0
-Y:PACK:60
+Y:PACK:55
 W:10:25:80:12000
 P:0:0d0:0:1d3
 F:RES_COLD | REGEN
@@ -2705,7 +2705,7 @@ D: carry the endurance of that terrible journey.
 N:160:of Caranthir
 Q:7c3f4a89d2e617b5
 I:30:2:1
-Y:PACK:60
+Y:PACK:55
 W:10:25:80:30000
 P:0:0d0:-1:1d3
 F:STR | RES_FIRE | NOBLE_ITEM | PERMA_CURSE
@@ -2728,7 +2728,7 @@ D: something of his furious heat.
 N:161:of the Swallow
 Q:b24231154ce8a61a
 I:31:1:2
-Y:PACK:10
+Y:PACK:9
 W:5:40:5:36000
 P:1:0d0:0:1d0
 F:ARCHERY | NOBLE_ITEM
@@ -2751,7 +2751,7 @@ D: the archer's hands and guide each shaft to its mark.
 N:162:of Celebrimbor
 Q:3647fb472c02b95f
 I:31:1:2
-Y:PACK:10
+Y:PACK:9
 W:10:10:5:36000
 P:0:0d0:0:1d0
 B:6/4
@@ -2772,7 +2772,7 @@ D: grant steady hands for the finest craft.
 N:163:of Rumil
 Q:5260771238db2cd0
 I:31:1:1
-Y:PACK:10
+Y:PACK:9
 W:14:22:5:36000
 P:0:0d0:0:1d0
 F:GRA | DEX | ENCHANTABLE | NOBLE_ITEM
@@ -2923,7 +2923,7 @@ D: works of the Enemy.
 N:175:of Morgoth
 Q:f38047100d805844
 I:33:50:0
-Y:PACK:360
+Y:PACK:315
 W:20:1:4000:10000000
 P:0:0d0:0:0d0:0
 F:INSTA_ART | EVIL_ITEM
@@ -2941,7 +2941,7 @@ D: Dark Lord's will was poured into its making.
 N:176:of Morgoth
 Q:77a2f22dc8899b5f
 I:33:50:4
-Y:PACK:360
+Y:PACK:315
 W:20:1:4000:10000000
 P:0:0d0:0:0d0:0
 F:INSTA_ART | EVIL_ITEM
@@ -2959,7 +2959,7 @@ D: Middle-earth, and the Oath of Fëanor binds his sons to claim it.
 N:177:of Morgoth
 Q:2b7dccf70bd0d34b
 I:33:50:5
-Y:PACK:360
+Y:PACK:315
 W:20:1:4000:10000000
 P:0:0d0:0:0d0:0
 F:INSTA_ART | EVIL_ITEM
@@ -2977,7 +2977,7 @@ D: Middle-earth, and war and ruin have followed in their wake.
 N:178:of Morgoth
 Q:f6312da20fddf8bf
 I:33:50:6
-Y:PACK:360
+Y:PACK:315
 W:20:1:4000:10000000
 P:0:0d0:0:0d0:0
 F:INSTA_ART | EVIL_ITEM
@@ -2997,7 +2997,7 @@ D: or press (k).
 N:179:'Grond'
 Q:6005d4f5148dcefc
 I:21:50:3
-Y:HARNESS:180
+Y:HARNESS:160
 W:20:1:1000:500000
 P:-9:6d5:0:0d0
 F:TUNNEL

@@ -12,6 +12,8 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+#define SDL_QUESTION_MENU_MAX_COLUMNS 4
+
 typedef struct sdl_question_menu_layout_info {
     SDL_FRect panel;
     SDL_FRect title_row;
@@ -25,14 +27,18 @@ typedef struct sdl_question_menu_layout_info {
     float letter_gap;
     float icon_w;
     float icon_size;
+    float table_column_w[SDL_QUESTION_MENU_MAX_COLUMNS];
+    float table_gap;
     float row_h;
     int font_px;
+    int table_column_count;
     int first_entry;
     int visible_count;
     int button_count;
     bool has_title;
     bool has_desc;
     bool has_divider;
+    bool has_table;
     bool close_button;
     bool suppress_button;
 } sdl_question_menu_layout_info;
@@ -319,6 +325,44 @@ static void sdl_question_menu_draw_text(TTF_Font* font, cptr text,
     SDL_RenderTexture(g_state.renderer, texture, &src, &dst);
 }
 
+/* A tab-separated entry is rendered as aligned columns.  Keep this private
+ * to the question overlay so normal labels continue to be plain text. */
+static int sdl_question_menu_split_columns(cptr text,
+    char columns[][SDL_QUESTION_MENU_TEXT_LEN])
+{
+    size_t start = 0;
+    size_t length;
+    int count = 0;
+
+    if (!columns)
+        return 0;
+
+    memset(columns, 0,
+        sizeof(char) * SDL_QUESTION_MENU_MAX_COLUMNS
+            * SDL_QUESTION_MENU_TEXT_LEN);
+    if (!text)
+        return 0;
+
+    length = strlen(text);
+    for (size_t i = 0; i <= length && count < SDL_QUESTION_MENU_MAX_COLUMNS;
+        i++)
+    {
+        if (i == length || text[i] == '\t')
+        {
+            size_t column_length = i - start;
+
+            if (column_length >= SDL_QUESTION_MENU_TEXT_LEN)
+                column_length = SDL_QUESTION_MENU_TEXT_LEN - 1;
+            memcpy(columns[count], text + start, column_length);
+            columns[count][column_length] = '\0';
+            count++;
+            start = i + 1;
+        }
+    }
+
+    return count;
+}
+
 static float sdl_question_menu_text_width(TTF_Font* font, cptr text,
     int font_px)
 {
@@ -381,6 +425,8 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     float letter_gap;
     float icon_w = 0.0f;
     float icon_size = 0.0f;
+    float table_column_w[SDL_QUESTION_MENU_MAX_COLUMNS] = { 0 };
+    float table_gap = 0.0f;
     float close_reserve = 0.0f;
     float suppress_reserve = 0.0f;
     float button_widths[SDL_QUESTION_MENU_MAX_BUTTONS] = { 0 };
@@ -399,6 +445,8 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     bool close_button;
     bool suppress_button;
     bool header_row;
+    bool has_table = false;
+    int table_column_count = 0;
     bool has_icons = false;
 
     if (!out)
@@ -427,16 +475,41 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     if (!story_font)
         return false;
     mono_font = sdl_main_menu_mono_font_for_height(font_px);
+    table_gap = sdl_touch_pane_clampf((float)font_px * 0.45f, 8.0f,
+        16.0f);
 
     for (int i = 0; i < g_question_menu.count; i++)
     {
         const sdl_question_menu_entry_state* entry
             = &g_question_menu.entries[i];
-        float w = sdl_question_menu_text_width(story_font, entry->text,
-            font_px);
+        float w;
 
-        if (w > text_w)
-            text_w = w;
+        if (strchr(entry->text, '\t'))
+        {
+            char columns[SDL_QUESTION_MENU_MAX_COLUMNS]
+                [SDL_QUESTION_MENU_TEXT_LEN];
+            int column_count = sdl_question_menu_split_columns(entry->text,
+                columns);
+
+            has_table = true;
+            if (column_count > table_column_count)
+                table_column_count = column_count;
+            for (int column = 0; column < column_count; column++)
+            {
+                w = sdl_question_menu_text_width(story_font,
+                    columns[column], font_px);
+                if (w > table_column_w[column])
+                    table_column_w[column] = w;
+            }
+        }
+        else
+        {
+            w = sdl_question_menu_text_width(story_font, entry->text,
+                font_px);
+
+            if (w > text_w)
+                text_w = w;
+        }
         if (entry->letter[0])
         {
             w = mono_font
@@ -448,6 +521,20 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
         }
         if (entry->has_icon)
             has_icons = true;
+    }
+
+    if (has_table)
+    {
+        float table_w = 0.0f;
+
+        for (int column = 0; column < table_column_count; column++)
+        {
+            table_w += table_column_w[column];
+            if (column > 0)
+                table_w += table_gap;
+        }
+        if (table_w > text_w)
+            text_w = table_w;
     }
 
     out->has_title = (g_question_menu.title[0] != '\0');
@@ -658,6 +745,11 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     out->letter_gap = letter_gap;
     out->icon_w = icon_w;
     out->icon_size = icon_size;
+    out->table_gap = table_gap;
+    out->table_column_count = table_column_count;
+    out->has_table = has_table;
+    for (int column = 0; column < table_column_count; column++)
+        out->table_column_w[column] = table_column_w[column];
     out->row_h = row_h;
     out->close_button = close_button;
     out->suppress_button = suppress_button;
@@ -1384,8 +1476,36 @@ void sdl_question_menu_render(void)
                     layout.icon_w, row.h, false);
             }
         }
-        sdl_question_menu_draw_text(story_font, entry->text, text_color,
-            text_x, row.y, text_w, row.h, false);
+        if (layout.has_table && strchr(entry->text, '\t'))
+        {
+            char columns[SDL_QUESTION_MENU_MAX_COLUMNS]
+                [SDL_QUESTION_MENU_TEXT_LEN];
+            int column_count = sdl_question_menu_split_columns(entry->text,
+                columns);
+            float column_x = text_x;
+
+            for (int column = 0;
+                column < layout.table_column_count
+                    && column < column_count; column++)
+            {
+                float column_w = layout.table_column_w[column];
+                float remaining_w = text_w - (column_x - text_x);
+
+                if (remaining_w <= 0.0f)
+                    break;
+                if (column_w > remaining_w)
+                    column_w = remaining_w;
+                sdl_question_menu_draw_text(story_font, columns[column],
+                    text_color, column_x, row.y, column_w, row.h, false);
+                column_x += layout.table_column_w[column]
+                    + layout.table_gap;
+            }
+        }
+        else
+        {
+            sdl_question_menu_draw_text(story_font, entry->text, text_color,
+                text_x, row.y, text_w, row.h, false);
+        }
     }
 
     for (int i = 0; i < layout.button_count; i++)

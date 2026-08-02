@@ -453,7 +453,7 @@ void process_command(void)
         break;
     }
 
-    /* Swap the equipped staff with one from the pack */
+    /* Compatibility shortcut: choose a staff from the Harness. */
     case KTRL('A'):
     {
         do_cmd_swap_staff();

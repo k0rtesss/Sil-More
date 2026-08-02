@@ -257,7 +257,7 @@ int object_stack_limit(const object_type* o_ptr)
     if (o_ptr->tval == TV_SWORD && o_ptr->sval == SV_DAGGER)
         return 7;
     if (o_ptr->tval == TV_POLEARM && o_ptr->sval == SV_SPEAR)
-        return 5;
+        return 4;
     if (o_ptr->tval == TV_POLEARM && o_ptr->sval == SV_HAND_AXE)
         return 3;
     if (o_ptr->tval == TV_ARROW)
@@ -557,13 +557,13 @@ void inven_enforce_current_pack_limits(void)
             {
                 if (enforce_limit > limit)
                 {
-                    msg_format("Your legacy %s overage cannot increase beyond %d.%d L; choose what to drop.",
+                    msg_format("Your legacy %s overage cannot increase beyond %d.%d qt; choose what to drop.",
                         group == INV_LIMIT_PACK ? "Pack" : "Harness",
                         enforce_limit / 10, enforce_limit % 10);
                 }
                 else
                 {
-                    msg_format("Your %s capacity is now %d.%d L; choose what to drop.",
+                    msg_format("Your %s capacity is now %d.%d qt; choose what to drop.",
                         group == INV_LIMIT_PACK ? "Pack" : "Harness",
                         limit / 10, limit % 10);
                 }

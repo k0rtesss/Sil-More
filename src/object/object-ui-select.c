@@ -190,7 +190,7 @@ static void object_choice_append_volume(char* text, size_t text_size,
     if (volume <= 0)
         return;
 
-    strnfmt(suffix, sizeof(suffix), "  %d.%d L", volume / 10, volume % 10);
+    strnfmt(suffix, sizeof(suffix), "  %d.%d qt", volume / 10, volume % 10);
     suffix_len = strlen(suffix);
     if (suffix_len + 1 >= text_size)
         return;

@@ -177,7 +177,7 @@ void binding_action_label(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Stealth (S)", buflen);
         return;
     case KTRL('A'):
-        SDL_strlcpy(buf, "Swap staff (^A)", buflen);
+        SDL_strlcpy(buf, "Activate Harness staff (^A)", buflen);
         return;
     case KTRL('F'):
         SDL_strlcpy(buf, "Quiver/belt cannot swap (^F)", buflen);
@@ -411,7 +411,7 @@ void binding_action_short(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Stealth", buflen);
         return;
     case KTRL('A'):
-        SDL_strlcpy(buf, "Swap staff", buflen);
+        SDL_strlcpy(buf, "Activate Harness staff", buflen);
         return;
     case KTRL('F'):
         SDL_strlcpy(buf, "Quiver/belt cannot swap", buflen);
@@ -2268,7 +2268,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
             HELP_ADV_COMMAND('E', "E", "eat food");
             HELP_ADV_COMMAND('q', "q", "quaff potion");
             HELP_ADV_COMMAND('a', "a", "activate staff");
-            HELP_ADV_COMMAND(KTRL('A'), "\001", "swap staff");
+            HELP_ADV_COMMAND(KTRL('A'), "\001", "activate Harness staff (alias)");
             HELP_ADV_COMMAND('p', "p", "blow horn");
             HELP_ADV_COMMAND('o', "o", "open door / chest");
             HELP_ADV_COMMAND('c', "c", "close door");

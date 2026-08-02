@@ -928,13 +928,23 @@ static int sdl_object_tooltip_layout_runs(TTF_Font* font, cptr text,
     int pos = 0;
 
     while (pos < len && run_count < max_runs) {
+        if (text[pos] == '\n') {
+            if (line_w > max_w)
+                max_w = line_w;
+            line++;
+            line_w = 0.0f;
+            pos++;
+            continue;
+        }
+
         bool is_space = (text[pos] == ' ');
         int tok_start = pos;
         int tok_len;
         float tok_w;
         int sub;
 
-        while (pos < len && (text[pos] == ' ') == is_space)
+        while (pos < len && text[pos] != '\n'
+            && (text[pos] == ' ') == is_space)
             pos++;
         tok_len = pos - tok_start;
 

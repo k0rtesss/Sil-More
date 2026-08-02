@@ -20,9 +20,9 @@ enum inventory_limit_group
 };
 #endif
 
-/* Pack and Harness capacity is stored in tenths of a litre. */
-#define INVENTORY_PACK_VOLUME_CAP 300
-#define INVENTORY_HARNESS_VOLUME_CAP 240
+/* Pack and Harness capacity is stored in tenths of an imperial quart. */
+#define INVENTORY_PACK_VOLUME_CAP 260
+#define INVENTORY_HARNESS_VOLUME_CAP 210
 #define INVENTORY_HEAVY_ARMOUR_VOLUME_BONUS 60
 #define INVENTORY_ARROW_VOLUME_BUNDLE 12
 

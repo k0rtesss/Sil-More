@@ -317,6 +317,69 @@ static void active_weapon_mode_prompt_name(char* buf, size_t buflen, int mode)
     }
 }
 
+void player_active_weapon_name(char* buf, size_t buflen)
+{
+    int mode;
+    int kind;
+    const object_type* weapon_ptr = NULL;
+    const object_type* quiver_ptr = NULL;
+    char weapon_name[80] = "";
+    char quiver_name[80] = "";
+
+    if (!buf || buflen == 0)
+        return;
+
+    mode = player_active_weapon_mode();
+    kind = active_weapon_kind_for_mode(mode);
+
+    if (kind == PLAYER_ACTIVE_WEAPON_KIND_MELEE)
+    {
+        weapon_ptr = &inventory[INVEN_WIELD];
+        if (weapon_ptr->k_idx)
+        {
+            object_desc(weapon_name, sizeof(weapon_name), weapon_ptr, false,
+                4);
+            strnfmt(buf, buflen, "Melee: %s", weapon_name);
+        }
+        else
+        {
+            SDL_strlcpy(buf, "Melee", buflen);
+        }
+        return;
+    }
+
+    quiver_ptr = &inventory[INVEN_QUIVER1];
+    if (kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
+    {
+        if (quiver_ptr->k_idx)
+        {
+            object_desc(quiver_name, sizeof(quiver_name), quiver_ptr, false,
+                4);
+            strnfmt(buf, buflen, "Throwing: %s", quiver_name);
+        }
+        else
+        {
+            SDL_strlcpy(buf, "Throwing", buflen);
+        }
+        return;
+    }
+
+    weapon_ptr = &inventory[INVEN_BOW];
+    if (weapon_ptr->k_idx)
+        object_desc(weapon_name, sizeof(weapon_name), weapon_ptr, false, 4);
+    if (quiver_ptr->k_idx)
+        object_desc(quiver_name, sizeof(quiver_name), quiver_ptr, false, 4);
+
+    if (weapon_name[0] && quiver_name[0])
+        strnfmt(buf, buflen, "Ranged: %s; %s", weapon_name, quiver_name);
+    else if (weapon_name[0])
+        strnfmt(buf, buflen, "Ranged: %s", weapon_name);
+    else if (quiver_name[0])
+        strnfmt(buf, buflen, "Ranged: %s", quiver_name);
+    else
+        SDL_strlcpy(buf, "Ranged: empty", buflen);
+}
+
 static bool confirm_active_weapon_switch(int new_mode)
 {
     char target[160];
@@ -707,6 +770,17 @@ static char active_weapon_choice_key(int index)
     return 0;
 }
 
+static char active_weapon_menu_key(int index)
+{
+    static cptr keys = "abcdefghijklmnopqrstuvwxyz";
+    size_t key_count = strlen(keys);
+
+    if (index >= 0 && (size_t)index < key_count)
+        return keys[index];
+
+    return 0;
+}
+
 static byte active_weapon_choice_attr(const object_type* o_ptr)
 {
     if (!o_ptr || !o_ptr->k_idx)
@@ -719,29 +793,26 @@ static byte active_weapon_choice_attr(const object_type* o_ptr)
 }
 
 static void active_weapon_object_choice_name(char* buf, size_t buflen,
-    const object_type* o_ptr, cptr location)
+    const object_type* o_ptr)
 {
     char object_name[120];
-    int volume;
 
     if (!buf || buflen == 0)
         return;
 
     if (!o_ptr || !o_ptr->k_idx)
     {
-        strnfmt(buf, buflen, "%s: no bow", location);
+        SDL_strlcpy(buf, "no bow", buflen);
         return;
     }
 
     object_desc(object_name, sizeof(object_name), o_ptr, true, 3);
-    volume = object_effective_volume(o_ptr);
-    strnfmt(buf, buflen, "%s: %s (%d.%d L)", location, object_name,
-        volume / 10, volume % 10);
+    SDL_strlcpy(buf, object_name, buflen);
 }
 
 static bool add_active_weapon_choice(active_weapon_choice choices[],
     ui_question_option options[], int* count, int item, object_type* o_ptr,
-    int mode, int target_slot, cptr label)
+    int mode, int target_slot, cptr role, cptr weapon_label)
 {
     active_weapon_choice* choice;
     active_weapon_preview preview;
@@ -766,15 +837,16 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
     if (active_weapon_choice_preview(mode, item, target_slot, &preview))
     {
         strnfmt(choice->label, sizeof(choice->label),
-            "%s (%+d,%dd%d)", label ? label : "Weapon", preview.attack,
-            preview.dd, preview.ds);
+            "%s\t%s\t(%+d,%dd%d)", role ? role : "Weapon",
+            weapon_label ? weapon_label : "", preview.attack, preview.dd,
+            preview.ds);
     }
     else
     {
-        SDL_strlcpy(choice->label, label ? label : "Weapon",
-            sizeof(choice->label));
+        strnfmt(choice->label, sizeof(choice->label), "%s\t%s",
+            role ? role : "Weapon", weapon_label ? weapon_label : "");
     }
-    options[*count].key = active_weapon_choice_key(*count);
+    options[*count].key = active_weapon_menu_key(*count);
     options[*count].label = choice->label;
     options[*count].attr = active_weapon_choice_attr(o_ptr);
     options[*count].disabled = false;
@@ -805,11 +877,10 @@ static void add_ranged_active_weapon_choices(active_weapon_choice choices[],
 
         ranged_slot_choice_name(quiver_name, sizeof(quiver_name),
             INVEN_QUIVER1);
-        active_weapon_object_choice_name(bow_name, sizeof(bow_name), bow,
-            role);
+        active_weapon_object_choice_name(bow_name, sizeof(bow_name), bow);
         strnfmt(label, sizeof(label), "%s; %s", bow_name, quiver_name);
         if (!add_active_weapon_choice(choices, options, count, item, bow,
-                PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW, label))
+                PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW, role, label))
         {
             return;
         }
@@ -839,9 +910,9 @@ static void add_melee_and_throwing_active_weapon_choices(
                && current_mode == PLAYER_ACTIVE_WEAPON_MELEE)
         ? "Melee [active]"
         : "Melee";
-    active_weapon_object_choice_name(label, sizeof(label), o_ptr, role);
+    active_weapon_object_choice_name(label, sizeof(label), o_ptr);
     if (add_active_weapon_choice(choices, options, count, item, o_ptr,
-            PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, label)
+            PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, role, label)
         && item == INVEN_WIELD
         && current_mode == PLAYER_ACTIVE_WEAPON_MELEE && default_index)
     {
@@ -856,13 +927,46 @@ static void add_melee_and_throwing_active_weapon_choices(
                && current_mode == PLAYER_ACTIVE_WEAPON_RANGED_1)
         ? "Throwing [active]"
         : "Throwing";
-    active_weapon_object_choice_name(label, sizeof(label), o_ptr, role);
+    active_weapon_object_choice_name(label, sizeof(label), o_ptr);
     if (add_active_weapon_choice(choices, options, count, item, o_ptr,
-            PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_QUIVER1, label)
+            PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_QUIVER1, role, label)
         && item == INVEN_QUIVER1
         && current_mode == PLAYER_ACTIVE_WEAPON_RANGED_1 && default_index)
     {
         *default_index = choice_index;
+    }
+}
+
+static void prepare_active_weapon_menu_choices(
+    active_weapon_choice choices[], ui_question_option options[], int count,
+    int* default_index)
+{
+    active_weapon_choice active_choice;
+    ui_question_option active_option;
+    int active_index;
+
+    if (!choices || !options || count <= 0 || !default_index)
+        return;
+
+    active_index = *default_index;
+    if (active_index > 0 && active_index < count)
+    {
+        active_choice = choices[active_index];
+        active_option = options[active_index];
+        for (int i = active_index; i > 0; i--)
+        {
+            choices[i] = choices[i - 1];
+            options[i] = options[i - 1];
+        }
+        choices[0] = active_choice;
+        options[0] = active_option;
+        *default_index = 0;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        options[i].key = active_weapon_menu_key(i);
+        options[i].label = choices[i].label;
     }
 }
 
@@ -922,6 +1026,9 @@ static bool choose_active_weapon(active_weapon_choice* selected)
         msg_print("You have no combat weapon to ready.");
         return false;
     }
+
+    prepare_active_weapon_menu_choices(choices, options, count,
+        &default_index);
 
     for (int i = 0; i < count; i++)
         object_icons[i] = choices[i].o_ptr;
@@ -1223,6 +1330,8 @@ bool player_weapon_slot_combat_bonuses_active_for_mode(int mode, int slot,
     case INVEN_QUIVER1:
         return mode == PLAYER_ACTIVE_WEAPON_RANGED_1;
     case INVEN_BELT:
+    case INVEN_STAFF:
+    case INVEN_HORN:
         return false;
     default:
         return true;
@@ -1255,6 +1364,8 @@ bool player_equipment_slot_is_active(int slot)
             ? player_weapon_slot_combat_bonuses_active(slot, &inventory[slot])
             : mode == PLAYER_ACTIVE_WEAPON_MELEE;
     case INVEN_BELT:
+    case INVEN_STAFF:
+    case INVEN_HORN:
         return false;
     default:
         return true;

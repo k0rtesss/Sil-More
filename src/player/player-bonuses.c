@@ -217,6 +217,10 @@ void calc_bonuses(void)
         if (!o_ptr->k_idx)
             continue;
 
+        /* Retired staff/horn slots are compatibility storage, not equipment. */
+        if (i == INVEN_STAFF || i == INVEN_HORN)
+            continue;
+
         /* Extract the item flags */
         object_flags(o_ptr, &f1, &f2, &f3);
 

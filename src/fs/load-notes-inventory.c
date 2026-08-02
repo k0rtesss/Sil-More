@@ -157,10 +157,10 @@ errr rd_inventory(void)
             /* Copy object */
             object_copy(&inventory[n], i_ptr);
 
-            /* Log equipped staff loading */
+            /* Log a staff found in the retired equipment range. */
             if (i_ptr->tval == TV_STAFF)
             {
-                log_debug("Loaded equipped staff at slot %d: k_idx=%d sval=%d pval=%d number=%d",
+                log_debug("Loaded legacy staff slot %d: k_idx=%d sval=%d pval=%d number=%d",
                           n, i_ptr->k_idx, i_ptr->sval, i_ptr->pval, i_ptr->number);
             }
 

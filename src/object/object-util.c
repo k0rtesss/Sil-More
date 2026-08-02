@@ -193,7 +193,7 @@ int object_effective_volume_with_reduction(const object_type* o_ptr,
     if (strongest_reduction < 0)
         volume = (volume * (100 + strongest_reduction) + 50) / 100;
 
-    /* A volume-bearing item always occupies at least 0.1 L. */
+    /* A volume-bearing item always occupies at least 0.1 qt. */
     return MAX(1, volume);
 }
 

@@ -314,7 +314,7 @@ void ui_menu_click_add_text_token(int choice, int col, int row, cptr text,
 
     if (sdl_is_story_font_enabled() && !sdl_is_story_font_grid())
     {
-        int cell_width = sdl_get_cell_width();
+        int cell_width = sdl_get_active_cell_width();
         int prefix_px = sdl_story_font_text_width(text, (int)(match - text));
         int token_px = sdl_story_font_text_width(token, token_width);
 

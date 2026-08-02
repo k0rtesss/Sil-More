@@ -3776,7 +3776,6 @@ static const int equipment_menu_slots[] = {
     EQUIPMENT_MENU_ALL,
     INVEN_WIELD,
     INVEN_BOW,
-    INVEN_STAFF,
     EQUIPMENT_MENU_RINGS,
     INVEN_NECK,
     INVEN_LITE,
@@ -3786,8 +3785,7 @@ static const int equipment_menu_slots[] = {
     INVEN_HEAD,
     INVEN_HANDS,
     INVEN_FEET,
-    EQUIPMENT_MENU_QUIVERS,
-    INVEN_HORN
+    EQUIPMENT_MENU_QUIVERS
 };
 
 #define EQUIPMENT_MENU_SLOT_COUNT ((int)N_ELEMENTS(equipment_menu_slots))
@@ -3918,6 +3916,9 @@ static bool equipment_object_is_wearable(const object_type* o_ptr)
         return false;
 
     if ((o_ptr->name1 >= ART_MORGOTH_0) && (o_ptr->name1 <= ART_MORGOTH_3))
+        return false;
+
+    if (o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN)
         return false;
 
     return wield_slot(o_ptr) >= INVEN_WIELD;
@@ -4780,7 +4781,7 @@ static bool equipment_entry_volume_text(const object_type* o_ptr, char* buf,
     if (volume <= 0)
         return false;
 
-    strnfmt(buf, buflen, "%3d.%1d L", volume / 10, volume % 10);
+    strnfmt(buf, buflen, "%3d.%1d qt", volume / 10, volume % 10);
     return true;
 }
 
@@ -5301,7 +5302,6 @@ static cptr supply_item_use_action_text(const object_type* o_ptr, int item)
 
     switch (o_ptr->tval)
     {
-    case TV_STAFF:
     case TV_LIGHT:
         return "Equip";
     case TV_FLASK:
@@ -5684,13 +5684,13 @@ static void inventory_browser_group_limit_status(inventory_menu_group group,
         if (saved > 0)
         {
             strnfmt(buf, buflen,
-                "%d.%d/%d.%d L (%d.%d L left; carriage saves %d.%d L)",
+                "%d.%d/%d.%d qt (%d.%d qt left; carriage saves %d.%d qt)",
                 used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
                 left / 10, left % 10, saved / 10, saved % 10);
         }
         else
         {
-            strnfmt(buf, buflen, "%d.%d/%d.%d L (%d.%d L left)",
+            strnfmt(buf, buflen, "%d.%d/%d.%d qt (%d.%d qt left)",
                 used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
                 left / 10, left % 10);
         }
@@ -5702,13 +5702,13 @@ static void inventory_browser_group_limit_status(inventory_menu_group group,
         if (saved > 0)
         {
             strnfmt(buf, buflen,
-                "%d.%d/%d.%d L (%d.%d L over; carriage saves %d.%d L)",
+                "%d.%d/%d.%d qt (%d.%d qt over; carriage saves %d.%d qt)",
                 used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
                 over / 10, over % 10, saved / 10, saved % 10);
         }
         else
         {
-            strnfmt(buf, buflen, "%d.%d/%d.%d L (%d.%d L over)",
+            strnfmt(buf, buflen, "%d.%d/%d.%d qt (%d.%d qt over)",
                 used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
                 over / 10, over % 10);
         }
@@ -5815,14 +5815,14 @@ static void inventory_browser_section_header(inventory_menu_group group,
     else if (left >= 0 && saved > 0)
     {
         strnfmt(buf, buflen,
-            "%s (%d): %d.%d/%d.%d L; %d.%d left; carriage saves %d.%d L",
+            "%s (%d): %d.%d/%d.%d qt; %d.%d left; carriage saves %d.%d qt",
             inventory_browser_group_text(group), entry_cnt,
             used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
             left / 10, left % 10, saved / 10, saved % 10);
     }
     else if (left >= 0)
     {
-        strnfmt(buf, buflen, "%s (%d): %d.%d/%d.%d L; %d.%d left",
+        strnfmt(buf, buflen, "%s (%d): %d.%d/%d.%d qt; %d.%d left",
             inventory_browser_group_text(group), entry_cnt,
             used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
             left / 10, left % 10);
@@ -5832,7 +5832,7 @@ static void inventory_browser_section_header(inventory_menu_group group,
         int over = 0 - left;
 
         strnfmt(buf, buflen,
-            "%s (%d): %d.%d/%d.%d L; %d.%d over; carriage saves %d.%d L",
+            "%s (%d): %d.%d/%d.%d qt; %d.%d over; carriage saves %d.%d qt",
             inventory_browser_group_text(group), entry_cnt,
             used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
             over / 10, over % 10, saved / 10, saved % 10);
@@ -5841,7 +5841,7 @@ static void inventory_browser_section_header(inventory_menu_group group,
     {
         int over = 0 - left;
 
-        strnfmt(buf, buflen, "%s (%d): %d.%d/%d.%d L; %d.%d over",
+        strnfmt(buf, buflen, "%s (%d): %d.%d/%d.%d qt; %d.%d over",
             inventory_browser_group_text(group), entry_cnt,
             used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
             over / 10, over % 10);
@@ -6639,8 +6639,8 @@ static void inventory_replacement_volume_status(
             if (candidate->number > 1)
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d L; incoming %d.%d L; selected drops "
-                    "%d and frees %d.%d L; %d.%d L still needed.",
+                    "%s %d.%d/%d.%d qt; incoming %d.%d qt; selected drops "
+                    "%d and frees %d.%d qt; %d.%d qt still needed.",
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, remove_amount, saved / 10, saved % 10,
@@ -6649,8 +6649,8 @@ static void inventory_replacement_volume_status(
             else
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d L; incoming %d.%d L; selected frees "
-                    "%d.%d L; %d.%d L still needed.",
+                    "%s %d.%d/%d.%d qt; incoming %d.%d qt; selected frees "
+                    "%d.%d qt; %d.%d qt still needed.",
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, saved / 10, saved % 10, remaining / 10,
@@ -6664,8 +6664,8 @@ static void inventory_replacement_volume_status(
             if (candidate->number > 1)
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d L; incoming %d.%d L; selected drops "
-                    "%d and frees %d.%d L; %d.%d L left after replacement.",
+                    "%s %d.%d/%d.%d qt; incoming %d.%d qt; selected drops "
+                    "%d and frees %d.%d qt; %d.%d qt left after replacement.",
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, remove_amount, saved / 10, saved % 10,
@@ -6674,8 +6674,8 @@ static void inventory_replacement_volume_status(
             else
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d L; incoming %d.%d L; selected frees "
-                    "%d.%d L; %d.%d L left after replacement.",
+                    "%s %d.%d/%d.%d qt; incoming %d.%d qt; selected frees "
+                    "%d.%d qt; %d.%d qt left after replacement.",
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, saved / 10, saved % 10, left_after / 10,
@@ -6686,8 +6686,8 @@ static void inventory_replacement_volume_status(
     else
     {
         strnfmt(buf, buflen,
-            "%s: %d replacement candidate%s. %d.%d/%d.%d L used; "
-            "incoming needs %d.%d L; short by %d.%d L.",
+            "%s: %d replacement candidate%s. %d.%d/%d.%d qt used; "
+            "incoming needs %d.%d qt; short by %d.%d qt.",
             inventory_browser_group_text(selected_group), candidate_count,
             (candidate_count == 1) ? "" : "s", used / 10, used % 10,
             limit / 10, limit % 10, needed / 10, needed % 10,
@@ -6908,12 +6908,10 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
 static bool inventory_page_drop_entry(equipment_list_entry* entry)
 {
     supply_list_entry supply_entry = {0};
-    object_type* o_ptr;
 
     if (!entry)
         return false;
 
-    o_ptr = equipment_entry_object(entry);
     if (equipment_entry_carried_pack_action_blocked(entry))
         return false;
 

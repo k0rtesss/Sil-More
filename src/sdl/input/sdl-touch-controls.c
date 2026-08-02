@@ -5664,12 +5664,12 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         return;
     case 'a':
         SDL_strlcpy(buf,
-            "Staff: choose and use a staff from your inventory or equipment.",
+            "Staff: choose and activate a staff from your Harness.",
             buflen);
         return;
     case KTRL('A'):
         SDL_strlcpy(buf,
-            "Swap Staff: change which staff is ready for quick use.", buflen);
+            "Staff: choose and activate a staff from your Harness.", buflen);
         return;
     case '0':
         SDL_strlcpy(buf, "Smithing: open the forge crafting screen.", buflen);

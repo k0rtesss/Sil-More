@@ -2009,6 +2009,7 @@ extern int polearm_bonus(const object_type* o_ptr);
 extern byte total_ads(const object_type* j_ptr);
 extern byte total_ads_for_weapon_mode(const object_type* j_ptr, int mode);
 extern int player_active_weapon_mode(void);
+extern void player_active_weapon_name(char* buf, size_t buflen);
 extern bool player_active_weapon_is_melee(void);
 extern bool player_active_weapon_is_ranged(void);
 extern bool player_active_weapon_stats_preview(int mode, int* attack,
@@ -2699,6 +2700,7 @@ extern int sdl_story_font_text_width(cptr text, int len);
 extern int sdl_overlay_log_wrap(const char* msg, int max_segs, int* out_off,
     int* out_len);
 extern int sdl_get_cell_width(void);
+extern int sdl_get_active_cell_width(void);
 extern int sdl_main_view_visible_col0(void);
 extern int sdl_main_view_visible_cols(void);
 extern bool sdl_left_panel_pane_map_coverage(int* start_col, int* cols,

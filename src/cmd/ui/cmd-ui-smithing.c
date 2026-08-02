@@ -611,6 +611,88 @@ static void smith_ui_put_fitted(int col, int row, int width, byte attr, cptr tex
     smith_ui_draw_fitted(col, row, width, attr, text, true);
 }
 
+/*
+ * Draw an object's title without letting a long quantity/name run into its
+ * combat statistics.  The story font packs text by pixel width, while the
+ * terminal still lays out each field in columns.  Keeping the name and the
+ * suffix in separate spans gives the statistics their own protected region.
+ */
+static void smith_ui_put_object_title(int col, int row, int width, byte attr,
+    cptr description, cptr weight)
+{
+    char name[160];
+    char suffix[160];
+    char fitted_name[160];
+    char fitted_suffix[160];
+    const char* suffix_start = NULL;
+    int name_len = 0;
+    int suffix_width;
+    int name_width;
+    int gap = 1;
+
+    if (!description)
+        description = "";
+    if (!weight)
+        weight = "";
+
+    /* Combat/protection/pval details begin with a space and one of these
+     * delimiters.  Keep the first such delimiter with the right-hand suffix.
+     */
+    for (const char* p = description; *p; p++)
+    {
+        if ((p > description) && (p[-1] == ' ')
+            && strchr("([{<", *p))
+        {
+            suffix_start = p - 1;
+            break;
+        }
+    }
+
+    if (!suffix_start)
+        suffix_start = description + strlen(description);
+
+    name_len = (int)(suffix_start - description);
+    if (name_len >= (int)sizeof(name))
+        name_len = (int)sizeof(name) - 1;
+    SDL_memcpy(name, description, (size_t)name_len);
+    name[name_len] = '\0';
+
+    SDL_strlcpy(suffix, suffix_start, sizeof(suffix));
+    if (weight[0])
+    {
+        if (suffix[0])
+            SDL_strlcat(suffix, "   ", sizeof(suffix));
+        SDL_strlcat(suffix, weight, sizeof(suffix));
+    }
+
+    width = smith_ui_safe_width(col, width);
+    if (width <= 0)
+        return;
+
+    suffix_width = utf8_display_width_n(suffix, (int)strlen(suffix));
+    if (suffix_width > width - 1)
+        suffix_width = MAX(1, width - 1);
+
+    name_width = width - suffix_width - gap;
+    if (name_width < 1)
+    {
+        name_width = 1;
+        gap = 0;
+        suffix_width = width - name_width;
+    }
+
+    smith_ui_fit_text(fitted_name, sizeof(fitted_name), name, name_width);
+    smith_ui_fit_text(fitted_suffix, sizeof(fitted_suffix), suffix,
+        suffix_width);
+
+    smith_ui_put_fitted(col, row, name_width, attr, fitted_name);
+    if (gap > 0)
+        Term_erase(col + name_width, row, gap);
+    if (suffix_width > 0)
+        smith_ui_put_fitted(col + name_width + gap, row, suffix_width, attr,
+            fitted_suffix);
+}
+
 static void smith_ui_fill_row(int col, int row, int width, byte attr)
 {
     char fill[180];
@@ -3213,7 +3295,8 @@ void wipe_object_description(void)
  */
 void prt_object_description(void)
 {
-    char o_desc[80];
+    char o_desc[160];
+    char weight_desc[32];
     char buf[80];
     char base_desc_buf[2048];
     cptr base_desc;
@@ -3260,11 +3343,9 @@ void prt_object_description(void)
         display_flag = false;
 
     object_desc(o_desc, sizeof(o_desc), smith_o_ptr, display_flag, 2);
-
-    SDL_strlcat(o_desc,
-        format("   %d.%d lb", smith_o_ptr->weight * smith_o_ptr->number / 10,
-            (smith_o_ptr->weight * smith_o_ptr->number) % 10),
-        sizeof(o_desc));
+    strnfmt(weight_desc, sizeof(weight_desc), "%d.%d lb",
+        smith_o_ptr->weight * smith_o_ptr->number / 10,
+        (smith_o_ptr->weight * smith_o_ptr->number) % 10);
 
     base_desc = object_lore_select_base_text(smith_o_ptr, base_desc_buf,
         sizeof(base_desc_buf));
@@ -3312,7 +3393,8 @@ void prt_object_description(void)
             return;
     }
 
-    smith_ui_put_fitted(desc_col, desc_row, desc_width, TERM_L_WHITE, o_desc);
+    smith_ui_put_object_title(desc_col, desc_row, desc_width, TERM_L_WHITE,
+        o_desc, weight_desc);
     desc_row++;
     if (desc_row > smith_ui_content_bottom_row())
         return;
@@ -4236,15 +4318,17 @@ static void pay_smithing_cost_struct(const smithing_cost_type* cost)
 }
 
 // Determine default stack sizes for smithing-created items.
-// Normal: arrows 24/18/12, daggers & spears 3/2/1 (normal/enchanted/artefact).
-// This keeps arrows and throwable weapons in sensible stack counts.
+// Normal: arrows 24/18/12, hand axes and spears 3/2/1, daggers 5/3/1
+// (normal/enchanted/artefact).  This keeps arrows and throwable weapons in
+// sensible stack counts.
 static byte smith_default_stack_size(const object_type* o_ptr)
 {
     bool is_arrow = (o_ptr->tval == TV_ARROW);
     bool is_spear = (o_ptr->tval == TV_POLEARM) && (o_ptr->sval == SV_SPEAR);
+    bool is_hand_axe = (o_ptr->tval == TV_POLEARM) && (o_ptr->sval == SV_HAND_AXE);
     bool is_dagger = (o_ptr->tval == TV_SWORD) && (o_ptr->sval == SV_DAGGER);
 
-    if (!(is_arrow || is_spear || is_dagger))
+    if (!(is_arrow || is_spear || is_hand_axe || is_dagger))
     {
         return (o_ptr->number ? o_ptr->number : 1);
     }
@@ -4260,8 +4344,8 @@ static byte smith_default_stack_size(const object_type* o_ptr)
     }
 
     if (is_artifact) return 1;
-    if (is_enchanted) return 2;
-    return 3;
+    if (is_enchanted) return is_dagger ? 3 : 2;
+    return is_dagger ? 5 : 3;
 }
 
 /*

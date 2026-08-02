@@ -171,17 +171,8 @@ static bool staff_channel_target_matches(const object_type* donor,
 static object_type* find_staff_channel_target(const object_type* donor,
                                               int* target_slot)
 {
-    object_type* wielded = &inventory[INVEN_STAFF];
-
     if (target_slot)
         *target_slot = -1;
-
-    if (staff_channel_target_matches(donor, wielded))
-    {
-        if (target_slot)
-            *target_slot = INVEN_STAFF;
-        return wielded;
-    }
 
     for (int i = 0; i < INVEN_PACK; i++)
     {
@@ -694,8 +685,8 @@ static void format_inventory_limit_reason(char* buf, size_t max,
             needed = inventory_limit_space_for_object(incoming);
         shortage = MAX(used + needed - limit, 0);
         strnfmt(buf, max,
-            "No room in %s: %d.%d/%d.%d L used (%d.%d L left). "
-            "Incoming needs %d.%d L; short by %d.%d L.",
+            "No room in %s: %d.%d/%d.%d qt used (%d.%d qt left). "
+            "Incoming needs %d.%d qt; short by %d.%d qt.",
             inventory_limit_group_name(group), used / 10, used % 10,
             limit / 10, limit % 10, left / 10, left % 10,
             needed / 10, needed % 10, shortage / 10, shortage % 10);
@@ -1521,8 +1512,8 @@ static void report_pack_limit_failure(const char* o_name, bool still)
             int used = inventory_limit_usage_for_group(group);
             int left = MAX(limit - used, 0);
 
-            msg_format("Your %s %s full: %d.%d/%d.%d L used "
-                       "(%d.%d L left).",
+            msg_format("Your %s %s full: %d.%d/%d.%d qt used "
+                       "(%d.%d qt left).",
                 inventory_limit_group_name(group), still ? "is still" : "is",
                 used / 10, used % 10, limit / 10, limit % 10,
                 left / 10, left % 10);
@@ -1635,7 +1626,7 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
 
         if (incoming_space > limit)
         {
-            msg_format("It needs %d.%d L, more than the %d.%d L maximum; "
+            msg_format("It needs %d.%d qt, more than the %d.%d qt maximum; "
                        "it cannot fit even when this pool is empty.",
                 incoming_space / 10, incoming_space % 10,
                 limit / 10, limit % 10);

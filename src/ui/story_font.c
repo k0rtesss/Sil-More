@@ -5,6 +5,13 @@
 #include "../log/log.h"
 #include "story_font.h"
 
+static int story_font_cell_width(void)
+{
+    int cell_width = sdl_get_active_cell_width();
+
+    return (cell_width > 0) ? cell_width : sdl_get_cell_width();
+}
+
 /*
  * Count how many lines text will occupy when using story font with pixel-based wrapping.
  * Similar to count_wrapped_lines but accounts for proportional font width.
@@ -17,7 +24,7 @@ int count_wrapped_lines_story(cptr str, int wrap_cols, int indent)
     /* Convert column-based wrap to pixel width */
     int term_wid = 80;
     int term_hgt = 24;
-    int cell_width = sdl_get_cell_width();
+    int cell_width = story_font_cell_width();
     int wrap_pixels = wrap_cols * cell_width;
     int indent_pixels = indent * cell_width;
     int space_pixels = sdl_story_font_text_width(" ", 1);
@@ -167,7 +174,7 @@ void text_out_to_screen_story(byte a, cptr str)
     else
         wrap_cols = wid;
 
-    int cell_width = sdl_get_cell_width();
+    int cell_width = story_font_cell_width();
     int wrap_pixels = wrap_cols * cell_width;
     int indent_pixels = text_out_indent * cell_width;
     int space_pixels = sdl_story_font_text_width(" ", 1);
@@ -299,7 +306,7 @@ void text_out_to_screen_overlay_story(byte a, cptr str)
     int slot = (Term ? Term->story_font_slot : 0);
     int wrap_pixels = sdl_description_overlay_text_px();
     if (wrap_pixels <= 0)
-        wrap_pixels = wid * sdl_get_cell_width();
+        wrap_pixels = wid * story_font_cell_width();
 
     overlay_story_seed_line(line, sizeof(line), y, x, &line_len);
 

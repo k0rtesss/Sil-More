@@ -601,7 +601,7 @@ static bool recharge_choose_target(const recharge_target_entry entries[],
 }
 
 /*
- * Recharge a staff from the pack, equipment, or on the floor.
+ * Recharge a staff from the Harness or on the floor.
  *
  * Mage -- Recharge I --> recharge(5)
  * Mage -- Recharge II --> recharge(40)

@@ -107,6 +107,10 @@ static int get_unequip_sound(const object_type* o_ptr)
  */
 static bool item_tester_hook_wear(const object_type* o_ptr)
 {
+    /* Staves and horns are used directly from the Harness, never equipped. */
+    if (o_ptr && (o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN))
+        return (false);
+
     /* Literal (broken) items cannot be equipped until repaired. */
     if (object_has_broken_prefix(o_ptr))
         return (false);
@@ -293,11 +297,9 @@ cptr item_use_action_name(const object_type* o_ptr, int item)
     case TV_NOTE:
         return "Read";
     case TV_STAFF:
-        return (item >= INVEN_WIELD && item < INVEN_TOTAL) ? "Activate"
-                                                           : "Wield";
+        return (item < 0) ? "Pick up" : "Activate";
     case TV_HORN:
-        return (item >= INVEN_WIELD && item < INVEN_TOTAL) ? "Play"
-                                                           : "Wield";
+        return (item < 0) ? "Pick up" : "Play";
     case TV_POTION:
         return "Quaff";
     case TV_FOOD:
@@ -1150,13 +1152,10 @@ void do_cmd_use_item_by_index(int item)
     }
     case TV_STAFF:
     {
-        /* A staff has to be equipped before the unified Use action activates
-         * it.  Packed and floor staves therefore use the same Equip path as
-         * other wearable items. */
-        if (item >= INVEN_WIELD && item < INVEN_TOTAL)
-            do_cmd_activate_staff(o_ptr, item);
+        if (item < 0)
+            py_pickup_aux(0 - item);
         else
-            do_cmd_wield(o_ptr, item);
+            do_cmd_activate_staff(o_ptr, item);
         break;
     }
     case TV_GEM:
@@ -1166,12 +1165,10 @@ void do_cmd_use_item_by_index(int item)
     }
     case TV_HORN:
     {
-        /* Like a staff, a horn must be equipped before unified Use performs
-         * its activation.  Packed and floor horns therefore equip first. */
-        if (item >= INVEN_WIELD && item < INVEN_TOTAL)
-            do_cmd_play_instrument(o_ptr, item);
+        if (item < 0)
+            py_pickup_aux(0 - item);
         else
-            do_cmd_wield(o_ptr, item);
+            do_cmd_play_instrument(o_ptr, item);
         break;
     }
     case TV_POTION:
@@ -1517,6 +1514,12 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         }
     }
 
+    if (o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN)
+    {
+        msg_print("Staves and horns are kept in your Harness and used from there.");
+        return;
+    }
+
     if (object_has_broken_prefix(o_ptr))
     {
         msg_print("Broken items must be repaired before they can be equipped.");
@@ -1528,12 +1531,6 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
     // remember how many there were
     original_quantity = o_ptr->number;
-
-    if (!from_supplies && item < 0 && o_ptr->tval == TV_STAFF
-        && player_channel_floor_staff(o_ptr, 0 - item))
-    {
-        return;
-    }
 
     // Check whether it would be too heavy
     if ((item < 0)
@@ -1598,8 +1595,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             int needed = inventory_limit_additional_space_for_object(o_ptr);
             int left = MAX(limit - used, 0);
 
-            msg_format("No room in %s: %d.%d/%d.%d L used (%d.%d L left); "
-                       "this item needs %d.%d L.",
+            msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
+                       "this item needs %d.%d qt.",
                 inventory_limit_group_name(group), used / 10, used % 10,
                 limit / 10, limit % 10, left / 10, left % 10,
                 needed / 10, needed % 10);

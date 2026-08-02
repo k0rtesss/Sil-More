@@ -1845,6 +1845,9 @@ void show_equip_enhanced(void)
     log_debug("show_equip_enhanced: Starting equipment scan, show_weights=%d", show_weights);
     for (k = 0, i = INVEN_WIELD; i < INVEN_TOTAL; i++)
     {
+        if (i == INVEN_STAFF || i == INVEN_HORN)
+            continue;
+
         o_ptr = &inventory[i];
         bool is_empty = !o_ptr->k_idx;
         

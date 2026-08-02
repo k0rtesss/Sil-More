@@ -1178,7 +1178,7 @@ s16b inven_takeoff(int item, int amt)
         {
             int used = inventory_limit_usage_for_group(group);
 
-            msg_format("Your %s has no room (%d.%d/%d.%d L used).",
+            msg_format("Your %s has no room (%d.%d/%d.%d qt used).",
                 inventory_limit_group_name(group), used / 10, used % 10,
                 limit / 10, limit % 10);
         }
