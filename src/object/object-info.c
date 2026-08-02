@@ -906,6 +906,7 @@ static void format_min_depth_bonus_depths(char* buf, size_t buflen, int units)
 static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b f4)
 {
     cptr good[24], bad[14];
+    char depth_scale_desc[96];
     char deep_call_desc[120];
     char deep_call_equipped_bonus[16];
     char deep_call_inventory_bonus[16];
@@ -952,7 +953,12 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     if (f4 & (TR4_ARMOR_SHATTER))
         good[gc++] = "can shatter the armor of your foes with each successful blow";
     if (f4 & (TR4_DEPTH_SCALE_PS))
-        good[gc++] = "gains protection as you delve deeper";
+    {
+        strnfmt(depth_scale_desc, sizeof(depth_scale_desc),
+            "gains protection as you delve deeper (currently %dd%d)",
+            o_ptr->pd, object_effective_protection_sides(o_ptr));
+        good[gc++] = depth_scale_desc;
+    }
     if (f3 & (TR3_WILL_DRAIN))
         good[gc++] = "drains the will of your enemies when you strike them";
     if (f4 & (TR4_PAIRED))
@@ -1586,64 +1592,18 @@ static bool describe_potion_throw(const object_type* o_ptr)
     return true;
 }
 
-static bool describe_inventory_volume(const object_type* o_ptr)
+static int object_info_inventory_volume(const object_type* o_ptr)
 {
     enum inventory_limit_group group;
-    cptr ability_name;
-    cptr pool;
-    int intrinsic;
-    int volume;
 
     if (!o_ptr || !o_ptr->k_idx)
-        return false;
+        return 0;
 
     group = inventory_limit_group_for_object(o_ptr);
-    if (group == INV_LIMIT_PACK)
-        pool = "Pack";
-    else if (group == INV_LIMIT_HARNESS)
-        pool = "Harness";
-    else
-        return false;
+    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
+        return 0;
 
-    intrinsic = inventory_limit_intrinsic_space_for_object(o_ptr);
-    volume = inventory_limit_space_for_object(o_ptr);
-    if (volume <= 0)
-        return false;
-
-    ability_name = inventory_limit_carriage_ability_name_for_object(o_ptr);
-    if (intrinsic > volume && ability_name)
-    {
-        if (o_ptr->number > 1)
-        {
-            p_text_out(format(
-                "Together they occupy %d.%d qt. Your learned %s carriage "
-                "efficiency reduces their %s use to %d.%d qt.",
-                intrinsic / 10, intrinsic % 10, ability_name, pool,
-                volume / 10, volume % 10));
-        }
-        else
-        {
-            p_text_out(format(
-                "It occupies %d.%d qt. Your learned %s carriage efficiency "
-                "reduces its %s use to %d.%d qt.",
-                intrinsic / 10, intrinsic % 10, ability_name, pool,
-                volume / 10, volume % 10));
-        }
-        return true;
-    }
-
-    if (o_ptr->number > 1)
-    {
-        p_text_out(format("Together they occupy %d.%d qt in your %s.",
-            volume / 10, volume % 10, pool));
-    }
-    else
-    {
-        p_text_out(format("It occupies %d.%d qt in your %s.",
-            volume / 10, volume % 10, pool));
-    }
-
-    return true;
+    return inventory_limit_space_for_object(o_ptr);
 }
 
 bool object_info_out(const object_type* o_ptr)
@@ -1668,8 +1628,6 @@ bool object_info_out(const object_type* o_ptr)
     if (describe_consumable_healing(o_ptr))
         something = true;
     if (describe_potion_throw(o_ptr))
-        something = true;
-    if (describe_inventory_volume(o_ptr))
         something = true;
     if (describe_stats(o_ptr, f1))
         something = true;
@@ -2396,6 +2354,14 @@ static bool screen_out_head(const object_type* o_ptr)
     
     /* Print, in colour */
     text_out_c(name_color, o_name);
+
+    /* Show carried volume before weight information. */
+    {
+        int volume = object_info_inventory_volume(o_ptr);
+        if (volume > 0)
+            text_out_c(TERM_L_UMBER,
+                format(" %d.%d qt", volume / 10, volume % 10));
+    }
 
     /* Show weight information */
     {

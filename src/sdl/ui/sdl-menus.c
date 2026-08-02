@@ -3740,6 +3740,15 @@ void sdl_touch_pane_display_label_for_slot(int panel, int index, char* buf, size
             g_description_overlay.active && g_description_overlay.interactive,
             NULL, context_label, sizeof(context_label)))
     {
+        /* The fixed Confirm button already exposes floor pickup for Harness
+         * items.  Keep the separate Use control's normal label instead of
+         * showing a second Pick Up button for staffs and horns. */
+        if (binding == 'u'
+            && (streq(context_label, "Pick up")
+                || streq(context_label, "Pick Up")))
+        {
+            return;
+        }
         SDL_strlcpy(buf, context_label, buflen);
     }
 }

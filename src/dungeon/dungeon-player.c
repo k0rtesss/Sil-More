@@ -270,7 +270,8 @@ void process_player(void)
         }
 
         /* Check for "player abort" */
-        if (p_ptr->running || p_ptr->fletching || p_ptr->smithing
+        if (player_pack_action_pending() || p_ptr->running || p_ptr->fletching
+            || p_ptr->smithing
             || p_ptr->command_rep || (p_ptr->resting && !(turn & 0x7F)))
         {
             /* Do not wait */
@@ -284,6 +285,10 @@ void process_player(void)
 
                 /* Disturb */
                 disturb(0, 0);
+
+                /* A Pack action is only cancelled by an attack or by the
+                 * player's explicit input. */
+                player_pack_action_cancel();
 
                 /* Hack -- Show a Message */
                 msg_print("Cancelled.");
@@ -481,6 +486,12 @@ void process_player(void)
 
             // store the action type
             p_ptr->previous_action[0] = ACTION_MISC;
+        }
+
+        /* Searching the Pack */
+        else if (player_pack_action_pending())
+        {
+            player_pack_action_process();
         }
 
         /* Smithing */

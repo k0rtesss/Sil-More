@@ -358,7 +358,11 @@ static bool prompt_replace_pack_item(const object_type* incoming)
         if (!queue_deferred_pickup_pack_drop(item, drop_ptr->number,
                 player_oil_container_object(incoming)
                     && player_oil_container_object(drop_ptr)))
+        {
+            if (player_pack_action_pending())
+                return false;
             continue;
+        }
 
         /* Let inventory housekeeping run before we attempt the pickup again */
         p_ptr->notice |= (PN_COMBINE | PN_REORDER);
@@ -396,6 +400,27 @@ static object_type deferred_pickup_drop;
 static int deferred_pickup_drop_oil = 0;
 static bool deferred_pickup_refill_oil_pool = false;
 static bool brass_lamp_pickup_overflow_checked = false;
+static int pack_replacement_pickup_o_idx = 0;
+
+static bool delay_pickup_for_pack_replacement(const object_type* affected)
+{
+    object_type* incoming;
+
+    if (!affected || !affected->k_idx
+        || inventory_limit_group_for_object(affected) != INV_LIMIT_PACK
+        || pack_replacement_pickup_o_idx <= 0
+        || pack_replacement_pickup_o_idx >= o_max)
+    {
+        return false;
+    }
+
+    incoming = &o_list[pack_replacement_pickup_o_idx];
+    if (!incoming->k_idx)
+        return false;
+
+    return player_pack_action_start_forced(PLAYER_PACK_ACTION_PICKUP,
+        0 - pack_replacement_pickup_o_idx, 0, false, incoming);
+}
 
 static void clear_deferred_pickup_drop(void)
 {
@@ -580,7 +605,7 @@ static bool queue_deferred_pickup_pack_drop(int item, int amount,
     if (!drop_ptr->k_idx)
         return false;
 
-    if (!player_pack_item_action_allowed(drop_ptr))
+    if (delay_pickup_for_pack_replacement(drop_ptr))
         return false;
 
     if (amount > drop_ptr->number)
@@ -635,8 +660,9 @@ static bool queue_deferred_pickup_equipment_drop(int item, int amount)
     if (!drop_ptr->k_idx || cursed_p(drop_ptr))
         return false;
 
-    if (!player_pack_item_action_allowed(drop_ptr))
+    if (delay_pickup_for_pack_replacement(drop_ptr))
         return false;
+
     if (amount > drop_ptr->number)
         amount = drop_ptr->number;
 
@@ -897,13 +923,15 @@ static pickup_failure_result prompt_replace_light_limit_item(
                     player_oil_container_object(incoming)
                         && player_oil_container_object(drop_ptr)))
             {
+                if (player_pack_action_pending())
+                    break;
                 continue;
             }
 
             if (item >= INVEN_WIELD)
             {
-                if (!player_pack_item_action_allowed(drop_ptr))
-                    continue;
+                if (delay_pickup_for_pack_replacement(drop_ptr))
+                    break;
                 inven_drop(item, remove_amt);
             }
         }
@@ -1327,19 +1355,22 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel)
     if (allow_channel && player_channel_floor_staff(o_ptr, o_idx))
         return;
 
-    /* Pack-destination items cannot be picked up while in combat.  Keep this
-     * at the shared pickup sink so keyboard, pile, contextual, and automatic
-     * pickup routes all enforce the same rule. */
+    /* Pack-destination pickups use the same three-turn action from keyboard,
+     * pile, contextual, and automatic pickup routes. */
     if (o_ptr->tval == TV_ARROW
         && (o_ptr->pickup || o_ptr->pickup_slot == INVEN_QUIVER1))
     {
-        if (player_quiver_arrow_space() <= 0 && player_in_combat())
+        int quiver_space = player_quiver_arrow_space();
+
+        if (o_ptr->number > quiver_space
+            && player_pack_action_start_forced(PLAYER_PACK_ACTION_PICKUP,
+                0 - o_idx, 0, false, o_ptr))
         {
-            msg_print(player_pack_item_action_restriction_message());
             return;
         }
     }
-    else if (!player_pack_item_action_allowed(o_ptr))
+    else if (player_pack_action_start(PLAYER_PACK_ACTION_PICKUP, 0 - o_idx, 0,
+            false, o_ptr))
     {
         return;
     }
@@ -1351,11 +1382,14 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel)
     /*hack - don't pickup &nothings*/
     if (o_ptr->k_idx)
     {
+        pack_replacement_pickup_o_idx = o_idx;
         if (!prepare_floor_object_for_pickup(o_idx, o_ptr))
         {
+            pack_replacement_pickup_o_idx = 0;
             flush_deferred_pickup_drop();
             return;
         }
+        pack_replacement_pickup_o_idx = 0;
 
         if (pickup_brass_lamp(o_idx, o_ptr))
             return;
@@ -1415,22 +1449,6 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel)
             }
         }
         
-        if (player_in_combat() && o_ptr->tval == TV_ARROW
-            && (o_ptr->pickup || o_ptr->pickup_slot == INVEN_QUIVER1)
-            && o_ptr->number > player_quiver_arrow_space())
-        {
-            object_type partial;
-            int quantity = player_quiver_arrow_space();
-
-            object_copy(&partial, o_ptr);
-            partial.number = quantity;
-            give_player_item(&partial);
-            o_ptr->number -= quantity;
-            break_truce(false);
-            flush_deferred_pickup_drop();
-            return;
-        }
-
         give_player_item(o_ptr);
 
         // Break the truce if creatures see
@@ -1830,11 +1848,17 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
             if (item >= INVEN_WIELD)
             {
                 if (!queue_deferred_pickup_equipment_drop(item, remove_amt))
+                {
+                    if (player_pack_action_pending())
+                        break;
                     continue;
+                }
             }
             else if (!queue_deferred_pickup_pack_drop(item, remove_amt,
                          false))
             {
+                if (player_pack_action_pending())
+                    break;
                 continue;
             }
         }
@@ -2056,6 +2080,8 @@ void py_pickup(void)
         py_pickup_aux_internal(this_o_idx, false);
 
         done_pickup = true;
+        if (player_pack_action_pending())
+            break;
     }
 
     if (!done_pickup)

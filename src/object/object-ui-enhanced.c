@@ -622,22 +622,38 @@ static char describe_item_with_comparisons_aux(int item_index,
                 count, "Esc close", actions, N_ELEMENTS(actions));
         }
 
-        object_info_screen_action actions[] = {
-            { 'x', "" },
-            { ' ', "Space pick up" },
-            { ESCAPE, "Esc close" }
-        };
+        object_info_screen_action actions[3];
+        int action_count = 0;
         char action_label[32];
         char prompt[96];
         cptr action_name = item_use_action_name(base_obj, item_index);
+        bool action_is_pickup = streq(action_name, "Pick up")
+            || streq(action_name, "Pick Up");
 
-        strnfmt(action_label, sizeof(action_label), "x %s", action_name);
-        actions[0].token = action_label;
-        strnfmt(prompt, sizeof(prompt), "%s  Space pick up  Esc close",
-            action_label);
+        /* A Harness item has no separate contextual action on the floor. */
+        if (!action_is_pickup)
+        {
+            strnfmt(action_label, sizeof(action_label), "x %s", action_name);
+            actions[action_count++] = (object_info_screen_action){
+                'x', action_label
+            };
+            strnfmt(prompt, sizeof(prompt), "%s  Space pick up  Esc close",
+                action_label);
+        }
+        else
+        {
+            strnfmt(prompt, sizeof(prompt), "Space pick up  Esc close");
+        }
+
+        actions[action_count++] = (object_info_screen_action){
+            ' ', "Space pick up"
+        };
+        actions[action_count++] = (object_info_screen_action){
+            ESCAPE, "Esc close"
+        };
 
         return object_info_screen_multi_with_actions(objects, headings, count,
-            prompt, actions, N_ELEMENTS(actions));
+            prompt, actions, action_count);
     }
 
     object_info_screen_multi(objects, headings, count);

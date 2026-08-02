@@ -881,6 +881,7 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
 {
     active_weapon_choice* choice;
     active_weapon_preview preview;
+    char source_label[240];
 
     if (!choices || !count || *count < 0
         || *count >= ACTIVE_WEAPON_MAX_CHOICES || !o_ptr)
@@ -899,17 +900,19 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
             ? PLAYER_ACTIVE_WEAPON_KIND_THROWING
             : PLAYER_ACTIVE_WEAPON_KIND_BOW);
     choice->target_slot = target_slot;
+    strnfmt(source_label, sizeof(source_label), "%s%s",
+        weapon_label ? weapon_label : "",
+        item == INVEN_BELT ? " (belt)" : "");
     if (active_weapon_choice_preview(mode, item, target_slot, &preview))
     {
         strnfmt(choice->label, sizeof(choice->label),
             "%s\t%s\t(%+d,%dd%d)", role ? role : "Weapon",
-            weapon_label ? weapon_label : "", preview.attack, preview.dd,
-            preview.ds);
+            source_label, preview.attack, preview.dd, preview.ds);
     }
     else
     {
         strnfmt(choice->label, sizeof(choice->label), "%s\t%s",
-            role ? role : "Weapon", weapon_label ? weapon_label : "");
+            role ? role : "Weapon", source_label);
     }
     options[*count].key = active_weapon_menu_key(*count);
     options[*count].label = choice->label;

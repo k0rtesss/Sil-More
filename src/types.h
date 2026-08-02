@@ -81,6 +81,27 @@ typedef enum object_storage_type
     OBJECT_STORAGE_PACK,
     OBJECT_STORAGE_HARNESS
 } object_storage_type;
+
+/* Deferred actions that require access to the Pack. */
+typedef enum player_pack_action_kind
+{
+    PLAYER_PACK_ACTION_NONE = 0,
+    PLAYER_PACK_ACTION_USE_ITEM,
+    PLAYER_PACK_ACTION_WIELD,
+    PLAYER_PACK_ACTION_TAKEOFF,
+    PLAYER_PACK_ACTION_DROP,
+    PLAYER_PACK_ACTION_DELETE,
+    PLAYER_PACK_ACTION_REFUEL_LAMP,
+    PLAYER_PACK_ACTION_REFUEL_TORCH,
+    PLAYER_PACK_ACTION_EAT,
+    PLAYER_PACK_ACTION_QUAFF,
+    PLAYER_PACK_ACTION_PLAY,
+    PLAYER_PACK_ACTION_ACTIVATE_STAFF,
+    PLAYER_PACK_ACTION_USE_GEM,
+    PLAYER_PACK_ACTION_ACTIVATE,
+    PLAYER_PACK_ACTION_PICKUP,
+    PLAYER_PACK_ACTION_JEWELRY_PRESET
+} player_pack_action_kind;
 typedef struct monster_type monster_type;
 typedef struct alloc_entry alloc_entry;
 typedef struct owner_type owner_type;

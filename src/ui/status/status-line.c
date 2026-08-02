@@ -434,8 +434,15 @@ void prt_state(void)
         SDL_strlcpy(text, "Entranced!", sizeof(text));
     }
 
+    /* Searching the Pack */
+    if (player_pack_action_pending())
+    {
+        strnfmt(text, sizeof(text), "Pack %5d",
+            player_pack_action_turns_left());
+    }
+
     /* Smithing */
-    if (p_ptr->smithing)
+    else if (p_ptr->smithing)
     {
         SDL_strlcpy(text, "Smithing  ", sizeof(text));
     }
@@ -857,6 +864,15 @@ bool status_state_text(char* out_long, size_t out_long_sz,
             *out_attr = TERM_RED;
         SDL_strlcpy(out_long, "Entranced", out_long_sz);
         SDL_strlcpy(out_short, "En", out_short_sz);
+        return true;
+    }
+
+    if (player_pack_action_pending())
+    {
+        strnfmt(out_long, out_long_sz, "Pack %d",
+            player_pack_action_turns_left());
+        strnfmt(out_short, out_short_sz, "Pk%d",
+            player_pack_action_turns_left());
         return true;
     }
 

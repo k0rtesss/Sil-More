@@ -456,11 +456,20 @@ bool do_cmd_context_square_action_popup(void)
         object_type* o_ptr = &o_list[0 - floor_item];
         bool action_only = o_ptr->tval == TV_SKELETON
             || o_ptr->tval == TV_CHEST;
+        cptr action_name = item_use_action_name(o_ptr, floor_item);
+        bool action_is_pickup = streq(action_name, "Pick up")
+            || streq(action_name, "Pick Up");
 
         if (!action_only)
             sdl_question_menu_add_button('x', "Description", TERM_L_BLUE);
-        sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_ACTION,
-            item_use_action_name(o_ptr, floor_item), TERM_L_GREEN);
+        /*
+         * Staffs and horns are stored in the Harness.  Their contextual
+         * action is therefore the same pickup command as the explicit
+         * pickup button; do not expose both choices.
+         */
+        if (!action_is_pickup)
+            sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_ACTION,
+                action_name, TERM_L_GREEN);
         if (!action_only)
             sdl_question_menu_add_button('g', "Pick Up", TERM_L_WHITE);
     }
@@ -1087,7 +1096,8 @@ static void do_cmd_unquiver_pack_arrow(int item)
     object_copy(&packed, o_ptr);
     packed.pickup = false;
     packed.pickup_slot = -1;
-    if (!player_pack_item_action_allowed(&packed))
+    if (player_pack_action_start(PLAYER_PACK_ACTION_USE_ITEM, item, 0, false,
+            &packed))
         return;
     if (!inventory_type_slot_available(&packed, true))
     {
@@ -1160,7 +1170,8 @@ void do_cmd_use_item_by_index(int item)
         return;
 
     if (!((item < 0) && o_ptr->tval == TV_ARROW)
-        && !player_pack_item_action_allowed(o_ptr))
+        && player_pack_action_start(PLAYER_PACK_ACTION_USE_ITEM, item, 0,
+            false, o_ptr))
         return;
 
     if (use_floor_interaction_by_index(item))
@@ -1642,8 +1653,12 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     }
 
     if (!((item < 0) && o_ptr->tval == TV_ARROW)
-        && !player_pack_item_action_allowed(o_ptr))
+        && player_pack_action_start(PLAYER_PACK_ACTION_WIELD, item,
+            forced_wield_slot, forced_wield_full_stack, o_ptr))
+    {
+        wield_command_succeeded = true;
         return;
+    }
 
     // remember how many there were
     original_quantity = o_ptr->number;
@@ -2919,6 +2934,32 @@ bool do_cmd_jewelry_preset_apply(int preset)
             targets, target_present, true))
         return false;
 
+    if (!player_pack_action_completing(PLAYER_PACK_ACTION_JEWELRY_PRESET))
+    {
+        for (int slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
+        {
+            int dest = jewelry_preset_inventory_slot(slot);
+            int source;
+
+            if (dest < 0 || !target_present[slot]
+                || jewelry_preset_objects_match(&inventory[dest],
+                    targets[slot]))
+            {
+                continue;
+            }
+
+            source = jewelry_preset_find_source_for_target(slot,
+                targets[slot], targets, target_present);
+            if (source >= 0
+                && player_pack_action_start(
+                    PLAYER_PACK_ACTION_JEWELRY_PRESET, source, preset, false,
+                    &inventory[source]))
+            {
+                return true;
+            }
+        }
+    }
+
     for (int slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
     {
         int dest = jewelry_preset_inventory_slot(slot);
@@ -3071,7 +3112,8 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
         }
     }
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (player_pack_action_start(PLAYER_PACK_ACTION_TAKEOFF, item, 0, false,
+            o_ptr))
         return;
 
     can_break_curse = p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING];
@@ -3238,14 +3280,18 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
     if (!o_ptr->k_idx)
         return false;
 
-    if (!player_pack_item_action_allowed(o_ptr))
-        return false;
-
     /* Get a quantity */
-    object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-    strnfmt(quantity_prompt, sizeof(quantity_prompt), "Drop how many %s? ",
-        o_name);
-    amt = get_quantity_action(quantity_prompt, "Drop", o_ptr->number);
+    if (player_pack_action_completing(PLAYER_PACK_ACTION_DROP))
+    {
+        amt = player_pack_action_completion_arg();
+    }
+    else
+    {
+        object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
+        strnfmt(quantity_prompt, sizeof(quantity_prompt), "Drop how many %s? ",
+            o_name);
+        amt = get_quantity_action(quantity_prompt, "Drop", o_ptr->number);
+    }
 
     /* Allow user abort */
     if (amt <= 0)
@@ -3257,8 +3303,22 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
         return false;
     }
 
-    if (confirm && !confirm_drop_item_amount(o_ptr, amt))
+    if (!player_pack_action_completing(PLAYER_PACK_ACTION_DROP)
+        && confirm && !confirm_drop_item_amount(o_ptr, amt))
         return false;
+
+    if ((item >= INVEN_WIELD) && cursed_p(o_ptr)
+        && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
+    {
+        msg_print("You cannot bear to part with it.");
+        return false;
+    }
+
+    if (player_pack_action_start(PLAYER_PACK_ACTION_DROP, item, amt, false,
+            o_ptr))
+    {
+        return true;
+    }
 
     /* Hack -- Cannot remove cursed items */
     if ((item >= INVEN_WIELD) && cursed_p(o_ptr))
@@ -3815,19 +3875,22 @@ bool do_cmd_delete_item_by_index(int item)
     if (handle_iron_crown_silmaril_action(o_ptr, item))
         return true;
 
-    /* Deleting an item already on the floor is not Pack management. */
-    if (item >= 0 && !player_pack_item_action_allowed(o_ptr))
-        return false;
-
     /* Get a quantity */
-    if (item < 0)
-        object_desc_floor(quantity_name, sizeof(quantity_name), o_ptr, false,
-            0);
+    if (player_pack_action_completing(PLAYER_PACK_ACTION_DELETE))
+    {
+        amt = player_pack_action_completion_arg();
+    }
     else
-        object_desc(quantity_name, sizeof(quantity_name), o_ptr, false, 0);
-    strnfmt(quantity_prompt, sizeof(quantity_prompt), "Delete how many %s? ",
-        quantity_name);
-    amt = get_quantity_action(quantity_prompt, "Delete", o_ptr->number);
+    {
+        if (item < 0)
+            object_desc_floor(quantity_name, sizeof(quantity_name), o_ptr,
+                false, 0);
+        else
+            object_desc(quantity_name, sizeof(quantity_name), o_ptr, false, 0);
+        strnfmt(quantity_prompt, sizeof(quantity_prompt),
+            "Delete how many %s? ", quantity_name);
+        amt = get_quantity_action(quantity_prompt, "Delete", o_ptr->number);
+    }
 
     /* Allow user abort */
     if (amt <= 0)
@@ -3868,8 +3931,24 @@ bool do_cmd_delete_item_by_index(int item)
 
     strnfmt(prompt, sizeof(prompt), "Do you really want to DELETE %s? ",
         prompt_name);
-    if (!get_check(prompt))
+    if (!player_pack_action_completing(PLAYER_PACK_ACTION_DELETE)
+        && !get_check(prompt))
+    {
+        if (old_charges)
+            o_ptr->pval = old_charges;
         return false;
+    }
+
+    if (old_charges)
+        o_ptr->pval = old_charges;
+
+    /* Deleting an item already on the floor is not Pack management. */
+    if (item >= 0
+        && player_pack_action_start(PLAYER_PACK_ACTION_DELETE, item, amt,
+            false, o_ptr))
+    {
+        return true;
+    }
 
     /* Take a turn */
     p_ptr->energy_use = 100;
@@ -3879,11 +3958,6 @@ bool do_cmd_delete_item_by_index(int item)
 
     /* Message */
     msg_format("You delete %s.", o_name);
-
-    /*hack, restore the proper number of charges after the messages have printed
-     * so the proper number of charges are destroyed*/
-    if (old_charges)
-        o_ptr->pval = old_charges;
 
     /* Eliminate the item (from the pack) */
     if (item >= 0)
@@ -4376,7 +4450,8 @@ void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (player_pack_action_start(PLAYER_PACK_ACTION_REFUEL_LAMP, item, 0,
+            false, o_ptr))
         return;
 
     if (object_has_broken_prefix(o_ptr))
@@ -4613,7 +4688,8 @@ void do_cmd_refuel_torch(
         }
     }
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (player_pack_action_start(PLAYER_PACK_ACTION_REFUEL_TORCH, item, 0,
+            is_mallorn, o_ptr))
         return;
 
     /* Take a turn */

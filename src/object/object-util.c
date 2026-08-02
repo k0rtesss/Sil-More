@@ -163,6 +163,31 @@ void object_prep(object_type* o_ptr, int k_idx)
         o_ptr->ident |= (IDENT_CURSED);
 }
 
+/* Return the protection sides currently provided by an object. */
+int object_effective_protection_sides(const object_type* o_ptr)
+{
+    int ps;
+    int depth;
+    u32b f1, f2, f3, f4;
+
+    if (!o_ptr)
+        return 0;
+
+    ps = o_ptr->ps;
+    if (ps <= 0 || !p_ptr)
+        return ps;
+
+    object_flags4(o_ptr, &f1, &f2, &f3, &f4);
+    if (!(f4 & TR4_DEPTH_SCALE_PS))
+        return ps;
+
+    depth = p_ptr->depth;
+    if (depth < 0)
+        depth = 0;
+
+    return ps + depth / 5;
+}
+
 /* Return per-item volume after ego and optional carriage reductions. */
 int object_effective_volume_with_reduction(const object_type* o_ptr,
     int extra_reduction_percent)

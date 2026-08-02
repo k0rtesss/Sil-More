@@ -578,7 +578,8 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (player_pack_action_start(PLAYER_PACK_ACTION_EAT, item, 0, false,
+            o_ptr))
         return;
 
     if (reject_broken_item_use(o_ptr))
@@ -727,7 +728,8 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (player_pack_action_start(PLAYER_PACK_ACTION_QUAFF, item, 0, false,
+            o_ptr))
         return;
 
     if (reject_broken_item_use(o_ptr))
@@ -841,7 +843,8 @@ void do_cmd_play_instrument(object_type* default_o_ptr, int default_item)
         return;
     }
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (player_pack_action_start(PLAYER_PACK_ACTION_PLAY,
+            carried_inventory_index(o_ptr), 0, false, o_ptr))
         return;
 
     if (reject_broken_item_use(o_ptr))
@@ -939,7 +942,8 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
         return;
     }
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE_STAFF, item, 0,
+            false, o_ptr))
         return;
 
     if (reject_broken_item_use(o_ptr))
@@ -1082,7 +1086,8 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (player_pack_action_start(PLAYER_PACK_ACTION_USE_GEM, item, 0, false,
+            o_ptr))
         return;
 
     if (reject_broken_item_use(o_ptr))
@@ -1197,36 +1202,30 @@ static bool item_tester_hook_activate(const object_type* o_ptr)
  * Note that it always takes a turn to activate an artefact, even if
  * the user hits "escape" at the "direction" prompt.
  */
-void do_cmd_activate(void)
+void do_cmd_activate_by_index(int item)
 {
-    int item, lev, score, difficulty;
+    int lev, score, difficulty;
     bool ident;
     object_type* o_ptr;
 
-    cptr q, s;
-
-    /* Prepare the hook */
-    item_tester_hook = item_tester_hook_activate;
-
-    /* Get an item */
-    q = "Activate which item? ";
-    s = "You have nothing to activate.";
-    if (!open_inventory_item_select_menu(USE_EQUIP, q, s, &item))
-        return;
-
-    /* Get the item (in the pack) */
-    if (item >= 0)
+    if (item >= 0 && item < INVEN_TOTAL)
     {
         o_ptr = &inventory[item];
     }
-
-    /* Get the item (on the floor) */
-    else
+    else if (item < 0 && 0 - item > 0 && 0 - item < o_max)
     {
         o_ptr = &o_list[0 - item];
     }
+    else
+    {
+        return;
+    }
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (!o_ptr->k_idx)
+        return;
+
+    if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE, item, 0, false,
+            o_ptr))
         return;
 
     if (reject_broken_item_use(o_ptr))
@@ -1268,4 +1267,20 @@ void do_cmd_activate(void)
 
     /* Activate the object */
     (void)use_object(o_ptr, &ident);
+}
+
+void do_cmd_activate(void)
+{
+    int item;
+
+    /* Prepare the hook */
+    item_tester_hook = item_tester_hook_activate;
+
+    if (!open_inventory_item_select_menu(USE_EQUIP, "Activate which item? ",
+            "You have nothing to activate.", &item))
+    {
+        return;
+    }
+
+    do_cmd_activate_by_index(item);
 }

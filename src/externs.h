@@ -919,6 +919,7 @@ extern void do_cmd_activate_staff(object_type* default_o_ptr, int default_item);
 extern void do_cmd_play_instrument(
     object_type* default_o_ptr, int default_item);
 extern void do_cmd_activate(void);
+extern void do_cmd_activate_by_index(int item);
 
 /* dungeon/ */
 extern bool can_be_pseudo_ided(const object_type* o_ptr);
@@ -1297,6 +1298,7 @@ extern void object_wipe(object_type* o_ptr);
 extern void object_copy(object_type* o_ptr, const object_type* j_ptr);
 extern byte object_chest_trap_flags(const object_type* o_ptr);
 extern void object_prep(object_type* o_ptr, int k_idx);
+extern int object_effective_protection_sides(const object_type* o_ptr);
 extern int object_effective_volume(const object_type* o_ptr);
 extern int object_effective_volume_with_reduction(const object_type* o_ptr,
     int extra_reduction_percent);
@@ -2006,10 +2008,20 @@ extern int editing_buffer_put_str(
 extern cptr get_ext_color_name(byte ext_color);
 
 /* Player/status/upkeep modules */
-extern bool player_in_combat(void);
+extern bool player_pack_action_start(player_pack_action_kind kind, int item,
+    int arg, bool flag, const object_type* o_ptr);
+extern bool player_pack_action_start_forced(player_pack_action_kind kind,
+    int item, int arg, bool flag, const object_type* o_ptr);
+extern bool player_pack_action_pending(void);
+extern int player_pack_action_turns_left(void);
+extern bool player_pack_action_completing(player_pack_action_kind kind);
+extern int player_pack_action_completion_arg(void);
+extern void player_pack_action_process(void);
+extern void player_pack_action_interrupt(void);
+extern void player_pack_action_cancel(void);
+extern void player_pack_action_reset(void);
 extern bool player_pack_item_action_blocked(const object_type* o_ptr);
 extern cptr player_pack_item_action_restriction_message(void);
-extern bool player_pack_item_action_allowed(const object_type* o_ptr);
 extern byte total_mdd(const object_type* o_ptr);
 extern byte strength_modified_ds(const object_type* o_ptr, int str_adjustment);
 extern byte total_mds(const object_type* o_ptr, int str_adjustment);

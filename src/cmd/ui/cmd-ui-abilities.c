@@ -3042,12 +3042,31 @@ static int ability_menu_skill_options(void)
     return ability_menu_show_special_skill() ? S_MAX : (S_MAX - 1);
 }
 
+static int ability_browser_skill_point_cost(int skill_level)
+{
+    return skill_level * 100;
+}
+
 static int ability_browser_next_skill_cost(int skilltype)
 {
     if (skilltype < 0 || skilltype >= S_MAX || skilltype == S_SPC)
         return 0;
 
-    return (p_ptr->skill_base[skilltype] + 1) * 100;
+    return ability_browser_skill_point_cost(p_ptr->skill_base[skilltype] + 1);
+}
+
+static int ability_browser_skill_training_cost(int current_base,
+    int required_base)
+{
+    int cost = 0;
+
+    for (int skill_level = current_base + 1;
+         skill_level <= required_base; skill_level++)
+    {
+        cost += ability_browser_skill_point_cost(skill_level);
+    }
+
+    return cost;
 }
 
 static void ability_browser_build_summary(int skilltype, char* summary,
@@ -3925,6 +3944,16 @@ static void ability_browser_add_prerequisites(
         (b_ptr->level <= p_ptr->skill_base[skilltype]) ? TERM_L_GREEN
                                                        : TERM_L_DARK,
         buf, width);
+
+    if (b_ptr->level > p_ptr->skill_base[skilltype])
+    {
+        int skill_xp = ability_browser_skill_training_cost(
+            p_ptr->skill_base[skilltype], b_ptr->level);
+
+        strnfmt(buf, sizeof(buf), "Skill XP: %d needed to reach level %d",
+            skill_xp, b_ptr->level);
+        ability_desc_add_wrapped(lines, line_count, TERM_L_DARK, buf, width);
+    }
 
     if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
     {

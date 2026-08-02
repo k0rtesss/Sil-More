@@ -21,6 +21,15 @@ static int ranged_attack_sound(int attack)
     }
 }
 
+static bool ranged_attack_targets_player(int attack)
+{
+    if (attack < 96 || attack > 96 + 23)
+        return false;
+
+    /* The hatch-spider action creates allies, but does not attack the player. */
+    return attack != 96 + 16;
+}
+
 /*********************************************************************/
 /*                                                                   */
 /*                      Monster Ranged Attacks                       */
@@ -237,6 +246,9 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         manacost = spell_info_RF4[attack - 96][COL_SPELL_MANA_COST];
     else
         return (false);
+
+    if (ranged_attack_targets_player(attack))
+        player_pack_action_interrupt();
 
     /* Spend mana (for non-songs) */
     if (attack < 96 + RF4_SNG_HEAD)
