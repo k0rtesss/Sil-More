@@ -3233,7 +3233,8 @@ int sdl_left_panel_quiver_attack_mode_at_col(int col)
     }
 
     if (!has_any_span) {
-        if (inventory[INVEN_QUIVER1].k_idx)
+        if (player_active_throwing_weapon_slot() >= 0
+            || player_quiver_arrow_count() > 0)
             return SDL_POINTER_ATTACK_RANGED_1;
     }
 
@@ -3258,7 +3259,9 @@ static bool sdl_visible_character_panel_attack_row(int row)
 
     if (player_active_weapon_is_ranged())
         return row == ROW_ARC
-            || (row == ROW_QUIVER && inventory[INVEN_QUIVER1].k_idx);
+            || (row == ROW_QUIVER
+                && (player_active_throwing_weapon_slot() >= 0
+                    || player_quiver_arrow_count() > 0));
 
     return false;
 }

@@ -421,7 +421,7 @@ static void distribute_fletchered_arrows(const object_type* arrows)
 
     log_fletchery_object_state("distribute_input", arrows, -1);
 
-    /* Crafted arrows add Harness volume just like found arrows.  Check before
+    /* Crafted arrows add Pack volume just like other unquivered arrows. Check before
      * the direct stack-merging passes below, which intentionally do not call
      * inven_carry() until after existing stacks have been topped up. */
     if (!inven_carry_okay(arrows))
@@ -430,7 +430,7 @@ static void distribute_fletchered_arrows(const object_type* arrows)
 
         object_copy(&dropped, arrows);
         if (drop_fletchered_arrows_near(&dropped))
-            msg_print("The crafted arrows do not fit your Harness and spill to the ground.");
+            msg_print("The crafted arrows do not fit your Pack and spill to the ground.");
         else
             msg_print("You lose track of the crafted arrows.");
         return;
@@ -439,28 +439,7 @@ static void distribute_fletchered_arrows(const object_type* arrows)
     object_type leftover = *arrows;
     bool combined_existing = false;
 
-    /* Try to top up quiver slots first */
-    for (int slot = INVEN_QUIVER1;
-         slot <= INVEN_QUIVER1 && leftover.number > 0; slot++)
-    {
-        object_type* slot_obj = &inventory[slot];
-        if (!slot_obj->k_idx)
-            continue;
-        if (!object_similar(slot_obj, &leftover))
-            continue;
-        log_fletchery_object_state("combine_quiver_before_slot", slot_obj, slot);
-        log_fletchery_object_state("combine_quiver_before_leftover", &leftover, -1);
-        int before = leftover.number;
-        object_absorb(slot_obj, &leftover);
-        if (leftover.number != before)
-        {
-            combined_existing = true;
-            log_fletchery_object_state("combine_quiver_after_slot", slot_obj, slot);
-            log_fletchery_object_state("combine_quiver_after_leftover", &leftover, -1);
-        }
-    }
-
-    /* Then fill stacks in the main pack */
+    /* Fill matching stacks in the main Pack. */
     for (int slot = 0; slot < INVEN_PACK && leftover.number > 0; slot++)
     {
         object_type* slot_obj = &inventory[slot];

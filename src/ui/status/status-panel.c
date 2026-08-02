@@ -155,13 +155,21 @@ byte status_touch_zone_attr(int action, int col, int width,
 
 static const object_type* pointer_attack_ranged_ammo_for_mode(int mode)
 {
-    return mode == SDL_POINTER_ATTACK_RANGED_1
-        ? &inventory[INVEN_QUIVER1] : NULL;
+    int slot;
+
+    if (mode != SDL_POINTER_ATTACK_RANGED_1)
+        return NULL;
+    slot = player_active_throwing_weapon_slot();
+    if (slot >= 0)
+        return &inventory[slot];
+    slot = player_quiver_first_arrow_slot();
+    return player_quiver_arrow_object(slot);
 }
 
 static int pointer_attack_ranged_display_mode(void)
 {
-    /* The Quiver is the sole active ranged source.  Belt throws use t. */
+    /* The active ranged row represents either the bow/Quiver pair or the
+     * active throwing weapon.  Quick and Power Throw use their own action. */
     return SDL_POINTER_ATTACK_RANGED_1;
 }
 
@@ -743,11 +751,11 @@ void prt_arc(void)
 
 }
 
-/* Print the active Quiver status, right-aligned like the other combat rows. */
+/* Print the active ranged-source status, right-aligned like combat rows. */
 void prt_quiver(void)
 {
     char buf[16];
-    object_type* q1_ptr = &inventory[INVEN_QUIVER1];
+    object_type* q1_ptr = NULL;
     int q1_current = 0;
     int q1_max = 0;
     int total_width;
@@ -769,12 +777,30 @@ void prt_quiver(void)
     /* Clear the entire line (12 characters) */
     Term_erase(COL_QUIVER, ROW_QUIVER, 12);
 
-    /* Belt throws use t and inactive Quiver contents belong to the Harness. */
-    if (!player_active_weapon_is_ranged() || !q1_ptr->k_idx)
+    if (!player_active_weapon_is_ranged())
         return;
 
-    q1_current = q1_ptr->number;
-    q1_max = object_stack_limit(q1_ptr);
+    {
+        int slot = player_active_throwing_weapon_slot();
+
+        if (slot >= 0)
+        {
+            q1_ptr = &inventory[slot];
+            q1_current = q1_ptr->number;
+            q1_max = object_stack_limit(q1_ptr);
+        }
+        else
+        {
+            slot = player_quiver_first_arrow_slot();
+            if (slot < 0)
+                return;
+            q1_ptr = player_quiver_arrow_object(slot);
+            if (!q1_ptr)
+                return;
+            q1_current = player_quiver_arrow_count();
+            q1_max = QUIVER_ARROW_CAPACITY;
+        }
+    }
     strnfmt(buf, sizeof(buf), "%d/%d", q1_current, q1_max);
     total_width = 2 + (int)strlen(buf);
 
@@ -1672,8 +1698,25 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
 
     if (player_active_weapon_is_ranged())
     {
-        hidden_left_panel_add_quiver_line(lines, &count, max_lines,
-            &inventory[INVEN_QUIVER1], SDL_POINTER_ATTACK_RANGED_1);
+        int slot = player_active_throwing_weapon_slot();
+        object_type display;
+
+        if (slot < 0)
+            slot = player_quiver_first_arrow_slot();
+        if (slot >= 0)
+        {
+            object_type* source = (slot >= QUIVER_INDEX
+                && slot < QUIVER_INDEX_END)
+                ? player_quiver_arrow_object(slot) : &inventory[slot];
+            if (source)
+            {
+                object_copy(&display, source);
+                if (display.tval == TV_ARROW)
+                    display.number = player_quiver_arrow_count();
+                hidden_left_panel_add_quiver_line(lines, &count, max_lines,
+                    &display, SDL_POINTER_ATTACK_RANGED_1);
+            }
+        }
     }
 
     {

@@ -261,13 +261,12 @@ static void append_description_slot(int* slots, int* count, int capacity,
  * Each group corresponds to an equipment slot (or class of slot) that an item
  * could occupy.  An item is comparable against another item only when their
  * groups overlap, so the description compares "things you could equip in its
- * place".  Most items belong to a single group, but a throwing weapon belongs
- * to both its melee group and the quiver/ammo group.  Daggers and hand axes
- * can additionally occupy the belt.
+ * place".  Throwing weapons remain melee/Harness objects; daggers and hand
+ * axes can additionally occupy the belt.
  */
 #define DESC_GRP_MELEE      0x00000001u
 #define DESC_GRP_BOW        0x00000002u
-#define DESC_GRP_AMMO       0x00000004u /* quiver: arrows and throwing weapons */
+#define DESC_GRP_AMMO       0x00000004u /* quiver: arrows only */
 #define DESC_GRP_HEAD       0x00000008u
 #define DESC_GRP_BODY       0x00000010u
 #define DESC_GRP_SHIELD     0x00000020u
@@ -290,9 +289,6 @@ static u32b description_groups_for_object(const object_type* o_ptr)
     if (!o_ptr || !o_ptr->k_idx)
         return 0;
 
-    /* Throwing-capable weapons can also be placed in the quiver. */
-    if (player_can_treat_as_throwing(o_ptr))
-        groups |= DESC_GRP_AMMO;
     if (object_is_belt_weapon(o_ptr))
         groups |= DESC_GRP_BELT;
 
@@ -431,6 +427,14 @@ static bool append_description_object(const object_type* objects[],
     return true;
 }
 
+static cptr description_inventory_group_name(const object_type* o_ptr)
+{
+    cptr group_name = inventory_limit_group_name(
+        inventory_limit_group_for_object(o_ptr));
+
+    return (group_name && group_name[0]) ? group_name : "Pack";
+}
+
 
 static char describe_item_with_comparisons_aux(int item_index,
     bool include_comparisons, bool floor_actions)
@@ -557,7 +561,9 @@ static char describe_item_with_comparisons_aux(int item_index,
                     &inventory[i]))
                 continue;
 
-            strnfmt(heading, sizeof(heading), "Pack %c", index_to_label(i));
+            strnfmt(heading, sizeof(heading), "%s %c",
+                description_inventory_group_name(&inventory[i]),
+                index_to_label(i));
             append_description_object(objects, headings, heading_texts, &count,
                 MAX_DESCRIPTION_COMPARE_ITEMS, &inventory[i], heading);
         }

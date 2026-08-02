@@ -1518,7 +1518,7 @@ void apply_magic(object_type* o_ptr, int lev, bool okay, bool good, bool great,
         if ((k_info[o_ptr->k_idx].flags3 & (TR3_THROWING))
             && !artefact_p(o_ptr))
         {
-            // often come in multiples, but limited to quiver stack size
+            // often come in multiples, but remain limited to their stack size
             if (one_in_(2))
             {
                 int stack_limit = object_stack_limit(o_ptr);

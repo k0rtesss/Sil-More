@@ -849,13 +849,16 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
         }
     }
     {
-        bool belt = player_can_power_throw_from_quiver(INVEN_BELT);
-        bool quiver = player_can_power_throw_from_quiver(INVEN_QUIVER1);
+        int sources = 0;
 
-        if (belt || quiver)
+        for (int slot = 0; slot < INVEN_TOTAL; slot++)
         {
-            cptr source = (belt && quiver) ? "choose"
-                : belt ? "belt" : "quiver";
+            if (player_can_power_throw_from_harness(slot))
+                sources++;
+        }
+        if (sources > 0)
+        {
+            cptr source = sources > 1 ? "choose" : "Harness";
             sdl_status_pane_add(entries, max_entries, &count, "Power Throw",
                 source, TERM_YELLOW);
         }

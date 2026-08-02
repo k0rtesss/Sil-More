@@ -84,14 +84,15 @@ errr rd_inventory(void)
      * savefiles through this same path into the shared inventory[] globals,
      * and this function only ever writes the slots a savefile actually
      * stored.  Without clearing first, a slot that the current character
-     * left empty (e.g. a quiver emptied by throwing its last weapon) keeps
+     * left empty (e.g. an active throwing stack emptied by its last throw) keeps
      * whatever a previously loaded character had there, duplicating the
-     * thrown weapon (one phantom in the quiver, one real copy on the floor).
+     * thrown weapon (one phantom in the active hand, one real copy on the floor).
      */
     for (int wipe_slot = 0; wipe_slot < INVEN_TOTAL; wipe_slot++)
         object_wipe(&inventory[wipe_slot]);
     p_ptr->inven_cnt = 0;
     p_ptr->equip_cnt = 0;
+    player_quiver_reset_store();
 
     /* Wipe the smithing object */
     object_wipe(smith_o_ptr);
@@ -201,6 +202,76 @@ errr rd_inventory(void)
     log_trace("[load:%06u] === END INVENTORY ===", (unsigned)load_byte_offset);
 
     log_debug("Inventory loaded: %d items carried, %d items equipped", p_ptr->inven_cnt, p_ptr->equip_cnt);
+
+    if (savefile_version_at_least(0, 9, 7, 9))
+    {
+        u16b quiver_magic = 0;
+        u16b quiver_count = 0;
+
+        rd_u16b(&quiver_magic);
+        rd_u16b(&quiver_count);
+        if (quiver_magic != SAVEFILE_QUIVER_BLOCK_MAGIC
+            || quiver_count > QUIVER_ARROW_CAPACITY)
+        {
+            log_warn("Invalid Quiver block marker/count 0x%04X/%u",
+                (unsigned)quiver_magic, (unsigned)quiver_count);
+            note("Error reading Quiver");
+            return (-1);
+        }
+
+        for (u16b i = 0; i < quiver_count; i++)
+        {
+            object_type arrow;
+            int original;
+
+            object_wipe(&arrow);
+            if (rd_item(&arrow) || arrow.tval != TV_ARROW || arrow.number <= 0)
+            {
+                note("Error reading Quiver arrow");
+                return (-1);
+            }
+            original = arrow.number;
+            if (player_quiver_absorb_arrow(&arrow) != original)
+            {
+                note("Too many arrows in Quiver");
+                return (-1);
+            }
+        }
+    }
+    else
+    {
+        /* Older saves kept one arrow stack in slot 37.  Development saves may
+         * also contain marked Pack entries from the short-lived transitional
+         * representation; migrate both without charging Pack space. */
+        if (inventory[INVEN_QUIVER1].k_idx
+            && inventory[INVEN_QUIVER1].tval == TV_ARROW)
+        {
+            object_type arrow;
+            object_copy(&arrow, &inventory[INVEN_QUIVER1]);
+            arrow.pickup_slot = INVEN_QUIVER1;
+            (void)player_quiver_absorb_arrow(&arrow);
+            object_wipe(&inventory[INVEN_QUIVER1]);
+            if (p_ptr->equip_cnt > 0)
+                p_ptr->equip_cnt--;
+        }
+
+        for (int i = 0; i < INVEN_PACK; i++)
+        {
+            if (!inventory[i].k_idx || inventory[i].tval != TV_ARROW
+                || inventory[i].pickup_slot != INVEN_QUIVER1)
+            {
+                continue;
+            }
+
+            object_type arrow;
+            int amount = inventory[i].number;
+            object_copy(&arrow, &inventory[i]);
+            (void)player_quiver_absorb_arrow(&arrow);
+            inven_item_increase(i, 0 - amount);
+            inven_item_optimize(i);
+            i--;
+        }
+    }
 
     log_trace("[load:%06u] === BEGIN SUPPLIES ===", (unsigned)load_byte_offset);
     supplies_reset_store();

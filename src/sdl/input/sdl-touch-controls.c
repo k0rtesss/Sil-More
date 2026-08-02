@@ -623,7 +623,7 @@ static bool sdl_touch_thumb_description_open(void);
  * compact-column footprint instead of stretching across the horizontal panel.
  * Touch-only.
  * Gameplay publishes every contextual action that currently applies: selected
- * quiver fire, quick throw, the current Space/floor-item action, and wait/rest.
+ * ranged fire, quick throw, the current Space/floor-item action, and wait/rest.
  * Interactive descriptions publish their complete footer action list.  Layout
  * is driven by the resulting count rather than by fixed top/bottom/sidecar
  * slots.
@@ -1399,7 +1399,7 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
             return;
         }
         SDL_strlcpy(buf,
-            "Ranged attack (active Quiver)",
+            "Ranged attack (active weapon)",
             buflen);
         return;
     }
@@ -1425,11 +1425,11 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         return;
     }
     if (binding == 'f') {
-        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
         return;
     }
     if (binding == 'F') {
-        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
         return;
     }
     if (binding == 'g') {
@@ -5649,12 +5649,12 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         return;
     case 'f':
         SDL_strlcpy(buf,
-            "Ranged attack: fire or throw the active Quiver weapon at a chosen target.",
+            "Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target.",
             buflen);
         return;
     case 'F':
         SDL_strlcpy(buf,
-            "Ranged attack: fire or throw the active Quiver weapon at a chosen target.",
+            "Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target.",
             buflen);
         return;
     case KTRL('F'):

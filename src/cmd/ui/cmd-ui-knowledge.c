@@ -66,9 +66,10 @@ static bool confirm_object_action(cptr action, const object_type* o_ptr,
     if (!action || !action[0] || !o_ptr || !o_ptr->k_idx)
         return true;
 
-    /* Picking up and floor deletion are deliberately outside the initial
-     * combat restriction; Pack use/equip/remove stops before confirmation. */
-    if (!(floor && (streq(action, "Pick up") || streq(action, "Delete")))
+    /* Floor deletion remains available, but Pack-destination pickups are
+     * also blocked when combat is active. */
+    if (!(floor && (streq(action, "Delete")
+                || (streq(action, "Equip") && o_ptr->tval == TV_ARROW)))
         && player_pack_item_action_blocked(o_ptr))
     {
         return false;
@@ -3785,7 +3786,8 @@ static const int equipment_menu_slots[] = {
     INVEN_HEAD,
     INVEN_HANDS,
     INVEN_FEET,
-    EQUIPMENT_MENU_QUIVERS
+    EQUIPMENT_MENU_QUIVERS,
+    INVEN_BELT
 };
 
 #define EQUIPMENT_MENU_SLOT_COUNT ((int)N_ELEMENTS(equipment_menu_slots))
@@ -3925,10 +3927,14 @@ static bool equipment_object_is_wearable(const object_type* o_ptr)
 }
 
 /* Weapon slots stay serialized as equipment for compatibility, but only the
- * active combat set is presented as Equipped.  Inactive Harness weapons are
- * presented by the Harness inventory page instead. */
+ * active combat set is presented as Equipped.  The Belt is also equipped,
+ * even though it grants passive rather than active-weapon combat bonuses.
+ * Inactive Harness weapons are presented by the Harness inventory page. */
 static bool equipment_slot_active_for_display(int slot)
 {
+    if (slot == INVEN_BELT)
+        return true;
+
     return player_equipment_slot_is_active(slot);
 }
 
@@ -3974,8 +3980,7 @@ static bool equipment_slot_accepts_object(int slot, const object_type* o_ptr)
         return o_ptr->tval == TV_RING;
 
     if (slot == EQUIPMENT_MENU_QUIVERS)
-        return (o_ptr->tval == TV_ARROW)
-            || player_can_treat_as_throwing(o_ptr);
+        return o_ptr->tval == TV_ARROW;
 
     switch (slot)
     {
@@ -3985,8 +3990,7 @@ static bool equipment_slot_accepts_object(int slot, const object_type* o_ptr)
     case INVEN_RIGHT:
         return o_ptr->tval == TV_RING;
     case INVEN_QUIVER1:
-        return (o_ptr->tval == TV_ARROW)
-            || player_can_treat_as_throwing(o_ptr);
+        return o_ptr->tval == TV_ARROW;
     case INVEN_BELT:
         return object_is_belt_weapon(o_ptr);
     default:
@@ -4019,6 +4023,9 @@ static object_type* equipment_entry_object(const equipment_list_entry* entry)
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
         return &inventory[entry->equip_idx];
+
+    if (entry->item_idx >= QUIVER_INDEX && entry->item_idx < QUIVER_INDEX_END)
+        return player_quiver_arrow_object(entry->item_idx);
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
         return &inventory[entry->item_idx];
@@ -4121,6 +4128,13 @@ static int collect_equipment_entries_for_slot(int slot,
                 equipment_add_slot_entry(entries, &count, capacity, i);
         }
 
+        for (int i = 0; i < player_quiver_store_entry_count()
+            && count < capacity; i++)
+        {
+            equipment_add_entry(entries, &count, capacity, QUIVER_INDEX + i,
+                -1, -1, true);
+        }
+
         return count;
     }
 
@@ -4144,6 +4158,16 @@ static int collect_equipment_entries_for_slot(int slot,
         equipment_add_entry(entries, &count, capacity, -1, -1, slot, true);
     }
 
+    if (slot == EQUIPMENT_MENU_QUIVERS)
+    {
+        for (int i = 0; i < player_quiver_store_entry_count()
+            && count < capacity; i++)
+        {
+            equipment_add_entry(entries, &count, capacity, QUIVER_INDEX + i,
+                -1, -1, true);
+        }
+    }
+
     for (int i = 0; i < INVEN_PACK && count < capacity; i++)
     {
         object_type* o_ptr = &inventory[i];
@@ -4151,7 +4175,9 @@ static int collect_equipment_entries_for_slot(int slot,
         if (!equipment_slot_accepts_object(slot, o_ptr))
             continue;
 
-        equipment_add_entry(entries, &count, capacity, i, -1, -1, false);
+        equipment_add_entry(entries, &count, capacity, i, -1, -1,
+            slot == EQUIPMENT_MENU_QUIVERS
+                && inventory_slot_is_quivered_arrow(i));
     }
 
     for (int i = 0; i < supplies_entry_count() && count < capacity; i++)
@@ -4414,6 +4440,9 @@ static void compute_equipment_group_totals(
 
 static bool equipment_menu_slot_is_filled(int slot)
 {
+    if (slot == EQUIPMENT_MENU_QUIVERS)
+        return player_quiver_arrow_count() > 0;
+
     if (slot == EQUIPMENT_MENU_ALL)
     {
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
@@ -4518,6 +4547,14 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
 
     if (entry->equipped)
     {
+        if (entry->item_idx >= QUIVER_INDEX
+            && entry->item_idx < QUIVER_INDEX_END)
+            return "Quiver";
+        if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK
+            && inventory_slot_is_quivered_arrow(entry->item_idx))
+        {
+            return "Quiver";
+        }
         return "Equipped";
     }
 
@@ -4526,9 +4563,16 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
     {
+        object_type* o_ptr = equipment_entry_object(entry);
+        cptr group_name = inventory_limit_group_name(
+            inventory_limit_group_for_object(o_ptr));
+
+        if (!group_name || !group_name[0])
+            group_name = "Pack";
         if (buf && buflen > 0)
-            strnfmt(buf, buflen, "Pack %c", index_to_label(entry->item_idx));
-        return buf ? buf : "Pack";
+            strnfmt(buf, buflen, "%s %c", group_name,
+                index_to_label(entry->item_idx));
+        return buf ? buf : group_name;
     }
 
     if (entry->floor_idx > 0 && entry->floor_idx < o_max)
@@ -5345,16 +5389,20 @@ static bool equipment_entry_carried_pack_action_blocked(
 static bool equipment_entry_use_pack_action_blocked(
     const equipment_list_entry* entry, supply_floor_action floor_action)
 {
+    object_type* o_ptr;
+
     if (!entry)
         return false;
 
+    o_ptr = equipment_entry_object(entry);
     if (entry->floor_idx > 0 && entry->floor_idx < o_max
-        && floor_action == SUPPLY_FLOOR_ACTION_DEFAULT)
+        && floor_action == SUPPLY_FLOOR_ACTION_WIELD
+        && o_ptr && o_ptr->tval == TV_ARROW)
     {
         return false;
     }
 
-    return player_pack_item_action_blocked(equipment_entry_object(entry));
+    return player_pack_item_action_blocked(o_ptr);
 }
 
 static bool confirm_equipment_entry_action(cptr action,
@@ -5424,6 +5472,13 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
     {
+        if (inventory_slot_is_quivered_arrow(entry->item_idx))
+        {
+            if (!confirm_equipment_entry_action("Remove", entry))
+                return false;
+            do_cmd_use_item_by_index(entry->item_idx);
+            return true;
+        }
         if (!confirm_equipment_entry_action("Equip", entry))
         {
             return false;
@@ -5432,6 +5487,14 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
             do_cmd_wield(o_ptr, entry->item_idx);
         else
             do_cmd_wield_to_slot(o_ptr, entry->item_idx, selected_slot);
+        return true;
+    }
+
+    if (entry->item_idx >= QUIVER_INDEX && entry->item_idx < QUIVER_INDEX_END)
+    {
+        if (!confirm_equipment_entry_action("Remove", entry))
+            return false;
+        do_cmd_use_item_by_index(entry->item_idx);
         return true;
     }
 
@@ -5453,6 +5516,9 @@ static bool equipment_menu_drop_entry(equipment_list_entry* entry)
         return do_cmd_drop_item_by_index_confirm(entry->equip_idx, true);
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
+        return do_cmd_drop_item_by_index_confirm(entry->item_idx, true);
+
+    if (entry->item_idx >= QUIVER_INDEX && entry->item_idx < QUIVER_INDEX_END)
         return do_cmd_drop_item_by_index_confirm(entry->item_idx, true);
 
     if (entry->supply_idx < 0)
@@ -13299,11 +13365,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                     if (!confirm_supply_entry_action(action, entry))
                     {
-                        if (!(entry->floor_idx > 0
-                                && entry->floor_idx < o_max
-                                && floor_action
-                                    == SUPPLY_FLOOR_ACTION_DEFAULT)
-                            && player_pack_item_action_blocked(action_o_ptr))
+                        if (player_pack_item_action_blocked(action_o_ptr))
                         {
                             pack_combat_notice = true;
                         }

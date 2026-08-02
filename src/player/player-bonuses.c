@@ -204,7 +204,15 @@ void calc_bonuses(void)
             p_ptr->danger += 1;
     }
     p_ptr->total_weight += supplies_total_weight();
+    p_ptr->total_weight += player_quiver_total_weight();
     p_ptr->total_weight += player_lamp_oil_weight();
+    for (i = 0; i < player_quiver_store_entry_count(); i++)
+    {
+        o_ptr = player_quiver_store_entry_at(i);
+        object_flags(o_ptr, &f1, &f2, &f3);
+        if (f2 & TR2_DANGER)
+            p_ptr->danger += 1;
+    }
 
     /*** Analyze equipment ***/
 

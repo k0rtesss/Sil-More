@@ -187,6 +187,20 @@ errr file_character(cptr name, bool full)
         SDL_IOprintf(fff, "\n\n");
     }
 
+    if (player_quiver_store_entry_count() > 0)
+    {
+        SDL_IOprintf(fff, "  [Quiver: %d/%d arrows]\n\n",
+            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
+        for (i = 0; i < player_quiver_store_entry_count(); i++)
+        {
+            object_type* o_ptr = player_quiver_store_entry_at(i);
+            object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+            SDL_IOprintf(fff, "%c) %s\n", I2A(i), o_name);
+            identify_random_gen(o_ptr);
+        }
+        SDL_IOprintf(fff, "\n");
+    }
+
     /* Dump the inventory */
     SDL_IOprintf(fff, "  [Inventory]\n\n");
     for (i = 0; i < INVEN_PACK; i++)

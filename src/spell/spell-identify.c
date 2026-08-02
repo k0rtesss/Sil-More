@@ -782,6 +782,16 @@ void identify_and_describe_pack(void)
         do_ident_item(item, o_ptr);
     }
 
+    /* Identify arrows in the dedicated Quiver store. */
+    for (int quiver_idx = 0;
+        quiver_idx < player_quiver_store_entry_count(); quiver_idx++)
+    {
+        o_ptr = player_quiver_store_entry_at(quiver_idx);
+        if (!o_ptr || !o_ptr->k_idx || object_known_p(o_ptr))
+            continue;
+        do_ident_item(QUIVER_INDEX + quiver_idx, o_ptr);
+    }
+
     /* Identify supplies */
     int supply_count = supplies_entry_count();
     for (int supply_idx = 0; supply_idx < supply_count; supply_idx++)
@@ -843,7 +853,12 @@ void do_ident_item(int item, object_type* o_ptr)
     object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
     /* Describe */
-    if (item >= SUPPLIES_INDEX)
+    if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+    {
+        msg_format("In your quiver: %s.", o_name);
+        p_ptr->redraw |= PR_QUIVER;
+    }
+    else if (item >= SUPPLIES_INDEX)
     {
         int supply_index = item - SUPPLIES_INDEX;
         msg_format("In your supplies: %s.", o_name);

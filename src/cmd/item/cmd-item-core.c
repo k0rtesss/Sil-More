@@ -135,6 +135,7 @@ static bool item_tester_hook_ring_slots(const object_type* o_ptr)
 bool throw_slot_menu_active = false;
 bool throw_slot_enabled[INVEN_TOTAL];
 static int forced_wield_slot = -1;
+static bool forced_wield_full_stack = false;
 static bool wield_command_succeeded = false;
 
 static bool forced_wield_slot_accepts_object(const object_type* o_ptr,
@@ -162,8 +163,7 @@ static bool forced_wield_slot_accepts_object(const object_type* o_ptr,
     case INVEN_NECK:
         return o_ptr->tval == TV_AMULET;
     case INVEN_QUIVER1:
-        return (o_ptr->tval == TV_ARROW)
-            || player_can_treat_as_throwing(o_ptr);
+        return o_ptr->tval == TV_ARROW;
     case INVEN_BELT:
         return object_is_belt_weapon(o_ptr);
     default:
@@ -307,6 +307,64 @@ cptr item_use_action_name(const object_type* o_ptr, int item)
     default:
         return "Use";
     }
+}
+
+static void do_cmd_quiver_arrows(object_type* o_ptr, int item)
+{
+    object_type moving;
+    int requested;
+    int placed;
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->tval != TV_ARROW)
+        return;
+    if ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && inventory_slot_is_quivered_arrow(item)))
+    {
+        msg_print("Those arrows are already in your quiver.");
+        return;
+    }
+
+    requested = MIN(o_ptr->number, player_quiver_arrow_space());
+    if (requested <= 0)
+    {
+        msg_format("Your quiver is full (%d/%d arrows).",
+            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
+        return;
+    }
+
+    object_copy(&moving, o_ptr);
+    moving.number = requested;
+    moving.pickup = false;
+    moving.pickup_slot = INVEN_QUIVER1;
+    placed = player_quiver_absorb_arrow(&moving);
+    if (placed <= 0)
+    {
+        msg_print("You have no free place for another type of arrow.");
+        return;
+    }
+
+    if (item >= 0)
+    {
+        inven_item_increase(item, 0 - placed);
+        inven_item_optimize(item);
+    }
+    else
+    {
+        floor_item_increase(0 - item, 0 - placed);
+        floor_item_optimize(0 - item);
+    }
+
+    p_ptr->energy_use = 100;
+    p_ptr->previous_action[0] = ACTION_MISC;
+    p_ptr->update |= PU_BONUS;
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    p_ptr->redraw |= PR_QUIVER;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+    msg_format("You place %d arrow%s in your quiver (%d/%d).", placed,
+        placed == 1 ? "" : "s", player_quiver_arrow_count(),
+        QUIVER_ARROW_CAPACITY);
+    sound(MSG_EQUIP_BOW);
+    wield_command_succeeded = true;
 }
 
 enum {
@@ -1013,6 +1071,48 @@ static bool handle_iron_crown_silmaril_action(object_type* o_ptr, int item)
 /*
  * Use an item by index, helper for enhanced menus
  */
+static void do_cmd_unquiver_pack_arrow(int item)
+{
+    object_type packed;
+    object_type* o_ptr;
+    int original_number;
+    int placed;
+
+    o_ptr = player_quiver_arrow_object(item);
+    if (!o_ptr || !o_ptr->k_idx)
+    {
+        return;
+    }
+
+    object_copy(&packed, o_ptr);
+    packed.pickup = false;
+    packed.pickup_slot = -1;
+    if (!player_pack_item_action_allowed(&packed))
+        return;
+    if (!inventory_type_slot_available(&packed, true))
+    {
+        msg_print("There is not enough room in your Pack for those arrows.");
+        return;
+    }
+
+    original_number = packed.number;
+    (void)inven_carry(&packed, false);
+    placed = original_number - packed.number;
+    if (placed <= 0)
+    {
+        msg_print("There is not enough room in your Pack for those arrows.");
+        return;
+    }
+    player_quiver_remove_arrows(item, placed);
+    p_ptr->energy_use = 100;
+    p_ptr->previous_action[0] = ACTION_MISC;
+    p_ptr->update |= PU_BONUS;
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    p_ptr->redraw |= PR_QUIVER;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+    msg_print("You move the arrows from your quiver to your Pack.");
+}
+
 void do_cmd_use_item_by_index(int item)
 {
     if (item == SUPPLIES_INDEX)
@@ -1022,6 +1122,12 @@ void do_cmd_use_item_by_index(int item)
     }
 
     object_type* o_ptr;
+
+    if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+    {
+        do_cmd_unquiver_pack_arrow(item);
+        return;
+    }
 
     /* Get the item (in the pack) */
     if (item >= 0)
@@ -1037,6 +1143,13 @@ void do_cmd_use_item_by_index(int item)
         log_debug("do_cmd_use_item_by_index: Using item from floor, index=%d, o_list index=%d", item, 0 - item);
     }
 
+    if (item >= 0 && item < INVEN_PACK
+        && inventory_slot_is_quivered_arrow(item))
+    {
+        do_cmd_unquiver_pack_arrow(item);
+        return;
+    }
+
     if (o_ptr->name1 == ART_MORGOTH_0)
     {
         msg_print("There are no Silmarils left in the Iron Crown.");
@@ -1046,7 +1159,8 @@ void do_cmd_use_item_by_index(int item)
     if (handle_iron_crown_silmaril_action(o_ptr, item))
         return;
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (!((item < 0) && o_ptr->tval == TV_ARROW)
+        && !player_pack_item_action_allowed(o_ptr))
         return;
 
     if (use_floor_interaction_by_index(item))
@@ -1171,6 +1285,7 @@ void do_cmd_use_item_by_index(int item)
             do_cmd_play_instrument(o_ptr, item);
         break;
     }
+
     case TV_POTION:
     {
         do_cmd_quaff_potion(o_ptr, item);
@@ -1526,7 +1641,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         return;
     }
 
-    if (!player_pack_item_action_allowed(o_ptr))
+    if (!((item < 0) && o_ptr->tval == TV_ARROW)
+        && !player_pack_item_action_allowed(o_ptr))
         return;
 
     // remember how many there were
@@ -1552,6 +1668,12 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     }
     
     log_debug("do_cmd_wield: Weight check passed or inventory item (item=%d)", item);
+
+    if (o_ptr->tval == TV_ARROW)
+    {
+        do_cmd_quiver_arrows(o_ptr, item);
+        return;
+    }
 
     /* Check the slot */
     slot = wield_slot(o_ptr);
@@ -1657,17 +1779,10 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     if (is_throwing)
     {
         if ((forced_wield_slot == INVEN_WIELD
-                || forced_wield_slot == INVEN_QUIVER1
                 || forced_wield_slot == INVEN_BELT)
             && forced_wield_slot_accepts_object(o_ptr, forced_wield_slot))
         {
             slot = forced_wield_slot;
-            if (slot == INVEN_QUIVER1
-                && inventory[slot].k_idx
-                && object_similar(&inventory[slot], o_ptr))
-            {
-                combine = true;
-            }
         }
         else
         {
@@ -1693,23 +1808,6 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
                 if (allow_wield)
                 {
                     throw_slot_enabled[INVEN_WIELD] = true;
-                    any_throw_dest = true;
-                }
-            }
-
-            {
-                object_type* q1_ptr = &inventory[INVEN_QUIVER1];
-                bool allow_quiver = true;
-
-                if (q1_ptr->k_idx && cursed_p(q1_ptr)
-                    && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
-                {
-                    allow_quiver = false;
-                }
-
-                if (allow_quiver)
-                {
-                    throw_slot_enabled[INVEN_QUIVER1] = true;
                     any_throw_dest = true;
                 }
             }
@@ -1743,9 +1841,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
             if (!throw_slot_enabled[slot_choice])
             {
-                if (throw_slot_enabled[INVEN_QUIVER1])
-                    slot_choice = INVEN_QUIVER1;
-                else if (throw_slot_enabled[INVEN_BELT])
+                if (throw_slot_enabled[INVEN_BELT])
                     slot_choice = INVEN_BELT;
                 else
                     slot_choice = INVEN_WIELD;
@@ -1766,14 +1862,14 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             }
             else
             {
-                /* Route the hand-or-quiver choice through the new inventory menu. */
+                /* Throwing weapons use the hand or the optional belt. */
                 int chosen_slot = -1;
 
                 slot_selected = open_inventory_slot_pick_menu(o_ptr,
                     throw_slot_enabled,
                     "Place this throwing weapon: the hand wields it, "
-                    "the quiver holds throwing stacks, and the belt holds one "
-                    "dagger or hand axe.",
+                    "and the belt holds one dagger or hand axe. Other "
+                    "throwing weapons stay on the Harness.",
                     &chosen_slot);
 
                 if (slot_selected && chosen_slot >= INVEN_WIELD
@@ -1804,114 +1900,10 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
             slot = slot_choice;
 
-            if (slot == INVEN_QUIVER1)
-            {
-                if (inventory[slot].k_idx
-                    && object_similar(&inventory[slot], o_ptr))
-                    combine = true;
-            }
-
             for (i = 0; i < INVEN_TOTAL; i++)
                 throw_slot_enabled[i] = false;
         }
     }
-    else
-    {
-        // Special cases for merging arrows
-        if (o_ptr->tval == TV_ARROW
-            && (forced_wield_slot == INVEN_QUIVER1)
-            && forced_wield_slot_accepts_object(o_ptr, forced_wield_slot))
-        {
-            slot = forced_wield_slot;
-            if (inventory[slot].k_idx && object_similar(&inventory[slot], o_ptr))
-                combine = true;
-        }
-        else if (object_similar(&inventory[INVEN_QUIVER1], o_ptr))
-        {
-            slot = INVEN_QUIVER1;
-            combine = true;
-        }
-        /* Ask for arrow set to replace */
-        else if (o_ptr->tval == TV_ARROW)
-        {
-            bool any_quiver_dest = false;
-            int slot_choice = slot;
-
-            throw_slot_menu_active = true;
-
-            for (i = 0; i < INVEN_TOTAL; i++)
-                throw_slot_enabled[i] = false;
-
-            {
-                object_type* q1_ptr = &inventory[INVEN_QUIVER1];
-                bool allow_quiver = true;
-
-                if (q1_ptr->k_idx && cursed_p(q1_ptr)
-                    && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
-                {
-                    allow_quiver = false;
-                }
-
-                if (allow_quiver)
-                {
-                    throw_slot_enabled[INVEN_QUIVER1] = true;
-                    any_quiver_dest = true;
-                }
-            }
-
-            if (!any_quiver_dest)
-            {
-                msg_print("You have no available quiver slot for those arrows.");
-                throw_slot_menu_active = false;
-                for (i = 0; i < INVEN_TOTAL; i++)
-                    throw_slot_enabled[i] = false;
-                return;
-            }
-
-            if (!throw_slot_enabled[slot_choice])
-            {
-                if (throw_slot_enabled[INVEN_QUIVER1])
-                    slot_choice = INVEN_QUIVER1;
-            }
-
-            bool slot_selected = open_inventory_slot_pick_menu(o_ptr,
-                throw_slot_enabled,
-                "Place arrows in a quiver.",
-                &slot_choice);
-
-            if (!slot_selected || slot_choice < INVEN_WIELD
-                || slot_choice >= INVEN_TOTAL || !throw_slot_enabled[slot_choice])
-            {
-                slot_selected = false;
-            }
-
-            if (!slot_selected)
-            {
-                item_tester_hook = NULL;
-                item_tester_full = false;
-                throw_slot_menu_active = false;
-                for (i = 0; i < INVEN_TOTAL; i++)
-                    throw_slot_enabled[i] = false;
-                return;
-            }
-
-            item_tester_hook = NULL;
-            item_tester_full = false;
-            throw_slot_menu_active = false;
-
-            slot = slot_choice;
-
-            if (slot == INVEN_QUIVER1)
-            {
-                if (inventory[slot].k_idx && object_similar(&inventory[slot], o_ptr))
-                    combine = true;
-            }
-
-            for (i = 0; i < INVEN_TOTAL; i++)
-                throw_slot_enabled[i] = false;
-        }
-    }
-
     // Check for paired weapons (e.g., Glamdring + Orcrist)
     // Paired weapons can be wielded together without Two Weapon Fighting
     bool paired_weapon_prompt = false;
@@ -2255,16 +2247,17 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         i_ptr->timeout = 0;
     }
 
-    bool target_is_throw_slot = (slot == INVEN_QUIVER1)
-        || (slot == INVEN_BELT);
+    bool target_is_throw_slot = (slot == INVEN_BELT);
+    bool ready_full_throwing_stack = forced_wield_full_stack && is_throwing
+        && slot == INVEN_WIELD;
 
-    /* A belt is a single sheath/loop; the quiver may hold stacks. */
+    /* A belt is a single sheath/loop.  Active Throwing, unlike ordinary
+     * melee wielding, readies the entire source stack in the active hand. */
     if (slot == INVEN_BELT)
     {
         quantity = 1;
     }
-    else if ((i_ptr->tval == TV_ARROW)
-        || (is_throwing && target_is_throw_slot))
+    else if ((i_ptr->tval == TV_ARROW) || ready_full_throwing_stack)
     {
         if (combine)
         {
@@ -2621,12 +2614,31 @@ bool do_cmd_wield_to_slot(
     object_type* default_o_ptr, int default_item, int forced_slot)
 {
     int old_forced_slot = forced_wield_slot;
+    bool old_forced_full_stack = forced_wield_full_stack;
     bool succeeded;
 
     forced_wield_slot = forced_slot;
+    forced_wield_full_stack = false;
     do_cmd_wield(default_o_ptr, default_item);
     succeeded = wield_command_succeeded;
     forced_wield_slot = old_forced_slot;
+    forced_wield_full_stack = old_forced_full_stack;
+    return succeeded;
+}
+
+bool do_cmd_wield_stack_to_slot(
+    object_type* default_o_ptr, int default_item, int forced_slot)
+{
+    int old_forced_slot = forced_wield_slot;
+    bool old_forced_full_stack = forced_wield_full_stack;
+    bool succeeded;
+
+    forced_wield_slot = forced_slot;
+    forced_wield_full_stack = true;
+    do_cmd_wield(default_o_ptr, default_item);
+    succeeded = wield_command_succeeded;
+    forced_wield_slot = old_forced_slot;
+    forced_wield_full_stack = old_forced_full_stack;
     return succeeded;
 }
 
@@ -3185,6 +3197,35 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
     object_type* o_ptr;
     char o_name[80];
     char quantity_prompt[160];
+
+    if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+    {
+        object_type dropped;
+
+        o_ptr = player_quiver_arrow_object(item);
+        if (!o_ptr || !o_ptr->k_idx)
+            return false;
+        object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
+        strnfmt(quantity_prompt, sizeof(quantity_prompt),
+            "Drop how many %s? ", o_name);
+        amt = get_quantity_action(quantity_prompt, "Drop", o_ptr->number);
+        if (amt <= 0)
+            return false;
+        if (confirm && !confirm_drop_item_amount(o_ptr, amt))
+            return false;
+
+        object_copy(&dropped, o_ptr);
+        dropped.number = amt;
+        dropped.pickup = false;
+        dropped.pickup_slot = -1;
+        object_desc(o_name, sizeof(o_name), &dropped, true, 3);
+        player_quiver_remove_arrows(item, amt);
+        msg_format("You drop %s (quiver).", o_name);
+        drop_near(&dropped, 0, p_ptr->py, p_ptr->px);
+        p_ptr->energy_use = 50;
+        p_ptr->redraw |= PR_QUIVER;
+        return true;
+    }
 
     /* Paranoia */
     if (item < 0 || item >= INVEN_TOTAL)

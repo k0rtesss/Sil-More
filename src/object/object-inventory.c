@@ -183,6 +183,8 @@ void inven_item_optimize(int item)
     /* The item is being wielded */
     else
     {
+        bool was_active_weapon = (item == player_active_weapon_quiver_slot());
+
         /* One less item */
         p_ptr->equip_cnt--;
 
@@ -199,7 +201,7 @@ void inven_item_optimize(int item)
         p_ptr->window |= (PW_EQUIP | PW_PLAYER_0);
 
         p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST);
-        if (item == player_active_weapon_quiver_slot())
+        if (was_active_weapon)
             p_ptr->redraw |= PR_MAP;
     }
 }
@@ -356,82 +358,278 @@ void check_pack_overflow(void)
     }
 }
 
+static object_type quiver_arrow_store[QUIVER_ARROW_CAPACITY];
+static int quiver_arrow_store_count = 0;
+
+static int quiver_store_index_for_pointer(const object_type* o_ptr)
+{
+    if (!o_ptr)
+        return -1;
+    for (int i = 0; i < quiver_arrow_store_count; i++)
+    {
+        if (o_ptr == &quiver_arrow_store[i])
+            return i;
+    }
+    return -1;
+}
+
+bool object_is_quivered_arrow(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->tval != TV_ARROW)
+        return false;
+    if (quiver_store_index_for_pointer(o_ptr) >= 0)
+        return true;
+
+    /* The marker also identifies arrows travelling back to the Quiver and
+     * legacy slot-37 arrows while an older save is being migrated. */
+    return o_ptr->pickup_slot == INVEN_QUIVER1;
+}
+
+bool inventory_slot_is_quivered_arrow(int item)
+{
+    return item >= 0 && item < INVEN_TOTAL
+        && object_is_quivered_arrow(&inventory[item]);
+}
+
+void player_quiver_reset_store(void)
+{
+    for (int i = 0; i < QUIVER_ARROW_CAPACITY; i++)
+        object_wipe(&quiver_arrow_store[i]);
+    quiver_arrow_store_count = 0;
+}
+
+int player_quiver_store_entry_count(void)
+{
+    return quiver_arrow_store_count;
+}
+
+object_type* player_quiver_store_entry_at(int index)
+{
+    if (index < 0 || index >= quiver_arrow_store_count)
+        return NULL;
+    return &quiver_arrow_store[index];
+}
+
+object_type* player_quiver_arrow_object(int handle)
+{
+    if (handle >= QUIVER_INDEX && handle < QUIVER_INDEX_END)
+        return player_quiver_store_entry_at(handle - QUIVER_INDEX);
+    if (handle >= 0 && handle < INVEN_TOTAL
+        && inventory_slot_is_quivered_arrow(handle))
+    {
+        return &inventory[handle];
+    }
+    return NULL;
+}
+
+int player_quiver_arrow_count(void)
+{
+    int count = 0;
+
+    for (int i = 0; i < quiver_arrow_store_count; i++)
+        count += quiver_arrow_store[i].number;
+
+    /* Only possible transiently while loading a legacy save. */
+    if (inventory_slot_is_quivered_arrow(INVEN_QUIVER1))
+        count += inventory[INVEN_QUIVER1].number;
+
+    return count;
+}
+
+int player_quiver_total_weight(void)
+{
+    int weight = 0;
+
+    for (int i = 0; i < quiver_arrow_store_count; i++)
+        weight += quiver_arrow_store[i].number * quiver_arrow_store[i].weight;
+    return weight;
+}
+
+int player_quiver_arrow_space(void)
+{
+    return MAX(0, QUIVER_ARROW_CAPACITY - player_quiver_arrow_count());
+}
+
+int player_quiver_arrow_slots(int* slots, int max)
+{
+    int count = 0;
+
+    if (!slots || max <= 0)
+        return 0;
+
+    /* Keep a transient legacy physical slot first until load migration runs. */
+    if (inventory_slot_is_quivered_arrow(INVEN_QUIVER1))
+        slots[count++] = INVEN_QUIVER1;
+    for (int i = 0; i < quiver_arrow_store_count && count < max; i++)
+        slots[count++] = QUIVER_INDEX + i;
+
+    return count;
+}
+
+int player_quiver_first_arrow_slot(void)
+{
+    int slots[QUIVER_ARROW_CAPACITY + 1];
+
+    return player_quiver_arrow_slots(slots, (int)N_ELEMENTS(slots)) > 0
+        ? slots[0] : -1;
+}
+
+static bool quiver_arrow_similar(const object_type* carried,
+    const object_type* incoming)
+{
+    object_type marked;
+
+    if (!carried || !incoming || !object_is_quivered_arrow(carried))
+        return false;
+    object_copy(&marked, incoming);
+    marked.pickup_slot = INVEN_QUIVER1;
+    return object_similar(carried, &marked);
+}
+
+static bool quiver_can_accept_arrow(const object_type* o_ptr)
+{
+    if (!o_ptr || o_ptr->tval != TV_ARROW || player_quiver_arrow_space() <= 0)
+        return false;
+    return quiver_arrow_store_count < QUIVER_ARROW_CAPACITY;
+}
+
+/* Move as many arrows as possible into the dedicated mixed-arrow store.
+ * Returns the number accepted and leaves any excess in o_ptr. */
+int player_quiver_absorb_arrow(object_type* o_ptr)
+{
+    int allowed;
+    int original_number;
+    object_type incoming;
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->tval != TV_ARROW)
+        return 0;
+
+    allowed = MIN(o_ptr->number, player_quiver_arrow_space());
+    if (allowed <= 0 || !quiver_can_accept_arrow(o_ptr))
+        return 0;
+
+    original_number = o_ptr->number;
+    object_copy(&incoming, o_ptr);
+    incoming.number = allowed;
+    incoming.pickup = false;
+    incoming.pickup_slot = INVEN_QUIVER1;
+
+    for (int i = 0; i < quiver_arrow_store_count && incoming.number > 0; i++)
+    {
+        object_type* q_ptr = &quiver_arrow_store[i];
+
+        if (!quiver_arrow_similar(q_ptr, &incoming))
+            continue;
+        object_absorb(q_ptr, &incoming);
+        q_ptr->pickup = false;
+        q_ptr->pickup_slot = INVEN_QUIVER1;
+        q_ptr->ident |= IDENT_HANDLED;
+    }
+
+    while (incoming.number > 0
+        && quiver_arrow_store_count < QUIVER_ARROW_CAPACITY)
+    {
+        object_type* q_ptr = &quiver_arrow_store[quiver_arrow_store_count++];
+        int placed = MIN(incoming.number, object_stack_limit(&incoming));
+
+        object_copy(q_ptr, &incoming);
+        q_ptr->number = placed;
+        q_ptr->pickup = false;
+        q_ptr->pickup_slot = INVEN_QUIVER1;
+        q_ptr->ident |= IDENT_HANDLED;
+        q_ptr->next_o_idx = 0;
+        q_ptr->held_m_idx = 0;
+        q_ptr->iy = q_ptr->ix = 0;
+        q_ptr->marked = false;
+        incoming.number -= placed;
+    }
+
+    o_ptr->number = original_number - (allowed - incoming.number);
+    if (o_ptr->number > 0)
+    {
+        o_ptr->pickup = false;
+        o_ptr->pickup_slot = -1;
+    }
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    p_ptr->redraw |= PR_QUIVER;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+    return original_number - o_ptr->number;
+}
+
+void player_quiver_remove_arrows(int handle, int amount)
+{
+    object_type* o_ptr = player_quiver_arrow_object(handle);
+
+    if (!o_ptr || amount <= 0)
+        return;
+    if (amount < o_ptr->number)
+    {
+        o_ptr->number -= amount;
+    }
+    else if (handle >= QUIVER_INDEX && handle < QUIVER_INDEX_END)
+    {
+        int index = handle - QUIVER_INDEX;
+        for (int i = index; i + 1 < quiver_arrow_store_count; i++)
+            object_copy(&quiver_arrow_store[i], &quiver_arrow_store[i + 1]);
+        quiver_arrow_store_count--;
+        object_wipe(&quiver_arrow_store[quiver_arrow_store_count]);
+    }
+    else
+    {
+        inven_item_increase(handle, 0 - o_ptr->number);
+        inven_item_optimize(handle);
+    }
+
+    p_ptr->redraw |= PR_QUIVER;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+}
+
 /*
  * Check if we have space for an item in the pack without overflow
  */
 bool inven_carry_okay(const object_type* o_ptr)
 {
     int j;
+    object_type pack_fallback;
 
     clear_inventory_limit_failure();
 
     if (!player_light_capacity_okay(o_ptr, true))
         return false;
 
-    /* Quiver and Belt contents are Harness contents too.  Check the complete
-     * incoming quantity before any auto-return or stack shortcut can accept
-     * it; moving it into an equipment slot does not make its volume vanish. */
+    if (o_ptr->tval == TV_ARROW
+        && (o_ptr->pickup_slot == INVEN_QUIVER1 || o_ptr->pickup)
+        && quiver_can_accept_arrow(o_ptr))
+    {
+        return true;
+    }
+
+    if (o_ptr->tval == TV_ARROW
+        && (o_ptr->pickup_slot == INVEN_QUIVER1 || o_ptr->pickup))
+    {
+        object_copy(&pack_fallback, o_ptr);
+        pack_fallback.pickup = false;
+        pack_fallback.pickup_slot = -1;
+        o_ptr = &pack_fallback;
+    }
+
+    if (o_ptr->pickup_slot == PICKUP_SLOT_ACTIVE_THROWING
+        && player_can_treat_as_throwing(o_ptr)
+        && (!inventory[INVEN_WIELD].k_idx
+            || object_similar(&inventory[INVEN_WIELD], o_ptr)))
+    {
+        return true;
+    }
+
     if (!inventory_limit_is_stack_counted(o_ptr)
         && !inventory_type_slot_available(o_ptr, true))
     {
         return false;
     }
 
-    // Check for combining in quiver first
-    if (o_ptr->tval == TV_ARROW)
-    {
-        int empty_quiver = 0;
-        {
-            object_type* j_ptr = &inventory[INVEN_QUIVER1];
-
-            if (!j_ptr->k_idx)
-            {
-                empty_quiver = INVEN_QUIVER1;
-            }
-            else if (object_similar(j_ptr, o_ptr))
-            {
-                if (j_ptr->number < object_stack_limit(j_ptr))
-                    return (true);
-            }
-        }
-
-        if ((empty_quiver > 0) && o_ptr->pickup)
-            return (true);
-    }
-
-    /* Throwing weapons can combine with similar items in quiver, 
-       or go back to their original empty quiver slot */
-    if (player_can_treat_as_throwing(o_ptr))
-    {
-        int empty_quiver = 0;
-        bool wants_quiver = (o_ptr->pickup_slot == INVEN_QUIVER1);
-        bool wants_belt = (o_ptr->pickup_slot == INVEN_BELT)
-            && object_is_belt_weapon(o_ptr);
-
-        if (wants_belt && !inventory[INVEN_BELT].k_idx)
-            return true;
-
-        {
-            object_type* j_ptr = &inventory[INVEN_QUIVER1];
-
-            if (!j_ptr->k_idx)
-            {
-                empty_quiver = INVEN_QUIVER1;
-            }
-            else if (object_similar(j_ptr, o_ptr))
-            {
-                if (j_ptr->number < object_stack_limit(j_ptr))
-                    return (true);
-            }
-        }
-        
-        /* Thrown items can go back to an empty quiver slot */
-        if ((empty_quiver > 0) && o_ptr->pickup)
-            return true;
-
-        if (wants_quiver && !inventory[INVEN_QUIVER1].k_idx)
-            return true;
-    }
+    if (o_ptr->pickup_slot == INVEN_BELT && object_is_belt_weapon(o_ptr)
+        && !inventory[INVEN_BELT].k_idx)
+        return true;
 
     /*
      * Per-item capped gear should check the cap before pack merges can hide
@@ -570,9 +768,32 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
     if (!player_light_capacity_okay(o_ptr, true))
         return (-1);
 
-    /* Enforce Pack/Harness volume before any direct Quiver/Belt placement or
-     * stack merge.  Several creation and recovery paths call inven_carry()
-     * directly rather than probing with inven_carry_okay() first. */
+    {
+        bool wants_quiver = o_ptr->tval == TV_ARROW
+            && (o_ptr->pickup_slot == INVEN_QUIVER1 || o_ptr->pickup);
+
+        if (wants_quiver && quiver_can_accept_arrow(o_ptr))
+        {
+            int placed = player_quiver_absorb_arrow(o_ptr);
+
+            if (placed > 0 && o_ptr->number <= 0)
+            {
+                o_ptr->pickup = false;
+                o_ptr->pickup_slot = -1;
+                return QUIVER_INDEX;
+            }
+        }
+        if (wants_quiver && o_ptr->number > 0)
+        {
+            o_ptr->pickup = false;
+            o_ptr->pickup_slot = -1;
+        }
+    }
+
+    (void)combine_ammo;
+
+    /* Quivered arrows have their own 48-arrow limit.  Everything else still
+     * obeys its Pack/Harness volume pool before direct recovery or merging. */
     if (!inventory_limit_is_stack_counted(o_ptr)
         && !inventory_type_slot_available(o_ptr, true))
     {
@@ -595,170 +816,63 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
 
     int desired_slot = o_ptr->pickup_slot;
     bool wanted_auto_recover = o_ptr->pickup ? true : false;
-    bool wants_throw_slot = (desired_slot == INVEN_QUIVER1)
-        || (desired_slot == INVEN_BELT);
 
-    if (wants_throw_slot)
+    /* A normally thrown active weapon returns to the active hand, not to the
+     * quiver.  If another weapon has since occupied that hand, it simply
+     * falls through to ordinary Harness carrying. */
+    if (desired_slot == PICKUP_SLOT_ACTIVE_THROWING
+        && player_can_treat_as_throwing(o_ptr))
     {
-        object_type* d_ptr = &inventory[desired_slot];
-        bool is_throwing = player_can_treat_as_throwing(o_ptr);
-        bool is_arrow = (o_ptr->tval == TV_ARROW);
-        bool slot_accepts = (desired_slot == INVEN_QUIVER1)
-            ? (is_throwing || is_arrow)
-            : object_is_belt_weapon(o_ptr);
+        object_type* d_ptr = &inventory[INVEN_WIELD];
 
-        if (slot_accepts)
+        if (!d_ptr->k_idx)
         {
-            if (d_ptr->k_idx == 0)
+            int placed = MIN(o_ptr->number, object_stack_limit(o_ptr));
+
+            object_copy(d_ptr, o_ptr);
+            d_ptr->number = placed;
+            d_ptr->pickup = false;
+            d_ptr->pickup_slot = PICKUP_SLOT_ACTIVE_THROWING;
+            d_ptr->ident |= IDENT_HANDLED;
+            o_ptr->number -= placed;
+            p_ptr->equip_cnt++;
+            p_ptr->notice |= PN_COMBINE | PN_REORDER;
+            p_ptr->redraw |= PR_QUIVER;
+            p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+
+            if (o_ptr->number <= 0)
             {
-                int limit = (desired_slot == INVEN_BELT)
-                    ? 1 : object_stack_limit(o_ptr);
-                int placed = MIN(o_ptr->number, limit);
-                object_copy(d_ptr, o_ptr);
-                d_ptr->number = placed;
-                d_ptr->pickup = false;
-                d_ptr->pickup_slot = -1;
-                d_ptr->ident |= IDENT_HANDLED;
-                o_ptr->number -= placed;
-
-                p_ptr->equip_cnt++;
-                p_ptr->notice |= (PN_COMBINE | PN_REORDER);
-                p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
-
-                if (o_ptr->number <= 0)
-                {
-                    o_ptr->pickup = false;
-                    o_ptr->pickup_slot = -1;
-                    return (desired_slot);
-                }
-
-                o_ptr->pickup = wanted_auto_recover;
                 o_ptr->pickup_slot = -1;
-            }
-            else if (desired_slot == INVEN_QUIVER1
-                && object_similar(d_ptr, o_ptr))
-            {
-                object_absorb(d_ptr, o_ptr);
-                d_ptr->pickup = false;
-                d_ptr->pickup_slot = -1;
-                d_ptr->ident |= IDENT_HANDLED;
-                p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
-
-                if (o_ptr->number == 0)
-                {
-                    o_ptr->pickup = false;
-                    o_ptr->pickup_slot = -1;
-                    return (desired_slot);
-                }
-
-                o_ptr->pickup = wanted_auto_recover;
-                o_ptr->pickup_slot = -1;
+                o_ptr->pickup = false;
+                return INVEN_WIELD;
             }
         }
+        else if (d_ptr->pickup_slot == PICKUP_SLOT_ACTIVE_THROWING
+            && object_similar(d_ptr, o_ptr))
+        {
+            object_absorb(d_ptr, o_ptr);
+            d_ptr->pickup = false;
+            d_ptr->pickup_slot = PICKUP_SLOT_ACTIVE_THROWING;
+            d_ptr->ident |= IDENT_HANDLED;
+            p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+            if (o_ptr->number <= 0)
+            {
+                o_ptr->pickup = false;
+                o_ptr->pickup_slot = -1;
+                return INVEN_WIELD;
+            }
+        }
+        o_ptr->pickup = wanted_auto_recover;
         o_ptr->pickup_slot = -1;
     }
 
-    // Check for combining in quiver first
-    if (o_ptr->tval == TV_ARROW && combine_ammo)
+    if (desired_slot == INVEN_BELT && object_is_belt_weapon(o_ptr))
     {
-        int empty_quiver = 0;
+        object_type* d_ptr = &inventory[INVEN_BELT];
 
-        // arrows combine with similar arrows
+        if (!d_ptr->k_idx)
         {
-            j = INVEN_QUIVER1;
-            j_ptr = &inventory[j];
-
-            /* Skip non-objects */
-            if (!j_ptr->k_idx)
-            {
-                // keep track of the first empty quiver
-                if (empty_quiver == 0)
-                    empty_quiver = j;
-            }
-            else if (object_similar(j_ptr, o_ptr))
-            {
-                /* Combine the items */
-                object_absorb(j_ptr, o_ptr);
-                j_ptr->ident |= IDENT_HANDLED;
-
-                /* Window stuff */
-                p_ptr->window |= (PW_INVEN);
-
-                if (o_ptr->number == 0)
-                {
-                    /* Success */
-                    return (j);
-                }
-                else
-                {
-                    char j_name[80];
-
-                    // combination message
-                    msg_print(
-                        "You combine them with the arrows in your quiver.");
-
-                    /* Describe the object */
-                    object_desc(j_name, sizeof(j_name), j_ptr, true, 3);
-
-                    /* Message */
-                    msg_format("You have %s (%c).", j_name, index_to_label(j));
-                }
-            }
-        }
-
-        // arrows that have been fired can also fit back into an empty quiver
-        // slot
-        if ((empty_quiver > 0) && o_ptr->pickup)
-        {
-            o_ptr->pickup = false;
-            o_ptr->pickup_slot = -1;
-
-            if ((o_ptr >= o_list) && (o_ptr < o_list + o_max))
-            {
-                int floor_idx = (int)(o_ptr - o_list);
-                do_cmd_wield(o_ptr, 0 - floor_idx);
-            }
-
-            return (-1);
-        }
-    }
-
-    /* Handle throwing weapons - try to combine with existing in quiver first */
-    if (player_can_treat_as_throwing(o_ptr))
-    {
-        int empty_quiver = 0;
-
-        /* Check for combining with existing throwing weapons in quiver */
-        {
-            j = INVEN_QUIVER1;
-            j_ptr = &inventory[j];
-
-            if (!j_ptr->k_idx)
-            {
-                empty_quiver = j;
-            }
-            else if (object_similar(j_ptr, o_ptr))
-            {
-                object_absorb(j_ptr, o_ptr);
-                j_ptr->ident |= IDENT_HANDLED;
-                p_ptr->window |= (PW_INVEN | PW_EQUIP);
-
-                if (o_ptr->number == 0)
-                    return (j);
-                
-                /* Partial absorption - show message and continue to pack */
-                char j_name[80];
-                object_desc(j_name, sizeof(j_name), j_ptr, true, 3);
-                msg_format("You combine some with %s (%c).", j_name, index_to_label(j));
-            }
-        }
-
-        if ((empty_quiver > 0) && o_ptr->pickup)
-        {
-            int limit = object_stack_limit(o_ptr);
-            int placed = MIN(o_ptr->number, limit);
-            object_type* d_ptr = &inventory[empty_quiver];
-
+            int placed = MIN(o_ptr->number, 1);
             object_copy(d_ptr, o_ptr);
             d_ptr->number = placed;
             d_ptr->pickup = false;
@@ -773,10 +887,10 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
             p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
 
             if (o_ptr->number <= 0)
-                return (empty_quiver);
+                return INVEN_BELT;
         }
-
-        /* Any overflow will fall through to pack handling below */
+        o_ptr->pickup = wanted_auto_recover;
+        o_ptr->pickup_slot = -1;
     }
 
     /*
@@ -1389,6 +1503,11 @@ void inven_drop(int item, int amt)
 
     /* Modify quantity */
     i_ptr->number = amt;
+    if (inventory_slot_is_quivered_arrow(item))
+    {
+        i_ptr->pickup = false;
+        i_ptr->pickup_slot = -1;
+    }
 
     if (player_oil_container_object(i_ptr))
     {

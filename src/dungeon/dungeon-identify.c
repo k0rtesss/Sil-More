@@ -137,6 +137,12 @@ void pseudo_id_everything(void)
         /* Pseudo-id it */
         pseudo_id(o_ptr);
     }
+    for (i = 0; i < player_quiver_store_entry_count(); i++)
+    {
+        o_ptr = player_quiver_store_entry_at(i);
+        if (o_ptr && o_ptr->k_idx && !object_known_p(o_ptr))
+            pseudo_id(o_ptr);
+    }
 
     p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
     handle_stuff();
@@ -178,6 +184,12 @@ void id_everything(void)
 
         /* Identify it */
         ident(o_ptr);
+    }
+    for (i = 0; i < player_quiver_store_entry_count(); i++)
+    {
+        o_ptr = player_quiver_store_entry_at(i);
+        if (o_ptr && o_ptr->k_idx && !object_known_p(o_ptr))
+            ident(o_ptr);
     }
 
     p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
@@ -246,6 +258,24 @@ void id_known_specials(void)
                 if (all_aware)
                     ident(o_ptr);
             }
+        }
+    }
+
+    for (i = 0; i < player_quiver_store_entry_count(); i++)
+    {
+        o_ptr = player_quiver_store_entry_at(i);
+        if (o_ptr && o_ptr->k_idx && object_has_ego(o_ptr)
+            && !object_known_p(o_ptr))
+        {
+            bool all_aware = true;
+            byte ego_pfx = object_ego_prefix(o_ptr);
+            byte ego_sfx = object_ego_suffix(o_ptr);
+            if (ego_pfx && !e_info[ego_pfx].aware)
+                all_aware = false;
+            if (ego_sfx && !e_info[ego_sfx].aware)
+                all_aware = false;
+            if (!object_uses_smithing_difficulty(o_ptr) && all_aware)
+                ident(o_ptr);
         }
     }
 

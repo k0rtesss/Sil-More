@@ -44,6 +44,17 @@ void give_player_item(object_type * o_ptr)
         return;
     }
 
+    if (slot >= QUIVER_INDEX && slot < QUIVER_INDEX_END)
+    {
+        object_desc(o_name, sizeof(o_name), &copy, true, 3);
+        msg_format("You add %s to your quiver (%d/%d arrows).", o_name,
+            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
+        sound(MSG_PICK);
+        p_ptr->redraw |= PR_QUIVER;
+        handle_stuff();
+        return;
+    }
+
     if (slot < 0)
         return;
     
@@ -58,9 +69,8 @@ void give_player_item(object_type * o_ptr)
 
     msg_format("You have %s (%c).", o_name, index_to_label(slot));
 
-    /* Update quiver display if this was a throwing weapon or arrow */
-    if ((slot == INVEN_QUIVER1 || slot == INVEN_BELT) ||
-        (copy.tval == TV_ARROW))
+    /* Update the shared arrow-quiver display when arrows were recovered. */
+    if (copy.tval == TV_ARROW)
     {
         p_ptr->redraw |= (PR_QUIVER);
     }
@@ -1317,6 +1327,23 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel)
     if (allow_channel && player_channel_floor_staff(o_ptr, o_idx))
         return;
 
+    /* Pack-destination items cannot be picked up while in combat.  Keep this
+     * at the shared pickup sink so keyboard, pile, contextual, and automatic
+     * pickup routes all enforce the same rule. */
+    if (o_ptr->tval == TV_ARROW
+        && (o_ptr->pickup || o_ptr->pickup_slot == INVEN_QUIVER1))
+    {
+        if (player_quiver_arrow_space() <= 0 && player_in_combat())
+        {
+            msg_print(player_pack_item_action_restriction_message());
+            return;
+        }
+    }
+    else if (!player_pack_item_action_allowed(o_ptr))
+    {
+        return;
+    }
+
     // Remember the floor position even if give_player_item wipes the object
     int pickup_y = o_ptr->iy;
     int pickup_x = o_ptr->ix;
@@ -1388,6 +1415,22 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel)
             }
         }
         
+        if (player_in_combat() && o_ptr->tval == TV_ARROW
+            && (o_ptr->pickup || o_ptr->pickup_slot == INVEN_QUIVER1)
+            && o_ptr->number > player_quiver_arrow_space())
+        {
+            object_type partial;
+            int quantity = player_quiver_arrow_space();
+
+            object_copy(&partial, o_ptr);
+            partial.number = quantity;
+            give_player_item(&partial);
+            o_ptr->number -= quantity;
+            break_truce(false);
+            flush_deferred_pickup_drop();
+            return;
+        }
+
         give_player_item(o_ptr);
 
         // Break the truce if creatures see

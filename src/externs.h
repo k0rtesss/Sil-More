@@ -736,6 +736,8 @@ extern void do_cmd_equip_direct(void);
 extern void do_cmd_wield(object_type* default_o_ptr, int default_item);
 extern bool do_cmd_wield_to_slot(
     object_type* default_o_ptr, int default_item, int forced_slot);
+extern bool do_cmd_wield_stack_to_slot(
+    object_type* default_o_ptr, int default_item, int forced_slot);
 extern void do_cmd_wield_wrapper(void);
 extern void do_cmd_wield_enhanced(void);
 extern void do_cmd_takeoff(object_type* default_o_ptr, int default_item);
@@ -1508,6 +1510,19 @@ extern bool inventory_limit_object_matches_group(
     enum inventory_limit_group group, const object_type* o_ptr);
 extern cptr inventory_limit_group_name(enum inventory_limit_group group);
 extern int object_stack_limit(const object_type* o_ptr);
+extern bool object_is_quivered_arrow(const object_type* o_ptr);
+extern bool inventory_slot_is_quivered_arrow(int item);
+extern void player_quiver_reset_store(void);
+extern int player_quiver_store_entry_count(void);
+extern object_type* player_quiver_store_entry_at(int index);
+extern object_type* player_quiver_arrow_object(int handle);
+extern int player_quiver_absorb_arrow(object_type* o_ptr);
+extern void player_quiver_remove_arrows(int handle, int amount);
+extern int player_quiver_arrow_count(void);
+extern int player_quiver_total_weight(void);
+extern int player_quiver_arrow_space(void);
+extern int player_quiver_first_arrow_slot(void);
+extern int player_quiver_arrow_slots(int* slots, int max);
 extern s16b inven_carry(object_type* o_ptr, bool combine_ammo);
 extern s16b inven_takeoff(int item, int amt);
 extern void inven_drop(int item, int amt);
@@ -2025,6 +2040,7 @@ extern int player_active_weapon_quiver_slot(void);
 extern int player_active_weapon_quiver_number(void);
 extern void player_active_weapon_sync_loaded_state(void);
 extern int player_active_weapon_kind(void);
+extern int player_active_throwing_weapon_slot(void);
 extern bool player_active_weapon_change_is_free(int old_kind, int new_kind);
 extern bool player_active_weapon_wield_change_is_free(
     int slot, const object_type* incoming, bool combine);
@@ -2043,13 +2059,12 @@ extern bool player_weapon_slot_combat_bonuses_active_for_mode(
 extern bool player_equipment_slot_is_active(int slot);
 extern bool player_shield_counts_for_active_weapon(const object_type* o_ptr);
 extern bool object_is_belt_weapon(const object_type* o_ptr);
-extern bool player_can_quick_throw_from_quiver(int slot);
-extern int player_quick_throw_quiver_slot(void);
+extern bool player_can_quick_throw_from_harness(int slot);
+extern int player_quick_throw_harness_slot(void);
 extern bool player_power_throw_weapon_eligible(const object_type* o_ptr);
 extern bool player_power_throw_ready(void);
 extern int player_power_throw_target_m_idx(void);
-extern bool player_can_power_throw_from_quiver(int slot);
-extern int player_power_throw_quiver_slot(void);
+extern bool player_can_power_throw_from_harness(int slot);
 extern bool player_can_throw_potions(void);
 extern bool player_has_throwable_potion(void);
 extern bool player_quick_throw_available(void);

@@ -286,13 +286,24 @@ int sdl_pointer_attack_ranged_range(int mode)
     if (!sdl_pointer_attack_mode_is_ranged(mode))
         return 0;
 
-    ammo = &inventory[INVEN_QUIVER1];
-    if (!ammo->k_idx)
-        return 0;
+    {
+        int slot = player_active_throwing_weapon_slot();
 
-    object_flags4(ammo, &f1, &f2, &f3, &f4);
-    if (player_can_treat_as_throwing_flags(ammo, f3))
+        if (slot >= 0)
+            ammo = &inventory[slot];
+        else
+        {
+            slot = player_quiver_first_arrow_slot();
+            ammo = player_quiver_arrow_object(slot);
+        }
+    }
+    if (ammo)
+        object_flags4(ammo, &f1, &f2, &f3, &f4);
+    if (ammo && player_can_treat_as_throwing_flags(ammo, f3))
         return throwing_range(ammo);
+
+    if (!ammo)
+        return 0;
 
     bow = &inventory[INVEN_BOW];
     if (!bow->tval || !p_ptr->ammo_tval)

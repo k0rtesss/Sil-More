@@ -474,7 +474,7 @@ void process_command(void)
         break;
     }
 
-    /* Make a ranged attack with the active Quiver weapon. */
+    /* Make a ranged attack with the active bow or throwing weapon. */
     case 'f':
     {
         do_cmd_fire(1);

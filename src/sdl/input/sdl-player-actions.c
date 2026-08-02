@@ -203,8 +203,8 @@ void sdl_player_action_menu_tile_for_kind(int kind, byte* out_attr,
         break;
     case SDL_PLAYER_ACTION_QUICK_THROW:
     {
-        int slot = player_quick_throw_quiver_slot();
-        object_type* icon_obj = slot ? &inventory[slot] : NULL;
+        int slot = player_quick_throw_harness_slot();
+        object_type* icon_obj = slot >= 0 ? &inventory[slot] : NULL;
 
         /* Prefer a quick-throw dagger; otherwise show an effective potion. */
         if ((!icon_obj || !icon_obj->k_idx) && player_has_throwable_potion())
@@ -311,8 +311,19 @@ static bool sdl_player_can_ready_weapon_entry(void)
     if (player_active_weapon_is_ranged())
         return true;
 
-    return (inventory[INVEN_BOW].k_idx && inventory[INVEN_BOW].tval == TV_BOW)
-        || inventory[INVEN_QUIVER1].k_idx;
+    if (inventory[INVEN_BOW].k_idx && inventory[INVEN_BOW].tval == TV_BOW)
+        return true;
+    for (int item = 0; item < INVEN_TOTAL; item++)
+    {
+        if (inventory[item].k_idx
+            && inventory_limit_group_for_object(&inventory[item])
+                == INV_LIMIT_HARNESS
+            && player_can_treat_as_throwing(&inventory[item]))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 /* Whether an adjacent known grid satisfies the given feature test. */

@@ -918,9 +918,9 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
         good[gc++] = (format(
             "can be thrown effectively (%d squares)", throwing_range(o_ptr)));
         if (object_is_belt_weapon(o_ptr))
-            good[gc++] = "can be placed in the quiver or belt (belt passive abilities remain active)";
+            good[gc++] = "stays on the Harness and can be placed at the belt (belt passive abilities remain active)";
         else
-            good[gc++] = "can be placed in the quiver";
+            good[gc++] = "stays on the Harness";
     }
 
     /* Collect stuff which can't be categorized */

@@ -3351,12 +3351,24 @@ static bool ability_inactive_reason(int skilltype, int abilitynum,
             {
                 reason = "Requires an equipped melee weapon.";
             }
-            else if (!player_power_throw_weapon_eligible(
-                         &inventory[INVEN_QUIVER1])
-                && !player_power_throw_weapon_eligible(
-                    &inventory[INVEN_BELT]))
+            else
             {
-                reason = "Requires a spear or hand axe in the quiver, or a hand axe at the belt.";
+                bool has_weapon = false;
+
+                for (int slot = 0; slot < INVEN_TOTAL; slot++)
+                {
+                    if (slot != INVEN_WIELD
+                        && inventory_limit_group_for_object(&inventory[slot])
+                            == INV_LIMIT_HARNESS
+                        && player_power_throw_weapon_eligible(
+                            &inventory[slot]))
+                    {
+                        has_weapon = true;
+                        break;
+                    }
+                }
+                if (!has_weapon)
+                    reason = "Requires an inactive Harness spear or hand axe.";
             }
             break;
         case MEL_TWO_WEAPON:

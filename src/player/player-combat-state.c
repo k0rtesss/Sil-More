@@ -47,13 +47,13 @@ bool player_in_combat(void)
 bool player_pack_item_action_blocked(const object_type* o_ptr)
 {
     return o_ptr && o_ptr->k_idx
-        && o_ptr->storage == OBJECT_STORAGE_PACK
+        && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
         && player_in_combat();
 }
 
 cptr player_pack_item_action_restriction_message(void)
 {
-    return "You cannot use or rearrange Pack items while in combat.";
+    return "You cannot use, rearrange, or pick up Pack items while in combat.";
 }
 
 bool player_pack_item_action_allowed(const object_type* o_ptr)

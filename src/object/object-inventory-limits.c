@@ -42,6 +42,12 @@ static enum inventory_limit_group volume_group_for_object(
 {
     if (!o_ptr || !o_ptr->k_idx || object_effective_volume(o_ptr) <= 0)
         return INV_LIMIT_NONE;
+    if (object_is_quivered_arrow(o_ptr))
+        return INV_LIMIT_NONE;
+    /* Arrow kinds retain their generation/equipment classification.  Their
+     * carried location is a gameplay rule: loose arrows use the Pack. */
+    if (o_ptr->tval == TV_ARROW)
+        return INV_LIMIT_PACK;
 
     if (o_ptr->storage == OBJECT_STORAGE_PACK)
         return INV_LIMIT_PACK;
@@ -112,14 +118,14 @@ static const ability_type* carriage_ability_for_object(
 {
     u32b f1, f2, f3;
 
-    if (!o_ptr || !o_ptr->k_idx
-        || volume_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
-    {
+    if (!o_ptr || !o_ptr->k_idx)
         return NULL;
-    }
 
     if (o_ptr->tval == TV_ARROW)
         return learned_carriage_ability(ABILITY_CARRIAGE_ARROWS);
+
+    if (volume_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
+        return NULL;
 
     object_flags(o_ptr, &f1, &f2, &f3);
     if (f3 & TR3_THROWING)
@@ -134,7 +140,9 @@ static int carried_unit_volume(const object_type* o_ptr,
     const ability_type* b_ptr = NULL;
     int reduction = 0;
 
-    if (apply_carriage_efficiency && group == INV_LIMIT_HARNESS)
+    (void)group;
+
+    if (apply_carriage_efficiency)
         b_ptr = carriage_ability_for_object(o_ptr);
     if (b_ptr)
         reduction = 0 - b_ptr->carriage_reduction_percent;
@@ -176,7 +184,7 @@ static int projected_inventory_volume_usage_internal(
 
         volume = carried_unit_volume(o_ptr, group,
             apply_carriage_efficiency);
-        if (group == INV_LIMIT_HARNESS && o_ptr->tval == TV_ARROW)
+        if (o_ptr->tval == TV_ARROW)
         {
             arrows += number;
             arrow_volume = MAX(arrow_volume, volume);
@@ -194,7 +202,7 @@ static int projected_inventory_volume_usage_internal(
         int volume = carried_unit_volume(incoming, group,
             apply_carriage_efficiency);
 
-        if (group == INV_LIMIT_HARNESS && incoming->tval == TV_ARROW)
+        if (incoming->tval == TV_ARROW)
         {
             arrows += number;
             arrow_volume = MAX(arrow_volume, volume);
@@ -745,7 +753,7 @@ static int inventory_limit_space_for_object_internal(
         cost = carried_unit_volume(o_ptr, group, apply_carriage_efficiency);
 
     number = MAX(o_ptr->number, 1);
-    if (group == INV_LIMIT_HARNESS && o_ptr->tval == TV_ARROW)
+    if (o_ptr->tval == TV_ARROW)
         return arrow_bundle_count(number) * cost;
 
     return cost * number;

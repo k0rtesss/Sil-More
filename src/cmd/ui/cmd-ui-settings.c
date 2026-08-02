@@ -6783,10 +6783,10 @@ static bool touch_top_widget_binding_label(int row, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Horn", buflen);
         break;
     case 'f':
-        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
         break;
     case 'F':
-        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
         break;
     case 'Z':
         SDL_strlcpy(buf, "Rest", buflen);
@@ -10985,8 +10985,8 @@ void do_cmd_keybinds(void)
         {'h', "H@", "Character sheet (h / H / @)", "h", false},
         {'\t', NULL, "Change active weapon", "Tab", false},
         {'y', NULL, "Abilities", "y", false},
-        {'f', NULL, "Ranged attack (active Quiver)", "f", false},
-        {'F', NULL, "Ranged attack (active Quiver)", "F", false},
+        {'f', NULL, "Ranged attack (active weapon)", "f", false},
+        {'F', NULL, "Ranged attack (active weapon)", "F", false},
         {'l', NULL, "Look around", "l", false},
         {'T', NULL, "Tunnel / dig", "T", false},
         {'b', NULL, "Bash door", "b", false},
@@ -12453,8 +12453,8 @@ void do_cmd_controller_settings(void)
         { CONTROLLER_ENTRY_ACTION, 's', "Sing / change song" },
         { CONTROLLER_ENTRY_ACTION, 'S', "Toggle stealth" },
         { CONTROLLER_ENTRY_ACTION, 'h', "Character sheet" },
-        { CONTROLLER_ENTRY_ACTION, 'f', "Ranged attack (active Quiver)" },
-        { CONTROLLER_ENTRY_ACTION, 'F', "Ranged attack (active Quiver)" },
+        { CONTROLLER_ENTRY_ACTION, 'f', "Ranged attack (active weapon)" },
+        { CONTROLLER_ENTRY_ACTION, 'F', "Ranged attack (active weapon)" },
         { CONTROLLER_ENTRY_ACTION, 'l', "Look around" },
         { CONTROLLER_ENTRY_ACTION, 'T', "Tunnel / dig" },
         { CONTROLLER_ENTRY_ACTION, 'b', "Bash door" },

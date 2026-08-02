@@ -417,10 +417,10 @@ void binding_action_short(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Quiver/belt cannot swap", buflen);
         return;
     case 'f':
-        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
         return;
     case 'F':
-        SDL_strlcpy(buf, "Ranged attack (active Quiver)", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
         return;
     case 'h':
         SDL_strlcpy(buf, "Character", buflen);
@@ -2138,8 +2138,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
             row++;                                                             \
         } while (0)
 
-        HELP_MISC_COMMAND('f', NULL, "f", "ranged attack (active Quiver)", ROLE_SUBTLE);
-        HELP_MISC_COMMAND('F', NULL, "F", "ranged attack (active Quiver)", ROLE_SUBTLE);
+        HELP_MISC_COMMAND('f', NULL, "f", "ranged attack (active weapon)", ROLE_SUBTLE);
+        HELP_MISC_COMMAND('F', NULL, "F", "ranged attack (active weapon)", ROLE_SUBTLE);
         HELP_MISC_COMMAND('s', NULL, "s", "sing", ROLE_SUBTLE);
         HELP_MISC_COMMAND('S', NULL, "S", "stealth mode", ROLE_SUBTLE);
         HELP_MISC_COMMAND('l', NULL, "l", "look", ROLE_SUBTLE);

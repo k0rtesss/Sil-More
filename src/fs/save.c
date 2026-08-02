@@ -1123,6 +1123,22 @@ static bool wr_savefile(void)
     wr_u16b(0xFFFF);
     log_trace("[save:%06u] === END INVENTORY ===", (unsigned)save_byte_offset);
 
+    /* Write the dedicated mixed-arrow Quiver store. */
+    log_trace("[save:%06u] === BEGIN QUIVER ===", (unsigned)save_byte_offset);
+    wr_u16b(SAVEFILE_QUIVER_BLOCK_MAGIC);
+    {
+        u16b quiver_count = (u16b)player_quiver_store_entry_count();
+        wr_u16b(quiver_count);
+        for (u16b qi = 0; qi < quiver_count; qi++)
+        {
+            object_type* arrow = player_quiver_store_entry_at(qi);
+            if (!arrow || !arrow->k_idx)
+                return false;
+            wr_item(arrow);
+        }
+    }
+    log_trace("[save:%06u] === END QUIVER ===", (unsigned)save_byte_offset);
+
     /* Write supplies cache */
     log_trace("[save:%06u] === BEGIN SUPPLIES ===", (unsigned)save_byte_offset);
     {

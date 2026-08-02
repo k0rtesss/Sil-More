@@ -1641,47 +1641,21 @@ typedef struct legacy_belt_migration_report
 } legacy_belt_migration_report;
 
 /*
- * Move as much of a former second-quiver stack as possible into the one
- * remaining quiver.  This deliberately bypasses volume limits: migration
- * preserves an old save's possessions and lets the normal pickup rules keep
- * an over-limit character from adding more.
+ * Move arrows from the former second quiver into the dedicated arrow store.
  */
 static void legacy_belt_move_to_quiver(object_type* moving,
     legacy_belt_migration_report* report)
 {
-    object_type* quiver;
     int before;
 
     if (!moving || !moving->k_idx || moving->number <= 0)
         return;
-    if (moving->tval != TV_ARROW
-        && !player_can_treat_as_throwing(moving))
-    {
+    if (moving->tval != TV_ARROW)
         return;
-    }
-
-    quiver = &inventory[INVEN_QUIVER1];
     before = moving->number;
-
-    if (!quiver->k_idx)
-    {
-        int placed = MIN(moving->number, object_stack_limit(moving));
-
-        object_copy(quiver, moving);
-        quiver->number = placed;
-        quiver->pickup = false;
-        quiver->pickup_slot = -1;
-        quiver->ident |= IDENT_HANDLED;
-        moving->number -= placed;
-        p_ptr->equip_cnt++;
-    }
-    else if (object_similar(quiver, moving))
-    {
-        object_absorb(quiver, moving);
-        quiver->pickup = false;
-        quiver->pickup_slot = -1;
-        quiver->ident |= IDENT_HANDLED;
-    }
+    moving->pickup = false;
+    moving->pickup_slot = INVEN_QUIVER1;
+    (void)player_quiver_absorb_arrow(moving);
 
     report->moved_to_quiver += before - MAX(moving->number, 0);
 }
@@ -1847,9 +1821,9 @@ static void migrate_legacy_second_quiver_to_belt(
     }
 
     /*
-     * Old thrown arrows and spears may still remember slot 38 as their
-     * recovery destination.  Only belt-eligible weapons keep that destination;
-     * everything else returns to the remaining quiver.
+     * Old thrown objects may still remember slot 38 as their recovery
+     * destination.  Only arrows return to the Quiver; non-belt weapons now
+     * return to ordinary Harness carrying.
      */
     for (int i = 0; i < INVEN_TOTAL; i++)
     {
@@ -1858,7 +1832,8 @@ static void migrate_legacy_second_quiver_to_belt(
         if (o_ptr->k_idx && o_ptr->pickup_slot == INVEN_BELT
             && !object_is_belt_weapon(o_ptr))
         {
-            o_ptr->pickup_slot = INVEN_QUIVER1;
+            o_ptr->pickup_slot = o_ptr->tval == TV_ARROW
+                ? INVEN_QUIVER1 : -1;
         }
     }
     for (int i = 1; i < o_max; i++)
@@ -1868,7 +1843,8 @@ static void migrate_legacy_second_quiver_to_belt(
         if (o_ptr->k_idx && o_ptr->pickup_slot == INVEN_BELT
             && !object_is_belt_weapon(o_ptr))
         {
-            o_ptr->pickup_slot = INVEN_QUIVER1;
+            o_ptr->pickup_slot = o_ptr->tval == TV_ARROW
+                ? INVEN_QUIVER1 : -1;
         }
     }
 }

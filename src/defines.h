@@ -60,12 +60,13 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 7
-#define VERSION_EXTRA 8   /* Belt migration; slot 38 remains save-compatible. */
+#define VERSION_EXTRA 9   /* Dedicated mixed-arrow Quiver store. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
 /* Marker before the serialized supplies block in 0.9.6+ savefiles. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
+#define SAVEFILE_QUIVER_BLOCK_MAGIC 0x51A8
 /* Marker before the serialized jewelry preset block in 0.9.6.7+ savefiles. */
 #define SAVEFILE_JEWELRY_PRESET_BLOCK_MAGIC 0x4A57
 /* Packed one-byte Morgoth summons state in 0.9.6.4+ savefiles. */
@@ -869,6 +870,13 @@
  * Total number of inventory slots (hard-coded).
  */
 #define INVEN_TOTAL 40
+
+/* Quiver contents live in a dedicated store addressed by synthetic handles,
+ * so mixed arrow types never consume Pack or Harness entries. */
+#define QUIVER_ARROW_CAPACITY 48
+#define QUIVER_INDEX 500
+#define QUIVER_INDEX_END (QUIVER_INDEX + QUIVER_ARROW_CAPACITY)
+#define PICKUP_SLOT_ACTIVE_THROWING (-2)
 
 /*
  * A "stack" of items is limited to less than 100 items (hard-coded).

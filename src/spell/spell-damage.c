@@ -368,7 +368,8 @@ typedef int (*inven_func)(const object_type*);
 typedef enum elemental_item_candidate_location
 {
     ELEMENTAL_CANDIDATE_INVENTORY = 0,
-    ELEMENTAL_CANDIDATE_SUPPLY = 1
+    ELEMENTAL_CANDIDATE_SUPPLY = 1,
+    ELEMENTAL_CANDIDATE_QUIVER = 2
 } elemental_item_candidate_location;
 
 typedef struct elemental_item_candidate
@@ -462,6 +463,11 @@ static void elemental_debug_slot_desc(
     if (location == ELEMENTAL_CANDIDATE_SUPPLY)
     {
         strnfmt(buf, buf_size, "supplies[%d]", index);
+        return;
+    }
+    if (location == ELEMENTAL_CANDIDATE_QUIVER)
+    {
+        strnfmt(buf, buf_size, "quiver[%d]", index);
         return;
     }
 
@@ -929,8 +935,9 @@ static bool elemental_attack_allows_size_location(int attack_type,
     case GF_ACID:
     case GF_ELEC:
     case GF_FIRE:
-        return (location == ELEMENTAL_CANDIDATE_INVENTORY)
-            && (index >= INVEN_WIELD) && (index < INVEN_TOTAL);
+        return location == ELEMENTAL_CANDIDATE_QUIVER
+            || ((location == ELEMENTAL_CANDIDATE_INVENTORY)
+                && (index >= INVEN_WIELD) && (index < INVEN_TOTAL));
 
     case GF_COLD:
         if (location == ELEMENTAL_CANDIDATE_SUPPLY)
@@ -1079,6 +1086,9 @@ static int elemental_item_unit_size(const object_type* o_ptr,
     (void)f2;
     (void)f4;
 
+    if (location == ELEMENTAL_CANDIDATE_QUIVER)
+        return 1;
+
     if ((location == ELEMENTAL_CANDIDATE_INVENTORY)
         && (index >= INVEN_WIELD) && (index < INVEN_TOTAL)
         && ((f3 & TR3_THROWING) || (index == INVEN_QUIVER1)
@@ -1181,6 +1191,10 @@ static void elemental_message_amount(const elemental_item_candidate* candidate,
     {
         msg_format("%s %s in your supplies %s", owner, o_name, action);
     }
+    else if (candidate->location == ELEMENTAL_CANDIDATE_QUIVER)
+    {
+        msg_format("%s %s in your quiver %s", owner, o_name, action);
+    }
     else if (candidate->index < INVEN_PACK)
     {
         msg_format("%s %s (%c) %s", owner, o_name,
@@ -1208,6 +1222,11 @@ static void elemental_remove_quantity_from_candidate(
     if (candidate->location == ELEMENTAL_CANDIDATE_SUPPLY)
     {
         (void)supplies_consume_quantity(candidate->index, amount);
+        return;
+    }
+    if (candidate->location == ELEMENTAL_CANDIDATE_QUIVER)
+    {
+        player_quiver_remove_arrows(QUIVER_INDEX + candidate->index, amount);
         return;
     }
 
@@ -1305,7 +1324,8 @@ static bool elemental_select_size_candidate(int attack_type, int total,
     int* selection_roll)
 {
     int supply_count = supplies_entry_count();
-    int capacity = INVEN_TOTAL + supply_count;
+    int quiver_count = player_quiver_store_entry_count();
+    int capacity = INVEN_TOTAL + supply_count + quiver_count;
     elemental_item_candidate* candidates;
     int count = 0;
     long available_units = 0;
@@ -1353,6 +1373,38 @@ retry_with_size:
         candidates[count].units = units;
         candidates[count].unit_size = unit_size;
         candidates[count].quantity_per_unit = elemental_item_quantity_per_unit(o_ptr);
+        available_units += units;
+        count++;
+    }
+
+    for (int idx = 0; idx < quiver_count; idx++)
+    {
+        object_type* o_ptr = player_quiver_store_entry_at(idx);
+        int unit_size;
+        int units;
+
+        if (!o_ptr || !o_ptr->k_idx
+            || !elemental_attack_allows_size_location(attack_type,
+                ELEMENTAL_CANDIDATE_QUIVER, idx, o_ptr)
+            || !elemental_attack_matches_object_material(attack_type, o_ptr))
+        {
+            continue;
+        }
+        unit_size = elemental_item_unit_size(o_ptr,
+            ELEMENTAL_CANDIDATE_QUIVER, idx);
+        if (unit_size <= 0 || unit_size > allowed_size)
+            continue;
+        units = elemental_item_unit_count(o_ptr);
+        if (units <= 0)
+            continue;
+        candidates[count].location = ELEMENTAL_CANDIDATE_QUIVER;
+        candidates[count].index = idx;
+        candidates[count].o_ptr = o_ptr;
+        candidates[count].weight = units;
+        candidates[count].units = units;
+        candidates[count].unit_size = unit_size;
+        candidates[count].quantity_per_unit
+            = elemental_item_quantity_per_unit(o_ptr);
         available_units += units;
         count++;
     }
@@ -1597,6 +1649,8 @@ static bool elemental_slot_uses_pack_like_factor(int slot,
 {
     if (location == ELEMENTAL_CANDIDATE_SUPPLY)
         return true;
+    if (location == ELEMENTAL_CANDIDATE_QUIVER)
+        return true;
 
     return (slot < INVEN_PACK) || (slot == INVEN_LITE)
         || (slot == INVEN_QUIVER1) || (slot == INVEN_BELT);
@@ -1606,6 +1660,8 @@ static double elemental_item_slot_factor(int slot,
     elemental_item_candidate_location location)
 {
     if (location == ELEMENTAL_CANDIDATE_SUPPLY)
+        return 0.70;
+    if (location == ELEMENTAL_CANDIDATE_QUIVER)
         return 0.70;
 
     if (slot < INVEN_PACK)
@@ -1704,8 +1760,9 @@ static bool elemental_attack_allows_candidate_location(int attack_type,
     case GF_FIRE:
     case GF_ACID:
     case GF_ELEC:
-        return (location == ELEMENTAL_CANDIDATE_INVENTORY)
-            && (index >= INVEN_WIELD) && (index < INVEN_TOTAL);
+        return location == ELEMENTAL_CANDIDATE_QUIVER
+            || ((location == ELEMENTAL_CANDIDATE_INVENTORY)
+                && (index >= INVEN_WIELD) && (index < INVEN_TOTAL));
 
     case GF_COLD:
         return location == ELEMENTAL_CANDIDATE_SUPPLY;
@@ -1754,7 +1811,8 @@ static bool elemental_select_candidate(int attack_type,
     elemental_item_candidate* out, elemental_item_debug_info* debug)
 {
     int supply_count = supplies_entry_count();
-    int capacity = INVEN_TOTAL + supply_count;
+    int quiver_count = player_quiver_store_entry_count();
+    int capacity = INVEN_TOTAL + supply_count + quiver_count;
     elemental_item_candidate* candidates;
     int count = 0;
     long total_weight = 0;
@@ -1781,6 +1839,25 @@ static bool elemental_select_candidate(int attack_type,
 
         candidates[count].location = ELEMENTAL_CANDIDATE_INVENTORY;
         candidates[count].index = slot;
+        candidates[count].o_ptr = o_ptr;
+        candidates[count].weight = weight;
+        total_weight += weight;
+        count++;
+    }
+
+    for (int idx = 0; idx < quiver_count; idx++)
+    {
+        object_type* o_ptr = player_quiver_store_entry_at(idx);
+        long weight;
+
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        weight = elemental_item_weight(attack_type,
+            ELEMENTAL_CANDIDATE_QUIVER, idx, o_ptr);
+        if (weight <= 0)
+            continue;
+        candidates[count].location = ELEMENTAL_CANDIDATE_QUIVER;
+        candidates[count].index = idx;
         candidates[count].o_ptr = o_ptr;
         candidates[count].weight = weight;
         total_weight += weight;
@@ -1851,6 +1928,10 @@ static void elemental_message(const elemental_item_candidate* candidate,
     {
         msg_format("%s %s in your supplies %s", owner, o_name, action);
     }
+    else if (candidate->location == ELEMENTAL_CANDIDATE_QUIVER)
+    {
+        msg_format("%s %s in your quiver %s", owner, o_name, action);
+    }
     else if (candidate->index < INVEN_PACK)
     {
         msg_format("%s %s (%c) %s", owner, o_name,
@@ -1888,6 +1969,11 @@ static void elemental_remove_one_from_candidate(
         (void)supplies_consume_quantity(candidate->index, 1);
         return;
     }
+    if (candidate->location == ELEMENTAL_CANDIDATE_QUIVER)
+    {
+        player_quiver_remove_arrows(QUIVER_INDEX + candidate->index, 1);
+        return;
+    }
 
     if (((o_ptr->tval == TV_STAFF) || (o_ptr->tval == TV_HORN))
         && (o_ptr->number > 1))
@@ -1905,6 +1991,15 @@ static void elemental_reinsert_split_item(
     if (candidate->location == ELEMENTAL_CANDIDATE_SUPPLY)
     {
         if (!supplies_absorb_object(split))
+            drop_near(split, 0, p_ptr->py, p_ptr->px);
+        return;
+    }
+
+    if (candidate->location == ELEMENTAL_CANDIDATE_QUIVER)
+    {
+        split->pickup = false;
+        split->pickup_slot = INVEN_QUIVER1;
+        if (player_quiver_absorb_arrow(split) <= 0)
             drop_near(split, 0, p_ptr->py, p_ptr->px);
         return;
     }

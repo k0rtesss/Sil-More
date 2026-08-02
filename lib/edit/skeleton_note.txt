@@ -552,7 +552,7 @@ M:ANY:TIP:100:You get a critical hit every time the difference between your atta
 M:ANY:TIP:100:Weapons can be one-handed, two-handed, or one-and-a-half-handed.
 M:ANY:TIP:100:If a one-and-a-half-handed weapon is used without a shield, it gets +2 damage sides.
 M:ANY:TIP:100:Some abilities only work explicitly with one-handed or two-handed weapons.
-M:ANY:TIP:100:Your quiver holds arrows or throwing weapons. Your belt holds one dagger or hand axe and retains its passive bonuses.
+M:ANY:TIP:100:Your quiver holds up to 48 arrows of any mix. Throwing weapons stay on your Harness; your belt holds one dagger or hand axe and retains its passive bonuses.
 M:ANY:TIP:100:You can stack elemental resistances and vulnerabilities.
 M:ANY:TIP:100:For each elemental resistance of that type, pure elemental damage is halved.
 M:ANY:TIP:100:For each elemental vulnerability of that type, pure elemental damage is doubled.
