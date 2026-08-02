@@ -1501,6 +1501,12 @@ void inven_drop(int item, int amt)
     /* Obtain local object */
     object_copy(i_ptr, o_ptr);
 
+    /* Pack is a carried location, not an intrinsic property of a loose
+     * Harness-stowable item.  A dropped item returns to its ready state when
+     * it is next picked up. */
+    if (object_can_choose_pack_or_harness(i_ptr))
+        i_ptr->storage = OBJECT_STORAGE_HARNESS;
+
     /* Modify quantity */
     i_ptr->number = amt;
     if (inventory_slot_is_quivered_arrow(item))

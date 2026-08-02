@@ -727,6 +727,7 @@ extern bool throw_slot_enabled[INVEN_TOTAL];
 
 /* cmd3.c */
 extern void do_cmd_use_item_by_index(int item);
+extern bool do_cmd_move_item_to_storage(int item, byte target_storage);
 extern void do_cmd_use_item(void);
 extern void do_cmd_use_item_enhanced(void);
 extern void do_cmd_inven(void);
@@ -1489,6 +1490,7 @@ extern bool inven_carry_limit_is_supply_weight(void);
 extern bool inven_carry_limit_can_replace(const object_type* o_ptr);
 extern enum inventory_limit_group inventory_limit_group_for_object(
     const object_type* o_ptr);
+extern bool object_can_choose_pack_or_harness(const object_type* o_ptr);
 extern bool inventory_limit_info_for_object(const object_type* o_ptr,
     enum inventory_limit_group* group, int* limit, int* cost);
 extern int inventory_limit_usage_for_group(enum inventory_limit_group group);

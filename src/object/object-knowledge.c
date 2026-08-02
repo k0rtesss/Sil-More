@@ -469,6 +469,10 @@ bool object_similar(const object_type* o_ptr, const object_type* j_ptr)
     if (o_ptr->k_idx != j_ptr->k_idx)
         return (false);
 
+    /* Pack-stored and Harness-ready copies must remain separate stacks. */
+    if (o_ptr->storage != j_ptr->storage)
+        return (false);
+
     /* Require identical weight */
     if (!(o_ptr->weight == j_ptr->weight))
         return (false);

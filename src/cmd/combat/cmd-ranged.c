@@ -1768,6 +1768,7 @@ void do_cmd_throw(bool automatic)
     bool has_impale_ability = false;
     bool power_throw_candidate = false;
     bool power_throw_attack = false;
+    bool active_throwing_depleted = false;
     bool from_supplies = false;
     int supply_index = -1;
     int power_throw_y = 0;
@@ -2107,6 +2108,10 @@ void do_cmd_throw(bool automatic)
     }
     else if (item >= 0)
     {
+        /* Keep the throwing mode through this attack, but remember that its
+         * last weapon leaves the active hand empty. */
+        active_throwing_depleted = preset && item == INVEN_WIELD
+            && o_ptr->number == 1;
         inven_item_increase(item, -1);
         inven_item_describe(item);
         inven_item_optimize(item);
@@ -2441,8 +2446,11 @@ void do_cmd_throw(bool automatic)
                 bool thrown_hit = hit_result > 0;
                 bool melee_hit = melee_hit_result > 0;
 
-                msg_print("Power Throw combines all successful weapon damage "
-                          "against one armor roll.");
+                if (power_throw_hit)
+                {
+                    msg_print("Power Throw combines all successful weapon "
+                              "damage against one armor roll.");
+                }
 
                 /* Note the collision */
                 hit_body = thrown_hit;
@@ -2776,7 +2784,7 @@ void do_cmd_throw(bool automatic)
     /* Drop (or break) near that location */
     drop_near(i_ptr, j, y, x);
 
-    if (power_throw_attack)
+    if (power_throw_attack || active_throwing_depleted)
     {
         (void)player_set_active_weapon_mode(
             PLAYER_ACTIVE_WEAPON_MELEE, false, false);

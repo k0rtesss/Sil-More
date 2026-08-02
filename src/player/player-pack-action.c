@@ -108,7 +108,15 @@ static bool player_pack_action_start_internal(player_pack_action_kind kind,
     object_copy(&pack_action.object, o_ptr);
 
     object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-    msg_format("You begin searching your Pack for %s.", o_name);
+    if (kind == PLAYER_PACK_ACTION_MOVE_STORAGE
+        && arg == OBJECT_STORAGE_PACK)
+    {
+        msg_format("You begin opening your Pack to store %s.", o_name);
+    }
+    else
+    {
+        msg_format("You begin searching your Pack for %s.", o_name);
+    }
 
     p_ptr->energy_use = 100;
     p_ptr->previous_action[0] = ACTION_MISC;
@@ -207,6 +215,9 @@ static void player_pack_action_complete(player_pack_action_kind kind, int item,
         break;
     case PLAYER_PACK_ACTION_JEWELRY_PRESET:
         (void)do_cmd_jewelry_preset_apply(arg);
+        break;
+    case PLAYER_PACK_ACTION_MOVE_STORAGE:
+        (void)do_cmd_move_item_to_storage(item, (byte)arg);
         break;
     case PLAYER_PACK_ACTION_NONE:
     default:

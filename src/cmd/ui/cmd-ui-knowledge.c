@@ -6894,8 +6894,15 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
             &o_list[entry->floor_idx], entry->floor_idx);
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
-        return browser_item_use_action_text(&inventory[entry->item_idx],
-            entry->item_idx);
+    {
+        o_ptr = &inventory[entry->item_idx];
+        if (object_can_choose_pack_or_harness(o_ptr))
+        {
+            return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
+                ? "Ready" : "Store";
+        }
+        return browser_item_use_action_text(o_ptr, entry->item_idx);
+    }
 
     if (entry->supply_idx >= 0)
     {
@@ -6907,8 +6914,37 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
     return "Use";
 }
 
+static void inventory_storage_move_failure_text(const object_type* o_ptr,
+    byte target_storage, char* buf, size_t buflen)
+{
+    object_type moving;
+    enum inventory_limit_group group =
+        target_storage == OBJECT_STORAGE_PACK
+        ? INV_LIMIT_PACK : INV_LIMIT_HARNESS;
+    int used = inventory_limit_usage_for_group(group);
+    int limit = inven_carry_limit_value();
+    int needed;
+    int left;
+
+    if (!buf || buflen == 0 || !o_ptr || !o_ptr->k_idx)
+        return;
+
+    object_copy(&moving, o_ptr);
+    moving.storage = target_storage;
+    if (limit < 0)
+        limit = inventory_limit_limit_for_group(group);
+    needed = inventory_limit_additional_space_for_object(&moving);
+    left = MAX(limit - used, 0);
+    strnfmt(buf, buflen,
+        "No room in %s: %d.%d/%d.%d qt used; %d.%d qt left, "
+        "%d.%d qt needed.",
+        inventory_limit_group_name(group), used / 10, ABS(used % 10),
+        limit / 10, ABS(limit % 10), left / 10, ABS(left % 10),
+        needed / 10, ABS(needed % 10));
+}
+
 static bool inventory_page_use_entry(equipment_list_entry* entry,
-    supply_floor_action floor_action)
+    supply_floor_action floor_action, char* failure, size_t failure_len)
 {
     supply_list_entry supply_entry = {0};
 
@@ -6944,10 +6980,28 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
 
     if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
     {
+        object_type* o_ptr = &inventory[entry->item_idx];
+        cptr action = inventory_page_use_action_text(entry, floor_action);
+
         if (!confirm_equipment_entry_action(
-                inventory_page_use_action_text(entry, floor_action), entry))
+                action, entry))
         {
             return false;
+        }
+        if (object_can_choose_pack_or_harness(o_ptr))
+        {
+            byte target_storage =
+                inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
+                ? OBJECT_STORAGE_HARNESS : OBJECT_STORAGE_PACK;
+            bool moved = do_cmd_move_item_to_storage(entry->item_idx,
+                target_storage);
+
+            if (!moved)
+            {
+                inventory_storage_move_failure_text(o_ptr, target_storage,
+                    failure, failure_len);
+            }
+            return moved;
         }
         do_cmd_use_item_by_index(entry->item_idx);
         return true;
@@ -10283,6 +10337,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     bool pack_combat_notice = false;
     bool drop_click_mode = false;
     bool delete_click_mode = false;
+    char inventory_action_notice[192] = "";
     bool desc_overlay_on = false;
     bool replacement_mode = false;
     bool slot_pick_mode = false;
@@ -11092,6 +11147,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             char harness_header[192] = "";
             char picker_heading[180] = "";
             char picker_detail[180] = "";
+            char primary_action[32] = "use";
             byte picker_heading_attr = TERM_L_WHITE + TERM_SHADE;
             byte status_attr = TERM_L_BLUE;
             bool touch_only;
@@ -11298,6 +11354,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     inv_entry_cur = 0;
                 if (inventory_one_page || slot_pick_mode)
                     inv_column = 1;
+            }
+            if (!replacement_mode && !slot_pick_mode && !item_select_mode
+                && inventory_entry_cnt > 0)
+            {
+                cptr action = inventory_page_use_action_text(
+                    &equip_entries[inv_entry_cur], floor_action);
+
+                SDL_strlcpy(primary_action, action, sizeof(primary_action));
+                primary_action[0] = (char)tolower((unsigned char)primary_action[0]);
             }
             if (preserve_touch_view)
             {
@@ -11663,7 +11728,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     status_buf, sizeof(status_buf));
                 status_attr = inventory_browser_status_attr(selected_group);
             }
-            if (pack_combat_notice)
+            if (inventory_action_notice[0])
+            {
+                knowledge_draw_status(&layout, TERM_ORANGE,
+                    inventory_action_notice);
+            }
+            else if (pack_combat_notice)
             {
                 knowledge_draw_status(&layout, TERM_ORANGE,
                     player_pack_item_action_restriction_message());
@@ -11896,26 +11966,27 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s] use  [%s] drop  [%s] back",
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s] %s  [%s] drop  [%s] back",
                         prev_label, next_label, preview_label, confirm_label,
-                        drop_label, back_label);
+                        primary_action, drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] info  [%s] use  [%s] drop",
-                        preview_label, confirm_label, drop_label);
+                        "D-pad nav  [%s] info  [%s] %s  [%s] drop",
+                        preview_label, confirm_label, primary_action,
+                        drop_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] use  [%s] drop  [%s] back",
-                        prev_label, next_label, confirm_label,
+                        "D-pad nav  [%s/%s] page  [%s] %s  [%s] drop  [%s] back",
+                        prev_label, next_label, confirm_label, primary_action,
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] use  [%s] drop",
-                        confirm_label, drop_label);
+                        "D-pad nav  [%s] %s  [%s] drop",
+                        confirm_label, primary_action, drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "D-pad nav  [%s] use  [%s] drop", confirm_label,
-                    drop_label);
+                    "D-pad nav  [%s] %s  [%s] drop", confirm_label,
+                    primary_action, drop_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_mid;
                 variants[2] = prompt_short;
@@ -11938,7 +12009,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                 supply_touch_row_prompt(prompt_buf, sizeof(prompt_buf),
                     layout.term_wid, desc_overlay_on, drop_click_mode,
-                    delete_click_mode, "use");
+                    delete_click_mode, primary_action);
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_SLATE, prompt_buf);
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_PREVIEW,
@@ -11956,18 +12027,37 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             else
             {
                 char prompt_buf[160];
+                char letter_full[160];
+                char letter_mid[160];
+                char letter_short[96];
+                char move_full[160];
+                char move_mid[160];
+                char move_short[96];
                 const char* const* variants;
                 size_t variant_count;
-                static const char* letter_variants[] = {
-                    "letter use  Dir move  x preview  z drop  y delete  Tab  Esc",
-                    "letter use  x preview  z drop  y delete  Tab  Esc",
-                    "letter use  z drop  Tab  Esc"
+                const char* letter_variants[] = {
+                    letter_full, letter_mid, letter_short
                 };
-                static const char* move_variants[] = {
-                    "Dir move  x preview  u use  z drop  y delete  Tab  Esc",
-                    "x preview  u use  z drop  y delete  Tab  Esc",
-                    "u use  z drop  Esc"
+                const char* move_variants[] = {
+                    move_full, move_mid, move_short
                 };
+
+                strnfmt(letter_full, sizeof(letter_full),
+                    "letter %s  Dir move  x preview  z drop  y delete  Tab  Esc",
+                    primary_action);
+                strnfmt(letter_mid, sizeof(letter_mid),
+                    "letter %s  x preview  z drop  y delete  Tab  Esc",
+                    primary_action);
+                strnfmt(letter_short, sizeof(letter_short),
+                    "letter %s  z drop  Tab  Esc", primary_action);
+                strnfmt(move_full, sizeof(move_full),
+                    "Dir move  x preview  u %s  z drop  y delete  Tab  Esc",
+                    primary_action);
+                strnfmt(move_mid, sizeof(move_mid),
+                    "x preview  u %s  z drop  y delete  Tab  Esc",
+                    primary_action);
+                strnfmt(move_short, sizeof(move_short),
+                    "u %s  z drop  Esc", primary_action);
 
                 if (indexed_menu_letters_enabled())
                 {
@@ -12070,6 +12160,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             char ch = inkey();
             bool click_generated_command = false;
             pack_combat_notice = false;
+            inventory_action_notice[0] = '\0';
             {
                 int clicked_choice = -1;
                 int click_action = UI_MENU_CLICK_PRIMARY;
@@ -12426,7 +12517,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     }
 
                     if (inventory_page_use_entry(&equip_entries[inv_entry_cur],
-                            floor_action))
+                            floor_action, inventory_action_notice,
+                            sizeof(inventory_action_notice)))
                     {
                         acted = true;
                         refresh_after_close = true;

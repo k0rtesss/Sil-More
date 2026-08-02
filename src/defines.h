@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 7
-#define VERSION_EXTRA 9   /* Dedicated mixed-arrow Quiver store. */
+#define VERSION_EXTRA 10  /* Per-item Pack/Harness storage choice. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
@@ -2204,6 +2204,7 @@
 #define TR4_PROT_POIS      0x00200000L /* Item protection counts against poison attacks */
 #define TR4_PROT_DARK      0x00400000L /* Item protection counts against dark attacks */
 #define TR4_LIGHT_ARMOR    0x00800000L /* Light armour (robe/leather/boots/gloves/cloaks; via (Light) ego on shields/helms) */
+#define TR4_HARNESS_STOWABLE 0x01000000L /* Harness item may be stored in the Pack */
 #define TR4_MIN_DEPTH_SPEED TR4_DEEP_CALL /* Compatibility alias */
 
 /*

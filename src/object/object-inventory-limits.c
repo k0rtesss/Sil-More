@@ -19,6 +19,17 @@ static bool inventory_limit_is_volume_group(enum inventory_limit_group group)
     return group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS;
 }
 
+bool object_can_choose_pack_or_harness(const object_type* o_ptr)
+{
+    u32b f1, f2, f3, f4;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    object_flags4(o_ptr, &f1, &f2, &f3, &f4);
+    return (f4 & TR4_HARNESS_STOWABLE) != 0;
+}
+
 void clear_inventory_limit_failure(void)
 {
     carry_limit_last_failed = false;

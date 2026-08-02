@@ -1009,6 +1009,36 @@ static void add_melee_and_throwing_active_weapon_choices(
     }
 }
 
+static void add_empty_active_hand_choice(active_weapon_choice choices[],
+    ui_question_option options[], int* count, int current_mode,
+    int* default_index)
+{
+    active_weapon_choice* choice;
+
+    if (!choices || !options || !count || !default_index
+        || *count < 0 || *count >= ACTIVE_WEAPON_MAX_CHOICES
+        || current_mode != PLAYER_ACTIVE_WEAPON_MELEE
+        || inventory[INVEN_WIELD].k_idx)
+    {
+        return;
+    }
+
+    choice = &choices[*count];
+    choice->item = INVEN_WIELD;
+    choice->o_ptr = NULL;
+    choice->mode = PLAYER_ACTIVE_WEAPON_MELEE;
+    choice->kind = PLAYER_ACTIVE_WEAPON_KIND_MELEE;
+    choice->target_slot = INVEN_WIELD;
+    SDL_strlcpy(choice->label, "Melee [active]\tEmpty hand",
+        sizeof(choice->label));
+    options[*count].key = active_weapon_menu_key(*count);
+    options[*count].label = choice->label;
+    options[*count].attr = TERM_L_WHITE;
+    options[*count].disabled = false;
+    *default_index = *count;
+    (*count)++;
+}
+
 static void prepare_active_weapon_menu_choices(
     active_weapon_choice choices[], ui_question_option options[], int count,
     int* default_index)
@@ -1055,6 +1085,8 @@ static bool choose_active_weapon(active_weapon_choice* selected)
     if (!selected)
         return false;
 
+    add_empty_active_hand_choice(choices, options, &count, current_mode,
+        &default_index);
     add_melee_and_throwing_active_weapon_choices(choices, options, &count,
         INVEN_WIELD, &inventory[INVEN_WIELD], current_mode, &default_index);
     add_melee_and_throwing_active_weapon_choices(choices, options, &count,

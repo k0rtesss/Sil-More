@@ -100,7 +100,8 @@ typedef enum player_pack_action_kind
     PLAYER_PACK_ACTION_USE_GEM,
     PLAYER_PACK_ACTION_ACTIVATE,
     PLAYER_PACK_ACTION_PICKUP,
-    PLAYER_PACK_ACTION_JEWELRY_PRESET
+    PLAYER_PACK_ACTION_JEWELRY_PRESET,
+    PLAYER_PACK_ACTION_MOVE_STORAGE
 } player_pack_action_kind;
 typedef struct monster_type monster_type;
 typedef struct alloc_entry alloc_entry;
@@ -651,7 +652,7 @@ struct object_type
 
     s16b weight; /* Item weight */
 
-    byte storage; /* Runtime OBJECT_STORAGE_* pool */
+    byte storage; /* Runtime OBJECT_STORAGE_* pool; saved for movable gear */
     s16b volume; /* Base per-item stowed volume, in tenths */
 
     byte name1; /* Artefact type, if any */

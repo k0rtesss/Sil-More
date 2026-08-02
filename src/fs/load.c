@@ -569,6 +569,8 @@ void artefact_derive_stat_skill_bonuses_from_pval(artefact_type* a_ptr)
 errr rd_item(object_type* o_ptr)
 {
     u32b f1, f2, f3;
+    byte saved_storage = OBJECT_STORAGE_NONE;
+    bool has_saved_storage = savefile_version_at_least(0, 9, 7, 10);
 
     object_kind* k_ptr;
 
@@ -617,6 +619,8 @@ errr rd_item(object_type* o_ptr)
     rd_byte(&o_ptr->ps);
     rd_byte(&o_ptr->pickup);
     rd_s16b(&o_ptr->pickup_slot);
+    if (has_saved_storage)
+        rd_byte(&saved_storage);
 
     rd_u32b(&o_ptr->ident);
 
@@ -679,9 +683,19 @@ errr rd_item(object_type* o_ptr)
     o_ptr->tval = k_ptr->tval;
     o_ptr->sval = k_ptr->sval;
 
-    /* Storage metadata is template-derived, not persisted in savefiles. */
+    /* Older saves use the current template's default storage pool. */
     o_ptr->storage = k_ptr->storage;
     o_ptr->volume = k_ptr->volume;
+
+    /* Flagged kinds, egos, and artefacts may retain a deliberate choice of
+     * Pack or Harness.  Do this before the wearable-only loading branch so
+     * future small Harness tools can use the same feature. */
+    if (has_saved_storage && object_can_choose_pack_or_harness(o_ptr)
+        && (saved_storage == OBJECT_STORAGE_PACK
+            || saved_storage == OBJECT_STORAGE_HARNESS))
+    {
+        o_ptr->storage = saved_storage;
+    }
 
     /* Hack -- notice "broken" items */
     if (k_ptr->cost <= 0)

@@ -34,6 +34,7 @@ bool inven_carry_limit_is_supply_weight(void);
 bool inven_carry_limit_can_replace(const object_type* o_ptr);
 enum inventory_limit_group inventory_limit_group_for_object(
     const object_type* o_ptr);
+bool object_can_choose_pack_or_harness(const object_type* o_ptr);
 bool inventory_limit_info_for_object(const object_type* o_ptr,
     enum inventory_limit_group* group, int* limit, int* cost);
 int inventory_limit_usage_for_group(enum inventory_limit_group group);

@@ -1123,6 +1123,98 @@ static void do_cmd_unquiver_pack_arrow(int item)
     msg_print("You move the arrows from your quiver to your Pack.");
 }
 
+static bool item_storage_destination_available(const object_type* o_ptr,
+    byte target_storage, int quantity, bool report)
+{
+    object_type moving;
+
+    if (!o_ptr || !o_ptr->k_idx
+        || (target_storage != OBJECT_STORAGE_PACK
+            && target_storage != OBJECT_STORAGE_HARNESS))
+    {
+        return false;
+    }
+
+    object_copy(&moving, o_ptr);
+    moving.storage = target_storage;
+    moving.number = MAX(1, MIN(quantity, o_ptr->number));
+    if (inventory_type_slot_available(&moving, report))
+        return true;
+
+    if (report)
+    {
+        enum inventory_limit_group group =
+            target_storage == OBJECT_STORAGE_PACK
+            ? INV_LIMIT_PACK : INV_LIMIT_HARNESS;
+        int used = inventory_limit_usage_for_group(group);
+        int limit = inven_carry_limit_value();
+        int needed = inventory_limit_additional_space_for_object(&moving);
+        int left;
+
+        if (limit < 0)
+            limit = inventory_limit_limit_for_group(group);
+        left = MAX(limit - used, 0);
+        msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
+                   "this move needs %d.%d qt.",
+            inventory_limit_group_name(group), used / 10, ABS(used % 10),
+            limit / 10, ABS(limit % 10), left / 10, ABS(left % 10),
+            needed / 10, ABS(needed % 10));
+    }
+
+    return false;
+}
+
+bool do_cmd_move_item_to_storage(int item, byte target_storage)
+{
+    object_type* o_ptr;
+    char o_name[80];
+
+    if (item < 0 || item >= INVEN_PACK)
+        return false;
+
+    o_ptr = &inventory[item];
+    if (!object_can_choose_pack_or_harness(o_ptr)
+        || (target_storage != OBJECT_STORAGE_PACK
+            && target_storage != OBJECT_STORAGE_HARNESS)
+        || o_ptr->storage == target_storage)
+    {
+        return false;
+    }
+
+    if (!item_storage_destination_available(o_ptr, target_storage,
+            o_ptr->number, true))
+    {
+        return false;
+    }
+
+    /* Reaching into the Pack, or opening it to store something, follows the
+     * same interruptible three-turn rule as every other Pack action. */
+    if (player_pack_action_start_forced(PLAYER_PACK_ACTION_MOVE_STORAGE,
+            item, target_storage, false, o_ptr))
+    {
+        return true;
+    }
+
+    o_ptr->storage = target_storage;
+    if (target_storage == OBJECT_STORAGE_PACK)
+    {
+        /* Stored copies are no longer assigned to an auto-recovery sheath. */
+        o_ptr->pickup = false;
+        o_ptr->pickup_slot = -1;
+    }
+    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+    if (target_storage == OBJECT_STORAGE_HARNESS)
+        msg_format("You ready %s on your Harness.", o_name);
+    else
+        msg_format("You store %s in your Pack.", o_name);
+
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    p_ptr->update |= PU_BONUS;
+    p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+    return true;
+}
+
 void do_cmd_use_item_by_index(int item)
 {
     if (item == SUPPLIES_INDEX)
@@ -1588,6 +1680,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     int lamp_flask_oil = 0;
     int lamp_replacement_item = -1;
     bool lamp_flask_replacement_planned = false;
+    bool move_pack_weapon_to_harness = false;
 
     u32b f1, f2, f3, f4;
 
@@ -1917,6 +2010,22 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
             for (i = 0; i < INVEN_TOTAL; i++)
                 throw_slot_enabled[i] = false;
+        }
+    }
+
+    move_pack_weapon_to_harness = item >= 0 && item < INVEN_PACK
+        && object_can_choose_pack_or_harness(o_ptr)
+        && o_ptr->storage == OBJECT_STORAGE_PACK;
+    if (move_pack_weapon_to_harness)
+    {
+        int moving_quantity = (forced_wield_full_stack && is_throwing
+                && slot == INVEN_WIELD)
+            ? MIN(o_ptr->number, object_stack_limit(o_ptr)) : 1;
+
+        if (!item_storage_destination_available(o_ptr,
+                OBJECT_STORAGE_HARNESS, moving_quantity, true))
+        {
+            return;
         }
     }
     // Check for paired weapons (e.g., Glamdring + Orcrist)
@@ -2253,6 +2362,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
     /* Obtain local object */
     object_copy(i_ptr, o_ptr);
+    if (move_pack_weapon_to_harness)
+        i_ptr->storage = OBJECT_STORAGE_HARNESS;
 
     if (!from_supplies && i_ptr->tval == TV_LIGHT
         && i_ptr->sval == SV_LIGHT_LANTERN)

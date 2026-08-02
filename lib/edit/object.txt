@@ -612,7 +612,7 @@ P:0:1d5:0:0d0
 R:ATT:1
 R:DS:6
 A:1/100
-F:THROWING
+F:THROWING | HARNESS_STOWABLE
 D:[neutral]A belt-knife of plain good steel, swift in the hand and easy
 D: to keep. Many a traveller, camp-warden, or hard-pressed soldier would
 D: carry such a blade for common need no less than for danger, and it
@@ -859,7 +859,7 @@ P:-1:4d2:0:0d0
 R:ATT:0
 R:DS:3
 A:2/100
-F:AXE | THROWING | LESS_SPECIAL
+F:AXE | THROWING | LESS_SPECIAL | HARNESS_STOWABLE
 D:[neutral]A light axe small enough for the belt and quick enough for
 D: the throw. Such a tool serves in camp and on the road no less than in
 D: a skirmish, ready for brushwood, kindling, or a sudden hard cast at
