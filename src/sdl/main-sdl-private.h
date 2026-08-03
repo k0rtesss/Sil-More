@@ -2134,6 +2134,8 @@ void sdl_character_sheet_screen_highlight_book_paragraph(void);
 void sdl_character_sheet_screen_commit_book(void);
 void sdl_character_sheet_screen_set_book_target_page_count(int page_count);
 int sdl_character_sheet_screen_book_contents_page(int contents_index);
+void sdl_character_sheet_screen_set_book_focus(int choice);
+int sdl_character_sheet_screen_book_action_page(int choice);
 void sdl_character_sheet_screen_add_select_row(int choice, cptr label, int attr, cptr desc);
 void sdl_character_sheet_screen_set_last_select_row_reset(int reset_choice);
 void sdl_character_sheet_screen_set_last_select_row_confirmable(bool confirmable);

@@ -1791,7 +1791,7 @@ static int supply_entry_turns(const supply_list_entry* entry,
     }
 
     if (o_ptr->tval != TV_LIGHT)
-        return -1;
+        return -2;
 
     if (!fuelable_light_p(o_ptr))
         return -1;
@@ -2039,7 +2039,8 @@ static void supply_init_columns(const knowledge_browser_layout* layout,
     cols->show_weight = (current_group == SUPPLY_GROUP_FOOD)
         || (current_group == SUPPLY_GROUP_LIGHTS)
         || (current_group == SUPPLY_GROUP_SUPPLY);
-    cols->show_turns = (current_group == SUPPLY_GROUP_LIGHTS);
+    cols->show_turns = (current_group == SUPPLY_GROUP_LIGHTS)
+        || (current_group == SUPPLY_GROUP_SUPPLY);
 
     if (current_group == SUPPLY_GROUP_JEWELRY_PRESETS)
     {
@@ -4219,7 +4220,8 @@ static bool equipment_object_is_wearable(const object_type* o_ptr)
 /* Weapon slots stay serialized as equipment for compatibility, but only the
  * active combat set is presented as Equipped.  The Belt is also equipped,
  * even though it grants passive rather than active-weapon combat bonuses.
- * Inactive Harness weapons are presented by the Harness inventory page. */
+ * Harness objects are also shown by the Inventory page, including active
+ * Harness equipment. */
 static bool equipment_slot_active_for_display(int slot)
 {
     if (slot == INVEN_BELT)
@@ -4228,12 +4230,17 @@ static bool equipment_slot_active_for_display(int slot)
     return player_equipment_slot_is_active(slot);
 }
 
-static bool equipment_slot_is_inactive_harness_item(int slot)
+static bool equipment_slot_is_harness_item(int slot)
 {
     return slot >= INVEN_WIELD && slot < INVEN_TOTAL
         && inventory[slot].k_idx
         && inventory_limit_group_for_object(&inventory[slot])
-            == INV_LIMIT_HARNESS
+            == INV_LIMIT_HARNESS;
+}
+
+static bool equipment_slot_is_inactive_harness_item(int slot)
+{
+    return equipment_slot_is_harness_item(slot)
         && !equipment_slot_active_for_display(slot);
 }
 
@@ -6283,7 +6290,7 @@ static int count_inventory_browser_group_entries(inventory_menu_group group)
     {
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
         {
-            if (equipment_slot_is_inactive_harness_item(i)
+            if (equipment_slot_is_harness_item(i)
                 || inventory_browser_equipped_slot_matches_group(
                     INVENTORY_MENU_GROUP_JEWELRY, i))
             {
@@ -6298,7 +6305,7 @@ static int count_inventory_browser_group_entries(inventory_menu_group group)
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
         {
             if (group == INVENTORY_MENU_GROUP_HARNESS
-                && equipment_slot_is_inactive_harness_item(i))
+                && equipment_slot_is_harness_item(i))
             {
                 count++;
             }
@@ -6452,7 +6459,7 @@ static void prepare_inventory_browser_group_icons(
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
         {
             bool harness_item = group == INVENTORY_MENU_GROUP_HARNESS
-                && equipment_slot_is_inactive_harness_item(i);
+                && equipment_slot_is_harness_item(i);
             bool jewelry_item = group == INVENTORY_MENU_GROUP_JEWELRY
                 && inventory_browser_equipped_slot_matches_group(group, i);
 
@@ -6624,15 +6631,17 @@ static int collect_inventory_page_entries(inventory_menu_group group,
         for (int i = INVEN_WIELD; i < INVEN_TOTAL && count < capacity; i++)
         {
             bool harness_item = group == INVENTORY_MENU_GROUP_HARNESS
-                && equipment_slot_is_inactive_harness_item(i);
+                && equipment_slot_is_harness_item(i);
             bool jewelry_item = group == INVENTORY_MENU_GROUP_JEWELRY
                 && inventory_browser_equipped_slot_matches_group(group, i);
+            bool equipped_item = jewelry_item
+                || (harness_item && equipment_slot_active_for_display(i));
 
             if (!harness_item && !jewelry_item)
                 continue;
 
             equipment_add_entry(entries, &count, capacity, -1, -1, i,
-                jewelry_item);
+                equipped_item);
         }
     }
     else if (request->item_select_flags & USE_EQUIP)
@@ -6727,8 +6736,9 @@ static int collect_inventory_page_entries(inventory_menu_group group,
     return count;
 }
 
-/* The ordinary Inventory page stacks both volume-pool lists on one page.
- * Keep entries ordered and tagged so the renderer can split them cleanly. */
+/* The ordinary Inventory page stacks Pack, Harness, and Jewelry on one page.
+ * Pack and Harness are kept first so their complete lists receive priority;
+ * Jewelry uses the remaining rows and scrolls within that section. */
 static int collect_inventory_page_all_entries(equipment_list_entry entries[],
     int capacity, const supply_menu_request* request)
 {
@@ -10396,27 +10406,25 @@ static void inventory_one_page_allocate_rows(int available_rows,
     *pack_rows = 0;
     *harness_rows = 0;
     *jewelry_rows = 0;
-    /* Harness and Jewelry each add a blank row, header, and divider. */
+    /* Harness and Jewelry each add a blank row, header, and divider.  Give
+     * Pack and Harness their complete lists first; Jewelry gets the remaining
+     * rows and can scroll within that section. */
     body_rows = available_rows - 6;
     if (body_rows <= 0)
         return;
 
-    needed[0] = MAX(pack_needed, 1);
-    needed[1] = MAX(harness_needed, 1);
-    needed[2] = MAX(jewelry_needed, 1);
+    needed[0] = MAX(pack_needed, 0);
+    needed[1] = MAX(harness_needed, 0);
 
-    for (int i = 0; i < 3 && allocated < body_rows; i++)
-    {
-        rows[i] = 1;
-        allocated++;
-    }
-
-    while (allocated < body_rows)
+    /* Spend the body rows on Pack and Harness before giving any to Jewelry.
+     * This makes both volume-pool lists complete whenever they fit. */
+    while (allocated < body_rows
+        && (rows[0] < needed[0] || rows[1] < needed[1]))
     {
         int best = -1;
         int best_deficit = 0;
 
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 2; i++)
         {
             int deficit = needed[i] - rows[i];
 
@@ -10427,10 +10435,15 @@ static void inventory_one_page_allocate_rows(int available_rows,
             }
         }
         if (best < 0)
-            best = allocated % 3;
+            break;
         rows[best]++;
         allocated++;
     }
+
+    /* All unused body rows belong to Jewelry, even when that section has more
+     * entries than fit; its own top/max-top state provides scrolling. */
+    if (jewelry_needed > 0)
+        rows[2] = body_rows - allocated;
 
     *pack_rows = rows[0];
     *harness_rows = rows[1];
@@ -10751,14 +10764,22 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             && request->inventory_group >= INVENTORY_MENU_GROUP_ALL
             && request->inventory_group < INVENTORY_MENU_GROUP_MAX)
         {
-            page = SUPPLY_MENU_PAGE_INVENTORY;
-            inv_grp_cur = inventory_browser_group_index(
-                request->inventory_group);
-            inv_focus_group = request->inventory_group;
-            inv_focus_group_pending =
-                request->inventory_group == INVENTORY_MENU_GROUP_PACK
-                || request->inventory_group == INVENTORY_MENU_GROUP_HARNESS
-                || request->inventory_group == INVENTORY_MENU_GROUP_JEWELRY;
+            if (request->inventory_group == INVENTORY_MENU_GROUP_JEWELRY)
+            {
+                /* Jewelry entries live on their dedicated page rather than
+                 * in the combined Pack/Harness Inventory list. */
+                page = SUPPLY_MENU_PAGE_JEWELRY;
+            }
+            else
+            {
+                page = SUPPLY_MENU_PAGE_INVENTORY;
+                inv_grp_cur = inventory_browser_group_index(
+                    request->inventory_group);
+                inv_focus_group = request->inventory_group;
+                inv_focus_group_pending =
+                    request->inventory_group == INVENTORY_MENU_GROUP_PACK
+                    || request->inventory_group == INVENTORY_MENU_GROUP_HARNESS;
+            }
         }
         if (request->preview_inventory_description)
         {
@@ -11913,7 +11934,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     INVENTORY_MENU_GROUP_HARNESS, harness_entry_cnt,
                     harness_header, sizeof(harness_header));
                 inventory_browser_section_header(
-                    INVENTORY_MENU_GROUP_JEWELRY, jewelry_entry_cnt,
+                    INVENTORY_MENU_GROUP_JEWELRY, inventory_totals[2],
                     jewelry_header, sizeof(jewelry_header));
             }
             else if (inventory_entry_cnt > 0)

@@ -835,6 +835,7 @@ void do_cmd_fire(int quiver)
                 }
 
                 song_disguise_note_player_attack(cave_m_idx[y][x]);
+                varda_quest_note_duruin_ranged_attack(m_ptr);
 
                 /* If it hit */
                 if (hit_result > 0)
@@ -2415,6 +2416,7 @@ void do_cmd_throw(bool automatic)
             }
 
             song_disguise_note_player_attack(cave_m_idx[y][x]);
+            varda_quest_note_duruin_ranged_attack(m_ptr);
 
             /* Resolve every successful component against one protection roll. */
             if (hit_result > 0 || melee_hit_result > 0)

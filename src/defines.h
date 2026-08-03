@@ -2040,6 +2040,10 @@
  */
 #define OBJECT_RUNTIME_STATE_NONE 0
 #define OBJECT_RUNTIME_STATE_FIRE_BROKEN 1
+/* Only weapon objects use this part of the otherwise generic payload. */
+#define OBJECT_RUNTIME_HARNESS_COLOR_MASK 0x000000ffL
+#define OBJECT_RUNTIME_HARNESS_COLOR_MARKER 0x00000080L
+#define OBJECT_RUNTIME_HARNESS_COLOR_VALUE_MASK 0x0000007fL
 
 /*
  * Number of special inscriptions, plus one.
@@ -2510,6 +2514,8 @@
 #define MFLAG_HIT_BY_RANGED 0x00020000 /* Monster has been hit with a spell */
 #define MFLAG_HIT_BY_MELEE                                                     \
     0x00040000 /* Monster was just meleed by player last turn */
+#define MFLAG_DURUIN_PROVOKED                                                   \
+    0x00080000 /* Duruin may leave his inner bastion enclosure */
 
 /*
  * New monster race bit flags

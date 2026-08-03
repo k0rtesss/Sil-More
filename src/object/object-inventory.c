@@ -1059,6 +1059,9 @@ int inven_carry(object_type* o_ptr, bool combine_ammo)
     if (!o_ptr->k_idx)
         return (-1);
 
+    if (inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS)
+        player_active_weapon_assign_harness_color(o_ptr);
+
     if (!player_light_capacity_okay(o_ptr, true))
         return (-1);
 

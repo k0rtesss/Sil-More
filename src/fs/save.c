@@ -653,7 +653,8 @@ void wr_item(const object_type* o_ptr)
  */
 #define SAVE_MON_FLAGS                                                         \
     (MFLAG_ACTV | MFLAG_ALWAYS_CAST | MFLAG_AGGRESSIVE | MFLAG_SUMMONED        \
-        | MFLAG_HIT_BY_RANGED | MFLAG_HIT_BY_MELEE | MFLAG_CHARGED)
+        | MFLAG_HIT_BY_RANGED | MFLAG_HIT_BY_MELEE | MFLAG_CHARGED             \
+        | MFLAG_DURUIN_PROVOKED)
 
 /*
  * Write a "monster" record

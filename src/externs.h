@@ -1792,6 +1792,8 @@ extern bool sdl_character_sheet_screen_page_turning(void);
 extern void sdl_character_sheet_screen_begin_page_turn(int dir);
 extern void sdl_character_sheet_screen_begin_page_turn_to(int page);
 extern bool sdl_character_sheet_screen_scroll_book(int direction);
+extern void sdl_character_sheet_screen_set_book_focus(int choice);
+extern int sdl_character_sheet_screen_book_action_page(int choice);
 extern void sdl_character_sheet_screen_set_select_size_hint(cptr longest_desc);
 extern void sdl_character_sheet_screen_add_select_description_candidate(
     cptr text);
@@ -2078,6 +2080,9 @@ extern int player_opposite_active_weapon_mode(void);
 extern int player_active_weapon_quiver_slot(void);
 extern int player_active_weapon_quiver_number(void);
 extern void player_active_weapon_sync_loaded_state(void);
+extern void player_active_weapon_assign_harness_color(object_type* o_ptr);
+extern void player_active_weapon_forget_harness_color(object_type* o_ptr);
+extern byte player_active_weapon_harness_color(const object_type* o_ptr);
 extern int player_active_weapon_kind(void);
 extern int player_active_throwing_weapon_slot(void);
 extern bool player_active_weapon_change_is_free(int old_kind, int new_kind);
@@ -2210,6 +2215,9 @@ extern void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byt
 extern void quest_typewriter_menu_pages(cptr title, cptr texts[],
     int total_texts, byte title_color, byte text_color,
     int target_page_count);
+extern int quest_reward_book_choice(cptr title, cptr texts[], int total_texts,
+    cptr prompt, const int values[], cptr labels[], const bool enabled[],
+    int choice_count, int initial_choice, void (*inspect)(int value));
 extern void tulkas_quest_interaction(void);
 extern void check_tulkas_quest_interaction(void);
 extern void check_tulkas_quest_completion(int r_idx);
@@ -2223,6 +2231,9 @@ extern void varda_quest_interaction(void);
 extern void check_varda_quest_interaction(void);
 extern void check_varda_quest_completion(int r_idx);
 extern bool varda_quest_bastion_level_active(void);
+extern void varda_quest_note_duruin_ranged_attack(monster_type* m_ptr);
+extern bool varda_quest_duruin_can_enter(
+    const monster_type* m_ptr, int y, int x);
 extern void varda_quest_notice_bastion_level_entry(void);
 extern bool varda_quest_confirm_leave_bastion(void);
 extern void varda_quest_fail_if_bastion_missed(void);

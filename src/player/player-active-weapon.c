@@ -284,6 +284,23 @@ void player_active_weapon_sync_loaded_state(void)
         }
     }
 
+    /* Existing saves and fresh characters can arrive here with Harness
+     * weapons that have not yet received a menu color. */
+    for (int i = 0; i < INVEN_TOTAL; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+
+        if (inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS)
+            player_active_weapon_assign_harness_color(o_ptr);
+    }
+    for (int i = 0; i < player_pack_entry_count(); i++)
+    {
+        object_type* o_ptr = player_pack_entry_at(i);
+
+        if (inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS)
+            player_active_weapon_assign_harness_color(o_ptr);
+    }
+
     p_ptr->active_weapon_mode = (byte)mode;
     last_ranged_weapon_mode = player_active_weapon_mode_is_ranged(mode)
         ? (byte)mode : PLAYER_ACTIVE_WEAPON_RANGED_1;
@@ -861,6 +878,118 @@ static bool object_is_harness_weapon(const object_type* o_ptr)
     return object_is_melee_combat_weapon(o_ptr) || o_ptr->tval == TV_BOW;
 }
 
+/* This is the color sequence for ordinary weapons.  Yellow is reserved for
+ * artefacts, and light blue is reserved for the selected menu row. */
+static const byte harness_weapon_colors[] = {
+    TERM_L_RED, TERM_L_GREEN, TERM_L_UMBER, TERM_VIOLET,
+    TERM_ORANGE, TERM_WHITE, TERM_RED, TERM_GREEN, TERM_BLUE, TERM_UMBER
+};
+
+static bool harness_weapon_colorable(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    return object_is_melee_combat_weapon(o_ptr) || o_ptr->tval == TV_BOW;
+}
+
+static bool harness_weapon_color_is_reserved(byte color)
+{
+    byte base_color = color % TERM_SHADE;
+
+    return base_color == TERM_YELLOW || base_color == TERM_L_BLUE;
+}
+
+static byte harness_weapon_saved_color(const object_type* o_ptr)
+{
+    byte color_id = object_runtime_harness_color_id(o_ptr);
+
+    if (!color_id)
+        return 0;
+    if (!(color_id & OBJECT_RUNTIME_HARNESS_COLOR_MARKER))
+        return 0;
+
+    return color_id & OBJECT_RUNTIME_HARNESS_COLOR_VALUE_MASK;
+}
+
+static bool harness_weapon_color_in_use(byte color)
+{
+    if (!color || harness_weapon_color_is_reserved(color))
+        return false;
+
+    for (int i = 0; i < INVEN_TOTAL; i++)
+    {
+        const object_type* o_ptr = &inventory[i];
+
+        if (!harness_weapon_colorable(o_ptr) || artefact_p(o_ptr))
+            continue;
+        if (harness_weapon_saved_color(o_ptr) == color)
+            return true;
+    }
+    for (int i = 0; i < player_pack_entry_count(); i++)
+    {
+        const object_type* o_ptr = player_pack_entry_at(i);
+
+        if (!harness_weapon_colorable(o_ptr) || artefact_p(o_ptr))
+            continue;
+        if (harness_weapon_saved_color(o_ptr) == color)
+            return true;
+    }
+
+    return false;
+}
+
+static byte allocate_harness_weapon_color(void)
+{
+    for (int i = 0; i < (int)N_ELEMENTS(harness_weapon_colors); i++)
+    {
+        if (!harness_weapon_color_in_use(harness_weapon_colors[i]))
+            return harness_weapon_colors[i];
+    }
+
+    /* All listed colors are already in use; reuse the first one. */
+    return harness_weapon_colors[0];
+}
+
+void player_active_weapon_assign_harness_color(object_type* o_ptr)
+{
+    byte saved_color;
+
+    if (!object_is_harness_weapon(o_ptr) || artefact_p(o_ptr))
+    {
+        return;
+    }
+
+    saved_color = harness_weapon_saved_color(o_ptr);
+    if (saved_color && !harness_weapon_color_is_reserved(saved_color))
+        return;
+
+    object_set_runtime_harness_color_id(o_ptr,
+        allocate_harness_weapon_color());
+}
+
+void player_active_weapon_forget_harness_color(object_type* o_ptr)
+{
+    if (!o_ptr || !harness_weapon_colorable(o_ptr))
+        return;
+
+    object_set_runtime_harness_color_id(o_ptr, 0);
+}
+
+byte player_active_weapon_harness_color(const object_type* o_ptr)
+{
+    byte color;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return TERM_L_WHITE;
+    if (artefact_p(o_ptr))
+        return TERM_YELLOW;
+
+    color = harness_weapon_saved_color(o_ptr);
+    return color && !harness_weapon_color_is_reserved(color)
+        ? color : TERM_L_WHITE;
+}
+
 static char active_weapon_choice_key(int index)
 {
     static cptr keys = "13579abcdefghilmnopqrstuvwyz";
@@ -881,17 +1010,6 @@ static char active_weapon_menu_key(int index)
         return keys[index];
 
     return 0;
-}
-
-static byte active_weapon_choice_attr(const object_type* o_ptr)
-{
-    if (!o_ptr || !o_ptr->k_idx)
-        return TERM_L_WHITE;
-
-    return weapon_glows(o_ptr)
-        ? object_display_color(o_ptr, TERM_L_BLUE)
-        : object_display_color(o_ptr,
-              tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
 }
 
 static void active_weapon_object_choice_name(char* buf, size_t buflen,
@@ -956,10 +1074,7 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
     }
     options[*count].key = active_weapon_menu_key(*count);
     options[*count].label = choice->label;
-    {
-        object_type* arrow = player_quiver_arrow_object(arrow_item);
-        options[*count].attr = active_weapon_choice_attr(arrow ? arrow : o_ptr);
-    }
+    options[*count].attr = TERM_L_WHITE;
     options[*count].disabled = false;
     (*count)++;
     return true;
@@ -1108,6 +1223,39 @@ static void add_empty_active_hand_choice(active_weapon_choice choices[],
     (*count)++;
 }
 
+static int active_weapon_choice_category(const active_weapon_choice* choice)
+{
+    if (!choice)
+        return 3;
+
+    switch (choice->kind)
+    {
+    case PLAYER_ACTIVE_WEAPON_KIND_MELEE:
+        return 0;
+    case PLAYER_ACTIVE_WEAPON_KIND_BOW:
+        return 1;
+    case PLAYER_ACTIVE_WEAPON_KIND_THROWING:
+        return 2;
+    default:
+        return 3;
+    }
+}
+
+static byte active_weapon_choice_color(
+    const active_weapon_choice choices[], int index)
+{
+    if (!choices || index < 0 || !choices[index].o_ptr
+        || !choices[index].o_ptr->k_idx)
+    {
+        return TERM_L_WHITE;
+    }
+
+    /* This is only a fallback for old objects or a missed acquisition path;
+     * normal Harness entry assigns the ID before the menu is opened. */
+    player_active_weapon_assign_harness_color(choices[index].o_ptr);
+    return player_active_weapon_harness_color(choices[index].o_ptr);
+}
+
 static void prepare_active_weapon_menu_choices(
     active_weapon_choice choices[], ui_question_option options[], int count,
     int* default_index)
@@ -1120,6 +1268,33 @@ static void prepare_active_weapon_menu_choices(
         return;
 
     active_index = *default_index;
+
+    /* Stable insertion sort groups all Melee, Ranged, and Throwing choices
+     * while preserving their existing order within each category. */
+    for (int i = 1; i < count; i++)
+    {
+        active_weapon_choice choice = choices[i];
+        ui_question_option option = options[i];
+        int category = active_weapon_choice_category(&choice);
+        int insert_at = i;
+
+        while (insert_at > 0
+            && active_weapon_choice_category(&choices[insert_at - 1])
+                > category)
+        {
+            choices[insert_at] = choices[insert_at - 1];
+            options[insert_at] = options[insert_at - 1];
+            if (active_index == insert_at - 1)
+                active_index = insert_at;
+            insert_at--;
+        }
+
+        choices[insert_at] = choice;
+        options[insert_at] = option;
+        if (active_index == i)
+            active_index = insert_at;
+    }
+
     if (active_index > 0 && active_index < count)
     {
         active_choice = choices[active_index];
@@ -1131,13 +1306,16 @@ static void prepare_active_weapon_menu_choices(
         }
         choices[0] = active_choice;
         options[0] = active_option;
-        *default_index = 0;
+        active_index = 0;
     }
+
+    *default_index = active_index;
 
     for (int i = 0; i < count; i++)
     {
         options[i].key = active_weapon_menu_key(i);
         options[i].label = choices[i].label;
+        options[i].attr = active_weapon_choice_color(choices, i);
     }
 }
 

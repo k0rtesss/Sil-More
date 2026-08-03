@@ -175,6 +175,28 @@ static inline void object_set_runtime_state(object_type* o_ptr, s32b state)
     o_ptr->unused3 = state;
 }
 
+static inline byte object_runtime_harness_color_id(const object_type* o_ptr)
+{
+    if (!o_ptr)
+        return 0;
+    return (byte)(o_ptr->unused4 & OBJECT_RUNTIME_HARNESS_COLOR_MASK);
+}
+
+static inline void object_set_runtime_harness_color_id(object_type* o_ptr,
+    byte color_id)
+{
+    if (!o_ptr)
+        return;
+    if (!color_id)
+    {
+        o_ptr->unused4 &= ~OBJECT_RUNTIME_HARNESS_COLOR_MASK;
+        return;
+    }
+    o_ptr->unused4 = (o_ptr->unused4 & ~OBJECT_RUNTIME_HARNESS_COLOR_MASK)
+        | OBJECT_RUNTIME_HARNESS_COLOR_MARKER
+        | (color_id & OBJECT_RUNTIME_HARNESS_COLOR_VALUE_MASK);
+}
+
 static inline s32b object_runtime_payload(const object_type* o_ptr)
 {
     if (!o_ptr)

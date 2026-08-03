@@ -142,8 +142,14 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
             return (100);
     }
 
+    /* Duruin remains within the shadowed inner enclosure until attacked with
+     * a bow or thrown weapon.  A player in the doorway can still be attacked
+     * because that does not move Duruin across the threshold. */
+    if (!varda_quest_duruin_can_enter(m_ptr, y, x))
+        return (0);
+
     /* The grid is occupied by a monster. */
-    else if (cave_m_idx[y][x] > 0)
+    if (cave_m_idx[y][x] > 0)
     {
         monster_type* n_ptr = &mon_list[cave_m_idx[y][x]];
         monster_race* nr_ptr = &r_info[n_ptr->r_idx];

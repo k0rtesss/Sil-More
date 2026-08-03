@@ -3730,12 +3730,6 @@ static bool skeleton_note_find_nearest_partition_site(level_partition_kind kind,
     big_cave_type_t cave_type, int from_y, int from_x, int* out_y, int* out_x, int* out_dist)
 {
     int source_pi = level_partition_index_for_point(from_y, from_x);
-    level_partition_kind source_kind = level_partition_kind_for_point(from_y, from_x);
-    big_cave_type_t source_cave_type =
-        level_partition_big_cave_type_for_point(from_y, from_x);
-    bool skip_source_partition = (source_pi >= 0) && (source_kind == kind)
-        && ((kind != LEVEL_PART_BIG_CAVE) || (cave_type == BIG_CAVE_NONE)
-            || (source_cave_type == cave_type));
     int best_y = -1;
     int best_x = -1;
     int best_dist = 0;
@@ -3747,7 +3741,10 @@ static bool skeleton_note_find_nearest_partition_site(level_partition_kind kind,
         {
             if (level_partition_kind_for_point(y, x) != kind)
                 continue;
-            if (skip_source_partition
+            /* A skeleton note must point outside the partition containing it.
+             * Use the raw partition index: overlays can change a point's
+             * effective kind without changing which partition owns it. */
+            if (source_pi >= 0
                 && level_partition_index_for_point(y, x) == source_pi)
             {
                 continue;

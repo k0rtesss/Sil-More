@@ -1509,6 +1509,8 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     }
 
     o_ptr->storage = target_storage;
+    if (target_storage == OBJECT_STORAGE_HARNESS)
+        player_active_weapon_assign_harness_color(o_ptr);
     if (target_storage == OBJECT_STORAGE_PACK)
     {
         /* Stored copies are no longer assigned to an auto-recovery sheath. */
@@ -2683,7 +2685,11 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     /* Obtain local object */
     object_copy(i_ptr, o_ptr);
     if (move_pack_weapon_to_harness)
+    {
         i_ptr->storage = OBJECT_STORAGE_HARNESS;
+    }
+    if (i_ptr->storage == OBJECT_STORAGE_HARNESS)
+        player_active_weapon_assign_harness_color(i_ptr);
 
     if (!from_supplies && i_ptr->tval == TV_LIGHT
         && i_ptr->sval == SV_LIGHT_LANTERN)

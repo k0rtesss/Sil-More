@@ -1882,11 +1882,14 @@ bool reveal_random_artifact(void)
 static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 {
     thrall_reward_option options[6];
-    ui_question_option question_options[6];
+    int values[6];
+    cptr labels[6];
+    bool enabled[6];
     int option_count = 0;
     int default_index = -1;
     char title[80];
     char desc[240];
+    cptr story[1];
 
     if (!m_ptr)
         return THRALL_REWARD_LATER;
@@ -1922,35 +1925,37 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 
     for (int i = 0; i < option_count; i++)
     {
-        question_options[i] = (ui_question_option){ options[i].hotkey,
-            options[i].label, TERM_L_WHITE, !options[i].enabled };
+        values[i] = options[i].reward;
+        labels[i] = options[i].label;
+        enabled[i] = options[i].enabled;
         if (default_index < 0 && options[i].enabled)
             default_index = i;
     }
 
-    strnfmt(title, sizeof(title), "%s thrall's reward",
-        pending_reward ? "Claim the" : "Choose the");
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
     {
-        strnfmt(desc, sizeof(desc), "%s Grey choices are unavailable.",
+        SDL_strlcpy(title, "The Elven Thrall's Reward", sizeof(title));
+        strnfmt(desc, sizeof(desc), "%s Gifts written in grey cannot yet be granted.",
             pending_reward
                 ? "The elven thrall still waits to grant the boon you earned."
                 : "Choose what gift the elven thrall will grant you.");
     }
     else
     {
-        strnfmt(desc, sizeof(desc), "%s Grey choices are unavailable.",
+        SDL_strlcpy(title, "The Human Thrall's Reward", sizeof(title));
+        strnfmt(desc, sizeof(desc), "%s Gifts written in grey cannot yet be granted.",
             pending_reward
                 ? "The human thrall still waits to grant the boon you earned."
                 : "Choose what gift the human thrall will grant you.");
     }
 
+    story[0] = desc;
     {
-        int selected = ui_question_ask(title, desc, question_options,
-            option_count, m_ptr->fy, m_ptr->fx, default_index);
+        int selected = quest_reward_book_choice(title, story, 1,
+            "Choose the boon you would receive:", values, labels, enabled,
+            option_count, default_index, NULL);
 
-        return (selected < 0) ? THRALL_REWARD_LATER
-                              : options[selected].reward;
+        return (selected < 0) ? THRALL_REWARD_LATER : selected;
     }
 }
 
