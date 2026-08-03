@@ -446,6 +446,8 @@ static char describe_item_with_comparisons_aux(int item_index,
     object_type* base_obj;
     bool is_floor = (item_index < 0);
     bool is_supply = (item_index >= SUPPLIES_INDEX);
+    bool is_quiver = item_index >= QUIVER_INDEX
+        && item_index < QUIVER_INDEX_END;
     u32b base_groups;
 
     if (item_index == ENHANCED_MENU_NO_SELECTION)
@@ -454,7 +456,7 @@ static char describe_item_with_comparisons_aux(int item_index,
     if (inventory_item_is_supply_summary(item_index))
         return 0;
 
-    if (is_floor || is_supply)
+    if (is_floor || is_supply || is_quiver)
     {
         base_obj = inventory_item_to_object_ptr(item_index);
     }
@@ -480,7 +482,9 @@ static char describe_item_with_comparisons_aux(int item_index,
     append_description_object(objects, headings, heading_texts, &count,
         MAX_DESCRIPTION_COMPARE_ITEMS, base_obj,
         is_floor ? "Selected item (floor)"
-                 : (is_supply ? "Selected item (supply)" : "Selected item"));
+                 : (is_supply ? "Selected item (supply)"
+                              : (is_quiver ? "Selected item (quiver)"
+                                           : "Selected item")));
 
     if (include_comparisons)
     {

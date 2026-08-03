@@ -242,9 +242,12 @@ errr rd_inventory(void)
     {
         u16b quiver_magic = 0;
         u16b quiver_count = 0;
+        s16b selected_arrow = 0;
 
         rd_u16b(&quiver_magic);
         rd_u16b(&quiver_count);
+        if (savefile_version_at_least(0, 9, 7, 13))
+            rd_s16b(&selected_arrow);
         if (quiver_magic != SAVEFILE_QUIVER_BLOCK_MAGIC
             || quiver_count > QUIVER_ARROW_CAPACITY)
         {
@@ -272,6 +275,7 @@ errr rd_inventory(void)
                 return (-1);
             }
         }
+        player_quiver_restore_selected_arrow(selected_arrow);
     }
     else
     {

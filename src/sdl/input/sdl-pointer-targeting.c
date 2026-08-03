@@ -221,8 +221,9 @@ void sdl_pointer_attack_activate_panel_choice(int mode, bool quiver_only)
     {
         if (!sdl_pointer_attack_mode_is_ranged(mode))
             return;
-        player_queue_ranged_quiver_mode(mode);
-        sdl_enqueue_bypassed_command(CMD_ACTIVE_WEAPON_MODE);
+        /* A quiver-row click opens the shared active-weapon chooser so the
+         * player can select any arrow stack in the mixed Quiver. */
+        sdl_enqueue_bypassed_command('\t');
     }
     else
     {
@@ -293,7 +294,7 @@ int sdl_pointer_attack_ranged_range(int mode)
             ammo = &inventory[slot];
         else
         {
-            slot = player_quiver_first_arrow_slot();
+            slot = player_quiver_selected_arrow_slot();
             ammo = player_quiver_arrow_object(slot);
         }
     }

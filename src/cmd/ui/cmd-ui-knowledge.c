@@ -4842,7 +4842,10 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
     {
         if (entry->item_idx >= QUIVER_INDEX
             && entry->item_idx < QUIVER_INDEX_END)
-            return "Quiver";
+        {
+            return entry->item_idx == player_quiver_selected_arrow_slot()
+                ? "Quiver [active]" : "Quiver";
+        }
         if (player_inventory_handle_is_carried(entry->item_idx)
             && inventory_slot_is_quivered_arrow(entry->item_idx))
         {

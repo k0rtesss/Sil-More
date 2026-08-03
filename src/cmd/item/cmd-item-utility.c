@@ -206,7 +206,9 @@ void do_cmd_exchange(void)
 
 void do_cmd_swap_quivers(void)
 {
-    msg_print("Your quiver and belt serve different purposes and cannot be swapped.");
+    /* Compatibility shortcut: there is one mixed Quiver now, and its active
+     * arrow stack is chosen through the shared active-weapon menu. */
+    do_cmd_toggle_active_weapon();
 }
 
 

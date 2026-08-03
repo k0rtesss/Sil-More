@@ -1921,7 +1921,8 @@ bool sdl_render_current_window_frame(void)
     sdl_unified_look_sidebar_render();
     sdl_unified_look_prompt_render();
     sdl_song_menu_render();
-    sdl_description_overlay_render();
+    if (!hide_main_menu_overlays)
+        sdl_description_overlay_render();
     /* Drawn after the description popup (and its dimming backdrop) so the thumb
      * buttons stay on top and visible while a description is open. */
     if (!hide_main_menu_overlays)

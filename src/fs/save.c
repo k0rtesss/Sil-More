@@ -1150,6 +1150,7 @@ static bool wr_savefile(void)
     {
         u16b quiver_count = (u16b)player_quiver_store_entry_count();
         wr_u16b(quiver_count);
+        wr_s16b((s16b)player_quiver_selected_arrow_index());
         for (u16b qi = 0; qi < quiver_count; qi++)
         {
             object_type* arrow = player_quiver_store_entry_at(qi);

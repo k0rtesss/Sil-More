@@ -162,7 +162,7 @@ static const object_type* pointer_attack_ranged_ammo_for_mode(int mode)
     slot = player_active_throwing_weapon_slot();
     if (slot >= 0)
         return &inventory[slot];
-    slot = player_quiver_first_arrow_slot();
+    slot = player_quiver_selected_arrow_slot();
     return player_quiver_arrow_object(slot);
 }
 
@@ -758,6 +758,8 @@ void prt_quiver(void)
     object_type* q1_ptr = NULL;
     int q1_current = 0;
     int q1_max = 0;
+    int q1_total = 0;
+    bool arrow_quiver = false;
     int total_width;
     int start_col;
     int q1_start;
@@ -791,17 +793,22 @@ void prt_quiver(void)
         }
         else
         {
-            slot = player_quiver_first_arrow_slot();
+            slot = player_quiver_selected_arrow_slot();
             if (slot < 0)
                 return;
             q1_ptr = player_quiver_arrow_object(slot);
             if (!q1_ptr)
                 return;
-            q1_current = player_quiver_arrow_count();
+            q1_current = q1_ptr->number;
+            q1_total = player_quiver_arrow_count();
             q1_max = QUIVER_ARROW_CAPACITY;
+            arrow_quiver = true;
         }
     }
-    strnfmt(buf, sizeof(buf), "%d/%d", q1_current, q1_max);
+    if (arrow_quiver)
+        strnfmt(buf, sizeof(buf), "%d|%d/%d", q1_current, q1_total, q1_max);
+    else
+        strnfmt(buf, sizeof(buf), "%d/%d", q1_current, q1_max);
     total_width = 2 + (int)strlen(buf);
 
     start_col = COL_QUIVER + 12 - total_width;
@@ -1702,7 +1709,7 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
         object_type display;
 
         if (slot < 0)
-            slot = player_quiver_first_arrow_slot();
+            slot = player_quiver_selected_arrow_slot();
         if (slot >= 0)
         {
             object_type* source = (slot >= QUIVER_INDEX
@@ -1712,8 +1719,6 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
             if (source)
             {
                 object_copy(&display, source);
-                if (display.tval == TV_ARROW)
-                    display.number = player_quiver_arrow_count();
                 hidden_left_panel_add_quiver_line(lines, &count, max_lines,
                     &display, SDL_POINTER_ATTACK_RANGED_1);
             }

@@ -600,6 +600,22 @@ void check_pack_overflow(void)
 
 static object_type quiver_arrow_store[QUIVER_ARROW_CAPACITY];
 static int quiver_arrow_store_count = 0;
+static int quiver_selected_arrow_index = -1;
+
+static void player_quiver_normalize_selected_arrow(void)
+{
+    if (quiver_arrow_store_count <= 0)
+    {
+        quiver_selected_arrow_index = -1;
+        return;
+    }
+
+    if (quiver_selected_arrow_index < 0
+        || quiver_selected_arrow_index >= quiver_arrow_store_count)
+    {
+        quiver_selected_arrow_index = 0;
+    }
+}
 
 static int quiver_store_index_for_pointer(const object_type* o_ptr)
 {
@@ -636,6 +652,7 @@ void player_quiver_reset_store(void)
     for (int i = 0; i < QUIVER_ARROW_CAPACITY; i++)
         object_wipe(&quiver_arrow_store[i]);
     quiver_arrow_store_count = 0;
+    quiver_selected_arrow_index = -1;
 }
 
 int player_quiver_store_entry_count(void)
@@ -714,6 +731,43 @@ int player_quiver_first_arrow_slot(void)
         ? slots[0] : -1;
 }
 
+int player_quiver_selected_arrow_slot(void)
+{
+    player_quiver_normalize_selected_arrow();
+    return quiver_selected_arrow_index >= 0
+        ? QUIVER_INDEX + quiver_selected_arrow_index : -1;
+}
+
+int player_quiver_selected_arrow_index(void)
+{
+    player_quiver_normalize_selected_arrow();
+    return quiver_selected_arrow_index;
+}
+
+void player_quiver_restore_selected_arrow(int index)
+{
+    quiver_selected_arrow_index = index;
+    player_quiver_normalize_selected_arrow();
+}
+
+bool player_quiver_select_arrow(int handle)
+{
+    int index = handle - QUIVER_INDEX;
+
+    if (index < 0 || index >= quiver_arrow_store_count
+        || !quiver_arrow_store[index].k_idx
+        || quiver_arrow_store[index].tval != TV_ARROW)
+    {
+        return false;
+    }
+
+    quiver_selected_arrow_index = index;
+    p_ptr->update |= PU_BONUS;
+    p_ptr->redraw |= PR_ARC | PR_QUIVER;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+    return true;
+}
+
 static bool quiver_arrow_similar(const object_type* carried,
     const object_type* incoming)
 {
@@ -784,6 +838,8 @@ int player_quiver_absorb_arrow(object_type* o_ptr)
         incoming.number -= placed;
     }
 
+    player_quiver_normalize_selected_arrow();
+
     o_ptr->number = original_number - (allowed - incoming.number);
     if (o_ptr->number > 0)
     {
@@ -809,10 +865,30 @@ void player_quiver_remove_arrows(int handle, int amount)
     else if (handle >= QUIVER_INDEX && handle < QUIVER_INDEX_END)
     {
         int index = handle - QUIVER_INDEX;
+        int old_selected = quiver_selected_arrow_index;
+        bool removed_selected = old_selected == index;
+
         for (int i = index; i + 1 < quiver_arrow_store_count; i++)
             object_copy(&quiver_arrow_store[i], &quiver_arrow_store[i + 1]);
         quiver_arrow_store_count--;
         object_wipe(&quiver_arrow_store[quiver_arrow_store_count]);
+
+        if (old_selected > index)
+            quiver_selected_arrow_index = old_selected - 1;
+        else if (old_selected == index)
+            quiver_selected_arrow_index = index;
+        player_quiver_normalize_selected_arrow();
+
+        if (removed_selected && quiver_selected_arrow_index >= 0)
+        {
+            object_type* selected
+                = &quiver_arrow_store[quiver_selected_arrow_index];
+            char selected_name[120];
+
+            object_desc(selected_name, sizeof(selected_name), selected, true,
+                3);
+            msg_format("Your active arrows are now %s.", selected_name);
+        }
     }
     else
     {

@@ -467,7 +467,7 @@ void process_command(void)
         break;
     }
 
-    /* Compatibility key: the quiver and belt cannot be swapped. */
+    /* Compatibility key: choose the active arrow through active weapons. */
     case KTRL('F'):
     {
         do_cmd_swap_quivers();

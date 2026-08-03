@@ -89,7 +89,7 @@ int player_active_weapon_quiver_slot(void)
     if (player_active_weapon_mode() != PLAYER_ACTIVE_WEAPON_RANGED_1)
         return -1;
     slot = player_active_throwing_weapon_slot();
-    return slot >= 0 ? slot : player_quiver_first_arrow_slot();
+    return slot >= 0 ? slot : player_quiver_selected_arrow_slot();
 }
 
 int player_active_weapon_quiver_number(void)
@@ -314,6 +314,7 @@ static const char* active_weapon_mode_log_name(int mode)
 static void active_weapon_mode_prompt_name(char* buf, size_t buflen, int mode)
 {
     char weapon_name[80];
+    char arrow_name[80] = "no arrows";
     object_type* weapon_ptr = NULL;
 
     if (!buf || buflen == 0)
@@ -348,18 +349,25 @@ static void active_weapon_mode_prompt_name(char* buf, size_t buflen, int mode)
     }
     else
     {
+        object_type* arrow_ptr = player_quiver_arrow_object(
+            player_quiver_selected_arrow_slot());
+
+        if (arrow_ptr)
+            object_desc(arrow_name, sizeof(arrow_name), arrow_ptr, false, 4);
         weapon_ptr = &inventory[INVEN_BOW];
         if (weapon_ptr->k_idx)
         {
             object_desc(weapon_name, sizeof(weapon_name), weapon_ptr, false, 4);
-            strnfmt(buf, buflen, "your bow (%s), quiver %d/%d",
-                weapon_name, player_quiver_arrow_count(),
+            strnfmt(buf, buflen,
+                "your bow (%s) with %s, quiver %d/%d", weapon_name,
+                arrow_name, player_quiver_arrow_count(),
                 QUIVER_ARROW_CAPACITY);
         }
         else
         {
-            strnfmt(buf, buflen, "your bow, quiver %d/%d",
-                player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
+            strnfmt(buf, buflen, "your bow with %s, quiver %d/%d",
+                arrow_name, player_quiver_arrow_count(),
+                QUIVER_ARROW_CAPACITY);
         }
     }
 }
@@ -369,7 +377,9 @@ void player_active_weapon_name(char* buf, size_t buflen)
     int mode;
     int kind;
     const object_type* weapon_ptr = NULL;
+    const object_type* arrow_ptr = NULL;
     char weapon_name[80] = "";
+    char arrow_name[80] = "no arrows";
 
     if (!buf || buflen == 0)
         return;
@@ -410,14 +420,18 @@ void player_active_weapon_name(char* buf, size_t buflen)
     }
 
     weapon_ptr = &inventory[INVEN_BOW];
+    arrow_ptr = player_quiver_arrow_object(
+        player_quiver_selected_arrow_slot());
     if (weapon_ptr->k_idx)
         object_desc(weapon_name, sizeof(weapon_name), weapon_ptr, false, 4);
+    if (arrow_ptr)
+        object_desc(arrow_name, sizeof(arrow_name), arrow_ptr, false, 4);
     if (weapon_name[0])
-        strnfmt(buf, buflen, "Ranged: %s; quiver %d/%d", weapon_name,
-            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
+        strnfmt(buf, buflen, "Ranged: %s; %s; quiver %d/%d", weapon_name,
+            arrow_name, player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
     else
-        strnfmt(buf, buflen, "Ranged: no bow; quiver %d/%d",
-            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
+        strnfmt(buf, buflen, "Ranged: no bow; %s; quiver %d/%d",
+            arrow_name, player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
 }
 
 static bool confirm_active_weapon_switch(int new_mode)
@@ -444,8 +458,18 @@ static bool confirm_active_weapon_switch(int new_mode)
 
 static void ranged_slot_choice_name(char* buf, size_t buflen, int slot)
 {
-    (void)slot;
-    strnfmt(buf, buflen, "Quiver: %d/%d arrows",
+    object_type* arrow = player_quiver_arrow_object(slot);
+    char arrow_name[120];
+
+    if (!arrow)
+    {
+        strnfmt(buf, buflen, "Quiver: empty (0/%d)",
+            QUIVER_ARROW_CAPACITY);
+        return;
+    }
+
+    object_desc(arrow_name, sizeof(arrow_name), arrow, true, 3);
+    strnfmt(buf, buflen, "Quiver: %s; %d/%d total", arrow_name,
         player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
 }
 
@@ -456,6 +480,7 @@ typedef struct active_weapon_choice
     int mode;
     int kind;
     int target_slot;
+    int arrow_item;
     char label[240];
 } active_weapon_choice;
 
@@ -588,7 +613,7 @@ static void active_weapon_preview_prepare_melee_equipment(void)
 }
 
 static bool active_weapon_choice_preview(int mode, int item, int target_slot,
-    active_weapon_preview* preview)
+    int arrow_item, active_weapon_preview* preview)
 {
     player_type player_snapshot;
     object_type inventory_snapshot[INVEN_TOTAL];
@@ -660,7 +685,8 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
     {
         object_type* bow = &inventory[INVEN_BOW];
         object_type* thrown = &inventory[INVEN_WIELD];
-        int ammo_slot = player_quiver_first_arrow_slot();
+        int ammo_slot = arrow_item >= 0
+            ? arrow_item : player_quiver_selected_arrow_slot();
         u32b f1 = 0, f2 = 0, f3 = 0, f4 = 0;
 
         ammo = player_quiver_arrow_object(ammo_slot);
@@ -736,7 +762,8 @@ bool player_active_weapon_stats_preview(int mode, int* attack, int* dd,
         return false;
     }
 
-    if (!active_weapon_choice_preview(mode, item, target_slot, &preview))
+    if (!active_weapon_choice_preview(mode, item, target_slot,
+            player_quiver_selected_arrow_slot(), &preview))
         return false;
     if (attack)
         *attack = preview.attack;
@@ -755,7 +782,7 @@ bool player_active_weapon_offhand_stats_preview(int* attack, int* dd,
     active_weapon_preview preview;
 
     if (!active_weapon_choice_preview(PLAYER_ACTIVE_WEAPON_MELEE,
-            INVEN_WIELD, INVEN_WIELD, &preview)
+            INVEN_WIELD, INVEN_WIELD, -1, &preview)
         || !preview.has_offhand)
     {
         return false;
@@ -806,7 +833,8 @@ static bool active_weapon_mode_preview_text(int mode, char* buf,
         return false;
     }
 
-    if (!active_weapon_choice_preview(mode, item, target_slot, &preview))
+    if (!active_weapon_choice_preview(mode, item, target_slot,
+            player_quiver_selected_arrow_slot(), &preview))
         return false;
 
     strnfmt(buf, buflen, "(%+d,%dd%d)", preview.attack, preview.dd,
@@ -886,7 +914,7 @@ static void active_weapon_object_choice_name(char* buf, size_t buflen,
 
 static bool add_active_weapon_choice(active_weapon_choice choices[],
     ui_question_option options[], int capacity, int* count, int item,
-    object_type* o_ptr, int mode, int target_slot, cptr role,
+    object_type* o_ptr, int mode, int target_slot, int arrow_item, cptr role,
     cptr weapon_label)
 {
     active_weapon_choice* choice;
@@ -910,10 +938,12 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
             ? PLAYER_ACTIVE_WEAPON_KIND_THROWING
             : PLAYER_ACTIVE_WEAPON_KIND_BOW);
     choice->target_slot = target_slot;
+    choice->arrow_item = arrow_item;
     strnfmt(source_label, sizeof(source_label), "%s%s",
         weapon_label ? weapon_label : "",
         item == INVEN_BELT ? " (belt)" : "");
-    if (active_weapon_choice_preview(mode, item, target_slot, &preview))
+    if (active_weapon_choice_preview(mode, item, target_slot, arrow_item,
+            &preview))
     {
         strnfmt(choice->label, sizeof(choice->label),
             "%s\t%s\t(%+d,%dd%d)", role ? role : "Weapon",
@@ -926,7 +956,10 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
     }
     options[*count].key = active_weapon_menu_key(*count);
     options[*count].label = choice->label;
-    options[*count].attr = active_weapon_choice_attr(o_ptr);
+    {
+        object_type* arrow = player_quiver_arrow_object(arrow_item);
+        options[*count].attr = active_weapon_choice_attr(arrow ? arrow : o_ptr);
+    }
     options[*count].disabled = false;
     (*count)++;
     return true;
@@ -937,37 +970,58 @@ static void add_ranged_active_weapon_choices(active_weapon_choice choices[],
     object_type* bow, int* default_index)
 {
     int active_mode = player_active_weapon_mode();
+    int selected_arrow = player_quiver_selected_arrow_slot();
+    int arrow_slots[QUIVER_ARROW_CAPACITY + 1];
+    int arrow_count = player_quiver_arrow_slots(arrow_slots,
+        (int)N_ELEMENTS(arrow_slots));
     char bow_name[160];
     char quiver_name[160];
     char label[240];
-    cptr role = (item == INVEN_BOW
-                    && active_mode == PLAYER_ACTIVE_WEAPON_RANGED_1
-                    && player_active_weapon_kind()
-                        == PLAYER_ACTIVE_WEAPON_KIND_BOW)
-        ? "Ranged [active]"
-        : "Ranged";
+    bool active_bow = item == INVEN_BOW
+        && active_mode == PLAYER_ACTIVE_WEAPON_RANGED_1
+        && player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_BOW;
 
     if (bow && bow->k_idx)
     {
-        int choice_index = *count;
-
-        ranged_slot_choice_name(quiver_name, sizeof(quiver_name),
-            INVEN_QUIVER1);
         active_weapon_object_choice_name(bow_name, sizeof(bow_name), bow);
-        strnfmt(label, sizeof(label), "%s; %s", bow_name, quiver_name);
-        if (!add_active_weapon_choice(choices, options, capacity, count,
-                item, bow,
-                PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW, role, label))
+        if (arrow_count <= 0)
         {
+            int choice_index = *count;
+            cptr role = active_bow ? "Ranged [active]" : "Ranged";
+
+            ranged_slot_choice_name(quiver_name, sizeof(quiver_name), -1);
+            strnfmt(label, sizeof(label), "%s; %s", bow_name, quiver_name);
+            if (!add_active_weapon_choice(choices, options, capacity, count,
+                    item, bow, PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW, -1,
+                    role, label))
+            {
+                return;
+            }
+            if (active_bow && default_index)
+                *default_index = choice_index;
             return;
         }
 
-        if (item == INVEN_BOW
-            && active_mode == PLAYER_ACTIVE_WEAPON_RANGED_1
-            && player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_BOW
-            && default_index)
+        for (int i = 0; i < arrow_count; i++)
         {
-            *default_index = choice_index;
+            int arrow_item = arrow_slots[i];
+            int choice_index = *count;
+            bool selected = arrow_item == selected_arrow;
+            cptr role = (active_bow && selected)
+                ? "Ranged [active]" : "Ranged";
+
+            ranged_slot_choice_name(quiver_name, sizeof(quiver_name),
+                arrow_item);
+            strnfmt(label, sizeof(label), "%s; %s", bow_name, quiver_name);
+            if (!add_active_weapon_choice(choices, options, capacity, count,
+                    item, bow, PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW,
+                    arrow_item, role, label))
+            {
+                return;
+            }
+
+            if (active_bow && selected && default_index)
+                *default_index = choice_index;
         }
     }
 
@@ -993,7 +1047,7 @@ static void add_melee_and_throwing_active_weapon_choices(
     active_weapon_object_choice_name(label, sizeof(label), o_ptr);
     if (add_active_weapon_choice(choices, options, capacity, count, item,
             o_ptr,
-            PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, role, label)
+            PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, -1, role, label)
         && item == INVEN_WIELD
         && current_mode == PLAYER_ACTIVE_WEAPON_MELEE && default_index)
     {
@@ -1013,7 +1067,7 @@ static void add_melee_and_throwing_active_weapon_choices(
     active_weapon_object_choice_name(label, sizeof(label), o_ptr);
     if (add_active_weapon_choice(choices, options, capacity, count, item,
             o_ptr,
-            PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_WIELD, role, label)
+            PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_WIELD, -1, role, label)
         && item == INVEN_WIELD
         && current_mode == PLAYER_ACTIVE_WEAPON_RANGED_1
         && player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_THROWING
@@ -1043,6 +1097,7 @@ static void add_empty_active_hand_choice(active_weapon_choice choices[],
     choice->mode = PLAYER_ACTIVE_WEAPON_MELEE;
     choice->kind = PLAYER_ACTIVE_WEAPON_KIND_MELEE;
     choice->target_slot = INVEN_WIELD;
+    choice->arrow_item = -1;
     SDL_strlcpy(choice->label, "Melee [active]\tEmpty hand",
         sizeof(choice->label));
     options[*count].key = active_weapon_menu_key(*count);
@@ -1088,7 +1143,8 @@ static void prepare_active_weapon_menu_choices(
 
 static bool choose_active_weapon(active_weapon_choice* selected)
 {
-    int capacity = 2 * (player_pack_entry_count() + 5);
+    int capacity = 2 * (player_pack_entry_count() + 5)
+        * (player_quiver_store_entry_count() + 1);
     active_weapon_choice* choices;
     ui_question_option* options;
     const object_type** object_icons;
@@ -1160,10 +1216,13 @@ static bool choose_active_weapon(active_weapon_choice* selected)
         &default_index);
 
     for (int i = 0; i < count; i++)
-        object_icons[i] = choices[i].o_ptr;
+    {
+        object_type* arrow = player_quiver_arrow_object(choices[i].arrow_item);
+        object_icons[i] = arrow ? arrow : choices[i].o_ptr;
+    }
 
     selected_index = ui_question_ask_objects("Change active weapon",
-            "Choose how to ready a weapon; the current choice is marked [active]. A throwing-capable weapon has separate Melee and Throwing choices. Expected attack and damage are shown at the end of each row. Changing the active weapon takes one turn unless an ability makes your first change before your next action free.",
+            "Choose how to ready a weapon; the current choice is marked [active]. Each bow row selects one arrow type from the mixed Quiver, and changing only that arrow choice always takes no time. A throwing-capable weapon has separate Melee and Throwing choices. Expected attack and damage are shown at the end of each row. Other active-weapon changes take one turn unless an ability makes your first change before your next action free.",
             options, object_icons, count, UI_QUESTION_GLOBAL,
             UI_QUESTION_GLOBAL, default_index);
 
@@ -1829,6 +1888,7 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
     bool wielded_shield = false;
     bool role_changed;
     bool cleared_throwing_marker = false;
+    bool arrow_changed = false;
 
     if (!choice || !choice->o_ptr)
         return;
@@ -1870,6 +1930,25 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
         inventory[INVEN_WIELD].pickup_slot = -1;
     }
 
+    if (choice->kind == PLAYER_ACTIVE_WEAPON_KIND_BOW
+        && choice->arrow_item >= 0)
+    {
+        int old_arrow = player_quiver_selected_arrow_slot();
+
+        if (!player_quiver_select_arrow(choice->arrow_item))
+            return;
+        arrow_changed = old_arrow != player_quiver_selected_arrow_slot();
+        if (arrow_changed)
+        {
+            object_type* arrow = player_quiver_arrow_object(
+                player_quiver_selected_arrow_slot());
+            char arrow_name[120];
+
+            object_desc(arrow_name, sizeof(arrow_name), arrow, true, 3);
+            msg_format("Your active arrows are now %s.", arrow_name);
+        }
+    }
+
     if (role_changed && !wielded_item)
     {
         p_ptr->energy_use = 100;
@@ -1882,6 +1961,14 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
 
     if (old_mode == choice->mode)
     {
+        if (arrow_changed && !wielded_item && !role_changed
+            && !wielded_shield)
+        {
+            p_ptr->energy_use = 0;
+            p_ptr->previous_action[0] = ACTION_NOTHING;
+            handle_stuff();
+            return;
+        }
         if ((wielded_item || role_changed) && !wielded_shield && free_choice)
         {
             p_ptr->energy_use = 0;

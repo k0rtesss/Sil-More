@@ -379,58 +379,6 @@ static void restore_target_after_implicit_fire(
         target_set_monster(0);
 }
 
-static bool select_quiver_arrow(int* item)
-{
-    int slots[QUIVER_ARROW_CAPACITY + 1];
-    int count;
-
-    if (!item)
-        return false;
-
-    count = player_quiver_arrow_slots(slots, (int)N_ELEMENTS(slots));
-    if (count <= 0)
-        return false;
-    if (count == 1)
-    {
-        *item = slots[0];
-        return true;
-    }
-
-    {
-        ui_question_option options[QUIVER_ARROW_CAPACITY + 1];
-        const object_type* icons[QUIVER_ARROW_CAPACITY + 1];
-        char labels[QUIVER_ARROW_CAPACITY + 1][100];
-        int choice;
-
-        for (int i = 0; i < count; i++)
-        {
-            object_type* o_ptr = player_quiver_arrow_object(slots[i]);
-            char o_name[80];
-
-            if (!o_ptr)
-                return false;
-
-            object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
-            strnfmt(labels[i], sizeof(labels[i]), "%s (%d/%d total)",
-                o_name, player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
-            options[i].key = (char)('a' + i);
-            options[i].label = labels[i];
-            options[i].attr = object_display_color(o_ptr,
-                tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-            options[i].disabled = false;
-            icons[i] = o_ptr;
-        }
-
-        choice = ui_question_ask_objects("Choose arrow",
-            "Shoot any arrow type in your quiver; choosing ammunition costs no extra time.",
-            options, icons, count, p_ptr->py, p_ptr->px, 0);
-        if (choice < 0 || choice >= count)
-            return false;
-        *item = slots[choice];
-        return true;
-    }
-}
-
 void do_cmd_fire(int quiver)
 {
     int dir, item;
@@ -517,7 +465,8 @@ void do_cmd_fire(int quiver)
         return;
     }
 
-    if (!select_quiver_arrow(&item))
+    item = player_quiver_selected_arrow_slot();
+    if (item < 0)
     {
         msg_print("You have no arrows in your quiver.");
         return;

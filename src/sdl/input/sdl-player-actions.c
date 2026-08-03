@@ -127,7 +127,7 @@ static cptr sdl_player_action_menu_description_for_kind(int kind)
     case SDL_PLAYER_ACTION_REST:
         return "Rest: rest until disturbed or fully recovered.";
     case SDL_PLAYER_ACTION_SWAP_QUIVERS:
-        return "Quiver and belt: these different carriers cannot be swapped.";
+        return "Arrows: choose the active arrow type from your mixed Quiver.";
     case SDL_PLAYER_ACTION_CHANGE_STAFF:
         return "Staff: choose and activate a staff from your Harness.";
     case SDL_PLAYER_ACTION_CLOSE_DOOR:
@@ -156,7 +156,7 @@ cptr sdl_player_action_menu_fallback_for_kind(int kind)
     case SDL_PLAYER_ACTION_QUICK_THROW:
         return "Throw";
     case SDL_PLAYER_ACTION_REST: return "Rest";
-    case SDL_PLAYER_ACTION_SWAP_QUIVERS: return "No swap";
+    case SDL_PLAYER_ACTION_SWAP_QUIVERS: return "Arrows";
     case SDL_PLAYER_ACTION_CHANGE_STAFF: return "Staff";
     case SDL_PLAYER_ACTION_CLOSE_DOOR: return "Close";
     case SDL_PLAYER_ACTION_BASH_DOOR: return "Bash";
@@ -1508,7 +1508,7 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
         command = 'Z';
         break;
     case SDL_PLAYER_ACTION_SWAP_QUIVERS:
-        command = KTRL('F');
+        command = '\t';
         break;
     case SDL_PLAYER_ACTION_CHANGE_STAFF:
         command = 'a';

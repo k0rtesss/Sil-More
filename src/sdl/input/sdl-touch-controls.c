@@ -5662,7 +5662,7 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         return;
     case KTRL('F'):
         SDL_strlcpy(buf,
-            "Quiver and belt cannot be swapped.",
+            "Arrows: choose the active arrow type from your mixed Quiver.",
             buflen);
         return;
     case 'a':

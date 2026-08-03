@@ -4,6 +4,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "object/object-ui-select.h"
+#include "sdl-config.h"
 #include "ui/question.h"
 
 static void prise_silmaril(void);
@@ -125,6 +126,54 @@ static bool item_tester_hook_wear(const object_type* o_ptr)
 
     /* Assume not wearable */
     return (false);
+}
+
+/* Give the player an explicit choice before knowingly binding a cursed item
+ * to their equipment.  Pack actions call do_cmd_wield() again when their
+ * delayed action completes, so do not repeat the prompt for that completion
+ * call after the player has already accepted it. */
+static bool cursed_item_known_to_player(const object_type* o_ptr)
+{
+    if (!o_ptr || !cursed_p(o_ptr))
+        return false;
+
+    if (object_known_p(o_ptr))
+        return true;
+
+    /* Sanctity and other sensing paths can reveal the curse without fully
+     * identifying the item.  These are the same visible feelings rendered as
+     * "cursed" by object_desc(). */
+    return o_ptr->discount == INSCRIP_CURSED
+        || o_ptr->discount == INSCRIP_TERRIBLE
+        || o_ptr->discount == INSCRIP_WORTHLESS;
+}
+
+static bool confirm_known_cursed_wield(const object_type* o_ptr, int item)
+{
+    ui_question_option options[2] = {
+        { 'e', "Equip anyway", TERM_ORANGE, false },
+        { 'c', "Cancel", TERM_SLATE, false }
+    };
+    char o_name[120];
+    char desc[260];
+
+    if (!o_ptr || !o_ptr->k_idx || !cursed_item_known_to_player(o_ptr)
+        || player_pack_action_completing(PLAYER_PACK_ACTION_WIELD))
+    {
+        return true;
+    }
+
+    if (item < 0)
+        object_desc_floor(o_name, sizeof(o_name), o_ptr, false, 0);
+    else
+        object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
+
+    strnfmt(desc, sizeof(desc),
+        "You know %s is cursed. Once equipped, it may be impossible to "
+        "remove.", o_name);
+
+    return ui_question_ask("Known cursed item", desc, options, 2,
+        UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 1) == 0;
 }
 
 static bool item_tester_hook_ring_slots(const object_type* o_ptr)
@@ -317,9 +366,110 @@ cptr item_use_action_name(const object_type* o_ptr, int item)
     }
 }
 
+static int choose_arrow_move_quantity(const object_type* o_ptr,
+    cptr destination, int maximum, bool partial_fit)
+{
+    char o_name[80];
+    char prompt[192];
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->number <= 0 || maximum <= 0)
+        return 0;
+
+    maximum = MIN(maximum, o_ptr->number);
+    object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
+    if (partial_fit)
+    {
+        strnfmt(prompt, sizeof(prompt),
+            "Your %s can only hold %d of %s. Move how many? (0-%d): ",
+            destination, maximum, o_name, maximum);
+        return get_quantity_touch_category_force_prompt_action(prompt, "Move",
+            maximum, SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
+    }
+
+    strnfmt(prompt, sizeof(prompt),
+        "How many do you want to move from %s to your %s? ", o_name,
+        destination);
+    return get_quantity_action(prompt, "Move", maximum);
+}
+
+static bool choose_quiver_arrow_replacement(const object_type* incoming,
+    int needed, int* replacement_item)
+{
+    object_choice_entry entries[QUIVER_ARROW_CAPACITY + 1];
+    int handles[QUIVER_ARROW_CAPACITY + 1];
+    int count;
+    int selected = -1;
+    char desc[320];
+
+    if (replacement_item)
+        *replacement_item = -1;
+    if (!incoming || !incoming->k_idx || needed <= 0 || !replacement_item)
+        return false;
+
+    count = player_quiver_arrow_slots(handles, (int)N_ELEMENTS(handles));
+    for (int i = 0; i < count; i++)
+    {
+        object_type* candidate = player_quiver_arrow_object(handles[i]);
+        char label[OBJECT_CHOICE_LABEL_LEN];
+
+        if (!candidate || !candidate->k_idx)
+            continue;
+        strnfmt(label, sizeof(label), "%d)", i + 1);
+        object_choice_entry_make(&entries[i], handles[i], candidate, label,
+            handles[i] == player_quiver_selected_arrow_slot()
+                ? "Active" : "Quiver");
+    }
+    if (count <= 0)
+        return false;
+
+    strnfmt(desc, sizeof(desc),
+        "Your quiver has %d/%d arrows. Moving the selected arrows requires "
+        "replacing %d quivered arrow%s.",
+        player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY, needed,
+        needed == 1 ? "" : "s");
+    if (!object_choice_overlay("What to replace?", desc, entries, count, 0,
+            &selected)
+        || selected < 0 || selected >= count)
+    {
+        return false;
+    }
+
+    *replacement_item = entries[selected].item;
+    return true;
+}
+
+static int drop_quiver_replacement_arrows(int item, int needed)
+{
+    object_type* o_ptr = player_quiver_arrow_object(item);
+    object_type dropped;
+    char o_name[120];
+    int amount;
+
+    if (!o_ptr || !o_ptr->k_idx || needed <= 0)
+        return 0;
+
+    amount = MIN(needed, o_ptr->number);
+    object_copy(&dropped, o_ptr);
+    dropped.number = amount;
+    dropped.pickup = false;
+    dropped.pickup_slot = -1;
+    dropped.storage = OBJECT_STORAGE_PACK;
+    dropped.next_o_idx = 0;
+    dropped.held_m_idx = 0;
+    dropped.iy = dropped.ix = 0;
+    object_desc(o_name, sizeof(o_name), &dropped, true, 3);
+
+    player_quiver_remove_arrows(item, amount);
+    drop_near(&dropped, 0, p_ptr->py, p_ptr->px);
+    msg_format("You replace %s from your quiver.", o_name);
+    p_ptr->redraw |= PR_MAP | PR_QUIVER;
+    return amount;
+}
+
 static void do_cmd_quiver_arrows(object_type* o_ptr, int item)
 {
     object_type moving;
+    int available;
     int requested;
     int placed;
 
@@ -332,13 +482,34 @@ static void do_cmd_quiver_arrows(object_type* o_ptr, int item)
         return;
     }
 
-    requested = MIN(o_ptr->number, player_quiver_arrow_space());
-    if (requested <= 0)
+    available = player_quiver_arrow_space();
+    if (available > 0)
     {
-        msg_format("Your quiver is full (%d/%d arrows).",
-            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
-        return;
+        int maximum = MIN(available, o_ptr->number);
+
+        requested = choose_arrow_move_quantity(o_ptr, "Quiver", maximum,
+            maximum < o_ptr->number);
     }
+    else
+    {
+        requested = choose_arrow_move_quantity(o_ptr, "Quiver",
+            MIN(o_ptr->number, QUIVER_ARROW_CAPACITY), false);
+        while (requested > player_quiver_arrow_space())
+        {
+            int replacement_item;
+            int needed = requested - player_quiver_arrow_space();
+
+            if (!choose_quiver_arrow_replacement(o_ptr, needed,
+                    &replacement_item))
+            {
+                return;
+            }
+            if (drop_quiver_replacement_arrows(replacement_item, needed) <= 0)
+                return;
+        }
+    }
+    if (requested <= 0)
+        return;
 
     object_copy(&moving, o_ptr);
     moving.number = requested;
@@ -1116,10 +1287,83 @@ static bool handle_iron_crown_silmaril_action(object_type* o_ptr, int item)
 /*
  * Use an item by index, helper for enhanced menus
  */
+static bool replace_pack_item_for_arrow_move(const object_type* incoming)
+{
+    int replacement_item = -1;
+    object_type* candidate;
+    int used;
+    int limit;
+    int needed;
+    int left;
+    int remove_amount;
+    char reason[280];
+
+    if (!incoming || !incoming->k_idx || incoming->number <= 0)
+        return false;
+
+    used = inventory_limit_usage_for_group(INV_LIMIT_PACK);
+    limit = inventory_limit_limit_for_group(INV_LIMIT_PACK);
+    if (inven_carry_limit_failed()
+        && inven_carry_limit_group() == INV_LIMIT_PACK)
+    {
+        limit = MAX(limit, inven_carry_limit_value());
+    }
+    needed = inventory_limit_additional_space_for_object(incoming);
+    left = MAX(limit - used, 0);
+    if (inventory_limit_space_for_object(incoming) > limit)
+    {
+        msg_format("Those arrows need %d.%d qt, more than your Pack's %d.%d "
+                   "qt maximum.",
+            inventory_limit_space_for_object(incoming) / 10,
+            ABS(inventory_limit_space_for_object(incoming) % 10), limit / 10,
+            ABS(limit % 10));
+        return false;
+    }
+    strnfmt(reason, sizeof(reason),
+        "No room in Pack: %d.%d/%d.%d qt used; %d.%d qt left, %d.%d qt "
+        "needed. Choose an item to drop.",
+        used / 10, ABS(used % 10), limit / 10, ABS(limit % 10), left / 10,
+        ABS(left % 10), needed / 10, ABS(needed % 10));
+
+    if (!open_inventory_replacement_menu(INVENTORY_MENU_GROUP_PACK, incoming,
+            false, false, reason, &replacement_item))
+    {
+        return false;
+    }
+    if (!player_inventory_handle_is_carried(replacement_item))
+        return false;
+
+    candidate = player_inventory_object(replacement_item);
+    if (!candidate || !candidate->k_idx
+        || inventory_limit_group_for_object(candidate) != INV_LIMIT_PACK)
+    {
+        return false;
+    }
+
+    remove_amount = candidate->number;
+    for (int amount = 1; amount <= candidate->number; amount++)
+    {
+        int projected = inventory_limit_usage_after_replacing(incoming,
+            candidate, amount);
+
+        if (projected >= 0 && projected <= limit)
+        {
+            remove_amount = amount;
+            break;
+        }
+    }
+
+    inven_drop(replacement_item, remove_amount);
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    notice_stuff();
+    return true;
+}
+
 static void do_cmd_unquiver_pack_arrow(int item)
 {
     object_type packed;
     object_type* o_ptr;
+    int max_quantity;
     int original_number;
     int placed;
 
@@ -1132,13 +1376,35 @@ static void do_cmd_unquiver_pack_arrow(int item)
     object_copy(&packed, o_ptr);
     packed.pickup = false;
     packed.pickup_slot = -1;
-    if (player_pack_action_start(PLAYER_PACK_ACTION_USE_ITEM, item, 0, false,
-            &packed))
+    packed.storage = OBJECT_STORAGE_PACK;
+    if (player_pack_action_start(PLAYER_PACK_ACTION_MOVE_STORAGE, item,
+            OBJECT_STORAGE_PACK, false, &packed))
         return;
-    if (!inventory_type_slot_available(&packed, true))
+
+    max_quantity = inventory_limit_max_carryable_quantity(&packed);
+    if (max_quantity > 0)
     {
-        msg_print("There is not enough room in your Pack for those arrows.");
+        int maximum = MIN(max_quantity, o_ptr->number);
+
+        packed.number = choose_arrow_move_quantity(o_ptr, "Pack", maximum,
+            maximum < o_ptr->number);
+    }
+    else
+    {
+        packed.number = choose_arrow_move_quantity(o_ptr, "Pack",
+            o_ptr->number, false);
+    }
+    if (packed.number <= 0)
         return;
+
+    while (!inventory_type_slot_available(&packed, true))
+    {
+        if (!inven_carry_limit_failed()
+            || inven_carry_limit_group() != INV_LIMIT_PACK
+            || !replace_pack_item_for_arrow_move(&packed))
+        {
+            return;
+        }
     }
 
     original_number = packed.number;
@@ -1156,7 +1422,8 @@ static void do_cmd_unquiver_pack_arrow(int item)
     p_ptr->notice |= PN_COMBINE | PN_REORDER;
     p_ptr->redraw |= PR_QUIVER;
     p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
-    msg_print("You move the arrows from your quiver to your Pack.");
+    msg_format("You move %d arrow%s from your quiver to your Pack.", placed,
+        placed == 1 ? "" : "s");
 }
 
 static bool item_storage_destination_available(const object_type* o_ptr,
@@ -1204,6 +1471,14 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
 {
     object_type* o_ptr;
     char o_name[80];
+
+    if (target_storage == OBJECT_STORAGE_PACK
+        && ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+            || (item >= 0 && inventory_slot_is_quivered_arrow(item))))
+    {
+        do_cmd_unquiver_pack_arrow(item);
+        return true;
+    }
 
     if (!player_inventory_handle_is_carried(item))
         return false;
@@ -1784,6 +2059,9 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         msg_print("Broken items must be repaired before they can be equipped.");
         return;
     }
+
+    if (!confirm_known_cursed_wield(o_ptr, item))
+        return;
 
     if (!((item < 0) && o_ptr->tval == TV_ARROW)
         && player_pack_action_start(PLAYER_PACK_ACTION_WIELD, item,

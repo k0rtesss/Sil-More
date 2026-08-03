@@ -30,8 +30,13 @@ static void give_player_item_internal(object_type* o_ptr,
 {
     char o_name[80];
     object_type copy = *o_ptr;
+    int quiver_before = player_quiver_arrow_count();
 
     int slot = inven_carry(o_ptr, true);
+    int quiver_added = player_quiver_arrow_count() - quiver_before;
+    int source_remaining = MAX(o_ptr->number, 0);
+    int carried_outside_quiver = MAX(0,
+        copy.number - source_remaining - quiver_added);
 
     if (slot == SUPPLIES_INDEX)
     {
@@ -46,22 +51,35 @@ static void give_player_item_internal(object_type* o_ptr,
         return;
     }
 
-    if (slot >= QUIVER_INDEX && slot < QUIVER_INDEX_END)
+    if (quiver_added > 0)
     {
-        object_desc(o_name, sizeof(o_name), &copy, true, 3);
+        object_type quivered;
+
+        object_copy(&quivered, &copy);
+        quivered.number = quiver_added;
+        object_desc(o_name, sizeof(o_name), &quivered, true, 3);
         msg_format("You add %s to your quiver (%d/%d arrows).", o_name,
             player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
         sound(MSG_PICK);
         p_ptr->redraw |= PR_QUIVER;
+    }
+
+    if (slot >= QUIVER_INDEX && slot < QUIVER_INDEX_END)
+    {
         handle_stuff();
         return;
     }
 
     if (slot < 0)
+    {
+        if (quiver_added > 0)
+            handle_stuff();
         return;
+    }
     
     /* Play pickup sound */
-    sound(MSG_PICK);
+    if (quiver_added <= 0)
+        sound(MSG_PICK);
 
     /* reset the pointer to the new location to pick up the count of the item
        in the inventory */
@@ -69,7 +87,18 @@ static void give_player_item_internal(object_type* o_ptr,
 
     object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
-    if (destination == OBJECT_STORAGE_PACK)
+    if (copy.tval == TV_ARROW && quiver_added > 0
+        && carried_outside_quiver > 0)
+    {
+        object_type overflow;
+
+        object_copy(&overflow, &copy);
+        overflow.number = carried_outside_quiver;
+        object_desc(o_name, sizeof(o_name), &overflow, true, 3);
+        msg_format("The remaining %s go into your Pack (%c).", o_name,
+            index_to_label(slot));
+    }
+    else if (destination == OBJECT_STORAGE_PACK)
         msg_format("You store %s in your Pack (%c).", o_name,
             index_to_label(slot));
     else if (destination == OBJECT_STORAGE_HARNESS)
