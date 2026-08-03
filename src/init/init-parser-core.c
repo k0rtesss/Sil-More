@@ -37,7 +37,7 @@ errr parse_tile_line(const char* buf, byte* x_attr, char* x_char)
     return 0;
 }
 
-/* Parse Y:<NONE|PACK|HARNESS>:<tenths of an imperial quart> storage metadata. */
+/* Parse Y:<NONE|PACK|HARNESS|JEWELRY>:<tenths of a quart> storage metadata. */
 errr parse_object_storage_line(
     const char* buf, byte* storage, s16b* volume)
 {
@@ -58,12 +58,16 @@ errr parse_object_storage_line(
         parsed_storage = OBJECT_STORAGE_PACK;
     else if (streq(pool, "HARNESS"))
         parsed_storage = OBJECT_STORAGE_HARNESS;
+    else if (streq(pool, "JEWELRY"))
+        parsed_storage = OBJECT_STORAGE_JEWELRY;
     else
         return PARSE_ERROR_GENERIC;
 
     if (parsed_volume < 0 || parsed_volume > 32767)
         return PARSE_ERROR_GENERIC;
-    if ((parsed_storage == OBJECT_STORAGE_NONE) != (parsed_volume == 0))
+    if ((parsed_storage == OBJECT_STORAGE_NONE
+            || parsed_storage == OBJECT_STORAGE_JEWELRY)
+        != (parsed_volume == 0))
         return PARSE_ERROR_GENERIC;
 
     *storage = parsed_storage;

@@ -79,7 +79,8 @@ typedef enum object_storage_type
 {
     OBJECT_STORAGE_NONE = 0,
     OBJECT_STORAGE_PACK,
-    OBJECT_STORAGE_HARNESS
+    OBJECT_STORAGE_HARNESS,
+    OBJECT_STORAGE_JEWELRY
 } object_storage_type;
 
 /* Deferred actions that require access to the Pack. */
@@ -1309,7 +1310,7 @@ struct player_type
 
     s32b total_weight; /* Total weight being carried */
 
-    s16b inven_cnt; /* Number of items in inventory */
+    s32b inven_cnt; /* Number of carried entries, including expandable ones */
     s16b equip_cnt; /* Number of items in equipment */
 
     s16b target_set; /* Target flag */
@@ -1330,7 +1331,7 @@ struct player_type
     s16b fletching; /* Fletching counter */
     s16b running; /* Running counter */
 
-    s16b fletch_item; /* Item we are currently fletching. */
+    s32b fletch_item; /* Carried handle we are currently fletching. */
 
     s16b run_cur_dir; /* Direction we are running */
     s16b run_old_dir; /* Direction we came from */

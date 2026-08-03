@@ -30,6 +30,17 @@ bool object_can_choose_pack_or_harness(const object_type* o_ptr)
     return (f4 & TR4_HARNESS_STOWABLE) != 0;
 }
 
+bool object_can_store_directly_in_pack(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    /* Honor the data-driven Y:PACK storage class directly. */
+    return o_ptr->storage == OBJECT_STORAGE_PACK
+        || o_ptr->tval == TV_ARROW
+        || object_can_choose_pack_or_harness(o_ptr);
+}
+
 void clear_inventory_limit_failure(void)
 {
     carry_limit_last_failed = false;
@@ -40,7 +51,7 @@ void clear_inventory_limit_failure(void)
 
 bool inven_index_valid(int item, cptr context)
 {
-    if (item >= 0 && item < INVEN_TOTAL)
+    if (player_inventory_handle_valid(item))
         return true;
 
     log_error("%s: invalid inventory slot %d",
@@ -51,7 +62,11 @@ bool inven_index_valid(int item, cptr context)
 static enum inventory_limit_group volume_group_for_object(
     const object_type* o_ptr)
 {
-    if (!o_ptr || !o_ptr->k_idx || object_effective_volume(o_ptr) <= 0)
+    if (!o_ptr || !o_ptr->k_idx)
+        return INV_LIMIT_NONE;
+    if (o_ptr->tval == TV_RING || o_ptr->tval == TV_AMULET)
+        return INV_LIMIT_JEWELRY;
+    if (object_effective_volume(o_ptr) <= 0)
         return INV_LIMIT_NONE;
     if (object_is_quivered_arrow(o_ptr))
         return INV_LIMIT_NONE;
@@ -165,7 +180,7 @@ static int inventory_volume_last_slot(enum inventory_limit_group group)
 {
     /* Worn Pack apparel is outside the backpack.  Harness objects remain on
      * the Harness when wielded, worn, quivered, or placed at the Belt. */
-    return group == INV_LIMIT_HARNESS ? INVEN_TOTAL - 1 : INVEN_PACK;
+    return group == INV_LIMIT_HARNESS ? INVEN_TOTAL - 1 : INVEN_PACK - 1;
 }
 
 static int projected_inventory_volume_usage_internal(
@@ -191,6 +206,33 @@ static int projected_inventory_volume_usage_internal(
         if (!o_ptr->k_idx || number <= 0)
             continue;
         if (volume_group_for_object(o_ptr) != group)
+            continue;
+
+        volume = carried_unit_volume(o_ptr, group,
+            apply_carriage_efficiency);
+        if (o_ptr->tval == TV_ARROW)
+        {
+            arrows += number;
+            arrow_volume = MAX(arrow_volume, volume);
+        }
+        else
+        {
+            usage += volume * number;
+        }
+    }
+
+    for (int i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        const object_type* o_ptr = player_carried_extra_entry_at(i);
+        int number;
+        int volume;
+
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        number = o_ptr->number;
+        if (o_ptr == removed)
+            number = MAX(0, number - MAX(remove_quantity, 0));
+        if (number <= 0 || volume_group_for_object(o_ptr) != group)
             continue;
 
         volume = carried_unit_volume(o_ptr, group,
@@ -299,6 +341,10 @@ static void fill_inventory_limit_label(enum inventory_limit_group group)
         SDL_strlcpy(carry_limit_last_label, "Harness volume",
             sizeof(carry_limit_last_label));
         break;
+    case INV_LIMIT_JEWELRY:
+        SDL_strlcpy(carry_limit_last_label, "Jewelry Pouch",
+            sizeof(carry_limit_last_label));
+        break;
     case INV_LIMIT_SUPPLY_WEIGHT:
         SDL_strlcpy(carry_limit_last_label, "supply weight",
             sizeof(carry_limit_last_label));
@@ -393,6 +439,45 @@ int inventory_limit_additional_space_for_object(const object_type* o_ptr)
     return MAX(projected - current, 0);
 }
 
+int inventory_limit_max_carryable_quantity(const object_type* o_ptr)
+{
+    enum inventory_limit_group group;
+    object_type incoming;
+    int requested;
+    int current;
+    int allowed;
+    int result = 0;
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->number <= 0
+        || !get_inventory_limit_info(o_ptr, &group, &allowed, NULL))
+    {
+        return 0;
+    }
+
+    requested = o_ptr->number;
+    current = inventory_volume_usage(group);
+    allowed = MAX(allowed, grandfathered_volume[group]);
+    object_copy(&incoming, o_ptr);
+
+    /* Keep this quantity calculation on the same projection path as the
+     * actual limit check.  In particular, arrow volume advances in bundles
+     * rather than by a fixed per-item division. */
+    for (int quantity = 1; quantity <= requested; quantity++)
+    {
+        int projected;
+
+        incoming.number = quantity;
+        projected = projected_inventory_volume_usage(group, NULL, 0,
+            &incoming);
+        if (projected > allowed)
+            break;
+        if (projected >= current)
+            result = quantity;
+    }
+
+    return result;
+}
+
 int inventory_limit_removal_space_for_object(const object_type* o_ptr)
 {
     enum inventory_limit_group group;
@@ -481,7 +566,7 @@ static bool item_tester_hook_pack_limit_group(const object_type* o_ptr)
     if (volume_group_for_object(o_ptr) != pack_limit_prompt_group)
         return false;
 
-    slot = o_ptr - inventory;
+    slot = player_inventory_handle_for_object(o_ptr);
     if (slot >= INVEN_WIELD && slot < INVEN_TOTAL && cursed_p(o_ptr))
         return false;
 
@@ -490,6 +575,15 @@ static bool item_tester_hook_pack_limit_group(const object_type* o_ptr)
 
 static int inventory_limit_group_last_slot(enum inventory_limit_group group)
 {
+    for (int index = player_carried_extra_entry_count() - 1; index >= 0;
+         index--)
+    {
+        object_type* o_ptr = player_carried_extra_entry_at(index);
+
+        if (o_ptr && o_ptr->k_idx && volume_group_for_object(o_ptr) == group)
+            return CARRIED_EXTRA_INDEX + index;
+    }
+
     for (int item = inventory_volume_last_slot(group); item >= 0; item--)
     {
         if (inventory[item].k_idx
@@ -509,10 +603,12 @@ static int inventory_limit_drop_amount(int item,
     object_type* o_ptr;
     int original_number;
 
-    if (item < 0 || item >= INVEN_TOTAL || !inventory[item].k_idx)
+    if (!player_inventory_handle_valid(item))
         return 0;
 
-    o_ptr = &inventory[item];
+    o_ptr = player_inventory_object(item);
+    if (!o_ptr || !o_ptr->k_idx)
+        return 0;
     original_number = o_ptr->number;
     for (int amount = 1; amount <= original_number; amount++)
     {
@@ -613,7 +709,8 @@ void inven_enforce_current_pack_limits(void)
             item_tester_tval = old_item_tester_tval;
             item_tester_full = old_item_tester_full;
 
-            if (item < 0 || item >= INVEN_TOTAL || !inventory[item].k_idx)
+            if (!player_inventory_handle_valid(item)
+                || !player_inventory_object(item)->k_idx)
                 break;
 
             amount = inventory_limit_drop_amount(item, group, enforce_limit);
@@ -854,6 +951,8 @@ cptr inventory_limit_group_name(enum inventory_limit_group group)
         return "Pack";
     case INV_LIMIT_HARNESS:
         return "Harness";
+    case INV_LIMIT_JEWELRY:
+        return "Jewelry Pouch";
     case INV_LIMIT_SUPPLY_WEIGHT:
         return "supply weight";
     case INV_LIMIT_TORCHES:

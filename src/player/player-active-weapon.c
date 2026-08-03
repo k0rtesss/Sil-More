@@ -459,8 +459,6 @@ typedef struct active_weapon_choice
     char label[240];
 } active_weapon_choice;
 
-#define ACTIVE_WEAPON_MAX_CHOICES (2 * (INVEN_PACK + 5))
-
 typedef struct active_weapon_preview
 {
     int attack;
@@ -510,24 +508,28 @@ static void active_weapon_preview_move_to_slot(int item, int target_slot)
 {
     object_type candidate;
     object_type displaced;
+    object_type* source;
 
     if (item == target_slot)
         return;
 
-    object_copy(&candidate, &inventory[item]);
+    source = player_inventory_object(item);
+    if (!source || !source->k_idx)
+        return;
+    object_copy(&candidate, source);
     object_copy(&displaced, &inventory[target_slot]);
     object_copy(&inventory[target_slot], &candidate);
 
-    if (item <= INVEN_PACK)
+    if (player_inventory_handle_is_carried(item))
     {
         if (displaced.k_idx)
-            object_copy(&inventory[item], &displaced);
+            object_copy(source, &displaced);
         else
-            object_wipe(&inventory[item]);
+            object_wipe(source);
     }
     else
     {
-        object_wipe(&inventory[item]);
+        object_wipe(source);
         active_weapon_preview_stow(&displaced, -1);
     }
 }
@@ -590,12 +592,15 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
 {
     player_type player_snapshot;
     object_type inventory_snapshot[INVEN_TOTAL];
+    object_type extra_source_snapshot;
+    object_type* extra_source = player_carried_extra_handle_valid(item)
+        ? player_inventory_object(item) : NULL;
     byte last_ranged_snapshot = last_ranged_weapon_mode;
     const object_type* weapon;
     const object_type* ammo;
     bool available = false;
 
-    if (!preview || !p_ptr || item < 0 || item >= INVEN_TOTAL
+    if (!preview || !p_ptr || !player_inventory_handle_valid(item)
         || target_slot < INVEN_WIELD || target_slot >= INVEN_TOTAL)
     {
         return false;
@@ -604,6 +609,8 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
     memset(preview, 0, sizeof(*preview));
     player_snapshot = *p_ptr;
     SDL_memcpy(inventory_snapshot, inventory, sizeof(inventory_snapshot));
+    if (extra_source)
+        object_copy(&extra_source_snapshot, extra_source);
 
     active_weapon_preview_move_to_slot(item, target_slot);
 
@@ -691,6 +698,8 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
 
     *p_ptr = player_snapshot;
     SDL_memcpy(inventory, inventory_snapshot, sizeof(inventory_snapshot));
+    if (extra_source)
+        object_copy(extra_source, &extra_source_snapshot);
     last_ranged_weapon_mode = last_ranged_snapshot;
     return available;
 }
@@ -876,15 +885,16 @@ static void active_weapon_object_choice_name(char* buf, size_t buflen,
 }
 
 static bool add_active_weapon_choice(active_weapon_choice choices[],
-    ui_question_option options[], int* count, int item, object_type* o_ptr,
-    int mode, int target_slot, cptr role, cptr weapon_label)
+    ui_question_option options[], int capacity, int* count, int item,
+    object_type* o_ptr, int mode, int target_slot, cptr role,
+    cptr weapon_label)
 {
     active_weapon_choice* choice;
     active_weapon_preview preview;
     char source_label[240];
 
     if (!choices || !count || *count < 0
-        || *count >= ACTIVE_WEAPON_MAX_CHOICES || !o_ptr)
+        || *count >= capacity || !o_ptr)
     {
         return false;
     }
@@ -923,8 +933,8 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
 }
 
 static void add_ranged_active_weapon_choices(active_weapon_choice choices[],
-    ui_question_option options[], int* count, int item, object_type* bow,
-    int* default_index)
+    ui_question_option options[], int capacity, int* count, int item,
+    object_type* bow, int* default_index)
 {
     int active_mode = player_active_weapon_mode();
     char bow_name[160];
@@ -945,7 +955,8 @@ static void add_ranged_active_weapon_choices(active_weapon_choice choices[],
             INVEN_QUIVER1);
         active_weapon_object_choice_name(bow_name, sizeof(bow_name), bow);
         strnfmt(label, sizeof(label), "%s; %s", bow_name, quiver_name);
-        if (!add_active_weapon_choice(choices, options, count, item, bow,
+        if (!add_active_weapon_choice(choices, options, capacity, count,
+                item, bow,
                 PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW, role, label))
         {
             return;
@@ -963,8 +974,9 @@ static void add_ranged_active_weapon_choices(active_weapon_choice choices[],
 }
 
 static void add_melee_and_throwing_active_weapon_choices(
-    active_weapon_choice choices[], ui_question_option options[], int* count,
-    int item, object_type* o_ptr, int current_mode, int* default_index)
+    active_weapon_choice choices[], ui_question_option options[], int capacity,
+    int* count, int item, object_type* o_ptr, int current_mode,
+    int* default_index)
 {
     char label[200];
     cptr role;
@@ -979,7 +991,8 @@ static void add_melee_and_throwing_active_weapon_choices(
         ? "Melee [active]"
         : "Melee";
     active_weapon_object_choice_name(label, sizeof(label), o_ptr);
-    if (add_active_weapon_choice(choices, options, count, item, o_ptr,
+    if (add_active_weapon_choice(choices, options, capacity, count, item,
+            o_ptr,
             PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, role, label)
         && item == INVEN_WIELD
         && current_mode == PLAYER_ACTIVE_WEAPON_MELEE && default_index)
@@ -998,7 +1011,8 @@ static void add_melee_and_throwing_active_weapon_choices(
         ? "Throwing [active]"
         : "Throwing";
     active_weapon_object_choice_name(label, sizeof(label), o_ptr);
-    if (add_active_weapon_choice(choices, options, count, item, o_ptr,
+    if (add_active_weapon_choice(choices, options, capacity, count, item,
+            o_ptr,
             PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_WIELD, role, label)
         && item == INVEN_WIELD
         && current_mode == PLAYER_ACTIVE_WEAPON_RANGED_1
@@ -1010,13 +1024,13 @@ static void add_melee_and_throwing_active_weapon_choices(
 }
 
 static void add_empty_active_hand_choice(active_weapon_choice choices[],
-    ui_question_option options[], int* count, int current_mode,
-    int* default_index)
+    ui_question_option options[], int capacity, int* count,
+    int current_mode, int* default_index)
 {
     active_weapon_choice* choice;
 
     if (!choices || !options || !count || !default_index
-        || *count < 0 || *count >= ACTIVE_WEAPON_MAX_CHOICES
+        || *count < 0 || *count >= capacity
         || current_mode != PLAYER_ACTIVE_WEAPON_MELEE
         || inventory[INVEN_WIELD].k_idx)
     {
@@ -1074,9 +1088,10 @@ static void prepare_active_weapon_menu_choices(
 
 static bool choose_active_weapon(active_weapon_choice* selected)
 {
-    active_weapon_choice choices[ACTIVE_WEAPON_MAX_CHOICES];
-    ui_question_option options[ACTIVE_WEAPON_MAX_CHOICES];
-    const object_type* object_icons[ACTIVE_WEAPON_MAX_CHOICES];
+    int capacity = 2 * (player_pack_entry_count() + 5);
+    active_weapon_choice* choices;
+    ui_question_option* options;
+    const object_type** object_icons;
     int count = 0;
     int default_index = 0;
     int selected_index = -1;
@@ -1085,18 +1100,27 @@ static bool choose_active_weapon(active_weapon_choice* selected)
     if (!selected)
         return false;
 
-    add_empty_active_hand_choice(choices, options, &count, current_mode,
-        &default_index);
-    add_melee_and_throwing_active_weapon_choices(choices, options, &count,
-        INVEN_WIELD, &inventory[INVEN_WIELD], current_mode, &default_index);
-    add_melee_and_throwing_active_weapon_choices(choices, options, &count,
-        INVEN_ARM, &inventory[INVEN_ARM], current_mode, &default_index);
-    add_melee_and_throwing_active_weapon_choices(choices, options, &count,
-        INVEN_BELT, &inventory[INVEN_BELT], current_mode, &default_index);
+    choices = mem_alloc_array(capacity, active_weapon_choice);
+    options = mem_alloc_array(capacity, ui_question_option);
+    object_icons = mem_alloc_array(capacity, const object_type*);
 
-    for (int i = 0; i < INVEN_PACK; i++)
+    add_empty_active_hand_choice(choices, options, capacity, &count,
+        current_mode,
+        &default_index);
+    add_melee_and_throwing_active_weapon_choices(choices, options, capacity,
+        &count, INVEN_WIELD, &inventory[INVEN_WIELD], current_mode,
+        &default_index);
+    add_melee_and_throwing_active_weapon_choices(choices, options, capacity,
+        &count, INVEN_ARM, &inventory[INVEN_ARM], current_mode,
+        &default_index);
+    add_melee_and_throwing_active_weapon_choices(choices, options, capacity,
+        &count, INVEN_BELT, &inventory[INVEN_BELT], current_mode,
+        &default_index);
+
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
 
         if (!object_is_harness_weapon(o_ptr)
             || !object_is_melee_combat_weapon(o_ptr))
@@ -1105,26 +1129,30 @@ static bool choose_active_weapon(active_weapon_choice* selected)
         }
 
         add_melee_and_throwing_active_weapon_choices(choices, options,
-            &count, i, o_ptr, current_mode, &default_index);
+            capacity, &count, item, o_ptr, current_mode, &default_index);
     }
 
-    add_ranged_active_weapon_choices(choices, options, &count, INVEN_BOW,
-        &inventory[INVEN_BOW], &default_index);
+    add_ranged_active_weapon_choices(choices, options, capacity, &count,
+        INVEN_BOW, &inventory[INVEN_BOW], &default_index);
 
-    for (int i = 0; i < INVEN_PACK; i++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
 
         if (!object_is_harness_weapon(o_ptr) || o_ptr->tval != TV_BOW)
             continue;
 
-        add_ranged_active_weapon_choices(choices, options, &count, i, o_ptr,
-            &default_index);
+        add_ranged_active_weapon_choices(choices, options, capacity, &count,
+            item, o_ptr, &default_index);
     }
 
     if (count <= 0)
     {
         msg_print("You have no combat weapon to ready.");
+        choices = mem_free(choices);
+        options = mem_free(options);
+        object_icons = mem_free(object_icons);
         return false;
     }
 
@@ -1140,9 +1168,17 @@ static bool choose_active_weapon(active_weapon_choice* selected)
             UI_QUESTION_GLOBAL, default_index);
 
     if (selected_index < 0 || selected_index >= count)
+    {
+        choices = mem_free(choices);
+        options = mem_free(options);
+        object_icons = mem_free(object_icons);
         return false;
+    }
 
     *selected = choices[selected_index];
+    choices = mem_free(choices);
+    options = mem_free(options);
+    object_icons = mem_free(object_icons);
     return true;
 }
 
@@ -1302,23 +1338,26 @@ int player_power_throw_target_m_idx(void)
 
 static bool harness_throw_source_slot(int slot)
 {
-    if (slot < 0 || slot >= INVEN_TOTAL || slot == INVEN_QUIVER1)
+    object_type* o_ptr = player_inventory_object(slot);
+
+    if (!o_ptr || !o_ptr->k_idx || slot == INVEN_QUIVER1)
         return false;
-    return inventory_limit_group_for_object(&inventory[slot])
+    return inventory_limit_group_for_object(o_ptr)
         == INV_LIMIT_HARNESS;
 }
 
 bool player_can_power_throw_from_harness(int slot)
 {
     if (!harness_throw_source_slot(slot)
-        || (slot >= INVEN_WIELD && player_equipment_slot_is_active(slot)))
+        || (slot >= INVEN_WIELD && slot < INVEN_TOTAL
+            && player_equipment_slot_is_active(slot)))
         return false;
     if (!player_power_throw_ready())
         return false;
     if (!player_power_throw_target_m_idx())
         return false;
 
-    return player_power_throw_weapon_eligible(&inventory[slot]);
+    return player_power_throw_weapon_eligible(player_inventory_object(slot));
 }
 
 bool player_can_quick_throw_from_harness(int slot)
@@ -1327,7 +1366,8 @@ bool player_can_quick_throw_from_harness(int slot)
 
     if (!harness_throw_source_slot(slot))
         return false;
-    if (slot >= INVEN_WIELD && player_equipment_slot_is_active(slot))
+    if (slot >= INVEN_WIELD && slot < INVEN_TOTAL
+        && player_equipment_slot_is_active(slot))
         return false;
     if (slot != INVEN_BELT
         && !p_ptr->active_ability[S_MEL][MEL_THROWING])
@@ -1335,7 +1375,7 @@ bool player_can_quick_throw_from_harness(int slot)
     if (!player_active_weapon_allows_quick_throw())
         return false;
 
-    o_ptr = &inventory[slot];
+    o_ptr = player_inventory_object(slot);
     return object_is_dagger(o_ptr);
 }
 
@@ -1343,6 +1383,14 @@ int player_quick_throw_harness_slot(void)
 {
     for (int slot = 0; slot < INVEN_TOTAL; slot++)
     {
+        if (player_can_quick_throw_from_harness(slot))
+            return slot;
+    }
+
+    for (int i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        int slot = CARRIED_EXTRA_INDEX + i;
+
         if (player_can_quick_throw_from_harness(slot))
             return slot;
     }
@@ -1376,9 +1424,9 @@ bool player_has_throwable_potion(void)
     }
 
     /* Keep compatibility with saves that have not ingested pack supplies. */
-    for (i = 0; i < INVEN_PACK; i++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        object_type* o_ptr = player_pack_entry_at(ordinal);
 
         if (potion_has_thrown_effect(o_ptr))
             return true;
@@ -1693,31 +1741,35 @@ static bool active_weapon_wield_to_slot(const object_type* source, int item,
 
 static bool active_weapon_offer_shield(void)
 {
-    object_choice_entry entries[INVEN_PACK];
-    int items[INVEN_PACK];
+    int capacity = MAX(player_pack_entry_count(), 1);
+    object_choice_entry* entries = mem_alloc_array(capacity,
+        object_choice_entry);
+    int* items = mem_alloc_array(capacity, int);
     int count = 0;
     int selected = -1;
     char shield_name[120];
     char prompt[180];
 
     if (!active_weapon_is_one_handed(&inventory[INVEN_WIELD]))
-        return false;
+        goto no_shield;
     if (inventory[INVEN_ARM].k_idx
         && inventory[INVEN_ARM].tval == TV_SHIELD)
     {
-        return false;
+        goto no_shield;
     }
     if (inventory[INVEN_ARM].k_idx && cursed_p(&inventory[INVEN_ARM]))
-        return false;
+        goto no_shield;
     if (c_info[p_ptr->pcharacter].flags_u & UNQ_MEL_MAEDHROS)
-        return false;
+        goto no_shield;
 
-    for (int i = 0; i < INVEN_PACK; i++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
         char label[OBJECT_CHOICE_LABEL_LEN];
         char key;
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
 
-        if (!active_weapon_shield_candidate(&inventory[i]))
+        if (!active_weapon_shield_candidate(o_ptr))
             continue;
 
         key = active_weapon_choice_key(count);
@@ -1725,36 +1777,47 @@ static bool active_weapon_offer_shield(void)
             strnfmt(label, sizeof(label), "%c)", key);
         else
             label[0] = '\0';
-        object_choice_entry_make(&entries[count], i, &inventory[i], label,
+        object_choice_entry_make(&entries[count], item, o_ptr, label,
             NULL);
-        items[count++] = i;
+        items[count++] = item;
     }
 
     if (count <= 0)
-        return false;
+        goto no_shield;
 
     if (count == 1)
     {
-        object_desc(shield_name, sizeof(shield_name), &inventory[items[0]],
-            true, 3);
+        object_desc(shield_name, sizeof(shield_name),
+            player_inventory_object(items[0]), true, 3);
         strnfmt(prompt, sizeof(prompt), "Add %s to your active weapon? ",
             shield_name);
         if (!get_check(prompt))
-            return false;
+            goto no_shield;
         selected = 0;
     }
     else if (!object_choice_overlay("Add a shield?",
                  "Choose a shield to equip, or cancel to leave your off hand unchanged.",
                  entries, count, 0, &selected))
     {
-        return false;
+        goto no_shield;
     }
 
     if (selected < 0 || selected >= count)
-        return false;
+        goto no_shield;
 
-    return active_weapon_wield_to_slot(&inventory[items[selected]],
-        items[selected], INVEN_ARM, false);
+    {
+        bool wielded = active_weapon_wield_to_slot(
+            player_inventory_object(items[selected]), items[selected],
+            INVEN_ARM, false);
+        entries = mem_free(entries);
+        items = mem_free(items);
+        return wielded;
+    }
+
+no_shield:
+    entries = mem_free(entries);
+    items = mem_free(items);
+    return false;
 }
 
 static void apply_active_weapon_choice(const active_weapon_choice* choice)

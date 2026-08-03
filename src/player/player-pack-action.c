@@ -20,8 +20,8 @@ static object_type* pack_action_object(int item)
 {
     if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
         return player_quiver_arrow_object(item);
-    if (item >= 0 && item < INVEN_TOTAL)
-        return &inventory[item];
+    if (player_inventory_handle_valid(item))
+        return player_inventory_object(item);
     if (item < 0 && 0 - item > 0 && 0 - item < o_max)
         return &o_list[0 - item];
 
@@ -108,8 +108,10 @@ static bool player_pack_action_start_internal(player_pack_action_kind kind,
     object_copy(&pack_action.object, o_ptr);
 
     object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-    if (kind == PLAYER_PACK_ACTION_MOVE_STORAGE
-        && arg == OBJECT_STORAGE_PACK)
+    if ((kind == PLAYER_PACK_ACTION_PICKUP
+            && arg == OBJECT_STORAGE_PACK)
+        || (kind == PLAYER_PACK_ACTION_MOVE_STORAGE
+            && arg == OBJECT_STORAGE_PACK))
     {
         msg_format("You begin opening your Pack to store %s.", o_name);
     }
@@ -211,7 +213,12 @@ static void player_pack_action_complete(player_pack_action_kind kind, int item,
         do_cmd_activate_by_index(item);
         break;
     case PLAYER_PACK_ACTION_PICKUP:
-        py_pickup_aux(0 - item);
+        if (arg == OBJECT_STORAGE_PACK)
+            py_pickup_aux_to_pack(0 - item);
+        else if (arg == OBJECT_STORAGE_HARNESS)
+            py_pickup_aux_to_harness(0 - item);
+        else
+            py_pickup_aux(0 - item);
         break;
     case PLAYER_PACK_ACTION_JEWELRY_PRESET:
         (void)do_cmd_jewelry_preset_apply(arg);
@@ -246,6 +253,22 @@ void player_pack_action_process(void)
     }
 
     o_ptr = pack_action_object(pack_action.item);
+    if (!pack_action_object_matches(o_ptr)
+        && player_inventory_handle_is_carried(pack_action.item))
+    {
+        for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
+        {
+            int candidate = player_pack_entry_handle_at(ordinal);
+            object_type* candidate_ptr = player_inventory_object(candidate);
+
+            if (pack_action_object_matches(candidate_ptr))
+            {
+                pack_action.item = candidate;
+                o_ptr = candidate_ptr;
+                break;
+            }
+        }
+    }
     if (!pack_action_object_matches(o_ptr))
     {
         player_pack_action_cancel();

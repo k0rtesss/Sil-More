@@ -14,7 +14,7 @@
 # T: tile row : tile column
 # I: tval : sval : pval
 # W: depth : rarity_weight (legacy) : weight : cost
-# Y: storage pool (NONE, PACK, or HARNESS) : volume in tenths of an imperial quart
+# Y: storage pool (NONE, PACK, HARNESS, or JEWELRY) : volume in tenths of an imperial quart
 # P: plus to-hit : damage dice : plus to-evasion : protection dice
 # R: STAT : max_value
 # A: depth/rarity_weight : depth/rarity_weight : etc
@@ -51,6 +51,7 @@
 #
 # 'Y' is for stowage. PACK is the back-carried load; HARNESS is gear
 #     secured to belts, scabbards, slings, and similar ready carriage.
+#     JEWELRY is the zero-volume pouch for rings and amulets.
 #     Volume is measured in tenths of an imperial quart (Y:PACK:35 means 3.5 qt).
 #     Larger entries in the historical table are rounded to the nearest 0.5 qt
 #     for easier play; tiny items retain 0.1 qt steps.
@@ -133,7 +134,7 @@ G:&:w
 N:1:& Serpentine Ring~
 G:=:g1
 I:45:32:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:1:0:1:65000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -148,7 +149,7 @@ D: not for display alone but for memory, oath, and inheritance.
 N:2:& Ring~
 G:=:D
 I:45:30:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:1:0:1:65000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -163,7 +164,7 @@ D: better felt than boasted.
 N:3:& Amulet~
 G:":D
 I:40:10:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:1:0:1:65000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -178,7 +179,7 @@ D: starlight, and song met together.
 N:4:& Pearl~
 G:":w
 I:40:13:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:1:0:1:100000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -192,7 +193,7 @@ D: gathered from deep waters and long remembered.
 N:5:& Jewel~
 G:":g
 I:40:16:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:1:0:1:50000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -206,7 +207,7 @@ D: healing and youth have somehow been remembered.
 N:6:& Necklace~
 G:":y
 I:40:12:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:1:0:1:75000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -222,7 +223,7 @@ D: master-craft rather than mere display.
 N:7:& Ring~
 G:=:D
 I:45:31:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:1:0:1:1000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -237,7 +238,7 @@ N:10:& Ring~
 G:=:W
 T:11:29
 I:45:40:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:1:0:1:1000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -254,7 +255,7 @@ N:11:& Amulet~
 G:":W
 T:11:27
 I:40:40:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:1:0:1:1000
 P:0:0d0:0:0d0
 F:INSTA_ART
@@ -1530,7 +1531,7 @@ D: It will shine forever.
 N:132:Last Chances
 G:":d
 I:40:0:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:7:0:1:20
 P:0:0d0:0:0d0
 A:10/10
@@ -1544,7 +1545,7 @@ D: the proud.
 N:133:Constitution
 G:":d
 I:40:1:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:8:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:1
@@ -1563,7 +1564,7 @@ D: living stone, kept against wasting by a cleaner power.
 N:134:Grace
 G:":d
 I:40:2:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:10:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:1
@@ -1582,7 +1583,7 @@ D: of a spirit more nearly attuned to clean song and truth.
 N:135:Regeneration
 G:":d
 I:40:3:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:12:0:1:600
 P:0:0d0:0:0d0
 A:6/40
@@ -1600,7 +1601,7 @@ D: and renewed.
 N:136:Preservation
 G:":d
 I:40:4:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:14:0:1:20000
 P:0:0d0:0:0d0
 A:5/40
@@ -1634,7 +1635,7 @@ D: the long road seem less eager to consume what is good.
 N:138:Haunted Dreams
 G:":d
 I:40:6:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:9:0:1:0
 P:0:0d0:0:0d0
 A:7/80
@@ -1649,7 +1650,7 @@ D: this world.
 N:139:the Vigilant Eye
 G:":d
 I:40:7:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:4:0:1:1
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1669,7 +1670,7 @@ D: to prevail against a mind resolved in cleaner light.
 N:140:the Slave Pits
 G:":d
 I:40:8:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:5:0:1:0
 P:0:0d0:0:0d0
 A:7/100:14/0
@@ -1689,7 +1690,7 @@ D: without hope or the memory of stars.
 N:141:the Shadow
 G:":d
 I:40:9:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:6:0:1:100
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1707,7 +1708,7 @@ D: service of the Enemy.
 N:142:the Orc-captain
 G:":d
 I:40:10:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:7:0:1:0
 P:2:0d0:2:0d0
 A:7/70
@@ -1724,7 +1725,7 @@ D: whose makers had no thought of grace nor beauty.
 N:143:the Earth-delver
 G:":d
 I:40:11:2
-Y:HARNESS:1
+Y:JEWELRY:0
 W:10:0:1:2000
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1744,7 +1745,7 @@ D: needed them fewer still.
 N:144:the Hidden Realm
 G:":d
 I:40:14:2
-Y:HARNESS:1
+Y:JEWELRY:0
 W:12:0:1:2000
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1767,7 +1768,7 @@ D: heart while it is worn.
 N:150:Secrets
 G:=:d
 I:45:0:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:15:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1787,7 +1788,7 @@ D: rather than mere suspicion had been set in the stone.
 N:151:Ered Luin
 G:=:d
 I:45:1:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:8:0:1:150
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -1804,7 +1805,7 @@ D: lingers in this ring.
 N:152:Evasion
 G:=:d
 I:45:2:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:8:0:1:500
 P:0:0d0:1:0d0
 R:EVN:3
@@ -1823,7 +1824,7 @@ D: courtesy instead of naked fear.
 N:153:Protection
 G:":d
 I:40:15:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:7:0:1:500
 P:0:0d0:0:1d1
 R:PS:3
@@ -1841,7 +1842,7 @@ D: more gently and more surely turned aside.
 N:154:Strength
 G:=:d
 I:45:4:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:9:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:1
@@ -1860,7 +1861,7 @@ D: and steadfast deeds.
 N:155:Dexterity
 G:=:d
 I:45:5:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:10:0:1:500
 P:0:0d0:0:0d0
 R:PVAL:1
@@ -1879,7 +1880,7 @@ D: can only imitate.
 N:156:Frost
 G:=:d
 I:45:6:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:9:0:1:250
 P:0:0d0:0:0d0
 A:12/50
@@ -1892,7 +1893,7 @@ D: the Enemy.
 N:157:Warmth
 G:=:d
 I:45:7:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:10:0:1:250
 P:0:0d0:0:0d0
 A:11/70
@@ -1905,7 +1906,7 @@ D: shields the wearer from the bitter cold of the north.
 N:158:Accuracy
 G:=:d
 I:45:8:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:12:0:1:500
 P:1:0d0:0:0d0
 R:ATT:3
@@ -1921,7 +1922,7 @@ D: and held, so that hand and eye agree with unusual certainty.
 N:159:Free Action
 G:=:d
 I:45:9:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:12:0:1:1500
 P:0:0d0:0:0d0
 A:12/20
@@ -1940,7 +1941,7 @@ D: stood against the binding malice of Morgoth.
 N:160:Cowardice
 G:=:d
 I:45:10:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:7:0:1:0
 P:0:0d0:1:0d0
 A:5/100
@@ -1955,7 +1956,7 @@ D: nimble.
 N:161:Bauglir's Vanguard
 G:=:d
 I:45:11:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:6:0:1:300
 P:0:0d0:0:1d2
 A:5/80
@@ -1970,7 +1971,7 @@ D: earth cannot sate.
 N:162:Venom's End
 G:=:d
 I:45:12:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:6:0:1:1000
 P:0:0d0:0:0d0
 A:10/30
@@ -1987,7 +1988,7 @@ D: more readily denied to one who wears it.
 N:163:Angband's Forge
 G:=:d
 I:45:13:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:5:0:1:100
 P:0:0d0:0:1d2
 A:4/80
@@ -2003,7 +2004,7 @@ D: bitter cold of Utumno straight to their heart.
 N:164:the Deep Cold of Utumno
 G:=:d
 I:45:14:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:5:0:1:100
 P:0:0d0:0:1d2
 A:3/70
@@ -2019,7 +2020,7 @@ D: defenseless, searing them with magnified fury.
 N:165:the Iron Fist
 G:=:d
 I:45:15:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:6:0:1:0
 P:0:0d0:0:0d0
 A:8/60
@@ -2037,7 +2038,7 @@ D: for it was made without art and without love.
 N:166:the Watchful Slave
 G:=:d
 I:45:16:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:4:0:1:0
 P:0:0d0:0:0d0
 R:PVAL:2
@@ -2054,7 +2055,7 @@ D: first bore it in the darkness beneath the mountains.
 N:167:Venom
 G:=:d
 I:45:17:0
-Y:HARNESS:1
+Y:JEWELRY:0
 W:4:0:1:0
 P:0:0d0:0:1d2
 A:2/80
@@ -2071,7 +2072,7 @@ D: to the will of their cruel masters.
 N:168:Morgoth's Dominion
 G:=:d
 I:45:18:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:12:0:1:300
 P:0:0d0:0:0d0
 R:PVAL:2
@@ -2089,7 +2090,7 @@ D: by its presence.
 N:169:Fell Voices
 G:=:d
 I:45:19:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:7:0:1:0
 P:0:0d0:0:0d0
 R:PVAL:2
@@ -2109,7 +2110,7 @@ D: is worn.
 N:171:the Laiquendi
 G:=:d
 I:45:21:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:8:0:1:1000
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -2133,7 +2134,7 @@ D: hunters: swift of step and keen with the bow.
 N:173:the Keen Hand
 G:=:d
 I:45:22:2
-Y:HARNESS:1
+Y:JEWELRY:0
 W:13:0:1:2000
 P:0:0d0:0:0d0
 R:PVAL:3
@@ -2153,7 +2154,7 @@ D: wearer's purpose.
 N:174:the Iron Guard
 G:=:d
 I:45:23:2
-Y:HARNESS:1
+Y:JEWELRY:0
 W:12:0:1:2000
 P:0:0d0:0:0d0
 R:PVAL:3

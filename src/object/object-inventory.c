@@ -7,6 +7,255 @@
 #include "log/log.h"
 #include "supplies.h"
 
+/* The first 23 carried entries remain in inventory[] for save compatibility.
+ * Further Pack, Harness, and Jewelry Pouch entries use stable object
+ * allocations addressed by synthetic handles.  Growing the pointer table
+ * never invalidates object pointers held by an open item browser. */
+static object_type** carried_extra_entries = NULL;
+static int carried_extra_count = 0;
+static int carried_extra_capacity = 0;
+
+static bool player_carried_extra_reserve(int needed)
+{
+    object_type** resized;
+    int new_capacity;
+
+    if (needed <= carried_extra_capacity)
+        return true;
+    if (needed < 0 || needed >= QUIVER_INDEX - CARRIED_EXTRA_INDEX)
+        return false;
+
+    new_capacity = carried_extra_capacity > 0 ? carried_extra_capacity : 16;
+    while (new_capacity < needed)
+    {
+        if (new_capacity > (QUIVER_INDEX - CARRIED_EXTRA_INDEX) / 2)
+        {
+            new_capacity = needed;
+            break;
+        }
+        new_capacity *= 2;
+    }
+
+    resized = SDL_realloc(carried_extra_entries,
+        (size_t)new_capacity * sizeof(*carried_extra_entries));
+    if (!resized)
+    {
+        log_error("Unable to grow expandable carried inventory to %d entries",
+            needed);
+        return false;
+    }
+
+    for (int i = carried_extra_capacity; i < new_capacity; i++)
+        resized[i] = NULL;
+    carried_extra_entries = resized;
+    carried_extra_capacity = new_capacity;
+    return true;
+}
+
+void player_carried_extra_reset_store(void)
+{
+    for (int i = 0; i < carried_extra_count; i++)
+        carried_extra_entries[i] = mem_free(carried_extra_entries[i]);
+    carried_extra_entries = mem_free(carried_extra_entries);
+    carried_extra_count = 0;
+    carried_extra_capacity = 0;
+}
+
+int player_carried_extra_entry_count(void)
+{
+    return carried_extra_count;
+}
+
+object_type* player_carried_extra_entry_at(int index)
+{
+    if (index < 0 || index >= carried_extra_count)
+        return NULL;
+    return carried_extra_entries[index];
+}
+
+bool player_carried_extra_handle_valid(int item)
+{
+    int index = item - CARRIED_EXTRA_INDEX;
+
+    return index >= 0 && index < carried_extra_count
+        && carried_extra_entries[index]
+        && carried_extra_entries[index]->k_idx;
+}
+
+object_type* player_inventory_object(int item)
+{
+    if (item >= 0 && item < INVEN_TOTAL)
+        return &inventory[item];
+    if (player_carried_extra_handle_valid(item))
+        return carried_extra_entries[item - CARRIED_EXTRA_INDEX];
+    return NULL;
+}
+
+int player_inventory_handle_for_object(const object_type* o_ptr)
+{
+    if (!o_ptr)
+        return -1;
+    for (int item = 0; item < INVEN_TOTAL; item++)
+    {
+        if (o_ptr == &inventory[item])
+            return item;
+    }
+    for (int index = 0; index < carried_extra_count; index++)
+    {
+        if (o_ptr == carried_extra_entries[index])
+            return CARRIED_EXTRA_INDEX + index;
+    }
+    return -1;
+}
+
+bool player_inventory_handle_valid(int item)
+{
+    return (item >= 0 && item < INVEN_TOTAL)
+        || player_carried_extra_handle_valid(item);
+}
+
+bool player_inventory_handle_is_carried(int item)
+{
+    return (item >= 0 && item < INVEN_PACK)
+        || player_carried_extra_handle_valid(item);
+}
+
+int player_pack_entry_count(void)
+{
+    int count = carried_extra_count;
+
+    for (int item = 0; item < INVEN_PACK; item++)
+    {
+        if (inventory[item].k_idx)
+            count++;
+    }
+    return count;
+}
+
+int player_pack_entry_handle_at(int ordinal)
+{
+    if (ordinal < 0)
+        return -1;
+
+    for (int item = 0; item < INVEN_PACK; item++)
+    {
+        if (!inventory[item].k_idx)
+            continue;
+        if (ordinal-- == 0)
+            return item;
+    }
+
+    return ordinal < carried_extra_count
+        ? CARRIED_EXTRA_INDEX + ordinal : -1;
+}
+
+object_type* player_pack_entry_at(int ordinal)
+{
+    return player_inventory_object(player_pack_entry_handle_at(ordinal));
+}
+
+char player_inventory_label(int item)
+{
+    if (item >= INVEN_WIELD && item < INVEN_TOTAL)
+        return index_to_label(item);
+
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
+    {
+        if (player_pack_entry_handle_at(ordinal) == item)
+            return ordinal < 26 ? I2A(ordinal) : '*';
+    }
+    return '?';
+}
+
+static bool player_carried_extra_store_copy(const object_type* o_ptr,
+    bool count_entry)
+{
+    object_type* stored;
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->number <= 0
+        || !player_carried_extra_reserve(carried_extra_count + 1))
+    {
+        return false;
+    }
+
+    stored = mem_alloc(object_type);
+    if (!stored)
+    {
+        log_error("Unable to allocate an expandable carried entry");
+        return false;
+    }
+    object_copy(stored, o_ptr);
+    stored->next_o_idx = 0;
+    stored->held_m_idx = 0;
+    stored->iy = stored->ix = 0;
+    stored->marked = false;
+    stored->pickup = false;
+    stored->pickup_slot = -1;
+    stored->ident |= IDENT_HANDLED;
+    carried_extra_entries[carried_extra_count++] = stored;
+    if (count_entry && p_ptr)
+        p_ptr->inven_cnt++;
+    return true;
+}
+
+bool player_carried_extra_load(const object_type* o_ptr)
+{
+    return player_carried_extra_store_copy(o_ptr, true);
+}
+
+static int player_carried_extra_add(object_type* o_ptr)
+{
+    object_type part;
+    int placed;
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->number <= 0)
+        return -1;
+
+    object_copy(&part, o_ptr);
+    placed = MIN(part.number, object_stack_limit(&part));
+    part.number = placed;
+    if (!player_carried_extra_store_copy(&part, true))
+        return -1;
+
+    o_ptr->number -= placed;
+    return CARRIED_EXTRA_INDEX + carried_extra_count - 1;
+}
+
+static void player_carried_extra_remove_index(int index, bool count_entry)
+{
+    if (index < 0 || index >= carried_extra_count)
+        return;
+
+    carried_extra_entries[index] = mem_free(carried_extra_entries[index]);
+    for (int i = index; i + 1 < carried_extra_count; i++)
+        carried_extra_entries[i] = carried_extra_entries[i + 1];
+    carried_extra_count--;
+    carried_extra_entries[carried_extra_count] = NULL;
+    if (count_entry && p_ptr)
+        p_ptr->inven_cnt--;
+}
+
+static void player_carried_promote_extra_to_physical(void)
+{
+    int empty = -1;
+
+    if (carried_extra_count <= 0)
+        return;
+    for (int item = 0; item < INVEN_PACK; item++)
+    {
+        if (!inventory[item].k_idx)
+        {
+            empty = item;
+            break;
+        }
+    }
+    if (empty < 0)
+        return;
+
+    object_copy(&inventory[empty], carried_extra_entries[0]);
+    player_carried_extra_remove_index(0, false);
+}
+
 
 void inven_item_charges(int item)
 {
@@ -14,7 +263,7 @@ void inven_item_charges(int item)
         return;
 
     int visible_charges = 0;
-    object_type* o_ptr = &inventory[item];
+    object_type* o_ptr = player_inventory_object(item);
 
     /* Require staff */
     if (o_ptr->tval != TV_STAFF)
@@ -42,7 +291,7 @@ void inven_item_describe(int item)
     if (!inven_index_valid(item, "inven_item_describe"))
         return;
 
-    object_type* o_ptr = &inventory[item];
+    object_type* o_ptr = player_inventory_object(item);
 
     char o_name[80];
 
@@ -53,7 +302,8 @@ void inven_item_describe(int item)
 
         /* Print a message */
         msg_format(
-            "You no longer have the %s (%c).", o_name, index_to_label(item));
+            "You no longer have the %s (%c).", o_name,
+            player_inventory_label(item));
     }
     else
     {
@@ -61,7 +311,7 @@ void inven_item_describe(int item)
         object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
         /* Print a message */
-        msg_format("You have %s (%c).", o_name, index_to_label(item));
+        msg_format("You have %s (%c).", o_name, player_inventory_label(item));
     }
 }
 
@@ -73,7 +323,7 @@ void inven_item_increase(int item, int num)
     if (!inven_index_valid(item, "inven_item_increase"))
         return;
 
-    object_type* o_ptr = &inventory[item];
+    object_type* o_ptr = player_inventory_object(item);
 
     /* Log staff number changes for debugging */
     if (o_ptr->tval == TV_STAFF)
@@ -134,7 +384,7 @@ void inven_item_optimize(int item)
     if (!inven_index_valid(item, "inven_item_optimize"))
         return;
 
-    object_type* o_ptr = &inventory[item];
+    object_type* o_ptr = player_inventory_object(item);
 
     /* Only optimize real items */
     if (!o_ptr->k_idx)
@@ -158,8 +408,14 @@ void inven_item_optimize(int item)
                   item, o_ptr->k_idx, o_ptr->sval, o_ptr->pval);
     }
 
-    /* The item is in the pack */
-    if (item < INVEN_WIELD)
+    if (player_carried_extra_handle_valid(item))
+    {
+        player_carried_extra_remove_index(item - CARRIED_EXTRA_INDEX, true);
+        p_ptr->window |= PW_INVEN;
+    }
+
+    /* The item is in the legacy physical carried range. */
+    else if (item < INVEN_WIELD)
     {
         int i;
 
@@ -175,6 +431,10 @@ void inven_item_optimize(int item)
 
         /* Hack -- wipe hole */
         memset(&inventory[i], 0, sizeof(object_type));
+
+        /* Keep the compatibility range populated while expandable entries
+         * remain, without changing the total carried-entry count. */
+        player_carried_promote_extra_to_physical();
 
         /* Window stuff */
         p_ptr->window |= (PW_INVEN);
@@ -309,53 +569,33 @@ void floor_item_optimize(int item)
  */
 void check_pack_overflow(void)
 {
-    if (inventory[INVEN_PACK].k_idx)
+    object_type moving;
+
+    if (!inventory[INVEN_PACK].k_idx)
+        return;
+
+    /* Slot 23 is retained only as a compatibility staging slot.  Move any
+     * transient occupant into expandable carried storage instead of dropping
+     * it because an obsolete row count was reached. */
+    object_copy(&moving, &inventory[INVEN_PACK]);
+    object_wipe(&inventory[INVEN_PACK]);
+    p_ptr->inven_cnt--;
+
+    while (moving.k_idx && moving.number > 0)
     {
-        int item = INVEN_PACK;
+        if (player_carried_extra_add(&moving) < 0)
+        {
+            char o_name[80];
 
-        char o_name[80];
-
-        object_type* o_ptr;
-
-        /* Get the slot to be dropped */
-        o_ptr = &inventory[item];
-
-        /* Disturbing */
-        disturb(0, 0);
-
-        /* Warning */
-        msg_print("Your pack overflows!");
-
-        /* Describe */
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
-
-        /* Message */
-        msg_format("You drop %s (%c).", o_name, index_to_label(item));
-
-        /* Drop it (carefully) near the player */
-        drop_near(o_ptr, 0, p_ptr->py, p_ptr->px);
-
-        /* Modify, Describe, Optimize */
-        inven_item_increase(item, -255);
-        inven_item_describe(item);
-        inven_item_optimize(item);
-
-        /* Notice stuff (if needed) */
-        if (p_ptr->notice)
-            notice_stuff();
-
-        /* Update stuff (if needed) */
-        if (p_ptr->update)
-            update_stuff();
-
-        /* Redraw stuff (if needed) */
-        if (p_ptr->redraw)
-            redraw_stuff();
-
-        /* Window stuff (if needed) */
-        if (p_ptr->window)
-            window_stuff();
+            object_desc(o_name, sizeof(o_name), &moving, true, 3);
+            msg_format("Unable to expand carried inventory; you drop %s.",
+                o_name);
+            drop_near(&moving, 0, p_ptr->py, p_ptr->px);
+            break;
+        }
     }
+
+    p_ptr->window |= PW_INVEN;
 }
 
 static object_type quiver_arrow_store[QUIVER_ARROW_CAPACITY];
@@ -637,9 +877,9 @@ bool inven_carry_okay(const object_type* o_ptr)
      * after similar-stack merges so one pack still counts as one unit.
      */
     /* Similar slot? */
-    for (j = 0; j < INVEN_PACK; j++)
+    for (j = 0; j < player_pack_entry_count(); j++)
     {
-        object_type* j_ptr = &inventory[j];
+        object_type* j_ptr = player_pack_entry_at(j);
 
         if (!j_ptr->k_idx)
             continue;
@@ -651,19 +891,8 @@ bool inven_carry_okay(const object_type* o_ptr)
     if (!inventory_type_slot_available(o_ptr, true))
         return (false);
 
-    bool supply_item = supplies_is_supply_object(o_ptr);
-    bool supplies_present = (supplies_entry_count() > 0);
-    int logical_items = p_ptr->inven_cnt + (supplies_present ? 1 : 0);
-
-    if (supply_item)
+    if (supplies_is_supply_object(o_ptr))
     {
-        if (!supplies_present)
-        {
-            /* Need to allocate one slot for the supplies bundle. */
-            if (logical_items >= INVEN_PACK)
-                return (false);
-        }
-
         /* Check if the item would exceed the supply weight limit */
         if (!supplies_can_absorb_object(o_ptr))
         {
@@ -684,10 +913,6 @@ bool inven_carry_okay(const object_type* o_ptr)
         return (true);
     }
 
-    /* Non-supply item */
-    if (logical_items >= INVEN_PACK)
-        return (false);
-
     return (true);
 }
 
@@ -696,7 +921,8 @@ bool inven_carry_okay_after_removing(
 {
     object_type saved_item;
     bool had_removed_item = false;
-    s16b saved_inven_cnt = p_ptr->inven_cnt;
+    s32b saved_inven_cnt = p_ptr->inven_cnt;
+    object_type* removed_ptr = NULL;
     bool result;
 
     if (!o_ptr)
@@ -705,28 +931,24 @@ bool inven_carry_okay_after_removing(
     clear_inventory_limit_failure();
 
     /* Simulate removing the source pack item so swap prompts reflect the real outcome. */
-    if (remove_item >= 0 && remove_item < INVEN_PACK && remove_amt > 0
-        && inventory[remove_item].k_idx)
+    removed_ptr = player_inventory_object(remove_item);
+    if (player_inventory_handle_is_carried(remove_item) && remove_amt > 0
+        && removed_ptr && removed_ptr->k_idx)
     {
-        object_copy(&saved_item, &inventory[remove_item]);
+        object_copy(&saved_item, removed_ptr);
         had_removed_item = true;
 
-        if (remove_amt >= inventory[remove_item].number)
-        {
-            object_wipe(&inventory[remove_item]);
-            p_ptr->inven_cnt--;
-        }
+        if (remove_amt >= removed_ptr->number)
+            object_wipe(removed_ptr);
         else
-        {
-            inventory[remove_item].number -= remove_amt;
-        }
+            removed_ptr->number -= remove_amt;
     }
 
     result = inven_carry_okay(o_ptr);
 
     if (had_removed_item)
     {
-        object_copy(&inventory[remove_item], &saved_item);
+        object_copy(removed_ptr, &saved_item);
         p_ptr->inven_cnt = saved_inven_cnt;
     }
 
@@ -741,17 +963,13 @@ bool inven_carry_okay_after_removing(
  * it will do so, using "object_similar()" and "object_absorb()", else,
  * the item will be placed into the "proper" location in the inventory.
  *
- * This function can be used to "over-fill" the player's pack, but only
- * once, and such an action must trigger the "overflow" code immediately.
- * Note that when the pack is being "over-filled", the new item must be
- * placed into the "overflow" slot, and the "overflow" must take place
- * before the pack is reordered, but (optionally) after the pack is
- * combined.  This may be tricky.  See "dungeon.c" for info.
+ * The legacy physical range holds the first 23 entries.  Further entries are
+ * placed in expandable carried storage and remain ordinary selectable items.
  *
  * Note that this code must remove any location/stack information
  * from the object once it is placed into the inventory.
  */
-s16b inven_carry(object_type* o_ptr, bool combine_ammo)
+int inven_carry(object_type* o_ptr, bool combine_ammo)
 {
     int i = 1; // default value to soothe compilation warnings
     int j, k;
@@ -899,16 +1117,14 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
      * combine pass so adding to an existing pack does not consume a new unit.
      */
     /* Check for combining */
-    for (j = 0; j < INVEN_PACK; j++)
+    for (j = 0; j < player_pack_entry_count(); j++)
     {
-        j_ptr = &inventory[j];
+        int handle = player_pack_entry_handle_at(j);
+        j_ptr = player_inventory_object(handle);
 
         /* Skip non-objects */
         if (!j_ptr->k_idx)
             continue;
-
-        /* Hack -- track last item */
-        n = j;
 
         /* Check if the two items can be combined */
         if (object_similar(j_ptr, o_ptr))
@@ -926,7 +1142,7 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
             if (o_ptr->number == 0)
             {
                 /* Success */
-                return (j);
+                return (handle);
             }
             else
             {
@@ -939,7 +1155,8 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
                 object_desc(j_name, sizeof(j_name), j_ptr, true, 3);
 
                 /* Message */
-                msg_format("You have %s (%c).", j_name, index_to_label(j));
+                msg_format("You have %s (%c).", j_name,
+                    player_inventory_label(handle));
             }
         }
     }
@@ -948,20 +1165,15 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
     if (!inventory_type_slot_available(o_ptr, true))
         return (-1);
 
-    /* Check if we have room, accounting for supplies */
-    bool supplies_present = (supplies_entry_count() > 0);
-    int logical_items = p_ptr->inven_cnt + (supplies_present ? 1 : 0);
-    if (logical_items >= INVEN_PACK)
-        return (-1);
-
-    /* Find an empty slot */
-    for (j = 0; j <= INVEN_PACK; j++)
+    /* Find an empty legacy physical slot. */
+    for (j = 0; j < INVEN_PACK; j++)
     {
         j_ptr = &inventory[j];
 
         /* Use it if found */
         if (!j_ptr->k_idx)
             break;
+        n = j;
     }
 
     /* Use that slot */
@@ -973,6 +1185,18 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
     /* Reset the pickup flag */
     o_ptr->pickup = false;
     o_ptr->pickup_slot = -1;
+
+    if (i >= INVEN_PACK)
+    {
+        i = player_carried_extra_add(o_ptr);
+        if (i < 0)
+            return -1;
+
+        p_ptr->update |= PU_BONUS;
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        p_ptr->window |= PW_INVEN;
+        return i;
+    }
 
     /* Reorder the pack */
     if (i < INVEN_PACK)
@@ -1131,7 +1355,7 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
     return (i);
 }
 
-s16b inven_takeoff(int item, int amt)
+int inven_takeoff(int item, int amt)
 {
     int slot;
 
@@ -1146,7 +1370,7 @@ s16b inven_takeoff(int item, int amt)
     int oil_to_drop = 0;
 
     /* Get the item to take off */
-    o_ptr = &inventory[item];
+    o_ptr = player_inventory_object(item);
 
     /* Paranoia */
     if (amt <= 0)
@@ -1461,7 +1685,7 @@ void inven_drop(int item, int amt)
         return;
 
     /* Get the original object */
-    o_ptr = &inventory[item];
+    o_ptr = player_inventory_object(item);
 
     /* Error check */
     if (amt <= 0)
@@ -1480,7 +1704,7 @@ void inven_drop(int item, int amt)
     }
 
     /* Take off equipment */
-    if (item >= INVEN_WIELD)
+    if (item >= INVEN_WIELD && item < INVEN_TOTAL)
     {
         /* Take off first */
         item = inven_takeoff(item, amt);
@@ -1492,7 +1716,7 @@ void inven_drop(int item, int amt)
             return;
 
         /* Get the original object */
-        o_ptr = &inventory[item];
+        o_ptr = player_inventory_object(item);
     }
 
     /* Get local object */
@@ -1540,7 +1764,7 @@ void inven_drop(int item, int amt)
     }
 
     /* Message */
-    msg_format("You drop %s (%c).", o_name, index_to_label(item));
+    msg_format("You drop %s (%c).", o_name, player_inventory_label(item));
 
     /* Drop it near the player */
     if (player_oil_container_object(i_ptr) && oil_to_drop > 0)
@@ -1577,70 +1801,94 @@ void inven_drop(int item, int amt)
  */
 void combine_pack(void)
 {
-    int i, j, k;
-
-    object_type* o_ptr;
-    object_type* j_ptr;
-
     bool flag = false;
+    bool removed;
 
-    /* Combine the pack (backwards) */
-    for (i = INVEN_PACK; i > 0; i--)
+    /* Restart after a source entry disappears because physical compaction can
+     * promote an expandable entry into the compatibility range. */
+    do
     {
-        /* Get the item */
-        o_ptr = &inventory[i];
-
-        /* Skip empty items */
-        if (!o_ptr->k_idx)
-            continue;
-
-        /* Scan the items above that item */
-        for (j = 0; j < i; j++)
+        removed = false;
+        for (int i = player_pack_entry_count() - 1; i > 0 && !removed; i--)
         {
-            /* Get the item */
-            j_ptr = &inventory[j];
+            int source_handle = player_pack_entry_handle_at(i);
+            object_type* source = player_inventory_object(source_handle);
 
-            /* Skip empty items */
-            if (!j_ptr->k_idx)
+            if (!source || !source->k_idx)
                 continue;
 
-            /* Can we drop "o_ptr" onto "j_ptr"? */
-            if (object_similar(j_ptr, o_ptr))
+            for (int j = 0; j < i; j++)
             {
-                /* Take note */
+                object_type* target = player_pack_entry_at(j);
+
+                if (!target || !target->k_idx || !object_similar(target, source))
+                    continue;
+
                 flag = true;
+                object_absorb(target, source);
+                p_ptr->window |= PW_INVEN;
 
-                /* Add together the item counts */
-                object_absorb(j_ptr, o_ptr);
-
-                /* Window stuff */
-                p_ptr->window |= (PW_INVEN);
-
-                if (o_ptr->number == 0)
+                if (source->number == 0)
                 {
-                    /* One object is gone */
-                    p_ptr->inven_cnt--;
-
-                    /* Slide everything down */
-                    for (k = i; k < INVEN_PACK; k++)
-                    {
-                        /* Hack -- slide object */
-                        memcpy(&inventory[k], &inventory[k + 1], sizeof(object_type));
-                    }
-
-                    /* Hack -- wipe hole */
-                    object_wipe(&inventory[k]);
-
-                    /* Done */
-                    break;
+                    inven_item_optimize(source_handle);
+                    removed = true;
                 }
+                break;
             }
         }
-    }
+    } while (removed);
 
     /* Message */
     if (flag)
         msg_print("You combine some items in your pack.");
+}
+
+static int pack_object_order_compare(const void* lhs, const void* rhs)
+{
+    const object_type* a = lhs;
+    const object_type* b = rhs;
+    bool a_known;
+    bool b_known;
+    s32b a_value;
+    s32b b_value;
+
+    if (a->tval != b->tval)
+        return a->tval > b->tval ? -1 : 1;
+    if (object_aware_p(a) != object_aware_p(b))
+        return object_aware_p(a) ? -1 : 1;
+    if (a->sval != b->sval)
+        return a->sval < b->sval ? -1 : 1;
+
+    a_known = object_known_p(a) && artefact_p(a);
+    b_known = object_known_p(b) && artefact_p(b);
+    if (a_known != b_known)
+        return a_known ? -1 : 1;
+
+    a_known = !object_known_p(a) && artefact_pseudo_p(a);
+    b_known = !object_known_p(b) && artefact_pseudo_p(b);
+    if (a_known != b_known)
+        return a_known ? -1 : 1;
+
+    a_known = object_known_p(a) && ego_item_p(a);
+    b_known = object_known_p(b) && ego_item_p(b);
+    if (a_known != b_known)
+        return a_known ? -1 : 1;
+
+    a_known = !object_known_p(a) && special_pseudo_p(a);
+    b_known = !object_known_p(b) && special_pseudo_p(b);
+    if (a_known != b_known)
+        return a_known ? -1 : 1;
+
+    if (a->tval == TV_LIGHT && a->timeout != b->timeout)
+        return a->timeout > b->timeout ? -1 : 1;
+
+    a_value = object_value(a);
+    b_value = object_value(b);
+    if (a_value != b_value)
+        return a_value > b_value ? -1 : 1;
+    if (a->weight != b->weight)
+        return a->weight < b->weight ? -1 : 1;
+    return 0;
 }
 
 /*
@@ -1650,152 +1898,35 @@ void combine_pack(void)
  */
 void reorder_pack(bool display_message)
 {
-    int i, j, k;
-
-    s32b o_value;
-    s32b j_value;
-
-    object_type* o_ptr;
-    object_type* j_ptr;
-
-    object_type* i_ptr;
-    object_type object_type_body;
-
+    int count = player_pack_entry_count();
+    object_type* ordered;
     bool flag = false;
 
-    /* Re-order the pack (forwards) */
-    for (i = 0; i < INVEN_PACK; i++)
+    if (count < 2)
+        return;
+
+    ordered = mem_alloc_array(count, object_type);
+    if (!ordered)
+        return;
+
+    for (int i = 0; i < count; i++)
+        object_copy(&ordered[i], player_pack_entry_at(i));
+
+    qsort(ordered, (size_t)count, sizeof(*ordered),
+        pack_object_order_compare);
+
+    for (int i = 0; i < count; i++)
     {
-        /* Mega-Hack -- allow "proper" over-flow */
-        if ((i == INVEN_PACK) && (p_ptr->inven_cnt == INVEN_PACK))
-            break;
+        object_type* destination = player_pack_entry_at(i);
 
-        /* Get the item */
-        o_ptr = &inventory[i];
-
-        /* Skip empty slots */
-        if (!o_ptr->k_idx)
-            continue;
-
-        /* Get the "value" of the item */
-        o_value = object_value(o_ptr);
-
-        /* Scan every occupied slot */
-        for (j = 0; j < INVEN_PACK; j++)
-        {
-            /* Get the item already there */
-            j_ptr = &inventory[j];
-
-            /* Use empty slots */
-            if (!j_ptr->k_idx)
-                break;
-
-            /* Objects sort by decreasing type */
-            if (o_ptr->tval > j_ptr->tval)
-                break;
-            if (o_ptr->tval < j_ptr->tval)
-                continue;
-
-            /* Non-aware (flavored) items always come last */
-            if (!object_aware_p(o_ptr))
-                continue;
-            if (!object_aware_p(j_ptr))
-                break;
-
-            /* Objects sort by increasing sval */
-            if (o_ptr->sval < j_ptr->sval)
-                break;
-            if (o_ptr->sval > j_ptr->sval)
-                continue;
-
-            // This next bit is complicated: identified art > pseudo art >
-            // identified special > pseudo special > other
-
-            /* Identified artefacts beat the rest */
-            if (!(object_known_p(o_ptr) && artefact_p(o_ptr))
-                && (object_known_p(j_ptr) && artefact_p(j_ptr)))
-                continue;
-            if ((object_known_p(o_ptr) && artefact_p(o_ptr))
-                && !(object_known_p(j_ptr) && artefact_p(j_ptr)))
-                break;
-
-            /* Then pseudo-identified {artefact} */
-            if (!(!object_known_p(o_ptr) && artefact_pseudo_p(o_ptr))
-                && (!object_known_p(j_ptr) && artefact_pseudo_p(j_ptr)))
-                continue;
-            if ((!object_known_p(o_ptr) && artefact_pseudo_p(o_ptr))
-                && !(!object_known_p(j_ptr) && artefact_pseudo_p(j_ptr)))
-                break;
-
-            /* Then identified specials */
-            if (!(object_known_p(o_ptr) && ego_item_p(o_ptr))
-                && (object_known_p(j_ptr) && ego_item_p(j_ptr)))
-                continue;
-            if ((object_known_p(o_ptr) && ego_item_p(o_ptr))
-                && !(object_known_p(j_ptr) && ego_item_p(j_ptr)))
-                break;
-
-            /* Then pseudo-identified {special} */
-            if (!(!object_known_p(o_ptr) && special_pseudo_p(o_ptr))
-                && (!object_known_p(j_ptr) && special_pseudo_p(j_ptr)))
-                continue;
-            if ((!object_known_p(o_ptr) && special_pseudo_p(o_ptr))
-                && !(!object_known_p(j_ptr) && special_pseudo_p(j_ptr)))
-                break;
-
-            /* Lites sort by decreasing fuel */
-            if (o_ptr->tval == TV_LIGHT)
-            {
-                if (o_ptr->timeout > j_ptr->timeout)
-                    break;
-                if (o_ptr->timeout < j_ptr->timeout)
-                    continue;
-            }
-
-            /* Determine the "value" of the pack item */
-            j_value = object_value(j_ptr);
-
-            /* Objects sort by decreasing value */
-            if (o_value > j_value)
-                break;
-            if (o_value < j_value)
-                continue;
-
-            /* Objects sort by increasing weight */
-            if (o_ptr->weight < j_ptr->weight)
-                break;
-            if (o_ptr->weight > j_ptr->weight)
-                continue;
-        }
-
-        /* Never move down */
-        if (j >= i)
-            continue;
-
-        /* Take note */
-        flag = true;
-
-        /* Get local object */
-        i_ptr = &object_type_body;
-
-        /* Save a copy of the moving item */
-        object_copy(i_ptr, &inventory[i]);
-
-        /* Slide the objects */
-        for (k = i; k > j; k--)
-        {
-            /* Slide the item */
-            object_copy(&inventory[k], &inventory[k - 1]);
-        }
-
-        /* Insert the moving item */
-        object_copy(&inventory[j], i_ptr);
-
-        /* Window stuff */
-        p_ptr->window |= (PW_INVEN);
-
-        handle_stuff();
+        if (memcmp(destination, &ordered[i], sizeof(*destination)) != 0)
+            flag = true;
+        object_copy(destination, &ordered[i]);
     }
+    ordered = mem_free(ordered);
+
+    if (flag)
+        p_ptr->window |= PW_INVEN;
 
     /* Message */
     if (flag && display_message)

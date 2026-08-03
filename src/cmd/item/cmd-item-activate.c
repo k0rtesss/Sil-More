@@ -60,9 +60,10 @@ static int carried_understanding_gem_count(
         count += o_ptr->number;
     }
 
-    for (int i = 0; i < INVEN_PACK; i++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
 
         if (!understanding_gem_matches(o_ptr))
             continue;
@@ -72,7 +73,7 @@ static int carried_understanding_gem_count(
         {
             first_source->type = UNDERSTANDING_GEM_SOURCE_PACK;
             first_source->o_ptr = o_ptr;
-            first_source->index = i;
+            first_source->index = item;
         }
         count += o_ptr->number;
     }
@@ -97,16 +98,17 @@ static bool understanding_gem_target(const object_type* viewed_o_ptr,
         return false;
     }
 
-    for (int i = 0; i < INVEN_TOTAL; i++)
     {
-        if (viewed_o_ptr != &inventory[i])
-            continue;
+        int item = player_inventory_handle_for_object(viewed_o_ptr);
 
-        if (target_o_ptr)
-            *target_o_ptr = &inventory[i];
-        if (target_item)
-            *target_item = i;
-        return true;
+        if (item >= 0)
+        {
+            if (target_o_ptr)
+                *target_o_ptr = player_inventory_object(item);
+            if (target_item)
+                *target_item = item;
+            return true;
+        }
     }
 
     for (int i = 0; i < supplies_entry_count(); i++)
@@ -198,16 +200,7 @@ static byte harness_activatable_tval = 0;
 
 static int carried_inventory_index(const object_type* o_ptr)
 {
-    if (!o_ptr)
-        return -1;
-
-    for (int i = 0; i < INVEN_TOTAL; i++)
-    {
-        if (o_ptr == &inventory[i])
-            return i;
-    }
-
-    return -1;
+    return player_inventory_handle_for_object(o_ptr);
 }
 
 static bool item_tester_hook_harness_activatable(const object_type* o_ptr)
@@ -236,9 +229,10 @@ static bool choose_harness_activatable(byte tval, cptr prompt, cptr none_msg,
     if (chosen_item)
         *chosen_item = -1;
 
-    for (int i = 0; i < INVEN_PACK; i++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        int handle = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(handle);
 
         if (!o_ptr->k_idx || o_ptr->tval != tval
             || inventory_limit_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
@@ -247,7 +241,7 @@ static bool choose_harness_activatable(byte tval, cptr prompt, cptr none_msg,
         }
 
         count++;
-        item = i;
+        item = handle;
     }
 
     /* The retired slots can only be populated transiently by an old save. */
@@ -290,11 +284,11 @@ static bool choose_harness_activatable(byte tval, cptr prompt, cptr none_msg,
             return false;
     }
 
-    if (item < 0 || item >= INVEN_TOTAL || !inventory[item].k_idx)
+    if (!player_inventory_handle_valid(item))
         return false;
 
     if (chosen_o_ptr)
-        *chosen_o_ptr = &inventory[item];
+        *chosen_o_ptr = player_inventory_object(item);
     if (chosen_item)
         *chosen_item = item;
 
@@ -315,12 +309,6 @@ typedef struct sanctity_target_entry
     int item;
     object_type* o_ptr;
 } sanctity_target_entry;
-
-enum
-{
-    MAX_SANCTITY_TARGETS =
-        INVEN_PACK + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK
-};
 
 static bool item_tester_hook_sanctity_target(const object_type* o_ptr)
 {
@@ -365,14 +353,17 @@ static int sanctity_collect_targets(sanctity_target_entry entries[],
 
     sanctity_target_excluded = gem_o_ptr;
 
-    for (int i = 0; i < INVEN_PACK && count < max_entries; i++)
+    for (int ordinal = 0;
+         ordinal < player_pack_entry_count() && count < max_entries;
+         ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
 
         if (!item_tester_hook_sanctity_target(o_ptr))
             continue;
 
-        entries[count].item = i;
+        entries[count].item = item;
         entries[count].o_ptr = o_ptr;
         count++;
     }
@@ -410,12 +401,14 @@ static int sanctity_collect_targets(sanctity_target_entry entries[],
 static bool sanctity_choose_target_from_entries(
     const sanctity_target_entry entries[], int count, int* out_item)
 {
-    object_choice_entry choices[MAX_SANCTITY_TARGETS];
+    object_choice_entry* choices;
     int selected = -1;
     char desc[80];
 
     if (!entries || count <= 0 || !out_item)
         return false;
+
+    choices = mem_alloc_array(count, object_choice_entry);
 
     for (int i = 0; i < count; i++)
     {
@@ -433,13 +426,18 @@ static bool sanctity_choose_target_from_entries(
     if (!object_choice_overlay("Cleanse which item?", desc, choices, count, 0,
             &selected))
     {
+        choices = mem_free(choices);
         return false;
     }
 
     if (selected < 0 || selected >= count)
+    {
+        choices = mem_free(choices);
         return false;
+    }
 
     *out_item = entries[selected].item;
+    choices = mem_free(choices);
     return true;
 }
 
@@ -448,23 +446,30 @@ static bool sanctity_choose_target(const object_type* gem_o_ptr,
 {
     int chosen_item;
     int count;
-    sanctity_target_entry entries[MAX_SANCTITY_TARGETS];
+    int capacity = player_pack_entry_count()
+        + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK;
+    sanctity_target_entry* entries;
 
     if (!target_o_ptr)
         return false;
 
-    count = sanctity_collect_targets(entries, N_ELEMENTS(entries), gem_o_ptr);
+    entries = mem_alloc_array(MAX(capacity, 1), sanctity_target_entry);
+    count = sanctity_collect_targets(entries, capacity, gem_o_ptr);
     if (count <= 0)
     {
         msg_print("You have no target to cleanse.");
+        entries = mem_free(entries);
         return false;
     }
 
     if (!sanctity_choose_target_from_entries(entries, count, &chosen_item))
+    {
+        entries = mem_free(entries);
         return false;
+    }
 
-    *target_o_ptr = (chosen_item >= 0) ? &inventory[chosen_item]
-        : &o_list[0 - chosen_item];
+    *target_o_ptr = inventory_item_to_object_ptr(chosen_item);
+    entries = mem_free(entries);
     return ((*target_o_ptr != NULL) && (*target_o_ptr)->k_idx);
 }
 
@@ -560,9 +565,17 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
         supplies_clear_pending_action();
 
         /* Get the item (in the pack) */
-        if (item >= 0)
+        if (item >= SUPPLIES_INDEX)
         {
-            o_ptr = &inventory[item];
+            supply_index = item - SUPPLIES_INDEX;
+            o_ptr = supplies_entry_at(supply_index);
+            from_supplies = true;
+        }
+        else if (player_inventory_handle_valid(item))
+        {
+            o_ptr = player_inventory_object(item);
+            from_supplies = false;
+            supply_index = -1;
         }
 
         /* Get the item (on the floor) */
@@ -571,8 +584,6 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
             o_ptr = &o_list[0 - item];
         }
 
-        from_supplies = false;
-        supply_index = -1;
     }
 
     if (!o_ptr)
@@ -710,9 +721,17 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
         supplies_clear_pending_action();
 
         /* Get the item (in the pack) */
-        if (item >= 0)
+        if (item >= SUPPLIES_INDEX)
         {
-            o_ptr = &inventory[item];
+            supply_index = item - SUPPLIES_INDEX;
+            o_ptr = supplies_entry_at(supply_index);
+            from_supplies = true;
+        }
+        else if (player_inventory_handle_valid(item))
+        {
+            o_ptr = player_inventory_object(item);
+            from_supplies = false;
+            supply_index = -1;
         }
 
         /* Get the item (on the floor) */
@@ -721,8 +740,6 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
             o_ptr = &o_list[0 - item];
         }
 
-        from_supplies = false;
-        supply_index = -1;
     }
 
     if (!o_ptr)
@@ -1068,9 +1085,17 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
         supplies_clear_pending_action();
 
         /* Get the item (in the pack) */
-        if (item >= 0)
+        if (item >= SUPPLIES_INDEX)
         {
-            o_ptr = &inventory[item];
+            supply_index = item - SUPPLIES_INDEX;
+            o_ptr = supplies_entry_at(supply_index);
+            from_supplies = true;
+        }
+        else if (player_inventory_handle_valid(item))
+        {
+            o_ptr = player_inventory_object(item);
+            from_supplies = false;
+            supply_index = -1;
         }
 
         /* Get the item (on the floor) */
@@ -1079,8 +1104,6 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
             o_ptr = &o_list[0 - item];
         }
 
-        from_supplies = false;
-        supply_index = -1;
     }
 
     if (!o_ptr)
@@ -1208,9 +1231,9 @@ void do_cmd_activate_by_index(int item)
     bool ident;
     object_type* o_ptr;
 
-    if (item >= 0 && item < INVEN_TOTAL)
+    if (player_inventory_handle_valid(item))
     {
-        o_ptr = &inventory[item];
+        o_ptr = player_inventory_object(item);
     }
     else if (item < 0 && 0 - item > 0 && 0 - item < o_max)
     {

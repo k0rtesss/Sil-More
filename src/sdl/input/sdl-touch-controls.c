@@ -1433,7 +1433,7 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         return;
     }
     if (binding == 'g') {
-        SDL_strlcpy(buf, "Pick Up", buflen);
+        SDL_strlcpy(buf, "Pack / Pick Up", buflen);
         return;
     }
     /* Space/'x' adapt their name to the player's situation (stairs, item,
@@ -5330,7 +5330,7 @@ static bool sdl_touch_top_panel_tile_for_binding(int binding, byte* out_attr,
     case INPUT_BIND_CONFIRM:
     case ' ':
     case 'g':
-        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_PICK; fallback = "Pick";
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_PICK; fallback = "Pack";
         break;
     case 'o':
         row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_OPEN_DOOR; fallback = "Open";
@@ -5586,7 +5586,10 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
     buf[0] = '\0';
     if (touch_shortcut_context_action(context_binding,
             sdl_touch_thumb_description_open(), NULL, label, sizeof(label))) {
-        if (context_binding == ' ')
+        if (context_binding == ' ' && streq(label, "Harness"))
+            strnfmt(buf, buflen,
+                "%s: store an eligible floor item in your Harness.", label);
+        else if (context_binding == ' ')
             strnfmt(buf, buflen,
                 "%s: confirm the current prompt or interact with what is on your square.",
                 label);

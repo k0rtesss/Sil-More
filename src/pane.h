@@ -6,8 +6,10 @@
 #define MAX_PANE_CONFIGS 16
 #define PANE_LOG_OVERLAY_COMBAT_COLS 48
 #define PANE_COMBAT_OVERLAY_COLS 12
-#define PANE_COMBAT_OVERLAY_ROWS 4
-#define PANE_COMBAT_OVERLAY_MIN_ROWS 3
+#define PANE_COMBAT_OVERLAY_ROWS 2
+#define PANE_COMBAT_OVERLAY_MAX_ROWS 3
+#define PANE_COMBAT_OVERLAY_MIN_ROWS 2
+#define PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW (-2)
 /* Visible (translucent) width of the overlay log; cells left of this stay
  * transparent so the panel reads as a narrow right-hand band. */
 #define PANE_LOG_OVERLAY_VISIBLE_COLS 31

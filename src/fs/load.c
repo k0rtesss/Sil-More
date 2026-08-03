@@ -917,6 +917,15 @@ errr rd_item(object_type* o_ptr)
         object_derive_stat_skill_bonuses_from_pval(o_ptr);
     }
 
+    /* Rings and amulets moved out of Harness in 0.9.7.11.  Classify loaded
+     * objects from every older format (including preset snapshots) in the
+     * zero-volume Jewelry Pouch. */
+    if (o_ptr->tval == TV_RING || o_ptr->tval == TV_AMULET)
+    {
+        o_ptr->storage = OBJECT_STORAGE_JEWELRY;
+        o_ptr->volume = 0;
+    }
+
     /* Log staff loading for debugging disappearing staff bug */
     if (o_ptr->tval == TV_STAFF)
     {

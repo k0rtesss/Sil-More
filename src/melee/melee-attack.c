@@ -450,8 +450,8 @@ void do_betrayal_ring_amulet(void)
         if (item == -1)
             return;
 
-        if (item >= 0)
-            o_ptr = &inventory[item];
+        if (player_inventory_handle_valid(item))
+            o_ptr = player_inventory_object(item);
         else
             o_ptr = &o_list[0 - item];
 
@@ -1711,8 +1711,8 @@ bool make_attack_normal(monster_type* m_ptr)
                             break;
 
                         /* Get the original object */
-                        if (item >= 0)
-                            o_ptr = &inventory[item];
+                        if (player_inventory_handle_valid(item))
+                            o_ptr = player_inventory_object(item);
                         else
                             o_ptr = &o_list[0 - item];
                     }

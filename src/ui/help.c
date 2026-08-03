@@ -117,7 +117,7 @@ void binding_action_label(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Confirm", buflen);
         return;
     case ' ':
-        SDL_strlcpy(buf, "Confirm (Space)", buflen);
+        SDL_strlcpy(buf, "Harness / context (Space)", buflen);
         return;
     case '\r':
         SDL_strlcpy(buf, "Enter", buflen);
@@ -228,7 +228,7 @@ void binding_action_label(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Wear / wield (w)", buflen);
         return;
     case 'g':
-        SDL_strlcpy(buf, "Pick up items (g)", buflen);
+        SDL_strlcpy(buf, "Pack / pick up items (g)", buflen);
         return;
     case 'Z':
         SDL_strlcpy(buf, "Rest (Z)", buflen);
@@ -351,7 +351,7 @@ void binding_action_short(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Confirm", buflen);
         return;
     case ' ':
-        SDL_strlcpy(buf, "Confirm", buflen);
+        SDL_strlcpy(buf, "Harness / context", buflen);
         return;
     case '\r':
         SDL_strlcpy(buf, "Enter", buflen);
@@ -462,7 +462,7 @@ void binding_action_short(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Wear", buflen);
         return;
     case 'g':
-        SDL_strlcpy(buf, "Pickup", buflen);
+        SDL_strlcpy(buf, "Pack / pickup", buflen);
         return;
     case 'Z':
         SDL_strlcpy(buf, "Rest", buflen);
@@ -2262,7 +2262,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
             help_emit_heading("Everyday commands", row - 2, col);
             HELP_ADV_COMMAND('i', "i", "inventory");
             HELP_ADV_COMMAND('e', "e", "equipment");
-            HELP_ADV_COMMAND('g', "g", "pick up items");
+            HELP_ADV_COMMAND('g', "g", "prefer Pack when picking up");
             HELP_ADV_COMMAND('w', "w", "wear / wield");
             HELP_ADV_COMMAND('r', "r", "remove equipment");
             HELP_ADV_COMMAND('E', "E", "eat food");

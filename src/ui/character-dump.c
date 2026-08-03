@@ -203,11 +203,9 @@ errr file_character(cptr name, bool full)
 
     /* Dump the inventory */
     SDL_IOprintf(fff, "  [Inventory]\n\n");
-    for (i = 0; i < INVEN_PACK; i++)
+    for (i = 0; i < player_pack_entry_count(); i++)
     {
-        object_type* o_ptr = &inventory[i];
-        if (!o_ptr->k_idx)
-            break;
+        object_type* o_ptr = player_pack_entry_at(i);
 
         object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 

@@ -63,10 +63,11 @@ static object_type* forge_sabotage_mattock(int* out_score)
     object_type* best = NULL;
     int best_score = 0;
 
-    for (int i = -1; i < INVEN_PACK; i++)
+    for (int ordinal = -1; ordinal < player_pack_entry_count(); ordinal++)
     {
         object_type* o_ptr
-            = (i < 0) ? &inventory[INVEN_WIELD] : &inventory[i];
+            = (ordinal < 0) ? &inventory[INVEN_WIELD]
+                            : player_pack_entry_at(ordinal);
         u32b f1, f2, f3;
 
         if (!o_ptr->k_idx || (o_ptr->tval != TV_DIGGING)

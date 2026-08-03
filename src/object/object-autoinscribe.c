@@ -157,13 +157,15 @@ extern void obliterate_autoinscription(s16b kind)
         /* Apply an autoinscription */
         unapply_autoinscription(o_ptr, note);
     }
-    for (i = INVEN_PACK; i > 0; i--)
+    for (i = 0; i < player_pack_entry_count(); i++)
     {
+        o_ptr = player_pack_entry_at(i);
+
         // Don't remove inscriptions from different object kinds.
-        if (inventory[i].k_idx != kind)
+        if (o_ptr->k_idx != kind)
             continue;
 
-        unapply_autoinscription(&inventory[i], note);
+        unapply_autoinscription(o_ptr, note);
     }
 
     remove_autoinscription(kind);
@@ -211,13 +213,15 @@ void autoinscribe_pack(void)
 {
     int i;
 
-    for (i = INVEN_PACK; i > 0; i--)
+    for (i = 0; i < player_pack_entry_count(); i++)
     {
+        object_type* o_ptr = player_pack_entry_at(i);
+
         /* Skip empty items */
-        if (!inventory[i].k_idx)
+        if (!o_ptr->k_idx)
             continue;
 
-        apply_autoinscription(&inventory[i]);
+        apply_autoinscription(o_ptr);
     }
 }
 

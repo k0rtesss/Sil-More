@@ -1124,6 +1124,26 @@ static bool wr_savefile(void)
     wr_u16b(0xFFFF);
     log_trace("[save:%06u] === END INVENTORY ===", (unsigned)save_byte_offset);
 
+    /* Write carried entries beyond the 23 legacy physical slots. */
+    log_trace("[save:%06u] === BEGIN CARRIED EXTRA ===",
+        (unsigned)save_byte_offset);
+    wr_u16b(SAVEFILE_CARRIED_EXTRA_BLOCK_MAGIC);
+    {
+        u32b extra_count = (u32b)player_carried_extra_entry_count();
+
+        wr_u32b(extra_count);
+        for (u32b ei = 0; ei < extra_count; ei++)
+        {
+            object_type* carried = player_carried_extra_entry_at((int)ei);
+
+            if (!carried || !carried->k_idx || carried->number <= 0)
+                return false;
+            wr_item(carried);
+        }
+    }
+    log_trace("[save:%06u] === END CARRIED EXTRA ===",
+        (unsigned)save_byte_offset);
+
     /* Write the dedicated mixed-arrow Quiver store. */
     log_trace("[save:%06u] === BEGIN QUIVER ===", (unsigned)save_byte_offset);
     wr_u16b(SAVEFILE_QUIVER_BLOCK_MAGIC);
@@ -1174,6 +1194,7 @@ static bool wr_savefile(void)
         {
             bool set = jewelry_preset_is_set(preset);
             wr_byte(set ? 1 : 0);
+            wr_string(jewelry_preset_name(preset));
             for (byte slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
             {
                 const object_type* preset_obj =

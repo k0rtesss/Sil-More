@@ -232,12 +232,6 @@ typedef struct recharge_target_entry
     object_type* o_ptr;
 } recharge_target_entry;
 
-enum
-{
-    MAX_RECHARGE_TARGETS =
-        INVEN_PACK + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK
-};
-
 static int recharge_collect_targets(recharge_target_entry entries[],
     int max_entries)
 {
@@ -260,14 +254,17 @@ static int recharge_collect_targets(recharge_target_entry entries[],
         count++;
     }
 
-    for (int i = 0; i < INVEN_PACK && count < max_entries; i++)
+    for (int ordinal = 0;
+         ordinal < player_pack_entry_count() && count < max_entries;
+         ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
 
         if (!item_tester_hook_recharge(o_ptr))
             continue;
 
-        entries[count].item = i;
+        entries[count].item = item;
         entries[count].o_ptr = o_ptr;
         count++;
     }
@@ -630,23 +627,31 @@ bool recharge(int num)
 {
     int item;
     int target_count;
+    int target_capacity = player_pack_entry_count()
+        + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK;
 
     object_type* o_ptr;
-    recharge_target_entry targets[MAX_RECHARGE_TARGETS];
+    recharge_target_entry* targets = mem_alloc_array(
+        MAX(target_capacity, 1), recharge_target_entry);
 
-    target_count = recharge_collect_targets(targets, N_ELEMENTS(targets));
+    target_count = recharge_collect_targets(targets, target_capacity);
     if (target_count <= 0)
     {
         msg_print("You have nothing to recharge.");
+        targets = mem_free(targets);
         return (false);
     }
 
     if (!recharge_choose_target(targets, target_count, &item))
+    {
+        targets = mem_free(targets);
         return (false);
+    }
+    targets = mem_free(targets);
 
     /* Get the item (in the pack) */
-    if (item >= 0)
-        o_ptr = &inventory[item];
+    if (player_inventory_handle_valid(item))
+        o_ptr = player_inventory_object(item);
 
     /* Get the item (on the floor) */
     else
@@ -765,10 +770,11 @@ void identify_and_describe_pack(void)
     }
 
     /* Identify inventory */
-    for (item = 0; item < INVEN_WIELD; item++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
+        item = player_pack_entry_handle_at(ordinal);
         /* Get the object */
-        o_ptr = &inventory[item];
+        o_ptr = player_inventory_object(item);
 
         /* Ignore empty objects */
         if (!o_ptr->k_idx)

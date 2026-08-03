@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "supplies.h"
 
 typedef struct {
     bool valid;
@@ -1011,6 +1012,71 @@ bool sdl_render_left_panel_pane_from_cells(const sdl_view* view,
         NULL);
 }
 
+static int sdl_combat_overlay_equipped_jewelry_preset(void)
+{
+    for (int preset = 0; preset < JEWELRY_PRESET_MAX; preset++) {
+        if (jewelry_preset_is_equipped(preset))
+            return preset;
+    }
+
+    return -1;
+}
+
+static void sdl_combat_overlay_render_jewelry_preset_row(int panel_cols,
+    int dest_row, const SDL_Rect* content, int cell_w, int cell_h,
+    SDL_Texture* font_atlas, int atlas_cell_w, int atlas_cell_h)
+{
+    char full_label[JEWELRY_PRESET_NAME_MAX + 16];
+    char label[PANE_COMBAT_OVERLAY_COLS + 1];
+    const object_type* ring;
+    const char* name;
+    int preset = sdl_combat_overlay_equipped_jewelry_preset();
+    int icon_cols;
+    int text_cols;
+    size_t copy_size;
+
+    /* Presets exist, but none matches the currently equipped jewelry. */
+    if (preset < 0 || panel_cols <= 0 || !content)
+        return;
+
+    name = jewelry_preset_name(preset);
+    if (name && name[0])
+        strnfmt(full_label, sizeof(full_label), "%d:%s", preset + 1, name);
+    else
+        strnfmt(full_label, sizeof(full_label), "Set %d", preset + 1);
+
+    ring = jewelry_preset_object(preset, JEWELRY_PRESET_SLOT_LEFT);
+    icon_cols = ring && ring->k_idx ? MIN(2, panel_cols) : 0;
+    if (icon_cols > 0) {
+        byte attr = object_attr(ring);
+        char icon = object_char(ring);
+        SDL_FRect dst = {
+            .x = (float)content->x,
+            .y = (float)content->y + (float)(dest_row * cell_h),
+            .w = (float)(icon_cols * cell_w),
+            .h = (float)cell_h,
+        };
+
+        if (sdl_left_panel_cell_is_tile(attr, icon))
+            sdl_draw_map_tile_layers_at(-1, -1, attr, icon, 0, 0, &dst);
+        else
+            sdl_render_mono_text_scaled(font_atlas, atlas_cell_w,
+                atlas_cell_h, (float)cell_w, (float)cell_h,
+                (float)content->x, (float)content->y, 0, dest_row, 1, &icon,
+                sdl_color_from_attr(sdl_ui_text_fg_attr(attr)));
+    }
+
+    text_cols = panel_cols - icon_cols;
+    if (text_cols <= 0)
+        return;
+    copy_size = MIN(sizeof(label), (size_t)text_cols + 1);
+    SDL_strlcpy(label, full_label, copy_size);
+    sdl_render_mono_text_scaled(font_atlas, atlas_cell_w, atlas_cell_h,
+        (float)cell_w, (float)cell_h, (float)content->x,
+        (float)content->y, icon_cols, dest_row, strlen(label), label,
+        sdl_color_from_attr(TERM_L_GREEN));
+}
+
 void sdl_combat_overlay_pane_render(void)
 {
     const sdl_view* view = &g_views[PANE_MAIN];
@@ -1115,6 +1181,13 @@ void sdl_combat_overlay_pane_render(void)
         if (!sdl_combat_overlay_visible_source_row_at_index(i, panel_rows,
                 &source_row))
         {
+            continue;
+        }
+
+        if (source_row == PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW) {
+            sdl_combat_overlay_render_jewelry_preset_row(panel_cols, dest_row,
+                &content, cell_w, cell_h, font_atlas, atlas_cell_w,
+                atlas_cell_h);
             continue;
         }
 

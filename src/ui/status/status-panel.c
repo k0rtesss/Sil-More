@@ -1707,7 +1707,8 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
         {
             object_type* source = (slot >= QUIVER_INDEX
                 && slot < QUIVER_INDEX_END)
-                ? player_quiver_arrow_object(slot) : &inventory[slot];
+                ? player_quiver_arrow_object(slot)
+                : player_inventory_object(slot);
             if (source)
             {
                 object_copy(&display, source);

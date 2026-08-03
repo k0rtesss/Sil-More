@@ -316,7 +316,7 @@ char index_to_label(int i)
  *
  * Return "-1" if the label does not indicate a real item.
  */
-s16b label_to_inven(int c)
+int label_to_inven(int c)
 {
     int i;
     int result;
@@ -372,7 +372,7 @@ s16b label_to_inven(int c)
  *
  * Return "-1" if the label does not indicate a real item.
  */
-s16b label_to_equip(int c)
+int label_to_equip(int c)
 {
     int i;
 
@@ -522,13 +522,15 @@ int inventory_visible_inven_item_at(int ordinal)
 
     int visible = supply_count;
 
-    for (int i = 0; i < INVEN_PACK; i++)
+    for (int entry = 0; entry < player_pack_entry_count(); entry++)
     {
-        if (!inventory[i].k_idx || !get_item_okay(i))
+        int item = player_pack_entry_handle_at(entry);
+
+        if (item < 0 || !get_item_okay(item))
             continue;
 
         if (visible == ordinal)
-            return i;
+            return item;
 
         visible++;
     }
@@ -558,12 +560,14 @@ int inventory_visible_inven_ordinal(int item)
 
     int visible = inventory_visible_supply_count();
 
-    for (int i = 0; i < INVEN_PACK; i++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        if (!inventory[i].k_idx || !get_item_okay(i))
+        int carried = player_pack_entry_handle_at(ordinal);
+
+        if (carried < 0 || !get_item_okay(carried))
             continue;
 
-        if (i == item)
+        if (carried == item)
             return visible;
 
         visible++;
@@ -591,7 +595,7 @@ char inventory_visible_label_for_item(int item)
     int ordinal = inventory_visible_inven_ordinal(item);
 
     if (ordinal >= 0)
-        return I2A(ordinal);
+        return ordinal < 26 ? I2A(ordinal) : '*';
 
     return index_to_label(item);
 }
@@ -616,15 +620,22 @@ object_type* inventory_item_to_object_ptr(int item)
     if (item >= SUPPLIES_INDEX)
         return supplies_entry_at(item - SUPPLIES_INDEX);
 
-    if (item >= 0)
-        return &inventory[item];
+    if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        return player_quiver_arrow_object(item);
 
-    return &o_list[0 - item];
+    if (player_inventory_handle_valid(item))
+        return player_inventory_object(item);
+
+    if (item < 0 && 0 - item > 0 && 0 - item < o_max)
+        return &o_list[0 - item];
+
+    return NULL;
 }
 
 bool inventory_item_uses_inven_channel(int item)
 {
-    return ((item >= 0) && (item < INVEN_WIELD)) || (item >= SUPPLIES_INDEX);
+    return player_inventory_handle_is_carried(item)
+        || (item >= SUPPLIES_INDEX);
 }
 
 void describe_inventory_menu_entry(int item, char* buf, size_t len)
@@ -1728,9 +1739,6 @@ int inventory_menu_visible_rows_for_height(int term_hgt)
     if (rows < 0)
         rows = 0;
 
-    if (rows > ENHANCED_MAX_LIST)
-        rows = ENHANCED_MAX_LIST;
-
     return rows;
 }
 
@@ -2091,6 +2099,8 @@ void draw_equipment_story_rows(int col, int entry_count, int* out_index,
 void show_inven(void)
 {
     int i, j, k, l;
+    int capacity = 1 + supplies_entry_count() + player_pack_entry_count()
+        + (INVEN_TOTAL - INVEN_WIELD);
     int col, len, lim;
     int term_wid = menu_term_width();
     int term_hgt = menu_term_height();
@@ -2104,9 +2114,10 @@ void show_inven(void)
 
     char tmp_val[80];
 
-    int out_index[ENHANCED_MAX_LIST];
-    byte out_color[ENHANCED_MAX_LIST];
-    char out_desc[ENHANCED_MAX_LIST][80];
+    int* out_index = mem_alloc_array(MAX(capacity, 1), int);
+    byte* out_color = mem_alloc_array(MAX(capacity, 1), byte);
+    char (*out_desc)[80] = SDL_calloc((size_t)MAX(capacity, 1),
+        sizeof(*out_desc));
 
     bool use_story_font = story_inventory_enabled();
     story_font_term_state story_state;
@@ -2139,7 +2150,7 @@ void show_inven(void)
     k = 0;
 
     if (include_supplies && !inventory_menu_uses_expanded_supplies()
-        && k < ENHANCED_MAX_LIST)
+        && k < capacity)
     {
         char supply_desc[80];
         format_supply_summary(supply_desc, sizeof(supply_desc));
@@ -2158,7 +2169,7 @@ void show_inven(void)
 
     if (include_supplies && inventory_menu_uses_expanded_supplies())
     {
-        for (i = 0; i < supplies_entry_count() && k < ENHANCED_MAX_LIST; i++)
+        for (i = 0; i < supplies_entry_count() && k < capacity; i++)
         {
             int item = SUPPLIES_INDEX + i;
 
@@ -2186,22 +2197,23 @@ void show_inven(void)
         }
     }
 
-    for (i = 0; i < INVEN_PACK && k < ENHANCED_MAX_LIST; i++)
+    for (i = 0; i < player_pack_entry_count() && k < capacity; i++)
     {
-        o_ptr = &inventory[i];
+        int item = player_pack_entry_handle_at(i);
+        o_ptr = player_inventory_object(item);
 
         /* Is this item acceptable? */
         if (!item_tester_okay(o_ptr))
             continue;
 
         /* Describe the object */
-        describe_inventory_menu_entry(i, o_name, sizeof(o_name));
+        describe_inventory_menu_entry(item, o_name, sizeof(o_name));
 
         /* Hack -- enforce max length */
         o_name[lim] = '\0';
 
         /* Save the index */
-        out_index[k] = i;
+        out_index[k] = item;
 
         /* Get inventory color */
         if (weapon_glows(o_ptr))
@@ -2229,7 +2241,7 @@ void show_inven(void)
 
     if (inventory_menu_include_equip)
     {
-        for (i = INVEN_WIELD; i < INVEN_TOTAL && k < ENHANCED_MAX_LIST; i++)
+        for (i = INVEN_WIELD; i < INVEN_TOTAL && k < capacity; i++)
         {
             o_ptr = &inventory[i];
 
@@ -2271,6 +2283,9 @@ void show_inven(void)
     if (display_rows <= 0)
     {
         story_font_term_pop(&story_state);
+        out_index = mem_free(out_index);
+        out_color = mem_free(out_color);
+        out_desc = mem_free(out_desc);
         return;
     }
 
@@ -2287,8 +2302,9 @@ void show_inven(void)
         int idx = out_index[entry];
         bool is_supply_summary = inventory_item_is_supply_summary(idx);
         bool is_supply_entry = inventory_item_is_supply_entry(idx);
-        object_type* cur_obj = is_supply_entry ? supplies_entry_at(idx - SUPPLIES_INDEX)
-            : (is_supply_summary ? NULL : &inventory[idx]);
+        object_type* cur_obj = is_supply_entry
+            ? supplies_entry_at(idx - SUPPLIES_INDEX)
+            : (is_supply_summary ? NULL : inventory_item_to_object_ptr(idx));
         object_type supply_icon;
         object_type* display_obj = is_supply_summary
             ? prepare_supply_icon_object(&supply_icon)
@@ -2395,6 +2411,9 @@ void show_inven(void)
     }
 
     story_font_term_pop(&story_state);
+    out_index = mem_free(out_index);
+    out_color = mem_free(out_color);
+    out_desc = mem_free(out_desc);
 }
 
 /*

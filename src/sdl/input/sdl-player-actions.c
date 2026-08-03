@@ -49,8 +49,8 @@ bool sdl_main_view_point_is_player_grid(float x, float y)
 
 static object_type* sdl_player_first_harness_activatable(int tval)
 {
-    for (int i = 0; i < INVEN_PACK; i++) {
-        object_type* o_ptr = &inventory[i];
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++) {
+        object_type* o_ptr = player_pack_entry_at(ordinal);
 
         if (o_ptr->k_idx && o_ptr->tval == tval
             && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS) {
@@ -220,11 +220,12 @@ void sdl_player_action_menu_tile_for_kind(int kind, byte* out_attr,
                 }
             }
 
-            for (int i = 0; (!icon_obj || !icon_obj->k_idx)
-                    && i < INVEN_PACK; i++)
+            for (int ordinal = 0; (!icon_obj || !icon_obj->k_idx)
+                    && ordinal < player_pack_entry_count(); ordinal++)
             {
-                if (potion_has_thrown_effect(&inventory[i]))
-                    icon_obj = &inventory[i];
+                object_type* o_ptr = player_pack_entry_at(ordinal);
+                if (potion_has_thrown_effect(o_ptr))
+                    icon_obj = o_ptr;
             }
         }
 
@@ -322,6 +323,15 @@ static bool sdl_player_can_ready_weapon_entry(void)
         {
             return true;
         }
+    }
+    for (int item = 0; item < player_carried_extra_entry_count(); item++)
+    {
+        object_type* o_ptr = player_carried_extra_entry_at(item);
+
+        if (o_ptr && o_ptr->k_idx
+            && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS
+            && player_can_treat_as_throwing(o_ptr))
+            return true;
     }
     return false;
 }

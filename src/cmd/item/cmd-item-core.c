@@ -200,6 +200,14 @@ static int first_floor_item_under_player(void)
     return 0;
 }
 
+static bool floor_item_can_prefer_harness(int floor_item)
+{
+    if (!floor_item)
+        return false;
+
+    return object_can_choose_pack_or_harness(&o_list[-floor_item]);
+}
+
 /*
  * Return the first floor object under the player whose primary action is an
  * interaction rather than pickup.  Space normally expands to the "/5"
@@ -462,16 +470,18 @@ bool do_cmd_context_square_action_popup(void)
 
         if (!action_only)
             sdl_question_menu_add_button('x', "Description", TERM_L_BLUE);
-        /*
-         * Staffs and horns are stored in the Harness.  Their contextual
-         * action is therefore the same pickup command as the explicit
-         * pickup button; do not expose both choices.
-         */
         if (!action_is_pickup)
             sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_ACTION,
                 action_name, TERM_L_GREEN);
         if (!action_only)
-            sdl_question_menu_add_button('g', "Pick Up", TERM_L_WHITE);
+        {
+            cptr pickup_name = object_can_store_directly_in_pack(o_ptr)
+                ? "Pack" : "Pick Up";
+
+            sdl_question_menu_add_button('g', pickup_name, TERM_L_WHITE);
+            if (object_can_choose_pack_or_harness(o_ptr))
+                sdl_question_menu_add_button(' ', "Harness", TERM_L_UMBER);
+        }
     }
     else
     {
@@ -564,9 +574,9 @@ static bool use_floor_interaction_by_index(int item)
  * on-screen button shows (and performs) the action that fits the player's
  * current situation:
  *
- *   Confirm: in an open description -> pick up ('g'/space) the shown item;
+ *   Confirm: in an open description -> Harness/pick up (space) the shown item;
  *          otherwise on stairs -> interact-here with confirmation, on a forge
- *          -> smith, standing on an item -> pick up ('g'), else -> confirm.
+ *          -> smith, standing on an item -> Harness/pick up, else -> confirm.
  *   '<'/'>' : on the matching staircase -> interact-here with confirmation.
  *   'u'  : names the floor item's real action (Wield, Quaff, Eat, etc.); in an
  *          open description it submits that popup's 'x' action.
@@ -590,10 +600,17 @@ bool touch_shortcut_context_action(int binding, bool description_open,
 
     if (binding == ' ') {
         if (description_open) {
-            /* Inside the popup, Space picks up the item being described. */
+            /* Inside the popup, Space prefers the Harness for dual-destination
+             * items and otherwise performs the ordinary pickup. */
+            int floor_item = first_floor_item_under_player();
+
             key = ' ';
-            name = (first_floor_item_under_player() != 0) ? "Pick Up"
-                                                          : "Confirm";
+            if (!floor_item)
+                name = "Confirm";
+            else if (floor_item_can_prefer_harness(floor_item))
+                name = "Harness";
+            else
+                name = "Pick Up";
         } else if (cave_down_stairs_bold(p_ptr->py, p_ptr->px)) {
             /* Space runs interact-here, which asks before changing levels. */
             key = ' ';
@@ -617,8 +634,11 @@ bool touch_shortcut_context_action(int binding, bool description_open,
             name = item_use_action_name(&o_list[-floor_interaction],
                 floor_interaction);
         } else if (first_floor_item_under_player() != 0) {
-            key = 'g';
-            name = "Pick Up";
+            int floor_item = first_floor_item_under_player();
+
+            key = ' ';
+            name = floor_item_can_prefer_harness(floor_item)
+                ? "Harness" : "Pick Up";
         } else {
             key = ' ';
             name = "Confirm";
@@ -682,7 +702,7 @@ static bool smith_oath_takeoff_hits_pack(const object_type* o_ptr, int source_it
     if (!smith_oath_forbids_object(o_ptr))
         return false;
 
-    if (source_item >= 0 && source_item < INVEN_PACK)
+    if (player_inventory_handle_is_carried(source_item))
         return inven_carry_okay_after_removing(o_ptr, source_item, 1);
 
     return inven_carry_okay(o_ptr);
@@ -814,7 +834,8 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
     const object_type* incoming, bool include_equip, bool include_supplies,
     cptr reason, int* replacement_item)
 {
-    object_choice_entry entries[OBJECT_CHOICE_MAX_ENTRIES];
+    object_choice_entry* entries;
+    int capacity;
     int count = 0;
     int selected = -1;
     char desc[480];
@@ -849,10 +870,16 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
         return do_cmd_knowledge_supplies(&request);
     }
 
+    capacity = player_pack_entry_count();
+    if (include_equip)
+        capacity += INVEN_TOTAL - INVEN_WIELD;
+    if (include_supplies)
+        capacity += supplies_entry_count();
+    entries = mem_alloc_array(MAX(capacity, 1), object_choice_entry);
+
     if (include_equip)
     {
-        for (int i = INVEN_WIELD; i < INVEN_TOTAL
-             && count < OBJECT_CHOICE_MAX_ENTRIES; i++)
+        for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
         {
             if (!replacement_choice_allowed(incoming, &inventory[i], true,
                     include_equip))
@@ -866,23 +893,24 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
         }
     }
 
-    for (int i = 0; i < INVEN_PACK && count < OBJECT_CHOICE_MAX_ENTRIES; i++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        if (!replacement_choice_allowed(incoming, &inventory[i], false,
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
+
+        if (!replacement_choice_allowed(incoming, o_ptr, false,
                 include_equip))
         {
             continue;
         }
 
-        object_choice_entry_make(&entries[count], i, &inventory[i], NULL,
-            NULL);
+        object_choice_entry_make(&entries[count], item, o_ptr, NULL, NULL);
         count++;
     }
 
     if (include_supplies)
     {
-        for (int i = 0; i < supplies_entry_count()
-             && count < OBJECT_CHOICE_MAX_ENTRIES; i++)
+        for (int i = 0; i < supplies_entry_count(); i++)
         {
             object_type* o_ptr = supplies_entry_at(i);
 
@@ -899,7 +927,10 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
     }
 
     if (count <= 0)
+    {
+        entries = mem_free(entries);
         return false;
+    }
 
     object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
     if (show_weights)
@@ -927,13 +958,18 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
     if (!object_choice_overlay("What to replace?", desc, entries, count, 0,
             &selected))
     {
+        entries = mem_free(entries);
         return false;
     }
 
     if (selected < 0 || selected >= count)
+    {
+        entries = mem_free(entries);
         return false;
+    }
 
     *replacement_item = entries[selected].item;
+    entries = mem_free(entries);
     return true;
 }
 
@@ -1169,10 +1205,10 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     object_type* o_ptr;
     char o_name[80];
 
-    if (item < 0 || item >= INVEN_PACK)
+    if (!player_inventory_handle_is_carried(item))
         return false;
 
-    o_ptr = &inventory[item];
+    o_ptr = player_inventory_object(item);
     if (!object_can_choose_pack_or_harness(o_ptr)
         || (target_storage != OBJECT_STORAGE_PACK
             && target_storage != OBJECT_STORAGE_HARNESS)
@@ -1232,17 +1268,21 @@ void do_cmd_use_item_by_index(int item)
     }
 
     /* Get the item (in the pack) */
-    if (item >= 0)
+    if (player_inventory_handle_valid(item))
     {
-        o_ptr = &inventory[item];
+        o_ptr = player_inventory_object(item);
         log_debug("do_cmd_use_item_by_index: Using item from inventory, index=%d", item);
     }
 
     /* Get the item (on the floor) */
-    else
+    else if (item < 0)
     {
         o_ptr = &o_list[0 - item];
         log_debug("do_cmd_use_item_by_index: Using item from floor, index=%d, o_list index=%d", item, 0 - item);
+    }
+    else
+    {
+        return;
     }
 
     if (item >= 0 && item < INVEN_PACK
@@ -1723,9 +1763,9 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         }
 
         /* Get the item (in the pack) */
-        if (item >= 0)
+        if (player_inventory_handle_valid(item))
         {
-            o_ptr = &inventory[item];
+            o_ptr = player_inventory_object(item);
         }
         else
         {
@@ -2013,7 +2053,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         }
     }
 
-    move_pack_weapon_to_harness = item >= 0 && item < INVEN_PACK
+    move_pack_weapon_to_harness = player_inventory_handle_is_carried(item)
         && object_can_choose_pack_or_harness(o_ptr)
         && o_ptr->storage == OBJECT_STORAGE_PACK;
     if (move_pack_weapon_to_harness)
@@ -2410,16 +2450,19 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     {
         supplies_consume_quantity(supply_index, quantity);
     }
-    else if (item >= 0)
+    else if (player_inventory_handle_valid(item))
     {
+        object_type* carried = player_inventory_object(item);
+
         log_debug(
             "do_cmd_wield: Before decrease - item=%d, k_idx=%d, ego_pfx=%d, ego_sfx=%d, number=%d",
-            item, inventory[item].k_idx, object_ego_prefix(&inventory[item]),
-            object_ego_suffix(&inventory[item]), inventory[item].number);
+            item, carried->k_idx, object_ego_prefix(carried),
+            object_ego_suffix(carried), carried->number);
         inven_item_increase(item, -quantity);
         inven_item_optimize(item);
-        log_debug("do_cmd_wield: After optimize - item=%d, k_idx=%d", 
-                  item, inventory[item].k_idx);
+        carried = player_inventory_object(item);
+        log_debug("do_cmd_wield: After optimize - item=%d, k_idx=%d",
+            item, carried ? carried->k_idx : 0);
     }
 
     /* Decrease the item (from the floor) */
@@ -2798,44 +2841,6 @@ static int jewelry_preset_slot_for_inventory(int inventory_slot)
     }
 }
 
-static bool jewelry_preset_objects_match(const object_type* a,
-    const object_type* b)
-{
-    if (!a || !b || !a->k_idx || !b->k_idx)
-        return false;
-
-    if (a->k_idx != b->k_idx || a->tval != b->tval || a->sval != b->sval)
-        return false;
-    if (a->pval != b->pval || a->weight != b->weight)
-        return false;
-    if (a->name1 != b->name1)
-        return false;
-    if (object_ego_prefix(a) != object_ego_prefix(b)
-        || object_ego_suffix(a) != object_ego_suffix(b))
-        return false;
-    if (a->att != b->att || a->evn != b->evn)
-        return false;
-    if (a->dd != b->dd || a->ds != b->ds
-        || a->pd != b->pd || a->ps != b->ps)
-        return false;
-    if (a->abilities != b->abilities)
-        return false;
-    if (memcmp(a->stat_bonus, b->stat_bonus, sizeof(a->stat_bonus)) != 0)
-        return false;
-    if (memcmp(a->skill_bonus, b->skill_bonus, sizeof(a->skill_bonus)) != 0)
-        return false;
-    if (memcmp(a->skilltype, b->skilltype, sizeof(a->skilltype)) != 0)
-        return false;
-    if (memcmp(a->abilitynum, b->abilitynum, sizeof(a->abilitynum)) != 0)
-        return false;
-    if (memcmp(a->bane_type, b->bane_type, sizeof(a->bane_type)) != 0)
-        return false;
-    if (a->unused1 != b->unused1)
-        return false;
-
-    return true;
-}
-
 static bool jewelry_preset_current_slot_is_settled(int inventory_slot,
     const object_type* targets[JEWELRY_PRESET_SLOT_MAX],
     const bool target_present[JEWELRY_PRESET_SLOT_MAX])
@@ -2854,11 +2859,16 @@ static bool jewelry_preset_targets_available(
     const bool target_present[JEWELRY_PRESET_SLOT_MAX])
 {
     bool used[INVEN_TOTAL];
+    int pack_count = player_pack_entry_count();
+    bool* used_pack = pack_count > 0
+        ? mem_alloc_array(pack_count, bool) : NULL;
     int jewelry_slots[JEWELRY_PRESET_SLOT_MAX] = {
         INVEN_LEFT, INVEN_RIGHT, INVEN_NECK
     };
 
     memset(used, 0, sizeof(used));
+    if (used_pack)
+        memset(used_pack, 0, (size_t)pack_count * sizeof(*used_pack));
 
     for (int preset_slot = 0; preset_slot < JEWELRY_PRESET_SLOT_MAX;
          preset_slot++)
@@ -2890,21 +2900,28 @@ static bool jewelry_preset_targets_available(
             }
         }
 
-        for (int item = 0; item < INVEN_PACK && !found; item++)
+        for (int ordinal = 0; ordinal < pack_count && !found; ordinal++)
         {
-            if (used[item])
+            object_type* o_ptr;
+
+            if (used_pack[ordinal])
                 continue;
-            if (jewelry_preset_objects_match(&inventory[item], target))
+            o_ptr = player_pack_entry_at(ordinal);
+            if (jewelry_preset_objects_match(o_ptr, target))
             {
-                used[item] = true;
+                used_pack[ordinal] = true;
                 found = true;
             }
         }
 
         if (!found)
+        {
+            used_pack = mem_free(used_pack);
             return false;
+        }
     }
 
+    used_pack = mem_free(used_pack);
     return true;
 }
 
@@ -2934,10 +2951,12 @@ static int jewelry_preset_find_source_for_target(int preset_slot,
             return item;
     }
 
-    for (int item = 0; item < INVEN_PACK; item++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        if (jewelry_preset_objects_match(&inventory[item], target))
-            return item;
+        object_type* o_ptr = player_pack_entry_at(ordinal);
+
+        if (jewelry_preset_objects_match(o_ptr, target))
+            return player_pack_entry_handle_at(ordinal);
     }
 
     return -1;
@@ -3001,11 +3020,24 @@ static bool jewelry_preset_can_apply_now(int preset)
             targets, target_present, false);
 }
 
+static void jewelry_preset_display_name(int preset, char* buf, size_t buflen)
+{
+    const char* name = jewelry_preset_name(preset);
+
+    if (!buf || buflen == 0)
+        return;
+    if (name && name[0])
+        SDL_strlcpy(buf, name, buflen);
+    else
+        strnfmt(buf, buflen, "Jewelry set %d", preset + 1);
+}
+
 bool do_cmd_jewelry_preset_apply(int preset)
 {
     const object_type* targets[JEWELRY_PRESET_SLOT_MAX];
     bool target_present[JEWELRY_PRESET_SLOT_MAX];
     bool changed = false;
+    char preset_name[JEWELRY_PRESET_NAME_MAX + 20];
 
     if (death_spectator_active())
     {
@@ -3016,9 +3048,11 @@ bool do_cmd_jewelry_preset_apply(int preset)
     if (preset < 0 || preset >= JEWELRY_PRESET_MAX
         || !jewelry_preset_is_set(preset))
     {
-        msg_format("Jewelry set %d is empty.", preset + 1);
+        jewelry_preset_display_name(preset, preset_name, sizeof(preset_name));
+        msg_format("%s is empty.", preset_name);
         return false;
     }
+    jewelry_preset_display_name(preset, preset_name, sizeof(preset_name));
 
     for (int slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
     {
@@ -3030,14 +3064,13 @@ bool do_cmd_jewelry_preset_apply(int preset)
         || !target_present[JEWELRY_PRESET_SLOT_RIGHT]
         || !target_present[JEWELRY_PRESET_SLOT_NECK])
     {
-        msg_format("Jewelry set %d is incomplete.", preset + 1);
+        msg_format("%s is incomplete.", preset_name);
         return false;
     }
 
     if (!jewelry_preset_targets_available(targets, target_present))
     {
-        msg_format("You no longer have all the items for jewelry set %d.",
-            preset + 1);
+        msg_format("You no longer have all the items for %s.", preset_name);
         return false;
     }
 
@@ -3086,8 +3119,7 @@ bool do_cmd_jewelry_preset_apply(int preset)
             targets, target_present);
         if (source < 0)
         {
-            msg_format("You no longer have all the items for jewelry set %d.",
-                preset + 1);
+            msg_format("You no longer have all the items for %s.", preset_name);
             return changed;
         }
 
@@ -3095,7 +3127,7 @@ bool do_cmd_jewelry_preset_apply(int preset)
 
         if (!jewelry_preset_objects_match(&inventory[dest], targets[slot]))
         {
-            msg_format("Jewelry set %d could not be completed.", preset + 1);
+            msg_format("%s could not be completed.", preset_name);
             return changed;
         }
 
@@ -3103,17 +3135,21 @@ bool do_cmd_jewelry_preset_apply(int preset)
     }
 
     if (changed)
-        msg_format("Jewelry set %d equipped.", preset + 1);
+        msg_format("%s equipped.", preset_name);
     else
-        msg_format("Jewelry set %d is already equipped.", preset + 1);
+        msg_format("%s is already equipped.", preset_name);
 
     return true;
 }
 
 bool do_cmd_jewelry_preset_store(int preset)
 {
+    char preset_name[JEWELRY_PRESET_NAME_MAX + 20];
+
     if (preset < 0 || preset >= JEWELRY_PRESET_MAX)
         return false;
+
+    jewelry_preset_display_name(preset, preset_name, sizeof(preset_name));
 
     if (death_spectator_active())
     {
@@ -3122,7 +3158,7 @@ bool do_cmd_jewelry_preset_store(int preset)
     }
 
     if (jewelry_preset_is_set(preset)
-        && !get_check(format("Replace jewelry set %d? ", preset + 1)))
+        && !get_check(format("Replace %s? ", preset_name)))
     {
         return false;
     }
@@ -3133,40 +3169,47 @@ bool do_cmd_jewelry_preset_store(int preset)
         return false;
     }
 
-    msg_format("Jewelry set %d saved.", preset + 1);
+    msg_format("%s saved.", preset_name);
     return true;
 }
 
 bool do_cmd_jewelry_preset_clear(int preset)
 {
+    char preset_name[JEWELRY_PRESET_NAME_MAX + 20];
+
     if (preset < 0 || preset >= JEWELRY_PRESET_MAX)
         return false;
 
+    jewelry_preset_display_name(preset, preset_name, sizeof(preset_name));
+
     if (!jewelry_preset_is_set(preset))
     {
-        msg_format("Jewelry set %d is already empty.", preset + 1);
+        msg_format("%s is already empty.", preset_name);
         return false;
     }
 
-    if (!get_check(format("Clear jewelry set %d? ", preset + 1)))
+    if (!get_check(format("Clear %s? ", preset_name)))
         return false;
 
     jewelry_preset_clear(preset);
-    msg_format("Jewelry set %d cleared.", preset + 1);
+    msg_format("%s cleared.", preset_name);
     return true;
 }
 
 void do_cmd_jewelry_preset_shortcut(void)
 {
     ui_question_option options[JEWELRY_PRESET_MAX];
-    char labels[JEWELRY_PRESET_MAX][32];
+    char labels[JEWELRY_PRESET_MAX][JEWELRY_PRESET_NAME_MAX + 24];
     int choice;
 
     for (int i = 0; i < JEWELRY_PRESET_MAX; i++)
     {
         bool available = jewelry_preset_can_apply_now(i);
 
-        strnfmt(labels[i], sizeof(labels[i]), "Jewelry set %d%s", i + 1,
+        char preset_name[JEWELRY_PRESET_NAME_MAX + 20];
+
+        jewelry_preset_display_name(i, preset_name, sizeof(preset_name));
+        strnfmt(labels[i], sizeof(labels[i]), "%s%s", preset_name,
             jewelry_preset_is_set(i)
                 ? (available ? "" : " (unavailable)") : " (empty)");
         options[i].key = (char)('1' + i);
@@ -3381,11 +3424,11 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
     }
 
     /* Paranoia */
-    if (item < 0 || item >= INVEN_TOTAL)
+    if (!player_inventory_handle_valid(item))
         return false;
 
     /* Get the item */
-    o_ptr = &inventory[item];
+    o_ptr = player_inventory_object(item);
 
     /* Nothing there */
     if (!o_ptr->k_idx)
@@ -3963,11 +4006,9 @@ bool do_cmd_delete_item_by_index(int item)
     char prompt[160];
 
     /* Get the item (in the pack) */
-    if (item >= 0)
+    if (player_inventory_handle_valid(item))
     {
-        if (item >= INVEN_TOTAL)
-            return false;
-        o_ptr = &inventory[item];
+        o_ptr = player_inventory_object(item);
     }
 
     /* Get the item (on the floor) */
@@ -4157,7 +4198,7 @@ void do_cmd_observe(void)
         }
         else if (action == ' ')
         {
-            do_cmd_pickup();
+            do_cmd_pickup_to_harness();
         }
 
         return;
@@ -4334,9 +4375,9 @@ void do_cmd_uninscribe(void)
         return;
 
     /* Get the item (in the pack) */
-    if (item >= 0)
+    if (player_inventory_handle_valid(item))
     {
-        o_ptr = &inventory[item];
+        o_ptr = player_inventory_object(item);
     }
 
     /* Get the item (on the floor) */
@@ -4379,9 +4420,9 @@ void do_cmd_inscribe(void)
         return;
 
     /* Get the item (in the pack) */
-    if (item >= 0)
+    if (player_inventory_handle_valid(item))
     {
-        o_ptr = &inventory[item];
+        o_ptr = player_inventory_object(item);
     }
 
     /* Get the item (on the floor) */
@@ -4546,9 +4587,9 @@ void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item)
             o_ptr = supplies_entry_at(supply_index);
             from_supplies = true;
         }
-        else if (item >= 0)
+        else if (player_inventory_handle_valid(item))
         {
-            o_ptr = &inventory[item];
+            o_ptr = player_inventory_object(item);
         }
 
         /* Get the item (on the floor) */
@@ -4787,9 +4828,9 @@ void do_cmd_refuel_torch(
             return;
 
         /* Get the item (in the pack) */
-        if (item >= 0)
+        if (player_inventory_handle_valid(item))
         {
-            o_ptr = &inventory[item];
+            o_ptr = player_inventory_object(item);
         }
 
         /* Get the item (on the floor) */

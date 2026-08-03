@@ -209,6 +209,7 @@ void player_wipe(void)
     {
         object_wipe(&inventory[i]);
     }
+    player_carried_extra_reset_store();
     player_quiver_reset_store();
 
     /* Start with no artefacts made yet */

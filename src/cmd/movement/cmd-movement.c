@@ -898,10 +898,8 @@ void do_cmd_hold(void)
     search();
 }
 
-/*
- * Get items
- */
-void do_cmd_pickup(void)
+static void do_cmd_pickup_with_preference(
+    object_storage_type preferred_storage)
 {
     s16b chest_o_idx;
 
@@ -924,13 +922,30 @@ void do_cmd_pickup(void)
     if (cave_o_idx[p_ptr->py][p_ptr->px])
     {
         /* Handle "objects" */
-        py_pickup();
+        if (preferred_storage == OBJECT_STORAGE_PACK)
+            py_pickup_to_pack();
+        else if (preferred_storage == OBJECT_STORAGE_HARNESS)
+            py_pickup_to_harness();
+        else
+            py_pickup();
     }
 
     else
     {
         msg_print("There is nothing here to get.");
     }
+}
+
+/* Get items, preferring the Pack when an item can be stored in either pool. */
+void do_cmd_pickup(void)
+{
+    do_cmd_pickup_with_preference(OBJECT_STORAGE_PACK);
+}
+
+/* Get items, preferring the Harness when an item can be stored in either pool. */
+void do_cmd_pickup_to_harness(void)
+{
+    do_cmd_pickup_with_preference(OBJECT_STORAGE_HARNESS);
 }
 
 /*

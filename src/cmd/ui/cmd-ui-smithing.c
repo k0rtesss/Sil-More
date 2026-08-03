@@ -2117,12 +2117,15 @@ void move_displayed_highlight(
 bool melt_metal_item(int item_num)
 {
     int number = 0;
-    int item, i;
     u32b f1, f2, f3;
+    int total = player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD);
 
-    for (item = 0; item < INVEN_TOTAL; item++)
+    for (int ordinal = 0; ordinal < total; ordinal++)
     {
-        object_type* o_ptr = &inventory[item];
+        int item = ordinal < player_pack_entry_count()
+            ? player_pack_entry_handle_at(ordinal)
+            : INVEN_WIELD + ordinal - player_pack_entry_count();
+        object_type* o_ptr = player_inventory_object(item);
 
         object_flags(o_ptr, &f1, &f2, &f3);
 
@@ -2134,35 +2137,6 @@ bool melt_metal_item(int item_num)
 
         if (number == item_num)
         {
-            int slots_needed = o_ptr->weight / 99;
-            int empty_slots = 0;
-
-            // Equipments needs an extra slot
-            if (item >= INVEN_WIELD)
-                slots_needed++;
-
-            // Count empty slots
-            for (i = INVEN_PACK - 1; i > 0; i--)
-            {
-                if (!(&inventory[i])->k_idx)
-                    empty_slots++;
-            }
-
-            if (empty_slots < slots_needed)
-            {
-                msg_print("You do not have enough room in your pack.");
-                if (slots_needed - empty_slots == 1)
-                {
-                    msg_print("You must free up another slot.");
-                }
-                else
-                {
-                    msg_format("You must free up %d more slots.",
-                        slots_needed - empty_slots);
-                }
-                return (false);
-            }
-
             {
                 char o_name[80];
                 char prompt[160];
@@ -2223,7 +2197,7 @@ bool melt_metal_item(int item_num)
 
                     // give it to the player
                     slot = inven_carry(i_ptr2, true);
-                    if ((slot >= 0) && (slot < INVEN_TOTAL))
+                    if (player_inventory_handle_is_carried(slot))
                     {
                         inven_item_optimize(slot);
                         inven_item_describe(slot);
@@ -2238,7 +2212,7 @@ bool melt_metal_item(int item_num)
 
                 // now give the last stack of mithril to the player
                 slot = inven_carry(i_ptr, true);
-                if ((slot >= 0) && (slot < INVEN_TOTAL))
+                if (player_inventory_handle_is_carried(slot))
                 {
                     inven_item_optimize(slot);
                     inven_item_describe(slot);
@@ -2261,12 +2235,15 @@ bool melt_metal_item(int item_num)
 static int meltable_metal_items_carried(void)
 {
     int number = 0;
-    int item;
     u32b f1, f2, f3;
+    int total = player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD);
 
-    for (item = 0; item < INVEN_TOTAL; item++)
+    for (int ordinal = 0; ordinal < total; ordinal++)
     {
-        object_type* o_ptr = &inventory[item];
+        int item = ordinal < player_pack_entry_count()
+            ? player_pack_entry_handle_at(ordinal)
+            : INVEN_WIELD + ordinal - player_pack_entry_count();
+        object_type* o_ptr = player_inventory_object(item);
 
         object_flags(o_ptr, &f1, &f2, &f3);
 
@@ -2286,9 +2263,9 @@ static int metal_carried(byte sval)
     int w = 0;
     int item;
 
-    for (item = 0; item < INVEN_WIELD; item++)
+    for (item = 0; item < player_pack_entry_count(); item++)
     {
-        object_type* o_ptr = &inventory[item];
+        object_type* o_ptr = player_pack_entry_at(item);
 
         if ((o_ptr->tval == TV_METAL) && (o_ptr->sval == sval))
         {
@@ -2311,20 +2288,32 @@ int star_iron_carried(void)
 
 static void use_metal(byte sval, int cost)
 {
-    int item;
-
-    for (item = INVEN_WIELD - 1; item >= 0 && cost > 0; item--)
+    while (cost > 0)
     {
-        object_type* o_ptr = &inventory[item];
+        int item = -1;
+        object_type* o_ptr = NULL;
 
-        if ((o_ptr->tval == TV_METAL) && (o_ptr->sval == sval))
+        for (int ordinal = player_pack_entry_count() - 1; ordinal >= 0;
+             ordinal--)
         {
-            int use = MIN(o_ptr->number, cost);
-            inven_item_increase(item, -use);
-            inven_item_describe(item);
-            inven_item_optimize(item);
-            cost -= use;
+            object_type* candidate = player_pack_entry_at(ordinal);
+
+            if (candidate->tval == TV_METAL && candidate->sval == sval)
+            {
+                item = player_pack_entry_handle_at(ordinal);
+                o_ptr = candidate;
+                break;
+            }
         }
+
+        if (!o_ptr)
+            break;
+
+        int use = MIN(o_ptr->number, cost);
+        inven_item_increase(item, -use);
+        inven_item_describe(item);
+        inven_item_optimize(item);
+        cost -= use;
     }
 }
 

@@ -3643,6 +3643,12 @@ bool sdl_main_screen_handle_character_panel_hover_pointer(float x, float y)
         && !sdl_touch_zone_controls_active()
         && sdl_combat_overlay_point_to_cell(x, y, &col, &row))
     {
+        if (row == PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW) {
+            sdl_pointer_attack_set_panel_hover_mode(SDL_POINTER_ATTACK_NONE);
+            sdl_main_screen_touch_zone_selection_set(SDL_STATUS_CLICK_NONE,
+                -1, SDL_PANEL_CLICK_NONE, -1, active);
+            return true;
+        }
         attack_mode = sdl_combat_overlay_attack_mode_at_cell(col, row);
         attack_quiver = (row == ROW_QUIVER);
         combat_hit = true;
@@ -3741,6 +3747,12 @@ bool sdl_main_screen_handle_character_panel_pointer(float x, float y)
     if (sdl_touch_zone_controls_active())
         return false;
     if (sdl_combat_overlay_point_to_cell(x, y, &col, &row)) {
+        if (row == PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW) {
+            sdl_main_screen_touch_zone_selection_set(SDL_STATUS_CLICK_NONE,
+                -1, SDL_PANEL_CLICK_NONE, -1, false);
+            sdl_enqueue_bypassed_command('J');
+            return true;
+        }
         attack_mode = sdl_combat_overlay_attack_mode_at_cell(col, row);
         attack_quiver = (row == ROW_QUIVER);
         if (attack_mode != SDL_POINTER_ATTACK_NONE

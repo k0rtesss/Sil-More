@@ -919,10 +919,12 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
         good[gc++] = (format(
             "can be thrown effectively (%d squares)", throwing_range(o_ptr)));
         if (object_is_belt_weapon(o_ptr))
-            good[gc++] = "stays on the Harness and can be placed at the belt (belt passive abilities remain active)";
-        else
+            good[gc++] = "can be placed at the belt (belt passive abilities remain active)";
+        else if (!(f4 & TR4_HARNESS_STOWABLE))
             good[gc++] = "stays on the Harness";
     }
+    if (f4 & TR4_HARNESS_STOWABLE)
+        good[gc++] = "can be kept ready on the Harness or moved to the Pack for storage";
 
     /* Collect stuff which can't be categorized */
     if (((o_ptr->tval == TV_LIGHT) && artefact_p(o_ptr))
@@ -2369,7 +2371,7 @@ static bool screen_out_head(const object_type* o_ptr)
         int total_weight = o_ptr->weight * o_ptr->number;
         int each_weight = o_ptr->weight;
         if (o_ptr->number > 1) {
-            strnfmt(weight_buf, sizeof(weight_buf), " %3d.%1d lb (%3d.%1d lb each)",
+            strnfmt(weight_buf, sizeof(weight_buf), " %3d.%1d lb (%d.%1d lb each)",
                 total_weight / 10, total_weight % 10, each_weight / 10, each_weight % 10);
         } else {
             strnfmt(weight_buf, sizeof(weight_buf), " %3d.%1d lb", total_weight / 10, total_weight % 10);

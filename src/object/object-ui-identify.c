@@ -29,9 +29,6 @@ typedef struct
     byte color;
 } ident_entry;
 
-#define MAX_IDENT_SUPPLY 256
-#define MAX_IDENT_ENTRIES (INVEN_PACK + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK + MAX_IDENT_SUPPLY)
-
 static void build_ident_entry_label(int order, char out[6])
 {
     char label = index_to_label(order);
@@ -43,8 +40,11 @@ static void build_ident_entry_label(int order, char out[6])
 bool display_unified_identify_menu(bool include_floor, int* out_item,
     object_type** out_object)
 {
-    ident_entry entries[MAX_IDENT_ENTRIES];
-    object_choice_entry choices[MAX_IDENT_ENTRIES];
+    int capacity = player_pack_entry_count()
+        + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK
+        + supplies_entry_count();
+    ident_entry* entries;
+    object_choice_entry* choices;
     int entry_count = 0;
     int floor_list[MAX_FLOOR_STACK];
     int floor_num = 0;
@@ -54,11 +54,14 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
     if (!out_item || !out_object)
         return false;
 
+    entries = mem_alloc_array(MAX(capacity, 1), ident_entry);
+    choices = mem_alloc_array(MAX(capacity, 1), object_choice_entry);
+
     if (include_floor)
     {
         floor_num = scan_floor(floor_list, MAX_FLOOR_STACK, p_ptr->py,
             p_ptr->px, 0x00);
-        for (int i = 0; i < floor_num && entry_count < MAX_IDENT_ENTRIES; i++)
+        for (int i = 0; i < floor_num && entry_count < capacity; i++)
         {
             int o_idx = floor_list[i];
             object_type* o_ptr = &o_list[o_idx];
@@ -79,7 +82,7 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
         }
     }
 
-    for (int i = 0; i < supply_count && entry_count < MAX_IDENT_ENTRIES; i++)
+    for (int i = 0; i < supply_count && entry_count < capacity; i++)
     {
         object_type* o_ptr = supplies_entry_at(i);
         ident_entry* entry;
@@ -113,9 +116,12 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
         entry_count++;
     }
 
-    for (int i = 0; i < INVEN_PACK && entry_count < MAX_IDENT_ENTRIES; i++)
+    for (int ordinal = 0;
+         ordinal < player_pack_entry_count() && entry_count < capacity;
+         ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
         ident_entry* entry;
         char label[6];
 
@@ -124,18 +130,18 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
 
         entry = &entries[entry_count];
         entry->type = IDENT_ENTRY_INVEN;
-        entry->index = i;
+        entry->index = item;
         entry->supply_index = -1;
         entry->floor_o_idx = 0;
         entry->o_ptr = o_ptr;
         build_ident_entry_label(entry_count, label);
-        object_choice_entry_make(&choices[entry_count], i, o_ptr, label,
+        object_choice_entry_make(&choices[entry_count], item, o_ptr, label,
             NULL);
         entry_count++;
     }
 
     for (int i = INVEN_WIELD; i < INVEN_TOTAL
-         && entry_count < MAX_IDENT_ENTRIES; i++)
+         && entry_count < capacity; i++)
     {
         object_type* o_ptr = &inventory[i];
         ident_entry* entry;
@@ -159,17 +165,25 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
     if (entry_count == 0)
     {
         msg_print("There is nothing unidentified here.");
+        entries = mem_free(entries);
+        choices = mem_free(choices);
         return false;
     }
 
     if (!object_choice_overlay("Identify which item?", NULL, choices,
             entry_count, 0, &selected))
     {
+        entries = mem_free(entries);
+        choices = mem_free(choices);
         return false;
     }
 
     if (selected < 0 || selected >= entry_count)
+    {
+        entries = mem_free(entries);
+        choices = mem_free(choices);
         return false;
+    }
 
     if (entries[selected].type == IDENT_ENTRY_FLOOR)
     {
@@ -184,9 +198,11 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
     else
     {
         *out_item = entries[selected].index;
-        *out_object = &inventory[entries[selected].index];
+        *out_object = entries[selected].o_ptr;
     }
 
+    entries = mem_free(entries);
+    choices = mem_free(choices);
     return true;
 }
 

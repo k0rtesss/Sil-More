@@ -213,6 +213,16 @@ void calc_bonuses(void)
         if (f2 & TR2_DANGER)
             p_ptr->danger += 1;
     }
+    for (i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        o_ptr = player_carried_extra_entry_at(i);
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        p_ptr->total_weight += o_ptr->number * o_ptr->weight;
+        object_flags(o_ptr, &f1, &f2, &f3);
+        if (f2 & TR2_DANGER)
+            p_ptr->danger += 1;
+    }
 
     /*** Analyze equipment ***/
 

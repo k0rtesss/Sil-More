@@ -92,6 +92,7 @@ errr rd_inventory(void)
         object_wipe(&inventory[wipe_slot]);
     p_ptr->inven_cnt = 0;
     p_ptr->equip_cnt = 0;
+    player_carried_extra_reset_store();
     player_quiver_reset_store();
 
     /* Wipe the smithing object */
@@ -202,6 +203,40 @@ errr rd_inventory(void)
     log_trace("[load:%06u] === END INVENTORY ===", (unsigned)load_byte_offset);
 
     log_debug("Inventory loaded: %d items carried, %d items equipped", p_ptr->inven_cnt, p_ptr->equip_cnt);
+
+    if (savefile_version_at_least(0, 9, 7, 12))
+    {
+        u16b extra_magic = 0;
+        u32b extra_count = 0;
+
+        log_trace("[load:%06u] === BEGIN CARRIED EXTRA ===",
+            (unsigned)load_byte_offset);
+        rd_u16b(&extra_magic);
+        rd_u32b(&extra_count);
+        if (extra_magic != SAVEFILE_CARRIED_EXTRA_BLOCK_MAGIC
+            || extra_count >= (u32b)(QUIVER_INDEX - CARRIED_EXTRA_INDEX))
+        {
+            log_warn("Invalid expandable carried block marker/count 0x%04X/%u",
+                (unsigned)extra_magic, (unsigned)extra_count);
+            note("Error reading expandable carried inventory");
+            return (-1);
+        }
+
+        for (u32b i = 0; i < extra_count; i++)
+        {
+            object_type carried;
+
+            object_wipe(&carried);
+            if (rd_item(&carried) || !carried.k_idx || carried.number <= 0
+                || !player_carried_extra_load(&carried))
+            {
+                note("Error reading expandable carried inventory entry");
+                return (-1);
+            }
+        }
+        log_trace("[load:%06u] === END CARRIED EXTRA ===",
+            (unsigned)load_byte_offset);
+    }
 
     if (savefile_version_at_least(0, 9, 7, 9))
     {
@@ -380,7 +415,15 @@ errr rd_inventory(void)
         for (byte preset = 0; preset < preset_count; preset++)
         {
             byte is_set = 0;
+            char preset_name[JEWELRY_PRESET_NAME_MAX];
             rd_byte(&is_set);
+            preset_name[0] = '\0';
+            if (savefile_version_at_least(0, 9, 7, 11))
+            {
+                rd_string(preset_name, sizeof(preset_name));
+                if (preset < JEWELRY_PRESET_MAX)
+                    jewelry_preset_set_name(preset, preset_name);
+            }
 
             for (byte slot_idx = 0; slot_idx < JEWELRY_PRESET_SLOT_MAX;
                  slot_idx++)

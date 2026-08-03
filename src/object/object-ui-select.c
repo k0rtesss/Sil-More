@@ -120,6 +120,8 @@ static void object_choice_label_for_item(char label[OBJECT_CHOICE_LABEL_LEN],
         c = supplies_label_for_entry(item - SUPPLIES_INDEX);
     else if (item < 0)
         c = '-';
+    else if (player_inventory_handle_is_carried(item))
+        c = player_inventory_label(item);
     else
         c = index_to_label(item);
 
@@ -378,9 +380,6 @@ bool object_choice_overlay(cptr title, cptr desc,
     if (!entries || count <= 0 || !out_entry)
         return false;
 
-    if (count > OBJECT_CHOICE_MAX_ENTRIES)
-        count = OBJECT_CHOICE_MAX_ENTRIES;
-
     highlight = (default_index >= 0 && default_index < count)
         ? default_index
         : 0;
@@ -576,7 +575,9 @@ static bool object_item_select_add_entry(object_choice_entry entries[],
 bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
     int* item_out)
 {
-    object_choice_entry entries[OBJECT_CHOICE_MAX_ENTRIES];
+    object_choice_entry* entries;
+    int capacity = MAX_FLOOR_STACK + supplies_entry_count()
+        + player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD) + 1;
     int count = 0;
     int selected = -1;
     int floor_list[MAX_FLOOR_STACK];
@@ -590,6 +591,7 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
         return false;
 
     *item_out = -1;
+    entries = mem_alloc_array(MAX(capacity, 1), object_choice_entry);
 
     if (mode & USE_INVEN)
     {
@@ -601,16 +603,15 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
 
             if (item >= SUPPLIES_INDEX)
                 object_item_select_add_entry(entries, &count,
-                    OBJECT_CHOICE_MAX_ENTRIES, item);
+                    capacity, item);
         }
 
-        for (int i = 0; i < INVEN_PACK; i++)
+        for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
         {
-            if (!inventory[i].k_idx)
-                continue;
+            int item = player_pack_entry_handle_at(ordinal);
 
             object_item_select_add_entry(entries, &count,
-                OBJECT_CHOICE_MAX_ENTRIES, i);
+                capacity, item);
         }
 
         if (include_equip_in_inventory)
@@ -621,7 +622,7 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
                     continue;
 
                 object_item_select_add_entry(entries, &count,
-                    OBJECT_CHOICE_MAX_ENTRIES, i);
+                    capacity, i);
             }
         }
     }
@@ -639,7 +640,7 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
 
             if (include_slot)
                 object_item_select_add_entry(entries, &count,
-                    OBJECT_CHOICE_MAX_ENTRIES, i);
+                    capacity, i);
         }
     }
 
@@ -657,7 +658,7 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
                 continue;
 
             object_item_select_add_entry(entries, &count,
-                OBJECT_CHOICE_MAX_ENTRIES, 0 - o_idx);
+                capacity, 0 - o_idx);
         }
     }
 
@@ -666,6 +667,7 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
         inventory_menu_set_include_equip(old_include_equip);
         if (none_msg)
             msg_print(none_msg);
+        entries = mem_free(entries);
         return false;
     }
 
@@ -673,22 +675,26 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
             count, 0, &selected))
     {
         inventory_menu_set_include_equip(old_include_equip);
+        entries = mem_free(entries);
         return false;
     }
 
     if (selected < 0 || selected >= count)
     {
         inventory_menu_set_include_equip(old_include_equip);
+        entries = mem_free(entries);
         return false;
     }
 
     if (!get_item_allow(entries[selected].item))
     {
         inventory_menu_set_include_equip(old_include_equip);
+        entries = mem_free(entries);
         return false;
     }
 
     *item_out = entries[selected].item;
+    entries = mem_free(entries);
     inventory_menu_set_include_equip(old_include_equip);
     return true;
 }

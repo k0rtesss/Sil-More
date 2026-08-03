@@ -60,13 +60,14 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 7
-#define VERSION_EXTRA 10  /* Per-item Pack/Harness storage choice. */
+#define VERSION_EXTRA 12  /* Expandable carried-inventory entries. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
 /* Marker before the serialized supplies block in 0.9.6+ savefiles. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
 #define SAVEFILE_QUIVER_BLOCK_MAGIC 0x51A8
+#define SAVEFILE_CARRIED_EXTRA_BLOCK_MAGIC 0xC471
 /* Marker before the serialized jewelry preset block in 0.9.6.7+ savefiles. */
 #define SAVEFILE_JEWELRY_PRESET_BLOCK_MAGIC 0x4A57
 /* Packed one-byte Morgoth summons state in 0.9.6.4+ savefiles. */
@@ -835,12 +836,10 @@
 #define ATT_IMPALE 11
 
 /*
- * Maximum number of "normal" pack slots, and the index of the "overflow"
- * slot, which can hold an item, but only temporarily, since it causes the
- * pack to "overflow", dropping the "last" item onto the ground.  Since this
- * value is used as an actual slot, it must be less than "INVEN_WIELD" (below).
- * Note that "INVEN_PACK" is probably hard-coded by its use in savefiles, and
- * by the fact that the screen can only show 23 items plus a one-line prompt.
+ * Number of legacy physical carried slots.  This is no longer the player's
+ * carried-entry limit: additional Pack, Harness, and Jewelry Pouch entries
+ * live in the expandable carried store.  Slot 23 remains reserved so the
+ * serialized equipment indexes below never change.
  */
 #define INVEN_PACK 23
 
@@ -871,10 +870,11 @@
  */
 #define INVEN_TOTAL 40
 
-/* Quiver contents live in a dedicated store addressed by synthetic handles,
- * so mixed arrow types never consume Pack or Harness entries. */
+/* Expandable carried entries and dedicated stores use disjoint synthetic
+ * handle ranges.  These are runtime handles, not savefile slot indexes. */
+#define CARRIED_EXTRA_INDEX 1000
+#define QUIVER_INDEX 0x20000000
 #define QUIVER_ARROW_CAPACITY 48
-#define QUIVER_INDEX 500
 #define QUIVER_INDEX_END (QUIVER_INDEX + QUIVER_ARROW_CAPACITY)
 #define PICKUP_SLOT_ACTIVE_THROWING (-2)
 

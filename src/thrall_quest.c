@@ -788,15 +788,16 @@ static bool thrall_quest_slot_can_be_given(int item_slot, byte quest_item)
             && supply_item_matches_quest(o_ptr, quest_item);
     }
 
-    if (item_slot < 0 || item_slot >= INVEN_TOTAL)
+    if (!player_inventory_handle_valid(item_slot))
         return false;
 
-    o_ptr = &inventory[item_slot];
+    o_ptr = player_inventory_object(item_slot);
     if (!o_ptr->k_idx || !item_matches_quest(o_ptr, quest_item))
         return false;
 
     /* An equipped cursed item cannot be willingly handed over. */
-    if (item_slot >= INVEN_WIELD && cursed_p(o_ptr))
+    if (item_slot >= INVEN_WIELD && item_slot < INVEN_TOTAL
+        && cursed_p(o_ptr))
         return false;
 
     return true;
@@ -807,12 +808,17 @@ static int collect_thrall_quest_item_choices(byte quest_item,
 {
     int count = 0;
 
-    for (int i = 0; i < INVEN_PACK && count < capacity; i++)
+    for (int ordinal = 0;
+         ordinal < player_pack_entry_count() && count < capacity;
+         ordinal++)
     {
-        if (!thrall_quest_slot_can_be_given(i, quest_item))
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
+
+        if (!thrall_quest_slot_can_be_given(item, quest_item))
             continue;
 
-        object_choice_entry_make(&entries[count], i, &inventory[i], NULL,
+        object_choice_entry_make(&entries[count], item, o_ptr, NULL,
             NULL);
         count++;
     }
@@ -846,7 +852,9 @@ static int collect_thrall_quest_item_choices(byte quest_item,
 
 static bool choose_thrall_quest_item(monster_type* m_ptr, int* out_slot)
 {
-    object_choice_entry entries[OBJECT_CHOICE_MAX_ENTRIES];
+    int capacity = player_pack_entry_count()
+        + (INVEN_TOTAL - INVEN_WIELD) + supplies_entry_count();
+    object_choice_entry* entries;
     int count;
     int selected = -1;
     char title[80];
@@ -857,14 +865,19 @@ static bool choose_thrall_quest_item(monster_type* m_ptr, int* out_slot)
         return false;
 
     *out_slot = -1;
+    entries = mem_alloc_array(MAX(capacity, 1), object_choice_entry);
     count = collect_thrall_quest_item_choices(m_ptr->thrall_quest_item,
-        entries, N_ELEMENTS(entries));
+        entries, capacity);
     if (count <= 0)
+    {
+        entries = mem_free(entries);
         return false;
+    }
 
     if (count == 1)
     {
         *out_slot = entries[0].item;
+        entries = mem_free(entries);
         return true;
     }
 
@@ -874,11 +887,18 @@ static bool choose_thrall_quest_item(monster_type* m_ptr, int* out_slot)
         "Choose which matching item to give to the thrall (%s).", item_name);
 
     if (!object_choice_overlay(title, desc, entries, count, 0, &selected))
+    {
+        entries = mem_free(entries);
         return false;
+    }
     if (selected < 0 || selected >= count)
+    {
+        entries = mem_free(entries);
         return false;
+    }
 
     *out_slot = entries[selected].item;
+    entries = mem_free(entries);
     return true;
 }
 
@@ -897,10 +917,7 @@ static object_type* thrall_quest_slot_object(int item_slot, int* supply_idx)
         return supplies_entry_at(idx);
     }
 
-    if (item_slot < 0 || item_slot >= INVEN_TOTAL)
-        return NULL;
-
-    return &inventory[item_slot];
+    return player_inventory_object(item_slot);
 }
 
 static bool thrall_quest_identifies_before_offer(byte quest_item)
@@ -942,10 +959,12 @@ int player_has_thrall_quest_item(byte quest_item)
     int i;
     
     /* Search inventory */
-    for (i = 0; i < INVEN_PACK; i++)
+    for (i = 0; i < player_pack_entry_count(); i++)
     {
-        if (thrall_quest_slot_can_be_given(i, quest_item))
-            return i;
+        int item = player_pack_entry_handle_at(i);
+
+        if (thrall_quest_slot_can_be_given(item, quest_item))
+            return item;
     }
 
     /* Search equipment */

@@ -153,13 +153,13 @@ static bool fletchery_source_matches(const object_type* o_ptr)
     return true;
 }
 
-static int collect_fletchery_source_slots(int slots[INVEN_TOTAL])
+static int collect_fletchery_source_slots(int* slots, int capacity)
 {
     int count = 0;
     int preferred_slot = p_ptr->fletch_item;
 
-    if ((preferred_slot >= 0) && (preferred_slot < INVEN_TOTAL)
-        && fletchery_source_matches(&inventory[preferred_slot]))
+    if (player_inventory_handle_valid(preferred_slot)
+        && fletchery_source_matches(player_inventory_object(preferred_slot)))
     {
         slots[count++] = preferred_slot;
     }
@@ -167,11 +167,15 @@ static int collect_fletchery_source_slots(int slots[INVEN_TOTAL])
     if (!fletchery_source_in_pack)
         return count;
 
-    for (int slot = 0; slot < INVEN_PACK; slot++)
+    for (int ordinal = 0;
+         ordinal < player_pack_entry_count() && count < capacity;
+         ordinal++)
     {
+        int slot = player_pack_entry_handle_at(ordinal);
+
         if (slot == preferred_slot)
             continue;
-        if (!fletchery_source_matches(&inventory[slot]))
+        if (!fletchery_source_matches(player_inventory_object(slot)))
             continue;
 
         slots[count++] = slot;
@@ -180,7 +184,8 @@ static int collect_fletchery_source_slots(int slots[INVEN_TOTAL])
     log_debug("fletchery:collect_slots preferred=%d count=%d in_pack=%d",
         preferred_slot, count, fletchery_source_in_pack ? 1 : 0);
     for (int i = 0; i < count; i++)
-        log_fletchery_object_state("collect_slot", &inventory[slots[i]], slots[i]);
+        log_fletchery_object_state("collect_slot",
+            player_inventory_object(slots[i]), slots[i]);
 
     return count;
 }
@@ -440,9 +445,12 @@ static void distribute_fletchered_arrows(const object_type* arrows)
     bool combined_existing = false;
 
     /* Fill matching stacks in the main Pack. */
-    for (int slot = 0; slot < INVEN_PACK && leftover.number > 0; slot++)
+    for (int ordinal = 0;
+         ordinal < player_pack_entry_count() && leftover.number > 0;
+         ordinal++)
     {
-        object_type* slot_obj = &inventory[slot];
+        int slot = player_pack_entry_handle_at(ordinal);
+        object_type* slot_obj = player_inventory_object(slot);
         if (!slot_obj->k_idx)
             continue;
         if (!object_similar(slot_obj, &leftover))
@@ -723,12 +731,15 @@ void finish_fletching(int turns_left)
 {
     object_type source_template;
     object_type* o_ptr = NULL;
-    int slots[INVEN_TOTAL];
-    int remove_amounts[INVEN_TOTAL];
+    int slot_capacity = MAX(player_pack_entry_count() + 1, 1);
+    int* slots = mem_alloc_array(slot_capacity, int);
+    int* remove_amounts = mem_alloc_array(slot_capacity, int);
     int slot_count = 0;
     int count = 0;
 
-    memset(remove_amounts, 0, sizeof(remove_amounts));
+    memset(remove_amounts, 0,
+        (size_t)slot_capacity * sizeof(*remove_amounts));
+
     log_debug("fletchery:finish begin turns_left=%d fletch_item=%d active_turns=%d snapshot=%d in_pack=%d",
         turns_left, p_ptr->fletch_item, p_ptr->fletching,
         fletchery_source_snapshot_valid ? 1 : 0, fletchery_source_in_pack ? 1 : 0);
@@ -737,12 +748,12 @@ void finish_fletching(int turns_left)
     {
         object_copy(&source_template, &fletchery_source_snapshot);
         count = source_template.number - turns_left;
-        slot_count = collect_fletchery_source_slots(slots);
+        slot_count = collect_fletchery_source_slots(slots, slot_capacity);
         log_fletchery_object_state("finish_snapshot", &source_template, p_ptr->fletch_item);
     }
-    else if ((p_ptr->fletch_item >= 0) && (p_ptr->fletch_item < INVEN_TOTAL))
+    else if (player_inventory_handle_valid(p_ptr->fletch_item))
     {
-        o_ptr = &inventory[p_ptr->fletch_item];
+        o_ptr = player_inventory_object(p_ptr->fletch_item);
         object_copy(&source_template, o_ptr);
         count = o_ptr->number - turns_left;
         if (o_ptr->k_idx)
@@ -766,6 +777,8 @@ void finish_fletching(int turns_left)
         }
 
         clear_fletchery_source_snapshot();
+        slots = mem_free(slots);
+        remove_amounts = mem_free(remove_amounts);
         return;
     }
 
@@ -780,7 +793,8 @@ void finish_fletching(int turns_left)
         for (int i = 0; i < slot_count && available_total < source_total; i++)
         {
             int slot = slots[i];
-            int available = inventory[slot].number;
+            object_type* slot_obj = player_inventory_object(slot);
+            int available = slot_obj ? slot_obj->number : 0;
             int used = MIN(source_total - available_total, available);
 
             if (used <= 0)
@@ -807,6 +821,8 @@ void finish_fletching(int turns_left)
         {
             msg_print("You can no longer find the arrows you were working on.");
             clear_fletchery_source_snapshot();
+            slots = mem_free(slots);
+            remove_amounts = mem_free(remove_amounts);
             return;
         }
 
@@ -833,9 +849,11 @@ void finish_fletching(int turns_left)
             if (remove_amounts[i] <= 0)
                 continue;
 
-            log_fletchery_object_state("finish_remove_before", &inventory[slots[i]], slots[i]);
+            log_fletchery_object_state("finish_remove_before",
+                player_inventory_object(slots[i]), slots[i]);
             inven_item_increase(slots[i], -remove_amounts[i]);
-            log_fletchery_object_state("finish_remove_after", &inventory[slots[i]], slots[i]);
+            log_fletchery_object_state("finish_remove_after",
+                player_inventory_object(slots[i]), slots[i]);
         }
 
         for (int i = slot_count - 1; i >= 0; i--)
@@ -843,9 +861,11 @@ void finish_fletching(int turns_left)
             if (remove_amounts[i] <= 0)
                 continue;
 
-            log_fletchery_object_state("finish_optimize_before", &inventory[slots[i]], slots[i]);
+            log_fletchery_object_state("finish_optimize_before",
+                player_inventory_object(slots[i]), slots[i]);
             inven_item_optimize(slots[i]);
-            log_fletchery_object_state("finish_optimize_after", &inventory[slots[i]], slots[i]);
+            log_fletchery_object_state("finish_optimize_after",
+                player_inventory_object(slots[i]), slots[i]);
         }
 
         distribute_fletchered_arrows(i_ptr);
@@ -864,6 +884,8 @@ void finish_fletching(int turns_left)
     }
 
     clear_fletchery_source_snapshot();
+    slots = mem_free(slots);
+    remove_amounts = mem_free(remove_amounts);
 
     /* Combine / Reorder the pack (later) */
     p_ptr->notice |= (PN_COMBINE | PN_REORDER);

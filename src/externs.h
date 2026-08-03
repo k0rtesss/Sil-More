@@ -624,8 +624,13 @@ extern int slay_bonus(
 extern int prt_after_sharpness(const object_type* o_ptr, u32b* noticed_flag);
 extern void search(void);
 extern void do_cmd_pickup_from_pile(void);
+extern void do_cmd_pickup_to_harness(void);
 extern void py_pickup_aux(int o_idx);
+extern void py_pickup_aux_to_pack(int o_idx);
+extern void py_pickup_aux_to_harness(int o_idx);
 extern void py_pickup(void);
+extern void py_pickup_to_pack(void);
+extern void py_pickup_to_harness(void);
 extern bool prepare_brass_lamp_flask_replacement(
     const object_type* incoming, int* flasks_to_replace, int* flask_oil,
     bool* aborted);
@@ -1247,8 +1252,8 @@ extern byte object_attr_graphics_override(
 extern char object_char_graphics_override(
     const object_type* o_ptr, char base_char);
 extern char index_to_label(int i);
-extern s16b label_to_inven(int c);
-extern s16b label_to_equip(int c);
+extern int label_to_inven(int c);
+extern int label_to_equip(int c);
 extern s16b wield_slot(const object_type* o_ptr);
 extern cptr describe_empty_slot(int i);
 extern cptr mention_use(int i);
@@ -1461,6 +1466,19 @@ extern void floor_item_describe(int item);
 extern void floor_item_increase(int item, int num);
 extern void floor_item_optimize(int item);
 extern void check_pack_overflow(void);
+extern void player_carried_extra_reset_store(void);
+extern int player_carried_extra_entry_count(void);
+extern object_type* player_carried_extra_entry_at(int index);
+extern bool player_carried_extra_load(const object_type* o_ptr);
+extern bool player_carried_extra_handle_valid(int item);
+extern object_type* player_inventory_object(int item);
+extern int player_inventory_handle_for_object(const object_type* o_ptr);
+extern bool player_inventory_handle_valid(int item);
+extern bool player_inventory_handle_is_carried(int item);
+extern int player_pack_entry_count(void);
+extern int player_pack_entry_handle_at(int ordinal);
+extern object_type* player_pack_entry_at(int ordinal);
+extern char player_inventory_label(int item);
 extern bool inven_carry_okay(const object_type* o_ptr);
 extern bool inventory_type_slot_available(const object_type* o_ptr,
     bool record_failure);
@@ -1474,6 +1492,7 @@ enum inventory_limit_group
     INV_LIMIT_NONE = 0,
     INV_LIMIT_PACK,
     INV_LIMIT_HARNESS,
+    INV_LIMIT_JEWELRY,
     INV_LIMIT_SUPPLY_WEIGHT,
     INV_LIMIT_TORCHES,
     INV_LIMIT_BRASS_LAMPS,
@@ -1491,6 +1510,7 @@ extern bool inven_carry_limit_can_replace(const object_type* o_ptr);
 extern enum inventory_limit_group inventory_limit_group_for_object(
     const object_type* o_ptr);
 extern bool object_can_choose_pack_or_harness(const object_type* o_ptr);
+extern bool object_can_store_directly_in_pack(const object_type* o_ptr);
 extern bool inventory_limit_info_for_object(const object_type* o_ptr,
     enum inventory_limit_group* group, int* limit, int* cost);
 extern int inventory_limit_usage_for_group(enum inventory_limit_group group);
@@ -1510,6 +1530,7 @@ extern int inventory_limit_removal_space_for_object(
     const object_type* o_ptr);
 extern int inventory_limit_usage_after_replacing(const object_type* incoming,
     const object_type* removed, int remove_quantity);
+extern int inventory_limit_max_carryable_quantity(const object_type* o_ptr);
 extern bool inventory_limit_object_matches_group(
     enum inventory_limit_group group, const object_type* o_ptr);
 extern cptr inventory_limit_group_name(enum inventory_limit_group group);
@@ -1527,8 +1548,8 @@ extern int player_quiver_total_weight(void);
 extern int player_quiver_arrow_space(void);
 extern int player_quiver_first_arrow_slot(void);
 extern int player_quiver_arrow_slots(int* slots, int max);
-extern s16b inven_carry(object_type* o_ptr, bool combine_ammo);
-extern s16b inven_takeoff(int item, int amt);
+extern int inven_carry(object_type* o_ptr, bool combine_ammo);
+extern int inven_takeoff(int item, int amt);
 extern void inven_drop(int item, int amt);
 extern void inven_enforce_current_pack_limits(void);
 extern void inventory_limit_grandfather_current_overflow(void);

@@ -471,9 +471,9 @@ static void elemental_debug_slot_desc(
         return;
     }
 
-    if (index < INVEN_PACK)
+    if (player_inventory_handle_is_carried(index))
     {
-        strnfmt(buf, buf_size, "pack(%c)", index_to_label(index));
+        strnfmt(buf, buf_size, "pack(%c)", player_inventory_label(index));
         return;
     }
 
@@ -1195,10 +1195,10 @@ static void elemental_message_amount(const elemental_item_candidate* candidate,
     {
         msg_format("%s %s in your quiver %s", owner, o_name, action);
     }
-    else if (candidate->index < INVEN_PACK)
+    else if (player_inventory_handle_is_carried(candidate->index))
     {
         msg_format("%s %s (%c) %s", owner, o_name,
-            index_to_label(candidate->index), action);
+            player_inventory_label(candidate->index), action);
     }
     else
     {
@@ -1325,7 +1325,8 @@ static bool elemental_select_size_candidate(int attack_type, int total,
 {
     int supply_count = supplies_entry_count();
     int quiver_count = player_quiver_store_entry_count();
-    int capacity = INVEN_TOTAL + supply_count + quiver_count;
+    int capacity = INVEN_TOTAL + player_carried_extra_entry_count()
+        + supply_count + quiver_count;
     elemental_item_candidate* candidates;
     int count = 0;
     long available_units = 0;
@@ -1373,6 +1374,37 @@ retry_with_size:
         candidates[count].units = units;
         candidates[count].unit_size = unit_size;
         candidates[count].quantity_per_unit = elemental_item_quantity_per_unit(o_ptr);
+        available_units += units;
+        count++;
+    }
+
+    for (int idx = 0; idx < player_carried_extra_entry_count(); idx++)
+    {
+        int item = CARRIED_EXTRA_INDEX + idx;
+        object_type* o_ptr = player_carried_extra_entry_at(idx);
+        int unit_size;
+        int units;
+
+        if (!o_ptr || !o_ptr->k_idx
+            || !elemental_attack_allows_size_location(attack_type,
+                ELEMENTAL_CANDIDATE_INVENTORY, item, o_ptr)
+            || !elemental_attack_matches_object_material(attack_type, o_ptr))
+            continue;
+        unit_size = elemental_item_unit_size(o_ptr,
+            ELEMENTAL_CANDIDATE_INVENTORY, item);
+        if (unit_size <= 0 || unit_size > allowed_size)
+            continue;
+        units = elemental_item_unit_count(o_ptr);
+        if (units <= 0)
+            continue;
+        candidates[count].location = ELEMENTAL_CANDIDATE_INVENTORY;
+        candidates[count].index = item;
+        candidates[count].o_ptr = o_ptr;
+        candidates[count].weight = units;
+        candidates[count].units = units;
+        candidates[count].unit_size = unit_size;
+        candidates[count].quantity_per_unit
+            = elemental_item_quantity_per_unit(o_ptr);
         available_units += units;
         count++;
     }
@@ -1652,7 +1684,7 @@ static bool elemental_slot_uses_pack_like_factor(int slot,
     if (location == ELEMENTAL_CANDIDATE_QUIVER)
         return true;
 
-    return (slot < INVEN_PACK) || (slot == INVEN_LITE)
+    return player_inventory_handle_is_carried(slot) || (slot == INVEN_LITE)
         || (slot == INVEN_QUIVER1) || (slot == INVEN_BELT);
 }
 
@@ -1664,7 +1696,7 @@ static double elemental_item_slot_factor(int slot,
     if (location == ELEMENTAL_CANDIDATE_QUIVER)
         return 0.70;
 
-    if (slot < INVEN_PACK)
+    if (player_inventory_handle_is_carried(slot))
         return 0.70;
 
     switch (slot)
@@ -1812,7 +1844,8 @@ static bool elemental_select_candidate(int attack_type,
 {
     int supply_count = supplies_entry_count();
     int quiver_count = player_quiver_store_entry_count();
-    int capacity = INVEN_TOTAL + supply_count + quiver_count;
+    int capacity = INVEN_TOTAL + player_carried_extra_entry_count()
+        + supply_count + quiver_count;
     elemental_item_candidate* candidates;
     int count = 0;
     long total_weight = 0;
@@ -1839,6 +1872,26 @@ static bool elemental_select_candidate(int attack_type,
 
         candidates[count].location = ELEMENTAL_CANDIDATE_INVENTORY;
         candidates[count].index = slot;
+        candidates[count].o_ptr = o_ptr;
+        candidates[count].weight = weight;
+        total_weight += weight;
+        count++;
+    }
+
+    for (int idx = 0; idx < player_carried_extra_entry_count(); idx++)
+    {
+        int item = CARRIED_EXTRA_INDEX + idx;
+        object_type* o_ptr = player_carried_extra_entry_at(idx);
+        long weight;
+
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        weight = elemental_item_weight(attack_type,
+            ELEMENTAL_CANDIDATE_INVENTORY, item, o_ptr);
+        if (weight <= 0)
+            continue;
+        candidates[count].location = ELEMENTAL_CANDIDATE_INVENTORY;
+        candidates[count].index = item;
         candidates[count].o_ptr = o_ptr;
         candidates[count].weight = weight;
         total_weight += weight;
@@ -1932,10 +1985,10 @@ static void elemental_message(const elemental_item_candidate* candidate,
     {
         msg_format("%s %s in your quiver %s", owner, o_name, action);
     }
-    else if (candidate->index < INVEN_PACK)
+    else if (player_inventory_handle_is_carried(candidate->index))
     {
         msg_format("%s %s (%c) %s", owner, o_name,
-            index_to_label(candidate->index), action);
+            player_inventory_label(candidate->index), action);
     }
     else
     {

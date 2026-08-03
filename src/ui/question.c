@@ -209,38 +209,7 @@ static int ui_question_ask_aux(cptr title, cptr desc,
         if (steamdeck && which == steamdeck_confirm_key())
             which = '\r';
 
-        switch (which)
-        {
-        case '\r':
-        case '\n':
-        case ' ':
-        case '6': /* right: select the highlighted answer */
-        {
-            if (options[highlight].disabled)
-                ui_question_unavailable();
-            else
-            {
-                result = highlight;
-                done = true;
-            }
-            break;
-        }
-
-        case '2': /* down: next answer */
-        {
-            highlight = ui_question_next_enabled(options, count, highlight, 1);
-            scroll_follow_highlight = true;
-            break;
-        }
-
-        case '8': /* up: previous answer */
-        {
-            highlight = ui_question_next_enabled(options, count, highlight, -1);
-            scroll_follow_highlight = true;
-            break;
-        }
-
-        default:
+        /* Explicit option keys take priority over numeric movement keys. */
         {
             bool matched = false;
 
@@ -280,8 +249,44 @@ static int ui_question_ask_aux(cptr title, cptr desc,
                 }
             }
 
-            if (!matched)
-                bell("Illegal response to question!");
+            if (matched)
+                continue;
+        }
+
+        switch (which)
+        {
+        case '\r':
+        case '\n':
+        case ' ':
+        case '6': /* right: select the highlighted answer */
+        {
+            if (options[highlight].disabled)
+                ui_question_unavailable();
+            else
+            {
+                result = highlight;
+                done = true;
+            }
+            break;
+        }
+
+        case '2': /* down: next answer */
+        {
+            highlight = ui_question_next_enabled(options, count, highlight, 1);
+            scroll_follow_highlight = true;
+            break;
+        }
+
+        case '8': /* up: previous answer */
+        {
+            highlight = ui_question_next_enabled(options, count, highlight, -1);
+            scroll_follow_highlight = true;
+            break;
+        }
+
+        default:
+        {
+            bell("Illegal response to question!");
             break;
         }
         }

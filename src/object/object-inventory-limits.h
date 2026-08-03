@@ -12,6 +12,7 @@ enum inventory_limit_group
     INV_LIMIT_NONE = 0,
     INV_LIMIT_PACK,
     INV_LIMIT_HARNESS,
+    INV_LIMIT_JEWELRY,
     INV_LIMIT_SUPPLY_WEIGHT,
     INV_LIMIT_TORCHES,
     INV_LIMIT_BRASS_LAMPS,
@@ -35,6 +36,7 @@ bool inven_carry_limit_can_replace(const object_type* o_ptr);
 enum inventory_limit_group inventory_limit_group_for_object(
     const object_type* o_ptr);
 bool object_can_choose_pack_or_harness(const object_type* o_ptr);
+bool object_can_store_directly_in_pack(const object_type* o_ptr);
 bool inventory_limit_info_for_object(const object_type* o_ptr,
     enum inventory_limit_group* group, int* limit, int* cost);
 int inventory_limit_usage_for_group(enum inventory_limit_group group);
@@ -47,6 +49,7 @@ int inventory_limit_carriage_savings_for_group(
 cptr inventory_limit_carriage_ability_name_for_object(
     const object_type* o_ptr);
 int inventory_limit_additional_space_for_object(const object_type* o_ptr);
+int inventory_limit_max_carryable_quantity(const object_type* o_ptr);
 int inventory_limit_removal_space_for_object(const object_type* o_ptr);
 int inventory_limit_usage_after_replacing(const object_type* incoming,
     const object_type* removed, int remove_quantity);

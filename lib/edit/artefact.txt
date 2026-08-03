@@ -17,7 +17,7 @@
 # B: skilltype / abilitynum : ...
 # M: stat/skill bonus token : bonus value
 # W: depth : rarity_weight : weight : cost
-# Y: storage pool (NONE, PACK, or HARNESS) : volume in tenths
+# Y: storage pool (NONE, PACK, HARNESS, or JEWELRY) : volume in tenths
 # P: attack bonus : damage dice : evasion bonus : protection dice
 # F: flag | flag | etc
 # D: text
@@ -200,7 +200,7 @@ V:0.9.7
 N:1:of Barahir
 Q:efacae2cc817eff9
 I:45:32:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:10:20:1:5000
 P:0:0d0:0:1d1
 F:FREE_ACT | RES_POIS | GRA | OATH_BOOST | NOBLE_ITEM
@@ -223,7 +223,7 @@ D: most faithful bond between Elves and Men in all the Elder Days.
 N:2:of Melian
 Q:f380c9eec37c3007
 I:45:30:6
-Y:HARNESS:1
+Y:JEWELRY:0
 W:14:20:1:50000
 P:0:0d0:0:0d0
 F:PERCEPTION | NOBLE_ITEM
@@ -244,7 +244,7 @@ D: hidden from all evil, and the ring holds an echo of her foresight.
 N:3:of Tinfang Gelion
 Q:561368162725be61
 I:40:10:4
-Y:HARNESS:1
+Y:JEWELRY:0
 W:12:20:1:5000
 P:0:0d0:0:0d0
 F:SONG | NOBLE_ITEM
@@ -264,7 +264,7 @@ D: this amulet is to hear the echo of Elvish music and long for starlight.
 N:4:'Nimphelos'
 Q:f4a9bee9fc977959
 I:40:13:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:12:20:1:5000
 P:0:0d0:0:0d0
 F:GRA | DEX | NOBLE_ITEM
@@ -287,7 +287,7 @@ D: when the Falathrim sang beneath the stars.
 N:5:'Elessar'
 Q:9efe653a53f97ef7
 I:40:16:1
-Y:HARNESS:1
+Y:JEWELRY:0
 W:14:20:1:7000
 P:0:0d0:0:0d0
 F:CON | GRA | REGEN | MEDIC | NOBLE_ITEM
@@ -309,7 +309,7 @@ D: yet to come.
 N:6:'Nauglamir'
 Q:aa0b792d54a72992
 I:40:12:3
-Y:HARNESS:1
+Y:JEWELRY:0
 W:16:30:1:10000
 P:0:0d0:0:0d0
 F:GRA | FREE_ACT | ENCHANTABLE | NOBLE_ITEM
@@ -328,7 +328,7 @@ D: weight of gold and jewels it lies upon the neck light as a strand of flax.
 N:7:of Mairon
 Q:d5699c25b01bbadc
 I:45:31:3
-Y:HARNESS:1
+Y:JEWELRY:0
 W:12:30:1:10000
 P:0:0d0:0:0d0
 F:STEALTH | SONG | UNLIGHT | TRAITOR | SEE_INVIS | EVIL_ITEM | MIN_DEPTH_SPEED
@@ -3141,7 +3141,7 @@ F:INSTA_ART
 N:188:'Ultimate'
 Q:6aac0dc3bc425596
 I:45:0:0
-Y:HARNESS:1
+Y:JEWELRY:0
 F:STR | DEX | NEG_STR | NEG_DEX
 F:ARCHERY | STEALTH | PERCEPTION
 F:SUST_STR | SUST_DEX | MEDIC
@@ -3158,7 +3158,7 @@ F:INSTA_ART
 N:189:'Ultimate'
 Q:ce2bbdd80f19c198
 I:40:0:0
-Y:HARNESS:1
+Y:JEWELRY:0
 F:CON | GRA | NEG_CON | NEG_GRA
 F:STEALTH | PERCEPTION | WILL | SONG
 F:SUST_CON | SUST_GRA | CHEAT_DEATH | MEDIC

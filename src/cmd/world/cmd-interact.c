@@ -1407,9 +1407,9 @@ static object_type* grid_question_best_digger(int* out_score)
     }
     else
     {
-        for (int i = 0; i < INVEN_PACK; i++)
+        for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
         {
-            o_ptr = &inventory[i];
+            o_ptr = player_pack_entry_at(ordinal);
             if (!o_ptr->k_idx)
                 continue;
 
@@ -2216,7 +2216,6 @@ static bool twall(int y, int x)
  */
 static bool do_cmd_tunnel_aux(int y, int x)
 {
-    int i;
     int item;
     bool more = false;
     bool digger_choice = false;
@@ -2247,9 +2246,9 @@ static bool do_cmd_tunnel_aux(int y, int x)
     else
     {
         // find one or more diggers in the pack
-        for (i = 0; i < INVEN_PACK; i++)
+        for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
         {
-            o_ptr = &inventory[i];
+            o_ptr = player_pack_entry_at(ordinal);
 
             object_flags(o_ptr, &f1, &f2, &f3);
 
@@ -2277,9 +2276,9 @@ static bool do_cmd_tunnel_aux(int y, int x)
             else
             {
                 /* Get the object */
-                if (item >= 0)
+                if (player_inventory_handle_valid(item))
                 {
-                    digger_ptr = &inventory[item];
+                    digger_ptr = player_inventory_object(item);
                 }
                 else
                 {
@@ -3465,8 +3464,8 @@ void do_cmd_alter(void)
     /* Pick up items */
     else if ((dir == 5) && (cave_o_idx[y][x]))
     {
-        /* Get item */
-        do_cmd_pickup();
+        /* Space/interact here prefers the Harness for dual-destination items. */
+        do_cmd_pickup_to_harness();
     }
 
     /* Oops */

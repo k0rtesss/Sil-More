@@ -7,7 +7,6 @@
 #include "ui/question.h"
 
 #define THROW_PENDING_NONE -9999
-#define THROW_CANDIDATE_MAX (INVEN_TOTAL + 32)
 static int throw_pending_slot = THROW_PENDING_NONE;
 
 static int breakage_chance(const object_type* o_ptr, bool hit_wall)
@@ -1580,9 +1579,7 @@ static object_type* throw_item_object(int item)
 {
     if (item >= SUPPLIES_INDEX)
         return supplies_entry_at(item - SUPPLIES_INDEX);
-    if (item >= 0 && item < INVEN_TOTAL)
-        return &inventory[item];
-    return NULL;
+    return player_inventory_object(item);
 }
 
 /* Whether a resolved slot is a legal source for t's throw command. */
@@ -1590,9 +1587,8 @@ static bool throw_command_slot_is_valid(int item)
 {
     object_type* o_ptr;
 
-    if (item >= 0 && item < INVEN_TOTAL
-        && (player_can_quick_throw_from_harness(item)
-            || player_can_power_throw_from_harness(item)))
+    if (player_can_quick_throw_from_harness(item)
+        || player_can_power_throw_from_harness(item))
     {
         return true;
     }
@@ -1601,7 +1597,7 @@ static bool throw_command_slot_is_valid(int item)
     if (!o_ptr || !o_ptr->k_idx)
         return false;
 
-    if ((item >= SUPPLIES_INDEX) || (item >= 0 && item < INVEN_PACK))
+    if (item >= SUPPLIES_INDEX || player_inventory_handle_is_carried(item))
         return player_can_throw_potions() && potion_has_thrown_effect(o_ptr);
 
     return false;
@@ -1630,6 +1626,17 @@ static int collect_throw_candidates(int* slots, int max)
         }
     }
 
+    for (i = 0; i < player_carried_extra_entry_count() && n < max; i++)
+    {
+        int item = CARRIED_EXTRA_INDEX + i;
+
+        if (player_can_quick_throw_from_harness(item)
+            || player_can_power_throw_from_harness(item))
+        {
+            slots[n++] = item;
+        }
+    }
+
     if (player_can_throw_potions())
     {
         for (i = 0; (i < supplies_entry_count()) && (n < max); i++)
@@ -1641,12 +1648,15 @@ static int collect_throw_candidates(int* slots, int max)
         }
 
         /* Keep compatibility with saves that have not ingested pack supplies. */
-        for (i = 0; (i < INVEN_PACK) && (n < max); i++)
+        for (int ordinal = 0;
+             ordinal < player_pack_entry_count() && n < max;
+             ordinal++)
         {
-            object_type* o_ptr = &inventory[i];
+            int item = player_pack_entry_handle_at(ordinal);
+            object_type* o_ptr = player_inventory_object(item);
 
             if (potion_has_thrown_effect(o_ptr))
-                slots[n++] = i;
+                slots[n++] = item;
         }
     }
 
@@ -1659,22 +1669,27 @@ static int collect_throw_candidates(int* slots, int max)
  */
 static bool select_throw_slot(int* item)
 {
-    int slots[THROW_CANDIDATE_MAX];
+    int capacity = INVEN_TOTAL + supplies_entry_count()
+        + player_pack_entry_count();
+    int* slots;
     int count;
 
     if (!item)
         return false;
 
-    count = collect_throw_candidates(slots, (int)(sizeof(slots) / sizeof(slots[0])));
+    slots = mem_alloc_array(MAX(capacity, 1), int);
+    count = collect_throw_candidates(slots, capacity);
 
     if (count <= 0)
     {
         msg_print("You have nothing ready to throw.");
+        slots = mem_free(slots);
         return false;
     }
     if (count == 1)
     {
         *item = slots[0];
+        slots = mem_free(slots);
         return true;
     }
 
@@ -1684,9 +1699,11 @@ static bool select_throw_slot(int* item)
      * door interaction popups.  This never draws on the message row.
      */
     {
-        ui_question_option options[THROW_CANDIDATE_MAX];
-        const object_type* object_icons[THROW_CANDIDATE_MAX];
-        char labels[THROW_CANDIDATE_MAX][80];
+        ui_question_option* options = mem_alloc_array(count,
+            ui_question_option);
+        const object_type** object_icons = mem_alloc_array(count,
+            const object_type*);
+        char (*labels)[80] = SDL_calloc((size_t)count, sizeof(*labels));
         int i;
         int choice;
 
@@ -1696,7 +1713,13 @@ static bool select_throw_slot(int* item)
             char o_name[80];
 
             if (!o_ptr || !o_ptr->k_idx)
+            {
+                slots = mem_free(slots);
+                options = mem_free(options);
+                object_icons = mem_free(object_icons);
+                labels = mem_free(labels);
                 return false;
+            }
             object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
             if (slots[i] == INVEN_BELT)
                 strnfmt(labels[i], sizeof(labels[i]), "%s (belt)", o_name);
@@ -1719,9 +1742,19 @@ static bool select_throw_slot(int* item)
             options, object_icons, count, p_ptr->py, p_ptr->px, 0);
 
         if (choice < 0 || choice >= count)
+        {
+            slots = mem_free(slots);
+            options = mem_free(options);
+            object_icons = mem_free(object_icons);
+            labels = mem_free(labels);
             return false;
+        }
 
         *item = slots[choice];
+        slots = mem_free(slots);
+        options = mem_free(options);
+        object_icons = mem_free(object_icons);
+        labels = mem_free(labels);
         return true;
     }
 }
