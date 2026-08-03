@@ -4563,7 +4563,8 @@ void do_cmd_search_skeleton(int y, int x, s16b o_idx)
                 }
                 else if (slot >= 0)
                 {
-                    msg_format("You recover %s (%c).", o_name, index_to_label(slot));
+                    msg_format("You recover %s (%c).", o_name,
+                        player_inventory_label(slot));
                 }
                 else
                 {

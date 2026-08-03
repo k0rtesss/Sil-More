@@ -9129,7 +9129,14 @@ void create_smithing_item(void)
     else
     {
         // Get the item itself
-        o_ptr = &inventory[slot];
+        o_ptr = player_inventory_object(slot);
+        if (!o_ptr || !o_ptr->k_idx)
+        {
+            log_warn("Smithing returned an invalid inventory handle: %d", slot);
+            object_wipe(smith_o_ptr);
+            smith_clear_alloy_state(&smith_alloy);
+            return;
+        }
 
         // Mark the item as smithed by the player (using unused1 field)
         o_ptr->unused1 = 1;  /* 1 = smithed by player, 0 = found item */
@@ -9138,7 +9145,7 @@ void create_smithing_item(void)
         object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
         // Message
-        msg_format("You have %s (%c).", o_name, index_to_label(slot));
+        msg_format("You have %s (%c).", o_name, player_inventory_label(slot));
         log_info("Created smithing item: %s", o_name);
     }
 

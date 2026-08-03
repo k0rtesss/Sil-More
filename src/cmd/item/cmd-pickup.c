@@ -81,9 +81,15 @@ static void give_player_item_internal(object_type* o_ptr,
     if (quiver_added <= 0)
         sound(MSG_PICK);
 
-    /* reset the pointer to the new location to pick up the count of the item
-       in the inventory */
-    o_ptr = &inventory[slot];
+    /* Resolve the returned handle through the expandable inventory store too.
+     * inven_carry() may return a synthetic handle once the legacy fixed slots
+     * are full. */
+    o_ptr = player_inventory_object(slot);
+    if (!o_ptr || !o_ptr->k_idx)
+    {
+        log_warn("Pickup returned an invalid inventory handle: %d", slot);
+        return;
+    }
 
     object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
@@ -96,16 +102,16 @@ static void give_player_item_internal(object_type* o_ptr,
         overflow.number = carried_outside_quiver;
         object_desc(o_name, sizeof(o_name), &overflow, true, 3);
         msg_format("The remaining %s go into your Pack (%c).", o_name,
-            index_to_label(slot));
+            player_inventory_label(slot));
     }
     else if (destination == OBJECT_STORAGE_PACK)
         msg_format("You store %s in your Pack (%c).", o_name,
-            index_to_label(slot));
+            player_inventory_label(slot));
     else if (destination == OBJECT_STORAGE_HARNESS)
         msg_format("You store %s in your Harness (%c).", o_name,
-            index_to_label(slot));
+            player_inventory_label(slot));
     else
-        msg_format("You have %s (%c).", o_name, index_to_label(slot));
+        msg_format("You have %s (%c).", o_name, player_inventory_label(slot));
 
     /* Update the shared arrow-quiver display when arrows were recovered. */
     if (copy.tval == TV_ARROW)

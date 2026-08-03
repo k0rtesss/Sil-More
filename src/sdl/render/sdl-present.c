@@ -1928,9 +1928,12 @@ bool sdl_render_current_window_frame(void)
     if (!hide_main_menu_overlays)
         sdl_touch_thumb_render();
     /* Question/roll popups are opaque foreground panels.  Keep them above
-     * Quick Touch so contextual controls cannot obscure their contents. */
-    sdl_question_menu_render();
-    if (sdl_question_menu_context_hint_active()
+     * Quick Touch so contextual controls cannot obscure their contents, but
+     * keep them out of the native main menu just like other gameplay overlays. */
+    if (!hide_main_menu_overlays)
+        sdl_question_menu_render();
+    if (!hide_main_menu_overlays
+        && sdl_question_menu_context_hint_active()
         && sdl_object_tooltip_uses_screen_rect())
         sdl_object_tooltip_render();
     if (!hide_main_menu_overlays)

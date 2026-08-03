@@ -518,11 +518,20 @@ static void distribute_fletchered_arrows(const object_type* arrows)
     }
     else if (carry_slot >= 0)
     {
-        object_type* carried = &inventory[carry_slot];
-        log_fletchery_object_state("carry_slot_object", carried, carry_slot);
-        char arrow_name[80];
-        object_desc(arrow_name, sizeof(arrow_name), carried, true, 3);
-        msg_format("You have %s (%c).", arrow_name, index_to_label(carry_slot));
+        object_type* carried = player_inventory_object(carry_slot);
+        if (!carried || !carried->k_idx)
+        {
+            log_warn("Fletchery returned an invalid inventory handle: %d",
+                carry_slot);
+        }
+        else
+        {
+            log_fletchery_object_state("carry_slot_object", carried, carry_slot);
+            char arrow_name[80];
+            object_desc(arrow_name, sizeof(arrow_name), carried, true, 3);
+            msg_format("You have %s (%c).", arrow_name,
+                player_inventory_label(carry_slot));
+        }
 
         if (carry_obj.number > 0)
         {

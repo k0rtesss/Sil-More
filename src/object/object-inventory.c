@@ -1575,7 +1575,7 @@ int inven_takeoff(int item, int amt)
     if (slot >= 0)
     {
         /* Message */
-        msg_format("%s %s (%c).", act, o_name, index_to_label(slot));
+        msg_format("%s %s (%c).", act, o_name, player_inventory_label(slot));
         return slot;
     }
 

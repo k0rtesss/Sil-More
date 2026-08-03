@@ -453,7 +453,7 @@ static int drop_quiver_replacement_arrows(int item, int needed)
     dropped.number = amount;
     dropped.pickup = false;
     dropped.pickup_slot = -1;
-    dropped.storage = OBJECT_STORAGE_PACK;
+    dropped.storage = OBJECT_STORAGE_NONE;
     dropped.next_o_idx = 0;
     dropped.held_m_idx = 0;
     dropped.iy = dropped.ix = 0;
@@ -1376,7 +1376,9 @@ static void do_cmd_unquiver_pack_arrow(int item)
     object_copy(&packed, o_ptr);
     packed.pickup = false;
     packed.pickup_slot = -1;
-    packed.storage = OBJECT_STORAGE_PACK;
+    /* Loose arrows always use the Pack by type.  Keep their storage marker
+     * neutral so they combine with arrows obtained through ordinary pickup. */
+    packed.storage = OBJECT_STORAGE_NONE;
     if (player_pack_action_start(PLAYER_PACK_ACTION_MOVE_STORAGE, item,
             OBJECT_STORAGE_PACK, false, &packed))
         return;
@@ -4156,13 +4158,20 @@ static void prise_silmaril(void)
             else if (slot >= 0)
             {
                 /* Get the object again */
-                o_ptr = &inventory[slot];
+                o_ptr = player_inventory_object(slot);
+                if (!o_ptr || !o_ptr->k_idx)
+                {
+                    log_warn("Silmaril pickup returned an invalid inventory handle: %d",
+                        slot);
+                    return;
+                }
 
                 /* Describe the object */
                 object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
                 /* Message */
-                msg_format("You have %s (%c).", o_name, index_to_label(slot));
+                msg_format("You have %s (%c).", o_name,
+                    player_inventory_label(slot));
             }
             else
             {

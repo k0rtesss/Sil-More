@@ -1946,7 +1946,7 @@ W:7:0:1:0
 P:0:0d0:1:0d0
 A:5/100
 F:FEAR | EASY_KNOW | LIGHT_CURSE | NO_SMITHING | EVIL_ITEM
-B:2/80
+B:2/0
 D:A ring of tarnished iron. It inflicts a creeping dread
 D: upon its wearer, driving them to flee from danger -
 D: though in their haste, they find themselves strangely
