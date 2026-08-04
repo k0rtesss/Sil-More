@@ -624,26 +624,32 @@ static void smith_ui_put_object_title(int col, int row, int width, byte attr,
     char suffix[160];
     char fitted_name[160];
     char fitted_suffix[160];
+    char fitted_weight[64];
     const char* suffix_start = NULL;
     int name_len = 0;
     int suffix_width;
+    int weight_width;
     int name_width;
-    int gap = 1;
+    int name_gap = 1;
+    int suffix_weight_gap = 3;
+    int name_display_width;
 
     if (!description)
         description = "";
     if (!weight)
         weight = "";
 
-    /* Combat/protection/pval details begin with a space and one of these
-     * delimiters.  Keep the first such delimiter with the right-hand suffix.
+    /* Combat/protection/pval details begin after a space and one of these
+     * delimiters.  Keep the delimiter with the suffix, but draw that suffix
+     * immediately after the item name rather than at the far edge of the
+     * description line.
      */
     for (const char* p = description; *p; p++)
     {
         if ((p > description) && (p[-1] == ' ')
             && strchr("([{<", *p))
         {
-            suffix_start = p - 1;
+            suffix_start = p;
             break;
         }
     }
@@ -652,45 +658,62 @@ static void smith_ui_put_object_title(int col, int row, int width, byte attr,
         suffix_start = description + strlen(description);
 
     name_len = (int)(suffix_start - description);
+    if (suffix_start < description + strlen(description))
+        name_len--;
     if (name_len >= (int)sizeof(name))
         name_len = (int)sizeof(name) - 1;
     SDL_memcpy(name, description, (size_t)name_len);
     name[name_len] = '\0';
 
     SDL_strlcpy(suffix, suffix_start, sizeof(suffix));
-    if (weight[0])
-    {
-        if (suffix[0])
-            SDL_strlcat(suffix, "   ", sizeof(suffix));
-        SDL_strlcat(suffix, weight, sizeof(suffix));
-    }
 
     width = smith_ui_safe_width(col, width);
     if (width <= 0)
         return;
 
     suffix_width = utf8_display_width_n(suffix, (int)strlen(suffix));
-    if (suffix_width > width - 1)
-        suffix_width = MAX(1, width - 1);
+    weight_width = utf8_display_width_n(weight, (int)strlen(weight));
 
-    name_width = width - suffix_width - gap;
+    if (suffix_width <= 0)
+        name_gap = 0;
+    if (weight_width <= 0)
+        suffix_weight_gap = 0;
+
+    /* Keep the stats and weight in the same inline sequence as the original
+     * object description.  Only the name is shortened when the fields
+     * compete for space, so the shield's combat/protection values remain
+     * visible. */
+    name_width = width - suffix_width - weight_width
+        - name_gap - suffix_weight_gap;
     if (name_width < 1)
     {
         name_width = 1;
-        gap = 0;
-        suffix_width = width - name_width;
+        name_gap = 0;
+        suffix_weight_gap = 0;
+        suffix_width = MIN(suffix_width, MAX(0, width - name_width));
+        weight_width = MIN(weight_width,
+            MAX(0, width - name_width - suffix_width));
     }
 
     smith_ui_fit_text(fitted_name, sizeof(fitted_name), name, name_width);
     smith_ui_fit_text(fitted_suffix, sizeof(fitted_suffix), suffix,
         suffix_width);
+    smith_ui_fit_text(fitted_weight, sizeof(fitted_weight), weight,
+        weight_width);
 
-    smith_ui_put_fitted(col, row, name_width, attr, fitted_name);
-    if (gap > 0)
-        Term_erase(col + name_width, row, gap);
+    name_display_width = utf8_display_width_n(fitted_name,
+        (int)strlen(fitted_name));
+    smith_ui_put_fitted(col, row, name_display_width, attr, fitted_name);
+    if (name_gap > 0)
+        Term_erase(col + name_display_width, row, name_gap);
     if (suffix_width > 0)
-        smith_ui_put_fitted(col + name_width + gap, row, suffix_width, attr,
+        smith_ui_put_fitted(col + name_display_width + name_gap, row,
+            suffix_width, attr,
             fitted_suffix);
+    if (weight_width > 0)
+        smith_ui_put_fitted(col + name_display_width + name_gap
+                + suffix_width + suffix_weight_gap,
+            row, weight_width, attr, fitted_weight);
 }
 
 static void smith_ui_fill_row(int col, int row, int width, byte attr)

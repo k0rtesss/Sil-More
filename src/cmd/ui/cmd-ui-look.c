@@ -3,6 +3,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "cmd/ui/cmd-ui-internal.h"
+#include "support/input.h"
 
 void do_cmd_target(void)
 {
@@ -1332,6 +1333,10 @@ void do_cmd_unified_look(void)
             need_redraw = false;
         }
         
+        /* Unified look keeps a saved-screen overlay active, but its terminal
+         * cursor intentionally marks the selected map cell. */
+        inkey_request_text_cursor();
+
         /* Get input */
         query = inkey();
         bool pointer_click_pending = ui_menu_click_has_pending();

@@ -54,6 +54,8 @@ static bool floor_entry_perform_action(int floor_idx,
     default:
         if (object_can_choose_pack_or_harness(o_ptr))
             py_pickup_aux_to_harness(floor_idx);
+        else if (object_can_store_directly_in_pack(o_ptr))
+            py_pickup_aux_to_pack(floor_idx);
         else
             py_pickup_aux(floor_idx);
         return true;

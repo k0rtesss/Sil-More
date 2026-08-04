@@ -591,7 +591,7 @@ static bool fletchery_choose_source(fletch_choice_t* out_choice)
         out_choice->type = FLETCH_SOURCE_SUPPLY;
         out_choice->index = selection - SUPPLIES_INDEX;
     }
-    else if (selection >= INVEN_WIELD)
+    else if (player_inventory_handle_is_equipped(selection))
     {
         out_choice->type = FLETCH_SOURCE_EQUIP;
         out_choice->index = selection;
@@ -640,7 +640,13 @@ void do_cmd_fletchery(void)
         o_ptr = &supply_source;
     }
     else
-        o_ptr = &inventory[source_index];
+        o_ptr = player_inventory_object(source_index);
+
+    if (!o_ptr || !o_ptr->k_idx)
+    {
+        msg_print("You can no longer find that fletchery source.");
+        return;
+    }
 
     bool is_arrow = (o_ptr->tval == TV_ARROW);
     bool is_torch = (o_ptr->tval == TV_LIGHT)
@@ -666,7 +672,8 @@ void do_cmd_fletchery(void)
 
         p_ptr->fletch_item = source_index;
         p_ptr->fletching = o_ptr->number;
-        fletchery_source_in_pack = (source_index < INVEN_WIELD);
+        fletchery_source_in_pack =
+            player_inventory_handle_is_carried(source_index);
         log_debug("fletchery:start source_index=%d in_pack=%d turns=%d",
             source_index, fletchery_source_in_pack ? 1 : 0, p_ptr->fletching);
         log_fletchery_object_state("start_source", o_ptr, source_index);

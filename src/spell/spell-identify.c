@@ -870,7 +870,7 @@ void do_ident_item(int item, object_type* o_ptr)
         msg_format("In your supplies: %s.", o_name);
         supplies_refresh_entry(supply_index);
     }
-    else if (item >= INVEN_WIELD)
+    else if (player_inventory_handle_is_equipped(item))
     {
         msg_format(
             "%^s: %s (%c).", describe_use(item), o_name, index_to_label(item));

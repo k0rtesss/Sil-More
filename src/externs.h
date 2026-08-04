@@ -1475,6 +1475,7 @@ extern object_type* player_inventory_object(int item);
 extern int player_inventory_handle_for_object(const object_type* o_ptr);
 extern bool player_inventory_handle_valid(int item);
 extern bool player_inventory_handle_is_carried(int item);
+extern bool player_inventory_handle_is_equipped(int item);
 extern int player_pack_entry_count(void);
 extern int player_pack_entry_handle_at(int ordinal);
 extern object_type* player_pack_entry_at(int ordinal);

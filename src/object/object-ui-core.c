@@ -612,7 +612,7 @@ bool inventory_item_is_supply_entry(int item)
 
 bool inventory_item_is_equipment(int item)
 {
-    return (item >= INVEN_WIELD) && (item < INVEN_TOTAL);
+    return player_inventory_handle_is_equipped(item);
 }
 
 object_type* inventory_item_to_object_ptr(int item)

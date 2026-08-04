@@ -100,13 +100,18 @@ static int volume_limit_for_group(enum inventory_limit_group group)
     return limit;
 }
 
-static int arrow_bundle_count(int arrows)
+static int arrow_volume_for_quantity(int arrows, int bundle_volume)
 {
-    if (arrows <= 0)
+    s64b numerator;
+
+    if (arrows <= 0 || bundle_volume <= 0)
         return 0;
 
-    return (arrows + INVENTORY_ARROW_VOLUME_BUNDLE - 1)
-        / INVENTORY_ARROW_VOLUME_BUNDLE;
+    /* Y gives the volume of a reference bundle.  Prorate smaller quantities
+     * in tenths of a quart so spare Pack space can accept part of a stack. */
+    numerator = (s64b)arrows * bundle_volume;
+    return (int)((numerator + INVENTORY_ARROW_VOLUME_BUNDLE - 1)
+        / INVENTORY_ARROW_VOLUME_BUNDLE);
 }
 
 static const ability_type* learned_carriage_ability(byte target)
@@ -266,7 +271,7 @@ static int projected_inventory_volume_usage_internal(
         }
     }
 
-    usage += arrow_bundle_count(arrows) * arrow_volume;
+    usage += arrow_volume_for_quantity(arrows, arrow_volume);
     return usage;
 }
 
@@ -460,8 +465,8 @@ int inventory_limit_max_carryable_quantity(const object_type* o_ptr)
     object_copy(&incoming, o_ptr);
 
     /* Keep this quantity calculation on the same projection path as the
-     * actual limit check.  In particular, arrow volume advances in bundles
-     * rather than by a fixed per-item division. */
+     * actual limit check.  In particular, arrow volume is prorated from its
+     * reference bundle and rounded to tenths of a quart. */
     for (int quantity = 1; quantity <= requested; quantity++)
     {
         int projected;
@@ -862,7 +867,7 @@ static int inventory_limit_space_for_object_internal(
 
     number = MAX(o_ptr->number, 1);
     if (o_ptr->tval == TV_ARROW)
-        return arrow_bundle_count(number) * cost;
+        return arrow_volume_for_quantity(number, cost);
 
     return cost * number;
 }

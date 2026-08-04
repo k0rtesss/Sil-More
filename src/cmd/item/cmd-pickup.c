@@ -134,6 +134,58 @@ static void give_player_item_to_storage(object_type* o_ptr,
     give_player_item_internal(o_ptr, destination);
 }
 
+static int pickup_max_volume_quantity(const object_type* incoming,
+    enum inventory_limit_group* group_out, int* quiver_quantity_out)
+{
+    enum inventory_limit_group group;
+    object_type pack_remainder;
+    const object_type* volume_object = incoming;
+    int quiver_quantity = 0;
+    int pack_quantity;
+
+    if (group_out)
+        *group_out = INV_LIMIT_NONE;
+    if (quiver_quantity_out)
+        *quiver_quantity_out = 0;
+    if (!incoming || !incoming->k_idx || incoming->number <= 0)
+        return 0;
+
+    /* A returning arrow stack may fill the Quiver first and send only its
+     * remainder to the Pack.  Capacity projection must clear the transient
+     * Quiver marker from that remainder just as inven_carry() does. */
+    if (incoming->tval == TV_ARROW
+        && (incoming->pickup_slot == INVEN_QUIVER1 || incoming->pickup))
+    {
+        quiver_quantity = MIN(incoming->number,
+            player_quiver_arrow_space());
+        if (quiver_quantity >= incoming->number)
+        {
+            if (quiver_quantity_out)
+                *quiver_quantity_out = quiver_quantity;
+            return incoming->number;
+        }
+
+        object_copy(&pack_remainder, incoming);
+        pack_remainder.number -= quiver_quantity;
+        pack_remainder.storage = OBJECT_STORAGE_PACK;
+        pack_remainder.pickup = false;
+        pack_remainder.pickup_slot = -1;
+        volume_object = &pack_remainder;
+    }
+
+    group = inventory_limit_group_for_object(volume_object);
+    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
+        return 0;
+
+    pack_quantity = inventory_limit_max_carryable_quantity(volume_object);
+    if (group_out)
+        *group_out = group;
+    if (quiver_quantity_out)
+        *quiver_quantity_out = quiver_quantity;
+
+    return MIN(incoming->number, quiver_quantity + pack_quantity);
+}
+
 static bool pickup_volume_stack_has_partial_fit(const object_type* incoming)
 {
     enum inventory_limit_group group;
@@ -143,11 +195,7 @@ static bool pickup_volume_stack_has_partial_fit(const object_type* incoming)
     if (!incoming || !incoming->k_idx || incoming->number <= 1)
         return false;
 
-    group = inventory_limit_group_for_object(incoming);
-    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
-        return false;
-
-    max_qty = inventory_limit_max_carryable_quantity(incoming);
+    max_qty = pickup_max_volume_quantity(incoming, &group, NULL);
     if (max_qty <= 0 || max_qty >= incoming->number)
         return false;
 
@@ -165,7 +213,9 @@ static bool pickup_partial_volume_stack(object_type* floor_object,
     enum inventory_limit_group group;
     object_type partial;
     char prompt[160];
+    cptr capacity_name;
     int max_qty;
+    int quiver_quantity;
     int qty;
     int picked;
 
@@ -175,18 +225,16 @@ static bool pickup_partial_volume_stack(object_type* floor_object,
         return false;
     }
 
-    group = inventory_limit_group_for_object(incoming);
-    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
-        return false;
-
-    max_qty = inventory_limit_max_carryable_quantity(incoming);
+    max_qty = pickup_max_volume_quantity(incoming, &group,
+        &quiver_quantity);
     if (max_qty <= 0 || max_qty >= incoming->number)
         return false;
 
+    capacity_name = quiver_quantity > 0 ? "Quiver and Pack"
+                                        : inventory_limit_group_name(group);
     strnfmt(prompt, sizeof(prompt),
         "Your %s can only hold %d of %d. Pick up how many? (0-%d): ",
-        inventory_limit_group_name(group), max_qty, incoming->number,
-        max_qty);
+        capacity_name, max_qty, incoming->number, max_qty);
     qty = get_quantity_touch_category_force_prompt_action(prompt, "Pick Up",
         max_qty, SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
 
@@ -2195,17 +2243,35 @@ static pickup_failure_result resolve_pickup_failure(object_type* incoming,
                                                     const char* incoming_name,
                                                     bool attempted_replacement)
 {
+    object_type pack_fallback;
+    object_type* limit_incoming = incoming;
     bool has_lamp_oil_fallback = object_is_brass_lamp(incoming)
         && (incoming->number == 1) && (incoming->timeout > 0);
 
     if (inven_carry_limit_failed())
     {
+        /* Generic arrow pickup preflights a Pack fallback when the Quiver is
+         * full.  Use that same location metadata for replacement filtering
+         * and volume projection instead of the floor object's stale Quiver
+         * recovery marker. */
+        if (inven_carry_limit_group() == INV_LIMIT_PACK
+            && incoming->tval == TV_ARROW
+            && inventory_limit_group_for_object(incoming) != INV_LIMIT_PACK)
+        {
+            object_copy(&pack_fallback, incoming);
+            pack_fallback.storage = OBJECT_STORAGE_PACK;
+            pack_fallback.pickup = false;
+            pack_fallback.pickup_slot = -1;
+            limit_incoming = &pack_fallback;
+        }
+
         if (inven_carry_limit_value() <= 0)
-            return handle_zero_limit_pickup(incoming, floor_o_idx,
+            return handle_zero_limit_pickup(limit_incoming, floor_o_idx,
                                             incoming_name);
 
         pickup_failure_result limit_result =
-            handle_group_limit_pickup(incoming, floor_o_idx, incoming_name);
+            handle_group_limit_pickup(limit_incoming, floor_o_idx,
+                incoming_name);
 
         if ((limit_result == PICKUP_FAILURE_ABORT) && !has_lamp_oil_fallback)
             report_pack_limit_failure(incoming_name, attempted_replacement);

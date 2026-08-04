@@ -1818,7 +1818,7 @@ void do_cmd_throw(bool automatic)
     }
 
     /* Hack -- Cannot remove cursed items */
-    if (!from_supplies && (item >= INVEN_WIELD) && cursed_p(o_ptr))
+    if (player_inventory_handle_is_equipped(item) && cursed_p(o_ptr))
     {
         if (p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
         {
@@ -1889,10 +1889,11 @@ void do_cmd_throw(bool automatic)
     else if (!get_aim_dir(&dir, tdis))
         return;
 
-    int original_slot = (!from_supplies && item >= INVEN_WIELD) ? item : -1;
+    int original_slot = player_inventory_handle_is_equipped(item) ? item : -1;
 
     /* The belt and active ranged rows may change when a weapon is thrown. */
-    bool throwing_from_equipment = (original_slot >= INVEN_WIELD);
+    bool throwing_from_equipment =
+        player_inventory_handle_is_equipped(original_slot);
     if (throwing_from_equipment
         && (original_slot == INVEN_WIELD || original_slot == INVEN_BELT))
     {

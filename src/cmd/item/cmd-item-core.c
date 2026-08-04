@@ -1610,7 +1610,10 @@ void do_cmd_use_item_by_index(int item)
     case TV_ARROW:
     case TV_FLASK:
     {
-        if (item < INVEN_WIELD)
+        /* Floor handles are negative, while expandable carried handles are
+         * above the fixed inventory range.  Both are wield sources; only
+         * actual equipment handles may be routed to takeoff. */
+        if (item < 0 || player_inventory_handle_is_carried(item))
         {
             object_type* l_ptr = &inventory[INVEN_LITE];
             bool try_to_wield = true;
@@ -1651,7 +1654,7 @@ void do_cmd_use_item_by_index(int item)
                 }
             }
         }
-        else
+        else if (player_inventory_handle_is_equipped(item))
         {
             /* Handle equipped arrows specially */
             if (o_ptr->tval == TV_ARROW)
@@ -1662,6 +1665,11 @@ void do_cmd_use_item_by_index(int item)
             {
                 do_cmd_takeoff(o_ptr, item);
             }
+        }
+        else
+        {
+            log_warn("do_cmd_use_item_by_index: refusing invalid item handle %d",
+                item);
         }
         break;
     }
@@ -2656,7 +2664,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
                 return;
             }
         }
-        else if (lamp_replacement_item < INVEN_WIELD)
+        else if (player_inventory_handle_is_carried(lamp_replacement_item))
         {
             inven_drop(lamp_replacement_item, 1);
         }
@@ -3528,7 +3536,6 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
     // use specified item if possible
     if (default_o_ptr != NULL)
     {
-        o_ptr = default_o_ptr;
         item = default_item;
     }
     /* Get an item */
@@ -3538,18 +3545,25 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
         s = "You are not wearing anything to remove.";
         if (!open_inventory_item_select_menu(USE_EQUIP, q, s, &item))
             return;
+    }
 
-        /* Get the item (in the pack) */
-        if (item >= 0)
-        {
-            o_ptr = &inventory[item];
-        }
+    if (!player_inventory_handle_is_equipped(item))
+    {
+        log_warn("do_cmd_takeoff: refusing non-equipment item handle %d", item);
+        return;
+    }
 
-        /* Get the item (on the floor) */
-        else
-        {
-            o_ptr = &o_list[0 - item];
-        }
+    o_ptr = player_inventory_object(item);
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->number <= 0)
+    {
+        log_warn("do_cmd_takeoff: refusing empty or unavailable slot %d", item);
+        return;
+    }
+    if (default_o_ptr && default_o_ptr != o_ptr)
+    {
+        log_warn("do_cmd_takeoff: refusing stale object pointer for slot %d",
+            item);
+        return;
     }
 
     if (player_pack_action_start(PLAYER_PACK_ACTION_TAKEOFF, item, 0, false,
@@ -3747,7 +3761,7 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
         && confirm && !confirm_drop_item_amount(o_ptr, amt))
         return false;
 
-    if ((item >= INVEN_WIELD) && cursed_p(o_ptr)
+    if (player_inventory_handle_is_equipped(item) && cursed_p(o_ptr)
         && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
     {
         msg_print("You cannot bear to part with it.");
@@ -3761,7 +3775,7 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
     }
 
     /* Hack -- Cannot remove cursed items */
-    if ((item >= INVEN_WIELD) && cursed_p(o_ptr))
+    if (player_inventory_handle_is_equipped(item) && cursed_p(o_ptr))
     {
         if (p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
         {

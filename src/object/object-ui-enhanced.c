@@ -472,7 +472,7 @@ static char describe_item_with_comparisons_aux(int item_index,
 
     /* Opening an item description attempts smithing-difficulty identification. */
     {
-        bool is_equipped = (!is_floor && item_index >= INVEN_WIELD);
+        bool is_equipped = player_inventory_handle_is_equipped(item_index);
         (void)player_try_identify_smithing_object_on_examine(base_obj,
             is_equipped);
     }

@@ -23,6 +23,7 @@ object_type* player_inventory_object(int item);
 int player_inventory_handle_for_object(const object_type* o_ptr);
 bool player_inventory_handle_valid(int item);
 bool player_inventory_handle_is_carried(int item);
+bool player_inventory_handle_is_equipped(int item);
 int player_pack_entry_count(void);
 int player_pack_entry_handle_at(int ordinal);
 object_type* player_pack_entry_at(int ordinal);

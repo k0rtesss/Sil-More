@@ -120,6 +120,11 @@ bool player_inventory_handle_is_carried(int item)
         || player_carried_extra_handle_valid(item);
 }
 
+bool player_inventory_handle_is_equipped(int item)
+{
+    return item >= INVEN_WIELD && item < INVEN_TOTAL;
+}
+
 int player_pack_entry_count(void)
 {
     int count = carried_extra_count;
@@ -1448,12 +1453,23 @@ int inven_takeoff(int item, int amt)
     char o_name[80];
     int oil_to_drop = 0;
 
-    /* Get the item to take off */
-    o_ptr = player_inventory_object(item);
-
     /* Paranoia */
     if (amt <= 0)
         return (-1);
+
+    if (!player_inventory_handle_is_equipped(item))
+    {
+        log_warn("inven_takeoff: refusing non-equipment item handle %d", item);
+        return (-1);
+    }
+
+    /* Get the item to take off */
+    o_ptr = player_inventory_object(item);
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->number <= 0)
+    {
+        log_warn("inven_takeoff: refusing empty or unavailable slot %d", item);
+        return (-1);
+    }
 
     /* Verify */
     if (amt > o_ptr->number)
