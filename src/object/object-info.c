@@ -1380,7 +1380,8 @@ static bool describe_archery(const object_type* o_ptr)
     }
     if (o_ptr->tval == TV_ARROW)
     {
-        if ((&inventory[INVEN_BOW])->k_idx)
+        if (inventory[INVEN_BOW].k_idx
+            && player_equipment_slot_counts_as_equipped(INVEN_BOW))
         {
             if (o_ptr->number == 1)
             {
@@ -1459,7 +1460,8 @@ static bool describe_weapon_damage(const object_type* o_ptr)
             int hand_half_bonus_potential;
             int one_handed_ds_int, two_handed_ds_int;
             byte one_handed_ds, two_handed_ds;
-            bool is_currently_equipped = (&inventory[INVEN_WIELD] == o_ptr);
+            bool is_currently_equipped = (&inventory[INVEN_WIELD] == o_ptr)
+                && player_equipment_slot_counts_as_equipped(INVEN_WIELD);
             
             /* Determine potential hand-and-a-half bonus (when wielded two-handed) */
             if (c_info[p_ptr->pcharacter].flags_u & UNQ_MEL_MAEDHROS)

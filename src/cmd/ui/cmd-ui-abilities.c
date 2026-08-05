@@ -1642,6 +1642,8 @@ int artifact_bane_bonus(monster_type* m_ptr)
         // Skip empty slots
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         // Check all abilities on this item
         for (j = 0; j < o_ptr->abilities; j++)
@@ -1694,6 +1696,8 @@ int artifact_spider_bane_bonus(void)
 
         // Skip empty slots
         if (!o_ptr->k_idx)
+            continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
         // Check all abilities on this item

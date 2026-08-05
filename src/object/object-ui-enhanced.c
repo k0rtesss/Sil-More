@@ -472,7 +472,8 @@ static char describe_item_with_comparisons_aux(int item_index,
 
     /* Opening an item description attempts smithing-difficulty identification. */
     {
-        bool is_equipped = player_inventory_handle_is_equipped(item_index);
+        bool is_equipped = player_inventory_handle_is_equipped(item_index)
+            && player_equipment_slot_counts_as_equipped(item_index);
         (void)player_try_identify_smithing_object_on_examine(base_obj,
             is_equipped);
     }
@@ -519,6 +520,8 @@ static char describe_item_with_comparisons_aux(int item_index,
 
         for (int slot = INVEN_WIELD; slot < INVEN_TOTAL; slot++)
         {
+            if (!player_equipment_slot_counts_as_equipped(slot))
+                continue;
             if (!inventory[slot].k_idx)
                 continue;
             if (!description_object_matches(base_obj, base_groups,
@@ -1871,7 +1874,8 @@ void show_equip_enhanced(void)
     log_debug("show_equip_enhanced: Starting equipment scan, show_weights=%d", show_weights);
     for (k = 0, i = INVEN_WIELD; i < INVEN_TOTAL; i++)
     {
-        if (i == INVEN_STAFF || i == INVEN_HORN)
+        if (!player_equipment_slot_counts_as_equipped(i)
+            && !(throw_slot_menu_active && throw_slot_enabled[i]))
             continue;
 
         o_ptr = &inventory[i];

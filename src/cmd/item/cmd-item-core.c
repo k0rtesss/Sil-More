@@ -3003,6 +3003,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
                 u32b eq_f1, eq_f2, eq_f3;
 
                 if (!eq_ptr->k_idx) continue;
+                if (!player_equipment_slot_counts_as_equipped(j)) continue;
 
                 object_flags(eq_ptr, &eq_f1, &eq_f2, &eq_f3);
 

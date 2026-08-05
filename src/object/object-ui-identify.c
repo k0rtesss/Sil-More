@@ -146,19 +146,21 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
         object_type* o_ptr = &inventory[i];
         ident_entry* entry;
         char label[6];
+        bool equipped;
 
         if (!o_ptr->k_idx || !object_is_unidentified_for_display(o_ptr))
             continue;
 
+        equipped = player_equipment_slot_counts_as_equipped(i);
         entry = &entries[entry_count];
-        entry->type = IDENT_ENTRY_EQUIP;
+        entry->type = equipped ? IDENT_ENTRY_EQUIP : IDENT_ENTRY_INVEN;
         entry->index = i;
         entry->supply_index = -1;
         entry->floor_o_idx = 0;
         entry->o_ptr = o_ptr;
         build_ident_entry_label(entry_count, label);
         object_choice_entry_make(&choices[entry_count], i, o_ptr, label,
-            mention_use(i));
+            equipped ? mention_use(i) : NULL);
         entry_count++;
     }
 

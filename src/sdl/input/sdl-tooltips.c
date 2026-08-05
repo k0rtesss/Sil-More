@@ -3136,7 +3136,9 @@ void sdl_mouse_recall_object(object_type* o_ptr)
 
         compare_objects[0] = o_ptr;
         compare_headings[0] = selected_heading;
-        compare_objects[1] = inventory[slot].k_idx ? &inventory[slot] : NULL;
+        compare_objects[1] = inventory[slot].k_idx
+                && player_equipment_slot_counts_as_equipped(slot)
+            ? &inventory[slot] : NULL;
         compare_headings[1] = equipped_heading;
 
         object_info_screen_multi(compare_objects, compare_headings, 2);

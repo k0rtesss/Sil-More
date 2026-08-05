@@ -676,7 +676,8 @@ void describe_inventory_menu_entry(int item, char* buf, size_t len)
         return;
     }
 
-    if (inventory_menu_include_equip && inventory_item_is_equipment(item))
+    if (inventory_menu_include_equip
+        && player_equipment_slot_counts_as_equipped(item))
     {
         object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
         strnfmt(buf, len, "%s: %s", mention_use(item), o_name);
@@ -972,6 +973,15 @@ cptr mention_use(int i)
 {
     cptr p;
 
+    /* Reserved weapon/staff/horn slots are save-compatible Harness storage
+     * whenever they are not part of the active equipment set. */
+    if ((i == INVEN_WIELD || i == INVEN_BOW || i == INVEN_ARM
+            || i == INVEN_STAFF || i == INVEN_HORN)
+        && !player_equipment_slot_counts_as_equipped(i))
+    {
+        return "Harness";
+    }
+
     /* Examine the location */
     switch (i)
     {
@@ -1039,6 +1049,13 @@ cptr mention_use(int i)
 cptr describe_use(int i)
 {
     cptr p;
+
+    if ((i == INVEN_WIELD || i == INVEN_BOW || i == INVEN_ARM
+            || i == INVEN_STAFF || i == INVEN_HORN)
+        && !player_equipment_slot_counts_as_equipped(i))
+    {
+        return "carrying in your Harness";
+    }
 
     switch (i)
     {
@@ -1411,7 +1428,8 @@ void display_equip(void)
 
         /* The equipment subwindow presents the active combat set.  Inactive
          * reserved weapon slots are shown on the Harness inventory page. */
-        if (!player_equipment_slot_is_active(i))
+        if (!player_equipment_slot_counts_as_equipped(i)
+            && !(throw_slot_menu_active && throw_slot_enabled[i]))
         {
             Term_erase(0, i - INVEN_WIELD, 255);
             continue;
@@ -2567,7 +2585,8 @@ void show_equip(void)
     /* Scan the equipment list */
     for (k = 0, i = INVEN_WIELD; i < INVEN_TOTAL; i++)
     {
-        if (i == INVEN_STAFF || i == INVEN_HORN)
+        if (!player_equipment_slot_counts_as_equipped(i)
+            && !(throw_slot_menu_active && throw_slot_enabled[i]))
             continue;
 
         o_ptr = &inventory[i];

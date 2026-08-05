@@ -633,6 +633,12 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
         {
             bool include_slot = false;
 
+            if (!player_equipment_slot_counts_as_equipped(i)
+                && !(throw_slot_menu_active && throw_slot_enabled[i]))
+            {
+                continue;
+            }
+
             if (inventory[i].k_idx)
                 include_slot = get_item_okay(i);
             else if (throw_slot_menu_active && throw_slot_enabled[i])
@@ -1044,6 +1050,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         } else if (p_ptr->command_wrk == (USE_EQUIP)) {                             \
             for (int ii = INVEN_WIELD; ii < INVEN_TOTAL; ++ii) {                    \
                 bool include_slot = false;                                          \
+                if (!player_equipment_slot_counts_as_equipped(ii)                   \
+                    && !(throw_slot_menu_active && throw_slot_enabled[ii]))          \
+                    continue;                                                       \
                 if (inventory[ii].k_idx) {                                          \
                     include_slot = get_item_okay(ii);                               \
                 } else if (throw_slot_menu_active && throw_slot_enabled[ii]) {      \

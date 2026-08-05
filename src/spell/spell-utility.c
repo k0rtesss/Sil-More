@@ -872,6 +872,8 @@ static int remove_curse_aux(bool star_curse)
         /* Skip non-objects */
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         /* Uncursed already */
         if (!cursed_p(o_ptr))
@@ -1074,6 +1076,9 @@ void self_knowledge(void)
         o_ptr = &inventory[k];
 
         if (!o_ptr->k_idx) continue;
+
+        if (!player_equipment_slot_counts_as_equipped(k))
+            continue;
 
         object_flags4(o_ptr, &t1, &t2, &t3, &t4);
 
@@ -1459,7 +1464,8 @@ void analyze_weapon_properties(int* count, char s[][200], char t[][200], bool go
                               bool identify[], int slot, const char* weapon_name)
 {
     object_type* o_ptr = &inventory[slot];
-    if (!o_ptr->k_idx) return;
+    if (!o_ptr->k_idx || !player_equipment_slot_counts_as_equipped(slot))
+        return;
 
     u32b f1, f2, f3, f4;
     object_flags4(o_ptr, &f1, &f2, &f3, &f4);

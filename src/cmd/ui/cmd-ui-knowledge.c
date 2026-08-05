@@ -45,9 +45,8 @@ static bool floor_entry_perform_action(int floor_idx,
 
     case SUPPLY_FLOOR_ACTION_WIELD:
         if (selected_slot >= INVEN_WIELD && selected_slot < INVEN_TOTAL)
-            do_cmd_wield_to_slot(o_ptr, 0 - floor_idx, selected_slot);
-        else
-            do_cmd_wield(o_ptr, 0 - floor_idx);
+            return do_cmd_wield_to_slot(o_ptr, 0 - floor_idx, selected_slot);
+        do_cmd_wield(o_ptr, 0 - floor_idx);
         return true;
 
     case SUPPLY_FLOOR_ACTION_DEFAULT:
@@ -4226,10 +4225,7 @@ static bool equipment_object_is_wearable(const object_type* o_ptr)
  * Harness equipment. */
 static bool equipment_slot_active_for_display(int slot)
 {
-    if (slot == INVEN_BELT)
-        return true;
-
-    return player_equipment_slot_is_active(slot);
+    return player_equipment_slot_counts_as_equipped(slot);
 }
 
 static bool equipment_slot_is_harness_item(int slot)
@@ -4427,11 +4423,13 @@ static int collect_equipment_entries_for_slot(int slot,
                 equipment_add_slot_entry(entries, &count, capacity, i);
         }
 
-        for (int i = 0; i < player_quiver_store_entry_count()
-            && count < capacity; i++)
+        if (player_quiver_counts_as_equipped()
+            && player_quiver_selected_arrow_slot() >= QUIVER_INDEX
+            && player_quiver_selected_arrow_slot() < QUIVER_INDEX_END
+            && count < capacity)
         {
-            equipment_add_entry(entries, &count, capacity, QUIVER_INDEX + i,
-                -1, -1, true);
+            equipment_add_entry(entries, &count, capacity,
+                player_quiver_selected_arrow_slot(), -1, -1, true);
         }
 
         return count;
@@ -4442,19 +4440,18 @@ static int collect_equipment_entries_for_slot(int slot,
         for (int i = INVEN_WIELD; i < INVEN_TOTAL && count < capacity; i++)
         {
             if (equipment_menu_slot_group_contains(slot, i)
-                && equipment_slot_active_for_display(i)
                 && inventory[i].k_idx)
             {
                 equipment_add_entry(entries, &count, capacity, -1, -1, i,
-                    true);
+                    equipment_slot_active_for_display(i));
             }
         }
     }
     else if (slot >= INVEN_WIELD && slot < INVEN_TOTAL
-        && equipment_slot_active_for_display(slot)
         && inventory[slot].k_idx)
     {
-        equipment_add_entry(entries, &count, capacity, -1, -1, slot, true);
+        equipment_add_entry(entries, &count, capacity, -1, -1, slot,
+            equipment_slot_active_for_display(slot));
     }
 
     if (slot == EQUIPMENT_MENU_QUIVERS)
@@ -4463,7 +4460,9 @@ static int collect_equipment_entries_for_slot(int slot,
             && count < capacity; i++)
         {
             equipment_add_entry(entries, &count, capacity, QUIVER_INDEX + i,
-                -1, -1, true);
+                -1, -1, player_quiver_counts_as_equipped()
+                    && QUIVER_INDEX + i
+                        == player_quiver_selected_arrow_slot());
         }
     }
 
@@ -4528,6 +4527,12 @@ static int count_equipment_entries_for_slot(int slot)
             if (equipment_slot_active_for_display(i))
                 count++;
         }
+        if (player_quiver_counts_as_equipped()
+            && player_quiver_selected_arrow_slot() >= QUIVER_INDEX
+            && player_quiver_selected_arrow_slot() < QUIVER_INDEX_END)
+        {
+            count++;
+        }
         return count;
     }
 
@@ -4536,7 +4541,6 @@ static int count_equipment_entries_for_slot(int slot)
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
         {
             if (equipment_menu_slot_group_contains(slot, i)
-                && equipment_slot_active_for_display(i)
                 && inventory[i].k_idx)
             {
                 count++;
@@ -4544,11 +4548,13 @@ static int count_equipment_entries_for_slot(int slot)
         }
     }
     else if (slot >= INVEN_WIELD && slot < INVEN_TOTAL
-        && equipment_slot_active_for_display(slot)
         && inventory[slot].k_idx)
     {
         count++;
     }
+
+    if (slot == EQUIPMENT_MENU_QUIVERS)
+        count += player_quiver_store_entry_count();
 
     for (int i = 0; i < player_pack_entry_count(); i++)
     {
@@ -4644,7 +4650,6 @@ static void prepare_equipment_group_icons(
             for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
             {
                 if (!equipment_menu_slot_group_contains(slot, i)
-                    || !equipment_slot_active_for_display(i)
                     || !inventory[i].k_idx)
                 {
                     continue;
@@ -4660,12 +4665,25 @@ static void prepare_equipment_group_icons(
         }
 
         if (slot >= INVEN_WIELD && slot < INVEN_TOTAL
-            && equipment_slot_active_for_display(slot)
             && inventory[slot].k_idx)
         {
             object_copy(icon_obj, &inventory[slot]);
             icons[group].has_icon = true;
             continue;
+        }
+
+        if (slot == EQUIPMENT_MENU_QUIVERS
+            && player_quiver_store_entry_count() > 0)
+        {
+            object_type* arrow = player_quiver_arrow_object(
+                player_quiver_first_arrow_slot());
+
+            if (arrow)
+            {
+                object_copy(icon_obj, arrow);
+                icons[group].has_icon = true;
+                continue;
+            }
         }
 
         for (int i = 0; i < player_pack_entry_count(); i++)
@@ -4743,7 +4761,8 @@ static void compute_equipment_group_totals(
 static bool equipment_menu_slot_is_filled(int slot)
 {
     if (slot == EQUIPMENT_MENU_QUIVERS)
-        return player_quiver_arrow_count() > 0;
+        return player_quiver_counts_as_equipped()
+            && player_quiver_arrow_count() > 0;
 
     if (slot == EQUIPMENT_MENU_ALL)
     {
@@ -4845,16 +4864,23 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
     }
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
+    {
+        if (!entry->equipped
+            && equipment_slot_is_inactive_harness_item(entry->equip_idx))
+        {
+            return "Harness";
+        }
         return equipment_slot_where_text(entry->equip_idx);
+    }
+
+    if (entry->item_idx >= QUIVER_INDEX
+        && entry->item_idx < QUIVER_INDEX_END)
+    {
+        return entry->equipped ? "Quiver [active]" : "Quiver";
+    }
 
     if (entry->equipped)
     {
-        if (entry->item_idx >= QUIVER_INDEX
-            && entry->item_idx < QUIVER_INDEX_END)
-        {
-            return entry->item_idx == player_quiver_selected_arrow_slot()
-                ? "Quiver [active]" : "Quiver";
-        }
         if (player_inventory_handle_is_carried(entry->item_idx)
             && inventory_slot_is_quivered_arrow(entry->item_idx))
         {
@@ -5171,6 +5197,7 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
     {
         *base_attr = TERM_L_DARK;
         if (show_source && entry->equip_idx == INVEN_ARM
+            && player_equipment_slot_counts_as_equipped(INVEN_WIELD)
             && inventory[INVEN_WIELD].k_idx
             && ((k_info[inventory[INVEN_WIELD].k_idx].flags3
                     & TR3_TWO_HANDED)
@@ -5491,6 +5518,7 @@ static int equipment_menu_compare_slots(int selected_slot, int slots[],
         for (int i = INVEN_WIELD; i < INVEN_TOTAL && count < max_slots; i++)
         {
             if (equipment_menu_slot_group_contains(selected_slot, i)
+                && equipment_slot_active_for_display(i)
                 && inventory[i].k_idx)
             {
                 slots[count++] = i;
@@ -5501,6 +5529,7 @@ static int equipment_menu_compare_slots(int selected_slot, int slots[],
     }
 
     if (selected_slot >= INVEN_WIELD && selected_slot < INVEN_TOTAL
+        && equipment_slot_active_for_display(selected_slot)
         && inventory[selected_slot].k_idx)
     {
         slots[count++] = selected_slot;
@@ -5736,6 +5765,29 @@ static bool confirm_equipment_entry_action(cptr action,
     return confirm_object_action(action, o_ptr, floor);
 }
 
+/* A successful physical wield fills a reserved Harness slot.  Finish the
+ * semantic equip operation by making that slot's weapon set active. */
+static bool equipment_ready_after_wield(int selected_slot)
+{
+    if (selected_slot == INVEN_BOW)
+    {
+        return player_ready_bow_with_arrow(
+            player_quiver_selected_arrow_slot());
+    }
+    if (selected_slot == INVEN_WIELD)
+    {
+        return player_set_active_weapon_mode(PLAYER_ACTIVE_WEAPON_MELEE,
+            false, false);
+    }
+    if (selected_slot == INVEN_ARM
+        && !player_equipment_slot_is_active(INVEN_ARM))
+    {
+        return player_set_active_weapon_mode(PLAYER_ACTIVE_WEAPON_MELEE,
+            false, false);
+    }
+    return true;
+}
+
 static bool equipment_menu_use_entry(equipment_list_entry* entry,
     int selected_slot, supply_floor_action floor_action)
 {
@@ -5746,18 +5798,42 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
 
     if (entry->floor_idx > 0 && entry->floor_idx < o_max)
     {
-        if (!confirm_equipment_entry_action(
-                floor_touch_action_text(floor_action,
-                    &o_list[entry->floor_idx], entry->floor_idx), entry))
+        bool acted;
+        cptr action = (selected_slot == EQUIPMENT_MENU_QUIVERS
+                && floor_action == SUPPLY_FLOOR_ACTION_WIELD)
+            ? "Quiver"
+            : floor_touch_action_text(floor_action,
+                &o_list[entry->floor_idx], entry->floor_idx);
+
+        if (!confirm_equipment_entry_action(action, entry))
         {
             return false;
         }
-        return floor_entry_perform_action(entry->floor_idx, floor_action,
+        acted = floor_entry_perform_action(entry->floor_idx, floor_action,
             equipment_menu_slot_is_group(selected_slot) ? -1 : selected_slot);
+        if (!acted || floor_action != SUPPLY_FLOOR_ACTION_WIELD
+            || equipment_menu_slot_is_group(selected_slot))
+        {
+            return acted;
+        }
+        return equipment_ready_after_wield(selected_slot);
     }
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
+        int ready_mode = inactive_harness_ready_mode_for_slot(
+            entry->equip_idx);
+
+        if (entry->equip_idx == INVEN_BOW && !entry->equipped)
+        {
+            if (!confirm_equipment_entry_action("Ready", entry))
+                return false;
+            return player_ready_bow_with_arrow(
+                player_quiver_selected_arrow_slot());
+        }
+        if (ready_mode != PLAYER_ACTIVE_WEAPON_NONE)
+            return player_set_active_weapon_mode(ready_mode, true, true);
+
         if (!confirm_equipment_entry_action(
                 browser_item_use_action_text(
                     &inventory[entry->equip_idx], entry->equip_idx), entry))
@@ -5774,7 +5850,9 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
 
     if (entry->supply_idx >= 0)
     {
-        if (!confirm_equipment_entry_action("Equip", entry))
+        if (!confirm_equipment_entry_action(
+                selected_slot == EQUIPMENT_MENU_QUIVERS
+                    ? "Quiver" : "Equip", entry))
         {
             return false;
         }
@@ -5782,7 +5860,13 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
         if (equipment_menu_slot_is_group(selected_slot))
             do_cmd_wield(o_ptr, SUPPLIES_INDEX);
         else
-            do_cmd_wield_to_slot(o_ptr, SUPPLIES_INDEX, selected_slot);
+        {
+            bool wielded = do_cmd_wield_to_slot(o_ptr, SUPPLIES_INDEX,
+                selected_slot);
+
+            supplies_end_action();
+            return wielded && equipment_ready_after_wield(selected_slot);
+        }
         supplies_end_action();
         return true;
     }
@@ -5796,19 +5880,32 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
             do_cmd_use_item_by_index(entry->item_idx);
             return true;
         }
-        if (!confirm_equipment_entry_action("Equip", entry))
+        if (!confirm_equipment_entry_action(
+                selected_slot == EQUIPMENT_MENU_QUIVERS
+                    ? "Quiver" : "Equip", entry))
         {
             return false;
         }
         if (equipment_menu_slot_is_group(selected_slot))
             do_cmd_wield(o_ptr, entry->item_idx);
         else
-            do_cmd_wield_to_slot(o_ptr, entry->item_idx, selected_slot);
+        {
+            bool wielded = do_cmd_wield_to_slot(o_ptr, entry->item_idx,
+                selected_slot);
+
+            return wielded && equipment_ready_after_wield(selected_slot);
+        }
         return true;
     }
 
     if (entry->item_idx >= QUIVER_INDEX && entry->item_idx < QUIVER_INDEX_END)
     {
+        if (!entry->equipped)
+        {
+            if (!confirm_equipment_entry_action("Ready", entry))
+                return false;
+            return player_ready_bow_with_arrow(entry->item_idx);
+        }
         if (!confirm_equipment_entry_action("Remove", entry))
             return false;
         do_cmd_use_item_by_index(entry->item_idx);
@@ -6652,6 +6749,8 @@ static int collect_inventory_page_entries(inventory_menu_group group,
         {
             if (!inventory[i].k_idx)
                 continue;
+            if (!equipment_slot_active_for_display(i))
+                continue;
             if (group != INVENTORY_MENU_GROUP_ALL
                 && !inventory_browser_equipped_slot_matches_group(group, i))
                 continue;
@@ -6851,9 +6950,11 @@ static int count_inventory_replacement_group_entries(
     {
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
         {
+            bool equipped = equipment_slot_active_for_display(i);
+
             if (inventory_browser_equipped_slot_matches_group(group, i)
                 && inventory_replacement_object_allowed(request, &inventory[i],
-                    true))
+                    equipped))
             {
                 count++;
             }
@@ -6925,12 +7026,14 @@ static int collect_inventory_replacement_entries(inventory_menu_group group,
     {
         for (int i = INVEN_WIELD; i < INVEN_TOTAL && count < capacity; i++)
         {
+            bool equipped = equipment_slot_active_for_display(i);
+
             if (inventory_browser_equipped_slot_matches_group(group, i)
                 && inventory_replacement_object_allowed(request, &inventory[i],
-                    true))
+                    equipped))
             {
                 equipment_add_entry(entries, &count, capacity, -1, -1, i,
-                    true);
+                    equipped);
             }
         }
     }

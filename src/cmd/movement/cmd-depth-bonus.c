@@ -91,7 +91,8 @@ static int min_depth_timer_item_bonus_units(void)
     {
         object_type* o_ptr = &inventory[i];
         u32b f1, f2, f3, f4;
-        bool equipped = (i >= INVEN_WIELD);
+        bool equipped = (i >= INVEN_WIELD)
+            && player_equipment_slot_counts_as_equipped(i);
 
         if (!o_ptr->k_idx)
             continue;

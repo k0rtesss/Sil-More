@@ -19,6 +19,8 @@ void attempt_to_cheat_death(void)
         u32b f1, f2, f3;
 
         object_type* o_ptr = &inventory[i];
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
         object_flags(o_ptr, &f1, &f2, &f3);
 
         /* If player is dead, save them at the cost of the item */
@@ -2893,6 +2895,9 @@ bool apply_disenchant(int mode)
 
     /* Get the item */
     o_ptr = &inventory[t];
+
+    if (!player_equipment_slot_counts_as_equipped(t))
+        return (false);
 
     k_ptr = &k_info[o_ptr->k_idx];
 

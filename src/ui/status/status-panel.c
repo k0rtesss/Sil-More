@@ -325,6 +325,8 @@ static const object_type* left_panel_armour_display_object(void)
 
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(slots[i]))
+            continue;
         if (slots[i] == INVEN_ARM && o_ptr->tval != TV_SHIELD)
             continue;
 

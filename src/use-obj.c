@@ -23,6 +23,8 @@ static int medicine_count(void)
         o_ptr = &inventory[i];
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         object_flags(o_ptr, &t1, &t2, &t3);
         if (t3 & (TR3_MEDIC))
@@ -959,6 +961,8 @@ static bool use_staff_effects(object_type* o_ptr, bool* ident, bool is_gem)
         {
             object_type* equip_ptr = &inventory[i];
             if (!equip_ptr->k_idx)
+                continue;
+            if (!player_equipment_slot_counts_as_equipped(i))
                 continue;
 
             u32b f1, f2, f3;

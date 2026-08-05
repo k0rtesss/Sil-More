@@ -895,6 +895,7 @@ void update_view(void)
 
             if (!o_ptr->k_idx) continue;
             if (slot == INVEN_LITE) continue;
+            if (!player_equipment_slot_counts_as_equipped(slot)) continue;
 
             object_flags(o_ptr, &f1, &f2, &f3);
             if (f2 & TR2_DARKNESS)

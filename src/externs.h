@@ -2093,6 +2093,7 @@ extern void player_active_weapon_free_change_commit(void);
 extern void player_active_weapon_begin_player_turn(void);
 extern bool player_set_active_weapon_mode(
     int mode, bool confirm, bool take_turn);
+extern bool player_ready_bow_with_arrow(int arrow_item);
 extern void do_cmd_toggle_active_weapon(void);
 extern void player_queue_active_weapon_mode(int mode);
 extern void player_queue_ranged_quiver_mode(int mode);
@@ -2102,6 +2103,8 @@ extern bool player_weapon_slot_combat_bonuses_active(
 extern bool player_weapon_slot_combat_bonuses_active_for_mode(
     int mode, int slot, const object_type* o_ptr);
 extern bool player_equipment_slot_is_active(int slot);
+extern bool player_equipment_slot_counts_as_equipped(int slot);
+extern bool player_quiver_counts_as_equipped(void);
 extern bool player_shield_counts_for_active_weapon(const object_type* o_ptr);
 extern bool object_is_belt_weapon(const object_type* o_ptr);
 extern bool player_can_quick_throw_from_harness(int slot);

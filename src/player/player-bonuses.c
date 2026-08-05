@@ -239,6 +239,11 @@ void calc_bonuses(void)
         if (i == INVEN_STAFF || i == INVEN_HORN)
             continue;
 
+        /* Inactive melee/bow/throwing sets remain in reserved save slots, but
+         * they are Harness storage and grant no equipped effects. */
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
+
         /* Extract the item flags */
         object_flags(o_ptr, &f1, &f2, &f3);
 
@@ -248,8 +253,6 @@ void calc_bonuses(void)
         bool throwing_belt = is_belt && is_throwing_item;
 
         if (is_quiver1)
-            continue;
-        if (is_belt && !is_throwing_item)
             continue;
 
         bool combat_bonuses_active =
@@ -486,6 +489,7 @@ void calc_bonuses(void)
         {
             object_type* o_ptr = &inventory[i];
             if (!o_ptr->k_idx) continue;
+            if (!player_equipment_slot_counts_as_equipped(i)) continue;
 
             u32b f1, f2, f3, f4;
             object_flags4(o_ptr, &f1, &f2, &f3, &f4);

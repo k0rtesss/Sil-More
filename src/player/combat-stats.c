@@ -257,6 +257,9 @@ extern bool wearing_only_light_armour(void)
         if (!o_ptr->k_idx)
             continue;
 
+        if (!player_equipment_slot_counts_as_equipped(slots[s]))
+            continue;
+
         /* The arm slot only counts as armour when it holds a shield */
         if ((slots[s] == INVEN_ARM) && (o_ptr->tval != TV_SHIELD))
             continue;

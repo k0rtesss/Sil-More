@@ -204,6 +204,7 @@ bool player_has_equipped_flag3(u32b flag3)
     {
         object_type* o_ptr = &inventory[i];
         if (!o_ptr->k_idx) continue;
+        if (!player_equipment_slot_counts_as_equipped(i)) continue;
 
         u32b f1, f2, f3;
         object_flags(o_ptr, &f1, &f2, &f3);
@@ -287,20 +288,15 @@ void calc_torch(void)
         if (!o_ptr->k_idx)
             continue;
 
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
+
         /* Extract the flags */
         object_flags4(o_ptr, &f1, &f2, &f3, &f4);
 
         /* Skip quiver 1 entirely - it provides no bonuses */
         if (i == INVEN_QUIVER1)
             continue;
-
-        /* A valid belt weapon retains its passive light. */
-        if (i == INVEN_BELT)
-        {
-            bool is_throwing = player_can_treat_as_throwing_flags(o_ptr, f3);
-            if (!is_throwing)
-                continue;
-        }
 
         /* Does this item glow? */
         if ((f2 & TR2_LIGHT) && (i != INVEN_LITE))
@@ -365,9 +361,11 @@ void calc_torch(void)
     }
 
     // increase radius when the player's weapon glows
-    if (weapon_glows(&inventory[INVEN_WIELD]))
+    if (player_equipment_slot_counts_as_equipped(INVEN_WIELD)
+        && weapon_glows(&inventory[INVEN_WIELD]))
         p_ptr->cur_light++;
-    if (weapon_glows(&inventory[INVEN_ARM]))
+    if (player_equipment_slot_counts_as_equipped(INVEN_ARM)
+        && weapon_glows(&inventory[INVEN_ARM]))
         p_ptr->cur_light++;
     /* The weapon at the belt retains passive bonuses while stowed. */
     if (weapon_glows(&inventory[INVEN_BELT]))

@@ -33,6 +33,7 @@ errr file_character(cptr name, bool full)
     char o_name[80];
 
     char buf[1024];
+    bool has_effective_equipment = false;
 
     ability_type* b_ptr;
 
@@ -157,13 +158,29 @@ errr file_character(cptr name, bool full)
         SDL_IOprintf(fff, "\n");
     }
 
+    for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+    {
+        if (inventory[i].k_idx
+            && player_equipment_slot_counts_as_equipped(i))
+        {
+            has_effective_equipment = true;
+            break;
+        }
+    }
+
     /* Dump the equipment */
-    if (p_ptr->equip_cnt)
+    if (has_effective_equipment)
     {
         SDL_IOprintf(fff, "\n  [Equipment]\n\n");
         for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
         {
             object_type* o_ptr = &inventory[i];
+
+            if (!o_ptr->k_idx
+                || !player_equipment_slot_counts_as_equipped(i))
+            {
+                continue;
+            }
             object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
             /* Display the weight if needed */

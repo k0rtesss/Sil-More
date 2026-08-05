@@ -450,6 +450,8 @@ void process_world(void)
         /* Skip non-objects */
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         /* Recharge activatable objects */
         if (o_ptr->timeout > 0 && !fuelable_light_p(o_ptr))

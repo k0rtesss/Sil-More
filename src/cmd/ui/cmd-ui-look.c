@@ -886,7 +886,8 @@ static bool unified_look_examine_object_at(int y, int x, bool use_story_font)
     (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
     screen_save();
 
-    if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
+    if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL
+        && player_equipment_slot_counts_as_equipped(wield_slot(o_ptr)))
     {
         int slot = wield_slot(o_ptr);
         const object_type* compare_objects[2];
@@ -1632,7 +1633,9 @@ void do_cmd_unified_look(void)
                         /* Save screen */
                         screen_save();
                         /* Show object info, with comparison if applicable */
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
+                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL
+                            && player_equipment_slot_counts_as_equipped(
+                                wield_slot(o_ptr)))
                         {
                             int slot = wield_slot(o_ptr);
                             const object_type* compare_objects[2];
@@ -1722,7 +1725,9 @@ void do_cmd_unified_look(void)
                             o_ptr, false);
                         screen_save();
 
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
+                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL
+                            && player_equipment_slot_counts_as_equipped(
+                                wield_slot(o_ptr)))
                         {
                             int slot = wield_slot(o_ptr);
                             const object_type* compare_objects[2];
@@ -2199,7 +2204,9 @@ command_key:
                         /* Save screen */
                         screen_save();
                         /* Show object info, with comparison if applicable */
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
+                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL
+                            && player_equipment_slot_counts_as_equipped(
+                                wield_slot(o_ptr)))
                         {
                             int slot = wield_slot(o_ptr);
                             const object_type* compare_objects[2];
@@ -2289,7 +2296,9 @@ command_key:
                             o_ptr, false);
                         screen_save();
 
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
+                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL
+                            && player_equipment_slot_counts_as_equipped(
+                                wield_slot(o_ptr)))
                         {
                             int slot = wield_slot(o_ptr);
                             const object_type* compare_objects[2];
