@@ -2468,6 +2468,32 @@ bool player_ready_bow_with_arrow(int arrow_item)
             || player_quiver_selected_arrow_slot() == arrow_item);
 }
 
+bool player_ready_throwing_weapon(object_type* o_ptr, int item)
+{
+    active_weapon_choice choice;
+    object_type wanted;
+
+    if (!o_ptr || !o_ptr->k_idx || !player_can_treat_as_throwing(o_ptr))
+        return false;
+
+    object_copy(&wanted, o_ptr);
+    memset(&choice, 0, sizeof(choice));
+    choice.item = item;
+    choice.o_ptr = o_ptr;
+    choice.mode = PLAYER_ACTIVE_WEAPON_RANGED_1;
+    choice.kind = PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+    choice.target_slot = INVEN_WIELD;
+    choice.arrow_item = -1;
+    choice.shield_item = -1;
+    apply_active_weapon_choice(&choice);
+
+    return player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_THROWING
+        && inventory[INVEN_WIELD].pickup_slot
+            == PICKUP_SLOT_ACTIVE_THROWING
+        && active_weapon_same_physical_item(&wanted,
+            &inventory[INVEN_WIELD]);
+}
+
 void do_cmd_toggle_active_weapon(void)
 {
     active_weapon_choice choice;

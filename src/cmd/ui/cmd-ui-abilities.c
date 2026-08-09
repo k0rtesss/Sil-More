@@ -2506,6 +2506,7 @@ typedef struct ability_browser_entry
 typedef struct ability_browser_desc_line
 {
     byte attr;
+    bool keep_with_next;
     char text[ABILITY_BROWSER_DESC_LINE_LEN];
 } ability_browser_desc_line;
 
@@ -2758,7 +2759,10 @@ static void ability_browser_init_layout(ability_browser_layout* layout,
         - sdl_touch_menu_button_reserved_rows();
     if (layout->prompt_row < layout->list_row)
         layout->prompt_row = layout->list_row;
-    layout->status_row = (layout->prompt_row > layout->list_row)
+    /* The portrait summary and selected ability row already contain the
+     * status footer's information.  Reclaim that duplicate row for the
+     * stacked information panel so it cannot look like description text. */
+    layout->status_row = (!portrait && layout->prompt_row > layout->list_row)
         ? layout->prompt_row - 1
         : layout->prompt_row;
     layout->list_rows = layout->status_row - layout->list_row;
@@ -2833,10 +2837,25 @@ static void ability_desc_add_line(ability_browser_desc_line lines[],
         return;
 
     lines[*line_count].attr = attr;
+    lines[*line_count].keep_with_next = false;
     ability_browser_fit_text(lines[*line_count].text,
         sizeof(lines[*line_count].text), text ? text : "",
         ABILITY_BROWSER_DESC_LINE_LEN - 1);
     (*line_count)++;
+}
+
+static void ability_desc_add_heading(ability_browser_desc_line lines[],
+    int* line_count, byte attr, cptr text)
+{
+    int heading_index;
+
+    if (!line_count)
+        return;
+
+    heading_index = *line_count;
+    ability_desc_add_line(lines, line_count, attr, text);
+    if (*line_count > heading_index)
+        lines[heading_index].keep_with_next = true;
 }
 
 static void ability_desc_add_blank(ability_browser_desc_line lines[],
@@ -3939,7 +3958,7 @@ static void ability_browser_add_prerequisites(
         return;
 
     ability_desc_add_blank(lines, line_count);
-    ability_desc_add_line(lines, line_count, TERM_YELLOW, "Requirements");
+    ability_desc_add_heading(lines, line_count, TERM_YELLOW, "Requirements");
 
     strnfmt(buf, sizeof(buf), "Skill: %d %s base (%d now)",
         b_ptr->level, skill_names_full[skilltype],
@@ -4224,10 +4243,18 @@ static int ability_browser_build_description(int skilltype,
         char* death_message = oath_death_message(oath_id);
 
         ability_desc_add_blank(lines, &line_count);
-        ability_desc_add_line(lines, &line_count, TERM_RED, "Broken oath");
         if (death_message && death_message[0])
+        {
+            ability_desc_add_heading(lines, &line_count, TERM_RED,
+                "Broken oath");
             ability_desc_add_wrapped(lines, &line_count, TERM_RED,
                 death_message, width);
+        }
+        else
+        {
+            ability_desc_add_line(lines, &line_count, TERM_RED,
+                "Broken oath");
+        }
     }
     else
     {
@@ -4243,7 +4270,8 @@ static int ability_browser_build_description(int skilltype,
         if (effect_text && effect_text[0])
         {
             ability_desc_add_blank(lines, &line_count);
-            ability_desc_add_line(lines, &line_count, TERM_YELLOW, "Effect");
+            ability_desc_add_heading(lines, &line_count, TERM_YELLOW,
+                "Effect");
             ability_desc_add_wrapped(lines, &line_count, TERM_L_WHITE,
                 effect_text, width);
         }
@@ -4254,7 +4282,8 @@ static int ability_browser_build_description(int skilltype,
         if (desc_text && desc_text[0])
         {
             ability_desc_add_blank(lines, &line_count);
-            ability_desc_add_line(lines, &line_count, TERM_YELLOW, "Lore");
+            ability_desc_add_heading(lines, &line_count, TERM_YELLOW,
+                "Lore");
             ability_desc_add_wrapped(lines, &line_count, TERM_SLATE,
                 desc_text, width);
         }
@@ -4490,16 +4519,26 @@ static void ability_browser_draw_description(
 {
     char label[64];
     int visible_rows = layout->desc_rows;
+    int content_rows = visible_rows;
     int header_row = layout->stacked ? layout->desc_header_row
                                      : layout->header_row;
+
+    /* In the stacked portrait layout, do not leave a section heading as the
+     * final visible line while its contents start below the viewport. */
+    if (layout->stacked && content_rows > 1
+        && desc_top + content_rows < line_count
+        && lines[desc_top + content_rows - 1].keep_with_next)
+    {
+        content_rows--;
+    }
 
     ability_browser_put_fitted(layout->desc_col, header_row,
         layout->desc_w, focused ? TERM_L_BLUE : TERM_SLATE, "Information");
 
-    if (line_count > visible_rows)
+    if (desc_top > 0 || line_count > content_rows)
     {
         strnfmt(label, sizeof(label), "[%d-%d/%d]", desc_top + 1,
-            MIN(desc_top + visible_rows, line_count), line_count);
+            MIN(desc_top + content_rows, line_count), line_count);
         ability_browser_put_fitted(
             layout->desc_col + MAX(0, layout->desc_w - (int)strlen(label)),
             header_row, (int)strlen(label), TERM_L_BLUE, label);
@@ -4511,7 +4550,7 @@ static void ability_browser_draw_description(
         int y = layout->desc_row + i;
 
         Term_erase(layout->desc_col, y, layout->desc_w);
-        if (idx >= line_count)
+        if (i >= content_rows || idx >= line_count)
             continue;
 
         ability_browser_draw_colored_text_line(layout->desc_col, y,
@@ -5977,11 +6016,30 @@ void do_cmd_ability_screen(void)
                 }
                 else
                 {
-                    strnfmt(status, sizeof(status),
+                    char status_full[180];
+                    char status_mid[180];
+                    char status_short[180];
+                    const char* variants[] = {
+                        status_full, status_mid, status_short
+                    };
+
+                    strnfmt(status_full, sizeof(status_full),
                         "%s: %s | next %s point costs %d XP",
                         entries[entry_cur].name, state,
                         skill_names_full[skilltype],
                         ability_browser_next_skill_cost(skilltype));
+                    strnfmt(status_mid, sizeof(status_mid),
+                        "%s: %s | next %s: %d XP",
+                        entries[entry_cur].name, state,
+                        skill_names_full[skilltype],
+                        ability_browser_next_skill_cost(skilltype));
+                    strnfmt(status_short, sizeof(status_short),
+                        "%s | %s +1: %d XP", state,
+                        skill_names_full[skilltype],
+                        ability_browser_next_skill_cost(skilltype));
+                    terminal_prompt_pick_variant(status, sizeof(status),
+                        layout.visible_w, true, variants,
+                        N_ELEMENTS(variants));
                 }
             }
             else

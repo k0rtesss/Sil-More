@@ -315,8 +315,15 @@ void calc_torch(void)
         {
             bool extinguished = false;
 
+            /* A fuel-burning light can be turned off for the current rest. */
+            if ((i == INVEN_LITE) && p_ptr->resting_light_off
+                && fuelable_light_p(o_ptr))
+            {
+                extinguished = true;
+            }
+
             /* Some items provide permanent, bright, light */
-            if (o_ptr->sval == SV_LIGHT_LESSER_JEWEL)
+            else if (o_ptr->sval == SV_LIGHT_LESSER_JEWEL)
                 p_ptr->cur_light += RADIUS_LESSER_JEWEL;
             else if (o_ptr->sval == SV_LIGHT_FEANORIAN)
                 p_ptr->cur_light += RADIUS_FEANORIAN;

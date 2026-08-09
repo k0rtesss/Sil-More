@@ -740,11 +740,6 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     {
         title_w = sdl_question_menu_text_width(story_font,
             g_question_menu.title, font_px);
-        if (g_question_menu.context_hint
-            && title_w > (float)font_px * 14.0f)
-        {
-            title_w = (float)font_px * 14.0f;
-        }
     }
 
     margin = sdl_overlay_margin_px();
@@ -808,10 +803,20 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     }
 
     content_w = letter_w + letter_gap + icon_w + text_w;
-    if (out->has_title
-        && title_w + close_reserve + suppress_reserve > content_w)
+    if (out->has_title)
     {
-        content_w = title_w + close_reserve + suppress_reserve;
+        float title_content_w = title_w + close_reserve + suppress_reserve;
+
+        /* Context shortcut bars have room to grow across the map.  Size
+         * them from the full measured title instead of shrinking long object
+         * names to the old compact-title cap. */
+        if (g_question_menu.context_hint)
+        {
+            title_content_w += sdl_touch_pane_clampf(
+                (float)font_px * 0.8f, 10.0f, 22.0f);
+        }
+        if (title_content_w > content_w)
+            content_w = title_content_w;
     }
     if (button_total_w > content_w)
         content_w = button_total_w;

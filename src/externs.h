@@ -769,6 +769,46 @@ extern bool do_cmd_delete_item_by_index(int item);
 extern void do_cmd_observe(void);
 extern void do_cmd_observe_enhanced(void);
 extern cptr item_use_action_name(const object_type* o_ptr, int item);
+
+#define FLOOR_CONTEXT_MAX_ACTIONS 8
+
+typedef enum floor_context_action_kind
+{
+    FLOOR_CONTEXT_ACTION_NONE = 0,
+    FLOOR_CONTEXT_ACTION_DETAILS,
+    FLOOR_CONTEXT_ACTION_USE,
+    FLOOR_CONTEXT_ACTION_READY_THROW,
+    FLOOR_CONTEXT_ACTION_PACK,
+    FLOOR_CONTEXT_ACTION_HARNESS,
+    FLOOR_CONTEXT_ACTION_SUPPLIES,
+    FLOOR_CONTEXT_ACTION_QUIVER,
+    FLOOR_CONTEXT_ACTION_JEWELRY,
+    FLOOR_CONTEXT_ACTION_PICKUP,
+    FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT,
+    FLOOR_CONTEXT_ACTION_ITEMS,
+    FLOOR_CONTEXT_ACTION_CLOSE
+} floor_context_action_kind;
+
+typedef struct floor_context_action
+{
+    floor_context_action_kind kind;
+    int key;
+    byte attr;
+    char label[32];
+    char token[40];
+} floor_context_action;
+
+extern int floor_context_collect_item_actions(int floor_item,
+    bool include_details, bool include_close, floor_context_action actions[],
+    int capacity);
+extern int floor_context_collect_square_actions(bool include_details,
+    floor_context_action actions[], int capacity);
+extern bool floor_context_perform_action(int floor_item,
+    floor_context_action_kind kind);
+extern bool floor_context_action_for_key(int floor_item, int key,
+    floor_context_action_kind* kind);
+extern void do_cmd_queue_floor_context_action(
+    floor_context_action_kind kind);
 extern bool do_cmd_context_square_action_popup(void);
 extern void do_cmd_context_floor_item_action(void);
 extern void do_cmd_suppress_context_square_popups(void);
@@ -2094,6 +2134,7 @@ extern void player_active_weapon_begin_player_turn(void);
 extern bool player_set_active_weapon_mode(
     int mode, bool confirm, bool take_turn);
 extern bool player_ready_bow_with_arrow(int arrow_item);
+extern bool player_ready_throwing_weapon(object_type* o_ptr, int item);
 extern void do_cmd_toggle_active_weapon(void);
 extern void player_queue_active_weapon_mode(int mode);
 extern void player_queue_ranged_quiver_mode(int mode);

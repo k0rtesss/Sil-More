@@ -249,14 +249,6 @@ static int first_floor_item_under_player(void)
     return 0;
 }
 
-static bool floor_item_can_prefer_harness(int floor_item)
-{
-    if (!floor_item)
-        return false;
-
-    return object_can_choose_pack_or_harness(&o_list[-floor_item]);
-}
-
 /*
  * Return the first floor object under the player whose primary action is an
  * interaction rather than pickup.  Space normally expands to the "/5"
@@ -364,6 +356,309 @@ cptr item_use_action_name(const object_type* o_ptr, int item)
     default:
         return "Use";
     }
+}
+
+static bool floor_context_add_action(floor_context_action actions[],
+    int capacity, int* count, floor_context_action_kind kind, int key,
+    cptr label, byte attr)
+{
+    floor_context_action* action;
+
+    if (!actions || !count || *count < 0 || *count >= capacity
+        || !label || !label[0])
+    {
+        return false;
+    }
+
+    action = &actions[(*count)++];
+    action->kind = kind;
+    action->key = key;
+    action->attr = attr;
+    SDL_strlcpy(action->label, label, sizeof(action->label));
+    if (key == ESCAPE)
+        strnfmt(action->token, sizeof(action->token), "Esc %s", label);
+    else if (key == ' ')
+        strnfmt(action->token, sizeof(action->token), "Space %s", label);
+    else if (key > 0 && key < 128 && SDL_isprint(key))
+        strnfmt(action->token, sizeof(action->token), "%c %s", key, label);
+    else
+        SDL_strlcpy(action->token, label, sizeof(action->token));
+    return true;
+}
+
+static cptr floor_context_use_label(const object_type* o_ptr, int floor_item,
+    char* label, size_t label_len)
+{
+    cptr action_name;
+
+    if (!o_ptr || !o_ptr->k_idx || !label || label_len == 0)
+        return NULL;
+
+    action_name = item_use_action_name(o_ptr, floor_item);
+    if (streq(action_name, "Pick up") || streq(action_name, "Pick Up"))
+        return NULL;
+
+    if (streq(action_name, "Wield"))
+    {
+        if (o_ptr->tval == TV_ARROW)
+            return NULL;
+        if (player_can_treat_as_throwing(o_ptr))
+        {
+            SDL_strlcpy(label,
+                object_is_belt_weapon(o_ptr) ? "Equip..." : "Wield",
+                label_len);
+        }
+        else if (o_ptr->tval == TV_DIGGING || o_ptr->tval == TV_HAFTED
+            || o_ptr->tval == TV_POLEARM || o_ptr->tval == TV_SWORD)
+        {
+            SDL_strlcpy(label, "Wield", label_len);
+        }
+        else
+        {
+            SDL_strlcpy(label,
+                o_ptr->tval == TV_RING && inventory[INVEN_LEFT].k_idx
+                    && inventory[INVEN_RIGHT].k_idx
+                    ? "Equip..." : "Equip",
+                label_len);
+        }
+        return label;
+    }
+
+    SDL_strlcpy(label, action_name, label_len);
+    return label;
+}
+
+static int floor_context_first_item_and_count(int* first_item)
+{
+    int floor_list[MAX_FLOOR_STACK];
+    int floor_num;
+    int count = 0;
+
+    if (first_item)
+        *first_item = 0;
+    if (!p_ptr)
+        return 0;
+
+    floor_num = scan_floor(floor_list, MAX_FLOOR_STACK,
+        p_ptr->py, p_ptr->px, 0x00);
+    for (int i = 0; i < floor_num; i++)
+    {
+        int o_idx = floor_list[i];
+        const object_type* o_ptr;
+
+        if (o_idx <= 0 || o_idx >= o_max)
+            continue;
+        o_ptr = &o_list[o_idx];
+        if (!o_ptr->k_idx || object_is_searched_skeleton(o_ptr))
+            continue;
+        if (count == 0 && first_item)
+            *first_item = 0 - o_idx;
+        count++;
+    }
+    return count;
+}
+
+int floor_context_collect_item_actions(int floor_item, bool include_details,
+    bool include_close, floor_context_action actions[], int capacity)
+{
+    object_type* o_ptr;
+    bool interaction_only;
+    char use_label[32];
+    int count = 0;
+
+    if (!p_ptr || !actions || capacity <= 0 || floor_item >= 0)
+        return 0;
+    if (0 - floor_item <= 0 || 0 - floor_item >= o_max)
+        return 0;
+
+    o_ptr = &o_list[0 - floor_item];
+    if (!o_ptr->k_idx || o_ptr->iy != p_ptr->py || o_ptr->ix != p_ptr->px)
+        return 0;
+
+    interaction_only = o_ptr->tval == TV_SKELETON
+        || o_ptr->tval == TV_CHEST;
+
+    if (floor_context_use_label(o_ptr, floor_item, use_label,
+            sizeof(use_label)))
+    {
+        floor_context_add_action(actions, capacity, &count,
+            FLOOR_CONTEXT_ACTION_USE, 'u', use_label, TERM_L_GREEN);
+    }
+
+    if (!interaction_only && player_can_treat_as_throwing(o_ptr))
+    {
+        floor_context_add_action(actions, capacity, &count,
+            FLOOR_CONTEXT_ACTION_READY_THROW, 't', "Ready to Throw",
+            TERM_YELLOW);
+    }
+
+    if (!interaction_only)
+    {
+        if (o_ptr->tval == TV_ARROW)
+        {
+            floor_context_add_action(actions, capacity, &count,
+                FLOOR_CONTEXT_ACTION_QUIVER, 'v', "Quiver", TERM_L_BLUE);
+            floor_context_add_action(actions, capacity, &count,
+                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_WHITE);
+        }
+        else if (supplies_is_supply_object(o_ptr))
+        {
+            floor_context_add_action(actions, capacity, &count,
+                FLOOR_CONTEXT_ACTION_SUPPLIES, 'j', "Supplies", TERM_L_GREEN);
+        }
+        else if (object_can_choose_pack_or_harness(o_ptr))
+        {
+            floor_context_add_action(actions, capacity, &count,
+                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_UMBER);
+            floor_context_add_action(actions, capacity, &count,
+                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_WHITE);
+        }
+        else if (o_ptr->storage == OBJECT_STORAGE_JEWELRY)
+        {
+            floor_context_add_action(actions, capacity, &count,
+                FLOOR_CONTEXT_ACTION_JEWELRY, 'j', "Jewelry", TERM_L_BLUE);
+        }
+        else if (o_ptr->storage == OBJECT_STORAGE_PACK)
+        {
+            floor_context_add_action(actions, capacity, &count,
+                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_WHITE);
+        }
+        else if (o_ptr->storage == OBJECT_STORAGE_HARNESS)
+        {
+            floor_context_add_action(actions, capacity, &count,
+                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_UMBER);
+        }
+        else
+        {
+            floor_context_add_action(actions, capacity, &count,
+                FLOOR_CONTEXT_ACTION_PICKUP, ' ', "Pick Up", TERM_L_WHITE);
+        }
+    }
+
+    if (include_details && !interaction_only)
+    {
+        floor_context_add_action(actions, capacity, &count,
+            FLOOR_CONTEXT_ACTION_DETAILS, 'x', "Details", TERM_L_BLUE);
+    }
+    if (include_close)
+    {
+        floor_context_add_action(actions, capacity, &count,
+            FLOOR_CONTEXT_ACTION_CLOSE, ESCAPE, "Close", TERM_SLATE);
+    }
+
+    return count;
+}
+
+int floor_context_collect_square_actions(bool include_details,
+    floor_context_action actions[], int capacity)
+{
+    int first_item = 0;
+    int item_count = floor_context_first_item_and_count(&first_item);
+    int count = 0;
+
+    if (!actions || capacity <= 0 || item_count <= 0)
+        return 0;
+    if (item_count == 1)
+    {
+        return floor_context_collect_item_actions(first_item, include_details,
+            false, actions, capacity);
+    }
+
+    {
+        char label[32];
+
+        strnfmt(label, sizeof(label), "Items (%d)...", item_count);
+        floor_context_add_action(actions, capacity, &count,
+            FLOOR_CONTEXT_ACTION_ITEMS, 'i', label, TERM_L_WHITE);
+    }
+    return count;
+}
+
+bool floor_context_action_for_key(int floor_item, int key,
+    floor_context_action_kind* kind)
+{
+    floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
+    int count = floor_context_collect_item_actions(floor_item, false, true,
+        actions, (int)N_ELEMENTS(actions));
+
+    if (kind)
+        *kind = FLOOR_CONTEXT_ACTION_NONE;
+    for (int i = 0; i < count; i++)
+    {
+        if (actions[i].key != key)
+            continue;
+        if (kind)
+            *kind = actions[i].kind;
+        return true;
+    }
+    return false;
+}
+
+static bool floor_context_preferred_pickup_action(int floor_item,
+    floor_context_action* selected)
+{
+    floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
+    int count = floor_context_collect_item_actions(floor_item, false, false,
+        actions, (int)N_ELEMENTS(actions));
+    static const floor_context_action_kind preference[] = {
+        FLOOR_CONTEXT_ACTION_HARNESS,
+        FLOOR_CONTEXT_ACTION_PACK,
+        FLOOR_CONTEXT_ACTION_SUPPLIES,
+        FLOOR_CONTEXT_ACTION_JEWELRY,
+        FLOOR_CONTEXT_ACTION_PICKUP
+    };
+
+    for (int p = 0; p < (int)N_ELEMENTS(preference); p++)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            if (actions[i].kind != preference[p])
+                continue;
+            if (selected)
+                *selected = actions[i];
+            return true;
+        }
+    }
+    return false;
+}
+
+static cptr floor_context_space_pickup_label(int floor_item)
+{
+    floor_context_action selected;
+
+    if (floor_context_preferred_pickup_action(floor_item, &selected))
+    {
+        switch (selected.kind)
+        {
+        case FLOOR_CONTEXT_ACTION_HARNESS:
+            return "Harness";
+        case FLOOR_CONTEXT_ACTION_PACK:
+            return "Pack";
+        case FLOOR_CONTEXT_ACTION_SUPPLIES:
+            return "Supplies";
+        case FLOOR_CONTEXT_ACTION_JEWELRY:
+            return "Jewelry";
+        case FLOOR_CONTEXT_ACTION_PICKUP:
+            return "Pick Up";
+        default:
+            break;
+        }
+    }
+    return "Pick Up";
+}
+
+static bool floor_context_primary_popup_action(int floor_item,
+    floor_context_action* selected)
+{
+    floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
+    int count = floor_context_collect_item_actions(floor_item, false, false,
+        actions, (int)N_ELEMENTS(actions));
+
+    if (count <= 0)
+        return false;
+    if (selected)
+        *selected = actions[0];
+    return true;
 }
 
 static int choose_arrow_move_quantity(const object_type* o_ptr,
@@ -552,6 +847,9 @@ enum {
 
 static s64b context_square_popup_suppressed_at = -1;
 static s64b context_square_popup_suppressed_until = -1;
+static int pending_floor_context_item = 0;
+static floor_context_action_kind pending_floor_context_action
+    = FLOOR_CONTEXT_ACTION_NONE;
 
 static bool context_square_popup_is_suppressed(void)
 {
@@ -680,10 +978,63 @@ void do_cmd_suppress_context_square_popups(void)
  */
 void do_cmd_context_floor_item_action(void)
 {
-    int floor_item = first_floor_item_under_player();
+    int floor_item;
+    floor_context_action_kind action;
 
-    if (floor_item)
-        do_cmd_use_item_by_index(floor_item);
+    if (pending_floor_context_action != FLOOR_CONTEXT_ACTION_NONE)
+    {
+        floor_item = pending_floor_context_item;
+        action = pending_floor_context_action;
+        pending_floor_context_item = 0;
+        pending_floor_context_action = FLOOR_CONTEXT_ACTION_NONE;
+        (void)floor_context_perform_action(floor_item, action);
+        return;
+    }
+
+    {
+        int item_count = floor_context_first_item_and_count(&floor_item);
+
+        if (item_count > 1)
+            (void)floor_context_perform_action(0,
+                FLOOR_CONTEXT_ACTION_ITEMS);
+        else if (floor_item)
+            do_cmd_use_item_by_index(floor_item);
+    }
+}
+
+void do_cmd_queue_floor_context_action(floor_context_action_kind kind)
+{
+    int first_item = 0;
+    int item_count;
+
+    if (kind <= FLOOR_CONTEXT_ACTION_NONE
+        || kind >= FLOOR_CONTEXT_ACTION_CLOSE)
+    {
+        return;
+    }
+
+    item_count = floor_context_first_item_and_count(&first_item);
+    if (kind == FLOOR_CONTEXT_ACTION_ITEMS)
+    {
+        if (item_count <= 1)
+            return;
+        first_item = 0;
+    }
+    else if (kind == FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT)
+    {
+        if (item_count <= 0)
+            return;
+        if (item_count > 1)
+            first_item = 0;
+    }
+    else if (item_count != 1)
+    {
+        return;
+    }
+
+    pending_floor_context_item = first_item;
+    pending_floor_context_action = kind;
+    Term_keypress(CMD_CONTEXT_FLOOR_ACTION);
 }
 
 /*
@@ -745,14 +1096,15 @@ static bool use_floor_interaction_by_index(int item)
  * on-screen button shows (and performs) the action that fits the player's
  * current situation:
  *
- *   Confirm: in an open description -> Harness/pick up (space) the shown item;
+ *   Confirm: in an open description -> the shown item's preferred pickup
+ *          destination, using that footer action's real key;
  *          otherwise on stairs -> interact-here with confirmation, on a forge
- *          -> smith, standing on an item -> Harness/pick up, else -> confirm.
+ *          -> smith, on a pile -> choose an item, standing on one item -> its
+ *          pickup destination, else -> confirm.
  *   '<'/'>' : on the matching staircase -> interact-here with confirmation.
- *   'u'  : names the floor item's real action (Wield, Quaff, Eat, etc.); in an
- *          open description it submits that popup's 'x' action.
- *   'x'  : "Description" until the description popup is open, then names the
- *          floor item's real action.  The key stays 'x' for the popup action.
+ *   'u'/'x': outside a description, retain Use/Description.  Inside one, both
+ *          fixed controls submit the first explicit footer action, preserving
+ *          their old "perform the primary action" role.
  *
  * `description_open` is the caller's "an interactive item description popup is
  * showing" state.  Returns true (filling *out_key and label) for contextual
@@ -765,23 +1117,27 @@ bool touch_shortcut_context_action(int binding, bool description_open,
     int key = binding;
     int floor_interaction = 0;
     const char* name = NULL;
+    char context_name[32];
 
     if (!character_dungeon || !p_ptr || !p_ptr->playing || p_ptr->is_dead)
         return false;
 
     if (binding == ' ') {
         if (description_open) {
-            /* Inside the popup, Space prefers the Harness for dual-destination
-             * items and otherwise performs the ordinary pickup. */
             int floor_item = first_floor_item_under_player();
+            floor_context_action selected;
 
             key = ' ';
             if (!floor_item)
                 name = "Confirm";
-            else if (floor_item_can_prefer_harness(floor_item))
-                name = "Harness";
+            else if (floor_context_preferred_pickup_action(floor_item,
+                    &selected))
+            {
+                key = selected.key;
+                name = selected.label;
+            }
             else
-                name = "Pick Up";
+                name = "Confirm";
         } else if (cave_down_stairs_bold(p_ptr->py, p_ptr->px)) {
             /* Space runs interact-here, which asks before changing levels. */
             key = ' ';
@@ -794,25 +1150,36 @@ bool touch_shortcut_context_action(int binding, bool description_open,
             /* Space runs interact-here, which opens the smithing screen. */
             key = ' ';
             name = "Smith";
-        } else if ((floor_interaction =
-                first_floor_interaction_under_player()) != 0)
-        {
-            /*
-             * Leave Space intact so request_command() applies its normal
-             * "/5" interact-here keymap.
-             */
-            key = ' ';
-            name = item_use_action_name(&o_list[-floor_interaction],
-                floor_interaction);
-        } else if (first_floor_item_under_player() != 0) {
-            int floor_item = first_floor_item_under_player();
-
-            key = ' ';
-            name = floor_item_can_prefer_harness(floor_item)
-                ? "Harness" : "Pick Up";
         } else {
-            key = ' ';
-            name = "Confirm";
+            int first_item = 0;
+            int item_count = floor_context_first_item_and_count(&first_item);
+
+            if (item_count > 1)
+            {
+                key = CMD_CONTEXT_FLOOR_ACTION;
+                strnfmt(context_name, sizeof(context_name), "Items (%d)...",
+                    item_count);
+                name = context_name;
+            }
+            else if ((floor_interaction =
+                first_floor_interaction_under_player()) != 0)
+            {
+                /* Leave Space intact so request_command() applies its normal
+                 * "/5" interact-here keymap. */
+                key = ' ';
+                name = item_use_action_name(&o_list[-floor_interaction],
+                    floor_interaction);
+            }
+            else if (first_item != 0)
+            {
+                key = ' ';
+                name = floor_context_space_pickup_label(first_item);
+            }
+            else
+            {
+                key = ' ';
+                name = "Confirm";
+            }
         }
     } else if (binding == '<') {
         if (!cave_up_stairs_bold(p_ptr->py, p_ptr->px))
@@ -828,30 +1195,35 @@ bool touch_shortcut_context_action(int binding, bool description_open,
         name = "Go Down";
     } else if (binding == 'u') {
         int floor_item = first_floor_item_under_player();
+        floor_context_action selected;
 
-        key = (description_open && floor_item != 0) ? 'x' : 'u';
-        name = (floor_item != 0)
-            ? item_use_action_name(&o_list[-floor_item], floor_item)
-            : "Use";
+        if (description_open && floor_item != 0
+            && floor_context_primary_popup_action(floor_item, &selected))
+        {
+            key = selected.key;
+            name = selected.label;
+        }
+        else
+        {
+            key = 'u';
+            name = (floor_item != 0)
+                ? item_use_action_name(&o_list[-floor_item], floor_item)
+                : "Use";
+        }
     } else if (binding == 'x') {
         key = 'x';
         if (description_open) {
             int floor_item = first_floor_item_under_player();
+            floor_context_action selected;
 
-            if (floor_item != 0) {
-                const object_type* o_ptr = &o_list[-floor_item];
-
-                if ((o_ptr->tval == TV_SKELETON
-                        && !object_is_searched_skeleton(o_ptr))
-                    || (o_ptr->tval == TV_CHEST && o_ptr->pval != 0))
-                {
-                    name = item_use_action_name(o_ptr, floor_item);
-                }
-                else
-                {
-                    name = item_use_action_name(o_ptr, floor_item);
-                }
-            } else {
+            if (floor_item != 0
+                && floor_context_primary_popup_action(floor_item, &selected))
+            {
+                key = selected.key;
+                name = selected.label;
+            }
+            else
+            {
                 name = "Use";
             }
         } else {
@@ -4463,6 +4835,214 @@ void do_cmd_destroy(void)
     (void)do_cmd_delete_item_by_index(item);
 }
 
+static bool floor_context_show_details(int floor_item)
+{
+    extern char current_menu_command;
+    extern int current_menu_state;
+    floor_context_action_kind kind;
+    char key;
+    int o_idx = 0 - floor_item;
+
+    if (floor_item >= 0 || o_idx <= 0 || o_idx >= o_max
+        || !o_list[o_idx].k_idx || o_list[o_idx].iy != p_ptr->py
+        || o_list[o_idx].ix != p_ptr->px)
+    {
+        return false;
+    }
+
+    current_menu_command = 'x';
+    current_menu_state = 0;
+    key = describe_item_with_floor_actions(floor_item, true);
+    current_menu_command = 0;
+    current_menu_state = 0;
+
+    if (!key || key == ESCAPE)
+        return true;
+    if (!floor_context_action_for_key(floor_item, key, &kind))
+        return false;
+    if (kind == FLOOR_CONTEXT_ACTION_CLOSE)
+        return true;
+    return floor_context_perform_action(floor_item, kind);
+}
+
+static bool item_tester_hook_floor_context(const object_type* o_ptr)
+{
+    return o_ptr && o_ptr->k_idx && !object_is_searched_skeleton(o_ptr);
+}
+
+static bool item_tester_hook_floor_context_pickup(const object_type* o_ptr)
+{
+    return item_tester_hook_floor_context(o_ptr)
+        && o_ptr->tval != TV_SKELETON && o_ptr->tval != TV_CHEST;
+}
+
+static bool floor_context_select_item(int* floor_item, bool pickup_only)
+{
+    bool old_item_tester_full = item_tester_full;
+
+    if (!floor_item)
+        return false;
+    *floor_item = 0;
+
+    item_tester_tval = 0;
+    item_tester_hook = pickup_only
+        ? item_tester_hook_floor_context_pickup
+        : item_tester_hook_floor_context;
+    item_tester_full = false;
+    if (!open_inventory_item_select_menu(USE_FLOOR,
+            "Choose a floor item: ", "There is nothing here.", floor_item))
+    {
+        item_tester_full = old_item_tester_full;
+        return false;
+    }
+    item_tester_full = old_item_tester_full;
+
+    return true;
+}
+
+static bool floor_context_choose_item(void)
+{
+    int floor_item;
+
+    if (!floor_context_select_item(&floor_item, false))
+        return false;
+    return floor_context_show_details(floor_item);
+}
+
+static bool floor_context_is_pickup_destination(
+    floor_context_action_kind kind)
+{
+    return kind == FLOOR_CONTEXT_ACTION_PACK
+        || kind == FLOOR_CONTEXT_ACTION_HARNESS
+        || kind == FLOOR_CONTEXT_ACTION_SUPPLIES
+        || kind == FLOOR_CONTEXT_ACTION_QUIVER
+        || kind == FLOOR_CONTEXT_ACTION_JEWELRY
+        || kind == FLOOR_CONTEXT_ACTION_PICKUP;
+}
+
+static bool floor_context_pickup(int floor_item)
+{
+    floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
+    floor_context_action destinations[FLOOR_CONTEXT_MAX_ACTIONS];
+    ui_question_option options[FLOOR_CONTEXT_MAX_ACTIONS];
+    object_type* o_ptr;
+    char o_name[120];
+    char desc[180];
+    int destination_count = 0;
+    int default_index = 0;
+    int count;
+    int choice;
+
+    if (floor_item == 0)
+    {
+        if (!floor_context_select_item(&floor_item, true))
+            return false;
+    }
+    if (floor_item >= 0 || 0 - floor_item <= 0 || 0 - floor_item >= o_max)
+        return false;
+
+    o_ptr = &o_list[0 - floor_item];
+    if (!o_ptr->k_idx || o_ptr->iy != p_ptr->py || o_ptr->ix != p_ptr->px)
+        return false;
+
+    count = floor_context_collect_item_actions(floor_item, false, false,
+        actions, (int)N_ELEMENTS(actions));
+    for (int i = 0; i < count; i++)
+    {
+        if (!floor_context_is_pickup_destination(actions[i].kind))
+            continue;
+        destinations[destination_count] = actions[i];
+        options[destination_count] = (ui_question_option){
+            (char)actions[i].key, destinations[destination_count].label,
+            actions[i].attr, false
+        };
+        if (actions[i].kind == FLOOR_CONTEXT_ACTION_PACK)
+            default_index = destination_count;
+        destination_count++;
+    }
+
+    if (destination_count <= 0)
+        return false;
+    if (destination_count == 1)
+    {
+        return floor_context_perform_action(floor_item,
+            destinations[0].kind);
+    }
+
+    object_desc_floor(o_name, sizeof(o_name), o_ptr, false, 0);
+    strnfmt(desc, sizeof(desc), "Choose where to put %s.", o_name);
+    choice = ui_question_ask("Pick up where?", desc, options,
+        destination_count, p_ptr->py, p_ptr->px, default_index);
+    if (choice < 0 || choice >= destination_count)
+        return false;
+
+    return floor_context_perform_action(floor_item,
+        destinations[choice].kind);
+}
+
+bool floor_context_perform_action(int floor_item,
+    floor_context_action_kind kind)
+{
+    object_type* o_ptr;
+    int o_idx;
+
+    if (kind == FLOOR_CONTEXT_ACTION_ITEMS)
+        return floor_context_choose_item();
+    if (kind == FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT)
+        return floor_context_pickup(floor_item);
+    if (kind == FLOOR_CONTEXT_ACTION_CLOSE)
+        return true;
+
+    o_idx = 0 - floor_item;
+    if (floor_item >= 0 || o_idx <= 0 || o_idx >= o_max)
+        return false;
+    o_ptr = &o_list[o_idx];
+    if (!o_ptr->k_idx || o_ptr->iy != p_ptr->py || o_ptr->ix != p_ptr->px)
+        return false;
+
+    switch (kind)
+    {
+    case FLOOR_CONTEXT_ACTION_DETAILS:
+        return floor_context_show_details(floor_item);
+    case FLOOR_CONTEXT_ACTION_USE:
+    {
+        extern char current_menu_command;
+        extern int current_menu_state;
+
+        current_menu_command = 'u';
+        current_menu_state = 0;
+        do_cmd_use_item_by_index(floor_item);
+        current_menu_command = 0;
+        current_menu_state = 0;
+        return true;
+    }
+    case FLOOR_CONTEXT_ACTION_READY_THROW:
+        return player_ready_throwing_weapon(o_ptr, floor_item);
+    case FLOOR_CONTEXT_ACTION_QUIVER:
+        return do_cmd_wield_to_slot(o_ptr, floor_item, INVEN_QUIVER1);
+    case FLOOR_CONTEXT_ACTION_PACK:
+    case FLOOR_CONTEXT_ACTION_HARNESS:
+    case FLOOR_CONTEXT_ACTION_SUPPLIES:
+    case FLOOR_CONTEXT_ACTION_JEWELRY:
+    case FLOOR_CONTEXT_ACTION_PICKUP:
+        p_ptr->previous_action[0] = ACTION_MISC;
+        p_ptr->energy_use = 100;
+        if (kind == FLOOR_CONTEXT_ACTION_PACK)
+            py_pickup_aux_to_pack(o_idx);
+        else if (kind == FLOOR_CONTEXT_ACTION_HARNESS)
+            py_pickup_aux_to_harness(o_idx);
+        else
+            py_pickup_aux(o_idx);
+        return true;
+    case FLOOR_CONTEXT_ACTION_NONE:
+    case FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT:
+    case FLOOR_CONTEXT_ACTION_ITEMS:
+    case FLOOR_CONTEXT_ACTION_CLOSE:
+    default:
+        return false;
+    }
+}
+
 /*
  * Observe an item, displaying what is known about it
  */
@@ -4479,36 +5059,14 @@ void do_cmd_observe(void)
         current_menu_state = 0;
     }
 
-    /* Shortcut: if standing on an item, examine it directly with comparisons
-     * instead of opening the inventory browser. */
+    /* Shortcut: if standing on an item, expose its complete item-specific
+     * action set instead of opening the general inventory browser. */
     if (floor_item != 0)
     {
-        extern char current_menu_command;
-        extern int current_menu_state;
-        char action;
-
         log_debug(
             "do_cmd_observe: Examining floor item under player, item=%d",
             floor_item);
-        current_menu_command = 'x';
-        current_menu_state = 0;
-        action = describe_item_with_floor_actions(floor_item, true);
-        current_menu_command = 0;
-        current_menu_state = 0;
-
-        if (action == 'x')
-        {
-            current_menu_command = 'u';
-            current_menu_state = 0;
-            do_cmd_use_item_by_index(floor_item);
-            current_menu_command = 0;
-            current_menu_state = 0;
-        }
-        else if (action == ' ')
-        {
-            do_cmd_pickup_to_harness();
-        }
-
+        (void)floor_context_show_details(floor_item);
         return;
     }
 

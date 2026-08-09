@@ -5130,9 +5130,6 @@ static int equipment_entry_wrapped_rows(cptr text, int width)
     while (equipment_entry_wrap_next(&cursor, width, line, sizeof(line)))
         rows++;
 
-    if (sdl_mobile_portrait_layout_active() && rows > 3)
-        rows = 3;
-
     return MAX(rows, 1);
 }
 

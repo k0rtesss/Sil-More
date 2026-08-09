@@ -1327,6 +1327,7 @@ struct player_type
     s16b energy_use; /* Energy use this turn */
 
     s16b resting; /* Resting counter */
+    bool resting_light_off; /* Fuel-burning light extinguished for this rest */
     s16b smithing; /* Smithing counter */
     s16b fletching; /* Fletching counter */
     s16b running; /* Running counter */

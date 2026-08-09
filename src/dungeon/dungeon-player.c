@@ -228,6 +228,11 @@ void process_player(void)
     // reset whether you have just woken up from entrancement
     p_ptr->was_entranced = false;
 
+    /* A completed timed rest relights its fuel-burning light before the
+     * player's next action. */
+    if (!p_ptr->resting && p_ptr->resting_light_off)
+        p_ptr->resting_light_off = false;
+
     // update the player's torch radius
     calc_torch();
 

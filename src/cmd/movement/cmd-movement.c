@@ -953,10 +953,24 @@ void do_cmd_pickup_to_harness(void)
  */
 void do_cmd_rest(void)
 {
+    object_type* light = &inventory[INVEN_LITE];
+
     /* Prompt for time if needed */
     if (p_ptr->command_arg == 0)
     {
         p_ptr->command_arg = (-2);
+    }
+
+    /* Offer to save fuel from an equipped torch or lamp while resting. */
+    p_ptr->resting_light_off = false;
+    if (fuelable_light_p(light) && player_light_has_fuel(light)
+        && !((light->sval == SV_LIGHT_LANTERN)
+            && (object_ego_prefix(light) == EGO_BROKEN_BRASS_LANTERN)))
+    {
+        cptr light_name = (light->sval == SV_LIGHT_LANTERN) ? "lamp" : "torch";
+
+        p_ptr->resting_light_off = get_check(format(
+            "Turn off your %s while resting to save fuel? ", light_name));
     }
 
     // typically resting ends your current song
@@ -974,6 +988,10 @@ void do_cmd_rest(void)
 
     /* Save the rest code */
     p_ptr->resting = p_ptr->command_arg;
+
+    /* Apply the light change before the first resting turn is displayed. */
+    if (p_ptr->resting_light_off)
+        calc_torch();
 
     /* Cancel the arg */
     p_ptr->command_arg = 0;

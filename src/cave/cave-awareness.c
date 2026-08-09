@@ -88,6 +88,13 @@ void disturb(int stop_stealth, int unused_flag)
         /* Cancel */
         p_ptr->resting = 0;
 
+        /* Relight a torch or lamp that was turned off for this rest. */
+        if (p_ptr->resting_light_off)
+        {
+            p_ptr->resting_light_off = false;
+            calc_torch();
+        }
+
         /* Redraw the state (later) */
         p_ptr->redraw |= (PR_STATE);
     }

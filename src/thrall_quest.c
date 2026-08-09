@@ -1697,11 +1697,12 @@ static bool artifact_is_revealable(int a_idx)
         return false;
     if (a_ptr->seen & ART_SEEN_REVEALED)
         return false;
-    if ((a_idx == ART_MORGOTH_0) || (a_idx == ART_MORGOTH_1)
-        || (a_idx == ART_MORGOTH_2))
-    {
+    /* Thrall lore should not spend its reveal on easy-to-identify artefacts. */
+    if (a_ptr->flags3 & TR3_EASY_ID)
         return false;
-    }
+    /* Morgoth's crown is a boss-state artefact, not ordinary quest lore. */
+    if ((a_idx >= ART_MORGOTH_0) && (a_idx <= ART_MORGOTH_3))
+        return false;
     if ((a_idx >= ART_ULTIMATE) && (a_idx <= z_info->art_norm_max))
         return false;
 
@@ -1882,14 +1883,11 @@ bool reveal_random_artifact(void)
 static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 {
     thrall_reward_option options[6];
-    int values[6];
-    cptr labels[6];
-    bool enabled[6];
+    ui_question_option question_options[6];
     int option_count = 0;
     int default_index = -1;
     char title[80];
     char desc[240];
-    cptr story[1];
 
     if (!m_ptr)
         return THRALL_REWARD_LATER;
@@ -1925,9 +1923,8 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 
     for (int i = 0; i < option_count; i++)
     {
-        values[i] = options[i].reward;
-        labels[i] = options[i].label;
-        enabled[i] = options[i].enabled;
+        question_options[i] = (ui_question_option){ options[i].hotkey,
+            options[i].label, TERM_L_WHITE, !options[i].enabled };
         if (default_index < 0 && options[i].enabled)
             default_index = i;
     }
@@ -1949,13 +1946,12 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
                 : "Choose what gift the human thrall will grant you.");
     }
 
-    story[0] = desc;
     {
-        int selected = quest_reward_book_choice(title, story, 1,
-            "Choose the boon you would receive:", values, labels, enabled,
-            option_count, default_index, NULL);
+        int selected = ui_question_ask(title, desc, question_options,
+            option_count, m_ptr->fy, m_ptr->fx, default_index);
 
-        return (selected < 0) ? THRALL_REWARD_LATER : selected;
+        return (selected < 0) ? THRALL_REWARD_LATER
+                              : options[selected].reward;
     }
 }
 
