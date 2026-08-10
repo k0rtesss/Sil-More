@@ -2236,6 +2236,7 @@ extern bool similar_monsters(int m1y, int m1x, int m2y, int m2x);
 extern void scare_onlooking_friends(const monster_type* m_ptr, int amount);
 extern void create_chosen_artefact(byte name1, int y, int x, bool identify);
 extern int drop_loot(monster_type* m_ptr);
+extern void award_quest_completion_exp(void);
 extern void apply_quest_rewards(int quest_idx);
 extern bool check_quest_eligibility(int quest_idx, int depth);
 typedef enum hint_quest_page
@@ -2465,6 +2466,8 @@ extern void sdl_song_menu_clear(void);
 extern void sdl_question_menu_begin(cptr title);
 extern void sdl_question_menu_set_anchor_grid(int y, int x);
 extern void sdl_question_menu_set_desc(cptr text);
+extern void sdl_question_menu_set_help(cptr text);
+extern bool sdl_question_menu_toggle_help(void);
 extern void sdl_question_menu_add_entry(int choice, cptr letter, cptr text,
     byte attr);
 extern void sdl_question_menu_add_object_entry(int choice, cptr letter,

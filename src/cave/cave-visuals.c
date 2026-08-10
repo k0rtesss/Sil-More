@@ -393,7 +393,17 @@ int player_tile_offset()
         if (active_throwing_slot >= 0)
         {
             main_wield_ptr = &inventory[active_throwing_slot];
-            secondary_wield_ptr = NULL;
+            /* Throwing uses a ranged mode but may still actively pair a
+             * one-handed weapon with an equipped shield.  Keep that shield in
+             * the visual loadout so the player tile selects the combined
+             * weapon-and-shield sprite rather than the spear-only sprite. */
+            if (!secondary_wield_ptr->k_idx
+                || secondary_wield_ptr->tval != TV_SHIELD
+                || !player_shield_counts_for_active_weapon(
+                    secondary_wield_ptr))
+            {
+                secondary_wield_ptr = NULL;
+            }
         }
         else if (player_quiver_arrow_count() > 0
             && inventory[INVEN_BOW].tval == TV_BOW)

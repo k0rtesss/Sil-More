@@ -359,6 +359,10 @@
 #define THRALL_QUEST_STATE_REWARDED 1
 #define THRALL_QUEST_STATE_REWARD_PENDING 2
 
+/* Experience granted for completing quests. */
+#define QUEST_COMPLETION_EXP 300
+#define THRALL_QUEST_COMPLETION_EXP 75
+
 /*
  * Artefact "seen" flags (a_info[].seen).
  *

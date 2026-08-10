@@ -2066,6 +2066,10 @@ void complete_thrall_quest(monster_type* m_ptr, int item_slot)
         inven_item_optimize(item_slot);
     }
     
+    gain_exp(THRALL_QUEST_COMPLETION_EXP);
+    msg_format("You gain %d experience for completing the thrall's request.",
+        THRALL_QUEST_COMPLETION_EXP);
+
     /* Reward can be claimed now or later. */
     m_ptr->thrall_quest_completed = THRALL_QUEST_STATE_REWARD_PENDING;
 

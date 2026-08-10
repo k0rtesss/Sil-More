@@ -1056,11 +1056,22 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
     active_weapon_choice* choice;
     active_weapon_preview preview;
     char source_label[240];
+    char role_label[32];
+    char* active_marker;
+    bool active = false;
 
     if (!choices || !count || *count < 0
         || *count >= capacity || !o_ptr)
     {
         return false;
+    }
+
+    SDL_strlcpy(role_label, role ? role : "Weapon", sizeof(role_label));
+    active_marker = strstr(role_label, " [active]");
+    if (active_marker && active_marker[9] == '\0')
+    {
+        *active_marker = '\0';
+        active = true;
     }
 
     choice = &choices[*count];
@@ -1087,13 +1098,15 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
     }
     if (shield_label && shield_label[0])
     {
-        strnfmt(source_label, sizeof(source_label), "%s%s + %s",
+        strnfmt(source_label, sizeof(source_label), "%s%s%s + %s",
+            active ? "[active] " : "",
             weapon_label ? weapon_label : "",
             item == INVEN_BELT ? " (belt)" : "", shield_label);
     }
     else
     {
-        strnfmt(source_label, sizeof(source_label), "%s%s",
+        strnfmt(source_label, sizeof(source_label), "%s%s%s",
+            active ? "[active] " : "",
             weapon_label ? weapon_label : "",
             item == INVEN_BELT ? " (belt)" : "");
     }
@@ -1101,13 +1114,13 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
             shield_item, &preview))
     {
         strnfmt(choice->label, sizeof(choice->label),
-            "%s\t%s\t(%+d,%dd%d)", role ? role : "Weapon",
+            "%s\t%s\t(%+d,%dd%d)", role_label,
             source_label, preview.attack, preview.dd, preview.ds);
     }
     else
     {
         strnfmt(choice->label, sizeof(choice->label), "%s\t%s",
-            role ? role : "Weapon", source_label);
+            role_label, source_label);
     }
     options[*count].key = active_weapon_menu_key(*count);
     options[*count].label = choice->label;
@@ -1417,7 +1430,7 @@ static void add_empty_active_hand_choice(active_weapon_choice choices[],
     choice->arrow_item = -1;
     choice->shield_item = -1;
     object_wipe(&choice->shield_object);
-    SDL_strlcpy(choice->label, "Melee [active]\tEmpty hand",
+    SDL_strlcpy(choice->label, "Melee\t[active] Empty hand",
         sizeof(choice->label));
     options[*count].key = active_weapon_menu_key(*count);
     options[*count].label = choice->label;
@@ -1614,7 +1627,7 @@ static bool choose_active_weapon(active_weapon_choice* selected)
         object_icons[i] = arrow ? arrow : choices[i].o_ptr;
     }
 
-    selected_index = ui_question_ask_objects("Change active weapon",
+    selected_index = ui_question_ask_objects_with_help("Change active weapon",
             "Choose how to ready a weapon; the current choice is marked [active]. Each bow row selects one arrow type from the mixed Quiver, and changing only that arrow choice always takes no time. A throwing-capable weapon has separate Melee and Throwing choices. One-handed melee and throwing rows list available Harness shield combinations; Point Blank Archery also allows a round shield with a shortbow. Expected attack and damage are shown at the end of each row. Other active-weapon changes take one turn unless an ability makes your first change before your next action free.",
             options, object_icons, count, UI_QUESTION_GLOBAL,
             UI_QUESTION_GLOBAL, default_index);

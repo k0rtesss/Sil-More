@@ -1491,9 +1491,7 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
                 buflen);
             return;
         }
-        SDL_strlcpy(buf,
-            "Ranged attack (active weapon)",
-            buflen);
+        SDL_strlcpy(buf, "Ranged Attack", buflen);
         return;
     }
     if (binding == ESCAPE && sdl_touch_thumb_fire_targeting_active()) {
@@ -1501,7 +1499,7 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         return;
     }
     if (binding == SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER) {
-        SDL_strlcpy(buf, "Change active weapon", buflen);
+        SDL_strlcpy(buf, "Switch Weapon", buflen);
         return;
     }
     if (binding == SDL_TOUCH_THUMB_BIND_QUICK_THROW) {
@@ -1518,11 +1516,11 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         return;
     }
     if (binding == 'f') {
-        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
+        SDL_strlcpy(buf, "Ranged Attack", buflen);
         return;
     }
     if (binding == 'F') {
-        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
+        SDL_strlcpy(buf, "Ranged Attack", buflen);
         return;
     }
     if (binding == 'g') {

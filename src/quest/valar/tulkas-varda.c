@@ -591,6 +591,7 @@ static bool grant_varda_reward(cptr* completion_texts, int completion_count)
 
     metarun_mark_quest_completed(METARUN_QUEST_VARDA);
     metarun_unlock_oath(OATH_LIGHT);
+    award_quest_completion_exp();
     do_cmd_note("Varda blessed me with a radiant artefact and the Oath of Light.", p_ptr->depth);
 
     return true;

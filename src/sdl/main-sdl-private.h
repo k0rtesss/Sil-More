@@ -1042,6 +1042,9 @@ typedef struct sdl_question_menu_state {
     bool blocking_input;
     bool nonblocking;
     bool context_hint;
+    bool help_mode;
+    bool help_open;
+    bool help_button_hover;
     bool close_hover;
     bool suppress_hover;
     bool scroll_follow_highlight;
@@ -1053,6 +1056,7 @@ typedef struct sdl_question_menu_state {
     int button_count;
     int highlight; /* choice highlighted by keyboard navigation, -1 none */
     int* scroll_offset_ptr;
+    int help_scroll_offset;
     char title[SDL_QUESTION_MENU_TITLE_LEN];
     char desc[SDL_QUESTION_MENU_DESC_LEN];
     sdl_question_menu_entry_state entries[SDL_QUESTION_MENU_MAX_ENTRIES];
@@ -3739,6 +3743,7 @@ bool sdl_song_menu_handle_hover_pointer(float x, float y);
 void sdl_question_menu_render(void);
 bool sdl_question_menu_handle_pointer(float x, float y, int action);
 bool sdl_question_menu_handle_hover_pointer(float x, float y);
+bool sdl_question_menu_handle_mouse_wheel(const SDL_MouseWheelEvent* wheel);
 void sdl_hint_quest_menu_render(void);
 bool sdl_hint_quest_menu_handle_event(const SDL_Event* ev);
 int sdl_hint_quest_menu_pending_timeout_ms(Uint64 now_ns);
@@ -3752,6 +3757,8 @@ void sdl_question_menu_cancel_touch(void);
 void sdl_question_menu_set_scroll_offset_target(int* offset,
     bool follow_highlight);
 bool sdl_question_menu_take_touch_scrolled(void);
+void sdl_question_menu_set_help(cptr text);
+bool sdl_question_menu_toggle_help(void);
 void sdl_question_menu_set_blocking_input(bool blocking);
 bool sdl_question_menu_blocks_input(void);
 bool sdl_question_menu_captures_pointer(void);
