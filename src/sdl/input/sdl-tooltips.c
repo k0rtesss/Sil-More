@@ -3114,6 +3114,8 @@ bool sdl_mouse_grid_has_describable_content(int y, int x)
 
 void sdl_mouse_recall_object(object_type* o_ptr)
 {
+    int o_idx;
+
     if (!o_ptr || !o_ptr->k_idx)
         return;
 
@@ -3122,29 +3124,20 @@ void sdl_mouse_recall_object(object_type* o_ptr)
         return;
     }
 
-    (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
-
-    if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL) {
-        int slot = wield_slot(o_ptr);
-        const object_type* compare_objects[2];
-        const char* compare_headings[2];
-        char selected_heading[32];
-        char equipped_heading[32];
-
-        strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-        strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-        compare_objects[0] = o_ptr;
-        compare_headings[0] = selected_heading;
-        compare_objects[1] = inventory[slot].k_idx
-                && player_equipment_slot_counts_as_equipped(slot)
-            ? &inventory[slot] : NULL;
-        compare_headings[1] = equipped_heading;
-
-        object_info_screen_multi(compare_objects, compare_headings, 2);
-    } else {
-        object_info_screen(o_ptr);
+    /* Map recall uses the same comparison collector as standing-floor
+     * details, including expandable Harness entries. */
+    if (o_ptr >= o_list && o_ptr < o_list + o_max)
+    {
+        o_idx = (int)(o_ptr - o_list);
+        if (o_idx > 0)
+        {
+            describe_item_with_comparisons(0 - o_idx, true);
+            return;
+        }
     }
+
+    (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
+    object_info_screen(o_ptr);
 }
 
 bool sdl_mouse_recall_handle_right_click(float x, float y)

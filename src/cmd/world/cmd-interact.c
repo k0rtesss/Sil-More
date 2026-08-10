@@ -3464,8 +3464,11 @@ void do_cmd_alter(void)
     /* Pick up items */
     else if ((dir == 5) && (cave_o_idx[y][x]))
     {
-        /* Space/interact here prefers the Harness for dual-destination items. */
-        do_cmd_pickup_to_harness();
+        /* Space/interact here uses the same contextual destination handling
+         * as the floor-item UI.  In particular, arrows must offer Quiver or
+         * Pack instead of silently falling through to Pack. */
+        (void)floor_context_perform_action(0,
+            FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT);
     }
 
     /* Oops */

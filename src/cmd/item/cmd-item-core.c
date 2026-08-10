@@ -1096,8 +1096,8 @@ static bool use_floor_interaction_by_index(int item)
  * on-screen button shows (and performs) the action that fits the player's
  * current situation:
  *
- *   Confirm: in an open description -> the shown item's preferred pickup
- *          destination, using that footer action's real key;
+ *   Confirm: in an open description -> the shown item's contextual pickup
+ *          footer action, preserving Space so destination choosers can open;
  *          otherwise on stairs -> interact-here with confirmation, on a forge
  *          -> smith, on a pile -> choose an item, standing on one item -> its
  *          pickup destination, else -> confirm.
@@ -1133,7 +1133,10 @@ bool touch_shortcut_context_action(int binding, bool description_open,
             else if (floor_context_preferred_pickup_action(floor_item,
                     &selected))
             {
-                key = selected.key;
+                /* The description footer owns contextual pickup.  Preserve
+                 * Space so multiple destinations can open their chooser
+                 * instead of bypassing it through one raw destination key. */
+                key = ' ';
                 name = selected.label;
             }
             else
@@ -4858,7 +4861,11 @@ static bool floor_context_show_details(int floor_item)
 
     if (!key || key == ESCAPE)
         return true;
-    if (!floor_context_action_for_key(floor_item, key, &kind))
+    if (key == 'x')
+        kind = FLOOR_CONTEXT_ACTION_USE;
+    else if (key == ' ')
+        kind = FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT;
+    else if (!floor_context_action_for_key(floor_item, key, &kind))
         return false;
     if (kind == FLOOR_CONTEXT_ACTION_CLOSE)
         return true;
@@ -4935,8 +4942,16 @@ static bool floor_context_pickup(int floor_item)
 
     if (floor_item == 0)
     {
-        if (!floor_context_select_item(&floor_item, true))
+        int first_item = 0;
+        int item_count = floor_context_first_item_and_count(&first_item);
+
+        if (item_count == 1)
+            floor_item = first_item;
+        else if (item_count <= 0
+            || !floor_context_select_item(&floor_item, true))
+        {
             return false;
+        }
     }
     if (floor_item >= 0 || 0 - floor_item <= 0 || 0 - floor_item >= o_max)
         return false;

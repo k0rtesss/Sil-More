@@ -9,6 +9,11 @@ static byte pending_active_weapon_mode = PLAYER_ACTIVE_WEAPON_NONE;
 static bool pending_ranged_quiver_only = false;
 static bool free_active_weapon_change_used = false;
 
+enum
+{
+    ACTIVE_WEAPON_SHIELD_NONE = -2
+};
+
 static bool active_weapon_mode_preview_text(int mode, char* buf,
     size_t buflen);
 static bool active_weapon_same_physical_item(const object_type* a,
@@ -17,6 +22,7 @@ static bool active_weapon_is_one_handed(const object_type* o_ptr);
 static bool active_weapon_shield_candidate(const object_type* o_ptr);
 static bool active_weapon_choice_allows_shield(int mode, int target_slot,
     const object_type* weapon, const object_type* shield);
+static bool active_weapon_offhand_removal_allowed(int item);
 static bool active_weapon_shield_selection_allowed(int item);
 static bool active_weapon_current_shield_name(char* buf, size_t buflen,
     int mode, int target_slot, const object_type* weapon);
@@ -680,7 +686,16 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
 
     active_weapon_preview_move_to_slot(item, target_slot);
 
-    if (shield_item >= 0)
+    if (shield_item == ACTIVE_WEAPON_SHIELD_NONE
+        && inventory[INVEN_ARM].k_idx)
+    {
+        object_type removed;
+
+        object_copy(&removed, &inventory[INVEN_ARM]);
+        object_wipe(&inventory[INVEN_ARM]);
+        active_weapon_preview_stow(&removed, -1);
+    }
+    else if (shield_item >= 0)
         active_weapon_preview_move_to_slot(shield_item, INVEN_ARM);
 
     if (mode == PLAYER_ACTIVE_WEAPON_RANGED_1
@@ -1157,11 +1172,21 @@ static void add_ranged_active_weapon_choices(active_weapon_choice choices[],
             PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW, bow);
         if (arrow_count <= 0)
         {
-            int choice_index = *count;
+            int choice_index;
             cptr role = active_bow ? "Ranged [active]" : "Ranged";
 
             ranged_slot_choice_name(quiver_name, sizeof(quiver_name), -1);
             strnfmt(label, sizeof(label), "%s; %s", bow_name, quiver_name);
+
+            if (has_current_shield
+                && active_weapon_offhand_removal_allowed(item))
+            {
+                add_active_weapon_choice(choices, options, capacity, count,
+                    item, bow, PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW, -1,
+                    ACTIVE_WEAPON_SHIELD_NONE, "Ranged", label, NULL);
+            }
+
+            choice_index = *count;
             if (!add_active_weapon_choice(choices, options, capacity, count,
                     item, bow, PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW, -1,
                     -1, role, label,
@@ -1201,7 +1226,7 @@ static void add_ranged_active_weapon_choices(active_weapon_choice choices[],
         for (int i = 0; i < arrow_count; i++)
         {
             int arrow_item = arrow_slots[i];
-            int choice_index = *count;
+            int choice_index;
             bool selected = arrow_item == selected_arrow;
             cptr role = (active_bow && selected)
                 ? "Ranged [active]" : "Ranged";
@@ -1209,6 +1234,17 @@ static void add_ranged_active_weapon_choices(active_weapon_choice choices[],
             ranged_slot_choice_name(quiver_name, sizeof(quiver_name),
                 arrow_item);
             strnfmt(label, sizeof(label), "%s; %s", bow_name, quiver_name);
+
+            if (has_current_shield
+                && active_weapon_offhand_removal_allowed(item))
+            {
+                add_active_weapon_choice(choices, options, capacity, count,
+                    item, bow, PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW,
+                    arrow_item, ACTIVE_WEAPON_SHIELD_NONE, "Ranged", label,
+                    NULL);
+            }
+
+            choice_index = *count;
             if (!add_active_weapon_choice(choices, options, capacity, count,
                     item, bow, PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_BOW,
                     arrow_item, -1, role, label,
@@ -1272,20 +1308,25 @@ static int active_weapon_collect_shield_items(int shield_items[],
     return count;
 }
 
-static bool active_weapon_shield_selection_allowed(int item)
+static bool active_weapon_offhand_removal_allowed(int item)
 {
-    if (c_info[p_ptr->pcharacter].flags_u & UNQ_MEL_MAEDHROS)
-        return false;
-
     /* Moving the off-hand weapon into the active hand first swaps the old
      * active weapon into the arm slot.  A cursed item there cannot then be
-     * replaced by the selected shield. */
+     * removed or replaced. */
     if (item == INVEN_ARM)
         return !inventory[INVEN_WIELD].k_idx
             || !cursed_p(&inventory[INVEN_WIELD]);
 
     return !inventory[INVEN_ARM].k_idx
         || !cursed_p(&inventory[INVEN_ARM]);
+}
+
+static bool active_weapon_shield_selection_allowed(int item)
+{
+    if (c_info[p_ptr->pcharacter].flags_u & UNQ_MEL_MAEDHROS)
+        return false;
+
+    return active_weapon_offhand_removal_allowed(item);
 }
 
 static bool active_weapon_current_shield_name(char* buf, size_t buflen,
@@ -1322,18 +1363,26 @@ static void add_melee_and_throwing_active_weapon_choices(
         current_shield_name, sizeof(current_shield_name),
         PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, o_ptr);
 
-    choice_index = *count;
     role = (item == INVEN_WIELD
                && current_mode == PLAYER_ACTIVE_WEAPON_MELEE)
         ? "Melee [active]"
         : "Melee";
     active_weapon_object_choice_name(label, sizeof(label), o_ptr);
+
+    if (has_current_shield
+        && active_weapon_offhand_removal_allowed(item))
+    {
+        add_active_weapon_choice(choices, options, capacity, count, item,
+            o_ptr, PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, -1,
+            ACTIVE_WEAPON_SHIELD_NONE, "Melee", label, NULL);
+    }
+
+    choice_index = *count;
     if (add_active_weapon_choice(choices, options, capacity, count, item,
-            o_ptr,
-            PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, -1, -1, role, label,
-            has_current_shield ? current_shield_name : NULL)
-        && item == INVEN_WIELD
-        && current_mode == PLAYER_ACTIVE_WEAPON_MELEE && default_index)
+            o_ptr, PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, -1, -1, role,
+            label, has_current_shield ? current_shield_name : NULL)
+        && item == INVEN_WIELD && current_mode == PLAYER_ACTIVE_WEAPON_MELEE
+        && default_index)
     {
         *default_index = choice_index;
     }
@@ -1362,7 +1411,6 @@ static void add_melee_and_throwing_active_weapon_choices(
     if (!player_can_treat_as_throwing(o_ptr))
         return;
 
-    choice_index = *count;
     role = (item == INVEN_WIELD
                && current_mode == PLAYER_ACTIVE_WEAPON_RANGED_1
                && player_active_weapon_kind()
@@ -1370,12 +1418,22 @@ static void add_melee_and_throwing_active_weapon_choices(
         ? "Throwing [active]"
         : "Throwing";
     active_weapon_object_choice_name(label, sizeof(label), o_ptr);
+
+    has_current_shield = active_weapon_current_shield_name(
+        current_shield_name, sizeof(current_shield_name),
+        PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_WIELD, o_ptr);
+    if (has_current_shield
+        && active_weapon_offhand_removal_allowed(item))
+    {
+        add_active_weapon_choice(choices, options, capacity, count, item,
+            o_ptr, PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_WIELD, -1,
+            ACTIVE_WEAPON_SHIELD_NONE, "Throwing", label, NULL);
+    }
+
+    choice_index = *count;
     if (add_active_weapon_choice(choices, options, capacity, count, item,
-            o_ptr,
-            PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_WIELD, -1, -1, role, label,
-            active_weapon_current_shield_name(current_shield_name,
-                sizeof(current_shield_name), PLAYER_ACTIVE_WEAPON_RANGED_1,
-                INVEN_WIELD, o_ptr) ? current_shield_name : NULL)
+            o_ptr, PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_WIELD, -1, -1,
+            role, label, has_current_shield ? current_shield_name : NULL)
         && item == INVEN_WIELD
         && current_mode == PLAYER_ACTIVE_WEAPON_RANGED_1
         && player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_THROWING
@@ -1544,7 +1602,7 @@ static bool choose_active_weapon(active_weapon_choice* selected)
     int shield_count = active_weapon_collect_shield_items(shield_items,
         shield_capacity);
     int capacity = 2 * (pack_count + 5)
-        * (player_quiver_store_entry_count() + 1) * (shield_count + 1);
+        * (player_quiver_store_entry_count() + 1) * (shield_count + 2);
     active_weapon_choice* choices;
     ui_question_option* options;
     const object_type** object_icons;
@@ -2323,6 +2381,7 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
     bool free_choice;
     bool wielded_item = false;
     bool wielded_shield = false;
+    bool stowed_offhand = false;
     bool role_changed;
     bool cleared_throwing_marker = false;
     bool arrow_changed = false;
@@ -2367,6 +2426,17 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
         inventory[INVEN_WIELD].pickup_slot = -1;
     }
 
+    if (choice->shield_item == ACTIVE_WEAPON_SHIELD_NONE
+        && inventory[INVEN_ARM].k_idx)
+    {
+        object_type* offhand = &inventory[INVEN_ARM];
+
+        do_cmd_takeoff(offhand, INVEN_ARM);
+        if (inventory[INVEN_ARM].k_idx)
+            return;
+        stowed_offhand = true;
+    }
+
     if (choice->kind == PLAYER_ACTIVE_WEAPON_KIND_BOW
         && choice->arrow_item >= 0)
     {
@@ -2409,14 +2479,15 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
     if (old_mode == choice->mode)
     {
         if (arrow_changed && !wielded_item && !role_changed
-            && !wielded_shield)
+            && !wielded_shield && !stowed_offhand)
         {
             p_ptr->energy_use = 0;
             p_ptr->previous_action[0] = ACTION_NOTHING;
             handle_stuff();
             return;
         }
-        if ((wielded_item || role_changed) && !wielded_shield && free_choice)
+        if ((wielded_item || role_changed) && !wielded_shield
+            && !stowed_offhand && free_choice)
         {
             p_ptr->energy_use = 0;
             p_ptr->previous_action[0] = ACTION_NOTHING;
@@ -2425,12 +2496,12 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
         return;
     }
 
-    if (wielded_item || wielded_shield)
+    if (wielded_item || wielded_shield || stowed_offhand)
     {
         int wield_energy = p_ptr->energy_use;
 
         (void)player_set_active_weapon_mode(choice->mode, false, false);
-        if (free_choice && !wielded_shield)
+        if (free_choice && !wielded_shield && !stowed_offhand)
         {
             p_ptr->energy_use = 0;
             p_ptr->previous_action[0] = ACTION_NOTHING;

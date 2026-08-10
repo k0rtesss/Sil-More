@@ -640,6 +640,24 @@ static bool sdl_touch_thumb_space_action(
     int key = ' ';
     char ctx[32];
 
+    /* Interactive descriptions register Space as their contextual pickup
+     * action.  Keep that exact key so a multi-destination item (such as
+     * arrows) reaches the Quiver/Pack chooser rather than a preferred raw
+     * destination shortcut. */
+    if (sdl_touch_thumb_description_open()
+        && sdl_description_overlay_has_footer_action(' '))
+    {
+        if (out_key)
+            *out_key = ' ';
+        if (label && label_len
+            && !sdl_description_overlay_footer_action_label(' ', label,
+                label_len))
+        {
+            SDL_strlcpy(label, "Pick Up", label_len);
+        }
+        return true;
+    }
+
     if (!touch_shortcut_context_action(' ',
             sdl_touch_thumb_description_open(), &key, ctx, sizeof(ctx)))
     {
