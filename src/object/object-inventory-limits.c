@@ -11,7 +11,6 @@ static bool carry_limit_last_failed = false;
 static enum inventory_limit_group carry_limit_last_group = INV_LIMIT_NONE;
 static int carry_limit_last_limit = 0;
 static char carry_limit_last_label[64];
-static enum inventory_limit_group pack_limit_prompt_group = INV_LIMIT_NONE;
 static int grandfathered_volume[INV_LIMIT_HARNESS + 1] = { 0 };
 
 static bool inventory_limit_is_volume_group(enum inventory_limit_group group)
@@ -94,8 +93,16 @@ static int volume_limit_for_group(enum inventory_limit_group group)
     else
         return -1;
 
-    if (p_ptr && p_ptr->active_ability[S_EVN][EVN_HEAVY_ARMOUR])
-        limit += INVENTORY_HEAVY_ARMOUR_VOLUME_BONUS;
+    if (p_ptr && group == INV_LIMIT_PACK
+        && p_ptr->active_ability[S_WIL][WIL_CON])
+    {
+        limit += INVENTORY_CONSTITUTION_PACK_VOLUME_BONUS;
+    }
+    if (p_ptr && group == INV_LIMIT_HARNESS
+        && p_ptr->active_ability[S_PER][PER_GRA])
+    {
+        limit += INVENTORY_GRACE_HARNESS_VOLUME_BONUS;
+    }
 
     return limit;
 }
@@ -114,7 +121,7 @@ static int arrow_volume_for_quantity(int arrows, int bundle_volume)
         / INVENTORY_ARROW_VOLUME_BUNDLE);
 }
 
-static const ability_type* learned_carriage_ability(byte target)
+static const ability_type* active_carriage_ability(byte target)
 {
     const ability_type* best = NULL;
 
@@ -132,7 +139,7 @@ static const ability_type* learned_carriage_ability(byte target)
         }
         if (b_ptr->skilltype >= S_MAX || b_ptr->abilitynum >= ABILITIES_MAX)
             continue;
-        if (!p_ptr->innate_ability[b_ptr->skilltype][b_ptr->abilitynum])
+        if (!p_ptr->active_ability[b_ptr->skilltype][b_ptr->abilitynum])
             continue;
         if (!best || b_ptr->carriage_reduction_percent
                 > best->carriage_reduction_percent)
@@ -153,14 +160,14 @@ static const ability_type* carriage_ability_for_object(
         return NULL;
 
     if (o_ptr->tval == TV_ARROW)
-        return learned_carriage_ability(ABILITY_CARRIAGE_ARROWS);
+        return active_carriage_ability(ABILITY_CARRIAGE_ARROWS);
 
     if (volume_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
         return NULL;
 
     object_flags(o_ptr, &f1, &f2, &f3);
     if (f3 & TR3_THROWING)
-        return learned_carriage_ability(ABILITY_CARRIAGE_THROWING);
+        return active_carriage_ability(ABILITY_CARRIAGE_THROWING);
 
     return NULL;
 }
@@ -564,76 +571,16 @@ bool inven_carry_limit_can_replace(const object_type* o_ptr)
         && object_effective_volume(o_ptr) > 0;
 }
 
-static bool item_tester_hook_pack_limit_group(const object_type* o_ptr)
-{
-    ptrdiff_t slot;
-
-    if (volume_group_for_object(o_ptr) != pack_limit_prompt_group)
-        return false;
-
-    slot = player_inventory_handle_for_object(o_ptr);
-    if (slot >= INVEN_WIELD && slot < INVEN_TOTAL && cursed_p(o_ptr))
-        return false;
-
-    return true;
-}
-
-static int inventory_limit_group_last_slot(enum inventory_limit_group group)
-{
-    for (int index = player_carried_extra_entry_count() - 1; index >= 0;
-         index--)
-    {
-        object_type* o_ptr = player_carried_extra_entry_at(index);
-
-        if (o_ptr && o_ptr->k_idx && volume_group_for_object(o_ptr) == group)
-            return CARRIED_EXTRA_INDEX + index;
-    }
-
-    for (int item = inventory_volume_last_slot(group); item >= 0; item--)
-    {
-        if (inventory[item].k_idx
-            && volume_group_for_object(&inventory[item]) == group
-            && (item < INVEN_WIELD || !cursed_p(&inventory[item])))
-        {
-            return item;
-        }
-    }
-
-    return -1;
-}
-
-static int inventory_limit_drop_amount(int item,
-    enum inventory_limit_group group, int limit)
-{
-    object_type* o_ptr;
-    int original_number;
-
-    if (!player_inventory_handle_valid(item))
-        return 0;
-
-    o_ptr = player_inventory_object(item);
-    if (!o_ptr || !o_ptr->k_idx)
-        return 0;
-    original_number = o_ptr->number;
-    for (int amount = 1; amount <= original_number; amount++)
-    {
-        o_ptr->number = original_number - amount;
-        if (inventory_volume_usage(group) <= limit)
-        {
-            o_ptr->number = original_number;
-            return amount;
-        }
-    }
-
-    o_ptr->number = original_number;
-    return original_number;
-}
-
-void inven_enforce_current_pack_limits(void)
+void inven_update_current_pack_limits(void)
 {
     static const enum inventory_limit_group volume_groups[] = {
         INV_LIMIT_PACK, INV_LIMIT_HARNESS
     };
+
+    /* A capacity loss may leave either pool overfull.  Keep the possessions;
+     * calc_bonuses() applies encumbrance until usage falls within the current
+     * limit.  Only reduce the legacy-load high-water allowance here so an
+     * overfilled pool cannot be increased again after the player lightens it. */
 
     if (!character_generated || character_xtra || character_icky
         || !p_ptr || p_ptr->is_dead)
@@ -646,86 +593,13 @@ void inven_enforce_current_pack_limits(void)
         enum inventory_limit_group group = volume_groups[i];
         int limit = volume_limit_for_group(group);
         int usage = inventory_volume_usage(group);
-        int enforce_limit = limit;
-        bool warned = false;
 
         if (grandfathered_volume[group] > 0)
         {
             if (usage <= limit)
                 grandfathered_volume[group] = 0;
-            else
-            {
-                if (usage < grandfathered_volume[group])
-                    grandfathered_volume[group] = usage;
-                enforce_limit = MAX(limit, grandfathered_volume[group]);
-            }
-        }
-
-        while (inventory_volume_usage(group) > enforce_limit)
-        {
-            int item = inventory_limit_group_last_slot(group);
-            int amount;
-            int old_usage = inventory_volume_usage(group);
-            bool old_item_tester_full;
-            byte old_item_tester_tval;
-            bool (*old_item_tester_hook)(const object_type*);
-
-            if (item < 0)
-                break;
-
-            if (!warned)
-            {
-                if (enforce_limit > limit)
-                {
-                    msg_format("Your legacy %s overage cannot increase beyond %d.%d qt; choose what to drop.",
-                        group == INV_LIMIT_PACK ? "Pack" : "Harness",
-                        enforce_limit / 10, enforce_limit % 10);
-                }
-                else
-                {
-                    msg_format("Your %s capacity is now %d.%d qt; choose what to drop.",
-                        group == INV_LIMIT_PACK ? "Pack" : "Harness",
-                        limit / 10, limit % 10);
-                }
-                warned = true;
-            }
-
-            old_item_tester_full = item_tester_full;
-            old_item_tester_tval = item_tester_tval;
-            old_item_tester_hook = item_tester_hook;
-            item_tester_full = false;
-            item_tester_tval = 0;
-            pack_limit_prompt_group = group;
-            item_tester_hook = item_tester_hook_pack_limit_group;
-
-            if (!open_inventory_item_select_menu(USE_INVEN
-                    | (group == INV_LIMIT_HARNESS ? USE_EQUIP : 0),
-                    group == INV_LIMIT_PACK ? "Drop which Pack item? "
-                                            : "Drop which Harness item? ",
-                    "You have nothing suitable to drop.", &item))
-            {
-                item = inventory_limit_group_last_slot(group);
-                if (item >= 0)
-                    msg_print("No choice made; dropping enough of one excess item.");
-            }
-
-            pack_limit_prompt_group = INV_LIMIT_NONE;
-            item_tester_hook = old_item_tester_hook;
-            item_tester_tval = old_item_tester_tval;
-            item_tester_full = old_item_tester_full;
-
-            if (!player_inventory_handle_valid(item)
-                || !player_inventory_object(item)->k_idx)
-                break;
-
-            amount = inventory_limit_drop_amount(item, group, enforce_limit);
-            if (amount <= 0)
-                break;
-
-            inven_drop(item, amount);
-            handle_stuff();
-            if (inventory_volume_usage(group) >= old_usage)
-                break;
+            else if (usage < grandfathered_volume[group])
+                grandfathered_volume[group] = usage;
         }
     }
 }

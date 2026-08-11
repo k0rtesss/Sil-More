@@ -24,7 +24,8 @@ enum inventory_limit_group
 /* Pack and Harness capacity is stored in tenths of an imperial quart. */
 #define INVENTORY_PACK_VOLUME_CAP 260
 #define INVENTORY_HARNESS_VOLUME_CAP 210
-#define INVENTORY_HEAVY_ARMOUR_VOLUME_BONUS 60
+#define INVENTORY_CONSTITUTION_PACK_VOLUME_BONUS 60
+#define INVENTORY_GRACE_HARNESS_VOLUME_BONUS 60
 #define INVENTORY_ARROW_VOLUME_BUNDLE 12
 
 bool inven_carry_limit_failed(void);
@@ -56,7 +57,7 @@ int inventory_limit_usage_after_replacing(const object_type* incoming,
 bool inventory_limit_object_matches_group(enum inventory_limit_group group,
     const object_type* o_ptr);
 cptr inventory_limit_group_name(enum inventory_limit_group group);
-void inven_enforce_current_pack_limits(void);
+void inven_update_current_pack_limits(void);
 void inventory_limit_grandfather_current_overflow(void);
 int object_stack_limit(const object_type* o_ptr);
 

@@ -1329,6 +1329,7 @@ struct player_type
     s16b resting; /* Resting counter */
     bool resting_light_off; /* Fuel-burning light extinguished for this rest */
     s16b smithing; /* Smithing counter */
+    bool smithing_starting; /* Smithing screen is restoring gameplay state */
     s16b fletching; /* Fletching counter */
     s16b running; /* Running counter */
 

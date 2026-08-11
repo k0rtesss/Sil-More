@@ -522,7 +522,7 @@ void do_betrayal_ring_amulet(void)
         }
 
         handle_stuff();
-        inven_enforce_current_pack_limits();
+        inven_update_current_pack_limits();
     }
 }
 
@@ -1751,7 +1751,7 @@ bool make_attack_normal(monster_type* m_ptr)
                     }
 
                     handle_stuff();
-                    inven_enforce_current_pack_limits();
+                    inven_update_current_pack_limits();
                 }
 
                 break;

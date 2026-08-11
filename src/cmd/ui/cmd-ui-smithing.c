@@ -9005,6 +9005,11 @@ void do_cmd_smithing_screen(void)
             p_ptr->smithing_leftover = p_ptr->smithing;
         }
 
+        /* Restoring gameplay zoom after this saved-screen menu can recenter the
+         * panel.  Applying the forge's light also refreshes the view.  Neither
+         * UI transition should cancel the action that was just accepted. */
+        p_ptr->smithing_starting = true;
+
         /* Recalculate bonuses */
         p_ptr->update |= (PU_BONUS);
 
@@ -9043,6 +9048,15 @@ void do_cmd_smithing_screen(void)
     sdl_pop_terminal_menu_scale();
     screen_pop_supporting_panes_hidden();
     screen_load();
+
+    /* Process the restored panel and initial forge-light view while the startup
+     * guard is still active, even when no supporting pane requested a refresh. */
+    if (p_ptr->smithing_starting)
+        handle_stuff();
+
+    /* From this point onward, input, monsters, damage, and other disturbances
+     * interrupt smithing normally. */
+    p_ptr->smithing_starting = false;
 }
 
 /*

@@ -838,9 +838,18 @@ void calc_bonuses(void)
     /* Extract the "weight limit" (in tenth pounds) */
     i = weight_limit();
 
-    /* Apply "encumbrance" from weight */
-    if (j > i)
+    /* Weight and volume are alternate measures of the same encumbrance.
+     * Capacity can fall when an ability is disabled or an ability-granting
+     * item is removed; keep the possessions and slow the player until either
+     * carried pool is brought back within its current limit. */
+    if (j > i
+        || inventory_limit_usage_for_group(INV_LIMIT_PACK)
+            > inventory_limit_limit_for_group(INV_LIMIT_PACK)
+        || inventory_limit_usage_for_group(INV_LIMIT_HARNESS)
+            > inventory_limit_limit_for_group(INV_LIMIT_HARNESS))
+    {
         p_ptr->pspeed -= 1;
+    }
 
     /* Stealth slows the player down (unless they are passing) */
     if (p_ptr->stealth_mode)

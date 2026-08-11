@@ -6293,5 +6293,5 @@ void do_cmd_ability_screen(void)
     screen_load();
 
     handle_stuff();
-    inven_enforce_current_pack_limits();
+    inven_update_current_pack_limits();
 }

@@ -1596,7 +1596,7 @@ extern int player_quiver_arrow_slots(int* slots, int max);
 extern int inven_carry(object_type* o_ptr, bool combine_ammo);
 extern int inven_takeoff(int item, int amt);
 extern void inven_drop(int item, int amt);
-extern void inven_enforce_current_pack_limits(void);
+extern void inven_update_current_pack_limits(void);
 extern void inventory_limit_grandfather_current_overflow(void);
 extern void combine_pack(void);
 extern void reorder_pack(bool display_message);

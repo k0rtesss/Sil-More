@@ -315,9 +315,10 @@ void calc_torch(void)
         {
             bool extinguished = false;
 
-            /* A fuel-burning light can be turned off for the current rest. */
-            if ((i == INVEN_LITE) && p_ptr->resting_light_off
-                && fuelable_light_p(o_ptr))
+            /* Resting and smithing provide their own light, so conserve the
+             * equipped torch or lamp while either activity is active. */
+            if ((i == INVEN_LITE) && fuelable_light_p(o_ptr)
+                && (p_ptr->resting_light_off || p_ptr->smithing))
             {
                 extinguished = true;
             }

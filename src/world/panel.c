@@ -655,7 +655,8 @@ void verify_panel(void)
          * terrain, and other real disturbances, so let it survive camera
          * maintenance. */
         if (!center_player && !p_ptr->running
-            && !sdl_mouse_path_is_following())
+            && !sdl_mouse_path_is_following()
+            && !p_ptr->smithing_starting)
         {
             disturb(0, 0);
         }

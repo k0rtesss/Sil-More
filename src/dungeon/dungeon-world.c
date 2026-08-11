@@ -384,7 +384,8 @@ void process_world(void)
     if (o_ptr->tval == TV_LIGHT)
     {
         /* Hack -- Use some fuel */
-        if (!p_ptr->resting_light_off && player_light_has_fuel(o_ptr)
+        if (!p_ptr->resting_light_off && !p_ptr->smithing
+            && player_light_has_fuel(o_ptr)
             && !((o_ptr->sval == SV_LIGHT_LANTERN)
                 && (object_ego_prefix(o_ptr) == EGO_BROKEN_BRASS_LANTERN)))
         {

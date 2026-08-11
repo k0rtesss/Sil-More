@@ -485,13 +485,6 @@ int floor_context_collect_item_actions(int floor_item, bool include_details,
             FLOOR_CONTEXT_ACTION_USE, 'u', use_label, TERM_L_GREEN);
     }
 
-    if (!interaction_only && player_can_treat_as_throwing(o_ptr))
-    {
-        floor_context_add_action(actions, capacity, &count,
-            FLOOR_CONTEXT_ACTION_READY_THROW, 't', "Ready to Throw",
-            TERM_YELLOW);
-    }
-
     if (!interaction_only)
     {
         if (o_ptr->tval == TV_ARROW)
@@ -933,9 +926,10 @@ bool do_cmd_context_square_action_popup(void)
         object_type* o_ptr = &o_list[0 - floor_item];
         bool action_only = o_ptr->tval == TV_SKELETON
             || o_ptr->tval == TV_CHEST;
-        cptr action_name = item_use_action_name(o_ptr, floor_item);
-        bool action_is_pickup = streq(action_name, "Pick up")
-            || streq(action_name, "Pick Up");
+        char action_label[32];
+        cptr action_name = floor_context_use_label(o_ptr, floor_item,
+            action_label, sizeof(action_label));
+        bool action_is_pickup = !action_name;
 
         if (!action_only)
             sdl_question_menu_add_button('x', "Description", TERM_L_BLUE);
@@ -998,7 +992,8 @@ void do_cmd_context_floor_item_action(void)
             (void)floor_context_perform_action(0,
                 FLOOR_CONTEXT_ACTION_ITEMS);
         else if (floor_item)
-            do_cmd_use_item_by_index(floor_item);
+            (void)floor_context_perform_action(floor_item,
+                FLOOR_CONTEXT_ACTION_USE);
     }
 }
 
@@ -3434,7 +3429,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
     /* Force immediate sidebar update */
     handle_stuff();
-    inven_enforce_current_pack_limits();
+    inven_update_current_pack_limits();
 
     /*
      * Smithing identification checks depend on the player's current effective
@@ -4034,7 +4029,7 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
 
     /* Force immediate sidebar update */
     handle_stuff();
-    inven_enforce_current_pack_limits();
+    inven_update_current_pack_limits();
 }
 
 static bool confirm_drop_item_amount(object_type* o_ptr, int amt)
@@ -4995,6 +4990,62 @@ static bool floor_context_pickup(int floor_item)
         destinations[choice].kind);
 }
 
+/* Equipping a Belt weapon from the floor is distinct from merely picking it
+ * up.  The active destination must use the active-throwing transition so the
+ * full stack is readied and the weapon mode changes; the Belt remains a
+ * one-item equipped destination. */
+static bool floor_context_equip_belt_weapon(object_type* o_ptr,
+    int floor_item)
+{
+    bool enabled[INVEN_TOTAL] = { false };
+    int destination_count = 0;
+    int slot = -1;
+
+    if (!o_ptr || !o_ptr->k_idx || !object_is_belt_weapon(o_ptr)
+        || floor_item >= 0)
+    {
+        return false;
+    }
+
+    enabled[INVEN_WIELD] = true;
+    enabled[INVEN_BELT] = true;
+    destination_count = 2;
+
+    if (inventory[INVEN_WIELD].k_idx && cursed_p(&inventory[INVEN_WIELD])
+        && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
+    {
+        enabled[INVEN_WIELD] = false;
+        destination_count--;
+    }
+    if (inventory[INVEN_BELT].k_idx && cursed_p(&inventory[INVEN_BELT])
+        && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
+    {
+        enabled[INVEN_BELT] = false;
+        destination_count--;
+    }
+
+    if (destination_count <= 0)
+    {
+        msg_print("You have no available slot for that throwing weapon.");
+        return true;
+    }
+    if (destination_count == 1)
+        slot = enabled[INVEN_WIELD] ? INVEN_WIELD : INVEN_BELT;
+    else if (!open_inventory_slot_pick_menu(o_ptr, enabled,
+            "Equip this throwing weapon: the active Harness weapon is "
+            "readied to throw, while the belt holds one dagger or hand axe.",
+            &slot))
+    {
+        return true;
+    }
+
+    if (slot == INVEN_WIELD)
+        return player_ready_throwing_weapon(o_ptr, floor_item);
+    if (slot == INVEN_BELT)
+        return do_cmd_wield_to_slot(o_ptr, floor_item, INVEN_BELT);
+    return false;
+}
+
 bool floor_context_perform_action(int floor_item,
     floor_context_action_kind kind)
 {
@@ -5023,6 +5074,9 @@ bool floor_context_perform_action(int floor_item,
     {
         extern char current_menu_command;
         extern int current_menu_state;
+
+        if (object_is_belt_weapon(o_ptr))
+            return floor_context_equip_belt_weapon(o_ptr, floor_item);
 
         current_menu_command = 'u';
         current_menu_state = 0;
