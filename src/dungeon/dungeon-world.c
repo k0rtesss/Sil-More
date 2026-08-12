@@ -384,7 +384,8 @@ void process_world(void)
     if (o_ptr->tval == TV_LIGHT)
     {
         /* Hack -- Use some fuel */
-        if (player_light_has_fuel(o_ptr)
+        if (!p_ptr->resting_light_off && !p_ptr->smithing
+            && player_light_has_fuel(o_ptr)
             && !((o_ptr->sval == SV_LIGHT_LANTERN)
                 && (object_ego_prefix(o_ptr) == EGO_BROKEN_BRASS_LANTERN)))
         {
@@ -449,6 +450,8 @@ void process_world(void)
 
         /* Skip non-objects */
         if (!o_ptr->k_idx)
+            continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
         /* Recharge activatable objects */

@@ -637,6 +637,11 @@ void sdl_main_menu_overlay_begin(void)
     sdl_player_action_menu_cancel();
     sdl_touch_round_cancel_press();
     sdl_touch_top_panel_cancel_press();
+    /* The square-action shortcut popup belongs to the live map.  The main
+     * menu hides gameplay overlays, but it can remain active while the menu
+     * opens a modal screen, so close it at the transition instead of letting
+     * it reappear over that screen or after returning to the map. */
+    sdl_question_menu_clear_context_hint();
     /* Drop any active hover tooltip (e.g. a terrain "granite wall" popup).
      * While the overlay is open it consumes mouse-motion events, so the
      * tooltip's own motion handler never runs to clear it, and the overlay

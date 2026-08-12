@@ -60,12 +60,14 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 7
-#define VERSION_EXTRA 7   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 13  /* Remember the selected mixed-Quiver arrow stack. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
 /* Marker before the serialized supplies block in 0.9.6+ savefiles. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
+#define SAVEFILE_QUIVER_BLOCK_MAGIC 0x51A8
+#define SAVEFILE_CARRIED_EXTRA_BLOCK_MAGIC 0xC471
 /* Marker before the serialized jewelry preset block in 0.9.6.7+ savefiles. */
 #define SAVEFILE_JEWELRY_PRESET_BLOCK_MAGIC 0x4A57
 /* Packed one-byte Morgoth summons state in 0.9.6.4+ savefiles. */
@@ -357,6 +359,10 @@
 #define THRALL_QUEST_STATE_REWARDED 1
 #define THRALL_QUEST_STATE_REWARD_PENDING 2
 
+/* Experience granted for completing quests. */
+#define QUEST_COMPLETION_EXP 300
+#define THRALL_QUEST_COMPLETION_EXP 75
+
 /*
  * Artefact "seen" flags (a_info[].seen).
  *
@@ -485,7 +491,15 @@
 #define PLAYER_ACTIVE_WEAPON_NONE 0
 #define PLAYER_ACTIVE_WEAPON_MELEE 1
 #define PLAYER_ACTIVE_WEAPON_RANGED_1 2
-#define PLAYER_ACTIVE_WEAPON_RANGED_2 3
+#define PLAYER_ACTIVE_WEAPON_BELT 3
+/* Serialized compatibility name for saves written with two quivers. */
+#define PLAYER_ACTIVE_WEAPON_RANGED_2 PLAYER_ACTIVE_WEAPON_BELT
+
+/* Physical active-weapon kinds used by readiness ability rules. */
+#define PLAYER_ACTIVE_WEAPON_KIND_NONE 0
+#define PLAYER_ACTIVE_WEAPON_KIND_MELEE 1
+#define PLAYER_ACTIVE_WEAPON_KIND_BOW 2
+#define PLAYER_ACTIVE_WEAPON_KIND_THROWING 3
 
 /*
  * Internal command queued by pointer/touch UI for exact active-mode changes.
@@ -676,6 +690,11 @@
 #define ARC_DEX 8
 #define ARC_SKIRMISHING 9
 
+/* Data-driven ability carriage-efficiency targets. */
+#define ABILITY_CARRIAGE_NONE 0
+#define ABILITY_CARRIAGE_THROWING 1
+#define ABILITY_CARRIAGE_ARROWS 2
+
 /*
  * Evasion abilities
  */
@@ -821,12 +840,10 @@
 #define ATT_IMPALE 11
 
 /*
- * Maximum number of "normal" pack slots, and the index of the "overflow"
- * slot, which can hold an item, but only temporarily, since it causes the
- * pack to "overflow", dropping the "last" item onto the ground.  Since this
- * value is used as an actual slot, it must be less than "INVEN_WIELD" (below).
- * Note that "INVEN_PACK" is probably hard-coded by its use in savefiles, and
- * by the fact that the screen can only show 23 items plus a one-line prompt.
+ * Number of legacy physical carried slots.  This is no longer the player's
+ * carried-entry limit: additional Pack, Harness, and Jewelry Pouch entries
+ * live in the expandable carried store.  Slot 23 remains reserved so the
+ * serialized equipment indexes below never change.
  */
 #define INVEN_PACK 23
 
@@ -847,13 +864,23 @@
 #define INVEN_HANDS 35
 #define INVEN_FEET 36
 #define INVEN_QUIVER1 37
-#define INVEN_QUIVER2 38
+#define INVEN_BELT 38
+/* Slot 38 was the second quiver and must never be renumbered in savefiles. */
+#define INVEN_QUIVER2 INVEN_BELT
 #define INVEN_HORN 39
 
 /*
  * Total number of inventory slots (hard-coded).
  */
 #define INVEN_TOTAL 40
+
+/* Expandable carried entries and dedicated stores use disjoint synthetic
+ * handle ranges.  These are runtime handles, not savefile slot indexes. */
+#define CARRIED_EXTRA_INDEX 1000
+#define QUIVER_INDEX 0x20000000
+#define QUIVER_ARROW_CAPACITY 48
+#define QUIVER_INDEX_END (QUIVER_INDEX + QUIVER_ARROW_CAPACITY)
+#define PICKUP_SLOT_ACTIVE_THROWING (-2)
 
 /*
  * A "stack" of items is limited to less than 100 items (hard-coded).
@@ -2017,6 +2044,10 @@
  */
 #define OBJECT_RUNTIME_STATE_NONE 0
 #define OBJECT_RUNTIME_STATE_FIRE_BROKEN 1
+/* Only weapon objects use this part of the otherwise generic payload. */
+#define OBJECT_RUNTIME_HARNESS_COLOR_MASK 0x000000ffL
+#define OBJECT_RUNTIME_HARNESS_COLOR_MARKER 0x00000080L
+#define OBJECT_RUNTIME_HARNESS_COLOR_VALUE_MASK 0x0000007fL
 
 /*
  * Number of special inscriptions, plus one.
@@ -2181,6 +2212,7 @@
 #define TR4_PROT_POIS      0x00200000L /* Item protection counts against poison attacks */
 #define TR4_PROT_DARK      0x00400000L /* Item protection counts against dark attacks */
 #define TR4_LIGHT_ARMOR    0x00800000L /* Light armour (robe/leather/boots/gloves/cloaks; via (Light) ego on shields/helms) */
+#define TR4_HARNESS_STOWABLE 0x01000000L /* Harness item may be stored in the Pack */
 #define TR4_MIN_DEPTH_SPEED TR4_DEEP_CALL /* Compatibility alias */
 
 /*
@@ -2486,6 +2518,8 @@
 #define MFLAG_HIT_BY_RANGED 0x00020000 /* Monster has been hit with a spell */
 #define MFLAG_HIT_BY_MELEE                                                     \
     0x00040000 /* Monster was just meleed by player last turn */
+#define MFLAG_DURUIN_PROVOKED                                                   \
+    0x00080000 /* Duruin may leave his inner bastion enclosure */
 
 /*
  * New monster race bit flags
@@ -2843,7 +2877,7 @@
 #define OPT_assassination_over_charge (OPT_GAME_PLAY + 4)
 /* Confirm before making direct attacks; useful for pacifist runs */
 #define OPT_pacifist_attack_warning (OPT_GAME_PLAY + 5)
-/* Confirm before spending a turn to switch between melee and ranged weapons */
+/* Confirm before paid melee/ranged active switches */
 #define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
 // reserved legacy slot: auto_haggle
 // reserved legacy slot: auto_scum

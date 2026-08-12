@@ -142,6 +142,9 @@ int heavy_armour_desc_current_weight(void)
     {
         object_type* o_ptr = &inventory[i];
 
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
+
         /* Off-hand weapons are not counted as armour weight. */
         if ((i == INVEN_ARM) && (o_ptr->tval != TV_SHIELD))
             continue;
@@ -163,6 +166,9 @@ int heavy_armour_desc_current_evasion_bonus(void)
         object_type* o_ptr = &inventory[i];
 
         if (!o_ptr->k_idx)
+            continue;
+
+        if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
         if (heavy_armour_desc_evasion_bonus_applies(o_ptr))

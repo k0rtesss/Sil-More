@@ -1168,8 +1168,10 @@ static bool sdl_question_overlay_consume_pointer(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_MOUSE_BUTTON_UP:
-    case SDL_EVENT_MOUSE_WHEEL:
         return true;
+
+    case SDL_EVENT_MOUSE_WHEEL:
+        return sdl_question_menu_handle_mouse_wheel(&ev->wheel);
 
     case SDL_EVENT_FINGER_DOWN:
         if (ev->tfinger.windowID == SDL_GetWindowID(g_state.window))

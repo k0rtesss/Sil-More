@@ -928,13 +928,23 @@ static int sdl_object_tooltip_layout_runs(TTF_Font* font, cptr text,
     int pos = 0;
 
     while (pos < len && run_count < max_runs) {
+        if (text[pos] == '\n') {
+            if (line_w > max_w)
+                max_w = line_w;
+            line++;
+            line_w = 0.0f;
+            pos++;
+            continue;
+        }
+
         bool is_space = (text[pos] == ' ');
         int tok_start = pos;
         int tok_len;
         float tok_w;
         int sub;
 
-        while (pos < len && (text[pos] == ' ') == is_space)
+        while (pos < len && text[pos] != '\n'
+            && (text[pos] == ' ') == is_space)
             pos++;
         tok_len = pos - tok_start;
 
@@ -2350,6 +2360,55 @@ static float sdl_description_overlay_render_story_run(TTF_Font* font,
     return advance_w;
 }
 
+static void sdl_description_overlay_render_plain_run(
+    const description_overlay_state* overlay,
+    const description_overlay_layout* layout, SDL_Texture* atlas,
+    int atlas_cell_w, int atlas_cell_h, int src_row, int run_start,
+    int run_end, float row_y)
+{
+    int run_len = run_end - run_start;
+    int idx;
+    byte attr;
+    const char* text;
+
+    if (!overlay || !layout || !overlay->chars || run_len <= 0)
+        return;
+
+    idx = src_row * overlay->width + run_start;
+    attr = overlay->attrs[idx];
+    text = overlay->chars + idx;
+
+    if (utf8_has_non_ascii_n(text, run_len))
+    {
+        TTF_Font* mono_font = sdl_acquire_mono_font_cells(
+            sdl_monospace_font_path(), layout->cell_w, layout->cell_h);
+
+        if (mono_font)
+        {
+            int render_atlas_cell_w = (atlas_cell_w > 0)
+                ? atlas_cell_w : layout->cell_w;
+            int render_atlas_cell_h = (atlas_cell_h > 0)
+                ? atlas_cell_h : layout->cell_h;
+
+            sdl_render_mono_utf8_text_cells_at(atlas, render_atlas_cell_w,
+                render_atlas_cell_h, mono_font, (float)layout->cell_w,
+                (float)layout->cell_h, layout->text_x, row_y, run_start, 0,
+                run_len, text, sdl_description_overlay_attr_color(attr));
+            return;
+        }
+    }
+
+    for (int col = run_start; col < run_end; col++)
+    {
+        int cell_idx = src_row * overlay->width + col;
+
+        sdl_description_overlay_render_char(atlas, atlas_cell_w,
+            atlas_cell_h, (float)layout->cell_w, (float)layout->cell_h,
+            layout->text_x + (float)col * (float)layout->cell_w, row_y,
+            overlay->attrs[cell_idx], overlay->chars[cell_idx]);
+    }
+}
+
 /*
  * Render one captured overlay row.  Story-font cells (flagged during capture)
  * are drawn proportionally with the matching story slot; plain cells fall back
@@ -2449,11 +2508,28 @@ static void sdl_description_overlay_render_row(
 
         if (!(sflag & STORY_FLAG_USE))
         {
-            sdl_description_overlay_render_char(atlas, atlas_cell_w,
-                atlas_cell_h, (float)layout->cell_w, (float)layout->cell_h,
-                layout->text_x + (float)col * (float)layout->cell_w, row_y,
-                overlay->attrs[idx], overlay->chars[idx]);
-            col++;
+            byte attr = overlay->attrs[idx];
+            int run_start = col;
+
+            while (col < limit)
+            {
+                int run_idx = src_row * overlay->width + col;
+                byte run_flag = overlay->story ? overlay->story[run_idx] : 0;
+
+                if (run_flag & STORY_FLAG_USE)
+                    break;
+                if (styled_monster_health_bars && overlay->health
+                    && overlay->health[run_idx] != 0)
+                {
+                    break;
+                }
+                if (overlay->attrs[run_idx] != attr)
+                    break;
+                col++;
+            }
+
+            sdl_description_overlay_render_plain_run(overlay, layout, atlas,
+                atlas_cell_w, atlas_cell_h, src_row, run_start, col, row_y);
             continue;
         }
 
@@ -3038,6 +3114,8 @@ bool sdl_mouse_grid_has_describable_content(int y, int x)
 
 void sdl_mouse_recall_object(object_type* o_ptr)
 {
+    int o_idx;
+
     if (!o_ptr || !o_ptr->k_idx)
         return;
 
@@ -3046,27 +3124,20 @@ void sdl_mouse_recall_object(object_type* o_ptr)
         return;
     }
 
-    (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
-
-    if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL) {
-        int slot = wield_slot(o_ptr);
-        const object_type* compare_objects[2];
-        const char* compare_headings[2];
-        char selected_heading[32];
-        char equipped_heading[32];
-
-        strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-        strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-        compare_objects[0] = o_ptr;
-        compare_headings[0] = selected_heading;
-        compare_objects[1] = inventory[slot].k_idx ? &inventory[slot] : NULL;
-        compare_headings[1] = equipped_heading;
-
-        object_info_screen_multi(compare_objects, compare_headings, 2);
-    } else {
-        object_info_screen(o_ptr);
+    /* Map recall uses the same comparison collector as standing-floor
+     * details, including expandable Harness entries. */
+    if (o_ptr >= o_list && o_ptr < o_list + o_max)
+    {
+        o_idx = (int)(o_ptr - o_list);
+        if (o_idx > 0)
+        {
+            describe_item_with_comparisons(0 - o_idx, true);
+            return;
+        }
     }
+
+    (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
+    object_info_screen(o_ptr);
 }
 
 bool sdl_mouse_recall_handle_right_click(float x, float y)

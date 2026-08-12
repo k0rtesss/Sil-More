@@ -73,6 +73,37 @@ typedef struct monster_race monster_race;
 typedef struct monster_lore monster_lore;
 typedef struct vault_type vault_type;
 typedef struct object_type object_type;
+
+/* Data-driven stowage pools used by the carried-volume system. */
+typedef enum object_storage_type
+{
+    OBJECT_STORAGE_NONE = 0,
+    OBJECT_STORAGE_PACK,
+    OBJECT_STORAGE_HARNESS,
+    OBJECT_STORAGE_JEWELRY
+} object_storage_type;
+
+/* Deferred actions that require access to the Pack. */
+typedef enum player_pack_action_kind
+{
+    PLAYER_PACK_ACTION_NONE = 0,
+    PLAYER_PACK_ACTION_USE_ITEM,
+    PLAYER_PACK_ACTION_WIELD,
+    PLAYER_PACK_ACTION_TAKEOFF,
+    PLAYER_PACK_ACTION_DROP,
+    PLAYER_PACK_ACTION_DELETE,
+    PLAYER_PACK_ACTION_REFUEL_LAMP,
+    PLAYER_PACK_ACTION_REFUEL_TORCH,
+    PLAYER_PACK_ACTION_EAT,
+    PLAYER_PACK_ACTION_QUAFF,
+    PLAYER_PACK_ACTION_PLAY,
+    PLAYER_PACK_ACTION_ACTIVATE_STAFF,
+    PLAYER_PACK_ACTION_USE_GEM,
+    PLAYER_PACK_ACTION_ACTIVATE,
+    PLAYER_PACK_ACTION_PICKUP,
+    PLAYER_PACK_ACTION_JEWELRY_PRESET,
+    PLAYER_PACK_ACTION_MOVE_STORAGE
+} player_pack_action_kind;
 typedef struct monster_type monster_type;
 typedef struct alloc_entry alloc_entry;
 typedef struct owner_type owner_type;
@@ -232,6 +263,9 @@ struct object_kind
 
     s16b weight; /* Weight */
 
+    byte storage; /* OBJECT_STORAGE_* pool (NONE for Supply) */
+    s16b volume; /* Stowed volume per item, in tenths */
+
     s32b cost; /* Object "base cost" */
 
     u32b flags1; /* Flags, set 1 */
@@ -281,6 +315,8 @@ struct ability_type
     byte abilitynum; /* Ability number within a skill */
 
     byte level; /* Prerequisite skill level */
+    byte carriage_target; /* ABILITY_CARRIAGE_* target, if any */
+    byte carriage_reduction_percent; /* Learned ability reduction */
     byte prereqs; /* Number of prerequisite abilities */
     byte prereq_skilltype[4]; /* Skill type (for prerequisites) */
     byte prereq_abilitynum[4]; /* The ability within that skill (for
@@ -325,6 +361,9 @@ struct artefact_type
 
     s16b weight; /* Weight */
 
+    byte storage; /* OBJECT_STORAGE_* pool (NONE for Supply) */
+    s16b volume; /* Stowed volume per item, in tenths */
+
     s32b cost; /* Artefact "cost" */
 
     u32b flags1; /* Artefact Flags, set 1 */
@@ -363,6 +402,9 @@ struct ego_item_type
     u32b text; /* Description (offset) */
 
     s32b cost; /* Ego-item "cost" */
+
+    /* Percentage change; reductions do not stack. */
+    s16b volume_adjustment_percent;
 
     u32b flags1; /* Ego-Item Flags, set 1 */
     u32b flags2; /* Ego-Item Flags, set 2 */
@@ -610,6 +652,9 @@ struct object_type
     byte number; /* Number of items */
 
     s16b weight; /* Item weight */
+
+    byte storage; /* Runtime OBJECT_STORAGE_* pool; saved for movable gear */
+    s16b volume; /* Base per-item stowed volume, in tenths */
 
     byte name1; /* Artefact type, if any */
     byte name2; /* Ego suffix index, if any (see object_ego_suffix()) */
@@ -1265,7 +1310,7 @@ struct player_type
 
     s32b total_weight; /* Total weight being carried */
 
-    s16b inven_cnt; /* Number of items in inventory */
+    s32b inven_cnt; /* Number of carried entries, including expandable ones */
     s16b equip_cnt; /* Number of items in equipment */
 
     s16b target_set; /* Target flag */
@@ -1282,11 +1327,13 @@ struct player_type
     s16b energy_use; /* Energy use this turn */
 
     s16b resting; /* Resting counter */
+    bool resting_light_off; /* Fuel-burning light extinguished for this rest */
     s16b smithing; /* Smithing counter */
+    bool smithing_starting; /* Smithing screen is restoring gameplay state */
     s16b fletching; /* Fletching counter */
     s16b running; /* Running counter */
 
-    s16b fletch_item; /* Item we are currently fletching. */
+    s32b fletch_item; /* Carried handle we are currently fletching. */
 
     s16b run_cur_dir; /* Direction we are running */
     s16b run_old_dir; /* Direction we came from */

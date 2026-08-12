@@ -840,7 +840,7 @@ void uncurse_object(object_type* o_ptr)
     {
         int slot = (int)(o_ptr - inventory);
 
-        if ((slot == INVEN_QUIVER1) || (slot == INVEN_QUIVER2))
+        if ((slot == INVEN_QUIVER1) || (slot == INVEN_BELT))
             p_ptr->redraw |= (PR_QUIVER);
         else if (slot == INVEN_LITE)
             p_ptr->redraw |= (PR_LIGHT);
@@ -871,6 +871,8 @@ static int remove_curse_aux(bool star_curse)
 
         /* Skip non-objects */
         if (!o_ptr->k_idx)
+            continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
         /* Uncursed already */
@@ -1075,16 +1077,19 @@ void self_knowledge(void)
 
         if (!o_ptr->k_idx) continue;
 
+        if (!player_equipment_slot_counts_as_equipped(k))
+            continue;
+
         object_flags4(o_ptr, &t1, &t2, &t3, &t4);
 
         {
             bool is_quiver1 = (k == INVEN_QUIVER1);
-            bool is_quiver2 = (k == INVEN_QUIVER2);
+            bool is_belt = (k == INVEN_BELT);
             bool is_throwing_item = player_can_treat_as_throwing_flags(o_ptr, t3);
 
             if (is_quiver1)
                 continue;
-            if (is_quiver2 && !is_throwing_item)
+            if (is_belt && !is_throwing_item)
                 continue;
         }
         f2 |= t2; f3 |= t3;
@@ -1459,7 +1464,8 @@ void analyze_weapon_properties(int* count, char s[][200], char t[][200], bool go
                               bool identify[], int slot, const char* weapon_name)
 {
     object_type* o_ptr = &inventory[slot];
-    if (!o_ptr->k_idx) return;
+    if (!o_ptr->k_idx || !player_equipment_slot_counts_as_equipped(slot))
+        return;
 
     u32b f1, f2, f3, f4;
     object_flags4(o_ptr, &f1, &f2, &f3, &f4);

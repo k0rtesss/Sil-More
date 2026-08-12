@@ -9223,12 +9223,10 @@ static bool sdl_character_sheet_scroll_active(void)
     bool select_menu = g_sdl_character_sheet_screen.context
             == SDL_CHARACTER_SHEET_BIRTH_SELECT
         && g_sdl_character_sheet_screen.select_menu_style;
-    bool landscape_chronicle = !g_sdl_narrative_portrait_rendering
-        && g_sdl_character_sheet_screen.context
-            == SDL_CHARACTER_SHEET_NARRATIVE
-        && g_sdl_character_sheet_screen.narrative_contents_count > 0;
+    bool narrative_book = g_sdl_character_sheet_screen.context
+        == SDL_CHARACTER_SHEET_NARRATIVE;
 
-    return (select_menu || landscape_chronicle)
+    return (select_menu || narrative_book)
         && g_sdl_character_sheet_screen.sheet_scroll_max > 0;
 }
 
@@ -9240,10 +9238,8 @@ static bool sdl_character_sheet_set_scroll(int scroll)
     scroll = sdl_char_sheet_clampi(scroll, 0,
         g_sdl_character_sheet_screen.sheet_scroll_max);
     g_sdl_character_sheet_screen.sheet_scroll = scroll;
-    if (!g_sdl_narrative_portrait_rendering
-        && g_sdl_character_sheet_screen.context
+    if (g_sdl_character_sheet_screen.context
             == SDL_CHARACTER_SHEET_NARRATIVE
-        && g_sdl_character_sheet_screen.narrative_contents_count > 0
         && page >= 0 && page < SDL_BOOK_MAX_PAGES)
     {
         g_sdl_narrative_page_scroll[page] = scroll;
@@ -11801,6 +11797,40 @@ int sdl_character_sheet_screen_book_contents_page(int contents_index)
         g_sdl_character_sheet_screen.narrative_contents_page[contents_index]);
 }
 
+int sdl_character_sheet_screen_book_action_page(int choice)
+{
+    int para_count;
+
+    if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_NARRATIVE
+        || choice < 0)
+    {
+        return -1;
+    }
+
+    para_count = g_sdl_character_sheet_screen.narrative_para_count;
+    for (int para = 0; para < para_count; para++)
+    {
+        if (g_sdl_character_sheet_screen.narrative_para_choice[para]
+            != choice)
+        {
+            continue;
+        }
+        for (int page = 0;
+             page < g_sdl_character_sheet_screen.narrative_page_count; page++)
+        {
+            if (para >= g_sdl_character_sheet_screen
+                    .narrative_page_start[page]
+                && para < g_sdl_character_sheet_screen
+                    .narrative_page_start[page + 1])
+            {
+                return page;
+            }
+        }
+    }
+
+    return -1;
+}
+
 /*
  * Draw one page of the narrative book: the paragraphs assigned to this page,
  * as wrapped body text on the parchment.  Text is laid out from the TOP of the
@@ -11816,7 +11846,7 @@ void sdl_char_sheet_render_narrative_page(int page, TTF_Font* body_font,
     float para_gap = body_lh * 0.6f;
     int para_count = g_sdl_character_sheet_screen.narrative_para_count;
     int page_count = g_sdl_character_sheet_screen.narrative_page_count;
-    bool scrollable = sdl_char_sheet_landscape_chronicle();
+    bool scrollable = true;
     float viewport_bottom = region_bottom;
     SDL_FRect viewport;
     float content_h = 0.0f;
@@ -14859,6 +14889,22 @@ void sdl_character_sheet_screen_commit_book(void)
     /* Force a (re)paginate on the next render and open on the first page. */
     sdl_character_sheet_narrative_layout_changed();
     g_sdl_character_sheet_screen.select_page = 0;
+    g_state.need_present = true;
+}
+
+void sdl_character_sheet_screen_set_book_focus(int choice)
+{
+    if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_NARRATIVE)
+        return;
+
+    if (g_sdl_character_sheet_screen.hover_choice >= 0
+        && g_sdl_character_sheet_screen.hover_choice != choice)
+    {
+        g_sdl_character_sheet_screen.hover_choice = SDL_CHAR_SHEET_NO_HOVER;
+        ui_menu_click_clear_pending_hover();
+    }
+    g_sdl_character_sheet_screen.selected_index = choice;
+    g_sdl_character_sheet_screen.focus_choice = choice;
     g_state.need_present = true;
 }
 

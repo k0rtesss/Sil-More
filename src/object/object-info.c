@@ -906,6 +906,7 @@ static void format_min_depth_bonus_depths(char* buf, size_t buflen, int units)
 static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b f4)
 {
     cptr good[24], bad[14];
+    char depth_scale_desc[96];
     char deep_call_desc[120];
     char deep_call_equipped_bonus[16];
     char deep_call_inventory_bonus[16];
@@ -917,8 +918,13 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     {
         good[gc++] = (format(
             "can be thrown effectively (%d squares)", throwing_range(o_ptr)));
-        good[gc++] = "can be placed in quiver (passive abilities remain active for 2nd quiver)";
+        if (object_is_belt_weapon(o_ptr))
+            good[gc++] = "can be placed at the belt (belt passive abilities remain active)";
+        else if (!(f4 & TR4_HARNESS_STOWABLE))
+            good[gc++] = "stays on the Harness";
     }
+    if (f4 & TR4_HARNESS_STOWABLE)
+        good[gc++] = "can be kept ready on the Harness or moved to the Pack for storage";
 
     /* Collect stuff which can't be categorized */
     if (((o_ptr->tval == TV_LIGHT) && artefact_p(o_ptr))
@@ -949,7 +955,12 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     if (f4 & (TR4_ARMOR_SHATTER))
         good[gc++] = "can shatter the armor of your foes with each successful blow";
     if (f4 & (TR4_DEPTH_SCALE_PS))
-        good[gc++] = "gains protection as you delve deeper";
+    {
+        strnfmt(depth_scale_desc, sizeof(depth_scale_desc),
+            "gains protection as you delve deeper (currently %dd%d)",
+            o_ptr->pd, object_effective_protection_sides(o_ptr));
+        good[gc++] = depth_scale_desc;
+    }
     if (f3 & (TR3_WILL_DRAIN))
         good[gc++] = "drains the will of your enemies when you strike them";
     if (f4 & (TR4_PAIRED))
@@ -1369,7 +1380,8 @@ static bool describe_archery(const object_type* o_ptr)
     }
     if (o_ptr->tval == TV_ARROW)
     {
-        if ((&inventory[INVEN_BOW])->k_idx)
+        if (inventory[INVEN_BOW].k_idx
+            && player_equipment_slot_counts_as_equipped(INVEN_BOW))
         {
             if (o_ptr->number == 1)
             {
@@ -1448,7 +1460,8 @@ static bool describe_weapon_damage(const object_type* o_ptr)
             int hand_half_bonus_potential;
             int one_handed_ds_int, two_handed_ds_int;
             byte one_handed_ds, two_handed_ds;
-            bool is_currently_equipped = (&inventory[INVEN_WIELD] == o_ptr);
+            bool is_currently_equipped = (&inventory[INVEN_WIELD] == o_ptr)
+                && player_equipment_slot_counts_as_equipped(INVEN_WIELD);
             
             /* Determine potential hand-and-a-half bonus (when wielded two-handed) */
             if (c_info[p_ptr->pcharacter].flags_u & UNQ_MEL_MAEDHROS)
@@ -1581,6 +1594,20 @@ static bool describe_potion_throw(const object_type* o_ptr)
 
     output_desc_list("If thrown, it ", good, gc);
     return true;
+}
+
+static int object_info_inventory_volume(const object_type* o_ptr)
+{
+    enum inventory_limit_group group;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return 0;
+
+    group = inventory_limit_group_for_object(o_ptr);
+    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
+        return 0;
+
+    return inventory_limit_space_for_object(o_ptr);
 }
 
 bool object_info_out(const object_type* o_ptr)
@@ -2332,13 +2359,21 @@ static bool screen_out_head(const object_type* o_ptr)
     /* Print, in colour */
     text_out_c(name_color, o_name);
 
+    /* Show carried volume before weight information. */
+    {
+        int volume = object_info_inventory_volume(o_ptr);
+        if (volume > 0)
+            text_out_c(TERM_L_UMBER,
+                format(" %d.%d qt", volume / 10, volume % 10));
+    }
+
     /* Show weight information */
     {
         char weight_buf[64];
         int total_weight = o_ptr->weight * o_ptr->number;
         int each_weight = o_ptr->weight;
         if (o_ptr->number > 1) {
-            strnfmt(weight_buf, sizeof(weight_buf), " %3d.%1d lb (%3d.%1d lb each)",
+            strnfmt(weight_buf, sizeof(weight_buf), " %3d.%1d lb (%d.%1d lb each)",
                 total_weight / 10, total_weight % 10, each_weight / 10, each_weight % 10);
         } else {
             strnfmt(weight_buf, sizeof(weight_buf), " %3d.%1d lb", total_weight / 10, total_weight % 10);

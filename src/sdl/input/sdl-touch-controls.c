@@ -579,6 +579,7 @@ void sdl_touch_pane_handle_pointer_up(float x, float y, bool mouse,
 #define SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER -103
 #define SDL_TOUCH_THUMB_BIND_QUICK_THROW -104
 #define SDL_TOUCH_THUMB_BIND_QUICK_THROW_TARGET -105
+#define SDL_TOUCH_THUMB_BIND_FLOOR_ACTION_BASE -200
 
 enum {
     SDL_TOUCH_THUMB_GAMEPLAY_ACTION_COUNT = 4,
@@ -622,8 +623,10 @@ static bool sdl_touch_thumb_description_open(void);
  * Column mode follows the left-panel width; row mode keeps the equivalent
  * compact-column footprint instead of stretching across the horizontal panel.
  * Touch-only.
- * Gameplay publishes every contextual action that currently applies: selected
- * quiver fire, quick throw, the current Space/floor-item action, and wait/rest.
+ * Gameplay keeps one floor-item control: tap opens its description and long
+ * press picks it up.  Destination-specific actions appear only after opening
+ * the description, or in the pickup destination chooser when more than one
+ * storage destination is valid.
  * Interactive descriptions publish their complete footer action list.  Layout
  * is driven by the resulting count rather than by fixed top/bottom/sidecar
  * slots.
@@ -637,6 +640,24 @@ static bool sdl_touch_thumb_space_action(
     int key = ' ';
     char ctx[32];
 
+    /* Interactive descriptions register Space as their contextual pickup
+     * action.  Keep that exact key so a multi-destination item (such as
+     * arrows) reaches the Quiver/Pack chooser rather than a preferred raw
+     * destination shortcut. */
+    if (sdl_touch_thumb_description_open()
+        && sdl_description_overlay_has_footer_action(' '))
+    {
+        if (out_key)
+            *out_key = ' ';
+        if (label && label_len
+            && !sdl_description_overlay_footer_action_label(' ', label,
+                label_len))
+        {
+            SDL_strlcpy(label, "Pick Up", label_len);
+        }
+        return true;
+    }
+
     if (!touch_shortcut_context_action(' ',
             sdl_touch_thumb_description_open(), &key, ctx, sizeof(ctx)))
     {
@@ -644,8 +665,13 @@ static bool sdl_touch_thumb_space_action(
     }
     if (strcmp(ctx, "Confirm") == 0)
         return false;
-    if (strcmp(ctx, "Pick Up") == 0)
+    if (strcmp(ctx, "Pick Up") == 0 || strcmp(ctx, "Pack") == 0
+        || strcmp(ctx, "Harness") == 0 || strcmp(ctx, "Supplies") == 0
+        || strcmp(ctx, "Jewelry") == 0
+        || strncmp(ctx, "Items (", 7) == 0)
+    {
         return false;
+    }
 
     if (out_key)
         *out_key = key;
@@ -654,17 +680,62 @@ static bool sdl_touch_thumb_space_action(
     return true;
 }
 
-static bool sdl_touch_thumb_pickup_action(void)
+static int sdl_touch_thumb_floor_action_binding(
+    floor_context_action_kind kind)
 {
-    char ctx[32];
+    return SDL_TOUCH_THUMB_BIND_FLOOR_ACTION_BASE - (int)kind;
+}
 
-    if (!touch_shortcut_context_action(' ',
-            sdl_touch_thumb_description_open(), NULL, ctx, sizeof(ctx)))
+static bool sdl_touch_thumb_floor_action_from_binding(int binding,
+    floor_context_action_kind* kind)
+{
+    int value = SDL_TOUCH_THUMB_BIND_FLOOR_ACTION_BASE - binding;
+
+    if (value <= FLOOR_CONTEXT_ACTION_NONE
+        || value >= FLOOR_CONTEXT_ACTION_CLOSE)
     {
         return false;
     }
 
-    return strcmp(ctx, "Pick Up") == 0;
+    if (kind)
+        *kind = (floor_context_action_kind)value;
+    return true;
+}
+
+static bool sdl_touch_thumb_floor_action_label(int binding, char* label,
+    size_t label_len)
+{
+    floor_context_action_kind kind;
+    floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
+    int count;
+
+    if (!label || label_len == 0
+        || !sdl_touch_thumb_floor_action_from_binding(binding, &kind))
+    {
+        return false;
+    }
+
+    if (kind == FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT)
+    {
+        SDL_strlcpy(label, "Pick Up", label_len);
+        return true;
+    }
+    if (kind == FLOOR_CONTEXT_ACTION_ITEMS)
+    {
+        SDL_strlcpy(label, "Description", label_len);
+        return true;
+    }
+
+    count = floor_context_collect_square_actions(true, actions,
+        (int)N_ELEMENTS(actions));
+    for (int i = 0; i < count; i++)
+    {
+        if (actions[i].kind != kind)
+            continue;
+        SDL_strlcpy(label, actions[i].label, label_len);
+        return true;
+    }
+    return false;
 }
 
 static bool sdl_touch_thumb_ranged_mode_active(void)
@@ -711,12 +782,29 @@ static void sdl_touch_thumb_append_button(touch_thumb_button_set* set,
     };
 }
 
+static bool sdl_touch_thumb_is_pickup_destination(
+    floor_context_action_kind kind)
+{
+    return kind == FLOOR_CONTEXT_ACTION_PACK
+        || kind == FLOOR_CONTEXT_ACTION_HARNESS
+        || kind == FLOOR_CONTEXT_ACTION_SUPPLIES
+        || kind == FLOOR_CONTEXT_ACTION_QUIVER
+        || kind == FLOOR_CONTEXT_ACTION_JEWELRY
+        || kind == FLOOR_CONTEXT_ACTION_PICKUP;
+}
+
 static void sdl_touch_thumb_collect_buttons(touch_thumb_button_set* set)
 {
     bool ranged;
     bool quick_throw;
     bool space_action;
-    bool pickup_action;
+    bool item_action = false;
+    bool pickup_action = false;
+    floor_context_action floor_actions[FLOOR_CONTEXT_MAX_ACTIONS];
+    int floor_action_count;
+    touch_thumb_button item = {
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE
+    };
     touch_thumb_button primary = {
         GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE
     };
@@ -739,6 +827,8 @@ static void sdl_touch_thumb_collect_buttons(touch_thumb_button_set* set)
 
     ranged = sdl_touch_thumb_ranged_mode_active();
     quick_throw = sdl_touch_thumb_quick_throw_active();
+    floor_action_count = floor_context_collect_square_actions(true,
+        floor_actions, (int)N_ELEMENTS(floor_actions));
     if (sdl_touch_thumb_fire_targeting_active()) {
         if (ranged || quick_throw) {
             sdl_touch_thumb_append_button(set,
@@ -750,7 +840,26 @@ static void sdl_touch_thumb_collect_buttons(touch_thumb_button_set* set)
     }
 
     space_action = sdl_touch_thumb_space_action(NULL, NULL, 0);
-    pickup_action = sdl_touch_thumb_pickup_action();
+    for (int i = 0; i < floor_action_count; i++) {
+        if (floor_actions[i].kind == FLOOR_CONTEXT_ACTION_DETAILS) {
+            item.tap_binding = 'x';
+            item_action = true;
+        } else if (floor_actions[i].kind == FLOOR_CONTEXT_ACTION_ITEMS) {
+            item.tap_binding = sdl_touch_thumb_floor_action_binding(
+                FLOOR_CONTEXT_ACTION_ITEMS);
+            item_action = true;
+            pickup_action = true;
+        } else if (sdl_touch_thumb_is_pickup_destination(
+                floor_actions[i].kind))
+        {
+            pickup_action = true;
+        }
+    }
+    if (item_action && pickup_action)
+    {
+        item.long_binding = sdl_touch_thumb_floor_action_binding(
+            FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT);
+    }
 
     if (ranged) {
         primary = (touch_thumb_button){
@@ -772,8 +881,8 @@ static void sdl_touch_thumb_collect_buttons(touch_thumb_button_set* set)
         primary = (touch_thumb_button){
             SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT, GAMEPAD_BIND_NONE
         };
-    } else if (pickup_action) {
-        primary = (touch_thumb_button){ 'x', 'g' };
+    } else if (item_action) {
+        primary = item;
     }
 
     if (primary.tap_binding != SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT
@@ -782,14 +891,14 @@ static void sdl_touch_thumb_collect_buttons(touch_thumb_button_set* set)
         extras[extra_count++] = (touch_thumb_button){
             SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT, GAMEPAD_BIND_NONE
         };
-    } else if (primary.tap_binding != 'x' && pickup_action) {
-        extras[extra_count++] = (touch_thumb_button){ 'x', 'g' };
+    }
+    if (primary.tap_binding != item.tap_binding && item_action) {
+        extras[extra_count++] = item;
     }
 
-    if (primary.tap_binding != GAMEPAD_BIND_NONE) {
+    if (primary.tap_binding != GAMEPAD_BIND_NONE)
         sdl_touch_thumb_append_button(set, primary.tap_binding,
             primary.long_binding);
-    }
     sdl_touch_thumb_append_button(set, 'z', 'Z');
     set->gameplay_base_count = set->count;
 
@@ -1379,6 +1488,8 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         SDL_strlcpy(buf, "Off", buflen);
         return;
     }
+    if (sdl_touch_thumb_floor_action_label(binding, buf, buflen))
+        return;
     if (sdl_touch_thumb_description_open()
         && sdl_description_overlay_footer_action_label(binding, buf, buflen))
     {
@@ -1398,10 +1509,7 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
                 buflen);
             return;
         }
-        SDL_strlcpy(buf,
-            (player_selected_ranged_quiver_number() == 2)
-                ? "Fire 2nd quiver" : "Fire 1st quiver",
-            buflen);
+        SDL_strlcpy(buf, "Ranged Attack", buflen);
         return;
     }
     if (binding == ESCAPE && sdl_touch_thumb_fire_targeting_active()) {
@@ -1409,11 +1517,7 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         return;
     }
     if (binding == SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER) {
-        SDL_strlcpy(buf,
-            (player_selected_ranged_quiver_number() == 2)
-                ? "Change to 1st quiver"
-                : "Change to 2nd quiver",
-            buflen);
+        SDL_strlcpy(buf, "Switch Weapon", buflen);
         return;
     }
     if (binding == SDL_TOUCH_THUMB_BIND_QUICK_THROW) {
@@ -1430,15 +1534,15 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         return;
     }
     if (binding == 'f') {
-        SDL_strlcpy(buf, "Fire 1st quiver", buflen);
+        SDL_strlcpy(buf, "Ranged Attack", buflen);
         return;
     }
     if (binding == 'F') {
-        SDL_strlcpy(buf, "Fire 2nd quiver", buflen);
+        SDL_strlcpy(buf, "Ranged Attack", buflen);
         return;
     }
     if (binding == 'g') {
-        SDL_strlcpy(buf, "Pick Up", buflen);
+        SDL_strlcpy(buf, "Pack / Pick Up", buflen);
         return;
     }
     /* Space/'x' adapt their name to the player's situation (stairs, item,
@@ -1573,16 +1677,18 @@ void sdl_touch_thumb_cancel_press(void)
 
 static void sdl_touch_thumb_queue_quiver_change(void)
 {
-    int next_quiver = (player_selected_ranged_quiver_number() == 2) ? 1 : 2;
-
-    player_queue_ranged_quiver_mode(
-        player_active_weapon_mode_for_quiver(next_quiver));
-    sdl_enqueue_bypassed_command(CMD_ACTIVE_WEAPON_MODE);
+    sdl_enqueue_bypassed_command('\t');
 }
 
 static bool sdl_touch_thumb_send_internal_binding(int binding)
 {
     int key = ' ';
+    floor_context_action_kind floor_action;
+
+    if (sdl_touch_thumb_floor_action_from_binding(binding, &floor_action)) {
+        do_cmd_queue_floor_context_action(floor_action);
+        return true;
+    }
 
     switch (binding) {
     case SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT:
@@ -1591,8 +1697,7 @@ static bool sdl_touch_thumb_send_internal_binding(int binding)
         sdl_touch_pane_send_binding(key, false, false);
         return true;
     case SDL_TOUCH_THUMB_BIND_FIRE_SELECTED:
-        Term_keypress(
-            (player_selected_ranged_quiver_number() == 2) ? 'F' : 'f');
+        Term_keypress('f');
         return true;
     case SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER:
         sdl_touch_thumb_queue_quiver_change();
@@ -3437,10 +3542,10 @@ void sdl_touch_corner_action_binding_label(int binding, char* buf,
         SDL_strlcpy(buf, "Zoom -", buflen);
         return;
     case 'f':
-        SDL_strlcpy(buf, "Shoot", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     case 'F':
-        SDL_strlcpy(buf, "Shoot 2", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     default:
         binding_action_short(binding, buf, buflen);
@@ -4485,12 +4590,23 @@ static int sdl_touch_top_panel_slot_for_display_index(int index,
 
 static int sdl_touch_top_panel_description_action_for_binding(int binding)
 {
+    int key = binding;
+    int context_binding;
+
     if (!sdl_touch_thumb_description_open())
         return GAMEPAD_BIND_NONE;
 
     if (binding == INPUT_BIND_CONFIRM)
         binding = ' ';
+    context_binding = binding;
 
+    if (sdl_description_overlay_has_footer_action(binding))
+        return binding;
+    if (touch_shortcut_context_action(context_binding, true, &key, NULL, 0)
+        && sdl_description_overlay_has_footer_action(key))
+    {
+        return key;
+    }
     if (binding == 'x' && sdl_description_overlay_has_footer_action('x'))
         return 'x';
     if ((binding == ' ' || binding == 'g')
@@ -4518,28 +4634,29 @@ static int sdl_touch_top_panel_visible_slots(int* slots, int max_slots)
 
     if (sdl_touch_thumb_description_open())
     {
-        int description_slot = -1;
-        int pickup_slot = -1;
+        int visible_actions[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+        int visible_action_count = 0;
 
         for (int i = 0; i < configured_count; i++) {
             int slot = sdl_touch_top_panel_slot_for_display_index(i,
                 configured_count);
             int action = sdl_touch_top_panel_description_action_for_slot(slot);
+            bool duplicate = false;
 
-            if (action == 'x' && description_slot < 0)
-                description_slot = slot;
-            else if (action == ' ' && pickup_slot < 0)
-                pickup_slot = slot;
-        }
+            if (action == GAMEPAD_BIND_NONE)
+                continue;
+            for (int j = 0; j < visible_action_count; j++) {
+                if (visible_actions[j] == action) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate)
+                continue;
 
-        if (description_slot >= 0) {
             if (slots && visible_count < max_slots)
-                slots[visible_count] = description_slot;
-            visible_count++;
-        }
-        if (pickup_slot >= 0 && pickup_slot != description_slot) {
-            if (slots && visible_count < max_slots)
-                slots[visible_count] = pickup_slot;
+                slots[visible_count] = slot;
+            visible_actions[visible_action_count++] = action;
             visible_count++;
         }
 
@@ -5340,7 +5457,7 @@ static bool sdl_touch_top_panel_tile_for_binding(int binding, byte* out_attr,
     case INPUT_BIND_CONFIRM:
     case ' ':
     case 'g':
-        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_PICK; fallback = "Pick";
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_PICK; fallback = "Pack";
         break;
     case 'o':
         row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_OPEN_DOOR; fallback = "Open";
@@ -5596,7 +5713,10 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
     buf[0] = '\0';
     if (touch_shortcut_context_action(context_binding,
             sdl_touch_thumb_description_open(), NULL, label, sizeof(label))) {
-        if (context_binding == ' ')
+        if (context_binding == ' ' && streq(label, "Harness"))
+            strnfmt(buf, buflen,
+                "%s: store an eligible floor item in your Harness.", label);
+        else if (context_binding == ' ')
             strnfmt(buf, buflen,
                 "%s: confirm the current prompt or interact with what is on your square.",
                 label);
@@ -5659,27 +5779,27 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         return;
     case 'f':
         SDL_strlcpy(buf,
-            "Shoot: fire ammunition from your first quiver at a chosen target.",
+            "Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target.",
             buflen);
         return;
     case 'F':
         SDL_strlcpy(buf,
-            "Second Quiver: fire ammunition from your second quiver at a chosen target.",
+            "Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target.",
             buflen);
         return;
     case KTRL('F'):
         SDL_strlcpy(buf,
-            "Swap Quiver: exchange the ammunition assigned to your two quivers.",
+            "Arrows: choose the active arrow type from your mixed Quiver.",
             buflen);
         return;
     case 'a':
         SDL_strlcpy(buf,
-            "Staff: choose and use a staff from your inventory or equipment.",
+            "Staff: choose and activate a staff from your Harness.",
             buflen);
         return;
     case KTRL('A'):
         SDL_strlcpy(buf,
-            "Swap Staff: change which staff is ready for quick use.", buflen);
+            "Staff: choose and activate a staff from your Harness.", buflen);
         return;
     case '0':
         SDL_strlcpy(buf, "Smithing: open the forge crafting screen.", buflen);

@@ -469,6 +469,15 @@ bool object_similar(const object_type* o_ptr, const object_type* j_ptr)
     if (o_ptr->k_idx != j_ptr->k_idx)
         return (false);
 
+    /* Loose arrows always belong to the Pack by type, so stale routing
+     * markers must not split otherwise identical arrow stacks (including
+     * stacks loaded from an affected save).  Pack/Harness-capable items still
+     * use storage to remain separate. */
+    if (o_ptr->storage != j_ptr->storage && o_ptr->tval != TV_ARROW)
+    {
+        return (false);
+    }
+
     /* Require identical weight */
     if (!(o_ptr->weight == j_ptr->weight))
         return (false);
@@ -739,10 +748,10 @@ void object_absorb(object_type* o_ptr, object_type* j_ptr)
         bool pickup = o_pickup || j_pickup;
         bool o_slot_valid = o_pickup
             && ((o_ptr->pickup_slot == INVEN_QUIVER1)
-                || (o_ptr->pickup_slot == INVEN_QUIVER2));
+                || (o_ptr->pickup_slot == INVEN_BELT));
         bool j_slot_valid = j_pickup
             && ((j_ptr->pickup_slot == INVEN_QUIVER1)
-                || (j_ptr->pickup_slot == INVEN_QUIVER2));
+                || (j_ptr->pickup_slot == INVEN_BELT));
         s16b pickup_slot = -1;
 
         if (o_slot_valid && j_slot_valid)

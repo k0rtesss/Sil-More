@@ -1219,7 +1219,9 @@ void do_cmd_character_sheet(void)
             || (steamdeck && ch == steamdeck_confirm_key()))
         {
             sdl_hover_tooltip_clear();
-            sdl_character_sheet_screen_hide();
+            /* Leave the live sheet active until gain_skills() replaces it
+             * with the skills overlay.  Hiding it here can present an
+             * uncovered gameplay frame during the handoff. */
             if (focus_item >= 0 && focus_item < sheet_item_count
                 && sheet_items[focus_item].kind == CHARACTER_SHEET_ITEM_SKILL)
             {

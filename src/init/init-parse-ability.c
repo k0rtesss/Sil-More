@@ -84,6 +84,33 @@ errr parse_b_info(char* buf, header* head)
         b_ptr->level = level;
     }
 
+    /* Process 'Y' for a learned carriage-efficiency rule. */
+    else if (buf[0] == 'Y')
+    {
+        char target[24];
+        int percent;
+        char trailing;
+
+        if (!b_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+        if (2 != sscanf(buf + 2, "%23[^:]:%d%c", target, &percent,
+                &trailing))
+        {
+            return (PARSE_ERROR_GENERIC);
+        }
+        if (percent <= 0 || percent >= 100)
+            return (PARSE_ERROR_GENERIC);
+
+        if (streq(target, "THROWING"))
+            b_ptr->carriage_target = ABILITY_CARRIAGE_THROWING;
+        else if (streq(target, "ARROWS"))
+            b_ptr->carriage_target = ABILITY_CARRIAGE_ARROWS;
+        else
+            return (PARSE_ERROR_GENERIC);
+
+        b_ptr->carriage_reduction_percent = (byte)percent;
+    }
+
     /* Process 'P' for "Prerequisites" (one line only) */
     else if (buf[0] == 'P')
     {

@@ -541,216 +541,29 @@ static void describe_varda_choice(int a_idx, char* buf, size_t buf_len)
     }
 }
 
-/*
- * Display Varda's reward selection in a scrollable menu integrated with quest completion text.
- * Returns the selected artefact index, or 0 if cancelled.
- */
-static int prompt_varda_reward_choice_menu(const int* choices, int choice_count, cptr* completion_texts, int text_count)
+static void inspect_varda_reward(int a_idx)
 {
-    int wid, hgt;
-    Term_get_size(&wid, &hgt);
-    bool compact = (wid < 60) || (hgt < 20);
-    bool steamdeck = steamdeck_controls_active();
-    bool menu_letters = sdl_menu_letters_enabled();
+    desc_art_fake(a_idx);
+}
 
-    int selection = 0;
-    bool done = false;
-    int selected_artifact = 0;
+/* Display Varda's completion and every radiant gift in the same parchment
+ * book used by quest introductions.  Closing it leaves the reward pending. */
+static int prompt_varda_reward_choice_menu(const int* choices,
+    int choice_count, cptr* completion_texts, int text_count)
+{
+    cptr labels[3];
+    char descriptions[3][120];
 
-    if (compact && completion_texts && text_count > 0) {
-        quest_typewriter_menu("Starlight Triumph", completion_texts, text_count,
-            TERM_L_GREEN, TERM_WHITE);
+    for (int i = 0; i < choice_count; i++)
+    {
+        describe_varda_choice(choices[i], descriptions[i],
+            sizeof(descriptions[i]));
+        labels[i] = descriptions[i];
     }
 
-    /* Save screen once */
-    screen_save();
-
-    while (!done) {
-        /* Clear screen */
-        Term_clear();
-        ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
-
-        /* Display title */
-        int row = 1;
-        cptr title = "Starlight Triumph";
-        Term_putstr((wid - strlen(title)) / 2, row, -1, TERM_L_GREEN, title);
-        row += 2;
-
-        /* Display completion text */
-        if (!compact) {
-            int reserved_rows = choice_count + 5;
-
-            for (int i = 0; i < text_count && row < hgt - reserved_rows; i++) {
-                if (completion_texts[i] && completion_texts[i][0] != '\0') {
-                    display_wrapped_text(2, &row, completion_texts[i], TERM_WHITE, wid);
-                } else {
-                    row++; /* Empty line for paragraph break */
-                }
-            }
-        }
-
-        row++;
-        Term_putstr(2, row++, -1, TERM_L_BLUE, "Choose your radiant gift:");
-        row++;
-
-        /* Display reward choices with highlighting */
-        int choice_start_row = row;
-        char desc[120];
-        for (int i = 0; i < choice_count && row < hgt - 3; i++) {
-            describe_varda_choice(choices[i], desc, sizeof(desc));
-
-            byte attr = (i == selection) ? TERM_YELLOW : TERM_L_WHITE;
-            char marker = (i == selection) ? '>' : ' ';
-
-            char line_buf[140];
-            if (!menu_letters)
-                strnfmt(line_buf, sizeof(line_buf), "%c   %s", marker, desc);
-            else
-                strnfmt(line_buf, sizeof(line_buf), "%c %c) %s", marker,
-                    'a' + i, desc);
-            Term_putstr(2, row, -1, attr, line_buf);
-            ui_menu_click_add(i, 2, row, wid - 4);
-            row++;
-        }
-
-        /* Display controls */
-        row = hgt - 2;
-        if (steamdeck)
-        {
-            char inspect_label[16];
-            char confirm_label[16];
-            char prompt_buf[120];
-            char prompt_full[120];
-            char prompt_short[80];
-            const char* variants[2];
-
-            target_prompt_label(steamdeck_alt_action_key(), "X",
-                inspect_label, sizeof(inspect_label));
-            target_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
-                sizeof(confirm_label));
-            strnfmt(prompt_full, sizeof(prompt_full),
-                compact ? "D-pad move  %s inspect  %s choose"
-                        : "D-pad navigate   %s Inspect   %s accept",
-                inspect_label, confirm_label);
-            strnfmt(prompt_short, sizeof(prompt_short),
-                "%s inspect  %s choose", inspect_label, confirm_label);
-            variants[0] = prompt_full;
-            variants[1] = prompt_short;
-            terminal_prompt_pick_variant(prompt_buf, sizeof(prompt_buf),
-                wid - 2, false, variants, N_ELEMENTS(variants));
-            Term_putstr(2, row, -1, TERM_L_DARK, prompt_buf);
-            ui_menu_click_add_text_token(-2, 2, row, prompt_buf, "inspect");
-            ui_menu_click_add_text_token(-2, 2, row, prompt_buf, "Inspect");
-            ui_menu_click_add_text_token(-1, 2, row, prompt_buf, "choose");
-            ui_menu_click_add_text_token(-1, 2, row, prompt_buf, "accept");
-        }
-        else if (menu_letters)
-        {
-            char prompt_buf[120];
-            const char* variants[] = {
-                compact ? "Dir move  x inspect  Enter choose"
-                        : "Dir navigate  x inspect  Enter accept  Letter select",
-                "x inspect  Enter accept  Letter select",
-                "Enter accept  x inspect"
-            };
-
-            terminal_prompt_pick_variant(prompt_buf, sizeof(prompt_buf),
-                wid - 2, false, variants, N_ELEMENTS(variants));
-            Term_putstr(2, row, -1, TERM_L_DARK, prompt_buf);
-            ui_menu_click_add_text_token(-2, 2, row, prompt_buf, "inspect");
-            ui_menu_click_add_text_token(-2, 2, row, prompt_buf, "Inspect");
-            ui_menu_click_add_text_token(-1, 2, row, prompt_buf, "choose");
-            ui_menu_click_add_text_token(-1, 2, row, prompt_buf, "accept");
-        }
-        else
-        {
-            char prompt_buf[96];
-            const char* variants[] = {
-                compact ? "Dir move  Enter choose"
-                        : "Dir navigate  Enter accept",
-                "Enter accept"
-            };
-
-            terminal_prompt_pick_variant(prompt_buf, sizeof(prompt_buf),
-                wid - 2, false, variants, N_ELEMENTS(variants));
-            Term_putstr(2, row, -1, TERM_L_DARK, prompt_buf);
-            ui_menu_click_add_text_token(-1, 2, row, prompt_buf, "choose");
-            ui_menu_click_add_text_token(-1, 2, row, prompt_buf, "accept");
-        }
-
-        /* Position cursor at selection */
-        Term_gotoxy(2, MIN(choice_start_row + selection, hgt - 3));
-        Term_fresh();
-
-        /* Get input */
-        char key = inkey();
-
-        {
-            int clicked_choice = 0;
-            int click_action = UI_MENU_CLICK_PRIMARY;
-
-            if (ui_menu_click_take_action(&clicked_choice, &click_action))
-            {
-                ui_menu_click_clear();
-                if (clicked_choice >= 0 && clicked_choice < choice_count)
-                {
-                    if (click_action == UI_MENU_CLICK_SECONDARY)
-                    {
-                        selection = clicked_choice;
-                        key = 'x';
-                    }
-                    else if (click_action == UI_MENU_CLICK_HOVER
-                        || clicked_choice != selection)
-                    {
-                        selection = clicked_choice;
-                        continue;
-                    }
-                    else
-                        key = '\r';
-                }
-                else if (click_action == UI_MENU_CLICK_HOVER)
-                    continue;
-                else if (clicked_choice == -1)
-                    key = '\r';
-                else if (clicked_choice == -2)
-                    key = 'x';
-            }
-        }
-
-        /* Handle input */
-        if (key == '\r' || key == '\n' || key == ' ' || key == '6'
-            || (steamdeck && key == steamdeck_confirm_key())) {
-            /* Accept current selection */
-            selected_artifact = choices[selection];
-            done = true;
-        } else if ((menu_letters && (key == 'x' || key == 'X'))
-                   || key == '?'
-                   || (steamdeck && key == steamdeck_alt_action_key())) {
-            /* Inspect selection */
-            ui_menu_click_clear();
-            Term_clear();
-            desc_art_fake(choices[selection]);
-        } else if (key == '8' || key == 'k' || key == '-') {
-            /* Move up */
-            selection = (selection + choice_count - 1) % choice_count;
-        } else if (key == '2' || key == 'j' || key == '+') {
-            /* Move down */
-            selection = (selection + 1) % choice_count;
-        } else if (menu_letters && key >= 'a' && key < 'a' + choice_count) {
-            /* Letter selection */
-            selected_artifact = choices[key - 'a'];
-            done = true;
-        } else if (menu_letters && key >= 'A' && key < 'A' + choice_count) {
-            /* Capital letter selection */
-            selected_artifact = choices[key - 'A'];
-            done = true;
-        }
-    }
-
-    ui_menu_click_clear();
-    screen_load();
-    return selected_artifact;
+    return quest_reward_book_choice("Starlight Triumph", completion_texts,
+        text_count, "Choose your radiant gift:", choices, labels, NULL,
+        choice_count, 0, inspect_varda_reward);
 }
 
 static bool grant_varda_reward(cptr* completion_texts, int completion_count)
@@ -778,6 +591,7 @@ static bool grant_varda_reward(cptr* completion_texts, int completion_count)
 
     metarun_mark_quest_completed(METARUN_QUEST_VARDA);
     metarun_unlock_oath(OATH_LIGHT);
+    award_quest_completion_exp();
     do_cmd_note("Varda blessed me with a radiant artefact and the Oath of Light.", p_ptr->depth);
 
     return true;
@@ -831,6 +645,40 @@ bool varda_quest_bastion_level_active(void)
     if (p_ptr->varda_level != p_ptr->depth) return false;
 
     return varda_quest_duruin_present();
+}
+
+void varda_quest_note_duruin_ranged_attack(monster_type* m_ptr)
+{
+    if (!m_ptr || m_ptr->r_idx != R_IDX_DURUIN) return;
+    if (p_ptr->varda_quest != VARDA_QUEST_ACTIVE) return;
+    if (!p_ptr->varda_vault_placed) return;
+    if (p_ptr->varda_level != p_ptr->depth) return;
+
+    if (!(m_ptr->mflag & MFLAG_DURUIN_PROVOKED))
+    {
+        m_ptr->mflag |= MFLAG_DURUIN_PROVOKED;
+        log_trace("Varda quest: Duruin provoked by a ranged attack");
+    }
+}
+
+bool varda_quest_duruin_can_enter(
+    const monster_type* m_ptr, int y, int x)
+{
+    int feat;
+
+    if (!m_ptr || m_ptr->r_idx != R_IDX_DURUIN) return true;
+    if (p_ptr->varda_quest != VARDA_QUEST_ACTIVE) return true;
+    if (!p_ptr->varda_vault_placed) return true;
+    if (p_ptr->varda_level != p_ptr->depth) return true;
+    if (m_ptr->mflag & MFLAG_DURUIN_PROVOKED) return true;
+    if (!in_bounds(y, x)) return false;
+
+    /* The only exits from Duruin's inner enclosure are its two doors.  Keep
+     * him from moving across either threshold until a bow or thrown attack
+     * draws him out. */
+    feat = cave_feat[y][x];
+    return !cave_any_closed_door_bold(y, x)
+        && feat != FEAT_OPEN && feat != FEAT_BROKEN;
 }
 
 void varda_quest_notice_bastion_level_entry(void)

@@ -624,8 +624,13 @@ extern int slay_bonus(
 extern int prt_after_sharpness(const object_type* o_ptr, u32b* noticed_flag);
 extern void search(void);
 extern void do_cmd_pickup_from_pile(void);
+extern void do_cmd_pickup_to_harness(void);
 extern void py_pickup_aux(int o_idx);
+extern void py_pickup_aux_to_pack(int o_idx);
+extern void py_pickup_aux_to_harness(int o_idx);
 extern void py_pickup(void);
+extern void py_pickup_to_pack(void);
+extern void py_pickup_to_harness(void);
 extern bool prepare_brass_lamp_flask_replacement(
     const object_type* incoming, int* flasks_to_replace, int* flask_oil,
     bool* aborted);
@@ -727,6 +732,7 @@ extern bool throw_slot_enabled[INVEN_TOTAL];
 
 /* cmd3.c */
 extern void do_cmd_use_item_by_index(int item);
+extern bool do_cmd_move_item_to_storage(int item, byte target_storage);
 extern void do_cmd_use_item(void);
 extern void do_cmd_use_item_enhanced(void);
 extern void do_cmd_inven(void);
@@ -734,7 +740,9 @@ extern void do_cmd_inven_direct(void);
 extern void do_cmd_equip(void);
 extern void do_cmd_equip_direct(void);
 extern void do_cmd_wield(object_type* default_o_ptr, int default_item);
-extern void do_cmd_wield_to_slot(
+extern bool do_cmd_wield_to_slot(
+    object_type* default_o_ptr, int default_item, int forced_slot);
+extern bool do_cmd_wield_stack_to_slot(
     object_type* default_o_ptr, int default_item, int forced_slot);
 extern void do_cmd_wield_wrapper(void);
 extern void do_cmd_wield_enhanced(void);
@@ -761,6 +769,46 @@ extern bool do_cmd_delete_item_by_index(int item);
 extern void do_cmd_observe(void);
 extern void do_cmd_observe_enhanced(void);
 extern cptr item_use_action_name(const object_type* o_ptr, int item);
+
+#define FLOOR_CONTEXT_MAX_ACTIONS 8
+
+typedef enum floor_context_action_kind
+{
+    FLOOR_CONTEXT_ACTION_NONE = 0,
+    FLOOR_CONTEXT_ACTION_DETAILS,
+    FLOOR_CONTEXT_ACTION_USE,
+    FLOOR_CONTEXT_ACTION_READY_THROW,
+    FLOOR_CONTEXT_ACTION_PACK,
+    FLOOR_CONTEXT_ACTION_HARNESS,
+    FLOOR_CONTEXT_ACTION_SUPPLIES,
+    FLOOR_CONTEXT_ACTION_QUIVER,
+    FLOOR_CONTEXT_ACTION_JEWELRY,
+    FLOOR_CONTEXT_ACTION_PICKUP,
+    FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT,
+    FLOOR_CONTEXT_ACTION_ITEMS,
+    FLOOR_CONTEXT_ACTION_CLOSE
+} floor_context_action_kind;
+
+typedef struct floor_context_action
+{
+    floor_context_action_kind kind;
+    int key;
+    byte attr;
+    char label[32];
+    char token[40];
+} floor_context_action;
+
+extern int floor_context_collect_item_actions(int floor_item,
+    bool include_details, bool include_close, floor_context_action actions[],
+    int capacity);
+extern int floor_context_collect_square_actions(bool include_details,
+    floor_context_action actions[], int capacity);
+extern bool floor_context_perform_action(int floor_item,
+    floor_context_action_kind kind);
+extern bool floor_context_action_for_key(int floor_item, int key,
+    floor_context_action_kind* kind);
+extern void do_cmd_queue_floor_context_action(
+    floor_context_action_kind kind);
 extern bool do_cmd_context_square_action_popup(void);
 extern void do_cmd_context_floor_item_action(void);
 extern void do_cmd_suppress_context_square_popups(void);
@@ -917,6 +965,7 @@ extern void do_cmd_activate_staff(object_type* default_o_ptr, int default_item);
 extern void do_cmd_play_instrument(
     object_type* default_o_ptr, int default_item);
 extern void do_cmd_activate(void);
+extern void do_cmd_activate_by_index(int item);
 
 /* dungeon/ */
 extern bool can_be_pseudo_ided(const object_type* o_ptr);
@@ -1243,8 +1292,8 @@ extern byte object_attr_graphics_override(
 extern char object_char_graphics_override(
     const object_type* o_ptr, char base_char);
 extern char index_to_label(int i);
-extern s16b label_to_inven(int c);
-extern s16b label_to_equip(int c);
+extern int label_to_inven(int c);
+extern int label_to_equip(int c);
 extern s16b wield_slot(const object_type* o_ptr);
 extern cptr describe_empty_slot(int i);
 extern cptr mention_use(int i);
@@ -1295,6 +1344,10 @@ extern void object_wipe(object_type* o_ptr);
 extern void object_copy(object_type* o_ptr, const object_type* j_ptr);
 extern byte object_chest_trap_flags(const object_type* o_ptr);
 extern void object_prep(object_type* o_ptr, int k_idx);
+extern int object_effective_protection_sides(const object_type* o_ptr);
+extern int object_effective_volume(const object_type* o_ptr);
+extern int object_effective_volume_with_reduction(const object_type* o_ptr,
+    int extra_reduction_percent);
 extern void object_refresh_weight(object_type* o_ptr);
 extern void object_into_artefact(object_type* o_ptr, artefact_type* a_ptr);
 extern u32b object_kind_pval_flags1(const object_kind* k_ptr);
@@ -1453,7 +1506,23 @@ extern void floor_item_describe(int item);
 extern void floor_item_increase(int item, int num);
 extern void floor_item_optimize(int item);
 extern void check_pack_overflow(void);
+extern void player_carried_extra_reset_store(void);
+extern int player_carried_extra_entry_count(void);
+extern object_type* player_carried_extra_entry_at(int index);
+extern bool player_carried_extra_load(const object_type* o_ptr);
+extern bool player_carried_extra_handle_valid(int item);
+extern object_type* player_inventory_object(int item);
+extern int player_inventory_handle_for_object(const object_type* o_ptr);
+extern bool player_inventory_handle_valid(int item);
+extern bool player_inventory_handle_is_carried(int item);
+extern bool player_inventory_handle_is_equipped(int item);
+extern int player_pack_entry_count(void);
+extern int player_pack_entry_handle_at(int ordinal);
+extern object_type* player_pack_entry_at(int ordinal);
+extern char player_inventory_label(int item);
 extern bool inven_carry_okay(const object_type* o_ptr);
+extern bool inventory_type_slot_available(const object_type* o_ptr,
+    bool record_failure);
 extern bool inven_carry_okay_after_removing(
     const object_type* o_ptr, int remove_item, int remove_amt);
 extern bool inven_carry_limit_failed(void);
@@ -1462,21 +1531,9 @@ extern bool inven_carry_limit_failed(void);
 enum inventory_limit_group
 {
     INV_LIMIT_NONE = 0,
-    INV_LIMIT_ARROW,
-    INV_LIMIT_BOW,
-    INV_LIMIT_STAFF,
-    INV_LIMIT_HORN,
-    INV_LIMIT_DIGGING,
-    INV_LIMIT_BOOTS,
-    INV_LIMIT_GLOVES,
-    INV_LIMIT_HELM_CROWN,
-    INV_LIMIT_ROUND_SHIELD,
-    INV_LIMIT_OTHER_SHIELD,
-    INV_LIMIT_CLOAK,
-    INV_LIMIT_SOFT_ARMOUR,
-    INV_LIMIT_MAIL,
-    INV_LIMIT_MELEE_WEAPON,
-    INV_LIMIT_THROWABLE,
+    INV_LIMIT_PACK,
+    INV_LIMIT_HARNESS,
+    INV_LIMIT_JEWELRY,
     INV_LIMIT_SUPPLY_WEIGHT,
     INV_LIMIT_TORCHES,
     INV_LIMIT_BRASS_LAMPS,
@@ -1493,19 +1550,54 @@ extern bool inven_carry_limit_is_supply_weight(void);
 extern bool inven_carry_limit_can_replace(const object_type* o_ptr);
 extern enum inventory_limit_group inventory_limit_group_for_object(
     const object_type* o_ptr);
+extern bool object_can_choose_pack_or_harness(const object_type* o_ptr);
+extern bool object_can_store_directly_in_pack(const object_type* o_ptr);
 extern bool inventory_limit_info_for_object(const object_type* o_ptr,
     enum inventory_limit_group* group, int* limit, int* cost);
 extern int inventory_limit_usage_for_group(enum inventory_limit_group group);
 extern int inventory_limit_limit_for_group(enum inventory_limit_group group);
 extern int inventory_limit_space_for_object(const object_type* o_ptr);
+extern int inventory_limit_intrinsic_space_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_carriage_savings_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_carriage_savings_for_group(
+    enum inventory_limit_group group);
+extern cptr inventory_limit_carriage_ability_name_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_additional_space_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_removal_space_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_usage_after_replacing(const object_type* incoming,
+    const object_type* removed, int remove_quantity);
+extern int inventory_limit_max_carryable_quantity(const object_type* o_ptr);
 extern bool inventory_limit_object_matches_group(
     enum inventory_limit_group group, const object_type* o_ptr);
 extern cptr inventory_limit_group_name(enum inventory_limit_group group);
 extern int object_stack_limit(const object_type* o_ptr);
-extern s16b inven_carry(object_type* o_ptr, bool combine_ammo);
-extern s16b inven_takeoff(int item, int amt);
+extern bool object_is_quivered_arrow(const object_type* o_ptr);
+extern bool inventory_slot_is_quivered_arrow(int item);
+extern void player_quiver_reset_store(void);
+extern int player_quiver_store_entry_count(void);
+extern object_type* player_quiver_store_entry_at(int index);
+extern object_type* player_quiver_arrow_object(int handle);
+extern int player_quiver_absorb_arrow(object_type* o_ptr);
+extern void player_quiver_remove_arrows(int handle, int amount);
+extern int player_quiver_arrow_count(void);
+extern int player_quiver_total_weight(void);
+extern int player_quiver_arrow_space(void);
+extern int player_quiver_first_arrow_slot(void);
+extern int player_quiver_selected_arrow_slot(void);
+extern int player_quiver_selected_arrow_index(void);
+extern void player_quiver_restore_selected_arrow(int index);
+extern bool player_quiver_select_arrow(int handle);
+extern int player_quiver_arrow_slots(int* slots, int max);
+extern int inven_carry(object_type* o_ptr, bool combine_ammo);
+extern int inven_takeoff(int item, int amt);
 extern void inven_drop(int item, int amt);
-extern void inven_enforce_current_pack_limits(void);
+extern void inven_update_current_pack_limits(void);
+extern void inventory_limit_grandfather_current_overflow(void);
 extern void combine_pack(void);
 extern void reorder_pack(bool display_message);
 extern void steal_object_from_monster(int y, int x);
@@ -1741,6 +1833,8 @@ extern bool sdl_character_sheet_screen_page_turning(void);
 extern void sdl_character_sheet_screen_begin_page_turn(int dir);
 extern void sdl_character_sheet_screen_begin_page_turn_to(int page);
 extern bool sdl_character_sheet_screen_scroll_book(int direction);
+extern void sdl_character_sheet_screen_set_book_focus(int choice);
+extern int sdl_character_sheet_screen_book_action_page(int choice);
 extern void sdl_character_sheet_screen_set_select_size_hint(cptr longest_desc);
 extern void sdl_character_sheet_screen_add_select_description_candidate(
     cptr text);
@@ -1984,6 +2078,20 @@ extern int editing_buffer_put_str(
 extern cptr get_ext_color_name(byte ext_color);
 
 /* Player/status/upkeep modules */
+extern bool player_pack_action_start(player_pack_action_kind kind, int item,
+    int arg, bool flag, const object_type* o_ptr);
+extern bool player_pack_action_start_forced(player_pack_action_kind kind,
+    int item, int arg, bool flag, const object_type* o_ptr);
+extern bool player_pack_action_pending(void);
+extern int player_pack_action_turns_left(void);
+extern bool player_pack_action_completing(player_pack_action_kind kind);
+extern int player_pack_action_completion_arg(void);
+extern void player_pack_action_process(void);
+extern void player_pack_action_interrupt(void);
+extern void player_pack_action_cancel(void);
+extern void player_pack_action_reset(void);
+extern bool player_pack_item_action_blocked(const object_type* o_ptr);
+extern cptr player_pack_item_action_restriction_message(void);
 extern byte total_mdd(const object_type* o_ptr);
 extern byte strength_modified_ds(const object_type* o_ptr, int str_adjustment);
 extern byte total_mds(const object_type* o_ptr, int str_adjustment);
@@ -1998,8 +2106,13 @@ extern int polearm_bonus(const object_type* o_ptr);
 extern byte total_ads(const object_type* j_ptr);
 extern byte total_ads_for_weapon_mode(const object_type* j_ptr, int mode);
 extern int player_active_weapon_mode(void);
+extern void player_active_weapon_name(char* buf, size_t buflen);
 extern bool player_active_weapon_is_melee(void);
 extern bool player_active_weapon_is_ranged(void);
+extern bool player_active_weapon_stats_preview(int mode, int* attack,
+    int* dd, int* ds, bool* throwing);
+extern bool player_active_weapon_offhand_stats_preview(int* attack,
+    int* dd, int* ds);
 extern bool player_active_weapon_mode_is_ranged(int mode);
 extern int player_active_weapon_mode_for_quiver(int quiver);
 extern int player_last_ranged_weapon_mode(void);
@@ -2007,8 +2120,21 @@ extern int player_selected_ranged_quiver_number(void);
 extern int player_opposite_active_weapon_mode(void);
 extern int player_active_weapon_quiver_slot(void);
 extern int player_active_weapon_quiver_number(void);
+extern void player_active_weapon_sync_loaded_state(void);
+extern void player_active_weapon_assign_harness_color(object_type* o_ptr);
+extern void player_active_weapon_forget_harness_color(object_type* o_ptr);
+extern byte player_active_weapon_harness_color(const object_type* o_ptr);
+extern int player_active_weapon_kind(void);
+extern int player_active_throwing_weapon_slot(void);
+extern bool player_active_weapon_change_is_free(int old_kind, int new_kind);
+extern bool player_active_weapon_wield_change_is_free(
+    int slot, const object_type* incoming, bool combine);
+extern void player_active_weapon_free_change_commit(void);
+extern void player_active_weapon_begin_player_turn(void);
 extern bool player_set_active_weapon_mode(
     int mode, bool confirm, bool take_turn);
+extern bool player_ready_bow_with_arrow(int arrow_item);
+extern bool player_ready_throwing_weapon(object_type* o_ptr, int item);
 extern void do_cmd_toggle_active_weapon(void);
 extern void player_queue_active_weapon_mode(int mode);
 extern void player_queue_ranged_quiver_mode(int mode);
@@ -2017,14 +2143,17 @@ extern bool player_weapon_slot_combat_bonuses_active(
     int slot, const object_type* o_ptr);
 extern bool player_weapon_slot_combat_bonuses_active_for_mode(
     int mode, int slot, const object_type* o_ptr);
+extern bool player_equipment_slot_is_active(int slot);
+extern bool player_equipment_slot_counts_as_equipped(int slot);
+extern bool player_quiver_counts_as_equipped(void);
 extern bool player_shield_counts_for_active_weapon(const object_type* o_ptr);
-extern bool player_can_quick_throw_from_quiver(int slot);
-extern int player_quick_throw_quiver_slot(void);
+extern bool object_is_belt_weapon(const object_type* o_ptr);
+extern bool player_can_quick_throw_from_harness(int slot);
+extern int player_quick_throw_harness_slot(void);
 extern bool player_power_throw_weapon_eligible(const object_type* o_ptr);
 extern bool player_power_throw_ready(void);
 extern int player_power_throw_target_m_idx(void);
-extern bool player_can_power_throw_from_quiver(int slot);
-extern int player_power_throw_quiver_slot(void);
+extern bool player_can_power_throw_from_harness(int slot);
 extern bool player_can_throw_potions(void);
 extern bool player_has_throwable_potion(void);
 extern bool player_quick_throw_available(void);
@@ -2107,6 +2236,7 @@ extern bool similar_monsters(int m1y, int m1x, int m2y, int m2x);
 extern void scare_onlooking_friends(const monster_type* m_ptr, int amount);
 extern void create_chosen_artefact(byte name1, int y, int x, bool identify);
 extern int drop_loot(monster_type* m_ptr);
+extern void award_quest_completion_exp(void);
 extern void apply_quest_rewards(int quest_idx);
 extern bool check_quest_eligibility(int quest_idx, int depth);
 typedef enum hint_quest_page
@@ -2131,6 +2261,9 @@ extern void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byt
 extern void quest_typewriter_menu_pages(cptr title, cptr texts[],
     int total_texts, byte title_color, byte text_color,
     int target_page_count);
+extern int quest_reward_book_choice(cptr title, cptr texts[], int total_texts,
+    cptr prompt, const int values[], cptr labels[], const bool enabled[],
+    int choice_count, int initial_choice, void (*inspect)(int value));
 extern void tulkas_quest_interaction(void);
 extern void check_tulkas_quest_interaction(void);
 extern void check_tulkas_quest_completion(int r_idx);
@@ -2144,6 +2277,9 @@ extern void varda_quest_interaction(void);
 extern void check_varda_quest_interaction(void);
 extern void check_varda_quest_completion(int r_idx);
 extern bool varda_quest_bastion_level_active(void);
+extern void varda_quest_note_duruin_ranged_attack(monster_type* m_ptr);
+extern bool varda_quest_duruin_can_enter(
+    const monster_type* m_ptr, int y, int x);
 extern void varda_quest_notice_bastion_level_entry(void);
 extern bool varda_quest_confirm_leave_bastion(void);
 extern void varda_quest_fail_if_bastion_missed(void);
@@ -2330,8 +2466,12 @@ extern void sdl_song_menu_clear(void);
 extern void sdl_question_menu_begin(cptr title);
 extern void sdl_question_menu_set_anchor_grid(int y, int x);
 extern void sdl_question_menu_set_desc(cptr text);
+extern void sdl_question_menu_set_help(cptr text);
+extern bool sdl_question_menu_toggle_help(void);
 extern void sdl_question_menu_add_entry(int choice, cptr letter, cptr text,
     byte attr);
+extern void sdl_question_menu_add_object_entry(int choice, cptr letter,
+    cptr text, byte attr, const object_type* o_ptr);
 extern void sdl_question_menu_add_button(int choice, cptr text, byte attr);
 extern void sdl_question_menu_add_text(cptr text, byte attr);
 extern void sdl_question_menu_set_highlight(int choice);
@@ -2673,6 +2813,7 @@ extern int sdl_story_font_text_width(cptr text, int len);
 extern int sdl_overlay_log_wrap(const char* msg, int max_segs, int* out_off,
     int* out_len);
 extern int sdl_get_cell_width(void);
+extern int sdl_get_active_cell_width(void);
 extern int sdl_main_view_visible_col0(void);
 extern int sdl_main_view_visible_cols(void);
 extern bool sdl_left_panel_pane_map_coverage(int* start_col, int* cols,

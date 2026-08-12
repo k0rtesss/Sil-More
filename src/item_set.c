@@ -610,6 +610,8 @@ static bool item_set_is_complete(const item_set_type* set)
             const object_type* o_ptr = &inventory[i];
             if (!o_ptr->k_idx)
                 continue;
+            if (!player_equipment_slot_counts_as_equipped(i))
+                continue;
             if (o_ptr->name1 == art)
             {
                 found = true;

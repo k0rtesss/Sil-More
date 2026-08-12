@@ -54,6 +54,8 @@ void dungeon(void)
     p_ptr->command_arg = 0;
     p_ptr->command_dir = 0;
 
+    player_pack_action_reset();
+
     /* Cancel the target */
     target_set_monster(0);
 

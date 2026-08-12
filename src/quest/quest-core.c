@@ -258,6 +258,14 @@ u32b get_metarun_quest_flag(int quest_idx)
     return 0;
 }
 
+/* Award the fixed experience for completing a normal quest. */
+void award_quest_completion_exp(void)
+{
+    gain_exp(QUEST_COMPLETION_EXP);
+    msg_format("You gain %d experience for completing the quest.",
+        QUEST_COMPLETION_EXP);
+}
+
 /*
  * Apply quest rewards (stats, skills, abilities) based on quest.txt data
  */
@@ -375,6 +383,8 @@ void apply_quest_rewards(int quest_idx)
     /* Recalculate bonuses and redraw */
     p_ptr->update |= (PU_BONUS);
     p_ptr->redraw |= (PR_STATS);
+
+    award_quest_completion_exp();
 }
 
 /*

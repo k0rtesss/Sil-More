@@ -1120,8 +1120,8 @@ void sdl_narrative_banner_render(void)
     }
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    panel_alpha = sdl_narrative_banner_scaled_alpha(212);
-    border_alpha = sdl_narrative_banner_scaled_alpha(126);
+    panel_alpha = sdl_narrative_banner_scaled_alpha(236);
+    border_alpha = sdl_narrative_banner_scaled_alpha(160);
     if (panel_alpha > 0) {
         SDL_SetRenderDrawColor(g_state.renderer, 4, 5, 7, panel_alpha);
         SDL_RenderFillRect(g_state.renderer, &panel);
@@ -3603,7 +3603,7 @@ void sdl_touch_pane_default_label_for_panel_slot(int panel, int index, char* buf
             break;
         case 8:
             if (binding == 'F') {
-                SDL_strlcpy(buf, "Shoot 2", buflen);
+                SDL_strlcpy(buf, "Ranged", buflen);
                 return;
             }
             break;
@@ -3740,6 +3740,15 @@ void sdl_touch_pane_display_label_for_slot(int panel, int index, char* buf, size
             g_description_overlay.active && g_description_overlay.interactive,
             NULL, context_label, sizeof(context_label)))
     {
+        /* The fixed Confirm button already exposes floor pickup for Harness
+         * items.  Keep the separate Use control's normal label instead of
+         * showing a second Pick Up button for staffs and horns. */
+        if (binding == 'u'
+            && (streq(context_label, "Pick up")
+                || streq(context_label, "Pick Up")))
+        {
+            return;
+        }
         SDL_strlcpy(buf, context_label, buflen);
     }
 }

@@ -7,6 +7,8 @@
 #include "item_set.h"
 #include "player/player-upkeep-internal.h"
 
+static bool bonuses_preview_active = false;
+
 static bool heavy_armour_evasion_bonus_applies(const object_type* o_ptr)
 {
     return (o_ptr->tval == TV_MAIL)
@@ -60,7 +62,8 @@ void calc_bonuses(void)
     int armour_weight = 0;
 
     // Remove off-hand weapons if you cannot wield them
-    if (!p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON])
+    if (!bonuses_preview_active
+        && !p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON])
     {
         o_ptr = &inventory[INVEN_ARM];
 
@@ -201,7 +204,25 @@ void calc_bonuses(void)
             p_ptr->danger += 1;
     }
     p_ptr->total_weight += supplies_total_weight();
+    p_ptr->total_weight += player_quiver_total_weight();
     p_ptr->total_weight += player_lamp_oil_weight();
+    for (i = 0; i < player_quiver_store_entry_count(); i++)
+    {
+        o_ptr = player_quiver_store_entry_at(i);
+        object_flags(o_ptr, &f1, &f2, &f3);
+        if (f2 & TR2_DANGER)
+            p_ptr->danger += 1;
+    }
+    for (i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        o_ptr = player_carried_extra_entry_at(i);
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        p_ptr->total_weight += o_ptr->number * o_ptr->weight;
+        object_flags(o_ptr, &f1, &f2, &f3);
+        if (f2 & TR2_DANGER)
+            p_ptr->danger += 1;
+    }
 
     /*** Analyze equipment ***/
 
@@ -214,19 +235,24 @@ void calc_bonuses(void)
         if (!o_ptr->k_idx)
             continue;
 
+        /* Retired staff/horn slots are compatibility storage, not equipment. */
+        if (i == INVEN_STAFF || i == INVEN_HORN)
+            continue;
+
+        /* Inactive melee/bow/throwing sets remain in reserved save slots, but
+         * they are Harness storage and grant no equipped effects. */
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
+
         /* Extract the item flags */
         object_flags(o_ptr, &f1, &f2, &f3);
 
         bool is_quiver1 = (i == INVEN_QUIVER1);
-        bool is_quiver2 = (i == INVEN_QUIVER2);
+        bool is_belt = (i == INVEN_BELT);
         bool is_throwing_item = player_can_treat_as_throwing_flags(o_ptr, f3);
-        bool is_arrow = (o_ptr->tval == TV_ARROW);
-
-        bool throwing_quiver = is_quiver2 && is_throwing_item;
+        bool throwing_belt = is_belt && is_throwing_item;
 
         if (is_quiver1)
-            continue;
-        if (is_quiver2 && !is_throwing_item && !is_arrow)
             continue;
 
         bool combat_bonuses_active =
@@ -273,7 +299,8 @@ void calc_bonuses(void)
 
         if (f2 & (TR2_SEE_INVIS))
         {
-            (void)set_blind(0);
+            if (!bonuses_preview_active)
+                (void)set_blind(0);
             p_ptr->see_inv += 1;
         }
         if (f2 & (TR2_FREE_ACT))
@@ -379,7 +406,7 @@ void calc_bonuses(void)
         /* Hack -- do not apply "arrow" to-hit bonuses at all */
         if (i == INVEN_QUIVER1)
             continue;
-        if ((i == INVEN_QUIVER2) && !throwing_quiver)
+        if (is_belt && !throwing_belt)
             continue;
 
         if (!combat_bonuses_active)
@@ -462,6 +489,7 @@ void calc_bonuses(void)
         {
             object_type* o_ptr = &inventory[i];
             if (!o_ptr->k_idx) continue;
+            if (!player_equipment_slot_counts_as_equipped(i)) continue;
 
             u32b f1, f2, f3, f4;
             object_flags4(o_ptr, &f1, &f2, &f3, &f4);
@@ -469,7 +497,10 @@ void calc_bonuses(void)
             {
                 p_ptr->oaths_broken |= OATH_LIGHT_FLAG;
                 p_ptr->active_ability[S_SPC][SPC_OATH_LIGHT] = false;
-                apply_oath_breaking_curse(OATH_LIGHT);
+                /* A chooser preview may simulate equipping this object, but
+                 * must never mutate the metarun curse state. */
+                if (!bonuses_preview_active)
+                    apply_oath_breaking_curse(OATH_LIGHT);
                 break;
             }
         }
@@ -661,35 +692,58 @@ void calc_bonuses(void)
         p_ptr->resist_hallu += 100;
         p_ptr->resist_stun += 100;
         p_ptr->resist_confu += 100; // added confusion immunity
-        log_trace("ABILITY DEBUG: Mandos' Doom active - granting mental immunities (fear+100, hallu+100, stun+100, confu+100). Total resist_confu: %d", p_ptr->resist_confu);
+        if (!bonuses_preview_active)
+            log_trace("ABILITY DEBUG: Mandos' Doom active - granting mental immunities (fear+100, hallu+100, stun+100, confu+100). Total resist_confu: %d", p_ptr->resist_confu);
         // Clear timed effects each turn
         if (p_ptr->afraid) {
-            (void)set_afraid(0);
-            log_trace("ABILITY DEBUG: Mandos' Doom - cleared fear effect");
+            if (bonuses_preview_active)
+                p_ptr->afraid = 0;
+            else {
+                (void)set_afraid(0);
+                log_trace("ABILITY DEBUG: Mandos' Doom - cleared fear effect");
+            }
         }
         if (p_ptr->image) {
             p_ptr->image = 0;  // No set_image function found
             p_ptr->redraw |= (PR_MAP);  // Manually trigger redraw for hallucination
-            log_trace("ABILITY DEBUG: Mandos' Doom - cleared hallucination effect");
+            if (!bonuses_preview_active)
+                log_trace("ABILITY DEBUG: Mandos' Doom - cleared hallucination effect");
         }
         if (p_ptr->entranced) {
-            (void)set_entranced(0);
-            log_trace("ABILITY DEBUG: Mandos' Doom - cleared entrancement effect");
+            if (bonuses_preview_active)
+                p_ptr->entranced = 0;
+            else {
+                (void)set_entranced(0);
+                log_trace("ABILITY DEBUG: Mandos' Doom - cleared entrancement effect");
+            }
         }
         if (p_ptr->rage) {
-            (void)set_rage(0);
-            log_trace("ABILITY DEBUG: Mandos' Doom - cleared rage effect");
+            if (bonuses_preview_active)
+                p_ptr->rage = 0;
+            else {
+                (void)set_rage(0);
+                log_trace("ABILITY DEBUG: Mandos' Doom - cleared rage effect");
+            }
         }
         if (p_ptr->stun) {
-            (void)set_stun(0);
-            log_trace("ABILITY DEBUG: Mandos' Doom - cleared stun effect");
+            if (bonuses_preview_active)
+                p_ptr->stun = 0;
+            else {
+                (void)set_stun(0);
+                log_trace("ABILITY DEBUG: Mandos' Doom - cleared stun effect");
+            }
         }
         if (p_ptr->confused) {
-            (void)set_confused(0);
-            log_trace("ABILITY DEBUG: Mandos' Doom - cleared confusion effect");
+            if (bonuses_preview_active)
+                p_ptr->confused = 0;
+            else {
+                (void)set_confused(0);
+                log_trace("ABILITY DEBUG: Mandos' Doom - cleared confusion effect");
+            }
         }
     } else {
-        log_trace("ABILITY DEBUG: Mandos' Doom NOT active - have_ability[S_SPC][SPC_MANDOS] = %d", p_ptr->have_ability[S_SPC][SPC_MANDOS]);
+        if (!bonuses_preview_active)
+            log_trace("ABILITY DEBUG: Mandos' Doom NOT active - have_ability[S_SPC][SPC_MANDOS] = %d", p_ptr->have_ability[S_SPC][SPC_MANDOS]);
     }
 
     /* Big cave environmental penalties: reduce key resistances while inside. */
@@ -697,7 +751,8 @@ void calc_bonuses(void)
         big_cave_type_t cave_type = level_partition_big_cave_type_for_point(p_ptr->py, p_ptr->px);
         bool suppressed = (cave_info[p_ptr->py][p_ptr->px]
             & (CAVE_G_VAULT | CAVE_MORGOTH_TUNNEL)) != 0;
-        bool should_log = (cave_type != BIG_CAVE_NONE) || suppressed;
+        bool should_log = !bonuses_preview_active
+            && ((cave_type != BIG_CAVE_NONE) || suppressed);
 
         if (should_log)
         {
@@ -757,12 +812,14 @@ void calc_bonuses(void)
 
             if (stealth_bonus > 0) {
                 p_ptr->skill_misc_mod[S_STL] += stealth_bonus;
-                log_trace("ABILITY DEBUG: Nienna's Gift of Mercy active - granting +%d stealth (global: seen=%d, killed=%d, ratio=%.2f)",
-                         stealth_bonus, total_monsters_seen, total_monsters_killed,
-                         (float)(total_monsters_seen - total_monsters_killed) / total_monsters_seen);
+                if (!bonuses_preview_active)
+                    log_trace("ABILITY DEBUG: Nienna's Gift of Mercy active - granting +%d stealth (global: seen=%d, killed=%d, ratio=%.2f)",
+                             stealth_bonus, total_monsters_seen, total_monsters_killed,
+                             (float)(total_monsters_seen - total_monsters_killed) / total_monsters_seen);
             } else {
-                log_trace("ABILITY DEBUG: Nienna's Gift of Mercy active but no bonus (global: seen=%d, killed=%d)",
-                         total_monsters_seen, total_monsters_killed);
+                if (!bonuses_preview_active)
+                    log_trace("ABILITY DEBUG: Nienna's Gift of Mercy active but no bonus (global: seen=%d, killed=%d)",
+                             total_monsters_seen, total_monsters_killed);
             }
         }
     }
@@ -781,9 +838,18 @@ void calc_bonuses(void)
     /* Extract the "weight limit" (in tenth pounds) */
     i = weight_limit();
 
-    /* Apply "encumbrance" from weight */
-    if (j > i)
+    /* Weight and volume are alternate measures of the same encumbrance.
+     * Capacity can fall when an ability is disabled or an ability-granting
+     * item is removed; keep the possessions and slow the player until either
+     * carried pool is brought back within its current limit. */
+    if (j > i
+        || inventory_limit_usage_for_group(INV_LIMIT_PACK)
+            > inventory_limit_limit_for_group(INV_LIMIT_PACK)
+        || inventory_limit_usage_for_group(INV_LIMIT_HARNESS)
+            > inventory_limit_limit_for_group(INV_LIMIT_HARNESS))
+    {
         p_ptr->pspeed -= 1;
+    }
 
     /* Stealth slows the player down (unless they are passing) */
     if (p_ptr->stealth_mode)
@@ -1209,10 +1275,19 @@ void calc_bonuses(void)
     if (c_info[p_ptr->pcharacter].flags & RHF_MOR_CURSE) p_ptr->danger += 1;
 
     /* Hack -- handle "xtra" mode */
-    if (character_xtra)
+    if (character_xtra || bonuses_preview_active)
         return;
 
     // identify {special} items when the type has been seen before
     id_known_specials();
     reorder_pack(false);
+}
+
+void calc_bonuses_for_preview(void)
+{
+    bool old_preview = bonuses_preview_active;
+
+    bonuses_preview_active = true;
+    calc_bonuses();
+    bonuses_preview_active = old_preview;
 }

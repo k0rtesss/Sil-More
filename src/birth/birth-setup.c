@@ -209,6 +209,8 @@ void player_wipe(void)
     {
         object_wipe(&inventory[i]);
     }
+    player_carried_extra_reset_store();
+    player_quiver_reset_store();
 
     /* Start with no artefacts made yet */
     /* and clear the slots for in-game randarts */
@@ -432,7 +434,8 @@ static void give_start_items(const start_item *list)
         inven_slot = carry_slot;
 
         /* Auto-wield if slot empty */
-        if (slot >= INVEN_WIELD && inventory[slot].tval == 0)
+        if (inven_slot < INVEN_TOTAL && slot >= INVEN_WIELD
+            && inventory[slot].tval == 0)
         {
             o_ptr = &inventory[slot];
             object_copy(o_ptr, i_ptr);

@@ -7,8 +7,6 @@
 
 #define OBJECT_CHOICE_TEXT_LEN 96
 #define OBJECT_CHOICE_LABEL_LEN 8
-#define OBJECT_CHOICE_MAX_ENTRIES 320
-
 typedef struct object_choice_entry
 {
     int item;
@@ -19,8 +17,8 @@ typedef struct object_choice_entry
 } object_choice_entry;
 
 char index_to_label(int i);
-s16b label_to_inven(int c);
-s16b label_to_equip(int c);
+int label_to_inven(int c);
+int label_to_equip(int c);
 s16b wield_slot(const object_type* o_ptr);
 cptr describe_empty_slot(int i);
 cptr mention_use(int i);

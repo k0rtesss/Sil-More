@@ -137,8 +137,10 @@ static void song_reveal_carried_items(void)
         if (!o_ptr->k_idx)
             continue;
 
-        (void)player_try_identify_smithing_object(
-            o_ptr, i >= INVEN_WIELD, 0);
+        (void)player_try_identify_smithing_object(o_ptr,
+            i >= INVEN_WIELD
+                && player_equipment_slot_counts_as_equipped(i),
+            0);
     }
 }
 

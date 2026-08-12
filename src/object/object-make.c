@@ -758,6 +758,8 @@ void object_into_artefact(object_type* o_ptr, artefact_type* a_ptr)
     o_ptr->pd = a_ptr->pd;
     o_ptr->ps = a_ptr->ps;
     o_ptr->weight = a_ptr->weight;
+    o_ptr->storage = a_ptr->storage;
+    o_ptr->volume = a_ptr->volume;
 
     // add the abilities
     for (i = 0; i < a_ptr->abilities; i++)
@@ -1516,7 +1518,7 @@ void apply_magic(object_type* o_ptr, int lev, bool okay, bool good, bool great,
         if ((k_info[o_ptr->k_idx].flags3 & (TR3_THROWING))
             && !artefact_p(o_ptr))
         {
-            // often come in multiples, but limited to quiver stack size
+            // often come in multiples, but remain limited to their stack size
             if (one_in_(2))
             {
                 int stack_limit = object_stack_limit(o_ptr);

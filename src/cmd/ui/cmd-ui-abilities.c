@@ -1642,6 +1642,8 @@ int artifact_bane_bonus(monster_type* m_ptr)
         // Skip empty slots
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         // Check all abilities on this item
         for (j = 0; j < o_ptr->abilities; j++)
@@ -1694,6 +1696,8 @@ int artifact_spider_bane_bonus(void)
 
         // Skip empty slots
         if (!o_ptr->k_idx)
+            continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
         // Check all abilities on this item
@@ -2502,6 +2506,7 @@ typedef struct ability_browser_entry
 typedef struct ability_browser_desc_line
 {
     byte attr;
+    bool keep_with_next;
     char text[ABILITY_BROWSER_DESC_LINE_LEN];
 } ability_browser_desc_line;
 
@@ -2754,7 +2759,10 @@ static void ability_browser_init_layout(ability_browser_layout* layout,
         - sdl_touch_menu_button_reserved_rows();
     if (layout->prompt_row < layout->list_row)
         layout->prompt_row = layout->list_row;
-    layout->status_row = (layout->prompt_row > layout->list_row)
+    /* The portrait summary and selected ability row already contain the
+     * status footer's information.  Reclaim that duplicate row for the
+     * stacked information panel so it cannot look like description text. */
+    layout->status_row = (!portrait && layout->prompt_row > layout->list_row)
         ? layout->prompt_row - 1
         : layout->prompt_row;
     layout->list_rows = layout->status_row - layout->list_row;
@@ -2829,10 +2837,25 @@ static void ability_desc_add_line(ability_browser_desc_line lines[],
         return;
 
     lines[*line_count].attr = attr;
+    lines[*line_count].keep_with_next = false;
     ability_browser_fit_text(lines[*line_count].text,
         sizeof(lines[*line_count].text), text ? text : "",
         ABILITY_BROWSER_DESC_LINE_LEN - 1);
     (*line_count)++;
+}
+
+static void ability_desc_add_heading(ability_browser_desc_line lines[],
+    int* line_count, byte attr, cptr text)
+{
+    int heading_index;
+
+    if (!line_count)
+        return;
+
+    heading_index = *line_count;
+    ability_desc_add_line(lines, line_count, attr, text);
+    if (*line_count > heading_index)
+        lines[heading_index].keep_with_next = true;
 }
 
 static void ability_desc_add_blank(ability_browser_desc_line lines[],
@@ -3042,12 +3065,31 @@ static int ability_menu_skill_options(void)
     return ability_menu_show_special_skill() ? S_MAX : (S_MAX - 1);
 }
 
+static int ability_browser_skill_point_cost(int skill_level)
+{
+    return skill_level * 100;
+}
+
 static int ability_browser_next_skill_cost(int skilltype)
 {
     if (skilltype < 0 || skilltype >= S_MAX || skilltype == S_SPC)
         return 0;
 
-    return (p_ptr->skill_base[skilltype] + 1) * 100;
+    return ability_browser_skill_point_cost(p_ptr->skill_base[skilltype] + 1);
+}
+
+static int ability_browser_skill_training_cost(int current_base,
+    int required_base)
+{
+    int cost = 0;
+
+    for (int skill_level = current_base + 1;
+         skill_level <= required_base; skill_level++)
+    {
+        cost += ability_browser_skill_point_cost(skill_level);
+    }
+
+    return cost;
 }
 
 static void ability_browser_build_summary(int skilltype, char* summary,
@@ -3351,12 +3393,24 @@ static bool ability_inactive_reason(int skilltype, int abilitynum,
             {
                 reason = "Requires an equipped melee weapon.";
             }
-            else if (!player_power_throw_weapon_eligible(
-                         &inventory[INVEN_QUIVER1])
-                && !player_power_throw_weapon_eligible(
-                    &inventory[INVEN_QUIVER2]))
+            else
             {
-                reason = "Requires a spear or hand axe in a quiver.";
+                bool has_weapon = false;
+
+                for (int slot = 0; slot < INVEN_TOTAL; slot++)
+                {
+                    if (slot != INVEN_WIELD
+                        && inventory_limit_group_for_object(&inventory[slot])
+                            == INV_LIMIT_HARNESS
+                        && player_power_throw_weapon_eligible(
+                            &inventory[slot]))
+                    {
+                        has_weapon = true;
+                        break;
+                    }
+                }
+                if (!has_weapon)
+                    reason = "Requires an inactive Harness spear or hand axe.";
             }
             break;
         case MEL_TWO_WEAPON:
@@ -3904,7 +3958,7 @@ static void ability_browser_add_prerequisites(
         return;
 
     ability_desc_add_blank(lines, line_count);
-    ability_desc_add_line(lines, line_count, TERM_YELLOW, "Requirements");
+    ability_desc_add_heading(lines, line_count, TERM_YELLOW, "Requirements");
 
     strnfmt(buf, sizeof(buf), "Skill: %d %s base (%d now)",
         b_ptr->level, skill_names_full[skilltype],
@@ -3913,6 +3967,16 @@ static void ability_browser_add_prerequisites(
         (b_ptr->level <= p_ptr->skill_base[skilltype]) ? TERM_L_GREEN
                                                        : TERM_L_DARK,
         buf, width);
+
+    if (b_ptr->level > p_ptr->skill_base[skilltype])
+    {
+        int skill_xp = ability_browser_skill_training_cost(
+            p_ptr->skill_base[skilltype], b_ptr->level);
+
+        strnfmt(buf, sizeof(buf), "Skill XP: %d needed to reach level %d",
+            skill_xp, b_ptr->level);
+        ability_desc_add_wrapped(lines, line_count, TERM_L_DARK, buf, width);
+    }
 
     if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
     {
@@ -4179,10 +4243,18 @@ static int ability_browser_build_description(int skilltype,
         char* death_message = oath_death_message(oath_id);
 
         ability_desc_add_blank(lines, &line_count);
-        ability_desc_add_line(lines, &line_count, TERM_RED, "Broken oath");
         if (death_message && death_message[0])
+        {
+            ability_desc_add_heading(lines, &line_count, TERM_RED,
+                "Broken oath");
             ability_desc_add_wrapped(lines, &line_count, TERM_RED,
                 death_message, width);
+        }
+        else
+        {
+            ability_desc_add_line(lines, &line_count, TERM_RED,
+                "Broken oath");
+        }
     }
     else
     {
@@ -4198,7 +4270,8 @@ static int ability_browser_build_description(int skilltype,
         if (effect_text && effect_text[0])
         {
             ability_desc_add_blank(lines, &line_count);
-            ability_desc_add_line(lines, &line_count, TERM_YELLOW, "Effect");
+            ability_desc_add_heading(lines, &line_count, TERM_YELLOW,
+                "Effect");
             ability_desc_add_wrapped(lines, &line_count, TERM_L_WHITE,
                 effect_text, width);
         }
@@ -4209,7 +4282,8 @@ static int ability_browser_build_description(int skilltype,
         if (desc_text && desc_text[0])
         {
             ability_desc_add_blank(lines, &line_count);
-            ability_desc_add_line(lines, &line_count, TERM_YELLOW, "Lore");
+            ability_desc_add_heading(lines, &line_count, TERM_YELLOW,
+                "Lore");
             ability_desc_add_wrapped(lines, &line_count, TERM_SLATE,
                 desc_text, width);
         }
@@ -4445,16 +4519,26 @@ static void ability_browser_draw_description(
 {
     char label[64];
     int visible_rows = layout->desc_rows;
+    int content_rows = visible_rows;
     int header_row = layout->stacked ? layout->desc_header_row
                                      : layout->header_row;
+
+    /* In the stacked portrait layout, do not leave a section heading as the
+     * final visible line while its contents start below the viewport. */
+    if (layout->stacked && content_rows > 1
+        && desc_top + content_rows < line_count
+        && lines[desc_top + content_rows - 1].keep_with_next)
+    {
+        content_rows--;
+    }
 
     ability_browser_put_fitted(layout->desc_col, header_row,
         layout->desc_w, focused ? TERM_L_BLUE : TERM_SLATE, "Information");
 
-    if (line_count > visible_rows)
+    if (desc_top > 0 || line_count > content_rows)
     {
         strnfmt(label, sizeof(label), "[%d-%d/%d]", desc_top + 1,
-            MIN(desc_top + visible_rows, line_count), line_count);
+            MIN(desc_top + content_rows, line_count), line_count);
         ability_browser_put_fitted(
             layout->desc_col + MAX(0, layout->desc_w - (int)strlen(label)),
             header_row, (int)strlen(label), TERM_L_BLUE, label);
@@ -4466,7 +4550,7 @@ static void ability_browser_draw_description(
         int y = layout->desc_row + i;
 
         Term_erase(layout->desc_col, y, layout->desc_w);
-        if (idx >= line_count)
+        if (i >= content_rows || idx >= line_count)
             continue;
 
         ability_browser_draw_colored_text_line(layout->desc_col, y,
@@ -5932,11 +6016,30 @@ void do_cmd_ability_screen(void)
                 }
                 else
                 {
-                    strnfmt(status, sizeof(status),
+                    char status_full[180];
+                    char status_mid[180];
+                    char status_short[180];
+                    const char* variants[] = {
+                        status_full, status_mid, status_short
+                    };
+
+                    strnfmt(status_full, sizeof(status_full),
                         "%s: %s | next %s point costs %d XP",
                         entries[entry_cur].name, state,
                         skill_names_full[skilltype],
                         ability_browser_next_skill_cost(skilltype));
+                    strnfmt(status_mid, sizeof(status_mid),
+                        "%s: %s | next %s: %d XP",
+                        entries[entry_cur].name, state,
+                        skill_names_full[skilltype],
+                        ability_browser_next_skill_cost(skilltype));
+                    strnfmt(status_short, sizeof(status_short),
+                        "%s | %s +1: %d XP", state,
+                        skill_names_full[skilltype],
+                        ability_browser_next_skill_cost(skilltype));
+                    terminal_prompt_pick_variant(status, sizeof(status),
+                        layout.visible_w, true, variants,
+                        N_ELEMENTS(variants));
                 }
             }
             else
@@ -6190,5 +6293,5 @@ void do_cmd_ability_screen(void)
     screen_load();
 
     handle_stuff();
-    inven_enforce_current_pack_limits();
+    inven_update_current_pack_limits();
 }

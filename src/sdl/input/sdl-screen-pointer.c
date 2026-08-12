@@ -3217,7 +3217,7 @@ int sdl_left_panel_quiver_attack_mode_at_col(int col)
 {
     bool has_any_span = false;
 
-    if (col < 0)
+    if (col < 0 || !player_active_weapon_is_ranged())
         return SDL_POINTER_ATTACK_NONE;
 
     for (int i = 0; i < 2; i++) {
@@ -3233,10 +3233,9 @@ int sdl_left_panel_quiver_attack_mode_at_col(int col)
     }
 
     if (!has_any_span) {
-        if (inventory[INVEN_QUIVER1].k_idx && !inventory[INVEN_QUIVER2].k_idx)
+        if (player_active_throwing_weapon_slot() >= 0
+            || player_quiver_arrow_count() > 0)
             return SDL_POINTER_ATTACK_RANGED_1;
-        if (!inventory[INVEN_QUIVER1].k_idx && inventory[INVEN_QUIVER2].k_idx)
-            return SDL_POINTER_ATTACK_RANGED_2;
     }
 
     return SDL_POINTER_ATTACK_NONE;
@@ -3249,16 +3248,20 @@ static bool sdl_visible_character_panel_attack_row(int row)
     if (row < 0)
         return false;
 
-    melee_uses_two_rows = (ROW_MEL - 1) != ROW_LIGHT
-        && inventory[INVEN_ARM].k_idx
-        && inventory[INVEN_ARM].tval != TV_SHIELD;
+    if (player_active_weapon_is_melee())
+    {
+        melee_uses_two_rows = (ROW_MEL - 1) != ROW_LIGHT
+            && inventory[INVEN_ARM].k_idx
+            && inventory[INVEN_ARM].tval != TV_SHIELD;
+        return row == ROW_MEL
+            || (melee_uses_two_rows && row == ROW_MEL - 1);
+    }
 
-    if (row == ROW_MEL || (melee_uses_two_rows && row == ROW_MEL - 1))
-        return true;
-    if (row == ROW_ARC)
-        return true;
-    if (row == ROW_QUIVER)
-        return true;
+    if (player_active_weapon_is_ranged())
+        return row == ROW_ARC
+            || (row == ROW_QUIVER
+                && (player_active_throwing_weapon_slot() >= 0
+                    || player_quiver_arrow_count() > 0));
 
     return false;
 }
@@ -3272,16 +3275,21 @@ int sdl_visible_character_panel_attack_mode_at_cell(int col, int row)
     if (col >= LEFT_PANEL_CONTENT_WID)
         return SDL_POINTER_ATTACK_NONE;
 
-    melee_uses_two_rows = (ROW_MEL - 1) != ROW_LIGHT
-        && inventory[INVEN_ARM].k_idx
-        && inventory[INVEN_ARM].tval != TV_SHIELD;
-
-    if (row == ROW_MEL || (melee_uses_two_rows && row == ROW_MEL - 1))
-        return player_opposite_active_weapon_mode();
-    if (row == ROW_ARC)
-        return player_opposite_active_weapon_mode();
-    if (row == ROW_QUIVER)
-        return sdl_left_panel_quiver_attack_mode_at_col(col);
+    if (player_active_weapon_is_melee())
+    {
+        melee_uses_two_rows = (ROW_MEL - 1) != ROW_LIGHT
+            && inventory[INVEN_ARM].k_idx
+            && inventory[INVEN_ARM].tval != TV_SHIELD;
+        if (row == ROW_MEL || (melee_uses_two_rows && row == ROW_MEL - 1))
+            return player_opposite_active_weapon_mode();
+    }
+    else if (player_active_weapon_is_ranged())
+    {
+        if (row == ROW_ARC)
+            return player_opposite_active_weapon_mode();
+        if (row == ROW_QUIVER)
+            return sdl_left_panel_quiver_attack_mode_at_col(col);
+    }
 
     return SDL_POINTER_ATTACK_NONE;
 }
@@ -3293,13 +3301,19 @@ static int sdl_combat_overlay_attack_mode_at_cell(int col, int row)
     if (col < 0 || row < 0 || col >= PANE_COMBAT_OVERLAY_COLS)
         return SDL_POINTER_ATTACK_NONE;
 
-    melee_uses_two_rows = sdl_combat_overlay_melee_uses_offhand_row();
-    if (row == ROW_MEL || (melee_uses_two_rows && row == ROW_MEL - 1))
-        return player_opposite_active_weapon_mode();
-    if (row == ROW_ARC)
-        return player_opposite_active_weapon_mode();
-    if (row == ROW_QUIVER)
-        return sdl_left_panel_quiver_attack_mode_at_col(col);
+    if (player_active_weapon_is_melee())
+    {
+        melee_uses_two_rows = sdl_combat_overlay_melee_uses_offhand_row();
+        if (row == ROW_MEL || (melee_uses_two_rows && row == ROW_MEL - 1))
+            return player_opposite_active_weapon_mode();
+    }
+    else if (player_active_weapon_is_ranged())
+    {
+        if (row == ROW_ARC)
+            return player_opposite_active_weapon_mode();
+        if (row == ROW_QUIVER)
+            return sdl_left_panel_quiver_attack_mode_at_col(col);
+    }
 
     return SDL_POINTER_ATTACK_NONE;
 }
@@ -3417,22 +3431,27 @@ cptr sdl_character_panel_click_tooltip_text(int click_action)
 
 cptr sdl_character_panel_attack_tooltip_text(int attack_mode, bool quiver_only)
 {
+    static char text[640];
+    char active_weapon[256];
+
     if (quiver_only)
     {
-        if (attack_mode == SDL_POINTER_ATTACK_RANGED_2)
-            return "Click: select Quiver 2 for ranged attacks.";
         if (attack_mode == SDL_POINTER_ATTACK_RANGED_1)
-            return "Click: select Quiver 1 for ranged attacks.";
+            return "Click: select the quiver for ranged attacks.";
         return NULL;
     }
 
     switch (attack_mode)
     {
     case SDL_POINTER_ATTACK_MELEE:
-        return "Click: change to melee.";
     case SDL_POINTER_ATTACK_RANGED_1:
     case SDL_POINTER_ATTACK_RANGED_2:
-        return "Click: change to ranged.";
+        player_active_weapon_name(active_weapon, sizeof(active_weapon));
+        strnfmt(text, sizeof(text),
+            "Click: change active weapon.\n"
+            "Current active weapon: %s.",
+            active_weapon);
+        return text;
     default:
         return NULL;
     }
@@ -3624,6 +3643,12 @@ bool sdl_main_screen_handle_character_panel_hover_pointer(float x, float y)
         && !sdl_touch_zone_controls_active()
         && sdl_combat_overlay_point_to_cell(x, y, &col, &row))
     {
+        if (row == PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW) {
+            sdl_pointer_attack_set_panel_hover_mode(SDL_POINTER_ATTACK_NONE);
+            sdl_main_screen_touch_zone_selection_set(SDL_STATUS_CLICK_NONE,
+                -1, SDL_PANEL_CLICK_NONE, -1, active);
+            return true;
+        }
         attack_mode = sdl_combat_overlay_attack_mode_at_cell(col, row);
         attack_quiver = (row == ROW_QUIVER);
         combat_hit = true;
@@ -3722,6 +3747,12 @@ bool sdl_main_screen_handle_character_panel_pointer(float x, float y)
     if (sdl_touch_zone_controls_active())
         return false;
     if (sdl_combat_overlay_point_to_cell(x, y, &col, &row)) {
+        if (row == PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW) {
+            sdl_main_screen_touch_zone_selection_set(SDL_STATUS_CLICK_NONE,
+                -1, SDL_PANEL_CLICK_NONE, -1, false);
+            sdl_enqueue_bypassed_command('J');
+            return true;
+        }
         attack_mode = sdl_combat_overlay_attack_mode_at_cell(col, row);
         attack_quiver = (row == ROW_QUIVER);
         if (attack_mode != SDL_POINTER_ATTACK_NONE

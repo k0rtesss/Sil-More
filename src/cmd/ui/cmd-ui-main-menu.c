@@ -1652,6 +1652,11 @@ bool do_cmd_main_menu_execute_choice(int actiontype)
     int pending_hint_map_x = -1;
     bool executed;
 
+    /* Quick Access can execute a main-menu action without opening the SDL
+     * menu overlay first.  Context shortcut popups are map-only, so do not
+     * carry one into the screen opened by this action. */
+    sdl_question_menu_clear_context_hint();
+
     if (death_spectator_active() && main_menu_choice_is_disabled(actiontype))
     {
         msg_print("You can no longer take that action.");

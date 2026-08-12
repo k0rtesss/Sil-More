@@ -611,6 +611,111 @@ static void smith_ui_put_fitted(int col, int row, int width, byte attr, cptr tex
     smith_ui_draw_fitted(col, row, width, attr, text, true);
 }
 
+/*
+ * Draw an object's title without letting a long quantity/name run into its
+ * combat statistics.  The story font packs text by pixel width, while the
+ * terminal still lays out each field in columns.  Keeping the name and the
+ * suffix in separate spans gives the statistics their own protected region.
+ */
+static void smith_ui_put_object_title(int col, int row, int width, byte attr,
+    cptr description, cptr weight)
+{
+    char name[160];
+    char suffix[160];
+    char fitted_name[160];
+    char fitted_suffix[160];
+    char fitted_weight[64];
+    const char* suffix_start = NULL;
+    int name_len = 0;
+    int suffix_width;
+    int weight_width;
+    int name_width;
+    int name_gap = 1;
+    int suffix_weight_gap = 3;
+    int name_display_width;
+
+    if (!description)
+        description = "";
+    if (!weight)
+        weight = "";
+
+    /* Combat/protection/pval details begin after a space and one of these
+     * delimiters.  Keep the delimiter with the suffix, but draw that suffix
+     * immediately after the item name rather than at the far edge of the
+     * description line.
+     */
+    for (const char* p = description; *p; p++)
+    {
+        if ((p > description) && (p[-1] == ' ')
+            && strchr("([{<", *p))
+        {
+            suffix_start = p;
+            break;
+        }
+    }
+
+    if (!suffix_start)
+        suffix_start = description + strlen(description);
+
+    name_len = (int)(suffix_start - description);
+    if (suffix_start < description + strlen(description))
+        name_len--;
+    if (name_len >= (int)sizeof(name))
+        name_len = (int)sizeof(name) - 1;
+    SDL_memcpy(name, description, (size_t)name_len);
+    name[name_len] = '\0';
+
+    SDL_strlcpy(suffix, suffix_start, sizeof(suffix));
+
+    width = smith_ui_safe_width(col, width);
+    if (width <= 0)
+        return;
+
+    suffix_width = utf8_display_width_n(suffix, (int)strlen(suffix));
+    weight_width = utf8_display_width_n(weight, (int)strlen(weight));
+
+    if (suffix_width <= 0)
+        name_gap = 0;
+    if (weight_width <= 0)
+        suffix_weight_gap = 0;
+
+    /* Keep the stats and weight in the same inline sequence as the original
+     * object description.  Only the name is shortened when the fields
+     * compete for space, so the shield's combat/protection values remain
+     * visible. */
+    name_width = width - suffix_width - weight_width
+        - name_gap - suffix_weight_gap;
+    if (name_width < 1)
+    {
+        name_width = 1;
+        name_gap = 0;
+        suffix_weight_gap = 0;
+        suffix_width = MIN(suffix_width, MAX(0, width - name_width));
+        weight_width = MIN(weight_width,
+            MAX(0, width - name_width - suffix_width));
+    }
+
+    smith_ui_fit_text(fitted_name, sizeof(fitted_name), name, name_width);
+    smith_ui_fit_text(fitted_suffix, sizeof(fitted_suffix), suffix,
+        suffix_width);
+    smith_ui_fit_text(fitted_weight, sizeof(fitted_weight), weight,
+        weight_width);
+
+    name_display_width = utf8_display_width_n(fitted_name,
+        (int)strlen(fitted_name));
+    smith_ui_put_fitted(col, row, name_display_width, attr, fitted_name);
+    if (name_gap > 0)
+        Term_erase(col + name_display_width, row, name_gap);
+    if (suffix_width > 0)
+        smith_ui_put_fitted(col + name_display_width + name_gap, row,
+            suffix_width, attr,
+            fitted_suffix);
+    if (weight_width > 0)
+        smith_ui_put_fitted(col + name_display_width + name_gap
+                + suffix_width + suffix_weight_gap,
+            row, weight_width, attr, fitted_weight);
+}
+
 static void smith_ui_fill_row(int col, int row, int width, byte attr)
 {
     char fill[180];
@@ -2035,12 +2140,15 @@ void move_displayed_highlight(
 bool melt_metal_item(int item_num)
 {
     int number = 0;
-    int item, i;
     u32b f1, f2, f3;
+    int total = player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD);
 
-    for (item = 0; item < INVEN_TOTAL; item++)
+    for (int ordinal = 0; ordinal < total; ordinal++)
     {
-        object_type* o_ptr = &inventory[item];
+        int item = ordinal < player_pack_entry_count()
+            ? player_pack_entry_handle_at(ordinal)
+            : INVEN_WIELD + ordinal - player_pack_entry_count();
+        object_type* o_ptr = player_inventory_object(item);
 
         object_flags(o_ptr, &f1, &f2, &f3);
 
@@ -2052,35 +2160,6 @@ bool melt_metal_item(int item_num)
 
         if (number == item_num)
         {
-            int slots_needed = o_ptr->weight / 99;
-            int empty_slots = 0;
-
-            // Equipments needs an extra slot
-            if (item >= INVEN_WIELD)
-                slots_needed++;
-
-            // Count empty slots
-            for (i = INVEN_PACK - 1; i > 0; i--)
-            {
-                if (!(&inventory[i])->k_idx)
-                    empty_slots++;
-            }
-
-            if (empty_slots < slots_needed)
-            {
-                msg_print("You do not have enough room in your pack.");
-                if (slots_needed - empty_slots == 1)
-                {
-                    msg_print("You must free up another slot.");
-                }
-                else
-                {
-                    msg_format("You must free up %d more slots.",
-                        slots_needed - empty_slots);
-                }
-                return (false);
-            }
-
             {
                 char o_name[80];
                 char prompt[160];
@@ -2141,7 +2220,7 @@ bool melt_metal_item(int item_num)
 
                     // give it to the player
                     slot = inven_carry(i_ptr2, true);
-                    if ((slot >= 0) && (slot < INVEN_TOTAL))
+                    if (player_inventory_handle_is_carried(slot))
                     {
                         inven_item_optimize(slot);
                         inven_item_describe(slot);
@@ -2156,7 +2235,7 @@ bool melt_metal_item(int item_num)
 
                 // now give the last stack of mithril to the player
                 slot = inven_carry(i_ptr, true);
-                if ((slot >= 0) && (slot < INVEN_TOTAL))
+                if (player_inventory_handle_is_carried(slot))
                 {
                     inven_item_optimize(slot);
                     inven_item_describe(slot);
@@ -2179,12 +2258,15 @@ bool melt_metal_item(int item_num)
 static int meltable_metal_items_carried(void)
 {
     int number = 0;
-    int item;
     u32b f1, f2, f3;
+    int total = player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD);
 
-    for (item = 0; item < INVEN_TOTAL; item++)
+    for (int ordinal = 0; ordinal < total; ordinal++)
     {
-        object_type* o_ptr = &inventory[item];
+        int item = ordinal < player_pack_entry_count()
+            ? player_pack_entry_handle_at(ordinal)
+            : INVEN_WIELD + ordinal - player_pack_entry_count();
+        object_type* o_ptr = player_inventory_object(item);
 
         object_flags(o_ptr, &f1, &f2, &f3);
 
@@ -2204,9 +2286,9 @@ static int metal_carried(byte sval)
     int w = 0;
     int item;
 
-    for (item = 0; item < INVEN_WIELD; item++)
+    for (item = 0; item < player_pack_entry_count(); item++)
     {
-        object_type* o_ptr = &inventory[item];
+        object_type* o_ptr = player_pack_entry_at(item);
 
         if ((o_ptr->tval == TV_METAL) && (o_ptr->sval == sval))
         {
@@ -2229,20 +2311,32 @@ int star_iron_carried(void)
 
 static void use_metal(byte sval, int cost)
 {
-    int item;
-
-    for (item = INVEN_WIELD - 1; item >= 0 && cost > 0; item--)
+    while (cost > 0)
     {
-        object_type* o_ptr = &inventory[item];
+        int item = -1;
+        object_type* o_ptr = NULL;
 
-        if ((o_ptr->tval == TV_METAL) && (o_ptr->sval == sval))
+        for (int ordinal = player_pack_entry_count() - 1; ordinal >= 0;
+             ordinal--)
         {
-            int use = MIN(o_ptr->number, cost);
-            inven_item_increase(item, -use);
-            inven_item_describe(item);
-            inven_item_optimize(item);
-            cost -= use;
+            object_type* candidate = player_pack_entry_at(ordinal);
+
+            if (candidate->tval == TV_METAL && candidate->sval == sval)
+            {
+                item = player_pack_entry_handle_at(ordinal);
+                o_ptr = candidate;
+                break;
+            }
         }
+
+        if (!o_ptr)
+            break;
+
+        int use = MIN(o_ptr->number, cost);
+        inven_item_increase(item, -use);
+        inven_item_describe(item);
+        inven_item_optimize(item);
+        cost -= use;
     }
 }
 
@@ -3059,7 +3153,7 @@ int object_difficulty(object_type* o_ptr)
     case INVEN_HANDS:
     case INVEN_FEET:
     case INVEN_QUIVER1:
-    case INVEN_QUIVER2:
+    case INVEN_BELT:
     case INVEN_HORN:
     {
         dif_mult += 20;
@@ -3213,7 +3307,8 @@ void wipe_object_description(void)
  */
 void prt_object_description(void)
 {
-    char o_desc[80];
+    char o_desc[160];
+    char weight_desc[32];
     char buf[80];
     char base_desc_buf[2048];
     cptr base_desc;
@@ -3260,11 +3355,9 @@ void prt_object_description(void)
         display_flag = false;
 
     object_desc(o_desc, sizeof(o_desc), smith_o_ptr, display_flag, 2);
-
-    SDL_strlcat(o_desc,
-        format("   %d.%d lb", smith_o_ptr->weight * smith_o_ptr->number / 10,
-            (smith_o_ptr->weight * smith_o_ptr->number) % 10),
-        sizeof(o_desc));
+    strnfmt(weight_desc, sizeof(weight_desc), "%d.%d lb",
+        smith_o_ptr->weight * smith_o_ptr->number / 10,
+        (smith_o_ptr->weight * smith_o_ptr->number) % 10);
 
     base_desc = object_lore_select_base_text(smith_o_ptr, base_desc_buf,
         sizeof(base_desc_buf));
@@ -3312,7 +3405,8 @@ void prt_object_description(void)
             return;
     }
 
-    smith_ui_put_fitted(desc_col, desc_row, desc_width, TERM_L_WHITE, o_desc);
+    smith_ui_put_object_title(desc_col, desc_row, desc_width, TERM_L_WHITE,
+        o_desc, weight_desc);
     desc_row++;
     if (desc_row > smith_ui_content_bottom_row())
         return;
@@ -4236,15 +4330,17 @@ static void pay_smithing_cost_struct(const smithing_cost_type* cost)
 }
 
 // Determine default stack sizes for smithing-created items.
-// Normal: arrows 24/18/12, daggers & spears 3/2/1 (normal/enchanted/artefact).
-// This keeps arrows and throwable weapons in sensible stack counts.
+// Normal: arrows 24/18/12, hand axes and spears 3/2/1, daggers 5/3/1
+// (normal/enchanted/artefact).  This keeps arrows and throwable weapons in
+// sensible stack counts.
 static byte smith_default_stack_size(const object_type* o_ptr)
 {
     bool is_arrow = (o_ptr->tval == TV_ARROW);
     bool is_spear = (o_ptr->tval == TV_POLEARM) && (o_ptr->sval == SV_SPEAR);
+    bool is_hand_axe = (o_ptr->tval == TV_POLEARM) && (o_ptr->sval == SV_HAND_AXE);
     bool is_dagger = (o_ptr->tval == TV_SWORD) && (o_ptr->sval == SV_DAGGER);
 
-    if (!(is_arrow || is_spear || is_dagger))
+    if (!(is_arrow || is_spear || is_hand_axe || is_dagger))
     {
         return (o_ptr->number ? o_ptr->number : 1);
     }
@@ -4260,8 +4356,8 @@ static byte smith_default_stack_size(const object_type* o_ptr)
     }
 
     if (is_artifact) return 1;
-    if (is_enchanted) return 2;
-    return 3;
+    if (is_enchanted) return is_dagger ? 3 : 2;
+    return is_dagger ? 5 : 3;
 }
 
 /*
@@ -8909,6 +9005,11 @@ void do_cmd_smithing_screen(void)
             p_ptr->smithing_leftover = p_ptr->smithing;
         }
 
+        /* Restoring gameplay zoom after this saved-screen menu can recenter the
+         * panel.  Applying the forge's light also refreshes the view.  Neither
+         * UI transition should cancel the action that was just accepted. */
+        p_ptr->smithing_starting = true;
+
         /* Recalculate bonuses */
         p_ptr->update |= (PU_BONUS);
 
@@ -8947,6 +9048,15 @@ void do_cmd_smithing_screen(void)
     sdl_pop_terminal_menu_scale();
     screen_pop_supporting_panes_hidden();
     screen_load();
+
+    /* Process the restored panel and initial forge-light view while the startup
+     * guard is still active, even when no supporting pane requested a refresh. */
+    if (p_ptr->smithing_starting)
+        handle_stuff();
+
+    /* From this point onward, input, monsters, damage, and other disturbances
+     * interrupt smithing normally. */
+    p_ptr->smithing_starting = false;
 }
 
 /*
@@ -9028,8 +9138,19 @@ void create_smithing_item(void)
     // Get the slot of the forged item
     slot = inven_carry(smith_o_ptr, true);
 
+    /* Supply items are absorbed into the separate supplies store.  inven_carry
+     * wipes smith_o_ptr after that transfer, so the returned value is not a
+     * real inventory slot and must not be used to index inventory[]. */
+    if (slot == SUPPLIES_INDEX)
+    {
+        char label = supplies_label_char();
+        if (!label)
+            label = 'a';
+        msg_format("You add %s to your supplies (%c).", o_name, label);
+    }
+
     // Check if the item couldn't fit in inventory (e.g., group limit)
-    if (slot < 0)
+    else if (slot < 0)
     {
         // Drop it on the floor instead
         log_debug("Smithed item couldn't fit in inventory, dropping to floor");
@@ -9045,7 +9166,14 @@ void create_smithing_item(void)
     else
     {
         // Get the item itself
-        o_ptr = &inventory[slot];
+        o_ptr = player_inventory_object(slot);
+        if (!o_ptr || !o_ptr->k_idx)
+        {
+            log_warn("Smithing returned an invalid inventory handle: %d", slot);
+            object_wipe(smith_o_ptr);
+            smith_clear_alloy_state(&smith_alloy);
+            return;
+        }
 
         // Mark the item as smithed by the player (using unused1 field)
         o_ptr->unused1 = 1;  /* 1 = smithed by player, 0 = found item */
@@ -9054,7 +9182,7 @@ void create_smithing_item(void)
         object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
         // Message
-        msg_format("You have %s (%c).", o_name, index_to_label(slot));
+        msg_format("You have %s (%c).", o_name, player_inventory_label(slot));
         log_info("Created smithing item: %s", o_name);
     }
 

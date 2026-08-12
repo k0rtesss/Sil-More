@@ -76,26 +76,6 @@ int elem_bonus(int effect)
     return (0);
 }
 
-/*
- * Calculate effective protection sides accounting for depth-scaling
- */
-static int effective_ps(const object_type* o_ptr)
-{
-    int ps = o_ptr->ps;
-    if (ps <= 0) return ps;
-
-    u32b f1, f2, f3, f4;
-    object_flags4(o_ptr, &f1, &f2, &f3, &f4);
-
-    if (f4 & TR4_DEPTH_SCALE_PS)
-    {
-        int depth = p_ptr->depth;
-        if (depth < 0) depth = 0;
-        ps += depth / 5;
-    }
-    return ps;
-}
-
 static u32b protection_flag_for_attack_type(int typ)
 {
     switch (typ)
@@ -177,7 +157,7 @@ int protection_roll(int typ, bool melee)
                 }
                 if (o_ptr->pd > 0)
                 {
-                    int sides = effective_ps(o_ptr);
+                    int sides = object_effective_protection_sides(o_ptr);
                     if (side_shift && sides > 0) {
                         sides -= side_shift;
                         if (sides < 1) sides = 1;
@@ -191,7 +171,7 @@ int protection_roll(int typ, bool melee)
         {
             if (o_ptr->ps > 0)
             {
-                int sides = effective_ps(o_ptr);
+                int sides = object_effective_protection_sides(o_ptr);
                 if (side_shift && sides > 0) {
                     sides -= side_shift;
                     if (sides < 1) sides = 1;
@@ -328,7 +308,7 @@ int p_max(int typ, bool melee)
                 }
                 if (o_ptr->pd > 0)
                 {
-                    int sides = effective_ps(o_ptr);
+                    int sides = object_effective_protection_sides(o_ptr);
                     if (side_shift && sides > 0) {
                         sides -= side_shift;
                         if (sides < 1) sides = 1;
@@ -342,7 +322,7 @@ int p_max(int typ, bool melee)
         {
             if (o_ptr->ps > 0)
             {
-                int sides = effective_ps(o_ptr);
+                int sides = object_effective_protection_sides(o_ptr);
                 if (side_shift && sides > 0) {
                     sides -= side_shift;
                     if (sides < 1) sides = 1;
@@ -470,8 +450,8 @@ void do_betrayal_ring_amulet(void)
         if (item == -1)
             return;
 
-        if (item >= 0)
-            o_ptr = &inventory[item];
+        if (player_inventory_handle_valid(item))
+            o_ptr = player_inventory_object(item);
         else
             o_ptr = &o_list[0 - item];
 
@@ -542,7 +522,7 @@ void do_betrayal_ring_amulet(void)
         }
 
         handle_stuff();
-        inven_enforce_current_pack_limits();
+        inven_update_current_pack_limits();
     }
 }
 
@@ -599,6 +579,10 @@ bool make_attack_normal(monster_type* m_ptr)
     /* Not allowed to attack */
     if (r_ptr->flags1 & (RF1_NEVER_BLOW))
         return (false);
+
+    /* Starting any real melee attack, including one that misses, interrupts
+     * a pending Pack action. */
+    player_pack_action_interrupt();
 
     monster_set_visual_facing_target_immediate(m_ptr, p_ptr->py, p_ptr->px);
 
@@ -1727,8 +1711,8 @@ bool make_attack_normal(monster_type* m_ptr)
                             break;
 
                         /* Get the original object */
-                        if (item >= 0)
-                            o_ptr = &inventory[item];
+                        if (player_inventory_handle_valid(item))
+                            o_ptr = player_inventory_object(item);
                         else
                             o_ptr = &o_list[0 - item];
                     }
@@ -1767,7 +1751,7 @@ bool make_attack_normal(monster_type* m_ptr)
                     }
 
                     handle_stuff();
-                    inven_enforce_current_pack_limits();
+                    inven_update_current_pack_limits();
                 }
 
                 break;

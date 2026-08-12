@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "supplies.h"
 #include "ui/question.h"
 
 static term g_left_panel_source_term;
@@ -2185,35 +2186,42 @@ bool sdl_combat_overlay_pane_presentation_active(void)
 
 bool sdl_combat_overlay_melee_uses_offhand_row(void)
 {
-    return inventory
+    return p_ptr && inventory
+        && player_active_weapon_is_melee()
         && (ROW_MEL - 1) != ROW_LIGHT
+        && inventory[INVEN_WIELD].k_idx
+        && p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]
         && inventory[INVEN_ARM].k_idx
         && inventory[INVEN_ARM].tval != TV_SHIELD;
 }
 
 int sdl_combat_overlay_source_row_count(void)
 {
-    return sdl_combat_overlay_melee_uses_offhand_row() ? 4 : 3;
+    return PANE_COMBAT_OVERLAY_ROWS
+        + (jewelry_preset_count() > 0 ? 1 : 0);
 }
 
 bool sdl_combat_overlay_source_row_at_index(int index, int* out_row)
 {
-    int rows[4];
-    int count = 0;
+    int rows[PANE_COMBAT_OVERLAY_MAX_ROWS];
+    int count = sdl_combat_overlay_source_row_count();
 
     if (out_row)
         *out_row = -1;
-    if (index < 0)
+    if (index < 0 || index >= count)
         return false;
 
-    if (sdl_combat_overlay_melee_uses_offhand_row())
-        rows[count++] = ROW_MEL - 1;
-    rows[count++] = ROW_MEL;
-    rows[count++] = ROW_ARC;
-    rows[count++] = ROW_QUIVER;
+    if (player_active_weapon_is_melee()) {
+        bool has_offhand = sdl_combat_overlay_melee_uses_offhand_row();
 
-    if (index >= count)
-        return false;
+        rows[0] = has_offhand ? ROW_MEL - 1 : ROW_MEL;
+        rows[1] = has_offhand ? ROW_MEL : ROW_ARC;
+    } else {
+        rows[0] = ROW_ARC;
+        rows[1] = ROW_QUIVER;
+    }
+    if (count > PANE_COMBAT_OVERLAY_ROWS)
+        rows[2] = PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW;
 
     if (out_row)
         *out_row = rows[index];
@@ -2232,26 +2240,14 @@ int sdl_combat_overlay_visible_row_count(int panel_rows)
 bool sdl_combat_overlay_visible_source_row_at_index(int index,
     int panel_rows, int* out_row)
 {
-    int source_count = sdl_combat_overlay_source_row_count();
     int visible_count = sdl_combat_overlay_visible_row_count(panel_rows);
-    int source_index = index;
 
     if (out_row)
         *out_row = -1;
     if (index < 0 || index >= visible_count)
         return false;
 
-    /*
-     * If the overlay is clipped to three rows, keep the primary combat rows
-     * visible and drop the optional offhand row first.
-     */
-    if (panel_rows < source_count
-        && sdl_combat_overlay_melee_uses_offhand_row())
-    {
-        source_index++;
-    }
-
-    return sdl_combat_overlay_source_row_at_index(source_index, out_row);
+    return sdl_combat_overlay_source_row_at_index(index, out_row);
 }
 
 bool sdl_combat_overlay_source_row_visible(int source_row)
@@ -4147,6 +4143,8 @@ int sdl_build_active_pane_config(struct pane_config* active, bool include_side,
                 continue;
         }
 
+        if (is_combat_pane)
+            effective.rect.rows = sdl_combat_overlay_source_row_count();
         active[active_count] = effective;
         if (is_touch_pane && proto_touch) {
             active[active_count].enabled = true;

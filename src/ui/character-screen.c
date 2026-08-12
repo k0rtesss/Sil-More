@@ -828,6 +828,8 @@ static void display_player_equippy(int y, int x)
         /* Skip empty objects */
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         /* Get attr/char for display */
         a = object_attr(o_ptr);
@@ -929,6 +931,9 @@ static void display_player_flag_info(void)
 
                 /* Object */
                 o_ptr = &inventory[i];
+
+                if (!player_equipment_slot_counts_as_equipped(i))
+                    continue;
 
                 /* Known flags */
                 object_flags_known(o_ptr, &f[1], &f[2], &f[3]);
@@ -2422,6 +2427,9 @@ static void display_player_sust_info(void)
     {
         /* Get the object */
         o_ptr = &inventory[i];
+
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         /* Get the "known" flags */
         object_flags_known(o_ptr, &f1, &f2, &f3);

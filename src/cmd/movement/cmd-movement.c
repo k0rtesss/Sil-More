@@ -898,10 +898,8 @@ void do_cmd_hold(void)
     search();
 }
 
-/*
- * Get items
- */
-void do_cmd_pickup(void)
+static void do_cmd_pickup_with_preference(
+    object_storage_type preferred_storage)
 {
     s16b chest_o_idx;
 
@@ -924,7 +922,12 @@ void do_cmd_pickup(void)
     if (cave_o_idx[p_ptr->py][p_ptr->px])
     {
         /* Handle "objects" */
-        py_pickup();
+        if (preferred_storage == OBJECT_STORAGE_PACK)
+            py_pickup_to_pack();
+        else if (preferred_storage == OBJECT_STORAGE_HARNESS)
+            py_pickup_to_harness();
+        else
+            py_pickup();
     }
 
     else
@@ -933,15 +936,41 @@ void do_cmd_pickup(void)
     }
 }
 
+/* Get items, preferring the Pack when an item can be stored in either pool. */
+void do_cmd_pickup(void)
+{
+    do_cmd_pickup_with_preference(OBJECT_STORAGE_PACK);
+}
+
+/* Get items, preferring the Harness when an item can be stored in either pool. */
+void do_cmd_pickup_to_harness(void)
+{
+    do_cmd_pickup_with_preference(OBJECT_STORAGE_HARNESS);
+}
+
 /*
  * Rest (restores hit points and mana and such)
  */
 void do_cmd_rest(void)
 {
+    object_type* light = &inventory[INVEN_LITE];
+
     /* Prompt for time if needed */
     if (p_ptr->command_arg == 0)
     {
         p_ptr->command_arg = (-2);
+    }
+
+    /* Offer to save fuel from an equipped torch or lamp while resting. */
+    p_ptr->resting_light_off = false;
+    if (fuelable_light_p(light) && player_light_has_fuel(light)
+        && !((light->sval == SV_LIGHT_LANTERN)
+            && (object_ego_prefix(light) == EGO_BROKEN_BRASS_LANTERN)))
+    {
+        cptr light_name = (light->sval == SV_LIGHT_LANTERN) ? "lamp" : "torch";
+
+        p_ptr->resting_light_off = get_check(format(
+            "Turn off your %s while resting to save fuel? ", light_name));
     }
 
     // typically resting ends your current song
@@ -959,6 +988,10 @@ void do_cmd_rest(void)
 
     /* Save the rest code */
     p_ptr->resting = p_ptr->command_arg;
+
+    /* Apply the light change before the first resting turn is displayed. */
+    if (p_ptr->resting_light_off)
+        calc_torch();
 
     /* Cancel the arg */
     p_ptr->command_arg = 0;

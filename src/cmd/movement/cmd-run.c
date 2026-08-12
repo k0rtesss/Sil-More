@@ -63,10 +63,11 @@ static object_type* forge_sabotage_mattock(int* out_score)
     object_type* best = NULL;
     int best_score = 0;
 
-    for (int i = -1; i < INVEN_PACK; i++)
+    for (int ordinal = -1; ordinal < player_pack_entry_count(); ordinal++)
     {
         object_type* o_ptr
-            = (i < 0) ? &inventory[INVEN_WIELD] : &inventory[i];
+            = (ordinal < 0) ? &inventory[INVEN_WIELD]
+                            : player_pack_entry_at(ordinal);
         u32b f1, f2, f3;
 
         if (!o_ptr->k_idx || (o_ptr->tval != TV_DIGGING)
@@ -753,6 +754,19 @@ static int see_wall(int dir, int y, int x)
 }
 
 /*
+ * Running treats an unknown grid like open floor.  A two-grid probe can
+ * therefore confirm a tight corner only when the wall is both known and
+ * actually a wall.
+ */
+static bool run_known_wall_at(int y, int x)
+{
+    if (!in_bounds(y, x))
+        return false;
+
+    return (cave_info[y][x] & CAVE_MARK) && cave_wall_bold(y, x);
+}
+
+/*
  * Hack -- Check for an "unknown corner" (see below)
  */
 // static int see_nothing(int dir, int y, int x)
@@ -1344,10 +1358,14 @@ static bool run_test(void)
         /* Two options, examining corners */
         else
         {
-            /* Primary option */
-            p_ptr->run_cur_dir = option;
+            bool cut_corner = !(prev_dir & 0x01) && !(option & 0x01)
+                && (option2 & 0x01)
+                && run_known_wall_at(py + 2 * ddy[option],
+                    px + 2 * ddx[option])
+                && run_known_wall_at(py + 2 * ddy[option2],
+                    px + 2 * ddx[option2]);
 
-            /* Stop in the doorway of a room */
+            /* Stop in the doorway of a room. */
             row = py + 2 * ddy[option];
             col = px + 2 * ddx[option];
             if ((cave_info[row][col] & CAVE_MARK) && !cave_wall_bold(row, col))
@@ -1355,8 +1373,19 @@ static bool run_test(void)
                 return (true);
             }
 
-            /* Hack -- allow curving */
-            p_ptr->run_old_dir = option2;
+            if (cut_corner)
+            {
+                /* Enter the diagonal leg directly, skipping the corner. */
+                p_ptr->run_cur_dir = option2;
+                p_ptr->run_old_dir = option2;
+            }
+            else
+            {
+                /* Continue through the corner and remember the diagonal
+                 * approach so the next scan can follow the new leg. */
+                p_ptr->run_cur_dir = option;
+                p_ptr->run_old_dir = option2;
+            }
         }
     }
 

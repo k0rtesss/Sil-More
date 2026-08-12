@@ -735,6 +735,8 @@ errr rd_randarts(void)
 
             a_ptr->tval = 0;
             a_ptr->sval = 0;
+            a_ptr->storage = OBJECT_STORAGE_NONE;
+            a_ptr->volume = 0;
             a_ptr->name[0] = '\0';
             memset(a_ptr->stat_bonus, 0, sizeof(a_ptr->stat_bonus));
             memset(a_ptr->skill_bonus, 0, sizeof(a_ptr->skill_bonus));
@@ -811,6 +813,23 @@ errr rd_randarts(void)
             else
             {
                 artefact_derive_stat_skill_bonuses_from_pval(a_ptr);
+            }
+
+            /*
+             * Randarts retain a base kind, so restore their runtime storage
+             * metadata from that kind.  This deliberately avoids extending
+             * the saved randart record and remains compatible with old saves.
+             */
+            s16b k_idx = lookup_kind(a_ptr->tval, a_ptr->sval);
+            if (k_idx > 0)
+            {
+                a_ptr->storage = k_info[k_idx].storage;
+                a_ptr->volume = k_info[k_idx].volume;
+            }
+            else
+            {
+                a_ptr->storage = OBJECT_STORAGE_NONE;
+                a_ptr->volume = 0;
             }
         }
     }

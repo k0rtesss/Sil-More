@@ -1012,7 +1012,7 @@ enum {
     SDL_QUESTION_MENU_MAX_ENTRIES = 320,
     SDL_QUESTION_MENU_MAX_BUTTONS = 4,
     SDL_QUESTION_MENU_LETTER_LEN = 4,
-    SDL_QUESTION_MENU_TEXT_LEN = 96,
+    SDL_QUESTION_MENU_TEXT_LEN = 256,
     SDL_QUESTION_MENU_TITLE_LEN = 80,
     SDL_QUESTION_MENU_DESC_LEN = 480
 };
@@ -1020,6 +1020,9 @@ enum {
 typedef struct sdl_question_menu_entry_state {
     int choice;
     byte text_attr;
+    byte icon_attr;
+    char icon_char;
+    bool has_icon;
     char letter[SDL_QUESTION_MENU_LETTER_LEN];
     char text[SDL_QUESTION_MENU_TEXT_LEN];
 } sdl_question_menu_entry_state;
@@ -1039,6 +1042,9 @@ typedef struct sdl_question_menu_state {
     bool blocking_input;
     bool nonblocking;
     bool context_hint;
+    bool help_mode;
+    bool help_open;
+    bool help_button_hover;
     bool close_hover;
     bool suppress_hover;
     bool scroll_follow_highlight;
@@ -1050,6 +1056,7 @@ typedef struct sdl_question_menu_state {
     int button_count;
     int highlight; /* choice highlighted by keyboard navigation, -1 none */
     int* scroll_offset_ptr;
+    int help_scroll_offset;
     char title[SDL_QUESTION_MENU_TITLE_LEN];
     char desc[SDL_QUESTION_MENU_DESC_LEN];
     sdl_question_menu_entry_state entries[SDL_QUESTION_MENU_MAX_ENTRIES];
@@ -2131,6 +2138,8 @@ void sdl_character_sheet_screen_highlight_book_paragraph(void);
 void sdl_character_sheet_screen_commit_book(void);
 void sdl_character_sheet_screen_set_book_target_page_count(int page_count);
 int sdl_character_sheet_screen_book_contents_page(int contents_index);
+void sdl_character_sheet_screen_set_book_focus(int choice);
+int sdl_character_sheet_screen_book_action_page(int choice);
 void sdl_character_sheet_screen_add_select_row(int choice, cptr label, int attr, cptr desc);
 void sdl_character_sheet_screen_set_last_select_row_reset(int reset_choice);
 void sdl_character_sheet_screen_set_last_select_row_confirmable(bool confirmable);
@@ -2545,8 +2554,8 @@ bool sdl_player_map_rect(int y, int x, SDL_FRect* out_rect);
 bool sdl_point_in_frect(const SDL_FRect* rect, float x, float y);
 void sdl_player_confirm_at_player(void);
 bool sdl_main_view_point_is_player_grid(float x, float y);
-bool sdl_player_has_equipped_staff(void);
-bool sdl_player_has_equipped_horn(void);
+bool sdl_player_has_harness_staff(void);
+bool sdl_player_has_harness_horn(void);
 bool sdl_player_has_singable_song(void);
 void sdl_player_action_menu_add_entry(player_action_menu_entry* entries, int* count, int kind, int command, cptr label);
 cptr sdl_player_action_menu_fallback_for_kind(int kind);
@@ -3262,6 +3271,7 @@ void sdl_story_font_set_slot(int slot);
 void sdl_story_font_reset(void);
 int sdl_story_font_text_width(cptr text, int len);
 int sdl_get_cell_width(void);
+int sdl_get_active_cell_width(void);
 int sdl_main_view_visible_col0(void);
 int sdl_main_view_visible_cols(void);
 void sdl_quit_hook(cptr str);
@@ -3733,6 +3743,7 @@ bool sdl_song_menu_handle_hover_pointer(float x, float y);
 void sdl_question_menu_render(void);
 bool sdl_question_menu_handle_pointer(float x, float y, int action);
 bool sdl_question_menu_handle_hover_pointer(float x, float y);
+bool sdl_question_menu_handle_mouse_wheel(const SDL_MouseWheelEvent* wheel);
 void sdl_hint_quest_menu_render(void);
 bool sdl_hint_quest_menu_handle_event(const SDL_Event* ev);
 int sdl_hint_quest_menu_pending_timeout_ms(Uint64 now_ns);
@@ -3746,6 +3757,8 @@ void sdl_question_menu_cancel_touch(void);
 void sdl_question_menu_set_scroll_offset_target(int* offset,
     bool follow_highlight);
 bool sdl_question_menu_take_touch_scrolled(void);
+void sdl_question_menu_set_help(cptr text);
+bool sdl_question_menu_toggle_help(void);
 void sdl_question_menu_set_blocking_input(bool blocking);
 bool sdl_question_menu_blocks_input(void);
 bool sdl_question_menu_captures_pointer(void);

@@ -220,11 +220,18 @@ void process_player(void)
     int regen_multiplier;
     int depth_counter_increment;
 
+    player_active_weapon_begin_player_turn();
+
     // reset the number of times you have riposted since last turn
     p_ptr->ripostes = 0;
 
     // reset whether you have just woken up from entrancement
     p_ptr->was_entranced = false;
+
+    /* A completed timed rest relights its fuel-burning light before the
+     * player's next action. */
+    if (!p_ptr->resting && p_ptr->resting_light_off)
+        p_ptr->resting_light_off = false;
 
     // update the player's torch radius
     calc_torch();
@@ -268,7 +275,8 @@ void process_player(void)
         }
 
         /* Check for "player abort" */
-        if (p_ptr->running || p_ptr->fletching || p_ptr->smithing
+        if (player_pack_action_pending() || p_ptr->running || p_ptr->fletching
+            || p_ptr->smithing
             || p_ptr->command_rep || (p_ptr->resting && !(turn & 0x7F)))
         {
             /* Do not wait */
@@ -282,6 +290,10 @@ void process_player(void)
 
                 /* Disturb */
                 disturb(0, 0);
+
+                /* A Pack action is only cancelled by an attack or by the
+                 * player's explicit input. */
+                player_pack_action_cancel();
 
                 /* Hack -- Show a Message */
                 msg_print("Cancelled.");
@@ -479,6 +491,12 @@ void process_player(void)
 
             // store the action type
             p_ptr->previous_action[0] = ACTION_MISC;
+        }
+
+        /* Searching the Pack */
+        else if (player_pack_action_pending())
+        {
+            player_pack_action_process();
         }
 
         /* Smithing */

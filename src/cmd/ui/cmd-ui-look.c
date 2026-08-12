@@ -3,6 +3,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "cmd/ui/cmd-ui-internal.h"
+#include "support/input.h"
 
 void do_cmd_target(void)
 {
@@ -871,43 +872,19 @@ static void unified_look_resume_pointer_handlers(void)
 
 static bool unified_look_examine_object_at(int y, int x, bool use_story_font)
 {
-    object_type* o_ptr;
+    int o_idx;
 
     if (!unified_look_can_show_marked_object_at(y, x))
         return false;
 
-    o_ptr = &o_list[cave_o_idx[y][x]];
+    o_idx = cave_o_idx[y][x];
 
     if (use_story_font)
         sdl_story_font_disable();
     unified_look_pause_pointer_handlers();
 
-    (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
     screen_save();
-
-    if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-    {
-        int slot = wield_slot(o_ptr);
-        const object_type* compare_objects[2];
-        const char* compare_headings[2];
-        char selected_heading[32];
-        char equipped_heading[32];
-
-        strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-        strnfmt(equipped_heading, sizeof(equipped_heading), "%s",
-            mention_use(slot));
-
-        compare_objects[0] = o_ptr;
-        compare_headings[0] = selected_heading;
-        compare_objects[1] = inventory[slot].k_idx ? &inventory[slot] : NULL;
-        compare_headings[1] = equipped_heading;
-
-        object_info_screen_multi(compare_objects, compare_headings, 2);
-    }
-    else
-    {
-        object_info_screen(o_ptr);
-    }
+    describe_item_with_comparisons(0 - o_idx, true);
 
     screen_load();
     unified_look_resume_pointer_handlers();
@@ -1332,6 +1309,10 @@ void do_cmd_unified_look(void)
             need_redraw = false;
         }
         
+        /* Unified look keeps a saved-screen overlay active, but its terminal
+         * cursor intentionally marks the selected map cell. */
+        inkey_request_text_cursor();
+
         /* Get input */
         query = inkey();
         bool pointer_click_pending = ui_menu_click_has_pending();
@@ -1620,44 +1601,11 @@ void do_cmd_unified_look(void)
                         /* Object was highlighted - examine object */
                         log_trace("EXAMINATION: Highlighted entity is object, examining object %d", cursor_o_idx);
                         /* Object examination */
-                        object_type* o_ptr = &o_list[cursor_o_idx];
-                        (void)player_try_identify_smithing_object_on_examine(
-                            o_ptr, false);
                         log_trace("EXAMINATION: Showing object info screen");
                         /* Save screen */
                         screen_save();
-                        /* Show object info, with comparison if applicable */
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
+                        describe_item_with_comparisons(0 - cursor_o_idx,
+                            true);
 
                         /* Restore screen */
                         screen_load();
@@ -1712,42 +1660,9 @@ void do_cmd_unified_look(void)
                     if (has_object)
                     {
                         log_trace("EXAMINATION: Examining object at cursor position");
-                        object_type* o_ptr = &o_list[cursor_o_idx];
-                        (void)player_try_identify_smithing_object_on_examine(
-                            o_ptr, false);
                         screen_save();
-
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
+                        describe_item_with_comparisons(0 - cursor_o_idx,
+                            true);
 
                         screen_load();
                     }
@@ -2187,44 +2102,11 @@ command_key:
                         /* Object was highlighted - examine object */
                         log_trace("EXAMINATION: Highlighted entity is object, examining object %d", cursor_o_idx);
                         /* Object examination */
-                        object_type* o_ptr = &o_list[cursor_o_idx];
-                        (void)player_try_identify_smithing_object_on_examine(
-                            o_ptr, false);
                         log_trace("EXAMINATION: Showing object info screen");
                         /* Save screen */
                         screen_save();
-                        /* Show object info, with comparison if applicable */
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
+                        describe_item_with_comparisons(0 - cursor_o_idx,
+                            true);
 
                         /* Restore screen */
                         screen_load();
@@ -2279,42 +2161,9 @@ command_key:
                     if (has_object)
                     {
                         log_trace("EXAMINATION: Examining object at cursor position");
-                        object_type* o_ptr = &o_list[cursor_o_idx];
-                        (void)player_try_identify_smithing_object_on_examine(
-                            o_ptr, false);
                         screen_save();
-
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
+                        describe_item_with_comparisons(0 - cursor_o_idx,
+                            true);
 
                         screen_load();
                     }

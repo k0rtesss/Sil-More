@@ -8,9 +8,11 @@
  * Rebuild the overlay panel for the current loop iteration.
  */
 static void ui_question_show(cptr title, cptr desc,
-    const ui_question_option* options, int count, int anchor_y, int anchor_x,
-    int highlight, int* scroll_offset, bool scroll_follow_highlight,
-    const ui_question_button* buttons, int button_count)
+    const ui_question_option* options,
+    const object_type* const object_icons[], int count, int anchor_y,
+    int anchor_x, int highlight, int* scroll_offset,
+    bool scroll_follow_highlight, const ui_question_button* buttons,
+    int button_count, bool desc_on_demand)
 {
     char letter[4];
 
@@ -20,7 +22,12 @@ static void ui_question_show(cptr title, cptr desc,
     if ((anchor_y >= 0) && (anchor_x >= 0))
         sdl_question_menu_set_anchor_grid(anchor_y, anchor_x);
     if (desc && desc[0])
-        sdl_question_menu_set_desc(desc);
+    {
+        if (desc_on_demand)
+            sdl_question_menu_set_help(desc);
+        else
+            sdl_question_menu_set_desc(desc);
+    }
 
     for (int i = 0; i < count; i++)
     {
@@ -29,13 +36,29 @@ static void ui_question_show(cptr title, cptr desc,
         if (options[i].key)
         {
             strnfmt(letter, sizeof(letter), "%c)", options[i].key);
-            sdl_question_menu_add_entry(i, letter, options[i].label,
-                attr);
+            if (object_icons && object_icons[i])
+            {
+                sdl_question_menu_add_object_entry(i, letter,
+                    options[i].label, attr, object_icons[i]);
+            }
+            else
+            {
+                sdl_question_menu_add_entry(i, letter, options[i].label,
+                    attr);
+            }
         }
         else
         {
-            sdl_question_menu_add_entry(i, "", options[i].label,
-                attr);
+            if (object_icons && object_icons[i])
+            {
+                sdl_question_menu_add_object_entry(i, "",
+                    options[i].label, attr, object_icons[i]);
+            }
+            else
+            {
+                sdl_question_menu_add_entry(i, "", options[i].label,
+                    attr);
+            }
         }
     }
     for (int i = 0; buttons && i < button_count; i++)
@@ -80,9 +103,11 @@ static void ui_question_unavailable(void)
 }
 
 static int ui_question_ask_aux(cptr title, cptr desc,
-    const ui_question_option* options, int count, int anchor_y, int anchor_x,
-    int default_index, bool repaint_background,
-    const ui_question_button* buttons, int button_count)
+    const ui_question_option* options,
+    const object_type* const object_icons[], int count, int anchor_y,
+    int anchor_x, int default_index, bool repaint_background,
+    const ui_question_button* buttons, int button_count,
+    bool desc_on_demand)
 {
     int highlight;
     int result = -1;
@@ -123,9 +148,9 @@ static int ui_question_ask_aux(cptr title, cptr desc,
         ui_menu_click_set_hover_enabled(true);
         ui_menu_click_set_outside_cancel_enabled(true);
         ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
-        ui_question_show(title, desc, options, count, anchor_y, anchor_x,
-            highlight, &scroll_offset, scroll_follow_highlight, buttons,
-            button_count);
+        ui_question_show(title, desc, options, object_icons, count, anchor_y,
+            anchor_x, highlight, &scroll_offset, scroll_follow_highlight,
+            buttons, button_count, desc_on_demand);
 
         which = inkey();
         if (sdl_question_menu_take_touch_scrolled())
@@ -180,6 +205,12 @@ static int ui_question_ask_aux(cptr title, cptr desc,
             }
         }
 
+        if (desc_on_demand && which == '?')
+        {
+            (void)sdl_question_menu_toggle_help();
+            continue;
+        }
+
         if ((which == ESCAPE)
             || (steamdeck && which == steamdeck_back_key()))
         {
@@ -190,38 +221,7 @@ static int ui_question_ask_aux(cptr title, cptr desc,
         if (steamdeck && which == steamdeck_confirm_key())
             which = '\r';
 
-        switch (which)
-        {
-        case '\r':
-        case '\n':
-        case ' ':
-        case '6': /* right: select the highlighted answer */
-        {
-            if (options[highlight].disabled)
-                ui_question_unavailable();
-            else
-            {
-                result = highlight;
-                done = true;
-            }
-            break;
-        }
-
-        case '2': /* down: next answer */
-        {
-            highlight = ui_question_next_enabled(options, count, highlight, 1);
-            scroll_follow_highlight = true;
-            break;
-        }
-
-        case '8': /* up: previous answer */
-        {
-            highlight = ui_question_next_enabled(options, count, highlight, -1);
-            scroll_follow_highlight = true;
-            break;
-        }
-
-        default:
+        /* Explicit option keys take priority over numeric movement keys. */
         {
             bool matched = false;
 
@@ -261,8 +261,44 @@ static int ui_question_ask_aux(cptr title, cptr desc,
                 }
             }
 
-            if (!matched)
-                bell("Illegal response to question!");
+            if (matched)
+                continue;
+        }
+
+        switch (which)
+        {
+        case '\r':
+        case '\n':
+        case ' ':
+        case '6': /* right: select the highlighted answer */
+        {
+            if (options[highlight].disabled)
+                ui_question_unavailable();
+            else
+            {
+                result = highlight;
+                done = true;
+            }
+            break;
+        }
+
+        case '2': /* down: next answer */
+        {
+            highlight = ui_question_next_enabled(options, count, highlight, 1);
+            scroll_follow_highlight = true;
+            break;
+        }
+
+        case '8': /* up: previous answer */
+        {
+            highlight = ui_question_next_enabled(options, count, highlight, -1);
+            scroll_follow_highlight = true;
+            break;
+        }
+
+        default:
+        {
+            bell("Illegal response to question!");
             break;
         }
         }
@@ -279,16 +315,34 @@ static int ui_question_ask_aux(cptr title, cptr desc,
 int ui_question_ask(cptr title, cptr desc, const ui_question_option* options,
     int count, int anchor_y, int anchor_x, int default_index)
 {
-    return ui_question_ask_aux(title, desc, options, count, anchor_y, anchor_x,
-        default_index, true, NULL, 0);
+    return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
+        anchor_x, default_index, true, NULL, 0, false);
+}
+
+int ui_question_ask_objects(cptr title, cptr desc,
+    const ui_question_option* options,
+    const object_type* const object_icons[], int count, int anchor_y,
+    int anchor_x, int default_index)
+{
+    return ui_question_ask_aux(title, desc, options, object_icons, count,
+        anchor_y, anchor_x, default_index, true, NULL, 0, false);
+}
+
+int ui_question_ask_objects_with_help(cptr title, cptr desc,
+    const ui_question_option* options,
+    const object_type* const object_icons[], int count, int anchor_y,
+    int anchor_x, int default_index)
+{
+    return ui_question_ask_aux(title, desc, options, object_icons, count,
+        anchor_y, anchor_x, default_index, true, NULL, 0, true);
 }
 
 int ui_question_ask_overlay(cptr title, cptr desc,
     const ui_question_option* options, int count, int anchor_y, int anchor_x,
     int default_index)
 {
-    return ui_question_ask_aux(title, desc, options, count, anchor_y, anchor_x,
-        default_index, false, NULL, 0);
+    return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
+        anchor_x, default_index, false, NULL, 0, false);
 }
 
 int ui_question_ask_overlay_buttons(cptr title, cptr desc,
@@ -296,6 +350,6 @@ int ui_question_ask_overlay_buttons(cptr title, cptr desc,
     const ui_question_button* buttons, int button_count, int anchor_y,
     int anchor_x, int default_index)
 {
-    return ui_question_ask_aux(title, desc, options, count, anchor_y, anchor_x,
-        default_index, false, buttons, button_count);
+    return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
+        anchor_x, default_index, false, buttons, button_count, false);
 }

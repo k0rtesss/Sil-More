@@ -384,23 +384,29 @@ int player_tile_offset()
 {
     object_type * main_wield_ptr = &inventory[INVEN_WIELD];
     object_type * secondary_wield_ptr = &inventory[INVEN_ARM];
-    int active_quiver_slot;
+    int active_throwing_slot;
 
     if (player_active_weapon_is_ranged())
     {
-        active_quiver_slot = player_active_weapon_quiver_slot();
+        active_throwing_slot = player_active_throwing_weapon_slot();
 
-        if (!active_quiver_slot || !inventory[active_quiver_slot].k_idx)
+        if (active_throwing_slot >= 0)
         {
-            return 0;
+            main_wield_ptr = &inventory[active_throwing_slot];
+            /* Throwing uses a ranged mode but may still actively pair a
+             * one-handed weapon with an equipped shield.  Keep that shield in
+             * the visual loadout so the player tile selects the combined
+             * weapon-and-shield sprite rather than the spear-only sprite. */
+            if (!secondary_wield_ptr->k_idx
+                || secondary_wield_ptr->tval != TV_SHIELD
+                || !player_shield_counts_for_active_weapon(
+                    secondary_wield_ptr))
+            {
+                secondary_wield_ptr = NULL;
+            }
         }
-        if (player_can_treat_as_throwing(&inventory[active_quiver_slot]))
-        {
-            main_wield_ptr = &inventory[active_quiver_slot];
-            secondary_wield_ptr = NULL;
-        }
-        else if (inventory[active_quiver_slot].tval == TV_ARROW &&
-            inventory[INVEN_BOW].tval == TV_BOW)
+        else if (player_quiver_arrow_count() > 0
+            && inventory[INVEN_BOW].tval == TV_BOW)
         {
             return 15;
         }

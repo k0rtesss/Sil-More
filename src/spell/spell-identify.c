@@ -232,12 +232,6 @@ typedef struct recharge_target_entry
     object_type* o_ptr;
 } recharge_target_entry;
 
-enum
-{
-    MAX_RECHARGE_TARGETS =
-        INVEN_PACK + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK
-};
-
 static int recharge_collect_targets(recharge_target_entry entries[],
     int max_entries)
 {
@@ -260,14 +254,17 @@ static int recharge_collect_targets(recharge_target_entry entries[],
         count++;
     }
 
-    for (int i = 0; i < INVEN_PACK && count < max_entries; i++)
+    for (int ordinal = 0;
+         ordinal < player_pack_entry_count() && count < max_entries;
+         ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
 
         if (!item_tester_hook_recharge(o_ptr))
             continue;
 
-        entries[count].item = i;
+        entries[count].item = item;
         entries[count].o_ptr = o_ptr;
         count++;
     }
@@ -601,7 +598,7 @@ static bool recharge_choose_target(const recharge_target_entry entries[],
 }
 
 /*
- * Recharge a staff from the pack, equipment, or on the floor.
+ * Recharge a staff from the Harness or on the floor.
  *
  * Mage -- Recharge I --> recharge(5)
  * Mage -- Recharge II --> recharge(40)
@@ -630,23 +627,31 @@ bool recharge(int num)
 {
     int item;
     int target_count;
+    int target_capacity = player_pack_entry_count()
+        + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK;
 
     object_type* o_ptr;
-    recharge_target_entry targets[MAX_RECHARGE_TARGETS];
+    recharge_target_entry* targets = mem_alloc_array(
+        MAX(target_capacity, 1), recharge_target_entry);
 
-    target_count = recharge_collect_targets(targets, N_ELEMENTS(targets));
+    target_count = recharge_collect_targets(targets, target_capacity);
     if (target_count <= 0)
     {
         msg_print("You have nothing to recharge.");
+        targets = mem_free(targets);
         return (false);
     }
 
     if (!recharge_choose_target(targets, target_count, &item))
+    {
+        targets = mem_free(targets);
         return (false);
+    }
+    targets = mem_free(targets);
 
     /* Get the item (in the pack) */
-    if (item >= 0)
-        o_ptr = &inventory[item];
+    if (player_inventory_handle_valid(item))
+        o_ptr = player_inventory_object(item);
 
     /* Get the item (on the floor) */
     else
@@ -765,10 +770,11 @@ void identify_and_describe_pack(void)
     }
 
     /* Identify inventory */
-    for (item = 0; item < INVEN_WIELD; item++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
+        item = player_pack_entry_handle_at(ordinal);
         /* Get the object */
-        o_ptr = &inventory[item];
+        o_ptr = player_inventory_object(item);
 
         /* Ignore empty objects */
         if (!o_ptr->k_idx)
@@ -780,6 +786,16 @@ void identify_and_describe_pack(void)
 
         /* Identify it */
         do_ident_item(item, o_ptr);
+    }
+
+    /* Identify arrows in the dedicated Quiver store. */
+    for (int quiver_idx = 0;
+        quiver_idx < player_quiver_store_entry_count(); quiver_idx++)
+    {
+        o_ptr = player_quiver_store_entry_at(quiver_idx);
+        if (!o_ptr || !o_ptr->k_idx || object_known_p(o_ptr))
+            continue;
+        do_ident_item(QUIVER_INDEX + quiver_idx, o_ptr);
     }
 
     /* Identify supplies */
@@ -843,13 +859,18 @@ void do_ident_item(int item, object_type* o_ptr)
     object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
     /* Describe */
-    if (item >= SUPPLIES_INDEX)
+    if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+    {
+        msg_format("In your quiver: %s.", o_name);
+        p_ptr->redraw |= PR_QUIVER;
+    }
+    else if (item >= SUPPLIES_INDEX)
     {
         int supply_index = item - SUPPLIES_INDEX;
         msg_format("In your supplies: %s.", o_name);
         supplies_refresh_entry(supply_index);
     }
-    else if (item >= INVEN_WIELD)
+    else if (player_inventory_handle_is_equipped(item))
     {
         msg_format(
             "%^s: %s (%c).", describe_use(item), o_name, index_to_label(item));

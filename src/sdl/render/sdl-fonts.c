@@ -1986,6 +1986,16 @@ int sdl_get_cell_width(void)
     return 8; /* fallback */
 }
 
+int sdl_get_active_cell_width(void)
+{
+    sdl_view* view = sdl_view_from_term(Term);
+
+    if (view && view->cell_w > 0)
+        return view->cell_w;
+
+    return sdl_get_cell_width();
+}
+
 int sdl_main_view_visible_col0(void)
 {
     if (sdl_left_panel_pane_presentation_active())
