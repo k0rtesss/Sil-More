@@ -1113,12 +1113,13 @@ void sdl_sound_reload(void)
     }
 
     /*
-     * Combat cues run on the input/render thread.  Decode their small sample
-     * sets during sound initialization so the first swing, shot, or monster
-     * attack cannot stall gameplay on slow storage.
+     * Gameplay cues run on the input/render thread.  Decode their small sample
+     * sets during sound initialization so the first step, swing, shot, or
+     * monster attack cannot stall gameplay on slow storage.
      */
     if (g_sound_config.enabled && sound_state.bank_loaded) {
-        static const int combat_preload_events[] = {
+        static const int gameplay_preload_events[] = {
+            MSG_WALK,
             MSG_HIT,
             MSG_ARMOR,
             MSG_MISS,
@@ -1134,9 +1135,9 @@ void sdl_sound_reload(void)
             MSG_MONSTER_ATTACK_BREATH
         };
 
-        for (int i = 0; i < (int)N_ELEMENTS(combat_preload_events); i++) {
-            if (is_sound_enabled(combat_preload_events[i]))
-                sdl_sound_preload_event(combat_preload_events[i]);
+        for (int i = 0; i < (int)N_ELEMENTS(gameplay_preload_events); i++) {
+            if (is_sound_enabled(gameplay_preload_events[i]))
+                sdl_sound_preload_event(gameplay_preload_events[i]);
         }
     }
 

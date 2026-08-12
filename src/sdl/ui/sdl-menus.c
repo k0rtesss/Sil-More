@@ -1120,8 +1120,8 @@ void sdl_narrative_banner_render(void)
     }
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    panel_alpha = sdl_narrative_banner_scaled_alpha(212);
-    border_alpha = sdl_narrative_banner_scaled_alpha(126);
+    panel_alpha = sdl_narrative_banner_scaled_alpha(236);
+    border_alpha = sdl_narrative_banner_scaled_alpha(160);
     if (panel_alpha > 0) {
         SDL_SetRenderDrawColor(g_state.renderer, 4, 5, 7, panel_alpha);
         SDL_RenderFillRect(g_state.renderer, &panel);

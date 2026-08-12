@@ -1948,6 +1948,22 @@ void sdl_question_menu_render(void)
                     };
 
                     SDL_SetTextureAlphaMod(g_state.tileset, 255);
+                    /* Term picts draw this overlay through the map-layer
+                     * renderer.  Question-menu icons are drawn directly, so
+                     * reproduce that glow layer here when object_attr() marks
+                     * a weapon as reacting to a nearby enemy. */
+                    if (entry->icon_attr & GRAPHICS_GLOW_MASK)
+                    {
+                        byte glow_attr = misc_to_attr[ICON_GLOW];
+                        char glow_char = misc_to_char[ICON_GLOW];
+
+                        if ((glow_attr & TILE_FLAG)
+                            && (((byte)glow_char) & TILE_FLAG))
+                        {
+                            sdl_draw_tileset_sprite(glow_attr, glow_char,
+                                &icon_dst, true);
+                        }
+                    }
                     sdl_draw_tileset_sprite(entry->icon_attr,
                         entry->icon_char, &icon_dst, false);
                     sdl_restore_tileset_mod();
