@@ -202,10 +202,27 @@ static char inkey_aux(void)
  */
 static cptr inkey_next = NULL;
 static bool inkey_text_cursor_requested = false;
+static unsigned int inkey_prompt_input_depth = 0;
 
 void inkey_request_text_cursor(void)
 {
     inkey_text_cursor_requested = true;
+}
+
+void inkey_prompt_input_begin(void)
+{
+    inkey_prompt_input_depth++;
+}
+
+void inkey_prompt_input_end(void)
+{
+    if (inkey_prompt_input_depth > 0)
+        inkey_prompt_input_depth--;
+}
+
+bool inkey_prompt_input_active(void)
+{
+    return inkey_prompt_input_depth > 0;
 }
 
 bool inkey_next_active(void)

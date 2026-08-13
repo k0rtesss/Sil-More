@@ -32,6 +32,7 @@ typedef struct sdl_halls_entry {
     char outcome[SDL_HALLS_TEXT_LEN];
     char details[SDL_HALLS_TEXT_LEN];
     char honors[96];
+    byte honors_attr;
     char score_increases[SDL_HALLS_TEXT_LEN];
     char score_decreases[SDL_HALLS_TEXT_LEN];
     SDL_FRect hit_rect;
@@ -463,7 +464,8 @@ int sdl_halls_screen_page_capacity(bool detailed)
 
 void sdl_halls_screen_add_entry(int choice, cptr rank, cptr name,
     cptr score, cptr outcome, cptr details, cptr honors,
-    cptr score_increases, cptr score_decreases, byte attr, bool selected)
+    byte honors_attr, cptr score_increases, cptr score_decreases,
+    byte attr, bool selected)
 {
     sdl_halls_entry* entry;
 
@@ -484,6 +486,7 @@ void sdl_halls_screen_add_entry(int choice, cptr rank, cptr name,
     SDL_strlcpy(entry->outcome, outcome ? outcome : "", sizeof(entry->outcome));
     SDL_strlcpy(entry->details, details ? details : "", sizeof(entry->details));
     SDL_strlcpy(entry->honors, honors ? honors : "", sizeof(entry->honors));
+    entry->honors_attr = honors_attr;
     SDL_strlcpy(entry->score_increases,
         score_increases ? score_increases : "",
         sizeof(entry->score_increases));
@@ -733,7 +736,8 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
             {
                 box.x = card.x + card.w - pad - honors_w;
                 box.w = honors_w;
-                (void)sdl_halls_draw_fitted_text(entry->honors, TERM_ORANGE,
+                (void)sdl_halls_draw_fitted_text(entry->honors,
+                    entry->honors_attr,
                     box, 1, meta_min_px, meta_px,
                     SDL_STORY_FONT_SLOT_NARRATIVE);
             }
@@ -757,7 +761,8 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
         {
             box = (SDL_FRect){ card.x + card.w - pad - score_w,
                 card.y + card.h * 0.66f, score_w, card.h * 0.26f };
-            (void)sdl_halls_draw_fitted_text(entry->honors, TERM_ORANGE,
+            (void)sdl_halls_draw_fitted_text(entry->honors,
+                entry->honors_attr,
                 box, 1, meta_min_px, meta_px,
                 SDL_STORY_FONT_SLOT_NARRATIVE);
         }
@@ -819,7 +824,8 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
             {
                 box.x = card.x + card.w - pad - honors_w;
                 box.w = honors_w;
-                (void)sdl_halls_draw_fitted_text(entry->honors, TERM_ORANGE,
+                (void)sdl_halls_draw_fitted_text(entry->honors,
+                    entry->honors_attr,
                     box, 1, meta_min_px, meta_px,
                     SDL_STORY_FONT_SLOT_NARRATIVE);
             }
@@ -848,7 +854,8 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
         {
             box = (SDL_FRect){ card.x + card.w - pad - score_w,
                 content_y, score_w, outcome_h };
-            (void)sdl_halls_draw_fitted_text(entry->honors, TERM_ORANGE,
+            (void)sdl_halls_draw_fitted_text(entry->honors,
+                entry->honors_attr,
                 box, 1, meta_min_px, meta_px,
                 SDL_STORY_FONT_SLOT_NARRATIVE);
         }

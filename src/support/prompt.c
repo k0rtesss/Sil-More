@@ -180,6 +180,8 @@ bool askfor_aux(char* buf, size_t len)
 
     bool done = false;
 
+    inkey_prompt_input_begin();
+
     /* Locate the cursor */
     Term_locate(&x, &y);
 
@@ -259,6 +261,7 @@ bool askfor_aux(char* buf, size_t len)
     }
 
     /* Done */
+    inkey_prompt_input_end();
     return (ch != ESCAPE);
 }
 
@@ -278,6 +281,8 @@ bool askfor_name(char* buf, size_t len)
 
     bool done = false;
     bool new_default_name = false;
+
+    inkey_prompt_input_begin();
 
     /* Locate the cursor */
     Term_locate(&x, &y);
@@ -379,6 +384,7 @@ bool askfor_name(char* buf, size_t len)
     }
 
     /* Done */
+    inkey_prompt_input_end();
     return (ch != ESCAPE);
 }
 
@@ -1139,7 +1145,9 @@ bool get_com(cptr prompt, char* command)
     prt(prompt, 0, 0);
 
     /* Get a key */
+    inkey_prompt_input_begin();
     ch = inkey();
+    inkey_prompt_input_end();
 
     /* Clear the prompt */
     prt("", 0, 0);

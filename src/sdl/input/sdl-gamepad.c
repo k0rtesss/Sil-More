@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "support/input.h"
 #include "ui/menu-click.h"
 
 static SDL_JoystickID g_active_gamepad_id;
@@ -275,6 +276,32 @@ static u16b sdl_movement_modifiers_from_sdl(SDL_Keymod mod)
 }
 
 /*
+ * Prompt input must reach the prompt before any movement-preset translation.
+ * This covers both SDL-owned overlays and the older terminal prompts whose
+ * input is synchronous inside inkey().  A separate predicate intentionally
+ * omits character_icky: global layout shortcuts remain useful on saved
+ * screens, while gameplay movement and command aliases must be disabled
+ * there.
+ */
+static bool sdl_prompt_input_is_active(void)
+{
+    return g_touch_pane_yes_no_prompt_active
+        || sdl_question_menu_captures_pointer()
+        || inkey_prompt_input_active();
+}
+
+static bool sdl_movement_input_is_modal(void)
+{
+    return character_icky || sdl_prompt_input_is_active();
+}
+
+static bool sdl_movement_command_input_is_live(void)
+{
+    return movement_input_active_context() == MOVEMENT_INPUT_CONTEXT_DUNGEON
+        && !sdl_movement_input_is_modal();
+}
+
+/*
  * Movement is only submitted during live gameplay input: a real command
  * request, a direction prompt, or targeting. A non-NONE active context is the
  * primary signal, but that context can survive into a modal screen that was
@@ -286,7 +313,7 @@ static u16b sdl_movement_modifiers_from_sdl(SDL_Keymod mod)
  */
 static bool sdl_movement_input_is_live(void)
 {
-    return !character_icky
+    return !sdl_movement_input_is_modal()
         && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_NONE;
 }
 
@@ -369,7 +396,8 @@ bool sdl_try_send_shadowed_command_event(const SDL_KeyboardEvent* key_event)
     SDL_Keycode base;
     char command;
 
-    if (!key_event || !character_dungeon || character_icky)
+    if (!key_event || !character_dungeon
+        || !sdl_movement_command_input_is_live())
         return false;
 
     if (!(key_event->mod & SDL_KMOD_ALT)
@@ -410,7 +438,8 @@ bool sdl_try_send_preset_command_alias(const SDL_KeyboardEvent* key_event)
 {
     char command;
 
-    if (!key_event || !character_dungeon || character_icky)
+    if (!key_event || !character_dungeon
+        || !sdl_movement_command_input_is_live())
         return false;
     if (key_event->mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))
         return false;
@@ -454,7 +483,8 @@ bool sdl_send_modified_direction_action(int dir, char dir_ch, bool shift, bool c
     char action_key;
     char follow_key;
 
-    if (dir < 1 || dir > 9 || mod_count != 1)
+    if (dir < 1 || dir > 9 || mod_count != 1
+        || sdl_movement_input_is_modal())
         return false;
 
     if (alt) {
@@ -510,7 +540,7 @@ bool sdl_try_send_modified_direction_event(const SDL_KeyboardEvent* key_event)
     SDL_Keycode base_key;
     int shifted_ascii;
 
-    if (!key_event)
+    if (!key_event || !sdl_movement_input_is_live())
         return false;
 
     shift = key_event->mod & SDL_KMOD_SHIFT;
@@ -545,7 +575,7 @@ bool sdl_handle_jewelry_preset_shortcut(
 {
     SDL_Keycode key;
 
-    if (!key_event || !character_dungeon)
+    if (!key_event || !character_dungeon || sdl_movement_input_is_modal())
         return false;
 
     if (!(key_event->mod & SDL_KMOD_ALT)
@@ -568,7 +598,7 @@ bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event)
 {
     SDL_Keycode key;
 
-    if (!key_event)
+    if (!key_event || sdl_prompt_input_is_active())
         return false;
 
     if (!(key_event->mod & SDL_KMOD_ALT))

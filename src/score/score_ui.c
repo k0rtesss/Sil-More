@@ -754,6 +754,31 @@ static void score_ui_build_score_factors(const score_breakdown* breakdown,
     SDL_strlcat(decreases, formula, decreases_len);
 }
 
+static byte score_ui_halls_honors_attr(const high_score* entry)
+{
+    int silmarils;
+    bool morgoth;
+    bool escaped;
+    bool alive;
+
+    if (!entry)
+        return TERM_SLATE;
+
+    silmarils = parse_score_int(entry->silmarils, sizeof(entry->silmarils), 0);
+    morgoth = entry->morgoth_slain[0] == 't';
+    escaped = entry->escaped[0] == 't';
+    alive = streq(entry->how, "(alive and well)");
+
+    /* Honors remain gold-orange; the plain outcome labels use status colors. */
+    if (silmarils > 0 || morgoth)
+        return TERM_ORANGE;
+    if (alive)
+        return TERM_L_GREEN;
+    if (escaped)
+        return TERM_L_BLUE;
+    return TERM_L_RED;
+}
+
 static void score_ui_build_halls_card(const high_score* entry, int place,
     char* rank, size_t rank_len, char* name, size_t name_len,
     char* score, size_t score_len, char* outcome, size_t outcome_len,
@@ -842,6 +867,8 @@ static void score_ui_build_halls_card(const high_score* entry, int place,
         SDL_strlcpy(honors, "Escaped", honors_len);
     else if (alive && !honors[0])
         SDL_strlcpy(honors, "Living", honors_len);
+    else if (!honors[0] && entry)
+        SDL_strlcpy(honors, "Dead", honors_len);
 
     score_ui_build_score_factors(&breakdown, increases, increases_len,
         decreases, decreases_len);
@@ -979,6 +1006,7 @@ static char display_scores_pages(const high_score* entries, int count,
             char outcome[256];
             char details[256];
             char honors[96];
+            byte honors_attr = score_ui_halls_honors_attr(&entries[idx]);
             char increases[256];
             char decreases[256];
 
@@ -988,7 +1016,8 @@ static char display_scores_pages(const high_score* entries, int count,
                 sizeof(honors), increases, sizeof(increases), decreases,
                 sizeof(decreases));
             sdl_halls_screen_add_entry(idx, rank, name, score, outcome,
-                details, honors, increases, decreases, attr, is_highlight);
+                details, honors, honors_attr, increases, decreases, attr,
+                is_highlight);
         }
 
         sdl_halls_screen_add_action(SCORE_CLICK_EXIT, "Back", TERM_L_WHITE,

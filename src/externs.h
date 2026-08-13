@@ -1771,7 +1771,8 @@ extern void sdl_halls_screen_begin(cptr subtitle, cptr page_status,
 extern int sdl_halls_screen_page_capacity(bool detailed);
 extern void sdl_halls_screen_add_entry(int choice, cptr rank, cptr name,
     cptr score, cptr outcome, cptr details, cptr honors,
-    cptr score_increases, cptr score_decreases, byte attr, bool selected);
+    byte honors_attr, cptr score_increases, cptr score_decreases,
+    byte attr, bool selected);
 extern void sdl_halls_screen_set_empty(cptr text);
 extern void sdl_halls_screen_add_action(int choice, cptr label, byte attr,
     bool enabled);
