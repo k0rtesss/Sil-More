@@ -1109,6 +1109,7 @@ hint_quest_page do_cmd_quest_status_page(void)
         }
         if (ch == UI_MENU_CLICK_WAKE_KEY)
             continue;
+        ch = (char)steamdeck_menu_key(ch, 0, 0);
         if (hint_quest_tab_key(ch))
         {
             next_page = HINT_QUEST_PAGE_THRALLS;

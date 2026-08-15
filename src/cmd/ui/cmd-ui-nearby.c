@@ -373,7 +373,7 @@ void do_cmd_view_monsters()
             prt("Monsters you can see (press [ to toggle):", 0, 0);
         else
             prt("Monsters on screen (press [ to toggle):", 0, 0);
-        get_char = inkey();
+        get_char = (char)steamdeck_menu_key(inkey(), 0, 0);
         show_los = !show_los;
         screen_load();
     }
@@ -399,7 +399,7 @@ void do_cmd_view_objects()
             prt("Objects you can see (press ] to toggle):", 0, 0);
         else
             prt("Objects on screen (press ] to toggle):", 0, 0);
-        get_char = inkey();
+        get_char = (char)steamdeck_menu_key(inkey(), 0, 0);
         show_los = !show_los;
         screen_load();
     }

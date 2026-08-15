@@ -1643,6 +1643,8 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 continue;
         }
 
+        which = (char)steamdeck_menu_key(which, 0, 0);
+
         /* Parse it */
         switch (which)
         {

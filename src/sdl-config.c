@@ -1533,6 +1533,53 @@ static bool sdl_config_gamepad_combo_bindings_empty(const struct sdl_config* con
     return true;
 }
 
+/*
+ * Preserve customized controller layouts while advancing the complete prior
+ * default layout.  West used to submit generic Use ('u'), which opens the
+ * inventory browser even when the player is standing on a floor item.  The
+ * current default uses Examine ('x') so the same button enters the shared
+ * description/context-action flow used by keyboard, mouse, and touch.
+ */
+static bool sdl_config_should_upgrade_previous_gamepad_defaults(
+    const struct sdl_config* config)
+{
+    struct sdl_config previous;
+
+    if (!config)
+        return false;
+
+    memset(&previous, 0, sizeof(previous));
+    sdl_config_set_default_gamepad_bindings(&previous);
+    previous.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST] = 'u';
+
+    return memcmp(config->gamepad_button_bindings,
+               previous.gamepad_button_bindings,
+               sizeof(previous.gamepad_button_bindings)) == 0
+        && memcmp(config->gamepad_trigger_bindings,
+               previous.gamepad_trigger_bindings,
+               sizeof(previous.gamepad_trigger_bindings)) == 0
+        && memcmp(config->gamepad_left_stick_bindings,
+               previous.gamepad_left_stick_bindings,
+               sizeof(previous.gamepad_left_stick_bindings)) == 0
+        && memcmp(config->gamepad_right_stick_bindings,
+               previous.gamepad_right_stick_bindings,
+               sizeof(previous.gamepad_right_stick_bindings)) == 0
+        && memcmp(config->gamepad_button_combo_bindings,
+               previous.gamepad_button_combo_bindings,
+               sizeof(previous.gamepad_button_combo_bindings)) == 0
+        && memcmp(config->gamepad_trigger_combo_bindings,
+               previous.gamepad_trigger_combo_bindings,
+               sizeof(previous.gamepad_trigger_combo_bindings)) == 0
+        && memcmp(config->gamepad_left_stick_combo_bindings,
+               previous.gamepad_left_stick_combo_bindings,
+               sizeof(previous.gamepad_left_stick_combo_bindings)) == 0
+        && memcmp(config->gamepad_right_stick_combo_bindings,
+               previous.gamepad_right_stick_combo_bindings,
+               sizeof(previous.gamepad_right_stick_combo_bindings)) == 0
+        && config->gamepad_shoulder_combo_binding
+            == previous.gamepad_shoulder_combo_binding;
+}
+
 static bool sdl_config_should_upgrade_legacy_gamepad_defaults(
     const struct sdl_config* config)
 {
@@ -4151,6 +4198,25 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             log_debug("Loaded gamepad.useDpad: %s", config->gamepad_use_dpad ? "true" : "false");
         }
 
+        item = cJSON_GetObjectItemCaseSensitive(gamepad, "dpadDiagonalDelayMs");
+        if (cJSON_IsNumber(item)) {
+            config->gamepad_dpad_diagonal_delay_ms = item->valueint;
+            if (config->gamepad_dpad_diagonal_delay_ms
+                < SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
+            {
+                config->gamepad_dpad_diagonal_delay_ms =
+                    SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS;
+            }
+            if (config->gamepad_dpad_diagonal_delay_ms
+                > SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS)
+            {
+                config->gamepad_dpad_diagonal_delay_ms =
+                    SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS;
+            }
+            log_debug("Loaded gamepad.dpadDiagonalDelayMs: %d",
+                config->gamepad_dpad_diagonal_delay_ms);
+        }
+
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "useLeftStick");
         if (cJSON_IsBool(item)) {
             config->gamepad_use_left_stick = cJSON_IsTrue(item);
@@ -4265,7 +4331,10 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             config->gamepad_shoulder_combo_binding = GAMEPAD_BIND_NONE;
         }
 
-        if (sdl_config_should_upgrade_legacy_gamepad_defaults(config)) {
+        if (sdl_config_should_upgrade_previous_gamepad_defaults(config)) {
+            log_info("Upgrading previous default West gamepad binding from Use to Examine");
+            sdl_config_set_default_gamepad_bindings(config);
+        } else if (sdl_config_should_upgrade_legacy_gamepad_defaults(config)) {
             log_info("Upgrading legacy default gamepad config to current defaults");
             sdl_config_set_default_gamepad_bindings(config);
             config->steamdeck_inv_equip_same_button_cycle = true;
@@ -5120,6 +5189,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             cJSON_AddBoolToObject(gamepad, "steamdeckInvEquipSameButtonCycle",
                 config->steamdeck_inv_equip_same_button_cycle);
             cJSON_AddBoolToObject(gamepad, "useDpad", config->gamepad_use_dpad);
+            cJSON_AddNumberToObject(gamepad, "dpadDiagonalDelayMs",
+                config->gamepad_dpad_diagonal_delay_ms);
             cJSON_AddBoolToObject(gamepad, "useLeftStick", config->gamepad_use_left_stick);
             cJSON_AddNumberToObject(gamepad, "deadzone", config->gamepad_deadzone);
             cJSON_AddNumberToObject(gamepad, "triggerThreshold", config->gamepad_trigger_threshold);
@@ -5475,7 +5546,7 @@ void sdl_config_set_default_gamepad_bindings(struct sdl_config* config)
 
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_SOUTH] = ' ';
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST] = 'f';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST] = 'u';
+    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST] = 'x';
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_NORTH] = 's';
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_LEFT_SHOULDER] = 'e';
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER] = 'i';
@@ -5695,6 +5766,8 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->gamepad_enabled = true;
     config->steamdeck_inv_equip_same_button_cycle = true;
     config->gamepad_use_dpad = true;
+    config->gamepad_dpad_diagonal_delay_ms =
+        SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS;
     config->gamepad_use_left_stick = true;
     config->gamepad_deadzone = 12000;
     config->gamepad_trigger_threshold = 16000;

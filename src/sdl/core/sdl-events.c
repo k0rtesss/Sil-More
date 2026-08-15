@@ -2690,6 +2690,33 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
                 return;
             }
 
+            /* Some controller backends expose the D-pad as keyboard arrows
+             * even while controller UI mode is active.  Keep those events
+             * inside the character wheel instead of treating them as a
+             * reason to dismiss it. */
+            if (g_player_action_menu.active && steamdeck_controls_active()) {
+                switch (key) {
+                case SDLK_UP:
+                case SDLK_KP_8:
+                    sdl_player_action_menu_move_hover_vertical(-1);
+                    return;
+                case SDLK_DOWN:
+                case SDLK_KP_2:
+                    sdl_player_action_menu_move_hover_vertical(1);
+                    return;
+                case SDLK_LEFT:
+                case SDLK_KP_4:
+                    sdl_player_action_menu_move_hover(-1);
+                    return;
+                case SDLK_RIGHT:
+                case SDLK_KP_6:
+                    sdl_player_action_menu_move_hover(1);
+                    return;
+                default:
+                    break;
+                }
+            }
+
             sdl_player_action_menu_cancel();
             sdl_player_exchange_cancel();
         }

@@ -323,7 +323,9 @@ enum {
 
 enum {
     MAX_GAMEPADS = 4,
-    DPAD_DIAGONAL_WINDOW_MS = 200,
+    /* Coalesce axis events from the current SDL batch, but do not add a
+     * timer delay to left-stick movement. */
+    GAMEPAD_STICK_DIAGONAL_WINDOW_MS = 0,
     SHOULDER_COMBO_WINDOW_MS = 150,
     /* Rebinding should listen immediately instead of dropping quick inputs. */
     GAMEPAD_CAPTURE_ARM_DELAY_MS = 0,
@@ -3381,11 +3383,14 @@ bool get_sdl_steamdeck_inv_equip_same_button_cycle(void);
 void set_sdl_steamdeck_inv_equip_same_button_cycle(bool value);
 bool get_sdl_gamepad_use_dpad(void);
 void set_sdl_gamepad_use_dpad(bool value);
+int get_sdl_gamepad_dpad_diagonal_delay_ms(void);
+void set_sdl_gamepad_dpad_diagonal_delay_ms(int value);
 bool get_sdl_gamepad_use_left_stick(void);
 void set_sdl_gamepad_use_left_stick(bool value);
 bool get_sdl_gamepad_default_enabled(void);
 bool get_sdl_steamdeck_default_inv_equip_same_button_cycle(void);
 bool get_sdl_gamepad_default_use_dpad(void);
+int get_sdl_gamepad_default_dpad_diagonal_delay_ms(void);
 bool get_sdl_gamepad_default_use_left_stick(void);
 int get_sdl_gamepad_button_binding(int button);
 void set_sdl_gamepad_button_binding(int button, int binding);

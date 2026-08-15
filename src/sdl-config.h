@@ -142,6 +142,10 @@
 #define SDL_DICE_ROLL_TIMING_MAX_MS 10000
 #define SDL_POPUP_NOTIFICATION_DEFAULT_MS 2000
 #define SDL_POPUP_NOTIFICATION_MAX_MS 10000
+#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS 50
+#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS 300
+#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS 25
+#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS 200
 #define SDL_CAMERA_CENTER_CLEARANCE_MIN 1
 #define SDL_CAMERA_CENTER_CLEARANCE_MAX 20
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -293,6 +297,7 @@ struct sdl_config {
     bool gamepad_enabled;                 // Enable gamepad input
     bool steamdeck_inv_equip_same_button_cycle; // In controller UI, pressing inventory/equipment again cycles to the other menu
     bool gamepad_use_dpad;                // Use d-pad for movement
+    int gamepad_dpad_diagonal_delay_ms;   // Wait for a second d-pad direction before sending a cardinal move
     bool gamepad_use_left_stick;          // Use left stick for movement
     int gamepad_deadzone;                 // Deadzone for analog sticks
     int gamepad_trigger_threshold;        // Threshold to treat triggers as pressed

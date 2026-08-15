@@ -295,6 +295,17 @@ static bool sdl_movement_input_is_modal(void)
     return character_icky || sdl_prompt_input_is_active();
 }
 
+/*
+ * The terminal menus normally translate the B binding after inkey() returns,
+ * but a few native overlays own the event before it reaches that loop.  Keep
+ * the physical B button on the same Back/Escape path for every modal menu.
+ */
+static bool sdl_gamepad_back_button_is_modal(void)
+{
+    return sdl_movement_input_is_modal()
+        || sdl_hint_quest_menu_active();
+}
+
 static bool sdl_movement_command_input_is_live(void)
 {
     return movement_input_active_context() == MOVEMENT_INPUT_CONTEXT_DUNGEON
@@ -657,6 +668,48 @@ bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event)
     return false;
 }
 
+/*
+ * Give every unmodified controller control the same situational command
+ * resolution as the touch controls.  Keep that resolution out of ordinary
+ * modal menus: there, A/B/X/Y and the shoulders are translated by the menu's
+ * controller contract and must not turn into dungeon-floor commands.
+ */
+static int sdl_gamepad_context_key(int key)
+{
+    bool description_open = g_description_overlay.active
+        && g_description_overlay.interactive;
+    int context_key = (key == INPUT_BIND_CONFIRM) ? ' ' : key;
+    int resolved_key = context_key;
+
+    if (description_open)
+    {
+        if (sdl_description_overlay_has_footer_action(context_key))
+            return context_key;
+
+        if (context_key == 'g'
+            && sdl_description_overlay_has_footer_action(' '))
+        {
+            return ' ';
+        }
+
+        if (touch_shortcut_context_action(context_key, true, &resolved_key,
+                NULL, 0)
+            && sdl_description_overlay_has_footer_action(resolved_key))
+        {
+            return resolved_key;
+        }
+
+        return context_key;
+    }
+
+    if (!sdl_main_screen_click_shortcuts_active())
+        return context_key;
+
+    (void)touch_shortcut_context_action(context_key, false, &resolved_key,
+        NULL, 0);
+    return resolved_key;
+}
+
 void sdl_gamepad_send_key(int key, bool use_macro_mods)
 {
     bool shift = sdl_gamepad_shift_active();
@@ -667,6 +720,9 @@ void sdl_gamepad_send_key(int key, bool use_macro_mods)
         sdl_send_macro_key(key, shift, ctrl, alt);
         return;
     }
+
+    if (!shift && !ctrl && !alt)
+        key = sdl_gamepad_context_key(key);
 
     if (SDL_isprint(key)) {
         if (ctrl && !alt && SDL_isalpha(key)) {
@@ -710,7 +766,7 @@ void sdl_gamepad_send_key(int key, bool use_macro_mods)
 
 void sdl_gamepad_send_key_raw(int key)
 {
-    Term_keypress(key);
+    Term_keypress(sdl_gamepad_context_key(key));
 }
 
 void sdl_gamepad_send_shoulder_combo(void)
@@ -828,6 +884,17 @@ void sdl_gamepad_send_direction(int dir)
         sdl_gamepad_ctrl_active(), sdl_gamepad_alt_active());
 }
 
+static int sdl_gamepad_dpad_diagonal_delay_ms(void)
+{
+    int delay = config.gamepad_dpad_diagonal_delay_ms;
+
+    if (delay < SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
+        return SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS;
+    if (delay > SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS)
+        return SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS;
+    return delay;
+}
+
 void sdl_gamepad_clear_pending_dpad(void)
 {
     g_gamepad_state.dpad_pending = false;
@@ -857,7 +924,8 @@ bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force)
         return false;
     }
 
-    Uint64 window_ns = (Uint64)DPAD_DIAGONAL_WINDOW_MS * 1000000ULL;
+    Uint64 window_ns = (Uint64)sdl_gamepad_dpad_diagonal_delay_ms()
+        * 1000000ULL;
     if (!force && now_ns - g_gamepad_state.dpad_pending_time < window_ns)
         return false;
 
@@ -897,7 +965,7 @@ bool sdl_gamepad_flush_pending_left_stick(Uint64 now_ns, bool force)
         return false;
     }
 
-    Uint64 window_ns = (Uint64)DPAD_DIAGONAL_WINDOW_MS * 1000000ULL;
+    Uint64 window_ns = (Uint64)GAMEPAD_STICK_DIAGONAL_WINDOW_MS * 1000000ULL;
     if (!force && now_ns - g_gamepad_state.left_pending_time < window_ns)
         return false;
 
@@ -1130,7 +1198,8 @@ int sdl_gamepad_pending_timeout_ms(Uint64 now_ns)
     int best = -1;
 
     if (g_gamepad_state.dpad_pending && config.gamepad_enabled && config.gamepad_use_dpad) {
-        Uint64 window_ns = (Uint64)DPAD_DIAGONAL_WINDOW_MS * 1000000ULL;
+        Uint64 window_ns = (Uint64)sdl_gamepad_dpad_diagonal_delay_ms()
+            * 1000000ULL;
         Uint64 elapsed = now_ns - g_gamepad_state.dpad_pending_time;
         if (elapsed >= window_ns) {
             dpad_timeout = 0;
@@ -1143,7 +1212,7 @@ int sdl_gamepad_pending_timeout_ms(Uint64 now_ns)
     }
 
     if (g_gamepad_state.left_pending && config.gamepad_enabled && config.gamepad_use_left_stick) {
-        Uint64 window_ns = (Uint64)DPAD_DIAGONAL_WINDOW_MS * 1000000ULL;
+        Uint64 window_ns = (Uint64)GAMEPAD_STICK_DIAGONAL_WINDOW_MS * 1000000ULL;
         Uint64 elapsed = now_ns - g_gamepad_state.left_pending_time;
         if (elapsed >= window_ns) {
             left_timeout = 0;
@@ -1792,6 +1861,14 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
     if (sdl_player_action_menu_handle_gamepad_button(button, down))
         return;
 
+    if (down && button == SDL_GAMEPAD_BUTTON_EAST
+        && steamdeck_controls_active()
+        && sdl_gamepad_back_button_is_modal())
+    {
+        Term_keypress(ESCAPE);
+        return;
+    }
+
     if (config.gamepad_use_dpad &&
         (button == SDL_GAMEPAD_BUTTON_DPAD_UP || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN ||
             button == SDL_GAMEPAD_BUTTON_DPAD_LEFT || button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT))
@@ -1836,9 +1913,14 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
                 sdl_gamepad_clear_pending_dpad();
                 sdl_gamepad_send_direction(dir);
             } else {
-                if (g_gamepad_state.dpad_pending)
-                    sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
-                sdl_gamepad_set_pending_dpad(dir);
+                if (sdl_gamepad_dpad_diagonal_delay_ms() == 0) {
+                    sdl_gamepad_clear_pending_dpad();
+                    sdl_gamepad_send_direction(dir);
+                } else {
+                    if (g_gamepad_state.dpad_pending)
+                        sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
+                    sdl_gamepad_set_pending_dpad(dir);
+                }
             }
         }
         return;

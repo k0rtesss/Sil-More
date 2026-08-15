@@ -1755,6 +1755,24 @@ void set_sdl_gamepad_use_dpad(bool value)
     }
 }
 
+int get_sdl_gamepad_dpad_diagonal_delay_ms(void)
+{
+    return config.gamepad_dpad_diagonal_delay_ms;
+}
+
+void set_sdl_gamepad_dpad_diagonal_delay_ms(int value)
+{
+    if (value < SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
+        value = SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS;
+    if (value > SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS)
+        value = SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS;
+
+    if (config.gamepad_dpad_diagonal_delay_ms != value) {
+        config.gamepad_dpad_diagonal_delay_ms = value;
+        sdl_gamepad_clear_pending_dpad();
+    }
+}
+
 bool get_sdl_gamepad_use_left_stick(void)
 {
     return config.gamepad_use_left_stick;
@@ -1809,6 +1827,13 @@ bool get_sdl_gamepad_default_use_dpad(void)
     struct sdl_config defaults;
     sdl_gamepad_toggle_defaults(&defaults);
     return defaults.gamepad_use_dpad;
+}
+
+int get_sdl_gamepad_default_dpad_diagonal_delay_ms(void)
+{
+    struct sdl_config defaults;
+    sdl_gamepad_toggle_defaults(&defaults);
+    return defaults.gamepad_dpad_diagonal_delay_ms;
 }
 
 bool get_sdl_gamepad_default_use_left_stick(void)

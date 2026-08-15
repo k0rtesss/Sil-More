@@ -11324,6 +11324,7 @@ void do_cmd_keybinds(void)
 
 typedef enum controller_entry_type {
     CONTROLLER_ENTRY_TOGGLE = 0,
+    CONTROLLER_ENTRY_CYCLE,
     CONTROLLER_ENTRY_ACTION,
 } controller_entry_type;
 
@@ -11333,6 +11334,10 @@ typedef enum controller_toggle_id {
     CONTROLLER_TOGGLE_DPAD,
     CONTROLLER_TOGGLE_LEFT_STICK,
 } controller_toggle_id;
+
+typedef enum controller_setting_id {
+    CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY = 0,
+} controller_setting_id;
 
 typedef struct controller_entry {
     controller_entry_type type;
@@ -11385,6 +11390,52 @@ static const char* controller_gamepad_button_label(int button)
     case SDL_GAMEPAD_BUTTON_MISC5: return "Misc5";
     case SDL_GAMEPAD_BUTTON_MISC6: return "Misc6";
     default: return "Unknown Button";
+    }
+}
+
+static int controller_dpad_diagonal_delay_count(void)
+{
+    return (SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS
+        - SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
+        / SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS + 1;
+}
+
+static int controller_dpad_diagonal_delay_index(int value)
+{
+    int index;
+    int count = controller_dpad_diagonal_delay_count();
+
+    if (value <= SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
+        return 0;
+    if (value >= SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS)
+        return count - 1;
+
+    index = (value - SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS
+        + SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS / 2)
+        / SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS;
+    if (index < 0)
+        index = 0;
+    if (index >= count)
+        index = count - 1;
+    return index;
+}
+
+static void controller_adjust_setting(int setting_id, int delta)
+{
+    if (setting_id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
+        int count = controller_dpad_diagonal_delay_count();
+        int index = controller_dpad_diagonal_delay_index(
+            get_sdl_gamepad_dpad_diagonal_delay_ms());
+
+        index += delta;
+        if (index < 0)
+            index = count - 1;
+        else if (index >= count)
+            index = 0;
+
+        set_sdl_gamepad_dpad_diagonal_delay_ms(
+            SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS
+            + index * SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS);
     }
 }
 
@@ -12169,6 +12220,15 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
             break;
         }
         break;
+    case CONTROLLER_ENTRY_CYCLE:
+        if (entry->id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
+            int delay = get_sdl_gamepad_dpad_diagonal_delay_ms();
+
+            strnfmt(buf, buflen, "%d ms", delay);
+        } else {
+            SDL_strlcpy(buf, "(unknown)", buflen);
+        }
+        break;
     case CONTROLLER_ENTRY_ACTION:
         controller_action_binding_label(entry->id, buf, buflen);
         break;
@@ -12437,6 +12497,7 @@ void do_cmd_controller_settings(void)
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_ENABLED, "Controller Input" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE, "Inv/Equip Same-Button Cycle" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_DPAD, "D-pad Movement" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY, "D-pad Diagonal Delay" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_LEFT_STICK, "Left Stick Movement" },
         { CONTROLLER_ENTRY_ACTION, '\r', "Enter" },
         { CONTROLLER_ENTRY_ACTION, INPUT_BIND_CONFIRM, "Confirm (Space)" },
@@ -12539,6 +12600,20 @@ void do_cmd_controller_settings(void)
                 strnfmt(desc, sizeof(desc),
                     "Bindings: %s. Enter or Space adds a controller control. R resets selected, M resets all. Changes are saved on exit.",
                     detail_value_buf);
+            } else if (entries[highlight].type == CONTROLLER_ENTRY_CYCLE) {
+                cptr cycle_desc;
+
+                switch (entries[highlight].id) {
+                case CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY:
+                    cycle_desc =
+                        "Wait this long for a second D-pad direction to form a diagonal. "
+                        "50 ms is the fastest setting, but makes diagonals harder to enter.";
+                    break;
+                default:
+                    cycle_desc = "";
+                    break;
+                }
+                strnfmt(desc, sizeof(desc), "%s", cycle_desc);
             } else {
                 cptr toggle_desc;
 
@@ -12630,6 +12705,11 @@ void do_cmd_controller_settings(void)
             highlight = (highlight + entry_count - 1) % entry_count;
         } else if (ch == '2') {
             highlight = (highlight + 1) % entry_count;
+        } else if (ch == '4' || ch == '6') {
+            if (entries[highlight].type == CONTROLLER_ENTRY_CYCLE) {
+                controller_adjust_setting(entries[highlight].id,
+                    (ch == '6') ? 1 : -1);
+            }
         } else if (ch == 'r' || (steamdeck && ch == steamdeck_alt_action_key())) {
             if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
                 controller_clear_effective_action_bindings(entries[highlight].id);
@@ -12638,6 +12718,15 @@ void do_cmd_controller_settings(void)
                 } else {
                     msg_print("No default binding for action.");
                 }
+                message_flush();
+            } else if (entries[highlight].type == CONTROLLER_ENTRY_CYCLE) {
+                if (entries[highlight].id
+                    == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY)
+                {
+                    set_sdl_gamepad_dpad_diagonal_delay_ms(
+                        get_sdl_gamepad_default_dpad_diagonal_delay_ms());
+                }
+                msg_format("Reset %s to default.", entries[highlight].label);
                 message_flush();
             } else {
                 controller_set_toggle(entries[highlight].id,
@@ -12656,6 +12745,8 @@ void do_cmd_controller_settings(void)
                 char cur[16];
                 controller_entry_value(entry, cur, sizeof(cur));
                 controller_set_toggle(entry->id, streq(cur, "Off"));
+            } else if (entry->type == CONTROLLER_ENTRY_CYCLE) {
+                controller_adjust_setting(entry->id, 1);
             } else {
                 char prompt[80];
                 char prompt_long[96];

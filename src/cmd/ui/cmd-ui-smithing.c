@@ -151,6 +151,12 @@ static int smith_ui_touch_drag_sink;
 
 #define SMITH_CLICK_BACK 33000
 
+/* Controller B uses a gameplay binding, so normalize it to menu Back here. */
+static char smithing_menu_key(char ch)
+{
+    return (char)steamdeck_menu_key(ch, 0, 0);
+}
+
 static int smith_ui_term_wid(void)
 {
     int wid = 80;
@@ -4502,7 +4508,7 @@ int create_sval_menu_aux(int tval, int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -4702,7 +4708,7 @@ int create_tval_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -5212,7 +5218,7 @@ int numbers_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -5647,7 +5653,7 @@ static int smith_bonus_menu_aux(int* highlight)
     Term_gotoxy(2, (hl_row >= first_row) ? hl_row : first_row);
 
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -6110,7 +6116,7 @@ static int reforge_prefix_menu(const object_type* source)
 
         Term_fresh();
         hide_cursor = true;
-        ch = inkey();
+        ch = smithing_menu_key(inkey());
         hide_cursor = false;
 
         {
@@ -6366,7 +6372,7 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -6920,7 +6926,7 @@ int artefact_flag_menu_aux(int category, int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -7379,7 +7385,7 @@ int artefact_ability_menu_aux(int skill, int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -7681,7 +7687,7 @@ int artefact_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -7944,7 +7950,7 @@ int melt_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -8687,7 +8693,7 @@ int smithing_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {

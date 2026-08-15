@@ -385,6 +385,10 @@ static cptr sdl_player_floor_use_action_name(void)
 {
     int floor_list[MAX_FLOOR_STACK];
     int floor_num;
+    int item_count = 0;
+    const object_type* first_item = NULL;
+    int first_item_index = 0;
+    static char items_label[32];
 
     if (!p_ptr)
         return "Use";
@@ -398,9 +402,22 @@ static cptr sdl_player_floor_use_action_name(void)
         if (o_idx <= 0 || o_idx >= o_max)
             continue;
         o_ptr = &o_list[o_idx];
-        if (o_ptr->k_idx && !object_is_searched_skeleton(o_ptr))
-            return item_use_action_name(o_ptr, 0 - o_idx);
+        if (!o_ptr->k_idx || object_is_searched_skeleton(o_ptr))
+            continue;
+
+        if (!first_item) {
+            first_item = o_ptr;
+            first_item_index = 0 - o_idx;
+        }
+        item_count++;
     }
+
+    if (item_count > 1) {
+        strnfmt(items_label, sizeof(items_label), "Items (%d)...", item_count);
+        return items_label;
+    }
+    if (first_item)
+        return item_use_action_name(first_item, first_item_index);
 
     return "Use";
 }
@@ -1466,7 +1483,6 @@ void sdl_player_exchange_activate_hover(void)
 void sdl_player_action_menu_activate_kind(int kind, bool secondary)
 {
     int command = 0;
-    bool select_floor = false;
 
     switch (kind) {
     case SDL_PLAYER_ACTION_EXCHANGE:
@@ -1476,8 +1492,8 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
         command = secondary ? 'Z' : 'z';
         break;
     case SDL_PLAYER_ACTION_USE:
-        command = 'u';
-        select_floor = !secondary && sdl_player_has_floor_item_underfoot();
+        command = (!secondary && sdl_player_has_floor_item_underfoot())
+            ? CMD_CONTEXT_FLOOR_ACTION : 'u';
         break;
     case SDL_PLAYER_ACTION_STEALTH:
         command = 'S';
@@ -1490,7 +1506,6 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
         break;
     case SDL_PLAYER_ACTION_EXAMINE:
         command = 'x';
-        select_floor = !secondary && sdl_player_has_floor_item_underfoot();
         break;
     case SDL_PLAYER_ACTION_ACTIVATE:
         command = 'a';
@@ -1527,8 +1542,6 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
     sdl_player_exchange_cancel();
     sdl_mouse_path_cancel();
     sdl_enqueue_bypassed_command(command);
-    if (select_floor)
-        Term_keypress('-');
 }
 
 bool sdl_player_action_menu_open(void)
