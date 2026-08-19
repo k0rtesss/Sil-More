@@ -177,6 +177,22 @@ void metarun_update_on_exit(bool died,
  * the run ends and persists everything.                              */
 
 void check_run_end(void);                        /* Check win/loss conditions */
+void metarun_show_poetry_scene(cptr title, byte title_attr, cptr body,
+                               byte body_attr, cptr transition,
+                               byte transition_attr, cptr prompt);
+void metarun_show_poetry_blocks(cptr title, byte title_attr,
+                                cptr blocks[], const byte block_attrs[],
+                                const bool block_outcome_reveals[],
+                                int block_count, cptr prompt, int hold_ms,
+                                bool wait_for_key, bool immediate,
+                                bool *fast_forward);
+void metarun_debug_show_run_result(bool victory, int silmarils, int alive,
+                                   int required_survivors);
+void metarun_debug_show_run_summary(int silmarils, int stolen_silmarils,
+                                    bool show_treachery,
+                                    int kinslaying_attempt);
+int metarun_debug_preview_curse_menu(void);
+int metarun_debug_choose_escape_curses(int n, int out[4]);
 void metarun_increment_deaths(void);             /* Shortcut: +1 death      */
 void metarun_gain_silmarils(byte n);             /* Shortcut: +n Silmarils  */
 
@@ -190,6 +206,10 @@ metarun *metarun_entry_mutable(s16b idx);        /* Bounds-checked mutable acces
 s16b metarun_current_index(void);                /* Current metarun index or -1 */
 s16b metarun_entry_count(void);                  /* Total metarun entries loaded */
 int metarun_completed_count(void);              /* Count finished metaruns */
+bool metarun_tale_management_available(void);   /* No active character/story save */
+bool metarun_tale_recovery_required(void);      /* Story ledger needs restart recovery */
+bool metarun_activate_tale(s16b idx);            /* Make a recorded tale current */
+bool metarun_create_tale(void);                  /* Create/select a fresh tale */
 
 /* ------------------------------------------------------------------ */
 /*  Quest completion tracking                                         */

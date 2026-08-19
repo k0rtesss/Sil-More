@@ -13,6 +13,7 @@
 # C: max att : plus damage dice : plus damage sides : max evn : 
 #    plus prot dice: plus prot sides : pval : min pval (optional)
 # W: depth : rarity_percent : max_depth : cost
+# Y: percentage volume reduction (for example, Y:-20 reduces volume by 20%)
 # A: depth/rarity_percent : depth/rarity_percent : etc
 # T: tval : min_sval : max_sval
 # F: flag | flag | etc
@@ -36,6 +37,10 @@
 #     Optional min_pval sets the minimum pval this ego can have. If omitted
 #     and max_pval > 0, min_pval defaults to 1 (forbidding 0 pval items).
 #     Set min_pval to 0 explicitly to allow 0 pval items.
+#
+# 'Y' reduces the base item's stowed volume by a percentage. Multiple
+#     volume-reducing egos do not stack; only the strongest reduction applies.
+#     The final volume of a volume-bearing item is never below 0.1 qt.
 #
 # 'F' is for flags. These are fairly self-explanatory. As many F:
 #     lines may be used as are needed to specify all the flags and flags
@@ -74,7 +79,7 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:0.9.9
 
 
 
@@ -830,6 +835,7 @@ N:52:of the Longbeards
 W:0:30:0:1000
 C:0:0:0:0:0:0:0
 T:20:3:3
+M:STR:2
 F:STR | NOBLE_ITEM
 D:[mattock]The grave strength of the Longbeards is in it still, fit for
 D: long delving where lesser folk would have laid tool and will aside.
@@ -1607,12 +1613,13 @@ D: or ash. When the hammer strikes, the hidden fire in the metal seems
 D: to wake again, as though the forge itself had judged the blow.
 
 
-# Daggers and hand axes only
+# Daggers, spears, and hand axes only
 # (ability 0/3 is Throwing)
 # The Gaurwaith were the outlaw band of Túrin, living by their wits and weapons in the wild.
 
 N:149:of the Gaurwaith
 W:4:75:0:1500
+Y:-20
 C:0:0:0:0:0:0:0
 T:23:4:4
 T:22:1:1
@@ -2129,6 +2136,7 @@ D: step, and sudden turning had entered into quiet agreement.
 
 N:185:(Light)
 W:0:40:0:800
+Y:-20
 C:0:0:0:1:0:0:0
 T:34:0:99
 T:32:0:99
@@ -2139,4 +2147,38 @@ D: still weave and turn as freely as the unarmoured. ||
 D:[helm]It has been beaten thin and fitted near to the brow, sparing of
 D: weight where lesser smiths would pile on iron, so that the head stays
 D: light and the wearer quick to slip aside.
+
+
+##### Additional Dagger Slaying Egos #####
+
+
+# Daggers only
+
+N:186:of the Haladin
+W:2:20:0:2500
+C:0:0:0:0:0:0:0
+T:23:4:4
+F:SLAY_ORC | SLAY_WOLF | SLAY_SPIDER | NOBLE_ITEM
+D:[dagger]The Haladin learned knife-craft behind timber walls and beneath
+D: close boughs. Orcs pressed their stockades, the wolves of the Enemy ran
+D: with his raiders, and the spawn of Nan Dungortheb haunted their westward
+D: road. Their broad, short blades cleared web, flew quickly at a springing
+D: wolf, and found the joints of Orc-mail when fighting became too close for
+D: spear or bow.
+
+
+# Daggers only
+
+N:187:of Tevildo's Thralls
+W:15:30:0:2500
+C:0:0:0:0:0:0:0
+T:23:4:4
+F:SLAY_WOLF | SLAY_CAT | NOBLE_ITEM
+D:[dagger]The thralls of Tevildo were watched by the great Cats of his
+D: household, while the wolves of Angamandi hunted those who fled. Denied
+D: all weapons, they altered the knives of kitchen and slaughter-house:
+D: stiffening the point so it would not turn on a wolf's ribs and weighting
+D: the blade for a sudden cast at a leaping Cat. To a gaoler's eye they
+D: remained tools; in a captive's hand, they became the first stroke of
+D: escape.
 

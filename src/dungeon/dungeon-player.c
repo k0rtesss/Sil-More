@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "dungeon-internal.h"
+#include "meta_state.h"
 
 static bool auto_pickup_okay(const object_type* o_ptr)
 {
@@ -220,11 +221,18 @@ void process_player(void)
     int regen_multiplier;
     int depth_counter_increment;
 
+    player_active_weapon_begin_player_turn();
+
     // reset the number of times you have riposted since last turn
     p_ptr->ripostes = 0;
 
     // reset whether you have just woken up from entrancement
     p_ptr->was_entranced = false;
+
+    /* A completed timed rest relights its fuel-burning light before the
+     * player's next action. */
+    if (!p_ptr->resting && p_ptr->resting_light_off)
+        p_ptr->resting_light_off = false;
 
     // update the player's torch radius
     calc_torch();
@@ -268,7 +276,8 @@ void process_player(void)
         }
 
         /* Check for "player abort" */
-        if (p_ptr->running || p_ptr->fletching || p_ptr->smithing
+        if (player_pack_action_pending() || p_ptr->running || p_ptr->fletching
+            || p_ptr->smithing
             || p_ptr->command_rep || (p_ptr->resting && !(turn & 0x7F)))
         {
             /* Do not wait */
@@ -282,6 +291,10 @@ void process_player(void)
 
                 /* Disturb */
                 disturb(0, 0);
+
+                /* A Pack action is only cancelled by an attack or by the
+                 * player's explicit input. */
+                player_pack_action_cancel();
 
                 /* Hack -- Show a Message */
                 msg_print("Cancelled.");
@@ -307,6 +320,8 @@ void process_player(void)
 
             /* Redraw the state */
             p_ptr->redraw |= (PR_STATE);
+            if (pixel_monster_status_icons)
+                p_ptr->redraw |= (PR_MAP);
 
             // Reset the flag
             stop_stealth_mode = false;
@@ -415,7 +430,8 @@ void process_player(void)
         /* Place the cursor on the player or target */
         if (hilite_player)
             move_cursor_relative(p_ptr->py, p_ptr->px);
-        if (hilite_target && target_sighted())
+        if (hilite_target && target_sighted()
+            && panel_contains(p_ptr->target_row, p_ptr->target_col))
             move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
 
         if (cheat_noise)
@@ -476,6 +492,12 @@ void process_player(void)
 
             // store the action type
             p_ptr->previous_action[0] = ACTION_MISC;
+        }
+
+        /* Searching the Pack */
+        else if (player_pack_action_pending())
+        {
+            player_pack_action_process();
         }
 
         /* Smithing */
@@ -636,6 +658,7 @@ void process_player(void)
             char out_val[160];
             char o_name[80];
             object_type* o_ptr;
+            bool context_popup_handled = false;
 
             // build an object description
             if (cave_o_idx[p_ptr->py][p_ptr->px])
@@ -647,9 +670,25 @@ void process_player(void)
                 strnfmt(out_val, sizeof(out_val), "Pick up %s? ", o_name);
             }
 
+#if !defined(__ANDROID__) && !defined(SIL_IOS)
+            /*
+             * Desktop has no always-visible Quick Touch strip.  After a real
+             * move onto a context-sensitive square, show its equivalent
+             * actions in a popup anchored to the player.
+             */
+            if ((p_ptr->previous_action[1] >= 1)
+                && (p_ptr->previous_action[1] <= 9)
+                && (p_ptr->previous_action[1] != 5))
+            {
+                context_popup_handled =
+                    do_cmd_context_square_action_popup();
+            }
+#endif
+
             // always offer to pickup if the mode is on, there is an object
             // present, and you have just moved
-            if (always_pickup && cave_o_idx[p_ptr->py][p_ptr->px]
+            if (!context_popup_handled && always_pickup
+                && cave_o_idx[p_ptr->py][p_ptr->px]
                 && (o_ptr->tval != TV_NOTE) && (p_ptr->previous_action[1] >= 1)
                 && (p_ptr->previous_action[1] <= 9)
                 && (p_ptr->previous_action[1] != 5))
@@ -671,7 +710,8 @@ void process_player(void)
                 /* Place the cursor on the player or target */
                 if (hilite_player)
                     move_cursor_relative(p_ptr->py, p_ptr->px);
-                if (hilite_target && target_sighted())
+                if (hilite_target && target_sighted()
+                    && panel_contains(p_ptr->target_row, p_ptr->target_col))
                     move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
 
                 /* We are certainly no longer in the process of restoring a game
@@ -680,6 +720,7 @@ void process_player(void)
 
                 /* Get a command (normal) */
                 TIME_PHASE("request_command", request_command());
+                sdl_question_menu_clear_context_hint();
                 if (p_ptr->leaving)
                 {
                     log_debug("process_player: leaving set while waiting for command; command=%d playing=%d",
@@ -707,6 +748,7 @@ void process_player(void)
         /* Update labyrinth map restriction and partition-entry messages/XP. */
         update_labyrinth_view_state(true);
         handle_partition_entry(false, op_ptr->partition_narrative_mode);
+        legendary_area_note_player_position();
 
         bool in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH)
             && (cave_info[p_ptr->py][p_ptr->px] & (CAVE_G_VAULT));

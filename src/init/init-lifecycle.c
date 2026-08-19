@@ -7,6 +7,7 @@
 #include "init.h"
 #include "item_set.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "metarun.h"
 #include "score/score_guid.h"
 #include "sdl-config.h"
@@ -382,6 +383,9 @@ void init_angband(void)
     if (metarun_created) {
         cleanup_old_game_files();
     }
+
+    if (!meta_state_init())
+        quit("Cannot initialize meta-state subsystem");
 
     /* Done */
     note("                                              ");

@@ -303,6 +303,10 @@ static errr term_win_nuke(term_win* s)
     mem_free_null(s->story);
     mem_free_null(s->vstory);
 
+    /* Free styled health-bar arrays */
+    mem_free_null(s->health);
+    mem_free_null(s->vhealth);
+
     /* Success */
     return (0);
 }
@@ -313,6 +317,8 @@ static errr term_win_nuke(term_win* s)
 static errr term_win_init(term_win* s, int w, int h)
 {
     int y;
+
+    s->cursor_big = false;
 
     /* Make the window access arrays */
     s->a = mem_alloc_array(h, byte*);
@@ -334,6 +340,10 @@ static errr term_win_init(term_win* s, int w, int h)
     s->story = mem_alloc_array(h, byte*);
     s->vstory = mem_alloc_array(h * w, byte);
 
+    /* Make the styled health-bar arrays */
+    s->health = mem_alloc_array(h, byte*);
+    s->vhealth = mem_alloc_array(h * w, byte);
+
     /* Prepare the window access arrays */
     for (y = 0; y < h; y++)
     {
@@ -344,6 +354,7 @@ static errr term_win_init(term_win* s, int w, int h)
         s->tc[y] = s->vtc + w * y;
 
         s->story[y] = s->vstory + w * y;
+        s->health[y] = s->vhealth + w * y;
     }
 
     /* Success */
@@ -374,6 +385,8 @@ static errr term_win_copy(term_win* s, term_win* f, int w, int h)
 
         byte* f_story = f->story[y];
         byte* s_story = s->story[y];
+        byte* f_health = f->health[y];
+        byte* s_health = s->health[y];
 
         for (x = 0; x < w; x++)
         {
@@ -384,6 +397,7 @@ static errr term_win_copy(term_win* s, term_win* f, int w, int h)
             *s_tcc++ = *f_tcc++;
 
             *s_story++ = *f_story++;
+            *s_health++ = *f_health++;
         }
     }
 
@@ -392,6 +406,7 @@ static errr term_win_copy(term_win* s, term_win* f, int w, int h)
     s->cy = f->cy;
     s->cu = f->cu;
     s->cv = f->cv;
+    s->cursor_big = f->cursor_big;
 
     /* Success */
     return (0);
@@ -508,6 +523,8 @@ void Term_queue_char(int x, int y, byte a, char c, byte ta, char tc)
 
     byte* scr_story = Term->scr->story[y];
     byte osf = scr_story[x];
+    byte* scr_health = Term->scr->health[y];
+    byte ohf = scr_health[x];
 
     /* Don't change is the terrain value is 0 */
     if (!ta)
@@ -531,7 +548,9 @@ void Term_queue_char(int x, int y, byte a, char c, byte ta, char tc)
         log_trace("Term_queue_char: story-font ACTIVE y=%d x=%d char='%c' attr=%d story_flag=0x%02x",
                   y, x, c, a, nsf);
     }
-    if ((oa == a) && (oc == c) && (ota == ta) && (otc == tc) && (osf == nsf))
+    byte nhf = Term->health_bar_active ? Term->health_bar_level : 0;
+    if ((oa == a) && (oc == c) && (ota == ta) && (otc == tc)
+        && (osf == nsf) && (ohf == nhf))
         return;
 
     /* Save the "literal" information */
@@ -542,6 +561,7 @@ void Term_queue_char(int x, int y, byte a, char c, byte ta, char tc)
     scr_tcc[x] = tc;
 
     scr_story[x] = nsf;
+    scr_health[x] = nhf;
 
     /* Check for new min/max row info */
     if (y < Term->y1)
@@ -599,6 +619,7 @@ void Term_queue_chars(int x, int y, int n, byte a, cptr s)
     char* scr_tcc = Term->scr->tc[y];
 
     byte* scr_story = Term->scr->story[y];
+    byte* scr_health = Term->scr->health[y];
 
     byte nsf = 0;
     if (Term->story_font_active)
@@ -615,6 +636,7 @@ void Term_queue_chars(int x, int y, int n, byte a, cptr s)
         log_trace("Term_queue_chars: story-font ACTIVE y=%d x=%d n=%d text='%.*s' story_flag=0x%02x",
                   y, x, n, n, s, nsf);
     }
+    byte nhf = Term->health_bar_active ? Term->health_bar_level : 0;
 
     /* Queue the attr/chars */
     for (; n; x++, s++, n--)
@@ -626,9 +648,11 @@ void Term_queue_chars(int x, int y, int n, byte a, cptr s)
         char otc = scr_tcc[x];
 
         byte osf = scr_story[x];
+        byte ohf = scr_health[x];
 
         /* Hack -- Ignore non-changes */
-        if ((oa == a) && (oc == *s) && (ota == 0) && (otc == 0) && (osf == nsf))
+        if ((oa == a) && (oc == *s) && (ota == 0) && (otc == 0)
+            && (osf == nsf) && (ohf == nhf))
             continue;
 
         /* Save the "literal" information */
@@ -639,6 +663,7 @@ void Term_queue_chars(int x, int y, int n, byte a, cptr s)
         scr_tcc[x] = 0;
 
         scr_story[x] = nsf;
+        scr_health[x] = nhf;
 
         /* Note the "range" of window updates */
         if (x1 < 0)
@@ -665,6 +690,106 @@ void Term_queue_chars(int x, int y, int n, byte a, cptr s)
 
 /*** Refresh routines ***/
 
+static int term_utf8_lead_length(byte c)
+{
+    if ((c >= 0xC2) && (c <= 0xDF))
+        return 2;
+    if ((c >= 0xE0) && (c <= 0xEF))
+        return 3;
+    if ((c >= 0xF0) && (c <= 0xF4))
+        return 4;
+    return 0;
+}
+
+static bool term_utf8_sequence_valid(const term_win* win, int y, int x,
+    int len)
+{
+    byte attr = win->a[y][x];
+    byte lead = (byte)win->c[y][x];
+    byte second;
+
+    if ((len < 2) || (x + len > Term->wid))
+        return false;
+
+    for (int i = 1; i < len; i++)
+    {
+        byte c = (byte)win->c[y][x + i];
+
+        if ((win->a[y][x + i] != attr) || ((c & 0xC0) != 0x80))
+            return false;
+    }
+
+    second = (byte)win->c[y][x + 1];
+    if ((lead == 0xE0) && (second < 0xA0))
+        return false;
+    if ((lead == 0xED) && (second > 0x9F))
+        return false;
+    if ((lead == 0xF0) && (second < 0x90))
+        return false;
+    if ((lead == 0xF4) && (second > 0x8F))
+        return false;
+
+    return true;
+}
+
+/*
+ * Selected text and glowing tiles both use attributes in the 11xxxxxx range:
+ * selected text adds a background color to 0xC0, while a tile sets 0x80 and
+ * may add the 0x40 glow flag.  Distinguish selected UTF-8 by validating the
+ * complete byte sequence around this cell.  A lone high-bit tile character
+ * (such as a glowing thrown weapon) is not valid UTF-8 and remains a tile.
+ */
+static bool term_cell_is_selected_utf8(const term_win* win, int y, int x)
+{
+    byte attr;
+    int first;
+
+    if (!win || (y < 0) || (y >= Term->hgt) || (x < 0) || (x >= Term->wid))
+        return false;
+
+    attr = win->a[y][x];
+    if ((attr & 0xC0) != 0xC0)
+        return false;
+
+    first = (x >= 3) ? x - 3 : 0;
+    for (int start = x; start >= first; start--)
+    {
+        int len;
+
+        if (win->a[y][start] != attr)
+            break;
+
+        len = term_utf8_lead_length((byte)win->c[y][start]);
+        if (!len || (x >= start + len))
+            continue;
+        if (term_utf8_sequence_valid(win, y, start, len))
+            return true;
+    }
+
+    return false;
+}
+
+/*
+ * Mixed text/tile terminals identify tiles with the high bit in both the
+ * attribute and character.  Keep valid selected UTF-8 text on the text path,
+ * but accept 11xxxxxx tile attributes carrying the graphical glow flag.
+ * Attribute 255 remains the bigtile continuation sentinel.
+ */
+static bool term_cell_is_tile(const term_win* win, int y, int x)
+{
+    byte a = win->a[y][x];
+    byte c = (byte)win->c[y][x];
+
+    if (!(c & 0x80))
+        return false;
+    if (a == 255)
+        return true;
+    if ((a & 0xC0) == 0x80)
+        return true;
+    return ((a & 0xC0) == 0xC0)
+        && !term_cell_is_selected_utf8(win, y, x);
+}
+
 /*
  * Flush a row of the current window (see "Term_fresh")
  *
@@ -688,6 +813,8 @@ static void Term_fresh_row_pict(int y, int x1, int x2)
 
     byte* old_story = Term->old->story[y];
     byte* scr_story = Term->scr->story[y];
+    byte* old_health = Term->old->health[y];
+    byte* scr_health = Term->scr->health[y];
 
     byte ota;
     char otc;
@@ -726,9 +853,12 @@ static void Term_fresh_row_pict(int y, int x1, int x2)
 
         byte osf = old_story[x];
         byte nsf = scr_story[x];
+        byte ohf = old_health[x];
+        byte nhf = scr_health[x];
 
         /* Handle unchanged grids */
-        if ((na == oa) && (nc == oc) && (nta == ota) && (ntc == otc) && (nsf == osf))
+        if ((na == oa) && (nc == oc) && (nta == ota) && (ntc == otc)
+            && (nsf == osf) && (nhf == ohf))
         {
             /* Flush */
             if (fn)
@@ -752,6 +882,7 @@ static void Term_fresh_row_pict(int y, int x1, int x2)
         old_taa[x] = nta;
         old_tcc[x] = ntc;
         old_story[x] = nsf;
+        old_health[x] = nhf;
 
         /* Restart and Advance */
         if (fn++ == 0)
@@ -789,6 +920,8 @@ static void Term_fresh_row_both(int y, int x1, int x2)
 
     byte* old_story = Term->old->story[y];
     byte* scr_story = Term->scr->story[y];
+    byte* old_health = Term->old->health[y];
+    byte* scr_health = Term->scr->health[y];
 
     byte ota;
     char otc;
@@ -807,6 +940,7 @@ static void Term_fresh_row_both(int y, int x1, int x2)
     /* Pending attr/font */
     byte fa = Term->attr_blank;
     byte fs = 0;
+    byte fh = 0;
 
     byte oa;
     char oc;
@@ -833,9 +967,12 @@ static void Term_fresh_row_both(int y, int x1, int x2)
 
         byte osf = old_story[x];
         byte nsf = scr_story[x];
+        byte ohf = old_health[x];
+        byte nhf = scr_health[x];
 
         /* Handle unchanged grids */
-        if ((na == oa) && (nc == oc) && (nta == ota) && (ntc == otc) && (nsf == osf))
+        if ((na == oa) && (nc == oc) && (nta == ota) && (ntc == otc)
+            && (nsf == osf) && (nhf == ohf))
         {
             /* Flush */
             if (fn)
@@ -869,9 +1006,10 @@ static void Term_fresh_row_both(int y, int x1, int x2)
         old_taa[x] = nta;
         old_tcc[x] = ntc;
         old_story[x] = nsf;
+        old_health[x] = nhf;
 
         /* Handle high-bit attr/chars */
-        if ((na & 0x80) && (nc & 0x80))
+        if (term_cell_is_tile(Term->scr, y, x))
         {
             /* 2nd byte of bigtile */
             if ((na == 255) && ((byte)nc == 255))
@@ -907,7 +1045,7 @@ static void Term_fresh_row_both(int y, int x1, int x2)
         }
 
         /* Notice new color */
-        if (fa != na)
+        if ((fa != na) || (fs != nsf) || (fh != nhf))
         {
             /* Flush */
             if (fn)
@@ -933,6 +1071,8 @@ static void Term_fresh_row_both(int y, int x1, int x2)
 
             /* Save the new color */
             fa = na;
+            fs = nsf;
+            fh = nhf;
         }
 
         /* Restart and Advance */
@@ -941,6 +1081,7 @@ static void Term_fresh_row_both(int y, int x1, int x2)
             fx = x;
             fa = na;
             fs = nsf;
+            fh = nhf;
         }
     }
 
@@ -981,6 +1122,8 @@ static void Term_fresh_row_text(int y, int x1, int x2)
 
     byte* old_story = Term->old->story[y];
     byte* scr_story = Term->scr->story[y];
+    byte* old_health = Term->old->health[y];
+    byte* scr_health = Term->scr->health[y];
 
     /* The "always_text" flag */
     int always_text = Term->always_text;
@@ -994,6 +1137,7 @@ static void Term_fresh_row_text(int y, int x1, int x2)
     /* Pending attr/font */
     byte fa = Term->attr_blank;
     byte fs = 0;
+    byte fh = 0;
 
     byte oa;
     char oc;
@@ -1014,9 +1158,11 @@ static void Term_fresh_row_text(int y, int x1, int x2)
 
         byte osf = old_story[x];
         byte nsf = scr_story[x];
+        byte ohf = old_health[x];
+        byte nhf = scr_health[x];
 
         /* Handle unchanged grids */
-        if ((na == oa) && (nc == oc) && (nsf == osf))
+        if ((na == oa) && (nc == oc) && (nsf == osf) && (nhf == ohf))
         {
             /* Flush */
             if (fn)
@@ -1045,9 +1191,10 @@ static void Term_fresh_row_text(int y, int x1, int x2)
         old_aa[x] = na;
         old_cc[x] = nc;
         old_story[x] = nsf;
+        old_health[x] = nhf;
 
         /* Notice new color */
-        if ((fa != na) || (fs != nsf))
+        if ((fa != na) || (fs != nsf) || (fh != nhf))
         {
             /* Flush */
             if (fn)
@@ -1074,6 +1221,7 @@ static void Term_fresh_row_text(int y, int x1, int x2)
             /* Save the new color and font flag */
             fa = na;
             fs = nsf;
+            fh = nhf;
         }
 
         /* Restart and Advance */
@@ -1237,9 +1385,15 @@ errr Term_fresh(void)
 
     /* Trivial Refresh */
     if ((y1 > y2) && (scr->cu == old->cu) && (scr->cv == old->cv)
-        && (scr->cx == old->cx) && (scr->cy == old->cy) && !(Term->total_erase))
+        && (scr->cx == old->cx) && (scr->cy == old->cy)
+        && (scr->cursor_big == old->cursor_big) && !(Term->total_erase))
     {
-        /* Nothing */
+        /*
+         * A frontend may compose live panes outside the terminal cell buffer.
+         * Those panes can be dirty even when this term has no changed cells,
+         * so still give the frontend an opportunity to present them.
+         */
+        Term_xtra(TERM_XTRA_FRESH, 0);
         return (1);
     }
 
@@ -1266,6 +1420,7 @@ errr Term_fresh(void)
 
         /* Hack -- clear all "cursor" data */
         old->cv = old->cu = false;
+        old->cursor_big = false;
         old->cx = old->cy = 0;
 
         /* Wipe each row */
@@ -1275,6 +1430,7 @@ errr Term_fresh(void)
             char* cc = old->c[y];
             byte* taa = old->ta[y];
             char* tcc = old->tc[y];
+            byte* health = old->health[y];
 
             /* Wipe each column */
             for (x = 0; x < w; x++)
@@ -1285,6 +1441,7 @@ errr Term_fresh(void)
 
                 *taa++ = na;
                 *tcc++ = nc;
+                *health++ = 0;
             }
         }
 
@@ -1311,6 +1468,9 @@ errr Term_fresh(void)
         {
             int tx = old->cx;
             int ty = old->cy;
+            bool old_cursor_big = old->cursor_big
+                || ((tx + 1 < w) && (old->a[ty][tx + 1] == 255));
+            bool restored_as_pict = false;
 
             byte* old_aa = old->a[ty];
             char* old_cc = old->c[ty];
@@ -1328,12 +1488,15 @@ errr Term_fresh(void)
             if (Term->always_pict)
             {
                 (void)((*Term->pict_hook)(tx, ty, 1, &oa, &oc, &ota, &otc));
+                restored_as_pict = true;
             }
 
             /* Hack -- use "Term_pict()" sometimes */
-            else if (Term->higher_pict && (oa & 0x80) && (oc & 0x80))
+            else if (Term->higher_pict
+                && term_cell_is_tile(Term->old, ty, tx))
             {
                 (void)((*Term->pict_hook)(tx, ty, 1, &oa, &oc, &ota, &otc));
+                restored_as_pict = true;
             }
 
             /* Hack -- restore the actual character */
@@ -1346,6 +1509,22 @@ errr Term_fresh(void)
             else
             {
                 (void)((*Term->wipe_hook)(tx, ty, 1));
+            }
+
+            /* A map cursor can cover two terminal cells even when the grid is
+             * represented by ordinary text or a blank rather than a tile
+             * sentinel.  Restore that second cell explicitly; pict hooks
+             * already restore the full bigtile span from the first cell. */
+            if (old_cursor_big && !restored_as_pict && tx + 1 < w)
+            {
+                tx++;
+                oa = old_aa[tx];
+                oc = old_cc[tx];
+
+                if (oa || Term->always_text)
+                    (void)((*Term->text_hook)(tx, ty, 1, oa, &oc));
+                else
+                    (void)((*Term->wipe_hook)(tx, ty, 1));
             }
         }
     }
@@ -1441,7 +1620,8 @@ errr Term_fresh(void)
         /* Draw the cursor */
         if (!scr->cu && scr->cv)
         {
-            if ((scr->cx + 1 < w) && (old->a[scr->cy][scr->cx + 1] == 255))
+            if (scr->cursor_big || ((scr->cx + 1 < w)
+                    && (old->a[scr->cy][scr->cx + 1] == 255)))
             {
                 /* Double width cursor for the Bigtile mode */
                 (void)((*Term->bigcurs_hook)(scr->cx, scr->cy));
@@ -1491,6 +1671,7 @@ errr Term_fresh(void)
     /* Save the "cursor state" */
     old->cu = scr->cu;
     old->cv = scr->cv;
+    old->cursor_big = scr->cursor_big;
     old->cx = scr->cx;
     old->cy = scr->cy;
 
@@ -1502,6 +1683,41 @@ errr Term_fresh(void)
 }
 
 /*** Output routines ***/
+
+/*
+ * Mark subsequently queued cells as one styled health bar.  Zero is reserved
+ * for ordinary cells, so living creatures use the range 1..255.
+ */
+void Term_health_bar_begin(int current, int max)
+{
+    long scaled;
+
+    if (!Term || max <= 0)
+        return;
+
+    if (current < 0)
+        current = 0;
+    if (current > max)
+        current = max;
+
+    scaled = ((long)current * 255L + (long)max - 1L) / (long)max;
+    if (scaled < 1L)
+        scaled = 1L;
+    if (scaled > 255L)
+        scaled = 255L;
+
+    Term->health_bar_level = (byte)scaled;
+    Term->health_bar_active = true;
+}
+
+void Term_health_bar_end(void)
+{
+    if (!Term)
+        return;
+
+    Term->health_bar_active = false;
+    Term->health_bar_level = 0;
+}
 
 static void Term_invalidate_extra_cursor(void)
 {
@@ -1526,6 +1742,7 @@ static void Term_invalidate_extra_cursor(void)
         Term->old->ta[y][x] = 255;
         Term->old->tc[y][x] = 0;
         Term->old->story[y][x] = 255;
+        Term->old->health[y][x] = 255;
 
         if (x < Term->x1[y])
             Term->x1[y] = x;
@@ -1605,12 +1822,30 @@ errr Term_gotoxy(int x, int y)
     /* Remember the cursor */
     Term->scr->cx = x;
     Term->scr->cy = y;
+    Term->scr->cursor_big = false;
 
     /* The cursor is not useless */
     Term->scr->cu = 0;
 
     /* Success */
     return (0);
+}
+
+/*
+ * Place a double-width cursor at a given location.
+ *
+ * This records cursor geometry explicitly instead of relying on the next
+ * cell's glyph being the special bigtile continuation marker.  Blank and
+ * text-backed map grids still occupy two terminal columns in bigtile mode.
+ */
+errr Term_gotoxy_big(int x, int y)
+{
+    errr result = Term_gotoxy(x, y);
+
+    if (result == 0)
+        Term->scr->cursor_big = true;
+
+    return result;
 }
 
 /*
@@ -1673,6 +1908,7 @@ errr Term_addch(byte a, char c)
 
     /* Advance the cursor */
     Term->scr->cx++;
+    Term->scr->cursor_big = false;
 
     /* Success */
     if (Term->scr->cx < w)
@@ -1732,6 +1968,7 @@ errr Term_addstr(int n, byte a, cptr s)
 
     /* Advance the cursor */
     Term->scr->cx += n;
+    Term->scr->cursor_big = false;
 
     /* Hack -- Notice "Useless" cursor */
     if (res)
@@ -1801,6 +2038,7 @@ errr Term_erase(int x, int y, int n)
     byte* scr_taa;
     char* scr_tcc;
     byte* scr_story;
+    byte* scr_health;
 
     /* Place cursor */
     if (Term_gotoxy(x, y))
@@ -1817,6 +2055,7 @@ errr Term_erase(int x, int y, int n)
     scr_taa = Term->scr->ta[y];
     scr_tcc = Term->scr->tc[y];
     scr_story = Term->scr->story[y];
+    scr_health = Term->scr->health[y];
 
     if ((x > 0) && (n > 0) && ((byte)scr_cc[x] == 255) && (scr_aa[x] == 255))
     {
@@ -1837,6 +2076,7 @@ errr Term_erase(int x, int y, int n)
         scr_taa[x] = 0;
         scr_tcc[x] = 0;
         scr_story[x] = 0;
+        scr_health[x] = 0;
 
         /* Always set to blank - we're erasing */
         scr_aa[x] = na;
@@ -1892,6 +2132,7 @@ errr Term_clear(void)
 
     /* Cursor to the top left */
     Term->scr->cx = Term->scr->cy = 0;
+    Term->scr->cursor_big = false;
 
     /* Wipe each row */
     for (y = 0; y < h; y++)
@@ -1901,6 +2142,7 @@ errr Term_clear(void)
         byte* scr_taa = Term->scr->ta[y];
         char* scr_tcc = Term->scr->tc[y];
         byte* scr_story = Term->scr->story[y];
+        byte* scr_health = Term->scr->health[y];
 
         /* Wipe each column */
         for (x = 0; x < w; x++)
@@ -1911,6 +2153,7 @@ errr Term_clear(void)
             scr_taa[x] = 0;
             scr_tcc[x] = 0;
             scr_story[x] = 0;
+            scr_health[x] = 0;
         }
 
         /* This row has changed */
@@ -2262,6 +2505,7 @@ errr Term_load(void)
         byte* old_taa = Term->old->ta[y];
         char* old_tcc = Term->old->tc[y];
         byte* old_story = Term->old->story[y];
+        byte* old_health = Term->old->health[y];
         
         for (x = 0; x < w; x++)
         {
@@ -2271,6 +2515,7 @@ errr Term_load(void)
             old_taa[x] = 255;
             old_tcc[x] = 0;
             old_story[x] = 255;
+            old_health[x] = 255;
         }
     }
 

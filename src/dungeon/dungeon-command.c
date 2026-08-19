@@ -86,6 +86,41 @@ static bool verify_debug_mode(void)
 #endif /* ALLOW_DEBUG */
 
 /*
+ * Restore the gameplay map after commands that use cursor-style selection.
+ *
+ * The shared aiming UI stores an empty-grid choice as a location target so
+ * direction 5 can deliver it to the command.  Unlike a monster target, that
+ * location never invalidates on its own.  Keeping it after the command makes
+ * normal input place the cursor on that grid indefinitely.  Also flush both
+ * terminal cursor layers here: inkey() can restore the hidden logical state
+ * without repainting the cell where its visible cursor was last drawn, and a
+ * menu can use the separate extra cursor without moving the real one.
+ */
+static void finish_command_cursor_state(void)
+{
+    if (p_ptr->target_set && (p_ptr->target_who == 0))
+    {
+        target_set_monster(0);
+        health_track(0);
+    }
+
+    (void)Term_set_extra_cursor(false, 0, 0, false);
+    (void)Term_set_cursor(false);
+
+    /*
+     * Movement queues PU_PANEL after changing the player's grid.  Presenting
+     * here before that update is handled briefly shows the moved player
+     * against the old panel, followed by a second frame with the recentered
+     * map.  Apply the pending camera update and its redraw first so movement
+     * and recentering reach the display as one completed frame.
+     */
+    if (p_ptr->update & PU_PANEL)
+        handle_stuff();
+
+    Term_fresh();
+}
+
+/*
  * Parse and execute the current command
  * Give "Warning" on illegal commands.
  */
@@ -112,9 +147,15 @@ void process_command(void)
     {
         if (p_ptr->command_cmd)
         {
-            msg_print("You can no longer take that action.");
+            msg_print("You cannot do that during this final look.");
         }
+        /* Pointer movement can queue a whole path.  Rejecting only its first
+         * generated step would otherwise immediately feed the next step back
+         * into request_command() and spam the read-only message. */
+        sdl_mouse_path_cancel();
+        p_ptr->energy_use = 0;
         p_ptr->command_cmd = 0;
+        finish_command_cursor_state();
         return;
     }
 
@@ -211,6 +252,20 @@ void process_command(void)
     case CMD_ACTIVE_WEAPON_MODE:
     {
         do_cmd_pending_active_weapon_mode();
+        break;
+    }
+
+    /* Direct floor-item action from the desktop context shortcut popup */
+    case CMD_CONTEXT_FLOOR_ACTION:
+    {
+        do_cmd_context_floor_item_action();
+        break;
+    }
+
+    /* Temporarily hide desktop square-action shortcut popups */
+    case CMD_SUPPRESS_CONTEXT_POPUPS:
+    {
+        do_cmd_suppress_context_square_popups();
         break;
     }
 
@@ -398,7 +453,7 @@ void process_command(void)
         break;
     }
 
-    /* Swap the equipped staff with one from the pack */
+    /* Compatibility shortcut: choose a staff from the Harness. */
     case KTRL('A'):
     {
         do_cmd_swap_staff();
@@ -412,24 +467,24 @@ void process_command(void)
         break;
     }
 
-    /* Swap the 1st and 2nd quivers */
+    /* Compatibility key: choose the active arrow through active weapons. */
     case KTRL('F'):
     {
         do_cmd_swap_quivers();
         break;
     }
 
-    /* Fire an arrow from the 1st quiver */
+    /* Make a ranged attack with the active bow or throwing weapon. */
     case 'f':
     {
         do_cmd_fire(1);
         break;
     }
 
-    /* Fire an arrow from the 2nd quiver */
+    /* Shift-f is an alias for the same active-Quiver ranged attack. */
     case 'F':
     {
-        do_cmd_fire(2);
+        do_cmd_fire(1);
         break;
     }
 
@@ -458,7 +513,7 @@ void process_command(void)
     case 'q':
     {
         open_supplies_menu_with_context(SUPPLY_MENU_ACTION_USE,
-            SUPPLY_GROUP_SUPPLY, true, true);
+            SUPPLY_GROUP_POTIONS, true, true);
         break;
     }
 
@@ -632,8 +687,8 @@ void process_command(void)
     /* Supplies overview */
     case 'j':
     {
-        open_supplies_menu_with_context(SUPPLY_MENU_ACTION_NONE, -1,
-            false, false);
+        open_supplies_menu_with_context(SUPPLY_MENU_ACTION_NONE,
+            SUPPLY_GROUP_SUPPLY, true, false);
         break;
     }
 
@@ -670,4 +725,6 @@ void process_command(void)
         break;
     }
     }
+
+    finish_command_cursor_state();
 }

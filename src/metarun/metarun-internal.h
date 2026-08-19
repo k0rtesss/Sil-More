@@ -69,7 +69,7 @@ void ensure_run_dir(const metarun *m);
 
 /* Lifecycle helpers */
 int required_survivor_target(int win_goal);
-void start_new_metarun(void);
+bool start_new_metarun(void);
 
 /* Shared metarun UI helpers */
 void metarun_prompt_label(int binding, const char *fallback, char *buf, size_t buflen);
@@ -78,7 +78,6 @@ char metarun_inkey_hidden(void);
 void metarun_wait_hidden(void);
 void print_heading_fade(cptr title, byte final_attr);
 bool print_paragraph_fade(cptr txt, byte final_attr, int row);
-void print_paragraph(cptr txt, byte attr);
 void wait_for_keypress_with_prompt(cptr prompt);
 cptr curse_display_name(int idx);
 cptr blessing_display_name(int idx);

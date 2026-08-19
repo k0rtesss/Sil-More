@@ -374,7 +374,18 @@ bool target_sighted(void)
     if (p_ptr->target_who > 0)
     {
         int m_idx = p_ptr->target_who;
-        monster_type* m_ptr = &mon_list[m_idx];
+        monster_type* m_ptr;
+
+        if (m_idx >= mon_max)
+            return (false);
+
+        m_ptr = &mon_list[m_idx];
+
+        if (!m_ptr->r_idx || !in_bounds_fully(m_ptr->fy, m_ptr->fx)
+            || (cave_m_idx[m_ptr->fy][m_ptr->fx] != m_idx))
+        {
+            return (false);
+        }
 
         /* Accept reasonable targets */
         if (player_can_see_bold(m_ptr->fy, m_ptr->fx) && m_ptr->ml)
@@ -939,20 +950,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                         /* Recall on screen */
                         recall_key = screen_roff(m_ptr->r_idx, m_ptr);
 
-                        if (recall_key)
-                        {
-                            query = (char)recall_key;
-                        }
-                        else
-                        {
-                            /* Hack -- Complete the prompt (again) */
-                            Term_addstr(-1, TERM_WHITE,
-                                format("  [(r)ecall, %s]", info));
-
-                            /* Command */
-                            query = inkey_movement_context(
-                                MOVEMENT_INPUT_CONTEXT_TARGETING);
-                        }
+                        query = (char)recall_key;
 
                         /* Load screen */
                         screen_load();
@@ -1476,20 +1474,24 @@ static void target_mode_prompt(
     {
         char confirm_label[24];
         char toggle_label[24];
+        char back_label[24];
 
-        target_prompt_label(INPUT_BIND_CONFIRM, "A", confirm_label,
+        target_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
             sizeof(confirm_label));
-        target_prompt_label('s', "Y", toggle_label, sizeof(toggle_label));
+        target_prompt_label(steamdeck_secondary_key(), "Y", toggle_label,
+            sizeof(toggle_label));
+        target_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
 
         if (valid_target)
         {
-            strnfmt(info, info_len, "%s=target, %s=%s, <dir>",
-                confirm_label, toggle_label, toggle_name);
+            strnfmt(info, info_len, "%s=target, %s=%s, %s=cancel, <dir>",
+                confirm_label, toggle_label, toggle_name, back_label);
         }
         else
         {
-            strnfmt(info, info_len, "%s=%s, <dir>", toggle_label,
-                toggle_name);
+            strnfmt(info, info_len, "%s=%s, %s=cancel, <dir>",
+                toggle_label, toggle_name, back_label);
         }
 
         return;
@@ -1607,6 +1609,7 @@ bool target_set_interactive(int mode, int range)
             query = target_set_interactive_aux(y, x, mode, info, use_story_look);
             if (use_story_look)
                 sdl_story_font_disable();
+            query = steamdeck_menu_key(query, 0, 0);
 
             /* Remove the path */
             if (mode & (TARGET_KILL))
@@ -1797,6 +1800,7 @@ bool target_set_interactive(int mode, int range)
                 use_story_look);
             if (use_story_look)
                 sdl_story_font_disable();
+            query = steamdeck_menu_key(query, 0, 0);
 
             /* Remove the path */
             if (mode & (TARGET_KILL))
@@ -1944,6 +1948,7 @@ bool target_set_interactive(int mode, int range)
 
             /* Describe and Prompt (enable "TARGET_LOOK") */
             query = target_set_interactive_aux(y, x, mode | TARGET_LOOK, info, use_story_look);
+            query = steamdeck_menu_key(query, 0, 0);
 
             /* Remove the path */
             if (mode & (TARGET_KILL))
@@ -2272,13 +2277,20 @@ bool target_set_interactive(int mode, int range)
     temp_n = 0;
 
     /* Clear the top line */
-    prt("", 0, 0);
+    if (ui_message_line_enabled())
+        prt("", 0, 0);
+    else
+        p_ptr->redraw |= (PR_MAP);
 
     /* Recenter around player */
     verify_panel();
 
     /* Handle stuff */
     handle_stuff();
+
+    /* Remove the visible targeting cursor left by the final inkey(). */
+    (void)Term_set_cursor(false);
+    Term_fresh();
 
     /* Failure to set target */
     if (!new_target)

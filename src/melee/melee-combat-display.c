@@ -1225,7 +1225,7 @@ static void draw_combat_roll_line(int row, int base_col_offset,
             strnfmt(buf, sizeof(buf), "%4d", roll->prot);
             Term_addstr(-1, a_prot_roll, buf);
 
-            log_debug("COMBAT_ROLL_ROLL protection: is_defender_player=%d",
+            log_trace("COMBAT_ROLL_ROLL protection: is_defender_player=%d",
                 roll->is_defender_player);
 
             if (roll->is_defender_player)
@@ -1343,7 +1343,7 @@ static void draw_combat_roll_line(int row, int base_col_offset,
         strnfmt(buf, sizeof(buf), "%4d", roll->prot);
         Term_addstr(-1, a_prot_roll, buf);
 
-        log_debug("COMBAT_ROLL_AUTO protection: is_defender_player=%d",
+        log_trace("COMBAT_ROLL_AUTO protection: is_defender_player=%d",
             roll->is_defender_player);
 
         if (roll->is_defender_player)

@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
@@ -899,6 +900,18 @@ bool morgoth_enter_final_stage(int m_idx)
 
     if (p_ptr->health_who == m_idx)
         p_ptr->redraw |= (PR_HEALTHBAR);
+    if (m_ptr->ml
+        && (styled_monster_health_bars || styled_monster_tile_health_bars))
+    {
+        if (styled_monster_health_bars)
+        {
+            p_ptr->window |= PW_MONLIST;
+            if (p_ptr->health_who == m_idx)
+                p_ptr->window |= PW_MONSTER;
+        }
+        if (styled_monster_tile_health_bars)
+            lite_spot(m_ptr->fy, m_ptr->fx);
+    }
 
     log_info("Morgoth entered final stage at %d/%d HP.",
              m_ptr->hp, m_ptr->maxhp);
@@ -1226,6 +1239,19 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
     /* Hurt it */
     m_ptr->hp -= dam;
 
+    if (m_ptr->ml
+        && (styled_monster_health_bars || styled_monster_tile_health_bars))
+    {
+        if (styled_monster_health_bars)
+        {
+            p_ptr->window |= PW_MONLIST;
+            if (p_ptr->health_who == m_idx)
+                p_ptr->window |= PW_MONSTER;
+        }
+        if (styled_monster_tile_health_bars)
+            lite_spot(m_ptr->fy, m_ptr->fx);
+    }
+
     if (dam > 0)
         maybe_update_morgoth_state_from_hp(m_ptr);
 
@@ -1292,6 +1318,12 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
             else
                 message_format(
                     MSG_KILL, m_ptr->r_idx, "%^s has been slain.", m_name);
+        }
+
+        if (who < 0)
+        {
+            meta_monster_record_revenge_kill((u16b)m_ptr->r_idx);
+            meta_monster_apply_runtime_overrides();
         }
 
         /* Generate treasure */

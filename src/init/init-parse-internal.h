@@ -19,6 +19,8 @@
 #define MAX_FLAG_SETS 12
 
 errr parse_tile_line(const char* buf, byte* x_attr, char* x_char);
+errr parse_object_storage_line(
+    const char* buf, byte* storage, s16b* volume);
 bool add_text(u32b* offset, header* head, cptr buf);
 u32b add_name(header* head, cptr buf);
 errr grab_one_flag(u32b** flag, cptr errstr, cptr what);

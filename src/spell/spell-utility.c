@@ -38,7 +38,9 @@ typedef struct self_knowledge_capture
 static void self_knowledge_capture_free(self_knowledge_capture* capture);
 static bool self_knowledge_capture_build(char s[][200], char t[][200],
     bool good[], int count, self_knowledge_capture* capture);
-static void self_knowledge_capture_view(const self_knowledge_capture* capture);
+static bool self_knowledge_capture_reflow(self_knowledge_capture* capture,
+    int width);
+static void self_knowledge_capture_view(self_knowledge_capture* capture);
 static bool render_resistance_summary(const char* text);
 
 static self_knowledge_capture pending_self_knowledge_capture;
@@ -257,7 +259,123 @@ cleanup:
     return success;
 }
 
-static void self_knowledge_capture_view(const self_knowledge_capture* capture)
+/*
+ * The scratch terminal is sized before the SDL popup becomes active.  Some
+ * layouts can reserve additional space once the popup is shown, leaving fewer
+ * visible columns than the capture contains.  Rewrap each captured row before
+ * it is displayed so the overlay never clips text on the right.
+ */
+static bool self_knowledge_capture_reflow(self_knowledge_capture* capture,
+    int width)
+{
+    int max_rows;
+    int out_row = 0;
+    byte* attrs;
+    char* chars;
+    byte* story;
+
+    if (!capture || !capture->attrs || !capture->chars || !capture->story
+        || width < 2 || width >= capture->width)
+    {
+        return false;
+    }
+
+    max_rows = capture->height * (capture->width / (width - 1) + 2);
+    attrs = mem_alloc_array(max_rows * width, byte);
+    chars = mem_alloc_array(max_rows * width, char);
+    story = mem_alloc_array(max_rows * width, byte);
+
+    for (int row = 0; row < max_rows; row++)
+    {
+        for (int col = 0; col < width; col++)
+        {
+            int index = row * width + col;
+
+            attrs[index] = TERM_WHITE;
+            chars[index] = ' ';
+            story[index] = 0;
+        }
+    }
+
+    for (int row = 0; row < capture->height; row++)
+    {
+        int source = row * capture->width;
+        int last = capture->width - 1;
+        int pos = 0;
+        bool first = true;
+
+        while (last >= 0 && capture->chars[source + last] == ' '
+            && capture->story[source + last] == 0)
+        {
+            last--;
+        }
+
+        if (last < 0)
+        {
+            out_row++;
+            continue;
+        }
+
+        while (pos <= last)
+        {
+            int dest_col = first ? 0 : 1;
+            int available = width - dest_col;
+            int end = MIN(pos + available, last + 1);
+            int next = end;
+
+            if (end <= last)
+            {
+                int break_at = -1;
+
+                for (int col = end - 1; col >= pos; col--)
+                {
+                    if (capture->chars[source + col] == ' ')
+                    {
+                        break_at = col;
+                        break;
+                    }
+                }
+
+                if (break_at >= pos)
+                {
+                    end = break_at;
+                    next = break_at + 1;
+                }
+            }
+
+            if (end > pos)
+            {
+                for (int col = pos; col < end; col++)
+                {
+                    int dest = out_row * width + dest_col + col - pos;
+
+                    attrs[dest] = capture->attrs[source + col];
+                    chars[dest] = capture->chars[source + col];
+                    story[dest] = capture->story[source + col];
+                }
+                out_row++;
+            }
+
+            pos = next;
+            while (pos <= last && capture->chars[source + pos] == ' ')
+                pos++;
+            first = false;
+        }
+    }
+
+    mem_free_null(capture->attrs);
+    mem_free_null(capture->chars);
+    mem_free_null(capture->story);
+    capture->attrs = attrs;
+    capture->chars = chars;
+    capture->story = story;
+    capture->width = width;
+    capture->height = out_row;
+
+    return true;
+}
+
+static void self_knowledge_capture_view(self_knowledge_capture* capture)
 {
     int scroll = 0;
     bool done = false;
@@ -306,8 +424,7 @@ static void self_knowledge_capture_view(const self_knowledge_capture* capture)
         else
         {
             const char* variants[] = {
-                "Esc close  Space page  Dir scroll",
-                "Esc close  Space page",
+                "Esc close  Dir scroll",
                 "Esc close"
             };
             terminal_prompt_pick_variant(footer, sizeof(footer), 80, false,
@@ -315,15 +432,23 @@ static void self_knowledge_capture_view(const self_knowledge_capture* capture)
         }
 
         sdl_description_overlay_set_footer(footer, true);
+        sdl_description_overlay_set_footer_gap(true);
         sdl_description_overlay_clear_footer_actions();
         sdl_description_overlay_add_footer_action(ESCAPE, "Esc close");
-        sdl_description_overlay_add_footer_action(' ', "Space page");
 
         if (!sdl_description_overlay_present(capture->attrs, capture->chars,
-                NULL, NULL, capture->story, capture->width, capture->height,
+                NULL, NULL, capture->story, NULL, capture->width,
+                capture->height,
                 capture->width, scroll, true, &visible_rows, &max_scroll))
         {
             break;
+        }
+
+        if (self_knowledge_capture_reflow(capture,
+                sdl_description_overlay_visible_cols()))
+        {
+            scroll = 0;
+            continue;
         }
 
         if (scroll < 0)
@@ -336,6 +461,7 @@ static void self_knowledge_capture_view(const self_knowledge_capture* capture)
         ui_scroll_area_begin(0, MAX(0, prompt_row),
             SDL_TOUCH_MENU_CATEGORY_OTHER);
         ui_scroll_area_set_keys('8', '2', '6', '4');
+        ui_scroll_area_set_offset_target(&scroll, max_scroll);
         ui_scroll_area_set_tap_key(ESCAPE);
 
         ch = inkey();
@@ -384,7 +510,6 @@ static void self_knowledge_capture_view(const self_knowledge_capture* capture)
                 scroll = 0;
             break;
         case '3':
-        case ' ':
         case 'n':
         case 'N':
         case '6':
@@ -405,6 +530,7 @@ static void self_knowledge_capture_view(const self_knowledge_capture* capture)
 
     sdl_description_overlay_clear();
     sdl_description_overlay_clear_footer_actions();
+    sdl_description_overlay_set_footer_gap(false);
     sdl_description_overlay_set_footer(NULL, false);
     hide_cursor = saved_hide_cursor;
     ui_menu_click_clear();
@@ -714,7 +840,7 @@ void uncurse_object(object_type* o_ptr)
     {
         int slot = (int)(o_ptr - inventory);
 
-        if ((slot == INVEN_QUIVER1) || (slot == INVEN_QUIVER2))
+        if ((slot == INVEN_QUIVER1) || (slot == INVEN_BELT))
             p_ptr->redraw |= (PR_QUIVER);
         else if (slot == INVEN_LITE)
             p_ptr->redraw |= (PR_LIGHT);
@@ -745,6 +871,8 @@ static int remove_curse_aux(bool star_curse)
 
         /* Skip non-objects */
         if (!o_ptr->k_idx)
+            continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
         /* Uncursed already */
@@ -949,16 +1077,19 @@ void self_knowledge(void)
 
         if (!o_ptr->k_idx) continue;
 
+        if (!player_equipment_slot_counts_as_equipped(k))
+            continue;
+
         object_flags4(o_ptr, &t1, &t2, &t3, &t4);
 
         {
             bool is_quiver1 = (k == INVEN_QUIVER1);
-            bool is_quiver2 = (k == INVEN_QUIVER2);
+            bool is_belt = (k == INVEN_BELT);
             bool is_throwing_item = player_can_treat_as_throwing_flags(o_ptr, t3);
 
             if (is_quiver1)
                 continue;
-            if (is_quiver2 && !is_throwing_item)
+            if (is_belt && !is_throwing_item)
                 continue;
         }
         f2 |= t2; f3 |= t3;
@@ -1333,7 +1464,8 @@ void analyze_weapon_properties(int* count, char s[][200], char t[][200], bool go
                               bool identify[], int slot, const char* weapon_name)
 {
     object_type* o_ptr = &inventory[slot];
-    if (!o_ptr->k_idx) return;
+    if (!o_ptr->k_idx || !player_equipment_slot_counts_as_equipped(slot))
+        return;
 
     u32b f1, f2, f3, f4;
     object_flags4(o_ptr, &f1, &f2, &f3, &f4);

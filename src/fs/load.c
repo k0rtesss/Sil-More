@@ -92,6 +92,7 @@ bool savefile_has_partition_meta = false;
 bool savefile_has_partition_meta_types = false;
 bool savefile_has_cave_info_hi = false;
 bool savefile_has_cave_rewired = false;
+bool savefile_has_cave_natural = false;
 bool savefile_has_hint_messages = false;
 bool savefile_has_hint_message_meta = false;
 bool savefile_has_thrall_quest = false;
@@ -162,12 +163,24 @@ static void clear_obsolete_interface_options_097(void)
     op_ptr->main_combat_rolls = 0;
 }
 
+static bool loaded_savefile_needs_interface_defaults(void)
+{
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    /* Mobile 0.9.7.3 introduced independent orientation profiles. */
+    return !savefile_version_at_least(0, 9, 7, 3);
+#else
+    /* Preserve the original general 0.9.7 interface migration on desktop. */
+    return !savefile_version_at_least(0, 9, 7, 0);
+#endif
+}
+
 static void apply_loaded_savefile_app_settings(void)
 {
     /* App-wide settings live in the SDL JSON config, so they must win over
-     * any copies serialized in the savefile. Older interface layouts are
-     * discarded entirely because 0.9.7 removed/reworked those settings. */
-    if (!savefile_version_at_least(0, 9, 7, 0))
+     * any copies serialized in the savefile.  On Android and iOS, 0.9.7.3
+     * introduced independent landscape and portrait profiles, so older
+     * mobile layouts rebuild both profiles from defaults. */
+    if (loaded_savefile_needs_interface_defaults())
     {
         clear_obsolete_interface_options_097();
         sdl_reset_interface_settings_to_defaults_for_migration();
@@ -559,6 +572,8 @@ void artefact_derive_stat_skill_bonuses_from_pval(artefact_type* a_ptr)
 errr rd_item(object_type* o_ptr)
 {
     u32b f1, f2, f3;
+    byte saved_storage = OBJECT_STORAGE_NONE;
+    bool has_saved_storage = savefile_version_at_least(0, 9, 7, 10);
 
     object_kind* k_ptr;
 
@@ -607,6 +622,8 @@ errr rd_item(object_type* o_ptr)
     rd_byte(&o_ptr->ps);
     rd_byte(&o_ptr->pickup);
     rd_s16b(&o_ptr->pickup_slot);
+    if (has_saved_storage)
+        rd_byte(&saved_storage);
 
     rd_u32b(&o_ptr->ident);
 
@@ -668,6 +685,20 @@ errr rd_item(object_type* o_ptr)
     /* Obtain tval/sval from k_info */
     o_ptr->tval = k_ptr->tval;
     o_ptr->sval = k_ptr->sval;
+
+    /* Older saves use the current template's default storage pool. */
+    o_ptr->storage = k_ptr->storage;
+    o_ptr->volume = k_ptr->volume;
+
+    /* Flagged kinds, egos, and artefacts may retain a deliberate choice of
+     * Pack or Harness.  Do this before the wearable-only loading branch so
+     * future small Harness tools can use the same feature. */
+    if (has_saved_storage && object_can_choose_pack_or_harness(o_ptr)
+        && (saved_storage == OBJECT_STORAGE_PACK
+            || saved_storage == OBJECT_STORAGE_HARNESS))
+    {
+        o_ptr->storage = saved_storage;
+    }
 
     /* Hack -- notice "broken" items */
     if (k_ptr->cost <= 0)
@@ -827,6 +858,10 @@ errr rd_item(object_type* o_ptr)
         /* Get the new artefact weight */
         o_ptr->weight = a_ptr->weight;
 
+        /* Get the artefact's explicit storage metadata. */
+        o_ptr->storage = a_ptr->storage;
+        o_ptr->volume = a_ptr->volume;
+
         /* Ensure artefact-granted abilities are present (some generators may omit them). */
         for (int ai = 0; ai < a_ptr->abilities && o_ptr->abilities < (int)N_ELEMENTS(o_ptr->skilltype); ai++)
         {
@@ -883,6 +918,15 @@ errr rd_item(object_type* o_ptr)
     else if (!savefile_has_item_bonuses)
     {
         object_derive_stat_skill_bonuses_from_pval(o_ptr);
+    }
+
+    /* Rings and amulets moved out of Harness in 0.9.7.11.  Classify loaded
+     * objects from every older format (including preset snapshots) in the
+     * zero-volume Jewelry Pouch. */
+    if (o_ptr->tval == TV_RING || o_ptr->tval == TV_AMULET)
+    {
+        o_ptr->storage = OBJECT_STORAGE_JEWELRY;
+        o_ptr->volume = 0;
     }
 
     /* Log staff loading for debugging disappearing staff bug */
@@ -1610,6 +1654,271 @@ static void legacy_supply_drop_object(object_type* drop,
 
     drop_near(drop, 0, p_ptr->py, p_ptr->px);
     legacy_supply_record_counts(report->dropped, drop, drop->number);
+}
+
+typedef struct legacy_belt_migration_report
+{
+    bool changed;
+    bool kept_belt_weapon;
+    bool active_mode_changed;
+    int moved_to_quiver;
+    int moved_to_harness;
+    int dropped;
+} legacy_belt_migration_report;
+
+/*
+ * Move arrows from the former second quiver into the dedicated arrow store.
+ */
+static void legacy_belt_move_to_quiver(object_type* moving,
+    legacy_belt_migration_report* report)
+{
+    int before;
+
+    if (!moving || !moving->k_idx || moving->number <= 0)
+        return;
+    if (moving->tval != TV_ARROW)
+        return;
+    before = moving->number;
+    moving->pickup = false;
+    moving->pickup_slot = INVEN_QUIVER1;
+    (void)player_quiver_absorb_arrow(moving);
+
+    report->moved_to_quiver += before - MAX(moving->number, 0);
+}
+
+/*
+ * Carry legacy overflow in the physical pack even when the new Pack/Harness
+ * volume is already exceeded.  Technical slot and stack limits still apply.
+ */
+static void legacy_belt_move_to_harness(object_type* moving,
+    legacy_belt_migration_report* report)
+{
+    int before;
+
+    if (!moving || !moving->k_idx || moving->number <= 0)
+        return;
+
+    before = moving->number;
+    for (int i = 0; i < INVEN_PACK && moving->number > 0; i++)
+    {
+        object_type* pack = &inventory[i];
+
+        if (pack->k_idx && object_similar(pack, moving))
+            object_absorb(pack, moving);
+    }
+
+    if (moving->number > 0)
+    {
+        for (int i = 0; i < INVEN_PACK; i++)
+        {
+            object_type* pack = &inventory[i];
+
+            if (pack->k_idx)
+                continue;
+
+            object_copy(pack, moving);
+            pack->pickup = false;
+            pack->pickup_slot = -1;
+            p_ptr->inven_cnt++;
+            moving->number = 0;
+            break;
+        }
+    }
+
+    report->moved_to_harness += before - MAX(moving->number, 0);
+}
+
+typedef struct retired_activatable_slot_report
+{
+    bool changed;
+    int moved_to_harness;
+    int dropped;
+} retired_activatable_slot_report;
+
+static void migrate_retired_activatable_slots(
+    retired_activatable_slot_report* report)
+{
+    static const int retired_slots[] = { INVEN_STAFF, INVEN_HORN };
+
+    if (!report)
+        return;
+
+    memset(report, 0, sizeof(*report));
+
+    for (int i = 0; i < (int)N_ELEMENTS(retired_slots); i++)
+    {
+        int slot = retired_slots[i];
+        object_type moving;
+        legacy_belt_migration_report carry_report = {0};
+
+        if (!inventory[slot].k_idx || inventory[slot].number <= 0)
+            continue;
+
+        object_copy(&moving, &inventory[slot]);
+        moving.pickup = false;
+        moving.pickup_slot = -1;
+        object_wipe(&inventory[slot]);
+        p_ptr->equip_cnt = MAX(p_ptr->equip_cnt - 1, 0);
+        report->changed = true;
+
+        legacy_belt_move_to_harness(&moving, &carry_report);
+        report->moved_to_harness += carry_report.moved_to_harness;
+
+        if (moving.number > 0)
+        {
+            int amount = moving.number;
+
+            drop_near(&moving, 0, p_ptr->py, p_ptr->px);
+            report->dropped += amount;
+        }
+    }
+}
+
+static void queue_retired_activatable_slot_messages(
+    const retired_activatable_slot_report* report)
+{
+    if (!report || !report->changed)
+        return;
+
+    msg_print("Staves and horns are now kept in your Harness, not equipped.");
+    if (report->dropped > 0)
+    {
+        msg_format("With no free inventory slot, %d item%s from the retired "
+                   "slots %s placed at your feet.",
+            report->dropped, report->dropped == 1 ? "" : "s",
+            report->dropped == 1 ? "was" : "were");
+    }
+}
+
+static void migrate_legacy_second_quiver_to_belt(
+    legacy_belt_migration_report* report)
+{
+    object_type moving;
+    object_type* belt = &inventory[INVEN_BELT];
+    bool valid_belt_weapon;
+
+    memset(report, 0, sizeof(*report));
+
+    if (belt->k_idx && belt->number > 0)
+    {
+        valid_belt_weapon = object_is_belt_weapon(belt);
+        object_copy(&moving, belt);
+        moving.pickup = false;
+        moving.pickup_slot = -1;
+
+        if (valid_belt_weapon)
+        {
+            report->kept_belt_weapon = true;
+            belt->number = 1;
+            moving.number--;
+        }
+        else
+        {
+            object_wipe(belt);
+            p_ptr->equip_cnt = MAX(p_ptr->equip_cnt - 1, 0);
+        }
+
+        if (!valid_belt_weapon || moving.number > 0)
+        {
+            report->changed = true;
+            legacy_belt_move_to_quiver(&moving, report);
+            legacy_belt_move_to_harness(&moving, report);
+
+            if (moving.number > 0)
+            {
+                int amount = moving.number;
+
+                drop_near(&moving, 0, p_ptr->py, p_ptr->px);
+                report->dropped += amount;
+                moving.number = 0;
+            }
+        }
+    }
+
+    {
+        byte old_mode = p_ptr->active_weapon_mode;
+
+        player_active_weapon_sync_loaded_state();
+        if (p_ptr->active_weapon_mode != old_mode)
+        {
+            report->active_mode_changed = true;
+            report->changed = true;
+        }
+    }
+
+    /*
+     * Old thrown objects may still remember slot 38 as their recovery
+     * destination.  Only arrows return to the Quiver; non-belt weapons now
+     * return to ordinary Harness carrying.
+     */
+    for (int i = 0; i < INVEN_TOTAL; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+
+        if (o_ptr->k_idx && o_ptr->pickup_slot == INVEN_BELT
+            && !object_is_belt_weapon(o_ptr))
+        {
+            o_ptr->pickup_slot = o_ptr->tval == TV_ARROW
+                ? INVEN_QUIVER1 : -1;
+        }
+    }
+    for (int i = 1; i < o_max; i++)
+    {
+        object_type* o_ptr = &o_list[i];
+
+        if (o_ptr->k_idx && o_ptr->pickup_slot == INVEN_BELT
+            && !object_is_belt_weapon(o_ptr))
+        {
+            o_ptr->pickup_slot = o_ptr->tval == TV_ARROW
+                ? INVEN_QUIVER1 : -1;
+        }
+    }
+}
+
+static void queue_legacy_belt_migration_messages(
+    const legacy_belt_migration_report* report)
+{
+    msg_print("Your former second quiver is now a belt, holding one dagger or hand axe.");
+
+    if (report->changed)
+    {
+        if (report->kept_belt_weapon)
+            msg_print("One suitable weapon remains at your belt; the rest was relocated.");
+        else if (report->moved_to_quiver > 0
+            || report->moved_to_harness > 0 || report->dropped > 0)
+        {
+            msg_print("The former second-quiver contents did not fit the belt and were relocated.");
+        }
+
+        if (report->moved_to_quiver > 0)
+            msg_format("%d item%s moved to your quiver.",
+                report->moved_to_quiver,
+                report->moved_to_quiver == 1 ? "" : "s");
+        if (report->moved_to_harness > 0)
+            msg_format("%d item%s moved to your Harness, even if that leaves it over capacity.",
+                report->moved_to_harness,
+                report->moved_to_harness == 1 ? "" : "s");
+        if (report->dropped > 0)
+            msg_format("%d item%s placed at your feet because every inventory slot was occupied.",
+                report->dropped, report->dropped == 1 ? " was" : "s were");
+        if (report->active_mode_changed)
+            msg_print("Your active weapon was adjusted to a valid slot.");
+    }
+
+    for (int group = INV_LIMIT_PACK; group <= INV_LIMIT_HARNESS; group++)
+    {
+        int used = inventory_limit_usage_for_group(
+            (enum inventory_limit_group)group);
+        int limit = inventory_limit_limit_for_group(
+            (enum inventory_limit_group)group);
+
+        if (limit >= 0 && used > limit)
+        {
+            msg_format("This older save is over %s capacity (%d.%d/%d.%d qt). All items were preserved; make room before carrying more.",
+                inventory_limit_group_name((enum inventory_limit_group)group),
+                used / 10, used % 10, limit / 10, limit % 10);
+        }
+    }
 }
 
 static bool legacy_pack_permanent_light_matches(const object_type* o_ptr)
@@ -2406,6 +2715,7 @@ static errr rd_savefile_new_aux(void)
     savefile_has_partition_meta_types = savefile_version_at_least(0, 9, 1, 9);
     savefile_has_cave_info_hi = savefile_version_at_least(0, 9, 1, 8);
     savefile_has_cave_rewired = savefile_version_at_least(0, 9, 7, 2);
+    savefile_has_cave_natural = savefile_version_at_least(0, 9, 7, 4);
     savefile_has_hint_messages = savefile_version_at_least(0, 9, 1, 10);
     savefile_has_hint_message_meta = savefile_version_at_least(0, 9, 5, 7);
     savefile_has_thrall_quest = savefile_version_at_least(0, 9, 1, 11);
@@ -2899,6 +3209,7 @@ bool load_player(void)
             savefile_has_partition_meta_types = savefile_version_at_least(0, 9, 1, 9);
             savefile_has_cave_info_hi = savefile_version_at_least(0, 9, 1, 8);
             savefile_has_cave_rewired = savefile_version_at_least(0, 9, 7, 2);
+            savefile_has_cave_natural = savefile_version_at_least(0, 9, 7, 4);
             savefile_has_hint_messages = savefile_version_at_least(0, 9, 1, 10);
             savefile_has_hint_message_meta = savefile_version_at_least(0, 9, 5, 7);
             savefile_has_thrall_quest = savefile_version_at_least(0, 9, 1, 11);
@@ -3097,6 +3408,39 @@ bool load_player(void)
                 p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
             }
             queue_oil_container_migration_messages(&oil_report);
+        }
+
+        {
+            legacy_belt_migration_report belt_report;
+            bool legacy_belt_save = !savefile_version_at_least(0, 9, 7, 8);
+
+            migrate_legacy_second_quiver_to_belt(&belt_report);
+            if (belt_report.changed)
+            {
+                p_ptr->notice |= (PN_COMBINE | PN_REORDER);
+                p_ptr->update |= (PU_BONUS | PU_MANA);
+                p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST | PR_MAP
+                    | PR_QUIVER | PR_MEL | PR_ARC);
+                p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
+            }
+            if (legacy_belt_save)
+                queue_legacy_belt_migration_messages(&belt_report);
+            else if (belt_report.changed)
+                msg_print("Invalid Belt contents were safely relocated.");
+        }
+
+        {
+            retired_activatable_slot_report activatable_report;
+
+            migrate_retired_activatable_slots(&activatable_report);
+            if (activatable_report.changed)
+            {
+                p_ptr->notice |= (PN_COMBINE | PN_REORDER);
+                p_ptr->update |= (PU_BONUS | PU_MANA);
+                p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST);
+                p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
+            }
+            queue_retired_activatable_slot_messages(&activatable_report);
         }
 
         /* Success */

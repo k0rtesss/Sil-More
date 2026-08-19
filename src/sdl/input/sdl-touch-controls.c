@@ -1,12 +1,28 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
-#define SDL_TOUCH_ROUND_INNER_RADIUS_FRAC 0.50f
+#define SDL_TOUCH_ROUND_INNER_RADIUS_FRAC 0.45f
 #define SDL_TOUCH_ROUND_DRAG_THRESHOLD_FRAC 0.62f
+#define SDL_TOUCH_ROUND_RUN_BUTTON_DISTANCE_MULT 1.3f
 /* The whole inner disc (up to the drag threshold) repeats the last direction,
  * so the centre reads as a single "repeat" button with no dead band. */
 #define SDL_TOUCH_ROUND_CENTER_REPEAT_FRAC 0.62f
 #define SDL_TOUCH_ROUND_HIT_SLOP_FRAC 0.18f
+
+static int sdl_touch_context_binding(int binding);
+static void sdl_touch_top_panel_set_hover_slot(int slot);
+static void sdl_touch_top_panel_close_description(void);
+static SDL_FRect g_touch_top_panel_cached_buttons[
+    SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+static Uint64 g_touch_top_panel_cached_generation;
+static bool g_touch_top_panel_cached_layout_valid;
+static int g_touch_top_panel_description_slot = -1;
+static SDL_FRect g_touch_top_panel_description_box;
+static SDL_FRect g_touch_top_panel_description_hover_bridge;
+static SDL_FRect g_touch_top_panel_description_change_rect;
+static SDL_FRect g_touch_top_panel_description_close_rect;
+static int g_touch_top_panel_description_hover;
+static bool g_touch_top_panel_description_layout_valid;
 
 /* Run a main-menu action that opens a modal screen inline (Quick Access / thumb
  * / swipe buttons bound to a main-menu choice).  Those screens call inkey(),
@@ -19,6 +35,15 @@ static void sdl_touch_run_main_menu_choice(int choice)
     bool restore_command_wait = inkey_flag;
 
     (void)do_cmd_main_menu_execute_choice(choice);
+    if (restore_command_wait && character_icky == 0)
+        inkey_flag = true;
+}
+
+static void sdl_touch_run_quick_access_picker(int slot)
+{
+    bool restore_command_wait = inkey_flag;
+
+    (void)do_cmd_touch_top_widget_pick_button(slot);
     if (restore_command_wait && character_icky == 0)
         inkey_flag = true;
 }
@@ -83,6 +108,9 @@ void sdl_touch_pane_send_binding(int binding, bool second_panel, bool long_press
 
     if (sdl_pointer_attack_toggle_binding(binding))
         return;
+
+    if (!long_press)
+        binding = sdl_touch_context_binding(binding);
 
     if (sdl_touch_pane_confirm_binding(binding)) {
         if (long_press && character_dungeon) {
@@ -546,23 +574,357 @@ void sdl_touch_pane_handle_pointer_up(float x, float y, bool mouse,
     }
 }
 
+#define SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT -101
+#define SDL_TOUCH_THUMB_BIND_FIRE_SELECTED -102
+#define SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER -103
+#define SDL_TOUCH_THUMB_BIND_QUICK_THROW -104
+#define SDL_TOUCH_THUMB_BIND_QUICK_THROW_TARGET -105
+#define SDL_TOUCH_THUMB_BIND_FLOOR_ACTION_BASE -200
+
+enum {
+    SDL_TOUCH_THUMB_GAMEPLAY_ACTION_COUNT = 4,
+    /* Interactive descriptions already own the largest possible action list.
+     * Reusing that source capacity means Quick Touch adds no smaller display
+     * cap of its own. */
+    SDL_TOUCH_THUMB_RUNTIME_CAPACITY = SDL_DESCRIPTION_OVERLAY_MAX_ACTIONS
+};
+
+typedef struct touch_thumb_button {
+    int tap_binding;
+    int long_binding;
+} touch_thumb_button;
+
+typedef struct touch_thumb_button_set {
+    touch_thumb_button buttons[SDL_TOUCH_THUMB_RUNTIME_CAPACITY];
+    int count;
+    int gameplay_base_count;
+} touch_thumb_button_set;
+
+typedef struct touch_target_layout_state {
+    bool locked;
+    bool thumb_valid;
+    SDL_FRect thumb_rects[SDL_TOUCH_THUMB_RUNTIME_CAPACITY];
+    bool wheel_valid;
+    float wheel_cx;
+    float wheel_cy;
+    float wheel_radius;
+    float wheel_inner_radius;
+    SDL_Rect wheel_clip;
+} touch_target_layout_state;
+
+static touch_target_layout_state g_touch_target_layout;
+
+static bool sdl_touch_thumb_description_open(void);
+
 /* ---- Thumb buttons --------------------------------------------------------
  *
- * Two configurable, semi-transparent overlay buttons that fill the left-edge
- * gap below the COLLAPSED ("compact") left character panel and above the combat
- * overlay pane, sized to the left-panel column width and stacked vertically.
- * Touch-only.  A tap fires the button's tap binding; a long press fires its
- * separately-assignable long-press binding.  The press/long-press machinery and
- * the action dispatch mirror the touch-pane buttons; the look mirrors the
- * translucent movement button-wheel.
+ * Semi-transparent overlay buttons that fill the left-edge gap below the
+ * COLLAPSED ("compact") left character panel and above the combat overlay pane.
+ * Column mode follows the left-panel width; row mode keeps the equivalent
+ * compact-column footprint instead of stretching across the horizontal panel.
+ * Touch-only.
+ * Gameplay keeps one floor-item control: tap opens its description and long
+ * press picks it up.  Destination-specific actions appear only after opening
+ * the description, or in the pickup destination chooser when more than one
+ * storage destination is valid.
+ * Interactive descriptions publish their complete footer action list.  Layout
+ * is driven by the resulting count rather than by fixed top/bottom/sidecar
+ * slots.
+ * The press/long-press machinery and the action dispatch mirror the touch-pane
+ * buttons; the look mirrors the translucent movement button-wheel.
  */
+
+static bool sdl_touch_thumb_space_action(
+    int* out_key, char* label, size_t label_len)
+{
+    int key = ' ';
+    char ctx[32];
+
+    /* Interactive descriptions register Space as their contextual pickup
+     * action.  Keep that exact key so a multi-destination item (such as
+     * arrows) reaches the Quiver/Pack chooser rather than a preferred raw
+     * destination shortcut. */
+    if (sdl_touch_thumb_description_open()
+        && sdl_description_overlay_has_footer_action(' '))
+    {
+        if (out_key)
+            *out_key = ' ';
+        if (label && label_len
+            && !sdl_description_overlay_footer_action_label(' ', label,
+                label_len))
+        {
+            SDL_strlcpy(label, "Pick Up", label_len);
+        }
+        return true;
+    }
+
+    if (!touch_shortcut_context_action(' ',
+            sdl_touch_thumb_description_open(), &key, ctx, sizeof(ctx)))
+    {
+        return false;
+    }
+    if (strcmp(ctx, "Confirm") == 0)
+        return false;
+    if (strcmp(ctx, "Pick Up") == 0 || strcmp(ctx, "Pack") == 0
+        || strcmp(ctx, "Harness") == 0 || strcmp(ctx, "Supplies") == 0
+        || strcmp(ctx, "Jewelry") == 0
+        || strncmp(ctx, "Items (", 7) == 0)
+    {
+        return false;
+    }
+
+    if (out_key)
+        *out_key = key;
+    if (label && label_len)
+        SDL_strlcpy(label, ctx, label_len);
+    return true;
+}
+
+static int sdl_touch_thumb_floor_action_binding(
+    floor_context_action_kind kind)
+{
+    return SDL_TOUCH_THUMB_BIND_FLOOR_ACTION_BASE - (int)kind;
+}
+
+static bool sdl_touch_thumb_floor_action_from_binding(int binding,
+    floor_context_action_kind* kind)
+{
+    int value = SDL_TOUCH_THUMB_BIND_FLOOR_ACTION_BASE - binding;
+
+    if (value <= FLOOR_CONTEXT_ACTION_NONE
+        || value >= FLOOR_CONTEXT_ACTION_CLOSE)
+    {
+        return false;
+    }
+
+    if (kind)
+        *kind = (floor_context_action_kind)value;
+    return true;
+}
+
+static bool sdl_touch_thumb_floor_action_label(int binding, char* label,
+    size_t label_len)
+{
+    floor_context_action_kind kind;
+    floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
+    int count;
+
+    if (!label || label_len == 0
+        || !sdl_touch_thumb_floor_action_from_binding(binding, &kind))
+    {
+        return false;
+    }
+
+    if (kind == FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT)
+    {
+        SDL_strlcpy(label, "Pick Up", label_len);
+        return true;
+    }
+    if (kind == FLOOR_CONTEXT_ACTION_ITEMS)
+    {
+        SDL_strlcpy(label, "Description", label_len);
+        return true;
+    }
+
+    count = floor_context_collect_square_actions(true, actions,
+        (int)N_ELEMENTS(actions));
+    for (int i = 0; i < count; i++)
+    {
+        if (actions[i].kind != kind)
+            continue;
+        SDL_strlcpy(label, actions[i].label, label_len);
+        return true;
+    }
+    return false;
+}
+
+static bool sdl_touch_thumb_ranged_mode_active(void)
+{
+    return character_dungeon && p_ptr && p_ptr->playing && !p_ptr->is_dead
+        && player_active_weapon_is_ranged();
+}
+
+static bool sdl_touch_thumb_quick_throw_active(void)
+{
+    if (!character_dungeon || !p_ptr || !p_ptr->playing || p_ptr->is_dead)
+        return false;
+
+    return player_quick_throw_available();
+}
+
+static void sdl_touch_thumb_throw_label(char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    SDL_strlcpy(buf, "Quick Throw", buflen);
+}
+
+static bool sdl_touch_thumb_fire_targeting_active(void)
+{
+    return g_pointer_aim.active && g_pointer_aim.select_mode
+        && !g_pointer_aim.select_location;
+}
+
+static bool sdl_touch_round_aim_targeting_active(void)
+{
+    return g_pointer_aim.active && g_pointer_aim.select_mode
+        && !g_pointer_aim.select_location;
+}
+
+static void sdl_touch_thumb_append_button(touch_thumb_button_set* set,
+    int tap_binding, int long_binding)
+{
+    if (!set || set->count >= SDL_TOUCH_THUMB_RUNTIME_CAPACITY)
+        return;
+    set->buttons[set->count++] = (touch_thumb_button){
+        tap_binding, long_binding
+    };
+}
+
+static bool sdl_touch_thumb_is_pickup_destination(
+    floor_context_action_kind kind)
+{
+    return kind == FLOOR_CONTEXT_ACTION_PACK
+        || kind == FLOOR_CONTEXT_ACTION_HARNESS
+        || kind == FLOOR_CONTEXT_ACTION_SUPPLIES
+        || kind == FLOOR_CONTEXT_ACTION_QUIVER
+        || kind == FLOOR_CONTEXT_ACTION_JEWELRY
+        || kind == FLOOR_CONTEXT_ACTION_PICKUP;
+}
+
+static void sdl_touch_thumb_collect_buttons(touch_thumb_button_set* set)
+{
+    bool ranged;
+    bool quick_throw;
+    bool space_action;
+    bool item_action = false;
+    bool pickup_action = false;
+    floor_context_action floor_actions[FLOOR_CONTEXT_MAX_ACTIONS];
+    int floor_action_count;
+    touch_thumb_button item = {
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE
+    };
+    touch_thumb_button primary = {
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE
+    };
+    touch_thumb_button extras[SDL_TOUCH_THUMB_GAMEPLAY_ACTION_COUNT];
+    int extra_count = 0;
+
+    if (!set)
+        return;
+    *set = (touch_thumb_button_set){ 0 };
+
+    if (sdl_touch_thumb_description_open()) {
+        for (int i = 0; i < g_description_overlay.footer_action_count; i++) {
+            int key = g_description_overlay.footer_actions[i].key;
+
+            if (key != 0)
+                sdl_touch_thumb_append_button(set, key, GAMEPAD_BIND_NONE);
+        }
+        return;
+    }
+
+    ranged = sdl_touch_thumb_ranged_mode_active();
+    quick_throw = sdl_touch_thumb_quick_throw_active();
+    floor_action_count = floor_context_collect_square_actions(true,
+        floor_actions, (int)N_ELEMENTS(floor_actions));
+    if (sdl_touch_thumb_fire_targeting_active()) {
+        if (ranged || quick_throw) {
+            sdl_touch_thumb_append_button(set,
+                SDL_TOUCH_THUMB_BIND_FIRE_SELECTED, GAMEPAD_BIND_NONE);
+            sdl_touch_thumb_append_button(
+                set, ESCAPE, GAMEPAD_BIND_NONE);
+        }
+        return;
+    }
+
+    space_action = sdl_touch_thumb_space_action(NULL, NULL, 0);
+    for (int i = 0; i < floor_action_count; i++) {
+        if (floor_actions[i].kind == FLOOR_CONTEXT_ACTION_DETAILS) {
+            item.tap_binding = 'x';
+            item_action = true;
+        } else if (floor_actions[i].kind == FLOOR_CONTEXT_ACTION_ITEMS) {
+            item.tap_binding = sdl_touch_thumb_floor_action_binding(
+                FLOOR_CONTEXT_ACTION_ITEMS);
+            item_action = true;
+            pickup_action = true;
+        } else if (sdl_touch_thumb_is_pickup_destination(
+                floor_actions[i].kind))
+        {
+            pickup_action = true;
+        }
+    }
+    if (item_action && pickup_action)
+    {
+        item.long_binding = sdl_touch_thumb_floor_action_binding(
+            FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT);
+    }
+
+    if (ranged) {
+        primary = (touch_thumb_button){
+            SDL_TOUCH_THUMB_BIND_FIRE_SELECTED,
+            SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER
+        };
+        if (quick_throw) {
+            extras[extra_count++] = (touch_thumb_button){
+                SDL_TOUCH_THUMB_BIND_QUICK_THROW,
+                SDL_TOUCH_THUMB_BIND_QUICK_THROW_TARGET
+            };
+        }
+    } else if (quick_throw) {
+        primary = (touch_thumb_button){
+            SDL_TOUCH_THUMB_BIND_QUICK_THROW,
+            SDL_TOUCH_THUMB_BIND_QUICK_THROW_TARGET
+        };
+    } else if (space_action) {
+        primary = (touch_thumb_button){
+            SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT, GAMEPAD_BIND_NONE
+        };
+    } else if (item_action) {
+        primary = item;
+    }
+
+    if (primary.tap_binding != SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT
+        && space_action)
+    {
+        extras[extra_count++] = (touch_thumb_button){
+            SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT, GAMEPAD_BIND_NONE
+        };
+    }
+    if (primary.tap_binding != item.tap_binding && item_action) {
+        extras[extra_count++] = item;
+    }
+
+    if (primary.tap_binding != GAMEPAD_BIND_NONE)
+        sdl_touch_thumb_append_button(set, primary.tap_binding,
+            primary.long_binding);
+    sdl_touch_thumb_append_button(set, 'z', 'Z');
+    set->gameplay_base_count = set->count;
+
+    for (int i = 0; i < extra_count; i++) {
+        sdl_touch_thumb_append_button(set, extras[i].tap_binding,
+            extras[i].long_binding);
+    }
+}
+
+static int sdl_touch_thumb_button_count(void)
+{
+    touch_thumb_button_set set;
+
+    sdl_touch_thumb_collect_buttons(&set);
+    return set.count;
+}
 
 int sdl_touch_thumb_button_binding(int index, bool long_press)
 {
-    if (index < 0 || index >= SDL_TOUCH_THUMB_BUTTON_COUNT)
+    touch_thumb_button_set set;
+
+    sdl_touch_thumb_collect_buttons(&set);
+    if (index < 0 || index >= set.count)
         return GAMEPAD_BIND_NONE;
-    return long_press ? config.touch_thumb_long_bindings[index]
-                      : config.touch_thumb_bindings[index];
+    return long_press ? set.buttons[index].long_binding
+                      : set.buttons[index].tap_binding;
 }
 
 static bool sdl_touch_thumb_button_has_binding(int index)
@@ -577,11 +939,7 @@ bool sdl_touch_thumb_config_enabled(void)
         return false;
     if (!config.touch_thumb_enabled)
         return false;
-    for (int i = 0; i < SDL_TOUCH_THUMB_BUTTON_COUNT; i++) {
-        if (sdl_touch_thumb_button_has_binding(i))
-            return true;
-    }
-    return false;
+    return sdl_touch_thumb_button_count() > 0;
 }
 
 static bool sdl_touch_thumb_description_open(void)
@@ -593,11 +951,24 @@ bool sdl_touch_thumb_layout_active(void)
 {
     if (!sdl_touch_thumb_config_enabled())
         return false;
-    if (!sdl_left_panel_pane_collapsed())
+    if (!sdl_mobile_portrait_layout_active()
+        && !sdl_left_panel_pane_collapsed())
+    {
         return false;
+    }
     /* Normal gameplay. */
     if (sdl_mouse_gameplay_context_active()
         && sdl_left_panel_pane_runtime_active())
+    {
+        return true;
+    }
+    /* Fire targeting keeps the fire thumb button available as an accept/fire
+     * control while the aim selector owns normal gameplay input. */
+    if (sdl_touch_thumb_fire_targeting_active()
+        && (sdl_touch_thumb_ranged_mode_active()
+            || sdl_touch_thumb_quick_throw_active())
+        && sdl_left_panel_pane_layout_enabled()
+        && p_ptr && p_ptr->playing && !p_ptr->is_dead)
     {
         return true;
     }
@@ -614,12 +985,61 @@ bool sdl_touch_thumb_layout_active(void)
     return false;
 }
 
+static float sdl_touch_thumb_region_bottom(float x, float width, float top,
+    const SDL_Rect* screen, float margin)
+{
+    SDL_Rect combat;
+    float bottom;
+
+    if (!screen)
+        return top;
+
+    bottom = (float)(screen->y + screen->h) - margin;
+    if (sdl_combat_overlay_pane_current_rect(&combat)
+        && combat.w > 0 && combat.h > 0)
+    {
+        bool overlaps_column = (float)combat.x < x + width
+            && (float)(combat.x + combat.w) > x;
+        float combat_top = (float)combat.y - margin;
+
+        if (overlaps_column && combat_top > top && combat_top < bottom)
+            bottom = combat_top;
+    }
+
+    return bottom;
+}
+
+static float sdl_touch_thumb_row_mode_width(const sdl_view* view,
+    const sdl_left_panel_metrics* metrics)
+{
+    int content_cols = 0;
+
+    if (!view || !metrics || metrics->cell_w <= 0)
+        return 0.0f;
+
+    for (int i = 0; i < metrics->compact_segment_count; i++) {
+        int width = sdl_left_panel_compact_source_row_width_for_view(view,
+            metrics->compact_source_rows[i], false);
+
+        if (width <= 0)
+            width = LEFT_PANEL_CONTENT_WID;
+        if (width > LEFT_PANEL_CONTENT_WID)
+            width = LEFT_PANEL_CONTENT_WID;
+        if (width > content_cols)
+            content_cols = width;
+    }
+    if (content_cols <= 0)
+        content_cols = LEFT_PANEL_CONTENT_WID;
+
+    /* Include the two border columns used by compact column mode. */
+    return (float)((content_cols + 2) * metrics->cell_w);
+}
+
 bool sdl_touch_thumb_compute_rects(SDL_FRect* out_rects)
 {
     const sdl_view* view = &g_views[PANE_MAIN];
     sdl_left_panel_metrics metrics;
     SDL_FRect panel;
-    SDL_Rect combat;
     SDL_Rect screen;
     float px;
     float pw;
@@ -638,6 +1058,45 @@ bool sdl_touch_thumb_compute_rects(SDL_FRect* out_rects)
     }
     if (!sdl_touch_thumb_layout_active())
         return false;
+
+    if (sdl_mobile_portrait_layout_active()) {
+        SDL_Rect left_region;
+        SDL_Rect right_region;
+        SDL_Rect touch_column;
+        float gap;
+        float button_h;
+
+        if (!sdl_mobile_portrait_control_regions(&left_region, &right_region))
+        {
+            return false;
+        }
+        touch_column = get_sdl_quick_touch_buttons_on_left()
+            ? left_region : right_region;
+        gap = (float)touch_column.h / 48.0f;
+        if (gap < 8.0f)
+            gap = 8.0f;
+        button_h = ((float)touch_column.h - gap) / 2.0f;
+        if (g_mobile_touch_tablet && button_h > (float)touch_column.w)
+            button_h = (float)touch_column.w;
+        if (button_h < 28.0f)
+            return false;
+        if (out_rects) {
+            float column_h = button_h * 2.0f + gap;
+            float top = (float)(touch_column.y + touch_column.h) - column_h;
+
+            out_rects[0] = (SDL_FRect){
+                (float)touch_column.x, top,
+                (float)touch_column.w, button_h
+            };
+            out_rects[1] = (SDL_FRect){
+                (float)touch_column.x,
+                top + button_h + gap,
+                (float)touch_column.w, button_h
+            };
+        }
+        return true;
+    }
+
     if (!view->term_ready || view->cell_w <= 0 || view->cell_h <= 0)
         return false;
 
@@ -663,21 +1122,25 @@ bool sdl_touch_thumb_compute_rects(SDL_FRect* out_rects)
 
     px = panel.x;
     pw = panel.w;
+    if (metrics.compact_row) {
+        float row_mode_width = sdl_touch_thumb_row_mode_width(view, &metrics);
+
+        if (row_mode_width > 0.0f && row_mode_width < pw) {
+            enum pane_placement where = sdl_left_panel_pane_placement();
+
+            if (sdl_left_panel_pane_placement_is_right(where))
+                px += pw - row_mode_width;
+            else if (sdl_left_panel_pane_placement_is_horizontal_center(where))
+                px += (pw - row_mode_width) * 0.5f;
+            pw = row_mode_width;
+        }
+    }
     top = panel.y + panel.h + margin;
 
     /* The gap ends at the combat pane when it sits in the same column, else at
      * the bottom of the usable screen. */
-    region_bottom = (float)(screen.y + screen.h) - margin;
-    if (sdl_combat_overlay_pane_current_rect(&combat)
-        && combat.w > 0 && combat.h > 0)
-    {
-        bool overlaps_column = (float)combat.x < px + pw
-            && (float)(combat.x + combat.w) > px;
-        float combat_top = (float)combat.y - margin;
-
-        if (overlaps_column && combat_top > top && combat_top < region_bottom)
-            region_bottom = combat_top;
-    }
+    region_bottom = sdl_touch_thumb_region_bottom(px, pw, top, &screen,
+        margin);
 
     avail = region_bottom - top;
     min_button_h = (float)screen.h / 14.0f;
@@ -701,16 +1164,285 @@ bool sdl_touch_thumb_compute_rects(SDL_FRect* out_rects)
     return true;
 }
 
+static int sdl_touch_thumb_visual_index(const touch_thumb_button_set* set,
+    int slot, int columns)
+{
+    int extra_count;
+
+    if (!set || slot < 0 || slot >= set->count)
+        return -1;
+    extra_count = set->count - set->gameplay_base_count;
+    if (columns != 1 || set->gameplay_base_count <= 0 || extra_count <= 0)
+        return slot;
+
+    /* A single vertical stack keeps contextual extras above the established
+     * primary and Wait/Rest pair.  Once columns are needed, the pair keeps the
+     * first column and extras flow into the remaining measured cells. */
+    if (slot < extra_count)
+        return set->gameplay_base_count + slot;
+    return slot - extra_count;
+}
+
+static bool sdl_touch_thumb_compute_runtime_rects(
+    SDL_FRect* out_rects, int rect_count)
+{
+    touch_thumb_button_set set;
+    SDL_FRect base[SDL_TOUCH_THUMB_BUTTON_COUNT];
+    SDL_Rect screen;
+    float gap;
+
+    if (out_rects) {
+        for (int i = 0; i < rect_count; i++)
+            out_rects[i] = (SDL_FRect){ 0 };
+    }
+    if (!out_rects || rect_count < SDL_TOUCH_THUMB_RUNTIME_CAPACITY)
+        return false;
+    if (g_touch_target_layout.locked) {
+        if (!g_touch_target_layout.thumb_valid)
+            return false;
+        for (int i = 0; i < SDL_TOUCH_THUMB_RUNTIME_CAPACITY; i++)
+            out_rects[i] = g_touch_target_layout.thumb_rects[i];
+        return true;
+    }
+
+    sdl_touch_thumb_collect_buttons(&set);
+    if (set.count <= 0 || !sdl_touch_thumb_compute_rects(base))
+        return false;
+
+    gap = base[1].y - (base[0].y + base[0].h);
+    if (gap < 4.0f)
+        gap = base[0].w / 12.0f;
+    if (gap < 4.0f)
+        gap = 4.0f;
+
+    /* With no contextual primary action, preserve the established lower
+     * position of the lone Wait/Rest button. */
+    if (set.count == 1 && set.gameplay_base_count == 1) {
+        out_rects[0] = base[1];
+        return true;
+    }
+
+    if (sdl_mobile_portrait_layout_active()) {
+        if (sdl_touch_thumb_description_open()) {
+            SDL_Rect left_region;
+            SDL_Rect right_region;
+            float grid_x;
+            float grid_y;
+            float grid_w;
+            float grid_h;
+            float button_w;
+            float button_h;
+            float preferred_w;
+            float four_column_w;
+            int columns;
+            int rows;
+
+            if (!sdl_mobile_portrait_control_regions(&left_region,
+                    &right_region))
+            {
+                return false;
+            }
+
+            grid_x = (float)MIN(left_region.x, right_region.x);
+            grid_w = (float)MAX(left_region.x + left_region.w,
+                right_region.x + right_region.w) - grid_x;
+            preferred_w = base[0].w;
+            columns = (int)((grid_w + gap) / (preferred_w + gap));
+            if (columns < 1)
+                columns = 1;
+            if (columns > set.count)
+                columns = set.count;
+            /* Description actions may use the combined portrait control width.
+             * Prefer four across when every target remains comfortably sized. */
+            four_column_w = (grid_w - gap * 3.0f) / 4.0f;
+            if (set.count >= 4 && four_column_w >= 48.0f)
+                columns = 4;
+            rows = (set.count + columns - 1) / columns;
+            button_w = (grid_w - gap * (float)(columns - 1))
+                / (float)columns;
+            button_h = base[0].h;
+            grid_h = button_h * (float)rows + gap * (float)(rows - 1);
+            if (grid_h > (float)left_region.h) {
+                button_h = ((float)left_region.h
+                    - gap * (float)(rows - 1)) / (float)rows;
+                grid_h = (float)left_region.h;
+            }
+            grid_y = (float)(left_region.y + left_region.h) - grid_h;
+
+            if (button_h <= 0.0f || button_w <= 0.0f)
+                return false;
+
+            for (int index = 0; index < set.count; index++) {
+                int row = index / columns;
+                int col = index % columns;
+
+                out_rects[index] = (SDL_FRect){
+                    grid_x + (button_w + gap) * (float)col,
+                    grid_y + (button_h + gap) * (float)row,
+                    button_w,
+                    button_h,
+                };
+            }
+            return true;
+        }
+
+        {
+            float column_h = base[1].y + base[1].h - base[0].y;
+            float button_h = (column_h - gap * (float)(set.count - 1))
+                / (float)set.count;
+
+            if (button_h <= 0.0f)
+                return false;
+            for (int slot = 0; slot < set.count; slot++) {
+                int index = sdl_touch_thumb_visual_index(&set, slot, 1);
+
+                out_rects[index] = (SDL_FRect){
+                    base[0].x,
+                    base[0].y + (button_h + gap) * (float)slot,
+                    base[0].w,
+                    button_h,
+                };
+            }
+        }
+        return true;
+    }
+
+    {
+        enum pane_placement where = sdl_left_panel_pane_placement();
+        float region_bottom;
+        float available_h;
+        float min_button_h;
+        float max_button_h;
+        float button_h;
+        float button_w;
+        float side_space;
+        float first_x;
+        bool expand_left;
+        int rows_fit;
+        int rows;
+        int columns;
+
+        screen = sdl_get_layout_screen_rect();
+        region_bottom = sdl_touch_thumb_region_bottom(base[0].x, base[0].w,
+            base[0].y, &screen, gap);
+        available_h = region_bottom - base[0].y;
+        min_button_h = (float)screen.h / 14.0f;
+        if (min_button_h < 40.0f)
+            min_button_h = 40.0f;
+        max_button_h = (float)screen.h / 5.0f;
+
+        rows_fit = (int)((available_h + gap) / (min_button_h + gap));
+        if (rows_fit < 1)
+            rows_fit = 1;
+        if (rows_fit > set.count)
+            rows_fit = set.count;
+        columns = (set.count + rows_fit - 1) / rows_fit;
+        rows = (set.count + columns - 1) / columns;
+        button_h = (available_h - gap * (float)(rows - 1)) / (float)rows;
+        if (button_h > max_button_h)
+            button_h = max_button_h;
+        if (button_h <= 0.0f)
+            return false;
+
+        expand_left = sdl_left_panel_pane_placement_is_right(where);
+        if (!expand_left
+            && sdl_left_panel_pane_placement_is_horizontal_center(where))
+        {
+            float left_space = base[0].x - (float)screen.x;
+            float right_space = (float)(screen.x + screen.w)
+                - (base[0].x + base[0].w);
+            expand_left = left_space > right_space;
+        }
+        side_space = expand_left
+            ? base[0].x - (float)screen.x
+            : (float)(screen.x + screen.w) - (base[0].x + base[0].w);
+        button_w = (base[0].w + side_space
+            - gap * (float)(columns - 1)) / (float)columns;
+        if (button_w > base[0].w)
+            button_w = base[0].w;
+        if (button_w <= 0.0f)
+            return false;
+        first_x = expand_left ? base[0].x + base[0].w - button_w
+                              : base[0].x;
+
+        for (int slot = 0; slot < set.count; slot++) {
+            int index = sdl_touch_thumb_visual_index(&set, slot, columns);
+            int row = slot % rows;
+            int col = slot / rows;
+            float x = expand_left
+                ? first_x - (button_w + gap) * (float)col
+                : first_x + (button_w + gap) * (float)col;
+
+            out_rects[index] = (SDL_FRect){
+                x,
+                base[0].y + (button_h + gap) * (float)row,
+                button_w,
+                button_h,
+            };
+        }
+    }
+
+    return true;
+}
+
+bool sdl_touch_thumb_current_bounds(SDL_FRect* out_bounds)
+{
+    SDL_FRect rects[SDL_TOUCH_THUMB_RUNTIME_CAPACITY];
+    SDL_FRect bounds = { 0 };
+    bool have_bounds = false;
+    int button_count = sdl_touch_thumb_button_count();
+
+    if (out_bounds)
+        *out_bounds = (SDL_FRect){ 0 };
+    if (!sdl_touch_thumb_compute_runtime_rects(
+            rects, SDL_TOUCH_THUMB_RUNTIME_CAPACITY))
+    {
+        return false;
+    }
+
+    for (int i = 0; i < button_count; i++) {
+        if (!sdl_touch_thumb_button_has_binding(i))
+            continue;
+        if (rects[i].w <= 0.0f || rects[i].h <= 0.0f)
+            continue;
+
+        if (!have_bounds) {
+            bounds = rects[i];
+            have_bounds = true;
+        } else {
+            float right = MAX(bounds.x + bounds.w,
+                rects[i].x + rects[i].w);
+            float bottom = MAX(bounds.y + bounds.h,
+                rects[i].y + rects[i].h);
+
+            bounds.x = MIN(bounds.x, rects[i].x);
+            bounds.y = MIN(bounds.y, rects[i].y);
+            bounds.w = right - bounds.x;
+            bounds.h = bottom - bounds.y;
+        }
+    }
+
+    if (!have_bounds)
+        return false;
+    if (out_bounds)
+        *out_bounds = bounds;
+    return true;
+}
+
 bool sdl_touch_thumb_point_to_button(float px, float py, int* out_index)
 {
-    SDL_FRect rects[SDL_TOUCH_THUMB_BUTTON_COUNT];
+    SDL_FRect rects[SDL_TOUCH_THUMB_RUNTIME_CAPACITY];
+    int button_count = sdl_touch_thumb_button_count();
 
     if (out_index)
         *out_index = -1;
-    if (!sdl_touch_thumb_compute_rects(rects))
+    if (!sdl_touch_thumb_compute_runtime_rects(
+            rects, SDL_TOUCH_THUMB_RUNTIME_CAPACITY))
+    {
         return false;
+    }
 
-    for (int i = 0; i < SDL_TOUCH_THUMB_BUTTON_COUNT; i++) {
+    for (int i = 0; i < button_count; i++) {
         if (!sdl_touch_thumb_button_has_binding(i))
             continue;
         if (rects[i].w <= 0.0f || rects[i].h <= 0.0f)
@@ -731,6 +1463,14 @@ static int sdl_touch_context_binding(int binding)
     int key = binding;
     int context_binding = (binding == INPUT_BIND_CONFIRM) ? ' ' : binding;
 
+    if (sdl_touch_thumb_description_open()
+        && sdl_description_overlay_has_footer_action(binding))
+    {
+        return binding;
+    }
+    if (binding == 'g' && sdl_touch_thumb_description_open())
+        return ' ';
+
     (void)touch_shortcut_context_action(context_binding,
         sdl_touch_thumb_description_open(), &key, NULL, 0);
     return key;
@@ -748,9 +1488,61 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
         SDL_strlcpy(buf, "Off", buflen);
         return;
     }
+    if (sdl_touch_thumb_floor_action_label(binding, buf, buflen))
+        return;
+    if (sdl_touch_thumb_description_open()
+        && sdl_description_overlay_footer_action_label(binding, buf, buflen))
+    {
+        return;
+    }
+    if (binding == SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT) {
+        if (sdl_touch_thumb_space_action(NULL, buf, buflen))
+            return;
+        SDL_strlcpy(buf, "Confirm", buflen);
+        return;
+    }
+    if (binding == SDL_TOUCH_THUMB_BIND_FIRE_SELECTED) {
+        if (sdl_touch_thumb_fire_targeting_active()) {
+            SDL_strlcpy(buf,
+                sdl_touch_thumb_ranged_mode_active()
+                    ? "Fire at target" : "Throw at target",
+                buflen);
+            return;
+        }
+        SDL_strlcpy(buf, "Ranged Attack", buflen);
+        return;
+    }
+    if (binding == ESCAPE && sdl_touch_thumb_fire_targeting_active()) {
+        SDL_strlcpy(buf, "Cancel", buflen);
+        return;
+    }
+    if (binding == SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER) {
+        SDL_strlcpy(buf, "Switch Weapon", buflen);
+        return;
+    }
+    if (binding == SDL_TOUCH_THUMB_BIND_QUICK_THROW) {
+        sdl_touch_thumb_throw_label(buf, buflen);
+        return;
+    }
+    if (binding == SDL_TOUCH_THUMB_BIND_QUICK_THROW_TARGET) {
+        SDL_strlcpy(buf, "Choose target", buflen);
+        return;
+    }
     if (binding == TOUCH_BIND_TOGGLE_TILES) {
         SDL_strlcpy(buf, get_sdl_tiles() ? "Change to ASCII"
                                         : "Change to Tiles", buflen);
+        return;
+    }
+    if (binding == 'f') {
+        SDL_strlcpy(buf, "Ranged Attack", buflen);
+        return;
+    }
+    if (binding == 'F') {
+        SDL_strlcpy(buf, "Ranged Attack", buflen);
+        return;
+    }
+    if (binding == 'g') {
+        SDL_strlcpy(buf, "Pack / Pick Up", buflen);
         return;
     }
     /* Space/'x' adapt their name to the player's situation (stairs, item,
@@ -766,24 +1558,37 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
 }
 
 static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
-    bool pressed)
+    bool pressed, bool flashed)
 {
     SDL_Color frame = g_state.palette[TERM_WHITE];
     SDL_Color text = g_state.palette[TERM_WHITE];
+    SDL_Color selected = g_state.palette[TERM_YELLOW];
+    bool active = pressed || flashed;
     int tap_binding = sdl_touch_thumb_button_binding(index, false);
     int long_binding = sdl_touch_thumb_button_binding(index, true);
     char label[32];
+    char* detail;
 
     /* Translucent body + border, in the style of the movement button-wheel. */
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, pressed ? 200 : 150);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, active ? 200 : 150);
     SDL_RenderFillRect(g_state.renderer, rect);
 
-    frame.a = pressed ? 230 : 185;
+    if (pressed) {
+        selected.a = 72;
+        SDL_SetRenderDrawColor(g_state.renderer, selected.r, selected.g,
+            selected.b, selected.a);
+        SDL_RenderFillRect(g_state.renderer, rect);
+        frame = g_state.palette[TERM_YELLOW];
+        text = g_state.palette[TERM_YELLOW];
+    }
+
+    frame.a = pressed ? 242 : (flashed ? 230 : 185);
     SDL_SetRenderDrawColor(g_state.renderer, frame.r, frame.g, frame.b, frame.a);
     SDL_RenderRect(g_state.renderer, rect);
 
-    text.a = pressed ? 255 : 245;
+    text.a = active ? 255 : 245;
     sdl_touch_context_label_for_binding(tap_binding, label, sizeof(label));
+    detail = sdl_touch_thumb_description_open() ? strstr(label, " (") : NULL;
 
     if (long_binding != GAMEPAD_BIND_NONE) {
         SDL_FRect main_rect = *rect;
@@ -797,12 +1602,28 @@ static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
 
         sdl_touch_context_label_for_binding(long_binding, long_label,
             sizeof(long_label));
-        hint.a = pressed ? 240 : 215;
+        hint.a = active ? 240 : 215;
 
         sdl_touch_pane_draw_button_text_scaled(&main_rect, NULL, label, text,
             0.40f, 0.60f);
         sdl_touch_pane_draw_button_text_scaled(&long_rect, NULL, long_label,
             hint, 0.36f, 0.52f);
+    } else if (detail) {
+        SDL_FRect main_rect = *rect;
+        SDL_FRect detail_rect = *rect;
+        SDL_Color hint = g_state.palette[TERM_L_WHITE];
+
+        *detail = '\0';
+        detail++;
+        main_rect.h = rect->h * 0.60f;
+        detail_rect.y = rect->y + rect->h * 0.56f;
+        detail_rect.h = rect->h * 0.44f;
+        hint.a = active ? 240 : 215;
+
+        sdl_touch_pane_draw_button_text_scaled(&main_rect, NULL, label, text,
+            0.40f, 0.60f);
+        sdl_touch_pane_draw_button_text_scaled(&detail_rect, NULL, detail,
+            hint, 0.34f, 0.52f);
     } else {
         sdl_touch_pane_draw_button_text_scaled(rect, NULL, label, text,
             0.40f, 0.64f);
@@ -811,7 +1632,8 @@ static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
 
 void sdl_touch_thumb_render(void)
 {
-    SDL_FRect rects[SDL_TOUCH_THUMB_BUTTON_COUNT];
+    SDL_FRect rects[SDL_TOUCH_THUMB_RUNTIME_CAPACITY];
+    int button_count = sdl_touch_thumb_button_count();
 
     if (g_touch_thumb_flash_button >= 0
         && SDL_GetTicksNS() >= g_touch_thumb_flash_until)
@@ -820,22 +1642,25 @@ void sdl_touch_thumb_render(void)
         g_touch_thumb_flash_until = 0;
     }
 
-    if (!sdl_touch_thumb_compute_rects(rects)) {
+    if (!sdl_touch_thumb_compute_runtime_rects(
+            rects, SDL_TOUCH_THUMB_RUNTIME_CAPACITY))
+    {
         sdl_touch_thumb_cancel_press();
         return;
     }
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    for (int i = 0; i < SDL_TOUCH_THUMB_BUTTON_COUNT; i++) {
+    for (int i = 0; i < button_count; i++) {
         bool pressed;
+        bool flashed;
 
         if (!sdl_touch_thumb_button_has_binding(i))
             continue;
         if (rects[i].w <= 0.0f || rects[i].h <= 0.0f)
             continue;
-        pressed = (g_touch_thumb_pressed_button == i)
-            || (g_touch_thumb_flash_button == i);
-        sdl_touch_thumb_render_button(&rects[i], i, pressed);
+        pressed = g_touch_thumb_pressed_button == i;
+        flashed = g_touch_thumb_flash_button == i;
+        sdl_touch_thumb_render_button(&rects[i], i, pressed, flashed);
     }
 }
 
@@ -850,6 +1675,44 @@ void sdl_touch_thumb_cancel_press(void)
     g_state.need_present = true;
 }
 
+static void sdl_touch_thumb_queue_quiver_change(void)
+{
+    sdl_enqueue_bypassed_command('\t');
+}
+
+static bool sdl_touch_thumb_send_internal_binding(int binding)
+{
+    int key = ' ';
+    floor_context_action_kind floor_action;
+
+    if (sdl_touch_thumb_floor_action_from_binding(binding, &floor_action)) {
+        do_cmd_queue_floor_context_action(floor_action);
+        return true;
+    }
+
+    switch (binding) {
+    case SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT:
+        if (!sdl_touch_thumb_space_action(&key, NULL, 0))
+            return false;
+        sdl_touch_pane_send_binding(key, false, false);
+        return true;
+    case SDL_TOUCH_THUMB_BIND_FIRE_SELECTED:
+        Term_keypress('f');
+        return true;
+    case SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER:
+        sdl_touch_thumb_queue_quiver_change();
+        return true;
+    case SDL_TOUCH_THUMB_BIND_QUICK_THROW:
+        Term_keypress(KTRL('T'));
+        return true;
+    case SDL_TOUCH_THUMB_BIND_QUICK_THROW_TARGET:
+        Term_keypress('t');
+        return true;
+    default:
+        return false;
+    }
+}
+
 static void sdl_touch_thumb_fire(int index, bool long_press)
 {
     int binding = sdl_touch_thumb_button_binding(index, long_press);
@@ -861,6 +1724,24 @@ static void sdl_touch_thumb_fire(int index, bool long_press)
         binding = sdl_touch_thumb_button_binding(index, !long_press);
     if (binding == GAMEPAD_BIND_NONE)
         return;
+
+    /* Description buttons are registered action keys, not configurable
+     * gameplay shortcuts.  Send them straight to the overlay's inkey() loop so
+     * keys such as 'i' cannot be intercepted as pane-opening commands. */
+    if (sdl_touch_thumb_description_open()) {
+        Term_keypress(binding);
+        g_touch_thumb_flash_button = index;
+        g_touch_thumb_flash_until = SDL_GetTicksNS() + 150000000ULL;
+        g_state.need_present = true;
+        return;
+    }
+
+    if (sdl_touch_thumb_send_internal_binding(binding)) {
+        g_touch_thumb_flash_button = index;
+        g_touch_thumb_flash_until = SDL_GetTicksNS() + 150000000ULL;
+        g_state.need_present = true;
+        return;
+    }
 
     /* Resolve a contextual binding (Space/'x') to the key its current label
      * promises; non-contextual bindings are left untouched. */
@@ -1001,14 +1882,16 @@ bool sdl_touch_thumb_handle_pointer_up(float x, float y, bool mouse,
 bool sdl_touch_round_layer_config_enabled(void)
 {
     return sdl_touch_only_mobile_device_active()
-        && config.touch_round_movement_enabled;
+        && (config.touch_round_movement_enabled
+            || sdl_mobile_portrait_layout_active());
 }
 
 bool sdl_touch_round_layer_controls_active(void)
 {
     return sdl_touch_round_layer_config_enabled()
         && !g_main_menu_overlay_active
-        && sdl_main_screen_click_shortcuts_active();
+        && (sdl_main_screen_click_shortcuts_active()
+            || sdl_touch_round_aim_targeting_active());
 }
 
 bool sdl_touch_movement_point_blocked_by_overlay(float x, float y)
@@ -1022,6 +1905,11 @@ bool sdl_touch_movement_point_blocked_by_overlay(float x, float y)
         return true;
     if (sdl_depth_menu_pane_hit_action(x, y, NULL)
         != SDL_DEPTH_PANE_HOVER_NONE)
+    {
+        return true;
+    }
+    if (sdl_status_depth_pane_current_rect(&panel)
+        && sdl_point_in_frect(&panel, x, y))
     {
         return true;
     }
@@ -1045,24 +1933,69 @@ static float sdl_touch_round_inner_radius_px(float radius)
     return radius * SDL_TOUCH_ROUND_INNER_RADIUS_FRAC;
 }
 
-/* Pull the [*top, *bottom] band in to clear the overlay panes anchored against
- * the right edge of the map (depth/log above, status/combat below), so a
- * right-anchored wheel lands in the open gap between them. Panes that do not
- * reach the right portion of the map are ignored, so moving one elsewhere
- * hands its space back to the wheel. */
-static void sdl_touch_round_clip_band_to_panes(const SDL_Rect* bounds,
-    float right_edge, float* top, float* bottom)
+static int sdl_touch_round_collect_obstacles(SDL_Rect* rects, int max_rects)
 {
+    int count = 0;
+    SDL_FRect frect;
+
+    if (!rects || max_rects <= 0)
+        return 0;
+
+    for (int i = 0; i < pane_config_count && count < max_rects; i++) {
+        enum pane_type pane = pane_config[i].pane;
+
+        /*
+         * Quick Access resolves after the wheel and stops its horizontal span
+         * at the wheel boundary.  It must not feed back into wheel placement.
+         */
+        if (!pane_config[i].enabled || pane == PANE_MAIN
+            || pane == PANE_TOUCH || pane == PANE_OVERLAY_MENU)
+        {
+            continue;
+        }
+        if (sdl_overlay_stack_visible_rect(pane, &rects[count]))
+            count++;
+    }
+
+    if (count < max_rects && sdl_touch_pane_current_rect(&rects[count]))
+        count++;
+    if (count < max_rects && sdl_main_menu_pane_button_rect(&frect)) {
+        rects[count++] = (SDL_Rect){
+            .x = (int)SDL_floorf(frect.x),
+            .y = (int)SDL_floorf(frect.y),
+            .w = (int)SDL_ceilf(frect.x + frect.w)
+                - (int)SDL_floorf(frect.x),
+            .h = (int)SDL_ceilf(frect.y + frect.h)
+                - (int)SDL_floorf(frect.y),
+        };
+    }
+    if (count < max_rects && sdl_touch_thumb_current_bounds(&frect)) {
+        rects[count++] = (SDL_Rect){
+            .x = (int)SDL_floorf(frect.x),
+            .y = (int)SDL_floorf(frect.y),
+            .w = (int)SDL_ceilf(frect.x + frect.w)
+                - (int)SDL_floorf(frect.x),
+            .h = (int)SDL_ceilf(frect.y + frect.h)
+                - (int)SDL_floorf(frect.y),
+        };
+    }
+
+    return count;
+}
+
+/* Shared mobile placement: panes above the available lane midpoint push the
+ * wheel down, while panes below it push the wheel up.  The obstacle source
+ * uses every other live painted pane.  Quick Access separately clips its
+ * horizontal span at the resulting wheel boundary. */
+static void sdl_touch_round_clip_mobile_band_to_panes(
+    const SDL_Rect* bounds, float right_edge, float* top, float* bottom)
+{
+    SDL_Rect rects[PANE_MAX + 4];
+    const float pane_gap = 12.0f;
     float slop;
     float right_threshold;
     float mid_y;
-    /* Keep the wheel from sitting flush against an adjacent pane (e.g. the
-     * log layer above): leave a small visual margin between them. */
-    const float pane_gap = 12.0f;
-    SDL_Rect rects[4];
-    int count = 0;
-    SDL_Rect rect;
-    SDL_FRect frect;
+    int rect_count;
 
     if (!bounds || !top || !bottom)
         return;
@@ -1073,20 +2006,11 @@ static void sdl_touch_round_clip_band_to_panes(const SDL_Rect* bounds,
     if (slop > 180.0f)
         slop = 180.0f;
     right_threshold = right_edge - slop;
-    mid_y = (float)bounds->y + (float)bounds->h * 0.5f;
+    mid_y = (*top + *bottom) * 0.5f;
 
-    if (sdl_depth_menu_pane_current_rect(&frect)) {
-        rects[count++] = (SDL_Rect){ (int)frect.x, (int)frect.y,
-            (int)frect.w, (int)frect.h };
-    }
-    if (sdl_overlay_log_pane_current_rect(&rect))
-        rects[count++] = rect;
-    if (sdl_status_pane_current_rect(&rect, NULL))
-        rects[count++] = rect;
-    if (sdl_combat_overlay_pane_current_rect(&rect))
-        rects[count++] = rect;
-
-    for (int i = 0; i < count; i++) {
+    rect_count = sdl_touch_round_collect_obstacles(rects,
+        (int)N_ELEMENTS(rects));
+    for (int i = 0; i < rect_count; i++) {
         float pane_right = (float)(rects[i].x + rects[i].w);
         float pane_top = (float)rects[i].y;
         float pane_bottom = (float)(rects[i].y + rects[i].h);
@@ -1106,6 +2030,51 @@ static void sdl_touch_round_clip_band_to_panes(const SDL_Rect* bounds,
     }
 }
 
+/*
+ * Landscape wheels occupy the lane selected by the configured Right overlay
+ * stacks.  Use every live Top Right pane's lower edge and every live Bottom
+ * Right pane's upper edge; pane types and their order remain settings-driven.
+ * Quick Access is excluded because it is finalized after the wheel and stops
+ * at the wheel boundary.
+ */
+static void sdl_touch_round_clip_between_right_stacks(
+    const SDL_Rect* bounds, float* top, float* bottom)
+{
+    const float pane_gap = 12.0f;
+
+    if (!bounds || !top || !bottom)
+        return;
+
+    for (int i = 0; i < pane_config_count; i++) {
+        enum pane_type pane = pane_config[i].pane;
+        enum pane_placement where = pane_config[i].where;
+        SDL_Rect visible;
+
+        if (!pane_config[i].enabled || pane == PANE_OVERLAY_MENU
+            || (where != PLACE_TOP_RIGHT && where != PLACE_BOTTOM_RIGHT)
+            || pane <= PANE_MAIN || pane >= PANE_MAX)
+        {
+            continue;
+        }
+
+        if (!sdl_overlay_stack_visible_rect(pane, &visible)) {
+            continue;
+        }
+
+        if (where == PLACE_TOP_RIGHT) {
+            float edge = (float)(visible.y + visible.h) + pane_gap;
+
+            if (edge > *top)
+                *top = edge;
+        } else {
+            float edge = (float)visible.y - pane_gap;
+
+            if (edge < *bottom)
+                *bottom = edge;
+        }
+    }
+}
+
 bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
     float* out_radius, float* out_inner_radius, SDL_Rect* out_clip)
 {
@@ -1120,7 +2089,24 @@ bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
     float right_edge;
     float right_margin;
     bool anchor_right;
+    bool anchor_center = false;
     bool sized = false;
+
+    if (g_touch_target_layout.locked) {
+        if (!g_touch_target_layout.wheel_valid)
+            return false;
+        if (out_cx)
+            *out_cx = g_touch_target_layout.wheel_cx;
+        if (out_cy)
+            *out_cy = g_touch_target_layout.wheel_cy;
+        if (out_radius)
+            *out_radius = g_touch_target_layout.wheel_radius;
+        if (out_inner_radius)
+            *out_inner_radius = g_touch_target_layout.wheel_inner_radius;
+        if (out_clip)
+            *out_clip = g_touch_target_layout.wheel_clip;
+        return true;
+    }
 
     if (!sdl_touch_round_compute_clip_rect(&clip))
         return false;
@@ -1148,43 +2134,111 @@ bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
         if (!sdl_rect_has_area(&screen))
             return false;
 
-        right_edge = (float)(screen.x + screen.w);
+        if (sdl_mobile_portrait_layout_active()) {
+            SDL_Rect left_region;
+            SDL_Rect right_region;
+            SDL_Rect wheel_region;
+            bool wheel_right = get_sdl_quick_touch_buttons_on_left();
+            float band_top;
+            float band_bottom;
+            float band_h;
+            float max_r_w;
+
+            if (!sdl_mobile_portrait_control_regions(&left_region,
+                    &right_region))
+            {
+                return false;
+            }
+            wheel_region = wheel_right ? right_region : left_region;
+            band_top = (float)wheel_region.y + margin;
+            band_bottom = (float)(wheel_region.y + wheel_region.h)
+                - margin;
+            band_h = band_bottom - band_top;
+            if (band_h < 56.0f)
+                return false;
+
+            /* Phone and tablet share the same portrait lane.  The tablet
+             * keeps its explicit half-narrow-side diameter cap and anchors
+             * the resulting smaller circle at that lane's bottom-right. */
+            max_r_w = ((float)wheel_region.w - margin * 2.0f) * 0.5f;
+            radius = MIN(max_r_w, band_h * 0.5f);
+            if (g_mobile_touch_tablet) {
+                float narrow_side = (float)MIN(screen.w, screen.h);
+                float tablet_max_radius = narrow_side * 0.25f;
+
+                if (radius > tablet_max_radius)
+                    radius = tablet_max_radius;
+            }
+            if (radius < 28.0f)
+                return false;
+
+            render_clip = wheel_region;
+            clip = render_clip;
+            right_edge = (float)(wheel_region.x + wheel_region.w);
+            right_margin = 0.0f;
+            if (g_mobile_touch_tablet) {
+                cy = band_bottom - radius;
+                cx = right_edge - radius;
+            } else {
+                cy = (band_top + band_bottom) * 0.5f;
+                cx = (float)wheel_region.x
+                    + (float)wheel_region.w * 0.5f;
+            }
+            anchor_center = true;
+            sized = true;
+        }
+
+        if (!sized)
+            right_edge = (float)(screen.x + screen.w);
         if (!sdl_touch_pane_is_left_placement()
-            && sdl_touch_pane_current_rect(&touch_rect))
+            && !sized && sdl_touch_pane_current_rect(&touch_rect))
         {
             right_edge = (float)touch_rect.x;
         }
-        if (right_edge <= (float)screen.x + 56.0f)
+        if (!sized && right_edge <= (float)screen.x + 56.0f)
             return false;
 
-        band_top = (float)screen.y + margin;
-        band_bottom = (float)(screen.y + screen.h) - margin;
-        sdl_touch_round_clip_band_to_panes(&screen, right_edge, &band_top,
-            &band_bottom);
-        band_h = band_bottom - band_top;
-        if (band_h < 56.0f)
-            return false;
+        if (!sized) {
+            band_top = (float)screen.y + margin;
+            band_bottom = (float)(screen.y + screen.h) - margin;
+            sdl_touch_round_clip_between_right_stacks(&screen, &band_top,
+                &band_bottom);
+            sdl_touch_round_clip_mobile_band_to_panes(&screen, right_edge,
+                &band_top, &band_bottom);
+            band_h = band_bottom - band_top;
+            if (band_h < 56.0f)
+                return false;
 
-        radius = band_h * 0.5f;
-        max_r_w = (right_edge - (float)screen.x - margin * 2.0f) * 0.5f;
-        if (max_r_w > 0.0f && radius > max_r_w)
-            radius = max_r_w;
-        if (radius < 28.0f)
-            return false;
+            radius = band_h * 0.5f;
+            max_r_w = (right_edge - (float)screen.x - margin * 2.0f) * 0.5f;
+            if (max_r_w > 0.0f && radius > max_r_w)
+                radius = max_r_w;
+            if (g_mobile_touch_tablet) {
+                float tablet_max_radius =
+                    (float)MIN(screen.w, screen.h) * 0.25f;
 
-        render_clip = (SDL_Rect){
-            .x = screen.x,
-            .y = (int)band_top,
-            .w = (int)(right_edge - (float)screen.x),
-            .h = (int)(band_h + 0.5f),
-        };
-        if (!sdl_rect_has_area(&render_clip))
-            return false;
+                if (radius > tablet_max_radius)
+                    radius = tablet_max_radius;
+            }
+            if (radius < 28.0f)
+                return false;
 
-        clip = render_clip;
-        right_margin = 0.0f;
-        cy = (band_top + band_bottom) * 0.5f;
-        sized = true;
+            render_clip = (SDL_Rect){
+                .x = screen.x,
+                .y = (int)band_top,
+                .w = (int)(right_edge - (float)screen.x),
+                .h = (int)(band_h + 0.5f),
+            };
+            if (!sdl_rect_has_area(&render_clip))
+                return false;
+
+            clip = render_clip;
+            right_margin = 0.0f;
+            cy = g_mobile_touch_tablet
+                ? band_bottom - radius
+                : (band_top + band_bottom) * 0.5f;
+            sized = true;
+        }
     }
 
     if (!sized) {
@@ -1207,9 +2261,11 @@ bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
         return false;
 
     inner_radius = sdl_touch_round_inner_radius_px(radius);
-    cx = anchor_right
-        ? right_edge - right_margin - radius
-        : (float)clip.x + margin + radius;
+    if (!anchor_center) {
+        cx = anchor_right
+            ? right_edge - right_margin - radius
+            : (float)clip.x + margin + radius;
+    }
 
     /* Clamp to the same rectangle that will be used for rendering. */
     if (cx - radius < (float)render_clip.x)
@@ -1233,6 +2289,28 @@ bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
         *out_clip = render_clip;
 
     return true;
+}
+
+void sdl_touch_target_layout_begin(void)
+{
+    touch_target_layout_state snapshot = { 0 };
+
+    /* Target selectors temporarily change input ownership, button bindings,
+     * and which overlay panes report live rectangles.  Snapshot the gameplay
+     * geometry before that transition so the wheel and contextual buttons do
+     * not jump when choosing a ranged, thrown, song, or other target. */
+    snapshot.thumb_valid = sdl_touch_thumb_compute_runtime_rects(
+        snapshot.thumb_rects, SDL_TOUCH_THUMB_RUNTIME_CAPACITY);
+    snapshot.wheel_valid = sdl_touch_round_compute_layout(
+        &snapshot.wheel_cx, &snapshot.wheel_cy, &snapshot.wheel_radius,
+        &snapshot.wheel_inner_radius, &snapshot.wheel_clip);
+    snapshot.locked = true;
+    g_touch_target_layout = snapshot;
+}
+
+void sdl_touch_target_layout_end(void)
+{
+    g_touch_target_layout = (touch_target_layout_state){ 0 };
 }
 
 static bool sdl_touch_round_point_to_wheel(float x, float y,
@@ -1419,13 +2497,28 @@ int sdl_touch_round_dir_for_delta(float dx, float dy)
     return (dx < 0.0f) ? 1 : 3;
 }
 
-void sdl_touch_round_send_dir(int dir, bool ctrl)
+static bool sdl_touch_round_drag_is_run(float dist, float inner_radius,
+    float radius)
+{
+    float button_distance;
+
+    if (inner_radius <= 0.0f || radius <= inner_radius)
+        return false;
+
+    /* Direction buttons are drawn halfway through the outer ring.  Require a
+     * drag 1.3 times as far from the wheel centre as that button centre. */
+    button_distance = (inner_radius + radius) * 0.5f;
+    return dist >= button_distance
+        * SDL_TOUCH_ROUND_RUN_BUTTON_DISTANCE_MULT;
+}
+
+void sdl_touch_round_send_dir(int dir, bool ctrl, bool run)
 {
     if (dir < 1 || dir > 9 || dir == 5)
         return;
 
     g_touch_round_last_dir = dir;
-    sdl_gamepad_send_direction_mods(dir, false, ctrl, false);
+    sdl_gamepad_send_direction_mods(dir, run, ctrl, false);
 }
 
 void sdl_touch_round_cancel_press(void)
@@ -1460,6 +2553,13 @@ bool sdl_touch_round_handle_pointer_down(float x, float y,
 
     if (!sdl_touch_round_layer_controls_active())
         return false;
+    /* The aim command bar owns its buttons even when the direction wheel
+     * overlaps the same part of the map. */
+    if (sdl_touch_round_aim_targeting_active()
+        && sdl_unified_look_prompt_contains_point(x, y))
+    {
+        return false;
+    }
     if (sdl_touch_movement_point_blocked_by_overlay(x, y))
         return false;
     if (!sdl_touch_round_point_in_bounds(x, y))
@@ -1556,6 +2656,7 @@ bool sdl_touch_round_handle_pointer_up(float x, float y,
     Uint64 press_time;
     int dir = 0;
     bool ctrl = false;
+    bool run = false;
 
     if (!g_touch_round_press.active
         || g_touch_round_press.finger_id != finger_id)
@@ -1585,20 +2686,30 @@ bool sdl_touch_round_handle_pointer_up(float x, float y,
          * "drag to move" path stays plain movement. */
         if (dir && press_time >= (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
             ctrl = true;
-    } else if (dist <= g_touch_round_press.inner_radius
+    } else if (!sdl_touch_round_aim_targeting_active()
+        && dist <= g_touch_round_press.inner_radius
             * SDL_TOUCH_ROUND_CENTER_REPEAT_FRAC) {
         if (press_time < (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
             dir = g_touch_round_last_dir;
     } else if (dist >= g_touch_round_press.inner_radius
             * SDL_TOUCH_ROUND_DRAG_THRESHOLD_FRAC) {
         dir = sdl_touch_round_dir_for_delta(dx, dy);
+        run = sdl_touch_round_drag_is_run(dist,
+            g_touch_round_press.inner_radius, radius);
     } else if (g_touch_round_press.selected_dir) {
         dir = g_touch_round_press.selected_dir;
     }
 
+    /* During aim selection the wheel is a direct firing control, never a
+     * run or Ctrl+direction gameplay gesture. */
+    if (sdl_touch_round_aim_targeting_active()) {
+        ctrl = false;
+        run = false;
+    }
+
     sdl_touch_round_cancel_press();
     if (dir)
-        sdl_touch_round_send_dir(dir, ctrl);
+        sdl_touch_round_send_dir(dir, ctrl, run);
     return true;
 }
 
@@ -1738,7 +2849,7 @@ bool sdl_touch_round_dir_to_map_rect(int dir, SDL_FRect* out_rect)
     return sdl_main_cell_rect(term_col, term_row, tile_cols, 1, out_rect);
 }
 
-void sdl_touch_round_render_target_square(int dir, bool ctrl)
+void sdl_touch_round_render_target_square(int dir, bool ctrl, bool run)
 {
     SDL_FRect rect;
     int map_y;
@@ -1751,6 +2862,8 @@ void sdl_touch_round_render_target_square(int dir, bool ctrl)
 
     if (ctrl) {
         accent = g_state.palette[TERM_L_RED];
+    } else if (run) {
+        accent = g_state.palette[TERM_L_GREEN];
     } else {
         map_y = p_ptr->py + ddy[dir];
         map_x = p_ptr->px + ddx[dir];
@@ -1821,6 +2934,8 @@ const char* sdl_touch_round_ctrl_action_for_dir(int dir)
         object_type* o_ptr = &o_list[cave_o_idx[y][x]];
 
         if (o_ptr->marked && o_ptr->tval == TV_CHEST) {
+            if (chest_trap_minigame && o_ptr->pval != 0)
+                return "Handle chest";
             if ((o_ptr->pval > 0) && object_chest_trap_flags(o_ptr)
                 && object_known_p(o_ptr))
             {
@@ -1860,24 +2975,18 @@ void sdl_touch_round_ctrl_action_label(int dir, char* buf, size_t buflen)
     strnfmt(buf, buflen, "Ctrl+%s: %s", dir_label, action);
 }
 
-void sdl_touch_round_render_ctrl_action_label(int dir, float radius,
-    const SDL_Rect* clip)
+static void sdl_touch_round_render_action_label(const char* label,
+    SDL_Color text, float radius, const SDL_Rect* clip)
 {
-    SDL_Color text = g_state.palette[TERM_L_RED];
     SDL_Color border = text;
     SDL_FRect rect;
-    char label[48];
     float label_w;
     float label_h;
     float margin;
     float min_y;
     float max_y;
 
-    if (!clip || dir <= 0)
-        return;
-
-    sdl_touch_round_ctrl_action_label(dir, label, sizeof(label));
-    if (!label[0])
+    if (!clip || !label || !label[0])
         return;
 
     margin = 8.0f;
@@ -1924,12 +3033,41 @@ void sdl_touch_round_render_ctrl_action_label(int dir, float radius,
         0.76f);
 }
 
+void sdl_touch_round_render_ctrl_action_label(int dir, float radius,
+    const SDL_Rect* clip)
+{
+    char label[48];
+
+    sdl_touch_round_ctrl_action_label(dir, label, sizeof(label));
+    sdl_touch_round_render_action_label(label,
+        g_state.palette[TERM_L_RED], radius, clip);
+}
+
+static void sdl_touch_round_render_run_action_label(int dir, float radius,
+    const SDL_Rect* clip)
+{
+    const char* dir_label;
+    char label[48];
+
+    if (!clip || dir <= 0)
+        return;
+
+    dir_label = sdl_touch_round_dir_label(dir);
+    if (!dir_label[0])
+        return;
+    strnfmt(label, sizeof(label), "Run %s", dir_label);
+    sdl_touch_round_render_action_label(label,
+        g_state.palette[TERM_L_GREEN], radius, clip);
+}
+
 static void sdl_touch_round_render_button_arrows(float cx, float cy,
-    float inner_radius, float radius, int target_dir, bool active)
+    float inner_radius, float radius, int target_dir, bool active,
+    bool run_preview)
 {
     static const int dirs[] = { 7, 8, 9, 4, 6, 1, 2, 3 };
     SDL_Color arrow = g_state.palette[TERM_WHITE];
-    SDL_Color chosen = g_state.palette[TERM_YELLOW];
+    SDL_Color chosen = g_state.palette[
+        run_preview ? TERM_L_GREEN : TERM_YELLOW];
     float mid = (inner_radius + radius) * 0.5f;
     float ring_w = radius - inner_radius;
     float button_size = ring_w * 1.14f;
@@ -1976,6 +3114,7 @@ void sdl_touch_round_render(void)
     SDL_Color line_color;
     SDL_FRect center_arrow;
     SDL_Rect clip;
+    SDL_Rect map_clip;
     bool active = g_touch_round_press.active;
     float cx;
     float cy;
@@ -1989,6 +3128,8 @@ void sdl_touch_round_render(void)
     Uint64 press_time;
     bool center_repeat;
     bool ctrl_preview;
+    bool run_preview;
+    bool aim_targeting = sdl_touch_round_aim_targeting_active();
     int target_dir;
     int dir;
 
@@ -2013,7 +3154,7 @@ void sdl_touch_round_render(void)
     } else {
         if (!sdl_touch_round_layer_config_enabled())
             return;
-        if (!sdl_mouse_gameplay_context_active())
+        if (!sdl_mouse_gameplay_context_active() && !aim_targeting)
             return;
         if (!sdl_touch_round_compute_layout(&cx, &cy, &radius,
                 &inner_radius, &clip))
@@ -2022,18 +3163,19 @@ void sdl_touch_round_render(void)
         }
     }
 
-    SDL_SetRenderClipRect(g_state.renderer, &clip);
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
 
-    frame.a = active ? 166 : 112;
-    accent.a = active ? 190 : 138;
+    if (aim_targeting)
+        accent = g_state.palette[TERM_L_RED];
+    frame.a = (active || aim_targeting) ? 166 : 112;
+    accent.a = (active || aim_targeting) ? 190 : 138;
     selected.a = 230;
 
     dx = active ? g_touch_round_press.current_x - cx : 0.0f;
     dy = active ? g_touch_round_press.current_y - cy : 0.0f;
     dist = SDL_sqrtf(dx * dx + dy * dy);
     press_time = active ? SDL_GetTicksNS() - g_touch_round_press.start_time : 0;
-    center_repeat = active
+    center_repeat = active && !aim_targeting
         && !g_touch_round_press.button_press
         && dist <= inner_radius * SDL_TOUCH_ROUND_CENTER_REPEAT_FRAC
         && press_time < (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL
@@ -2045,22 +3187,38 @@ void sdl_touch_round_render(void)
         : 0;
 
     /* A direct button press held past the long-press threshold previews the
-     * Ctrl+direction action (released as Ctrl+dir).  The inner-disc drag is
-     * plain movement, so it never previews Ctrl. */
+     * Ctrl+direction action (released as Ctrl+dir).  Inner-disc drags choose
+     * between step and run by distance, so they never preview Ctrl. */
     ctrl_preview = active
         && g_touch_round_press.button_press
         && target_dir != 0
         && press_time >= (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL;
+    run_preview = active
+        && !g_touch_round_press.button_press
+        && target_dir != 0
+        && sdl_touch_round_drag_is_run(dist, inner_radius, radius);
 
-    if (target_dir)
-        sdl_touch_round_render_target_square(target_dir, ctrl_preview);
+    /* The wheel's pane-aware clip can be only the vertical lane containing
+     * the control, while the selected map square follows the player anywhere
+     * in the map.  Draw drag/repeat previews against the full map clip, then
+     * restore the wheel clip for the control itself.  Direct outer-button
+     * presses intentionally act immediately without a map-square preview. */
+    if (target_dir && !g_touch_round_press.button_press
+        && sdl_touch_round_compute_clip_rect(&map_clip))
+    {
+        SDL_SetRenderClipRect(g_state.renderer, &map_clip);
+        sdl_touch_round_render_target_square(target_dir, ctrl_preview,
+            run_preview);
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, &clip);
 
     sdl_touch_round_draw_circle(cx, cy, radius, frame);
     sdl_touch_round_draw_circle(cx, cy, radius - 2.0f, frame);
     sdl_touch_round_draw_circle(cx, cy, inner_radius, accent);
     sdl_touch_round_draw_sector_lines(cx, cy, inner_radius, radius, frame);
     sdl_touch_round_render_button_arrows(cx, cy, inner_radius, radius,
-        target_dir, active);
+        target_dir, active, run_preview);
 
     if (active && !g_touch_round_press.button_press) {
         end_x = g_touch_round_press.current_x;
@@ -2070,7 +3228,9 @@ void sdl_touch_round_render(void)
             end_y = cy + dy * inner_radius / dist;
         }
 
-        line_color = accent;
+        line_color = run_preview
+            ? g_state.palette[TERM_L_GREEN]
+            : accent;
         SDL_SetRenderDrawColor(g_state.renderer, line_color.r, line_color.g,
             line_color.b, line_color.a);
         SDL_RenderLine(g_state.renderer, cx, cy, end_x, end_y);
@@ -2080,7 +3240,7 @@ void sdl_touch_round_render(void)
     if (dir) {
         SDL_Color arrow_color = ctrl_preview
             ? g_state.palette[TERM_L_RED]
-            : selected;
+            : (run_preview ? g_state.palette[TERM_L_GREEN] : selected);
 
         center_arrow = (SDL_FRect){
             .x = cx - inner_radius,
@@ -2089,10 +3249,23 @@ void sdl_touch_round_render(void)
             .h = inner_radius * 2.0f,
         };
         sdl_touch_pane_draw_arrow(&center_arrow, '0' + dir, arrow_color);
+    } else if (aim_targeting) {
+        /* Name the otherwise ambiguous centre of the wheel so touch users can
+         * distinguish this direct-direction action from exact map targeting. */
+        center_arrow = (SDL_FRect){
+            .x = cx - inner_radius * 0.92f,
+            .y = cy - inner_radius * 0.92f,
+            .w = inner_radius * 1.84f,
+            .h = inner_radius * 1.84f,
+        };
+        sdl_touch_pane_draw_button_text_scaled(&center_arrow, NULL,
+            "Fire direction", accent, 0.22f, 0.54f);
     }
 
     if (ctrl_preview)
         sdl_touch_round_render_ctrl_action_label(target_dir, radius, &clip);
+    else if (run_preview)
+        sdl_touch_round_render_run_action_label(target_dir, radius, &clip);
 
     SDL_SetRenderClipRect(g_state.renderer, NULL);
 }
@@ -2369,10 +3542,10 @@ void sdl_touch_corner_action_binding_label(int binding, char* buf,
         SDL_strlcpy(buf, "Zoom -", buflen);
         return;
     case 'f':
-        SDL_strlcpy(buf, "Shoot", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     case 'F':
-        SDL_strlcpy(buf, "Shoot 2", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     default:
         binding_action_short(binding, buf, buflen);
@@ -2816,6 +3989,8 @@ static bool sdl_touch_top_panel_indicator_geometry(bool open,
         points[1] = (SDL_FPoint){ 0.0f, 0.0f };
         points[2] = (SDL_FPoint){ 0.0f, 0.0f };
     }
+    if (!config.touch_top_panel_arrows_visible)
+        return false;
 
     if (!sdl_touch_top_panel_current_anchor(&screen, &anchor, &where))
         return false;
@@ -2837,13 +4012,15 @@ static bool sdl_touch_top_panel_indicator_geometry(bool open,
     case TOUCH_TOP_PANEL_INDICATOR_TOP:
         cx = panel_ready ? panel.x + panel.w * 0.5f
                          : (float)anchor.x + (float)anchor.w * 0.5f;
-        edge_pos = panel_ready ? panel.y : (float)anchor.y;
+        edge_pos = panel_ready ? panel.y : (float)screen.y;
         cy = panel_ready ? edge_pos - depth * 0.5f : edge_pos + depth * 0.5f;
         if (points) {
-            points[0] = (SDL_FPoint){ cx - half, edge_pos };
-            points[1] = (SDL_FPoint){ cx + half, edge_pos };
+            points[0] = (SDL_FPoint){ cx - half,
+                panel_ready ? edge_pos : edge_pos + depth };
+            points[1] = (SDL_FPoint){ cx + half,
+                panel_ready ? edge_pos : edge_pos + depth };
             points[2] = (SDL_FPoint){ cx,
-                panel_ready ? edge_pos - depth : edge_pos + depth };
+                panel_ready ? edge_pos - depth : edge_pos };
         }
         sdl_touch_top_panel_indicator_hit_rect(cx, cy, hit, out_hit);
         break;
@@ -2852,14 +4029,16 @@ static bool sdl_touch_top_panel_indicator_geometry(bool open,
         cy = panel_ready ? panel.y + panel.h * 0.5f
                          : (float)anchor.y + (float)anchor.h * 0.5f;
         edge_pos = panel_ready ? panel.x + panel.w
-                               : (float)(anchor.x + anchor.w - 1);
+                               : (float)(screen.x + screen.w - 1);
         cx = panel_ready ? edge_pos + depth * 0.5f
                          : edge_pos - depth * 0.5f;
         if (points) {
-            points[0] = (SDL_FPoint){ edge_pos, cy - half };
-            points[1] = (SDL_FPoint){ edge_pos, cy + half };
+            points[0] = (SDL_FPoint){
+                panel_ready ? edge_pos : edge_pos - depth, cy - half };
+            points[1] = (SDL_FPoint){
+                panel_ready ? edge_pos : edge_pos - depth, cy + half };
             points[2] = (SDL_FPoint){
-                panel_ready ? edge_pos + depth : edge_pos - depth, cy };
+                panel_ready ? edge_pos + depth : edge_pos, cy };
         }
         sdl_touch_top_panel_indicator_hit_rect(cx, cy, hit, out_hit);
         break;
@@ -2867,14 +4046,16 @@ static bool sdl_touch_top_panel_indicator_geometry(bool open,
     case TOUCH_TOP_PANEL_INDICATOR_LEFT:
         cy = panel_ready ? panel.y + panel.h * 0.5f
                          : (float)anchor.y + (float)anchor.h * 0.5f;
-        edge_pos = panel_ready ? panel.x : (float)anchor.x;
+        edge_pos = panel_ready ? panel.x : (float)screen.x;
         cx = panel_ready ? edge_pos - depth * 0.5f
                          : edge_pos + depth * 0.5f;
         if (points) {
-            points[0] = (SDL_FPoint){ edge_pos, cy - half };
-            points[1] = (SDL_FPoint){ edge_pos, cy + half };
+            points[0] = (SDL_FPoint){
+                panel_ready ? edge_pos : edge_pos + depth, cy - half };
+            points[1] = (SDL_FPoint){
+                panel_ready ? edge_pos : edge_pos + depth, cy + half };
             points[2] = (SDL_FPoint){
-                panel_ready ? edge_pos - depth : edge_pos + depth, cy };
+                panel_ready ? edge_pos - depth : edge_pos, cy };
         }
         sdl_touch_top_panel_indicator_hit_rect(cx, cy, hit, out_hit);
         break;
@@ -2884,14 +4065,16 @@ static bool sdl_touch_top_panel_indicator_geometry(bool open,
         cx = panel_ready ? panel.x + panel.w * 0.5f
                          : (float)anchor.x + (float)anchor.w * 0.5f;
         edge_pos = panel_ready ? panel.y + panel.h
-                               : (float)(anchor.y + anchor.h - 1);
+                               : (float)(screen.y + screen.h - 1);
         cy = panel_ready ? edge_pos + depth * 0.5f
                          : edge_pos - depth * 0.5f;
         if (points) {
-            points[0] = (SDL_FPoint){ cx - half, edge_pos };
-            points[1] = (SDL_FPoint){ cx + half, edge_pos };
+            points[0] = (SDL_FPoint){ cx - half,
+                panel_ready ? edge_pos : edge_pos - depth };
+            points[1] = (SDL_FPoint){ cx + half,
+                panel_ready ? edge_pos : edge_pos - depth };
             points[2] = (SDL_FPoint){ cx,
-                panel_ready ? edge_pos + depth : edge_pos - depth };
+                panel_ready ? edge_pos + depth : edge_pos };
         }
         sdl_touch_top_panel_indicator_hit_rect(cx, cy, hit, out_hit);
         break;
@@ -2979,6 +4162,24 @@ bool sdl_touch_top_panel_pointer_claims_point(float x, float y)
     }
 
     return false;
+}
+
+bool sdl_touch_top_panel_handle_secondary_pointer(float x, float y)
+{
+    int slot = -1;
+
+    if (!sdl_main_screen_click_shortcuts_active())
+        return false;
+    if (!sdl_touch_top_panel_point_to_slot(x, y, &slot))
+        return false;
+    if (slot < 0)
+        return false;
+
+    sdl_touch_top_panel_cancel_press();
+    sdl_touch_top_panel_close_description();
+    sdl_touch_top_panel_set_hover_slot(-1);
+    sdl_touch_run_quick_access_picker(slot);
+    return true;
 }
 
 void sdl_touch_zone_send(int zone, bool long_press)
@@ -3170,7 +4371,7 @@ static bool sdl_touch_top_panel_pane_enabled(void)
 {
     const struct pane_config* pc = sdl_touch_top_panel_pane_config();
 
-    return pc ? pc->enabled : true;
+    return pc && pc->enabled;
 }
 
 static enum pane_placement sdl_touch_top_panel_pane_placement(void)
@@ -3179,7 +4380,93 @@ static enum pane_placement sdl_touch_top_panel_pane_placement(void)
 
     if (pc && pane_type_allows_placement(PANE_OVERLAY_MENU, pc->where))
         return pc->where;
-    return PLACE_BOTTOM_CENTER;
+    return pane_first_allowed_placement(PANE_OVERLAY_MENU);
+}
+
+/*
+ * Quick Access is the final layout consumer.  If the generic allocator could
+ * not reserve its nominal rectangle, recover its configured stack position
+ * from the already-final live panes before it in pane_config.  This keeps
+ * placement and order settings authoritative without making another pane
+ * depend on Quick Access.
+ */
+static bool sdl_touch_top_panel_ordered_anchor(const SDL_Rect* screen,
+    enum pane_placement where, SDL_Rect* out_anchor)
+{
+    SDL_Rect anchor;
+    bool bottom;
+    bool top;
+    int quick_index = -1;
+    int edge;
+
+    if (!screen || !out_anchor || !sdl_rect_has_area(screen))
+        return false;
+
+    for (int i = 0; i < pane_config_count; i++) {
+        if (pane_config[i].pane == PANE_OVERLAY_MENU) {
+            quick_index = i;
+            break;
+        }
+    }
+    if (quick_index < 0)
+        return false;
+
+    bottom = sdl_left_panel_pane_placement_is_bottom(where);
+    top = where == PLACE_TOP_LEFT || where == PLACE_TOP_CENTER
+        || where == PLACE_TOP_RIGHT;
+    if (!bottom && !top)
+        return false;
+
+    anchor = *screen;
+    edge = bottom ? screen->y + screen->h : screen->y;
+    for (int i = 0; i < pane_config_count; i++) {
+        enum pane_type pane = pane_config[i].pane;
+        enum pane_placement pane_where = pane_config[i].where;
+        SDL_Rect visible;
+        bool same_stack;
+        bool docked_edge;
+
+        if (!pane_config[i].enabled
+            || pane <= PANE_MAIN || pane >= PANE_MAX
+            || pane == PANE_OVERLAY_MENU)
+        {
+            continue;
+        }
+
+        /* Earlier members of Quick Access's own configured stack. */
+        same_stack = i < quick_index && pane_where == where;
+        /*
+         * Docked pane groups own real layout rows at the screen edge, so a
+         * bottom-edge overlay has to start above them however it is placed.
+         * Without this the anchor keeps the full screen height, the panel
+         * lands on top of a full-width docked pane such as the log, and the
+         * side-collision pass below collapses its span to nothing.
+         */
+        docked_edge = bottom && pane_placement_is_bottom(pane_where);
+        if (!same_stack && !docked_edge)
+            continue;
+        if (!sdl_overlay_stack_visible_rect(pane, &visible))
+            continue;
+
+        if (bottom)
+            edge = MIN(edge, visible.y);
+        else
+            edge = MAX(edge, visible.y + visible.h);
+    }
+
+    if (bottom) {
+        anchor.h = edge - anchor.y;
+    } else {
+        int screen_bottom = screen->y + screen->h;
+
+        anchor.y = edge;
+        anchor.h = screen_bottom - edge;
+    }
+    if (!sdl_rect_has_area(&anchor))
+        return false;
+
+    *out_anchor = anchor;
+    return true;
 }
 
 bool sdl_touch_top_panel_layout_visible(void)
@@ -3201,6 +4488,36 @@ static void sdl_touch_top_panel_set_hover_slot(int slot)
     g_state.need_present = true;
 }
 
+static void sdl_touch_top_panel_close_description(void)
+{
+    if (g_touch_top_panel_description_slot < 0
+        && !g_touch_top_panel_description_layout_valid)
+    {
+        return;
+    }
+
+    g_touch_top_panel_description_slot = -1;
+    g_touch_top_panel_description_box = (SDL_FRect){ 0 };
+    g_touch_top_panel_description_hover_bridge = (SDL_FRect){ 0 };
+    g_touch_top_panel_description_change_rect = (SDL_FRect){ 0 };
+    g_touch_top_panel_description_close_rect = (SDL_FRect){ 0 };
+    g_touch_top_panel_description_hover = 0;
+    g_touch_top_panel_description_layout_valid = false;
+    g_state.need_present = true;
+}
+
+static void sdl_touch_top_panel_open_description(int slot)
+{
+    if (slot < 0 || slot >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        return;
+
+    g_touch_top_panel_description_slot = slot;
+    g_touch_top_panel_description_hover = 0;
+    g_touch_top_panel_description_layout_valid = false;
+    sdl_touch_top_panel_set_hover_slot(-1);
+    g_state.need_present = true;
+}
+
 void sdl_touch_top_panel_set_open(bool open)
 {
     if (g_touch_top_panel_open == open)
@@ -3208,53 +4525,59 @@ void sdl_touch_top_panel_set_open(bool open)
 
     g_touch_top_panel_open = open;
     sdl_touch_top_panel_cancel_press();
-    if (!open)
+    if (!open) {
+        sdl_touch_top_panel_close_description();
         sdl_touch_top_panel_set_hover_slot(-1);
+    }
     g_state.need_present = true;
 }
 
-int sdl_touch_top_panel_mode_normalized(int mode)
+float sdl_touch_top_panel_size_normalized(float size)
 {
-    if (mode == SDL_TOUCH_TOP_PANEL_MODE_SHORT
-        || mode == SDL_TOUCH_TOP_PANEL_MODE_LONG)
-    {
-        return mode;
-    }
+    int steps;
 
-    return SDL_TOUCH_TOP_PANEL_MODE_SHORT;
+    if (size <= SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+        return SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+    if (size < SDL_TOUCH_TOP_PANEL_SIZE_MIN)
+        size = SDL_TOUCH_TOP_PANEL_SIZE_MIN;
+    if (size > SDL_TOUCH_TOP_PANEL_SIZE_MAX)
+        size = SDL_TOUCH_TOP_PANEL_SIZE_MAX;
+
+    steps = (int)(size / SDL_TOUCH_TOP_PANEL_SIZE_STEP + 0.5f);
+    return (float)steps * SDL_TOUCH_TOP_PANEL_SIZE_STEP;
 }
 
-int sdl_touch_top_panel_button_count_normalized(int count)
+int sdl_touch_top_panel_columns_normalized(int columns)
 {
-    if (count < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_MIN)
-        return SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_MIN;
-    if (count > SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
-        return SDL_TOUCH_TOP_PANEL_BUTTON_COUNT;
+    if (columns < SDL_TOUCH_TOP_PANEL_COLUMNS_MIN)
+        return SDL_TOUCH_TOP_PANEL_COLUMNS_MIN;
+    if (columns > SDL_TOUCH_TOP_PANEL_COLUMNS_MAX)
+        return SDL_TOUCH_TOP_PANEL_COLUMNS_MAX;
+    return columns;
+}
+
+int sdl_touch_top_panel_cell_count_normalized(int count)
+{
+    if (count < SDL_TOUCH_TOP_PANEL_CELL_COUNT_MIN)
+        return SDL_TOUCH_TOP_PANEL_CELL_COUNT_MIN;
+    if (count > SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX)
+        return SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX;
     return count;
 }
 
-int sdl_touch_top_panel_tile_scale_normalized(int scale)
+int sdl_touch_top_panel_rows_normalized(int rows)
 {
-    if (scale <= 0)
-        return SDL_TOUCH_TOP_PANEL_TILE_SCALE_DEFAULT;
-    if (scale < SDL_TOUCH_TOP_PANEL_TILE_SCALE_MIN)
-        return SDL_TOUCH_TOP_PANEL_TILE_SCALE_MIN;
-    if (scale > SDL_TOUCH_TOP_PANEL_TILE_SCALE_MAX)
-        return SDL_TOUCH_TOP_PANEL_TILE_SCALE_MAX;
-    return scale;
-}
-
-bool sdl_touch_top_panel_long_mode(void)
-{
-    return sdl_touch_top_panel_button_count_normalized(
-        config.touch_top_panel_button_count)
-        > SDL_TOUCH_TOP_PANEL_SHORT_BUTTON_COUNT;
+    if (rows < SDL_TOUCH_TOP_PANEL_ROWS_MIN)
+        return SDL_TOUCH_TOP_PANEL_ROWS_MIN;
+    if (rows > SDL_TOUCH_TOP_PANEL_ROWS_MAX)
+        return SDL_TOUCH_TOP_PANEL_ROWS_MAX;
+    return rows;
 }
 
 static int sdl_touch_top_panel_configured_button_count(void)
 {
-    return sdl_touch_top_panel_button_count_normalized(
-        config.touch_top_panel_button_count);
+    return sdl_touch_top_panel_cell_count_normalized(
+        config.touch_top_panel_cell_count);
 }
 
 static int sdl_touch_top_panel_slot_for_display_index(int index,
@@ -3262,18 +4585,46 @@ static int sdl_touch_top_panel_slot_for_display_index(int index,
 {
     if (index < 0 || index >= configured_count)
         return -1;
-    if (configured_count <= SDL_TOUCH_TOP_PANEL_SHORT_BUTTON_COUNT)
-        return index + 1;
     return index;
 }
 
-static bool sdl_touch_top_panel_slot_assigned(int slot)
+static int sdl_touch_top_panel_description_action_for_binding(int binding)
+{
+    int key = binding;
+    int context_binding;
+
+    if (!sdl_touch_thumb_description_open())
+        return GAMEPAD_BIND_NONE;
+
+    if (binding == INPUT_BIND_CONFIRM)
+        binding = ' ';
+    context_binding = binding;
+
+    if (sdl_description_overlay_has_footer_action(binding))
+        return binding;
+    if (touch_shortcut_context_action(context_binding, true, &key, NULL, 0)
+        && sdl_description_overlay_has_footer_action(key))
+    {
+        return key;
+    }
+    if (binding == 'x' && sdl_description_overlay_has_footer_action('x'))
+        return 'x';
+    if ((binding == ' ' || binding == 'g')
+        && sdl_description_overlay_has_footer_action(' '))
+    {
+        return ' ';
+    }
+
+    return GAMEPAD_BIND_NONE;
+}
+
+static int sdl_touch_top_panel_description_action_for_slot(int slot)
 {
     if (slot < 0 || slot >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
-        return false;
+        return GAMEPAD_BIND_NONE;
 
-    return config.touch_top_panel_bindings[slot] != GAMEPAD_BIND_NONE
-        || config.touch_top_panel_long_bindings[slot] != GAMEPAD_BIND_NONE;
+    return sdl_touch_top_panel_description_action_for_binding(
+        config.touch_top_panel_bindings[slot]);
 }
 
 static int sdl_touch_top_panel_visible_slots(int* slots, int max_slots)
@@ -3281,12 +4632,40 @@ static int sdl_touch_top_panel_visible_slots(int* slots, int max_slots)
     int configured_count = sdl_touch_top_panel_configured_button_count();
     int visible_count = 0;
 
+    if (sdl_touch_thumb_description_open())
+    {
+        int visible_actions[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+        int visible_action_count = 0;
+
+        for (int i = 0; i < configured_count; i++) {
+            int slot = sdl_touch_top_panel_slot_for_display_index(i,
+                configured_count);
+            int action = sdl_touch_top_panel_description_action_for_slot(slot);
+            bool duplicate = false;
+
+            if (action == GAMEPAD_BIND_NONE)
+                continue;
+            for (int j = 0; j < visible_action_count; j++) {
+                if (visible_actions[j] == action) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate)
+                continue;
+
+            if (slots && visible_count < max_slots)
+                slots[visible_count] = slot;
+            visible_actions[visible_action_count++] = action;
+            visible_count++;
+        }
+
+        return visible_count;
+    }
+
     for (int i = 0; i < configured_count; i++) {
         int slot = sdl_touch_top_panel_slot_for_display_index(i,
             configured_count);
-
-        if (!sdl_touch_top_panel_slot_assigned(slot))
-            continue;
 
         if (slots && visible_count < max_slots)
             slots[visible_count] = slot;
@@ -3306,13 +4685,11 @@ bool sdl_touch_top_panel_current_anchor(SDL_Rect* out_screen,
 {
     SDL_Rect screen = sdl_get_layout_screen_rect();
     SDL_Rect anchor = { 0 };
+    SDL_Rect ordered_anchor;
     enum pane_placement where = sdl_touch_top_panel_pane_placement();
 
     if (!sdl_touch_top_panel_pane_enabled())
         return false;
-
-    if (sdl_rect_has_area(&g_pane_rects[PANE_MAIN]))
-        screen = g_pane_rects[PANE_MAIN];
 
     if (sdl_layout_matches_supporting_pane_visibility()
         && sdl_rect_has_area(&g_pane_rects[PANE_OVERLAY_MENU]))
@@ -3322,8 +4699,6 @@ bool sdl_touch_top_panel_current_anchor(SDL_Rect* out_screen,
         SDL_Rect panes[PANE_MAX] = { 0 };
 
         sdl_compute_display_panes(panes);
-        if (sdl_rect_has_area(&panes[PANE_MAIN]))
-            screen = panes[PANE_MAIN];
         if (sdl_rect_has_area(&panes[PANE_OVERLAY_MENU]))
             anchor = panes[PANE_OVERLAY_MENU];
     }
@@ -3332,7 +4707,16 @@ bool sdl_touch_top_panel_current_anchor(SDL_Rect* out_screen,
         screen = sdl_get_layout_screen_rect();
     if (!sdl_rect_has_area(&screen))
         return false;
-    if (!sdl_rect_has_area(&anchor))
+
+    /*
+     * For top and bottom slots, the live predecessors are more authoritative
+     * than Quick Access's nominal allocation.  In particular, this preserves
+     * position 2 when the nominal allocator exhausted the screen before it
+     * reached the Quick Access entry.
+     */
+    if (sdl_touch_top_panel_ordered_anchor(&screen, where, &ordered_anchor))
+        anchor = ordered_anchor;
+    else if (!sdl_rect_has_area(&anchor))
         anchor = screen;
 
     if (out_screen)
@@ -3344,65 +4728,85 @@ bool sdl_touch_top_panel_current_anchor(SDL_Rect* out_screen,
     return true;
 }
 
-/* Reduce the visible button count so the centre-anchored quick access panel
- * does not cross the side overlay panes (status / combat / log / depth) that
- * intrude into the panel's horizontal band.  Returns the most buttons of the
- * given size that fit, centred, in the clear span between those panes. */
-static int sdl_touch_top_panel_fit_button_count(const SDL_Rect* screen,
-    const SDL_Rect* anchor, enum pane_placement where, int active_count,
-    float button_size, float gap)
+/* Return the full horizontal span which does not cross side overlay panes in
+ * the Quick Access panel's vertical band.  Stretch uses the whole span. */
+static float sdl_touch_top_panel_available_width(const SDL_Rect* screen,
+    enum pane_placement where, float panel_top, float panel_h, float gap,
+    float* out_left, float* out_right)
 {
-    float panel_h = button_size;
+    float panel_bottom;
     float band_top;
     float band_bottom;
     float left;
     float right;
     float center;
-    float half;
-    float avail;
     float screen_w;
     float side_margin;
-    SDL_Rect panes[4];
-    int pane_count = 0;
-    SDL_Rect r;
-    SDL_FRect fr;
-    int max_fit;
+    int quick_index = -1;
 
-    if (!screen || !anchor || active_count <= 1 || button_size <= 0.0f)
-        return active_count;
+    if (!screen || panel_h <= 0.0f)
+        return 0.0f;
 
     screen_w = (float)screen->w;
     side_margin = sdl_touch_pane_clampf(screen_w * 0.02f, 6.0f, 18.0f);
     left = (float)screen->x + side_margin;
     right = (float)(screen->x + screen->w) - side_margin;
 
-    band_top = sdl_overlay_panel_y(anchor, where, (int)(panel_h + 0.5f));
-    band_bottom = band_top + panel_h;
-    /* Small vertical slop so a pane that just abuts the band still counts. */
-    band_top -= gap;
-    band_bottom += gap;
+    panel_bottom = panel_top + panel_h;
+    band_top = panel_top;
+    band_bottom = panel_bottom;
 
-    if (sdl_status_pane_current_rect(&r, NULL) && r.w > 0 && r.h > 0)
-        panes[pane_count++] = r;
-    if (sdl_combat_overlay_pane_current_rect(&r) && r.w > 0 && r.h > 0)
-        panes[pane_count++] = r;
-    if (sdl_overlay_log_pane_current_rect(&r) && r.w > 0 && r.h > 0)
-        panes[pane_count++] = r;
-    if (sdl_depth_menu_pane_current_rect(&fr) && fr.w > 0.0f && fr.h > 0.0f) {
-        panes[pane_count++] = (SDL_Rect){ (int)fr.x, (int)fr.y,
-            (int)fr.w, (int)fr.h };
+    /* Quick Access is last in the dependency order, so every other configured
+     * pane has a final live rectangle by the time this span is measured.
+     * Adjacent members of the same configured stack deliberately abut, so
+     * only rectangles that actually enter this row constrain its width. */
+    for (int i = 0; i < pane_config_count; i++) {
+        if (pane_config[i].pane == PANE_OVERLAY_MENU) {
+            quick_index = i;
+            break;
+        }
     }
+    center = (float)screen->x + (float)screen->w * 0.5f;
+    for (int i = 0; i < pane_config_count; i++) {
+        enum pane_type pane = pane_config[i].pane;
+        SDL_Rect visible;
+        float p_left;
+        float p_right;
+        float p_top;
+        float p_bottom;
+        float p_mid;
 
-    center = (float)anchor->x + (float)anchor->w * 0.5f;
+        if (!pane_config[i].enabled || pane == PANE_MAIN
+            || pane == PANE_OVERLAY_MENU)
+        {
+            continue;
+        }
+        /*
+         * Earlier panes in this exact configured stack already determine the
+         * Quick Access anchor.  Treating a rounding contact with one of them
+         * as a side collision incorrectly pushes Stretch to the other side.
+         */
+        if (i < quick_index && pane_config[i].where == where)
+            continue;
+        if (!sdl_overlay_stack_visible_rect(pane, &visible))
+            continue;
 
-    for (int i = 0; i < pane_count; i++) {
-        float p_left = (float)panes[i].x;
-        float p_right = (float)(panes[i].x + panes[i].w);
-        float p_top = (float)panes[i].y;
-        float p_bottom = (float)(panes[i].y + panes[i].h);
-        float p_mid = (p_left + p_right) * 0.5f;
+        p_left = (float)visible.x;
+        p_right = (float)(visible.x + visible.w);
+        p_top = (float)visible.y;
+        p_bottom = (float)(visible.y + visible.h);
+        p_mid = (p_left + p_right) * 0.5f;
 
         if (p_bottom <= band_top || p_top >= band_bottom)
+            continue;
+        /*
+         * A pane that covers the whole remaining span leaves no side to move
+         * to.  Treating it as a left or right neighbour pushes the edges past
+         * each other and reports a one pixel span, which fails the layout and
+         * leaves Quick Access invisible with no way to reopen it.  Such a pane
+         * has to be cleared vertically by the anchor instead.
+         */
+        if (p_left <= left && p_right >= right)
             continue;
         if (p_mid <= center) {
             if (p_right + gap > left)
@@ -3412,20 +4816,200 @@ static int sdl_touch_top_panel_fit_button_count(const SDL_Rect* screen,
         }
     }
 
-    /* Largest panel width that, centred on the anchor, clears both sides. */
-    half = center - left;
-    if (right - center < half)
-        half = right - center;
-    avail = half * 2.0f;
-    if (avail < button_size)
-        return 1;
+    /*
+     * The wheel is circular, so reserve only the horizontal chord that
+     * actually intersects this Quick Access row.  A bottom row may extend
+     * beneath an empty corner of the wheel's bounding box, as in the original
+     * mobile layout.
+     */
+    if (sdl_touch_round_layer_config_enabled()) {
+        float wheel_cx;
+        float wheel_cy;
+        float wheel_radius;
 
-    max_fit = (int)((avail + gap) / (button_size + gap));
-    if (max_fit < 1)
-        max_fit = 1;
-    if (max_fit > active_count)
-        max_fit = active_count;
-    return max_fit;
+        if (sdl_touch_round_compute_layout(&wheel_cx, &wheel_cy,
+                &wheel_radius, NULL, NULL))
+        {
+            float padded_radius = wheel_radius + gap;
+            float nearest_y = sdl_touch_pane_clampf(wheel_cy,
+                panel_top, panel_bottom);
+            float dy = SDL_fabsf(nearest_y - wheel_cy);
+
+            if (dy < padded_radius) {
+                float half_chord = SDL_sqrtf(
+                    padded_radius * padded_radius - dy * dy);
+                float wheel_left = wheel_cx - half_chord;
+                float wheel_right = wheel_cx + half_chord;
+
+                if (wheel_cx <= center) {
+                    if (wheel_right > left)
+                        left = wheel_right;
+                } else if (wheel_left < right) {
+                    right = wheel_left;
+                }
+            }
+        }
+    }
+
+    if (out_left)
+        *out_left = left;
+    if (out_right)
+        *out_right = right;
+    return MAX(1.0f, right - left);
+}
+
+static void sdl_touch_top_panel_button_metrics_for_size(float size,
+    float* out_button_size, float* out_gap)
+{
+    float icon_size;
+    float button_size;
+    float gap;
+
+    if (size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+        size = SDL_TOUCH_TOP_PANEL_SIZE_DEFAULT;
+    size = sdl_touch_top_panel_size_normalized(size);
+    icon_size = (float)TILE_SIZE * size;
+
+#if SIL_SDL_MOBILE_BUILD
+    button_size = sdl_touch_pane_clampf(icon_size * 2.75f, 76.0f, 112.0f);
+    if (size > SDL_TOUCH_TOP_PANEL_SIZE_DEFAULT) {
+        button_size += (size - SDL_TOUCH_TOP_PANEL_SIZE_DEFAULT) * 12.0f;
+    }
+    gap = sdl_touch_pane_clampf(button_size * 0.12f, 8.0f, 18.0f);
+#else
+    float pad = sdl_touch_pane_clampf(icon_size * 0.18f, 6.0f, 14.0f);
+
+    gap = sdl_touch_pane_clampf(icon_size * 0.18f, 6.0f, 14.0f);
+    button_size = icon_size + pad * 2.0f;
+#endif
+
+    if (out_button_size)
+        *out_button_size = button_size;
+    if (out_gap)
+        *out_gap = gap;
+}
+
+/*
+ * Return the vertical space requested by the configured Quick Access grid
+ * before collision fitting.  Portrait uses this settings-only measurement to
+ * reserve the bottom stack before placing the wheel; the final Quick Access
+ * layout still runs afterward and may shorten horizontally around obstacles.
+ */
+int sdl_touch_top_panel_reserved_stack_height(const SDL_Rect* screen)
+{
+    float available_w;
+    float button_size;
+    float configured_size;
+    float gap;
+    float panel_h;
+    float side_margin;
+    int active_count;
+    int columns;
+    int rows;
+
+    if (!screen || !sdl_rect_has_area(screen))
+        return 0;
+
+    active_count = sdl_touch_top_panel_visible_button_count();
+    if (active_count <= 0)
+        return 0;
+
+    if (sdl_touch_thumb_description_open()) {
+        rows = 1;
+        columns = active_count;
+    } else {
+        rows = MIN(get_sdl_touch_top_panel_rows(), active_count);
+        columns = (active_count + rows - 1) / rows;
+    }
+    if (rows <= 0 || columns <= 0)
+        return 0;
+
+    configured_size = get_sdl_touch_top_panel_size();
+    sdl_touch_top_panel_button_metrics_for_size(configured_size,
+        &button_size, &gap);
+
+    side_margin = sdl_touch_pane_clampf((float)screen->w * 0.02f,
+        6.0f, 18.0f);
+    available_w = (float)screen->w - side_margin * 2.0f;
+    if (available_w <= 0.0f)
+        return 0;
+
+    /*
+     * Stretch's gap depends on the fitted button size.  Resolve that small
+     * equation without querying panes or the wheel, keeping this a pure
+     * settings/screen measurement.
+     */
+    for (int pass = 0; pass < 6; pass++) {
+        float fit_size;
+
+        if (available_w <= gap * (float)(columns - 1))
+            return 0;
+        fit_size = (available_w - gap * (float)(columns - 1))
+            / (float)columns;
+        if (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+            button_size = fit_size;
+            gap = sdl_touch_pane_clampf(button_size * 0.10f,
+                6.0f, 18.0f);
+        } else {
+            if (button_size > fit_size)
+                button_size = fit_size;
+            break;
+        }
+    }
+    if (button_size <= 0.0f)
+        return 0;
+
+    panel_h = button_size * (float)rows + gap * (float)(rows - 1);
+    if (panel_h > (float)screen->h - side_margin * 2.0f)
+        panel_h = (float)screen->h - side_margin * 2.0f;
+    return panel_h > 0.0f ? (int)SDL_ceilf(panel_h) : 0;
+}
+
+static bool sdl_touch_top_panel_vertical_placement(
+    enum pane_placement where)
+{
+    return where == PLACE_LEFT_CENTER || where == PLACE_RIGHT_CENTER;
+}
+
+static bool sdl_touch_top_panel_fixed_overlaps_left_combat(
+    const SDL_Rect* screen, const SDL_Rect* anchor, enum pane_placement where,
+    float panel_w, float panel_h)
+{
+#if SIL_SDL_MOBILE_BUILD
+    SDL_Rect combat;
+    SDL_FRect panel;
+    float combat_center;
+    float panel_center;
+
+    if (!screen || !anchor || sdl_mobile_portrait_layout_active())
+        return false;
+    if (!sdl_combat_overlay_pane_current_rect(&combat)
+        || combat.w <= 0 || combat.h <= 0)
+    {
+        return false;
+    }
+
+    panel = sdl_overlay_panel_rect(anchor, where,
+        (int)(panel_w + 0.5f), (int)(panel_h + 0.5f), screen);
+    if (panel.x + panel.w <= (float)combat.x
+        || panel.x >= (float)(combat.x + combat.w)
+        || panel.y + panel.h <= (float)combat.y
+        || panel.y >= (float)(combat.y + combat.h))
+    {
+        return false;
+    }
+
+    combat_center = (float)combat.x + (float)combat.w * 0.5f;
+    panel_center = panel.x + panel.w * 0.5f;
+    return combat_center <= panel_center;
+#else
+    (void)screen;
+    (void)anchor;
+    (void)where;
+    (void)panel_w;
+    (void)panel_h;
+    return false;
+#endif
 }
 
 bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
@@ -3433,18 +5017,20 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
     SDL_FRect* button_rects, SDL_FRect* out_panel)
 {
     float screen_w;
-    float icon_size;
     float side_margin;
     float max_panel_w;
+    float max_panel_h;
     float gap;
     float panel_w;
     float panel_h;
     float button_size;
+    float configured_size;
     SDL_FRect panel;
     int visible_slots[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
     int active_count;
     int columns;
     int rows;
+    bool vertical;
 
     if (!screen || !anchor || !sdl_rect_has_area(screen)
         || !sdl_rect_has_area(anchor))
@@ -3452,6 +5038,9 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
         return false;
     }
 
+    /* The configured pane rectangle is an alignment anchor, not a size cap.
+     * Corner anchors can be only a few cells wide, which previously collapsed
+     * Bottom Right Quick Access buttons almost to zero in portrait mode. */
     screen_w = (float)screen->w;
     active_count = sdl_touch_top_panel_visible_slots(visible_slots,
         SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
@@ -3460,69 +5049,192 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
 
     side_margin = sdl_touch_pane_clampf(screen_w * 0.02f, 6.0f, 18.0f);
     max_panel_w = screen_w - side_margin * 2.0f;
-    icon_size = (float)(TILE_SIZE * get_sdl_touch_top_panel_tile_scale());
-#if SIL_SDL_MOBILE_BUILD
-    button_size = sdl_touch_pane_clampf(icon_size * 2.75f, 76.0f, 112.0f);
-    gap = sdl_touch_pane_clampf(button_size * 0.12f, 8.0f, 18.0f);
-    active_count = sdl_touch_top_panel_fit_button_count(screen, anchor, where,
-        active_count, button_size, gap);
-    columns = active_count;
-    rows = 1;
-    panel_w = button_size * (float)columns + gap * (float)(columns - 1);
-    if (panel_w > max_panel_w && active_count > 1) {
-        columns = (int)((max_panel_w + gap) / (button_size + gap));
-        if (columns < 1)
-            columns = 1;
-        if (columns > active_count)
-            columns = active_count;
+    max_panel_h = (float)screen->h - side_margin * 2.0f;
+    vertical = sdl_touch_top_panel_vertical_placement(where);
+    if (sdl_touch_thumb_description_open()) {
+        rows = vertical ? active_count : 1;
+        columns = vertical ? 1 : active_count;
+    } else if (vertical) {
+        rows = active_count;
+        columns = 1;
+    } else {
+        rows = MIN(get_sdl_touch_top_panel_rows(), active_count);
+        columns = (active_count + rows - 1) / rows;
+    }
+    if (columns < 1 || rows < 1 || active_count < 1)
+        return false;
 
-        while (columns > 1) {
-            float fit_size =
-                (max_panel_w - gap * (float)(columns - 1)) / (float)columns;
+    configured_size = get_sdl_touch_top_panel_size();
+    sdl_touch_top_panel_button_metrics_for_size(configured_size,
+        &button_size, &gap);
 
-            if (fit_size >= 64.0f || columns == 1) {
-                if (fit_size < button_size)
-                    button_size = fit_size;
-                break;
-            }
-            columns--;
+    /*
+     * A fixed landscape panel is normally scaled with the main view.  If that
+     * footprint reaches into the left-side Combat pane, use Stretch for this
+     * layout so Quick Access fills the measured clear span beside Combat.
+     * Keep the saved fixed size intact for layouts where it fits.
+     */
+    if (!vertical && configured_size != SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+        float fixed_panel_w = button_size * (float)columns
+            + gap * (float)(columns - 1);
+        float fixed_panel_h = button_size * (float)rows
+            + gap * (float)(rows - 1);
+
+        if (sdl_touch_top_panel_fixed_overlaps_left_combat(screen, anchor,
+                where, fixed_panel_w, fixed_panel_h))
+        {
+            configured_size = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
         }
     }
-    if (columns < 1)
-        return false;
-    if (button_size > max_panel_w)
-        button_size = max_panel_w;
-    if (button_size < 1.0f)
-        return false;
-    rows = (active_count + columns - 1) / columns;
-    panel_w = button_size * (float)columns + gap * (float)(columns - 1);
-#else
-    float pad;
 
-    pad = sdl_touch_pane_clampf(icon_size * 0.18f, 6.0f, 14.0f);
-    gap = sdl_touch_pane_clampf(icon_size * 0.18f, 6.0f, 14.0f);
-    button_size = icon_size + pad * 2.0f;
-    active_count = sdl_touch_top_panel_fit_button_count(screen, anchor, where,
-        active_count, button_size, gap);
-    columns = active_count;
-    rows = 1;
-    if (max_panel_w <= gap * (float)(active_count - 1))
-        return false;
+    if (vertical) {
+        float fit_size;
 
-    panel_w = button_size * (float)active_count
-        + gap * (float)(active_count - 1);
-    if (panel_w > max_panel_w) {
-        button_size = (max_panel_w - gap * (float)(active_count - 1))
-            / (float)active_count;
-        panel_w = max_panel_w;
+        if (max_panel_h <= gap * (float)(rows - 1))
+            return false;
+        fit_size = (max_panel_h - gap * (float)(rows - 1))
+            / (float)rows;
+        if (fit_size > max_panel_w)
+            fit_size = max_panel_w;
+        if (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH
+            || button_size > fit_size)
+        {
+            button_size = fit_size;
+        }
+        if (button_size <= 0.0f)
+            return false;
+    }
+
+    /* The available span depends on the panel's vertical band.  A few passes
+     * converge the stretch size while accounting for side panes intersecting
+     * that band.  Fixed sizes remain fixed unless the window cannot contain
+     * the requested columns. */
+    for (int pass = 0; !vertical && pass < 3; pass++) {
+        float available_w;
+        float fit_size;
+
+        panel_h = button_size * (float)rows
+            + gap * (float)(rows - 1);
+        available_w = sdl_touch_top_panel_available_width(screen, where,
+            sdl_overlay_panel_y(anchor, where, (int)(panel_h + 0.5f)),
+            panel_h, gap, NULL, NULL);
+        if (available_w > max_panel_w)
+            available_w = max_panel_w;
+        if (available_w <= gap * (float)(columns - 1))
+            return false;
+
+        fit_size = (available_w - gap * (float)(columns - 1))
+            / (float)columns;
+        if (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+            button_size = fit_size;
+            gap = sdl_touch_pane_clampf(button_size * 0.10f, 6.0f, 18.0f);
+        } else if (button_size > fit_size) {
+            button_size = fit_size;
+        }
     }
     if (button_size <= 0.0f)
         return false;
-#endif
 
-    panel_h = button_size * (float)rows + gap * (float)(rows - 1);
-    panel = sdl_overlay_panel_rect(anchor, where, (int)(panel_w + 0.5f),
-        (int)(panel_h + 0.5f), screen);
+    if (!vertical
+        && configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+    {
+        float available_w;
+
+        panel_h = button_size * (float)rows
+            + gap * (float)(rows - 1);
+        available_w = sdl_touch_top_panel_available_width(screen, where,
+            sdl_overlay_panel_y(anchor, where, (int)(panel_h + 0.5f)),
+            panel_h, gap, NULL, NULL);
+        if (available_w > max_panel_w)
+            available_w = max_panel_w;
+        if (available_w <= gap * (float)(columns - 1))
+            return false;
+        button_size = (available_w - gap * (float)(columns - 1))
+            / (float)columns;
+    }
+
+    if (!vertical) {
+        /*
+         * Resolve the final settings-derived position before applying
+         * horizontal collision limits.  Refit at that exact band without
+         * moving any pane from its configured placement or stack order.
+         */
+        for (int pass = 0; pass < 12; pass++) {
+            float clear_left;
+            float clear_right;
+            float available_w;
+            float fit_size;
+            float previous_size = button_size;
+
+            panel_w = button_size * (float)columns
+                + gap * (float)(columns - 1);
+            panel_h = button_size * (float)rows
+                + gap * (float)(rows - 1);
+            panel = sdl_overlay_panel_rect(anchor, where,
+                (int)(panel_w + 0.5f), (int)(panel_h + 0.5f), screen);
+
+            clear_left = panel.x;
+            clear_right = panel.x + panel.w;
+            available_w = sdl_touch_top_panel_available_width(screen, where,
+                panel.y, panel_h, gap, &clear_left, &clear_right);
+            if (available_w > max_panel_w)
+                available_w = max_panel_w;
+            if (available_w <= gap * (float)(columns - 1))
+                return false;
+
+            fit_size = (available_w - gap * (float)(columns - 1))
+                / (float)columns;
+            if (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+                button_size = fit_size;
+                gap = sdl_touch_pane_clampf(button_size * 0.10f,
+                    6.0f, 18.0f);
+            } else if (button_size > fit_size) {
+                button_size = fit_size;
+            }
+            if (button_size <= 0.0f)
+                return false;
+            if (SDL_fabsf(button_size - previous_size) <= 0.25f)
+                break;
+        }
+
+        /*
+         * Always build from the last safe fit.  The wheel chord can make the
+         * available width change slightly as the row height changes; failure
+         * to settle within a small epsilon must not hide the whole pane.
+         */
+        panel_w = button_size * (float)columns
+            + gap * (float)(columns - 1);
+        panel_h = button_size * (float)rows
+            + gap * (float)(rows - 1);
+        panel = sdl_overlay_panel_rect(anchor, where,
+            (int)(panel_w + 0.5f), (int)(panel_h + 0.5f), screen);
+
+        {
+            float clear_left = panel.x;
+            float clear_right = panel.x + panel.w;
+            float available_w = sdl_touch_top_panel_available_width(screen,
+                where, panel.y, panel_h, gap, &clear_left, &clear_right);
+
+            if (available_w <= gap * (float)(columns - 1))
+                return false;
+            if (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+                panel.x = clear_left;
+                panel.w = MAX(1.0f, clear_right - clear_left);
+            } else if (panel.w <= clear_right - clear_left) {
+                panel.x = sdl_touch_pane_clampf(panel.x, clear_left,
+                    clear_right - panel.w);
+            }
+        }
+        if (panel.w <= 0.0f || panel.h <= 0.0f)
+            return false;
+    } else {
+        panel_w = button_size * (float)columns
+            + gap * (float)(columns - 1);
+        panel_h = button_size * (float)rows
+            + gap * (float)(rows - 1);
+        panel = sdl_overlay_panel_rect(anchor, where,
+            (int)(panel_w + 0.5f), (int)(panel_h + 0.5f), screen);
+    }
     panel_w = panel.w;
     panel_h = panel.h;
 
@@ -3540,18 +5252,15 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
             int slot = visible_slots[i];
             int row = i / columns;
             int col = i % columns;
-            float row_x = panel.x;
-
-#if SIL_SDL_MOBILE_BUILD
             int row_count = active_count - row * columns;
             float row_w;
+            float row_x;
 
             if (row_count > columns)
                 row_count = columns;
             row_w = button_size * (float)row_count
                 + gap * (float)(row_count - 1);
             row_x = panel.x + (panel.w - row_w) * 0.5f;
-#endif
 
             button_rects[slot] = (SDL_FRect){
                 .x = row_x + (button_size + gap) * (float)col,
@@ -3565,24 +5274,27 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
     return true;
 }
 
-bool sdl_touch_top_panel_compute_layout_for_screen(
-    const SDL_Rect* screen, SDL_FRect* button_rects, SDL_FRect* out_panel)
-{
-    return sdl_touch_top_panel_compute_layout_for_anchor(screen, screen,
-        PLACE_BOTTOM_CENTER, button_rects, out_panel);
-}
-
 bool sdl_touch_top_panel_point_to_slot(float x, float y, int* out_slot)
 {
-    SDL_FRect button_rects[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+    const SDL_FRect* button_rects = g_touch_top_panel_cached_buttons;
     int visible_slots[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
     int active_count = sdl_touch_top_panel_visible_slots(visible_slots,
         SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
 
     if (out_slot)
         *out_slot = -1;
-    if (!sdl_touch_top_panel_compute_layout(button_rects, NULL))
-        return false;
+    if (!g_touch_top_panel_cached_layout_valid
+        || g_touch_top_panel_cached_generation != g_sdl_present_generation)
+    {
+        if (!sdl_touch_top_panel_compute_layout(
+                g_touch_top_panel_cached_buttons, NULL))
+        {
+            g_touch_top_panel_cached_layout_valid = false;
+            return false;
+        }
+        g_touch_top_panel_cached_layout_valid = true;
+        g_touch_top_panel_cached_generation = g_sdl_present_generation;
+    }
 
     for (int i = 0; i < active_count; i++) {
         int slot = visible_slots[i];
@@ -3611,8 +5323,12 @@ int sdl_touch_top_panel_binding_for_slot(int slot, bool long_press)
 
 static int sdl_touch_top_panel_display_binding_for_slot(int slot)
 {
+    int description_action =
+        sdl_touch_top_panel_description_action_for_slot(slot);
     int binding = sdl_touch_top_panel_binding_for_slot(slot, false);
 
+    if (description_action != GAMEPAD_BIND_NONE)
+        return description_action;
     if (binding != GAMEPAD_BIND_NONE)
         return binding;
 
@@ -3637,6 +5353,17 @@ void sdl_touch_top_panel_label_for_slot(int slot, bool long_press,
         return;
     }
 
+    {
+        int description_action =
+            sdl_touch_top_panel_description_action_for_binding(binding);
+
+        if (description_action != GAMEPAD_BIND_NONE) {
+            sdl_touch_context_label_for_binding(description_action, buf,
+                buflen);
+            return;
+        }
+    }
+
     if (binding == TOUCH_BIND_MAIN_MENU_KNOWLEDGE) {
         SDL_strlcpy(buf, "Known Lore", buflen);
         return;
@@ -3654,6 +5381,62 @@ static bool sdl_touch_top_panel_can_draw_tiles(void)
     return g_state.use_tiles && g_state.tileset;
 }
 
+static int sdl_touch_top_panel_player_action_kind_for_binding(int binding)
+{
+    switch (binding) {
+    case 'z': return SDL_PLAYER_ACTION_WAIT;
+    case 'u': return SDL_PLAYER_ACTION_USE;
+    case 'S': return SDL_PLAYER_ACTION_STEALTH;
+    case 's': return SDL_PLAYER_ACTION_SING;
+    case 'X': return SDL_PLAYER_ACTION_EXCHANGE;
+    case '-': return SDL_PLAYER_ACTION_FLETCH;
+    case 'x': return SDL_PLAYER_ACTION_EXAMINE;
+    case 'a': return SDL_PLAYER_ACTION_ACTIVATE;
+    case 'p': return SDL_PLAYER_ACTION_HORN;
+    case '\t': return SDL_PLAYER_ACTION_SHOOT;
+    case 't':
+    case KTRL('T'):
+    case SDL_TOUCH_THUMB_BIND_QUICK_THROW:
+    case SDL_TOUCH_THUMB_BIND_QUICK_THROW_TARGET:
+        return SDL_PLAYER_ACTION_QUICK_THROW;
+    case 'Z': return SDL_PLAYER_ACTION_REST;
+    case KTRL('F'):
+    case SDL_TOUCH_THUMB_BIND_CHANGE_QUIVER:
+        return SDL_PLAYER_ACTION_SWAP_QUIVERS;
+    case KTRL('A'): return SDL_PLAYER_ACTION_CHANGE_STAFF;
+    case 'c': return SDL_PLAYER_ACTION_CLOSE_DOOR;
+    case 'b': return SDL_PLAYER_ACTION_BASH_DOOR;
+    default:
+        return SDL_PLAYER_ACTION_NONE;
+    }
+}
+
+static bool sdl_touch_top_panel_player_action_icon_for_binding(int binding,
+    byte* out_attr, char* out_char, cptr* out_fallback)
+{
+    int kind = sdl_touch_top_panel_player_action_kind_for_binding(binding);
+
+    /* While the floor Description is open, its x footer action is the
+     * contextual Use/Wield verb, not the action that opens Description. */
+    if (binding == 'x' && sdl_touch_thumb_description_open()) {
+        if (out_attr)
+            *out_attr = (byte)(TILE_FLAG | SDL_UI_SYMBOL_ROW);
+        if (out_char)
+            *out_char = (char)(TILE_FLAG | SDL_UI_SYMBOL_USE);
+        if (out_fallback)
+            *out_fallback = "Use";
+        return true;
+    }
+
+    if (kind == SDL_PLAYER_ACTION_NONE)
+        return false;
+
+    sdl_player_action_menu_tile_for_kind(kind, out_attr, out_char);
+    if (out_fallback)
+        *out_fallback = sdl_player_action_menu_fallback_for_kind(kind);
+    return true;
+}
+
 static bool sdl_touch_top_panel_tile_for_binding(int binding, byte* out_attr,
     char* out_char, cptr* out_fallback)
 {
@@ -3662,59 +5445,67 @@ static bool sdl_touch_top_panel_tile_for_binding(int binding, byte* out_attr,
     cptr fallback = "?";
     bool has_tile = true;
 
+    if (sdl_touch_top_panel_player_action_icon_for_binding(binding, out_attr,
+            out_char, out_fallback))
+    {
+        return true;
+    }
+
+    /* Only Quick Access-only bindings belong here.  Actions shared with the
+     * player wheel must use sdl_player_action_menu_tile_for_kind() above. */
     switch (binding) {
+    case INPUT_BIND_CONFIRM:
+    case ' ':
+    case 'g':
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_PICK; fallback = "Pack";
+        break;
+    case 'o':
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_OPEN_DOOR; fallback = "Open";
+        break;
+    case 'D':
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_DISARM; fallback = "D";
+        break;
     case 'j':
-        row = 1; col = 0; fallback = "S";      /* small wooden chest */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_SUPPLY; fallback = "S";
         break;
     case '0':
-        row = 15; col = 1; fallback = "Sm";    /* forge */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_SMITHING; fallback = "Sm";
         break;
     case 'l':
-    case 'M':
     case 'L':
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_VIEW; fallback = "V";
+        break;
+    case 'M':
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_MAP; fallback = "Map";
+        break;
     case TOUCH_BIND_MAIN_MENU_KNOWLEDGE:
-        row = 12; col = 30; fallback = "V";    /* seen/view icon */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_LORE; fallback = "Lore";
         break;
     case TOUCH_BIND_MAIN_MENU_HINTS_QUESTS:
-        has_tile = false; fallback = "?";      /* hints/quests notebook */
-        break;
-    case '\t':
-        row = 5; col = 29; fallback = "Wp";    /* active weapon */
+        row = 12; col = 10; fallback = "?";    /* question-mark tile */
         break;
     case 'y':
-        row = 11; col = 27; fallback = "Ab";   /* amulet/ability */
-        break;
-    case 'z':
-    case 'Z':
-        row = 19; col = 8; fallback = "Z";     /* sleep/rest icon */
-        break;
-    case 'a':
-        row = 6; col = 8; fallback = "St";     /* staff */
-        break;
-    case 'p':
-        row = 4; col = 2; fallback = "H";      /* horn */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_ABILITIES; fallback = "Ab";
         break;
     case 'f':
     case 'F':
-    case '-':
-        row = 5; col = 27; fallback = "F";     /* arrows */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_RANGED_ATTACK; fallback = "F";
         break;
     case 'q':
         row = 3; col = 0; fallback = "!";      /* potion */
         break;
     case 'i':
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_INVENTORY; fallback = "I";
+        break;
     case 'e':
-        row = 1; col = 0; fallback = "I";      /* pack / chest */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_EQUIPPED; fallback = "E";
         break;
     case 'h':
     case '@':
-        row = 13; col = 0; fallback = "Ch";    /* character sheet / player */
-        break;
-    case 's':
-        row = 11; col = 27; fallback = "Song";
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_CHARACTER; fallback = "Ch";
         break;
     case TOUCH_BIND_TOGGLE_TILES:
-        has_tile = false; fallback = "A/T";
+        has_tile = false; fallback = "@";
         break;
     case KTRL('Y'):
         has_tile = false; fallback = "Dbg";
@@ -3808,6 +5599,14 @@ static bool sdl_touch_top_panel_render_vector_icon(int binding,
         SDL_RenderLine(g_state.renderer, x + w * 0.69f, y + h * 0.31f,
             x + w * 0.31f, y + h * 0.69f);
         return true;
+    case 'm':
+        SDL_RenderLine(g_state.renderer, x + w * 0.20f, y + h * 0.30f,
+            x + w * 0.80f, y + h * 0.30f);
+        SDL_RenderLine(g_state.renderer, x + w * 0.20f, cy,
+            x + w * 0.80f, cy);
+        SDL_RenderLine(g_state.renderer, x + w * 0.20f, y + h * 0.70f,
+            x + w * 0.80f, y + h * 0.70f);
+        return true;
     default:
         return false;
     }
@@ -3830,12 +5629,14 @@ static void sdl_touch_top_panel_render_icon(const SDL_FRect* button_rect,
 
 #if SIL_SDL_MOBILE_BUILD
     icon_size = MIN(button_rect->w, button_rect->h) * 0.68f;
-    if (icon_size < (float)(TILE_SIZE * get_sdl_touch_top_panel_tile_scale()))
-        icon_size = (float)(TILE_SIZE * get_sdl_touch_top_panel_tile_scale());
     max_icon = MIN(button_rect->w, button_rect->h)
         - sdl_touch_pane_clampf(button_rect->w * 0.14f, 8.0f, 18.0f);
 #else
-    icon_size = (float)(TILE_SIZE * get_sdl_touch_top_panel_tile_scale());
+    float configured_size = get_sdl_touch_top_panel_size();
+
+    icon_size = (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+        ? MIN(button_rect->w, button_rect->h) * 0.68f
+        : (float)TILE_SIZE * configured_size;
     max_icon = MIN(button_rect->w, button_rect->h)
         - sdl_touch_pane_clampf(button_rect->w * 0.18f, 6.0f, 14.0f);
 #endif
@@ -3893,9 +5694,9 @@ static void sdl_touch_top_panel_render_icon(const SDL_FRect* button_rect,
 
     sdl_touch_pane_draw_button_text_scaled(&rect, NULL, fallback, color,
 #if SIL_SDL_MOBILE_BUILD
-        0.42f, 0.58f
+        0.78f, 0.82f
 #else
-        0.34f, 0.48f
+        0.74f, 0.80f
 #endif
         );
 }
@@ -3912,13 +5713,27 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
     buf[0] = '\0';
     if (touch_shortcut_context_action(context_binding,
             sdl_touch_thumb_description_open(), NULL, label, sizeof(label))) {
-        strnfmt(buf, buflen, "%s.", label);
+        if (context_binding == ' ' && streq(label, "Harness"))
+            strnfmt(buf, buflen,
+                "%s: store an eligible floor item in your Harness.", label);
+        else if (context_binding == ' ')
+            strnfmt(buf, buflen,
+                "%s: confirm the current prompt or interact with what is on your square.",
+                label);
+        else if (context_binding == 'u')
+            strnfmt(buf, buflen,
+                "%s: perform the available action for the item on your square.",
+                label);
+        else
+            strnfmt(buf, buflen,
+                "%s: show details for the item on your square.", label);
         return;
     }
 
     switch (binding) {
     case GAMEPAD_BIND_NONE:
-        SDL_strlcpy(buf, "Unbound.", buflen);
+        SDL_strlcpy(buf,
+            "Unbound: this Quick Access cell has no command.", buflen);
         return;
     case TOUCH_BIND_TOP_PANEL_OPEN:
         SDL_strlcpy(buf, "Overlay menu: open the shortcut menu.", buflen);
@@ -3930,16 +5745,61 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         SDL_strlcpy(buf, "Known Lore: open the lore browser.", buflen);
         return;
     case TOUCH_BIND_MAIN_MENU_HINTS_QUESTS:
-        SDL_strlcpy(buf, "Hints & Quests: open saved hints and quest notes.",
+        SDL_strlcpy(buf,
+            "Hints & Quests: open saved hints, quest notes, and thrall requests.",
             buflen);
         return;
     case TOUCH_BIND_TOGGLE_TILES:
-        strnfmt(buf, buflen, "%s.", get_sdl_tiles() ? "Change to ASCII"
-                                                     : "Change to Tiles");
+        strnfmt(buf, buflen, "%s: change how the dungeon map is displayed.",
+            get_sdl_tiles() ? "Change to ASCII" : "Change to Tiles");
+        return;
+    case 'm':
+        SDL_strlcpy(buf,
+            "Main Menu: open the main menu and its game, character, and settings actions.",
+            buflen);
+        return;
+    case 'e':
+        SDL_strlcpy(buf,
+            "Equipment: view your worn and wielded items and choose actions for them.",
+            buflen);
+        return;
+    case 'i':
+        SDL_strlcpy(buf,
+            "Inventory: view your carried items and choose actions for them.",
+            buflen);
         return;
     case 'j':
         SDL_strlcpy(buf, "Supply: open supplies and carried resources.",
             buflen);
+        return;
+    case 's':
+        SDL_strlcpy(buf,
+            "Song: choose a song, begin singing, or stop your current song.",
+            buflen);
+        return;
+    case 'f':
+        SDL_strlcpy(buf,
+            "Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target.",
+            buflen);
+        return;
+    case 'F':
+        SDL_strlcpy(buf,
+            "Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target.",
+            buflen);
+        return;
+    case KTRL('F'):
+        SDL_strlcpy(buf,
+            "Arrows: choose the active arrow type from your mixed Quiver.",
+            buflen);
+        return;
+    case 'a':
+        SDL_strlcpy(buf,
+            "Staff: choose and activate a staff from your Harness.",
+            buflen);
+        return;
+    case KTRL('A'):
+        SDL_strlcpy(buf,
+            "Staff: choose and activate a staff from your Harness.", buflen);
         return;
     case '0':
         SDL_strlcpy(buf, "Smithing: open the forge crafting screen.", buflen);
@@ -3952,10 +5812,97 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         SDL_strlcpy(buf, "Weapon: change active melee or ranged weapon.", buflen);
         return;
     case 'y':
-        SDL_strlcpy(buf, "Abilities: open the ability screen.", buflen);
+        SDL_strlcpy(buf,
+            "Abilities: open the ability screen to review learned abilities.",
+            buflen);
         return;
     case 'M':
         SDL_strlcpy(buf, "Map: view the full dungeon map.", buflen);
+        return;
+    case 'h':
+        SDL_strlcpy(buf,
+            "Character: open your character sheet, skills, attributes, and status details.",
+            buflen);
+        return;
+    case 'z':
+        SDL_strlcpy(buf,
+            "Wait: spend one turn in place without moving or taking another action.",
+            buflen);
+        return;
+    case 'Z':
+        SDL_strlcpy(buf,
+            "Rest: wait repeatedly until recovered or interrupted by danger.",
+            buflen);
+        return;
+    case 'g':
+        SDL_strlcpy(buf,
+            "Pick Up: collect an item from your current square.", buflen);
+        return;
+    case 'o':
+        SDL_strlcpy(buf,
+            "Open: choose an adjacent door or chest and attempt to open it.",
+            buflen);
+        return;
+    case 'c':
+        SDL_strlcpy(buf,
+            "Close: choose an adjacent open door and close it.", buflen);
+        return;
+    case 'D':
+        SDL_strlcpy(buf,
+            "Disarm: choose an adjacent known trap and attempt to disarm it.",
+            buflen);
+        return;
+    case 'X':
+        SDL_strlcpy(buf,
+            "Exchange Places: swap positions with an adjacent creature when allowed.",
+            buflen);
+        return;
+    case '-':
+        SDL_strlcpy(buf,
+            "Fletchery: make arrows while you have the required materials and ability.",
+            buflen);
+        return;
+    case 't':
+        SDL_strlcpy(buf,
+            "Throw: choose an item and throw it in a selected direction.", buflen);
+        return;
+    case 'p':
+        SDL_strlcpy(buf,
+            "Horn: choose and sound a horn from your carried items.", buflen);
+        return;
+    case 'q':
+        SDL_strlcpy(buf,
+            "Quaff: choose and drink a potion from your carried items.", buflen);
+        return;
+    case 'S':
+        SDL_strlcpy(buf,
+            "Stealth: enter or leave stealth mode.", buflen);
+        return;
+    case 'b':
+        SDL_strlcpy(buf,
+            "Bash: choose an adjacent obstacle and attempt to bash it.", buflen);
+        return;
+    case KTRL('Q'):
+        SDL_strlcpy(buf,
+            "Combat Rolls: open the detailed history of recent combat rolls.",
+            buflen);
+        return;
+    case KTRL('Y'):
+        SDL_strlcpy(buf,
+            "Debug Command: open the developer command menu.", buflen);
+        return;
+    case 'J':
+        SDL_strlcpy(buf,
+            "Jewel Set: choose a saved jewel set to equip.", buflen);
+        return;
+    case '?':
+        SDL_strlcpy(buf,
+            "Help: open the in-game help and control reference.", buflen);
+        return;
+    case 'O':
+        SDL_strlcpy(buf,
+            "Options: open game, interface, input, and display settings.",
+            buflen);
         return;
     default:
         break;
@@ -3964,18 +5911,16 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
     label[0] = '\0';
     binding_action_short(binding, label, sizeof(label));
     if (label[0])
-        strnfmt(buf, buflen, "%s.", label);
+        strnfmt(buf, buflen, "%s: run this bound command.", label);
     else
-        strnfmt(buf, buflen, "Action %d.", binding);
+        strnfmt(buf, buflen, "Action %d: run this bound command.", binding);
 }
 
-static void sdl_touch_top_panel_description_for_slot(int slot, char* buf,
-    size_t buflen)
+static void sdl_touch_top_panel_description_for_slot(int slot, bool persistent,
+    char* buf, size_t buflen)
 {
     int tap_binding;
-    int hold_binding;
     char tap_desc[192];
-    char hold_desc[192];
 
     if (!buf || !buflen)
         return;
@@ -3984,35 +5929,92 @@ static void sdl_touch_top_panel_description_for_slot(int slot, char* buf,
         return;
 
     tap_binding = sdl_touch_top_panel_binding_for_slot(slot, false);
-    hold_binding = sdl_touch_top_panel_binding_for_slot(slot, true);
+    {
+        int description_action =
+            sdl_touch_top_panel_description_action_for_binding(tap_binding);
+
+        if (description_action != GAMEPAD_BIND_NONE)
+            tap_binding = description_action;
+    }
     sdl_touch_top_panel_description_for_binding(tap_binding, tap_desc,
         sizeof(tap_desc));
+    if (persistent)
+        SDL_strlcpy(buf, tap_desc, buflen);
+    else
+        strnfmt(buf, buflen, "Tap: %s\nHold: open description.", tap_desc);
+}
 
-    if (tap_binding == GAMEPAD_BIND_NONE
-        && hold_binding != GAMEPAD_BIND_NONE)
-    {
-        sdl_touch_top_panel_description_for_binding(hold_binding, hold_desc,
-            sizeof(hold_desc));
-        strnfmt(buf, buflen, "Hold: %s", hold_desc);
+static void sdl_touch_top_panel_render_description_button(
+    const SDL_FRect* rect, bool change, bool hover)
+{
+    SDL_Color icon = hover ? (SDL_Color){125, 185, 255, 255}
+                           : (SDL_Color){220, 224, 232, 235};
+    SDL_Color outline = hover ? (SDL_Color){125, 185, 255, 220}
+                              : (SDL_Color){210, 216, 226, 150};
+    float pad;
+    float stroke;
+    int repeats;
+
+    if (!rect || rect->w <= 0.0f || rect->h <= 0.0f)
+        return;
+
+    SDL_SetRenderDrawColor(g_state.renderer, hover ? 26 : 12,
+        hover ? 38 : 18, hover ? 58 : 24, hover ? 245 : 220);
+    SDL_RenderFillRect(g_state.renderer, rect);
+    SDL_SetRenderDrawColor(g_state.renderer, outline.r, outline.g,
+        outline.b, outline.a);
+    SDL_RenderRect(g_state.renderer, rect);
+
+    pad = rect->w * 0.22f;
+    stroke = rect->w / 11.0f;
+    if (stroke < 1.0f)
+        stroke = 1.0f;
+    if (stroke > 4.0f)
+        stroke = 4.0f;
+    repeats = (int)stroke;
+    if (repeats < 1)
+        repeats = 1;
+
+    SDL_SetRenderDrawColor(g_state.renderer, icon.r, icon.g, icon.b, icon.a);
+    if (change) {
+        SDL_FRect square = {
+            .x = rect->x + pad,
+            .y = rect->y + pad,
+            .w = rect->w - pad * 2.0f,
+            .h = rect->h - pad * 2.0f,
+        };
+
+        for (int i = 0; i < repeats; i++) {
+            float inset = (float)i;
+            SDL_FRect line = {
+                .x = square.x + inset,
+                .y = square.y + inset,
+                .w = square.w - inset * 2.0f,
+                .h = square.h - inset * 2.0f,
+            };
+
+            if (line.w > 0.0f && line.h > 0.0f)
+                SDL_RenderRect(g_state.renderer, &line);
+        }
         return;
     }
 
-    if (hold_binding != GAMEPAD_BIND_NONE && hold_binding != tap_binding) {
-        sdl_touch_top_panel_description_for_binding(hold_binding, hold_desc,
-            sizeof(hold_desc));
-        strnfmt(buf, buflen, "Tap: %s\nHold: %s", tap_desc, hold_desc);
-        return;
+    for (int i = 0; i < repeats; i++) {
+        float offset = (float)i - ((float)repeats - 1.0f) * 0.5f;
+        SDL_RenderLine(g_state.renderer, rect->x + pad,
+            rect->y + pad + offset, rect->x + rect->w - pad,
+            rect->y + rect->h - pad + offset);
+        SDL_RenderLine(g_state.renderer, rect->x + pad,
+            rect->y + rect->h - pad + offset, rect->x + rect->w - pad,
+            rect->y + pad + offset);
     }
-
-    SDL_strlcpy(buf, tap_desc, buflen);
 }
 
 static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
-    int slot)
+    int slot, bool persistent)
 {
     SDL_Rect screen;
     TTF_Font* font;
-    SDL_Surface* surface;
     SDL_Texture* texture;
     SDL_FRect box;
     SDL_FRect text_dst;
@@ -4024,12 +6026,17 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
     float screen_margin;
     float max_box_w;
     float max_text_w;
+    float controls_gap = 0.0f;
+    float controls_w = 0.0f;
+    float control_size = 0.0f;
     int font_px;
+    int text_w = 0;
+    int text_h = 0;
 
     if (!anchor)
         return;
 
-    sdl_touch_top_panel_description_for_slot(slot, description,
+    sdl_touch_top_panel_description_for_slot(slot, persistent, description,
         sizeof(description));
     if (!description[0])
         return;
@@ -4049,25 +6056,40 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
     screen_margin = sdl_touch_pane_clampf(g_state.system_scale * 4.0f,
         4.0f, 10.0f);
     max_box_w = (float)screen.w - screen_margin * 2.0f;
-    if (max_box_w > 420.0f)
+    if (persistent) {
+        if (max_box_w > 640.0f)
+            max_box_w = 640.0f;
+    } else if (max_box_w > 420.0f) {
         max_box_w = 420.0f;
+    }
     if (max_box_w <= pad * 2.0f)
         return;
 
-    max_text_w = max_box_w - pad * 2.0f;
-    surface = sdl_object_tooltip_render_text_surface(font, description,
-        text_color, max_text_w);
-    if (!surface)
-        return;
-
-    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
-    if (!texture) {
-        SDL_DestroySurface(surface);
-        return;
+    if (persistent) {
+#if SIL_SDL_MOBILE_BUILD
+        control_size = MAX(anchor->h * 0.82f, (float)font_px * 2.20f);
+        control_size = sdl_touch_pane_clampf(control_size, 48.0f, 72.0f);
+#else
+        control_size = (float)font_px * 1.55f;
+        control_size = sdl_touch_pane_clampf(control_size, 30.0f, 42.0f);
+#endif
+        controls_gap = sdl_touch_pane_clampf((float)font_px * 0.22f,
+            4.0f, 8.0f);
+        controls_w = control_size * 2.0f + controls_gap;
     }
 
-    box.w = (float)surface->w + pad * 2.0f;
-    box.h = (float)surface->h + pad * 2.0f;
+    max_text_w = max_box_w - pad * 2.0f;
+    if (max_text_w < 64.0f)
+        return;
+    texture = sdl_ui_wrapped_text_texture(font, description,
+        MAX(1, (int)(max_text_w + 0.5f)), text_color, &text_w, &text_h);
+    if (!texture)
+        return;
+
+    box.w = persistent ? max_box_w : (float)text_w + pad * 2.0f;
+    box.h = (float)text_h + pad * 2.0f;
+    if (persistent)
+        box.h += control_size + gap;
     box.x = anchor->x + anchor->w * 0.5f - box.w * 0.5f;
     box.y = anchor->y - box.h - gap;
     if (box.y < (float)screen.y + screen_margin)
@@ -4090,9 +6112,10 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
 
     text_dst = (SDL_FRect){
         .x = box.x + pad,
-        .y = box.y + pad,
-        .w = (float)surface->w,
-        .h = (float)surface->h,
+        .y = persistent ? box.y + pad + control_size + gap
+                        : box.y + pad,
+        .w = (float)text_w,
+        .h = (float)text_h,
     };
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
@@ -4102,11 +6125,108 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
         166);
     SDL_RenderRect(g_state.renderer, &box);
 
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_RenderTexture(g_state.renderer, texture, NULL, &text_dst);
 
-    SDL_DestroyTexture(texture);
-    SDL_DestroySurface(surface);
+    if (persistent) {
+        float controls_x = box.x + box.w - pad - controls_w;
+        float controls_y = box.y + pad;
+        float box_bottom = box.y + box.h;
+        float anchor_bottom = anchor->y + anchor->h;
+
+        g_touch_top_panel_description_box = box;
+        g_touch_top_panel_description_hover_bridge = (SDL_FRect){ 0 };
+        if (box_bottom < anchor->y) {
+            g_touch_top_panel_description_hover_bridge = (SDL_FRect){
+                .x = box.x,
+                .y = box_bottom,
+                .w = box.w,
+                .h = anchor->y - box_bottom,
+            };
+        } else if (anchor_bottom < box.y) {
+            g_touch_top_panel_description_hover_bridge = (SDL_FRect){
+                .x = box.x,
+                .y = anchor_bottom,
+                .w = box.w,
+                .h = box.y - anchor_bottom,
+            };
+        }
+        g_touch_top_panel_description_change_rect = (SDL_FRect){
+            .x = controls_x,
+            .y = controls_y,
+            .w = control_size,
+            .h = control_size,
+        };
+        g_touch_top_panel_description_close_rect = (SDL_FRect){
+            .x = controls_x + control_size + controls_gap,
+            .y = controls_y,
+            .w = control_size,
+            .h = control_size,
+        };
+        g_touch_top_panel_description_layout_valid = true;
+
+        sdl_touch_top_panel_render_description_button(
+            &g_touch_top_panel_description_change_rect, true,
+            g_touch_top_panel_description_hover == 1);
+        sdl_touch_top_panel_render_description_button(
+            &g_touch_top_panel_description_close_rect, false,
+            g_touch_top_panel_description_hover == 2);
+    }
+}
+
+bool sdl_touch_top_panel_handle_description_hover(float x, float y)
+{
+    int hover = 0;
+
+    if (g_touch_top_panel_description_slot < 0
+        && g_touch_top_panel_hover_slot < 0)
+    {
+        return false;
+    }
+    if (!g_touch_top_panel_description_layout_valid)
+    {
+        return false;
+    }
+
+    if (sdl_point_in_frect(&g_touch_top_panel_description_change_rect, x, y))
+        hover = 1;
+    else if (sdl_point_in_frect(&g_touch_top_panel_description_close_rect,
+                 x, y))
+        hover = 2;
+
+    if (hover != g_touch_top_panel_description_hover) {
+        g_touch_top_panel_description_hover = hover;
+        g_state.need_present = true;
+    }
+
+    return sdl_point_in_frect(&g_touch_top_panel_description_box, x, y)
+        || sdl_point_in_frect(&g_touch_top_panel_description_hover_bridge,
+            x, y);
+}
+
+bool sdl_touch_top_panel_handle_description_pointer(float x, float y)
+{
+    int slot = (g_touch_top_panel_description_slot >= 0)
+        ? g_touch_top_panel_description_slot : g_touch_top_panel_hover_slot;
+
+    if (slot < 0
+        || !g_touch_top_panel_description_layout_valid)
+    {
+        return false;
+    }
+
+    if (sdl_point_in_frect(&g_touch_top_panel_description_change_rect, x, y)) {
+        sdl_touch_top_panel_close_description();
+        sdl_touch_top_panel_set_hover_slot(-1);
+        sdl_touch_run_quick_access_picker(slot);
+        return true;
+    }
+    if (sdl_point_in_frect(&g_touch_top_panel_description_close_rect, x, y)) {
+        sdl_touch_top_panel_close_description();
+        sdl_touch_top_panel_set_hover_slot(-1);
+        return true;
+    }
+
+    return sdl_point_in_frect(&g_touch_top_panel_description_box, x, y);
 }
 
 void sdl_touch_top_panel_render_buttons(
@@ -4139,9 +6259,12 @@ void sdl_touch_top_panel_render_buttons(
         int binding = sdl_touch_top_panel_display_binding_for_slot(slot);
         bool toggled = sdl_pointer_attack_binding_toggled(binding);
         bool hovered = slot == g_touch_top_panel_hover_slot;
+        bool described = slot == g_touch_top_panel_description_slot;
         bool pressed = slot == g_touch_top_panel_pressed_slot;
         bool flashed = slot == g_touch_top_panel_flash_slot;
-        bool active = hovered || pressed || flashed || toggled;
+        bool pending_touch = pressed && g_touch_top_panel_press.active
+            && g_touch_top_panel_press.finger_id != 0;
+        bool selected_active = hovered || described || pressed || toggled;
 
         shadow.x += 2.0f;
         shadow.y += 2.0f;
@@ -4152,10 +6275,14 @@ void sdl_touch_top_panel_render_buttons(
             SDL_SetRenderDrawColor(g_state.renderer, 26, 26, 26, 250);
             icon_color = muted;
             border_color = hovered ? selected : muted;
-        } else if (active) {
+        } else if (selected_active) {
             SDL_SetRenderDrawColor(g_state.renderer, 34, 34, 34, 252);
             icon_color = selected;
             border_color = selected;
+        } else if (flashed) {
+            SDL_SetRenderDrawColor(g_state.renderer, 48, 48, 48, 252);
+            icon_color = frame;
+            border_color = frame;
         } else {
             SDL_SetRenderDrawColor(g_state.renderer, 34, 34, 34, 250);
             icon_color = frame;
@@ -4168,34 +6295,56 @@ void sdl_touch_top_panel_render_buttons(
         SDL_RenderRect(g_state.renderer, &button_rects[slot]);
 
         sdl_touch_top_panel_render_icon(&button_rects[slot], binding,
-            icon_color, active);
+            icon_color, selected_active || flashed);
 
-        if (hovered || pressed) {
+        /* A touch hold needs time to become a long press.  Keep the button's
+         * pressed highlight during that interval, but do not flash the old
+         * hover tooltip before the persistent description replaces it. */
+        if ((hovered || pressed) && !pending_touch
+            && g_touch_top_panel_description_slot < 0)
+        {
             tooltip_slot = slot;
             tooltip_rect = &button_rects[slot];
         }
     }
 
-    if (tooltip_slot >= 0)
-        sdl_touch_top_panel_render_tooltip(tooltip_rect, tooltip_slot);
+    g_touch_top_panel_description_layout_valid = false;
+    if (g_touch_top_panel_description_slot >= 0) {
+        int slot = g_touch_top_panel_description_slot;
+
+        if (slot < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT
+            && button_rects[slot].w > 0.0f && button_rects[slot].h > 0.0f)
+        {
+            sdl_touch_top_panel_render_tooltip(&button_rects[slot], slot, true);
+        } else {
+            sdl_touch_top_panel_close_description();
+        }
+    } else if (tooltip_slot >= 0) {
+        sdl_touch_top_panel_render_tooltip(tooltip_rect, tooltip_slot, true);
+    }
 }
 
 void sdl_touch_top_panel_render(void)
 {
-    SDL_FRect button_rects[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
-
     if (!sdl_touch_top_panel_layout_visible()) {
+        g_touch_top_panel_cached_layout_valid = false;
         sdl_touch_top_panel_cancel_press();
+        sdl_touch_top_panel_close_description();
         sdl_touch_top_panel_set_hover_slot(-1);
         return;
     }
 
-    if (!sdl_touch_top_panel_compute_layout(button_rects, NULL)) {
+    if (!sdl_touch_top_panel_compute_layout(g_touch_top_panel_cached_buttons,
+            NULL))
+    {
+        g_touch_top_panel_cached_layout_valid = false;
         sdl_touch_top_panel_set_hover_slot(-1);
         return;
     }
+    g_touch_top_panel_cached_layout_valid = true;
+    g_touch_top_panel_cached_generation = g_sdl_present_generation;
 
-    sdl_touch_top_panel_render_buttons(button_rects);
+    sdl_touch_top_panel_render_buttons(g_touch_top_panel_cached_buttons);
 
     if (g_touch_top_panel_flash_slot >= 0
         && SDL_GetTicksNS() >= g_touch_top_panel_flash_until)
@@ -4211,6 +6360,16 @@ void sdl_touch_top_panel_send_slot(int slot, bool long_press)
 
     if (!sdl_main_screen_click_shortcuts_active())
         return;
+
+    if (long_press) {
+        sdl_touch_top_panel_open_description(slot);
+        return;
+    }
+
+    /* A press or mouse hover displays the button description.  Clear it
+     * before the selected command can open its own prompt or modal screen. */
+    sdl_touch_top_panel_close_description();
+    sdl_touch_top_panel_set_hover_slot(-1);
 
     sdl_touch_pane_send_binding(sdl_touch_context_binding(binding), false,
         false);
@@ -4256,7 +6415,7 @@ bool sdl_touch_top_panel_handle_pointer_down(float x, float y,
     return true;
 }
 
-bool sdl_touch_top_panel_handle_pointer_motion(float x, float y,
+bool sdl_touch_top_panel_handle_pointer_motion(float x, float y, bool mouse,
     SDL_FingerID finger_id)
 {
     float dx;
@@ -4269,6 +6428,11 @@ bool sdl_touch_top_panel_handle_pointer_motion(float x, float y,
     if (!g_touch_top_panel_press.active
         || g_touch_top_panel_press.finger_id != finger_id)
     {
+        /* Fingers do not hover.  Avoid running the complete top-panel/status
+         * placement calculation for every Android movement sample when no
+         * top-panel button owns that finger. */
+        if (!mouse)
+            return false;
         if (sdl_touch_top_panel_point_to_slot(x, y, &slot) && slot >= 0) {
             sdl_touch_top_panel_set_hover_slot(slot);
             return true;

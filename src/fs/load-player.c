@@ -223,11 +223,12 @@ errr rd_extra(void)
     rd_byte(&p_ptr->self_made_arts);
     rd_byte(&p_ptr->climbing);
 
-    // Reserved block: legacy status bytes, active weapon, summons, revenge, Lore/KP.
+    /* Compatibility fields plus the 0.9.9 revenge and Lore extension. */
     {
         byte morgoth_hall_entered = 0;
         byte morgoth_second_wind = 0;
         byte discovery_lore_flags = 0;
+        byte quick_access_prompt_flags = 0;
         s16b lamp_oil = 0;
         byte active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
         byte morgoth_call_state = 0;
@@ -242,13 +243,16 @@ errr rd_extra(void)
         if (savefile_version_at_least(0, 9, 7, 1))
         {
             rd_byte(&active_weapon_mode);
-            strip_bytes(1);
         }
         else
         {
             active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
-            strip_bytes(2);
+            strip_bytes(1);
         }
+        if (savefile_version_at_least(0, 9, 7, 5))
+            rd_byte(&quick_access_prompt_flags);
+        else
+            strip_bytes(1);
         if (savefile_has_morgoth_call_state)
         {
             rd_byte(&morgoth_call_state);
@@ -269,6 +273,8 @@ errr rd_extra(void)
         p_ptr->morgoth_hall_entered = morgoth_hall_entered ? 1 : 0;
         p_ptr->morgoth_second_wind = morgoth_second_wind ? 1 : 0;
         p_ptr->discovery_lore_flags = discovery_lore_flags;
+        p_ptr->quick_access_prompt_flags =
+            quick_access_prompt_flags & QUICK_ACCESS_PROMPT_MASK;
         p_ptr->lamp_oil = lamp_oil;
         p_ptr->active_weapon_mode = active_weapon_mode;
         p_ptr->revenge_kills = revenge_kills;
@@ -828,6 +834,8 @@ errr rd_randarts(void)
 
             a_ptr->tval = 0;
             a_ptr->sval = 0;
+            a_ptr->storage = OBJECT_STORAGE_NONE;
+            a_ptr->volume = 0;
             a_ptr->name[0] = '\0';
             memset(a_ptr->stat_bonus, 0, sizeof(a_ptr->stat_bonus));
             memset(a_ptr->skill_bonus, 0, sizeof(a_ptr->skill_bonus));
@@ -904,6 +912,23 @@ errr rd_randarts(void)
             else
             {
                 artefact_derive_stat_skill_bonuses_from_pval(a_ptr);
+            }
+
+            /*
+             * Randarts retain a base kind, so restore their runtime storage
+             * metadata from that kind.  This deliberately avoids extending
+             * the saved randart record and remains compatible with old saves.
+             */
+            s16b k_idx = lookup_kind(a_ptr->tval, a_ptr->sval);
+            if (k_idx > 0)
+            {
+                a_ptr->storage = k_info[k_idx].storage;
+                a_ptr->volume = k_info[k_idx].volume;
+            }
+            else
+            {
+                a_ptr->storage = OBJECT_STORAGE_NONE;
+                a_ptr->volume = 0;
             }
         }
     }

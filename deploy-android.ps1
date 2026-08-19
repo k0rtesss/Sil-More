@@ -34,14 +34,23 @@ if (-not (Test-Path $installScript)) {
 function Get-AndroidApplicationId {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Delivery
+        [string]$Delivery,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Config
     )
 
     if ($Delivery -eq 'Play') {
-        return 'com.silmore.myapp'
+        $applicationId = 'com.silmore.myapp'
+    } else {
+        $applicationId = 'com.silmore.myapp.sideload'
     }
 
-    return 'com.silmore.myapp.sideload'
+    if ($Config -eq 'Debug') {
+        return "$applicationId.debug"
+    }
+
+    return $applicationId
 }
 
 $buildParams = @{
@@ -73,7 +82,10 @@ if ($AllowDowngrade) {
     $installParams['AllowDowngrade'] = $true
 }
 
-& $installScript @installParams
+[string]$targetSerial = & $installScript @installParams
+if ([string]::IsNullOrWhiteSpace($targetSerial)) {
+    throw 'Android installer did not return a target device serial.'
+}
 
 if ($LaunchApp) {
     $adb = if ($AdbPath) {
@@ -91,19 +103,18 @@ if ($LaunchApp) {
         throw "adb not found for launch step: $adb"
     }
 
-    $applicationId = Get-AndroidApplicationId -Delivery $Delivery
-    $launchArgs = @()
-    if ($Serial) {
-        $launchArgs += @('-s', $Serial)
-    }
-    $launchArgs += @('shell', 'am', 'start', '-n', "$applicationId/com.silqh.silmore.SilMoreActivity")
+    $applicationId = Get-AndroidApplicationId -Delivery $Delivery -Config $Config
+    $launchArgs = @(
+        '-s', $targetSerial,
+        'shell', 'am', 'start', '-n', "$applicationId/com.silqh.silmore.SilMoreActivity"
+    )
 
     & $adb @launchArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to launch app via adb (exit code $LASTEXITCODE)"
     }
 
-    Write-Host "Launched $applicationId." -ForegroundColor Green
+    Write-Host "Launched $applicationId on $targetSerial." -ForegroundColor Green
 }
 
 Write-Host "Deploy complete for $Delivery $Config." -ForegroundColor Green

@@ -1,6 +1,8 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+static Uint64 g_story_font_use_clock;
+
 void sdl_apply_font_settings(TTF_Font* font, bool is_story_font)
 {
     // Select settings based on font type
@@ -52,6 +54,19 @@ mono_font_style_key sdl_current_mono_font_style_key(void)
     return style;
 }
 
+static bool sdl_mono_font_style_keys_equal(const mono_font_style_key* a,
+    const mono_font_style_key* b)
+{
+    return a && b
+        && a->bold == b->bold
+        && a->italic == b->italic
+        && a->underline == b->underline
+        && a->strikethrough == b->strikethrough
+        && a->hinting == b->hinting
+        && a->kerning == b->kerning
+        && a->outline == b->outline;
+}
+
 void sdl_apply_mono_font_style_key(TTF_Font* font,
     const mono_font_style_key* style)
 {
@@ -82,15 +97,87 @@ const char* sdl_monospace_font_path(void)
         : "lib/xtra/font/VictorMono-Medium.ttf";
 }
 
+static Uint64 sdl_mono_font_atlas_generation_bump(void)
+{
+    g_mono_font_atlas_generation++;
+    if (g_mono_font_atlas_generation == 0)
+        g_mono_font_atlas_generation = 1;
+    return g_mono_font_atlas_generation;
+}
+
 void sdl_mono_font_prewarm_queue_clear(void)
 {
     g_mono_font_prewarm_count = 0;
+}
+
+static TTF_Font* sdl_open_fitted_mono_font(const char* font_path,
+    int cell_width, int cell_height, const mono_font_style_key* style,
+    int* out_font_size, char* error_buf, size_t error_buf_size)
+{
+    TTF_Font* font;
+    int low;
+    int high;
+    int best = 0;
+
+    if (out_font_size)
+        *out_font_size = 0;
+    if (!font_path || !font_path[0] || !style || cell_width <= 0
+        || cell_height <= 0)
+    {
+        return NULL;
+    }
+
+    low = cell_height / 2;
+    if (low < 1)
+        low = 1;
+    high = cell_height;
+    font = TTF_OpenFont(font_path, (float)high);
+    if (!font) {
+        if (error_buf && error_buf_size)
+            strnfmt(error_buf, error_buf_size, "TTF_OpenFont failed: %s",
+                SDL_GetError());
+        return NULL;
+    }
+    sdl_apply_mono_font_style_key(font, style);
+
+    while (low <= high) {
+        int middle = low + (high - low) / 2;
+        int measured_w = 0;
+
+        if (!TTF_SetFontSize(font, (float)middle)
+            || !TTF_MeasureString(font, "M", 1, 0, &measured_w, NULL))
+        {
+            if (error_buf && error_buf_size)
+                strnfmt(error_buf, error_buf_size,
+                    "font measurement failed: %s", SDL_GetError());
+            TTF_CloseFont(font);
+            return NULL;
+        }
+        if (measured_w <= cell_width) {
+            best = middle;
+            low = middle + 1;
+        } else {
+            high = middle - 1;
+        }
+    }
+
+    if (best < 1 || !TTF_SetFontSize(font, (float)best)) {
+        if (error_buf && error_buf_size)
+            SDL_strlcpy(error_buf, "could not find suitable font size",
+                error_buf_size);
+        TTF_CloseFont(font);
+        return NULL;
+    }
+    if (out_font_size)
+        *out_font_size = best;
+    return font;
 }
 
 void sdl_mono_font_cache_clear(void)
 {
     sdl_mono_font_prewarm_job_shutdown();
     sdl_mono_font_prewarm_queue_clear();
+    sdl_ui_text_cache_clear();
 
     for (int i = 0; i < MAX_MONO_FONT_CACHE; i++) {
         mono_font_atlas_entry* entry = &g_state.mono_font_atlases[i];
@@ -112,6 +199,7 @@ void sdl_mono_font_cache_clear(void)
         entry->hinting = 0;
         entry->kerning = false;
         entry->outline = 0;
+        entry->generation = 0;
 
         if (font_entry->font) {
             TTF_CloseFont(font_entry->font);
@@ -130,37 +218,25 @@ void sdl_mono_font_cache_clear(void)
         font_entry->kerning = false;
         font_entry->outline = 0;
     }
+
+    sdl_mono_font_atlas_generation_bump();
 }
 
 TTF_Font* sdl_load_mono_font_cells(const char* font_path, int cell_width,
     int cell_height)
 {
-    int font_size = cell_height;
-    int min_size = cell_height / 2;
+    mono_font_style_key style = sdl_current_mono_font_style_key();
+    char error[256] = "";
+    TTF_Font* font;
 
     if (!font_path || !font_path[0] || cell_width <= 0 || cell_height <= 0)
         return NULL;
-    if (min_size < 1)
-        min_size = 1;
-
-    for (; font_size >= min_size; font_size--) {
-        int measured_w = 0;
-        TTF_Font* font = TTF_OpenFont(font_path, font_size);
-
-        if (!font) {
-            log_error("could not load TTF font '%s': %s", font_path, SDL_GetError());
-            return NULL;
-        }
-
-        sdl_apply_font_settings(font, false);
-        TTF_MeasureString(font, "M", 1, 0, &measured_w, NULL);
-        if (measured_w <= cell_width)
-            return font;
-
-        TTF_CloseFont(font);
-    }
-
-    return NULL;
+    font = sdl_open_fitted_mono_font(font_path, cell_width, cell_height,
+        &style, NULL, error, sizeof(error));
+    if (!font)
+        log_error("could not load TTF font '%s': %s", font_path,
+            error[0] ? error : SDL_GetError());
+    return font;
 }
 
 TTF_Font* sdl_acquire_mono_font_cells(const char* font_path,
@@ -276,8 +352,13 @@ mono_font_atlas_entry* sdl_find_mono_font_atlas_fallback_cells(
             continue;
         }
 
+        /* Downscaling a larger atlas can drop bottom scanlines with nearest
+         * sampling on small panes. Prefer an equal/smaller fallback and let
+         * exact-size prewarm replace it when available. */
         score = abs(entry->cell_height - cell_height)
             + abs(entry->cell_width - cell_width);
+        if (entry->cell_height > cell_height || entry->cell_width > cell_width)
+            score += 1000000;
         if (!best || score < best_score) {
             best = entry;
             best_score = score;
@@ -297,6 +378,26 @@ bool sdl_mono_font_atlas_cached_cells(const char* font_path,
 
     return sdl_mono_font_atlas_cached_cells_style(font_path, cell_width,
         cell_height, &style);
+}
+
+Uint64 sdl_mono_font_atlas_generation_for_cells(const char* font_path,
+    int cell_width, int cell_height)
+{
+    mono_font_style_key style = sdl_current_mono_font_style_key();
+    mono_font_atlas_entry* fallback;
+
+    for (int i = 0; i < MAX_MONO_FONT_CACHE; i++) {
+        mono_font_atlas_entry* entry = &g_state.mono_font_atlases[i];
+
+        if (sdl_mono_font_atlas_entry_matches_style(entry, font_path,
+                cell_width, cell_height, &style))
+        {
+            return entry->generation;
+        }
+    }
+    fallback = sdl_find_mono_font_atlas_fallback_cells(font_path, cell_width,
+        cell_height);
+    return fallback ? fallback->generation : 0;
 }
 
 bool sdl_mono_font_atlas_cached_cells_style(const char* font_path,
@@ -360,6 +461,7 @@ bool sdl_store_mono_font_atlas_cells(const char* font_path,
     free_entry->hinting = style->hinting;
     free_entry->kerning = style->kerning;
     free_entry->outline = style->outline;
+    free_entry->generation = sdl_mono_font_atlas_generation_bump();
     return true;
 }
 
@@ -421,7 +523,7 @@ SDL_Texture* sdl_acquire_mono_font_atlas_cells_ex(const char* font_path,
                 *out_atlas_cell_w = fallback->cell_width;
             if (out_atlas_cell_h)
                 *out_atlas_cell_h = fallback->cell_height;
-            log_debug("Using fallback mono font atlas %dx%d for requested %dx%d",
+            log_trace("Using fallback mono font atlas %dx%d for requested %dx%d",
                 fallback->cell_width, fallback->cell_height, cell_width,
                 cell_height);
             return fallback->atlas;
@@ -561,7 +663,8 @@ static TTF_Font* sdl_load_story_font_slot(const char* font_path, int font_size, 
     if (font_path && font_path[0] != '\0') {
         font = TTF_OpenFont(font_path, font_size);
         if (font) {
-            log_debug("Loaded story font (slot %d): %s at size %d", slot, font_path, font_size);
+            log_trace("Loaded story font (slot %d): %s at size %d", slot,
+                font_path, font_size);
             sdl_apply_mono_font_style_key(font, &style);
             return font;
         }
@@ -571,7 +674,8 @@ static TTF_Font* sdl_load_story_font_slot(const char* font_path, int font_size, 
     const char* fallback = sdl_story_fallback_for_slot(slot);
     font = TTF_OpenFont(fallback, font_size);
     if (font) {
-        log_debug("Using fallback story font (slot %d): %s at size %d", slot, fallback, font_size);
+        log_trace("Using fallback story font (slot %d): %s at size %d",
+            slot, fallback, font_size);
         sdl_apply_mono_font_style_key(font, &style);
     } else {
         log_error("Failed to load fallback story font (slot %d) '%s': %s", slot, fallback, SDL_GetError());
@@ -581,6 +685,10 @@ static TTF_Font* sdl_load_story_font_slot(const char* font_path, int font_size, 
 
 void sdl_story_font_cache_clear(void)
 {
+    /* Wrapped-description entries hold non-owning TTF_Font pointers. */
+    sdl_char_sheet_fitted_wrap_cache_clear();
+    sdl_ui_text_cache_clear();
+
     for (int i = 0; i < g_state.story_font_count; i++) {
         if (g_state.story_fonts[i].font) {
             TTF_CloseFont(g_state.story_fonts[i].font);
@@ -588,10 +696,15 @@ void sdl_story_font_cache_clear(void)
         }
         g_state.story_fonts[i].pixel_height = 0;
         g_state.story_fonts[i].slot = 0;
+        g_state.story_fonts[i].last_used = 0;
     }
     g_state.story_font_count = 0;
+    g_story_font_use_clock = 0;
     g_state.story_font_cache_valid = false;
     memset(g_state.story_font_cache, 0, sizeof(g_state.story_font_cache));
+    g_story_font_generation++;
+    if (g_story_font_generation == 0)
+        g_story_font_generation = 1;
 }
 
 bool sdl_story_font_cache_matches_config(void)
@@ -650,6 +763,10 @@ void sdl_story_font_cache_mark_config(void)
 
 TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
 {
+    const char* font_path;
+    TTF_Font* font;
+    int target_index;
+
     if (pixel_height <= 0)
         return NULL;
 
@@ -657,45 +774,41 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
 
     for (int i = 0; i < g_state.story_font_count; i++) {
         if (g_state.story_fonts[i].pixel_height == pixel_height
-            && g_state.story_fonts[i].slot == slot)
+            && g_state.story_fonts[i].slot == slot) {
+            g_state.story_fonts[i].last_used = ++g_story_font_use_clock;
             return g_state.story_fonts[i].font;
+        }
     }
 
-    if (g_state.story_font_count >= MAX_STORY_FONT_CACHE) {
-        int nearest = -1;
-        int nearest_delta = 0;
-
-        for (int i = 0; i < g_state.story_font_count; i++) {
-            int delta = g_state.story_fonts[i].pixel_height - pixel_height;
-
-            if (g_state.story_fonts[i].slot != slot)
-                continue;
-            if (delta < 0)
-                delta = -delta;
-            if (nearest < 0 || delta < nearest_delta) {
-                nearest = i;
-                nearest_delta = delta;
-            }
-        }
-
-        if (nearest >= 0) {
-            log_warn("Story font cache full; requested size %d slot %d, reusing nearest size %d",
-                pixel_height, slot, g_state.story_fonts[nearest].pixel_height);
-            return g_state.story_fonts[nearest].font;
-        }
-
-        return NULL;
-    }
-
-    const char* font_path = sdl_story_font_path_for_slot(slot);
-    TTF_Font* font = sdl_load_story_font_slot(font_path, pixel_height, slot);
+    font_path = sdl_story_font_path_for_slot(slot);
+    font = sdl_load_story_font_slot(font_path, pixel_height, slot);
     if (!font)
         return NULL;
 
-    g_state.story_fonts[g_state.story_font_count].pixel_height = pixel_height;
-    g_state.story_fonts[g_state.story_font_count].slot = slot;
-    g_state.story_fonts[g_state.story_font_count].font = font;
-    g_state.story_font_count++;
+    if (g_state.story_font_count >= MAX_STORY_FONT_CACHE) {
+        target_index = 0;
+
+        for (int i = 1; i < g_state.story_font_count; i++) {
+            if (g_state.story_fonts[i].last_used
+                < g_state.story_fonts[target_index].last_used)
+            {
+                target_index = i;
+            }
+        }
+        /* These caches hold borrowed font pointers/textures.  Drop references
+         * to the victim before closing it without flushing unrelated labels. */
+        sdl_char_sheet_fitted_wrap_cache_clear();
+        sdl_ui_text_cache_clear_font(
+            g_state.story_fonts[target_index].font);
+        TTF_CloseFont(g_state.story_fonts[target_index].font);
+    } else {
+        target_index = g_state.story_font_count++;
+    }
+
+    g_state.story_fonts[target_index].pixel_height = pixel_height;
+    g_state.story_fonts[target_index].slot = slot;
+    g_state.story_fonts[target_index].font = font;
+    g_state.story_fonts[target_index].last_used = ++g_story_font_use_clock;
     return font;
 }
 
@@ -722,6 +835,7 @@ TTF_Font* sdl_story_font_slot_sibling(TTF_Font* font, int slot)
         return NULL;
     for (int i = 0; i < g_state.story_font_count; i++) {
         if (g_state.story_fonts[i].font == font) {
+            g_state.story_fonts[i].last_used = ++g_story_font_use_clock;
             TTF_Font* sibling = sdl_story_font_for_height_slot(
                 g_state.story_fonts[i].pixel_height, slot);
             return sibling ? sibling : font;
@@ -751,41 +865,26 @@ SDL_Surface* sdl_build_ttf_font_atlas_surface(const char* font_path,
     int cell_width, int cell_height, const mono_font_style_key* style,
     int* actual_font_size, char* error_buf, size_t error_buf_size)
 {
-    int font_size = cell_height;
-    int min_size = cell_height / 2;
+    int font_size = 0;
+    int bottom_guard;
+    int draw_height;
     TTF_Font* font = NULL;
 
     if (cell_width < 1)
         cell_width = 1;
     if (cell_height < 1)
         cell_height = 1;
-    if (min_size < 1)
-        min_size = 1;
-
     sdl_mono_atlas_set_error(error_buf, error_buf_size, "");
-    for (; font_size >= min_size; font_size--) {
-        int measured_w = 0;
-
-        font = TTF_OpenFont(font_path, font_size);
-        if (!font) {
-            strnfmt(error_buf, error_buf_size, "TTF_OpenFont failed: %s",
-                SDL_GetError());
-            return NULL;
-        }
-
-        sdl_apply_mono_font_style_key(font, style);
-        TTF_MeasureString(font, "M", 1, 0, &measured_w, NULL);
-        if (measured_w <= cell_width)
-            break;
-
-        TTF_CloseFont(font);
-        font = NULL;
-    }
+    font = sdl_open_fitted_mono_font(font_path, cell_width, cell_height,
+        style, &font_size, error_buf, error_buf_size);
     if (!font) {
-        sdl_mono_atlas_set_error(error_buf, error_buf_size,
-            "could not find suitable font size");
         return NULL;
     }
+
+    bottom_guard = (cell_height >= 32) ? 2 : (cell_height >= 10) ? 1 : 0;
+    draw_height = cell_height - bottom_guard;
+    if (draw_height < 1)
+        draw_height = cell_height;
 
     SDL_Surface* atlas_surface = SDL_CreateSurface(16 * cell_width,
         16 * cell_height, SDL_PIXELFORMAT_RGBA8888);
@@ -829,13 +928,11 @@ SDL_Surface* sdl_build_ttf_font_atlas_surface(const char* font_path,
             continue;
         }
 
-        /* Stretch each glyph to fill its whole cell, matching the original
-         * mono atlas behaviour. Rendering glyphs at their natural ink width
-         * (scaling down only when oversized, then centering) left narrow
-         * glyphs floating in the cell, which made monospace text look too
-         * thin. */
+        /* Keep the old mono-atlas width behaviour, but leave a tiny descent
+         * guard so one-row sampling differences do not shave the bottom of
+         * glyphs on small high-density panels. */
         dst.w = cell_width;
-        dst.h = cell_height;
+        dst.h = draw_height;
         dst.x = (int)(ch & 15) * cell_width;
         dst.y = (int)(ch >> 4) * cell_height;
 
@@ -949,6 +1046,54 @@ void sdl_window_set_position(int x, int y)
     }
 }
 
+bool sdl_window_reassert_fullscreen(cptr reason)
+{
+    SDL_WindowFlags flags;
+
+    if (!g_state.window || !config.fullscreen)
+        return true;
+
+    flags = SDL_GetWindowFlags(g_state.window);
+    if (!(flags & SDL_WINDOW_FULLSCREEN))
+    {
+        log_warn("Fullscreen flag was lost during %s; restoring it",
+            reason ? reason : "window update");
+        if (!SDL_SetWindowFullscreen(g_state.window, true))
+        {
+            log_error("Failed to restore fullscreen during %s: %s",
+                reason ? reason : "window update", SDL_GetError());
+            return false;
+        }
+    }
+
+    /* SDL fullscreen transitions can be asynchronous.  Synchronize before
+     * raising so Windows recognizes this as the foreground fullscreen window
+     * and places the taskbar behind it.  SDL_RaiseWindow does not leave the
+     * game permanently topmost. */
+    if (!SDL_SyncWindow(g_state.window))
+    {
+        log_warn("Fullscreen synchronization timed out during %s: %s",
+            reason ? reason : "window update", SDL_GetError());
+    }
+    if (!SDL_RaiseWindow(g_state.window))
+    {
+        log_warn("Failed to raise fullscreen window during %s: %s",
+            reason ? reason : "window update", SDL_GetError());
+    }
+
+    flags = SDL_GetWindowFlags(g_state.window);
+    if (!(flags & SDL_WINDOW_FULLSCREEN))
+    {
+        log_error("Window is still not fullscreen after %s",
+            reason ? reason : "window update");
+        return false;
+    }
+
+    log_debug("Fullscreen synchronized and raised during %s",
+        reason ? reason : "window update");
+    return true;
+}
+
 void sdl_window_create(int window_width, int window_height, bool fullscreen, bool use_tiles)
 {
     SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_RESIZABLE;
@@ -962,6 +1107,9 @@ void sdl_window_create(int window_width, int window_height, bool fullscreen, boo
         log_error("SDL_CreateWindowAndRenderer failed: %s", SDL_GetError());
         quit("could not create SDL window");
     }
+
+    if (fullscreen)
+        (void)sdl_window_reassert_fullscreen("window creation");
 
     // Enable V-SYNC for consistent frame timing across GPU vendors.
     // Without V-SYNC, NVIDIA drivers may buffer commands and return immediately
@@ -1003,6 +1151,7 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
         // Integer scaling mode.
 #if defined(__ANDROID__) || defined(SIL_IOS)
         int requested_scale = scale;
+        SDL_Rect scale_reference;
         bool runtime_zoom = (g_main_view_zoom_scale > 0
             && scale == g_main_view_zoom_scale);
         int min_cols = runtime_zoom
@@ -1014,9 +1163,25 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
                 SDL_MAIN_VIEW_ZOOM_MIN_MAP_SQUARES)
             : sdl_current_min_terminal_rows();
         int bottom_rows_for_minimum = 0;
-        int max_scale_for_min_cols = (rect.w / min_cols) * 2 / TILE_SIZE;
-        int max_scale_for_min_rows = rect.h / min_rows / TILE_SIZE;
+        int max_scale_for_min_cols;
+        int max_scale_for_min_rows;
         int effective_scale = requested_scale;
+
+        scale_reference = rect;
+        if (sdl_mobile_portrait_layout_active()) {
+            SDL_Rect screen = sdl_get_layout_screen_rect();
+
+            /* Orientation does not change the physical display's scale.
+             * Size portrait cells from the full screen with its axes
+             * reversed, not from the smaller map pane left after reserving
+             * the portrait HUD. */
+            if (sdl_rect_has_area(&screen))
+                sdl_mobile_portrait_scale_reference_rect(&screen,
+                    &scale_reference);
+        }
+        max_scale_for_min_cols = (scale_reference.w / min_cols) * 2
+            / TILE_SIZE;
+        max_scale_for_min_rows = scale_reference.h / min_rows / TILE_SIZE;
 
         if (!runtime_zoom) {
             bottom_rows_for_minimum =
@@ -1025,7 +1190,8 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
                 min_rows -= bottom_rows_for_minimum;
                 if (min_rows < 1)
                     min_rows = 1;
-                max_scale_for_min_rows = rect.h / min_rows / TILE_SIZE;
+                max_scale_for_min_rows = scale_reference.h / min_rows
+                    / TILE_SIZE;
             }
         }
 
@@ -1079,18 +1245,22 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
         d->cols = sdl_main_view_logical_cols_for_visual_cols(d->cols);
     d->rows = rect.h / d->cell_h;
     /*
-     * The overlay log keeps a top and bottom margin (painted as panel
-     * background by the renderer), so size it to the whole number of rows
-     * that fit inside the band once that vertical padding is reserved.  This
-     * adapts to the band height and cell/text size instead of clipping a row.
+     * The overlay log keeps a bottom margin (painted as panel background by
+     * the renderer), so size it to the whole number of rows that fit once
+     * that padding is reserved.  The content stays flush with the top.
      */
     if (sdl_view_is_overlay_log_pane(d)) {
-        int vmargin = (int)((float)d->cell_h
-            * (SDL_OVERLAY_LOG_VMARGIN_CELLS * 2.0f) + 0.5f);
+        int vmargin = pane_log_overlay_vertical_padding_px(d->cell_h);
         int avail = rect.h - vmargin;
+        int config_index = sdl_pane_config_index_in_array(pane_config,
+            pane_config_count, PANE_ROLLS);
+        int requested_rows = (config_index >= 0)
+            ? pane_config[config_index].rect.rows : 0;
 
         if (avail >= d->cell_h)
             d->rows = avail / d->cell_h;
+        if (requested_rows > 0 && d->rows > requested_rows)
+            d->rows = requested_rows;
     }
 #if defined(__ANDROID__) || defined(SIL_IOS)
     if (scale) {
@@ -1466,6 +1636,87 @@ void sdl_mono_font_prewarm_job_shutdown(void)
     sdl_mono_font_prewarm_job_reset();
 }
 
+static void sdl_mono_font_prewarm_adopt_exact(
+    const mono_font_prewarm_request* req, const mono_font_style_key* style,
+    SDL_Texture* atlas)
+{
+    mono_font_style_key current_style = sdl_current_mono_font_style_key();
+    term* old_term;
+    bool redraw_started = false;
+    bool active_consumer = false;
+
+    if (!req || !style || !atlas
+        || !streq(req->font_path, sdl_monospace_font_path())
+        || !sdl_mono_font_style_keys_equal(style, &current_style))
+    {
+        return;
+    }
+
+    old_term = Term;
+    for (int i = 0; i < MAX_TERM_DATA; i++) {
+        sdl_view* view = &g_views[i];
+
+        if (!view->term_ready || view->cell_w != req->cell_width
+            || view->cell_h != req->cell_height)
+        {
+            continue;
+        }
+        active_consumer = true;
+        if (view->font_atlas == atlas && view->font_atlas_exact)
+            continue;
+        if (view->font_atlas && !view->font_atlas_cached)
+            SDL_DestroyTexture(view->font_atlas);
+        view->font_atlas = atlas;
+        view->font_atlas_cached = true;
+        view->font_atlas_exact = true;
+        view->font_atlas_cell_w = req->cell_width;
+        view->font_atlas_cell_h = req->cell_height;
+        SDL_SetTextureBlendMode(atlas, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureColorMod(atlas, 255, 255, 255);
+        SDL_SetTextureAlphaMod(atlas, 255);
+
+        if (!redraw_started) {
+            sdl_present_batch_begin();
+            redraw_started = true;
+        }
+        Term_activate(&view->t);
+        Term_redraw();
+    }
+
+    /* The styled left panel and combat overlay acquire atlases directly
+     * rather than owning a view pointer.  Wake one frame when this exact size
+     * is currently visible; the per-size atlas generation invalidates only
+     * the matching retained panel. */
+    if (g_views[PANE_MAIN].term_ready) {
+        sdl_left_panel_metrics metrics;
+        SDL_Rect combat_rect;
+
+        if (sdl_left_panel_metrics_for_view(&g_views[PANE_MAIN], &metrics)
+            && metrics.cell_w == req->cell_width
+            && metrics.cell_h == req->cell_height)
+        {
+            active_consumer = true;
+        }
+        if (sdl_combat_overlay_pane_content_rect(&combat_rect)) {
+            int cell_h = sdl_effective_pane_cell_height_for_type(PANE_COMBAT);
+            int cell_w;
+
+            if (cell_h < 1)
+                cell_h = 1;
+            cell_w = MAX(1, cell_h / 2);
+            if (cell_w == req->cell_width && cell_h == req->cell_height)
+                active_consumer = true;
+        }
+    }
+
+    if (old_term)
+        Term_activate(old_term);
+    if (active_consumer)
+        g_state.need_present = true;
+    if (redraw_started)
+        sdl_present_batch_end();
+}
+
 bool sdl_mono_font_prewarm_finish_ready(void)
 {
     mono_font_prewarm_job* job = &g_mono_font_prewarm_job;
@@ -1528,6 +1779,7 @@ bool sdl_mono_font_prewarm_finish_ready(void)
         SDL_DestroySurface(surface);
 
     if (success && atlas) {
+        sdl_mono_font_prewarm_adopt_exact(&req, &style, atlas);
         log_debug("Prewarmed mono font atlas %dx%d asynchronously in %llu ms",
             req.cell_width, req.cell_height,
             (unsigned long long)(build_ns / 1000000ULL));
@@ -1701,7 +1953,8 @@ int sdl_story_font_text_width(cptr text, int len)
     if (!d)
         return 0;
 
-    TTF_Font* font = sdl_story_font_for_view(d);
+    int slot = Term ? Term->story_font_slot : SDL_STORY_FONT_SLOT_DEFAULT;
+    TTF_Font* font = sdl_story_font_for_view_slot(d, slot);
     if (!font)
         return 0;
 
@@ -1731,6 +1984,16 @@ int sdl_get_cell_width(void)
         return g_views[0].cell_w;
     }
     return 8; /* fallback */
+}
+
+int sdl_get_active_cell_width(void)
+{
+    sdl_view* view = sdl_view_from_term(Term);
+
+    if (view && view->cell_w > 0)
+        return view->cell_w;
+
+    return sdl_get_cell_width();
 }
 
 int sdl_main_view_visible_col0(void)

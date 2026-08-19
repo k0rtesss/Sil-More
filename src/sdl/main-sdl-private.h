@@ -80,7 +80,7 @@ enum {
     SDL_NARRATIVE_BANNER_LINE_LEN = 220,
     SDL_BIRTH_STAT_MAX = A_MAX + 1,
     SDL_LOG_PANE_DEFAULT_ROWS = 5,
-    SDL_OVERLAY_LOG_PANE_DEFAULT_ROWS = 5,
+    SDL_OVERLAY_LOG_PANE_DEFAULT_ROWS = 8,
     SDL_OVERLAY_LOG_PANE_ALPHA = 220,
     SDL_LOG_PANE_MIN_ROWS = 1,
     SDL_LOG_PANE_MAX_ROWS = 20,
@@ -95,11 +95,9 @@ enum {
  * scaled to the pane's cell width so the messages do not hug the border. */
 #define SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d) ((float)(d)->cell_w * 0.6f)
 
-/* Top/bottom margin of the overlay log band, expressed as a fraction of a
- * cell height.  The view reserves this above and below its rows so the
- * content fits a whole number of lines, and the renderer paints those strips
- * with the panel background. */
-#define SDL_OVERLAY_LOG_VMARGIN_CELLS 0.4f
+/* Shared by the game-start narrative banner and transient notifications. */
+#define SDL_NARRATIVE_BANNER_FADE_MS 1000
+#define SDL_NARRATIVE_BANNER_FADE_FRAME_MS 16
 
 #define TOUCH_MOUSE_FALLBACK_FINGER_ID ((SDL_FingerID)~(SDL_FingerID)0)
 #if SIL_SDL_MOBILE_BUILD
@@ -145,18 +143,21 @@ enum { STORY_FONT_SLOTS = 2 };
  */
 enum {
     SDL_STORY_FONT_SLOT_DEFAULT   = 0,
+    SDL_STORY_FONT_SLOT_STATUS    = 0, /* status overlay: Story Font 1 */
     SDL_STORY_FONT_SLOT_NARRATIVE = 1, /* quest / narrative book body text */
     SDL_STORY_FONT_SLOT_MENU      = 1, /* in-game popup selection menus */
     SDL_STORY_FONT_SLOT_LOG       = 1, /* message log and log pane */
     SDL_STORY_FONT_SLOT_CHAR_DESC = 1, /* character sheet description / history */
     SDL_STORY_FONT_SLOT_CHAR_NUM  = 1, /* character sheet numeric values */
-    SDL_STORY_FONT_SLOT_CHAR_SELECT = 1 /* character selection (race/house) book body */
+    SDL_STORY_FONT_SLOT_CHAR_SELECT = 1, /* character selection (race/house) book body */
+    SDL_STORY_FONT_SLOT_TUTORIAL = 1 /* touch/mouse/zones and birth coach tutorials */
 };
 
 typedef struct story_font_entry {
     int pixel_height;
     int slot;
     TTF_Font* font;
+    Uint64 last_used;
 } story_font_entry;
 
 typedef struct story_font_slot_cache {
@@ -182,6 +183,7 @@ typedef struct mono_font_atlas_entry {
     int hinting;
     bool kerning;
     int outline;
+    Uint64 generation;
     SDL_Texture* atlas;
 } mono_font_atlas_entry;
 
@@ -272,6 +274,8 @@ typedef struct sdl_view {
     bool term_ready;
 } sdl_view;
 
+#define SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX 4
+
 typedef struct sdl_left_panel_metrics {
     bool collapsed;
     bool compact_row;
@@ -283,15 +287,16 @@ typedef struct sdl_left_panel_metrics {
     int total_w;
     int panel_rows;
     int panel_render_h;
-    int bottom_border_h;
+    int top_padding_h;
+    int bottom_padding_h;
     int corner_h;
     int visual_rows;
     int source_h;
     int compact_segment_count;
-    int compact_source_rows[3];
-    int compact_output_cols[3];
-    int compact_output_rows[3];
-    int compact_widths[3];
+    int compact_source_rows[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
+    int compact_output_cols[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
+    int compact_output_rows[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
+    int compact_widths[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
 } sdl_left_panel_metrics;
 
 typedef struct sdl_left_panel_compact_light_span {
@@ -319,7 +324,9 @@ enum {
 
 enum {
     MAX_GAMEPADS = 4,
-    DPAD_DIAGONAL_WINDOW_MS = 200,
+    /* Coalesce axis events from the current SDL batch, but do not add a
+     * timer delay to left-stick movement. */
+    GAMEPAD_STICK_DIAGONAL_WINDOW_MS = 0,
     SHOULDER_COMBO_WINDOW_MS = 150,
     /* Rebinding should listen immediately instead of dropping quick inputs. */
     GAMEPAD_CAPTURE_ARM_DELAY_MS = 0,
@@ -410,6 +417,7 @@ typedef struct welcome_touch_press_state {
     SDL_FingerID finger_id;
     float start_x;
     float start_y;
+    Uint64 start_time;
 } welcome_touch_press_state;
 
 typedef enum sdl_welcome_screen_mode {
@@ -430,7 +438,6 @@ typedef enum sdl_welcome_line_role {
 } sdl_welcome_line_role;
 
 typedef struct sdl_welcome_intro_line {
-    int row;
     byte attr;
     sdl_welcome_line_role role;
     const char* text;
@@ -477,6 +484,7 @@ typedef struct sdl_character_sheet_live_item {
 typedef struct sdl_character_sheet_hit {
     SDL_FRect rect;
     int choice;
+    byte attr;
     char desc[256];
 } sdl_character_sheet_hit;
 
@@ -486,6 +494,7 @@ typedef struct sdl_character_sheet_select_row {
     int choice;        /* choice id consumed by get_player_choice (>= 0) */
     int reset_choice;  /* >=0: draw a tappable per-row "Reset" button, this id */
     byte attr;
+    bool confirmable;  /* false: visible/focusable, but cannot be confirmed */
     bool is_heading;   /* book mode: non-selectable heading/blurb text */
     char label[160];
     char desc[256];    /* hover tooltip */
@@ -510,6 +519,11 @@ typedef struct sdl_character_sheet_select_rating {
     char desc[256];
 } sdl_character_sheet_select_rating;
 
+typedef struct sdl_character_sheet_title_candidate {
+    char title[128];
+    char suffix[64];
+} sdl_character_sheet_title_candidate;
+
 typedef struct menu_scroll_drag_state {
     bool active;
     bool dragged;
@@ -521,6 +535,13 @@ typedef struct menu_scroll_drag_state {
     float last_y;
     float accum_y;
 } menu_scroll_drag_state;
+
+/* "Nothing is hovered" sentinel for hover_choice.  It must stay distinct from
+ * every real choice value: entries are >= 0, and the prompt buttons reuse small
+ * negatives (-1 Back/Esc, -2 Confirm, -3) while page controls use -20/-21.  A
+ * plain -1 sentinel collided with the Back button, so it was always drawn
+ * focused when the mouse hovered nothing. */
+#define SDL_CHAR_SHEET_NO_HOVER (-1000000)
 
 typedef struct sdl_character_sheet_screen_state {
     sdl_character_sheet_context context;
@@ -542,25 +563,44 @@ typedef struct sdl_character_sheet_screen_state {
     int select_rating_count;
     char select_rating_title[64];
     int select_stat_rows_hint;
+    int select_ability_rows_hint;
+    int select_ability_rows;
     int select_trait_rows_hint;
     char select_description[4096];
     char select_title[96];
     char select_focus_title[96];
     char select_title_suffix[64];
     byte select_title_suffix_attr;
+    sdl_character_sheet_title_candidate select_title_candidates[96];
+    int select_title_candidate_count;
+    int select_title_power_px;
+    int select_title_power_for_title_px;
+    int select_title_power_for_width;
     char select_intro[2048];   /* book mode: chronicle text (white) */
     char select_frame_top[768];    /* book mode: framing line above (accent) */
     char select_frame_bottom[768]; /* book mode: framing/charge below (accent) */
-    char select_desc_sizing[4096]; /* longest description, for stable layout */
+    char select_desc_sizing[4096]; /* description sample used for font fitting */
+    /* Welcomes for the characters in the selected race, measured at the real
+     * render font so every sheet in that race uses one shared band height. */
+    char select_welcome[96][160]; /* sized to match select_rows[] */
+    int select_welcome_count;
+    /* Lore bodies for every selectable entry.  The longest byte string is not
+     * necessarily the one that wraps to the most lines, so font fitting must
+     * measure every candidate at the live width. */
+    char select_desc_candidates[96][1280];
+    int select_desc_candidate_count;
+    Uint64 select_desc_candidate_hash;
     bool select_book_mode;     /* screen 1: story/explanation page, no detail */
     bool select_menu_style;    /* menu mode: pixel rows, storyfont2, no grid */
-    int select_page;           /* book mode: current page (0 = story, 1 = choice) */
+    int select_page;           /* book mode: current page (last = choice) */
     int select_page_count;     /* book mode: number of pages (1 otherwise) */
-    int select_book_body_px;   /* cached body size for race book layout */
+    int select_book_body_px;   /* cached body size for race story pages */
+    int select_book_choice_body_px; /* cached body size for final choice page */
     int select_book_body_for_h;
     int select_book_body_for_w;
     int select_book_body_for_region_h;
     int select_book_body_for_title_px;
+    Uint64 select_book_body_for_layout_hash;
     bool page_turn_active;     /* book mode: a page-curl animation is playing */
     int page_turn_dir;         /* +1 = forward (0->1), -1 = back (1->0) */
     int page_turn_from_page;   /* outgoing page; may be non-adjacent to dest */
@@ -582,19 +622,30 @@ typedef struct sdl_character_sheet_screen_state {
     bool narrative_pending_highlight; /* next added paragraph is highlighted */
     int narrative_para_count;
     int narrative_page_start[SDL_BOOK_MAX_PAGES + 1]; /* [page]..[page+1) paras */
+    int narrative_para_lines[SDL_BOOK_MAX_PARAS]; /* cached final-layout wrap count */
     int narrative_page_count;
+    int narrative_target_page_count; /* 0 = content-driven pagination */
     int narrative_body_px;         /* one body size shared by every page of the book */
     int narrative_paginated_for_h; /* canvas.h the page breaks were built for */
     int narrative_paginated_for_w; /* content width the page breaks were built for */
+    int narrative_paginated_for_top;
+    int narrative_paginated_for_bottom;
+    int narrative_paginated_for_title_px;
+    Uint64 narrative_paginated_font_generation;
+    Uint64 narrative_layout_generation;
+    Uint64 narrative_paginated_layout_generation;
     char narrative_contents_label[SDL_BOOK_MAX_CONTENTS][48];
     int narrative_contents_choice[SDL_BOOK_MAX_CONTENTS];
     int narrative_contents_page[SDL_BOOK_MAX_CONTENTS];
     int narrative_contents_count;
+    int narrative_contents_body_px; /* cached contents-column font size */
     bool narrative_lamp_enabled;
     u32b narrative_lamp_current;
     u32b narrative_lamp_maximum;
     int narrative_lamp_page;
-    bool narrative_close_enabled;  /* show an on-screen Close button (mouse/touch) */
+    bool narrative_lamp_side;     /* place lamp beside text when width permits */
+    bool narrative_close_enabled;  /* show an on-screen exit button (mouse/touch) */
+    char narrative_close_label[48]; /* context-specific exit button label */
     touch_swipe_state birth_swipe;
     character_sheet_touch_press_state touch_press;
     int last_body_px;          /* last column/list body font px for tooltips */
@@ -609,12 +660,6 @@ typedef struct sdl_character_sheet_screen_state {
     SDL_FRect select_scroll_rect;
     menu_scroll_drag_state select_scroll_drag;
 } sdl_character_sheet_screen_state;
-
-typedef struct sdl_welcome_picture_bounds {
-    bool any;
-    float left;
-    float right;
-} sdl_welcome_picture_bounds;
 
 typedef struct touch_zone_press_state {
     bool active;
@@ -744,12 +789,35 @@ typedef struct status_pane_layout {
     SDL_FRect panel;
     status_pane_layout_item items[SDL_STATUS_PANE_MAX_ENTRIES];
     int layout_count;
+    int content_w;
     int font_px;
     int row_h;
     int pad_x;
     int pad_y;
     int item_pad_x;
+    bool right_align;
 } status_pane_layout;
+
+typedef struct status_depth_pane_layout_item {
+    int row_from_bottom;
+    int right;
+    int w;
+    char line[96];
+    byte attr;
+} status_depth_pane_layout_item;
+
+typedef struct status_depth_pane_layout {
+    SDL_FRect panel;
+    status_depth_pane_layout_item items[SDL_STATUS_PANE_MAX_ENTRIES + 1];
+    int layout_count;
+    int row_count;
+    int content_w;
+    int font_px;
+    int row_h;
+    int pad_x;
+    int pad_y;
+    int gap_x;
+} status_depth_pane_layout;
 
 typedef enum log_pane_menu_action {
     LOG_PANE_MENU_FILTER,
@@ -834,6 +902,7 @@ typedef struct description_overlay_state {
     const byte* tattrs;
     const char* tchars;
     const byte* story;
+    const byte* health;
     int width;
     int height;
     int target_cols;
@@ -843,7 +912,9 @@ typedef struct description_overlay_state {
     int avoid_term_wid;
     int avoid_term_hgt;
     bool footer_always;
+    bool footer_gap;
     int footer_hover_key;
+    bool close_hover;
     int footer_action_count;
     char footer_text[SDL_DESCRIPTION_OVERLAY_FOOTER_LEN];
     description_overlay_action footer_actions[SDL_DESCRIPTION_OVERLAY_MAX_ACTIONS];
@@ -851,6 +922,7 @@ typedef struct description_overlay_state {
 
 typedef struct description_overlay_layout {
     SDL_FRect panel;
+    SDL_FRect close_rect;
     float text_x;
     float text_y;
     float footer_y;
@@ -861,6 +933,7 @@ typedef struct description_overlay_layout {
     int max_scroll;
     int scroll;
     bool footer;
+    bool close_button;
 } description_overlay_layout;
 
 enum {
@@ -899,6 +972,9 @@ typedef struct sdl_unified_look_sidebar_item_state {
     int x;
     byte symbol_attr;
     byte text_attr;
+    s16b health_m_idx;
+    byte health_offset;
+    byte health_len;
     char symbol[SDL_UNIFIED_LOOK_SIDEBAR_SYMBOL_LEN];
     char text[SDL_UNIFIED_LOOK_SIDEBAR_TEXT_LEN];
 } sdl_unified_look_sidebar_item_state;
@@ -936,9 +1012,10 @@ typedef struct sdl_song_menu_state {
 } sdl_song_menu_state;
 
 enum {
-    SDL_QUESTION_MENU_MAX_ENTRIES = 96,
+    SDL_QUESTION_MENU_MAX_ENTRIES = 320,
+    SDL_QUESTION_MENU_MAX_BUTTONS = 4,
     SDL_QUESTION_MENU_LETTER_LEN = 4,
-    SDL_QUESTION_MENU_TEXT_LEN = 96,
+    SDL_QUESTION_MENU_TEXT_LEN = 256,
     SDL_QUESTION_MENU_TITLE_LEN = 80,
     SDL_QUESTION_MENU_DESC_LEN = 480
 };
@@ -946,9 +1023,18 @@ enum {
 typedef struct sdl_question_menu_entry_state {
     int choice;
     byte text_attr;
+    byte icon_attr;
+    char icon_char;
+    bool has_icon;
     char letter[SDL_QUESTION_MENU_LETTER_LEN];
     char text[SDL_QUESTION_MENU_TEXT_LEN];
 } sdl_question_menu_entry_state;
+
+typedef struct sdl_question_menu_button_state {
+    int choice;
+    byte text_attr;
+    char text[SDL_QUESTION_MENU_TEXT_LEN];
+} sdl_question_menu_button_state;
 
 /* Generic question overlay: a titled panel with an optional wrapped
  * description block and selectable answer rows.  Local questions anchor
@@ -958,15 +1044,26 @@ typedef struct sdl_question_menu_state {
     bool active;
     bool blocking_input;
     bool nonblocking;
+    bool context_hint;
+    bool help_mode;
+    bool help_open;
+    bool help_button_hover;
+    bool close_hover;
+    bool suppress_hover;
+    bool scroll_follow_highlight;
     bool has_anchor;
     int anchor_y; /* map grid the question is about (local placement) */
     int anchor_x;
     Uint64 expires_at_ns;
     int count;
+    int button_count;
     int highlight; /* choice highlighted by keyboard navigation, -1 none */
+    int* scroll_offset_ptr;
+    int help_scroll_offset;
     char title[SDL_QUESTION_MENU_TITLE_LEN];
     char desc[SDL_QUESTION_MENU_DESC_LEN];
     sdl_question_menu_entry_state entries[SDL_QUESTION_MENU_MAX_ENTRIES];
+    sdl_question_menu_button_state buttons[SDL_QUESTION_MENU_MAX_BUTTONS];
 } sdl_question_menu_state;
 
 typedef struct unified_look_map_drag_state {
@@ -1027,6 +1124,39 @@ enum {
     SDL_PLAYER_ACTION_BASH_DOOR,
     SDL_PLAYER_ACTION_MAX = 17,
     SDL_PLAYER_EXCHANGE_MAX_TARGETS = 8,
+};
+
+/* Dedicated UI symbols in the final row of the 16x16 atlas.  Keep these
+ * columns centralized: both the player action wheel and Quick Access use
+ * them, so their icons must not drift apart again. */
+enum {
+    SDL_UI_SYMBOL_ROW = 32,
+    SDL_UI_SYMBOL_DESCRIPTION = 0,
+    SDL_UI_SYMBOL_PICK = 1,
+    SDL_UI_SYMBOL_WAIT = 2,
+    SDL_UI_SYMBOL_REST = 3,
+    SDL_UI_SYMBOL_STEALTH = 4,
+    SDL_UI_SYMBOL_DISARM = 5,
+    SDL_UI_SYMBOL_OPEN_DOOR = 6,
+    SDL_UI_SYMBOL_CLOSE_DOOR = 7,
+    SDL_UI_SYMBOL_BASH_DOOR = 8,
+    SDL_UI_SYMBOL_FLETCH = 9,
+    SDL_UI_SYMBOL_EXCHANGE = 10,
+    SDL_UI_SYMBOL_ACTIVATE_STAFF = 11,
+    SDL_UI_SYMBOL_BLOW_HORN = 12,
+    SDL_UI_SYMBOL_RANGED_ATTACK = 13,
+    SDL_UI_SYMBOL_CHANGE_QUIVERS = 14,
+    SDL_UI_SYMBOL_INVENTORY = 15,
+    SDL_UI_SYMBOL_EQUIPPED = 16,
+    SDL_UI_SYMBOL_SUPPLY = 17,
+    SDL_UI_SYMBOL_ABILITIES = 18,
+    SDL_UI_SYMBOL_CHARACTER = 19,
+    SDL_UI_SYMBOL_SMITHING = 20,
+    SDL_UI_SYMBOL_VIEW = 21,
+    SDL_UI_SYMBOL_LORE = 22,
+    SDL_UI_SYMBOL_USE = 23,
+    SDL_UI_SYMBOL_SING = 24,
+    SDL_UI_SYMBOL_MAP = 25,
 };
 
 typedef struct player_action_menu_entry {
@@ -1312,6 +1442,8 @@ typedef struct mouse_path_search_state {
     int heap_size;
     int* cost;
     int* heap_pos;
+    u16b* visit_generation;
+    u16b current_generation;
     u16b* parent_grid;
     byte* parent_state;
     int* heap_priority;
@@ -1364,8 +1496,10 @@ extern const int default_pane_config_count;
 extern struct pane_config pane_config[MAX_PANE_CONFIGS];
 extern int pane_config_count;
 extern struct sdl_pane_profile g_pane_profiles[SDL_PANE_PROFILE_COUNT];
-extern int g_platform_max_main_view_scale[SDL_PANE_PROFILE_COUNT];
+extern int g_platform_max_main_view_scale[SDL_MIN_TERMINAL_MODE_COUNT];
 extern sdl_startup_device_class g_startup_device_class;
+extern bool g_android_controller_present;
+extern bool g_mobile_touch_tablet;
 extern bool g_touch_tutorial_requested_from_settings;
 extern bool g_mouse_tutorial_requested_from_settings;
 extern bool g_character_wheel_tutorial_requested_from_settings;
@@ -1376,6 +1510,9 @@ extern const int g_touch_pane_visible_slots[SDL_TOUCH_PANE_VISIBLE_BUTTON_COUNT]
 extern mono_font_prewarm_request g_mono_font_prewarm_queue[SDL_MONO_FONT_PREWARM_QUEUE_MAX];
 extern int g_mono_font_prewarm_count;
 extern mono_font_prewarm_job g_mono_font_prewarm_job;
+extern Uint64 g_mono_font_atlas_generation;
+extern Uint64 g_story_font_generation;
+extern Uint64 g_sdl_present_generation;
 extern SDL_Rect g_pane_rects[PANE_MAX];
 extern SDL_Texture* g_left_panel_canvas;
 extern int g_left_panel_canvas_w;
@@ -1384,6 +1521,7 @@ extern bool g_left_panel_debug_dump_rows;
 extern bool g_active_side_panes;
 extern bool g_active_bottom_panes;
 extern int g_description_overlay_main_anchor_depth;
+extern int g_description_overlay_full_main_anchor_depth;
 extern bool g_supporting_panes_layout_visible;
 extern int g_inventory_pane_layout_rows;
 extern int g_supply_pane_layout_rows;
@@ -1407,6 +1545,7 @@ extern int g_default_gamepad_shoulder_combo_binding;
 extern bool g_default_gamepad_bindings_ready;
 extern bool g_default_mouse_enabled;
 extern int g_default_mouse_movement_mode;
+extern bool g_default_mouse_tile_pointer;
 extern bool g_default_mouse_settings_ready;
 extern int g_default_touch_pane_bindings[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_BUTTON_COUNT];
 extern char g_default_touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
@@ -1421,10 +1560,11 @@ extern bool g_default_touch_round_movement_enabled;
 extern int g_default_touch_zone_center_bindings[SDL_TOUCH_ZONE_CENTER_BINDING_COUNT];
 extern int g_default_touch_corner_up_down_side;
 extern int g_default_touch_corner_action_bindings[SDL_TOUCH_CORNER_ACTION_BINDING_COUNT];
-extern int g_default_touch_top_panel_mode;
+extern bool g_default_touch_top_panel_arrows_visible;
 extern bool g_default_touch_top_panel_default_open;
-extern int g_default_touch_top_panel_button_count;
-extern int g_default_touch_top_panel_tile_scale;
+extern float g_default_touch_top_panel_size;
+extern int g_default_touch_top_panel_cell_count;
+extern int g_default_touch_top_panel_rows;
 extern int g_default_touch_top_panel_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
 extern int g_default_touch_top_panel_long_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
 extern bool g_default_touch_thumb_enabled;
@@ -1580,9 +1720,8 @@ void sdl_seed_all_pane_profiles_from_active(void);
 int sdl_pane_config_index_in_array(const struct pane_config* configs, int count, enum pane_type pane);
 bool sdl_normalize_unified_log_pane_config(struct pane_config* configs, int* config_count, bool enable_added_log);
 void sdl_normalize_unified_log_pane_profiles(bool enable_added_log);
-bool sdl_screen_is_wide_for_pane_defaults(int screen_width, int screen_height);
-void sdl_apply_screen_aspect_pane_defaults(struct pane_config* configs, int* config_count, int screen_width, int screen_height);
-void sdl_apply_screen_aspect_pane_default_profiles(int screen_width, int screen_height);
+enum pane_placement sdl_default_status_pane_placement(
+    const struct pane_config* configs, int config_count);
 int sdl_default_main_scale_for_screen_size(int screen_width, int screen_height, int mode);
 void sdl_store_platform_max_main_view_scales(int screen_width, int screen_height);
 void sdl_refresh_platform_max_main_view_scales_for_current_layout(const char* reason);
@@ -1610,6 +1749,7 @@ void sdl_sync_palette(void);
 void sdl_view_destroy(sdl_view* d);
 void sdl_left_panel_canvas_destroy(void);
 int sdl_overlay_margin_px(void);
+int sdl_overlay_inner_gap_px(void);
 int sdl_overlay_edge_gap_px(int area_px, int content_px);
 bool sdl_pane_default_enabled_on_migration(enum pane_type pane);
 bool sdl_migrate_legacy_main_menu_depth_pane( struct pane_config* configs, int count);
@@ -1655,13 +1795,17 @@ int sdl_combat_overlay_visible_row_count(int panel_rows);
 bool sdl_combat_overlay_visible_source_row_at_index(int index,
     int panel_rows, int* out_row);
 bool sdl_combat_overlay_source_row_visible(int source_row);
-bool sdl_left_panel_source_row_hidden_by_combat_overlay(int source_row);
+bool sdl_left_panel_source_row_hidden(int source_row);
 int sdl_left_panel_output_row_for_source_row(int source_row);
 int sdl_left_panel_source_row_for_output_row(int output_row);
 bool sdl_left_panel_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
 bool sdl_combat_overlay_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
 bool sdl_overlay_log_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
+int sdl_map_overlay_map_coverages(int max_rects, int* start_cols, int* cols, int* start_rows, int* rows);
+bool sdl_overlay_stack_visible_rect(enum pane_type pane, SDL_Rect* out);
 bool sdl_overlay_log_pane_current_rect(SDL_Rect* out_rect);
+void sdl_reset_top_right_overlay_offset(void);
+void sdl_apply_top_right_overlay_offset(void);
 bool sdl_left_panel_pane_runtime_active(void);
 bool sdl_left_panel_pane_collapsed(void);
 int sdl_left_panel_compact_mode_normalized(int mode);
@@ -1675,6 +1819,8 @@ void sdl_apply_startup_input_defaults_to_config( struct sdl_config* target, sdl_
 void sdl_set_touch_pane_config_enabled(bool enabled);
 void sdl_apply_first_start_device_defaults( sdl_startup_device_class device);
 sdl_startup_device_class sdl_detect_startup_device_class( int screen_width, int screen_height);
+bool sdl_mobile_device_is_tablet(void);
+void sdl_apply_mobile_tablet_default_profiles(void);
 struct pane_config* sdl_find_pane_config_entry(struct pane_config* configs, int count, enum pane_type pane);
 void sdl_mobile_reset_default_pane_configs(struct pane_config* configs, int count);
 void sdl_mobile_set_touch_pane_enabled(struct pane_config* configs, int count, bool enabled);
@@ -1712,6 +1858,10 @@ bool sdl_query_direct_touch_present(void);
 bool sdl_refresh_direct_touch_present(void);
 void sdl_note_touch_event_device(SDL_TouchID touch_id);
 void sdl_update_cursor_visibility(void);
+void sdl_mouse_cursor_button_state(int button, bool pressed);
+int sdl_mouse_cursor_animation_timeout_ms(Uint64 now_ns);
+void sdl_mouse_cursor_animation_update(Uint64 now_ns);
+void sdl_mouse_cursor_shutdown(void);
 void sdl_log_mouse_devices(void);
 int sdl_build_active_pane_config(struct pane_config* active, bool include_side, bool include_bottom, bool touch_only);
 int sdl_configured_main_view_scale(void);
@@ -1771,6 +1921,12 @@ bool sdl_recover_layout_for_current_window(const char* reason, bool notify_user,
 bool sdl_prompt_reset_sdl_defaults(const char* issue_summary, int screen_width, int screen_height);
 bool sdl_resolution_matches_pair(int width, int height, int native_w, int native_h);
 bool sdl_is_desktop_handheld_resolution(int width, int height);
+bool sdl_mobile_portrait_layout_active(void);
+bool sdl_mobile_orientation_matches_layout(void);
+void sdl_mobile_portrait_scale_reference_rect(const SDL_Rect* source,
+    SDL_Rect* out);
+bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
+    SDL_Rect* out_right);
 sdl_startup_device_class sdl_prompt_desktop_startup_input_device( int screen_width, int screen_height);
 bool sdl_touch_pane_binding_is_direction(int binding);
 bool sdl_touch_pane_slot_uses_long_press(int slot, int binding);
@@ -1785,11 +1941,13 @@ bool sdl_touch_pane_current_rect(SDL_Rect* out_rect);
 bool sdl_side_map_pane_current_rect(SDL_Rect* out_rect);
 const struct pane_config* sdl_status_pane_config(void);
 const struct pane_config* sdl_depth_pane_config(void);
+const struct pane_config* sdl_status_depth_pane_config(void);
 float sdl_overlay_panel_x(const SDL_Rect* anchor, enum pane_placement where, int panel_w);
 float sdl_overlay_panel_y(const SDL_Rect* anchor, enum pane_placement where, int panel_h);
 SDL_FRect sdl_overlay_panel_rect(const SDL_Rect* anchor, enum pane_placement where, int panel_w, int panel_h, const SDL_Rect* screen);
 bool sdl_status_pane_current_rect(SDL_Rect* out_rect, enum pane_placement* out_where);
 const struct pane_config* sdl_combat_overlay_pane_config(void);
+bool sdl_combat_overlay_connected_to_left_panel(bool* out_combat_below);
 bool sdl_combat_overlay_pane_current_rect(SDL_Rect* out_rect);
 bool sdl_combat_overlay_pane_content_rect(SDL_Rect* out_rect);
 float sdl_touch_pane_clampf(float value, float min_value, float max_value);
@@ -1808,10 +1966,16 @@ int sdl_status_pane_layout_entries(TTF_Font* font, const status_pane_entry* entr
 void sdl_status_pane_draw_text(TTF_Font* font, cptr text, SDL_Color color, float x, float y, float max_w, float row_h, bool right_align);
 bool sdl_status_pane_layout(status_pane_layout* out);
 void sdl_status_pane_render(void);
+bool sdl_status_depth_pane_layout(status_depth_pane_layout* out);
+bool sdl_status_depth_pane_current_rect(SDL_FRect* out);
+void sdl_status_depth_pane_render(void);
 bool sdl_overlay_pane_anchor_rect(enum pane_type pane_type, SDL_Rect* out);
 void sdl_push_description_overlay_main_anchor(void);
 void sdl_pop_description_overlay_main_anchor(void);
+void sdl_push_description_overlay_full_main_anchor(void);
+void sdl_pop_description_overlay_full_main_anchor(void);
 int sdl_main_menu_pane_font_px(void);
+int sdl_main_menu_button_height_for_screen(const SDL_Rect* screen);
 bool sdl_main_menu_pane_context_visible(void);
 const char* sdl_main_menu_mono_font_path(void);
 TTF_Font* sdl_main_menu_mono_font_for_height(int font_px);
@@ -1828,31 +1992,68 @@ bool sdl_welcome_screen_show_menu(bool show_wizard, bool new_metarun);
 bool sdl_welcome_screen_set_status(cptr status);
 bool sdl_welcome_screen_show_loading(cptr status);
 void sdl_welcome_screen_hide(void);
-int sdl_welcome_col_for_role(sdl_welcome_line_role role);
-int sdl_welcome_slot_for_role(sdl_welcome_line_role role);
-bool sdl_welcome_line_centers_footer(sdl_welcome_line_role role);
-int sdl_welcome_font_px_for_canvas(const SDL_Rect* canvas);
-float sdl_welcome_cell_width(const SDL_Rect* canvas);
-float sdl_welcome_cell_height(const SDL_Rect* canvas);
-float sdl_welcome_text_target_height(const SDL_Rect* canvas);
-float sdl_welcome_text_scale(const SDL_Rect* canvas, int max_cols, int text_w, int text_h);
-SDL_FRect sdl_welcome_measure_story_text(const SDL_Rect* canvas, int col, int row, int max_cols, cptr text, int slot);
-void sdl_welcome_bounds_add(sdl_welcome_picture_bounds* bounds, SDL_FRect rect);
-void sdl_welcome_bounds_add_text(sdl_welcome_picture_bounds* bounds, const SDL_Rect* canvas, int col, int row, int max_cols, cptr text, int slot);
-SDL_FRect sdl_welcome_draw_story_text(const SDL_Rect* canvas, int col, int row, int max_cols, cptr text, byte attr, float x_offset, int slot);
-SDL_FRect sdl_welcome_story_text_span_rect(const SDL_Rect* canvas, int col, int row, int max_cols, cptr text, int start, int end, float x_offset, int slot);
-SDL_FRect sdl_welcome_draw_story_text_span(const SDL_Rect* canvas, int col, int row, int max_cols, cptr text, int start, int end, byte attr, float x_offset, int slot);
+bool sdl_welcome_screen_cycle_intro(int direction);
 bool sdl_welcome_text_token_range(cptr text, cptr token, int* start, int* end);
 bool sdl_welcome_text_command_range(cptr text, cptr token_a, cptr token_b, int* start, int* end);
 void sdl_welcome_compose_menu_line(char* menu_line, size_t menu_size, char* quit_command, size_t quit_command_size, cptr* primary_token);
-float sdl_welcome_bounds_x_offset(const SDL_Rect* canvas, const sdl_welcome_picture_bounds* bounds);
-float sdl_welcome_intro_x_offset(const SDL_Rect* canvas);
-float sdl_welcome_status_x_offset(const SDL_Rect* canvas);
-float sdl_welcome_footer_x_offset(const SDL_Rect* canvas);
-void sdl_welcome_render_intro_canvas(const SDL_Rect* canvas, float x_offset);
-void sdl_welcome_render_status_canvas(const SDL_Rect* canvas, float x_offset);
-void sdl_welcome_render_menu_footer_canvas(const SDL_Rect* canvas, float x_offset);
+void sdl_welcome_render_intro_canvas(const SDL_Rect* canvas);
+void sdl_welcome_render_status_canvas(const SDL_Rect* canvas);
+void sdl_welcome_render_menu_footer_canvas(const SDL_Rect* canvas);
+bool sdl_narrative_portrait_transform_pointer(float* x, float* y);
 void sdl_welcome_screen_render(void);
+void sdl_halls_screen_render(void);
+bool sdl_halls_screen_handle_pointer_event(const SDL_Event* ev);
+void sdl_poetry_screen_begin(cptr title, cptr body, cptr transition,
+    cptr prompt);
+void sdl_poetry_sequence_layout_begin(void);
+void sdl_poetry_sequence_layout_end(void);
+void sdl_poetry_screen_begin_choices(cptr title);
+void sdl_poetry_screen_begin_blocks(cptr title, cptr prompt);
+int sdl_poetry_screen_add_block(cptr text, byte attr);
+void sdl_poetry_screen_set_block_visible(int block, bool visible);
+void sdl_poetry_screen_set_block_alpha(int block, byte alpha);
+void sdl_poetry_screen_set_block_attr(int block, byte attr);
+void sdl_poetry_screen_add_choice(int choice, cptr label, cptr body);
+void sdl_poetry_screen_set_choice_visible(int choice, bool visible,
+    byte label_attr, byte body_attr);
+void sdl_poetry_screen_set_choice_alpha(int choice, byte alpha);
+void sdl_poetry_screen_set_highlight(int choice);
+void sdl_poetry_screen_set_prompt(cptr prompt, bool visible);
+void sdl_poetry_screen_set_alpha(byte title_alpha, byte body_alpha,
+    byte transition_alpha, byte prompt_alpha);
+void sdl_poetry_screen_update(bool title_visible, byte title_attr,
+    bool body_visible, byte body_attr, bool transition_visible,
+    byte transition_attr, bool prompt_visible);
+void sdl_poetry_screen_hide(void);
+bool sdl_poetry_screen_active(void);
+bool sdl_poetry_screen_captures_pointer(void);
+bool sdl_poetry_screen_handle_pointer(float x, float y, int action);
+bool sdl_poetry_screen_handle_hover_pointer(float x, float y);
+void sdl_poetry_screen_render(void);
+bool sdl_pause_text_screen_begin(void);
+void sdl_pause_text_screen_add_line(cptr text, byte attr, int indent);
+void sdl_pause_text_screen_set_visible_lines(int visible_lines);
+void sdl_pause_text_screen_hide(void);
+bool sdl_pause_text_screen_active(void);
+void sdl_pause_text_screen_render(void);
+bool sdl_tale_screen_begin(cptr title);
+void sdl_tale_screen_add_entry(cptr heading, cptr body);
+void sdl_tale_screen_set_manuscript(bool enabled);
+int sdl_tale_screen_current_page_entry_count(void);
+int sdl_tale_screen_current_page_entry_at(int position);
+int sdl_tale_screen_entry_character_count(int entry);
+int sdl_tale_screen_entry_character_at(int entry, int position);
+void sdl_tale_screen_set_active_entry(int active_entry, byte alpha);
+void sdl_tale_screen_set_typewriter_entry(int active_entry,
+    int visible_characters, bool cursor_visible);
+void sdl_tale_screen_set_prompt(cptr prompt, bool visible, bool final);
+bool sdl_tale_screen_advance_page(void);
+bool sdl_tale_screen_is_last_page(void);
+void sdl_tale_screen_hide(void);
+bool sdl_tale_screen_active(void);
+bool sdl_tale_screen_handle_pointer(float x, float y);
+bool sdl_tale_screen_handle_hover_pointer(float x, float y);
+void sdl_tale_screen_render(void);
 float sdl_char_sheet_clampf(float value, float min_value, float max_value);
 int sdl_char_sheet_clampi(int value, int min_value, int max_value);
 int sdl_char_sheet_text_width(TTF_Font* font, cptr text);
@@ -1866,7 +2067,7 @@ bool sdl_char_sheet_choice_is_valid(int choice);
 bool sdl_char_sheet_prompt_choice_is_valid(int choice);
 void sdl_char_sheet_clear_hits(void);
 bool sdl_char_sheet_panel_rect(cptr heading, SDL_FRect* out);
-void sdl_char_sheet_add_hit(SDL_FRect rect, int choice, cptr desc);
+void sdl_char_sheet_add_hit(SDL_FRect rect, int choice, cptr desc, byte attr);
 void sdl_char_sheet_add_prompt_hit(SDL_FRect rect, int choice);
 void sdl_char_sheet_add_select_button_hit(SDL_FRect rect, int choice);
 const sdl_character_sheet_hit* sdl_char_sheet_hit_at(float x, float y);
@@ -1898,7 +2099,7 @@ void sdl_char_sheet_draw_history(TTF_Font* font, cptr text, float x, float y, fl
 bool sdl_char_sheet_split_first_paragraph(cptr text, char* first, size_t first_len, cptr* rest);
 void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x, float y, float w, float h);
 bool sdl_char_sheet_birth_context(void);
-cptr sdl_char_sheet_hover_desc(SDL_FRect* out_rect);
+cptr sdl_char_sheet_hover_desc(SDL_FRect* out_rect, byte* out_attr);
 void sdl_char_sheet_render_hover_tooltip(void);
 float sdl_char_sheet_sample_panel_natural_w(TTF_Font* font, cptr heading, cptr sample, float label_fraction);
 int sdl_char_sheet_target_ncols(float content_w, float screen_h);
@@ -1924,22 +2125,27 @@ bool sdl_character_sheet_birth_swipe_motion(float x, float y, SDL_FingerID finge
 void sdl_character_sheet_screen_render(void);
 bool sdl_character_sheet_screen_active(void);
 void sdl_character_sheet_screen_hide(void);
-bool sdl_character_sheet_screen_begin_live(int focus_choice);
-bool sdl_character_sheet_screen_begin_birth_preview(void);
+void sdl_character_sheet_screen_begin_live(int focus_choice);
+void sdl_character_sheet_screen_begin_birth_preview(void);
 void sdl_character_sheet_screen_add_live_item(int choice, int kind, int skill, int value_kind, cptr label, cptr desc);
-bool sdl_character_sheet_screen_show_birth_stats(const int* stats, const int* costs, int selected_stat, int points_left);
-bool sdl_character_sheet_screen_show_birth_skills(const int* old_base, const int* skill_gain, const int* costs, int selected_skill, int points_left);
+void sdl_character_sheet_screen_show_birth_stats(const int* stats, const int* costs, int selected_stat, int points_left);
+void sdl_character_sheet_screen_show_birth_skills(const int* old_base, const int* skill_gain, const int* costs, int selected_skill, int points_left);
 void sdl_select_page_turn_free(void);
 void sdl_character_sheet_screen_reset_select_page(void);
-bool sdl_character_sheet_screen_begin_select(int focus_choice, cptr title);
+void sdl_character_sheet_screen_begin_select(int focus_choice, cptr title);
 void sdl_character_sheet_screen_set_select_menu_style(bool enabled);
-bool sdl_character_sheet_screen_begin_book(cptr title);
+void sdl_character_sheet_screen_begin_book(cptr title);
 void sdl_character_sheet_screen_add_book_paragraph(cptr text);
 void sdl_character_sheet_screen_break_book_page(void);
 void sdl_character_sheet_screen_highlight_book_paragraph(void);
 void sdl_character_sheet_screen_commit_book(void);
+void sdl_character_sheet_screen_set_book_target_page_count(int page_count);
+int sdl_character_sheet_screen_book_contents_page(int contents_index);
+void sdl_character_sheet_screen_set_book_focus(int choice);
+int sdl_character_sheet_screen_book_action_page(int choice);
 void sdl_character_sheet_screen_add_select_row(int choice, cptr label, int attr, cptr desc);
 void sdl_character_sheet_screen_set_last_select_row_reset(int reset_choice);
+void sdl_character_sheet_screen_set_last_select_row_confirmable(bool confirmable);
 void sdl_character_sheet_screen_add_select_heading(cptr label);
 void sdl_character_sheet_screen_set_select_intro(cptr text);
 int sdl_character_sheet_screen_select_page(void);
@@ -1947,11 +2153,15 @@ int sdl_character_sheet_screen_select_page_count(void);
 bool sdl_character_sheet_screen_page_turning(void);
 void sdl_character_sheet_screen_set_select_frame(cptr top, cptr bottom);
 void sdl_character_sheet_screen_set_select_title_detail(cptr title, cptr suffix, int suffix_attr);
+void sdl_character_sheet_screen_add_select_title_candidate(cptr title,
+    cptr suffix);
 void sdl_character_sheet_screen_begin_select_rating_summary(cptr title);
 void sdl_character_sheet_screen_add_select_rating(cptr group, cptr stars, int count, int attr, cptr desc);
 void sdl_character_sheet_screen_add_select_detail(cptr text, int attr, cptr desc);
-void sdl_character_sheet_screen_set_select_detail_size_hint(int stat_rows, int trait_rows);
+void sdl_character_sheet_screen_set_select_detail_size_hint(int stat_rows, int ability_rows, int trait_rows);
+void sdl_character_sheet_screen_set_select_ability_rows(int rows);
 void sdl_character_sheet_screen_set_select_size_hint(cptr longest_desc);
+void sdl_character_sheet_screen_add_select_description_candidate(cptr text);
 void sdl_character_sheet_screen_set_select_description(cptr text);
 bool sdl_character_sheet_screen_commit_select(int selected_index);
 bool sdl_character_sheet_screen_handle_pointer_motion(float x, float y);
@@ -1964,7 +2174,7 @@ bool sdl_main_menu_choice_disabled_now(int choice);
 void sdl_main_menu_overlay_reset_nav_input(void);
 bool sdl_main_menu_overlay_hides_supporting_panes(void);
 void sdl_main_menu_overlay_close(void);
-bool sdl_main_menu_overlay_begin(void);
+void sdl_main_menu_overlay_begin(void);
 void sdl_main_menu_overlay_move(int delta);
 void sdl_main_menu_overlay_choose(int choice);
 bool sdl_main_menu_overlay_handle_direction(int dir);
@@ -1973,9 +2183,22 @@ void sdl_main_menu_overlay_flash_touch_slot(int slot);
 bool sdl_main_menu_overlay_handle_touch_pane_point(float x, float y, bool activate);
 bool sdl_main_menu_overlay_handle_gamepad_axis( const SDL_GamepadAxisEvent* ev);
 void sdl_main_menu_pane_render(void);
+void sdl_popup_notification_render(void);
+int sdl_popup_notification_pending_timeout_ms(Uint64 now_ns);
+bool sdl_popup_notification_flush_expired(Uint64 now_ns);
 bool sdl_main_menu_pane_hit(float x, float y, SDL_FRect* out_rect);
 bool sdl_main_menu_pane_handle_hover_pointer(float x, float y);
 bool sdl_main_menu_pane_handle_pointer(float x, float y);
+bool sdl_main_menu_button_handle_secondary_pointer(float x, float y);
+bool sdl_main_menu_button_handle_long_press_down(float x, float y,
+    SDL_FingerID finger_id);
+bool sdl_main_menu_button_handle_long_press_motion(float x, float y,
+    SDL_FingerID finger_id);
+bool sdl_main_menu_button_handle_long_press_up(float x, float y,
+    SDL_FingerID finger_id);
+void sdl_main_menu_button_cancel_long_press(SDL_FingerID finger_id);
+int sdl_main_menu_button_pending_timeout_ms(Uint64 now_ns);
+bool sdl_main_menu_button_flush_pending_press(Uint64 now_ns);
 int sdl_main_menu_overlay_choice_at(float x, float y, bool* in_panel);
 bool sdl_main_menu_overlay_handle_pointer_motion(float x, float y);
 bool sdl_main_menu_overlay_handle_pointer_down(float x, float y);
@@ -2007,7 +2230,7 @@ int sdl_narrative_banner_line_count(void);
 void sdl_narrative_banner_draw_line(TTF_Font* font, cptr text, SDL_Color color, float left_x, float y, float max_w, float line_h);
 void sdl_narrative_banner_render(void);
 bool sdl_narrative_banner_handle_pointer(float x, float y);
-void sdl_narrative_banner_show(bool line_delay);
+void sdl_narrative_banner_show(bool line_delay, bool fast_fade);
 int sdl_touch_pane_wrap_prompt_lines(cptr text, TTF_Font* font, float max_w, char lines[][SDL_TOUCH_YES_NO_LINE_LEN], int max_lines);
 bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect, SDL_FRect* prompt_rect, SDL_FRect* yes_rect, SDL_FRect* no_rect);
 bool sdl_touch_pane_point_to_slot(float x, float y, int* out_slot);
@@ -2107,13 +2330,12 @@ bool sdl_main_map_handle_drag_motion(float x, float y, bool mouse, SDL_FingerID 
 bool sdl_main_map_handle_mouse_release_click(float x, float y);
 bool sdl_main_map_handle_drag_up(float x, float y, bool mouse, SDL_FingerID finger_id);
 bool sdl_main_map_handle_zoom_wheel(const SDL_MouseWheelEvent* wheel);
+void sdl_main_map_flush_pending_pan(void);
 bool sdl_unified_look_handle_map_drag_down(float x, float y, bool mouse, SDL_FingerID finger_id);
 bool sdl_unified_look_handle_map_drag_motion(float x, float y, bool mouse, SDL_FingerID finger_id);
 bool sdl_unified_look_handle_map_drag_up(float x, float y, bool mouse, SDL_FingerID finger_id);
 bool sdl_unified_look_handle_map_hover_pointer(float x, float y);
 bool sdl_mouse_path_grid_is_open_floor(int y, int x);
-void sdl_mouse_path_feature_visual(int feat, byte* a, char* c);
-bool sdl_mouse_path_minimap_draws_terrain(int y, int x);
 bool sdl_mouse_path_grid_known(int y, int x);
 bool sdl_mouse_feature_known_for_action(int y, int x);
 void sdl_mouse_note_feature_for_action(int y, int x);
@@ -2130,9 +2352,11 @@ byte sdl_mouse_path_route_state(int dir, int chain);
 int sdl_mouse_path_route_state_dir(byte state);
 int sdl_mouse_path_route_state_chain(byte state);
 bool sdl_mouse_path_dirs_sprint_compatible(int newer_dir, int older_dir);
+bool sdl_mouse_path_grid_is_leapable_obstacle(int y, int x);
 bool sdl_mouse_path_grid_is_safe_leap_landing(int y, int x);
 bool sdl_mouse_path_state_has_run_up(int y, int x, int dir, byte state);
-bool sdl_mouse_path_can_step_into_chasm(int y, int x, int dir, byte state);
+bool sdl_mouse_path_can_step_into_leapable_obstacle(int y, int x, int dir,
+    byte state);
 byte sdl_mouse_path_initial_route_state(bool sprint_enabled);
 byte sdl_mouse_path_next_route_state(byte state, int dir, bool sprint_enabled);
 int sdl_mouse_path_route_edge_cost(byte state, int dir, bool sprint_enabled);
@@ -2178,10 +2402,12 @@ bool sdl_pointer_attack_binding_toggled(int binding);
 int sdl_pointer_attack_current_mode(void);
 int sdl_pointer_attack_panel_display_mode(void);
 bool sdl_pointer_attack_panel_mode_highlighted(int mode);
+bool sdl_pointer_attack_panel_quiver_highlighted(int mode);
 const char* sdl_pointer_attack_mode_name(int mode);
 void sdl_pointer_attack_refresh_mode_display(bool redraw_map);
 void sdl_pointer_attack_reset_to_melee(void);
 void sdl_pointer_attack_set_mode(int mode);
+void sdl_pointer_attack_activate_panel_choice(int mode, bool quiver_only);
 void sdl_pointer_attack_set_panel_hover_mode(int mode);
 bool sdl_pointer_attack_toggle_binding(int binding);
 int sdl_pointer_attack_ranged_range(int mode);
@@ -2244,6 +2470,7 @@ bool sdl_mouse_grid_has_visible_monster(int y, int x, int* out_m_idx);
 bool sdl_mouse_monster_is_friendly(int m_idx);
 bool sdl_mouse_grid_has_marked_object(int y, int x, object_type** out_obj);
 void sdl_object_tooltip_clear(void);
+bool sdl_object_tooltip_uses_screen_rect(void);
 void sdl_object_tooltip_begin_persistent(void);
 void sdl_object_tooltip_end_persistent(void);
 bool sdl_object_tooltip_dismiss_persistent_on_press(void);
@@ -2259,7 +2486,6 @@ bool sdl_object_tooltip_show_text_at_rect(const SDL_FRect* rect, cptr text, bool
 bool sdl_hover_tooltip_show_text(int col, int row, int cols, cptr text, bool touch);
 void sdl_hover_tooltip_clear(void);
 int sdl_object_tooltip_font_px(void);
-SDL_Surface* sdl_object_tooltip_render_text_surface(TTF_Font* font, cptr text, SDL_Color color, float max_text_w);
 bool sdl_object_tooltip_pointer_hits_term_cell(float x, float y);
 void sdl_object_tooltip_handle_mouse_motion(float x, float y);
 int sdl_object_tooltip_pending_timeout_ms(Uint64 now_ns);
@@ -2267,29 +2493,46 @@ bool sdl_object_tooltip_flush_expired(Uint64 now_ns);
 void sdl_object_tooltip_render(void);
 int sdl_description_overlay_font_px(void);
 int sdl_description_overlay_max_cols(void);
+int sdl_description_overlay_capture_cols(int terminal_cols,
+    bool interactive);
+int sdl_description_overlay_visible_cols(void);
 SDL_Color sdl_description_overlay_attr_color(byte attr);
 cptr sdl_description_overlay_footer_text( const description_overlay_state* overlay);
 void sdl_description_overlay_set_footer(cptr text, bool always);
+void sdl_description_overlay_set_footer_gap(bool enabled);
 void sdl_description_overlay_clear_footer_actions(void);
 void sdl_description_overlay_add_footer_action(int key, cptr token);
+bool sdl_description_overlay_has_footer_action(int key);
+bool sdl_description_overlay_footer_action_label(int key, char* buf,
+    size_t buflen);
 void sdl_description_overlay_clear_avoid(void);
 void sdl_description_overlay_set_avoid_term_rect(int col, int row, int wid, int hgt);
 bool sdl_description_overlay_token_matches_hover( const description_overlay_state* overlay, cptr text, int col);
 bool sdl_description_overlay_avoid_rect(SDL_FRect* out);
 bool sdl_description_overlay_rects_intersect( const SDL_FRect* a, const SDL_FRect* b);
-int sdl_description_overlay_rows_for_panel_space(float available_h, int pad_y, int cell_h, bool footer);
-bool sdl_description_overlay_fit_around_avoid( const SDL_Rect* anchor, int margin, int pad_y, int cell_h, bool footer, float panel_x, float panel_w, int* visible_rows, float* panel_h, float* panel_y);
+int sdl_description_overlay_rows_for_panel_space(float available_h, int pad_y, int cell_h, bool footer, int header_rows);
+bool sdl_description_overlay_fit_around_avoid( const SDL_Rect* anchor, int margin, int pad_y, int cell_h, bool footer, int header_rows, float panel_x, float panel_w, int* visible_rows, float* panel_h, float* panel_y);
 bool sdl_description_overlay_layout(description_overlay_layout* out);
 bool sdl_description_overlay_scroll_to_layout( const description_overlay_layout* layout, int scroll);
 bool sdl_description_overlay_scroll_by(int rows);
 bool sdl_description_overlay_scroll_page(int direction);
 bool sdl_description_overlay_handle_mouse_wheel( const SDL_MouseWheelEvent* wheel);
 bool sdl_description_overlay_contains_point(float x, float y);
+void sdl_description_overlay_touch_scroll_cancel(void);
+bool sdl_description_overlay_touch_scroll_handle_pointer_down(float x,
+    float y, SDL_FingerID finger_id);
+bool sdl_description_overlay_touch_scroll_handle_pointer_motion(float x,
+    float y, SDL_FingerID finger_id);
+bool sdl_description_overlay_touch_scroll_handle_pointer_up(
+    SDL_FingerID finger_id);
 void sdl_description_overlay_render_char(SDL_Texture* atlas, int atlas_cell_w, int atlas_cell_h, float cell_w, float cell_h, float x, float y, byte attr, char ch);
 void sdl_description_overlay_render_text(SDL_Texture* atlas, int atlas_cell_w, int atlas_cell_h, const char* text, float x, float y, float cell_w, float cell_h, byte attr);
 void sdl_description_overlay_render(void);
 void sdl_touch_exit_button_render(void);
 bool sdl_touch_exit_button_handle_pointer(float x, float y);
+int sdl_touch_menu_button_reserved_rows(void);
+bool sdl_description_overlay_handle_close_hover(float x, float y);
+bool sdl_description_overlay_handle_close_pointer(float x, float y);
 int sdl_description_overlay_footer_action_at(float x, float y);
 bool sdl_description_overlay_handle_footer_hover(float x, float y);
 bool sdl_description_overlay_handle_footer_pointer(float x, float y);
@@ -2314,10 +2557,12 @@ bool sdl_player_map_rect(int y, int x, SDL_FRect* out_rect);
 bool sdl_point_in_frect(const SDL_FRect* rect, float x, float y);
 void sdl_player_confirm_at_player(void);
 bool sdl_main_view_point_is_player_grid(float x, float y);
-bool sdl_player_has_equipped_staff(void);
-bool sdl_player_has_equipped_horn(void);
+bool sdl_player_has_harness_staff(void);
+bool sdl_player_has_harness_horn(void);
 bool sdl_player_has_singable_song(void);
 void sdl_player_action_menu_add_entry(player_action_menu_entry* entries, int* count, int kind, int command, cptr label);
+cptr sdl_player_action_menu_fallback_for_kind(int kind);
+void sdl_player_action_menu_tile_for_kind(int kind, byte* out_attr, char* out_char);
 int sdl_player_action_menu_collect(player_action_menu_entry* entries);
 int sdl_player_action_menu_collect_secondary(int primary_kind, player_action_menu_entry* entries);
 int sdl_player_action_menu_secondary_owner(int kind);
@@ -2448,6 +2693,8 @@ void sdl_minimap_clear_map_layout(void);
 void sdl_minimap_store_map_layout(const SDL_FRect* map_rect, int min_y, int min_x, int max_y, int max_x);
 void sdl_minimap_begin(void);
 void sdl_minimap_end(void);
+void sdl_minimap_map_texture_cache_clear(void);
+void sdl_minimap_flush_pending_redraw(void);
 bool sdl_minimap_redraw(void);
 bool sdl_minimap_set_zoom_step(int step);
 bool sdl_minimap_adjust_zoom(int delta);
@@ -2495,6 +2742,7 @@ bool sdl_menu_scroll_handle_pointer_motion(float x, float y, SDL_FingerID finger
 bool sdl_menu_scroll_handle_pointer_up(SDL_FingerID finger_id);
 bool sdl_main_screen_cell_hits_character_panel(int col, int row);
 int sdl_hidden_left_panel_attack_mode_at_cell(int col, int row);
+bool sdl_hidden_left_panel_attack_is_quiver_at_cell(int col, int row);
 int sdl_left_panel_quiver_attack_mode_at_col(int col);
 int sdl_visible_character_panel_attack_mode_at_cell(int col, int row);
 void sdl_enqueue_bypassed_command(int command);
@@ -2502,9 +2750,11 @@ int sdl_hidden_left_panel_click_action_at_cell(int col, int row);
 int sdl_visible_character_panel_click_action_at_cell(int col, int row);
 int sdl_visible_character_panel_block_top_row(int click_action);
 cptr sdl_character_panel_click_tooltip_text(int click_action);
-cptr sdl_character_panel_attack_tooltip_text(int attack_mode);
+cptr sdl_character_panel_attack_tooltip_text(int attack_mode,
+    bool quiver_only);
 void sdl_character_panel_tooltip_span(int col, int row, int attack_mode, int click_action, int* out_col, int* out_cols);
-void sdl_character_panel_show_hover_tooltip(int col, int row, int attack_mode, int click_action, bool touch);
+void sdl_character_panel_show_hover_tooltip(int col, int row, int attack_mode,
+    bool quiver_only, int click_action, bool touch);
 bool sdl_handle_character_panel_click_action(int click_action);
 bool sdl_main_screen_handle_character_panel_hover_pointer(float x, float y);
 bool sdl_binding_opens_pane_menu(int binding);
@@ -2609,6 +2859,7 @@ int sdl_touch_thumb_button_binding(int index, bool long_press);
 bool sdl_touch_thumb_config_enabled(void);
 bool sdl_touch_thumb_layout_active(void);
 bool sdl_touch_thumb_compute_rects(SDL_FRect* out_rects);
+bool sdl_touch_thumb_current_bounds(SDL_FRect* out_bounds);
 bool sdl_touch_thumb_point_to_button(float px, float py, int* out_index);
 void sdl_touch_thumb_render(void);
 void sdl_touch_thumb_cancel_press(void);
@@ -2625,8 +2876,10 @@ float sdl_touch_round_radius_px(void);
 bool sdl_touch_round_compute_clip_rect(SDL_Rect* out_clip);
 bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
     float* out_radius, float* out_inner_radius, SDL_Rect* out_clip);
+void sdl_touch_target_layout_begin(void);
+void sdl_touch_target_layout_end(void);
 int sdl_touch_round_dir_for_delta(float dx, float dy);
-void sdl_touch_round_send_dir(int dir, bool ctrl);
+void sdl_touch_round_send_dir(int dir, bool ctrl, bool run);
 void sdl_touch_round_cancel_press(void);
 bool sdl_touch_round_handle_pointer_down(float x, float y, SDL_FingerID finger_id);
 bool sdl_touch_round_handle_pointer_motion(float x, float y, SDL_FingerID finger_id);
@@ -2636,7 +2889,7 @@ void sdl_touch_round_flush_pending_highlight(Uint64 now_ns);
 void sdl_touch_round_draw_circle(float cx, float cy, float radius, SDL_Color color);
 void sdl_touch_round_draw_sector_lines(float cx, float cy, float inner_radius, float outer_radius, SDL_Color color);
 bool sdl_touch_round_dir_to_map_rect(int dir, SDL_FRect* out_rect);
-void sdl_touch_round_render_target_square(int dir, bool ctrl);
+void sdl_touch_round_render_target_square(int dir, bool ctrl, bool run);
 const char* sdl_touch_round_dir_label(int dir);
 const char* sdl_touch_round_ctrl_action_for_dir(int dir);
 void sdl_touch_round_ctrl_action_label(int dir, char* buf, size_t buflen);
@@ -2678,19 +2931,22 @@ int sdl_touch_zone_pending_timeout_ms(Uint64 now_ns);
 bool sdl_touch_zone_flush_pending_press(Uint64 now_ns);
 bool sdl_touch_top_panel_layout_visible(void);
 void sdl_touch_top_panel_set_open(bool open);
-int sdl_touch_top_panel_mode_normalized(int mode);
-int sdl_touch_top_panel_button_count_normalized(int count);
-int sdl_touch_top_panel_tile_scale_normalized(int scale);
-bool sdl_touch_top_panel_long_mode(void);
+float sdl_touch_top_panel_size_normalized(float size);
+int sdl_touch_top_panel_cell_count_normalized(int count);
+int sdl_touch_top_panel_columns_normalized(int columns);
+int sdl_touch_top_panel_rows_normalized(int rows);
 int sdl_touch_top_panel_visible_button_count(void);
+int sdl_touch_top_panel_reserved_stack_height(const SDL_Rect* screen);
 bool sdl_touch_top_panel_current_anchor(SDL_Rect* out_screen,
     SDL_Rect* out_anchor, enum pane_placement* out_where);
 bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
     const SDL_Rect* anchor, enum pane_placement where,
     SDL_FRect* button_rects, SDL_FRect* out_panel);
-bool sdl_touch_top_panel_compute_layout_for_screen( const SDL_Rect* screen, SDL_FRect* button_rects, SDL_FRect* out_panel);
 bool sdl_touch_top_panel_point_to_slot(float x, float y, int* out_slot);
 bool sdl_touch_top_panel_pointer_claims_point(float x, float y);
+bool sdl_touch_top_panel_handle_secondary_pointer(float x, float y);
+bool sdl_touch_top_panel_handle_description_hover(float x, float y);
+bool sdl_touch_top_panel_handle_description_pointer(float x, float y);
 int sdl_touch_top_panel_binding_for_slot(int slot, bool long_press);
 void sdl_touch_top_panel_label_for_slot(int slot, bool long_press, char* buf, size_t buflen);
 void sdl_touch_top_panel_render_buttons( const SDL_FRect* button_rects);
@@ -2698,7 +2954,8 @@ void sdl_touch_top_panel_render(void);
 void sdl_touch_top_panel_send_slot(int slot, bool long_press);
 void sdl_touch_top_panel_cancel_press(void);
 bool sdl_touch_top_panel_handle_pointer_down(float x, float y, SDL_FingerID finger_id);
-bool sdl_touch_top_panel_handle_pointer_motion(float x, float y, SDL_FingerID finger_id);
+bool sdl_touch_top_panel_handle_pointer_motion(float x, float y, bool mouse,
+    SDL_FingerID finger_id);
 bool sdl_touch_top_panel_handle_pointer_up(float x, float y, SDL_FingerID finger_id);
 int sdl_touch_top_panel_pending_timeout_ms(Uint64 now_ns);
 bool sdl_touch_top_panel_flush_pending_press(Uint64 now_ns);
@@ -2836,11 +3093,11 @@ bool sdl_touch_tutorial_view_rect(enum pane_type pane, SDL_FRect* out);
 void sdl_touch_tutorial_clamp_box_to_screen(SDL_FRect* box, const SDL_Rect* screen, float margin);
 bool sdl_touch_tutorial_compact_layout(const SDL_Rect* screen);
 void sdl_touch_tutorial_draw_compact_zone_label( const SDL_Rect* screen, const SDL_FRect* zone, cptr label);
-void sdl_touch_tutorial_draw_compact_zone_legend( const SDL_Rect* screen, float min_y, const char* const* lines, int line_count, bool mouse);
+void sdl_touch_tutorial_draw_compact_zone_legend( const SDL_Rect* screen, float min_y, const char* const* lines, int line_count, bool mouse, bool mobile_section);
 void sdl_touch_tutorial_draw_zone_highlight(const SDL_FRect* zone);
 void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen, const SDL_FRect* zone, cptr title, cptr detail, float min_y);
 void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen, float x, float y, float w, cptr title, cptr body);
-void sdl_touch_tutorial_draw_main_screen_zones_compact( const SDL_Rect* screen, float header_bottom, bool mouse);
+void sdl_touch_tutorial_draw_main_screen_zones_compact( const SDL_Rect* screen, float header_bottom, bool mouse, int section);
 void sdl_touch_tutorial_draw_main_screen_zones( const SDL_Rect* screen, bool mouse, float min_callout_y);
 void sdl_touch_tutorial_draw_zones_page(const SDL_Rect* screen, int page, int page_count, bool mouse);
 void sdl_touch_tutorial_draw_overlay_menu(const SDL_Rect* screen);
@@ -2914,6 +3171,9 @@ void sdl_minimap_draw_hint_sources(const SDL_FRect* map_dst, int min_y, int min_
 void sdl_minimap_draw_focus_tip(sdl_view* d, int canvas_w, int canvas_h, const SDL_FRect* map_dst, int min_y, int min_x, int max_y, int max_x);
 bool sdl_minimap_known_bounds(int* min_y, int* min_x, int* max_y, int* max_x);
 void sdl_side_map_pane_note_level(void);
+void sdl_side_map_pane_forget_level(void);
+void sdl_side_map_pane_invalidate_cell(int y, int x);
+void sdl_side_map_pane_texture_cache_clear(void);
 void sdl_side_map_pane_redraw(void);
 bool sdl_side_map_pane_content_rect(SDL_FRect* out_rect, SDL_Rect* out_clip);
 void sdl_side_map_pane_draw_player_marker(const SDL_FRect* map_dst, int min_y, int min_x, int max_y, int max_x);
@@ -2965,11 +3225,14 @@ bool sdl_mono_font_atlas_entry_matches_style( const mono_font_atlas_entry* entry
 bool sdl_mono_font_atlas_entry_matches( const mono_font_atlas_entry* entry, const char* font_path, int cell_width, int cell_height);
 mono_font_atlas_entry* sdl_find_mono_font_atlas_fallback_cells( const char* font_path, int cell_width, int cell_height);
 bool sdl_mono_font_atlas_cached_cells(const char* font_path, int cell_width, int cell_height);
+Uint64 sdl_mono_font_atlas_generation_for_cells(const char* font_path,
+    int cell_width, int cell_height);
 bool sdl_mono_font_atlas_cached_cells_style(const char* font_path, int cell_width, int cell_height, const mono_font_style_key* style);
 bool sdl_mono_font_atlas_cache_has_free_slot(void);
 bool sdl_store_mono_font_atlas_cells(const char* font_path, int cell_width, int cell_height, SDL_Texture* atlas, const mono_font_style_key* style);
 SDL_Texture* sdl_acquire_mono_font_atlas_cells_ex(const char* font_path, int cell_width, int cell_height, bool* out_cached, int* out_atlas_cell_w, int* out_atlas_cell_h, bool* out_exact, bool allow_fallback);
 void sdl_story_font_cache_clear(void);
+void sdl_char_sheet_fitted_wrap_cache_clear(void);
 bool sdl_story_font_cache_matches_config(void);
 void sdl_story_font_cache_mark_config(void);
 const char* sdl_story_font_path_for_slot(int slot);
@@ -2986,6 +3249,7 @@ SDL_Texture* sdl_try_load_ttf_font_cells(const char* font_path, int cell_width, 
 SDL_Texture* sdl_load_ttf_font_cells(const char* font_path, int cell_width, int cell_height, int* actual_font_size);
 void sdl_window_set_position(int x, int y);
 void sdl_window_create(int window_width, int window_height, bool fullscreen, bool use_tiles);
+bool sdl_window_reassert_fullscreen(cptr reason);
 bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font_size, int scale, int margin);
 TTF_Font* sdl_load_font_with_fallback(const char* font_path, int font_size, const char* fallback_path);
 void sdl_load_story_fonts(void);
@@ -3010,6 +3274,7 @@ void sdl_story_font_set_slot(int slot);
 void sdl_story_font_reset(void);
 int sdl_story_font_text_width(cptr text, int len);
 int sdl_get_cell_width(void);
+int sdl_get_active_cell_width(void);
 int sdl_main_view_visible_col0(void);
 int sdl_main_view_visible_cols(void);
 void sdl_quit_hook(cptr str);
@@ -3020,17 +3285,32 @@ cptr get_sdl_config_path(void);
 int get_sdl_main_view_scale(void);
 int get_sdl_effective_main_view_scale(void);
 int get_sdl_min_main_view_scale(void);
+int get_sdl_terminal_menu_scale_offset(void);
+void set_sdl_terminal_menu_scale_offset(int value);
+bool get_sdl_compact_inventory_menus(void);
+void set_sdl_compact_inventory_menus(bool value);
+bool get_sdl_show_context_square_popups(void);
+void set_sdl_show_context_square_popups(bool value);
+int get_sdl_mobile_starting_zoom_offset(void);
+void set_sdl_mobile_starting_zoom_offset(int value);
+bool get_sdl_mobile_portrait_mode(void);
+void set_sdl_mobile_portrait_mode(bool value);
+void sdl_set_mobile_orientation_hint(bool portrait);
 int get_sdl_min_terminal_mode(void);
 void set_sdl_min_terminal_mode(int value);
 void set_sdl_main_view_scale(int value);
 bool set_sdl_main_view_zoom_scale(int value);
 void sdl_suspend_main_view_zoom_for_saved_screen(void);
-void sdl_resume_main_view_zoom_for_saved_screen(void);
+bool sdl_resume_main_view_zoom_for_saved_screen(void);
 int get_sdl_aux_view_font_size(void);
 int get_sdl_effective_aux_view_font_size(void);
 void set_sdl_aux_view_font_size(int value);
 int get_sdl_margin(void);
 void set_sdl_margin(int value);
+int get_sdl_camera_center_clearance_vertical(void);
+void set_sdl_camera_center_clearance_vertical(int value);
+int get_sdl_camera_center_clearance_horizontal(void);
+void set_sdl_camera_center_clearance_horizontal(int value);
 bool get_sdl_fullscreen(void);
 void set_sdl_fullscreen(bool value);
 bool get_sdl_tiles(void);
@@ -3044,6 +3324,9 @@ int get_pane_config_count(void);
 int get_sdl_pane_type(int index);
 int get_sdl_pane_where(int index);
 void set_sdl_pane_where(int index, int where);
+int get_sdl_pane_stack_order(int index);
+int get_sdl_pane_stack_count(int where);
+void set_sdl_pane_where_order(int index, int where, int order);
 bool get_sdl_pane_enabled(int index);
 int get_sdl_pane_rows(int index);
 int get_sdl_pane_cols(int index);
@@ -3065,13 +3348,23 @@ bool get_sdl_enable_bottom_panes(void);
 void set_sdl_enable_bottom_panes(bool value);
 bool get_sdl_show_pane_borders(void);
 void set_sdl_show_pane_borders(bool value);
+bool get_sdl_left_overlays_touch_screen_edge(void);
+void set_sdl_left_overlays_touch_screen_edge(bool value);
+bool get_sdl_show_overlay_log_border(void);
+void set_sdl_show_overlay_log_border(bool value);
 bool get_sdl_hide_left_panel(void);
 void sdl_push_saved_screen_left_panel_pane(void);
 void sdl_pop_saved_screen_left_panel_pane(void);
 bool get_sdl_left_panel_expanded_on_launch(void);
+bool get_sdl_left_panel_expanded_default_on_launch(void);
 void set_sdl_left_panel_expanded_on_launch(bool value);
 int get_sdl_left_panel_compact_mode(void);
 void set_sdl_left_panel_compact_mode(int mode);
+bool get_sdl_left_panel_compact_health_bar(void);
+void set_sdl_left_panel_compact_health_bar(bool value);
+bool get_sdl_quick_touch_buttons_on_left(void);
+void set_sdl_quick_touch_buttons_on_left(bool value);
+bool get_sdl_quick_touch_buttons_default_on_left(void);
 int get_sdl_intro_style(void);
 void set_sdl_intro_style(int style);
 void sdl_gamepad_load_default_bindings(void);
@@ -3083,21 +3376,22 @@ bool sdl_touch_only_device_active(void);
 bool portable_controls_active(void);
 bool get_sdl_gamepad_enabled(void);
 void set_sdl_gamepad_enabled(bool value);
-bool get_sdl_gamepad_auto_mode(void);
-void set_sdl_gamepad_auto_mode(bool value);
-bool get_sdl_steamdeck_mode(void);
-void set_sdl_steamdeck_mode(bool value);
+int get_sdl_input_ui_mode(void);
+void set_sdl_input_ui_mode(int mode);
+const char* get_sdl_input_ui_mode_label(int mode);
+int get_sdl_input_ui_default_mode(void);
 bool get_sdl_steamdeck_inv_equip_same_button_cycle(void);
 void set_sdl_steamdeck_inv_equip_same_button_cycle(bool value);
 bool get_sdl_gamepad_use_dpad(void);
 void set_sdl_gamepad_use_dpad(bool value);
+int get_sdl_gamepad_dpad_diagonal_delay_ms(void);
+void set_sdl_gamepad_dpad_diagonal_delay_ms(int value);
 bool get_sdl_gamepad_use_left_stick(void);
 void set_sdl_gamepad_use_left_stick(bool value);
 bool get_sdl_gamepad_default_enabled(void);
-bool get_sdl_gamepad_default_auto_mode(void);
-bool get_sdl_steamdeck_default_mode(void);
 bool get_sdl_steamdeck_default_inv_equip_same_button_cycle(void);
 bool get_sdl_gamepad_default_use_dpad(void);
+int get_sdl_gamepad_default_dpad_diagonal_delay_ms(void);
 bool get_sdl_gamepad_default_use_left_stick(void);
 int get_sdl_gamepad_button_binding(int button);
 void set_sdl_gamepad_button_binding(int button, int binding);
@@ -3125,6 +3419,9 @@ int get_sdl_mouse_movement_default_mode(void);
 bool get_sdl_mouse_enabled(void);
 void set_sdl_mouse_enabled(bool enabled);
 bool get_sdl_mouse_default_enabled(void);
+bool get_sdl_mouse_tile_pointer(void);
+void set_sdl_mouse_tile_pointer(bool enabled);
+bool get_sdl_mouse_default_tile_pointer(void);
 int get_sdl_touch_pane_binding(int index);
 int get_sdl_touch_pane_binding_for_panel(int panel, int index);
 void set_sdl_touch_pane_binding(int index, int binding);
@@ -3172,21 +3469,28 @@ int get_sdl_touch_corner_up_down_default_side(void);
 int get_sdl_touch_corner_action_binding(int index);
 void set_sdl_touch_corner_action_binding(int index, int binding);
 int get_sdl_touch_corner_action_default_binding(int index);
-int get_sdl_touch_top_panel_mode(void);
-void set_sdl_touch_top_panel_mode(int mode);
-int get_sdl_touch_top_panel_default_mode(void);
+bool get_sdl_touch_top_panel_arrows_visible(void);
+void set_sdl_touch_top_panel_arrows_visible(bool value);
+bool get_sdl_touch_top_panel_arrows_default_visible(void);
 bool get_sdl_touch_top_panel_default_open(void);
 void set_sdl_touch_top_panel_default_open(bool value);
 bool get_sdl_touch_top_panel_default_open_default(void);
-int get_sdl_touch_top_panel_button_count(void);
-void set_sdl_touch_top_panel_button_count(int count);
-int get_sdl_touch_top_panel_default_button_count(void);
-int get_sdl_touch_top_panel_tile_scale(void);
-void set_sdl_touch_top_panel_tile_scale(int scale);
-int get_sdl_touch_top_panel_default_tile_scale(void);
+float get_sdl_touch_top_panel_size(void);
+void set_sdl_touch_top_panel_size(float size);
+float get_sdl_touch_top_panel_default_size(void);
+int get_sdl_touch_top_panel_columns(void);
+void set_sdl_touch_top_panel_columns(int columns);
+int get_sdl_touch_top_panel_default_columns(void);
+int get_sdl_touch_top_panel_cell_count(void);
+void set_sdl_touch_top_panel_cell_count(int count);
+int get_sdl_touch_top_panel_default_cell_count(void);
+int get_sdl_touch_top_panel_rows(void);
+void set_sdl_touch_top_panel_rows(int rows);
+int get_sdl_touch_top_panel_default_rows(void);
 int get_sdl_touch_top_panel_binding(int index, bool long_press);
 void set_sdl_touch_top_panel_binding(int index, bool long_press, int binding);
 int get_sdl_touch_top_panel_default_binding(int index, bool long_press);
+bool sdl_ensure_main_menu_access(void);
 bool get_sdl_touch_swipe_enabled(void);
 void set_sdl_touch_swipe_enabled(bool value);
 int get_sdl_touch_swipe_binding(int dir);
@@ -3229,7 +3533,7 @@ int get_sdl_platform_max_main_view_scale(void);
 int get_sdl_terminal_menu_scale(void);
 void sdl_push_terminal_menu_scale(void);
 void sdl_pop_terminal_menu_scale(void);
-bool sdl_description_overlay_present(const byte* attrs, const char* chars, const byte* tattrs, const char* tchars, const byte* story, int width, int height, int target_cols, int scroll, bool interactive, int* out_visible_rows, int* out_max_scroll);
+bool sdl_description_overlay_present(const byte* attrs, const char* chars, const byte* tattrs, const char* tchars, const byte* story, const byte* health, int width, int height, int target_cols, int scroll, bool interactive, int* out_visible_rows, int* out_max_scroll);
 void sdl_description_overlay_clear(void);
 void sdl_request_redraw(void);
 void sdl_apply_story_font_state(bool active);
@@ -3237,6 +3541,12 @@ void sdl_apply_story_grid_state(bool grid);
 void sdl_apply_story_slot_state(int slot);
 void sdl_story_font_reset_state(void);
 void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_Color col);
+SDL_Texture* sdl_ui_text_texture(TTF_Font* font, cptr text, SDL_Color color,
+    int* out_width, int* out_height);
+SDL_Texture* sdl_ui_wrapped_text_texture(TTF_Font* font, cptr text,
+    int wrap_width, SDL_Color color, int* out_width, int* out_height);
+void sdl_ui_text_cache_clear(void);
+void sdl_ui_text_cache_clear_font(TTF_Font* font);
 void sdl_render_mono_utf8_glyph(TTF_Font* font, float cell_w, float cell_h, float origin_x, float origin_y, int x, int y, int cell_offset, int cell_span, const char* s, int len, SDL_Color col);
 void sdl_render_mono_utf8_text_cells(SDL_Texture* atlas, int atlas_cell_w, int atlas_cell_h, TTF_Font* font, float cell_w, float cell_h, float origin_x, int x, int y, int n, const char* s, SDL_Color col);
 void sdl_render_mono_utf8_text_cells_at(SDL_Texture* atlas, int atlas_cell_w, int atlas_cell_h, TTF_Font* font, float cell_w, float cell_h, float origin_x, float origin_y, int x, int y, int n, const char* s, SDL_Color col);
@@ -3246,6 +3556,8 @@ bool sdl_story_cell_is_text(byte a, char c);
 byte sdl_ui_text_fg_attr(byte attr);
 byte sdl_ui_text_bg_attr(byte attr);
 SDL_Color sdl_color_from_attr(byte attr);
+void sdl_render_health_bar_rect(const SDL_FRect* rect, byte level,
+    byte fill_attr);
 void sdl_fill_cell_span_with_attr(sdl_view* d, int x, int y, int n, byte attr);
 void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte* story_row, const char* row_chars, const byte* row_attr);
 void sdl_render_story_text_grid(sdl_view* d, TTF_Font* font, int x, int y, int n, const char* s, SDL_Color col);
@@ -3437,13 +3749,34 @@ bool sdl_song_menu_handle_hover_pointer(float x, float y);
 void sdl_question_menu_render(void);
 bool sdl_question_menu_handle_pointer(float x, float y, int action);
 bool sdl_question_menu_handle_hover_pointer(float x, float y);
+bool sdl_question_menu_handle_mouse_wheel(const SDL_MouseWheelEvent* wheel);
+void sdl_hint_quest_menu_render(void);
+bool sdl_hint_quest_menu_handle_event(const SDL_Event* ev);
+int sdl_hint_quest_menu_pending_timeout_ms(Uint64 now_ns);
+bool sdl_question_menu_handle_touch_down(float x, float y,
+    SDL_FingerID finger_id);
+bool sdl_question_menu_handle_touch_motion(float x, float y,
+    SDL_FingerID finger_id);
+bool sdl_question_menu_handle_touch_up(float x, float y,
+    SDL_FingerID finger_id);
+void sdl_question_menu_cancel_touch(void);
+void sdl_question_menu_set_scroll_offset_target(int* offset,
+    bool follow_highlight);
+bool sdl_question_menu_take_touch_scrolled(void);
+void sdl_question_menu_set_help(cptr text);
+bool sdl_question_menu_toggle_help(void);
 void sdl_question_menu_set_blocking_input(bool blocking);
 bool sdl_question_menu_blocks_input(void);
 bool sdl_question_menu_captures_pointer(void);
+void sdl_question_menu_clear_nonblocking(void);
 void sdl_question_menu_set_nonblocking(bool nonblocking);
+void sdl_question_menu_set_context_hint(void);
+void sdl_question_menu_clear_context_hint(void);
+bool sdl_question_menu_context_hint_active(void);
 void sdl_question_menu_set_timeout_ms(int ms);
 int sdl_question_menu_pending_timeout_ms(Uint64 now_ns);
 bool sdl_question_menu_flush_expired(Uint64 now_ns);
+void sdl_question_menu_add_button(int choice, cptr text, byte attr);
 bool sdl_map_grid_cell_rect(int y, int x, SDL_FRect* out);
 bool sdl_grid_question_queue(int map_y, int map_x);
 bool sdl_grid_question_take_command(int* command, int* dir);
@@ -3511,6 +3844,7 @@ bool sdl_welcome_touch_handle_pointer_down(float x, float y, SDL_FingerID finger
 bool sdl_welcome_touch_handle_pointer_motion(float x, float y, SDL_FingerID finger_id);
 bool sdl_welcome_touch_handle_pointer_up(float x, float y, SDL_FingerID finger_id);
 void sdl_welcome_touch_cancel_press(void);
+bool sdl_welcome_screen_cycle_intro(int direction);
 bool sdl_welcome_screen_handle_pointer_motion(float x, float y);
 bool sdl_pointer_activate_welcome_screen_at(float x, float y);
 bool sdl_pointer_activate_welcome_screen(void);
@@ -3742,21 +4076,22 @@ void sdl_touch_round_cancel_press(void);
 void sdl_touch_round_render(void);
 bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
     float* out_radius, float* out_inner_radius, SDL_Rect* out_clip);
-void sdl_touch_round_render_target_square(int dir, bool ctrl);
+void sdl_touch_round_render_target_square(int dir, bool ctrl, bool run);
 int sdl_touch_profile_normalized(int profile);
 void sdl_touch_hidden_indicator_render(void);
 bool sdl_touch_hidden_indicator_handle_pointer_down(float x, float y, bool touch);
 bool sdl_touch_top_panel_layout_visible(void);
 void sdl_touch_top_panel_set_open(bool open);
-int sdl_touch_top_panel_button_count_normalized(int count);
-int sdl_touch_top_panel_tile_scale_normalized(int scale);
+float sdl_touch_top_panel_size_normalized(float size);
+int sdl_touch_top_panel_cell_count_normalized(int count);
+int sdl_touch_top_panel_columns_normalized(int columns);
+int sdl_touch_top_panel_rows_normalized(int rows);
+int sdl_touch_top_panel_reserved_stack_height(const SDL_Rect* screen);
 bool sdl_touch_top_panel_current_anchor(SDL_Rect* out_screen,
     SDL_Rect* out_anchor, enum pane_placement* out_where);
 bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
     const SDL_Rect* anchor, enum pane_placement where,
     SDL_FRect* button_rects, SDL_FRect* out_panel);
-bool sdl_touch_top_panel_compute_layout_for_screen(
-    const SDL_Rect* screen, SDL_FRect* button_rects, SDL_FRect* out_panel);
 bool sdl_touch_top_panel_compute_layout(SDL_FRect* button_rects,
     SDL_FRect* out_panel);
 bool sdl_touch_top_panel_compute_layout_for_display(SDL_FRect* button_rects,
@@ -3765,11 +4100,14 @@ void sdl_touch_top_panel_render_buttons(
     const SDL_FRect* button_rects);
 bool sdl_touch_top_panel_point_to_slot(float x, float y, int* out_slot);
 bool sdl_touch_top_panel_pointer_claims_point(float x, float y);
+bool sdl_touch_top_panel_handle_secondary_pointer(float x, float y);
+bool sdl_touch_top_panel_handle_description_hover(float x, float y);
+bool sdl_touch_top_panel_handle_description_pointer(float x, float y);
 void sdl_touch_top_panel_render(void);
 bool sdl_touch_top_panel_handle_pointer_down(float x, float y,
     SDL_FingerID finger_id);
 bool sdl_touch_top_panel_handle_pointer_motion(float x, float y,
-    SDL_FingerID finger_id);
+    bool mouse, SDL_FingerID finger_id);
 bool sdl_touch_top_panel_handle_pointer_up(float x, float y,
     SDL_FingerID finger_id);
 void sdl_touch_top_panel_cancel_press(void);
@@ -3807,6 +4145,8 @@ bool sdl_layout_matches_supporting_pane_visibility(void);
 bool sdl_status_pane_current_rect(SDL_Rect* out_rect,
     enum pane_placement* out_where);
 void sdl_status_pane_render(void);
+bool sdl_status_depth_pane_current_rect(SDL_FRect* out);
+void sdl_status_depth_pane_render(void);
 void sdl_narrative_banner_render(void);
 void sdl_present_if_needed(sdl_view* d);
 int sdl_build_active_pane_config(struct pane_config* active, bool include_side,
@@ -3875,6 +4215,9 @@ void sdl_reset_config_to_resolution_defaults(int screen_width,
     int screen_height);
 bool sdl_prompt_reset_sdl_defaults(const char* issue_summary,
     int screen_width, int screen_height);
+#if SIL_SDL_MOBILE_BUILD
+bool sdl_prompt_mobile_startup_portrait_mode(void);
+#endif
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD
 bool sdl_is_desktop_handheld_resolution(int width, int height);
 sdl_startup_device_class sdl_prompt_desktop_startup_input_device(

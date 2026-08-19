@@ -39,11 +39,25 @@ const struct pane_config default_pane_config[] = {
     {.pane = PANE_COMBAT, .where = PLACE_BOTTOM_LEFT, .enabled = true,
         .rect.rows = PANE_COMBAT_OVERLAY_ROWS,
         .rect.cols = PANE_COMBAT_OVERLAY_COLS},
-    {.pane = PANE_DEPTH, .where = PLACE_TOP_RIGHT, .enabled = true,
+#if SIL_SDL_MOBILE_BUILD
+    {.pane = PANE_DEPTH, .where = PLACE_BOTTOM_RIGHT, .enabled = false,
+#else
+    {.pane = PANE_DEPTH, .where = PLACE_BOTTOM_RIGHT, .enabled = true,
+#endif
         .rect.rows = 4, .rect.cols = 12},
     {.pane = PANE_ROLLS, .where = PLACE_TOP_RIGHT, .enabled = true,
         .rect.rows = SDL_OVERLAY_LOG_PANE_DEFAULT_ROWS},
-    {.pane = PANE_STATUS, .where = PLACE_BOTTOM_RIGHT, .enabled = true,
+#if SIL_SDL_MOBILE_BUILD
+    {.pane = PANE_STATUS, .where = PLACE_TOP_CENTER, .enabled = false,
+#else
+    {.pane = PANE_STATUS, .where = PLACE_TOP_CENTER, .enabled = true,
+#endif
+        .rect.rows = 1, .rect.cols = 24},
+#if SIL_SDL_MOBILE_BUILD
+    {.pane = PANE_STATUS_DEPTH, .where = PLACE_BOTTOM_RIGHT, .enabled = true,
+#else
+    {.pane = PANE_STATUS_DEPTH, .where = PLACE_BOTTOM_RIGHT, .enabled = false,
+#endif
         .rect.rows = 1, .rect.cols = 24},
     {.pane = PANE_DESCRIPTION, .where = PLACE_BOTTOM_CENTER, .enabled = true,
         .rect.rows = 80, .rect.cols = 160},
@@ -67,11 +81,13 @@ const int default_pane_config_count = sizeof(default_pane_config) / sizeof(struc
 struct pane_config pane_config[MAX_PANE_CONFIGS];
 int pane_config_count = 0;
 struct sdl_pane_profile g_pane_profiles[SDL_PANE_PROFILE_COUNT];
-int g_platform_max_main_view_scale[SDL_PANE_PROFILE_COUNT] = {
+int g_platform_max_main_view_scale[SDL_MIN_TERMINAL_MODE_COUNT] = {
     SDL_MAIN_VIEW_PREFERRED_MIN_SCALE, SDL_MAIN_VIEW_PREFERRED_MIN_SCALE
 };
 sdl_startup_device_class g_startup_device_class =
     SDL_STARTUP_DEVICE_DESKTOP;
+bool g_android_controller_present = false;
+bool g_mobile_touch_tablet = false;
 bool g_touch_tutorial_requested_from_settings = false;
 bool g_mouse_tutorial_requested_from_settings = false;
 bool g_character_wheel_tutorial_requested_from_settings = false;
@@ -110,7 +126,7 @@ int sdl_main_view_scale_floor_for_mode(int mode)
 
     if (!sdl_min_terminal_mode_is_valid(mode))
         mode = SDL_MIN_TERMINAL_NORMAL;
-    if (mode >= SDL_PANE_PROFILE_COUNT)
+    if (mode >= SDL_MIN_TERMINAL_MODE_COUNT)
         mode = SDL_MIN_TERMINAL_NORMAL;
 
     platform_max = g_platform_max_main_view_scale[mode];
@@ -126,7 +142,7 @@ int sdl_platform_max_main_view_scale_for_mode(int mode)
 
     if (!sdl_min_terminal_mode_is_valid(mode))
         mode = SDL_MIN_TERMINAL_NORMAL;
-    if (mode >= SDL_PANE_PROFILE_COUNT)
+    if (mode >= SDL_MIN_TERMINAL_MODE_COUNT)
         mode = SDL_MIN_TERMINAL_NORMAL;
 
     scale = g_platform_max_main_view_scale[mode];
@@ -165,42 +181,197 @@ int sdl_clamp_main_view_scale_platform_bounds(int scale, int mode)
     return scale;
 }
 
-void sdl_store_active_pane_profile(int mode)
+static int sdl_pane_profile_index_for_mode(int mode)
 {
     if (!sdl_min_terminal_mode_is_valid(mode))
-        return;
-    if (mode >= SDL_PANE_PROFILE_COUNT)
+        return -1;
+
+#if SIL_SDL_MOBILE_BUILD
+    return SDL_PANE_PROFILE_INDEX(config.mobile_portrait_mode
+            ? SDL_PANE_ORIENTATION_PORTRAIT
+            : SDL_PANE_ORIENTATION_LANDSCAPE,
+        mode);
+#else
+    return SDL_PANE_PROFILE_INDEX(SDL_PANE_ORIENTATION_LANDSCAPE, mode);
+#endif
+}
+
+void sdl_log_pane_sync_display_filter_from_config(void);
+
+static void sdl_capture_pane_profile(struct sdl_pane_profile* profile)
+{
+    if (!profile)
         return;
 
-    g_pane_profiles[mode].main_view_scale = config.main_view_scale;
-    g_pane_profiles[mode].aux_view_font_size = config.aux_view_font_size;
-    g_pane_profiles[mode].enable_right_panes = config.enable_right_panes;
-    g_pane_profiles[mode].enable_bottom_panes = config.enable_bottom_panes;
-    sdl_copy_pane_configs(g_pane_profiles[mode].pane_configs,
-        &g_pane_profiles[mode].pane_count, pane_config, pane_config_count);
+    profile->main_view_scale = config.main_view_scale;
+    profile->aux_view_font_size = config.aux_view_font_size;
+    profile->enable_right_panes = config.enable_right_panes;
+    profile->enable_bottom_panes = config.enable_bottom_panes;
+    profile->left_overlays_touch_screen_edge =
+        config.left_overlays_touch_screen_edge;
+    profile->show_overlay_log_border = config.show_overlay_log_border;
+    profile->show_main_menu_button = config.show_main_menu_button;
+    profile->left_panel_expanded_on_launch =
+        config.left_panel_expanded_on_launch;
+    profile->left_panel_compact_mode = config.left_panel_compact_mode;
+    profile->left_panel_compact_health_bar =
+        config.left_panel_compact_health_bar;
+    profile->quick_touch_buttons_on_left =
+        config.quick_touch_buttons_on_left;
+    profile->log_pane_display_filter = config.log_pane_display_filter;
+    profile->dice_roll_lock_ms = config.dice_roll_lock_ms;
+    profile->dice_roll_overlay_ms = config.dice_roll_overlay_ms;
+    profile->popup_notification_ms = config.popup_notification_ms;
+    profile->touch_top_panel_arrows_visible =
+        config.touch_top_panel_arrows_visible;
+    profile->touch_top_panel_default_open =
+        config.touch_top_panel_default_open;
+    profile->touch_top_panel_cell_count = config.touch_top_panel_cell_count;
+    profile->touch_top_panel_rows = config.touch_top_panel_rows;
+    profile->touch_top_panel_size = config.touch_top_panel_size;
+    memcpy(profile->touch_top_panel_bindings,
+        config.touch_top_panel_bindings,
+        sizeof(profile->touch_top_panel_bindings));
+    memcpy(profile->touch_top_panel_long_bindings,
+        config.touch_top_panel_long_bindings,
+        sizeof(profile->touch_top_panel_long_bindings));
+    sdl_copy_pane_configs(profile->pane_configs,
+        &profile->pane_count, pane_config, pane_config_count);
+}
+
+void sdl_store_active_pane_profile(int mode)
+{
+    int profile_index = sdl_pane_profile_index_for_mode(mode);
+
+    if (profile_index < 0 || profile_index >= SDL_PANE_PROFILE_COUNT)
+        return;
+
+    sdl_capture_pane_profile(&g_pane_profiles[profile_index]);
+
+#if SIL_SDL_MOBILE_BUILD
+    /* Orientation profiles own pane and menu layout, but the configured main
+     * view scale is one display setting.  Keep it continuous when rotating. */
+    {
+        int other_orientation = config.mobile_portrait_mode
+            ? SDL_PANE_ORIENTATION_LANDSCAPE
+            : SDL_PANE_ORIENTATION_PORTRAIT;
+        int other_index = SDL_PANE_PROFILE_INDEX(other_orientation, mode);
+
+        g_pane_profiles[other_index].main_view_scale = config.main_view_scale;
+    }
+#endif
 }
 
 void sdl_apply_stored_pane_profile(int mode)
 {
+    int profile_index = sdl_pane_profile_index_for_mode(mode);
+    const struct sdl_pane_profile* profile;
+
     if (!sdl_min_terminal_mode_is_valid(mode))
         return;
-    if (mode >= SDL_PANE_PROFILE_COUNT)
+    if (profile_index < 0 || profile_index >= SDL_PANE_PROFILE_COUNT)
         return;
 
-    config.main_view_scale = g_pane_profiles[mode].main_view_scale;
+    profile = &g_pane_profiles[profile_index];
+
+    config.main_view_scale = profile->main_view_scale;
     config.main_view_scale = sdl_clamp_main_view_scale_platform_bounds(
         config.main_view_scale, mode);
-    config.aux_view_font_size = g_pane_profiles[mode].aux_view_font_size;
-    config.enable_right_panes = g_pane_profiles[mode].enable_right_panes;
-    config.enable_bottom_panes = g_pane_profiles[mode].enable_bottom_panes;
+    config.aux_view_font_size = profile->aux_view_font_size;
+    config.enable_right_panes = profile->enable_right_panes;
+    config.enable_bottom_panes = profile->enable_bottom_panes;
+    config.left_overlays_touch_screen_edge =
+        profile->left_overlays_touch_screen_edge;
+    config.show_overlay_log_border = profile->show_overlay_log_border;
+    config.show_main_menu_button = profile->show_main_menu_button;
+    config.left_panel_expanded_on_launch =
+        profile->left_panel_expanded_on_launch;
+    config.left_panel_compact_mode = profile->left_panel_compact_mode;
+    config.left_panel_compact_health_bar =
+        profile->left_panel_compact_health_bar;
+    config.quick_touch_buttons_on_left =
+        profile->quick_touch_buttons_on_left;
+    config.log_pane_display_filter = profile->log_pane_display_filter;
+    config.dice_roll_lock_ms = profile->dice_roll_lock_ms;
+    config.dice_roll_overlay_ms = profile->dice_roll_overlay_ms;
+    config.popup_notification_ms = profile->popup_notification_ms;
+    config.touch_top_panel_arrows_visible =
+        profile->touch_top_panel_arrows_visible;
+    config.touch_top_panel_default_open =
+        profile->touch_top_panel_default_open;
+    config.touch_top_panel_cell_count = profile->touch_top_panel_cell_count;
+    config.touch_top_panel_rows = profile->touch_top_panel_rows;
+    config.touch_top_panel_size = profile->touch_top_panel_size;
+    memcpy(config.touch_top_panel_bindings,
+        profile->touch_top_panel_bindings,
+        sizeof(config.touch_top_panel_bindings));
+    memcpy(config.touch_top_panel_long_bindings,
+        profile->touch_top_panel_long_bindings,
+        sizeof(config.touch_top_panel_long_bindings));
+    sdl_log_pane_sync_display_filter_from_config();
+    g_left_panel_pane_expanded = config.left_panel_expanded_on_launch;
+    g_touch_top_panel_open = !config.touch_top_panel_arrows_visible
+        || config.touch_top_panel_default_open;
     sdl_copy_pane_configs(pane_config, &pane_config_count,
-        g_pane_profiles[mode].pane_configs, g_pane_profiles[mode].pane_count);
+        profile->pane_configs, profile->pane_count);
+    if (sdl_ensure_main_menu_access())
+        sdl_capture_pane_profile(&g_pane_profiles[profile_index]);
 }
 
 void sdl_seed_all_pane_profiles_from_active(void)
 {
-    for (int mode = 0; mode < SDL_PANE_PROFILE_COUNT; mode++)
-        sdl_store_active_pane_profile(mode);
+    struct sdl_pane_profile base;
+
+    memset(&base, 0, sizeof(base));
+    sdl_capture_pane_profile(&base);
+
+    for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
+        int landscape = SDL_PANE_PROFILE_INDEX(
+            SDL_PANE_ORIENTATION_LANDSCAPE, mode);
+        int portrait = SDL_PANE_PROFILE_INDEX(
+            SDL_PANE_ORIENTATION_PORTRAIT, mode);
+
+        g_pane_profiles[landscape] = base;
+        g_pane_profiles[landscape].touch_top_panel_size =
+            (float)g_pane_profiles[landscape].main_view_scale;
+        g_pane_profiles[portrait] = base;
+        sdl_pane_profile_apply_portrait_defaults(
+            &g_pane_profiles[portrait]);
+    }
+}
+
+void sdl_apply_mobile_tablet_default_profiles(void)
+{
+    if (!g_mobile_touch_tablet
+        || g_startup_device_class != SDL_STARTUP_DEVICE_MOBILE_TOUCH)
+    {
+        return;
+    }
+
+    /*
+     * Portrait always exposes the wheel at runtime, but landscape obeys this
+     * persisted switch.  Keep it enabled in the tablet default scheme or the
+     * corner-touch profile claims most landscape map squares before tap
+     * movement can see them.
+     */
+    config.touch_profile = SDL_TOUCH_PROFILE_ROUND_WHEEL;
+    config.touch_movement_mode = SDL_TOUCH_MOVEMENT_ON;
+    config.touch_round_movement_enabled = true;
+    config.touch_zone_overlay_mode = SDL_TOUCH_ZONE_OVERLAY_OFF;
+    config.mobile_starting_zoom_offset =
+        SDL_MOBILE_TABLET_STARTING_ZOOM_OFFSET_DEFAULT;
+
+    for (int orientation = 0;
+         orientation < SDL_PANE_ORIENTATION_COUNT;
+         orientation++)
+    {
+        for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
+            int profile_index = SDL_PANE_PROFILE_INDEX(orientation, mode);
+
+            sdl_pane_profile_apply_tablet_defaults(
+                &g_pane_profiles[profile_index], orientation);
+        }
+    }
 }
 
 int sdl_pane_config_index_in_array(const struct pane_config* configs,
@@ -354,27 +525,6 @@ bool sdl_normalize_unified_log_pane_config(struct pane_config* configs,
         changed = true;
     }
 
-    if (rolls_idx >= 0) {
-        int depth_idx = sdl_pane_config_index_in_array(configs, *config_count,
-            PANE_DEPTH);
-
-        if (depth_idx >= 0 && rolls_idx < depth_idx
-            && configs[depth_idx].where == PLACE_TOP_RIGHT
-            && configs[rolls_idx].where == PLACE_TOP_RIGHT
-            && configs[rolls_idx].enabled
-            && configs[rolls_idx].rect.rows == SDL_OVERLAY_LOG_PANE_DEFAULT_ROWS
-            && configs[rolls_idx].rect.cols == 0
-            && configs[rolls_idx].ratio == 0.0f)
-        {
-            struct pane_config rolls = configs[rolls_idx];
-
-            memmove(&configs[rolls_idx], &configs[rolls_idx + 1],
-                sizeof(configs[0]) * (depth_idx - rolls_idx));
-            configs[depth_idx] = rolls;
-            changed = true;
-        }
-    }
-
     return changed;
 }
 
@@ -387,55 +537,30 @@ void sdl_normalize_unified_log_pane_profiles(bool enable_added_log)
     }
 }
 
-bool sdl_screen_is_wide_for_pane_defaults(int screen_width, int screen_height)
+enum pane_placement sdl_default_status_pane_placement(
+    const struct pane_config* configs, int config_count)
 {
-    /* "Wide" means at least a 16:10 aspect ratio. */
-    return screen_width > 0 && screen_height > 0
-        && (long)screen_width * 10 >= (long)screen_height * 16;
-}
-
-/* Adapt the default log/depth layout to the screen shape. Wide screens show the
- * combat log as the top/bottom-right overlay (PANE_ROLLS) and drop the depth
- * readout into the bottom-right corner; narrower screens dock the log along the
- * bottom (PANE_LOG) and keep depth at the top-right. */
-void sdl_apply_screen_aspect_pane_defaults(struct pane_config* configs,
-    int* config_count, int screen_width, int screen_height)
-{
-    bool wide;
-    int depth_idx;
-    int rolls_idx;
-    int log_idx;
-
-    if (!configs || !config_count)
-        return;
-
-    wide = sdl_screen_is_wide_for_pane_defaults(screen_width, screen_height);
-
-    depth_idx = sdl_pane_config_index_in_array(configs, *config_count,
-        PANE_DEPTH);
-    rolls_idx = sdl_pane_config_index_in_array(configs, *config_count,
+    int rolls_idx = sdl_pane_config_index_in_array(configs, config_count,
         PANE_ROLLS);
-    log_idx = sdl_pane_config_index_in_array(configs, *config_count, PANE_LOG);
+    int log_idx = sdl_pane_config_index_in_array(configs, config_count,
+        PANE_LOG);
 
-    if (depth_idx >= 0)
-        configs[depth_idx].where = wide ? PLACE_BOTTOM_RIGHT : PLACE_TOP_RIGHT;
-    if (rolls_idx >= 0)
-        configs[rolls_idx].enabled = wide;
-    if (log_idx >= 0)
-        configs[log_idx].enabled = !wide;
-}
-
-void sdl_apply_screen_aspect_pane_default_profiles(int screen_width,
-    int screen_height)
-{
-    for (int mode = 0; mode < SDL_PANE_PROFILE_COUNT; mode++) {
-        sdl_apply_screen_aspect_pane_defaults(
-            g_pane_profiles[mode].pane_configs,
-            &g_pane_profiles[mode].pane_count, screen_width, screen_height);
+    /* Keep the status readout away from the depth readout in the top-right.
+     * The overlay log owns that corner on wide layouts, so status sits at the
+     * top centre; with the desktop bottom log, status uses bottom-right. */
+    if (rolls_idx >= 0 && configs[rolls_idx].enabled
+        && configs[rolls_idx].where == PLACE_TOP_RIGHT)
+    {
+        return PLACE_TOP_CENTER;
     }
-}
+    if (log_idx >= 0 && configs[log_idx].enabled
+        && pane_placement_is_bottom(configs[log_idx].where))
+    {
+        return PLACE_BOTTOM_RIGHT;
+    }
 
-void sdl_log_pane_sync_display_filter_from_config(void);
+    return PLACE_TOP_CENTER;
+}
 
 int sdl_default_main_scale_for_screen_size(int screen_width,
     int screen_height, int mode)
@@ -464,7 +589,7 @@ int sdl_default_main_scale_for_screen_size(int screen_width,
 void sdl_store_platform_max_main_view_scales(int screen_width,
     int screen_height)
 {
-    for (int mode = 0; mode < SDL_PANE_PROFILE_COUNT; mode++)
+    for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++)
     {
         g_platform_max_main_view_scale[mode] =
             sdl_default_main_scale_for_screen_size(screen_width, screen_height,
@@ -509,7 +634,7 @@ void sdl_refresh_platform_max_main_view_scales_for_current_layout(
 
     old_normal = g_platform_max_main_view_scale[SDL_MIN_TERMINAL_NORMAL];
     old_compact = g_platform_max_main_view_scale[SDL_MIN_TERMINAL_COMPACT];
-    for (int mode = 0; mode < SDL_PANE_PROFILE_COUNT; mode++)
+    for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++)
     {
         g_platform_max_main_view_scale[mode] =
             sdl_default_main_scale_for_screen_size(screen_w, screen_h, mode);
@@ -536,24 +661,64 @@ void sdl_refresh_platform_max_main_view_scales_for_current_layout(
 void sdl_reset_config_to_resolution_defaults(int screen_width,
     int screen_height)
 {
+    int default_main_scales[SDL_MIN_TERMINAL_MODE_COUNT];
+
+#if SIL_SDL_MOBILE_BUILD
+    /* A phone's current window can be portrait, but main view scale is a
+     * shared display setting across orientations.  Derive defaults from the
+     * device's landscape-sized bounds so resetting in portrait does not pick
+     * a smaller scale. */
+    if (screen_width < screen_height) {
+        int tmp = screen_width;
+
+        screen_width = screen_height;
+        screen_height = tmp;
+    }
+#endif
+    for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
+        default_main_scales[mode] =
+            sdl_default_main_scale_for_screen_size(screen_width,
+                screen_height, mode);
+    }
+
     (void)sdl_config_set_defaults_for_resolution(&config, pane_config,
         &pane_config_count, MAX_PANE_CONFIGS, screen_width, screen_height);
 
-    config.main_view_scale = sdl_default_main_scale_for_screen_size(screen_width,
-        screen_height, config.min_terminal_mode);
+    config.main_view_scale = default_main_scales[config.min_terminal_mode];
+    config.terminal_menu_scale_offset =
+        SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
+            config.main_view_scale);
     config.aux_view_font_size = 0;
     config.enable_right_panes = false;
+#if SIL_SDL_MOBILE_BUILD
+    config.enable_bottom_panes = false;
+#else
     config.enable_bottom_panes = true;
+#endif
 
     (void)sdl_normalize_unified_log_pane_config(pane_config,
         &pane_config_count, true);
     sdl_seed_all_pane_profiles_from_active();
+    for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
+        int landscape = SDL_PANE_PROFILE_INDEX(
+            SDL_PANE_ORIENTATION_LANDSCAPE, mode);
+        int portrait = SDL_PANE_PROFILE_INDEX(
+            SDL_PANE_ORIENTATION_PORTRAIT, mode);
+
+        g_pane_profiles[landscape].main_view_scale =
+            default_main_scales[mode];
+        g_pane_profiles[landscape].touch_top_panel_size =
+            (float)default_main_scales[mode];
+        g_pane_profiles[portrait].main_view_scale =
+            default_main_scales[mode];
+    }
     sdl_log_pane_sync_display_filter_from_config();
 
-    log_info("Default main view scale: %d for %dx%d minimum terminal (%s), selected without side panes; default log pane rows=%d",
+    log_info("Default main view scales: normal=%d compact=%d for %dx%d; active=%d (%s), selected without side panes; default log pane rows=%d",
+        default_main_scales[SDL_MIN_TERMINAL_NORMAL],
+        default_main_scales[SDL_MIN_TERMINAL_COMPACT],
+        screen_width, screen_height,
         config.main_view_scale,
-        (config.min_terminal_mode == SDL_MIN_TERMINAL_COMPACT) ? 50 : 80,
-        (config.min_terminal_mode == SDL_MIN_TERMINAL_COMPACT) ? 18 : 24,
         (config.min_terminal_mode == SDL_MIN_TERMINAL_COMPACT) ? "compact" : "normal",
         SDL_LOG_PANE_DEFAULT_ROWS);
 }
@@ -637,6 +802,9 @@ mono_font_prewarm_request
     g_mono_font_prewarm_queue[SDL_MONO_FONT_PREWARM_QUEUE_MAX];
 int g_mono_font_prewarm_count = 0;
 mono_font_prewarm_job g_mono_font_prewarm_job;
+Uint64 g_mono_font_atlas_generation = 1;
+Uint64 g_story_font_generation = 1;
+Uint64 g_sdl_present_generation = 1;
 SDL_Rect g_pane_rects[PANE_MAX];
 SDL_Texture* g_left_panel_canvas = NULL;
 int g_left_panel_canvas_w = 0;
@@ -645,6 +813,7 @@ bool g_left_panel_debug_dump_rows = false;
 bool g_active_side_panes = true;
 bool g_active_bottom_panes = true;
 int g_description_overlay_main_anchor_depth = 0;
+int g_description_overlay_full_main_anchor_depth = 0;
 bool g_supporting_panes_layout_visible = true;
 int g_inventory_pane_layout_rows = -1;
 int g_supply_pane_layout_rows = -1;
@@ -668,6 +837,7 @@ int g_default_gamepad_shoulder_combo_binding = GAMEPAD_BIND_NONE;
 bool g_default_gamepad_bindings_ready = false;
 bool g_default_mouse_enabled = true;
 int g_default_mouse_movement_mode = SDL_MOUSE_MOVEMENT_ON;
+bool g_default_mouse_tile_pointer = false;
 bool g_default_mouse_settings_ready = false;
 int g_default_touch_pane_bindings[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_BUTTON_COUNT];
 char g_default_touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
@@ -682,11 +852,11 @@ bool g_default_touch_round_movement_enabled = false;
 int g_default_touch_zone_center_bindings[SDL_TOUCH_ZONE_CENTER_BINDING_COUNT];
 int g_default_touch_corner_up_down_side = SDL_TOUCH_CORNER_UP_DOWN_RIGHT;
 int g_default_touch_corner_action_bindings[SDL_TOUCH_CORNER_ACTION_BINDING_COUNT];
-int g_default_touch_top_panel_mode = SDL_TOUCH_TOP_PANEL_MODE_SHORT;
+bool g_default_touch_top_panel_arrows_visible = true;
 bool g_default_touch_top_panel_default_open = false;
-int g_default_touch_top_panel_button_count =
-    SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_DEFAULT;
-int g_default_touch_top_panel_tile_scale = SDL_TOUCH_TOP_PANEL_TILE_SCALE_DEFAULT;
+float g_default_touch_top_panel_size = SDL_TOUCH_TOP_PANEL_SIZE_DEFAULT;
+int g_default_touch_top_panel_cell_count = SDL_TOUCH_TOP_PANEL_CELL_COUNT_DEFAULT;
+int g_default_touch_top_panel_rows = SDL_TOUCH_TOP_PANEL_ROWS_DEFAULT;
 int g_default_touch_top_panel_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
 int g_default_touch_top_panel_long_bindings[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
 bool g_default_touch_thumb_enabled = true;
@@ -741,7 +911,7 @@ sdl_character_sheet_screen_state g_sdl_character_sheet_screen = {
     .context = SDL_CHARACTER_SHEET_HIDDEN,
     .focus_choice = -1,
     .selected_index = -1,
-    .hover_choice = -1
+    .hover_choice = SDL_CHAR_SHEET_NO_HOVER
 };
 touch_zone_press_state g_touch_zone_press;
 touch_top_panel_press_state g_touch_top_panel_press;

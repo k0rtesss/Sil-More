@@ -1,6 +1,7 @@
 /* File: monster-lore.c */
 
 #include "monster-internal.h"
+#include "meta_state.h"
 
 /*
  * Pronoun arrays, by gender.
@@ -111,7 +112,12 @@ static void monster_lore_learn_live_song_duels(
 static void describe_monster_desc(int r_idx)
 {
     const monster_race* r_ptr = &r_info[r_idx];
+    const meta_monster_record* record;
+    const char* reason_text;
     char buf[2048];
+    char name_buf[96];
+
+    meta_monster_apply_runtime_overrides();
 
     /* Simple method */
     SDL_strlcpy(buf, r_text + r_ptr->text, sizeof(buf));
@@ -119,6 +125,31 @@ static void describe_monster_desc(int r_idx)
     /* Dump it */
     text_out(buf);
     text_out("\n");
+
+    reason_text = meta_monster_revenge_reason_for_race((u16b)r_idx);
+    if (reason_text)
+    {
+        text_out("A doom lies on this foe for you.  ");
+        text_out(reason_text);
+        text_out("  ");
+    }
+    else if (meta_monster_is_revenge_marked_race((u16b)r_idx))
+    {
+        text_out("A doom lies on this foe, and vengeance remembers its name.  ");
+    }
+
+    record = meta_monster_find_record_for_race((u16b)r_idx);
+    if (record && record->rank > 0 && record->kill_memory_count > 0)
+    {
+        const meta_monster_kill_memory* memory = &record->kills[0];
+
+        monster_desc_race(name_buf, sizeof(name_buf), r_idx);
+        text_out(format("%s slew %s in the deeps at %d feet",
+            name_buf, memory->character_name, memory->depth * 50));
+        if (memory->cause[0])
+            text_out(format(" by %s", memory->cause));
+        text_out(", and the shadow of that death clings to it.  ");
+    }
 }
 
 static void describe_monster_kills(int r_idx, const monster_lore* l_ptr)

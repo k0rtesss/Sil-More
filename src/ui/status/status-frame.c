@@ -265,15 +265,31 @@ static int pane_log_display_entry_compare_newest_first(
 }
 
 static int pane_log_display_collect_entries(
-    pane_log_display_entry* entries, int max_entries, int filter)
+    pane_log_display_entry* entries, int max_entries, int visible_limit,
+    int filter)
 {
     int count = 0;
+    int combat_count = 0;
+
+    if (!entries || max_entries <= 0 || visible_limit <= 0)
+        return 0;
+
+    /*
+     * Each entry consumes at least one pane row, so entries older than the
+     * newest visible_limit items can never be drawn.  Take that many newest
+     * candidates from each already-chronological source, then sort only those
+     * candidates together.  Previously this rebuilt and sorted as many as
+     * 7,098 records on every message or combat-roll update for a five-row pane.
+     */
+    if (visible_limit > max_entries / 2)
+        visible_limit = max_entries / 2;
 
     if (pane_log_filter_includes_messages(filter))
     {
         s16b num = message_num();
 
-        for (s16b age = 0; (age < num) && (count < max_entries); age++)
+        for (s16b age = 0; (age < num) && (age < visible_limit)
+             && (count < max_entries); age++)
         {
             entries[count].kind = PANE_LOG_DISPLAY_MESSAGE;
             entries[count].sequence = message_sequence(age);
@@ -290,8 +306,13 @@ static int pane_log_display_collect_entries(
 
     if (pane_log_filter_includes_combat(filter))
     {
-        for (int r = 0; (r < combat_number) && (count < max_entries)
-             && (r < MAX_COMBAT_ROLLS); r++)
+        int current_rolls = combat_number;
+
+        if (current_rolls > MAX_COMBAT_ROLLS)
+            current_rolls = MAX_COMBAT_ROLLS;
+
+        for (int r = current_rolls - 1; (r >= 0) && (count < max_entries)
+             && (combat_count < visible_limit); r--)
         {
             combat_roll* roll = &combat_rolls[0][r];
 
@@ -308,10 +329,11 @@ static int pane_log_display_collect_entries(
             entries[count].roll_idx = r;
             entries[count].roll = roll;
             count++;
+            combat_count++;
         }
 
-        for (int h = 0; (h < combat_history_count) && (count < max_entries);
-             h++)
+        for (int h = 0; (h < combat_history_count) && (count < max_entries)
+             && (combat_count < visible_limit); h++)
         {
             int hist_idx =
                 (combat_history_head - h + MAX_COMBAT_HISTORY)
@@ -322,7 +344,8 @@ static int pane_log_display_collect_entries(
             if (rolls > MAX_COMBAT_ROLLS)
                 rolls = MAX_COMBAT_ROLLS;
 
-            for (int r = 0; (r < rolls) && (count < max_entries); r++)
+            for (int r = rolls - 1; (r >= 0) && (count < max_entries)
+                 && (combat_count < visible_limit); r--)
             {
                 combat_roll* roll = &round->rolls[r];
 
@@ -339,6 +362,7 @@ static int pane_log_display_collect_entries(
                 entries[count].roll_idx = r;
                 entries[count].roll = roll;
                 count++;
+                combat_count++;
             }
         }
     }
@@ -346,7 +370,7 @@ static int pane_log_display_collect_entries(
     qsort(entries, count, sizeof(pane_log_display_entry),
         pane_log_display_entry_compare_newest_first);
 
-    return count;
+    return (count < visible_limit) ? count : visible_limit;
 }
 
 static void display_messages_in_pane(void)
@@ -638,7 +662,7 @@ static void display_combined_log_in_pane(int filter)
         avail = 1;
 
     count = pane_log_display_collect_entries(pane_log_display_entries,
-        PANE_LOG_DISPLAY_MAX_ENTRIES, filter);
+        PANE_LOG_DISPLAY_MAX_ENTRIES, h, filter);
 
     row = h - 1;
     for (int i = 0; (i < count) && (row >= 0); i++)
@@ -875,7 +899,19 @@ static void fix_monster(void)
 
         /* Display monster race info */
         if (p_ptr->monster_race_idx)
-            display_roff(p_ptr->monster_race_idx, NULL);
+        {
+            monster_type* m_ptr = NULL;
+
+            if (p_ptr->health_who > 0 && p_ptr->health_who < mon_max
+                && mon_list[p_ptr->health_who].r_idx
+                && mon_list[p_ptr->health_who].ml
+                && mon_list[p_ptr->health_who].r_idx
+                    == p_ptr->monster_race_idx)
+            {
+                m_ptr = &mon_list[p_ptr->health_who];
+            }
+            display_roff(p_ptr->monster_race_idx, m_ptr);
+        }
 
         /* Fresh */
         Term_fresh();

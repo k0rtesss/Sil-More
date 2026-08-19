@@ -572,18 +572,20 @@ extern void ident_resist(u32b flag)
         /* Skip non-objects */
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         /* Extract the item flags */
         object_flags(o_ptr, &f1, &f2, &f3);
 
         {
             bool is_quiver1 = (i == INVEN_QUIVER1);
-            bool is_quiver2 = (i == INVEN_QUIVER2);
+            bool is_belt = (i == INVEN_BELT);
             bool is_throwing_item = player_can_treat_as_throwing_flags(o_ptr, f3);
 
             if (is_quiver1)
                 continue;
-            if (is_quiver2 && !is_throwing_item)
+            if (is_belt && !is_throwing_item)
                 continue;
         }
 
@@ -759,6 +761,8 @@ extern void ident_passive(void)
         /* Skip non-objects */
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         /* Extract the item flags */
         object_flags(o_ptr, &f1, &f2, &f3);
@@ -842,6 +846,8 @@ extern void ident_see_invisible(const monster_type* m_ptr)
         /* Skip non-objects */
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         /* Extract the item flags */
         object_flags(o_ptr, &f1, &f2, &f3);
@@ -909,6 +915,8 @@ extern void ident_haunted(void)
         /* Skip non-objects */
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         /* Extract the item flags */
         object_flags(o_ptr, &f1, &f2, &f3);
@@ -971,6 +979,8 @@ void ident_hunger(void)
 
         /* Skip non-objects */
         if (!o_ptr->k_idx)
+            continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
         /* Extract the item flags */
@@ -1048,6 +1058,8 @@ extern void ident_f2(u32b flag, object_type* supplied_object)
             /* Skip non-objects */
             if (!o_ptr->k_idx)
                 continue;
+            if (!player_equipment_slot_counts_as_equipped(i))
+                continue;
 
             /* Extract the item flags */
             object_flags(o_ptr, &f1, &f2, &f3);
@@ -1115,6 +1127,8 @@ extern void ident_f3(u32b flag, object_type* supplied_object)
             /* Skip non-objects */
             if (!o_ptr->k_idx)
                 continue;
+            if (!player_equipment_slot_counts_as_equipped(i))
+                continue;
 
             /* Extract the item flags */
             object_flags(o_ptr, &f1, &f2, &f3);
@@ -1171,7 +1185,8 @@ void search_square(int y, int x, int dist, int searching)
     // determine if a trap is present
     for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))
     {
-        if ((o_ptr->tval == TV_CHEST) && (o_ptr->pval > 0)
+        if (!chest_trap_minigame && (o_ptr->tval == TV_CHEST)
+            && (o_ptr->pval > 0)
             && object_chest_trap_flags(o_ptr) && !object_known_p(o_ptr))
         {
             chest_trap_present = true;
@@ -1252,11 +1267,11 @@ void search_square(int y, int x, int dist, int searching)
         if (dist == 4)
             difficulty += 6; // distance 4
         if cave_trap_bold (y, x)
-            difficulty += 5; // dungeon trap
+            difficulty += 8; // dungeon trap
         if (cave_feat[y][x] == FEAT_SECRET)
             difficulty += 10; // secret door
         if (chest_trap_present)
-            difficulty += 15; // chest trap
+            difficulty += 18; // chest trap
         // if (cave_info[y][x] & (CAVE_ICKY)) difficulty
         // += 2;   // inside least/lesser/greater vaults
 

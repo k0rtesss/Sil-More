@@ -265,6 +265,9 @@ void do_cmd_save_game(void)
 #if defined(__ANDROID__) || defined(SIL_IOS)
         upsert_live_score_on_save();
 #endif
+
+        if (!save_game_quietly && p_ptr->playing && !p_ptr->leaving)
+            sdl_popup_notification_show("Saved");
     }
 
     /* Save failed (oops) */
@@ -291,269 +294,12 @@ void do_cmd_save_game(void)
 }
 
 /*
- * Hack - save the time of death
- */
-
-static void print_tomb(high_score* the_score)
-{
-    if (p_ptr->escaped)
-    {
-        if (p_ptr->oath_type > 0 && !oath_invalid(p_ptr->oath_type))
-            Term_putstr(
-                15, 2, -1, TERM_L_BLUE, "You have escaped and kept your oath");
-        else
-            Term_putstr(15, 2, -1, TERM_L_BLUE, "You have escaped");
-    }
-    else if (p_ptr->morgoth_slain)
-    {
-        Term_putstr(15, 2, -1, TERM_YELLOW,
-            "You are acclaimed as the Slayer of Morgoth");
-    }
-    else
-    {
-        Term_putstr(15, 2, -1, TERM_L_BLUE, "You have been slain");
-    }
-
-    /* Show score line */
-    display_single_score(TERM_WHITE, 1, 0, 0, false, the_score);
-
-}
-
-/*
- * Display some character info
- */
-static void show_info(void)
-{
-    int term_wid = 80;
-    int term_hgt = 24;
-    bool old_item_tester_full = item_tester_full;
-    byte old_item_tester_tval = item_tester_tval;
-    bool (*old_item_tester_hook)(const object_type*) = item_tester_hook;
-    char anykey_buf[48];
-
-    any_key_prompt_text(anykey_buf, sizeof(anykey_buf), NULL);
-
-    Term_get_size(&term_wid, &term_hgt);
-
-    /* Display player */
-    display_player(0);
-
-    /* Prompt for inventory */
-    Term_putstr(MAX(0, term_wid - 18), term_hgt - 2, -1, TERM_L_WHITE,
-        anykey_buf);
-
-    /* Allow abort at this point */
-    if (inkey() == ESCAPE)
-        goto cleanup;
-
-    /* Show equipment and inventory */
-
-    /* Equipment -- if any */
-    if (p_ptr->equip_cnt)
-    {
-        Term_clear();
-        item_tester_full = true;
-        show_equip();
-        prt("You are using:", 0, 0);
-        Term_putstr(MAX(0, term_wid - 18), term_hgt - 2, -1, TERM_L_WHITE,
-            anykey_buf);
-        if (inkey() == ESCAPE)
-            goto cleanup;
-        item_tester_full = false;
-    }
-
-    /* Inventory -- if any */
-    if (p_ptr->inven_cnt)
-    {
-        Term_clear();
-        item_tester_full = true;
-        show_inven();
-        prt("You are carrying:", 0, 0);
-        Term_putstr(MAX(0, term_wid - 18), MIN(p_ptr->inven_cnt + 2, term_hgt - 2),
-            -1, TERM_L_WHITE, anykey_buf);
-        if (inkey() == ESCAPE)
-            goto cleanup;
-        item_tester_full = false;
-    }
-
-    // Display notes
-    do_cmd_knowledge_notes();
-
-cleanup:
-    item_tester_hook = old_item_tester_hook;
-    item_tester_tval = old_item_tester_tval;
-    item_tester_full = old_item_tester_full;
-}
-
-
-
-static int final_menu(int* highlight)
-{
-    char ch;
-    int clicked_choice = 0;
-    bool morgoth_victory = (p_ptr->morgoth_slain && !p_ptr->escaped);
-    int term_wid = 80;
-    int term_hgt = 24;
-    int separator_row;
-    int option_row;
-    int first_option_row;
-    char separator[96];
-
-    const char* option_a = morgoth_victory ? "a) Review the Valar's record"
-                                           : "a) View scores";
-    const char* option_b = morgoth_victory ? "b) Survey Angband one last time"
-                                           : "b) Final look";
-    const char* option_c = morgoth_victory ? "c) Rehear the proclamations"
-                                           : "c) View final messages";
-    const char* option_d = morgoth_victory ? "d) Review your legend"
-                                           : "d) View character sheet";
-    const char* option_e = morgoth_victory ? "e) Append to the annals"
-                                           : "e) Add comment to notes";
-    const char* option_f = morgoth_victory ? "f) Archive your legend"
-                                           : "f) Save character sheet";
-    const char* option_exit = "g) Exit";
-
-    Term_get_size(&term_wid, &term_hgt);
-    separator_row = (term_hgt < 20) ? 9 : 10;
-    option_row = separator_row + 2;
-    first_option_row = option_row;
-    memset(separator, '_', sizeof(separator) - 1);
-    separator[MIN((int)sizeof(separator) - 1, MAX(1, term_wid - 6))] = '\0';
-
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-
-    Term_putstr(3, separator_row, term_wid - 6, TERM_L_DARK, separator);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (*highlight == 1) ? TERM_L_BLUE : TERM_WHITE,
-        option_a);
-    ui_menu_click_add(1, 15, first_option_row + 0, term_wid - 15);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (*highlight == 2) ? TERM_L_BLUE : TERM_WHITE,
-        option_b);
-    ui_menu_click_add(2, 15, first_option_row + 1, term_wid - 15);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (*highlight == 3) ? TERM_L_BLUE : TERM_WHITE,
-        option_c);
-    ui_menu_click_add(3, 15, first_option_row + 2, term_wid - 15);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE,
-        option_d);
-    ui_menu_click_add(4, 15, first_option_row + 3, term_wid - 15);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE,
-        option_e);
-    ui_menu_click_add(5, 15, first_option_row + 4, term_wid - 15);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (*highlight == 6) ? TERM_L_BLUE : TERM_WHITE,
-        option_f);
-    ui_menu_click_add(6, 15, first_option_row + 5, term_wid - 15);
-    Term_putstr(15, option_row, term_wid - 15,
-        (*highlight == 7) ? TERM_L_BLUE : TERM_WHITE, option_exit);
-    ui_menu_click_add(7, 15, first_option_row + 6, term_wid - 15);
-
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(10, separator_row + 1 + *highlight);
-
-    /* Get key (while allowing menu commands) */
-    hide_cursor = true;
-    ch = inkey();
-    hide_cursor = false;
-
-    {
-        int click_action = UI_MENU_CLICK_PRIMARY;
-
-        if (ui_menu_click_take_action(&clicked_choice, &click_action)
-            && clicked_choice >= 1 && clicked_choice <= 7)
-        {
-            *highlight = clicked_choice;
-            if (click_action != UI_MENU_CLICK_PRIMARY)
-                return (0);
-            return (*highlight);
-        }
-    }
-
-    if (ch == 'a')
-    {
-        *highlight = 1;
-        return (1);
-    }
-
-    if (ch == 'b')
-    {
-        *highlight = 2;
-        return (2);
-    }
-
-    if (ch == 'c')
-    {
-        *highlight = 3;
-        return (3);
-    }
-
-    if (ch == 'd')
-    {
-        *highlight = 4;
-        return (4);
-    }
-
-    if (ch == 'e')
-    {
-        *highlight = 5;
-        return (5);
-    }
-
-    if (ch == 'f')
-    {
-        *highlight = 6;
-        return (6);
-    }
-
-    if ((ch == 'g') || (ch == 'q') || (ch == 'Q'))
-    {
-        *highlight = 7;
-        return (7);
-    }
-
-    /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        return (*highlight);
-    }
-
-    /* Prev item */
-    if (ch == '8')
-    {
-        if (*highlight > 1)
-            (*highlight)--;
-        else if (*highlight == 1)
-            *highlight = 7;
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        if (*highlight < 7)
-            (*highlight)++;
-        else if (*highlight == 7)
-            *highlight = 1;
-    }
-
-    return (0);
-}
-
-/*
  * Handle character death
  */
 static void close_game_aux(void)
 {
     static bool death_processing = false;
-    bool wants_to_quit = false;
     high_score the_score;
-    int choice = 0, highlight = 1;
 
     /* Prevent duplicate death processing */
     if (death_processing)
@@ -563,7 +309,6 @@ static void close_game_aux(void)
     }
     death_processing = true;
     score_postmortem_clear();
-    screen_push_supporting_panes_hidden();
 
     log_debug("Processing character death for '%s' (wizard=%d, noscore=0x%04X, savefile='%s')",
              op_ptr->full_name, p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore, savefile);
@@ -663,152 +408,19 @@ static void close_game_aux(void)
         blitz_show_end_summary((byte)blitz_silmarils);
     }
 
-    /* Let the player inspect the final dungeon state before the tomb menu. */
+    /* Final Look now owns the complete postmortem UI.  Choosing Quit there
+     * returns directly to the welcome screen; there is no second tomb menu. */
     death_spectator_view();
 
-    /* Restore a clean screen for the tombstone display. */
-    Term_clear();
-
-    /* Present the appropriate epitaph */
-    print_tomb(&the_score);
-
-    /* Flush all input keys */
-    flush();
-
-    /* Flush messages */
-    message_flush();
-
-    /* Loop */
-    while (!wants_to_quit)
-    {
-        choice = final_menu(&highlight);
-        ui_menu_click_clear();
-
-        switch (choice)
-        {
-        // view scores
-        case 1:
-        {
-            const char* postmortem_scores_path = score_postmortem_path();
-            if (postmortem_scores_path[0]) {
-                show_scores_interactive_highlight_from_file(true,
-                    postmortem_scores_path, &the_score);
-            } else {
-                show_scores_interactive_highlight(true, &the_score);
-            }
-            break;
-        }
-
-        // final look
-        case 2:
-        {
-            /* Save screen */
-            screen_save();
-
-            death_spectator_view();
-
-            /* Load screen */
-            screen_load();
-
-            break;
-        }
-
-        // view final messages
-        case 3:
-        {
-            /* Save screen */
-            screen_save();
-
-            /* Display messages */
-            do_cmd_messages();
-
-            /* Load screen */
-            screen_load();
-            break;
-        }
-
-        // view character sheet
-        case 4:
-        {
-            /* Save screen */
-            screen_save();
-
-            /* Show the character */
-            show_info();
-
-            /* Load screen */
-            screen_load();
-            break;
-        }
-
-        // add comment to notes
-        case 5:
-        {
-            do_cmd_note("", p_ptr->depth);
-            break;
-        }
-
-        // save character sheet
-        case 6:
-        {
-            char ftmp[80];
-
-            strnfmt(ftmp, sizeof(ftmp), "%s.txt", op_ptr->base_name);
-
-            if (term_get_string("File name: ", ftmp, sizeof(ftmp)))
-            {
-                if (ftmp[0] && (ftmp[0] != ' '))
-                {
-                    errr err;
-
-                    /* Save screen */
-                    screen_save();
-
-                    /* Dump a character file */
-                    err = file_character(ftmp, false);
-
-                    /* Load screen */
-                    screen_load();
-
-                    /* Check result */
-                    if (err)
-                    {
-                        msg_print("Character dump failed!");
-                    }
-                    else
-                    {
-                        msg_print("Character dump successful.");
-                    }
-
-                    /* Flush messages */
-                    message_flush();
-                }
-            }
-            break;
-        }
-
-        // exit
-        case 7:
-        {
-            wants_to_quit = true;
-            break;
-        }
-        }
-    }
-
-    /* Reset death processing flag for next character */
     score_postmortem_clear();
-    screen_pop_supporting_panes_hidden();
     death_processing = false;
 }
 
 /*
  * Close up the current game (player may or may not be dead)
  *
- * Note that the savefile is not saved until the tombstone is
- * actually displayed and the player has a chance to examine
- * the inventory and such.  This allows cheating if the game
- * is equipped with a "quit without save" method.  XXX XXX XXX
+ * Death processing saves and records the finalized run before Final Look is
+ * entered.  Leaving Final Look completes shutdown and returns to welcome.
  */
 void close_game(void)
 {
@@ -911,10 +523,10 @@ void close_game(void)
              * snapshot above is still recorded so the story run resumes, but
              * the score screen is skipped for a seamless switch. */
             if (!blitz_launch_requested())
-                show_scores_interactive_highlight(true, &preview);
+                show_scores_interactive_highlight(&preview);
         }
         else if (!blitz_launch_requested())
-            show_scores_interactive(true);
+            show_scores_interactive();
 
         /* Update the live character entry in the scores file so that
            scores.raw acts as a database of current running characters.

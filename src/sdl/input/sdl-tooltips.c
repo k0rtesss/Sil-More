@@ -1,6 +1,17 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+typedef struct description_overlay_touch_scroll_state
+{
+    bool active;
+    SDL_FingerID finger_id;
+    float last_y;
+    float accum_y;
+} description_overlay_touch_scroll_state;
+
+static description_overlay_touch_scroll_state
+    g_description_overlay_touch_scroll;
+
 bool sdl_mouse_path_has_pending_key(void)
 {
     char ch = '\0';
@@ -84,15 +95,7 @@ bool sdl_mouse_path_take_step_command(int* command, int* dir)
         return false;
     }
 
-    Uint64 _tsc0 = SDL_GetTicksNS();
-    bool _tsc_ok = sdl_mouse_path_compute(target_y, target_x);
-    {
-        Uint64 _tsc_ms = (SDL_GetTicksNS() - _tsc0) / 1000000ULL;
-        if (_tsc_ms >= 150)
-            log_warn("[INPUTLAG] take_step compute %llu ms (path_len=%d)",
-                (unsigned long long)_tsc_ms, g_mouse_path.path_len);
-    }
-    if (!_tsc_ok) {
+    if (!sdl_mouse_path_compute(target_y, target_x)) {
         sdl_mouse_path_cancel();
         bell("Mouse path blocked.");
         return false;
@@ -140,7 +143,7 @@ bool sdl_mouse_path_take_step_command(int* command, int* dir)
     next_y = GRID_Y(g_mouse_path.path[0]);
     next_x = GRID_X(g_mouse_path.path[0]);
     attack_step = sdl_mouse_grid_has_visible_monster(next_y, next_x, NULL);
-    if (cave_feat[next_y][next_x] == FEAT_CHASM)
+    if (sdl_mouse_path_grid_is_leapable_obstacle(next_y, next_x))
         sdl_mouse_note_feature_for_action(next_y, next_x);
 
     *command = ';';
@@ -267,6 +270,11 @@ void sdl_object_tooltip_clear(void)
     g_state.need_present = true;
 }
 
+bool sdl_object_tooltip_uses_screen_rect(void)
+{
+    return g_object_tooltip.active && g_object_tooltip.screen_rect;
+}
+
 /*
  * Dismiss a persistent touch popup on the next press, the way moving the mouse
  * dismisses the hovered right-click popup.  Returns true if one was cleared.
@@ -311,6 +319,100 @@ void sdl_object_tooltip_append_part(char* buf, size_t buflen,
     if (buf[0])
         sdl_object_tooltip_append_text(buf, buflen, attrs, "; ", TERM_WHITE);
     sdl_object_tooltip_append_text(buf, buflen, attrs, text, attr);
+}
+
+typedef struct sdl_tooltip_semantic_rule {
+    cptr phrase;
+    byte attr;
+} sdl_tooltip_semantic_rule;
+
+/* Text-only hover/long-press popups do not carry the per-byte attributes used
+ * by map tooltips.  Add restrained semantic accents at render time: controls
+ * are green, their UI targets blue, warnings red/orange, and trait meanings
+ * retain the same colours used by the character tutorials. */
+static const sdl_tooltip_semantic_rule sdl_tooltip_semantic_rules[] = {
+    { "second-quiver ranged attack mode", TERM_L_BLUE },
+    { "ranged attack mode", TERM_L_BLUE },
+    { "melee attack mode", TERM_L_BLUE },
+    { "supplies for lights", TERM_L_BLUE },
+    { "character details", TERM_L_BLUE },
+    { "compact panel", TERM_L_BLUE },
+    { "power rating", TERM_ORANGE },
+    { "song menu", TERM_L_BLUE },
+    { "right-click", TERM_L_GREEN },
+    { "left-click", TERM_L_GREEN },
+    { "long-press", TERM_L_GREEN },
+    { "inventory", TERM_L_BLUE },
+    { "abilities", TERM_L_BLUE },
+    { "smithing", TERM_L_BLUE },
+    { "equipment", TERM_L_BLUE },
+    { "mastery", TERM_L_BLUE },
+    { "affinity", TERM_L_GREEN },
+    { "resistance", TERM_L_GREEN },
+    { "vulnerable", TERM_L_RED },
+    { "vulnerability", TERM_L_RED },
+    { "penalty", TERM_L_RED },
+    { "cursed", TERM_UMBER },
+    { "curse", TERM_UMBER },
+    { "unique", TERM_VIOLET },
+    { "click", TERM_L_GREEN },
+    { "tap", TERM_L_GREEN },
+    { "hold", TERM_L_GREEN },
+    { "select", TERM_L_GREEN },
+};
+
+static bool sdl_tooltip_semantic_word_char(char ch)
+{
+    return isalnum((unsigned char)ch) || ch == '_' || ch == '-';
+}
+
+static void sdl_object_tooltip_semantic_attrs(cptr text, byte* attrs,
+    size_t attrs_len)
+{
+    size_t text_len;
+
+    if (!text || !attrs || attrs_len == 0)
+        return;
+
+    text_len = MIN(strlen(text), attrs_len);
+    for (size_t pos = 0; pos < text_len; )
+    {
+        size_t best_len = 0;
+        byte best_attr = TERM_WHITE;
+
+        for (int i = 0; i < (int)N_ELEMENTS(sdl_tooltip_semantic_rules); ++i)
+        {
+            const sdl_tooltip_semantic_rule* rule
+                = &sdl_tooltip_semantic_rules[i];
+            size_t len = strlen(rule->phrase);
+
+            if (len <= best_len || pos + len > text_len)
+                continue;
+            if (pos > 0 && sdl_tooltip_semantic_word_char(text[pos - 1]))
+                continue;
+            if (SDL_strncasecmp(text + pos, rule->phrase, len) != 0)
+                continue;
+            if (pos + len < text_len
+                && sdl_tooltip_semantic_word_char(text[pos + len]))
+            {
+                continue;
+            }
+
+            best_len = len;
+            best_attr = rule->attr;
+        }
+
+        if (best_len > 0)
+        {
+            for (size_t i = pos; i < pos + best_len; ++i)
+                attrs[i] = best_attr;
+            pos += best_len;
+        }
+        else
+        {
+            ++pos;
+        }
+    }
 }
 
 bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
@@ -430,8 +532,11 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
             sizeof(morale_text), &morale_attr);
         sdl_object_tooltip_append_part(buf, buflen, attrs, m_name,
             TERM_WHITE);
-        if (m_ptr->maxhp > 0) {
-            monster_health_bar_text(m_ptr, hp_bar, sizeof(hp_bar), 8);
+        if (monster_health_bar_allowed(m_ptr) && m_ptr->maxhp > 0) {
+            if (styled_monster_health_bars)
+                SDL_strlcpy(hp_bar, "--------", sizeof(hp_bar));
+            else
+                monster_health_bar_text(m_ptr, hp_bar, sizeof(hp_bar), 8);
             sdl_object_tooltip_append_text(buf, buflen, attrs, " [HP: ",
                 TERM_WHITE);
             sdl_object_tooltip_append_text(buf, buflen, attrs,
@@ -439,7 +544,7 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
                 health_attr(m_ptr->hp, m_ptr->maxhp));
             if (morale_text[0]) {
                 sdl_object_tooltip_append_text(buf, buflen, attrs,
-                    ", Morale: ", TERM_WHITE);
+                    " Morale: ", TERM_WHITE);
                 sdl_object_tooltip_append_text(buf, buflen, attrs,
                     morale_text, morale_attr);
             }
@@ -669,29 +774,6 @@ int sdl_object_tooltip_font_px(void)
     return (font_px > 0) ? font_px : SDL_OBJECT_TOOLTIP_FONT_SIZE;
 }
 
-SDL_Surface* sdl_object_tooltip_render_text_surface(TTF_Font* font,
-    cptr text, SDL_Color color, float max_text_w)
-{
-    SDL_Surface* surface;
-    int wrap_w;
-
-    if (!font || !text || !text[0])
-        return NULL;
-
-    surface = TTF_RenderText_Blended(font, text, 0, color);
-    if (!surface)
-        return NULL;
-    if (max_text_w <= 0.0f || (float)surface->w <= max_text_w)
-        return surface;
-
-    SDL_DestroySurface(surface);
-    wrap_w = (int)(max_text_w + 0.5f);
-    if (wrap_w < 1)
-        wrap_w = 1;
-
-    return TTF_RenderText_Blended_Wrapped(font, text, 0, color, wrap_w);
-}
-
 bool sdl_object_tooltip_pointer_hits_term_cell(float x, float y)
 {
     int col = 0;
@@ -711,6 +793,19 @@ bool sdl_object_tooltip_pointer_hits_term_cell(float x, float y)
             || !g_last_main_cell_hit_left_panel)
         {
             return false;
+        }
+
+        /*
+         * Click-action tooltips are pinned to the top row of their panel
+         * block.  Treat every row in the same highlighted block as part of
+         * the anchor, otherwise mouse motion clears and recreates the popup
+         * whenever it crosses a row boundary within that block.
+         */
+        if (g_main_screen_panel_selected_action != SDL_PANEL_CLICK_NONE
+            && sdl_visible_character_panel_click_action_at_cell(col, row)
+                == g_main_screen_panel_selected_action)
+        {
+            return true;
         }
     } else if (!sdl_main_view_point_to_cell(x, y, &col, &row)) {
         return false;
@@ -833,13 +928,23 @@ static int sdl_object_tooltip_layout_runs(TTF_Font* font, cptr text,
     int pos = 0;
 
     while (pos < len && run_count < max_runs) {
+        if (text[pos] == '\n') {
+            if (line_w > max_w)
+                max_w = line_w;
+            line++;
+            line_w = 0.0f;
+            pos++;
+            continue;
+        }
+
         bool is_space = (text[pos] == ' ');
         int tok_start = pos;
         int tok_len;
         float tok_w;
         int sub;
 
-        while (pos < len && (text[pos] == ' ') == is_space)
+        while (pos < len && text[pos] != '\n'
+            && (text[pos] == ' ') == is_space)
             pos++;
         tok_len = pos - tok_start;
 
@@ -944,6 +1049,63 @@ static float sdl_object_tooltip_clamp_box_y(float y, float box_h,
     return (float)screen->y + screen_margin;
 }
 
+static void sdl_object_tooltip_draw_health_bar(TTF_Font* font,
+    const monster_type* m_ptr, float x, float y, float width, float line_h)
+{
+    long scaled;
+    char status[3];
+    int status_len = 0;
+    SDL_FRect bar;
+
+    if (!font || !m_ptr || m_ptr->maxhp <= 0 || width <= 0.0f)
+        return;
+
+    scaled = ((long)m_ptr->hp * 255L + (long)m_ptr->maxhp - 1L)
+        / (long)m_ptr->maxhp;
+    if (scaled < 1L)
+        scaled = 1L;
+    if (scaled > 255L)
+        scaled = 255L;
+
+    bar = (SDL_FRect){
+        .x = x,
+        .y = y + line_h * 0.28f,
+        .w = width,
+        .h = MAX(3.0f, line_h * 0.44f),
+    };
+    sdl_render_health_bar_rect(&bar, (byte)scaled,
+        health_attr(m_ptr->hp, m_ptr->maxhp));
+
+    if (m_ptr->confused)
+        status[status_len++] = 'c';
+    if (m_ptr->stunned)
+        status[status_len++] = 's';
+    status[status_len] = '\0';
+
+    if (status_len > 0)
+    {
+        int text_w_px = 0;
+        int text_h_px = 0;
+        SDL_Texture* texture = sdl_ui_text_texture(font, status,
+            g_state.palette[TERM_WHITE], &text_w_px, &text_h_px);
+
+        if (texture)
+        {
+            float scale = (text_h_px > 0)
+                ? (line_h / (float)text_h_px) : 1.0f;
+            float text_w = (float)text_w_px * scale;
+            SDL_FRect dst = {
+                .x = bar.x + MAX(0.0f, (bar.w - text_w) * 0.5f),
+                .y = y,
+                .w = MIN(text_w, bar.w),
+                .h = line_h,
+            };
+
+            SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+        }
+    }
+}
+
 void sdl_object_tooltip_render(void)
 {
     char current[sizeof(g_object_tooltip.text)];
@@ -967,6 +1129,9 @@ void sdl_object_tooltip_render(void)
     bool prefer_above;
     int font_px;
     int line_h;
+    int health_start = -1;
+    int health_end = -1;
+    monster_type* tooltip_monster = NULL;
 
     if (!g_object_tooltip.active)
         return;
@@ -978,6 +1143,11 @@ void sdl_object_tooltip_render(void)
     }
 
     SDL_memset(attrs, TERM_WHITE, sizeof(attrs));
+    if (g_object_tooltip.term_cell || g_object_tooltip.screen_rect)
+    {
+        sdl_object_tooltip_semantic_attrs(g_object_tooltip.text, attrs,
+            sizeof(attrs));
+    }
     if (g_object_tooltip.screen_rect) {
         if (!g_object_tooltip.text[0]
             || g_object_tooltip.rect.w <= 0.0f
@@ -1013,6 +1183,20 @@ void sdl_object_tooltip_render(void)
         if (SDL_strcmp(g_object_tooltip.text, current) != 0)
             SDL_strlcpy(g_object_tooltip.text, current,
                 sizeof(g_object_tooltip.text));
+
+        if (styled_monster_health_bars)
+        {
+            int m_idx = 0;
+            cptr hp_label = strstr(g_object_tooltip.text, "[HP: ");
+
+            if (hp_label && sdl_mouse_grid_has_visible_monster(
+                    g_object_tooltip.map_y, g_object_tooltip.map_x, &m_idx))
+            {
+                tooltip_monster = &mon_list[m_idx];
+                health_start = (int)(hp_label - g_object_tooltip.text) + 5;
+                health_end = health_start + 8;
+            }
+        }
     }
 
     screen = sdl_get_layout_screen_rect();
@@ -1102,10 +1286,24 @@ void sdl_object_tooltip_render(void)
     for (int i = 0; i < run_count; i++) {
         const object_tooltip_text_run* run = &runs[i];
         char run_text[sizeof(g_object_tooltip.text)];
-        SDL_Surface* surface;
         SDL_Texture* texture;
         SDL_FRect text_dst;
         int copy_len = run->len;
+        int run_w = 0;
+        int run_h = 0;
+
+        if (tooltip_monster && run->start >= health_start
+            && run->start + run->len <= health_end)
+        {
+            float width = sdl_object_tooltip_measure_text(font,
+                g_object_tooltip.text + run->start, run->len);
+
+            sdl_object_tooltip_draw_health_bar(font, tooltip_monster,
+                box.x + pad + run->x,
+                box.y + pad + (float)(run->line * line_h),
+                width, (float)line_h);
+            continue;
+        }
 
         if (copy_len >= (int)sizeof(run_text))
             copy_len = (int)sizeof(run_text) - 1;
@@ -1113,28 +1311,18 @@ void sdl_object_tooltip_render(void)
             (size_t)copy_len);
         run_text[copy_len] = '\0';
 
-        surface = TTF_RenderText_Blended(font, run_text, 0,
-            g_state.palette[run->attr]);
-        if (!surface)
+        texture = sdl_ui_text_texture(font, run_text,
+            g_state.palette[run->attr], &run_w, &run_h);
+        if (!texture)
             continue;
-
-        texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
-        if (!texture) {
-            SDL_DestroySurface(surface);
-            continue;
-        }
 
         text_dst = (SDL_FRect){
             .x = box.x + pad + run->x,
             .y = box.y + pad + (float)(run->line * line_h),
-            .w = (float)surface->w,
-            .h = (float)surface->h,
+            .w = (float)run_w,
+            .h = (float)run_h,
         };
-        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
         SDL_RenderTexture(g_state.renderer, texture, NULL, &text_dst);
-
-        SDL_DestroyTexture(texture);
-        SDL_DestroySurface(surface);
     }
 }
 
@@ -1168,6 +1356,38 @@ static int sdl_description_overlay_cell_w_for_font_px(int font_px)
     return (cell_w > 0) ? cell_w : 1;
 }
 
+static void sdl_description_overlay_reserve_touch_thumb(SDL_Rect* anchor,
+    int margin)
+{
+    SDL_FRect buttons;
+
+    if (!anchor)
+        return;
+
+    if (!sdl_touch_thumb_current_bounds(&buttons))
+        return;
+
+    if (sdl_mobile_portrait_layout_active()
+        && g_description_overlay.active
+        && g_description_overlay.interactive)
+    {
+        int reserve = anchor->y + anchor->h - (int)buttons.y + margin;
+
+        if (reserve > 0 && reserve < anchor->h)
+            anchor->h -= reserve;
+        return;
+    }
+
+    {
+        int reserve = (int)(buttons.x + buttons.w) + margin - anchor->x;
+
+        if (reserve > 0 && reserve < anchor->w) {
+            anchor->x += reserve;
+            anchor->w -= reserve;
+        }
+    }
+}
+
 static int sdl_description_overlay_anchor_max_cols_for_font_px(int font_px)
 {
     SDL_Rect anchor;
@@ -1182,6 +1402,7 @@ static int sdl_description_overlay_anchor_max_cols_for_font_px(int font_px)
 
     cell_w = sdl_description_overlay_cell_w_for_font_px(font_px);
     margin = sdl_overlay_margin_px();
+    sdl_description_overlay_reserve_touch_thumb(&anchor, margin);
     pad_x = cell_w;
     max_panel_w = anchor.w - margin * 2;
     if (max_panel_w <= pad_x * 2)
@@ -1202,11 +1423,35 @@ int sdl_description_overlay_max_cols(void)
     /*
      * Match the historical item description body width, which left a small
      * allowance inside the description pane instead of filling every column.
+     * Portrait descriptions use the whole measured width because their touch
+     * controls now sit below the popup rather than beside it.
      */
-    if (max_cols > 24)
+    if (!sdl_mobile_portrait_layout_active() && max_cols > 24)
         max_cols -= 4;
 
     return max_cols;
+}
+
+int sdl_description_overlay_capture_cols(int terminal_cols, bool interactive)
+{
+    int max_cols = sdl_description_overlay_max_cols();
+
+    if (interactive && sdl_mobile_portrait_layout_active() && max_cols > 0)
+        return max_cols;
+    if (max_cols > 0 && terminal_cols > max_cols)
+        return max_cols;
+
+    return terminal_cols;
+}
+
+int sdl_description_overlay_visible_cols(void)
+{
+    description_overlay_layout layout;
+
+    if (!sdl_description_overlay_layout(&layout))
+        return 0;
+
+    return layout.visible_cols;
 }
 
 /* Pixel width available for text inside the description overlay panel.  Used to
@@ -1299,6 +1544,15 @@ cptr sdl_description_overlay_footer_text(
     return "Esc close  Space page  Dir scroll";
 }
 
+static bool sdl_description_overlay_actions_use_touch_dock(
+    const description_overlay_state* overlay)
+{
+    return overlay && overlay->active && overlay->interactive
+        && overlay->footer_action_count > 0
+        && sdl_mobile_portrait_layout_active()
+        && sdl_touch_thumb_layout_active();
+}
+
 void sdl_description_overlay_set_footer(cptr text, bool always)
 {
     bool changed;
@@ -1318,6 +1572,11 @@ void sdl_description_overlay_set_footer(cptr text, bool always)
         g_description_overlay.footer_hover_key = 0;
         g_description_overlay.footer_text[0] = '\0';
     }
+}
+
+void sdl_description_overlay_set_footer_gap(bool enabled)
+{
+    g_description_overlay.footer_gap = enabled;
 }
 
 void sdl_description_overlay_clear_footer_actions(void)
@@ -1347,6 +1606,74 @@ void sdl_description_overlay_add_footer_action(int key, cptr token)
             g_description_overlay.footer_action_count++];
     action->key = key;
     SDL_strlcpy(action->token, token, sizeof(action->token));
+}
+
+static cptr sdl_description_overlay_footer_action_token(int key)
+{
+    if (!g_description_overlay.active || !g_description_overlay.interactive)
+        return NULL;
+
+    for (int i = 0; i < g_description_overlay.footer_action_count; i++)
+    {
+        const description_overlay_action* action =
+            &g_description_overlay.footer_actions[i];
+
+        if (action->key == key && action->token[0])
+            return action->token;
+    }
+
+    return NULL;
+}
+
+bool sdl_description_overlay_has_footer_action(int key)
+{
+    return sdl_description_overlay_footer_action_token(key) != NULL;
+}
+
+bool sdl_description_overlay_footer_action_label(int key, char* buf,
+    size_t buflen)
+{
+    cptr token = sdl_description_overlay_footer_action_token(key);
+    cptr label;
+
+    if (!buf || buflen == 0)
+        return false;
+    buf[0] = '\0';
+    if (!token)
+        return false;
+
+    label = token;
+    if (key == ' ' && strncmp(token, "Space", 5) == 0)
+    {
+        label = token + 5;
+    }
+    else if (key == ESCAPE && strncmp(token, "Esc", 3) == 0)
+    {
+        label = token + 3;
+    }
+    else if (key > 0 && key < 128 && SDL_isprint(key) && token[0]
+        && tolower((unsigned char)token[0]) == tolower((unsigned char)key))
+    {
+        label = token + 1;
+    }
+
+    while (*label && isspace((unsigned char)*label))
+        label++;
+    if (!*label)
+        label = token;
+
+    if (streq(label, "pick up"))
+    {
+        SDL_strlcpy(buf, "Pick Up", buflen);
+    }
+    else
+    {
+        SDL_strlcpy(buf, label, buflen);
+        if (buf[0] && islower((unsigned char)buf[0]))
+            buf[0] = (char)toupper((unsigned char)buf[0]);
+    }
+
+    return buf[0] != '\0';
 }
 
 void sdl_description_overlay_clear_avoid(void)
@@ -1446,7 +1773,7 @@ bool sdl_description_overlay_rects_intersect(
 }
 
 int sdl_description_overlay_rows_for_panel_space(float available_h,
-    int pad_y, int cell_h, bool footer)
+    int pad_y, int cell_h, bool footer, int header_rows)
 {
     int rows;
 
@@ -1454,6 +1781,7 @@ int sdl_description_overlay_rows_for_panel_space(float available_h,
         return 0;
 
     rows = ((int)available_h - pad_y * 2) / cell_h;
+    rows -= header_rows;
     if (footer)
         rows--;
     if (rows < 0)
@@ -1464,8 +1792,8 @@ int sdl_description_overlay_rows_for_panel_space(float available_h,
 
 bool sdl_description_overlay_fit_around_avoid(
     const SDL_Rect* anchor, int margin, int pad_y, int cell_h, bool footer,
-    float panel_x, float panel_w, int* visible_rows, float* panel_h,
-    float* panel_y)
+    int header_rows, float panel_x, float panel_w, int* visible_rows,
+    float* panel_h, float* panel_y)
 {
     SDL_FRect avoid;
     SDL_FRect panel;
@@ -1508,9 +1836,9 @@ bool sdl_description_overlay_fit_around_avoid(
         above_h = avoid.y - gap - min_y;
         below_h = max_y - (avoid.y + avoid.h + gap);
         above_rows = sdl_description_overlay_rows_for_panel_space(
-            above_h, pad_y, cell_h, footer);
+            above_h, pad_y, cell_h, footer, header_rows);
         below_rows = sdl_description_overlay_rows_for_panel_space(
-            below_h, pad_y, cell_h, footer);
+            below_h, pad_y, cell_h, footer, header_rows);
 
         if (below_rows >= *visible_rows && above_rows < *visible_rows)
             place_below = true;
@@ -1525,8 +1853,8 @@ bool sdl_description_overlay_fit_around_avoid(
 
         if (*visible_rows > side_rows)
             *visible_rows = side_rows;
-        *panel_h = (float)((*visible_rows + (footer ? 1 : 0)) * cell_h
-            + pad_y * 2);
+        *panel_h = (float)((header_rows + *visible_rows
+            + (footer ? 1 : 0)) * cell_h + pad_y * 2);
         *panel_y = place_below ? (avoid.y + avoid.h + gap)
                                : (avoid.y - gap - *panel_h);
     }
@@ -1553,9 +1881,12 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     int max_cols;
     int target_cols;
     int footer_cols = 0;
+    int footer_gap = 0;
+    int header_rows;
     int text_px;
     int visible_cols;
     int visible_rows;
+    bool actions_use_touch_dock;
     bool footer;
     bool footer_forced;
     float panel_w;
@@ -1587,38 +1918,19 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     if (pad_y < 2)
         pad_y = 2;
 
-    /* Reserve the left strip the thumb buttons occupy so the popup is sized and
-     * centred in the space to their right and never crosses them. */
-    {
-        SDL_FRect thumb_rects[SDL_TOUCH_THUMB_BUTTON_COUNT];
-
-        if (sdl_touch_thumb_compute_rects(thumb_rects)) {
-            float right = 0.0f;
-
-            for (int i = 0; i < SDL_TOUCH_THUMB_BUTTON_COUNT; i++) {
-                float edge = thumb_rects[i].x + thumb_rects[i].w;
-
-                if (thumb_rects[i].w > 0.0f && edge > right)
-                    right = edge;
-            }
-            if (right > 0.0f) {
-                int reserve = (int)right + margin - anchor.x;
-
-                if (reserve > 0 && reserve < anchor.w) {
-                    anchor.x += reserve;
-                    anchor.w -= reserve;
-                }
-            }
-        }
-    }
+    /* Keep the popup above the portrait description button row.  Other layouts
+     * retain the contextual thumb strip beside the popup. */
+    sdl_description_overlay_reserve_touch_thumb(&anchor, margin);
 
     max_panel_w = anchor.w - margin * 2;
     max_panel_h = anchor.h - margin * 2;
     if (max_panel_w <= pad_x * 2 || max_panel_h <= pad_y * 2 + cell_h)
         return false;
 
+    header_rows = overlay->interactive ? 1 : 0;
     max_cols = (max_panel_w - pad_x * 2) / cell_w;
-    max_rows_no_footer = (max_panel_h - pad_y * 2) / cell_h;
+    max_rows_no_footer =
+        (max_panel_h - pad_y * 2) / cell_h - header_rows;
     if (max_cols < 1 || max_rows_no_footer < 1)
         return false;
 
@@ -1627,17 +1939,23 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     if (target_cols < 1)
         target_cols = 1;
 
-    if (overlay->interactive)
+    actions_use_touch_dock =
+        sdl_description_overlay_actions_use_touch_dock(overlay);
+    if (overlay->interactive && !actions_use_touch_dock)
         footer_cols = (int)strlen(sdl_description_overlay_footer_text(overlay));
 
-    footer_forced = overlay->interactive
+    footer_forced = overlay->interactive && !actions_use_touch_dock
         && (overlay->footer_always || overlay->footer_text[0]);
     footer = footer_forced
         || (overlay->interactive && overlay->height > max_rows_no_footer);
 
     for (int pass = 0; pass < 2; pass++)
     {
-        max_rows = max_rows_no_footer - (footer ? 1 : 0);
+        footer_gap = (footer && overlay->footer_gap)
+            ? MAX(2, cell_h / 4) : 0;
+        max_rows = (max_panel_h - pad_y * 2
+            - header_rows * cell_h
+            - (footer ? cell_h + footer_gap : 0)) / cell_h;
         if (max_rows < 1)
             max_rows = 1;
 
@@ -1673,14 +1991,14 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
         }
 
         panel_w = (float)(text_px + pad_x * 2);
-        panel_h = (float)((visible_rows + (footer ? 1 : 0)) * cell_h
-            + pad_y * 2);
+        panel_h = (float)((header_rows + visible_rows + (footer ? 1 : 0))
+            * cell_h + pad_y * 2 + footer_gap);
         panel_x = (float)anchor.x + ((float)anchor.w - panel_w) * 0.5f;
         panel_y = (float)anchor.y + ((float)anchor.h - panel_h) * 0.5f;
 
         if (!sdl_description_overlay_fit_around_avoid(&anchor, margin,
-                pad_y, cell_h, footer, panel_x, panel_w, &visible_rows,
-                &panel_h, &panel_y))
+                pad_y, cell_h, footer, header_rows, panel_x, panel_w,
+                &visible_rows, &panel_h, &panel_y))
         {
             return false;
         }
@@ -1701,6 +2019,7 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     out->footer = footer;
     out->max_scroll = MAX(0, overlay->height - visible_rows);
     out->scroll = overlay->scroll;
+    out->close_button = overlay->interactive;
     if (out->scroll < 0)
         out->scroll = 0;
     if (out->scroll > out->max_scroll)
@@ -1713,8 +2032,22 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
         .h = panel_h,
     };
     out->text_x = out->panel.x + (float)pad_x;
-    out->text_y = out->panel.y + (float)pad_y;
+    out->text_y = out->panel.y + (float)pad_y
+        + (float)(header_rows * cell_h);
     out->footer_y = out->text_y + (float)(visible_rows * cell_h);
+    if (footer)
+        out->footer_y += (float)footer_gap;
+    if (out->close_button)
+    {
+        float close_size = (float)cell_h;
+
+        out->close_rect = (SDL_FRect){
+            .x = out->panel.x + out->panel.w - (float)pad_x - close_size,
+            .y = out->panel.y + (float)pad_y,
+            .w = close_size,
+            .h = close_size,
+        };
+    }
 
     return true;
 }
@@ -1810,6 +2143,91 @@ bool sdl_description_overlay_contains_point(float x, float y)
     return sdl_point_in_frect(&layout.panel, x, y);
 }
 
+void sdl_description_overlay_touch_scroll_cancel(void)
+{
+    g_description_overlay_touch_scroll =
+        (description_overlay_touch_scroll_state){ 0 };
+}
+
+bool sdl_description_overlay_touch_scroll_handle_pointer_down(float x,
+    float y, SDL_FingerID finger_id)
+{
+    description_overlay_layout layout;
+
+    /*
+     * Interactive, full-screen descriptions already use the menu scroll
+     * gesture, which sends keys back to their modal input loop.  This handler
+     * owns only non-modal previews such as the Inventory browser overlay.
+     */
+    if (g_description_overlay.interactive
+        || !sdl_description_overlay_layout(&layout)
+        || layout.max_scroll <= 0
+        || !sdl_point_in_frect(&layout.panel, x, y))
+    {
+        return false;
+    }
+
+    sdl_description_overlay_touch_scroll_cancel();
+    g_description_overlay_touch_scroll.active = true;
+    g_description_overlay_touch_scroll.finger_id = finger_id;
+    g_description_overlay_touch_scroll.last_y = y;
+    return true;
+}
+
+bool sdl_description_overlay_touch_scroll_handle_pointer_motion(float x,
+    float y, SDL_FingerID finger_id)
+{
+    description_overlay_layout layout;
+    float delta;
+    int row_h;
+
+    (void)x;
+
+    if (!g_description_overlay_touch_scroll.active
+        || g_description_overlay_touch_scroll.finger_id != finger_id)
+    {
+        return false;
+    }
+
+    if (g_description_overlay.interactive
+        || !sdl_description_overlay_layout(&layout))
+    {
+        sdl_description_overlay_touch_scroll_cancel();
+        return true;
+    }
+
+    row_h = MAX(1, layout.cell_h);
+    delta = y - g_description_overlay_touch_scroll.last_y;
+    g_description_overlay_touch_scroll.last_y = y;
+    g_description_overlay_touch_scroll.accum_y += delta;
+
+    while (g_description_overlay_touch_scroll.accum_y >= (float)row_h)
+    {
+        (void)sdl_description_overlay_scroll_by(-1);
+        g_description_overlay_touch_scroll.accum_y -= (float)row_h;
+    }
+    while (g_description_overlay_touch_scroll.accum_y <= -(float)row_h)
+    {
+        (void)sdl_description_overlay_scroll_by(1);
+        g_description_overlay_touch_scroll.accum_y += (float)row_h;
+    }
+
+    return true;
+}
+
+bool sdl_description_overlay_touch_scroll_handle_pointer_up(
+    SDL_FingerID finger_id)
+{
+    if (!g_description_overlay_touch_scroll.active
+        || g_description_overlay_touch_scroll.finger_id != finger_id)
+    {
+        return false;
+    }
+
+    sdl_description_overlay_touch_scroll_cancel();
+    return true;
+}
+
 void sdl_description_overlay_render_char(SDL_Texture* atlas,
     int atlas_cell_w, int atlas_cell_h, float cell_w, float cell_h,
     float x, float y, byte attr, char ch)
@@ -1898,9 +2316,10 @@ static float sdl_description_overlay_render_story_run(TTF_Font* font,
     float scale;
     float advance_w;
     float render_w;
-    SDL_Surface* surface;
     SDL_Texture* texture;
     SDL_Color col;
+    int text_w = 0;
+    int text_h = 0;
 
     if (!font || !s || n <= 0)
         return 0.0f;
@@ -1917,13 +2336,13 @@ static float sdl_description_overlay_render_story_run(TTF_Font* font,
     text_buf[len] = '\0';
 
     col = sdl_description_overlay_attr_color(attr);
-    surface = TTF_RenderText_Blended(font, text_buf, 0, col);
-    if (!surface)
+    texture = sdl_ui_text_texture(font, text_buf, col, &text_w, &text_h);
+    if (!texture)
         return 0.0f;
 
     TTF_MeasureString(font, text_buf, len, 0, &adv_unscaled, NULL);
-    scale = (surface->h > 0) ? (cell_h / (float)surface->h) : 1.0f;
-    render_w = (float)surface->w * scale;
+    scale = (text_h > 0) ? (cell_h / (float)text_h) : 1.0f;
+    render_w = (float)text_w * scale;
 
     /* Advance must match sdl_description_overlay_story_text_width (which scales
      * by the font height) so wrapping and rendering agree on line width. */
@@ -1933,18 +2352,61 @@ static float sdl_description_overlay_render_story_run(TTF_Font* font,
         advance_w = (float)adv_unscaled * adv_scale;
     }
 
-    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
-    if (texture)
     {
         SDL_FRect dst = { x_px, y_px, render_w, cell_h };
 
-        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
         SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
-        SDL_DestroyTexture(texture);
+    }
+    return advance_w;
+}
+
+static void sdl_description_overlay_render_plain_run(
+    const description_overlay_state* overlay,
+    const description_overlay_layout* layout, SDL_Texture* atlas,
+    int atlas_cell_w, int atlas_cell_h, int src_row, int run_start,
+    int run_end, float row_y)
+{
+    int run_len = run_end - run_start;
+    int idx;
+    byte attr;
+    const char* text;
+
+    if (!overlay || !layout || !overlay->chars || run_len <= 0)
+        return;
+
+    idx = src_row * overlay->width + run_start;
+    attr = overlay->attrs[idx];
+    text = overlay->chars + idx;
+
+    if (utf8_has_non_ascii_n(text, run_len))
+    {
+        TTF_Font* mono_font = sdl_acquire_mono_font_cells(
+            sdl_monospace_font_path(), layout->cell_w, layout->cell_h);
+
+        if (mono_font)
+        {
+            int render_atlas_cell_w = (atlas_cell_w > 0)
+                ? atlas_cell_w : layout->cell_w;
+            int render_atlas_cell_h = (atlas_cell_h > 0)
+                ? atlas_cell_h : layout->cell_h;
+
+            sdl_render_mono_utf8_text_cells_at(atlas, render_atlas_cell_w,
+                render_atlas_cell_h, mono_font, (float)layout->cell_w,
+                (float)layout->cell_h, layout->text_x, row_y, run_start, 0,
+                run_len, text, sdl_description_overlay_attr_color(attr));
+            return;
+        }
     }
 
-    SDL_DestroySurface(surface);
-    return advance_w;
+    for (int col = run_start; col < run_end; col++)
+    {
+        int cell_idx = src_row * overlay->width + col;
+
+        sdl_description_overlay_render_char(atlas, atlas_cell_w,
+            atlas_cell_h, (float)layout->cell_w, (float)layout->cell_h,
+            layout->text_x + (float)col * (float)layout->cell_w, row_y,
+            overlay->attrs[cell_idx], overlay->chars[cell_idx]);
+    }
 }
 
 /*
@@ -1969,13 +2431,105 @@ static void sdl_description_overlay_render_row(
         int idx = src_row * overlay->width + col;
         byte sflag = overlay->story ? overlay->story[idx] : 0;
 
+        if (styled_monster_health_bars && overlay->health
+            && overlay->health[idx] != 0)
+        {
+            byte level = overlay->health[idx];
+            byte fill_attr = TERM_L_GREEN;
+            bool confused = false;
+            bool stunned = false;
+            int bar_start = col;
+            int bar_end = col + 1;
+            SDL_FRect bar;
+
+            while (bar_end < limit
+                && overlay->health[src_row * overlay->width + bar_end]
+                    == level)
+            {
+                bar_end++;
+            }
+
+            for (int c = bar_start; c < bar_end; c++)
+            {
+                int i = src_row * overlay->width + c;
+                char ch = overlay->chars[i];
+
+                if (ch != '-' && ch != ' ')
+                    fill_attr = overlay->attrs[i];
+                if (ch == 'c')
+                    confused = true;
+                else if (ch == 's')
+                    stunned = true;
+            }
+
+            bar = (SDL_FRect){
+                .x = layout->text_x
+                    + (float)bar_start * (float)layout->cell_w
+                    + MAX(1.0f, (float)layout->cell_w * 0.12f),
+                .y = row_y + MAX(1.0f,
+                    (float)layout->cell_h * 0.24f),
+                .w = (float)((bar_end - bar_start) * layout->cell_w)
+                    - 2.0f * MAX(1.0f,
+                        (float)layout->cell_w * 0.12f),
+                .h = (float)layout->cell_h
+                    - 2.0f * MAX(1.0f,
+                        (float)layout->cell_h * 0.24f),
+            };
+            sdl_render_health_bar_rect(&bar, level, fill_attr);
+
+            if (confused || stunned)
+            {
+                char status[3];
+                int len = 0;
+                int status_col;
+
+                if (confused)
+                    status[len++] = 'c';
+                if (stunned)
+                    status[len++] = 's';
+                status[len] = '\0';
+                status_col = bar_start
+                    + MAX(0, ((bar_end - bar_start) - len) / 2);
+                for (int i = 0; i < len; i++)
+                {
+                    sdl_description_overlay_render_char(atlas, atlas_cell_w,
+                        atlas_cell_h, (float)layout->cell_w,
+                        (float)layout->cell_h,
+                        layout->text_x
+                            + (float)(status_col + i)
+                                * (float)layout->cell_w,
+                        row_y, TERM_WHITE, status[i]);
+                }
+            }
+
+            col = bar_end;
+            continue;
+        }
+
         if (!(sflag & STORY_FLAG_USE))
         {
-            sdl_description_overlay_render_char(atlas, atlas_cell_w,
-                atlas_cell_h, (float)layout->cell_w, (float)layout->cell_h,
-                layout->text_x + (float)col * (float)layout->cell_w, row_y,
-                overlay->attrs[idx], overlay->chars[idx]);
-            col++;
+            byte attr = overlay->attrs[idx];
+            int run_start = col;
+
+            while (col < limit)
+            {
+                int run_idx = src_row * overlay->width + col;
+                byte run_flag = overlay->story ? overlay->story[run_idx] : 0;
+
+                if (run_flag & STORY_FLAG_USE)
+                    break;
+                if (styled_monster_health_bars && overlay->health
+                    && overlay->health[run_idx] != 0)
+                {
+                    break;
+                }
+                if (overlay->attrs[run_idx] != attr)
+                    break;
+                col++;
+            }
+
+            sdl_description_overlay_render_plain_run(overlay, layout, atlas,
+                atlas_cell_w, atlas_cell_h, src_row, run_start, col, row_y);
             continue;
         }
 
@@ -2050,6 +2604,55 @@ static void sdl_description_overlay_render_row(
     }
 }
 
+static void sdl_description_overlay_render_close_button(
+    const description_overlay_layout* layout, bool hover)
+{
+    SDL_FRect rect;
+    SDL_Color icon = hover ? (SDL_Color){125, 185, 255, 255}
+                           : (SDL_Color){220, 224, 232, 235};
+    SDL_Color outline = hover ? (SDL_Color){125, 185, 255, 220}
+                              : (SDL_Color){210, 216, 226, 150};
+    float stroke;
+    float pad;
+    int repeats;
+
+    if (!layout || !layout->close_button)
+        return;
+
+    rect = layout->close_rect;
+    if (rect.w <= 0.0f || rect.h <= 0.0f)
+        return;
+
+    SDL_SetRenderDrawColor(g_state.renderer, hover ? 26 : 12,
+        hover ? 38 : 18, hover ? 58 : 24, hover ? 245 : 220);
+    SDL_RenderFillRect(g_state.renderer, &rect);
+    SDL_SetRenderDrawColor(g_state.renderer, outline.r, outline.g,
+        outline.b, outline.a);
+    SDL_RenderRect(g_state.renderer, &rect);
+
+    stroke = rect.w / 11.0f;
+    if (stroke < 1.0f)
+        stroke = 1.0f;
+    if (stroke > 4.0f)
+        stroke = 4.0f;
+    pad = rect.w * 0.33f;
+    repeats = (int)stroke;
+    if (repeats < 1)
+        repeats = 1;
+
+    SDL_SetRenderDrawColor(g_state.renderer, icon.r, icon.g, icon.b, icon.a);
+    for (int i = 0; i < repeats; i++)
+    {
+        float offset = (float)i - ((float)repeats - 1.0f) * 0.5f;
+        SDL_RenderLine(g_state.renderer, rect.x + pad,
+            rect.y + pad + offset, rect.x + rect.w - pad,
+            rect.y + rect.h - pad + offset);
+        SDL_RenderLine(g_state.renderer, rect.x + pad,
+            rect.y + rect.h - pad + offset, rect.x + rect.w - pad,
+            rect.y + pad + offset);
+    }
+}
+
 void sdl_description_overlay_render(void)
 {
     description_overlay_layout layout;
@@ -2113,7 +2716,8 @@ void sdl_description_overlay_render(void)
         TTF_Font* footer_font = sdl_story_font_for_height_slot(
             layout.cell_h, STORY_FONT_SLOT_SECONDARY);
 
-        if (overlay->interactive)
+        if (overlay->interactive
+            && !sdl_description_overlay_actions_use_touch_dock(overlay))
         {
             int len = (int)strlen(footer_text);
 
@@ -2200,10 +2804,86 @@ void sdl_description_overlay_render(void)
         }
     }
 
+    sdl_description_overlay_render_close_button(&layout,
+        overlay->close_hover);
+
     SDL_SetRenderClipRect(g_state.renderer, NULL);
 
     if (!cached)
         SDL_DestroyTexture(atlas);
+}
+
+static bool sdl_description_overlay_close_button_at(float x, float y)
+{
+    description_overlay_layout layout;
+    SDL_FRect hit;
+
+    if (!g_description_overlay.active || !g_description_overlay.interactive)
+        return false;
+
+    if (!sdl_description_overlay_layout(&layout) || !layout.close_button)
+        return false;
+
+    hit = layout.close_rect;
+    hit.x -= hit.w * 0.75f;
+    hit.y = layout.panel.y;
+    hit.w = layout.panel.x + layout.panel.w - hit.x;
+    hit.h = layout.close_rect.y + layout.close_rect.h - layout.panel.y;
+    if (hit.h < layout.close_rect.h)
+        hit.h = layout.close_rect.h;
+
+    return sdl_point_in_frect(&hit, x, y);
+}
+
+bool sdl_description_overlay_handle_close_hover(float x, float y)
+{
+    bool hit = sdl_description_overlay_close_button_at(x, y);
+    bool changed = false;
+
+    if (!g_description_overlay.active || !g_description_overlay.interactive)
+        return false;
+
+    if (!hit)
+    {
+        if (g_description_overlay.close_hover)
+        {
+            g_description_overlay.close_hover = false;
+            g_state.need_present = true;
+            Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+        }
+        return false;
+    }
+
+    if (g_description_overlay.footer_hover_key != 0)
+    {
+        g_description_overlay.footer_hover_key = 0;
+        changed = true;
+    }
+
+    if (!g_description_overlay.close_hover)
+    {
+        g_description_overlay.close_hover = true;
+        changed = true;
+    }
+
+    if (changed)
+    {
+        g_state.need_present = true;
+        Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+    }
+
+    return true;
+}
+
+bool sdl_description_overlay_handle_close_pointer(float x, float y)
+{
+    if (!sdl_description_overlay_close_button_at(x, y))
+        return false;
+
+    g_description_overlay.close_hover = true;
+    g_state.need_present = true;
+    Term_keypress(ESCAPE);
+    return true;
 }
 
 int sdl_description_overlay_footer_action_at(float x, float y)
@@ -2218,6 +2898,8 @@ int sdl_description_overlay_footer_action_at(float x, float y)
     {
         return 0;
     }
+    if (sdl_description_overlay_actions_use_touch_dock(overlay))
+        return 0;
 
     if (!sdl_description_overlay_layout(&layout) || !layout.footer)
         return 0;
@@ -2432,6 +3114,8 @@ bool sdl_mouse_grid_has_describable_content(int y, int x)
 
 void sdl_mouse_recall_object(object_type* o_ptr)
 {
+    int o_idx;
+
     if (!o_ptr || !o_ptr->k_idx)
         return;
 
@@ -2440,27 +3124,20 @@ void sdl_mouse_recall_object(object_type* o_ptr)
         return;
     }
 
-    (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
-
-    if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL) {
-        int slot = wield_slot(o_ptr);
-        const object_type* compare_objects[2];
-        const char* compare_headings[2];
-        char selected_heading[32];
-        char equipped_heading[32];
-
-        strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-        strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-        compare_objects[0] = o_ptr;
-        compare_headings[0] = selected_heading;
-        compare_objects[1] = inventory[slot].k_idx ? &inventory[slot] : NULL;
-        compare_headings[1] = equipped_heading;
-
-        object_info_screen_multi(compare_objects, compare_headings, 2);
-    } else {
-        object_info_screen(o_ptr);
+    /* Map recall uses the same comparison collector as standing-floor
+     * details, including expandable Harness entries. */
+    if (o_ptr >= o_list && o_ptr < o_list + o_max)
+    {
+        o_idx = (int)(o_ptr - o_list);
+        if (o_idx > 0)
+        {
+            describe_item_with_comparisons(0 - o_idx, true);
+            return;
+        }
     }
+
+    (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
+    object_info_screen(o_ptr);
 }
 
 bool sdl_mouse_recall_handle_right_click(float x, float y)
@@ -2761,7 +3438,7 @@ bool sdl_mouse_recall_process_pending(void)
     (void)sdl_mouse_consume_wake_key();
 
     if (!character_generated || !character_dungeon || !p_ptr
-        || p_ptr->is_dead || death_spectator_active() || character_icky != 0
+        || p_ptr->is_dead || character_icky != 0
         || ui_menu_click_is_active())
     {
         return true;
@@ -2777,8 +3454,7 @@ bool sdl_mouse_recall_process_pending(void)
         handle_stuff();
 
         screen_save();
-        if (!screen_roff(m_ptr->r_idx, m_ptr))
-            (void)inkey();
+        (void)screen_roff(m_ptr->r_idx, m_ptr);
         screen_load();
         return true;
     }

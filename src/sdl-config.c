@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "externs.h"
+#include "fs/path.h"
 #include "sdl-config.h"
 #include "log/log.h"
 #include "pane.h"
@@ -200,6 +201,9 @@ static void sdl_config_load_keyboard_keymaps(cJSON* root,
 {
     cJSON* keyboard;
     cJSON* modes;
+    char loaded[SDL_KEYMAP_MODE_COUNT][SDL_KEYMAP_KEY_COUNT]
+        [SDL_KEYMAP_ACTION_LEN] = { 0 };
+    int valid_count = 0;
 
     if (!root || !config)
         return;
@@ -211,8 +215,6 @@ static void sdl_config_load_keyboard_keymaps(cJSON* root,
     modes = cJSON_GetObjectItemCaseSensitive(keyboard, "keymaps");
     if (!cJSON_IsArray(modes))
         return;
-
-    memset(config->keymap_actions, 0, sizeof(config->keymap_actions));
 
     for (int mode = 0;
         mode < cJSON_GetArraySize(modes) && mode < SDL_KEYMAP_MODE_COUNT;
@@ -231,24 +233,40 @@ static void sdl_config_load_keyboard_keymaps(cJSON* root,
 
             if (!cJSON_IsNumber(key) || !cJSON_IsString(action)
                 || key->valueint < 0 || key->valueint >= SDL_KEYMAP_KEY_COUNT
-                || !action->valuestring)
+                || !action->valuestring || !action->valuestring[0])
             {
                 continue;
             }
 
-            SDL_strlcpy(config->keymap_actions[mode][key->valueint],
-                action->valuestring,
-                sizeof(config->keymap_actions[mode][key->valueint]));
+            SDL_strlcpy(loaded[mode][key->valueint], action->valuestring,
+                sizeof(loaded[mode][key->valueint]));
+            valid_count++;
         }
     }
+
+    /*
+     * A config saved during shutdown used to serialize keymap_act[] after
+     * cleanup had freed it, producing four empty arrays.  Treat that as a
+     * damaged legacy config and retain the defaults established by
+     * sdl_config_set_defaults(); otherwise Space/comma lose their "/5"
+     * interact-here mapping.
+     */
+    if (valid_count == 0)
+    {
+        log_warn("keyboard.keymaps is empty; restoring default keymaps");
+        return;
+    }
+
+    memcpy(config->keymap_actions, loaded, sizeof(config->keymap_actions));
 }
 
-static cJSON* sdl_config_create_keyboard_keymaps(void)
+static cJSON* sdl_config_create_keyboard_keymaps(
+    const struct sdl_config* config)
 {
     cJSON* keyboard = cJSON_CreateObject();
     cJSON* modes = cJSON_CreateArray();
 
-    if (!keyboard || !modes)
+    if (!config || !keyboard || !modes)
     {
         cJSON_Delete(keyboard);
         cJSON_Delete(modes);
@@ -265,8 +283,9 @@ static cJSON* sdl_config_create_keyboard_keymaps(void)
         for (int key = 0; key < 256; key++)
         {
             cJSON* entry;
+            const char* action = config->keymap_actions[mode][key];
 
-            if (!keymap_act[mode][key])
+            if (!action[0])
                 continue;
 
             entry = cJSON_CreateObject();
@@ -274,7 +293,7 @@ static cJSON* sdl_config_create_keyboard_keymaps(void)
                 continue;
 
             cJSON_AddNumberToObject(entry, "key", key);
-            cJSON_AddStringToObject(entry, "action", keymap_act[mode][key]);
+            cJSON_AddStringToObject(entry, "action", action);
             cJSON_AddItemToArray(entries, entry);
         }
 
@@ -320,7 +339,7 @@ const char* sdl_config_movement_preset_label(u16b preset_id)
     case SDL_MOVEMENT_PRESET_MODERN_ARROWS:
         return "Modern Arrows";
     case SDL_MOVEMENT_PRESET_MODERN_WASD_QEZC:
-        return "Modern WASD+QEZC";
+        return "Modern WASD Grid";
     case SDL_MOVEMENT_PRESET_VI_KEYS:
         return "Vi Keys";
     case SDL_MOVEMENT_PRESET_CLASSIC_SIL:
@@ -682,7 +701,7 @@ void sdl_config_set_default_movement_bindings(struct sdl_config* cfg,
     static const SDL_Scancode wasd_scancodes[] = {
         SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_E,
         SDL_SCANCODE_A, SDL_SCANCODE_D,
-        SDL_SCANCODE_Z, SDL_SCANCODE_S, SDL_SCANCODE_C
+        SDL_SCANCODE_Z, SDL_SCANCODE_X, SDL_SCANCODE_C
     };
     static const SDL_Scancode vi_scancodes[] = {
         SDL_SCANCODE_Y, SDL_SCANCODE_K, SDL_SCANCODE_U,
@@ -730,6 +749,14 @@ void sdl_config_set_default_movement_bindings(struct sdl_config* cfg,
         sdl_config_add_directional_movement_preset_set(cfg, arrows_scancodes);
         sdl_config_add_wait_rest_movement_bindings(cfg, SDL_SCANCODE_KP_5,
             SDL_SCANCODE_KP_5, SDL_SCANCODE_Z, SDL_SCANCODE_Z);
+    }
+    else if (preset_id == SDL_MOVEMENT_PRESET_MODERN_WASD_QEZC)
+    {
+        /* Complete the QWE/ASD/ZXC grid: S waits, X moves south. */
+        sdl_config_add_wait_rest_movement_bindings(cfg, SDL_SCANCODE_S,
+            SDL_SCANCODE_S, SDL_SCANCODE_PERIOD, SDL_SCANCODE_PERIOD);
+        sdl_config_add_wait_rest_movement_bindings(cfg, SDL_SCANCODE_KP_5,
+            SDL_SCANCODE_KP_5, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN);
     }
     else
     {
@@ -816,8 +843,8 @@ bool sdl_config_resolve_movement_binding(const struct sdl_config* cfg,
     return movement_input_command_from_binding(selected, context, out_command);
 }
 
-bool sdl_config_scancode_is_plain_move_letter(const struct sdl_config* cfg,
-    u32b scancode)
+bool sdl_config_scancode_is_plain_movement_letter(
+    const struct sdl_config* cfg, u32b scancode)
 {
     if (!cfg)
         return false;
@@ -829,8 +856,6 @@ bool sdl_config_scancode_is_plain_move_letter(const struct sdl_config* cfg,
         const movement_input_binding* binding = &cfg->movement_bindings[i];
 
         if (!movement_input_binding_is_valid(binding))
-            continue;
-        if (binding->action != MOVEMENT_INPUT_ACTION_MOVE_DIR)
             continue;
         if (binding->required_modifiers)
             continue;
@@ -880,19 +905,20 @@ static void sdl_config_load_movement_bindings(cJSON* root,
         return;
     }
 
+    /* Built-in presets are defined by code; only custom layouts load their
+     * individual bindings from JSON. */
+    if (preset_id != SDL_MOVEMENT_PRESET_NONE)
+    {
+        sdl_config_set_default_movement_bindings(cfg, preset_id);
+        return;
+    }
+
     bindings = cJSON_GetObjectItemCaseSensitive(movement, "keyboardBindings");
     if (!bindings)
     {
-        if (preset_id == SDL_MOVEMENT_PRESET_NONE)
-        {
-            log_warn("custom movement config has no keyboardBindings; using Classic Sil movement defaults");
-            sdl_config_set_default_movement_bindings(cfg,
-                SDL_MOVEMENT_PRESET_CLASSIC_SIL);
-        }
-        else
-        {
-            sdl_config_set_default_movement_bindings(cfg, preset_id);
-        }
+        log_warn("custom movement config has no keyboardBindings; using Classic Sil movement defaults");
+        sdl_config_set_default_movement_bindings(cfg,
+            SDL_MOVEMENT_PRESET_CLASSIC_SIL);
         return;
     }
 
@@ -998,6 +1024,13 @@ static void sdl_config_save_movement_bindings(cJSON* root,
     cJSON_AddStringToObject(movement, "keyboardPreset",
         sdl_config_movement_preset_name(cfg->movement_keyboard_preset));
 
+    /* Built-in preset bindings are canonical in code and need no JSON copy. */
+    if (cfg->movement_keyboard_preset != SDL_MOVEMENT_PRESET_NONE)
+    {
+        cJSON_AddItemToObject(root, "movement", movement);
+        return;
+    }
+
     bindings = cJSON_CreateArray();
     if (bindings)
     {
@@ -1038,295 +1071,6 @@ static void sdl_config_save_movement_bindings(cJSON* root,
     cJSON_AddItemToObject(root, "movement", movement);
 }
 
-/*
- * Legacy resolution preset data.
- *
- * First-run defaults are now computed dynamically from the display size and
- * the platform minimum terminal size, so no resolution preset table is used.
- */
-#if 0
-// Resolution-specific default configuration profile
-// Only includes values that differ per resolution
-struct resolution_profile {
-    int width;
-    int height;
-    const char* name;
-    
-    // Resolution-specific SDL settings
-    int main_view_scale;
-    int aux_view_font_size;
-    
-    // Pane configurations (up to 8 panes)
-    int pane_count;
-    struct {
-        enum pane_type type;
-        enum pane_placement where;
-        int rows;
-        int cols;
-    } panes[MAX_PANE_CONFIGS];
-};
-
-// Resolution profiles database - add new resolutions here!
-// 
-// Only resolution-specific values are stored here.
-// Common defaults (margin=4, fullscreen=true, tiles=true) are set in sdl_config_set_defaults()
-// 
-// LAYOUT CALCULATION LOGIC:
-// 1. Normal minimum main terminal: 80x24 cells
-// 2. Try maximum scale (up to 4) that fits: scale 4 = 2560x1536, scale 3 = 1920x1152, scale 2 = 1280x768, scale 1 = 640x384
-// 3. Aux view font size: auto-derived from scale at 2/3 main size
-//    (left panel uses 3/4 main size)
-// 4. Right pane: if we can fit >=40 columns (using aux_font_size / 2 char width), add right pane
-//    - Right pane contains: Inventory (22 rows), Worn (17 rows), Info (remaining, rows=0 means auto)
-//    - Right pane width: 40-50 columns depending on available space
-// 5. Bottom pane: add one combined Log pane (messages + combat), defaulting to 4 rows
-// 6. Main terminal expands to use all remaining space
-//
-// To add a new resolution:
-// 1. Copy an existing profile block
-// 2. Update width, height, name
-// 3. Adjust main_view_scale, aux_view_font_size, and pane layout following the logic above
-// 4. That's it! The function will automatically pick it up.
-//
-static const struct resolution_profile resolution_profiles[] = {
-    // 800x600 (SVGA)
-    { .width = 800, .height = 600, .name = "800x600 (SVGA)", .main_view_scale = 1, .aux_view_font_size = 9,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1024x768 (XGA)
-    { .width = 1024, .height = 768, .name = "1024x768 (XGA)", .main_view_scale = 1, .aux_view_font_size = 9,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 40 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1152x864
-    { .width = 1152, .height = 864, .name = "1152x864", .main_view_scale = 1, .aux_view_font_size = 9,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1280x720 (HD 720p)
-    { .width = 1280, .height = 720, .name = "1280x720 (HD 720p)", .main_view_scale = 1, .aux_view_font_size = 9,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1280x768
-    { .width = 1280, .height = 768, .name = "1280x768", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 0, .panes = {} },
-    
-    // 1280x800 (WXGA)
-    { .width = 1280, .height = 800, .name = "1280x800 (WXGA)", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 1, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1280x960
-    { .width = 1280, .height = 960, .name = "1280x960", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1280x1024 (SXGA)
-    { .width = 1280, .height = 1024, .name = "1280x1024 (SXGA)", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1360x768
-    { .width = 1360, .height = 768, .name = "1360x768", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 0, .panes = {} },
-    
-    // 1366x768 (HD)
-    { .width = 1366, .height = 768, .name = "1366x768 (HD)", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 0, .panes = {} },
-    
-    // 1400x1050
-    { .width = 1400, .height = 1050, .name = "1400x1050", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1440x900
-    { .width = 1440, .height = 900, .name = "1440x900", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1536x864
-    { .width = 1536, .height = 864, .name = "1536x864", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 3, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1600x900 (HD+)
-    { .width = 1600, .height = 900, .name = "1600x900 (HD+)", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1600x1200 (UXGA)
-    { .width = 1600, .height = 1200, .name = "1600x1200 (UXGA)", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1680x1050
-    { .width = 1680, .height = 1050, .name = "1680x1050", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1920x1080 (Full HD)
-    { .width = 1920, .height = 1080, .name = "1920x1080 (Full HD)", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 1920x1200 (WUXGA)
-    { .width = 1920, .height = 1200, .name = "1920x1200 (WUXGA)", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 1, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2048x1152
-    { .width = 2048, .height = 1152, .name = "2048x1152", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 0, .panes = {} },
-    
-    // 2256x1504 (Surface Laptop 13.5")
-    { .width = 2256, .height = 1504, .name = "2256x1504 (Surface Laptop 13.5\")", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2160x1440
-    { .width = 2160, .height = 1440, .name = "2160x1440", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2304x1440 (LG UltraFine scaled)
-    { .width = 2304, .height = 1440, .name = "2304x1440 (LG UltraFine scaled)", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2520x1680 (MacBook Air 13" M2/M3)
-    { .width = 2520, .height = 1680, .name = "2520x1680 (MacBook Air 13\" M2/M3)", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2560x1080 (Ultrawide)
-    { .width = 2560, .height = 1080, .name = "2560x1080 (Ultrawide)", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2560x1440 (QHD)
-    { .width = 2560, .height = 1440, .name = "2560x1440 (QHD)", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2560x1600 (MacBook 13")
-    { .width = 2560, .height = 1600, .name = "2560x1600 (MacBook 13\")", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2560x1700 (Dell XPS 17")
-    { .width = 2560, .height = 1700, .name = "2560x1700 (Dell XPS 17\")", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2736x1824 (Surface Book)
-    { .width = 2736, .height = 1824, .name = "2736x1824 (Surface Book)", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 45 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2880x1620
-    { .width = 2880, .height = 1620, .name = "2880x1620", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2880x1800 (MacBook 15")
-    { .width = 2880, .height = 1800, .name = "2880x1800 (MacBook 15\")", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 2880x1920 (Surface Laptop 15")
-    { .width = 2880, .height = 1920, .name = "2880x1920 (Surface Laptop 15\")", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3000x2000 (Surface Laptop)
-    { .width = 3000, .height = 2000, .name = "3000x2000 (Surface Laptop)", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3024x1964 (MacBook Pro 14" base)
-    { .width = 3024, .height = 1964, .name = "3024x1964 (MacBook Pro 14\" base)", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3072x1920 (MacBook Pro 16")
-    { .width = 3072, .height = 1920, .name = "3072x1920 (MacBook Pro 16\")", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3200x1800
-    { .width = 3200, .height = 1800, .name = "3200x1800", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3240x2160
-    { .width = 3240, .height = 2160, .name = "3240x2160", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3440x1440 (Ultrawide QHD)
-    { .width = 3440, .height = 1440, .name = "3440x1440 (Ultrawide QHD)", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3456x2234 (MacBook Pro 14")
-    { .width = 3456, .height = 2234, .name = "3456x2234 (MacBook Pro 14\")", .main_view_scale = 4, .aux_view_font_size = 24,
-      .pane_count = 2, .panes = { { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3840x1080 (Super Ultrawide)
-    { .width = 3840, .height = 1080, .name = "3840x1080 (Super Ultrawide)", .main_view_scale = 2, .aux_view_font_size = 16,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3840x1200
-    { .width = 3840, .height = 1200, .name = "3840x1200", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 1, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3840x1440
-    { .width = 3840, .height = 1440, .name = "3840x1440", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3840x1600
-    { .width = 3840, .height = 1600, .name = "3840x1600", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3840x2160 (4K UHD)
-    { .width = 3840, .height = 2160, .name = "3840x2160 (4K UHD)", .main_view_scale = 4, .aux_view_font_size = 24,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 3840x2400 (Dell UltraSharp)
-    { .width = 3840, .height = 2400, .name = "3840x2400 (Dell UltraSharp)", .main_view_scale = 4, .aux_view_font_size = 24,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 4096x2160 (DCI 4K)
-    { .width = 4096, .height = 2160, .name = "4096x2160 (DCI 4K)", .main_view_scale = 4, .aux_view_font_size = 24,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 4480x1440
-    { .width = 4480, .height = 1440, .name = "4480x1440", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 5120x1440 (Super Ultrawide)
-    { .width = 5120, .height = 1440, .name = "5120x1440 (Super Ultrawide)", .main_view_scale = 3, .aux_view_font_size = 18,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 5120x2160 (5K Ultrawide)
-    { .width = 5120, .height = 2160, .name = "5120x2160 (5K Ultrawide)", .main_view_scale = 4, .aux_view_font_size = 24,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 5120x2880 (5K)
-    { .width = 5120, .height = 2880, .name = "5120x2880 (5K)", .main_view_scale = 4, .aux_view_font_size = 24,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 6016x3384 (6K)
-    { .width = 6016, .height = 3384, .name = "6016x3384 (6K)", .main_view_scale = 4, .aux_view_font_size = 24,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } },
-    
-    // 7680x4320 (8K UHD)
-    { .width = 7680, .height = 4320, .name = "7680x4320 (8K UHD)", .main_view_scale = 4, .aux_view_font_size = 24,
-      .pane_count = 5, .panes = { { PANE_INVENTORY, PLACE_RIGHT, 22, 50 }, { PANE_WORN, PLACE_RIGHT, 17, 0 },
-                                  { PANE_INFO, PLACE_RIGHT, 0, 0 }, { PANE_ROLLS, PLACE_BOTTOM, 4, 0 }, { PANE_LOG, PLACE_BOTTOM, 0, 0 } } }
-};
-
-#define NUM_RESOLUTION_PROFILES (sizeof(resolution_profiles) / sizeof(resolution_profiles[0]))
-#endif
-
 enum {
     SDL_CONFIG_DEFAULT_LOG_PANE_ROWS = 5,
 };
@@ -1351,6 +1095,7 @@ static const char* pane_type_to_string(enum pane_type type)
         case PANE_DESCRIPTION: return "DESCRIPTION";
         case PANE_OVERLAY_MENU: return "OVERLAY_MENU";
         case PANE_COMBAT: return "COMBAT";
+        case PANE_STATUS_DEPTH: return "STATUS_DEPTH";
         default: return "MAIN";
     }
 }
@@ -1392,6 +1137,10 @@ static enum pane_type parse_pane_type(const char* value)
         || strcmp(value, "COMBAT_OVERLAY") == 0
         || strcmp(value, "COMBAT OVERLAY") == 0)
         return PANE_COMBAT;
+    if (strcmp(value, "STATUS_DEPTH") == 0
+        || strcmp(value, "STATUS DEPTH") == 0
+        || strcmp(value, "STATUS_AND_DEPTH") == 0)
+        return PANE_STATUS_DEPTH;
     return PANE_MAIN;
 }
 
@@ -1470,6 +1219,38 @@ static int parse_left_panel_compact_mode(const char* value)
     return SDL_LEFT_PANEL_COMPACT_COLUMN;
 }
 
+static const char* input_ui_mode_to_string(int mode)
+{
+    switch (mode) {
+    case SDL_INPUT_UI_MODE_PLATFORM:
+#if SIL_SDL_MOBILE_BUILD
+        return "TOUCH";
+#else
+        return "KEYBOARD";
+#endif
+    case SDL_INPUT_UI_MODE_CONTROLLER:
+        return "CONTROLLER";
+    case SDL_INPUT_UI_MODE_AUTO:
+    default:
+        return "AUTO";
+    }
+}
+
+static int parse_input_ui_mode(const char* value)
+{
+    if (!value)
+        return SDL_INPUT_UI_MODE_AUTO;
+    if (strcmp(value, "TOUCH") == 0
+        || strcmp(value, "KEYBOARD") == 0
+        || strcmp(value, "PLATFORM") == 0)
+    {
+        return SDL_INPUT_UI_MODE_PLATFORM;
+    }
+    if (strcmp(value, "CONTROLLER") == 0)
+        return SDL_INPUT_UI_MODE_CONTROLLER;
+    return SDL_INPUT_UI_MODE_AUTO;
+}
+
 static const char* touch_profile_to_string(int profile)
 {
     switch (profile) {
@@ -1504,55 +1285,37 @@ static int parse_touch_profile(const char* value)
     return SDL_TOUCH_PROFILE_TOUCH_PANE;
 }
 
-static const char* touch_top_panel_mode_to_string(int mode)
+static int normalize_touch_top_panel_cell_count(int count)
 {
-    switch (mode) {
-        case SDL_TOUCH_TOP_PANEL_MODE_LONG: return "LONG";
-        case SDL_TOUCH_TOP_PANEL_MODE_SHORT:
-        default:
-            return "SHORT";
-    }
-}
-
-static int normalize_touch_top_panel_mode(int mode)
-{
-    if (mode == SDL_TOUCH_TOP_PANEL_MODE_SHORT
-        || mode == SDL_TOUCH_TOP_PANEL_MODE_LONG)
-    {
-        return mode;
-    }
-
-    return SDL_TOUCH_TOP_PANEL_MODE_SHORT;
-}
-
-static int normalize_touch_top_panel_button_count(int count)
-{
-    if (count < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_MIN)
-        return SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_MIN;
-    if (count > SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
-        return SDL_TOUCH_TOP_PANEL_BUTTON_COUNT;
+    if (count < SDL_TOUCH_TOP_PANEL_CELL_COUNT_MIN)
+        return SDL_TOUCH_TOP_PANEL_CELL_COUNT_MIN;
+    if (count > SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX)
+        return SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX;
     return count;
 }
 
-static int parse_touch_top_panel_mode(const char* value)
+static int normalize_touch_top_panel_rows(int rows)
 {
-    if (!value)
-        return SDL_TOUCH_TOP_PANEL_MODE_SHORT;
-    if (strcmp(value, "LONG") == 0) return SDL_TOUCH_TOP_PANEL_MODE_LONG;
-    if (strcmp(value, "EXTENDED") == 0) return SDL_TOUCH_TOP_PANEL_MODE_LONG;
-    if (strcmp(value, "SHORT") == 0) return SDL_TOUCH_TOP_PANEL_MODE_SHORT;
-    return SDL_TOUCH_TOP_PANEL_MODE_SHORT;
+    if (rows < SDL_TOUCH_TOP_PANEL_ROWS_MIN)
+        return SDL_TOUCH_TOP_PANEL_ROWS_MIN;
+    if (rows > SDL_TOUCH_TOP_PANEL_ROWS_MAX)
+        return SDL_TOUCH_TOP_PANEL_ROWS_MAX;
+    return rows;
 }
 
-static int normalize_touch_top_panel_tile_scale(int scale)
+static float normalize_touch_top_panel_size(float size)
 {
-    if (scale <= 0)
-        return SDL_TOUCH_TOP_PANEL_TILE_SCALE_DEFAULT;
-    if (scale < SDL_TOUCH_TOP_PANEL_TILE_SCALE_MIN)
-        return SDL_TOUCH_TOP_PANEL_TILE_SCALE_MIN;
-    if (scale > SDL_TOUCH_TOP_PANEL_TILE_SCALE_MAX)
-        return SDL_TOUCH_TOP_PANEL_TILE_SCALE_MAX;
-    return scale;
+    int steps;
+
+    if (size <= SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+        return SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+    if (size < SDL_TOUCH_TOP_PANEL_SIZE_MIN)
+        size = SDL_TOUCH_TOP_PANEL_SIZE_MIN;
+    if (size > SDL_TOUCH_TOP_PANEL_SIZE_MAX)
+        size = SDL_TOUCH_TOP_PANEL_SIZE_MAX;
+
+    steps = (int)(size / SDL_TOUCH_TOP_PANEL_SIZE_STEP + 0.5f);
+    return (float)steps * SDL_TOUCH_TOP_PANEL_SIZE_STEP;
 }
 
 static const char* touch_movement_mode_to_string(int mode)
@@ -1770,6 +1533,53 @@ static bool sdl_config_gamepad_combo_bindings_empty(const struct sdl_config* con
     return true;
 }
 
+/*
+ * Preserve customized controller layouts while advancing the complete prior
+ * default layout.  West used to submit generic Use ('u'), which opens the
+ * inventory browser even when the player is standing on a floor item.  The
+ * current default uses Examine ('x') so the same button enters the shared
+ * description/context-action flow used by keyboard, mouse, and touch.
+ */
+static bool sdl_config_should_upgrade_previous_gamepad_defaults(
+    const struct sdl_config* config)
+{
+    struct sdl_config previous;
+
+    if (!config)
+        return false;
+
+    memset(&previous, 0, sizeof(previous));
+    sdl_config_set_default_gamepad_bindings(&previous);
+    previous.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST] = 'u';
+
+    return memcmp(config->gamepad_button_bindings,
+               previous.gamepad_button_bindings,
+               sizeof(previous.gamepad_button_bindings)) == 0
+        && memcmp(config->gamepad_trigger_bindings,
+               previous.gamepad_trigger_bindings,
+               sizeof(previous.gamepad_trigger_bindings)) == 0
+        && memcmp(config->gamepad_left_stick_bindings,
+               previous.gamepad_left_stick_bindings,
+               sizeof(previous.gamepad_left_stick_bindings)) == 0
+        && memcmp(config->gamepad_right_stick_bindings,
+               previous.gamepad_right_stick_bindings,
+               sizeof(previous.gamepad_right_stick_bindings)) == 0
+        && memcmp(config->gamepad_button_combo_bindings,
+               previous.gamepad_button_combo_bindings,
+               sizeof(previous.gamepad_button_combo_bindings)) == 0
+        && memcmp(config->gamepad_trigger_combo_bindings,
+               previous.gamepad_trigger_combo_bindings,
+               sizeof(previous.gamepad_trigger_combo_bindings)) == 0
+        && memcmp(config->gamepad_left_stick_combo_bindings,
+               previous.gamepad_left_stick_combo_bindings,
+               sizeof(previous.gamepad_left_stick_combo_bindings)) == 0
+        && memcmp(config->gamepad_right_stick_combo_bindings,
+               previous.gamepad_right_stick_combo_bindings,
+               sizeof(previous.gamepad_right_stick_combo_bindings)) == 0
+        && config->gamepad_shoulder_combo_binding
+            == previous.gamepad_shoulder_combo_binding;
+}
+
 static bool sdl_config_should_upgrade_legacy_gamepad_defaults(
     const struct sdl_config* config)
 {
@@ -1866,7 +1676,8 @@ static const byte app_input_options[] = {
 
 static const byte app_interface_options[] = {
     OPT_look_objects_sort_by_difficulty, OPT_look_nearby_filter_default,
-    OPT_song_list_sort_by_recent,
+    OPT_song_list_sort_by_recent, OPT_styled_player_health_bar,
+    OPT_styled_monster_health_bars, OPT_styled_monster_tile_health_bars,
     OPT_show_level_generation_debug, OPT_show_elemental_item_rolls,
     OPT_supply_menu_random_icons,
     OPT_supply_menu_hide_flavor_compact, OPT_hide_secondary_action_ring,
@@ -1884,6 +1695,8 @@ static const byte app_text_options[] = {
 static const byte app_gameplay_options[] = {
     OPT_active_weapon_switch_confirm,
     OPT_load_blitz_by_default,
+    OPT_lockpick_minigame,
+    OPT_chest_trap_minigame,
     OPT_NONE
 };
 
@@ -1891,7 +1704,8 @@ static const byte app_visual_options[] = {
     OPT_artifact_unique_color, OPT_hilite_player, OPT_hilite_target,
     OPT_hilite_unwary, OPT_solid_walls, OPT_hybrid_walls,
     OPT_unidentified_items_slate, OPT_stealth_vision, OPT_sleep_icon,
-    OPT_mirror_player_tile_facing, OPT_handcrafted_player_tile_facing,
+    OPT_pixel_monster_status_icons, OPT_mirror_player_tile_facing,
+    OPT_handcrafted_player_tile_facing,
     OPT_mirror_monster_tile_facing,
     OPT_center_player, OPT_run_avoid_center,
     OPT_show_smithing_difficulty,
@@ -1991,6 +1805,8 @@ static void sdl_config_apply_app_option_defaults(void)
     op_ptr->level_entry_narrative_mode = LEVEL_ENTRY_NARRATIVE_BANNER_DELAY;
     op_ptr->partition_narrative_mode = PARTITION_NARRATIVE_BANNER_DELAY;
     op_ptr->narrative_banner_turns = DEFAULT_NARRATIVE_BANNER_TURNS;
+    op_ptr->monster_tile_health_bar_mode = MONSTER_TILE_HEALTH_BARS_SHOW;
+    op_ptr->opt[OPT_styled_monster_tile_health_bars] = true;
 }
 
 void sdl_config_reset_app_options_to_defaults(void)
@@ -2014,6 +1830,12 @@ static void sdl_config_load_app_option_group(cJSON* app_options,
 
         if (opt >= 0 && opt < OPT_MAX)
             op_ptr->opt[opt] = sdl_config_default_app_bool(opt);
+        if (opt == OPT_styled_monster_tile_health_bars)
+        {
+            op_ptr->monster_tile_health_bar_mode =
+                MONSTER_TILE_HEALTH_BARS_SHOW;
+            op_ptr->opt[opt] = true;
+        }
 
         if (!cJSON_IsObject(group))
             continue;
@@ -2022,6 +1844,29 @@ static void sdl_config_load_app_option_group(cJSON* app_options,
             continue;
 
         item = cJSON_GetObjectItemCaseSensitive(group, key);
+        if (opt == OPT_styled_monster_tile_health_bars)
+        {
+            if (cJSON_IsNumber(item))
+            {
+                int mode = item->valueint;
+
+                if (mode < MONSTER_TILE_HEALTH_BARS_SHOW)
+                    mode = MONSTER_TILE_HEALTH_BARS_SHOW;
+                if (mode > MONSTER_TILE_HEALTH_BARS_MAX)
+                    mode = MONSTER_TILE_HEALTH_BARS_MAX;
+                op_ptr->monster_tile_health_bar_mode = (byte)mode;
+                op_ptr->opt[opt]
+                    = (mode != MONSTER_TILE_HEALTH_BARS_OFF);
+            }
+            else if (cJSON_IsBool(item))
+            {
+                op_ptr->monster_tile_health_bar_mode = cJSON_IsTrue(item)
+                    ? MONSTER_TILE_HEALTH_BARS_SHOW
+                    : MONSTER_TILE_HEALTH_BARS_OFF;
+                op_ptr->opt[opt] = cJSON_IsTrue(item);
+            }
+            continue;
+        }
         if (cJSON_IsBool(item))
             op_ptr->opt[opt] = cJSON_IsTrue(item);
     }
@@ -2070,6 +1915,16 @@ static void sdl_config_save_app_option_group(cJSON* app_options,
 
         if (!key)
             continue;
+
+        if (opt == OPT_styled_monster_tile_health_bars)
+        {
+            byte mode = op_ptr->monster_tile_health_bar_mode;
+
+            if (mode > MONSTER_TILE_HEALTH_BARS_MAX)
+                mode = MONSTER_TILE_HEALTH_BARS_SHOW;
+            cJSON_AddNumberToObject(group, key, mode);
+            continue;
+        }
 
         cJSON_AddBoolToObject(group, key, op_ptr->opt[opt]);
     }
@@ -2265,6 +2120,13 @@ void sdl_config_load_app_options(const char* filename)
         &op_ptr->narrative_banner_turns, NARRATIVE_BANNER_TURNS_MAX,
         DEFAULT_NARRATIVE_BANNER_TURNS);
 
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    /* Ordinary supporting panes do not exist on mobile.  Keep the legacy
+     * option canonical even when an older shared config explicitly disabled
+     * it. */
+    op_ptr->opt[OPT_hide_supporting_panes_fullscreen] = true;
+#endif
+
     cJSON_Delete(root);
 }
 
@@ -2380,13 +2242,20 @@ static void sdl_config_migrate_touch_pane_binding(struct sdl_config* config,
 
 static void sdl_config_set_default_top_panel_bindings(struct sdl_config* config)
 {
-    /* Left to right: Quaff potions, Inventory, Abilities, Hints, Character
-     * sheet, ASCII/Tiles toggle, Smithing, Look. */
+    /* Left to right: Supplies, Inventory, Abilities, Character sheet,
+     * ASCII/Tiles toggle, Stealth, Look, Map.  Portrait profiles append Main
+     * Menu so the separate fixed button is unnecessary there. */
     static const int top_panel_defaults[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
-        'q', 'i', 'y', TOUCH_BIND_MAIN_MENU_HINTS_QUESTS,
-        'h', TOUCH_BIND_TOGGLE_TILES, '0', 'l',
+        'j', 'i', 'y', 'h',
+        TOUCH_BIND_TOGGLE_TILES, 'S', 'l', 'M',
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
     };
     static const int top_panel_long_defaults[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
         GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
         GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
         GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
@@ -2403,13 +2272,13 @@ static void sdl_config_set_default_top_panel_bindings(struct sdl_config* config)
 
 static void sdl_config_set_default_thumb_bindings(struct sdl_config* config)
 {
-    /* Button 1: tap = space (pick/continue), long = 'x' (look/describe).
+    /* Button 1: tap = space (context action).
      * Button 2: tap = 'z' (wait), long = 'Z' (rest). */
     static const int thumb_defaults[SDL_TOUCH_THUMB_BUTTON_COUNT] = {
         ' ', 'z',
     };
     static const int thumb_long_defaults[SDL_TOUCH_THUMB_BUTTON_COUNT] = {
-        'x', 'Z',
+        GAMEPAD_BIND_NONE, 'Z',
     };
 
     if (!config)
@@ -2421,97 +2290,56 @@ static void sdl_config_set_default_thumb_bindings(struct sdl_config* config)
         sizeof(thumb_long_defaults));
 }
 
-static void sdl_config_migrate_touch_top_panel_defaults(
+static void sdl_config_migrate_touch_thumb_defaults(
     struct sdl_config* config)
 {
-    static const int previous_taps[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
-        'z', 'h', 'i', 'a', 'l', 'f', GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
+    static const int legacy_taps[SDL_TOUCH_THUMB_BUTTON_COUNT] = {
+        ' ', 'z',
     };
-    static const int previous_longs[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
-        'Z', '\t', 'e', 'p', 'j', 'F', GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
+    static const int legacy_longs[SDL_TOUCH_THUMB_BUTTON_COUNT] = {
+        'x', 'Z',
     };
+    static const int previous_taps[SDL_TOUCH_THUMB_BUTTON_COUNT] = {
+        ' ', 'x',
+    };
+    static const int previous_longs[SDL_TOUCH_THUMB_BUTTON_COUNT] = {
+        'z', 'Z',
+    };
+    static const int contextual_taps[SDL_TOUCH_THUMB_BUTTON_COUNT] = {
+        'x', 'z',
+    };
+    static const int contextual_longs[SDL_TOUCH_THUMB_BUTTON_COUNT] = {
+        'g', 'Z',
+    };
+    bool legacy_defaults;
+    bool previous_defaults;
+    bool contextual_defaults;
 
     if (!config)
         return;
 
-    if (memcmp(config->touch_top_panel_bindings, previous_taps,
-            sizeof(previous_taps)) != 0)
+    legacy_defaults =
+        memcmp(config->touch_thumb_bindings, legacy_taps,
+            sizeof(legacy_taps)) == 0
+        && memcmp(config->touch_thumb_long_bindings, legacy_longs,
+            sizeof(legacy_longs)) == 0;
+    previous_defaults =
+        memcmp(config->touch_thumb_bindings, previous_taps,
+            sizeof(previous_taps)) == 0
+        && memcmp(config->touch_thumb_long_bindings, previous_longs,
+            sizeof(previous_longs)) == 0;
+    contextual_defaults =
+        memcmp(config->touch_thumb_bindings, contextual_taps,
+            sizeof(contextual_taps)) == 0
+        && memcmp(config->touch_thumb_long_bindings, contextual_longs,
+            sizeof(contextual_longs)) == 0;
+    if (!legacy_defaults && !previous_defaults && !contextual_defaults)
     {
         return;
     }
-    if (memcmp(config->touch_top_panel_long_bindings, previous_longs,
-            sizeof(previous_longs)) != 0)
-    {
-        return;
-    }
 
-    sdl_config_set_default_top_panel_bindings(config);
-    log_info("Migrated default quick access buttons to icon layout");
-}
-
-static void sdl_config_migrate_touch_top_panel_layout(
-    struct sdl_config* config, int tap_count, int long_count)
-{
-    int old_taps[4] = { 0 };
-    int old_longs[4] = { 0 };
-    int saved_taps[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
-    int saved_longs[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
-    bool old_default_taps;
-    bool old_default_longs;
-
-    if (!config)
-        return;
-
-    memcpy(saved_taps, config->touch_top_panel_bindings, sizeof(saved_taps));
-    memcpy(saved_longs, config->touch_top_panel_long_bindings,
-        sizeof(saved_longs));
-    if (tap_count == 4)
-        memcpy(old_taps, config->touch_top_panel_bindings, sizeof(old_taps));
-    if (long_count == 4)
-        memcpy(old_longs, config->touch_top_panel_long_bindings,
-            sizeof(old_longs));
-
-    old_default_taps = tap_count == 4
-        && config->touch_top_panel_bindings[0] == 'h'
-        && config->touch_top_panel_bindings[1] == 'i'
-        && config->touch_top_panel_bindings[2] == 'j'
-        && config->touch_top_panel_bindings[3] == 'f';
-    old_default_longs = long_count == 4
-        && config->touch_top_panel_long_bindings[0] == '\t'
-        && config->touch_top_panel_long_bindings[1] == 'e'
-        && config->touch_top_panel_long_bindings[2] == 's'
-        && config->touch_top_panel_long_bindings[3] == 'F';
-
-    if (old_default_taps && old_default_longs) {
-        sdl_config_set_default_top_panel_bindings(config);
-        log_info("Migrated default quick access buttons to icon layout");
-        return;
-    }
-
-    if (tap_count == 4 || long_count == 4) {
-        sdl_config_set_default_top_panel_bindings(config);
-        if (tap_count != 4)
-            memcpy(config->touch_top_panel_bindings, saved_taps,
-                sizeof(saved_taps));
-        if (long_count != 4)
-            memcpy(config->touch_top_panel_long_bindings, saved_longs,
-                sizeof(saved_longs));
-    }
-
-    if (tap_count == 4) {
-        for (int i = 0; i < 4; i++)
-            config->touch_top_panel_bindings[i + 1] = old_taps[i];
-        if (long_count != 4)
-            log_info("Shifted four-button quick access tap bindings into short layout");
-    }
-
-    if (long_count == 4) {
-        for (int i = 0; i < 4; i++)
-            config->touch_top_panel_long_bindings[i + 1] = old_longs[i];
-        log_info((tap_count == 4)
-            ? "Shifted four-button quick access bindings into short layout"
-            : "Shifted four-button quick access long-tap bindings into short layout");
-    }
+    sdl_config_set_default_thumb_bindings(config);
+    log_info("Migrated default touch thumb buttons to Space Context and Wait/Rest");
 }
 
 static cJSON* sdl_config_create_int_array(const int* src, int count)
@@ -2528,6 +2356,24 @@ static cJSON* sdl_config_create_int_array(const int* src, int count)
     for (int i = 0; i < count; i++) {
         cJSON_AddItemToArray(array, cJSON_CreateNumber(src[i]));
     }
+
+    return array;
+}
+
+static cJSON* sdl_config_create_string_array(
+    const char src[][SDL_TOUCH_PANE_LABEL_LEN], int count)
+{
+    cJSON* array;
+
+    if (!src || count <= 0)
+        return NULL;
+
+    array = cJSON_CreateArray();
+    if (!array)
+        return NULL;
+
+    for (int i = 0; i < count; i++)
+        cJSON_AddItemToArray(array, cJSON_CreateString(src[i]));
 
     return array;
 }
@@ -2605,6 +2451,33 @@ static void sdl_config_copy_pane_profile(struct sdl_pane_profile* dest,
     dest->aux_view_font_size = src->aux_view_font_size;
     dest->enable_right_panes = src->enable_right_panes;
     dest->enable_bottom_panes = src->enable_bottom_panes;
+    dest->left_overlays_touch_screen_edge =
+        src->left_overlays_touch_screen_edge;
+    dest->show_overlay_log_border = src->show_overlay_log_border;
+    dest->show_main_menu_button = src->show_main_menu_button;
+    dest->left_panel_expanded_on_launch =
+        src->left_panel_expanded_on_launch;
+    dest->left_panel_compact_mode = src->left_panel_compact_mode;
+    dest->left_panel_compact_health_bar =
+        src->left_panel_compact_health_bar;
+    dest->quick_touch_buttons_on_left =
+        src->quick_touch_buttons_on_left;
+    dest->log_pane_display_filter = src->log_pane_display_filter;
+    dest->dice_roll_lock_ms = src->dice_roll_lock_ms;
+    dest->dice_roll_overlay_ms = src->dice_roll_overlay_ms;
+    dest->popup_notification_ms = src->popup_notification_ms;
+    dest->touch_top_panel_arrows_visible =
+        src->touch_top_panel_arrows_visible;
+    dest->touch_top_panel_default_open =
+        src->touch_top_panel_default_open;
+    dest->touch_top_panel_cell_count = src->touch_top_panel_cell_count;
+    dest->touch_top_panel_rows = src->touch_top_panel_rows;
+    dest->touch_top_panel_size = src->touch_top_panel_size;
+    memcpy(dest->touch_top_panel_bindings, src->touch_top_panel_bindings,
+        sizeof(dest->touch_top_panel_bindings));
+    memcpy(dest->touch_top_panel_long_bindings,
+        src->touch_top_panel_long_bindings,
+        sizeof(dest->touch_top_panel_long_bindings));
     sdl_config_copy_pane_configs(dest->pane_configs, &dest->pane_count,
         src->pane_configs, src->pane_count);
 }
@@ -2727,6 +2600,43 @@ static void sdl_config_init_pane_profiles_from_legacy(const struct sdl_config* c
         pane_profiles[mode].aux_view_font_size = config->aux_view_font_size;
         pane_profiles[mode].enable_right_panes = config->enable_right_panes;
         pane_profiles[mode].enable_bottom_panes = config->enable_bottom_panes;
+        pane_profiles[mode].left_overlays_touch_screen_edge =
+            config->left_overlays_touch_screen_edge;
+        pane_profiles[mode].show_overlay_log_border =
+            config->show_overlay_log_border;
+        pane_profiles[mode].show_main_menu_button =
+            config->show_main_menu_button;
+        pane_profiles[mode].left_panel_expanded_on_launch =
+            config->left_panel_expanded_on_launch;
+        pane_profiles[mode].left_panel_compact_mode =
+            config->left_panel_compact_mode;
+        pane_profiles[mode].left_panel_compact_health_bar =
+            config->left_panel_compact_health_bar;
+        pane_profiles[mode].quick_touch_buttons_on_left =
+            config->quick_touch_buttons_on_left;
+        pane_profiles[mode].log_pane_display_filter =
+            config->log_pane_display_filter;
+        pane_profiles[mode].dice_roll_lock_ms = config->dice_roll_lock_ms;
+        pane_profiles[mode].dice_roll_overlay_ms =
+            config->dice_roll_overlay_ms;
+        pane_profiles[mode].popup_notification_ms =
+            config->popup_notification_ms;
+        pane_profiles[mode].touch_top_panel_arrows_visible =
+            config->touch_top_panel_arrows_visible;
+        pane_profiles[mode].touch_top_panel_default_open =
+            config->touch_top_panel_default_open;
+        pane_profiles[mode].touch_top_panel_cell_count =
+            config->touch_top_panel_cell_count;
+        pane_profiles[mode].touch_top_panel_rows =
+            config->touch_top_panel_rows;
+        pane_profiles[mode].touch_top_panel_size =
+            config->touch_top_panel_size;
+        memcpy(pane_profiles[mode].touch_top_panel_bindings,
+            config->touch_top_panel_bindings,
+            sizeof(pane_profiles[mode].touch_top_panel_bindings));
+        memcpy(pane_profiles[mode].touch_top_panel_long_bindings,
+            config->touch_top_panel_long_bindings,
+            sizeof(pane_profiles[mode].touch_top_panel_long_bindings));
         if (pane_count > 0) {
             sdl_config_copy_pane_configs(pane_profiles[mode].pane_configs,
                 &pane_profiles[mode].pane_count, pane_configs, pane_count);
@@ -2763,6 +2673,135 @@ static void sdl_config_load_pane_profile(cJSON* profile_obj,
     if (cJSON_IsBool(item))
         profile->enable_bottom_panes = cJSON_IsTrue(item);
 
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "leftOverlaysTouchScreenEdge");
+    if (cJSON_IsBool(item))
+        profile->left_overlays_touch_screen_edge = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "showOverlayLogBorder");
+    if (cJSON_IsBool(item))
+        profile->show_overlay_log_border = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "showMainMenuButton");
+    if (cJSON_IsBool(item))
+        profile->show_main_menu_button = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "leftPanelExpandedOnLaunch");
+    if (cJSON_IsBool(item))
+        profile->left_panel_expanded_on_launch = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "leftPanelCompactMode");
+    if (cJSON_IsString(item)) {
+        profile->left_panel_compact_mode =
+            parse_left_panel_compact_mode(item->valuestring);
+    } else if (cJSON_IsNumber(item)) {
+        profile->left_panel_compact_mode =
+            item->valueint == SDL_LEFT_PANEL_COMPACT_ROW
+                ? SDL_LEFT_PANEL_COMPACT_ROW
+                : SDL_LEFT_PANEL_COMPACT_COLUMN;
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "leftPanelCompactHealthBar");
+    if (cJSON_IsBool(item))
+        profile->left_panel_compact_health_bar = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "quickTouchButtonsOnLeft");
+    if (cJSON_IsBool(item))
+        profile->quick_touch_buttons_on_left = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "logPaneDisplayFilter");
+    if (cJSON_IsNumber(item)) {
+        profile->log_pane_display_filter = item->valueint;
+        if (profile->log_pane_display_filter < LOG_HISTORY_FILTER_ALL
+            || profile->log_pane_display_filter > LOG_HISTORY_FILTER_COMBAT)
+        {
+            profile->log_pane_display_filter = LOG_HISTORY_FILTER_ALL;
+        }
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj, "diceRollLockMs");
+    if (cJSON_IsNumber(item)) {
+        profile->dice_roll_lock_ms = item->valueint;
+        if (profile->dice_roll_lock_ms < 0)
+            profile->dice_roll_lock_ms = 0;
+        if (profile->dice_roll_lock_ms > SDL_DICE_ROLL_TIMING_MAX_MS)
+            profile->dice_roll_lock_ms = SDL_DICE_ROLL_TIMING_MAX_MS;
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "diceRollOverlayMs");
+    if (cJSON_IsNumber(item)) {
+        profile->dice_roll_overlay_ms = item->valueint;
+        if (profile->dice_roll_overlay_ms < 0)
+            profile->dice_roll_overlay_ms = 0;
+        if (profile->dice_roll_overlay_ms > SDL_DICE_ROLL_TIMING_MAX_MS)
+            profile->dice_roll_overlay_ms = SDL_DICE_ROLL_TIMING_MAX_MS;
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "popupNotificationMs");
+    if (cJSON_IsNumber(item)) {
+        profile->popup_notification_ms = item->valueint;
+        if (profile->popup_notification_ms < 0)
+            profile->popup_notification_ms = 0;
+        if (profile->popup_notification_ms > SDL_DICE_ROLL_TIMING_MAX_MS)
+            profile->popup_notification_ms = SDL_DICE_ROLL_TIMING_MAX_MS;
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "touchTopPanelArrowsVisible");
+    if (cJSON_IsBool(item))
+        profile->touch_top_panel_arrows_visible = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "touchTopPanelDefaultOpen");
+    if (cJSON_IsBool(item))
+        profile->touch_top_panel_default_open = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "touchTopPanelCellCount");
+    if (cJSON_IsNumber(item)) {
+        profile->touch_top_panel_cell_count =
+            normalize_touch_top_panel_cell_count(item->valueint);
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "touchTopPanelRows");
+    if (cJSON_IsNumber(item)) {
+        profile->touch_top_panel_rows =
+            normalize_touch_top_panel_rows(item->valueint);
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "touchTopPanelSize");
+    if (cJSON_IsNumber(item)) {
+        profile->touch_top_panel_size =
+            normalize_touch_top_panel_size((float)item->valuedouble);
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "touchTopPanelBindings");
+    if (cJSON_IsArray(item)) {
+        sdl_config_load_touch_binding_array(item,
+            profile->touch_top_panel_bindings,
+            SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(profile_obj,
+        "touchTopPanelLongBindings");
+    if (cJSON_IsArray(item)) {
+        sdl_config_load_touch_binding_array(item,
+            profile->touch_top_panel_long_bindings,
+            SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
+    }
+
     item = cJSON_GetObjectItemCaseSensitive(profile_obj, "panes");
     if (cJSON_IsArray(item)) {
         sdl_config_load_pane_array(item, panes, &pane_count, MAX_PANE_CONFIGS, label);
@@ -2783,6 +2822,289 @@ static int sdl_config_profile_find_pane(struct sdl_pane_profile* profile,
     }
 
     return -1;
+}
+
+static void sdl_pane_profile_apply_portrait_stack_migration(
+    struct sdl_pane_profile* profile)
+{
+    int rolls_index;
+    int depth_index;
+    int status_depth_index;
+    int quick_access_index;
+
+    if (!profile)
+        return;
+
+    rolls_index = sdl_config_profile_find_pane(profile, PANE_ROLLS);
+    depth_index = sdl_config_profile_find_pane(profile, PANE_DEPTH);
+    if (rolls_index >= 0 && depth_index >= 0 && rolls_index > depth_index
+        && profile->pane_configs[rolls_index].where
+            == profile->pane_configs[depth_index].where
+        && pane_placement_is_overlay(
+            profile->pane_configs[rolls_index].where))
+    {
+        struct pane_config rolls = profile->pane_configs[rolls_index];
+
+        memmove(&profile->pane_configs[depth_index + 1],
+            &profile->pane_configs[depth_index],
+            sizeof(profile->pane_configs[0]) * (rolls_index - depth_index));
+        profile->pane_configs[depth_index] = rolls;
+    }
+
+    status_depth_index = sdl_config_profile_find_pane(profile,
+        PANE_STATUS_DEPTH);
+    quick_access_index = sdl_config_profile_find_pane(profile,
+        PANE_OVERLAY_MENU);
+    if (status_depth_index >= 0 && quick_access_index >= 0
+        && status_depth_index > quick_access_index)
+    {
+        struct pane_config status_depth =
+            profile->pane_configs[status_depth_index];
+
+        memmove(&profile->pane_configs[quick_access_index + 1],
+            &profile->pane_configs[quick_access_index],
+            sizeof(profile->pane_configs[0])
+                * (status_depth_index - quick_access_index));
+        profile->pane_configs[quick_access_index] = status_depth;
+    }
+}
+
+void sdl_pane_config_apply_portrait_default(struct pane_config* pane)
+{
+    if (!pane)
+        return;
+
+    switch (pane->pane) {
+    case PANE_LOG:
+    case PANE_TOUCH:
+        pane->enabled = false;
+        break;
+    case PANE_ROLLS:
+        pane->enabled = true;
+        pane->where = PLACE_TOP_RIGHT;
+        pane->rect.rows = SDL_PORTRAIT_OVERLAY_LOG_PANE_DEFAULT_ROWS;
+        pane->rect.cols = 0;
+        break;
+    case PANE_LEFT_PANEL:
+        pane->enabled = true;
+        pane->where = PLACE_TOP_LEFT;
+        break;
+    case PANE_STATUS:
+    case PANE_DEPTH:
+        pane->enabled = false;
+        pane->where = PLACE_TOP_RIGHT;
+        break;
+    case PANE_STATUS_DEPTH:
+        pane->enabled = true;
+        pane->where = PLACE_BOTTOM_CENTER;
+        break;
+    case PANE_COMBAT:
+        pane->enabled = true;
+        pane->where = PLACE_TOP_LEFT;
+        break;
+    case PANE_OVERLAY_MENU:
+        pane->enabled = true;
+        pane->where = PLACE_BOTTOM_CENTER;
+        break;
+    case PANE_DESCRIPTION:
+        break;
+    default:
+        /* Portrait previously hid every supporting side/bottom pane.  Store
+         * that as an editable default instead of imposing it in rendering. */
+        if (!pane_placement_is_overlay(pane->where))
+            pane->enabled = false;
+        break;
+    }
+}
+
+void sdl_pane_profile_apply_portrait_defaults(
+    struct sdl_pane_profile* profile)
+{
+    if (!profile)
+        return;
+
+    profile->enable_right_panes = false;
+    profile->enable_bottom_panes = false;
+    profile->show_overlay_log_border = false;
+    profile->show_main_menu_button = false;
+    profile->left_panel_expanded_on_launch = false;
+    profile->touch_top_panel_arrows_visible = false;
+    profile->touch_top_panel_default_open = true;
+    profile->touch_top_panel_size = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+
+    /* Portrait opens Main Menu from the final Quick Access cell instead of
+     * spending scarce vertical space on the separate fixed button. */
+    if (profile->touch_top_panel_cell_count < 0)
+        profile->touch_top_panel_cell_count = 0;
+    if (profile->touch_top_panel_cell_count > SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        profile->touch_top_panel_cell_count = SDL_TOUCH_TOP_PANEL_BUTTON_COUNT;
+    {
+        bool has_main_menu = false;
+
+        for (int i = 0; i < profile->touch_top_panel_cell_count; i++) {
+            if (profile->touch_top_panel_bindings[i] == 'm'
+                || profile->touch_top_panel_long_bindings[i] == 'm')
+            {
+                has_main_menu = true;
+                break;
+            }
+        }
+        if (!has_main_menu) {
+            int slot;
+
+            if (profile->touch_top_panel_cell_count
+                < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+            {
+                slot = profile->touch_top_panel_cell_count++;
+            } else {
+                /* The fixed button is disabled in portrait, so Main Menu must
+                 * win the final slot even in a full inherited layout. */
+                slot = profile->touch_top_panel_cell_count - 1;
+            }
+            profile->touch_top_panel_bindings[slot] = 'm';
+            profile->touch_top_panel_long_bindings[slot] = GAMEPAD_BIND_NONE;
+        }
+    }
+
+    for (int i = 0; i < profile->pane_count && i < MAX_PANE_CONFIGS; i++)
+        sdl_pane_config_apply_portrait_default(&profile->pane_configs[i]);
+
+    /* Pane order is the stack order for panes sharing one overlay slot.  Keep
+     * combined Status & Depth at Bottom Center 1 and Quick Access at 2. */
+    sdl_pane_profile_apply_portrait_stack_migration(profile);
+}
+
+static bool sdl_config_profile_pane_has_stack_order(enum pane_type pane)
+{
+    return pane != PANE_MAIN && pane != PANE_MAIN_MENU
+        && pane != PANE_DESCRIPTION;
+}
+
+static void sdl_config_profile_set_pane_where_order(
+    struct sdl_pane_profile* profile, int index,
+    enum pane_placement where, int order)
+{
+    struct pane_config moving;
+    int reduced_count;
+    int placement_count = 0;
+    int insertion_index = -1;
+    int last_placement_index = -1;
+
+    if (!profile || index < 0 || index >= profile->pane_count)
+        return;
+    if (!pane_type_allows_placement(profile->pane_configs[index].pane, where))
+        return;
+
+    moving = profile->pane_configs[index];
+    moving.where = where;
+    reduced_count = profile->pane_count - 1;
+    if (index < reduced_count) {
+        memmove(&profile->pane_configs[index],
+            &profile->pane_configs[index + 1],
+            sizeof(profile->pane_configs[0]) * (reduced_count - index));
+    }
+
+    for (int i = 0; i < reduced_count; i++) {
+        if (!sdl_config_profile_pane_has_stack_order(
+                profile->pane_configs[i].pane)
+            || profile->pane_configs[i].where != where)
+        {
+            continue;
+        }
+        placement_count++;
+        last_placement_index = i;
+    }
+
+    if (order < 1)
+        order = 1;
+    if (order > placement_count + 1)
+        order = placement_count + 1;
+
+    if (placement_count == 0) {
+        insertion_index = (index < reduced_count) ? index : reduced_count;
+    } else if (order > placement_count) {
+        insertion_index = last_placement_index + 1;
+    } else {
+        int seen = 0;
+
+        for (int i = 0; i < reduced_count; i++) {
+            if (!sdl_config_profile_pane_has_stack_order(
+                    profile->pane_configs[i].pane)
+                || profile->pane_configs[i].where != where)
+            {
+                continue;
+            }
+            seen++;
+            if (seen == order) {
+                insertion_index = i;
+                break;
+            }
+        }
+    }
+
+    if (insertion_index < 0)
+        insertion_index = reduced_count;
+    if (insertion_index < reduced_count) {
+        memmove(&profile->pane_configs[insertion_index + 1],
+            &profile->pane_configs[insertion_index],
+            sizeof(profile->pane_configs[0])
+                * (reduced_count - insertion_index));
+    }
+    profile->pane_configs[insertion_index] = moving;
+}
+
+static void sdl_config_profile_set_pane(
+    struct sdl_pane_profile* profile, enum pane_type pane,
+    bool enabled, enum pane_placement where, int order)
+{
+    int index = sdl_config_profile_find_pane(profile, pane);
+
+    if (index < 0)
+        return;
+    profile->pane_configs[index].enabled = enabled;
+    sdl_config_profile_set_pane_where_order(profile, index, where, order);
+}
+
+void sdl_pane_profile_apply_tablet_defaults(
+    struct sdl_pane_profile* profile, int orientation)
+{
+    int rolls_index;
+
+    if (!profile)
+        return;
+
+    profile->left_panel_compact_health_bar = true;
+    if (orientation == SDL_PANE_ORIENTATION_PORTRAIT) {
+        sdl_pane_profile_apply_portrait_defaults(profile);
+        profile->left_panel_expanded_on_launch = false;
+        profile->quick_touch_buttons_on_left = true;
+    } else {
+        int quick_access_index;
+
+        profile->left_panel_expanded_on_launch = false;
+        profile->quick_touch_buttons_on_left = false;
+        sdl_config_profile_set_pane(profile, PANE_DEPTH, true,
+            PLACE_BOTTOM_RIGHT, 1);
+        sdl_config_profile_set_pane(profile, PANE_STATUS_DEPTH, false,
+            PLACE_BOTTOM_RIGHT, 2);
+        sdl_config_profile_set_pane(profile, PANE_STATUS, true,
+            PLACE_BOTTOM_CENTER, 1);
+        /*
+         * Status now owns Bottom Center 1.  Reinsert Quick Access explicitly
+         * at 2 so its dynamic renderer consumes the shifted stack anchor
+         * instead of retaining the old first-slot geometry.
+         */
+        quick_access_index = sdl_config_profile_find_pane(profile,
+            PANE_OVERLAY_MENU);
+        if (quick_access_index >= 0) {
+            sdl_config_profile_set_pane_where_order(profile,
+                quick_access_index, PLACE_BOTTOM_CENTER, 2);
+        }
+    }
+
+    rolls_index = sdl_config_profile_find_pane(profile, PANE_ROLLS);
+    if (rolls_index >= 0)
+        profile->pane_configs[rolls_index].rect.rows = 8;
 }
 
 static bool sdl_config_profile_has_enabled_bottom_pane(
@@ -2870,17 +3192,30 @@ static void sdl_config_migrate_default_log_pane(struct sdl_config* config,
     if (!pane_profiles || profile_count <= 0)
         return;
 
-    for (int mode = 0; mode < profile_count; mode++) {
-        if (sdl_config_profile_has_enabled_bottom_pane(&pane_profiles[mode])) {
-            if (!pane_profiles[mode].enable_bottom_panes) {
-                pane_profiles[mode].enable_bottom_panes = true;
+    for (int mode = 0;
+         mode < SDL_MIN_TERMINAL_MODE_COUNT;
+         mode++)
+    {
+        int profile_index = SDL_PANE_PROFILE_INDEX(
+            SDL_PANE_ORIENTATION_LANDSCAPE, mode);
+
+        if (profile_index >= profile_count)
+            continue;
+        if (sdl_config_profile_has_enabled_bottom_pane(
+                &pane_profiles[profile_index]))
+        {
+            if (!pane_profiles[profile_index].enable_bottom_panes) {
+                pane_profiles[profile_index].enable_bottom_panes = true;
                 changed = true;
             }
             continue;
         }
 
-        if (sdl_config_profile_enable_default_log_pane(&pane_profiles[mode]))
+        if (sdl_config_profile_enable_default_log_pane(
+                &pane_profiles[profile_index]))
+        {
             changed = true;
+        }
     }
 
     if (changed) {
@@ -2925,14 +3260,103 @@ static cJSON* sdl_config_create_panes_array(const struct pane_config* pane_confi
     return panes;
 }
 
+static cJSON* sdl_config_create_pane_profile_object(
+    const struct sdl_pane_profile* profile)
+{
+    cJSON* profile_obj;
+    cJSON* panes;
+    cJSON* top_panel_bindings;
+    cJSON* top_panel_long_bindings;
+
+    if (!profile)
+        return NULL;
+
+    profile_obj = cJSON_CreateObject();
+    if (!profile_obj)
+        return NULL;
+
+    cJSON_AddNumberToObject(profile_obj, "mainViewScale",
+        profile->main_view_scale);
+    cJSON_AddNumberToObject(profile_obj, "auxViewFontSize",
+        profile->aux_view_font_size);
+    cJSON_AddBoolToObject(profile_obj, "enableRightPanes",
+        profile->enable_right_panes);
+    cJSON_AddBoolToObject(profile_obj, "enableBottomPanes",
+        profile->enable_bottom_panes);
+    cJSON_AddBoolToObject(profile_obj, "leftOverlaysTouchScreenEdge",
+        profile->left_overlays_touch_screen_edge);
+    cJSON_AddBoolToObject(profile_obj, "showOverlayLogBorder",
+        profile->show_overlay_log_border);
+    cJSON_AddBoolToObject(profile_obj, "showMainMenuButton",
+        profile->show_main_menu_button);
+    cJSON_AddBoolToObject(profile_obj, "leftPanelExpandedOnLaunch",
+        profile->left_panel_expanded_on_launch);
+    cJSON_AddStringToObject(profile_obj, "leftPanelCompactMode",
+        left_panel_compact_mode_to_string(profile->left_panel_compact_mode));
+    cJSON_AddBoolToObject(profile_obj, "leftPanelCompactHealthBar",
+        profile->left_panel_compact_health_bar);
+    cJSON_AddBoolToObject(profile_obj, "quickTouchButtonsOnLeft",
+        profile->quick_touch_buttons_on_left);
+    cJSON_AddNumberToObject(profile_obj, "logPaneDisplayFilter",
+        profile->log_pane_display_filter);
+    cJSON_AddNumberToObject(profile_obj, "diceRollLockMs",
+        profile->dice_roll_lock_ms);
+    cJSON_AddNumberToObject(profile_obj, "diceRollOverlayMs",
+        profile->dice_roll_overlay_ms);
+    cJSON_AddNumberToObject(profile_obj, "popupNotificationMs",
+        profile->popup_notification_ms);
+    cJSON_AddBoolToObject(profile_obj, "touchTopPanelArrowsVisible",
+        profile->touch_top_panel_arrows_visible);
+    cJSON_AddBoolToObject(profile_obj, "touchTopPanelDefaultOpen",
+        profile->touch_top_panel_default_open);
+    cJSON_AddNumberToObject(profile_obj, "touchTopPanelCellCount",
+        profile->touch_top_panel_cell_count);
+    cJSON_AddNumberToObject(profile_obj, "touchTopPanelRows",
+        profile->touch_top_panel_rows);
+    cJSON_AddNumberToObject(profile_obj, "touchTopPanelSize",
+        profile->touch_top_panel_size);
+    top_panel_bindings = sdl_config_create_int_array(
+        profile->touch_top_panel_bindings,
+        SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
+    if (top_panel_bindings) {
+        cJSON_AddItemToObject(profile_obj, "touchTopPanelBindings",
+            top_panel_bindings);
+    }
+    top_panel_long_bindings = sdl_config_create_int_array(
+        profile->touch_top_panel_long_bindings,
+        SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
+    if (top_panel_long_bindings) {
+        cJSON_AddItemToObject(profile_obj, "touchTopPanelLongBindings",
+            top_panel_long_bindings);
+    }
+    cJSON_AddNumberToObject(profile_obj, "stackOrderVersion", 1);
+
+    panes = sdl_config_create_panes_array(profile->pane_configs,
+        profile->pane_count);
+    if (!panes) {
+        cJSON_Delete(profile_obj);
+        return NULL;
+    }
+
+    cJSON_AddItemToObject(profile_obj, "panes", panes);
+    return profile_obj;
+}
+
 enum sdl_config_load_status sdl_config_load(const char* filename,
     struct sdl_config* config, struct sdl_pane_profile* pane_profiles,
-    int profile_count)
+    int profile_count, struct sdl_config_load_info* load_info)
 {
     struct pane_config legacy_panes[MAX_PANE_CONFIGS] = { 0 };
     int legacy_pane_count = 0;
     bool saw_enable_bottom_panes = false;
     bool saw_left_panel_expanded_on_launch = false;
+    bool profile_top_panel_arrows_loaded[SDL_PANE_PROFILE_COUNT] = { false };
+    bool profile_top_panel_bindings_loaded[SDL_PANE_PROFILE_COUNT] = { false };
+    bool profile_top_panel_long_bindings_loaded[SDL_PANE_PROFILE_COUNT] = {
+        false };
+
+    if (load_info)
+        memset(load_info, 0, sizeof(*load_info));
 
     /* Loaders overlay JSON onto defaults so old configs inherit new settings. */
     sdl_config_set_defaults(config);
@@ -2980,6 +3404,94 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         } else {
             log_warn("mainViewScale not found or not a number");
         }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "inputUiMode");
+        if (cJSON_IsString(item) && item->valuestring) {
+            config->input_ui_mode = parse_input_ui_mode(item->valuestring);
+            log_debug("Loaded inputUiMode: %s",
+                input_ui_mode_to_string(config->input_ui_mode));
+        } else if (cJSON_IsNumber(item)
+            && item->valueint >= SDL_INPUT_UI_MODE_AUTO
+            && item->valueint < SDL_INPUT_UI_MODE_COUNT)
+        {
+            config->input_ui_mode = item->valueint;
+            log_debug("Loaded legacy numeric inputUiMode: %s",
+                input_ui_mode_to_string(config->input_ui_mode));
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "terminalMenuScaleOffset");
+        if (cJSON_IsNumber(item)) {
+            config->terminal_menu_scale_offset = item->valueint;
+            if (config->terminal_menu_scale_offset
+                < SDL_TERMINAL_MENU_SCALE_OFFSET_MIN)
+            {
+                config->terminal_menu_scale_offset =
+                    SDL_TERMINAL_MENU_SCALE_OFFSET_MIN;
+            }
+            if (config->terminal_menu_scale_offset
+                > SDL_TERMINAL_MENU_SCALE_OFFSET_MAX)
+            {
+                config->terminal_menu_scale_offset =
+                    SDL_TERMINAL_MENU_SCALE_OFFSET_MAX;
+            }
+            log_debug("Loaded terminalMenuScaleOffset: %d",
+                config->terminal_menu_scale_offset);
+        } else {
+            config->terminal_menu_scale_offset =
+                SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
+                    config->main_view_scale);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "compactInventoryMenus");
+        if (cJSON_IsBool(item)) {
+            config->compact_inventory_menus = cJSON_IsTrue(item);
+            log_debug("Loaded compactInventoryMenus: %s",
+                config->compact_inventory_menus ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "mobileStartingZoomOffset");
+        if (cJSON_IsNumber(item)) {
+            config->mobile_starting_zoom_offset = item->valueint;
+            if (config->mobile_starting_zoom_offset
+                < SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN)
+            {
+                config->mobile_starting_zoom_offset =
+                    SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN;
+            }
+            if (config->mobile_starting_zoom_offset
+                > SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX)
+            {
+                config->mobile_starting_zoom_offset =
+                    SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX;
+            }
+            log_debug("Loaded mobileStartingZoomOffset: %d",
+                config->mobile_starting_zoom_offset);
+        }
+
+#if defined(__ANDROID__) || defined(SIL_IOS)
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "mobilePortraitMode");
+        if (!cJSON_IsBool(item))
+        {
+            /* Migrate the former render-only Android portrait settings. */
+            item = cJSON_GetObjectItemCaseSensitive(sdl,
+                "androidNarrativePortraitLayout");
+        }
+        if (!cJSON_IsBool(item))
+        {
+            item = cJSON_GetObjectItemCaseSensitive(sdl,
+                "androidWelcomePortraitLayout");
+        }
+        if (cJSON_IsBool(item)) {
+            config->mobile_portrait_mode = cJSON_IsTrue(item);
+            log_debug("Loaded mobilePortraitMode: %s",
+                config->mobile_portrait_mode ? "true" : "false");
+        }
+#else
+        config->mobile_portrait_mode = false;
+#endif
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "auxViewFontSize");
         if (cJSON_IsNumber(item)) {
@@ -2995,6 +3507,71 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             log_debug("Loaded margin: %d", config->margin);
         } else {
             log_warn("margin not found or not a number");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "cameraCenterClearance");
+        if (cJSON_IsNumber(item)) {
+            config->camera_center_clearance_vertical = item->valueint;
+            config->camera_center_clearance_horizontal = item->valueint;
+            if (config->camera_center_clearance_vertical
+                < SDL_CAMERA_CENTER_CLEARANCE_MIN)
+            {
+                config->camera_center_clearance_vertical =
+                    SDL_CAMERA_CENTER_CLEARANCE_MIN;
+                config->camera_center_clearance_horizontal =
+                    SDL_CAMERA_CENTER_CLEARANCE_MIN;
+            }
+            if (config->camera_center_clearance_vertical
+                > SDL_CAMERA_CENTER_CLEARANCE_MAX)
+            {
+                config->camera_center_clearance_vertical =
+                    SDL_CAMERA_CENTER_CLEARANCE_MAX;
+                config->camera_center_clearance_horizontal =
+                    SDL_CAMERA_CENTER_CLEARANCE_MAX;
+            }
+            log_debug("Loaded cameraCenterClearance: %d",
+                config->camera_center_clearance_vertical);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "cameraCenterClearanceVertical");
+        if (cJSON_IsNumber(item)) {
+            config->camera_center_clearance_vertical = item->valueint;
+            if (config->camera_center_clearance_vertical
+                < SDL_CAMERA_CENTER_CLEARANCE_MIN)
+            {
+                config->camera_center_clearance_vertical =
+                    SDL_CAMERA_CENTER_CLEARANCE_MIN;
+            }
+            if (config->camera_center_clearance_vertical
+                > SDL_CAMERA_CENTER_CLEARANCE_MAX)
+            {
+                config->camera_center_clearance_vertical =
+                    SDL_CAMERA_CENTER_CLEARANCE_MAX;
+            }
+            log_debug("Loaded cameraCenterClearanceVertical: %d",
+                config->camera_center_clearance_vertical);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "cameraCenterClearanceHorizontal");
+        if (cJSON_IsNumber(item)) {
+            config->camera_center_clearance_horizontal = item->valueint;
+            if (config->camera_center_clearance_horizontal
+                < SDL_CAMERA_CENTER_CLEARANCE_MIN)
+            {
+                config->camera_center_clearance_horizontal =
+                    SDL_CAMERA_CENTER_CLEARANCE_MIN;
+            }
+            if (config->camera_center_clearance_horizontal
+                > SDL_CAMERA_CENTER_CLEARANCE_MAX)
+            {
+                config->camera_center_clearance_horizontal =
+                    SDL_CAMERA_CENTER_CLEARANCE_MAX;
+            }
+            log_debug("Loaded cameraCenterClearanceHorizontal: %d",
+                config->camera_center_clearance_horizontal);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "fullscreen");
@@ -3046,6 +3623,22 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             log_debug("Loaded showPaneBorders: %s", config->show_pane_borders ? "true" : "false");
         }
 
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "leftOverlaysTouchScreenEdge");
+        if (cJSON_IsBool(item)) {
+            config->left_overlays_touch_screen_edge = cJSON_IsTrue(item);
+            log_debug("Loaded leftOverlaysTouchScreenEdge: %s",
+                config->left_overlays_touch_screen_edge ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "showOverlayLogBorder");
+        if (cJSON_IsBool(item)) {
+            config->show_overlay_log_border = cJSON_IsTrue(item);
+            log_debug("Loaded showOverlayLogBorder: %s",
+                config->show_overlay_log_border ? "true" : "false");
+        }
+
         item = cJSON_GetObjectItemCaseSensitive(sdl, "leftPanelExpandedOnLaunch");
         saw_left_panel_expanded_on_launch = (item != NULL);
         if (cJSON_IsBool(item)) {
@@ -3069,6 +3662,22 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             log_debug("Loaded numeric leftPanelCompactMode: %s",
                 left_panel_compact_mode_to_string(
                     config->left_panel_compact_mode));
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "leftPanelCompactHealthBar");
+        if (cJSON_IsBool(item)) {
+            config->left_panel_compact_health_bar = cJSON_IsTrue(item);
+            log_debug("Loaded leftPanelCompactHealthBar: %s",
+                config->left_panel_compact_health_bar ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "quickTouchButtonsOnLeft");
+        if (cJSON_IsBool(item)) {
+            config->quick_touch_buttons_on_left = cJSON_IsTrue(item);
+            log_debug("Loaded quickTouchButtonsOnLeft: %s",
+                config->quick_touch_buttons_on_left ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "minTerminalMode");
@@ -3118,6 +3727,38 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                 config->dice_roll_overlay_ms = SDL_DICE_ROLL_TIMING_MAX_MS;
             log_debug("Loaded diceRollOverlayMs: %d",
                 config->dice_roll_overlay_ms);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "popupNotificationMs");
+        if (cJSON_IsNumber(item)) {
+            config->popup_notification_ms = item->valueint;
+            if (config->popup_notification_ms < 0)
+                config->popup_notification_ms = 0;
+            if (config->popup_notification_ms
+                > SDL_POPUP_NOTIFICATION_MAX_MS)
+            {
+                config->popup_notification_ms =
+                    SDL_POPUP_NOTIFICATION_MAX_MS;
+            }
+            log_debug("Loaded popupNotificationMs: %d",
+                config->popup_notification_ms);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "showMainMenuButton");
+        if (cJSON_IsBool(item)) {
+            config->show_main_menu_button = cJSON_IsTrue(item);
+            log_debug("Loaded showMainMenuButton: %s",
+                config->show_main_menu_button ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "showContextSquarePopups");
+        if (cJSON_IsBool(item)) {
+            config->show_context_square_popups = cJSON_IsTrue(item);
+            log_debug("Loaded showContextSquarePopups: %s",
+                config->show_context_square_popups ? "true" : "false");
         }
         
         // Window position and size for windowed mode
@@ -3315,31 +3956,216 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         bool loaded_profiles[SDL_PANE_PROFILE_COUNT] = { false };
 
         if (cJSON_IsObject(pane_profiles_obj) && pane_profiles && profile_count > 0) {
-            for (int mode = 0; mode < profile_count; mode++) {
-                const char* mode_name = min_terminal_mode_to_string(mode);
-                cJSON* profile_obj = cJSON_GetObjectItemCaseSensitive(pane_profiles_obj, mode_name);
+            cJSON* orientation_objs[SDL_PANE_ORIENTATION_COUNT] = {
+                cJSON_GetObjectItemCaseSensitive(pane_profiles_obj,
+                    "landscape"),
+                cJSON_GetObjectItemCaseSensitive(pane_profiles_obj,
+                    "portrait"),
+            };
+            bool has_orientation_profiles =
+                cJSON_IsObject(orientation_objs[SDL_PANE_ORIENTATION_LANDSCAPE])
+                || cJSON_IsObject(
+                    orientation_objs[SDL_PANE_ORIENTATION_PORTRAIT]);
 
-                if (cJSON_IsObject(profile_obj)) {
-                    sdl_config_load_pane_profile(profile_obj, &pane_profiles[mode], mode_name);
-                    if (mode >= 0 && mode < SDL_PANE_PROFILE_COUNT)
-                        loaded_profiles[mode] = true;
+            if (has_orientation_profiles) {
+                for (int orientation = 0;
+                     orientation < SDL_PANE_ORIENTATION_COUNT;
+                     orientation++)
+                {
+                    cJSON* orientation_obj = orientation_objs[orientation];
+
+                    if (!cJSON_IsObject(orientation_obj))
+                        continue;
+                    for (int mode = 0;
+                         mode < SDL_MIN_TERMINAL_MODE_COUNT;
+                         mode++)
+                    {
+                        int profile_index = SDL_PANE_PROFILE_INDEX(
+                            orientation, mode);
+                        const char* mode_name =
+                            min_terminal_mode_to_string(mode);
+                        cJSON* profile_obj =
+                            cJSON_GetObjectItemCaseSensitive(orientation_obj,
+                                mode_name);
+                        char label[48];
+
+                        if (profile_index >= profile_count
+                            || !cJSON_IsObject(profile_obj))
+                        {
+                            continue;
+                        }
+                        strnfmt(label, sizeof(label), "%s.%s",
+                            orientation == SDL_PANE_ORIENTATION_PORTRAIT
+                                ? "portrait" : "landscape",
+                            mode_name);
+                        profile_top_panel_arrows_loaded[profile_index] =
+                            cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(
+                                profile_obj,
+                                "touchTopPanelArrowsVisible"));
+                        profile_top_panel_bindings_loaded[profile_index] =
+                            cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(
+                                profile_obj, "touchTopPanelBindings"));
+                        profile_top_panel_long_bindings_loaded[profile_index] =
+                            cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(
+                                profile_obj, "touchTopPanelLongBindings"));
+                        sdl_config_load_pane_profile(profile_obj,
+                            &pane_profiles[profile_index], label);
+                        if (orientation == SDL_PANE_ORIENTATION_PORTRAIT
+                            && !cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(
+                                profile_obj, "showOverlayLogBorder")))
+                        {
+                            pane_profiles[profile_index]
+                                .show_overlay_log_border = false;
+                        }
+                        if (orientation == SDL_PANE_ORIENTATION_PORTRAIT) {
+                            cJSON* order_version =
+                                cJSON_GetObjectItemCaseSensitive(profile_obj,
+                                    "stackOrderVersion");
+
+                            if (!cJSON_IsNumber(order_version)
+                                || order_version->valueint < 1)
+                            {
+                                sdl_pane_profile_apply_portrait_stack_migration(
+                                    &pane_profiles[profile_index]);
+                            }
+                        }
+                        loaded_profiles[profile_index] = true;
+                    }
+                }
+            } else {
+                /* Migrate the former NORMAL/COMPACT flat profile object into
+                 * the landscape half.  Portrait gets its own defaults below. */
+                for (int mode = 0;
+                     mode < SDL_MIN_TERMINAL_MODE_COUNT;
+                     mode++)
+                {
+                    int profile_index = SDL_PANE_PROFILE_INDEX(
+                        SDL_PANE_ORIENTATION_LANDSCAPE, mode);
+                    const char* mode_name = min_terminal_mode_to_string(mode);
+                    cJSON* profile_obj = cJSON_GetObjectItemCaseSensitive(
+                        pane_profiles_obj, mode_name);
+
+                    if (profile_index >= profile_count
+                        || !cJSON_IsObject(profile_obj))
+                    {
+                        continue;
+                    }
+                    profile_top_panel_arrows_loaded[profile_index] =
+                        cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(
+                            profile_obj, "touchTopPanelArrowsVisible"));
+                    profile_top_panel_bindings_loaded[profile_index] =
+                        cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(
+                            profile_obj, "touchTopPanelBindings"));
+                    profile_top_panel_long_bindings_loaded[profile_index] =
+                        cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(
+                            profile_obj, "touchTopPanelLongBindings"));
+                    sdl_config_load_pane_profile(profile_obj,
+                        &pane_profiles[profile_index], mode_name);
+                    loaded_profiles[profile_index] = true;
                 }
             }
 
-            if (profile_count > SDL_MIN_TERMINAL_COMPACT
-                && loaded_profiles[SDL_MIN_TERMINAL_NORMAL]
-                && !loaded_profiles[SDL_MIN_TERMINAL_COMPACT]) {
-                sdl_config_copy_pane_profile(
-                    &pane_profiles[SDL_MIN_TERMINAL_COMPACT],
-                    &pane_profiles[SDL_MIN_TERMINAL_NORMAL]);
-                log_info("paneProfiles.COMPACT missing; copied NORMAL profile into COMPACT");
-            } else if (profile_count > SDL_MIN_TERMINAL_COMPACT
-                && loaded_profiles[SDL_MIN_TERMINAL_COMPACT]
-                && !loaded_profiles[SDL_MIN_TERMINAL_NORMAL]) {
-                sdl_config_copy_pane_profile(
-                    &pane_profiles[SDL_MIN_TERMINAL_NORMAL],
-                    &pane_profiles[SDL_MIN_TERMINAL_COMPACT]);
-                log_info("paneProfiles.NORMAL missing; copied COMPACT profile into NORMAL");
+            {
+                int normal = SDL_PANE_PROFILE_INDEX(
+                    SDL_PANE_ORIENTATION_LANDSCAPE,
+                    SDL_MIN_TERMINAL_NORMAL);
+                int compact = SDL_PANE_PROFILE_INDEX(
+                    SDL_PANE_ORIENTATION_LANDSCAPE,
+                    SDL_MIN_TERMINAL_COMPACT);
+
+                if (compact < profile_count && loaded_profiles[normal]
+                    && !loaded_profiles[compact])
+                {
+                    sdl_config_copy_pane_profile(&pane_profiles[compact],
+                        &pane_profiles[normal]);
+                    profile_top_panel_arrows_loaded[compact] =
+                        profile_top_panel_arrows_loaded[normal];
+                    profile_top_panel_bindings_loaded[compact] =
+                        profile_top_panel_bindings_loaded[normal];
+                    profile_top_panel_long_bindings_loaded[compact] =
+                        profile_top_panel_long_bindings_loaded[normal];
+                    loaded_profiles[compact] = true;
+                    log_info("Landscape COMPACT profile missing; copied NORMAL");
+                } else if (compact < profile_count && loaded_profiles[compact]
+                    && !loaded_profiles[normal])
+                {
+                    sdl_config_copy_pane_profile(&pane_profiles[normal],
+                        &pane_profiles[compact]);
+                    profile_top_panel_arrows_loaded[normal] =
+                        profile_top_panel_arrows_loaded[compact];
+                    profile_top_panel_bindings_loaded[normal] =
+                        profile_top_panel_bindings_loaded[compact];
+                    profile_top_panel_long_bindings_loaded[normal] =
+                        profile_top_panel_long_bindings_loaded[compact];
+                    loaded_profiles[normal] = true;
+                    log_info("Landscape NORMAL profile missing; copied COMPACT");
+                }
+            }
+
+            {
+                int normal = SDL_PANE_PROFILE_INDEX(
+                    SDL_PANE_ORIENTATION_PORTRAIT,
+                    SDL_MIN_TERMINAL_NORMAL);
+                int compact = SDL_PANE_PROFILE_INDEX(
+                    SDL_PANE_ORIENTATION_PORTRAIT,
+                    SDL_MIN_TERMINAL_COMPACT);
+
+                if (compact < profile_count && loaded_profiles[normal]
+                    && !loaded_profiles[compact])
+                {
+                    sdl_config_copy_pane_profile(&pane_profiles[compact],
+                        &pane_profiles[normal]);
+                    profile_top_panel_arrows_loaded[compact] =
+                        profile_top_panel_arrows_loaded[normal];
+                    profile_top_panel_bindings_loaded[compact] =
+                        profile_top_panel_bindings_loaded[normal];
+                    profile_top_panel_long_bindings_loaded[compact] =
+                        profile_top_panel_long_bindings_loaded[normal];
+                    loaded_profiles[compact] = true;
+                    log_info("Portrait COMPACT profile missing; copied NORMAL");
+                } else if (compact < profile_count && loaded_profiles[compact]
+                    && !loaded_profiles[normal])
+                {
+                    sdl_config_copy_pane_profile(&pane_profiles[normal],
+                        &pane_profiles[compact]);
+                    profile_top_panel_arrows_loaded[normal] =
+                        profile_top_panel_arrows_loaded[compact];
+                    profile_top_panel_bindings_loaded[normal] =
+                        profile_top_panel_bindings_loaded[compact];
+                    profile_top_panel_long_bindings_loaded[normal] =
+                        profile_top_panel_long_bindings_loaded[compact];
+                    loaded_profiles[normal] = true;
+                    log_info("Portrait NORMAL profile missing; copied COMPACT");
+                }
+            }
+        }
+
+        if (pane_profiles && profile_count > 0) {
+            for (int mode = 0;
+                 mode < SDL_MIN_TERMINAL_MODE_COUNT;
+                 mode++)
+            {
+                int landscape = SDL_PANE_PROFILE_INDEX(
+                    SDL_PANE_ORIENTATION_LANDSCAPE, mode);
+                int portrait = SDL_PANE_PROFILE_INDEX(
+                    SDL_PANE_ORIENTATION_PORTRAIT, mode);
+
+                if (portrait >= profile_count || loaded_profiles[portrait])
+                    continue;
+                if (landscape < profile_count) {
+                    sdl_config_copy_pane_profile(&pane_profiles[portrait],
+                        &pane_profiles[landscape]);
+                    profile_top_panel_arrows_loaded[portrait] =
+                        profile_top_panel_arrows_loaded[landscape];
+                    profile_top_panel_bindings_loaded[portrait] =
+                        profile_top_panel_bindings_loaded[landscape];
+                    profile_top_panel_long_bindings_loaded[portrait] =
+                        profile_top_panel_long_bindings_loaded[landscape];
+                }
+                sdl_pane_profile_apply_portrait_defaults(
+                    &pane_profiles[portrait]);
+                log_info("Portrait %s profile missing; seeded portrait defaults",
+                    min_terminal_mode_to_string(mode));
             }
         }
     }
@@ -3359,18 +4185,6 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             log_debug("Loaded gamepad.enabled: %s", config->gamepad_enabled ? "true" : "false");
         }
 
-        item = cJSON_GetObjectItemCaseSensitive(gamepad, "autoMode");
-        if (cJSON_IsBool(item)) {
-            config->gamepad_auto_mode = cJSON_IsTrue(item);
-            log_debug("Loaded gamepad.autoMode: %s", config->gamepad_auto_mode ? "true" : "false");
-        }
-
-        item = cJSON_GetObjectItemCaseSensitive(gamepad, "steamdeckMode");
-        if (cJSON_IsBool(item)) {
-            config->steamdeck_mode = cJSON_IsTrue(item);
-            log_debug("Loaded gamepad.steamdeckMode: %s", config->steamdeck_mode ? "true" : "false");
-        }
-
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "steamdeckInvEquipSameButtonCycle");
         if (cJSON_IsBool(item)) {
             config->steamdeck_inv_equip_same_button_cycle = cJSON_IsTrue(item);
@@ -3382,6 +4196,25 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         if (cJSON_IsBool(item)) {
             config->gamepad_use_dpad = cJSON_IsTrue(item);
             log_debug("Loaded gamepad.useDpad: %s", config->gamepad_use_dpad ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(gamepad, "dpadDiagonalDelayMs");
+        if (cJSON_IsNumber(item)) {
+            config->gamepad_dpad_diagonal_delay_ms = item->valueint;
+            if (config->gamepad_dpad_diagonal_delay_ms
+                < SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
+            {
+                config->gamepad_dpad_diagonal_delay_ms =
+                    SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS;
+            }
+            if (config->gamepad_dpad_diagonal_delay_ms
+                > SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS)
+            {
+                config->gamepad_dpad_diagonal_delay_ms =
+                    SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS;
+            }
+            log_debug("Loaded gamepad.dpadDiagonalDelayMs: %d",
+                config->gamepad_dpad_diagonal_delay_ms);
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "useLeftStick");
@@ -3498,7 +4331,10 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             config->gamepad_shoulder_combo_binding = GAMEPAD_BIND_NONE;
         }
 
-        if (sdl_config_should_upgrade_legacy_gamepad_defaults(config)) {
+        if (sdl_config_should_upgrade_previous_gamepad_defaults(config)) {
+            log_info("Upgrading previous default West gamepad binding from Use to Examine");
+            sdl_config_set_default_gamepad_bindings(config);
+        } else if (sdl_config_should_upgrade_legacy_gamepad_defaults(config)) {
             log_info("Upgrading legacy default gamepad config to current defaults");
             sdl_config_set_default_gamepad_bindings(config);
             config->steamdeck_inv_equip_same_button_cycle = true;
@@ -3525,10 +4361,9 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         cJSON* legacy_swipe_bindings = NULL;
         bool saw_touch_control_swipe_enabled = false;
         bool saw_touch_control_swipe_bindings = false;
-        bool saw_touch_control_top_panel_mode = false;
-        bool saw_touch_control_top_panel_button_count = false;
-        int top_panel_bindings_count = -1;
-        int top_panel_long_bindings_count = -1;
+        bool saw_touch_control_top_panel_size = false;
+        bool saw_touch_control_top_panel_cell_count = false;
+        bool saw_touch_control_top_panel_rows = false;
         cJSON* touch_pane = cJSON_GetObjectItemCaseSensitive(root, "touchPane");
         if (cJSON_IsObject(touch_pane)) {
             cJSON* bindings = cJSON_GetObjectItemCaseSensitive(touch_pane, "bindings");
@@ -3691,10 +4526,23 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                     "cornerButtonUpDownSide");
                 cJSON* corner_button_action_bindings = cJSON_GetObjectItemCaseSensitive(touch_control,
                     "cornerButtonActionBindings");
-                cJSON* top_panel_mode = cJSON_GetObjectItemCaseSensitive(touch_control,
-                    "topPanelMode");
+                cJSON* top_panel_arrows_visible = cJSON_GetObjectItemCaseSensitive(touch_control,
+                    "topPanelArrowsVisible");
                 cJSON* top_panel_default_open = cJSON_GetObjectItemCaseSensitive(touch_control,
                     "topPanelDefaultOpen");
+                cJSON* top_panel_size = cJSON_GetObjectItemCaseSensitive(touch_control,
+                    "topPanelSize");
+                cJSON* top_panel_cell_count = cJSON_GetObjectItemCaseSensitive(touch_control,
+                    "topPanelCellCount");
+                /* The first grid implementation stored its cell count under
+                 * topPanelColumns.  Read it once as a legacy alias. */
+                cJSON* top_panel_columns = cJSON_GetObjectItemCaseSensitive(touch_control,
+                    "topPanelColumns");
+                cJSON* top_panel_rows = cJSON_GetObjectItemCaseSensitive(touch_control,
+                    "topPanelRows");
+                /* Legacy fields used only to migrate existing sil_sdl.json. */
+                cJSON* top_panel_second_row = cJSON_GetObjectItemCaseSensitive(touch_control,
+                    "topPanelSecondRow");
                 cJSON* top_panel_button_count = cJSON_GetObjectItemCaseSensitive(touch_control,
                     "topPanelButtonCount");
                 cJSON* top_panel_tile_scale = cJSON_GetObjectItemCaseSensitive(touch_control,
@@ -3715,11 +4563,15 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                     "swipeBindings");
 
                 if (cJSON_IsString(profile) && profile->valuestring) {
+                    if (load_info)
+                        load_info->touch_profile_present = true;
                     config->touch_profile =
                         parse_touch_profile(profile->valuestring);
                     log_debug("Loaded touchControl.profile: %s",
                         touch_profile_to_string(config->touch_profile));
                 } else if (cJSON_IsNumber(profile)) {
+                    if (load_info)
+                        load_info->touch_profile_present = true;
                     config->touch_profile =
                         normalize_touch_profile(profile->valueint);
                     log_debug("Loaded numeric touchControl.profile: %s",
@@ -3780,6 +4632,8 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                 }
 
                 if (cJSON_IsBool(round_movement)) {
+                    if (load_info)
+                        load_info->touch_round_movement_present = true;
                     config->touch_round_movement_enabled =
                         cJSON_IsTrue(round_movement);
                     log_debug("Loaded touchControl.roundMovementLayerEnabled: %s",
@@ -3857,24 +4711,12 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                         count);
                 }
 
-                if (cJSON_IsString(top_panel_mode)
-                    && top_panel_mode->valuestring)
-                {
-                    saw_touch_control_top_panel_mode = true;
-                    config->touch_top_panel_mode =
-                        parse_touch_top_panel_mode(
-                            top_panel_mode->valuestring);
-                    log_debug("Loaded touchControl.topPanelMode: %s",
-                        touch_top_panel_mode_to_string(
-                            config->touch_top_panel_mode));
-                } else if (cJSON_IsNumber(top_panel_mode)) {
-                    saw_touch_control_top_panel_mode = true;
-                    config->touch_top_panel_mode =
-                        normalize_touch_top_panel_mode(
-                            top_panel_mode->valueint);
-                    log_debug("Loaded numeric touchControl.topPanelMode: %s",
-                        touch_top_panel_mode_to_string(
-                            config->touch_top_panel_mode));
+                if (cJSON_IsBool(top_panel_arrows_visible)) {
+                    config->touch_top_panel_arrows_visible =
+                        cJSON_IsTrue(top_panel_arrows_visible);
+                    log_debug("Loaded touchControl.topPanelArrowsVisible: %s",
+                        config->touch_top_panel_arrows_visible
+                            ? "true" : "false");
                 }
 
                 if (cJSON_IsBool(top_panel_default_open)) {
@@ -3884,26 +4726,72 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                         config->touch_top_panel_default_open ? "true" : "false");
                 }
 
-                if (cJSON_IsNumber(top_panel_button_count)) {
-                    saw_touch_control_top_panel_button_count = true;
-                    config->touch_top_panel_button_count =
-                        normalize_touch_top_panel_button_count(
-                            top_panel_button_count->valueint);
-                    log_debug("Loaded touchControl.topPanelButtonCount: %d",
-                        config->touch_top_panel_button_count);
+                if (cJSON_IsString(top_panel_size)
+                    && top_panel_size->valuestring
+                    && strcmp(top_panel_size->valuestring, "STRETCH") == 0)
+                {
+                    saw_touch_control_top_panel_size = true;
+                    config->touch_top_panel_size =
+                        SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+                    log_debug("Loaded touchControl.topPanelSize: STRETCH");
+                } else if (cJSON_IsNumber(top_panel_size)) {
+                    saw_touch_control_top_panel_size = true;
+                    config->touch_top_panel_size = normalize_touch_top_panel_size(
+                        (float)top_panel_size->valuedouble);
+                    log_debug("Loaded touchControl.topPanelSize: %.2f",
+                        (double)config->touch_top_panel_size);
                 }
 
-                if (cJSON_IsNumber(top_panel_tile_scale)) {
-                    config->touch_top_panel_tile_scale =
-                        normalize_touch_top_panel_tile_scale(
-                            top_panel_tile_scale->valueint);
-                    log_debug("Loaded touchControl.topPanelTileScale: %d",
-                        config->touch_top_panel_tile_scale);
+                if (cJSON_IsNumber(top_panel_cell_count)) {
+                    saw_touch_control_top_panel_cell_count = true;
+                    config->touch_top_panel_cell_count =
+                        normalize_touch_top_panel_cell_count(
+                            top_panel_cell_count->valueint);
+                    log_debug("Loaded touchControl.topPanelCellCount: %d",
+                        config->touch_top_panel_cell_count);
+                } else if (cJSON_IsNumber(top_panel_columns)) {
+                    saw_touch_control_top_panel_cell_count = true;
+                    config->touch_top_panel_cell_count =
+                        normalize_touch_top_panel_cell_count(
+                            top_panel_columns->valueint);
+                    log_info("Migrated touchControl.topPanelColumns to topPanelCellCount");
+                }
+
+                if (cJSON_IsNumber(top_panel_rows)) {
+                    saw_touch_control_top_panel_rows = true;
+                    config->touch_top_panel_rows = normalize_touch_top_panel_rows(
+                        top_panel_rows->valueint);
+                    log_debug("Loaded touchControl.topPanelRows: %d",
+                        config->touch_top_panel_rows);
+                }
+
+                if (!saw_touch_control_top_panel_rows
+                    && cJSON_IsBool(top_panel_second_row))
+                {
+                    config->touch_top_panel_rows =
+                        cJSON_IsTrue(top_panel_second_row) ? 2 : 1;
+                    log_info("Migrated touchControl.topPanelSecondRow to topPanelRows");
+                }
+
+                if (!saw_touch_control_top_panel_cell_count
+                    && cJSON_IsNumber(top_panel_button_count))
+                {
+                    config->touch_top_panel_cell_count =
+                        normalize_touch_top_panel_cell_count(
+                            top_panel_button_count->valueint);
+                    log_info("Migrated touchControl.topPanelButtonCount to topPanelCellCount");
+                }
+
+                if (!saw_touch_control_top_panel_size
+                    && cJSON_IsNumber(top_panel_tile_scale))
+                {
+                    config->touch_top_panel_size = normalize_touch_top_panel_size(
+                        (float)top_panel_tile_scale->valuedouble);
+                    log_info("Migrated touchControl.topPanelTileScale to topPanelSize");
                 }
 
                 if (cJSON_IsArray(top_panel_bindings)) {
                     int count = cJSON_GetArraySize(top_panel_bindings);
-                    top_panel_bindings_count = count;
                     sdl_config_load_touch_binding_array(
                         top_panel_bindings,
                         config->touch_top_panel_bindings,
@@ -3914,7 +4802,6 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
 
                 if (cJSON_IsArray(top_panel_long_bindings)) {
                     int count = cJSON_GetArraySize(top_panel_long_bindings);
-                    top_panel_long_bindings_count = count;
                     sdl_config_load_touch_binding_array(
                         top_panel_long_bindings,
                         config->touch_top_panel_long_bindings,
@@ -3966,19 +4853,7 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             }
         }
 
-        sdl_config_migrate_touch_top_panel_layout(config,
-            top_panel_bindings_count, top_panel_long_bindings_count);
-        sdl_config_migrate_touch_top_panel_defaults(config);
-        if (!saw_touch_control_top_panel_mode) {
-            config->touch_top_panel_mode = SDL_TOUCH_TOP_PANEL_MODE_SHORT;
-        }
-        if (!saw_touch_control_top_panel_button_count) {
-            config->touch_top_panel_button_count =
-                (config->touch_top_panel_mode == SDL_TOUCH_TOP_PANEL_MODE_LONG)
-                    ? SDL_TOUCH_TOP_PANEL_BUTTON_COUNT
-                    : SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_DEFAULT;
-        }
-
+        sdl_config_migrate_touch_thumb_defaults(config);
         if (!saw_touch_control_swipe_enabled && cJSON_IsBool(legacy_swipe_enabled)) {
             config->touch_swipe_enabled = cJSON_IsTrue(legacy_swipe_enabled);
             log_debug("Loaded legacy touchPane.swipeEnabled: %s",
@@ -4010,13 +4885,13 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             normalize_touch_zone_overlay_mode(config->touch_zone_overlay_mode);
         config->touch_corner_up_down_side =
             normalize_touch_corner_up_down_side(config->touch_corner_up_down_side);
-        config->touch_top_panel_mode =
-            normalize_touch_top_panel_mode(config->touch_top_panel_mode);
-        config->touch_top_panel_tile_scale =
-            normalize_touch_top_panel_tile_scale(config->touch_top_panel_tile_scale);
-        config->touch_top_panel_button_count =
-            normalize_touch_top_panel_button_count(
-                config->touch_top_panel_button_count);
+        config->touch_top_panel_size =
+            normalize_touch_top_panel_size(config->touch_top_panel_size);
+        config->touch_top_panel_cell_count =
+            normalize_touch_top_panel_cell_count(
+                config->touch_top_panel_cell_count);
+        config->touch_top_panel_rows =
+            normalize_touch_top_panel_rows(config->touch_top_panel_rows);
         config->touch_profile =
             normalize_touch_profile(config->touch_profile);
     }
@@ -4028,6 +4903,8 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                 "enabled");
             cJSON* movement_mode = cJSON_GetObjectItemCaseSensitive(mouse_control,
                 "movementMode");
+            cJSON* tile_pointer = cJSON_GetObjectItemCaseSensitive(mouse_control,
+                "tilePointer");
 
             if (cJSON_IsBool(enabled)) {
                 config->mouse_enabled = cJSON_IsTrue(enabled);
@@ -4046,26 +4923,76 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                 log_debug("Loaded numeric mouseControl.movementMode: %s",
                     mouse_movement_mode_to_string(config->mouse_movement_mode));
             }
+
+            if (cJSON_IsBool(tile_pointer)) {
+                config->mouse_tile_pointer = cJSON_IsTrue(tile_pointer);
+                log_debug("Loaded mouseControl.tilePointer: %s",
+                    config->mouse_tile_pointer ? "true" : "false");
+            }
         }
 
         config->mouse_movement_mode =
             normalize_mouse_movement_mode(config->mouse_movement_mode);
     }
 
+    /* Quick Access used to be one global touch-control profile.  Preserve
+     * those values when loading an older file, while allowing every new pane
+     * profile to override them independently once the profile keys exist. */
+    if (pane_profiles) {
+        int count = MIN(profile_count, SDL_PANE_PROFILE_COUNT);
+
+        for (int i = 0; i < count; i++) {
+            if (!profile_top_panel_arrows_loaded[i]) {
+                pane_profiles[i].touch_top_panel_arrows_visible =
+                    config->touch_top_panel_arrows_visible;
+            }
+            if (!profile_top_panel_bindings_loaded[i]) {
+                memcpy(pane_profiles[i].touch_top_panel_bindings,
+                    config->touch_top_panel_bindings,
+                    sizeof(pane_profiles[i].touch_top_panel_bindings));
+            }
+            if (!profile_top_panel_long_bindings_loaded[i]) {
+                memcpy(pane_profiles[i].touch_top_panel_long_bindings,
+                    config->touch_top_panel_long_bindings,
+                    sizeof(pane_profiles[i].touch_top_panel_long_bindings));
+            }
+        }
+    }
+
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    /* Mobile owns the whole display and permits overlay panes only.  Normalize
+     * stale/shared desktop values at the persistence boundary so orientation
+     * switches cannot restore ordinary side or bottom panes. */
+    config->fullscreen = true;
+    config->aux_view_font_size = 0;
+    config->enable_right_panes = false;
+    config->enable_bottom_panes = false;
+    if (pane_profiles) {
+        for (int i = 0; i < profile_count; i++) {
+            pane_profiles[i].aux_view_font_size = 0;
+            pane_profiles[i].enable_right_panes = false;
+            pane_profiles[i].enable_bottom_panes = false;
+        }
+    }
+#endif
+
     cJSON_Delete(root);
     log_debug("Configuration loading complete. Active mode=%s", min_terminal_mode_to_string(config->min_terminal_mode));
     return SDL_CONFIG_LOAD_OK;
 }
 
-void sdl_config_save(const char* filename, const struct sdl_config* config,
+bool sdl_config_save(const char* filename, const struct sdl_config* config,
                      const struct sdl_pane_profile* pane_profiles, int profile_count)
 {
     int active_mode = config->min_terminal_mode;
+    int active_orientation = SDL_PANE_ORIENTATION_LANDSCAPE;
+    int saved_orientation_count = 1;
+    int active_profile_index;
     const struct sdl_pane_profile* active_profile = NULL;
     cJSON* root = cJSON_CreateObject();
     if (!root) {
         log_error("Failed to create JSON root object");
-        return;
+        return false;
     }
     
     // Create SDL settings object
@@ -4073,12 +5000,27 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     if (!sdl) {
         cJSON_Delete(root);
         log_error("Failed to create SDL settings object");
-        return;
+        return false;
     }
     
     cJSON_AddNumberToObject(sdl, "mainViewScale", config->main_view_scale);
+    cJSON_AddNumberToObject(sdl, "terminalMenuScaleOffset",
+        config->terminal_menu_scale_offset);
+    cJSON_AddBoolToObject(sdl, "compactInventoryMenus",
+        config->compact_inventory_menus);
+    cJSON_AddNumberToObject(sdl, "mobileStartingZoomOffset",
+        config->mobile_starting_zoom_offset);
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    cJSON_AddBoolToObject(sdl, "mobilePortraitMode",
+        config->mobile_portrait_mode);
+    saved_orientation_count = SDL_PANE_ORIENTATION_COUNT;
+#endif
     cJSON_AddNumberToObject(sdl, "auxViewFontSize", config->aux_view_font_size);
     cJSON_AddNumberToObject(sdl, "margin", config->margin);
+    cJSON_AddNumberToObject(sdl, "cameraCenterClearanceVertical",
+        config->camera_center_clearance_vertical);
+    cJSON_AddNumberToObject(sdl, "cameraCenterClearanceHorizontal",
+        config->camera_center_clearance_horizontal);
     cJSON_AddBoolToObject(sdl, "fullscreen", config->fullscreen);
     cJSON_AddBoolToObject(sdl, "tiles", config->tiles);
     cJSON_AddStringToObject(sdl, "palettePreset", config->palette_preset);
@@ -4086,16 +5028,32 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     cJSON_AddBoolToObject(sdl, "enableRightPanes", config->enable_right_panes);
     cJSON_AddBoolToObject(sdl, "enableBottomPanes", config->enable_bottom_panes);
     cJSON_AddBoolToObject(sdl, "showPaneBorders", config->show_pane_borders);
+    cJSON_AddBoolToObject(sdl, "leftOverlaysTouchScreenEdge",
+        config->left_overlays_touch_screen_edge);
+    cJSON_AddBoolToObject(sdl, "showOverlayLogBorder",
+        config->show_overlay_log_border);
     cJSON_AddBoolToObject(sdl, "leftPanelExpandedOnLaunch",
         config->left_panel_expanded_on_launch);
     cJSON_AddStringToObject(sdl, "leftPanelCompactMode",
         left_panel_compact_mode_to_string(config->left_panel_compact_mode));
+    cJSON_AddBoolToObject(sdl, "leftPanelCompactHealthBar",
+        config->left_panel_compact_health_bar);
+    cJSON_AddBoolToObject(sdl, "quickTouchButtonsOnLeft",
+        config->quick_touch_buttons_on_left);
     cJSON_AddStringToObject(sdl, "minTerminalMode", min_terminal_mode_to_string(config->min_terminal_mode));
     cJSON_AddNumberToObject(sdl, "logPaneDisplayFilter",
         config->log_pane_display_filter);
     cJSON_AddNumberToObject(sdl, "diceRollLockMs", config->dice_roll_lock_ms);
     cJSON_AddNumberToObject(sdl, "diceRollOverlayMs",
         config->dice_roll_overlay_ms);
+    cJSON_AddNumberToObject(sdl, "popupNotificationMs",
+        config->popup_notification_ms);
+    cJSON_AddBoolToObject(sdl, "showMainMenuButton",
+        config->show_main_menu_button);
+    cJSON_AddBoolToObject(sdl, "showContextSquarePopups",
+        config->show_context_square_popups);
+    cJSON_AddStringToObject(sdl, "inputUiMode",
+        input_ui_mode_to_string(config->input_ui_mode));
     
     // Save window position and size for windowed mode
     cJSON_AddNumberToObject(sdl, "windowX", config->window_x);
@@ -4138,17 +5096,26 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     cJSON_AddItemToObject(root, "sdl", sdl);
 
     {
-        cJSON* keyboard = sdl_config_create_keyboard_keymaps();
+        cJSON* keyboard = sdl_config_create_keyboard_keymaps(config);
         if (keyboard)
             cJSON_AddItemToObject(root, "keyboard", keyboard);
     }
 
     sdl_config_save_movement_bindings(root, config);
 
-    if (active_mode < 0 || active_mode >= profile_count)
+    if (active_mode < 0 || active_mode >= SDL_MIN_TERMINAL_MODE_COUNT)
         active_mode = SDL_MIN_TERMINAL_NORMAL;
-    if (pane_profiles && active_mode >= 0 && active_mode < profile_count)
-        active_profile = &pane_profiles[active_mode];
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    if (config->mobile_portrait_mode)
+        active_orientation = SDL_PANE_ORIENTATION_PORTRAIT;
+#endif
+    active_profile_index = SDL_PANE_PROFILE_INDEX(active_orientation,
+        active_mode);
+    if (pane_profiles && active_profile_index >= 0
+        && active_profile_index < profile_count)
+    {
+        active_profile = &pane_profiles[active_profile_index];
+    }
 
     {
         cJSON* panes = active_profile
@@ -4158,7 +5125,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
         if (!panes) {
             cJSON_Delete(root);
             log_error("Failed to create panes array");
-            return;
+            return false;
         }
 
         cJSON_AddItemToObject(root, "panes", panes);
@@ -4170,35 +5137,40 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
         if (!pane_profiles_obj) {
             cJSON_Delete(root);
             log_error("Failed to create paneProfiles object");
-            return;
+            return false;
         }
 
-        for (int mode = 0; mode < profile_count; mode++) {
-            cJSON* profile_obj = cJSON_CreateObject();
-            cJSON* panes = NULL;
+        for (int orientation = 0;
+             orientation < saved_orientation_count;
+             orientation++)
+        {
+            const char* orientation_name =
+                orientation == SDL_PANE_ORIENTATION_PORTRAIT
+                    ? "portrait" : "landscape";
+            cJSON* orientation_obj = cJSON_CreateObject();
 
-            if (!profile_obj)
+            if (!orientation_obj)
                 continue;
 
-            cJSON_AddNumberToObject(profile_obj, "mainViewScale",
-                pane_profiles[mode].main_view_scale);
-            cJSON_AddNumberToObject(profile_obj, "auxViewFontSize",
-                pane_profiles[mode].aux_view_font_size);
-            cJSON_AddBoolToObject(profile_obj, "enableRightPanes",
-                pane_profiles[mode].enable_right_panes);
-            cJSON_AddBoolToObject(profile_obj, "enableBottomPanes",
-                pane_profiles[mode].enable_bottom_panes);
+            for (int mode = 0;
+                 mode < SDL_MIN_TERMINAL_MODE_COUNT;
+                 mode++)
+            {
+                int profile_index = SDL_PANE_PROFILE_INDEX(orientation, mode);
+                cJSON* profile_obj;
 
-            panes = sdl_config_create_panes_array(pane_profiles[mode].pane_configs,
-                pane_profiles[mode].pane_count);
-            if (!panes) {
-                cJSON_Delete(profile_obj);
-                continue;
+                if (!pane_profiles || profile_index >= profile_count)
+                    continue;
+                profile_obj = sdl_config_create_pane_profile_object(
+                    &pane_profiles[profile_index]);
+                if (!profile_obj)
+                    continue;
+                cJSON_AddItemToObject(orientation_obj,
+                    min_terminal_mode_to_string(mode), profile_obj);
             }
 
-            cJSON_AddItemToObject(profile_obj, "panes", panes);
-            cJSON_AddItemToObject(pane_profiles_obj,
-                min_terminal_mode_to_string(mode), profile_obj);
+            cJSON_AddItemToObject(pane_profiles_obj, orientation_name,
+                orientation_obj);
         }
 
         cJSON_AddItemToObject(root, "paneProfiles", pane_profiles_obj);
@@ -4214,11 +5186,11 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
             cJSON* right_stick = NULL;
 
             cJSON_AddBoolToObject(gamepad, "enabled", config->gamepad_enabled);
-            cJSON_AddBoolToObject(gamepad, "autoMode", config->gamepad_auto_mode);
-            cJSON_AddBoolToObject(gamepad, "steamdeckMode", config->steamdeck_mode);
             cJSON_AddBoolToObject(gamepad, "steamdeckInvEquipSameButtonCycle",
                 config->steamdeck_inv_equip_same_button_cycle);
             cJSON_AddBoolToObject(gamepad, "useDpad", config->gamepad_use_dpad);
+            cJSON_AddNumberToObject(gamepad, "dpadDiagonalDelayMs",
+                config->gamepad_dpad_diagonal_delay_ms);
             cJSON_AddBoolToObject(gamepad, "useLeftStick", config->gamepad_use_left_stick);
             cJSON_AddNumberToObject(gamepad, "deadzone", config->gamepad_deadzone);
             cJSON_AddNumberToObject(gamepad, "triggerThreshold", config->gamepad_trigger_threshold);
@@ -4306,24 +5278,132 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
                 config->mouse_enabled);
             cJSON_AddStringToObject(mouse_control, "movementMode",
                 mouse_movement_mode_to_string(config->mouse_movement_mode));
+            cJSON_AddBoolToObject(mouse_control, "tilePointer",
+                config->mouse_tile_pointer);
             cJSON_AddItemToObject(root, "mouseControl", mouse_control);
         }
     }
 
-    /*
-     * Persist the thumb-button overlay settings. Other touchControl fields are
-     * not (yet) serialized here, so this object intentionally carries only the
-     * thumb keys; the loader reads each key independently and leaves the rest at
-     * their defaults, so writing a partial object does not affect them.
-     */
+    /* Persist the complete touch-panel configuration.  The loader overlays
+     * these values onto defaults, so every user-editable field must be written
+     * here or a normal shutdown silently resets it on the next launch. */
+    {
+        cJSON* touch_pane = cJSON_CreateObject();
+        if (touch_pane) {
+            cJSON* bindings = sdl_config_create_int_array(
+                config->touch_pane_bindings, SDL_TOUCH_PANE_BUTTON_COUNT);
+            cJSON* labels = sdl_config_create_string_array(
+                config->touch_pane_labels, SDL_TOUCH_PANE_BUTTON_COUNT);
+            cJSON* second_bindings = sdl_config_create_int_array(
+                config->touch_pane_second_bindings,
+                SDL_TOUCH_PANE_BUTTON_COUNT);
+            cJSON* second_labels = sdl_config_create_string_array(
+                config->touch_pane_second_labels,
+                SDL_TOUCH_PANE_BUTTON_COUNT);
+            cJSON* panel_names = sdl_config_create_string_array(
+                config->touch_pane_panel_names, SDL_TOUCH_PANE_PANEL_COUNT);
+
+            if (bindings)
+                cJSON_AddItemToObject(touch_pane, "bindings", bindings);
+            if (labels)
+                cJSON_AddItemToObject(touch_pane, "labels", labels);
+            if (second_bindings) {
+                cJSON_AddItemToObject(touch_pane, "secondBindings",
+                    second_bindings);
+            }
+            if (second_labels) {
+                cJSON_AddItemToObject(touch_pane, "secondLabels",
+                    second_labels);
+            }
+            if (panel_names)
+                cJSON_AddItemToObject(touch_pane, "panelNames", panel_names);
+            cJSON_AddBoolToObject(touch_pane, "showKeyLabels",
+                config->touch_pane_key_labels_visible);
+            cJSON_AddBoolToObject(touch_pane, "inventoryEquipmentCycle",
+                config->touch_pane_inventory_equipment_cycle);
+            cJSON_AddItemToObject(root, "touchPane", touch_pane);
+        }
+    }
+
+    /* Persist the complete touch-control configuration.  In particular,
+     * profile and roundMovementLayerEnabled form the round-wheel invariant;
+     * omitting either made the mobile default disappear after restart. */
     {
         cJSON* touch_control = cJSON_CreateObject();
         if (touch_control) {
+            cJSON* center_bindings = sdl_config_create_int_array(
+                config->touch_zone_center_bindings,
+                SDL_TOUCH_ZONE_CENTER_BINDING_COUNT);
+            cJSON* corner_action_bindings = sdl_config_create_int_array(
+                config->touch_corner_action_bindings,
+                SDL_TOUCH_CORNER_ACTION_BINDING_COUNT);
+            cJSON* top_panel_bindings = sdl_config_create_int_array(
+                config->touch_top_panel_bindings,
+                SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
+            cJSON* top_panel_long_bindings = sdl_config_create_int_array(
+                config->touch_top_panel_long_bindings,
+                SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
             cJSON* thumb_bindings = sdl_config_create_int_array(
                 config->touch_thumb_bindings, SDL_TOUCH_THUMB_BUTTON_COUNT);
             cJSON* thumb_long_bindings = sdl_config_create_int_array(
                 config->touch_thumb_long_bindings, SDL_TOUCH_THUMB_BUTTON_COUNT);
+            cJSON* swipe_bindings = sdl_config_create_int_array(
+                config->touch_swipe_bindings, TOUCH_SWIPE_DIR_COUNT);
 
+            cJSON_AddStringToObject(touch_control, "profile",
+                touch_profile_to_string(config->touch_profile));
+            cJSON_AddBoolToObject(touch_control, "touchPaneDefaultOpen",
+                config->touch_pane_default_open);
+            cJSON_AddBoolToObject(touch_control,
+                "inventoryEquipmentMenuCommandsEnabled",
+                config->touch_menu_command_enabled[
+                    SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT]);
+            cJSON_AddBoolToObject(touch_control,
+                "supplyMenuCommandsEnabled",
+                config->touch_menu_command_enabled[SDL_TOUCH_MENU_CATEGORY_SUPPLY]);
+            cJSON_AddBoolToObject(touch_control, "otherMenuCommandsEnabled",
+                config->touch_menu_command_enabled[SDL_TOUCH_MENU_CATEGORY_OTHER]);
+            cJSON_AddStringToObject(touch_control, "movementMode",
+                touch_movement_mode_to_string(config->touch_movement_mode));
+            cJSON_AddBoolToObject(touch_control, "roundMovementLayerEnabled",
+                config->touch_round_movement_enabled);
+            cJSON_AddStringToObject(touch_control, "cornerButtonOverlayMode",
+                touch_zone_overlay_mode_to_string(
+                    config->touch_zone_overlay_mode));
+            if (center_bindings) {
+                cJSON_AddItemToObject(touch_control,
+                    "cornerButtonCenterBindings", center_bindings);
+            }
+            cJSON_AddStringToObject(touch_control, "cornerButtonUpDownSide",
+                touch_corner_up_down_side_to_string(
+                    config->touch_corner_up_down_side));
+            if (corner_action_bindings) {
+                cJSON_AddItemToObject(touch_control,
+                    "cornerButtonActionBindings", corner_action_bindings);
+            }
+            cJSON_AddBoolToObject(touch_control, "topPanelArrowsVisible",
+                config->touch_top_panel_arrows_visible);
+            cJSON_AddBoolToObject(touch_control, "topPanelDefaultOpen",
+                config->touch_top_panel_default_open);
+            if (config->touch_top_panel_size
+                == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+            {
+                cJSON_AddStringToObject(touch_control, "topPanelSize",
+                    "STRETCH");
+            } else {
+                cJSON_AddNumberToObject(touch_control, "topPanelSize",
+                    config->touch_top_panel_size);
+            }
+            cJSON_AddNumberToObject(touch_control, "topPanelCellCount",
+                config->touch_top_panel_cell_count);
+            cJSON_AddNumberToObject(touch_control, "topPanelRows",
+                config->touch_top_panel_rows);
+            if (top_panel_bindings)
+                cJSON_AddItemToObject(touch_control, "topPanelBindings",
+                    top_panel_bindings);
+            if (top_panel_long_bindings)
+                cJSON_AddItemToObject(touch_control, "topPanelLongBindings",
+                    top_panel_long_bindings);
             cJSON_AddBoolToObject(touch_control, "thumbButtonsEnabled",
                 config->touch_thumb_enabled);
             if (thumb_bindings)
@@ -4332,6 +5412,11 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
             if (thumb_long_bindings)
                 cJSON_AddItemToObject(touch_control, "thumbButtonLongBindings",
                     thumb_long_bindings);
+            cJSON_AddBoolToObject(touch_control, "swipeEnabled",
+                config->touch_swipe_enabled);
+            if (swipe_bindings)
+                cJSON_AddItemToObject(touch_control, "swipeBindings",
+                    swipe_bindings);
             cJSON_AddItemToObject(root, "touchControl", touch_control);
         }
     }
@@ -4388,23 +5473,58 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     if (!json_string) {
         cJSON_Delete(root);
         log_error("Failed to print JSON");
-        return;
+        return false;
     }
-    
-    FILE* f = fopen(filename, "w");
-    if (!f) {
-        log_error("Could not write JSON file: %s", filename);
+
+    char temporary[1200];
+    if (!filename || !filename[0]
+        || strlen(filename) + 5 > sizeof(temporary)) {
+        log_error("Invalid SDL configuration filename");
         cJSON_free(json_string);
         cJSON_Delete(root);
-        return;
+        return false;
     }
-    
-    fprintf(f, "%s\n", json_string);
-    fclose(f);
+    strnfmt(temporary, sizeof(temporary), "%s.tmp", filename);
+
+    SDL_PathInfo temporary_info;
+    if (SDL_GetPathInfo(temporary, &temporary_info))
+        (void)SDL_RemovePath(temporary);
+    else
+        SDL_ClearError();
+
+    FILE* f = fopen(temporary, "wb");
+    if (!f) {
+        log_error("Could not write temporary JSON file: %s", temporary);
+        cJSON_free(json_string);
+        cJSON_Delete(root);
+        return false;
+    }
+
+    bool write_ok = fprintf(f, "%s\n", json_string) >= 0;
+    if (write_ok)
+        write_ok = fflush(f) == 0;
+    if (fclose(f) != 0)
+        write_ok = false;
+
     cJSON_free(json_string);
     cJSON_Delete(root);
-    
+
+    if (!write_ok) {
+        log_error("Failed writing or closing SDL configuration: %s",
+            temporary);
+        (void)SDL_RemovePath(temporary);
+        return false;
+    }
+
+    if (!fd_move(temporary, filename)) {
+        log_error("Failed to atomically replace SDL configuration: %s",
+            filename);
+        (void)SDL_RemovePath(temporary);
+        return false;
+    }
+
     log_info("Saved SDL configuration to: %s", filename);
+    return true;
 }
 
 void sdl_config_set_default_gamepad_bindings(struct sdl_config* config)
@@ -4426,7 +5546,7 @@ void sdl_config_set_default_gamepad_bindings(struct sdl_config* config)
 
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_SOUTH] = ' ';
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST] = 'f';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST] = 'u';
+    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST] = 'x';
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_NORTH] = 's';
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_LEFT_SHOULDER] = 'e';
     config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER] = 'i';
@@ -4519,11 +5639,17 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* config)
     config->touch_corner_up_down_side = SDL_TOUCH_CORNER_UP_DOWN_RIGHT;
     memcpy(config->touch_corner_action_bindings, corner_action_defaults,
         sizeof(corner_action_defaults));
-    config->touch_top_panel_mode = SDL_TOUCH_TOP_PANEL_MODE_LONG;
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    config->touch_top_panel_arrows_visible = false;
+    config->touch_top_panel_default_open = true;
+    config->touch_top_panel_size = (float)config->main_view_scale;
+#else
+    config->touch_top_panel_arrows_visible = true;
     config->touch_top_panel_default_open = false;
-    config->touch_top_panel_button_count =
-        SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_DEFAULT;
-    config->touch_top_panel_tile_scale = SDL_TOUCH_TOP_PANEL_TILE_SCALE_DEFAULT;
+    config->touch_top_panel_size = SDL_TOUCH_TOP_PANEL_SIZE_DEFAULT;
+#endif
+    config->touch_top_panel_cell_count = SDL_TOUCH_TOP_PANEL_CELL_COUNT_DEFAULT;
+    config->touch_top_panel_rows = SDL_TOUCH_TOP_PANEL_ROWS_DEFAULT;
     sdl_config_set_default_top_panel_bindings(config);
     config->touch_thumb_enabled = true;
     sdl_config_set_default_thumb_bindings(config);
@@ -4543,8 +5669,19 @@ void sdl_config_clear_touch_pane_labels(struct sdl_config* config)
 void sdl_config_set_defaults(struct sdl_config* config)
 {
     config->main_view_scale = SDL_MAIN_VIEW_PREFERRED_MIN_SCALE;
+    config->terminal_menu_scale_offset =
+        SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
+            config->main_view_scale);
+    config->compact_inventory_menus = false;
+    config->mobile_starting_zoom_offset =
+        SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT;
+    config->mobile_portrait_mode = false;
     config->aux_view_font_size = 0;
     config->margin = 4;
+    config->camera_center_clearance_vertical =
+        SDL_CAMERA_CENTER_CLEARANCE_DEFAULT;
+    config->camera_center_clearance_horizontal =
+        SDL_CAMERA_CENTER_CLEARANCE_DEFAULT;
     config->fullscreen = true;
     config->tiles = true;
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -4553,14 +5690,22 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->use_unsafe_area = false;
 #endif
     config->enable_right_panes = false;
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    config->enable_bottom_panes = false;
+#else
     config->enable_bottom_panes = true;
+#endif
     config->show_pane_borders = true;
+    config->left_overlays_touch_screen_edge = false;
+    config->show_overlay_log_border = true;
 #if defined(__ANDROID__) || defined(SIL_IOS)
     config->left_panel_expanded_on_launch = false;
 #else
     config->left_panel_expanded_on_launch = true;
 #endif
     config->left_panel_compact_mode = SDL_LEFT_PANEL_COMPACT_COLUMN;
+    config->left_panel_compact_health_bar = true;
+    config->quick_touch_buttons_on_left = false;
 #if defined(__ANDROID__) || defined(SIL_IOS)
     config->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
 #else
@@ -4569,6 +5714,9 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->log_pane_display_filter = LOG_HISTORY_FILTER_ALL;
     config->dice_roll_lock_ms = SDL_DICE_ROLL_LOCK_DEFAULT_MS;
     config->dice_roll_overlay_ms = SDL_DICE_ROLL_OVERLAY_DEFAULT_MS;
+    config->popup_notification_ms = SDL_POPUP_NOTIFICATION_DEFAULT_MS;
+    config->show_main_menu_button = true;
+    config->show_context_square_popups = true;
     
     // Default window position and size (will be overridden by actual screen size)
     config->window_x = -1;  // -1 means centered
@@ -4614,16 +5762,18 @@ void sdl_config_set_defaults(struct sdl_config* config)
         SDL_MOVEMENT_PRESET_CLASSIC_SIL);
 
     // Default gamepad settings
+    config->input_ui_mode = SDL_INPUT_UI_MODE_AUTO;
     config->gamepad_enabled = true;
-    config->gamepad_auto_mode = true;
-    config->steamdeck_mode = false;
     config->steamdeck_inv_equip_same_button_cycle = true;
     config->gamepad_use_dpad = true;
+    config->gamepad_dpad_diagonal_delay_ms =
+        SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS;
     config->gamepad_use_left_stick = true;
     config->gamepad_deadzone = 12000;
     config->gamepad_trigger_threshold = 16000;
     config->mouse_enabled = true;
     config->mouse_movement_mode = SDL_MOUSE_MOVEMENT_ON;
+    config->mouse_tile_pointer = false;
     sdl_config_set_default_gamepad_bindings(config);
     sdl_config_set_default_touch_pane_bindings(config);
     sdl_config_clear_touch_pane_labels(config);
@@ -4668,8 +5818,13 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv)
             config->tiles = false;
             log_info("Command line: ASCII mode enabled");
         } else if (strcmp(argv[i], "--windowed") == 0) {
+#if defined(__ANDROID__) || defined(SIL_IOS)
+            config->fullscreen = true;
+            log_info("Command line: windowed mode ignored on mobile");
+#else
             config->fullscreen = false;
             log_info("Command line: windowed mode enabled");
+#endif
         } else if (strcmp(argv[i], "--fullscreen") == 0) {
             config->fullscreen = true;
             log_info("Command line: fullscreen mode enabled");

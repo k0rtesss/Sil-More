@@ -1,6 +1,9 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "support/input.h"
 #include "ui/menu-click.h"
+
+static SDL_JoystickID g_active_gamepad_id;
 
 bool sdl_gamepad_shift_active(void)
 {
@@ -84,8 +87,21 @@ int sdl_gamepad_combo_binding_for_input(int modifier, int type, int id)
 
 void sdl_gamepad_mark_auto_ui(void)
 {
-    if (config.gamepad_auto_mode)
-        g_gamepad_auto_ui = true;
+    if (get_sdl_input_ui_mode() != SDL_INPUT_UI_MODE_AUTO
+        || g_gamepad_auto_ui)
+    {
+        return;
+    }
+
+#if defined(SDL_PLATFORM_ANDROID)
+    /* SDL treats some Android keyboard covers with navigation keys as
+     * gamepads.  Only a non-keyboard Android controller may enable the
+     * controller presentation automatically. */
+    if (!sdl_android_has_controller_device())
+        return;
+#endif
+
+    g_gamepad_auto_ui = true;
 }
 
 void sdl_gamepad_apply_modifier(int binding, bool down)
@@ -260,6 +276,43 @@ static u16b sdl_movement_modifiers_from_sdl(SDL_Keymod mod)
 }
 
 /*
+ * Prompt input must reach the prompt before any movement-preset translation.
+ * This covers both SDL-owned overlays and the older terminal prompts whose
+ * input is synchronous inside inkey().  A separate predicate intentionally
+ * omits character_icky: global layout shortcuts remain useful on saved
+ * screens, while gameplay movement and command aliases must be disabled
+ * there.
+ */
+static bool sdl_prompt_input_is_active(void)
+{
+    return g_touch_pane_yes_no_prompt_active
+        || sdl_question_menu_captures_pointer()
+        || inkey_prompt_input_active();
+}
+
+static bool sdl_movement_input_is_modal(void)
+{
+    return character_icky || sdl_prompt_input_is_active();
+}
+
+/*
+ * The terminal menus normally translate the B binding after inkey() returns,
+ * but a few native overlays own the event before it reaches that loop.  Keep
+ * the physical B button on the same Back/Escape path for every modal menu.
+ */
+static bool sdl_gamepad_back_button_is_modal(void)
+{
+    return sdl_movement_input_is_modal()
+        || sdl_hint_quest_menu_active();
+}
+
+static bool sdl_movement_command_input_is_live(void)
+{
+    return movement_input_active_context() == MOVEMENT_INPUT_CONTEXT_DUNGEON
+        && !sdl_movement_input_is_modal();
+}
+
+/*
  * Movement is only submitted during live gameplay input: a real command
  * request, a direction prompt, or targeting. A non-NONE active context is the
  * primary signal, but that context can survive into a modal screen that was
@@ -271,7 +324,7 @@ static u16b sdl_movement_modifiers_from_sdl(SDL_Keymod mod)
  */
 static bool sdl_movement_input_is_live(void)
 {
-    return !character_icky
+    return !sdl_movement_input_is_modal()
         && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_NONE;
 }
 
@@ -339,13 +392,13 @@ bool sdl_try_send_movement_event(const SDL_KeyboardEvent* key_event)
 }
 
 /*
- * Letter-based movement presets (WASD/QEZC, Vi) take over their letters' normal
- * commands while in the dungeon: plain = move, Shift = run, Ctrl = interact.
- * That shadows both the lowercase command (w = wield) and the Shift/capital
- * command (S = stealth, D = disarm, ...). Alt is the one free modifier, so:
+ * Letter-based movement presets take over some letters' normal commands while
+ * in the dungeon. That shadows both lowercase commands (w = wield, s = sing)
+ * and Shift/capital commands (S = stealth, D = disarm, ...). Alt is the one
+ * free modifier, so:
  *   Alt+<letter>       -> the lowercase command (Alt+w = wield, Alt+s = sing)
  *   Alt+Shift+<letter> -> the capital command  (Alt+Shift+s = stealth)
- * Only fires when that letter is actually a plain-move binding, so
+ * Only fires when that letter has a plain movement binding, so
  * Classic/Arrows presets are unaffected and the Alt layout shortcuts
  * (Alt+a/i/l) keep working for unshadowed letters.
  */
@@ -354,7 +407,8 @@ bool sdl_try_send_shadowed_command_event(const SDL_KeyboardEvent* key_event)
     SDL_Keycode base;
     char command;
 
-    if (!key_event || !character_dungeon || character_icky)
+    if (!key_event || !character_dungeon
+        || !sdl_movement_command_input_is_live())
         return false;
 
     if (!(key_event->mod & SDL_KMOD_ALT)
@@ -363,7 +417,7 @@ bool sdl_try_send_shadowed_command_event(const SDL_KeyboardEvent* key_event)
         return false;
     }
 
-    if (!sdl_config_scancode_is_plain_move_letter(&config,
+    if (!sdl_config_scancode_is_plain_movement_letter(&config,
             (u32b)key_event->scancode))
     {
         return false;
@@ -385,9 +439,8 @@ bool sdl_try_send_shadowed_command_event(const SDL_KeyboardEvent* key_event)
 }
 
 /*
- * WASD/QEZC-only extra command keys. The WASD cross takes s/a (sing/activate)
- * for movement and Shift+s (stealth) for run, so the free letters n/v/k are
- * offered as command keys for that preset only:
+ * WASD-grid-only extra command keys. The grid shadows several command letters,
+ * so the free letters n/v/k are offered as command keys for that preset only:
  *   n = sing, v = examine, k = activate staff, Shift+N = toggle stealth.
  * (Other presets leave n/v/k alone; in particular Vi uses n/k for movement and
  * keeps the normal Shift+S for stealth.)
@@ -396,7 +449,8 @@ bool sdl_try_send_preset_command_alias(const SDL_KeyboardEvent* key_event)
 {
     char command;
 
-    if (!key_event || !character_dungeon || character_icky)
+    if (!key_event || !character_dungeon
+        || !sdl_movement_command_input_is_live())
         return false;
     if (key_event->mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))
         return false;
@@ -405,7 +459,7 @@ bool sdl_try_send_preset_command_alias(const SDL_KeyboardEvent* key_event)
 
     if (key_event->mod & SDL_KMOD_SHIFT)
     {
-        /* Capital alias for the command shadowed by the WASD run bindings. */
+        /* Capital alias for the command shadowed by the WASD-grid bindings. */
         if (key_event->scancode != SDL_SCANCODE_N)
             return false;
         command = 'S'; /* toggle stealth */
@@ -440,7 +494,8 @@ bool sdl_send_modified_direction_action(int dir, char dir_ch, bool shift, bool c
     char action_key;
     char follow_key;
 
-    if (dir < 1 || dir > 9 || mod_count != 1)
+    if (dir < 1 || dir > 9 || mod_count != 1
+        || sdl_movement_input_is_modal())
         return false;
 
     if (alt) {
@@ -496,7 +551,7 @@ bool sdl_try_send_modified_direction_event(const SDL_KeyboardEvent* key_event)
     SDL_Keycode base_key;
     int shifted_ascii;
 
-    if (!key_event)
+    if (!key_event || !sdl_movement_input_is_live())
         return false;
 
     shift = key_event->mod & SDL_KMOD_SHIFT;
@@ -531,7 +586,7 @@ bool sdl_handle_jewelry_preset_shortcut(
 {
     SDL_Keycode key;
 
-    if (!key_event || !character_dungeon)
+    if (!key_event || !character_dungeon || sdl_movement_input_is_modal())
         return false;
 
     if (!(key_event->mod & SDL_KMOD_ALT)
@@ -554,7 +609,7 @@ bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event)
 {
     SDL_Keycode key;
 
-    if (!key_event)
+    if (!key_event || sdl_prompt_input_is_active())
         return false;
 
     if (!(key_event->mod & SDL_KMOD_ALT))
@@ -613,6 +668,48 @@ bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event)
     return false;
 }
 
+/*
+ * Give every unmodified controller control the same situational command
+ * resolution as the touch controls.  Keep that resolution out of ordinary
+ * modal menus: there, A/B/X/Y and the shoulders are translated by the menu's
+ * controller contract and must not turn into dungeon-floor commands.
+ */
+static int sdl_gamepad_context_key(int key)
+{
+    bool description_open = g_description_overlay.active
+        && g_description_overlay.interactive;
+    int context_key = (key == INPUT_BIND_CONFIRM) ? ' ' : key;
+    int resolved_key = context_key;
+
+    if (description_open)
+    {
+        if (sdl_description_overlay_has_footer_action(context_key))
+            return context_key;
+
+        if (context_key == 'g'
+            && sdl_description_overlay_has_footer_action(' '))
+        {
+            return ' ';
+        }
+
+        if (touch_shortcut_context_action(context_key, true, &resolved_key,
+                NULL, 0)
+            && sdl_description_overlay_has_footer_action(resolved_key))
+        {
+            return resolved_key;
+        }
+
+        return context_key;
+    }
+
+    if (!sdl_main_screen_click_shortcuts_active())
+        return context_key;
+
+    (void)touch_shortcut_context_action(context_key, false, &resolved_key,
+        NULL, 0);
+    return resolved_key;
+}
+
 void sdl_gamepad_send_key(int key, bool use_macro_mods)
 {
     bool shift = sdl_gamepad_shift_active();
@@ -623,6 +720,9 @@ void sdl_gamepad_send_key(int key, bool use_macro_mods)
         sdl_send_macro_key(key, shift, ctrl, alt);
         return;
     }
+
+    if (!shift && !ctrl && !alt)
+        key = sdl_gamepad_context_key(key);
 
     if (SDL_isprint(key)) {
         if (ctrl && !alt && SDL_isalpha(key)) {
@@ -666,7 +766,7 @@ void sdl_gamepad_send_key(int key, bool use_macro_mods)
 
 void sdl_gamepad_send_key_raw(int key)
 {
-    Term_keypress(key);
+    Term_keypress(sdl_gamepad_context_key(key));
 }
 
 void sdl_gamepad_send_shoulder_combo(void)
@@ -784,6 +884,17 @@ void sdl_gamepad_send_direction(int dir)
         sdl_gamepad_ctrl_active(), sdl_gamepad_alt_active());
 }
 
+static int sdl_gamepad_dpad_diagonal_delay_ms(void)
+{
+    int delay = config.gamepad_dpad_diagonal_delay_ms;
+
+    if (delay < SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
+        return SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS;
+    if (delay > SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS)
+        return SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS;
+    return delay;
+}
+
 void sdl_gamepad_clear_pending_dpad(void)
 {
     g_gamepad_state.dpad_pending = false;
@@ -813,7 +924,8 @@ bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force)
         return false;
     }
 
-    Uint64 window_ns = (Uint64)DPAD_DIAGONAL_WINDOW_MS * 1000000ULL;
+    Uint64 window_ns = (Uint64)sdl_gamepad_dpad_diagonal_delay_ms()
+        * 1000000ULL;
     if (!force && now_ns - g_gamepad_state.dpad_pending_time < window_ns)
         return false;
 
@@ -853,7 +965,7 @@ bool sdl_gamepad_flush_pending_left_stick(Uint64 now_ns, bool force)
         return false;
     }
 
-    Uint64 window_ns = (Uint64)DPAD_DIAGONAL_WINDOW_MS * 1000000ULL;
+    Uint64 window_ns = (Uint64)GAMEPAD_STICK_DIAGONAL_WINDOW_MS * 1000000ULL;
     if (!force && now_ns - g_gamepad_state.left_pending_time < window_ns)
         return false;
 
@@ -898,7 +1010,7 @@ bool sdl_touch_top_panel_compute_layout(SDL_FRect* button_rects,
 
     if (!sdl_touch_top_panel_layout_visible())
         return false;
-    if (!g_touch_top_panel_open)
+    if (config.touch_top_panel_arrows_visible && !g_touch_top_panel_open)
         return false;
 
     if (!sdl_touch_top_panel_current_anchor(&screen, &anchor, &where))
@@ -1086,7 +1198,8 @@ int sdl_gamepad_pending_timeout_ms(Uint64 now_ns)
     int best = -1;
 
     if (g_gamepad_state.dpad_pending && config.gamepad_enabled && config.gamepad_use_dpad) {
-        Uint64 window_ns = (Uint64)DPAD_DIAGONAL_WINDOW_MS * 1000000ULL;
+        Uint64 window_ns = (Uint64)sdl_gamepad_dpad_diagonal_delay_ms()
+            * 1000000ULL;
         Uint64 elapsed = now_ns - g_gamepad_state.dpad_pending_time;
         if (elapsed >= window_ns) {
             dpad_timeout = 0;
@@ -1099,7 +1212,7 @@ int sdl_gamepad_pending_timeout_ms(Uint64 now_ns)
     }
 
     if (g_gamepad_state.left_pending && config.gamepad_enabled && config.gamepad_use_left_stick) {
-        Uint64 window_ns = (Uint64)DPAD_DIAGONAL_WINDOW_MS * 1000000ULL;
+        Uint64 window_ns = (Uint64)GAMEPAD_STICK_DIAGONAL_WINDOW_MS * 1000000ULL;
         Uint64 elapsed = now_ns - g_gamepad_state.left_pending_time;
         if (elapsed >= window_ns) {
             left_timeout = 0;
@@ -1150,7 +1263,7 @@ const char* sdl_gamepad_button_label(int button)
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4 (Right Paddle 1)";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5 (Right Paddle 2)";
     case SDL_GAMEPAD_BUTTON_START: return "Start (Menu)";
-    case SDL_GAMEPAD_BUTTON_BACK: return "Back (View)";
+    case SDL_GAMEPAD_BUTTON_BACK: return "View / Select";
     case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "Left Stick Click";
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "Right Stick Click";
     case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide (Steam)";
@@ -1183,7 +1296,7 @@ const char* sdl_gamepad_button_short_label(int button)
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5";
     case SDL_GAMEPAD_BUTTON_START: return "Start";
-    case SDL_GAMEPAD_BUTTON_BACK: return "Back";
+    case SDL_GAMEPAD_BUTTON_BACK: return "View";
     case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "L3";
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "R3";
     case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide";
@@ -1271,6 +1384,65 @@ bool sdl_gamepad_action_binding_equals(int lhs, int rhs)
         return true;
 
     return lhs == rhs;
+}
+
+static SDL_Gamepad* sdl_gamepad_active_pad(void)
+{
+    for (int i = 0; i < g_gamepad_state.pad_count; i++) {
+        if (g_gamepad_state.pads[i].id == g_active_gamepad_id)
+            return g_gamepad_state.pads[i].pad;
+    }
+
+    if (g_gamepad_state.pad_count > 0)
+        return g_gamepad_state.pads[0].pad;
+
+    return NULL;
+}
+
+bool sdl_gamepad_control_available(int type, int id)
+{
+    SDL_Gamepad* pad = sdl_gamepad_active_pad();
+    SDL_GamepadAxis axis = SDL_GAMEPAD_AXIS_INVALID;
+
+    if (!pad)
+        return false;
+
+    switch (type) {
+    case GAMEPAD_CAPTURE_BUTTON:
+        if (id < 0 || id >= SDL_GAMEPAD_BUTTON_COUNT)
+            return false;
+        return SDL_GamepadHasButton(pad, (SDL_GamepadButton)id);
+
+    case GAMEPAD_CAPTURE_TRIGGER:
+        if (id == 0)
+            axis = SDL_GAMEPAD_AXIS_LEFT_TRIGGER;
+        else if (id == 1)
+            axis = SDL_GAMEPAD_AXIS_RIGHT_TRIGGER;
+        break;
+
+    case GAMEPAD_CAPTURE_LEFT_STICK:
+        if (id == GAMEPAD_STICK_DIR_LEFT || id == GAMEPAD_STICK_DIR_RIGHT)
+            axis = SDL_GAMEPAD_AXIS_LEFTX;
+        else if (id == GAMEPAD_STICK_DIR_UP || id == GAMEPAD_STICK_DIR_DOWN)
+            axis = SDL_GAMEPAD_AXIS_LEFTY;
+        break;
+
+    case GAMEPAD_CAPTURE_RIGHT_STICK:
+        if (id == GAMEPAD_STICK_DIR_LEFT || id == GAMEPAD_STICK_DIR_RIGHT)
+            axis = SDL_GAMEPAD_AXIS_RIGHTX;
+        else if (id == GAMEPAD_STICK_DIR_UP || id == GAMEPAD_STICK_DIR_DOWN)
+            axis = SDL_GAMEPAD_AXIS_RIGHTY;
+        break;
+
+    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
+        return SDL_GamepadHasButton(pad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)
+            && SDL_GamepadHasButton(pad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+
+    default:
+        return false;
+    }
+
+    return axis != SDL_GAMEPAD_AXIS_INVALID && SDL_GamepadHasAxis(pad, axis);
 }
 
 int sdl_gamepad_direct_binding_count(int binding, int* out_type, int* out_id)
@@ -1563,8 +1735,12 @@ int steamdeck_menu_key(int key, int prev_page_key, int next_page_key)
 
 int steamdeck_info_key(void)
 {
-    /* RS Right - for info/recall in menus */
-    return get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_RIGHT);
+    /*
+     * View/Select is present on conventional and stickless handheld
+     * controllers.  Keep optional stick directions available for gameplay,
+     * but never require one for menu information or recall.
+     */
+    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK);
 }
 
 int steamdeck_alt_action_key(void)
@@ -1586,6 +1762,9 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
 
     SDL_GamepadButton button = (SDL_GamepadButton)ev->button;
     bool down = ev->down;
+
+    if (down)
+        g_active_gamepad_id = ev->which;
 
     if (button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) {
         g_gamepad_state.left_shoulder_down = down;
@@ -1682,6 +1861,14 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
     if (sdl_player_action_menu_handle_gamepad_button(button, down))
         return;
 
+    if (down && button == SDL_GAMEPAD_BUTTON_EAST
+        && steamdeck_controls_active()
+        && sdl_gamepad_back_button_is_modal())
+    {
+        Term_keypress(ESCAPE);
+        return;
+    }
+
     if (config.gamepad_use_dpad &&
         (button == SDL_GAMEPAD_BUTTON_DPAD_UP || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN ||
             button == SDL_GAMEPAD_BUTTON_DPAD_LEFT || button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT))
@@ -1726,9 +1913,14 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
                 sdl_gamepad_clear_pending_dpad();
                 sdl_gamepad_send_direction(dir);
             } else {
-                if (g_gamepad_state.dpad_pending)
-                    sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
-                sdl_gamepad_set_pending_dpad(dir);
+                if (sdl_gamepad_dpad_diagonal_delay_ms() == 0) {
+                    sdl_gamepad_clear_pending_dpad();
+                    sdl_gamepad_send_direction(dir);
+                } else {
+                    if (g_gamepad_state.dpad_pending)
+                        sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
+                    sdl_gamepad_set_pending_dpad(dir);
+                }
             }
         }
         return;
@@ -1809,6 +2001,9 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
 {
     if (!ev)
         return;
+
+    if (abs((int)ev->value) > MAX(config.gamepad_deadzone, 0))
+        g_active_gamepad_id = ev->which;
 
     if (g_gamepad_capture_active) {
         bool capture_armed = (SDL_GetTicksNS() >= g_gamepad_capture_arm_time);
@@ -2080,6 +2275,8 @@ void sdl_gamepad_open(SDL_JoystickID id)
     g_gamepad_state.pads[g_gamepad_state.pad_count].id = id;
     g_gamepad_state.pads[g_gamepad_state.pad_count].pad = pad;
     g_gamepad_state.pad_count++;
+    if (!g_active_gamepad_id)
+        g_active_gamepad_id = id;
 
     log_info("Gamepad opened id %d (%s)", (int)id, SDL_GetGamepadName(pad));
     sdl_gamepad_mark_auto_ui();
@@ -2092,6 +2289,11 @@ void sdl_gamepad_close(SDL_JoystickID id)
             SDL_CloseGamepad(g_gamepad_state.pads[i].pad);
             g_gamepad_state.pads[i] = g_gamepad_state.pads[g_gamepad_state.pad_count - 1];
             g_gamepad_state.pad_count--;
+            if (g_active_gamepad_id == id) {
+                g_active_gamepad_id = (g_gamepad_state.pad_count > 0)
+                    ? g_gamepad_state.pads[0].id
+                    : 0;
+            }
             log_info("Gamepad closed id %d", (int)id);
             break;
         }
@@ -2108,6 +2310,16 @@ void sdl_gamepad_handle_device(const SDL_GamepadDeviceEvent* ev)
     } else if (ev->type == SDL_EVENT_GAMEPAD_REMOVED) {
         sdl_gamepad_close(ev->which);
     }
+#if defined(SDL_PLATFORM_ANDROID)
+    g_android_controller_present = sdl_android_has_controller_device();
+    if (!g_android_controller_present) {
+        g_gamepad_auto_ui = false;
+        if (g_direct_touch_present)
+            g_startup_device_class = SDL_STARTUP_DEVICE_MOBILE_TOUCH;
+    } else if (g_direct_touch_present) {
+        g_startup_device_class = SDL_STARTUP_DEVICE_ANDROID_HANDHELD;
+    }
+#endif
 }
 
 void sdl_gamepad_init(void)

@@ -143,320 +143,144 @@ const char ultimate_bug_text[][100]
 
           { "" } };
 
-static int pause_with_text_max_line_width(const char lines[][100])
+static bool pause_with_text_is_tutorial(const char desc[][100])
 {
-    int max_width = 0;
+    return desc == tutorial_leave_text || desc == tutorial_win_text
+        || desc == tutorial_early_death_text
+        || desc == tutorial_late_death_text;
+}
 
-    if (!lines)
-        return 0;
+/* The legacy tutorial conclusion/death pages do not support inline spans.
+ * Their source is already split into short ideas, so colour only the lines
+ * carrying success, danger, or concrete next-step advice. */
+static byte pause_with_text_tutorial_attr(cptr line)
+{
+    if (!line)
+        return TERM_WHITE;
 
-    for (int i = 0; lines[i][0]; ++i)
+    if (strstr(line, "Congratulations") || strstr(line, "finished")
+        || strstr(line, "survived") || strstr(line, "more than ready"))
     {
-        int width = (int)strlen(lines[i]);
-        if (width > max_width)
-            max_width = width;
+        return TERM_L_GREEN;
     }
 
-    return max_width;
-}
-
-static int pause_with_text_fit_column(int col, int term_wid, int text_width)
-{
-    int max_col;
-
-    if (col < 0)
-        col = 0;
-    if (term_wid <= 2 || text_width <= 0)
-        return col;
-
-    max_col = term_wid - text_width - 3;
-    if (max_col < 0)
-        max_col = 0;
-
-    if (col > max_col)
-        col = max_col;
-
-    return col;
-}
-
-static cptr pause_with_text_fit_segment_text(cptr text, int max_cols)
-{
-    if (!text)
-        return "";
-
-    while ((*text == ' ') && (max_cols > 0)
-        && ((int)strlen(text) > max_cols))
+    if (strstr(line, "slain") || strstr(line, "cannot use savepoints")
+        || strstr(line, "if you die") || strstr(line, "You will die")
+        || strstr(line, "from that death") || strstr(line, "too deadly"))
     {
-        text++;
+        return TERM_L_RED;
     }
 
-    return text;
+    if (strstr(line, "default Race and Character")
+        || strstr(line, "starting experience")
+        || strstr(line, "Melee and Evasion")
+        || strstr(line, "weapons and armour")
+        || strstr(line, "restart the tutorial")
+        || strstr(line, "escape and heal")
+        || strstr(line, "high score")
+        || strstr(line, "top priority"))
+    {
+        return TERM_L_BLUE;
+    }
+
+    if (strstr(line, "*think*") || strstr(line, "reflect on what to learn"))
+        return TERM_YELLOW;
+
+    return TERM_WHITE;
 }
 
-static int pause_with_text_print_wrapped_segment(int row, int col, byte attr,
-                                                 cptr text, int delay_msec)
+static void pause_with_text_semantic_add(cptr text, byte attr,
+    int base_indent, int* line_count)
 {
-    int term_wid = 80;
-    int term_hgt = 24;
-    int max_cols;
-    int wrap_col;
-    int rows_used = 1;
+    int leading = 0;
 
     if (!text)
         text = "";
+    while (text[leading] == ' ')
+        leading++;
 
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_wid < 1)
-        term_wid = 80;
-    if (term_hgt < 1)
-        term_hgt = 24;
-
-    if (row < 0 || row >= term_hgt)
-        return 0;
-
-    if (col < 0)
-        col = 0;
-    if (col >= term_wid)
-        col = term_wid - 1;
-
-    max_cols = term_wid - col - 2;
-    if (max_cols < 1)
-        max_cols = 1;
-
-    text = pause_with_text_fit_segment_text(text, MAX(1, max_cols - 1));
-    wrap_col = col + max_cols;
-
-    if (*text)
-    {
-        if (sdl_is_story_font_enabled())
-            rows_used = count_wrapped_lines_story(text, wrap_col, col);
-        else
-            rows_used = count_wrapped_lines(text, wrap_col, col);
-
-        if (rows_used < 1)
-            rows_used = 1;
-    }
-
-    story_print_text(row, col, max_cols, attr, text);
-    Term_fresh();
-
-    if (delay_msec > 0)
-        Term_xtra(TERM_XTRA_DELAY, delay_msec);
-
-    return rows_used;
+    sdl_pause_text_screen_add_line(text + leading, attr,
+        MAX(0, base_indent + leading));
+    if (line_count)
+        (*line_count)++;
 }
 
-static int pause_with_text_count_wrapped_segment(int col, cptr text)
+/* Preserve source lines, colours, and relative indentation as semantic data;
+ * the SDL canvas owns font sizing, wrapping, and rendering. */
+static void pause_with_text_sdl(const char desc[][100], int row, int col,
+    const char extra[][100], byte extra_attr)
 {
-    int term_wid = 80;
-    int term_hgt = 24;
-    int max_cols;
-    int wrap_col;
-    int rows_used = 1;
+    int line_count = 0;
+    int origin_col = col;
+    int banner_col = MAX(0, col - 5);
+    int tail_col = banner_col + 4;
+    int n_extra = 0;
+    bool tutorial_text = pause_with_text_is_tutorial(desc);
 
-    if (!text)
-        text = "";
+    (void)row;
 
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_wid < 1)
-        term_wid = 80;
-    (void)term_hgt;
-
-    if (col < 0)
-        col = 0;
-    if (col >= term_wid)
-        col = term_wid - 1;
-
-    max_cols = term_wid - col - 2;
-    if (max_cols < 1)
-        max_cols = 1;
-
-    text = pause_with_text_fit_segment_text(text, MAX(1, max_cols - 1));
-    wrap_col = col + max_cols;
-
-    if (*text)
+    if (!sdl_pause_text_screen_begin())
     {
-        if (sdl_is_story_font_enabled())
-            rows_used = count_wrapped_lines_story(text, wrap_col, col);
-        else
-            rows_used = count_wrapped_lines(text, wrap_col, col);
-
-        if (rows_used < 1)
-            rows_used = 1;
+        log_error("Unable to open the SDL pause-text screen");
+        return;
     }
 
-    return rows_used;
-}
-
-/* pause_with_text: prints name+alt, explicit blank line, then wrapped start splits */
-void pause_with_text(const char desc[][100], int row, int col,
-                     const char extra[][100], byte extra_attr)
-{
-    int i_main = 0, msec = 50;
-    int banner_lines = 0;
-    int main_rows = 0;
-    int term_wid = 80;
-    int term_hgt = 24;
-    int banner_col;
-    int tail_col;
-    bool show_banner_gap = true;
-    bool show_stanza_gap = true;
-
-    /* 0. save & clear screen */
     screen_save();
     Term_clear();
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_wid < 1)
-        term_wid = 80;
-    if (term_hgt < 1)
-        term_hgt = 24;
-
-    col = pause_with_text_fit_column(col, term_wid,
-        pause_with_text_max_line_width(desc));
-
-    sdl_story_font_enable();
-    log_debug("Banner: story font enabled");
-
-    banner_col = col - 5;
-    if (banner_col < 0)
-        banner_col = 0;
-    tail_col = banner_col + 4;
-    if (tail_col < 0)
-        tail_col = 0;
 
     if (extra)
     {
-        int n_extra = 0;
-
-        banner_lines += pause_with_text_count_wrapped_segment(banner_col, extra[0]);
         while (extra[n_extra][0])
             n_extra++;
+        origin_col = banner_col;
 
+        if (n_extra > 0)
+        {
+            pause_with_text_semantic_add(extra[0], extra_attr, 0,
+                &line_count);
+        }
         if (n_extra > 1)
         {
-            for (int i = 1; i < n_extra; ++i)
+            pause_with_text_semantic_add("", extra_attr, 0, &line_count);
+            for (int i = 1; i < n_extra; i++)
             {
-                int segment_col = (i == n_extra - 1) ? tail_col : banner_col;
-                banner_lines += pause_with_text_count_wrapped_segment(segment_col, extra[i]);
+                int line_col = (i == n_extra - 1) ? tail_col : banner_col;
+
+                pause_with_text_semantic_add(extra[i], extra_attr,
+                    line_col - origin_col, &line_count);
             }
-        }
-        else
-        {
-            show_banner_gap = false;
-            show_stanza_gap = false;
+            pause_with_text_semantic_add("", TERM_WHITE, 0, &line_count);
         }
     }
-    else
+
+    for (int i = 0; desc && desc[i][0]; i++)
     {
-        show_banner_gap = false;
-        show_stanza_gap = false;
+        byte attr = tutorial_text
+            ? pause_with_text_tutorial_attr(desc[i]) : TERM_WHITE;
+
+        pause_with_text_semantic_add(desc[i], attr, col - origin_col,
+            &line_count);
     }
 
-    if (show_banner_gap)
-        banner_lines++;
-    if (show_stanza_gap)
-        banner_lines++;
-
-    while (desc && desc[i_main][0])
+    sdl_pause_text_screen_set_visible_lines(0);
+    Term_fresh();
+    for (int i = 0; i < line_count; i++)
     {
-        main_rows += pause_with_text_count_wrapped_segment(col, desc[i_main]);
-        ++i_main;
+        sdl_pause_text_screen_set_visible_lines(i + 1);
+        Term_fresh();
+        Term_xtra(TERM_XTRA_DELAY, 50);
     }
 
-    if ((banner_lines + main_rows) > term_hgt && show_stanza_gap)
-    {
-        banner_lines--;
-        show_stanza_gap = false;
-    }
-
-    if ((banner_lines + main_rows) > term_hgt && show_banner_gap)
-    {
-        banner_lines--;
-        show_banner_gap = false;
-    }
-
-    {
-        int total_rows = banner_lines + main_rows;
-
-        if (extra)
-        {
-            row = (term_hgt - total_rows) / 2;
-        }
-        else
-        {
-            int slack = term_hgt - total_rows;
-
-            if (row < 0)
-                row = 0;
-            if (slack < 0)
-                slack = 0;
-            if (row > slack)
-                row = slack;
-        }
-
-        if (row < 0)
-            row = 0;
-    }
-
-    banner_lines = 0;
-    main_rows = 0;
-
-    /* 1. optional banner */
-    if (extra) {
-        int n_extra = 0;
-
-        while (extra[n_extra][0]) n_extra++;
-
-        /* Line 1: name+alt */
-        banner_lines += pause_with_text_print_wrapped_segment(
-            row + banner_lines, banner_col, extra_attr, extra[0], msec);
-
-        /* Line 2: blank line */
-        if (show_banner_gap)
-        {
-            banner_lines += pause_with_text_print_wrapped_segment(
-                row + banner_lines, banner_col, extra_attr, "", msec);
-        }
-
-        /* Lines 3+: start splits, last one shifted further right */
-        for (int i = 1; i < n_extra; ++i) {
-            int shift = (i == n_extra - 1) ? tail_col : banner_col;
-            banner_lines += pause_with_text_print_wrapped_segment(
-                row + banner_lines, shift, extra_attr, extra[i], msec);
-        }
-
-        /* separator before stanza */
-        if (show_stanza_gap)
-            banner_lines++;
-    }
-
-    /* 2. main stanza */
-    i_main = 0;
-    while (desc && desc[i_main][0]) {
-        main_rows += pause_with_text_print_wrapped_segment(
-            row + banner_lines + main_rows, col, TERM_WHITE, desc[i_main], msec);
-        ++i_main;
-    }
-
-    log_debug("Banner: story font disabled");
-    sdl_story_font_disable();
-
-    ui_menu_click_begin();
-    for (int click_row = 0; click_row < term_hgt; click_row++)
-        ui_menu_click_add_full_row(1, click_row);
-
-    /* 3. wait for key */
     hide_cursor = true;
     (void)inkey();
     hide_cursor = false;
-    ui_menu_click_clear();
 
-    /* 4. wipe the area used */
-    int total = banner_lines + main_rows;
-    int max_row = MIN(row + total, term_hgt);
-    for (int j = row; j < max_row; ++j) {
-        Term_erase(0, j, 255);
-    }
-
+    sdl_pause_text_screen_hide();
     screen_load();
+}
+
+void pause_with_text(const char desc[][100], int row, int col,
+    const char extra[][100], byte extra_attr)
+{
+    pause_with_text_sdl(desc, row, col, extra, extra_attr);
 }

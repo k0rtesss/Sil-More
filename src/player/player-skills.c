@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "metarun.h"
 #include "pane.h"
 #include "supplies.h"
@@ -445,6 +446,7 @@ int song_effective_skill(int abilitynum)
 
     // woven theme synergy pairs grant an extra 20% of base song skill
     skill += song_synergy_bonus(abilitynum, full_skill);
+    skill += legendary_area_song_skill_bonus(abilitynum);
 
     // effective skill is never negative
     if (skill < 0)
@@ -474,6 +476,89 @@ static int stepped_song_bonus(int skill, int first_threshold, int next_gap)
     }
 
     return bonus;
+}
+
+static bool ability_weapon_skill_partner_active(int skilltype, int abilitynum)
+{
+    if (skilltype == S_MEL && abilitynum == MEL_WARDEN)
+        return p_ptr->active_ability[S_ARC][ARC_VERSATILITY];
+
+    if (skilltype == S_ARC && abilitynum == ARC_VERSATILITY)
+        return p_ptr->active_ability[S_MEL][MEL_WARDEN];
+
+    return false;
+}
+
+static int ability_weapon_skill_combo_bonus(int base_skill)
+{
+    return (MAX(0, base_skill) + 2) / 3;
+}
+
+static int ability_weapon_skill_bonus(int skilltype, int abilitynum,
+    bool target_active, bool partner_active, bool weapon_active)
+{
+    if (skilltype == S_MEL && abilitynum == MEL_WARDEN)
+    {
+        if (!target_active || !weapon_active)
+            return 0;
+
+        if (partner_active)
+            return ability_weapon_skill_combo_bonus(p_ptr->skill_base[S_MEL]);
+
+        if (p_ptr->skill_base[S_MEL] > p_ptr->skill_base[S_ARC])
+        {
+            return (p_ptr->skill_base[S_MEL] - p_ptr->skill_base[S_ARC]) / 2;
+        }
+    }
+    else if (skilltype == S_ARC && abilitynum == ARC_VERSATILITY)
+    {
+        if (!target_active || !weapon_active)
+            return 0;
+
+        if (partner_active)
+            return ability_weapon_skill_combo_bonus(p_ptr->skill_base[S_ARC]);
+
+        if (p_ptr->skill_base[S_ARC] > p_ptr->skill_base[S_MEL])
+        {
+            return (p_ptr->skill_base[S_ARC] - p_ptr->skill_base[S_MEL]) / 2;
+        }
+    }
+
+    return 0;
+}
+
+/* Return the current weapon-dependent skill addition supplied by Warden or
+ * Versatility.  Keep this calculation shared by the bonus pass and the
+ * ability browser so the displayed value follows the actual combat value. */
+int ability_current_skill_bonus(int skilltype, int abilitynum)
+{
+    bool weapon_active;
+
+    weapon_active = (skilltype == S_MEL)
+        ? player_active_weapon_is_ranged()
+        : player_active_weapon_is_melee();
+
+    return ability_weapon_skill_bonus(skilltype, abilitynum,
+        p_ptr->active_ability[skilltype][abilitynum],
+        ability_weapon_skill_partner_active(skilltype, abilitynum),
+        weapon_active);
+}
+
+/* Return the value the ability would add if acquired and enabled now.  The
+ * matching weapon check is intentionally omitted: this is a preview of the
+ * ability's effect, not the player's current loadout contribution. */
+int ability_potential_skill_bonus(int skilltype, int abilitynum)
+{
+    return ability_weapon_skill_bonus(skilltype, abilitynum, true,
+        ability_weapon_skill_partner_active(skilltype, abilitynum), true);
+}
+
+/* Return the value the ability would add when it and its partner are both
+ * acquired and enabled.  This is used to explain the reciprocal increase in
+ * the Warden/Versatility ability previews. */
+int ability_potential_skill_bonus_with_partner(int skilltype, int abilitynum)
+{
+    return ability_weapon_skill_bonus(skilltype, abilitynum, true, true, true);
 }
 
 int ability_bonus(int skilltype, int abilitynum)

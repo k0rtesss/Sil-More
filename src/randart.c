@@ -1876,6 +1876,8 @@ static void artefact_prep(s16b k_idx, int a_idx)
     a_ptr->pd = k_ptr->pd;
     a_ptr->ps = k_ptr->ps;
     a_ptr->weight = k_ptr->weight;
+    a_ptr->storage = k_ptr->storage;
+    a_ptr->volume = k_ptr->volume;
     for (int si = 0; si < A_MAX; si++)
         a_ptr->stat_bonus[si] = k_ptr->stat_bonus[si];
     for (int sk = 0; sk < S_MAX; sk++)

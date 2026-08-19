@@ -67,12 +67,12 @@ static bool enhanced_menu_format_prompt(char* out, size_t out_size,
          * the words "drop" and "cycle", so keep them present on the wider
          * variants or those affordances would silently disappear on touch. */
         strnfmt(touch_long, sizeof(touch_long),
-            "Tap a row to %s, tap drop or cycle, tap away to exit", action);
-        strnfmt(touch_mid, sizeof(touch_mid), "Tap to %s; drop; cycle",
+            "Tap row to select; selected row to %s; drop; cycle", action);
+        strnfmt(touch_mid, sizeof(touch_mid), "Selected row: %s; drop; cycle",
             action);
         touch_variants[0] = touch_long;
         touch_variants[1] = touch_mid;
-        touch_variants[2] = "Tap a row";
+        touch_variants[2] = "Tap row";
         terminal_prompt_pick_variant(out, out_size, term_wid - 1,
             use_story_font, touch_variants, N_ELEMENTS(touch_variants));
         return false;
@@ -87,13 +87,16 @@ static bool enhanced_menu_format_prompt(char* out, size_t out_size,
 
         inventory_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
             sizeof(confirm_label));
-        inventory_prompt_label(steamdeck_info_key(), "RS Right", desc_label,
+        inventory_prompt_label(steamdeck_info_key(), "View", desc_label,
             sizeof(desc_label));
 
         if (current_menu_command == 'u' || current_menu_command == 'x')
         {
-            inventory_prompt_label(current_menu_command,
-                current_menu_command == 'u' ? "X" : "RS Right",
+            int cycle_binding = (current_menu_command == 'u')
+                ? current_menu_command : steamdeck_info_key();
+
+            inventory_prompt_label(cycle_binding,
+                current_menu_command == 'u' ? "X" : "View",
                 cycle_label, sizeof(cycle_label));
             show_cycle = true;
         }
@@ -258,13 +261,12 @@ static void append_description_slot(int* slots, int* count, int capacity,
  * Each group corresponds to an equipment slot (or class of slot) that an item
  * could occupy.  An item is comparable against another item only when their
  * groups overlap, so the description compares "things you could equip in its
- * place".  Most items belong to a single group, but a throwing weapon belongs
- * to both its melee group and the quiver/ammo group (it can be wielded or
- * thrown), which is why a dagger compares against both weapons and the quiver.
+ * place".  Throwing weapons remain melee/Harness objects; daggers and hand
+ * axes can additionally occupy the belt.
  */
 #define DESC_GRP_MELEE      0x00000001u
 #define DESC_GRP_BOW        0x00000002u
-#define DESC_GRP_AMMO       0x00000004u /* quiver: arrows and throwing weapons */
+#define DESC_GRP_AMMO       0x00000004u /* quiver: arrows only */
 #define DESC_GRP_HEAD       0x00000008u
 #define DESC_GRP_BODY       0x00000010u
 #define DESC_GRP_SHIELD     0x00000020u
@@ -278,6 +280,7 @@ static void append_description_slot(int* slots, int* count, int capacity,
 #define DESC_GRP_HORN       0x00002000u
 #define DESC_GRP_CONSUMABLE 0x00004000u
 #define DESC_GRP_MATERIAL   0x00008000u
+#define DESC_GRP_BELT       0x00010000u
 
 static u32b description_groups_for_object(const object_type* o_ptr)
 {
@@ -286,9 +289,8 @@ static u32b description_groups_for_object(const object_type* o_ptr)
     if (!o_ptr || !o_ptr->k_idx)
         return 0;
 
-    /* Throwing-capable weapons can also be placed in the quiver. */
-    if (player_can_treat_as_throwing(o_ptr))
-        groups |= DESC_GRP_AMMO;
+    if (object_is_belt_weapon(o_ptr))
+        groups |= DESC_GRP_BELT;
 
     if (supplies_group_matches_object(SUPPLY_GROUP_LIGHTS, o_ptr))
         groups |= DESC_GRP_LIGHT;
@@ -393,6 +395,21 @@ static bool description_object_matches(const object_type* base,
     return base && base->tval == o_ptr->tval;
 }
 
+/* Digging tools share the melee weapon slot, but another mattock or shovel is
+ * the most useful comparison.  Keep the broader melee/Harness matches after
+ * those exact-purpose comparisons. */
+static int description_object_match_priority(const object_type* base,
+    u32b base_groups, const object_type* o_ptr)
+{
+    if (!description_object_matches(base, base_groups, o_ptr))
+        return 0;
+
+    if (base && base->tval == TV_DIGGING && o_ptr->tval == TV_DIGGING)
+        return 2;
+
+    return 1;
+}
+
 static bool description_object_already_listed(const object_type* objects[],
     int count, const object_type* o_ptr)
 {
@@ -425,6 +442,25 @@ static bool append_description_object(const object_type* objects[],
     return true;
 }
 
+static bool description_floor_action_is_pickup(
+    floor_context_action_kind kind)
+{
+    return kind == FLOOR_CONTEXT_ACTION_PACK
+        || kind == FLOOR_CONTEXT_ACTION_HARNESS
+        || kind == FLOOR_CONTEXT_ACTION_SUPPLIES
+        || kind == FLOOR_CONTEXT_ACTION_QUIVER
+        || kind == FLOOR_CONTEXT_ACTION_JEWELRY
+        || kind == FLOOR_CONTEXT_ACTION_PICKUP;
+}
+
+static cptr description_inventory_group_name(const object_type* o_ptr)
+{
+    cptr group_name = inventory_limit_group_name(
+        inventory_limit_group_for_object(o_ptr));
+
+    return (group_name && group_name[0]) ? group_name : "Pack";
+}
+
 
 static char describe_item_with_comparisons_aux(int item_index,
     bool include_comparisons, bool floor_actions)
@@ -436,6 +472,8 @@ static char describe_item_with_comparisons_aux(int item_index,
     object_type* base_obj;
     bool is_floor = (item_index < 0);
     bool is_supply = (item_index >= SUPPLIES_INDEX);
+    bool is_quiver = item_index >= QUIVER_INDEX
+        && item_index < QUIVER_INDEX_END;
     u32b base_groups;
 
     if (item_index == ENHANCED_MENU_NO_SELECTION)
@@ -444,7 +482,7 @@ static char describe_item_with_comparisons_aux(int item_index,
     if (inventory_item_is_supply_summary(item_index))
         return 0;
 
-    if (is_floor || is_supply)
+    if (is_floor || is_supply || is_quiver)
     {
         base_obj = inventory_item_to_object_ptr(item_index);
     }
@@ -460,7 +498,8 @@ static char describe_item_with_comparisons_aux(int item_index,
 
     /* Opening an item description attempts smithing-difficulty identification. */
     {
-        bool is_equipped = (!is_floor && item_index >= INVEN_WIELD);
+        bool is_equipped = player_inventory_handle_is_equipped(item_index)
+            && player_equipment_slot_counts_as_equipped(item_index);
         (void)player_try_identify_smithing_object_on_examine(base_obj,
             is_equipped);
     }
@@ -470,7 +509,9 @@ static char describe_item_with_comparisons_aux(int item_index,
     append_description_object(objects, headings, heading_texts, &count,
         MAX_DESCRIPTION_COMPARE_ITEMS, base_obj,
         is_floor ? "Selected item (floor)"
-                 : (is_supply ? "Selected item (supply)" : "Selected item"));
+                 : (is_supply ? "Selected item (supply)"
+                              : (is_quiver ? "Selected item (quiver)"
+                                           : "Selected item")));
 
     if (include_comparisons)
     {
@@ -478,8 +519,133 @@ static char describe_item_with_comparisons_aux(int item_index,
         bool slot_allows_empty[INVEN_TOTAL - INVEN_WIELD];
         int slot_count = 0;
 
-        append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
-            wield_slot(base_obj));
+        /* A mattock should first line up against other digging tools, then
+         * against the remaining melee weapons on the Harness.  The ordinary
+         * slot walk cannot express that ordering because all of them share
+         * INVEN_WIELD. */
+        if (base_obj->tval == TV_DIGGING)
+        {
+            int digging_count_start = count;
+
+            for (int priority = 2; priority >= 1; priority--)
+            {
+                object_type* wielded = &inventory[INVEN_WIELD];
+
+                if (wielded->k_idx && wielded != base_obj
+                    && description_object_match_priority(base_obj,
+                        base_groups, wielded) == priority)
+                {
+                    append_description_object(objects, headings,
+                        heading_texts, &count,
+                        MAX_DESCRIPTION_COMPARE_ITEMS, wielded,
+                        priority == 2 ? "Digging" : mention_use(INVEN_WIELD));
+                }
+
+                for (int ordinal = 0;
+                     ordinal < player_pack_entry_count()
+                         && count < MAX_DESCRIPTION_COMPARE_ITEMS;
+                     ordinal++)
+                {
+                    int item = player_pack_entry_handle_at(ordinal);
+                    object_type* carried = player_inventory_object(item);
+                    char heading[48];
+                    cptr group_name;
+
+                    if (!carried || carried == base_obj
+                        || description_object_match_priority(base_obj,
+                            base_groups, carried) != priority)
+                    {
+                        continue;
+                    }
+
+                    group_name = description_inventory_group_name(carried);
+                    if (priority == 2)
+                    {
+                        strnfmt(heading, sizeof(heading),
+                            "Digging (%s %c)", group_name,
+                            player_inventory_label(item));
+                    }
+                    else
+                    {
+                        strnfmt(heading, sizeof(heading), "%s %c",
+                            group_name, player_inventory_label(item));
+                    }
+                    append_description_object(objects, headings,
+                        heading_texts, &count,
+                        MAX_DESCRIPTION_COMPARE_ITEMS, carried, heading);
+                }
+
+                if (is_floor)
+                {
+                    int floor_list[MAX_FLOOR_STACK];
+                    int floor_num = scan_floor(floor_list, MAX_FLOOR_STACK,
+                        base_obj->iy, base_obj->ix, 0x00);
+
+                    for (int i = 0; i < floor_num
+                         && count < MAX_DESCRIPTION_COMPARE_ITEMS; i++)
+                    {
+                        int o_idx = floor_list[i];
+                        object_type* floor_obj;
+
+                        if (o_idx <= 0 || o_idx >= o_max)
+                            continue;
+
+                        floor_obj = &o_list[o_idx];
+                        if (floor_obj == base_obj
+                            || description_object_match_priority(base_obj,
+                                base_groups, floor_obj) != priority)
+                        {
+                            continue;
+                        }
+
+                        append_description_object(objects, headings,
+                            heading_texts, &count,
+                            MAX_DESCRIPTION_COMPARE_ITEMS, floor_obj,
+                            priority == 2 ? "Digging (floor)" : "Floor");
+                    }
+                }
+
+                if (priority == 2 && count == digging_count_start)
+                {
+                    append_description_object(objects, headings,
+                        heading_texts, &count,
+                        MAX_DESCRIPTION_COMPARE_ITEMS, NULL, "Digging");
+                }
+            }
+
+            goto comparisons_done;
+        }
+
+        if (base_obj->tval == TV_ARROW)
+        {
+            int quiver_handles[QUIVER_ARROW_CAPACITY + 1];
+            int quiver_count = player_quiver_arrow_slots(quiver_handles,
+                (int)N_ELEMENTS(quiver_handles));
+
+            /* The current Quiver is an expandable synthetic store, not the
+             * legacy inventory[INVEN_QUIVER1] slot.  Show every distinct
+             * arrow stack so the comparison reflects what is really there. */
+            for (int i = 0; i < quiver_count
+                 && count < MAX_DESCRIPTION_COMPARE_ITEMS; i++)
+            {
+                object_type* arrow =
+                    player_quiver_arrow_object(quiver_handles[i]);
+                char heading[64];
+
+                if (!arrow)
+                    continue;
+
+                strnfmt(heading, sizeof(heading), "Quiver arrows (%d/%d)",
+                    i + 1, quiver_count);
+                append_description_object(objects, headings, heading_texts,
+                    &count, MAX_DESCRIPTION_COMPARE_ITEMS, arrow, heading);
+            }
+        }
+        else
+        {
+            append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
+                wield_slot(base_obj));
+        }
 
         if (base_obj->tval == TV_RING)
         {
@@ -488,13 +654,15 @@ static char describe_item_with_comparisons_aux(int item_index,
             append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
                 INVEN_RIGHT);
         }
-        else if (base_obj->tval == TV_ARROW
-            || player_can_treat_as_throwing(base_obj))
+        else if (player_can_treat_as_throwing(base_obj))
         {
             append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
                 INVEN_QUIVER1);
-            append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
-                INVEN_QUIVER2);
+            if (object_is_belt_weapon(base_obj))
+            {
+                append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
+                    INVEN_BELT);
+            }
         }
 
         for (int i = 0; i < slot_count; i++)
@@ -502,6 +670,8 @@ static char describe_item_with_comparisons_aux(int item_index,
 
         for (int slot = INVEN_WIELD; slot < INVEN_TOTAL; slot++)
         {
+            if (!player_equipment_slot_counts_as_equipped(slot))
+                continue;
             if (!inventory[slot].k_idx)
                 continue;
             if (!description_object_matches(base_obj, base_groups,
@@ -539,18 +709,22 @@ static char describe_item_with_comparisons_aux(int item_index,
             }
         }
 
-        for (int i = 0; i < INVEN_PACK
-             && count < MAX_DESCRIPTION_COMPARE_ITEMS; i++)
+        for (int ordinal = 0; ordinal < player_pack_entry_count()
+             && count < MAX_DESCRIPTION_COMPARE_ITEMS; ordinal++)
         {
+            int item = player_pack_entry_handle_at(ordinal);
+            object_type* carried = player_inventory_object(item);
             char heading[32];
 
             if (!description_object_matches(base_obj, base_groups,
-                    &inventory[i]))
+                    carried))
                 continue;
 
-            strnfmt(heading, sizeof(heading), "Pack %c", index_to_label(i));
+            strnfmt(heading, sizeof(heading), "%s %c",
+                description_inventory_group_name(carried),
+                player_inventory_label(item));
             append_description_object(objects, headings, heading_texts, &count,
-                MAX_DESCRIPTION_COMPARE_ITEMS, &inventory[i], heading);
+                MAX_DESCRIPTION_COMPARE_ITEMS, carried, heading);
         }
 
         for (int i = 0; i < supplies_entry_count()
@@ -571,8 +745,8 @@ static char describe_item_with_comparisons_aux(int item_index,
         if (is_floor)
         {
             int floor_list[MAX_FLOOR_STACK];
-            int floor_num = scan_floor(floor_list, MAX_FLOOR_STACK, p_ptr->py,
-                p_ptr->px, 0x00);
+            int floor_num = scan_floor(floor_list, MAX_FLOOR_STACK,
+                base_obj->iy, base_obj->ix, 0x00);
 
             for (int i = 0; i < floor_num
                  && count < MAX_DESCRIPTION_COMPARE_ITEMS; i++)
@@ -593,18 +767,77 @@ static char describe_item_with_comparisons_aux(int item_index,
                     "Floor");
             }
         }
+
+comparisons_done:
+        ;
     }
 
     if (floor_actions && is_floor)
     {
-        static const object_info_screen_action actions[] = {
-            { 'x', "x use" },
-            { ' ', "Space pick up" },
-            { ESCAPE, "Esc close" }
-        };
+        if (object_is_searched_skeleton(base_obj))
+        {
+            object_info_screen_action actions[] = {
+                { ESCAPE, "Esc close" }
+            };
+
+            return object_info_screen_multi_with_actions(objects, headings,
+                count, "Esc close", actions, N_ELEMENTS(actions));
+        }
+
+        floor_context_action context_actions[FLOOR_CONTEXT_MAX_ACTIONS];
+        object_info_screen_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
+        char prompt[160] = "";
+        int action_count = floor_context_collect_item_actions(item_index,
+            false, true, context_actions,
+            (int)N_ELEMENTS(context_actions));
+        int display_action_count = 0;
+        int pickup_count = 0;
+        bool pickup_added = false;
+
+        for (int i = 0; i < action_count; i++)
+        {
+            if (description_floor_action_is_pickup(context_actions[i].kind))
+                pickup_count++;
+        }
+
+        for (int i = 0; i < action_count; i++)
+        {
+            floor_context_action* context_action = &context_actions[i];
+
+            /* Description controls stay contextual and stable: x performs the
+             * item's primary action, while Space picks it up.  When several
+             * destinations are legal, Space opens the destination chooser. */
+            if (context_action->kind == FLOOR_CONTEXT_ACTION_USE)
+            {
+                context_action->key = 'x';
+                strnfmt(context_action->token, sizeof(context_action->token),
+                    "x %s", context_action->label);
+            }
+            else if (description_floor_action_is_pickup(context_action->kind))
+            {
+                if (pickup_added)
+                    continue;
+
+                context_action->kind = FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT;
+                context_action->key = ' ';
+                if (pickup_count > 1)
+                    SDL_strlcpy(context_action->label, "Pick Up...",
+                        sizeof(context_action->label));
+                strnfmt(context_action->token, sizeof(context_action->token),
+                    "Space %s", context_action->label);
+                pickup_added = true;
+            }
+
+            actions[display_action_count].key = context_action->key;
+            actions[display_action_count].token = context_action->token;
+            display_action_count++;
+            if (prompt[0])
+                SDL_strlcat(prompt, "  ", sizeof(prompt));
+            SDL_strlcat(prompt, context_action->token, sizeof(prompt));
+        }
 
         return object_info_screen_multi_with_actions(objects, headings, count,
-            "x use  Space pick up  Esc close", actions, N_ELEMENTS(actions));
+            prompt, actions, display_action_count);
     }
 
     object_info_screen_multi(objects, headings, count);
@@ -948,8 +1181,9 @@ void show_inven_enhanced(void)
                 else if (highlighted_obj->tval == TV_ARROW)
                 {
                     append_compare_slot(slot_candidates, &slot_count, INVEN_QUIVER1);
-                    append_compare_slot(slot_candidates, &slot_count, INVEN_QUIVER2);
                 }
+                else if (object_is_belt_weapon(highlighted_obj))
+                    append_compare_slot(slot_candidates, &slot_count, INVEN_BELT);
 
                 for (int idx = 0; idx < slot_count; idx++)
                 {
@@ -1386,12 +1620,13 @@ void show_inven_enhanced(void)
         
         /* Get a key */
         which = inkey();
+        bool click_taken = false;
 
         {
             int clicked_row = -1;
             int click_action = UI_MENU_CLICK_PRIMARY;
 
-            bool click_taken =
+            click_taken =
                 ui_menu_click_take_action(&clicked_row, &click_action);
 
             if (click_taken && clicked_row == ENHANCED_MENU_CLICK_SWITCH)
@@ -1413,11 +1648,15 @@ void show_inven_enhanced(void)
 
             if (click_taken && clicked_row >= 0 && clicked_row < k)
             {
+                bool same_row = highlight_active && (highlight_row == clicked_row);
+
                 highlight_row = clicked_row;
                 highlight_active = true;
                 enhanced_inventory_selected_item = out_index[highlight_row];
 
                 if (click_action == UI_MENU_CLICK_HOVER)
+                    continue;
+                if (!same_row)
                     continue;
 
                 if (click_action == UI_MENU_CLICK_SECONDARY)
@@ -1460,6 +1699,11 @@ void show_inven_enhanced(void)
                 continue;
         }
         which = steamdeck_menu_key(which, 'e', 'i');
+        if (controller_controls && !click_taken
+            && which == steamdeck_info_key())
+        {
+            which = 'x';
+        }
         
         log_trace("show_inven_enhanced: Key pressed: %d ('%c')", which, (which >= 32 && which <= 126) ? which : '?');
         
@@ -1807,6 +2051,10 @@ void show_equip_enhanced(void)
     log_debug("show_equip_enhanced: Starting equipment scan, show_weights=%d", show_weights);
     for (k = 0, i = INVEN_WIELD; i < INVEN_TOTAL; i++)
     {
+        if (!player_equipment_slot_counts_as_equipped(i)
+            && !(throw_slot_menu_active && throw_slot_enabled[i]))
+            continue;
+
         o_ptr = &inventory[i];
         bool is_empty = !o_ptr->k_idx;
         
@@ -2027,11 +2275,12 @@ void show_equip_enhanced(void)
                     c_put_str(line_attr, tmp_val, display_row, weight_col);
                 }
                 
-                if (highlighted_slot == INVEN_QUIVER2)
+                if (highlighted_slot == INVEN_BELT)
                 {
                     /* Account for potential tile offset when calculating note position */
                     int note_col = text_col + (int)strlen(out_desc[highlight_index]);
-                    c_put_str(TERM_L_DARK, " (keeps passive bonuses)", display_row, note_col);
+                    c_put_str(TERM_L_DARK, " (belt; keeps passive bonuses)",
+                        display_row, note_col);
                 }
 
                 /* Print the item letter at the end with highlight */
@@ -2054,12 +2303,13 @@ void show_equip_enhanced(void)
         
         /* Get a key */
         which = inkey();
+        bool click_taken = false;
 
         {
             int clicked_row = -1;
             int click_action = UI_MENU_CLICK_PRIMARY;
 
-            bool click_taken =
+            click_taken =
                 ui_menu_click_take_action(&clicked_row, &click_action);
 
             if (click_taken && clicked_row == ENHANCED_MENU_CLICK_SWITCH)
@@ -2085,10 +2335,15 @@ void show_equip_enhanced(void)
                 if (clicked_slot >= INVEN_WIELD && clicked_slot < INVEN_TOTAL
                     && inventory[clicked_slot].k_idx)
                 {
+                    bool same_row =
+                        highlight_active && (highlight_index == clicked_row);
+
                     highlight_index = clicked_row;
                     highlight_active = true;
                     enhanced_equipment_selected_item = clicked_slot;
                     if (click_action == UI_MENU_CLICK_HOVER)
+                        continue;
+                    if (!same_row)
                         continue;
 
                     done = true;
@@ -2112,6 +2367,11 @@ void show_equip_enhanced(void)
                 continue;
         }
         which = steamdeck_menu_key(which, 'e', 'i');
+        if (controller_controls && !click_taken
+            && which == steamdeck_info_key())
+        {
+            which = 'x';
+        }
         
         log_trace("show_equip_enhanced: Key pressed: %d ('%c')", which, (which >= 32 && which <= 126) ? which : '?');
         

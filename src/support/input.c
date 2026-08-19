@@ -201,6 +201,29 @@ static char inkey_aux(void)
  * trigger any macros.  It is used in Angband to handle "keymaps".
  */
 static cptr inkey_next = NULL;
+static bool inkey_text_cursor_requested = false;
+static unsigned int inkey_prompt_input_depth = 0;
+
+void inkey_request_text_cursor(void)
+{
+    inkey_text_cursor_requested = true;
+}
+
+void inkey_prompt_input_begin(void)
+{
+    inkey_prompt_input_depth++;
+}
+
+void inkey_prompt_input_end(void)
+{
+    if (inkey_prompt_input_depth > 0)
+        inkey_prompt_input_depth--;
+}
+
+bool inkey_prompt_input_active(void)
+{
+    return inkey_prompt_input_depth > 0;
+}
 
 bool inkey_next_active(void)
 {
@@ -242,6 +265,10 @@ void inkey_next_set(cptr keys)
  * in response to a "menu item" request unless "inkey_flag" is true, to
  * prevent savefile corruption.
  *
+ * Saved/special screens render their selections themselves, so their legacy
+ * terminal cursor is always hidden.  A real free-text editor may opt in to a
+ * one-call text cursor with inkey_request_text_cursor().
+ *
  * If we are waiting for a keypress, and no keypress is ready, then we will
  * refresh (once) the window which was active when this function was called.
  *
@@ -275,6 +302,9 @@ void inkey_next_set(cptr keys)
 char inkey(void)
 {
     bool cursor_state;
+    bool text_cursor_requested = inkey_text_cursor_requested;
+    bool suppress_special_cursor = character_icky > 0
+        && !text_cursor_requested;
 
     char kk;
 
@@ -292,6 +322,7 @@ char inkey(void)
 
         /* Cancel the various "global parameters" */
         inkey_base = inkey_xtra = inkey_flag = inkey_scan = false;
+        inkey_text_cursor_requested = false;
         ui_key_wait_dismiss_clear();
 
         /* Accept result */
@@ -317,11 +348,19 @@ char inkey(void)
     /* Get the cursor state */
     (void)Term_get_cursor(&cursor_state);
 
-    /* Show the cursor if waiting, except sometimes in "command" mode */
+    if (suppress_special_cursor)
+        (void)Term_set_cursor(false);
+
+    /* Show the cursor for explicit text entry, or for normal gameplay input.
+     * Special screens use their rendered row highlight instead. */
     if (!inkey_scan
-        && (!inkey_flag || hilite_player || (hilite_target && target_sighted())
-            || character_icky)
-        && !hide_cursor)
+        && (text_cursor_requested
+            || (!suppress_special_cursor && !hide_cursor
+                && (!inkey_flag
+                    || (hilite_player && panel_contains(p_ptr->py, p_ptr->px))
+                    || (hilite_target && target_sighted()
+                        && panel_contains(
+                            p_ptr->target_row, p_ptr->target_col))))))
     {
         /* Show the cursor */
         (void)Term_set_cursor(true);
@@ -466,11 +505,12 @@ char inkey(void)
     /* Hack -- restore the term */
     Term_activate(old);
 
-    /* Restore the cursor */
-    Term_set_cursor(cursor_state);
+    /* Do not resurrect a stale list cursor after special-screen input. */
+    Term_set_cursor(suppress_special_cursor ? false : cursor_state);
 
     /* Cancel the various "global parameters" */
     inkey_base = inkey_xtra = inkey_flag = inkey_scan = false;
+    inkey_text_cursor_requested = false;
     ui_key_wait_dismiss_clear();
 
     /* (no banner countdown updates here; handled per turn) */

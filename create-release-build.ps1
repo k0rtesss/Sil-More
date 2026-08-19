@@ -103,14 +103,11 @@ $requiredDlls = @(
 )
 
 Write-Host ""
-Write-Host "Checking for standard Windows deployment..." -ForegroundColor Yellow
-if (-not (Test-Path $deploymentExePath)) {
-    Write-Host "Standard deployment not found. Building now..." -ForegroundColor Cyan
-    & $buildScriptPath
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Build failed!" -ForegroundColor Red
-        exit 1
-    }
+Write-Host "Building fresh standard Windows deployment..." -ForegroundColor Yellow
+& $buildScriptPath
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Build failed!" -ForegroundColor Red
+    exit 1
 }
 
 if (-not (Test-Path $deploymentExePath)) {

@@ -217,6 +217,7 @@ bool sdl_left_panel_source_cell_rect(int col, int row, int cols,
 
     panel_content_x = panel_rect.x
         + (float)sdl_left_panel_content_x_for_metrics(&metrics);
+    panel_rect.y += (float)metrics.top_padding_h;
 
     if (metrics.collapsed) {
         bool have = false;
@@ -508,7 +509,8 @@ bool sdl_main_view_point_to_cell(float x, float y, int* out_col, int* out_row)
             && y >= panel_rect.y && y < panel_rect.y + panel_rect.h)
         {
             panel_local_x = x - panel_rect.x;
-            panel_local_y = y - panel_rect.y;
+            panel_local_y = y - panel_rect.y
+                - (float)metrics.top_padding_h;
             if (metrics.cell_w <= 0 || metrics.cell_h <= 0)
                 return false;
             if (panel_local_y < 0.0f
@@ -598,7 +600,6 @@ bool sdl_mouse_gameplay_context_active(void)
         && p_ptr->playing
         && !p_ptr->leaving
         && !p_ptr->is_dead
-        && !death_spectator_active()
         && character_icky == 0
         && !ui_menu_click_is_active()
         && g_views[PANE_MAIN].term_ready;
@@ -1286,6 +1287,34 @@ bool sdl_main_map_apply_pan(int pan_dy, int pan_dx)
     return true;
 }
 
+/*
+ * SDL can deliver several finger-motion samples in one poll batch.  Applying
+ * each sample immediately redraws the full map and, with V-sync enabled,
+ * potentially presents it before the next sample is handled.  Accumulate the
+ * logical cell movement and apply the final panel position once the batch has
+ * been drained.
+ */
+static int g_main_map_pending_pan_dy;
+static int g_main_map_pending_pan_dx;
+
+static void sdl_main_map_queue_pan(int pan_dy, int pan_dx)
+{
+    g_main_map_pending_pan_dy += pan_dy;
+    g_main_map_pending_pan_dx += pan_dx;
+}
+
+void sdl_main_map_flush_pending_pan(void)
+{
+    int pan_dy = g_main_map_pending_pan_dy;
+    int pan_dx = g_main_map_pending_pan_dx;
+
+    g_main_map_pending_pan_dy = 0;
+    g_main_map_pending_pan_dx = 0;
+
+    if (pan_dy || pan_dx)
+        (void)sdl_main_map_apply_pan(pan_dy, pan_dx);
+}
+
 void sdl_main_map_cancel_drag(void)
 {
     g_main_map_drag.active = false;
@@ -1532,7 +1561,7 @@ bool sdl_main_map_handle_drag_motion(float x, float y,
     if (pan_dy || pan_dx)
     {
         sdl_main_map_mark_dragged();
-        (void)sdl_main_map_apply_pan(pan_dy, pan_dx);
+        sdl_main_map_queue_pan(pan_dy, pan_dx);
     }
 
     return true;

@@ -3,7 +3,6 @@
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
-#include "sdl-config.h"
 #include "ui/question.h"
 #include <math.h>
 
@@ -30,6 +29,18 @@ static bool player_take_trap_step_allowance(int y, int x)
     return allowed;
 }
 
+bool player_grid_is_leapable_obstacle(int y, int x)
+{
+    if (!in_bounds(y, x))
+        return false;
+    if (cave_feat[y][x] == FEAT_CHASM)
+        return true;
+
+    return cave_trap_bold(y, x) && !cave_floorlike_bold(y, x)
+        && !cave_rewired[y][x] && cave_feat[y][x] != FEAT_TRAP_ROOST
+        && cave_feat[y][x] != FEAT_TRAP_WEB;
+}
+
 static bool move_target_exits_gates(int y, int x)
 {
     if (!p_ptr || (p_ptr->depth != 0))
@@ -40,6 +51,146 @@ static bool move_target_exits_gates(int y, int x)
 
     return (y == 0) || (x == 0) || (y == p_ptr->cur_map_hgt - 1)
         || (x == p_ptr->cur_map_wid - 1);
+}
+
+/*
+ * Return the strongest actual mattock in the main-hand slot or pack.
+ * Forge sabotage deliberately excludes shovels, while using the same
+ * tunneling value as quartz-vein destruction.
+ */
+static object_type* forge_sabotage_mattock(int* out_score)
+{
+    object_type* best = NULL;
+    int best_score = 0;
+
+    for (int ordinal = -1; ordinal < player_pack_entry_count(); ordinal++)
+    {
+        object_type* o_ptr
+            = (ordinal < 0) ? &inventory[INVEN_WIELD]
+                            : player_pack_entry_at(ordinal);
+        u32b f1, f2, f3;
+
+        if (!o_ptr->k_idx || (o_ptr->tval != TV_DIGGING)
+            || (o_ptr->sval != SV_MATTOCK))
+        {
+            continue;
+        }
+
+        object_flags(o_ptr, &f1, &f2, &f3);
+        if ((f1 & (TR1_TUNNEL)) && (o_ptr->pval > best_score))
+        {
+            best = o_ptr;
+            best_score = o_ptr->pval;
+        }
+    }
+
+    if (out_score)
+        *out_score = best_score;
+    return best;
+}
+
+/*
+ * Offer the forge mini-quest whenever the player steps onto a forge.
+ * Returns true only when the player chooses to open the smithing screen.
+ */
+static bool forge_entry_choice(int y, int x)
+{
+    ui_question_option options[2];
+    object_type* mattock;
+    int digging_score = 0;
+    int feat = cave_feat[y][x];
+    int choice;
+    bool can_destroy;
+    bool unique = (feat >= FEAT_FORGE_UNIQUE_HEAD);
+    char desc[640];
+    char destroy_label[64];
+    char tool_status[192];
+
+    if (unique)
+    {
+        SDL_strlcpy(desc,
+            "Here Morgoth's greatest weapons were wrought for his armies. "
+            "Orodruth is rooted in the Mountain's own fire and cannot be "
+            "destroyed.",
+            sizeof(desc));
+        options[0] = (ui_question_option){
+            'u', "Enter and use Orodruth", TERM_L_GREEN, false
+        };
+
+        choice = ui_question_ask("Orodruth, the Mountain's Anger", desc,
+            options, 1, y, x, 0);
+        return choice == 0;
+    }
+
+    mattock = forge_sabotage_mattock(&digging_score);
+    if (!mattock)
+    {
+        SDL_strlcpy(tool_status,
+            "You carry no mattock with which to break it apart.",
+            sizeof(tool_status));
+    }
+    else if (digging_score < TUNNEL_DIFFICULTY_QUARTZ)
+    {
+        char o_name[80];
+
+        object_desc(o_name, sizeof(o_name), mattock, false, -1);
+        strnfmt(tool_status, sizeof(tool_status),
+            "Your %s has tunneling %d; destroying the forge requires %d.",
+            o_name, digging_score, TUNNEL_DIFFICULTY_QUARTZ);
+    }
+    else if (p_ptr->stat_use[A_STR] < TUNNEL_DIFFICULTY_QUARTZ)
+    {
+        strnfmt(tool_status, sizeof(tool_status),
+            "Your mattock is suitable, but destroying the forge requires "
+            "Strength %d.",
+            TUNNEL_DIFFICULTY_QUARTZ);
+    }
+    else
+    {
+        SDL_strlcpy(tool_status,
+            "Your mattock and Strength are sufficient to destroy it.",
+            sizeof(tool_status));
+    }
+    can_destroy = mattock
+        && (digging_score >= TUNNEL_DIFFICULTY_QUARTZ)
+        && (p_ptr->stat_use[A_STR] >= TUNNEL_DIFFICULTY_QUARTZ);
+
+    strnfmt(desc, sizeof(desc),
+        "Forges such as this arm the hosts of Morgoth. You may preserve its "
+        "fires for your own craft, or smash it so that it can serve the "
+        "Enemy no more. Even an exhausted forge may be destroyed for %d "
+        "experience. %s",
+        FORGE_DESTROY_EXP, tool_status);
+
+    options[0]
+        = (ui_question_option){
+            'u', "Enter and use the forge", TERM_L_GREEN, false
+        };
+    strnfmt(destroy_label, sizeof(destroy_label),
+        "Destroy the forge (+%d experience)", FORGE_DESTROY_EXP);
+    options[1] = (ui_question_option){
+        'd', destroy_label, TERM_ORANGE, !can_destroy
+    };
+
+    choice = ui_question_ask(
+        (feat >= FEAT_FORGE_GOOD_HEAD) ? "An Enchanted Forge of the Enemy"
+                                       : "A Forge of the Enemy",
+        desc, options, 2, y, x, 0);
+
+    if (choice == 0)
+        return true;
+    if (choice != 1)
+        return false;
+
+    sound(MSG_DIG);
+    monster_perception(true, false, -10);
+    cave_set_feat(y, x, FEAT_RUBBLE);
+    gain_exp(FORGE_DESTROY_EXP);
+    msg_format("You smash the forge beyond use, denying it to Morgoth's "
+               "army, and gain %d experience.",
+        FORGE_DESTROY_EXP);
+    do_cmd_note("Destroyed one of Morgoth's forges", p_ptr->depth);
+    return false;
 }
 
 void move_player(int dir)
@@ -169,11 +320,7 @@ void move_player(int dir)
         {
             // leapable things: chasms, traps (except roosts and webs).
             // A trap the player has rewired is safe for them -- no leap prompt.
-            if ((cave_feat[y][x] == FEAT_CHASM)
-                || (((cave_trap_bold(y, x)) && !cave_floorlike_bold(y, x))
-                    && !cave_rewired[y][x]
-                    && !(cave_feat[y][x] == FEAT_TRAP_ROOST
-                        || cave_feat[y][x] == FEAT_TRAP_WEB)))
+            if (player_grid_is_leapable_obstacle(y, x))
             {
                 char prompt[80];
                 int i;
@@ -360,13 +507,7 @@ void move_player(int dir)
                 && !cave_rewired[y][x]
                 && !player_take_trap_step_allowance(y, x))
             {
-                ui_question_option options[2];
-                char title[80];
-                int choice;
-                int disarm_choice = -1;
-                int step_choice = 0;
-                int count = 0;
-                cptr name = (f_name + f_info[cave_feat[y][x]].name);
+                int command = 0;
 
                 /* Disturb the player */
                 disturb(0, 0);
@@ -374,33 +515,7 @@ void move_player(int dir)
                 /* Flush input */
                 flush();
 
-                strnfmt(title, sizeof(title), "%^s in the way", name);
-
-                /* Offer disarming when the trap allows it -- or rewiring, if the
-                 * player has the ability and the trap can be re-keyed (this
-                 * block only runs for not-yet-rewired traps). */
-                if (trap_disarm_power(cave_feat[y][x], NULL))
-                {
-                    bool rewiring
-                        = p_ptr->active_ability[S_PER][PER_REWIRE_TRAPS]
-                        && trap_is_rewireable(cave_feat[y][x]);
-                    options[count].key = 'd';
-                    options[count].label = rewiring ? "Rewire it" : "Disarm it";
-                    options[count].attr = TERM_L_WHITE;
-                    disarm_choice = count;
-                    count++;
-                }
-
-                options[count].key = 'w';
-                options[count].label = "Step onto it";
-                options[count].attr = TERM_L_WHITE;
-                step_choice = count;
-                count++;
-
-                choice = ui_question_ask(title, NULL, options, count, y, x,
-                    step_choice);
-
-                if (choice < 0)
+                if (!grid_interact_question(y, x, &command, NULL))
                 {
                     // don't take a turn...
                     p_ptr->energy_use = 0;
@@ -408,7 +523,7 @@ void move_player(int dir)
                     return;
                 }
 
-                if ((disarm_choice >= 0) && (choice == disarm_choice))
+                if (command == 'D')
                 {
                     /* Disarm instead of moving; this takes the turn */
                     p_ptr->previous_action[0] = ACTION_MISC;
@@ -417,6 +532,18 @@ void move_player(int dir)
 
                     return;
                 }
+
+                if (command != ';')
+                {
+                    // don't take a turn...
+                    p_ptr->energy_use = 0;
+
+                    return;
+                }
+
+                /* This direct movement continues in the current call, so
+                 * consume the popup's queued allowance immediately. */
+                (void)player_take_trap_step_allowance(y, x);
             }
         }
 
@@ -570,6 +697,9 @@ void move_player(int dir)
 
             cave_info[y][x] |= (CAVE_MARK);
             lite_spot(y, x);
+
+            if (forge_entry_choice(y, x))
+                do_cmd_smithing_screen();
         }
 
         /* Set off traps */
@@ -621,6 +751,19 @@ static int see_wall(int dir, int y, int x)
 
     /* Default */
     return (true);
+}
+
+/*
+ * Running treats an unknown grid like open floor.  A two-grid probe can
+ * therefore confirm a tight corner only when the wall is both known and
+ * actually a wall.
+ */
+static bool run_known_wall_at(int y, int x)
+{
+    if (!in_bounds(y, x))
+        return false;
+
+    return (cave_info[y][x] & CAVE_MARK) && cave_wall_bold(y, x);
 }
 
 /*
@@ -1215,10 +1358,14 @@ static bool run_test(void)
         /* Two options, examining corners */
         else
         {
-            /* Primary option */
-            p_ptr->run_cur_dir = option;
+            bool cut_corner = !(prev_dir & 0x01) && !(option & 0x01)
+                && (option2 & 0x01)
+                && run_known_wall_at(py + 2 * ddy[option],
+                    px + 2 * ddx[option])
+                && run_known_wall_at(py + 2 * ddy[option2],
+                    px + 2 * ddx[option2]);
 
-            /* Stop in the doorway of a room */
+            /* Stop in the doorway of a room. */
             row = py + 2 * ddy[option];
             col = px + 2 * ddx[option];
             if ((cave_info[row][col] & CAVE_MARK) && !cave_wall_bold(row, col))
@@ -1226,8 +1373,19 @@ static bool run_test(void)
                 return (true);
             }
 
-            /* Hack -- allow curving */
-            p_ptr->run_old_dir = option2;
+            if (cut_corner)
+            {
+                /* Enter the diagonal leg directly, skipping the corner. */
+                p_ptr->run_cur_dir = option2;
+                p_ptr->run_old_dir = option2;
+            }
+            else
+            {
+                /* Continue through the corner and remember the diagonal
+                 * approach so the next scan can follow the new leg. */
+                p_ptr->run_cur_dir = option;
+                p_ptr->run_old_dir = option2;
+            }
         }
     }
 

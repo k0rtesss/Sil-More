@@ -155,13 +155,13 @@ void wr_extra(void)
 
     meta_monster_sync_player_state();
 
-    // Reserved block: legacy status bytes, active weapon, summons, revenge, Lore/KP.
+    /* Compatibility fields plus the 0.9.9 revenge and Lore extension. */
     wr_byte(p_ptr->morgoth_hall_entered ? 1 : 0);
     wr_byte(p_ptr->morgoth_second_wind ? 1 : 0);
     wr_byte(p_ptr->discovery_lore_flags);
     wr_s16b(p_ptr->lamp_oil);
     wr_byte((byte)player_active_weapon_mode());
-    wr_byte(0);
+    wr_byte(p_ptr->quick_access_prompt_flags & QUICK_ACCESS_PROMPT_MASK);
     {
         byte morgoth_call_state =
             p_ptr->morgoth_call_state

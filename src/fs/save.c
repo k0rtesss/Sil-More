@@ -596,6 +596,7 @@ void wr_item(const object_type* o_ptr)
     wr_byte(o_ptr->ps);
     wr_byte(o_ptr->pickup);
     wr_s16b(o_ptr->pickup_slot);
+    wr_byte(o_ptr->storage);
 
     wr_u32b(o_ptr->ident);
 
@@ -652,7 +653,8 @@ void wr_item(const object_type* o_ptr)
  */
 #define SAVE_MON_FLAGS                                                         \
     (MFLAG_ACTV | MFLAG_ALWAYS_CAST | MFLAG_AGGRESSIVE | MFLAG_SUMMONED        \
-        | MFLAG_HIT_BY_RANGED | MFLAG_HIT_BY_MELEE | MFLAG_CHARGED)
+        | MFLAG_HIT_BY_RANGED | MFLAG_HIT_BY_MELEE | MFLAG_CHARGED             \
+        | MFLAG_DURUIN_PROVOKED)
 
 /*
  * Write a "monster" record
@@ -1123,6 +1125,43 @@ static bool wr_savefile(void)
     wr_u16b(0xFFFF);
     log_trace("[save:%06u] === END INVENTORY ===", (unsigned)save_byte_offset);
 
+    /* Write carried entries beyond the 23 legacy physical slots. */
+    log_trace("[save:%06u] === BEGIN CARRIED EXTRA ===",
+        (unsigned)save_byte_offset);
+    wr_u16b(SAVEFILE_CARRIED_EXTRA_BLOCK_MAGIC);
+    {
+        u32b extra_count = (u32b)player_carried_extra_entry_count();
+
+        wr_u32b(extra_count);
+        for (u32b ei = 0; ei < extra_count; ei++)
+        {
+            object_type* carried = player_carried_extra_entry_at((int)ei);
+
+            if (!carried || !carried->k_idx || carried->number <= 0)
+                return false;
+            wr_item(carried);
+        }
+    }
+    log_trace("[save:%06u] === END CARRIED EXTRA ===",
+        (unsigned)save_byte_offset);
+
+    /* Write the dedicated mixed-arrow Quiver store. */
+    log_trace("[save:%06u] === BEGIN QUIVER ===", (unsigned)save_byte_offset);
+    wr_u16b(SAVEFILE_QUIVER_BLOCK_MAGIC);
+    {
+        u16b quiver_count = (u16b)player_quiver_store_entry_count();
+        wr_u16b(quiver_count);
+        wr_s16b((s16b)player_quiver_selected_arrow_index());
+        for (u16b qi = 0; qi < quiver_count; qi++)
+        {
+            object_type* arrow = player_quiver_store_entry_at(qi);
+            if (!arrow || !arrow->k_idx)
+                return false;
+            wr_item(arrow);
+        }
+    }
+    log_trace("[save:%06u] === END QUIVER ===", (unsigned)save_byte_offset);
+
     /* Write supplies cache */
     log_trace("[save:%06u] === BEGIN SUPPLIES ===", (unsigned)save_byte_offset);
     {
@@ -1157,6 +1196,7 @@ static bool wr_savefile(void)
         {
             bool set = jewelry_preset_is_set(preset);
             wr_byte(set ? 1 : 0);
+            wr_string(jewelry_preset_name(preset));
             for (byte slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
             {
                 const object_type* preset_obj =

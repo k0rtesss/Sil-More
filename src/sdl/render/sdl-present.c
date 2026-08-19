@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "supplies.h"
 
 typedef struct {
     bool valid;
@@ -95,8 +96,12 @@ void sdl_touch_pane_render(void)
         if (i == SDL_TOUCH_PANE_CENTER_SLOT
             && sdl_touch_pane_confirm_binding(binding))
         {
-            SDL_strlcpy(label, "Confirm", sizeof(label));
-            SDL_strlcpy(symbol, "(pick)", sizeof(symbol));
+            if (!label[0])
+                SDL_strlcpy(label, "Confirm", sizeof(label));
+            if (streq(label, "Confirm"))
+                SDL_strlcpy(symbol, "(pick)", sizeof(symbol));
+            else
+                symbol[0] = '\0';
         } else {
             sdl_touch_pane_binding_symbol(binding, symbol, sizeof(symbol));
             if (!config.touch_pane_key_labels_visible
@@ -328,9 +333,22 @@ static Uint64 sdl_left_panel_source_hash(const term* source_term,
     hash = sdl_left_panel_hash_mix(hash, (Uint64)metrics->cell_h);
     hash = sdl_left_panel_hash_mix(hash, (Uint64)metrics->content_cols);
     hash = sdl_left_panel_hash_mix(hash, (Uint64)metrics->panel_rows);
+    hash = sdl_left_panel_hash_mix(hash, (Uint64)metrics->top_padding_h);
+    hash = sdl_left_panel_hash_mix(hash, (Uint64)metrics->bottom_padding_h);
     hash = sdl_left_panel_hash_mix(hash, (Uint64)metrics->compact_segment_count);
     hash = sdl_left_panel_hash_mix(hash, (Uint64)use_bigtile);
     hash = sdl_left_panel_hash_mix(hash, (Uint64)g_state.use_tiles);
+    hash = sdl_left_panel_hash_mix(hash,
+        sdl_mono_font_atlas_generation_for_cells(sdl_monospace_font_path(),
+            metrics->cell_w, metrics->cell_h));
+    hash = sdl_left_panel_hash_mix(hash,
+        (Uint64)(op_ptr && styled_player_health_bar));
+    hash = sdl_left_panel_hash_mix(hash,
+        (Uint64)(op_ptr && styled_monster_health_bars));
+    if (p_ptr && op_ptr && styled_player_health_bar) {
+        hash = sdl_left_panel_hash_mix(hash, (Uint64)p_ptr->chp);
+        hash = sdl_left_panel_hash_mix(hash, (Uint64)p_ptr->mhp);
+    }
 
     for (int i = 0; i < metrics->compact_segment_count; i++) {
         hash = sdl_left_panel_hash_mix(hash,
@@ -357,15 +375,181 @@ static Uint64 sdl_left_panel_source_hash(const term* source_term,
             byte terrain_ch = (scr->tc && scr->tc[row])
                 ? (byte)scr->tc[row][col]
                 : 0;
+            byte health = (scr->health && scr->health[row])
+                ? scr->health[row][col]
+                : 0;
 
             hash = sdl_left_panel_hash_mix(hash, attr);
             hash = sdl_left_panel_hash_mix(hash, ch);
             hash = sdl_left_panel_hash_mix(hash, terrain_attr);
             hash = sdl_left_panel_hash_mix(hash, terrain_ch);
+            hash = sdl_left_panel_hash_mix(hash, health);
         }
     }
 
     return hash;
+}
+
+/*
+ * Render a continuous, pixel-accurate health bar on the row beneath the
+ * player name in the styled left panel instead of the terminal health row.
+ */
+static bool sdl_render_left_panel_player_health_bar(int source_row,
+    int source_col, int end_col, int dest_col, int dest_row, float content_x,
+    float content_y, int cell_w, int cell_h)
+{
+    const int bar_col = COL_NAME;
+    const int bar_cells = 12;
+    byte fill_attr;
+    SDL_Color fill_color;
+    SDL_Color track_color;
+    SDL_Color frame_color;
+    SDL_FRect bar;
+    SDL_FRect fill;
+    float inset_x;
+    float inset_y;
+    float fraction;
+    bool flush_top;
+
+    if (!p_ptr || !op_ptr || !styled_player_health_bar || p_ptr->mhp <= 0)
+        return false;
+    if (source_row != ROW_NAME + 1)
+        return false;
+    if (source_col > bar_col || end_col < bar_col + bar_cells)
+        return false;
+
+    fill_attr = health_attr(p_ptr->chp, p_ptr->mhp);
+    fill_attr = sdl_left_panel_pane_render_attr_for_cell(bar_col, source_row,
+        fill_attr);
+    fill_color = sdl_color_from_attr(sdl_ui_text_fg_attr(fill_attr));
+    track_color = sdl_color_from_attr(TERM_L_DARK);
+    frame_color = sdl_color_from_attr(TERM_SLATE);
+
+    inset_x = (float)cell_w * 0.12f;
+    if (inset_x < 1.0f)
+        inset_x = 1.0f;
+    flush_top = get_sdl_left_panel_compact_health_bar()
+        && sdl_left_panel_pane_collapsed()
+        && !sdl_left_panel_compact_row_mode()
+        && dest_row == 0;
+    inset_y = (float)cell_h * 0.24f;
+    if (inset_y < 1.0f)
+        inset_y = 1.0f;
+
+    bar.x = content_x
+        + (float)(dest_col + bar_col - source_col) * (float)cell_w
+        + inset_x;
+    bar.y = content_y + (float)dest_row * (float)cell_h
+        + (flush_top ? 0.0f : inset_y);
+    bar.w = (float)(bar_cells * cell_w) - 2.0f * inset_x;
+    bar.h = (float)cell_h - 2.0f * inset_y;
+    if (bar.w < 2.0f || bar.h < 2.0f)
+        return false;
+
+    SDL_SetRenderDrawColor(g_state.renderer, track_color.r, track_color.g,
+        track_color.b, 255);
+    SDL_RenderFillRect(g_state.renderer, &bar);
+
+    fraction = (float)p_ptr->chp / (float)p_ptr->mhp;
+    if (fraction < 0.0f)
+        fraction = 0.0f;
+    if (fraction > 1.0f)
+        fraction = 1.0f;
+
+    fill = bar;
+    fill.x += 1.0f;
+    fill.y += 1.0f;
+    fill.w = (bar.w - 2.0f) * fraction;
+    fill.h -= 2.0f;
+    if (fill.w > 0.0f && fill.h > 0.0f) {
+        if (fill.w < 1.0f)
+            fill.w = 1.0f;
+        SDL_SetRenderDrawColor(g_state.renderer, fill_color.r, fill_color.g,
+            fill_color.b, 255);
+        SDL_RenderFillRect(g_state.renderer, &fill);
+    }
+
+    SDL_SetRenderDrawColor(g_state.renderer, frame_color.r, frame_color.g,
+        frame_color.b, 255);
+    SDL_RenderRect(g_state.renderer, &bar);
+    return true;
+}
+
+static int sdl_render_left_panel_monster_health_bar(term_win* scr,
+    int source_row, int col, int end_col, int out_col, int dest_row,
+    float content_x, float content_y, int cell_w, int cell_h,
+    SDL_Texture* font_atlas, int atlas_cell_w, int atlas_cell_h)
+{
+    byte level;
+    byte fill_attr = TERM_L_GREEN;
+    bool confused = false;
+    bool stunned = false;
+    int bar_end;
+    SDL_FRect bar;
+
+    if (!styled_monster_health_bars || !scr || !scr->health
+        || !scr->health[source_row])
+    {
+        return col;
+    }
+
+    level = scr->health[source_row][col];
+    if (level == 0)
+        return col;
+
+    bar_end = col + 1;
+    while (bar_end < end_col
+        && scr->health[source_row][bar_end] == level)
+    {
+        bar_end++;
+    }
+
+    for (int c = col; c < bar_end; c++)
+    {
+        char ch = scr->c[source_row][c];
+
+        if (ch != '-' && ch != ' ')
+        {
+            fill_attr = sdl_left_panel_pane_render_attr_for_cell(c,
+                source_row, scr->a[source_row][c]);
+        }
+        if (ch == 'c')
+            confused = true;
+        else if (ch == 's')
+            stunned = true;
+    }
+
+    bar = (SDL_FRect){
+        .x = content_x + (float)out_col * (float)cell_w
+            + MAX(1.0f, (float)cell_w * 0.12f),
+        .y = content_y + (float)dest_row * (float)cell_h
+            + MAX(1.0f, (float)cell_h * 0.24f),
+        .w = (float)((bar_end - col) * cell_w)
+            - 2.0f * MAX(1.0f, (float)cell_w * 0.12f),
+        .h = (float)cell_h
+            - 2.0f * MAX(1.0f, (float)cell_h * 0.24f),
+    };
+    sdl_render_health_bar_rect(&bar, level, fill_attr);
+
+    if (confused || stunned)
+    {
+        char status[3];
+        int len = 0;
+        int status_col;
+        SDL_Color text_col = sdl_color_from_attr(TERM_WHITE);
+
+        if (confused)
+            status[len++] = 'c';
+        if (stunned)
+            status[len++] = 's';
+        status[len] = '\0';
+        status_col = out_col + MAX(0, ((bar_end - col) - len) / 2);
+        sdl_render_mono_text_scaled(font_atlas, atlas_cell_w, atlas_cell_h,
+            (float)cell_w, (float)cell_h, content_x, content_y, status_col,
+            dest_row, len, status, text_col);
+    }
+
+    return bar_end;
 }
 
 void sdl_render_left_panel_source_row_cells(const sdl_view* view,
@@ -400,6 +584,13 @@ void sdl_render_left_panel_source_row_cells(const sdl_view* view,
     sdl_left_panel_debug_log_source_row(t, scr, source_row, source_col,
         width, end_col, dest_col, dest_row, content_x, cell_w, cell_h);
 
+    if (sdl_render_left_panel_player_health_bar(source_row, source_col,
+            end_col, dest_col, dest_row, content_x, content_y, cell_w,
+            cell_h))
+    {
+        return;
+    }
+
     col = source_col;
     while (col < end_col) {
         int out_col = dest_col + (col - source_col);
@@ -411,6 +602,16 @@ void sdl_render_left_panel_source_row_cells(const sdl_view* view,
         char tc = (scr->tc && scr->tc[source_row])
             ? scr->tc[source_row][col]
             : 0;
+
+        if (scr->health && scr->health[source_row]
+            && scr->health[source_row][col] != 0
+            && styled_monster_health_bars)
+        {
+            col = sdl_render_left_panel_monster_health_bar(scr, source_row,
+                col, end_col, out_col, dest_row, content_x, content_y,
+                cell_w, cell_h, font_atlas, atlas_cell_w, atlas_cell_h);
+            continue;
+        }
 
         if ((a == 255) && ((byte)c == 0xFF)) {
             col++;
@@ -517,7 +718,8 @@ void sdl_left_panel_debug_log_frame(const sdl_view* view,
     static int last_total_w;
     static int last_panel_rows;
     static int last_panel_render_h;
-    static int last_bottom_border_h;
+    static int last_top_padding_h;
+    static int last_bottom_padding_h;
     static int last_corner_h;
     static int last_dst_x;
     static int last_dst_y;
@@ -556,7 +758,8 @@ void sdl_left_panel_debug_log_frame(const sdl_view* view,
         || last_total_w != metrics->total_w
         || last_panel_rows != metrics->panel_rows
         || last_panel_render_h != metrics->panel_render_h
-        || last_bottom_border_h != metrics->bottom_border_h
+        || last_top_padding_h != metrics->top_padding_h
+        || last_bottom_padding_h != metrics->bottom_padding_h
         || last_corner_h != metrics->corner_h
         || last_dst_x != dst_x
         || last_dst_y != dst_y
@@ -585,7 +788,8 @@ void sdl_left_panel_debug_log_frame(const sdl_view* view,
     last_total_w = metrics->total_w;
     last_panel_rows = metrics->panel_rows;
     last_panel_render_h = metrics->panel_render_h;
-    last_bottom_border_h = metrics->bottom_border_h;
+    last_top_padding_h = metrics->top_padding_h;
+    last_bottom_padding_h = metrics->bottom_padding_h;
     last_corner_h = metrics->corner_h;
     last_dst_x = dst_x;
     last_dst_y = dst_y;
@@ -595,14 +799,17 @@ void sdl_left_panel_debug_log_frame(const sdl_view* view,
     log_trace("left-panel frame: collapsed=%d compact_row=%d "
         "term=%dx%d visual=%dx%d main_cell=%dx%d pane_cell=%dx%d "
         "source_h=%d visual_w=%d canvas_w=%d content_cols=%d content_w=%d "
-        "separator_w=%d total_w=%d panel_rows=%d panel_h=%d border_h=%d "
+        "separator_w=%d total_w=%d panel_rows=%d panel_h=%d "
+        "padding_h=%d/%d "
         "corner_h=%d dst=(%d,%d %dx%d) use_tiles=%d use_bigtile=%d",
         metrics->collapsed ? 1 : 0, metrics->compact_row ? 1 : 0,
         view->cols, view->rows, visual_cols, visual_rows, view->cell_w,
         view->cell_h, metrics->cell_w, metrics->cell_h, source_h,
         visual_w, canvas_w, metrics->content_cols, metrics->content_w,
         metrics->separator_w, metrics->total_w, metrics->panel_rows,
-        metrics->panel_render_h, metrics->bottom_border_h, metrics->corner_h,
+        metrics->panel_render_h, metrics->top_padding_h,
+        metrics->bottom_padding_h,
+        metrics->corner_h,
         dst_x, dst_y, dst_w, dst_h, g_state.use_tiles ? 1 : 0,
         use_bigtile ? 1 : 0);
 }
@@ -642,12 +849,14 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
     SDL_Rect old_clip;
     bool had_clip;
     bool font_cached = false;
+    bool font_exact = false;
     sdl_left_panel_metrics metrics;
     int canvas_w;
     int canvas_h;
     int atlas_cell_w;
     int atlas_cell_h;
     float content_x;
+    float content_y;
     SDL_FRect canvas_src;
     const term* source_term;
     int source_rows;
@@ -668,6 +877,7 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
         return false;
     }
     content_x = (float)sdl_left_panel_content_x_for_metrics(&metrics);
+    content_y = (float)metrics.top_padding_h;
 
     canvas_w = metrics.total_w;
     canvas_h = metrics.corner_h;
@@ -708,10 +918,13 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
         : "lib/xtra/font/VictorMono-Medium.ttf";
     font_atlas = sdl_acquire_mono_font_atlas_cells_ex(font_path,
         atlas_cell_w, atlas_cell_h, &font_cached, &atlas_cell_w,
-        &atlas_cell_h, NULL, true);
+        &atlas_cell_h, &font_exact, true);
     if (!font_atlas) {
         return false;
     }
+    if (!font_exact)
+        sdl_queue_mono_font_atlas_prewarm_cells(font_path, metrics.cell_w,
+            metrics.cell_h);
     mono_font = sdl_acquire_mono_font_cells(font_path, atlas_cell_w,
         atlas_cell_h);
 
@@ -742,13 +955,13 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
                 {
                     sdl_render_left_panel_source_row_cells(view, source_term,
                         scr, source_row, 0, span.icon_cols, output_col,
-                        output_row, content_x, 0.0f, metrics.cell_w,
+                        output_row, content_x, content_y, metrics.cell_w,
                         metrics.cell_h, font_atlas, atlas_cell_w,
                         atlas_cell_h, mono_font);
                     sdl_render_left_panel_source_row_cells(view, source_term,
                         scr, source_row, span.text_start, span.text_width,
                         output_col + span.icon_cols + 1, output_row,
-                        content_x, 0.0f, metrics.cell_w, metrics.cell_h,
+                        content_x, content_y, metrics.cell_w, metrics.cell_h,
                         font_atlas, atlas_cell_w, atlas_cell_h, mono_font);
                     continue;
                 }
@@ -756,20 +969,21 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
 
             sdl_render_left_panel_source_row_cells(view, source_term, scr,
                 source_row, 0, metrics.compact_widths[i], output_col,
-                output_row, content_x, 0.0f, metrics.cell_w, metrics.cell_h,
+                output_row, content_x, content_y, metrics.cell_w,
+                metrics.cell_h,
                 font_atlas, atlas_cell_w, atlas_cell_h, mono_font);
         }
     } else {
         int output_row = 0;
 
         for (int source_row = 0; source_row < metrics.panel_rows; source_row++) {
-            if (sdl_left_panel_source_row_hidden_by_combat_overlay(source_row))
+            if (sdl_left_panel_source_row_hidden(source_row))
                 continue;
             if (output_row * metrics.cell_h >= metrics.panel_render_h)
                 break;
             sdl_render_left_panel_source_row_cells(view, source_term, scr,
                 source_row, 0, metrics.content_cols, 0, output_row, content_x,
-                0.0f, metrics.cell_w,
+                content_y, metrics.cell_w,
                 metrics.cell_h, font_atlas, atlas_cell_w, atlas_cell_h,
                 mono_font);
             output_row++;
@@ -798,6 +1012,71 @@ bool sdl_render_left_panel_pane_from_cells(const sdl_view* view,
         NULL);
 }
 
+static int sdl_combat_overlay_equipped_jewelry_preset(void)
+{
+    for (int preset = 0; preset < JEWELRY_PRESET_MAX; preset++) {
+        if (jewelry_preset_is_equipped(preset))
+            return preset;
+    }
+
+    return -1;
+}
+
+static void sdl_combat_overlay_render_jewelry_preset_row(int panel_cols,
+    int dest_row, const SDL_Rect* content, int cell_w, int cell_h,
+    SDL_Texture* font_atlas, int atlas_cell_w, int atlas_cell_h)
+{
+    char full_label[JEWELRY_PRESET_NAME_MAX + 16];
+    char label[PANE_COMBAT_OVERLAY_COLS + 1];
+    const object_type* ring;
+    const char* name;
+    int preset = sdl_combat_overlay_equipped_jewelry_preset();
+    int icon_cols;
+    int text_cols;
+    size_t copy_size;
+
+    /* Presets exist, but none matches the currently equipped jewelry. */
+    if (preset < 0 || panel_cols <= 0 || !content)
+        return;
+
+    name = jewelry_preset_name(preset);
+    if (name && name[0])
+        strnfmt(full_label, sizeof(full_label), "%d:%s", preset + 1, name);
+    else
+        strnfmt(full_label, sizeof(full_label), "Set %d", preset + 1);
+
+    ring = jewelry_preset_object(preset, JEWELRY_PRESET_SLOT_LEFT);
+    icon_cols = ring && ring->k_idx ? MIN(2, panel_cols) : 0;
+    if (icon_cols > 0) {
+        byte attr = object_attr(ring);
+        char icon = object_char(ring);
+        SDL_FRect dst = {
+            .x = (float)content->x,
+            .y = (float)content->y + (float)(dest_row * cell_h),
+            .w = (float)(icon_cols * cell_w),
+            .h = (float)cell_h,
+        };
+
+        if (sdl_left_panel_cell_is_tile(attr, icon))
+            sdl_draw_map_tile_layers_at(-1, -1, attr, icon, 0, 0, &dst);
+        else
+            sdl_render_mono_text_scaled(font_atlas, atlas_cell_w,
+                atlas_cell_h, (float)cell_w, (float)cell_h,
+                (float)content->x, (float)content->y, 0, dest_row, 1, &icon,
+                sdl_color_from_attr(sdl_ui_text_fg_attr(attr)));
+    }
+
+    text_cols = panel_cols - icon_cols;
+    if (text_cols <= 0)
+        return;
+    copy_size = MIN(sizeof(label), (size_t)text_cols + 1);
+    SDL_strlcpy(label, full_label, copy_size);
+    sdl_render_mono_text_scaled(font_atlas, atlas_cell_w, atlas_cell_h,
+        (float)cell_w, (float)cell_h, (float)content->x,
+        (float)content->y, icon_cols, dest_row, strlen(label), label,
+        sdl_color_from_attr(TERM_L_GREEN));
+}
+
 void sdl_combat_overlay_pane_render(void)
 {
     const sdl_view* view = &g_views[PANE_MAIN];
@@ -812,6 +1091,7 @@ void sdl_combat_overlay_pane_render(void)
     SDL_Rect old_clip;
     bool had_clip;
     bool font_cached = false;
+    bool font_exact = false;
     int cell_h;
     int cell_w;
     int atlas_cell_w;
@@ -855,9 +1135,11 @@ void sdl_combat_overlay_pane_render(void)
         : "lib/xtra/font/VictorMono-Medium.ttf";
     font_atlas = sdl_acquire_mono_font_atlas_cells_ex(font_path,
         atlas_cell_w, atlas_cell_h, &font_cached, &atlas_cell_w,
-        &atlas_cell_h, NULL, true);
+        &atlas_cell_h, &font_exact, true);
     if (!font_atlas)
         return;
+    if (!font_exact)
+        sdl_queue_mono_font_atlas_prewarm_cells(font_path, cell_w, cell_h);
     mono_font = sdl_acquire_mono_font_cells(font_path, atlas_cell_w,
         atlas_cell_h);
 
@@ -899,6 +1181,13 @@ void sdl_combat_overlay_pane_render(void)
         if (!sdl_combat_overlay_visible_source_row_at_index(i, panel_rows,
                 &source_row))
         {
+            continue;
+        }
+
+        if (source_row == PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW) {
+            sdl_combat_overlay_render_jewelry_preset_row(panel_cols, dest_row,
+                &content, cell_w, cell_h, font_atlas, atlas_cell_w,
+                atlas_cell_h);
             continue;
         }
 
@@ -1012,8 +1301,15 @@ static bool sdl_render_main_view_with_left_panel_metrics(const sdl_view* view,
 
         dst_content.x +=
             (float)sdl_left_panel_content_x_for_metrics(&metrics);
+        dst_content.y += (float)metrics.top_padding_h;
         dst_content.w = (float)metrics.content_w;
         dst_content.h = (float)metrics.panel_render_h;
+        if (!metrics.collapsed) {
+            float source_top = (float)(ROW_NAME * view->cell_h);
+
+            src_content.y += source_top;
+            src_content.h -= source_top;
+        }
         if (dst_content.y + dst_content.h > dst_left.y + dst_left.h)
             dst_content.h = (dst_left.y + dst_left.h) - dst_content.y;
         if (src_content.h > dst_content.h)
@@ -1060,6 +1356,11 @@ bool sdl_saved_screen_cell_changed(const term_win* scr,
     }
     if (scr->story && mem->story && scr->story[y] && mem->story[y]
         && scr->story[y][x] != mem->story[y][x])
+    {
+        return true;
+    }
+    if (scr->health && mem->health && scr->health[y] && mem->health[y]
+        && scr->health[y][x] != mem->health[y][x])
     {
         return true;
     }
@@ -1245,6 +1546,7 @@ bool sdl_render_current_window_frame(void)
 {
     bool show_supporting_panes;
     bool hide_main_menu_supporting_panes;
+    bool hide_main_menu_overlays;
     bool layout_matches;
     SDL_Rect layout_screen;
     SDL_Rect side_map_rect;
@@ -1254,14 +1556,47 @@ bool sdl_render_current_window_frame(void)
     SDL_FRect left_panel_rect;
     int visible_views = 0;
 
+    g_sdl_present_generation++;
+    if (g_sdl_present_generation == 0)
+        g_sdl_present_generation = 1;
+
     if (g_suppress_layout_refresh_present)
         return false;
+
+    if (sdl_pause_text_screen_active()) {
+        sdl_pause_text_screen_render();
+        return true;
+    }
+
+    if (sdl_tale_screen_active()) {
+        sdl_tale_screen_render();
+        return true;
+    }
+
+    if (sdl_poetry_screen_active()) {
+        sdl_poetry_screen_render();
+        return true;
+    }
+
+    if (sdl_halls_screen_active()) {
+        sdl_halls_screen_render();
+        return true;
+    }
+
+    if (sdl_hint_quest_menu_active()) {
+        sdl_hint_quest_menu_render();
+        return true;
+    }
 
     if (sdl_welcome_screen_active()) {
         sdl_welcome_screen_render();
         /* The yes/no confirm is modal and must stay visible above any
          * full-screen surface (see sdl_yes_no_prompt_handle_modal_event). */
         sdl_touch_pane_render_yes_no_prompt();
+        /* Save recovery can open a shared question overlay while the startup
+         * loading surface is still active.  Keep that modal above Loading
+         * rather than returning with it hidden behind the welcome screen. */
+        sdl_question_menu_render();
         return true;
     }
 
@@ -1279,6 +1614,7 @@ bool sdl_render_current_window_frame(void)
     show_supporting_panes = sdl_should_show_supporting_panes();
     hide_main_menu_supporting_panes =
         sdl_main_menu_overlay_hides_supporting_panes();
+    hide_main_menu_overlays = g_main_menu_overlay_active;
     layout_matches = sdl_layout_matches_supporting_pane_visibility();
     if (!layout_matches)
         return false;
@@ -1313,7 +1649,9 @@ bool sdl_render_current_window_frame(void)
     } else {
         g_pane_rects[PANE_LEFT_PANEL] = (SDL_Rect){ 0 };
     }
-    side_map_visible = !hide_main_menu_supporting_panes
+    sdl_apply_top_right_overlay_offset();
+    side_map_visible = !hide_main_menu_overlays
+        && !hide_main_menu_supporting_panes
         && sdl_side_map_pane_current_rect(&side_map_rect);
 
     for (int i = 0; i < MAX_TERM_DATA; i++) {
@@ -1344,6 +1682,11 @@ bool sdl_render_current_window_frame(void)
             continue;
         if (!show_supporting_panes && i != PANE_MAIN)
             continue;
+        if (hide_main_menu_overlays && i == PANE_ROLLS
+            && sdl_view_is_overlay_log_pane(view))
+        {
+            continue;
+        }
         /* Hide the message log(s) while an interactive item description popup is
          * open, so it doesn't show through/around the popup. */
         if (g_description_overlay.active && g_description_overlay.interactive
@@ -1401,17 +1744,11 @@ bool sdl_render_current_window_frame(void)
 
         if (overlay_log)
         {
-            /*
-             * Bottom-anchor the content with a reasonable, panel-backed
-             * margin.  The cell grid is shorter than the band by the centered
-             * slack; left as-is that slack reads as a transparent map gap and
-             * the messages hug the lower border.  Instead we lift the content
-             * by a fraction of a cell, clip any top overflow, and paint the
-             * freed strips with the panel background so the margins match the
-             * panel rather than the map.
-             */
-            int bottom_margin = (int)((float)view->cell_h
-                * SDL_OVERLAY_LOG_VMARGIN_CELLS + 0.5f);
+            /* Bottom-anchor the content above its single panel-backed bottom
+             * margin.  The pane allocation reserves no matching top margin,
+             * so the first configured row begins at the top of the band. */
+            int bottom_margin =
+                pane_log_overlay_vertical_margin_px(view->cell_h);
             float band_top = (float)view->rect.y;
             float band_bottom = (float)(view->rect.y + view->rect.h);
 
@@ -1462,33 +1799,37 @@ bool sdl_render_current_window_frame(void)
             (void)sdl_render_saved_screen_left_panel_backdrop(view);
     }
 
-    sdl_side_map_pane_render();
-    sdl_pointer_aim_render();
-    sdl_pointer_attack_render();
-    sdl_mouse_path_render();
-    sdl_combat_overlay_pane_render();
-    sdl_status_pane_render();
-    sdl_main_menu_pane_render();
-    sdl_depth_menu_pane_render();
-    sdl_narrative_banner_render();
-    sdl_object_tooltip_render();
-    sdl_player_exchange_render();
-    sdl_player_action_menu_render();
-    sdl_touch_round_render();
+    if (!hide_main_menu_overlays) {
+        sdl_side_map_pane_render();
+        sdl_pointer_aim_render();
+        sdl_pointer_attack_render();
+        sdl_mouse_path_render();
+        sdl_combat_overlay_pane_render();
+        sdl_status_pane_render();
+        sdl_status_depth_pane_render();
+        sdl_depth_menu_pane_render();
+        if (!sdl_question_menu_context_hint_active()
+            || !sdl_object_tooltip_uses_screen_rect())
+            sdl_object_tooltip_render();
+        sdl_player_exchange_render();
+        sdl_player_action_menu_render();
+        sdl_touch_round_render();
+    }
 
     if (visible_views > 1) {
-        if (config.show_pane_borders)
-            SDL_SetRenderDrawColor(g_state.renderer, 255, 255, 255, 128);
-        else
-            SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-
         for (int i = 0; i < MAX_TERM_DATA; i++) {
             sdl_view* view = &g_views[i];
+            bool overlay_log;
 
             if (!view->canvas)
                 continue;
             if (!show_supporting_panes && i != PANE_MAIN && i != PANE_TOUCH)
                 continue;
+            if (hide_main_menu_overlays && i == PANE_ROLLS
+                && sdl_view_is_overlay_log_pane(view))
+            {
+                continue;
+            }
 
             if (i == PANE_TOUCH)
                 continue;
@@ -1501,6 +1842,17 @@ bool sdl_render_current_window_frame(void)
                 continue;
             }
 
+            overlay_log = i == PANE_ROLLS
+                && sdl_view_is_overlay_log_pane(view);
+            if (overlay_log && !get_sdl_show_overlay_log_border())
+                continue;
+
+            if (overlay_log || config.show_pane_borders)
+                SDL_SetRenderDrawColor(g_state.renderer,
+                    255, 255, 255, 128);
+            else
+                SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+
             /* Draw only internal leading edges.  This keeps separators
              * between panes without painting a frame around the window. */
             SDL_Rect edge_rect = view->rect;
@@ -1511,7 +1863,7 @@ bool sdl_render_current_window_frame(void)
             /* The overlay log only paints a narrow right-hand band, so inset
              * its border to where that band (and the messages) begin, and close
              * it off with a bottom edge. */
-            if (i == PANE_ROLLS && sdl_view_is_overlay_log_pane(view))
+            if (overlay_log)
             {
                 int pad = view->cell_w / 8;
                 int inset;
@@ -1539,6 +1891,11 @@ bool sdl_render_current_window_frame(void)
         }
 
         if (side_map_visible) {
+            if (config.show_pane_borders)
+                SDL_SetRenderDrawColor(g_state.renderer,
+                    255, 255, 255, 128);
+            else
+                SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
             sdl_draw_pane_edges(&side_map_rect,
                 (layout_screen.w > 0 && side_map_rect.x > layout_screen.x),
                 (layout_screen.h > 0 && side_map_rect.y > layout_screen.y),
@@ -1549,10 +1906,14 @@ bool sdl_render_current_window_frame(void)
     }
 
     sdl_touch_pane_render();
-    sdl_touch_zone_render_markers();
-    if (!g_touch_tutorial_suppress_runtime_top_panel)
-        sdl_touch_top_panel_render();
+    if (!hide_main_menu_overlays)
+        sdl_touch_zone_render_markers();
+    if (!hide_main_menu_overlays)
+        sdl_popup_notification_render();
     sdl_touch_hidden_indicator_render();
+    /* The Main Menu is the topmost gameplay pane.  Draw it after pane borders
+     * and touch controls so neither can obscure its panel or labels. */
+    sdl_main_menu_pane_render();
     sdl_touch_pane_render_reset_prompt();
     sdl_touch_pane_render_yes_no_prompt();
     sdl_log_pane_menu_render();
@@ -1560,11 +1921,25 @@ bool sdl_render_current_window_frame(void)
     sdl_unified_look_sidebar_render();
     sdl_unified_look_prompt_render();
     sdl_song_menu_render();
-    sdl_question_menu_render();
-    sdl_description_overlay_render();
+    if (!hide_main_menu_overlays)
+        sdl_description_overlay_render();
     /* Drawn after the description popup (and its dimming backdrop) so the thumb
      * buttons stay on top and visible while a description is open. */
-    sdl_touch_thumb_render();
+    if (!hide_main_menu_overlays)
+        sdl_touch_thumb_render();
+    /* Question/roll popups are opaque foreground panels.  Keep them above
+     * Quick Touch so contextual controls cannot obscure their contents, but
+     * keep them out of the native main menu just like other gameplay overlays. */
+    if (!hide_main_menu_overlays)
+        sdl_question_menu_render();
+    if (!hide_main_menu_overlays
+        && sdl_question_menu_context_hint_active()
+        && sdl_object_tooltip_uses_screen_rect())
+        sdl_object_tooltip_render();
+    if (!hide_main_menu_overlays)
+        sdl_narrative_banner_render();
+    if (!g_touch_tutorial_suppress_runtime_top_panel)
+        sdl_touch_top_panel_render();
     sdl_touch_exit_button_render();
 
     return true;
@@ -1615,25 +1990,17 @@ void sdl_present_if_needed(sdl_view* d)
     if (!g_state.need_present)
         return;
 
-    /* Diagnostic (temporary): flag slow frames.  A frequently-slow frame here
-     * means the per-frame render (e.g. the left-panel pane rebuild) is the
-     * cost behind the "overlay moving"/sluggish feel. */
-    Uint64 _fr0 = SDL_GetTicksNS();
-
-    if (!sdl_render_current_window_frame())
+    /* Renderers for animated UI may request the following frame.  Consume the
+     * current request before rendering so that request is not cleared after
+     * the page-curl/notification render has re-armed it. */
+    g_state.need_present = false;
+    if (!sdl_render_current_window_frame()) {
+        g_state.need_present = true;
         return;
+    }
 
     SDL_RenderPresent(g_state.renderer);
     sdl_restore_render_target(d);
-
-    g_state.need_present = false;
-
-    {
-        Uint64 _fr_ms = (SDL_GetTicksNS() - _fr0) / 1000000ULL;
-        if (_fr_ms >= 100)
-            log_warn("[SLOWPRESENT] frame render+present %llu ms",
-                (unsigned long long)_fr_ms);
-    }
 }
 
 

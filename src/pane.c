@@ -64,6 +64,7 @@ static struct pane_specs pane_specs[PANE_MAX] = {
     [PANE_DESCRIPTION] = {.placement = OVERLAY_PLACEMENTS, .min_rect.rows = 1, .min_rect.cols = 1},
     [PANE_OVERLAY_MENU] = {.placement = OVERLAY_PLACEMENTS, .min_rect.rows = 1, .min_rect.cols = 1},
     [PANE_COMBAT] = {.placement = OVERLAY_PLACEMENTS, .min_rect.rows = PANE_COMBAT_OVERLAY_ROWS, .min_rect.cols = PANE_COMBAT_OVERLAY_COLS},
+    [PANE_STATUS_DEPTH] = {.placement = OVERLAY_PLACEMENTS, .min_rect.rows = 1, .min_rect.cols = 24},
 };
 
 static bool pane_placement_is_left(enum pane_placement where)
@@ -164,6 +165,21 @@ int pane_log_overlay_left_margin(int term_cols)
     int margin = term_cols - PANE_LOG_OVERLAY_VISIBLE_COLS;
 
     return (margin > 0) ? margin : 0;
+}
+
+int pane_log_overlay_vertical_margin_px(int cell_height)
+{
+    if (cell_height <= 0)
+        return 0;
+
+    /* Round 0.4 cell to the nearest pixel. */
+    return (cell_height * 2 + 2) / 5;
+}
+
+int pane_log_overlay_vertical_padding_px(int cell_height)
+{
+    /* The log is flush at the top and keeps breathing room only below. */
+    return pane_log_overlay_vertical_margin_px(cell_height);
 }
 
 int pane_secondary_min_cells(enum pane_type type, enum pane_placement where)
@@ -451,8 +467,12 @@ static int pane_corner_secondary_pixels(const struct pane_config* config,
     }
 
     cells = (requested > minimum) ? requested : minimum;
-    return cells * pane_secondary_cell_px(config->pane, where, cell_widths,
-        cell_heights) + margin_px;
+    cell_px = pane_secondary_cell_px(config->pane, where, cell_widths,
+        cell_heights);
+    pixels = cells * cell_px + margin_px;
+    if (config->pane == PANE_ROLLS && pane_placement_is_overlay(where))
+        pixels += pane_log_overlay_vertical_padding_px(cell_px);
+    return pixels;
 }
 
 static int pane_corner_primary_pixels(const struct pane_config* config,
@@ -538,6 +558,13 @@ static void layout_overlay_group(enum pane_placement where,
 
     edge_gap_x = pane_overlay_edge_gap(area->w, split_px, margin_px);
     edge_gap_y = pane_overlay_edge_gap(area->h, total_h, margin_px);
+
+    /* Top Right is a live stack: start it at the safe edge, then let the
+     * actual visible Menu/left-panel rectangles move it down as needed.  A
+     * generic inset here leaves a phantom row when Menu is disabled and
+     * misaligns the stack with the flush Top Left panel. */
+    if (where == PLACE_TOP_RIGHT)
+        edge_gap_y = 0;
 
     bottom_edge = pane_placement_is_bottom_edge(where);
     if (bottom_edge)
@@ -625,14 +652,19 @@ enum pane_placement pane_first_allowed_placement(enum pane_type type)
         return PLACE_TOP_LEFT;
     }
     if (type == PANE_STATUS
-        && pane_type_allows_placement(type, PLACE_BOTTOM_RIGHT))
+        && pane_type_allows_placement(type, PLACE_TOP_CENTER))
     {
-        return PLACE_BOTTOM_RIGHT;
+        return PLACE_TOP_CENTER;
     }
     if (type == PANE_DEPTH
         && pane_type_allows_placement(type, PLACE_TOP_RIGHT))
     {
         return PLACE_TOP_RIGHT;
+    }
+    if (type == PANE_STATUS_DEPTH
+        && pane_type_allows_placement(type, PLACE_BOTTOM_RIGHT))
+    {
+        return PLACE_BOTTOM_RIGHT;
     }
     if (type == PANE_COMBAT
         && pane_type_allows_placement(type, PLACE_BOTTOM_LEFT))

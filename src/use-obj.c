@@ -23,6 +23,8 @@ static int medicine_count(void)
         o_ptr = &inventory[i];
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         object_flags(o_ptr, &t1, &t2, &t3);
         if (t3 & (TR3_MEDIC))
@@ -237,7 +239,7 @@ static int sanctity_slot_multiplier(const object_type* o_ptr)
         case INVEN_HANDS:
         case INVEN_FEET:
         case INVEN_QUIVER1:
-        case INVEN_QUIVER2:
+        case INVEN_BELT:
         case INVEN_HORN:
             return 120;
 
@@ -304,6 +306,19 @@ static int sanctity_check_burden(const object_type* o_ptr,
     return burden;
 }
 
+static void sanctity_mark_curse_sensed(object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx || !cursed_p(o_ptr))
+        return;
+
+    if (o_ptr->discount >= INSCRIP_NULL)
+        o_ptr->discount = 0;
+    if (o_ptr->discount == 0)
+        o_ptr->discount = INSCRIP_CURSED;
+
+    o_ptr->ident |= IDENT_SENSE;
+}
+
 bool use_sanctity_gem_on(object_type* target_o_ptr, bool* ident)
 {
     bool can_remove_light = false;
@@ -333,6 +348,7 @@ bool use_sanctity_gem_on(object_type* target_o_ptr, bool* ident)
 
         if (skill_check(PLAYER, score, difficulty, NULL) <= 0)
         {
+            sanctity_mark_curse_sensed(target_o_ptr);
             msg_format("%^s resists the sanctity.", target_name);
             return true;
         }
@@ -340,7 +356,10 @@ bool use_sanctity_gem_on(object_type* target_o_ptr, bool* ident)
     else
     {
         if (cursed_p(target_o_ptr))
+        {
+            sanctity_mark_curse_sensed(target_o_ptr);
             msg_format("%^s resists the sanctity.", target_name);
+        }
         else
         {
             msg_format("Nothing happens to %s.", target_name);
@@ -943,18 +962,19 @@ static bool use_staff_effects(object_type* o_ptr, bool* ident, bool is_gem)
             object_type* equip_ptr = &inventory[i];
             if (!equip_ptr->k_idx)
                 continue;
+            if (!player_equipment_slot_counts_as_equipped(i))
+                continue;
 
             u32b f1, f2, f3;
             object_flags(equip_ptr, &f1, &f2, &f3);
 
             bool is_quiver1 = (i == INVEN_QUIVER1);
-            bool is_quiver2 = (i == INVEN_QUIVER2);
+            bool is_belt = (i == INVEN_BELT);
             bool is_throwing_item = player_can_treat_as_throwing_flags(equip_ptr, f3);
-            bool is_arrow = (equip_ptr->tval == TV_ARROW);
 
             if (is_quiver1)
                 continue;
-            if (is_quiver2 && !is_throwing_item && !is_arrow)
+            if (is_belt && !is_throwing_item)
                 continue;
 
             (void)player_try_identify_smithing_object(equip_ptr, true, 5);

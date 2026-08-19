@@ -73,6 +73,37 @@ typedef struct monster_race monster_race;
 typedef struct monster_lore monster_lore;
 typedef struct vault_type vault_type;
 typedef struct object_type object_type;
+
+/* Data-driven stowage pools used by the carried-volume system. */
+typedef enum object_storage_type
+{
+    OBJECT_STORAGE_NONE = 0,
+    OBJECT_STORAGE_PACK,
+    OBJECT_STORAGE_HARNESS,
+    OBJECT_STORAGE_JEWELRY
+} object_storage_type;
+
+/* Deferred actions that require access to the Pack. */
+typedef enum player_pack_action_kind
+{
+    PLAYER_PACK_ACTION_NONE = 0,
+    PLAYER_PACK_ACTION_USE_ITEM,
+    PLAYER_PACK_ACTION_WIELD,
+    PLAYER_PACK_ACTION_TAKEOFF,
+    PLAYER_PACK_ACTION_DROP,
+    PLAYER_PACK_ACTION_DELETE,
+    PLAYER_PACK_ACTION_REFUEL_LAMP,
+    PLAYER_PACK_ACTION_REFUEL_TORCH,
+    PLAYER_PACK_ACTION_EAT,
+    PLAYER_PACK_ACTION_QUAFF,
+    PLAYER_PACK_ACTION_PLAY,
+    PLAYER_PACK_ACTION_ACTIVATE_STAFF,
+    PLAYER_PACK_ACTION_USE_GEM,
+    PLAYER_PACK_ACTION_ACTIVATE,
+    PLAYER_PACK_ACTION_PICKUP,
+    PLAYER_PACK_ACTION_JEWELRY_PRESET,
+    PLAYER_PACK_ACTION_MOVE_STORAGE
+} player_pack_action_kind;
 typedef struct monster_type monster_type;
 typedef struct alloc_entry alloc_entry;
 typedef struct owner_type owner_type;
@@ -232,6 +263,9 @@ struct object_kind
 
     s16b weight; /* Weight */
 
+    byte storage; /* OBJECT_STORAGE_* pool (NONE for Supply) */
+    s16b volume; /* Stowed volume per item, in tenths */
+
     s32b cost; /* Object "base cost" */
 
     u32b flags1; /* Flags, set 1 */
@@ -281,6 +315,8 @@ struct ability_type
     byte abilitynum; /* Ability number within a skill */
 
     byte level; /* Legacy/default prerequisite skill level */
+    byte carriage_target; /* ABILITY_CARRIAGE_* target, if any */
+    byte carriage_reduction_percent; /* Learned ability reduction */
     byte stat_req[A_MAX]; /* Minimum equipment-adjusted stat levels */
     byte skill_req[S_MAX]; /* Minimum equipment-adjusted skill levels */
     byte lore_req; /* Minimum Lore stat */
@@ -338,6 +374,9 @@ struct artefact_type
 
     s16b weight; /* Weight */
 
+    byte storage; /* OBJECT_STORAGE_* pool (NONE for Supply) */
+    s16b volume; /* Stowed volume per item, in tenths */
+
     s32b cost; /* Artefact "cost" */
 
     u32b flags1; /* Artefact Flags, set 1 */
@@ -376,6 +415,9 @@ struct ego_item_type
     u32b text; /* Description (offset) */
 
     s32b cost; /* Ego-item "cost" */
+
+    /* Percentage change; reductions do not stack. */
+    s16b volume_adjustment_percent;
 
     u32b flags1; /* Ego-Item Flags, set 1 */
     u32b flags2; /* Ego-Item Flags, set 2 */
@@ -548,6 +590,7 @@ struct vault_type
     u32b name; /* Name (offset) */
     u32b text; /* Text (offset) */
     u32b message; /* Entry message text (offset) */
+    u32b skeleton_hint; /* Unique skeleton hint text (offset) */
 
     byte typ; /* Vault type */
 
@@ -623,6 +666,9 @@ struct object_type
 
     s16b weight; /* Item weight */
 
+    byte storage; /* Runtime OBJECT_STORAGE_* pool; saved for movable gear */
+    s16b volume; /* Base per-item stowed volume, in tenths */
+
     byte name1; /* Artefact type, if any */
     byte name2; /* Ego suffix index, if any (see object_ego_suffix()) */
 
@@ -658,7 +704,7 @@ struct object_type
     s32b unused1; // Smithing marker: 0=found, 1=forged by player, 2=reforged by player
     s32b unused2; // Ego prefix index (0 = none); see object_ego_prefix()
     s32b unused3; // Room for expansion without breaking savefiles
-    s32b unused4; // Room for expansion without breaking savefiles
+    s32b unused4; // Runtime payload; chests store last inspected Perception base
 };
 
 /*
@@ -751,6 +797,7 @@ struct monster_type
     byte previous_action[ACTION_MAX]; /* What the monster did on its previous
                                          turns */
     byte visual_facing_dir; /* Cosmetic tile facing direction (not saved) */
+    byte visual_random_facing; /* Stable random tile facing (not saved) */
 
     /* Thrall quest system */
     byte thrall_quest_item;      /* Item the thrall wants: see THRALL_QUEST_* */
@@ -1086,6 +1133,7 @@ struct player_other
     byte narrative_banner_turns; /* Banner visibility (0=dismiss on next input, 1-3=player turns) */
     byte noble_item_spawn_mode; /* Noble item sources (NOBLE_ITEM_SPAWN_*) */
     byte min_depth_timer_mode; /* Minimum-depth timer pace (MIN_DEPTH_TIMER_MODE_*) */
+    byte monster_tile_health_bar_mode; /* Map tile monster health bars (MONSTER_TILE_HEALTH_BARS_*) */
 };
 
 /*
@@ -1128,6 +1176,7 @@ struct player_type
     s16b lore; /* Lore stat: improves identification and knowledge costs */
     s32b knowledge_points; /* Knowledge currency for lore abilities */
     byte discovery_lore_flags; /* Run-wide discovery XP awards already claimed */
+    byte quick_access_prompt_flags; /* Run-wide item shortcut offers already made */
 
     s16b mhp; /* Max hit pts */
     s16b chp; /* Cur hit pts */
@@ -1287,7 +1336,7 @@ struct player_type
 
     s32b total_weight; /* Total weight being carried */
 
-    s16b inven_cnt; /* Number of items in inventory */
+    s32b inven_cnt; /* Number of carried entries, including expandable ones */
     s16b equip_cnt; /* Number of items in equipment */
 
     s16b target_set; /* Target flag */
@@ -1304,11 +1353,13 @@ struct player_type
     s16b energy_use; /* Energy use this turn */
 
     s16b resting; /* Resting counter */
+    bool resting_light_off; /* Fuel-burning light extinguished for this rest */
     s16b smithing; /* Smithing counter */
+    bool smithing_starting; /* Smithing screen is restoring gameplay state */
     s16b fletching; /* Fletching counter */
     s16b running; /* Running counter */
 
-    s16b fletch_item; /* Item we are currently fletching. */
+    s32b fletch_item; /* Carried handle we are currently fletching. */
 
     s16b run_cur_dir; /* Direction we are running */
     s16b run_old_dir; /* Direction we came from */
@@ -1559,12 +1610,14 @@ struct skill_roll_details
 {
     int skill;             /* Adjusted skill used by the check */
     int difficulty;        /* Adjusted difficulty used by the check */
-    int skill_die;         /* Final d10 used on the skill side */
-    int difficulty_die;    /* Final d10 used on the difficulty side */
-    int skill_die_primary; /* First skill-side d10 */
-    int difficulty_die_primary; /* First difficulty-side d10 */
-    int skill_die_alt;     /* Alternate skill-side d10 for curses */
-    int difficulty_die_alt; /* Alternate difficulty-side d10 for curses */
+    int skill_sides;       /* Sides on the skill die */
+    int difficulty_sides;  /* Sides on the difficulty die */
+    int skill_die;         /* Final die used on the skill side */
+    int difficulty_die;    /* Final die used on the difficulty side */
+    int skill_die_primary; /* First skill-side die */
+    int difficulty_die_primary; /* First difficulty-side die */
+    int skill_die_alt;     /* Alternate skill-side die for curses */
+    int difficulty_die_alt; /* Alternate difficulty-side die for curses */
     int skill_total;
     int difficulty_total;
     int result;

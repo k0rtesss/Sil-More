@@ -11,7 +11,7 @@
 
 void teleport_away(int m_idx, int dis)
 {
-    int ny, nx, oy, ox, d, i, min;
+    int ny = 0, nx = 0, oy, ox, d, i, min, search_round;
 
     bool look = true;
 
@@ -25,11 +25,16 @@ void teleport_away(int m_idx, int dis)
     oy = m_ptr->fy;
     ox = m_ptr->fx;
 
+    if (dis < 1)
+        dis = 1;
+    if (dis > 200)
+        dis = 200;
+
     /* Minimum distance */
     min = dis / 2;
 
     /* Look until done */
-    while (look)
+    for (search_round = 0; look && search_round < 16; search_round++)
     {
         /* Verify max distance */
         if (dis > 200)
@@ -77,6 +82,51 @@ void teleport_away(int m_idx, int dis)
         min = min / 2;
     }
 
+    /*
+     * Random probing should normally find a grid well before this point.
+     * Exhaustively scan as a final fallback so a crowded or degenerate level
+     * cannot leave this command spinning forever.
+     */
+    if (look)
+    {
+        int chosen_y = 0;
+        int chosen_x = 0;
+        int legal_seen = 0;
+
+        if (dis > 200)
+            dis = 200;
+
+        for (ny = 0; ny < p_ptr->cur_map_hgt; ny++)
+        {
+            for (nx = 0; nx < p_ptr->cur_map_wid; nx++)
+            {
+                d = distance(oy, ox, ny, nx);
+                if ((d < min) || (d > dis))
+                    continue;
+                if (!cave_empty_bold(ny, nx) || cave_glyph(ny, nx))
+                    continue;
+
+                legal_seen++;
+                if (one_in_(legal_seen))
+                {
+                    chosen_y = ny;
+                    chosen_x = nx;
+                }
+            }
+        }
+
+        if (legal_seen == 0)
+        {
+            log_warn("teleport_away: no legal destination for monster %d at (%d,%d)",
+                m_idx, oy, ox);
+            return;
+        }
+
+        ny = chosen_y;
+        nx = chosen_x;
+        look = false;
+    }
+
     /* Sound */
     sound(MSG_TPOTHER);
 
@@ -104,23 +154,27 @@ void teleport_player(int dis)
     int px = p_ptr->px;
 
     int d, i, min, y, x;
+    int max_dis;
 
     bool look = true;
+
+    if (dis < 1)
+        dis = 1;
 
     /* Minimum distance */
     min = dis / 2;
 
     /*guage the dungeon size*/
-    d = distance(p_ptr->cur_map_hgt, p_ptr->cur_map_wid, 0, 0);
+    max_dis = distance(p_ptr->cur_map_hgt, p_ptr->cur_map_wid, 0, 0);
 
     /*first start with a realistic range*/
-    if (dis > d)
-        dis = d;
+    if (dis > max_dis)
+        dis = max_dis;
 
     /*must have a realistic minimum*/
-    if (min > (d * 4 / 10))
+    if (min > (max_dis * 4 / 10))
     {
-        min = (d * 4 / 10);
+        min = (max_dis * 4 / 10);
     }
 
     /* Look until done */
@@ -174,11 +228,42 @@ void teleport_player(int dis)
         if (spot_counter > 3)
             break;
 
+        /*
+         * Once the whole map is in range and the minimum has reached zero,
+         * further random passes cannot expose any new grids.  Finish with a
+         * deterministic scan so failure is bounded on fully blocked levels.
+         */
+        if ((dis >= max_dis) && (min == 0))
+        {
+            for (y = 0; y < p_ptr->cur_map_hgt && spot_counter < 20; y++)
+            {
+                for (x = 0; x < p_ptr->cur_map_wid && spot_counter < 20; x++)
+                {
+                    if (!cave_naked_bold(y, x))
+                        continue;
+
+                    x_location_tables[spot_counter] = x;
+                    y_location_tables[spot_counter] = y;
+                    spot_counter++;
+                }
+            }
+            break;
+        }
+
         /* Increase the maximum distance */
-        dis = dis * 2;
+        if (dis > max_dis / 2)
+            dis = max_dis;
+        else
+            dis = dis * 2;
 
         /* Decrease the minimum distance */
         min = min * 6 / 10;
+    }
+
+    if (spot_counter == 0)
+    {
+        log_warn("teleport_player: no legal destination from (%d,%d)", py, px);
+        return;
     }
 
     i = rand_int(spot_counter);

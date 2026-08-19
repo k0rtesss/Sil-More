@@ -4,6 +4,7 @@
 #include "externs.h"
 #include "spell/spell-projection-internal.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
@@ -822,6 +823,18 @@ bool project_m(
         /* Redraw (later) if needed */
         if (p_ptr->health_who == cave_m_idx[y][x])
             p_ptr->redraw |= (PR_HEALTHBAR);
+        if (healed && m_ptr->ml
+            && (styled_monster_health_bars || styled_monster_tile_health_bars))
+        {
+            if (styled_monster_health_bars)
+            {
+                p_ptr->window |= PW_MONLIST;
+                if (p_ptr->health_who == cave_m_idx[y][x])
+                    p_ptr->window |= PW_MONSTER;
+            }
+            if (styled_monster_tile_health_bars)
+                lite_spot(y, x);
+        }
 
         /*monster was at full hp to begin*/
         if (!healed)
@@ -1025,6 +1038,9 @@ bool project_m(
                         if (stun_amount > 0)
                         {
                             stun_monster(m_ptr, stun_amount);
+                            if (dif >= 0)
+                                legendary_song_observe_monster(
+                                    cave_m_idx[y][x], 0);
                             
                             /*possibly update the monster health bar*/
                             if (p_ptr->health_who == cave_m_idx[m_ptr->fy][m_ptr->fx])
@@ -1443,6 +1459,19 @@ bool project_m(
         /* Hurt the monster */
         m_ptr->hp -= dam;
 
+        if (m_ptr->ml
+            && (styled_monster_health_bars || styled_monster_tile_health_bars))
+        {
+            if (styled_monster_health_bars)
+            {
+                p_ptr->window |= PW_MONLIST;
+                if (p_ptr->health_who == cave_m_idx[y][x])
+                    p_ptr->window |= PW_MONSTER;
+            }
+            if (styled_monster_tile_health_bars)
+                lite_spot(y, x);
+        }
+
         if (dam > 0)
             maybe_update_morgoth_state_from_hp(m_ptr);
 
@@ -1576,6 +1605,8 @@ bool project_m(
         /* Window stuff */
         p_ptr->window |= (PW_MONSTER);
     }
+    if (styled_monster_health_bars && m_ptr->ml)
+        p_ptr->window |= PW_MONLIST;
 
     /* Track it */
     project_m_n++;

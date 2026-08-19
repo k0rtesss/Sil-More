@@ -611,7 +611,7 @@ static void a_m_aux_4(object_type* o_ptr, int level, bool fine, bool special)
         /* Hack -- Torches -- random fuel */
         if (o_ptr->sval == SV_LIGHT_TORCH)
         {
-            int spawn_fuel = 1000;
+            int spawn_fuel = FUEL_TORCH_DEFAULT;
             int min_fuel = 250;
 
             if (one_in_(3))
@@ -645,11 +645,11 @@ static void a_m_aux_4(object_type* o_ptr, int level, bool fine, bool special)
         {
             if (one_in_(3))
             {
-                o_ptr->timeout = rand_range(40, 100);
+                o_ptr->timeout = rand_range(40, FUEL_MALLORN_DEFAULT);
             }
             else
             {
-                o_ptr->timeout = 100;
+                o_ptr->timeout = FUEL_MALLORN_DEFAULT;
             }
         }
         break;
@@ -758,6 +758,8 @@ void object_into_artefact(object_type* o_ptr, artefact_type* a_ptr)
     o_ptr->pd = a_ptr->pd;
     o_ptr->ps = a_ptr->ps;
     o_ptr->weight = a_ptr->weight;
+    o_ptr->storage = a_ptr->storage;
+    o_ptr->volume = a_ptr->volume;
 
     // add the abilities
     for (i = 0; i < a_ptr->abilities; i++)
@@ -912,6 +914,31 @@ static void unpack_fire_broken_weapon_payload(s32b payload, s16b* att, byte* dd,
 bool object_is_fire_broken(const object_type* o_ptr)
 {
     return object_runtime_state(o_ptr) == OBJECT_RUNTIME_STATE_FIRE_BROKEN;
+}
+
+/*
+ * Check for the literal "(broken)" prefix shown in object descriptions.
+ * This is deliberately narrower than TR3_DAMAGED: rusty, bent, splintered,
+ * and other damaged items remain usable until the player chooses to repair
+ * them.
+ */
+bool object_has_broken_prefix(const object_type* o_ptr)
+{
+    byte e_idx;
+    const char* name;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    if (object_is_fire_broken(o_ptr))
+        return true;
+
+    e_idx = object_ego_prefix(o_ptr);
+    if (!e_idx || e_idx >= z_info->e_max || !e_info[e_idx].name)
+        return false;
+
+    name = e_name + e_info[e_idx].name;
+    return SDL_strcasecmp(name, "(broken)") == 0;
 }
 
 bool object_break_shafted_weapon_by_fire(object_type* o_ptr)
@@ -1491,7 +1518,7 @@ void apply_magic(object_type* o_ptr, int lev, bool okay, bool good, bool great,
         if ((k_info[o_ptr->k_idx].flags3 & (TR3_THROWING))
             && !artefact_p(o_ptr))
         {
-            // often come in multiples, but limited to quiver stack size
+            // often come in multiples, but remain limited to their stack size
             if (one_in_(2))
             {
                 int stack_limit = object_stack_limit(o_ptr);

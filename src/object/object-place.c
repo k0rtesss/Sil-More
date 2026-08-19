@@ -40,6 +40,7 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
 
             if (j_ptr->number == 0)
             {
+                player_active_weapon_forget_harness_color(o_ptr);
                 /* Result */
                 return (this_o_idx);
             }
@@ -70,6 +71,7 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
 
         /* Structure Copy */
         object_copy(o_ptr, j_ptr);
+        player_active_weapon_forget_harness_color(o_ptr);
 
         /* Location */
         o_ptr->iy = y;

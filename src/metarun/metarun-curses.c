@@ -76,6 +76,54 @@ static int weighted_random_curse(void)
     return rand_int(z_info->cu_max);                /* unreachable */
 }
 
+static void curse_menu_fade_title(void)
+{
+    const int duration_ms = 450;
+    const int frame_ms = 16;
+
+    sdl_poetry_screen_set_alpha(0, 0, 0, 0);
+    for (int elapsed = 0; elapsed < duration_ms; elapsed += frame_ms)
+    {
+        byte alpha = (byte)((elapsed * 255) / duration_ms);
+
+        sdl_poetry_screen_set_alpha(alpha, 0, 0, 0);
+        Term_fresh();
+        Term_xtra(TERM_XTRA_DELAY,
+            MIN(frame_ms, duration_ms - elapsed));
+    }
+    sdl_poetry_screen_set_alpha(255, 0, 0, 0);
+    Term_fresh();
+}
+
+static bool curse_menu_fade_choice(int choice)
+{
+    const int duration_ms = 600;
+    const int frame_ms = 16;
+
+    sdl_poetry_screen_set_choice_visible(choice, true,
+        TERM_L_RED, TERM_SLATE);
+    sdl_poetry_screen_set_choice_alpha(choice, 0);
+    for (int elapsed = 0; elapsed < duration_ms; elapsed += frame_ms)
+    {
+        char ch;
+        byte alpha = (byte)((elapsed * 255) / duration_ms);
+
+        if (Term_inkey(&ch, false, false) == 0 && ch == ESCAPE)
+        {
+            sdl_poetry_screen_set_choice_alpha(choice, 255);
+            Term_fresh();
+            return false;
+        }
+        sdl_poetry_screen_set_choice_alpha(choice, alpha);
+        Term_fresh();
+        Term_xtra(TERM_XTRA_DELAY,
+            MIN(frame_ms, duration_ms - elapsed));
+    }
+    sdl_poetry_screen_set_choice_alpha(choice, 255);
+    Term_fresh();
+    return true;
+}
+
 void add_curse_stack(int idx)
 {
     /* respect per-curse stack cap */
@@ -91,10 +139,10 @@ void add_curse_stack(int idx)
     save_metaruns();
 }
 
-int menu_choose_one_curse(int n)
+static int menu_choose_one_curse_aux(int n, bool force_menu)
 {
     /* if any active curse has the "no-choice" flag, skip the menu */
-    if (any_curse_flag_active(CUR_NOCHOICE))
+    if (!force_menu && any_curse_flag_active(CUR_NOCHOICE))
         return weighted_random_curse();
 
     int pick[CURSE_MENU_LINES], sel;
@@ -120,92 +168,48 @@ int menu_choose_one_curse(int n)
     Term_clear();
 
     /* Fade in the title */
-    char str[60];
-    const char* seq[] = { "a", "the second", "the third" };
-    strnfmt(str, sizeof(str), "Dark powers demand their price - choose %s curse:", seq[n]);
-    print_heading_fade(str, TERM_YELLOW);
+    char str[96];
+    cptr ordinal;
 
-    /* dynamic vertical layout - ask support/text-output.c to count wrapped lines */
-    int row = 4;                                     /* first free row */
-    text_out_hook = text_out_to_screen;
-    text_out_wrap = metarun_term_width() - 2;        /* full width     */
+    switch (n)
+    {
+        case 1: ordinal = "the second"; break;
+        case 2: ordinal = "the third"; break;
+        case 3: ordinal = "the fourth"; break;
+        default: ordinal = "a"; break;
+    }
+    strnfmt(str, sizeof(str),
+        "Dark powers demand their price - choose %s curse:", ordinal);
+    sdl_poetry_screen_begin_choices(str);
+    if (!sdl_poetry_screen_active())
+        quit("Mandatory SDL curse menu renderer is unavailable");
+    for (int i = 0; i < CURSE_MENU_LINES; i++)
+    {
+        curse_type* cu = &cu_info[pick[i]];
+        char name_buf[128];
+
+        if (menu_letters)
+            strnfmt(name_buf, sizeof(name_buf), "%c) %s", 'a' + i,
+                cu_name + cu->name);
+        else
+            SDL_strlcpy(name_buf, cu_name + cu->name, sizeof(name_buf));
+        sdl_poetry_screen_add_choice(i, name_buf, cu_text + cu->text);
+    }
+    curse_menu_fade_title();
+    Term_xtra(TERM_XTRA_DELAY, 1000);
 
     /* Show each curse one by one with fade-in effect */
     bool fast_forward = false;
 
     for (int i = 0; i < CURSE_MENU_LINES; i++) {
-        curse_type *cu = &cu_info[pick[i]];
-        char name_buf[128];
-        if (!menu_letters)
-            strnfmt(name_buf, sizeof name_buf, "   %s", cu_name + cu->name);
-        else
-            strnfmt(name_buf, sizeof name_buf, "%c) %s", 'a'+i, cu_name + cu->name);
-
-        const char *txt = cu_text + cu->text;
-        int need_lines = count_wrapped_lines(txt, text_out_wrap, 4);
-
-#ifdef DEBUG_CURSES
-        const char *pow = cu_text + cu->power;
-        int need_pow_lines = 0;
-        if (*pow) {
-            need_pow_lines = count_wrapped_lines(pow, text_out_wrap, 4);
-        }
-#endif
-
-        /* Fade in all text for this curse simultaneously */
-        const byte fade_cols[] = { TERM_L_DARK, TERM_SLATE, TERM_L_WHITE };
-        const int steps = (int)(sizeof(fade_cols) / sizeof(fade_cols[0]));
-
-        for (int s = 0; s < steps && !fast_forward; s++)
+        if (fast_forward)
         {
-            /* Check for ESC key to skip fade */
-            char ch;
-            if (Term_inkey(&ch, false, false) == 0 && ch == ESCAPE)
-            {
-                fast_forward = true;
-                break;
-            }
-
-            /* Name line */
-            c_put_str(s == steps - 1 ? TERM_L_RED : fade_cols[s], name_buf, row, 2);
-
-            /* Poem text */
-            Term_gotoxy(4, row + 2);
-            text_out_c(s == steps - 1 ? TERM_SLATE : fade_cols[s], txt);
-
-#ifdef DEBUG_CURSES
-            /* Power text if present */
-            if (*pow) {
-                Term_gotoxy(4, row + need_lines + 2);
-                text_out_c(s == steps - 1 ? TERM_L_RED : fade_cols[s], pow);
-            }
-#endif
-
-            Term_fresh();
-            Term_xtra(TERM_XTRA_DELAY, 200);
+            sdl_poetry_screen_set_choice_visible(i, true,
+                TERM_L_RED, TERM_SLATE);
+            sdl_poetry_screen_set_choice_alpha(i, 255);
         }
-
-        /* If fade was interrupted, show final state immediately */
-        if (fast_forward) {
-            c_put_str(TERM_L_RED, name_buf, row, 2);
-            Term_gotoxy(4, row + 2);
-            text_out_c(TERM_SLATE, txt);
-
-#ifdef DEBUG_CURSES
-            if (*pow) {
-                Term_gotoxy(4, row + need_lines + 2);
-                text_out_c(TERM_L_RED, pow);
-            }
-#endif
-        }
-
-        /* Move to next curse position */
-#ifdef DEBUG_CURSES
-        if (*pow)
-            row += need_lines + need_pow_lines + 3;
-        else
-#endif
-            row += need_lines + 3;
+        else if (!curse_menu_fade_choice(i))
+            fast_forward = true;
 
         /* 1 second delay between curses (except for the last one) */
         if (i < CURSE_MENU_LINES - 1) {
@@ -243,7 +247,6 @@ int menu_choose_one_curse(int n)
                 N_ELEMENTS(variants));
         }
         SDL_strlcpy(curse_prompt, hint_buf, sizeof(curse_prompt));
-        c_put_str(TERM_L_DARK, hint_buf, row + 1, 2);
     }
     else if (sdl_touch_only_device_active())
     {
@@ -256,7 +259,6 @@ int menu_choose_one_curse(int n)
         terminal_prompt_pick_variant(prompt, sizeof(prompt),
             metarun_term_width() - 2, false, variants, N_ELEMENTS(variants));
         SDL_strlcpy(curse_prompt, prompt, sizeof(curse_prompt));
-        c_put_str(TERM_L_DARK, prompt, row + 1, 2);
     }
     else if (menu_letters)
     {
@@ -268,7 +270,6 @@ int menu_choose_one_curse(int n)
         terminal_prompt_pick_variant(prompt, sizeof(prompt),
             metarun_term_width() - 2, false, variants, N_ELEMENTS(variants));
         SDL_strlcpy(curse_prompt, prompt, sizeof(curse_prompt));
-        c_put_str(TERM_L_DARK, prompt, row + 1, 2);
     }
     else
     {
@@ -280,65 +281,18 @@ int menu_choose_one_curse(int n)
         terminal_prompt_pick_variant(prompt, sizeof(prompt),
             metarun_term_width() - 2, false, variants, N_ELEMENTS(variants));
         SDL_strlcpy(curse_prompt, prompt, sizeof(curse_prompt));
-        c_put_str(TERM_L_DARK, prompt, row + 1, 2);
     }
+
+    sdl_poetry_screen_set_prompt(curse_prompt, true);
 
     /* Menu navigation variables */
     int highlight = 0;  /* Currently highlighted option (0, 1, 2) */
     bool menu_done = false;
-    int option_rows[CURSE_MENU_LINES];  /* Store the row for each option */
-
-    /* Calculate row positions for each option */
-    int calc_row = 4;
-    for (int i = 0; i < CURSE_MENU_LINES; i++) {
-        option_rows[i] = calc_row;
-        curse_type *cu = &cu_info[pick[i]];
-        const char *txt = cu_text + cu->text;
-        int need_lines = count_wrapped_lines(txt, text_out_wrap, 4);
-        calc_row += need_lines + 3;
-    }
 
     while (!menu_done) {
-        /* Ensure text output settings are consistent */
-        text_out_hook = text_out_to_screen;
-        text_out_wrap = metarun_term_width() - 2;
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
-
-        /* Update highlight display for each option */
-        for (int i = 0; i < CURSE_MENU_LINES; i++) {
-            curse_type *cu = &cu_info[pick[i]];
-            char name_buf[128];
-            if (!menu_letters)
-                strnfmt(name_buf, sizeof name_buf, "   %s", cu_name + cu->name);
-            else
-                strnfmt(name_buf, sizeof name_buf, "%c) %s", 'a'+i, cu_name + cu->name);
-
-            /* Clear the line first to remove any previous highlighting */
-            Term_erase(2, option_rows[i], strlen(name_buf));
-
-            /* Display the option with highlighting */
-            if (i == highlight) {
-                c_put_str(TERM_RED, name_buf, option_rows[i], 2);     /* Highlighted - red */
-            } else {
-                c_put_str(TERM_L_RED, name_buf, option_rows[i], 2);   /* Normal - light red */
-            }
-            ui_menu_click_add(i, 2, option_rows[i], metarun_term_width() - 4);
-        }
-        ui_menu_click_add_text_token(-1, 2, row + 1,
-            curse_prompt, "cancel");
-
-        /* Position cursor at the end of the highlighted option text */
-        curse_type *highlighted_cu = &cu_info[pick[highlight]];
-        char highlighted_name_buf[128];
-        if (!menu_letters)
-            strnfmt(highlighted_name_buf, sizeof highlighted_name_buf, "   %s",
-                cu_name + highlighted_cu->name);
-        else
-            strnfmt(highlighted_name_buf, sizeof highlighted_name_buf, "%c) %s",
-                'a'+highlight, cu_name + highlighted_cu->name);
-        int cursor_col = 2 + strlen(highlighted_name_buf);
-        Term_gotoxy(cursor_col, option_rows[highlight]);
+        sdl_poetry_screen_set_highlight(highlight);
         Term_fresh();
         char key = metarun_inkey_hidden();
 
@@ -400,9 +354,20 @@ int menu_choose_one_curse(int n)
         }
     }
     ui_menu_click_clear();
+    sdl_poetry_screen_hide();
     screen_pop_supporting_panes_hidden();
     screen_load();
     return pick[sel];
+}
+
+int menu_choose_one_curse(int n)
+{
+    return menu_choose_one_curse_aux(n, false);
+}
+
+int metarun_debug_preview_curse_menu(void)
+{
+    return menu_choose_one_curse_aux(0, true);
 }
 
 
@@ -420,18 +385,15 @@ void metarun_clear_all_curses(void)
     save_metaruns();
 }
 
-int choose_escape_curses_ui(int n, int out[4])
+static int choose_escape_curses_ui_aux(int n, int out[4], bool preview)
 {
     // int rolls = any_curse_flag_active(CUR_NOCHOICE) ? 1 : n;
     int taken = 0;
-    bool fast_forward = false;
 
     /* Display intro with fade-in effect */
     screen_save();
     screen_push_supporting_panes_hidden();
     Term_clear();
-
-    print_heading_fade("The Valar's Judgment", TERM_L_BLUE);
 
     char intro_text[512];
     strnfmt(intro_text, sizeof(intro_text),
@@ -441,17 +403,21 @@ int choose_escape_curses_ui(int n, int out[4])
             (n == 1) ? "a" : (n == 2) ? "two" : (n == 3) ? "three" : "four",
             (n == 1) ? "" : "s");
 
-    if (!print_paragraph_fade(intro_text, TERM_L_WHITE, 4))
-        fast_forward = true;
-
-    wait_for_keypress_with_prompt("[Press any key to face your destiny]");
+    metarun_show_poetry_scene("The Valar's Judgment", TERM_L_BLUE,
+        intro_text, TERM_L_WHITE, "", TERM_SLATE,
+        "[Press any key to face your destiny]");
     Term_clear();
 
     for (int i = 0; i < n; i++)
     {
-        int idx = menu_choose_one_curse(i);   /* weighted picker, UI */
+        int idx = preview ? menu_choose_one_curse_aux(i, true)
+                          : menu_choose_one_curse(i);
+
+        if (idx < 0)
+            break;
         log_debug("Player selected curse %d: %s", idx, cu_name + cu_info[idx].name);
-        add_curse_stack(idx);                /* gameplay side-effect */
+        if (!preview)
+            add_curse_stack(idx);            /* gameplay side-effect */
         if (taken < 4) out[taken++] = idx;
     }
 
@@ -462,53 +428,37 @@ int choose_escape_curses_ui(int n, int out[4])
     screen_pop_supporting_panes_hidden();
     screen_load();
 
-    /* Avoid unused variable warning */
-    (void)fast_forward;
-
     return taken;
+}
+
+int choose_escape_curses_ui(int n, int out[4])
+{
+    return choose_escape_curses_ui_aux(n, out, false);
+}
+
+int metarun_debug_choose_escape_curses(int n, int out[4])
+{
+    return choose_escape_curses_ui_aux(n, out, true);
 }
 
 /****************  Oath-breaking curse chooser with fade ************/
 
 /*
- * Shows the oath-specific curse message with fade-in, waits 3 seconds,
- * then shows the permanent consequence message and curse selection menu.
+ * Shows the oath-specific consequence and Morgoth's response with fade-in,
+ * then opens the permanent curse selection menu.
  * Returns the selected curse index.
  */
 int choose_oath_breaking_curse_ui(int oath_id)
 {
-    bool fast_forward = false;
-
     /* Display curse message with fade-in effect */
     screen_save();
     screen_push_supporting_panes_hidden();
     Term_clear();
 
-    /* Add Tolkien-style heading */
-    print_heading_fade("The Sundering of Sacred Vows", TERM_L_RED);
-
     /* Get oath-specific permanent message (E: field from oath.txt) */
     char* perm_msg = oath_permanent_message(oath_id);
-
-    /* Add empty line before E: text */
-    Term_putstr(2, 4, -1, TERM_SLATE, "");
-
-    /* Show only the permanent message (E: field) with fade */
-    if (perm_msg && perm_msg[0]) {
-        if (!print_paragraph_fade(perm_msg, TERM_L_RED, 5))
-            fast_forward = true;
-    } else {
-        if (!print_paragraph_fade("Your oath is forever broken in this age.", TERM_L_RED, 5))
-            fast_forward = true;
-    }
-
-    /* Hold the message for 3 seconds if not fast-forwarded */
-    if (!fast_forward) {
-        Term_xtra(TERM_XTRA_DELAY, 3000);
-    }
-
-    /* Add empty line before attention text */
-    Term_putstr(2, 8, -1, TERM_SLATE, "");
+    cptr consequence = (perm_msg && perm_msg[0])
+        ? perm_msg : "Your oath is forever broken in this age.";
 
     /* Show Morgoth's attention text with fade in red */
     char intro_text[256];
@@ -516,10 +466,9 @@ int choose_oath_breaking_curse_ui(int oath_id)
             "The breach of your sacred vow has drawn Morgoth's attention. "
             "His malice reaches out to compound your suffering with a curse you must bear.");
 
-    if (!print_paragraph_fade(intro_text, TERM_RED, 9))
-        fast_forward = true;
-
-    wait_for_keypress_with_prompt("[Press any key to face your judgment]");
+    metarun_show_poetry_scene("The Sundering of Sacred Vows", TERM_L_RED,
+        consequence, TERM_L_RED, intro_text, TERM_RED,
+        "[Press any key to face your judgment]");
     Term_clear();
 
     /* Let the player choose 1 curse from 3 options */
@@ -532,9 +481,6 @@ int choose_oath_breaking_curse_ui(int oath_id)
     /* Restore screen state */
     screen_pop_supporting_panes_hidden();
     screen_load();
-
-    /* Avoid unused variable warning */
-    (void)fast_forward;
 
     return idx;
 }

@@ -1,6 +1,166 @@
 #include "angband.h"
 #include "blitz.h"
 #include "sdl/main-sdl-private.h"
+#include "ui/question.h"
+
+enum {
+    SDL_POPUP_NOTIFICATION_TEXT_LEN = 96,
+    SDL_POPUP_NOTIFICATION_PHASE_FADE_IN = 0,
+    SDL_POPUP_NOTIFICATION_PHASE_HOLD,
+    SDL_POPUP_NOTIFICATION_PHASE_FADE_OUT,
+    SDL_POPUP_NOTIFICATION_PHASE_DONE,
+};
+
+typedef struct sdl_popup_notification_state {
+    bool active;
+    int phase;
+    char text[SDL_POPUP_NOTIFICATION_TEXT_LEN];
+    Uint64 fade_in_end_ns;
+    Uint64 hold_end_ns;
+    Uint64 end_ns;
+    Uint64 next_frame_ns;
+} sdl_popup_notification_state;
+
+typedef struct sdl_main_menu_button_press_state {
+    bool active;
+    bool canceled;
+    SDL_FingerID finger_id;
+    float start_x;
+    float start_y;
+    Uint64 start_time;
+} sdl_main_menu_button_press_state;
+
+static sdl_popup_notification_state g_popup_notification;
+static sdl_main_menu_button_press_state g_main_menu_button_press;
+static bool g_main_menu_button_disable_prompt_pending;
+
+static bool sdl_main_menu_button_run_pending_disable_prompt(void);
+
+static int sdl_popup_notification_phase(Uint64 now_ns)
+{
+    if (now_ns < g_popup_notification.fade_in_end_ns)
+        return SDL_POPUP_NOTIFICATION_PHASE_FADE_IN;
+    if (now_ns < g_popup_notification.hold_end_ns)
+        return SDL_POPUP_NOTIFICATION_PHASE_HOLD;
+    if (now_ns < g_popup_notification.end_ns)
+        return SDL_POPUP_NOTIFICATION_PHASE_FADE_OUT;
+    return SDL_POPUP_NOTIFICATION_PHASE_DONE;
+}
+
+static int sdl_popup_notification_timeout_until(Uint64 now_ns,
+    Uint64 target_ns)
+{
+    Uint64 remaining_ns;
+    Uint64 remaining_ms;
+
+    if (target_ns <= now_ns)
+        return 0;
+
+    remaining_ns = target_ns - now_ns;
+    remaining_ms = (remaining_ns + 999999ULL) / 1000000ULL;
+    if (remaining_ms > (Uint64)INT_MAX)
+        return INT_MAX;
+    return (int)remaining_ms;
+}
+
+void sdl_popup_notification_show(cptr text)
+{
+    Uint64 now_ns;
+    Uint64 fade_ns;
+    Uint64 hold_ns;
+    int hold_ms;
+
+    if (!text || !text[0])
+        return;
+
+    hold_ms = get_sdl_popup_notification_ms();
+    if (hold_ms < 0)
+        hold_ms = 0;
+    if (hold_ms > SDL_POPUP_NOTIFICATION_MAX_MS)
+        hold_ms = SDL_POPUP_NOTIFICATION_MAX_MS;
+    if (hold_ms == 0)
+        return;
+
+    now_ns = SDL_GetTicksNS();
+    fade_ns = (Uint64)SDL_NARRATIVE_BANNER_FADE_MS * 1000000ULL;
+    hold_ns = (Uint64)hold_ms * 1000000ULL;
+
+    memset(&g_popup_notification, 0, sizeof(g_popup_notification));
+    g_popup_notification.active = true;
+    g_popup_notification.phase = SDL_POPUP_NOTIFICATION_PHASE_FADE_IN;
+    SDL_strlcpy(g_popup_notification.text, text,
+        sizeof(g_popup_notification.text));
+    g_popup_notification.fade_in_end_ns = now_ns + fade_ns;
+    g_popup_notification.hold_end_ns =
+        g_popup_notification.fade_in_end_ns + hold_ns;
+    g_popup_notification.end_ns = g_popup_notification.hold_end_ns + fade_ns;
+    g_popup_notification.next_frame_ns = now_ns
+        + (Uint64)SDL_NARRATIVE_BANNER_FADE_FRAME_MS * 1000000ULL;
+    g_state.need_present = true;
+}
+
+int sdl_popup_notification_pending_timeout_ms(Uint64 now_ns)
+{
+    int phase;
+    Uint64 target_ns;
+
+    if (!g_popup_notification.active)
+        return -1;
+
+    phase = sdl_popup_notification_phase(now_ns);
+    if (phase == SDL_POPUP_NOTIFICATION_PHASE_DONE)
+        return 0;
+    if (phase == SDL_POPUP_NOTIFICATION_PHASE_HOLD)
+        return sdl_popup_notification_timeout_until(now_ns,
+            g_popup_notification.hold_end_ns);
+
+    target_ns = g_popup_notification.next_frame_ns;
+    if (phase == SDL_POPUP_NOTIFICATION_PHASE_FADE_IN
+        && g_popup_notification.fade_in_end_ns < target_ns)
+    {
+        target_ns = g_popup_notification.fade_in_end_ns;
+    }
+    if (phase == SDL_POPUP_NOTIFICATION_PHASE_FADE_OUT
+        && g_popup_notification.end_ns < target_ns)
+    {
+        target_ns = g_popup_notification.end_ns;
+    }
+    return sdl_popup_notification_timeout_until(now_ns, target_ns);
+}
+
+bool sdl_popup_notification_flush_expired(Uint64 now_ns)
+{
+    int phase;
+    bool changed = false;
+
+    if (!g_popup_notification.active)
+        return false;
+
+    phase = sdl_popup_notification_phase(now_ns);
+    if (phase == SDL_POPUP_NOTIFICATION_PHASE_DONE) {
+        memset(&g_popup_notification, 0, sizeof(g_popup_notification));
+        changed = true;
+    } else if (phase != g_popup_notification.phase) {
+        g_popup_notification.phase = phase;
+        if (phase == SDL_POPUP_NOTIFICATION_PHASE_HOLD)
+            g_popup_notification.next_frame_ns =
+                g_popup_notification.hold_end_ns;
+        else
+            g_popup_notification.next_frame_ns = now_ns
+                + (Uint64)SDL_NARRATIVE_BANNER_FADE_FRAME_MS * 1000000ULL;
+        changed = true;
+    } else if (phase != SDL_POPUP_NOTIFICATION_PHASE_HOLD
+        && now_ns >= g_popup_notification.next_frame_ns)
+    {
+        g_popup_notification.next_frame_ns = now_ns
+            + (Uint64)SDL_NARRATIVE_BANNER_FADE_FRAME_MS * 1000000ULL;
+        changed = true;
+    }
+
+    if (changed)
+        g_state.need_present = true;
+    return changed;
+}
 
 static bool sdl_main_menu_overlay_should_hide_supporting_panes(void)
 {
@@ -62,8 +222,7 @@ bool sdl_main_menu_pane_context_visible(void)
         return false;
     if (!p_ptr || screen_saved_fullscreen_active())
         return false;
-    if (!death_spectator_active()
-        && (!p_ptr->playing || p_ptr->leaving || p_ptr->is_dead))
+    if (!p_ptr->playing || p_ptr->leaving || p_ptr->is_dead)
     {
         return false;
     }
@@ -127,35 +286,30 @@ float sdl_main_menu_draw_text(TTF_Font* font, cptr text, float x,
     float y, float max_w, float row_h, SDL_Color color,
     main_menu_text_align align)
 {
-    SDL_Surface* surface;
     SDL_Texture* texture;
     SDL_FRect dst;
     float scale = 1.0f;
     float max_h;
+    int text_w = 0;
+    int text_h = 0;
 
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return 0.0f;
 
-    surface = TTF_RenderText_Blended(font, text, 0, color);
-    if (!surface)
+    texture = sdl_ui_text_texture(font, text, color, &text_w, &text_h);
+    if (!texture)
         return 0.0f;
 
-    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
-    if (!texture) {
-        SDL_DestroySurface(surface);
-        return 0.0f;
-    }
-
-    if (surface->w > 0 && (float)surface->w > max_w)
-        scale = max_w / (float)surface->w;
+    if (text_w > 0 && (float)text_w > max_w)
+        scale = max_w / (float)text_w;
     max_h = row_h * 0.86f;
-    if (surface->h > 0 && (float)surface->h * scale > max_h)
-        scale = max_h / (float)surface->h;
+    if (text_h > 0 && (float)text_h * scale > max_h)
+        scale = max_h / (float)text_h;
     if (scale > 1.0f)
         scale = 1.0f;
 
-    dst.w = (float)surface->w * scale;
-    dst.h = (float)surface->h * scale;
+    dst.w = (float)text_w * scale;
+    dst.h = (float)text_h * scale;
     if (align == MAIN_MENU_TEXT_RIGHT)
         dst.x = x + max_w - dst.w;
     else if (align == MAIN_MENU_TEXT_CENTER)
@@ -164,14 +318,9 @@ float sdl_main_menu_draw_text(TTF_Font* font, cptr text, float x,
         dst.x = x;
     dst.y = y + (row_h - dst.h) * 0.5f;
 
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
-
-    SDL_DestroyTexture(texture);
-    SDL_DestroySurface(surface);
     return dst.w;
 }
-
 
 bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
 {
@@ -181,7 +330,6 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
     int font_px;
     int text_w;
     float pad_x;
-    float pad_y;
     float panel_w;
     float panel_h;
     cptr label = "Menu";
@@ -189,12 +337,14 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
     if (out)
         *out = (SDL_FRect){ 0 };
 
-    if (!sdl_main_menu_pane_context_visible())
+    if (!get_sdl_show_main_menu_button()
+        || !sdl_main_menu_pane_context_visible())
         return false;
 
     screen = sdl_get_layout_screen_rect();
-    if (!sdl_overlay_pane_anchor_rect(PANE_MAIN, &anchor))
+    if (!sdl_overlay_pane_anchor_rect(PANE_MAIN, &anchor)) {
         return false;
+    }
 
     font_px = sdl_main_menu_pane_font_px();
     font = sdl_story_font_for_height(font_px);
@@ -204,11 +354,8 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
         return false;
 
     pad_x = (float)font_px * 0.78f;
-    pad_y = (float)font_px * 0.34f;
     if (pad_x < 8.0f)
         pad_x = 8.0f;
-    if (pad_y < 4.0f)
-        pad_y = 4.0f;
 
     panel_w = (float)text_w + pad_x * 2.0f;
     if (panel_w < (float)font_px * 4.4f)
@@ -216,15 +363,15 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
     if (panel_w > (float)screen.w)
         panel_w = (float)screen.w;
 
-    panel_h = (float)font_px * 1.16f + pad_y * 2.0f;
-    if (panel_h < (float)font_px * 1.45f)
-        panel_h = (float)font_px * 1.45f;
-    if (panel_h > (float)screen.h * 0.18f)
-        panel_h = (float)screen.h * 0.18f;
+    panel_h = (float)sdl_main_menu_button_height_for_screen(&screen);
+    if (panel_h <= 0.0f)
+        return false;
 
-    if (out)
-        *out = sdl_overlay_panel_rect(&anchor, PLACE_TOP_CENTER, (int)panel_w,
-            (int)panel_h, &screen);
+    if (out) {
+        *out = sdl_overlay_panel_rect(&anchor, PLACE_TOP_CENTER,
+            (int)panel_w, (int)panel_h, &screen);
+        out->y = (float)screen.y;
+    }
 
     return true;
 }
@@ -271,6 +418,7 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
     int font_px;
     int title_w = 0;
     int shortcut_w = 0;
+    int text_h;
     float pad_x;
     float pad_y;
     float row_h;
@@ -297,6 +445,9 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
     mono_font = sdl_main_menu_mono_font_for_height(font_px);
     if (!story_font)
         return false;
+    text_h = TTF_GetFontHeight(story_font);
+    if (text_h < 1)
+        text_h = font_px;
 
     for (int i = 1; i <= MAIN_MENU_MAX; i++) {
         char shortcut[32];
@@ -350,8 +501,13 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
 
         panel_h = max_panel_h;
         row_h = (panel_h - pad_y * 2.0f) / (float)MAIN_MENU_MAX;
+        /* Keep the empty vertical gap between adjacent labels no larger than
+         * the rendered label height. */
+        if (row_h > (float)text_h * 2.0f)
+            row_h = (float)text_h * 2.0f;
         if (row_h < 1.0f)
             row_h = 1.0f;
+        panel_h = pad_y * 2.0f + row_h * (float)MAIN_MENU_MAX;
         visible_count = MAIN_MENU_MAX;
     }
 #else
@@ -375,6 +531,7 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
     {
         out->panel = sdl_overlay_panel_rect(&anchor, PLACE_TOP_CENTER,
             (int)(panel_w + 0.5f), (int)(panel_h + 0.5f), &screen);
+        out->panel.y = (float)screen.y;
         out->pad_x = pad_x;
         out->row_h = row_h;
         out->title_w = (float)title_w;
@@ -463,17 +620,28 @@ void sdl_main_menu_overlay_close(void)
     g_state.need_present = true;
 }
 
-bool sdl_main_menu_overlay_begin(void)
+void sdl_main_menu_overlay_begin(void)
 {
     main_menu_pane_layout layout;
 
+    if (sdl_main_menu_button_run_pending_disable_prompt())
+        return;
+
     if (!sdl_main_menu_overlay_layout(&layout))
-        return false;
+    {
+        log_warn("Unable to lay out the SDL main menu overlay");
+        return;
+    }
 
     (void)dismiss_active_narrative_banner();
     sdl_player_action_menu_cancel();
     sdl_touch_round_cancel_press();
     sdl_touch_top_panel_cancel_press();
+    /* The square-action shortcut popup belongs to the live map.  The main
+     * menu hides gameplay overlays, but it can remain active while the menu
+     * opens a modal screen, so close it at the transition instead of letting
+     * it reappear over that screen or after returning to the map. */
+    sdl_question_menu_clear_context_hint();
     /* Drop any active hover tooltip (e.g. a terrain "granite wall" popup).
      * While the overlay is open it consumes mouse-motion events, so the
      * tooltip's own motion handler never runs to clear it, and the overlay
@@ -502,7 +670,6 @@ bool sdl_main_menu_overlay_begin(void)
 
     sdl_main_menu_overlay_scroll_to_highlight(layout.visible_count);
     g_state.need_present = true;
-    return true;
 }
 
 void sdl_main_menu_overlay_move(int delta)
@@ -706,7 +873,154 @@ bool sdl_main_menu_overlay_handle_gamepad_axis(
         return true;
     }
 
+    return false;
+}
+
+static Uint8 sdl_popup_notification_alpha(Uint64 now_ns)
+{
+    Uint64 fade_ns =
+        (Uint64)SDL_NARRATIVE_BANNER_FADE_MS * 1000000ULL;
+    Uint64 amount_ns;
+
+    if (!g_popup_notification.active || fade_ns == 0)
+        return 0;
+
+    if (now_ns < g_popup_notification.fade_in_end_ns) {
+        Uint64 start_ns = g_popup_notification.fade_in_end_ns - fade_ns;
+
+        amount_ns = (now_ns > start_ns) ? now_ns - start_ns : 0;
+    } else if (now_ns < g_popup_notification.hold_end_ns) {
+        return SDL_ALPHA_OPAQUE;
+    } else if (now_ns < g_popup_notification.end_ns) {
+        amount_ns = g_popup_notification.end_ns - now_ns;
+    } else {
+        return 0;
+    }
+
+    return (Uint8)((amount_ns * SDL_ALPHA_OPAQUE + fade_ns / 2) / fade_ns);
+}
+
+static Uint8 sdl_popup_notification_scaled_alpha(Uint8 alpha,
+    Uint8 scale)
+{
+    if (!alpha || !scale)
+        return 0;
+    return (Uint8)(((int)alpha * (int)scale + SDL_ALPHA_OPAQUE / 2)
+        / SDL_ALPHA_OPAQUE);
+}
+
+static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
+    TTF_Font** out_font)
+{
+    SDL_FRect menu_rect;
+    SDL_Rect screen;
+    TTF_Font* font;
+    int font_px;
+    int text_w;
+    float pad_x;
+    float pad_y;
+    float gap;
+    float panel_w;
+    float panel_h;
+    float max_panel_w;
+    SDL_FRect panel;
+    bool menu_button_visible;
+
+    if (!g_popup_notification.active || g_main_menu_overlay_active
+        || !sdl_main_menu_pane_context_visible())
+    {
+        return false;
+    }
+    menu_button_visible = sdl_main_menu_pane_button_rect(&menu_rect);
+
+    screen = sdl_get_layout_screen_rect();
+    font_px = sdl_main_menu_pane_font_px();
+    font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_MENU);
+    if (!font)
+        return false;
+
+    text_w = sdl_touch_pane_story_text_width(font,
+        g_popup_notification.text);
+    if (text_w < 1)
+        return false;
+
+    pad_x = sdl_touch_pane_clampf((float)font_px * 0.72f, 9.0f, 24.0f);
+    pad_y = sdl_touch_pane_clampf((float)font_px * 0.28f, 4.0f, 12.0f);
+    gap = sdl_touch_pane_clampf((float)font_px * 0.22f, 3.0f, 9.0f);
+    panel_w = (float)text_w + pad_x * 2.0f;
+    if (menu_button_visible && panel_w < menu_rect.w)
+        panel_w = menu_rect.w;
+
+    max_panel_w = (float)screen.w - (float)sdl_overlay_margin_px() * 2.0f;
+    if (max_panel_w < 1.0f)
+        max_panel_w = (float)screen.w;
+    if (panel_w > max_panel_w)
+        panel_w = max_panel_w;
+
+    panel_h = (float)font_px * 1.10f + pad_y * 2.0f;
+    panel = (SDL_FRect){ .w = panel_w, .h = panel_h };
+    if (menu_button_visible) {
+        panel.x = menu_rect.x + (menu_rect.w - panel_w) * 0.5f;
+        panel.y = menu_rect.y + menu_rect.h + gap;
+    } else {
+        panel.x = (float)screen.x + ((float)screen.w - panel_w) * 0.5f;
+        panel.y = (float)screen.y + gap;
+    }
+
+    if (panel.x < (float)screen.x + (float)sdl_overlay_margin_px())
+        panel.x = (float)screen.x + (float)sdl_overlay_margin_px();
+    if (panel.x + panel.w
+        > (float)(screen.x + screen.w - sdl_overlay_margin_px()))
+    {
+        panel.x = (float)(screen.x + screen.w - sdl_overlay_margin_px())
+            - panel.w;
+    }
+    if (panel.y + panel.h
+        > (float)(screen.y + screen.h - sdl_overlay_margin_px()))
+    {
+        panel.y = (float)(screen.y + screen.h - sdl_overlay_margin_px())
+            - panel.h;
+    }
+
+    if (out_panel)
+        *out_panel = panel;
+    if (out_font)
+        *out_font = font;
     return true;
+}
+
+void sdl_popup_notification_render(void)
+{
+    SDL_FRect panel;
+    SDL_FRect shadow;
+    TTF_Font* font;
+    SDL_Color text;
+    Uint8 alpha;
+
+    alpha = sdl_popup_notification_alpha(SDL_GetTicksNS());
+    if (!alpha || !sdl_popup_notification_layout(&panel, &font))
+        return;
+
+    shadow = panel;
+    shadow.x += 2.0f;
+    shadow.y += 2.0f;
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        sdl_popup_notification_scaled_alpha(alpha, 126));
+    SDL_RenderFillRect(g_state.renderer, &shadow);
+    SDL_SetRenderDrawColor(g_state.renderer, 8, 10, 12,
+        sdl_popup_notification_scaled_alpha(alpha, 226));
+    SDL_RenderFillRect(g_state.renderer, &panel);
+    SDL_SetRenderDrawColor(g_state.renderer, 255, 184, 94,
+        sdl_popup_notification_scaled_alpha(alpha, 154));
+    SDL_RenderRect(g_state.renderer, &panel);
+
+    text = g_state.palette[TERM_L_WHITE];
+    text.a = alpha;
+    (void)sdl_main_menu_draw_text(font, g_popup_notification.text,
+        panel.x + panel.w * 0.07f, panel.y, panel.w * 0.86f, panel.h,
+        text, MAIN_MENU_TEXT_CENTER);
 }
 
 void sdl_main_menu_pane_render(void)
@@ -847,7 +1161,398 @@ bool sdl_main_menu_pane_handle_pointer(float x, float y)
 
     g_main_menu_pane_hover = false;
     g_state.need_present = true;
-    (void)sdl_main_menu_overlay_begin();
+    sdl_main_menu_overlay_begin();
+    return true;
+}
+
+static void sdl_main_menu_button_clear_press(void)
+{
+    bool redraw = g_main_menu_button_press.active || g_main_menu_pane_hover;
+
+    memset(&g_main_menu_button_press, 0,
+        sizeof(g_main_menu_button_press));
+    g_main_menu_pane_hover = false;
+    if (redraw)
+        g_state.need_present = true;
+}
+
+static void sdl_main_menu_button_queue_disable_prompt(void)
+{
+    sdl_main_menu_button_clear_press();
+    if (g_main_menu_button_disable_prompt_pending)
+        return;
+
+    g_main_menu_button_disable_prompt_pending = true;
+    Term_keypress('m');
+}
+
+bool sdl_main_menu_button_handle_secondary_pointer(float x, float y)
+{
+    if (!sdl_main_menu_pane_hit(x, y, NULL))
+        return false;
+
+    sdl_main_menu_button_queue_disable_prompt();
+    return true;
+}
+
+bool sdl_main_menu_button_handle_long_press_down(float x, float y,
+    SDL_FingerID finger_id)
+{
+    if (!sdl_main_menu_pane_hit(x, y, NULL))
+        return false;
+
+    sdl_main_menu_button_clear_press();
+    g_main_menu_button_press.active = true;
+    g_main_menu_button_press.finger_id = finger_id;
+    g_main_menu_button_press.start_x = x;
+    g_main_menu_button_press.start_y = y;
+    g_main_menu_button_press.start_time = SDL_GetTicksNS();
+    g_main_menu_pane_hover = true;
+    g_state.need_present = true;
+    return true;
+}
+
+bool sdl_main_menu_button_handle_long_press_motion(float x, float y,
+    SDL_FingerID finger_id)
+{
+    float dx;
+    float dy;
+    float threshold;
+
+    if (!g_main_menu_button_press.active
+        || g_main_menu_button_press.finger_id != finger_id)
+    {
+        return false;
+    }
+    if (g_main_menu_button_press.canceled)
+        return true;
+
+    dx = x - g_main_menu_button_press.start_x;
+    dy = y - g_main_menu_button_press.start_y;
+    if (dx < 0.0f)
+        dx = -dx;
+    if (dy < 0.0f)
+        dy = -dy;
+    threshold = sdl_touch_swipe_threshold_px();
+    if (dx > threshold || dy > threshold) {
+        g_main_menu_button_press.canceled = true;
+        g_main_menu_pane_hover = false;
+        g_state.need_present = true;
+    }
+
+    return true;
+}
+
+bool sdl_main_menu_button_handle_long_press_up(float x, float y,
+    SDL_FingerID finger_id)
+{
+    bool activate;
+
+    if (!g_main_menu_button_press.active
+        || g_main_menu_button_press.finger_id != finger_id)
+    {
+        return false;
+    }
+
+    activate = !g_main_menu_button_press.canceled
+        && sdl_main_menu_pane_hit(x, y, NULL);
+    sdl_main_menu_button_clear_press();
+    if (activate)
+        sdl_main_menu_overlay_begin();
+    return true;
+}
+
+void sdl_main_menu_button_cancel_long_press(SDL_FingerID finger_id)
+{
+    if (!g_main_menu_button_press.active
+        || g_main_menu_button_press.finger_id != finger_id)
+    {
+        return;
+    }
+
+    sdl_main_menu_button_clear_press();
+}
+
+int sdl_main_menu_button_pending_timeout_ms(Uint64 now_ns)
+{
+    Uint64 elapsed;
+
+    if (!g_main_menu_button_press.active
+        || g_main_menu_button_press.canceled)
+    {
+        return -1;
+    }
+    if (!sdl_main_menu_pane_hit(g_main_menu_button_press.start_x,
+            g_main_menu_button_press.start_y, NULL))
+    {
+        return 0;
+    }
+
+    elapsed = now_ns - g_main_menu_button_press.start_time;
+    if (elapsed >= (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
+        return 0;
+    return TOUCH_PANE_LONG_PRESS_MS - (int)(elapsed / 1000000ULL);
+}
+
+bool sdl_main_menu_button_flush_pending_press(Uint64 now_ns)
+{
+    if (!g_main_menu_button_press.active)
+        return false;
+    if (!sdl_main_menu_pane_hit(g_main_menu_button_press.start_x,
+            g_main_menu_button_press.start_y, NULL))
+    {
+        sdl_main_menu_button_clear_press();
+        return false;
+    }
+    if (g_main_menu_button_press.canceled
+        || now_ns - g_main_menu_button_press.start_time
+            < (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
+    {
+        return false;
+    }
+
+    sdl_main_menu_button_queue_disable_prompt();
+    return true;
+}
+
+static bool sdl_quick_access_has_binding(int binding)
+{
+    int count = get_sdl_touch_top_panel_cell_count();
+
+    for (int i = 0; i < count; i++) {
+        if (get_sdl_touch_top_panel_binding(i, false) == binding
+            || get_sdl_touch_top_panel_binding(i, true) == binding)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool sdl_quick_access_profile_insert_binding(
+    struct sdl_pane_profile* profile, int binding)
+{
+    int count;
+    int insert_at;
+
+    if (!profile)
+        return false;
+    count = profile->touch_top_panel_cell_count;
+    if (count < 0)
+        count = 0;
+    if (count > SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        count = SDL_TOUCH_TOP_PANEL_BUTTON_COUNT;
+
+    for (int i = 0; i < count; i++) {
+        if (profile->touch_top_panel_bindings[i] == binding
+            || profile->touch_top_panel_long_bindings[i] == binding)
+        {
+            return true;
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        if (profile->touch_top_panel_bindings[i] == GAMEPAD_BIND_NONE
+            && profile->touch_top_panel_long_bindings[i] == GAMEPAD_BIND_NONE)
+        {
+            profile->touch_top_panel_bindings[i] = binding;
+            return true;
+        }
+    }
+    if (count >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        return false;
+
+    /* Keep the portrait Main Menu entry last when a newly unlocked skill is
+     * accepted later in the run. */
+    insert_at = count;
+    for (int i = 0; i < count; i++) {
+        if (profile->touch_top_panel_bindings[i] == 'm'
+            || profile->touch_top_panel_long_bindings[i] == 'm')
+        {
+            insert_at = i;
+            break;
+        }
+    }
+    for (int i = count; i > insert_at; i--) {
+        profile->touch_top_panel_bindings[i] =
+            profile->touch_top_panel_bindings[i - 1];
+        profile->touch_top_panel_long_bindings[i] =
+            profile->touch_top_panel_long_bindings[i - 1];
+    }
+    profile->touch_top_panel_bindings[insert_at] = binding;
+    profile->touch_top_panel_long_bindings[insert_at] = GAMEPAD_BIND_NONE;
+    profile->touch_top_panel_cell_count = count + 1;
+    return true;
+}
+
+static void sdl_quick_access_suggest_unlocked_shortcut(cptr unlock_name,
+    cptr action_name, int binding, bool character_wheel_available,
+    cptr custom_desc)
+{
+    ui_question_option options[2];
+    int count;
+    bool has_room = false;
+    char desc[320];
+    int choice;
+
+    if (!g_state.window || death_spectator_active())
+        return;
+    if (!unlock_name || !unlock_name[0] || !action_name || !action_name[0])
+        return;
+    if (sdl_quick_access_has_binding(binding))
+        return;
+
+    count = get_sdl_touch_top_panel_cell_count();
+    if (count < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        has_room = true;
+    for (int i = 0; !has_room && i < count; i++) {
+        has_room = get_sdl_touch_top_panel_binding(i, false)
+                == GAMEPAD_BIND_NONE
+            && get_sdl_touch_top_panel_binding(i, true) == GAMEPAD_BIND_NONE;
+    }
+    if (!has_room)
+        return;
+
+    if (custom_desc && custom_desc[0]) {
+        SDL_strlcpy(desc, custom_desc, sizeof(desc));
+    } else if (character_wheel_available) {
+        strnfmt(desc, sizeof(desc),
+            "You acquired %s. Add %s to Quick Access? You can also use it "
+            "through the character wheel.",
+            unlock_name, action_name);
+    } else {
+        strnfmt(desc, sizeof(desc),
+            "You acquired %s. Add %s to Quick Access?",
+            unlock_name, action_name);
+    }
+    options[0] = (ui_question_option){ 'y', "Add to Quick Access",
+        TERM_L_GREEN, false };
+    options[1]
+        = (ui_question_option){ 'n', "Not now", TERM_SLATE, false };
+    choice = ui_question_ask("New Quick Access action", desc, options, 2,
+        UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 1);
+    if (choice != 0)
+        return;
+
+    /* Apply the accepted shortcut to each saved layout.  Otherwise the
+     * one-time skill transition could add it only to the orientation that
+     * happened to be active when the player trained. */
+    sdl_store_active_pane_profile(config.min_terminal_mode);
+    for (int i = 0; i < SDL_PANE_PROFILE_COUNT; i++)
+        (void)sdl_quick_access_profile_insert_binding(&g_pane_profiles[i],
+            binding);
+    sdl_apply_stored_pane_profile(config.min_terminal_mode);
+    sdl_apply_config();
+    (void)save_pane_config_to_json();
+    log_info("Added %s to Quick Access after %s %s", action_name,
+        custom_desc ? "equipping" : "acquiring", unlock_name);
+}
+
+void sdl_quick_access_suggest_skill_shortcut(int skill)
+{
+    if (skill == S_SNG) {
+        sdl_quick_access_suggest_unlocked_shortcut("Song", "Sing", 's',
+            false, NULL);
+    } else if (skill == S_SMT) {
+        sdl_quick_access_suggest_unlocked_shortcut("Smithing", "Smithing",
+            '0', false, NULL);
+    }
+}
+
+void sdl_quick_access_suggest_ability_shortcut(int skill, int ability)
+{
+    if (skill == S_ARC && ability == ARC_FLETCHERY) {
+        sdl_quick_access_suggest_unlocked_shortcut("Fletchery", "Fletch",
+            '-', true, NULL);
+    } else if (skill == S_STL && ability == STL_EXCHANGE_PLACES) {
+        sdl_quick_access_suggest_unlocked_shortcut("Exchange Places",
+            "Exchange Places", 'X', true, NULL);
+    }
+}
+
+void sdl_quick_access_suggest_equipped_item(int tval)
+{
+    byte prompt_flag;
+    cptr item_name;
+    cptr action_name;
+    cptr wheel_verb;
+    int binding;
+    char desc[320];
+
+    if (!p_ptr)
+        return;
+
+    if (tval == TV_STAFF) {
+        prompt_flag = QUICK_ACCESS_PROMPT_STAFF;
+        item_name = "a staff";
+        action_name = "Activate staff";
+        wheel_verb = "activate";
+        binding = 'a';
+    } else if (tval == TV_HORN) {
+        prompt_flag = QUICK_ACCESS_PROMPT_HORN;
+        item_name = "a horn";
+        action_name = "Blow horn";
+        wheel_verb = "blow";
+        binding = 'p';
+    } else {
+        return;
+    }
+
+    if (p_ptr->quick_access_prompt_flags & prompt_flag)
+        return;
+
+    /* The first successful equip consumes the offer even when it is declined. */
+    p_ptr->quick_access_prompt_flags |= prompt_flag;
+    strnfmt(desc, sizeof(desc),
+        "You equipped %s for the first time this run. Add %s to Quick "
+        "Access? You can also %s it from the character wheel.",
+        item_name, action_name, wheel_verb);
+    sdl_quick_access_suggest_unlocked_shortcut(item_name, action_name,
+        binding, true, desc);
+}
+
+void sdl_quick_access_suggest_starting_shortcuts(void)
+{
+    if (!p_ptr)
+        return;
+
+    if (p_ptr->skill_base[S_SNG] > 0)
+        sdl_quick_access_suggest_skill_shortcut(S_SNG);
+    if (p_ptr->skill_base[S_SMT] > 0)
+        sdl_quick_access_suggest_skill_shortcut(S_SMT);
+    if (p_ptr->innate_ability[S_ARC][ARC_FLETCHERY])
+        sdl_quick_access_suggest_ability_shortcut(S_ARC, ARC_FLETCHERY);
+    if (p_ptr->innate_ability[S_STL][STL_EXCHANGE_PLACES])
+        sdl_quick_access_suggest_ability_shortcut(S_STL,
+            STL_EXCHANGE_PLACES);
+}
+
+static bool sdl_main_menu_button_run_pending_disable_prompt(void)
+{
+    ui_question_option options[2];
+    const char* desc =
+        "Turn off the fixed Main Menu button? Main Menu will be added to "
+        "Quick Access, and Quick Access will be enabled if needed.";
+    int choice;
+
+    if (!g_main_menu_button_disable_prompt_pending)
+        return false;
+    g_main_menu_button_disable_prompt_pending = false;
+
+    options[0]
+        = (ui_question_option){ 'y', "Turn off button", TERM_ORANGE, false };
+    options[1]
+        = (ui_question_option){ 'c', "Cancel", TERM_SLATE, false };
+
+    choice = ui_question_ask("Turn off Main Menu button", desc, options,
+        2, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 1);
+    if (choice != 0)
+        return true;
+
+    set_sdl_show_main_menu_button(false);
+    sdl_apply_config();
+    (void)save_pane_config_to_json();
+    log_info("Fixed Main Menu button disabled with Quick Access recovery configured");
     return true;
 }
 
@@ -1052,10 +1757,16 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
     case SDL_EVENT_KEY_DOWN:
         return sdl_main_menu_overlay_handle_key(&ev->key);
     case SDL_EVENT_MOUSE_MOTION:
-        if (sdl_main_menu_overlay_handle_touch_pane_point(
-                (float)ev->motion.x, (float)ev->motion.y, false))
         {
-            return true;
+            bool in_panel = false;
+
+            (void)sdl_main_menu_overlay_choice_at((float)ev->motion.x,
+                (float)ev->motion.y, &in_panel);
+            if (!in_panel && sdl_main_menu_overlay_handle_touch_pane_point(
+                    (float)ev->motion.x, (float)ev->motion.y, false))
+            {
+                return true;
+            }
         }
         return sdl_main_menu_overlay_handle_pointer_motion(
             (float)ev->motion.x, (float)ev->motion.y);
@@ -1065,10 +1776,16 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
             return true;
         }
         if (ev->button.button == SDL_BUTTON_LEFT) {
-            if (sdl_main_menu_overlay_handle_touch_pane_point(
-                    (float)ev->button.x, (float)ev->button.y, true))
             {
-                return true;
+                bool in_panel = false;
+
+                (void)sdl_main_menu_overlay_choice_at((float)ev->button.x,
+                    (float)ev->button.y, &in_panel);
+                if (!in_panel && sdl_main_menu_overlay_handle_touch_pane_point(
+                        (float)ev->button.x, (float)ev->button.y, true))
+                {
+                    return true;
+                }
             }
             return sdl_main_menu_overlay_handle_pointer_down(
                 (float)ev->button.x, (float)ev->button.y);
@@ -1083,10 +1800,15 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
             return true;
         if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
             return true;
-        if (sdl_main_menu_overlay_handle_touch_pane_point(x, y,
-                ev->type == SDL_EVENT_FINGER_DOWN))
         {
-            return true;
+            bool in_panel = false;
+
+            (void)sdl_main_menu_overlay_choice_at(x, y, &in_panel);
+            if (!in_panel && sdl_main_menu_overlay_handle_touch_pane_point(x, y,
+                    ev->type == SDL_EVENT_FINGER_DOWN))
+            {
+                return true;
+            }
         }
         if (ev->type == SDL_EVENT_FINGER_DOWN)
             return sdl_main_menu_overlay_handle_pointer_down(x, y);

@@ -204,6 +204,7 @@ bool player_has_equipped_flag3(u32b flag3)
     {
         object_type* o_ptr = &inventory[i];
         if (!o_ptr->k_idx) continue;
+        if (!player_equipment_slot_counts_as_equipped(i)) continue;
 
         u32b f1, f2, f3;
         object_flags(o_ptr, &f1, &f2, &f3);
@@ -287,21 +288,15 @@ void calc_torch(void)
         if (!o_ptr->k_idx)
             continue;
 
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
+
         /* Extract the flags */
         object_flags4(o_ptr, &f1, &f2, &f3, &f4);
 
         /* Skip quiver 1 entirely - it provides no bonuses */
         if (i == INVEN_QUIVER1)
             continue;
-
-        /* Skip quiver 2 unless item is an arrow or throwing item */
-        if (i == INVEN_QUIVER2)
-        {
-            bool is_throwing = player_can_treat_as_throwing_flags(o_ptr, f3);
-            bool is_arrow = (o_ptr->tval == TV_ARROW);
-            if (!is_throwing && !is_arrow)
-                continue;
-        }
 
         /* Does this item glow? */
         if ((f2 & TR2_LIGHT) && (i != INVEN_LITE))
@@ -320,8 +315,16 @@ void calc_torch(void)
         {
             bool extinguished = false;
 
+            /* Resting and smithing provide their own light, so conserve the
+             * equipped torch or lamp while either activity is active. */
+            if ((i == INVEN_LITE) && fuelable_light_p(o_ptr)
+                && (p_ptr->resting_light_off || p_ptr->smithing))
+            {
+                extinguished = true;
+            }
+
             /* Some items provide permanent, bright, light */
-            if (o_ptr->sval == SV_LIGHT_LESSER_JEWEL)
+            else if (o_ptr->sval == SV_LIGHT_LESSER_JEWEL)
                 p_ptr->cur_light += RADIUS_LESSER_JEWEL;
             else if (o_ptr->sval == SV_LIGHT_FEANORIAN)
                 p_ptr->cur_light += RADIUS_FEANORIAN;
@@ -366,9 +369,14 @@ void calc_torch(void)
     }
 
     // increase radius when the player's weapon glows
-    if (weapon_glows(&inventory[INVEN_WIELD]))
+    if (player_equipment_slot_counts_as_equipped(INVEN_WIELD)
+        && weapon_glows(&inventory[INVEN_WIELD]))
         p_ptr->cur_light++;
-    if (weapon_glows(&inventory[INVEN_ARM]))
+    if (player_equipment_slot_counts_as_equipped(INVEN_ARM)
+        && weapon_glows(&inventory[INVEN_ARM]))
+        p_ptr->cur_light++;
+    /* The weapon at the belt retains passive bonuses while stowed. */
+    if (weapon_glows(&inventory[INVEN_BELT]))
         p_ptr->cur_light++;
 
     /* Player is darkened */

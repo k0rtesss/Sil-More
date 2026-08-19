@@ -4,6 +4,7 @@
 #include "melee/melee-movement.h"
 #include "melee/melee-process.h"
 #include "melee/melee-util.h"
+#include "meta_state.h"
 
 int challenge_check(monster_type* m_ptr)
 {
@@ -612,6 +613,8 @@ static void process_monster(monster_type* m_ptr)
             // make sure the monster doesn't do any free attacks before its next
             // turn
             m_ptr->skip_this_turn = true;
+            if (m_ptr >= mon_list && m_ptr < mon_list + mon_max)
+                legendary_song_observe_monster((int)(m_ptr - mon_list), 0);
 
             // end the monster's turn
             return;
@@ -1561,6 +1564,8 @@ static void recover_monster(monster_type* m_ptr)
     bool visible = false;
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     int i;
+    int old_confused = m_ptr->confused;
+    int old_stunned = m_ptr->stunned;
 
     // summoned monsters have a half-life of one turn after the song stops
     if (m_ptr->mflag & (MFLAG_SUMMONED))
@@ -1672,6 +1677,17 @@ static void recover_monster(monster_type* m_ptr)
     /* Hack -- Update the health and mana bar (always) */
     if (p_ptr->health_who == cave_m_idx[m_ptr->fy][m_ptr->fx])
         p_ptr->redraw |= (PR_HEALTHBAR);
+    if (styled_monster_health_bars && m_ptr->ml
+        && (m_ptr->confused != old_confused
+            || m_ptr->stunned != old_stunned))
+    {
+        int current_m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
+
+        p_ptr->window |= PW_MONLIST;
+        if (p_ptr->health_who == current_m_idx)
+            p_ptr->window |= PW_MONSTER;
+        lite_spot(m_ptr->fy, m_ptr->fx);
+    }
 
     // Monsters who are out of sight and fail their perception rolls by 25 or
     // more (15 with Vanish) start to lose track of the player
@@ -1941,8 +1957,10 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
                         }
                     }
 
-                    // bonus reduced if the player has 'disguise' (only with old behavior)
-                    if (!visual_recognition && p_ptr->active_ability[S_STL][STL_DISGUISE])
+                    // Disguise both makes smart monsters less likely to
+                    // visually recognize the player and reduces any LOS
+                    // sight bonus that still applies.
+                    if (p_ptr->active_ability[S_STL][STL_DISGUISE])
                     {
                         m_perception += (open_squares + combat_sight_bonus) / 2;
                     }

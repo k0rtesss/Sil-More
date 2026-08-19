@@ -267,12 +267,12 @@ cptr option_text[OPT_MAX] = {
     "story_object_desc", /* OPT_story_object_desc */
     "hide_secondary_action_ring", /* OPT_hide_secondary_action_ring */
     "mirror_monster_tile_facing", /* OPT_mirror_monster_tile_facing */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
+    "styled_player_health_bar", /* OPT_styled_player_health_bar */
+    "styled_monster_health_bars", /* OPT_styled_monster_health_bars */
+    "styled_monster_tile_health_bars", /* OPT_styled_monster_tile_health_bars */
+    "pixel_monster_status_icons", /* OPT_pixel_monster_status_icons */
+    "lockpick_minigame", /* OPT_lockpick_minigame */
+    "chest_trap_minigame", /* OPT_chest_trap_minigame */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -431,7 +431,7 @@ cptr option_desc[OPT_MAX] = {
     "Show an overlay icon on sleeping monsters", /* OPT_sleep_icon */
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */
     "Warn before making direct attacks (useful for pacifist runs)", /* OPT_pacifist_attack_warning */
-    "Confirm before switching between melee and ranged weapons", /* OPT_active_weapon_switch_confirm */
+    "Confirm before paid melee/ranged active switches", /* OPT_active_weapon_switch_confirm */
     NULL, /* reserved legacy slot: view_torch_grids */
     NULL, /* reserved legacy slot: dungeon_align */
     NULL, /* reserved legacy slot: dungeon_stair */
@@ -494,7 +494,7 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* obsolete 0.9.7: hide_left_panel */
     NULL, /* reserved legacy slot: banner_message_stairs */
     "Debug: Show detailed level-generation screen info and pause before play", /* OPT_show_level_generation_debug */
-    "Unlock Blitz Mode after winning a metarun", /* OPT_unlock_blitz_mode */
+    "Unlock Blitz Mode after winning a tale", /* OPT_unlock_blitz_mode */
     "Sort look (L) objects by difficulty only (off = category, then difficulty)", /* OPT_look_objects_sort_by_difficulty */
     "Start look (l) with the nearby-only sidebar filter enabled", /* OPT_look_nearby_filter_default */
     "Debug: Show elemental item break rolls and target probabilities", /* OPT_show_elemental_item_rolls */
@@ -512,13 +512,13 @@ cptr option_desc[OPT_MAX] = {
     "Use handcrafted right-facing player tiles", /* OPT_handcrafted_player_tile_facing */
     "Render object description overlays with the story font", /* OPT_story_object_desc */
     "Hide the action wheel's secondary ring until its sector is hovered", /* OPT_hide_secondary_action_ring */
-    "Mirror monster tiles to face horizontal movement", /* OPT_mirror_monster_tile_facing */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
+    "Apply directional or per-race random monster tile facing", /* OPT_mirror_monster_tile_facing */
+    "Render the left-panel player health meter as a styled bar", /* OPT_styled_player_health_bar */
+    "Render styled monster health bars in panes and overlays", /* OPT_styled_monster_health_bars */
+    "Monster tile health bars (show/only damaged/off)", /* OPT_styled_monster_tile_health_bars */
+    "Render monster sleep, sight, and alert indicators with SDL pixel overlays", /* OPT_pixel_monster_status_icons */
+    "Use the lockpick and bash minigame for locked doors", /* OPT_lockpick_minigame */
+    "Use the trap-search and disarm minigame for chests", /* OPT_chest_trap_minigame */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -715,8 +715,8 @@ const bool option_norm[OPT_MAX] = {
     false, /* reserved legacy slot */
     false, /* reserved legacy slot: compress_savefile */
     false, /* OPT_hilite_player */
-    true, /* OPT_hilite_target */
-    true, /* OPT_hilite_unwary */
+    false, /* OPT_hilite_target */
+    false, /* OPT_hilite_unwary */
     true, /* OPT_solid_walls */
     false, /* OPT_hybrid_walls */
     false, /* reserved legacy slot: easy_open */
@@ -774,13 +774,13 @@ const bool option_norm[OPT_MAX] = {
     true, /* OPT_handcrafted_player_tile_facing */
     false, /* OPT_story_object_desc */
     true, /* OPT_hide_secondary_action_ring */
-    false, /* OPT_mirror_monster_tile_facing */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
+    true, /* OPT_mirror_monster_tile_facing */
+    true, /* OPT_styled_player_health_bar */
+    true, /* OPT_styled_monster_health_bars */
+    true, /* OPT_styled_monster_tile_health_bars */
+    true, /* OPT_pixel_monster_status_icons */
+    true, /* OPT_lockpick_minigame */
+    true, /* OPT_chest_trap_minigame */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
@@ -921,14 +921,17 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
     /*** User-Interface ***/
 
     { OPT_look_objects_sort_by_difficulty, OPT_look_nearby_filter_default,
-        OPT_song_list_sort_by_recent, OPT_hide_supporting_panes_fullscreen,
-        OPT_hitpoint_warning, OPT_supply_menu_random_icons,
+        OPT_song_list_sort_by_recent, OPT_styled_player_health_bar,
+        OPT_styled_monster_health_bars, OPT_styled_monster_tile_health_bars,
+        OPT_hide_supporting_panes_fullscreen,
+        OPT_hitpoint_warning,
+        OPT_supply_menu_random_icons,
         OPT_supply_menu_hide_flavor_compact,
         OPT_hide_secondary_action_ring,
         OPT_show_level_generation_debug, OPT_show_elemental_item_rolls,
+        OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
-        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
-        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
+        OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Text options ***/
 
@@ -945,17 +948,19 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
     { OPT_valorous_oath_auto_attack_safety, OPT_pacifist_attack_warning,
         OPT_active_weapon_switch_confirm,
         OPT_forgo_attacking_unwary, OPT_assassination_over_charge,
+        OPT_lockpick_minigame, OPT_chest_trap_minigame,
         OPT_stop_singing_on_rest, OPT_visual_recognition, OPT_know_monster_info,
         OPT_disable_skeleton_note_tutorial, OPT_smaller_level_size, OPT_more_stairs,
         OPT_vault_drop_frequency, OPT_noble_item_spawn_mode,
         OPT_min_depth_timer_mode, OPT_load_blitz_by_default,
-        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Display ***/
 
-    { OPT_stealth_vision, OPT_sleep_icon, OPT_artifact_unique_color,
-        OPT_unidentified_items_slate, OPT_delay_factor, OPT_running_delay,
+    { OPT_stealth_vision, OPT_sleep_icon, OPT_pixel_monster_status_icons,
+        OPT_artifact_unique_color, OPT_unidentified_items_slate,
+        OPT_delay_factor, OPT_running_delay,
         OPT_mirror_player_tile_facing, OPT_mirror_monster_tile_facing,
         OPT_center_player,
         OPT_run_avoid_center, OPT_show_level_entry_banner,
@@ -963,7 +968,7 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_intro_style, OPT_solid_walls, OPT_hybrid_walls,
         OPT_hilite_player, OPT_hilite_target, OPT_hilite_unwary,
         OPT_show_smithing_difficulty, OPT_show_smithing_difficulty_look,
-        OPT_NONE, OPT_NONE, OPT_NONE },
+        OPT_NONE, OPT_NONE },
 
     /*** Birth ***/
 

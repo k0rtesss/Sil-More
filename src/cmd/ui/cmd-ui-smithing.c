@@ -8,6 +8,7 @@ extern struct sound_config g_sound_config;
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include <ctype.h>
 #include "h-define.h"
 #include "metarun.h"
@@ -125,11 +126,37 @@ smithing_cost_type smithing_cost;
 #define SMT_NUM_MENU_MAX 13
 
 #define COL_SMT1 2
-#define COL_SMT2 16
+#define COL_SMT2_LANDSCAPE 16
+static int smith_ui_primary_submenu_col(void);
+#define COL_SMT2 (smith_ui_primary_submenu_col())
 static int smith_ui_last_desc_row = -1;
+static int smith_ui_cost_title_row_override = -1;
+
+typedef enum smith_ui_scroll_id
+{
+    SMITH_SCROLL_SVAL = 0,
+    SMITH_SCROLL_TVAL,
+    SMITH_SCROLL_NUMBERS,
+    SMITH_SCROLL_BONUSES,
+    SMITH_SCROLL_REFORGE,
+    SMITH_SCROLL_ENCHANT,
+    SMITH_SCROLL_FLAG,
+    SMITH_SCROLL_ABILITY,
+    SMITH_SCROLL_ARTEFACT,
+    SMITH_SCROLL_MELT,
+    SMITH_SCROLL_MAX
+} smith_ui_scroll_id;
+
+static int smith_ui_scroll_top[SMITH_SCROLL_MAX];
+static int smith_ui_touch_drag_sink;
 
 #define SMITH_CLICK_BACK 33000
-#define SMITH_ROOT_BACK_LABEL "Smithing Esc"
+
+/* Controller B uses a gameplay binding, so normalize it to menu Back here. */
+static char smithing_menu_key(char ch)
+{
+    return (char)steamdeck_menu_key(ch, 0, 0);
+}
 
 static int smith_ui_term_wid(void)
 {
@@ -149,6 +176,36 @@ static int smith_ui_term_hgt(void)
         return hgt;
 
     return (Term && (Term->hgt > 0)) ? Term->hgt : 24;
+}
+
+static bool smith_ui_portrait_layout(void)
+{
+    return sdl_mobile_portrait_layout_active();
+}
+
+static int smith_ui_content_bottom_row(void)
+{
+    int bottom = smith_ui_term_hgt() - 1
+        - sdl_touch_menu_button_reserved_rows();
+
+    /* Keyboard/controller Smithing uses the same dedicated bottom prompt row
+     * as Inventory and Abilities.  Touch-only layouts use their floating
+     * Exit/Back button instead and retain the extra content row. */
+    if (!sdl_touch_only_device_active())
+        bottom--;
+
+    return MAX(0, bottom);
+}
+
+static int smith_ui_prompt_row(void)
+{
+    return MAX(0, smith_ui_term_hgt() - 1
+        - sdl_touch_menu_button_reserved_rows());
+}
+
+static int smith_ui_primary_submenu_col(void)
+{
+    return smith_ui_portrait_layout() ? COL_SMT1 : COL_SMT2_LANDSCAPE;
 }
 
 static bool smith_ui_compact_width(void)
@@ -314,18 +371,14 @@ static int smith_ui_dense_row0(void)
     return smith_ui_compact_height() ? 1 : 2;
 }
 
-static int smith_ui_dense_row(int index0)
-{
-    return smith_ui_dense_row0() + index0;
-}
-
-static int smith_ui_dense_highlight_row(int highlight)
-{
-    return smith_ui_dense_row0() + highlight - 1;
-}
-
 static int smith_ui_cost_title_row(void)
 {
+    if (smith_ui_portrait_layout()
+        && smith_ui_cost_title_row_override >= 0)
+    {
+        return smith_ui_cost_title_row_override;
+    }
+
     return smith_ui_compact_height() ? 6 : 8;
 }
 
@@ -342,12 +395,25 @@ static int smith_ui_desc_col(void)
 static void smith_ui_reset_description_state(void)
 {
     smith_ui_last_desc_row = -1;
+    smith_ui_cost_title_row_override = -1;
+}
+
+static void smith_ui_wipe_active_panel(int col)
+{
+    if (smith_ui_portrait_layout())
+    {
+        Term_clear();
+        smith_ui_reset_description_state();
+        return;
+    }
+
+    wipe_screen_from(col);
 }
 
 static void smith_ui_clear_from_row(int row)
 {
     int wid = smith_ui_term_wid();
-    int hgt = smith_ui_term_hgt();
+    int hgt = smith_ui_content_bottom_row() + 1;
 
     if (row < 0)
         row = 0;
@@ -358,12 +424,23 @@ static void smith_ui_clear_from_row(int row)
         Term_erase(0, y, wid);
 }
 
+static void smith_ui_draw_horizontal_divider(int row)
+{
+    int wid = smith_ui_term_wid();
+
+    if (row < 0 || row > smith_ui_content_bottom_row())
+        return;
+
+    for (int x = 0; x < wid; x++)
+        Term_putch(x, row, TERM_L_DARK, '-');
+}
+
 static int smith_ui_used_bottom_row(void)
 {
     if (!Term || !Term->scr)
         return 0;
 
-    for (int y = smith_ui_term_hgt() - 1; y >= 0; y--)
+    for (int y = smith_ui_content_bottom_row(); y >= 0; y--)
     {
         for (int x = 0; x < smith_ui_term_wid(); x++)
         {
@@ -386,7 +463,7 @@ static int smith_ui_min_description_row(void)
 
 static int smith_ui_description_row_for_lines(int lines)
 {
-    int hgt = smith_ui_term_hgt();
+    int hgt = smith_ui_content_bottom_row() + 1;
     int min_row = smith_ui_min_description_row();
     int row;
 
@@ -406,6 +483,9 @@ static int smith_ui_description_row_for_lines(int lines)
 static int smith_ui_weight_col(void)
 {
     int col = smith_ui_cost_col() - 10;
+
+    if (smith_ui_portrait_layout())
+        return -1;
 
     if (col <= COL_SMT2 + 16)
         return -1;
@@ -520,6 +600,9 @@ static void smith_ui_draw_fitted(int col, int row, int width, byte attr,
 {
     char fitted[180];
 
+    if (row < 0 || row > smith_ui_content_bottom_row())
+        return;
+
     width = smith_ui_safe_width(col, width);
     if (width <= 0)
         return;
@@ -535,9 +618,117 @@ static void smith_ui_put_fitted(int col, int row, int width, byte attr, cptr tex
     smith_ui_draw_fitted(col, row, width, attr, text, true);
 }
 
+/*
+ * Draw an object's title without letting a long quantity/name run into its
+ * combat statistics.  The story font packs text by pixel width, while the
+ * terminal still lays out each field in columns.  Keeping the name and the
+ * suffix in separate spans gives the statistics their own protected region.
+ */
+static void smith_ui_put_object_title(int col, int row, int width, byte attr,
+    cptr description, cptr weight)
+{
+    char name[160];
+    char suffix[160];
+    char fitted_name[160];
+    char fitted_suffix[160];
+    char fitted_weight[64];
+    const char* suffix_start = NULL;
+    int name_len = 0;
+    int suffix_width;
+    int weight_width;
+    int name_width;
+    int name_gap = 1;
+    int suffix_weight_gap = 3;
+    int name_display_width;
+
+    if (!description)
+        description = "";
+    if (!weight)
+        weight = "";
+
+    /* Combat/protection/pval details begin after a space and one of these
+     * delimiters.  Keep the delimiter with the suffix, but draw that suffix
+     * immediately after the item name rather than at the far edge of the
+     * description line.
+     */
+    for (const char* p = description; *p; p++)
+    {
+        if ((p > description) && (p[-1] == ' ')
+            && strchr("([{<", *p))
+        {
+            suffix_start = p;
+            break;
+        }
+    }
+
+    if (!suffix_start)
+        suffix_start = description + strlen(description);
+
+    name_len = (int)(suffix_start - description);
+    if (suffix_start < description + strlen(description))
+        name_len--;
+    if (name_len >= (int)sizeof(name))
+        name_len = (int)sizeof(name) - 1;
+    SDL_memcpy(name, description, (size_t)name_len);
+    name[name_len] = '\0';
+
+    SDL_strlcpy(suffix, suffix_start, sizeof(suffix));
+
+    width = smith_ui_safe_width(col, width);
+    if (width <= 0)
+        return;
+
+    suffix_width = utf8_display_width_n(suffix, (int)strlen(suffix));
+    weight_width = utf8_display_width_n(weight, (int)strlen(weight));
+
+    if (suffix_width <= 0)
+        name_gap = 0;
+    if (weight_width <= 0)
+        suffix_weight_gap = 0;
+
+    /* Keep the stats and weight in the same inline sequence as the original
+     * object description.  Only the name is shortened when the fields
+     * compete for space, so the shield's combat/protection values remain
+     * visible. */
+    name_width = width - suffix_width - weight_width
+        - name_gap - suffix_weight_gap;
+    if (name_width < 1)
+    {
+        name_width = 1;
+        name_gap = 0;
+        suffix_weight_gap = 0;
+        suffix_width = MIN(suffix_width, MAX(0, width - name_width));
+        weight_width = MIN(weight_width,
+            MAX(0, width - name_width - suffix_width));
+    }
+
+    smith_ui_fit_text(fitted_name, sizeof(fitted_name), name, name_width);
+    smith_ui_fit_text(fitted_suffix, sizeof(fitted_suffix), suffix,
+        suffix_width);
+    smith_ui_fit_text(fitted_weight, sizeof(fitted_weight), weight,
+        weight_width);
+
+    name_display_width = utf8_display_width_n(fitted_name,
+        (int)strlen(fitted_name));
+    smith_ui_put_fitted(col, row, name_display_width, attr, fitted_name);
+    if (name_gap > 0)
+        Term_erase(col + name_display_width, row, name_gap);
+    if (suffix_width > 0)
+        smith_ui_put_fitted(col + name_display_width + name_gap, row,
+            suffix_width, attr,
+            fitted_suffix);
+    if (weight_width > 0)
+        smith_ui_put_fitted(col + name_display_width + name_gap
+                + suffix_width + suffix_weight_gap,
+            row, weight_width, attr, fitted_weight);
+}
+
 static void smith_ui_fill_row(int col, int row, int width, byte attr)
 {
     char fill[180];
+
+    if (row < 0 || row > smith_ui_content_bottom_row())
+        return;
 
     width = smith_ui_safe_width(col, width);
     if (width <= 0)
@@ -626,6 +817,9 @@ static int smith_ui_next_column_after(int col)
 {
     int next_col = smith_ui_term_wid();
 
+    if (smith_ui_portrait_layout())
+        return next_col;
+
     if (col < COL_SMT2)
         next_col = COL_SMT2;
     else if (col < COL_SMT3)
@@ -664,6 +858,9 @@ static void smith_ui_put_icon_menu_row(int choice, int col, int row,
     int row_w = smith_ui_menu_row_width(col);
     int label_w = row_w - (label_col - prefix_col);
     byte attr = selected ? smith_ui_selected_attr(base_attr) : base_attr;
+
+    if (row < 0 || row > smith_ui_content_bottom_row())
+        return;
 
     if (selected)
         indexed_menu_focus_prefix(prefix, sizeof(prefix), choice - 1);
@@ -716,15 +913,19 @@ static int smith_ui_put_wrapped(int col, int row, int width, int max_lines,
 
             if (line_len == 0)
             {
-                int copy_len = word_len;
+                int copy_len = smith_ui_utf8_prefix_len(word, width);
+
+                if (copy_len <= 0 || copy_len > word_len)
+                    copy_len = word_len;
                 if (copy_len >= (int)sizeof(line))
-                    copy_len = (int)sizeof(line) - 1;
+                    copy_len = utf8_safe_prefix_len(
+                        word, (int)sizeof(line) - 1);
                 SDL_memcpy(line, word, (size_t)copy_len);
                 line[copy_len] = '\0';
                 line_len = (int)strlen(line);
-                s += word_len;
+                s += copy_len;
             }
-            else if (line_len + 1 + word_len < width
+            else if (line_len + 1 + word_len <= width
                 && line_len + 1 + word_len < (int)sizeof(line))
             {
                 line[line_len++] = ' ';
@@ -757,7 +958,8 @@ static int smith_ui_put_wrapped(int col, int row, int width, int max_lines,
 
 static void smith_ui_put_cost_line(int index0, byte attr, cptr text)
 {
-    int col = smith_ui_cost_col() + 2;
+    int col = smith_ui_portrait_layout() ? COL_SMT1
+                                         : smith_ui_cost_col() + 2;
 
     smith_ui_put_fitted(col, smith_ui_cost_item_row(index0),
         smith_ui_line_width(col), attr, text);
@@ -765,25 +967,57 @@ static void smith_ui_put_cost_line(int index0, byte attr, cptr text)
 
 static int smith_ui_column_width(int col);
 
-static void smith_ui_put_menu_label(int col, int row, byte attr, cptr label)
+static void smith_ui_put_menu_row(int choice, int col, int row,
+    byte base_attr, cptr label, bool selected)
 {
-    if (!indexed_menu_letters_enabled())
-        smith_ui_put_fitted(indexed_menu_prefix_col(col), row, 2, attr, "  ");
-
-    smith_ui_put_fitted(col, row, smith_ui_column_width(col), attr, label);
-}
-
-static void smith_ui_register_menu_row(int choice, int col, int row, cptr label)
-{
+    char prefix[8];
     int start_col = indexed_menu_prefix_col(col);
     int width = smith_ui_menu_row_width(col);
+    int label_width = width - (col - start_col);
+    byte attr = selected ? smith_ui_selected_attr(base_attr) : base_attr;
 
-    (void)label;
+    if (row < 0 || row > smith_ui_content_bottom_row())
+        return;
 
     if (width < 1)
         width = 1;
+    if (label_width < 1)
+        label_width = 1;
 
+    Term_erase(start_col, row, width);
+    if (selected)
+        smith_ui_fill_row(start_col, row, width, attr);
+
+    if (!indexed_menu_letters_enabled())
+    {
+        if (selected)
+            indexed_menu_focus_prefix(prefix, sizeof(prefix), choice - 1);
+        else
+            indexed_menu_normal_prefix(prefix, sizeof(prefix), choice - 1);
+        smith_ui_draw_fitted(start_col, row, 2, attr, prefix, false);
+    }
+
+    smith_ui_draw_fitted(col, row, label_width, attr, label, false);
     ui_menu_click_add(choice, start_col, row, width);
+}
+
+/*
+ * Match the abilities menu's pointer contract: pointing/first tapping moves
+ * the highlight, while activating an already-highlighted row confirms it.
+ * Keyboard and controller confirmations do not pass through this helper.
+ */
+static bool smith_ui_pointer_choice_confirms(
+    int choice, int action, int* highlight)
+{
+    bool same_choice;
+
+    if (!highlight)
+        return false;
+
+    same_choice = (*highlight == choice);
+    *highlight = choice;
+
+    return action != UI_MENU_CLICK_HOVER && same_choice;
 }
 
 static void smith_ui_add_back_click_target(int col, int row, cptr text)
@@ -792,27 +1026,138 @@ static void smith_ui_add_back_click_target(int col, int row, cptr text)
     ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "ESC");
     ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "back");
     ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "return");
+    ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "exit");
 }
 
-static void smith_ui_begin_touch_scroll_area(void)
+static void smith_ui_draw_navigation_prompt(bool root_menu)
 {
-    int bottom_row = smith_ui_term_hgt() - 2;
+    char prompt[48];
+    int row;
+
+    if (sdl_touch_only_device_active())
+        return;
+
+    row = smith_ui_prompt_row();
+    if (steamdeck_controls_active())
+    {
+        char back_label[16];
+
+        controller_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        strnfmt(prompt, sizeof(prompt), "[%s] %s", back_label,
+            root_menu ? "Exit" : "Back");
+    }
+    else
+    {
+        strnfmt(prompt, sizeof(prompt), "Esc %s",
+            root_menu ? "Exit" : "Back");
+    }
+
+    Term_erase(0, row, smith_ui_term_wid());
+    Term_putstr(0, row, smith_ui_term_wid(), TERM_SLATE, prompt);
+    smith_ui_add_back_click_target(0, row, prompt);
+}
+
+static void smith_ui_begin_touch_scroll_area(bool root_menu)
+{
+    int bottom_row = smith_ui_content_bottom_row();
 
     if (bottom_row < 1)
         bottom_row = 1;
 
-    /* Every smithing menu calls this right after ui_menu_click_begin(), so it
-     * is the single chokepoint that enables the floating touch Exit button for
-     * all of them (root screen exits smithing; sub-screens go back a level). */
-    ui_menu_click_set_touch_exit_button(true);
+    /* Keep the floating navigation control contextual: the root leaves
+     * Smithing, while every nested screen returns by its normal Back action. */
+    if (root_menu)
+        ui_menu_click_set_touch_exit_button(true);
+    else
+        ui_menu_click_add_touch_button(
+            SMITH_CLICK_BACK, "Back", TERM_DARK);
 
     ui_scroll_area_begin(1, bottom_row, SDL_TOUCH_MENU_CATEGORY_OTHER);
     ui_scroll_area_set_keys('8', '2', '6', '4');
+
+    /* Register a valid zero-range target immediately.  Long lists replace this
+     * with their own persistent viewport below.  Short Smithing screens still
+     * consume touch drags without translating them into cursor movement. */
+    if (sdl_touch_only_device_active())
+        ui_scroll_area_set_offset_target(&smith_ui_touch_drag_sink, 0);
+}
+
+static int smith_ui_list_bottom_row(int first_row, bool reserve_detail)
+{
+    int bottom = smith_ui_content_bottom_row();
+    int legacy_bottom = MAX_SMITHING_TVALS + 2;
+
+    if (reserve_detail)
+        bottom -= smith_ui_portrait_layout() ? 8 : 5;
+    if (bottom > legacy_bottom)
+        bottom = legacy_bottom;
+    if (bottom < first_row)
+        bottom = first_row;
+
+    return bottom;
+}
+
+static int smith_ui_configure_list_view(smith_ui_scroll_id id, int count,
+    int highlight, int first_row, int last_row)
+{
+    int visible;
+    int max_top;
+    int* top;
+    bool touch_only = sdl_touch_only_device_active();
+
+    if (id < 0 || id >= SMITH_SCROLL_MAX)
+        return 0;
+
+    visible = MAX(1, last_row - first_row + 1);
+    max_top = MAX(0, count - visible);
+    top = &smith_ui_scroll_top[id];
+
+    if (touch_only)
+        (void)ui_scroll_area_take_touch_scrolled();
+
+    if (*top < 0)
+        *top = 0;
+    if (*top > max_top)
+        *top = max_top;
+
+    /* Inventory-style touch lists are viewport-driven: an off-screen selection
+     * must not pull the list back after the finger drags it.  Non-touch control
+     * schemes continue to keep keyboard/controller highlights visible. */
+    if (!touch_only && count > 0)
+    {
+        int selected = MAX(0, MIN(count - 1, highlight - 1));
+
+        if (selected < *top)
+            *top = selected;
+        else if (selected >= *top + visible)
+            *top = selected - visible + 1;
+    }
+
+    if (touch_only)
+        ui_scroll_area_set_offset_target(top, max_top);
+
+    return *top;
+}
+
+static int smith_ui_visible_highlight_row(int highlight, int top,
+    int first_row, int last_row)
+{
+    int selected = highlight - 1;
+    int visible = MAX(1, last_row - first_row + 1);
+
+    if (selected < top || selected >= top + visible)
+        return -1;
+
+    return first_row + selected - top;
 }
 
 static int smith_ui_column_width(int col)
 {
     int next_col = smith_ui_term_wid();
+
+    if (smith_ui_portrait_layout())
+        return smith_ui_line_width(col);
 
     if (col < COL_SMT2)
         next_col = COL_SMT2;
@@ -848,20 +1193,7 @@ static void smith_ui_put_header(int col, int row, cptr label)
 static void smith_ui_put_section_header(int col, int row, cptr label)
 {
     smith_ui_put_header(col, row, label);
-    smith_ui_add_back_click_target(COL_SMT1, 1, SMITH_ROOT_BACK_LABEL);
-}
-
-static void smith_ui_put_menu_prefix(
-    int col, int row, int index, byte attr, bool focused)
-{
-    char buf[80];
-
-    if (focused)
-        indexed_menu_focus_prefix(buf, sizeof(buf), index);
-    else
-        indexed_menu_normal_prefix(buf, sizeof(buf), index);
-
-    Term_putstr(indexed_menu_prefix_col(col), row, -1, attr, buf);
+    smith_ui_draw_navigation_prompt(false);
 }
 
 /*
@@ -1815,12 +2147,15 @@ void move_displayed_highlight(
 bool melt_metal_item(int item_num)
 {
     int number = 0;
-    int item, i;
     u32b f1, f2, f3;
+    int total = player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD);
 
-    for (item = 0; item < INVEN_TOTAL; item++)
+    for (int ordinal = 0; ordinal < total; ordinal++)
     {
-        object_type* o_ptr = &inventory[item];
+        int item = ordinal < player_pack_entry_count()
+            ? player_pack_entry_handle_at(ordinal)
+            : INVEN_WIELD + ordinal - player_pack_entry_count();
+        object_type* o_ptr = player_inventory_object(item);
 
         object_flags(o_ptr, &f1, &f2, &f3);
 
@@ -1832,36 +2167,16 @@ bool melt_metal_item(int item_num)
 
         if (number == item_num)
         {
-            int slots_needed = o_ptr->weight / 99;
-            int empty_slots = 0;
-
-            // Equipments needs an extra slot
-            if (item >= INVEN_WIELD)
-                slots_needed++;
-
-            // Count empty slots
-            for (i = INVEN_PACK - 1; i > 0; i--)
             {
-                if (!(&inventory[i])->k_idx)
-                    empty_slots++;
+                char o_name[80];
+                char prompt[160];
+
+                object_desc(o_name, sizeof(o_name), o_ptr, false, 4);
+                strnfmt(prompt, sizeof(prompt), "Melt %s down? ", o_name);
+                if (!get_check(prompt))
+                    return (false);
             }
 
-            if (empty_slots < slots_needed)
-            {
-                msg_print("You do not have enough room in your pack.");
-                if (slots_needed - empty_slots == 1)
-                {
-                    msg_print("You must free up another slot.");
-                }
-                else
-                {
-                    msg_format("You must free up %d more slots.",
-                        slots_needed - empty_slots);
-                }
-                return (false);
-            }
-
-            if (get_check("Are you sure you wish to melt this item down? "))
             {
                 int slot;
                 object_type* i_ptr;
@@ -1912,7 +2227,7 @@ bool melt_metal_item(int item_num)
 
                     // give it to the player
                     slot = inven_carry(i_ptr2, true);
-                    if ((slot >= 0) && (slot < INVEN_TOTAL))
+                    if (player_inventory_handle_is_carried(slot))
                     {
                         inven_item_optimize(slot);
                         inven_item_describe(slot);
@@ -1927,7 +2242,7 @@ bool melt_metal_item(int item_num)
 
                 // now give the last stack of mithril to the player
                 slot = inven_carry(i_ptr, true);
-                if ((slot >= 0) && (slot < INVEN_TOTAL))
+                if (player_inventory_handle_is_carried(slot))
                 {
                     inven_item_optimize(slot);
                     inven_item_describe(slot);
@@ -1941,9 +2256,6 @@ bool melt_metal_item(int item_num)
 
                 return (true);
             }
-
-            else
-                return (false);
         }
     }
 
@@ -1953,12 +2265,15 @@ bool melt_metal_item(int item_num)
 static int meltable_metal_items_carried(void)
 {
     int number = 0;
-    int item;
     u32b f1, f2, f3;
+    int total = player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD);
 
-    for (item = 0; item < INVEN_TOTAL; item++)
+    for (int ordinal = 0; ordinal < total; ordinal++)
     {
-        object_type* o_ptr = &inventory[item];
+        int item = ordinal < player_pack_entry_count()
+            ? player_pack_entry_handle_at(ordinal)
+            : INVEN_WIELD + ordinal - player_pack_entry_count();
+        object_type* o_ptr = player_inventory_object(item);
 
         object_flags(o_ptr, &f1, &f2, &f3);
 
@@ -1978,9 +2293,9 @@ static int metal_carried(byte sval)
     int w = 0;
     int item;
 
-    for (item = 0; item < INVEN_WIELD; item++)
+    for (item = 0; item < player_pack_entry_count(); item++)
     {
-        object_type* o_ptr = &inventory[item];
+        object_type* o_ptr = player_pack_entry_at(item);
 
         if ((o_ptr->tval == TV_METAL) && (o_ptr->sval == sval))
         {
@@ -2003,20 +2318,32 @@ int star_iron_carried(void)
 
 static void use_metal(byte sval, int cost)
 {
-    int item;
-
-    for (item = INVEN_WIELD - 1; item >= 0 && cost > 0; item--)
+    while (cost > 0)
     {
-        object_type* o_ptr = &inventory[item];
+        int item = -1;
+        object_type* o_ptr = NULL;
 
-        if ((o_ptr->tval == TV_METAL) && (o_ptr->sval == sval))
+        for (int ordinal = player_pack_entry_count() - 1; ordinal >= 0;
+             ordinal--)
         {
-            int use = MIN(o_ptr->number, cost);
-            inven_item_increase(item, -use);
-            inven_item_describe(item);
-            inven_item_optimize(item);
-            cost -= use;
+            object_type* candidate = player_pack_entry_at(ordinal);
+
+            if (candidate->tval == TV_METAL && candidate->sval == sval)
+            {
+                item = player_pack_entry_handle_at(ordinal);
+                o_ptr = candidate;
+                break;
+            }
         }
+
+        if (!o_ptr)
+            break;
+
+        int use = MIN(o_ptr->number, cost);
+        inven_item_increase(item, -use);
+        inven_item_describe(item);
+        inven_item_optimize(item);
+        cost -= use;
     }
 }
 
@@ -2064,6 +2391,50 @@ int forge_bonus(int y, int x)
         return (3);
     else
         return (7);
+}
+
+static int smith_find_available_artefact_slot(void)
+{
+    if (!a_info || !z_info)
+        return -1;
+
+    for (int a_idx = z_info->art_rand_max;
+         a_idx < z_info->art_self_made_max - 2; a_idx++)
+    {
+        artefact_type* a_ptr = &a_info[a_idx];
+
+        if (a_ptr->tval == 0 && a_ptr->sval == 0 && !a_ptr->name[0])
+            return a_idx;
+    }
+
+    return -1;
+}
+
+static bool smith_used_aule_forge_for_item(int saved_difficulty)
+{
+    int effective_skill;
+
+    if (!p_ptr || !p_ptr->have_ability[S_SPC][SPC_AULE])
+        return false;
+
+    effective_skill = p_ptr->skill_use[S_SMT]
+        + forge_bonus(p_ptr->py, p_ptr->px);
+    return saved_difficulty > effective_skill;
+}
+
+static bool smith_used_masterpiece_for_item(int saved_difficulty)
+{
+    int effective_skill;
+
+    if (!p_ptr || p_ptr->have_ability[S_SPC][SPC_AULE]
+        || !p_ptr->active_ability[S_SMT][SMT_MASTERPIECE])
+    {
+        return false;
+    }
+
+    effective_skill = p_ptr->skill_use[S_SMT]
+        + forge_bonus(p_ptr->py, p_ptr->px);
+    return saved_difficulty > effective_skill;
 }
 
 /*
@@ -2833,7 +3204,7 @@ int object_difficulty(object_type* o_ptr)
     case INVEN_HANDS:
     case INVEN_FEET:
     case INVEN_QUIVER1:
-    case INVEN_QUIVER2:
+    case INVEN_BELT:
     case INVEN_HORN:
     {
         dif_mult += 20;
@@ -2987,7 +3358,8 @@ void wipe_object_description(void)
  */
 void prt_object_description(void)
 {
-    char o_desc[80];
+    char o_desc[160];
+    char weight_desc[32];
     char buf[80];
     char base_desc_buf[2048];
     cptr base_desc;
@@ -3026,7 +3398,7 @@ void prt_object_description(void)
     if (wrap_col <= desc_col + 1)
         wrap_col = desc_col + 2;
     min_desc_row = smith_ui_min_description_row();
-    max_lines = smith_ui_term_hgt() - min_desc_row;
+    max_lines = smith_ui_content_bottom_row() - min_desc_row + 1;
 
     if (smith_o_ptr->number > 1)
         display_flag = true;
@@ -3034,11 +3406,9 @@ void prt_object_description(void)
         display_flag = false;
 
     object_desc(o_desc, sizeof(o_desc), smith_o_ptr, display_flag, 2);
-
-    SDL_strlcat(o_desc,
-        format("   %d.%d lb", smith_o_ptr->weight * smith_o_ptr->number / 10,
-            (smith_o_ptr->weight * smith_o_ptr->number) % 10),
-        sizeof(o_desc));
+    strnfmt(weight_desc, sizeof(weight_desc), "%d.%d lb",
+        smith_o_ptr->weight * smith_o_ptr->number / 10,
+        (smith_o_ptr->weight * smith_o_ptr->number) % 10);
 
     base_desc = object_lore_select_base_text(smith_o_ptr, base_desc_buf,
         sizeof(base_desc_buf));
@@ -3052,6 +3422,8 @@ void prt_object_description(void)
         smith_o_ptr, base_desc, true, desc_col, wrap_col);
 
     show_info = (info_lines > 0);
+    if (progress_lines + header_lines + info_lines > max_lines)
+        show_info = false;
     if (base_desc && base_desc[0])
     {
         int full_body_lines = show_info ? lore_info_lines : lore_lines;
@@ -3064,7 +3436,7 @@ void prt_object_description(void)
     }
 
     body_lines = show_lore ? (show_info ? lore_info_lines : lore_lines)
-                           : info_lines;
+                           : (show_info ? info_lines : 0);
     total_lines = progress_lines + header_lines + body_lines;
 
     desc_row = smith_ui_description_row_for_lines(total_lines);
@@ -3080,13 +3452,14 @@ void prt_object_description(void)
             p_ptr->smithing_leftover);
         smith_ui_put_fitted(desc_col, desc_row, desc_width, TERM_L_BLUE, buf);
         desc_row++;
-        if (desc_row >= smith_ui_term_hgt())
+        if (desc_row > smith_ui_content_bottom_row())
             return;
     }
 
-    smith_ui_put_fitted(desc_col, desc_row, desc_width, TERM_L_WHITE, o_desc);
+    smith_ui_put_object_title(desc_col, desc_row, desc_width, TERM_L_WHITE,
+        o_desc, weight_desc);
     desc_row++;
-    if (desc_row >= smith_ui_term_hgt())
+    if (desc_row > smith_ui_content_bottom_row())
         return;
 
     Term_gotoxy(desc_col, desc_row);
@@ -3161,11 +3534,21 @@ void prt_object_difficulty(void)
     byte attr;
     bool affordable = true;
     bool compact = smith_ui_compact_width();
-    int cost_title_row = smith_ui_cost_title_row();
+    bool portrait = smith_ui_portrait_layout();
+    int cost_title_row;
+    int measure_row = -1;
 
     // abort if there is no object to display
     if (smith_o_ptr->tval == 0)
         return;
+
+    if (portrait)
+    {
+        int divider_row = smith_ui_used_bottom_row() + 1;
+
+        smith_ui_draw_horizontal_divider(divider_row);
+        measure_row = divider_row + 1;
+    }
 
     // display difficulty information
     if (too_difficult(smith_o_ptr))
@@ -3173,8 +3556,11 @@ void prt_object_difficulty(void)
     else
         attr = TERM_SLATE;
 
-    smith_ui_put_fitted(COL_SMT4, 2, smith_ui_line_width(COL_SMT4), attr,
-        "Difficulty:");
+    if (!portrait)
+    {
+        smith_ui_put_fitted(COL_SMT4, 2, smith_ui_line_width(COL_SMT4), attr,
+            "Difficulty:");
+    }
 
     // change colour if smithing drain is required
     if ((smithing_cost.drain > 0)
@@ -3186,17 +3572,35 @@ void prt_object_difficulty(void)
     // calculate difficulty (and costs)
     dif = object_difficulty(smith_o_ptr);
 
-    sprintf(buf, "%d", dif);
-    smith_ui_put_fitted(COL_SMT4 + 2, 4, 4, attr, buf);
+    if (portrait)
+    {
+        int used;
 
-    if (compact)
-        strnfmt(buf, sizeof(buf), "/%d",
+        strnfmt(buf, sizeof(buf), "Measure   Difficulty: %d / %d", dif,
             p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
+        used = smith_ui_put_wrapped(COL_SMT1, measure_row,
+            smith_ui_line_width(COL_SMT1),
+            MAX(1, smith_ui_content_bottom_row() - measure_row + 1), attr,
+            buf);
+        smith_ui_cost_title_row_override = measure_row + MAX(1, used);
+    }
     else
-        strnfmt(buf, sizeof(buf), "(max %d)",
-            p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
-    smith_ui_put_fitted(COL_SMT4 + (compact ? 4 : 5), 4,
-        smith_ui_line_width(COL_SMT4 + (compact ? 4 : 5)), TERM_L_DARK, buf);
+    {
+        sprintf(buf, "%d", dif);
+        smith_ui_put_fitted(COL_SMT4 + 2, 4, 4, attr, buf);
+
+        if (compact)
+            strnfmt(buf, sizeof(buf), "/%d",
+                p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
+        else
+            strnfmt(buf, sizeof(buf), "(max %d)",
+                p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
+        smith_ui_put_fitted(COL_SMT4 + (compact ? 4 : 5), 4,
+            smith_ui_line_width(COL_SMT4 + (compact ? 4 : 5)), TERM_L_DARK,
+            buf);
+    }
+
+    cost_title_row = smith_ui_cost_title_row();
 
     // display cost information
     if (smithing_cost.weaponsmith)
@@ -3248,7 +3652,7 @@ void prt_object_difficulty(void)
         {
             sprintf(buf, "%d Uses", smithing_cost.uses);
         }
-        if (compact)
+        if (compact || portrait)
         {
             strnfmt(buf, sizeof(buf), "%d/%d uses", smithing_cost.uses,
                 forge_uses(p_ptr->py, p_ptr->px));
@@ -3415,8 +3819,8 @@ void prt_object_difficulty(void)
         attr = TERM_SLATE;
     else
         attr = TERM_L_DARK;
-    smith_ui_put_fitted(COL_SMT4, cost_title_row,
-        smith_ui_line_width(COL_SMT4), attr, "Cost:");
+    smith_ui_put_fitted(portrait ? COL_SMT1 : COL_SMT4, cost_title_row,
+        smith_ui_line_width(portrait ? COL_SMT1 : COL_SMT4), attr, "Cost:");
 }
 
 /*
@@ -3977,15 +4381,17 @@ static void pay_smithing_cost_struct(const smithing_cost_type* cost)
 }
 
 // Determine default stack sizes for smithing-created items.
-// Normal: arrows 24/18/12, daggers & spears 3/2/1 (normal/enchanted/artefact).
-// This keeps arrows and throwable weapons in sensible stack counts.
+// Normal: arrows 24/18/12, hand axes and spears 3/2/1, daggers 5/3/1
+// (normal/enchanted/artefact).  This keeps arrows and throwable weapons in
+// sensible stack counts.
 static byte smith_default_stack_size(const object_type* o_ptr)
 {
     bool is_arrow = (o_ptr->tval == TV_ARROW);
     bool is_spear = (o_ptr->tval == TV_POLEARM) && (o_ptr->sval == SV_SPEAR);
+    bool is_hand_axe = (o_ptr->tval == TV_POLEARM) && (o_ptr->sval == SV_HAND_AXE);
     bool is_dagger = (o_ptr->tval == TV_SWORD) && (o_ptr->sval == SV_DAGGER);
 
-    if (!(is_arrow || is_spear || is_dagger))
+    if (!(is_arrow || is_spear || is_hand_axe || is_dagger))
     {
         return (o_ptr->number ? o_ptr->number : 1);
     }
@@ -4001,8 +4407,8 @@ static byte smith_default_stack_size(const object_type* o_ptr)
     }
 
     if (is_artifact) return 1;
-    if (is_enchanted) return 2;
-    return 3;
+    if (is_enchanted) return is_dagger ? 3 : 2;
+    return is_dagger ? 5 : 3;
 }
 
 /*
@@ -4040,28 +4446,34 @@ int create_sval_menu_aux(int tval, int* highlight)
     int i, num;
     bool valid[20];
     int sval[20];
+    char names[20][80];
+    object_type icons[20];
     int list_col = COL_SMT3;
     int title_row = MAX(0, smith_ui_dense_row0() - 1);
+    int first_row = smith_ui_dense_row0();
+    int last_row = smith_ui_list_bottom_row(first_row, true);
+    int top;
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(false);
 
     // clear the right of the screen
-    wipe_screen_from(indexed_menu_prefix_col(list_col));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(list_col));
     smith_ui_put_section_header(list_col, title_row, "Subtype");
 
     /* We have to search the whole itemlist. */
     for (num = 0, i = 1; i < z_info->k_max; i++)
     {
         object_kind* k_ptr = &k_info[i];
-        char name[80];
-        object_type icon;
 
         /* Analyze matching items */
         if (k_ptr->tval == tval)
         {
+            if (num >= (int)N_ELEMENTS(sval))
+                break;
+
             /* Skip instant artefact item types */
             if (k_ptr->flags3 & (TR3_INSTA_ART))
                 continue;
@@ -4085,11 +4497,11 @@ int create_sval_menu_aux(int tval, int* highlight)
             }
 
             /* Get the "name" of object "i" */
-            strip_name(name, i);
+            strip_name(names[num], i);
 
             // make a simple version of the object
             create_base_object(tval, k_ptr->sval);
-            object_copy(&icon, smith_o_ptr);
+            object_copy(&icons[num], smith_o_ptr);
 
             // Check whether it is a valid choice for creating
             if (affordable(smith_o_ptr))
@@ -4097,17 +4509,30 @@ int create_sval_menu_aux(int tval, int* highlight)
             else
                 valid[num] = false;
 
-            /* Print it */
-            smith_ui_put_icon_menu_row(num + 1, list_col,
-                smith_ui_dense_row(num), valid[num] ? TERM_WHITE : TERM_SLATE,
-                name, &icon, *highlight == num + 1);
-
             /* Remember the object sval */
             sval[num] = k_ptr->sval;
 
             // count the applicable items
             num++;
         }
+    }
+
+    if (num <= 0)
+        return -1;
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > num)
+        *highlight = num;
+
+    top = smith_ui_configure_list_view(SMITH_SCROLL_SVAL, num, *highlight,
+        first_row, last_row);
+    for (i = top; i < num && i < top + (last_row - first_row + 1); i++)
+    {
+        int row = first_row + i - top;
+
+        smith_ui_put_icon_menu_row(i + 1, list_col, row,
+            valid[i] ? TERM_WHITE : TERM_SLATE, names[i], &icons[i],
+            *highlight == i + 1);
     }
 
     // make a simple version of the object
@@ -4124,11 +4549,11 @@ int create_sval_menu_aux(int tval, int* highlight)
 
     /* Place cursor at current choice */
     Term_gotoxy(indexed_menu_prefix_col(list_col),
-        smith_ui_dense_highlight_row(*highlight));
+        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -4146,9 +4571,11 @@ int create_sval_menu_aux(int tval, int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
+                {
                     return 0;
+                }
                 ch = '\r';
             }
         }
@@ -4158,16 +4585,15 @@ int create_sval_menu_aux(int tval, int* highlight)
         && (ch >= 'a') && (ch <= (char)'a' + num - 1))
     {
         *highlight = (int)ch - 'a' + 1;
-
-        // make a simple version of the object
-        create_base_object(tval, sval[*highlight - 1]);
-
-        return (*highlight);
+        ch = '\r';
     }
 
-    /* Choose current  */
+    /* Materialize the selected row on every confirmation path.  A direct
+     * pointer activation can change the highlight after the preview above was
+     * built, while keyboard/controller navigation redraws before confirming. */
     if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
     {
+        create_base_object(tval, sval[*highlight - 1]);
         return (*highlight);
     }
 
@@ -4248,16 +4674,21 @@ int create_tval_menu_aux(int* highlight)
     char ch;
     int i;
     bool valid[MAX_SMITHING_TVALS];
-    byte valid_attr = TERM_WHITE; // default to soothe compilation warnings
+    bool has_icon[MAX_SMITHING_TVALS];
+    byte row_attr[MAX_SMITHING_TVALS];
+    object_type icons[MAX_SMITHING_TVALS];
     int title_row = MAX(0, smith_ui_dense_row0() - 1);
+    int first_row = smith_ui_dense_row0();
+    int last_row = smith_ui_list_bottom_row(first_row, false);
+    int top;
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(false);
 
     // clear the right of the screen
-    wipe_screen_from(indexed_menu_prefix_col(COL_SMT2));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
     smith_ui_put_section_header(COL_SMT2, title_row, "Type");
 
     // clear bottom of the screen
@@ -4267,11 +4698,18 @@ int create_tval_menu_aux(int* highlight)
     object_wipe(smith_o_ptr);
     smith_clear_alloy_state(&smith_alloy);
 
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > MAX_SMITHING_TVALS)
+        *highlight = MAX_SMITHING_TVALS;
+    top = smith_ui_configure_list_view(SMITH_SCROLL_TVAL,
+        MAX_SMITHING_TVALS, *highlight, first_row, last_row);
+
     for (i = 0; i < MAX_SMITHING_TVALS; i++)
     {
-        object_type icon;
-        bool has_icon = smith_tval_icon(smithing_tvals[i].tval, &icon);
+        byte valid_attr = TERM_WHITE;
 
+        has_icon[i] = smith_tval_icon(smithing_tvals[i].tval, &icons[i]);
         valid[i] = false;
 
         if (smithing_tvals[i].category == CAT_WEAPON)
@@ -4294,10 +4732,16 @@ int create_tval_menu_aux(int* highlight)
             valid_attr = p_ptr->active_ability[S_SMT][SMT_JEWELLER] ? TERM_WHITE
                                                                     : TERM_RED;
         }
+        row_attr[i] = valid[i] ? valid_attr : TERM_L_DARK;
 
-        smith_ui_put_icon_menu_row(i + 1, COL_SMT2, smith_ui_dense_row(i),
-            valid[i] ? valid_attr : TERM_L_DARK, smithing_tvals[i].desc,
-            has_icon ? &icon : NULL, *highlight == i + 1);
+        if (i >= top && i < top + (last_row - first_row + 1))
+        {
+            int row = first_row + i - top;
+
+            smith_ui_put_icon_menu_row(i + 1, COL_SMT2, row,
+                row_attr[i], smithing_tvals[i].desc,
+                has_icon[i] ? &icons[i] : NULL, *highlight == i + 1);
+        }
     }
 
     /* Flush the prompt */
@@ -4305,11 +4749,11 @@ int create_tval_menu_aux(int* highlight)
 
     /* Place cursor at current choice */
     Term_gotoxy(indexed_menu_prefix_col(COL_SMT2),
-        smith_ui_dense_highlight_row(*highlight));
+        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -4327,9 +4771,11 @@ int create_tval_menu_aux(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= MAX_SMITHING_TVALS)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
+                {
                     return 0;
+                }
                 ch = '\r';
             }
         }
@@ -4351,7 +4797,24 @@ int create_tval_menu_aux(int* highlight)
     if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
     {
         if (valid[*highlight - 1])
+        {
+            /* The Type panel remains visible behind Subtype.  Repaint it with
+             * the activated row so a direct click/tap does not leave the old
+             * first-row highlight frozen in the parent screen. */
+            for (i = top;
+                 i < MAX_SMITHING_TVALS
+                     && i < top + (last_row - first_row + 1);
+                 i++)
+            {
+                int row = first_row + i - top;
+
+                smith_ui_put_icon_menu_row(i + 1, COL_SMT2, row,
+                    row_attr[i], smithing_tvals[i].desc,
+                    has_icon[i] ? &icons[i] : NULL, *highlight == i + 1);
+            }
+            Term_fresh();
             return (*highlight);
+        }
         else
             bell("Invalid choice.");
     }
@@ -4630,14 +5093,17 @@ int numbers_menu_aux(int* highlight)
     byte attr[SMT_NUM_MENU_MAX];
     bool valid[SMT_NUM_MENU_MAX];
     bool can_afford[SMT_NUM_MENU_MAX] = { false };
+    const int first_row = 2;
+    const int last_row = smith_ui_list_bottom_row(first_row, true);
+    int top;
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(false);
 
     // clear the right of the screen
-    wipe_screen_from(indexed_menu_prefix_col(COL_SMT2));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
     smith_ui_put_section_header(COL_SMT2, 1, "Adjust");
 
     memset(valid, 0, sizeof(valid));
@@ -4716,6 +5182,13 @@ int numbers_menu_aux(int* highlight)
                            : TERM_L_DARK;
     }
 
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > SMT_NUM_MENU_MAX)
+        *highlight = SMT_NUM_MENU_MAX;
+    top = smith_ui_configure_list_view(SMITH_SCROLL_NUMBERS,
+        SMT_NUM_MENU_MAX, *highlight, first_row, last_row);
+
     {
         static cptr number_menu_labels[SMT_NUM_MENU_MAX] = {
             "increase attack bonus",
@@ -4735,12 +5208,17 @@ int numbers_menu_aux(int* highlight)
 
         for (i = 0; i < SMT_NUM_MENU_MAX; i++)
         {
+            int row;
+
+            if (i < top || i >= top + (last_row - first_row + 1))
+                continue;
+            row = first_row + i - top;
             indexed_menu_entry_label(buf, sizeof(buf), i, number_menu_labels[i]);
-            smith_ui_put_menu_label(COL_SMT2, i + 2, attr[i], buf);
-            smith_ui_register_menu_row(i + 1, COL_SMT2, i + 2, buf);
+            smith_ui_put_menu_row(i + 1, COL_SMT2, row, attr[i], buf,
+                *highlight == i + 1);
         }
     }
-    if (alloy_applicable)
+    if (smith_alloy.type != SMITH_ALLOY_NONE)
     {
         byte info_attr = has_alloy_mastery ? TERM_SLATE : TERM_L_DARK;
         if (!has_alloy_mastery)
@@ -4759,19 +5237,16 @@ int numbers_menu_aux(int* highlight)
                 alloy_weight / 10, alloy_weight % 10, mithril_have / 10,
                 mithril_have % 10, star_iron_have / 10, star_iron_have % 10);
         }
-        smith_ui_put_fitted(COL_SMT2, 15, smith_ui_column_width(COL_SMT2),
-            info_attr, buf);
+        smith_ui_put_wrapped(COL_SMT2, last_row + 1,
+            smith_ui_column_width(COL_SMT2), 2, info_attr, buf);
     }
-    else if (!has_alloy_mastery)
+    else if ((k_info[smith_o_ptr->k_idx].flags3 & (TR3_MITHRIL | TR3_STAR_IRON))
+        && !has_alloy_mastery)
     {
-        smith_ui_put_fitted(COL_SMT2, 15,
-            smith_ui_column_width(COL_SMT2), TERM_L_DARK,
+        smith_ui_put_wrapped(COL_SMT2, last_row + 1,
+            smith_ui_column_width(COL_SMT2), 2, TERM_L_DARK,
             "Alloy requires Alloy mastery.");
     }
-
-    // highlight the label
-    smith_ui_put_menu_prefix(COL_SMT2, *highlight + 1, *highlight - 1,
-        TERM_L_BLUE, true);
 
     // display the object difficulty
     prt_object_difficulty();
@@ -4783,11 +5258,12 @@ int numbers_menu_aux(int* highlight)
     Term_fresh();
 
     /* Place cursor at current choice */
-    Term_gotoxy(2, 1 + *highlight);
+    Term_gotoxy(2,
+        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -4805,9 +5281,11 @@ int numbers_menu_aux(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= SMT_NUM_MENU_MAX)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
+                {
                     return 0;
+                }
                 ch = '\r';
             }
         }
@@ -5115,15 +5593,16 @@ static int smith_bonus_menu_aux(int* highlight)
     byte attr[26];
     int num = smith_collect_bonus_actions(actions, (int)N_ELEMENTS(actions));
     const int first_row = 2;
-    const int max_row = MAX_SMITHING_TVALS + 2;
+    const int max_row = smith_ui_list_bottom_row(first_row, true);
     const int max_visible = max_row - first_row + 1;
+    int top;
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(false);
 
-    wipe_screen_from(indexed_menu_prefix_col(COL_SMT2));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
 
     smith_ui_put_section_header(COL_SMT2, 1, "Bonuses");
 
@@ -5145,16 +5624,10 @@ static int smith_bonus_menu_aux(int* highlight)
     if (*highlight > num)
         *highlight = num;
 
-    int top = 1;
+    top = smith_ui_configure_list_view(SMITH_SCROLL_BONUSES, num, *highlight,
+        first_row, max_row) + 1;
     if (num > max_visible)
     {
-        top = *highlight - max_visible / 2;
-        if (top < 1)
-            top = 1;
-        int max_top = num - max_visible + 1;
-        if (top > max_top)
-            top = max_top;
-
         int end = top + max_visible - 1;
         if (end > num)
             end = num;
@@ -5210,23 +5683,22 @@ static int smith_bonus_menu_aux(int* highlight)
             strnfmt(action_label, sizeof(action_label), "%s %-12s (%+d)",
                 verb, name, value);
             indexed_menu_entry_label(buf, sizeof(buf), i, action_label);
-            smith_ui_put_menu_label(COL_SMT2, row, attr[i], buf);
-            smith_ui_register_menu_row(entry_idx, COL_SMT2, row, buf);
+            smith_ui_put_menu_row(entry_idx, COL_SMT2, row, attr[i], buf,
+                *highlight == entry_idx);
         }
     }
 
-    int hl_row = first_row + (*highlight - top);
-    smith_ui_put_menu_prefix(COL_SMT2, hl_row, *highlight - 1,
-        TERM_L_BLUE, true);
+    int hl_row = smith_ui_visible_highlight_row(
+        *highlight, top - 1, first_row, max_row);
 
     prt_object_difficulty();
     prt_object_description();
 
     Term_fresh();
-    Term_gotoxy(2, hl_row);
+    Term_gotoxy(2, (hl_row >= first_row) ? hl_row : first_row);
 
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -5244,9 +5716,11 @@ static int smith_bonus_menu_aux(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
+                {
                     return 0;
+                }
                 ch = '\r';
             }
         }
@@ -5412,8 +5886,11 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
     int costs = 0;
     byte attr = TERM_SLATE;
     bool compact = smith_ui_compact_width();
+    bool portrait = smith_ui_portrait_layout();
+    int measure_row = -1;
 
-    wipe_screen_from(COL_SMT4);
+    if (!portrait)
+        wipe_screen_from(COL_SMT4);
 
     if (!preview)
         return;
@@ -5421,20 +5898,40 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
     if (!preview->affordable)
         attr = TERM_L_DARK;
 
-    smith_ui_put_fitted(COL_SMT4, 2, smith_ui_line_width(COL_SMT4), attr,
-        "Reforge Diff:");
-    strnfmt(buf, sizeof(buf), "%d", preview->scaled_difficulty);
-    smith_ui_put_fitted(COL_SMT4 + 2, 4, 4, attr, buf);
+    if (portrait)
+    {
+        int divider_row = smith_ui_used_bottom_row() + 1;
 
-    if (compact)
-        strnfmt(buf, sizeof(buf), "+%d raw", preview->raw_delta_difficulty);
+        smith_ui_draw_horizontal_divider(divider_row);
+        measure_row = divider_row + 1;
+        strnfmt(buf, sizeof(buf), "Measure   Reforge: %d (+%d raw)",
+            preview->scaled_difficulty, preview->raw_delta_difficulty);
+        smith_ui_cost_title_row_override = measure_row
+            + MAX(1, smith_ui_put_wrapped(COL_SMT1, measure_row,
+                         smith_ui_line_width(COL_SMT1),
+                         MAX(1, smith_ui_content_bottom_row() - measure_row + 1),
+                         attr, buf));
+    }
     else
-        strnfmt(buf, sizeof(buf), "(+%d raw)", preview->raw_delta_difficulty);
-    smith_ui_put_fitted(COL_SMT4 + (compact ? 4 : 5), 4,
-        smith_ui_line_width(COL_SMT4 + (compact ? 4 : 5)), TERM_L_DARK, buf);
+    {
+        smith_ui_put_fitted(COL_SMT4, 2, smith_ui_line_width(COL_SMT4), attr,
+            "Reforge Diff:");
+        strnfmt(buf, sizeof(buf), "%d", preview->scaled_difficulty);
+        smith_ui_put_fitted(COL_SMT4 + 2, 4, 4, attr, buf);
 
-    smith_ui_put_fitted(COL_SMT4, smith_ui_cost_title_row(),
-        smith_ui_line_width(COL_SMT4),
+        if (compact)
+            strnfmt(buf, sizeof(buf), "+%d raw", preview->raw_delta_difficulty);
+        else
+            strnfmt(buf, sizeof(buf), "(+%d raw)",
+                preview->raw_delta_difficulty);
+        smith_ui_put_fitted(COL_SMT4 + (compact ? 4 : 5), 4,
+            smith_ui_line_width(COL_SMT4 + (compact ? 4 : 5)), TERM_L_DARK,
+            buf);
+    }
+
+    smith_ui_put_fitted(portrait ? COL_SMT1 : COL_SMT4,
+        smith_ui_cost_title_row(),
+        smith_ui_line_width(portrait ? COL_SMT1 : COL_SMT4),
         preview->affordable ? TERM_SLATE : TERM_L_DARK, "Cost:");
 
     if (preview->needs_reforging)
@@ -5577,6 +6074,8 @@ static int reforge_prefix_menu(const object_type* source)
     int choice[26];
     bool valid[26];
     reforge_preview_type previews[26];
+    const int first_row = 2;
+    const int last_row = smith_ui_list_bottom_row(first_row, true);
 
     if (!source || !source->k_idx)
         return 0;
@@ -5588,9 +6087,9 @@ static int reforge_prefix_menu(const object_type* source)
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         ui_menu_click_set_outside_cancel_enabled(true);
-        smith_ui_begin_touch_scroll_area();
+        smith_ui_begin_touch_scroll_area(false);
 
-        wipe_screen_from(indexed_menu_prefix_col(COL_SMT2));
+        smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
         smith_ui_put_section_header(COL_SMT2, 1, "Prefix");
 
         entry_count = 0;
@@ -5600,8 +6099,6 @@ static int reforge_prefix_menu(const object_type* source)
 
         for (i = 1; i < z_info->e_max && entry_count < (int)N_ELEMENTS(choice); i++)
         {
-            char ego_label[64];
-
             if (!ego_prefix_can_apply_to_object(source, i))
                 continue;
             if (!reforge_preview_build(source, i, &previews[entry_count]))
@@ -5610,17 +6107,6 @@ static int reforge_prefix_menu(const object_type* source)
             valid[entry_count] = previews[entry_count].affordable;
             choice[entry_count] = i;
 
-            ego_name_for_enchant_menu(i, ego_label, sizeof(ego_label));
-            indexed_menu_entry_label(buf, sizeof(buf), entry_count, ego_label);
-            smith_ui_put_menu_label(COL_SMT2, entry_count + 2,
-                valid[entry_count] ? TERM_WHITE
-                                   : (reforge_preview_primary_blocker(
-                                          &previews[entry_count])
-                                             ? TERM_RED
-                                             : TERM_L_DARK),
-                buf);
-            smith_ui_register_menu_row(entry_count + 1, COL_SMT2,
-                entry_count + 2, buf);
             entry_count++;
         }
 
@@ -5642,8 +6128,31 @@ static int reforge_prefix_menu(const object_type* source)
         if (highlight < 1) highlight = 1;
         if (highlight > entry_count) highlight = entry_count;
 
-        smith_ui_put_menu_prefix(COL_SMT2, highlight + 1, highlight - 1,
-            TERM_L_BLUE, true);
+        {
+            int top = smith_ui_configure_list_view(SMITH_SCROLL_REFORGE,
+                entry_count, highlight, first_row, last_row);
+
+            for (i = top;
+                 i < entry_count && i < top + (last_row - first_row + 1); i++)
+            {
+                char ego_label[64];
+                int row = first_row + i - top;
+
+                ego_name_for_enchant_menu(choice[i], ego_label,
+                    sizeof(ego_label));
+                indexed_menu_entry_label(buf, sizeof(buf), i, ego_label);
+                smith_ui_put_menu_row(i + 1, COL_SMT2, row,
+                    valid[i] ? TERM_WHITE
+                             : (reforge_preview_primary_blocker(&previews[i])
+                                    ? TERM_RED
+                                    : TERM_L_DARK),
+                    buf, highlight == i + 1);
+            }
+
+            Term_gotoxy(14,
+                first_row + MAX(0,
+                    MIN(last_row - first_row, highlight - 1 - top)));
+        }
 
         (void)reforge_preview_build(source, choice[highlight - 1],
             &previews[highlight - 1]);
@@ -5651,10 +6160,8 @@ static int reforge_prefix_menu(const object_type* source)
         prt_object_description();
 
         Term_fresh();
-        Term_gotoxy(14, 1 + highlight);
-
         hide_cursor = true;
-        ch = inkey();
+        ch = smithing_menu_key(inkey());
         hide_cursor = false;
 
         {
@@ -5672,9 +6179,11 @@ static int reforge_prefix_menu(const object_type* source)
                 }
                 else if (clicked_choice >= 1 && clicked_choice <= entry_count)
                 {
-                    highlight = clicked_choice;
-                    if (click_action == UI_MENU_CLICK_HOVER)
+                    if (!smith_ui_pointer_choice_confirms(
+                            clicked_choice, click_action, &highlight))
+                    {
                         continue;
+                    }
                     ch = '\r';
                 }
             }
@@ -5806,14 +6315,19 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     bool valid[26];
     int choice[26];
     char title[80];
+    const int first_row = 2;
+    const int last_row = smith_ui_list_bottom_row(first_row, true);
+    int top;
+    bool no_prefix_allowed = selecting_prefix
+        && ego_forbids_prefix_combo(fixed_suffix);
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(false);
 
     // clear the right of the screen
-    wipe_screen_from(indexed_menu_prefix_col(COL_SMT2));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
 
     /* Header */
     strnfmt(title, sizeof(title), "%s", selecting_prefix ? "prefix" : "suffix");
@@ -5823,19 +6337,7 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     /* Always allow selecting no affix */
     valid[entry_count] = true;
     choice[entry_count] = 0;
-    indexed_menu_entry_label(buf, sizeof(buf), entry_count, "(none)");
-    smith_ui_put_menu_label(COL_SMT2, entry_count + 2, TERM_WHITE, buf);
-    smith_ui_register_menu_row(entry_count + 1, COL_SMT2, entry_count + 2,
-        buf);
     entry_count++;
-
-    /* Suffix egos marked NO_PREFIX only allow "(none)" as the prefix choice. */
-    if (selecting_prefix && ego_forbids_prefix_combo(fixed_suffix))
-    {
-        smith_ui_put_fitted(COL_SMT2, entry_count + 2,
-            smith_ui_column_width(COL_SMT2), TERM_SLATE,
-            "(no prefix allowed with this suffix)");
-    }
 
     /* We have to search the whole special item list. */
     for (i = 1; i < z_info->e_max && entry_count < (int)N_ELEMENTS(choice); i++)
@@ -5859,15 +6361,6 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
                 valid[entry_count] = false;
             }
 
-            /* Print it */
-            char ego_label[64];
-            ego_name_for_enchant_menu(i, ego_label, sizeof(ego_label));
-            indexed_menu_entry_label(buf, sizeof(buf), entry_count, ego_label);
-            smith_ui_put_menu_label(COL_SMT2, entry_count + 2,
-                valid[entry_count] ? TERM_WHITE : TERM_SLATE, buf);
-            smith_ui_register_menu_row(entry_count + 1, COL_SMT2,
-                entry_count + 2, buf);
-
             /* Remember the object index */
             choice[entry_count] = i;
 
@@ -5879,9 +6372,29 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     if (*highlight < 1) *highlight = 1;
     if (*highlight > entry_count) *highlight = entry_count;
 
-    // highlight the label
-    smith_ui_put_menu_prefix(COL_SMT2, *highlight + 1, *highlight - 1,
-        TERM_L_BLUE, true);
+    top = smith_ui_configure_list_view(SMITH_SCROLL_ENCHANT, entry_count,
+        *highlight, first_row, last_row);
+    for (i = top;
+         i < entry_count && i < top + (last_row - first_row + 1); i++)
+    {
+        char ego_label[64];
+        int row = first_row + i - top;
+
+        if (choice[i] == 0)
+            SDL_strlcpy(ego_label, "(none)", sizeof(ego_label));
+        else
+            ego_name_for_enchant_menu(choice[i], ego_label, sizeof(ego_label));
+        indexed_menu_entry_label(buf, sizeof(buf), i, ego_label);
+        smith_ui_put_menu_row(i + 1, COL_SMT2, row,
+            valid[i] ? TERM_WHITE : TERM_SLATE, buf,
+            *highlight == i + 1);
+    }
+    if (no_prefix_allowed)
+    {
+        smith_ui_put_wrapped(COL_SMT2, last_row + 1,
+            smith_ui_column_width(COL_SMT2), 2, TERM_SLATE,
+            "No prefix is allowed with this suffix.");
+    }
 
     /* Make a preview 'special' version of the object */
     if (selecting_prefix)
@@ -5899,11 +6412,12 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     Term_fresh();
 
     /* Place cursor at current choice */
-    Term_gotoxy(14, 1 + *highlight);
+    Term_gotoxy(14,
+        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -5921,9 +6435,11 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
             }
             else if (clicked_choice >= 1 && clicked_choice <= entry_count)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
+                {
                     return 0;
+                }
                 ch = '\r';
             }
         }
@@ -5934,23 +6450,22 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
         && (ch >= 'a') && (ch <= (char)'a' + entry_count - 1))
     {
         *highlight = (int)ch - 'a' + 1;
-
-        /* Make a preview 'special' version of the object */
-        if (selecting_prefix)
-            create_special(choice[*highlight - 1], fixed_suffix);
-        else
-            create_special(fixed_prefix, choice[*highlight - 1]);
-
-        return (*highlight);
+        ch = '\r';
     }
 
-    /* Choose current  */
+    /* Rebuild from the selected logical row for every input source.  Pointer
+     * activation can update the highlight after the old preview was made. */
     if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6')
 #ifdef ARROW_RIGHT
         || (ch == ARROW_RIGHT)
 #endif
         )
     {
+        if (selecting_prefix)
+            create_special(choice[*highlight - 1], fixed_suffix);
+        else
+            create_special(fixed_prefix, choice[*highlight - 1]);
+
         return (*highlight);
     }
 
@@ -6134,6 +6649,7 @@ void add_artefact_details(void)
     smith_a_ptr->flags1 |= (&k_info[smith_o_ptr->k_idx])->flags1;
     smith_a_ptr->flags2 |= (&k_info[smith_o_ptr->k_idx])->flags2;
     smith_a_ptr->flags3 |= (&k_info[smith_o_ptr->k_idx])->flags3;
+    smith_a_ptr->flags4 |= (&k_info[smith_o_ptr->k_idx])->flags4;
 
     memcpy(smith_a_ptr->stat_bonus, smith_o_ptr->stat_bonus, sizeof(smith_a_ptr->stat_bonus));
     memcpy(smith_a_ptr->skill_bonus, smith_o_ptr->skill_bonus, sizeof(smith_a_ptr->skill_bonus));
@@ -6334,15 +6850,19 @@ int artefact_flag_menu_aux(int category, int* highlight)
     bool flag_affordable[MAX_SMITHING_FLAGS] = { false };
     u32b flag[MAX_SMITHING_FLAGS];
     int flagset[MAX_SMITHING_FLAGS];
-    byte attr;
+    byte flag_attr[MAX_SMITHING_FLAGS];
+    cptr flag_desc[MAX_SMITHING_FLAGS];
+    const int first_row = 2;
+    const int last_row = smith_ui_list_bottom_row(first_row, true);
+    int top;
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(false);
 
     // clear the right of the screen
-    wipe_screen_from(indexed_menu_prefix_col(COL_SMT3));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT3));
     smith_ui_put_section_header(COL_SMT3, 1, "Property");
 
     // display the categories
@@ -6394,17 +6914,12 @@ int artefact_flag_menu_aux(int category, int* highlight)
         //     !(c_info[p_ptr->pcharacter].flags_u & UNQ_SMT_TELCHAR))
         //     flag_valid[num] = false;
 
-            attr = flag_present[num]
+            flag_attr[num] = flag_present[num]
                 ? TERM_BLUE
                 : (flag_valid[num]
                         ? (flag_affordable[num] ? TERM_WHITE : TERM_SLATE)
                         : TERM_L_DARK);
-
-            /* Display the line */
-            indexed_menu_entry_label(buf, sizeof(buf), num,
-                smithing_flag_types[i].desc);
-            smith_ui_put_menu_label(COL_SMT3, num + 2, attr, buf);
-            smith_ui_register_menu_row(num + 1, COL_SMT3, num + 2, buf);
+            flag_desc[num] = smithing_flag_types[i].desc;
 
             num++;
         }
@@ -6424,9 +6939,20 @@ int artefact_flag_menu_aux(int category, int* highlight)
         return (-1);
     }
 
-    // highlight the label
-    smith_ui_put_menu_prefix(COL_SMT3, *highlight + 1, *highlight - 1,
-        TERM_L_BLUE, true);
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > num)
+        *highlight = num;
+    top = smith_ui_configure_list_view(SMITH_SCROLL_FLAG, num, *highlight,
+        first_row, last_row);
+    for (i = top; i < num && i < top + (last_row - first_row + 1); i++)
+    {
+        int row = first_row + i - top;
+
+        indexed_menu_entry_label(buf, sizeof(buf), i, flag_desc[i]);
+        smith_ui_put_menu_row(i + 1, COL_SMT3, row, flag_attr[i], buf,
+            *highlight == i + 1);
+    }
 
     // add this flag to the dummy artefact under construction
     add_artefact_flag(flag[*highlight - 1], flagset[*highlight - 1]);
@@ -6441,11 +6967,12 @@ int artefact_flag_menu_aux(int category, int* highlight)
     Term_fresh();
 
     /* Place cursor at current choice */
-    Term_gotoxy(14, 1 + *highlight);
+    Term_gotoxy(14,
+        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -6463,9 +6990,11 @@ int artefact_flag_menu_aux(int category, int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
+                {
                     return 0;
+                }
                 ch = '\r';
             }
         }
@@ -6475,56 +7004,22 @@ int artefact_flag_menu_aux(int category, int* highlight)
     if (sdl_menu_letters_enabled()
         && (ch >= 'a') && (ch <= (char)'a' + num - 1))
     {
-        int new_highlight = (int)ch - 'a' + 1;
-
-        if (flag_valid[new_highlight - 1])
-        {
-            if (new_highlight == *highlight)
-            {
-                // remove a flag if it already existed
-                if (flag_present[*highlight - 1])
-                    remove_artefact_flag(
-                        flag[*highlight - 1], flagset[*highlight - 1]);
-            }
-            else
-            {
-                // restore the artefact from backup
-                artefact_copy(smith_a_ptr, smith2_a_ptr);
-
-                *highlight = new_highlight;
-
-                // remove a flag if it already existed
-                if (flag_present[*highlight - 1])
-                    remove_artefact_flag(
-                        flag[*highlight - 1], flagset[*highlight - 1]);
-
-                // otherwise add it
-                else
-                    add_artefact_flag(
-                        flag[*highlight - 1], flagset[*highlight - 1]);
-            }
-
-            // backup the new artefact
-            artefact_copy(smith2_a_ptr, smith_a_ptr);
-            object_copy(smith2_o_ptr, smith_o_ptr);
-            smith2_alloy = smith_alloy;
-
-            return (*highlight);
-        }
-        else
-        {
-            bell("Invalid choice.");
-        }
+        *highlight = (int)ch - 'a' + 1;
+        ch = '\r';
     }
 
-    /* Choose current  */
+    /* Toggle the selected logical row from the saved baseline.  add/remove
+     * prepare that baseline themselves, so this is correct even when a click
+     * changed the highlight after another row was previewed. */
     if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
     {
         if (flag_valid[*highlight - 1])
         {
-            // remove a flag if it already existed
             if (flag_present[*highlight - 1])
                 remove_artefact_flag(
+                    flag[*highlight - 1], flagset[*highlight - 1]);
+            else
+                add_artefact_flag(
                     flag[*highlight - 1], flagset[*highlight - 1]);
 
             // backup the new artefact
@@ -6787,7 +7282,9 @@ int artefact_ability_menu_aux(int skill, int* highlight)
     int i, num = 0;
     char buf[80];
     ability_type* b_ptr;
-    byte attr;
+    const int first_row = 2;
+    const int last_row = smith_ui_list_bottom_row(first_row, true);
+    int top;
 
     /* Allocate arrays dynamically based on actual max abilities */
     bool* ability_present = mem_alloc_array(z_info->b_max, bool);
@@ -6803,10 +7300,10 @@ int artefact_ability_menu_aux(int skill, int* highlight)
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(false);
 
     // clear the right of the screen
-    wipe_screen_from(indexed_menu_prefix_col(COL_SMT3));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT3));
     smith_ui_put_section_header(COL_SMT3, 1, "Ability");
 
     // list the abilities
@@ -6865,17 +7362,6 @@ int artefact_ability_menu_aux(int skill, int* highlight)
             }
         }
 
-        attr = ability_present[num]
-            ? TERM_BLUE
-            : (ability_valid[num]
-                    ? (ability_affordable[num] ? TERM_WHITE : TERM_SLATE)
-                    : TERM_L_DARK);
-
-        /* Display the line */
-        indexed_menu_entry_label(buf, sizeof(buf), num, b_name + b_ptr->name);
-        smith_ui_put_menu_label(COL_SMT3, num + 2, attr, buf);
-        smith_ui_register_menu_row(num + 1, COL_SMT3, num + 2, buf);
-
         num++;
     }
 
@@ -6896,9 +7382,36 @@ int artefact_ability_menu_aux(int skill, int* highlight)
         return (-1);
     }
 
-    // highlight the label
-    smith_ui_put_menu_prefix(COL_SMT3, *highlight + 1, *highlight - 1,
-        TERM_L_BLUE, true);
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > num)
+        *highlight = num;
+    top = smith_ui_configure_list_view(SMITH_SCROLL_ABILITY, num, *highlight,
+        first_row, last_row);
+    for (i = top; i < num && i < top + (last_row - first_row + 1); i++)
+    {
+        byte attr = ability_present[i]
+            ? TERM_BLUE
+            : (ability_valid[i]
+                    ? (ability_affordable[i] ? TERM_WHITE : TERM_SLATE)
+                    : TERM_L_DARK);
+        cptr name = "Ability";
+        int row = first_row + i - top;
+
+        for (int j = 0; j < z_info->b_max; j++)
+        {
+            b_ptr = &b_info[j];
+            if (b_ptr->name && b_ptr->skilltype == skill
+                && b_ptr->abilitynum == ability_nums[i])
+            {
+                name = b_name + b_ptr->name;
+                break;
+            }
+        }
+        indexed_menu_entry_label(buf, sizeof(buf), i, name);
+        smith_ui_put_menu_row(i + 1, COL_SMT3, row, attr, buf,
+            *highlight == i + 1);
+    }
 
     // add this ability to the dummy artefact under construction (use actual ability number)
     add_artefact_ability(skill, ability_nums[*highlight - 1]);
@@ -6913,11 +7426,12 @@ int artefact_ability_menu_aux(int skill, int* highlight)
     Term_fresh();
 
     /* Place cursor at current choice */
-    Term_gotoxy(14, 1 + *highlight);
+    Term_gotoxy(14,
+        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -6941,8 +7455,8 @@ int artefact_ability_menu_aux(int skill, int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
                 {
                     mem_free(ability_present);
                     mem_free(ability_valid);
@@ -6959,55 +7473,20 @@ int artefact_ability_menu_aux(int skill, int* highlight)
     if (sdl_menu_letters_enabled()
         && (ch >= 'a') && (ch <= (char)'a' + num - 1))
     {
-        int new_highlight = (int)ch - 'a' + 1;
-
-        if (ability_valid[new_highlight - 1])
-        {
-            if (new_highlight == *highlight)
-            {
-                // remove an ability if it already existed
-                if (ability_present[*highlight - 1])
-                    remove_artefact_ability(skill, ability_nums[*highlight - 1]);
-            }
-            else
-            {
-                // restore the artefact from backup
-                artefact_copy(smith_a_ptr, smith2_a_ptr);
-
-                *highlight = new_highlight;
-
-                // remove an ability if it already existed
-                if (ability_present[*highlight - 1])
-                    remove_artefact_ability(skill, ability_nums[*highlight - 1]);
-
-                // otherwise add it
-                else
-                    add_artefact_ability(skill, ability_nums[*highlight - 1]);
-            }
-
-            // backup the new artefact
-            artefact_copy(smith2_a_ptr, smith_a_ptr);
-
-            mem_free(ability_present);
-            mem_free(ability_valid);
-            mem_free(ability_affordable);
-            mem_free(ability_nums);
-            return (*highlight);
-        }
-        else
-        {
-            bell("Invalid choice.");
-        }
+        *highlight = (int)ch - 'a' + 1;
+        ch = '\r';
     }
 
-    /* Choose current  */
+    /* Toggle the selected logical row from the saved baseline.  This avoids
+     * committing the old preview after a one-step pointer activation. */
     if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
     {
         if (ability_valid[*highlight - 1])
         {
-            // remove an ability if it already existed
             if (ability_present[*highlight - 1])
                 remove_artefact_ability(skill, ability_nums[*highlight - 1]);
+            else
+                add_artefact_ability(skill, ability_nums[*highlight - 1]);
 
             // backup the new artefact
             artefact_copy(smith2_a_ptr, smith_a_ptr);
@@ -7112,7 +7591,7 @@ void rename_artefact(void)
     char o_desc[30];
     bool name_selected = false;
     int row = (smith_ui_last_desc_row >= 0) ? smith_ui_last_desc_row
-                                            : (smith_ui_term_hgt() - 1);
+                                            : smith_ui_content_bottom_row();
     int col = smith_ui_desc_col();
 
     // Clear the names
@@ -7170,56 +7649,74 @@ int artefact_menu_aux(int* highlight)
     char ch;
     int i, num;
     char buf[80];
+    int display_idx = 0;
+    const int first_row = smith_ui_dense_row0();
+    const int last_row = smith_ui_list_bottom_row(first_row, true);
+    int top;
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(false);
 
     // clear the right of the screen
-    wipe_screen_from(indexed_menu_prefix_col(COL_SMT2));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
     smith_ui_put_section_header(COL_SMT2, MAX(0, smith_ui_dense_row0() - 1),
         "Artifice");
+
+    num = MAX_CATS + S_MAX;
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > num)
+        *highlight = num;
+    top = smith_ui_configure_list_view(SMITH_SCROLL_ARTEFACT, num, *highlight,
+        first_row, last_row);
 
     // display the categories for flags
     for (i = 0; i < MAX_CATS; i++)
     {
+        int row;
+
+        if (i < top || i >= top + (last_row - first_row + 1))
+            continue;
+        row = first_row + i - top;
         indexed_menu_entry_label(buf, sizeof(buf), i, smithing_flag_cats[i].desc);
-        smith_ui_put_menu_label(COL_SMT2, smith_ui_dense_row(i), TERM_WHITE,
-            buf);
-        smith_ui_register_menu_row(i + 1, COL_SMT2, smith_ui_dense_row(i),
-            buf);
+        smith_ui_put_menu_row(i + 1, COL_SMT2, row, TERM_WHITE, buf,
+            *highlight == i + 1);
     }
 
     // display the categories for abilities (skip Special abilities - S_SPC)
-    int display_idx = 0;
     for (i = 0; i < S_MAX; i++)
     {
+        int logical_idx;
+        int row;
+
         /* Skip Special abilities - they cannot be smithed onto items */
         if (i == S_SPC) continue;
 
-        indexed_menu_entry_label(buf, sizeof(buf), MAX_CATS + display_idx,
-            skill_names_full[i]);
-        smith_ui_put_menu_label(COL_SMT2,
-            smith_ui_dense_row(MAX_CATS + display_idx), TERM_WHITE, buf);
-        smith_ui_register_menu_row(MAX_CATS + display_idx + 1, COL_SMT2,
-            smith_ui_dense_row(MAX_CATS + display_idx), buf);
+        logical_idx = MAX_CATS + display_idx;
+        if (logical_idx >= top
+            && logical_idx < top + (last_row - first_row + 1))
+        {
+            row = first_row + logical_idx - top;
+            indexed_menu_entry_label(buf, sizeof(buf), logical_idx,
+                skill_names_full[i]);
+            smith_ui_put_menu_row(logical_idx + 1, COL_SMT2, row, TERM_WHITE,
+                buf, *highlight == logical_idx + 1);
+        }
         display_idx++;
     }
 
-    num = MAX_CATS + display_idx + 1;
-
     // Menu item for naming artefacts
-    indexed_menu_entry_label(buf, sizeof(buf), num - 1, "Name Artefact");
-    smith_ui_put_menu_label(COL_SMT2, smith_ui_dense_row(num - 1), TERM_WHITE,
-        buf);
-    smith_ui_register_menu_row(num, COL_SMT2, smith_ui_dense_row(num - 1),
-        buf);
+    if (num - 1 >= top
+        && num - 1 < top + (last_row - first_row + 1))
+    {
+        int row = first_row + num - 1 - top;
 
-    // highlight the label
-    smith_ui_put_menu_prefix(COL_SMT2,
-        smith_ui_dense_highlight_row(*highlight), *highlight - 1,
-        TERM_L_BLUE, true);
+        indexed_menu_entry_label(buf, sizeof(buf), num - 1, "Name Artefact");
+        smith_ui_put_menu_row(num, COL_SMT2, row, TERM_WHITE, buf,
+            *highlight == num);
+    }
 
     // display the object difficulty
     prt_object_difficulty();
@@ -7231,11 +7728,12 @@ int artefact_menu_aux(int* highlight)
     Term_fresh();
 
     /* Place cursor at current choice */
-    Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
+    Term_gotoxy(14,
+        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -7253,9 +7751,11 @@ int artefact_menu_aux(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
+                {
                     return 0;
+                }
                 ch = '\r';
             }
         }
@@ -7265,16 +7765,7 @@ int artefact_menu_aux(int* highlight)
     if (sdl_menu_letters_enabled()
         && (ch >= 'a') && (ch <= (char)'a' + num - 1))
     {
-        int old_highlight = *highlight;
-
         *highlight = (int)ch - 'a' + 1;
-
-        smith_ui_put_menu_prefix(COL_SMT2,
-            smith_ui_dense_highlight_row(old_highlight), old_highlight - 1,
-            TERM_WHITE, false);
-        smith_ui_put_menu_prefix(COL_SMT2,
-            smith_ui_dense_highlight_row(*highlight), *highlight - 1,
-            TERM_L_BLUE, true);
 
         return (*highlight);
     }
@@ -7412,14 +7903,17 @@ int melt_menu_aux(int* highlight)
     u32b f1, f2, f3;
     char desc[80];
     char buf[80];
+    const int first_row = smith_ui_dense_row0();
+    const int last_row = smith_ui_list_bottom_row(first_row, false);
+    int top;
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(false);
 
     // clear the right of the screen
-    wipe_screen_from(indexed_menu_prefix_col(COL_SMT2));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
     smith_ui_put_section_header(COL_SMT2, MAX(0, smith_ui_dense_row0() - 1),
         "Melt");
 
@@ -7434,27 +7928,7 @@ int melt_menu_aux(int* highlight)
 
         /* ignore metal items that carry the "can't melt" tag */
         if ((f3 & (TR3_MITHRIL | TR3_STAR_IRON)) && !(o_ptr->ident & IDENT_CANT_MELT))
-        {
-            object_desc(desc, 80, o_ptr, false, 2);
-            indexed_menu_entry_label(buf, sizeof(buf), num, desc);
-
-            smith_ui_put_menu_label(COL_SMT2, smith_ui_dense_row(num),
-                TERM_WHITE, buf);
-            smith_ui_register_menu_row(num + 1, COL_SMT2,
-                smith_ui_dense_row(num), buf);
-
-            if (smith_ui_weight_col() > 0)
-            {
-                strnfmt(buf, 80, "%2d.%d lb", o_ptr->weight / 10,
-                    o_ptr->weight % 10);
-                smith_ui_put_fitted(smith_ui_weight_col(),
-                    smith_ui_dense_row(num),
-                    smith_ui_line_width(smith_ui_weight_col()), TERM_WHITE,
-                    buf);
-            }
-
             num++;
-        }
     }
 
     if (num == 0)
@@ -7470,20 +7944,59 @@ int melt_menu_aux(int* highlight)
         return (-1);
     }
 
-    // highlight the label
-    smith_ui_put_menu_prefix(COL_SMT2,
-        smith_ui_dense_highlight_row(*highlight), *highlight - 1,
-        TERM_L_BLUE, true);
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > num)
+        *highlight = num;
+    top = smith_ui_configure_list_view(SMITH_SCROLL_MELT, num, *highlight,
+        first_row, last_row);
+
+    num = 0;
+    for (i = 0; i < INVEN_TOTAL; i++)
+    {
+        int row;
+
+        o_ptr = &inventory[i];
+        object_flags(o_ptr, &f1, &f2, &f3);
+        if (!((f3 & (TR3_MITHRIL | TR3_STAR_IRON))
+                && !(o_ptr->ident & IDENT_CANT_MELT)))
+        {
+            continue;
+        }
+
+        if (num >= top && num < top + (last_row - first_row + 1))
+        {
+            row = first_row + num - top;
+            object_desc(desc, 80, o_ptr, false, 2);
+            indexed_menu_entry_label(buf, sizeof(buf), num, desc);
+            smith_ui_put_menu_row(num + 1, COL_SMT2, row, TERM_WHITE, buf,
+                *highlight == num + 1);
+
+            if (smith_ui_weight_col() > 0)
+            {
+                strnfmt(buf, 80, "%2d.%d lb", o_ptr->weight / 10,
+                    o_ptr->weight % 10);
+                smith_ui_put_fitted(smith_ui_weight_col(), row,
+                    smith_ui_line_width(smith_ui_weight_col()),
+                    (*highlight == num + 1)
+                        ? smith_ui_selected_attr(TERM_WHITE)
+                        : TERM_WHITE,
+                    buf);
+            }
+        }
+        num++;
+    }
 
     /* Flush the prompt */
     Term_fresh();
 
     /* Place cursor at current choice */
-    Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
+    Term_gotoxy(14,
+        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -7501,9 +8014,11 @@ int melt_menu_aux(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
+                {
                     return 0;
+                }
                 ch = '\r';
             }
         }
@@ -7631,8 +8146,7 @@ static void smith_root_build_entries(bool valid[SMT_MENU_MAX],
             && (smith_o_ptr->sval == SV_SHOVEL));
     valid[SMT_MENU_ARTEFACT - 1] = (!object_has_ego(smith_o_ptr)) && has_item
         && (smith_o_ptr->tval != TV_HORN)
-        && (p_ptr->self_made_arts
-            < z_info->art_self_made_max - z_info->art_rand_max - 2);
+        && (smith_find_available_artefact_slot() >= 0);
     valid[SMT_MENU_NUMBERS - 1] = has_item;
     valid[SMT_MENU_MELT - 1] = meltable_metal_items_carried() && at_forge;
     valid[SMT_MENU_REPAIR - 1] = (reforge_target >= 0);
@@ -7679,6 +8193,9 @@ static int smith_root_detail_col(void)
     int cost_col = smith_ui_cost_col();
     int detail_col;
 
+    if (smith_ui_portrait_layout())
+        return -1;
+
     if (term_wid >= 76)
         detail_col = 34;
     else if (term_wid >= 64)
@@ -7698,6 +8215,9 @@ static int smith_root_list_width(int detail_col)
     int width = COL_SMT2 - prefix_col - 1;
 
     (void)detail_col;
+
+    if (smith_ui_portrait_layout())
+        width = smith_ui_line_width(prefix_col);
 
     if (width < 1)
         width = smith_ui_line_width(prefix_col);
@@ -7813,7 +8333,7 @@ static void smith_root_note_for_choice(int choice, bool valid, char* buf,
     }
 }
 
-static void smith_root_draw_header(void)
+static int smith_root_draw_header(void)
 {
     char title[80];
     char status[160];
@@ -7822,11 +8342,26 @@ static void smith_root_draw_header(void)
     bool at_forge = cave_forge_bold(p_ptr->py, p_ptr->px);
     int uses = at_forge ? forge_uses(p_ptr->py, p_ptr->px) : 0;
     int col = indexed_menu_prefix_col(COL_SMT1);
+    int width = smith_ui_line_width(col);
+    int row = 0;
+    int used;
 
-    SDL_strlcpy(title, "Smithing Esc - Work of the Forge", sizeof(title));
-    smith_ui_put_fitted(col, 0, smith_ui_line_width(col),
-        TERM_L_WHITE + TERM_SHADE, title);
-    smith_ui_add_back_click_target(col, 0, title);
+    SDL_strlcpy(title, "Smithing - Work of the Forge", sizeof(title));
+    if (smith_ui_portrait_layout())
+        used = smith_ui_put_wrapped(col, row, width,
+            MAX(1, smith_ui_content_bottom_row() - row + 1),
+            TERM_L_WHITE + TERM_SHADE, title);
+    else
+    {
+        smith_ui_put_fitted(col, row, width, TERM_L_WHITE + TERM_SHADE, title);
+        used = 1;
+    }
+    if (used < 1)
+        used = 1;
+    for (int y = row; y < row + used; y++)
+        ui_menu_click_add_full_row(SMITH_CLICK_BACK, y);
+    smith_ui_add_back_click_target(col, row, title);
+    row += used;
 
     if (at_forge)
     {
@@ -7844,25 +8379,47 @@ static void smith_root_draw_header(void)
             star_iron_carried() / 10, star_iron_carried() % 10);
     }
 
-    smith_ui_put_fitted(col, 1, smith_ui_line_width(col), TERM_SLATE, status);
+    if (smith_ui_portrait_layout())
+    {
+        used = smith_ui_put_wrapped(col, row, width,
+            MAX(1, smith_ui_content_bottom_row() - row + 1), TERM_SLATE,
+            status);
+        row += MAX(1, used);
+    }
+    else
+    {
+        smith_ui_put_fitted(col, row, width, TERM_SLATE, status);
+        row++;
+    }
+
+    return row;
 }
 
-static void smith_root_draw_chrome(int detail_col, int list_w)
+static int smith_root_draw_chrome(int detail_col, int list_w, int header_row)
 {
     int term_wid = smith_ui_term_wid();
     int prefix_col = indexed_menu_prefix_col(COL_SMT1);
+    int divider_row = header_row + 1;
 
-    smith_ui_put_fitted(prefix_col, 2, list_w, TERM_SLATE, "Work");
-    if (detail_col > 0)
+    smith_ui_put_fitted(prefix_col, header_row, list_w, TERM_SLATE, "Work");
+    if (!smith_ui_portrait_layout() && detail_col > 0)
     {
         int width = smith_ui_cost_col() - detail_col - 2;
-        smith_ui_put_fitted(detail_col, 2, width, TERM_SLATE, "Lore");
+        smith_ui_put_fitted(detail_col, header_row, width, TERM_SLATE, "Lore");
     }
-    smith_ui_put_fitted(smith_ui_cost_col(), 2,
-        smith_ui_line_width(smith_ui_cost_col()), TERM_SLATE, "Measure");
+    if (!smith_ui_portrait_layout())
+    {
+        smith_ui_put_fitted(smith_ui_cost_col(), header_row,
+            smith_ui_line_width(smith_ui_cost_col()), TERM_SLATE, "Measure");
+    }
 
-    for (int x = 0; x < term_wid; x++)
-        Term_putch(x, 3, TERM_L_DARK, '=');
+    if (divider_row <= smith_ui_content_bottom_row())
+    {
+        for (int x = 0; x < term_wid; x++)
+            Term_putch(x, divider_row, TERM_L_DARK, '=');
+    }
+
+    return divider_row + 1;
 }
 
 static void smith_root_draw_action(int choice, int row, int list_w,
@@ -7874,6 +8431,9 @@ static void smith_root_draw_action(int choice, int row, int list_w,
     int label_col = prefix_col + prefix_w;
     int label_w = list_w - (label_col - prefix_col);
     byte attr = selected ? smith_ui_selected_attr(base_attr) : base_attr;
+
+    if (row < 0 || row > smith_ui_content_bottom_row())
+        return;
 
     if (selected)
         indexed_menu_focus_prefix(prefix, sizeof(prefix), choice - 1);
@@ -7893,21 +8453,34 @@ static void smith_root_draw_action(int choice, int row, int list_w,
 }
 
 static void smith_root_draw_detail(int choice, int detail_col, int list_w,
-    bool valid, cptr label)
+    int action_row, bool valid, cptr label)
 {
     char note[120];
     int col = detail_col;
     int width;
-    int row = 4;
+    int row = action_row;
     int max_lines;
 
     if (detail_col <= 0)
     {
         col = indexed_menu_prefix_col(COL_SMT1);
-        row = 12;
-        width = smith_ui_cost_col() - col - 2;
-        if (width < 20)
-            width = list_w;
+        if (smith_ui_portrait_layout())
+        {
+            int divider_row = action_row + SMT_MENU_MAX;
+
+            smith_ui_draw_horizontal_divider(divider_row);
+            smith_ui_put_fitted(col, divider_row + 1,
+                smith_ui_line_width(col), TERM_SLATE, "Lore");
+            row = divider_row + 2;
+            width = smith_ui_line_width(col);
+        }
+        else
+        {
+            row = 12;
+            width = smith_ui_cost_col() - col - 2;
+            if (width < 20)
+                width = list_w;
+        }
     }
     else
     {
@@ -7926,7 +8499,7 @@ static void smith_root_draw_detail(int choice, int detail_col, int list_w,
         smith_root_detail_text(choice));
 
     smith_root_note_for_choice(choice, valid, note, sizeof(note));
-    if (note[0] && row < smith_ui_term_hgt() - 1)
+    if (note[0] && row < smith_ui_content_bottom_row())
     {
         byte note_attr = valid ? TERM_L_DARK : TERM_RED;
 
@@ -7935,27 +8508,33 @@ static void smith_root_draw_detail(int choice, int detail_col, int list_w,
     }
 }
 
-static void smith_root_draw(int highlight, const bool valid[SMT_MENU_MAX],
+static int smith_root_draw(int highlight, const bool valid[SMT_MENU_MAX],
     const byte menu_attr[SMT_MENU_MAX], char labels[SMT_MENU_MAX][32])
 {
     int detail_col = smith_root_detail_col();
     int list_w = smith_root_list_width(detail_col);
+    int header_row;
+    int action_row;
 
     Term_clear();
     smith_ui_reset_description_state();
 
-    smith_root_draw_header();
-    smith_root_draw_chrome(detail_col, list_w);
+    header_row = smith_root_draw_header();
+    action_row = smith_root_draw_chrome(detail_col, list_w, header_row);
 
     for (int i = 0; i < SMT_MENU_MAX; i++)
     {
-        smith_root_draw_action(i + 1, 4 + i, list_w,
+        smith_root_draw_action(i + 1, action_row + i, list_w,
             highlight == i + 1, menu_attr[i], labels[i]);
     }
 
     if (highlight >= 1 && highlight <= SMT_MENU_MAX)
-        smith_root_draw_detail(highlight, detail_col, list_w,
+        smith_root_draw_detail(highlight, detail_col, list_w, action_row,
             valid[highlight - 1], labels[highlight - 1]);
+
+    smith_ui_draw_navigation_prompt(true);
+
+    return action_row;
 }
 
 static void smithing_redraw_root_after_item_picker(void)
@@ -7969,7 +8548,7 @@ static void smithing_redraw_root_after_item_picker(void)
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(true);
 
     smith_root_build_entries(valid, menu_attr, labels);
     smith_root_draw(highlight, valid, menu_attr, labels);
@@ -7989,7 +8568,7 @@ static bool smith_reforge_item(void)
     smith_alloy_state alloy_backup = smith_alloy;
     smith_alloy_state alloy2_backup = smith2_alloy;
 
-    wipe_screen_from(indexed_menu_prefix_col(COL_SMT2));
+    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
     wipe_object_description();
     Term_fresh();
 
@@ -8134,14 +8713,15 @@ int smithing_menu_aux(int* highlight)
     bool valid[SMT_MENU_MAX];
     byte menu_attr[SMT_MENU_MAX];
     char labels[SMT_MENU_MAX][32];
+    int action_row;
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area();
+    smith_ui_begin_touch_scroll_area(true);
 
     smith_root_build_entries(valid, menu_attr, labels);
-    smith_root_draw(*highlight, valid, menu_attr, labels);
+    action_row = smith_root_draw(*highlight, valid, menu_attr, labels);
 
     // display the object difficulty
     prt_object_difficulty();
@@ -8153,11 +8733,12 @@ int smithing_menu_aux(int* highlight)
     Term_fresh();
 
     /* Place cursor at current choice */
-    Term_gotoxy(indexed_menu_prefix_col(COL_SMT1), 3 + *highlight);
+    Term_gotoxy(indexed_menu_prefix_col(COL_SMT1),
+        action_row + *highlight - 1);
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = inkey();
+    ch = smithing_menu_key(inkey());
     hide_cursor = false;
 
     {
@@ -8175,9 +8756,11 @@ int smithing_menu_aux(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= SMT_MENU_MAX)
             {
-                *highlight = clicked_choice;
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (!smith_ui_pointer_choice_confirms(
+                        clicked_choice, click_action, highlight))
+                {
                     return 0;
+                }
                 ch = '\r';
             }
         }
@@ -8241,6 +8824,9 @@ void do_cmd_smithing_screen(void)
     int highlight = 1;
     bool leave_menu = false;
     bool create = false;
+    bool death_view = death_spectator_active();
+    int old_smithing = p_ptr->smithing;
+    int old_smithing_leftover = p_ptr->smithing_leftover;
 
     // if (!cave_forge_bold(p_ptr->py, p_ptr->px))
     //{
@@ -8297,7 +8883,8 @@ void do_cmd_smithing_screen(void)
         case SMT_MENU_CREATE:
         {
             // this is not a resumption of smithing an item
-            p_ptr->smithing_leftover = 0;
+            if (!death_view)
+                p_ptr->smithing_leftover = 0;
 
             create_tval_menu();
 
@@ -8312,7 +8899,8 @@ void do_cmd_smithing_screen(void)
             if (smith_o_ptr->tval)
             {
                 // this is not a resumption of smithing an item
-                p_ptr->smithing_leftover = 0;
+                if (!death_view)
+                    p_ptr->smithing_leftover = 0;
 
                 if (!enchant_menu())
                 {
@@ -8333,7 +8921,8 @@ void do_cmd_smithing_screen(void)
             if (smith_o_ptr->tval)
             {
                 // this is not a resumption of smithing an item
-                p_ptr->smithing_leftover = 0;
+                if (!death_view)
+                    p_ptr->smithing_leftover = 0;
 
                 artefact_menu();
             }
@@ -8349,7 +8938,8 @@ void do_cmd_smithing_screen(void)
             if (smith_o_ptr->tval)
             {
                 // this is not a resumption of smithing an item
-                p_ptr->smithing_leftover = 0;
+                if (!death_view)
+                    p_ptr->smithing_leftover = 0;
 
                 numbers_menu();
 
@@ -8366,6 +8956,12 @@ void do_cmd_smithing_screen(void)
         }
         case SMT_MENU_MELT:
         {
+            if (death_view)
+            {
+                msg_print("You cannot do that during this final look.");
+                break;
+            }
+
             if (meltable_metal_items_carried())
             {
                 // this is not a resumption of smithing an item
@@ -8382,11 +8978,23 @@ void do_cmd_smithing_screen(void)
         }
         case SMT_MENU_REPAIR:
         {
+            if (death_view)
+            {
+                msg_print("You cannot do that during this final look.");
+                break;
+            }
+
             smith_reforge_item();
             break;
         }
         case SMT_MENU_ACCEPT:
         {
+            if (death_view)
+            {
+                msg_print("You cannot do that during this final look.");
+                break;
+            }
+
             if (smithing_cost.drain > 0)
             {
                 char buf[80];
@@ -8428,6 +9036,8 @@ void do_cmd_smithing_screen(void)
             add_artefact_details();
 
         /* Cancel stealth mode */
+        if (p_ptr->stealth_mode && pixel_monster_status_icons)
+            p_ptr->redraw |= (PR_MAP);
         p_ptr->stealth_mode = false;
 
         // Allow the resumption of interrupted smithing
@@ -8446,6 +9056,11 @@ void do_cmd_smithing_screen(void)
             p_ptr->smithing_leftover = p_ptr->smithing;
         }
 
+        /* Restoring gameplay zoom after this saved-screen menu can recenter the
+         * panel.  Applying the forge's light also refreshes the view.  Neither
+         * UI transition should cancel the action that was just accepted. */
+        p_ptr->smithing_starting = true;
+
         /* Recalculate bonuses */
         p_ptr->update |= (PU_BONUS);
 
@@ -8459,6 +9074,11 @@ void do_cmd_smithing_screen(void)
         Term_fresh();
     }
 
+    else if (death_view)
+    {
+        p_ptr->smithing = old_smithing;
+        p_ptr->smithing_leftover = old_smithing_leftover;
+    }
     else
     {
         if (p_ptr->smithing_leftover == 0)
@@ -8479,6 +9099,15 @@ void do_cmd_smithing_screen(void)
     sdl_pop_terminal_menu_scale();
     screen_pop_supporting_panes_hidden();
     screen_load();
+
+    /* Process the restored panel and initial forge-light view while the startup
+     * guard is still active, even when no supporting pane requested a refresh. */
+    if (p_ptr->smithing_starting)
+        handle_stuff();
+
+    /* From this point onward, input, monsters, damage, and other disturbances
+     * interrupt smithing normally. */
+    p_ptr->smithing_starting = false;
 }
 
 /*
@@ -8487,8 +9116,11 @@ void do_cmd_smithing_screen(void)
 void create_smithing_item(void)
 {
     int slot;
+    int artefact_slot = -1;
+    int saved_difficulty = 0;
     object_type* o_ptr;
     char o_name[80];
+    bool meta_saved = false;
 
     log_debug("Creating smithing item");
 
@@ -8500,13 +9132,53 @@ void create_smithing_item(void)
     if (smith_o_ptr->name1)
     {
         log_info("Creating new artifact");
-        smith_o_ptr->name1 = z_info->art_rand_max + p_ptr->self_made_arts;
+        saved_difficulty = object_difficulty(smith_o_ptr);
+        artefact_slot = smith_find_available_artefact_slot();
+        if (artefact_slot < 0)
+        {
+            log_error("No runtime slot available for newly forged artefact");
+            return;
+        }
+
+        if (saved_difficulty >= 15)
+        {
+            msg_print("This work may be remembered through the long years of Beleriand. Name it with care.");
+        }
+
+        smith_o_ptr->name1 = artefact_slot;
 
         artefact_copy(&a_info[smith_o_ptr->name1], smith_a_ptr);
         artefact_type* created = &a_info[smith_o_ptr->name1];
         if (score_guid_is_zero(&created->guid)) {
             created->guid = score_guid_random();
         }
+
+        if (saved_difficulty >= 15)
+        {
+            meta_artifact_record record;
+            bool used_aule_forge =
+                smith_used_aule_forge_for_item(saved_difficulty);
+            bool used_masterpiece =
+                smith_used_masterpiece_for_item(saved_difficulty);
+
+            if (meta_artifact_build_created_record(&record, created,
+                    smith_o_ptr, saved_difficulty, used_masterpiece,
+                    used_aule_forge))
+            {
+                meta_saved = meta_artifact_register_created(&record);
+                if (!meta_saved)
+                {
+                    log_warn("Failed to persist remembered artefact '%s' to artefact.db",
+                        created->name);
+                }
+            }
+            else
+            {
+                log_warn("Failed to build remembered artefact record for '%s'",
+                    created->name);
+            }
+        }
+
         (void)score_artefact_register(created);
         p_ptr->self_made_arts++;
 
@@ -8551,6 +9223,12 @@ void create_smithing_item(void)
     // create description
     object_desc(o_name, sizeof(o_name), smith_o_ptr, true, 3);
 
+    if (meta_saved)
+    {
+        msg_format("%s is set among the works that may outlive its maker.",
+            o_name);
+    }
+
     // Record the depth where the object was created
     do_cmd_note(format("Made %s  %d.%d lb", o_name,
                     (smith_o_ptr->weight * smith_o_ptr->number) / 10,
@@ -8560,8 +9238,19 @@ void create_smithing_item(void)
     // Get the slot of the forged item
     slot = inven_carry(smith_o_ptr, true);
 
+    /* Supply items are absorbed into the separate supplies store.  inven_carry
+     * wipes smith_o_ptr after that transfer, so the returned value is not a
+     * real inventory slot and must not be used to index inventory[]. */
+    if (slot == SUPPLIES_INDEX)
+    {
+        char label = supplies_label_char();
+        if (!label)
+            label = 'a';
+        msg_format("You add %s to your supplies (%c).", o_name, label);
+    }
+
     // Check if the item couldn't fit in inventory (e.g., group limit)
-    if (slot < 0)
+    else if (slot < 0)
     {
         // Drop it on the floor instead
         log_debug("Smithed item couldn't fit in inventory, dropping to floor");
@@ -8577,7 +9266,14 @@ void create_smithing_item(void)
     else
     {
         // Get the item itself
-        o_ptr = &inventory[slot];
+        o_ptr = player_inventory_object(slot);
+        if (!o_ptr || !o_ptr->k_idx)
+        {
+            log_warn("Smithing returned an invalid inventory handle: %d", slot);
+            object_wipe(smith_o_ptr);
+            smith_clear_alloy_state(&smith_alloy);
+            return;
+        }
 
         // Mark the item as smithed by the player (using unused1 field)
         o_ptr->unused1 = 1;  /* 1 = smithed by player, 0 = found item */
@@ -8586,7 +9282,7 @@ void create_smithing_item(void)
         object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
         // Message
-        msg_format("You have %s (%c).", o_name, index_to_label(slot));
+        msg_format("You have %s (%c).", o_name, player_inventory_label(slot));
         log_info("Created smithing item: %s", o_name);
     }
 

@@ -14,17 +14,19 @@ typedef enum supply_group
     SUPPLY_GROUP_POTIONS,
     SUPPLY_GROUP_GEMS,
     SUPPLY_GROUP_LIGHTS,
+    SUPPLY_GROUP_JEWELRY,
     SUPPLY_GROUP_JEWELRY_PRESETS,
     SUPPLY_GROUP_SUPPLY,
     SUPPLY_GROUP_MAX
 } supply_group;
 
-#define SUPPLIES_INDEX 1000
+#define SUPPLIES_INDEX 0x40000000
 #define JEWELRY_PRESET_MAX 5
 #define JEWELRY_PRESET_SLOT_LEFT 0
 #define JEWELRY_PRESET_SLOT_RIGHT 1
 #define JEWELRY_PRESET_SLOT_NECK 2
 #define JEWELRY_PRESET_SLOT_MAX 3
+#define JEWELRY_PRESET_NAME_MAX 32
 #define PLAYER_TORCH_CAP 5
 #define PLAYER_OIL_CONTAINER_SLOT_CAP 4
 #define PLAYER_BRASS_LAMP_SLOT_COST 2
@@ -44,29 +46,16 @@ typedef enum supply_menu_page
 {
     SUPPLY_MENU_PAGE_EQUIPPED = 0,
     SUPPLY_MENU_PAGE_INVENTORY,
+    SUPPLY_MENU_PAGE_JEWELRY,
     SUPPLY_MENU_PAGE_SUPPLIES
 } supply_menu_page;
 
 typedef enum inventory_menu_group
 {
     INVENTORY_MENU_GROUP_ALL = 0,
-    INVENTORY_MENU_GROUP_RINGS,
-    INVENTORY_MENU_GROUP_AMULETS,
-    INVENTORY_MENU_GROUP_WEAPONS,
-    INVENTORY_MENU_GROUP_THROWABLES,
-    INVENTORY_MENU_GROUP_BOWS,
-    INVENTORY_MENU_GROUP_ARROWS,
-    INVENTORY_MENU_GROUP_ARMOUR,
-    INVENTORY_MENU_GROUP_CLOAKS,
-    INVENTORY_MENU_GROUP_SHIELDS,
-    INVENTORY_MENU_GROUP_HEADGEAR,
-    INVENTORY_MENU_GROUP_GLOVES,
-    INVENTORY_MENU_GROUP_BOOTS,
-    INVENTORY_MENU_GROUP_LIGHTS,
-    INVENTORY_MENU_GROUP_STAVES,
-    INVENTORY_MENU_GROUP_HORNS,
-    INVENTORY_MENU_GROUP_DIGGING,
-    INVENTORY_MENU_GROUP_OTHER,
+    INVENTORY_MENU_GROUP_PACK,
+    INVENTORY_MENU_GROUP_HARNESS,
+    INVENTORY_MENU_GROUP_JEWELRY,
     INVENTORY_MENU_GROUP_MAX
 } inventory_menu_group;
 
@@ -217,10 +206,15 @@ bool supplies_pending_hotkey(void);
 
 void jewelry_presets_reset(void);
 bool jewelry_preset_is_set(int preset);
+bool jewelry_preset_is_equipped(int preset);
 int jewelry_preset_count(void);
 bool jewelry_preset_store_current(int preset);
 void jewelry_preset_clear(int preset);
+const char* jewelry_preset_name(int preset);
+bool jewelry_preset_set_name(int preset, const char* name);
 const struct object_type* jewelry_preset_object(int preset, int slot);
+bool jewelry_preset_objects_match(const struct object_type* a,
+    const struct object_type* b);
 bool jewelry_preset_set_object(int preset, int slot,
     const struct object_type* o_ptr);
 

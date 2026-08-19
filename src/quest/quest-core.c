@@ -9,11 +9,19 @@
 /*
  * Select a suitable unique monster for the Tulkas quest
  */
-static bool tulkas_target_valid(int r_idx, const monster_race* r_ptr, int depth)
+bool tulkas_target_race_valid(const monster_race* r_ptr)
 {
     if (!r_ptr) return false;
-
     if (!(r_ptr->flags1 & RF1_UNIQUE)) return false;
+    if (r_ptr->flags1 & (RF1_PEACEFUL | RF1_NEVER_BLOW | RF1_SPECIAL_GEN))
+        return false;
+
+    return true;
+}
+
+static bool tulkas_target_valid(int r_idx, const monster_race* r_ptr, int depth)
+{
+    if (!tulkas_target_race_valid(r_ptr)) return false;
     if (r_ptr->max_num <= 0) return false;
     if (r_ptr->level < depth) return false;
     if (r_ptr->level > MORGOTH_DEPTH) return false;
@@ -36,13 +44,14 @@ static bool tulkas_has_valid_target(int depth)
     return false;
 }
 
-int select_tulkas_quest_target(void)
+int select_tulkas_quest_target_for_depth(int depth)
 {
     int i;
     int valid_targets[50];
     int count = 0;
 
-    log_trace("select_tulkas_quest_target: z_info=%p, r_max=%d", z_info, z_info ? z_info->r_max : -1);
+    log_trace("select_tulkas_quest_target_for_depth: depth=%d, z_info=%p, r_max=%d",
+        depth, z_info, z_info ? z_info->r_max : -1);
 
     if (!z_info)
     {
@@ -63,7 +72,7 @@ int select_tulkas_quest_target(void)
 
         /* Must be unique, alive (max_num > 0), and at appropriate depth */
         /* Exclude Tulkas himself and Morgoth from being targets */
-        if (tulkas_target_valid(i, r_ptr, p_ptr->depth))
+        if (tulkas_target_valid(i, r_ptr, depth))
         {
             valid_targets[count] = i;
             count++;
@@ -78,6 +87,11 @@ int select_tulkas_quest_target(void)
 
     log_trace("select_tulkas_quest_target: Found %d valid unique targets", count);
     return valid_targets[rand_int(count)];
+}
+
+int select_tulkas_quest_target(void)
+{
+    return select_tulkas_quest_target_for_depth(p_ptr->depth);
 }
 
 /*
@@ -244,6 +258,14 @@ u32b get_metarun_quest_flag(int quest_idx)
     return 0;
 }
 
+/* Award the fixed experience for completing a normal quest. */
+void award_quest_completion_exp(void)
+{
+    gain_exp(QUEST_COMPLETION_EXP);
+    msg_format("You gain %d experience for completing the quest.",
+        QUEST_COMPLETION_EXP);
+}
+
 /*
  * Apply quest rewards (stats, skills, abilities) based on quest.txt data
  */
@@ -276,6 +298,8 @@ void apply_quest_rewards(int quest_idx)
 
     /* Apply skill bonus */
     if (q_ptr->skill_bonus > 0 && q_ptr->skill_type < S_MAX) {
+        int old_skill = p_ptr->skill_base[q_ptr->skill_type];
+
         p_ptr->skill_base[q_ptr->skill_type] += q_ptr->skill_bonus;
 
         switch (q_ptr->skill_type) {
@@ -307,6 +331,13 @@ void apply_quest_rewards(int quest_idx)
                 log_trace("Applied skill bonus: skill=%d bonus=+%d",
                           q_ptr->skill_type, q_ptr->skill_bonus);
                 break;
+        }
+
+        if (old_skill == 0 && p_ptr->skill_base[q_ptr->skill_type] > 0
+            && (q_ptr->skill_type == S_SNG
+                || q_ptr->skill_type == S_SMT))
+        {
+            sdl_quick_access_suggest_skill_shortcut(q_ptr->skill_type);
         }
     }
 
@@ -352,6 +383,8 @@ void apply_quest_rewards(int quest_idx)
     /* Recalculate bonuses and redraw */
     p_ptr->update |= (PU_BONUS);
     p_ptr->redraw |= (PR_STATS);
+
+    award_quest_completion_exp();
 }
 
 /*

@@ -1445,7 +1445,7 @@ void object_desc(
         object_desc_chr_macro(t, ',');
         object_desc_num_macro(t, o_ptr->pd);
         object_desc_chr_macro(t, 'd');
-        object_desc_num_macro(t, o_ptr->ps);
+        object_desc_num_macro(t, object_effective_protection_sides(o_ptr));
         object_desc_chr_macro(t, b2);
     }
     else if (o_ptr->evn)

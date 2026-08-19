@@ -100,7 +100,7 @@ static bool drop_object_is_damaged(const object_type* o_ptr)
 
 static const char* DROP_RAW_FILE = "drops";
 static const u32b DROP_RAW_MAGIC = 0x44525053; /* 'DRPS' */
-static const u32b DROP_RAW_VERSION = 22;
+static const u32b DROP_RAW_VERSION = 23;
 static const int DROP_MIN_DIFFICULTY = -15;
 
 typedef struct
@@ -1195,7 +1195,7 @@ static int smithing_difficulty_baseline(const object_type* o_ptr)
     case INVEN_HANDS:
     case INVEN_FEET:
     case INVEN_QUIVER1:
-    case INVEN_QUIVER2:
+    case INVEN_BELT:
     case INVEN_HORN:
         dif_mult += 20;
         break;
@@ -1252,7 +1252,7 @@ static byte scale_arrow_supply_rarity(byte rarity, int att_bonus)
 
     while (att_bonus > 0 && scaled > 0)
     {
-        scaled /= 2;
+        scaled /= 3;
         att_bonus--;
     }
 
@@ -1625,8 +1625,12 @@ static void build_normal_variants(int k_idx)
 
     drop_group_kind group_kind = (cat == DROP_CAT_JEWELRY) ? DROP_GROUP_EGO : DROP_GROUP_NORMAL;
 
-    /* Supply items: no smithing variants, use new allocation semantics. */
-    if (cat == DROP_CAT_SUPPLY)
+    /* Normal arrows start in the weapon category so ego arrows remain
+     * weapons, but ordinary arrow variants are later overridden to supply
+     * by add_drop_entry().  Include them here so their rarity scaling is
+     * applied before that category override. */
+    if (cat == DROP_CAT_SUPPLY
+        || (k_ptr->tval == TV_ARROW && group_kind == DROP_GROUP_NORMAL))
     {
         if (k_ptr->tval == TV_ARROW)
         {
@@ -2547,7 +2551,7 @@ typedef struct
 
 typedef struct
 {
-    s16b entry_indices[4096];
+    s16b* entry_indices;
     int entry_count;
     drop_group_kind kind;
     s16b group_id;
@@ -3049,9 +3053,12 @@ static int group_rarity_at_depth(const drop_entry* e, int depth)
 }
 
 static bool build_groups(drop_entry* entries, size_t count, drop_group* groups,
-    int* group_count)
+    s16b* entry_indices, int* group_count)
 {
     int gcount = 0;
+
+    /* Count each group first.  Keeping 4096 indices inline in every possible
+     * group made one ordinary object selection allocate tens of megabytes. */
     for (size_t i = 0; i < count; i++)
     {
         drop_entry* e = &entries[i];
@@ -3061,8 +3068,7 @@ static bool build_groups(drop_entry* entries, size_t count, drop_group* groups,
             drop_group* grp = &groups[g];
             if (grp->kind == e->group_kind && grp->group_id == e->group_id)
             {
-                if (grp->entry_count < (int)(sizeof(grp->entry_indices) / sizeof(grp->entry_indices[0])))
-                    grp->entry_indices[grp->entry_count++] = (s16b)i;
+                grp->entry_count++;
                 found = true;
                 break;
             }
@@ -3074,10 +3080,35 @@ static bool build_groups(drop_entry* entries, size_t count, drop_group* groups,
             drop_group* grp = &groups[gcount++];
             grp->kind = e->group_kind;
             grp->group_id = e->group_id;
-            grp->entry_count = 0;
-            grp->entry_indices[grp->entry_count++] = (s16b)i;
+            grp->entry_indices = NULL;
+            grp->entry_count = 1;
         }
     }
+
+    /* Give every group an exact slice of one count-sized index buffer. */
+    int offset = 0;
+    for (int g = 0; g < gcount; g++)
+    {
+        groups[g].entry_indices = &entry_indices[offset];
+        offset += groups[g].entry_count;
+        groups[g].entry_count = 0;
+    }
+
+    for (size_t i = 0; i < count; i++)
+    {
+        drop_entry* e = &entries[i];
+
+        for (int g = 0; g < gcount; g++)
+        {
+            drop_group* grp = &groups[g];
+            if (grp->kind == e->group_kind && grp->group_id == e->group_id)
+            {
+                grp->entry_indices[grp->entry_count++] = (s16b)i;
+                break;
+            }
+        }
+    }
+
     *group_count = gcount;
     return (gcount > 0);
 }
@@ -3732,14 +3763,17 @@ static drop_entry* drop_try_pick(drop_request* req, int legal_depth,
         else
         {
             drop_group* groups = mem_alloc_array(*cand_count, drop_group);
+            s16b* group_entries = mem_alloc_array(*cand_count, s16b);
             int group_cap = (int)(*cand_count);
             int group_count = group_cap;
-            if (build_groups(*candidates, *cand_count, groups, &group_count))
+            if (build_groups(*candidates, *cand_count, groups, group_entries,
+                    &group_count))
             {
                 drop_group* grp = choose_group(groups, group_count, *candidates, legal_depth, req);
                 if (grp)
                     chosen = choose_entry_from_group(*candidates, grp, legal_depth, req);
             }
+            mem_free_null(group_entries);
             mem_free_null(groups);
         }
     }

@@ -279,6 +279,16 @@ errr parse_a_info(char* buf, header* head)
         a_ptr->cost = cost;
     }
 
+    /* Process 'Y' for storage pool and per-item volume in tenths of an
+     * imperial quart. */
+    else if (buf[0] == 'Y')
+    {
+        if (!a_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        return parse_object_storage_line(buf, &a_ptr->storage, &a_ptr->volume);
+    }
+
     /* Process 'P' for "power" and such */
     else if (buf[0] == 'P')
     {

@@ -5,6 +5,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "cmd/world/cmd-interact-chest.h"
+#include "ui/question.h"
 
 s16b chest_check(int y, int x)
 {
@@ -592,7 +593,6 @@ static int skeleton_note_map_distance(int y1, int x1, int y2, int x2);
 static const char* skeleton_note_direction_phrase(int from_y, int from_x, int to_y, int to_x);
 static const char* skeleton_note_distance_phrase(int dist,
     const level_layout_info* layout, char* buf, size_t buf_sz);
-static int skeleton_note_effective_wrap_width(int col);
 static int skeleton_note_append_wrapped_text(
     const char* text, char lines[][100], int idx, int limit, int wrap);
 static void skeleton_note_recount_templates(void)
@@ -1315,6 +1315,126 @@ const char* hint_messages_message_line(int index, int line)
     return g_hint_message_state.lines[index][line];
 }
 
+typedef struct hint_platform_text_rule {
+    const char* keyboard;
+    const char* controller;
+    const char* touch;
+} hint_platform_text_rule;
+
+/*
+ * Skeleton-note text is stored in a platform-neutral save format: the
+ * keyboard wording remains the canonical source text, then this presentation
+ * helper adapts control instructions to the active UI.  That also updates
+ * hints restored from older saves rather than leaving archived Alt-key text
+ * visible on mobile.
+ */
+static const hint_platform_text_rule hint_platform_text_rules[] = {
+    {
+        "You can move more quietly using stealth mode with capital 'S'.",
+        "Open the character action wheel and choose Stealth to move more "
+            "quietly.",
+        "Tap your character to open the action wheel, then tap Stealth to "
+            "move more quietly."
+    },
+    {
+        "You can reassign controls in the options.",
+        "You can reassign controller controls in Options > Input Options > "
+            "Controller Settings.",
+        "You can reassign touch controls in Options > Input Options > Touch "
+            "Settings."
+    },
+    {
+        "You can zoom the main map by Alt+'+' or Alt+'-'.",
+        "You can change the main-map zoom in Options > Window Options.",
+        "Pinch the main map with two fingers to zoom in or out."
+    },
+    {
+        "You can hide or unhide the right panel by Alt+'i'.",
+        "You can show or hide side panes in Options > Window Options.",
+        "Tap a Quick Access button to use it; hold the button for its "
+            "description, then use the square button to change its command."
+    },
+    {
+        "You can hide or unhide the bottom panel by Alt+'l'.",
+        "You can show or hide bottom panes in Options > Window Options.",
+        "Tap the combat, status, depth, or rolls regions to open their "
+            "overlays."
+    }
+};
+
+static void hint_text_replace_all(const char* src, const char* from,
+    const char* to, char* out, size_t out_sz)
+{
+    const char* cursor;
+    const char* match;
+    size_t from_len;
+    size_t used = 0;
+
+    if (!out || out_sz == 0)
+        return;
+    out[0] = '\0';
+    if (!src || !from || !from[0] || !to)
+        return;
+
+    cursor = src;
+    from_len = strlen(from);
+    while ((match = strstr(cursor, from)) != NULL)
+    {
+        size_t prefix_len = (size_t)(match - cursor);
+        size_t available = out_sz - used - 1;
+        size_t copy_len = MIN(prefix_len, available);
+
+        if (copy_len > 0)
+        {
+            memcpy(out + used, cursor, copy_len);
+            used += copy_len;
+            out[used] = '\0';
+        }
+        if (copy_len < prefix_len)
+            return;
+
+        SDL_strlcat(out, to, out_sz);
+        used = strlen(out);
+        if (used >= out_sz - 1)
+            return;
+        cursor = match + from_len;
+    }
+
+    if (used < out_sz - 1)
+        SDL_strlcat(out, cursor, out_sz);
+}
+
+void hint_text_for_current_platform(const char* src, char* out,
+    size_t out_sz)
+{
+    char current[2048];
+    char replaced[2048];
+    bool touch = sdl_touch_tutorial_device_available();
+    bool controller = !touch && steamdeck_controls_active();
+
+    if (!out || out_sz == 0)
+        return;
+
+    SDL_strlcpy(current, src ? src : "", sizeof(current));
+    if (!touch && !controller)
+    {
+        SDL_strlcpy(out, current, out_sz);
+        return;
+    }
+
+    for (int i = 0; i < (int)N_ELEMENTS(hint_platform_text_rules); ++i)
+    {
+        const hint_platform_text_rule* rule = &hint_platform_text_rules[i];
+        const char* replacement = touch ? rule->touch : rule->controller;
+
+        hint_text_replace_all(current, rule->keyboard, replacement, replaced,
+            sizeof(replaced));
+        SDL_strlcpy(current, replaced, sizeof(current));
+    }
+
+    SDL_strlcpy(out, current, out_sz);
+}
+
 void hint_messages_message_meta(int index, hint_message_meta* out)
 {
     if (!out)
@@ -1540,6 +1660,7 @@ bool hint_messages_short_tip(int index, char* out, size_t out_sz)
     hint_message_meta meta;
     char title[96];
     char cues[128];
+    char platform_text[512];
 
     if (!out || out_sz == 0)
         return false;
@@ -1576,6 +1697,8 @@ bool hint_messages_short_tip(int index, char* out, size_t out_sz)
     else
         strnfmt(out, out_sz, "%s", cues);
 
+    hint_text_for_current_platform(out, platform_text, sizeof(platform_text));
+    SDL_strlcpy(out, platform_text, out_sz);
     return out[0] != '\0';
 }
 
@@ -1636,6 +1759,57 @@ static bool level_has_greater_vault(void)
         }
     }
     return false;
+}
+
+static const vault_type* skeleton_note_current_greater_vault(void)
+{
+    if (!p_ptr || !z_info || !v_info || !v_name)
+        return NULL;
+
+    /*
+     * Before first entry, g_vault_name is the authoritative identity for the
+     * current level's vault.
+     */
+    if (g_vault_name[0])
+    {
+        for (int i = 0; i < z_info->v_max; ++i)
+        {
+            const vault_type* v_ptr = &v_info[i];
+            if (v_ptr->typ != 8 || !v_ptr->name)
+                continue;
+            if (streq(v_name + v_ptr->name, g_vault_name))
+                return v_ptr;
+        }
+    }
+
+    /*
+     * Entry clears g_vault_name, but greater_vaults retains generated vault
+     * indices for the run.  The newest one is the vault on this level.  Do
+     * not apply that fallback on the Gates or Morgoth's special level, whose
+     * CAVE_G_VAULT areas are not type-8 greater vaults.
+     */
+    if (p_ptr->depth == 0 || p_ptr->depth == MORGOTH_DEPTH)
+        return NULL;
+
+    for (int i = MAX_GREATER_VAULTS - 1; i >= 0; --i)
+    {
+        int v_idx = p_ptr->greater_vaults[i];
+        if (v_idx <= 0 || v_idx >= z_info->v_max)
+            continue;
+        if (v_info[v_idx].typ == 8)
+            return &v_info[v_idx];
+    }
+
+    return NULL;
+}
+
+static cptr skeleton_note_current_greater_vault_hint(void)
+{
+    const vault_type* v_ptr = skeleton_note_current_greater_vault();
+
+    if (!v_ptr || !v_text || !v_ptr->skeleton_hint)
+        return NULL;
+    return v_text + v_ptr->skeleton_hint;
 }
 
 static bool skeleton_note_artefact_seen_and_identified(const object_type* o_ptr)
@@ -2712,6 +2886,13 @@ static void skeleton_note_expand_template(const char* tpl,
                 p += 5;
                 continue;
             }
+            if (strncmp(p, "{MITHRIL}", 9) == 0)
+            {
+                if (p_ptr && p_ptr->depth >= MITHRIL_VEIN_MIN_DEPTH)
+                    w += strnfmt(out + w, out_sz - w, " or mithril");
+                p += 9;
+                continue;
+            }
         }
         out[w++] = *p++;
     }
@@ -2748,25 +2929,6 @@ static int skeleton_note_append_expanded_lines(const skeleton_note_line* line,
     }
 
     return idx;
-}
-
-static int skeleton_note_effective_wrap_width(int col)
-{
-    int wrap = 70;
-
-    if (Term && Term->wid > 0)
-    {
-        int avail = Term->wid - col - 1;
-        if (avail < wrap)
-            wrap = avail;
-    }
-
-    if (wrap < 10)
-        wrap = 10;
-    if (wrap > 95)
-        wrap = 95;
-
-    return wrap;
 }
 
 static int skeleton_note_append_wrapped_text(
@@ -2815,11 +2977,15 @@ static const char* skeleton_note_body_separator(byte sval)
 
 static void skeleton_note_build_lines(const char* opening,
     const skeleton_note_line* body_lines, int body_count, const char* closing,
-    const level_layout_info* layout, char lines[][100], int col,
+    const level_layout_info* layout, char lines[][100],
     const char* body_separator)
 {
-    const int max_lines = 12; /* Reserve final slot for terminator */
-    int wrap = skeleton_note_effective_wrap_width(col);
+    /* These lines are archived content, not terminal rows.  The native SDL
+     * surface wraps them to its measured pixel width when displayed.  Using
+     * the narrow portrait Term width here can exhaust the archive before a
+     * second hint is appended. */
+    const int max_lines = HINT_MESSAGE_LINES_MAX - 2; /* Title + terminator. */
+    const int wrap = 95;
 
     int idx = 0;
     idx = skeleton_note_append_wrapped_text(opening, lines, idx, max_lines, wrap);
@@ -3376,7 +3542,8 @@ static const char* skeleton_note_hoard_site_for_source_ident(u32b source_ident)
     return NULL;
 }
 
-static const char* skeleton_note_hoard_site_for_object(const object_type* o_ptr)
+static const char* skeleton_note_hoard_site_for_object(
+    const object_type* o_ptr, char* vault_site, size_t vault_site_sz)
 {
     u32b source_ident = 0;
     const char* source_site = NULL;
@@ -3398,8 +3565,20 @@ static const char* skeleton_note_hoard_site_for_object(const object_type* o_ptr)
     if (in_bounds_fully(o_ptr->iy, o_ptr->ix)
         && (cave_info[o_ptr->iy][o_ptr->ix] & CAVE_G_VAULT))
     {
-        if (g_vault_name[0] != '\0')
-            return g_vault_name;
+        const vault_type* v_ptr = skeleton_note_current_greater_vault();
+        cptr vault_name = NULL;
+
+        if (v_ptr && v_ptr->name)
+            vault_name = v_name + v_ptr->name;
+        else if (g_vault_name[0])
+            vault_name = g_vault_name;
+
+        if (vault_name && vault_site && vault_site_sz > 0)
+        {
+            strnfmt(vault_site, vault_site_sz, "a cache within %s",
+                vault_name);
+            return vault_site;
+        }
         return "a great vault";
     }
 
@@ -3417,15 +3596,17 @@ static const char* skeleton_note_hoard_site_for_object(const object_type* o_ptr)
 
 static bool skeleton_note_find_nearest_artefact(
     int from_y, int from_x, int* out_y, int* out_x, int* out_dist,
-    const char** out_site, char* out_artefact_kind, size_t out_artefact_kind_sz)
+    char* out_site, size_t out_site_sz, char* out_artefact_kind,
+    size_t out_artefact_kind_sz)
 {
     int best_y = -1;
     int best_x = -1;
     int best_dist = 0;
-    const char* best_site = NULL;
+    char best_site[96];
     char best_artefact_kind[64];
     int seen = 0;
 
+    best_site[0] = '\0';
     best_artefact_kind[0] = '\0';
 
     for (int i = 1; i < o_max; i++)
@@ -3437,10 +3618,17 @@ static bool skeleton_note_find_nearest_artefact(
         int dist = skeleton_note_map_distance(from_y, from_x, o_ptr->iy, o_ptr->ix);
         if (best_y < 0 || dist < best_dist)
         {
+            char vault_site[96];
+            const char* site;
+
             best_y = o_ptr->iy;
             best_x = o_ptr->ix;
             best_dist = dist;
-            best_site = skeleton_note_hoard_site_for_object(o_ptr);
+            vault_site[0] = '\0';
+            site = skeleton_note_hoard_site_for_object(
+                o_ptr, vault_site, sizeof(vault_site));
+            strnfmt(best_site, sizeof(best_site), "%s",
+                site ? site : "a hidden cache");
             (void)skeleton_note_format_artefact_kind(
                 o_ptr, best_artefact_kind, sizeof(best_artefact_kind));
             seen = 1;
@@ -3452,9 +3640,16 @@ static bool skeleton_note_find_nearest_artefact(
             ++seen;
             if (one_in_(seen))
             {
+                char vault_site[96];
+                const char* site;
+
                 best_y = o_ptr->iy;
                 best_x = o_ptr->ix;
-                best_site = skeleton_note_hoard_site_for_object(o_ptr);
+                vault_site[0] = '\0';
+                site = skeleton_note_hoard_site_for_object(
+                    o_ptr, vault_site, sizeof(vault_site));
+                strnfmt(best_site, sizeof(best_site), "%s",
+                    site ? site : "a hidden cache");
                 (void)skeleton_note_format_artefact_kind(
                     o_ptr, best_artefact_kind, sizeof(best_artefact_kind));
             }
@@ -3467,7 +3662,11 @@ static bool skeleton_note_find_nearest_artefact(
     if (out_y) *out_y = best_y;
     if (out_x) *out_x = best_x;
     if (out_dist) *out_dist = best_dist;
-    if (out_site) *out_site = best_site ? best_site : "a hidden cache";
+    if (out_site && out_site_sz > 0)
+    {
+        strnfmt(out_site, out_site_sz, "%s",
+            best_site[0] ? best_site : "a hidden cache");
+    }
     if (out_artefact_kind && out_artefact_kind_sz > 0)
     {
         strnfmt(out_artefact_kind, out_artefact_kind_sz, "%s",
@@ -3531,12 +3730,6 @@ static bool skeleton_note_find_nearest_partition_site(level_partition_kind kind,
     big_cave_type_t cave_type, int from_y, int from_x, int* out_y, int* out_x, int* out_dist)
 {
     int source_pi = level_partition_index_for_point(from_y, from_x);
-    level_partition_kind source_kind = level_partition_kind_for_point(from_y, from_x);
-    big_cave_type_t source_cave_type =
-        level_partition_big_cave_type_for_point(from_y, from_x);
-    bool skip_source_partition = (source_pi >= 0) && (source_kind == kind)
-        && ((kind != LEVEL_PART_BIG_CAVE) || (cave_type == BIG_CAVE_NONE)
-            || (source_cave_type == cave_type));
     int best_y = -1;
     int best_x = -1;
     int best_dist = 0;
@@ -3548,7 +3741,10 @@ static bool skeleton_note_find_nearest_partition_site(level_partition_kind kind,
         {
             if (level_partition_kind_for_point(y, x) != kind)
                 continue;
-            if (skip_source_partition
+            /* A skeleton note must point outside the partition containing it.
+             * Use the raw partition index: overlays can change a point's
+             * effective kind without changing which partition owns it. */
+            if (source_pi >= 0
                 && level_partition_index_for_point(y, x) == source_pi)
             {
                 continue;
@@ -3935,12 +4131,16 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
 
     skeleton_hint_kind hints[2] = {hint1, hint2};
     int hint_count = (hint2 != SKEL_HINT_NONE) ? 2 : 1;
+    cptr unique_vault_hint = skeleton_note_current_greater_vault_hint();
 
     char forge_site_buf[64];
+    char artefact_site_buf[2][96];
     char artefact_kind_buf[2][64];
     char distance_buf[2][64];
     char tutorial_tip_buf[2][256];
     forge_site_buf[0] = '\0';
+    artefact_site_buf[0][0] = '\0';
+    artefact_site_buf[1][0] = '\0';
     artefact_kind_buf[0][0] = '\0';
     artefact_kind_buf[1][0] = '\0';
     distance_buf[0][0] = '\0';
@@ -3951,28 +4151,45 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
     for (int i = 0; i < hint_count; ++i)
     {
         skeleton_hint_kind hint = hints[i];
-        s16b note_id = skeleton_note_pick_entry(
-            sval, SKELETON_NOTE_ROLE_HINT, hint);
+        s16b note_id = -1;
         const char* extra_tpl = NULL;
+        const char* tpl = NULL;
 
-        if (hint == SKEL_HINT_TIP && body_count > 0 && note_id == body_ids[body_count - 1])
+        if (hint == SKEL_HINT_GREAT_VAULT && unique_vault_hint)
         {
-            note_id = skeleton_note_pick_entry_internal(
-                sval, SKELETON_NOTE_ROLE_HINT, hint, false, body_ids[body_count - 1]);
+            tpl = unique_vault_hint;
         }
-
-        if (note_id < 0)
+        else
         {
-            note_id = skeleton_note_pick_entry_internal(
-                sval, SKELETON_NOTE_ROLE_HINT, hint, true,
-                (hint == SKEL_HINT_TIP && body_count > 0) ? body_ids[body_count - 1] : -1);
-        }
+            note_id = skeleton_note_pick_entry(
+                sval, SKELETON_NOTE_ROLE_HINT, hint);
 
-        const char* tpl = (note_id >= 0)
-            ? (skeleton_note_text + skeleton_note_info[note_id].text)
-            : NULL;
-        if (note_id >= 0 && skeleton_note_info[note_id].extra_text)
-            extra_tpl = skeleton_note_text + skeleton_note_info[note_id].extra_text;
+            if (hint == SKEL_HINT_TIP && body_count > 0
+                && note_id == body_ids[body_count - 1])
+            {
+                note_id = skeleton_note_pick_entry_internal(
+                    sval, SKELETON_NOTE_ROLE_HINT, hint, false,
+                    body_ids[body_count - 1]);
+            }
+
+            if (note_id < 0)
+            {
+                note_id = skeleton_note_pick_entry_internal(
+                    sval, SKELETON_NOTE_ROLE_HINT, hint, true,
+                    (hint == SKEL_HINT_TIP && body_count > 0)
+                        ? body_ids[body_count - 1]
+                        : -1);
+            }
+
+            tpl = (note_id >= 0)
+                ? (skeleton_note_text + skeleton_note_info[note_id].text)
+                : NULL;
+            if (note_id >= 0 && skeleton_note_info[note_id].extra_text)
+            {
+                extra_tpl =
+                    skeleton_note_text + skeleton_note_info[note_id].extra_text;
+            }
+        }
 
         if (!tpl)
         {
@@ -4131,9 +4348,10 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
         else if (hint == SKEL_HINT_VAULT_ARTIFACT)
         {
             int ty = 0, tx = 0, dist = 0;
-            const char* site = NULL;
             if (skeleton_note_find_nearest_artefact(
-                    skel_y, skel_x, &ty, &tx, &dist, &site,
+                    skel_y, skel_x, &ty, &tx, &dist,
+                    artefact_site_buf[body_count],
+                    sizeof(artefact_site_buf[body_count]),
                     artefact_kind_buf[body_count],
                     sizeof(artefact_kind_buf[body_count])))
             {
@@ -4142,7 +4360,8 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                 body_lines[body_count].dist = skeleton_note_distance_phrase(
                     dist, &layout, distance_buf[body_count],
                     sizeof(distance_buf[body_count]));
-                body_lines[body_count].site = site;
+                body_lines[body_count].site =
+                    artefact_site_buf[body_count];
                 body_lines[body_count].artefact_kind =
                     artefact_kind_buf[body_count];
             }
@@ -4197,9 +4416,9 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
         body_count++;
     }
 
-    char note_lines[16][100];
+    char note_lines[HINT_MESSAGE_LINES_MAX][100] = {{0}};
     skeleton_note_build_lines(
-        opening, body_lines, body_count, signoff, &layout, note_lines, 8,
+        opening, body_lines, body_count, signoff, &layout, note_lines,
         skeleton_note_body_separator(sval));
 
     /* Prepend title */
@@ -4228,7 +4447,7 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                 (hint1 == SKEL_HINT_STAIRS) ? stairs_feat : -1));
     }
 
-    for (int i = 14; i >= 0; --i)
+    for (int i = HINT_MESSAGE_LINES_MAX - 2; i >= 0; --i)
         strnfmt(note_lines[i+1], 100, "%s", note_lines[i]);
     strnfmt(note_lines[0], 100, "%s", title_buf);
 
@@ -4341,7 +4560,8 @@ void do_cmd_search_skeleton(int y, int x, s16b o_idx)
                 }
                 else if (slot >= 0)
                 {
-                    msg_format("You recover %s (%c).", o_name, index_to_label(slot));
+                    msg_format("You recover %s (%c).", o_name,
+                        player_inventory_label(slot));
                 }
                 else
                 {
@@ -4361,14 +4581,504 @@ void do_cmd_search_skeleton(int y, int x, s16b o_idx)
     }
 }
 
+typedef struct chest_minigame_retry_state
+{
+    bool active;
+    bool pause_before_prompt;
+    int y;
+    int x;
+    char previous[240];
+} chest_minigame_retry_state;
+
+static chest_minigame_retry_state chest_retry;
+
+#define CHEST_LOOK_DIE_SIDES 5
+#define CHEST_UNDETECTED_TRAP_DISARM_PENALTY 5
+#define CHEST_UNIDENTIFIED_TRAP_DISARM_PENALTY 3
+#define CHEST_MINIGAME_RETRY_DELAY_MS 1000
+#define CHEST_LOCK_BASE_DIFFICULTY 8
+#define CHEST_LOOK_BASE_DIFFICULTY 8
+#define CHEST_DISARM_BASE_DIFFICULTY 7
+#define CHEST_CONCEALED_TRAP_BASE_DIFFICULTY 18
+
+static bool chest_was_inspected(const object_type* o_ptr)
+{
+    return o_ptr && ((o_ptr->ident & IDENT_CHEST_LOOKED) != 0);
+}
+
+bool chest_trap_fully_known(const object_type* o_ptr)
+{
+    return o_ptr && (object_known_p(o_ptr)
+        || ((o_ptr->ident & IDENT_CHEST_TRAP_FULL) != 0));
+}
+
+bool chest_trap_presence_known(const object_type* o_ptr)
+{
+    if (!o_ptr || !object_chest_trap_flags(o_ptr))
+        return false;
+
+    return chest_trap_fully_known(o_ptr)
+        || ((o_ptr->ident & IDENT_CHEST_TRAP_PRESENT) != 0);
+}
+
+bool chest_minigame_retry_target(int* y, int* x)
+{
+    if (!chest_retry.active)
+        return false;
+
+    if (y)
+        *y = chest_retry.y;
+    if (x)
+        *x = chest_retry.x;
+    return true;
+}
+
+void chest_minigame_clear_retry(void)
+{
+    memset(&chest_retry, 0, sizeof(chest_retry));
+}
+
+static void chest_minigame_schedule_retry(int y, int x, cptr previous,
+    bool pause_before_prompt)
+{
+    chest_retry.active = true;
+    chest_retry.pause_before_prompt = pause_before_prompt;
+    chest_retry.y = y;
+    chest_retry.x = x;
+    SDL_strlcpy(chest_retry.previous, previous ? previous : "",
+        sizeof(chest_retry.previous));
+    p_ptr->command_new = 'o';
+}
+
+static void chest_desc_append(char* desc, size_t desc_size, cptr text)
+{
+    if (!desc || !desc_size || !text || !text[0])
+        return;
+
+    if (desc[0])
+        SDL_strlcat(desc, " ", desc_size);
+    SDL_strlcat(desc, text, desc_size);
+}
+
+static int chest_condition_penalty(void)
+{
+    int penalty = 0;
+
+    if (p_ptr->blind || no_light() || p_ptr->image)
+        penalty += 5;
+    if (p_ptr->confused)
+        penalty += 5;
+    return penalty;
+}
+
+static int chest_lock_difficulty(const object_type* o_ptr)
+{
+    int level = o_ptr ? ABS(o_ptr->pval) : 0;
+    int power = 1 + (level / 4);
+
+    return power + CHEST_LOCK_BASE_DIFFICULTY
+        + chest_condition_penalty();
+}
+
+static int chest_look_difficulty(const object_type* o_ptr)
+{
+    int level = o_ptr ? ABS(o_ptr->pval) : 0;
+
+    /* A deliberate close inspection is substantially easier than noticing a
+     * chest trap in passing.  The d5 opposed throw keeps its variance low. */
+    return (level / 2) + CHEST_LOOK_BASE_DIFFICULTY
+        + chest_condition_penalty();
+}
+
+static int chest_disarm_difficulty(const object_type* o_ptr)
+{
+    int level = o_ptr ? ABS(o_ptr->pval) : 0;
+    int power = 1 + (level / 4);
+    int difficulty = power + (level / 4) + CHEST_DISARM_BASE_DIFFICULTY
+        + chest_condition_penalty();
+
+    if (!chest_trap_presence_known(o_ptr))
+        difficulty += CHEST_UNDETECTED_TRAP_DISARM_PENALTY;
+    else if (!chest_trap_fully_known(o_ptr))
+        difficulty += CHEST_UNIDENTIFIED_TRAP_DISARM_PENALTY;
+
+    return difficulty;
+}
+
+static void chest_trap_effect_desc(char* buf, size_t buf_size,
+    const object_type* o_ptr)
+{
+    byte trap = object_chest_trap_flags(o_ptr);
+    int level = ABS(o_ptr->pval);
+    int bonus = level / 6;
+    int needle_skill = 2 + level / 4;
+    char part[192];
+
+    buf[0] = '\0';
+
+#define CHEST_EFFECT_ADD(text_) chest_desc_append(buf, buf_size, (text_))
+    if (trap & CHEST_GAS_CONF)
+        CHEST_EFFECT_ADD("Confusion gas: 4d4 turns of confusion.");
+    if (trap & CHEST_GAS_STUN)
+    {
+        strnfmt(part, sizeof(part),
+            "Acrid smoke: %dd4 damage and 30d4 turns of stun.", 3 + bonus);
+        CHEST_EFFECT_ADD(part);
+    }
+    if (trap & CHEST_GAS_POISON)
+    {
+        strnfmt(part, sizeof(part),
+            "Poison gas: %dd4 pure poison damage.", 10 + bonus * 2);
+        CHEST_EFFECT_ADD(part);
+    }
+    if (trap & CHEST_NEEDLE_HALLU)
+    {
+        strnfmt(part, sizeof(part),
+            "Hallucinatory needle: attack %d vs Dexterity; 80d4 turns of "
+            "hallucination.",
+            needle_skill);
+        CHEST_EFFECT_ADD(part);
+    }
+    if (trap & CHEST_NEEDLE_ENTRANCE)
+    {
+        strnfmt(part, sizeof(part),
+            "Entrancing needle: attack %d vs Dexterity; 10d4 turns of "
+            "entrancement.",
+            needle_skill);
+        CHEST_EFFECT_ADD(part);
+    }
+    if (trap & CHEST_NEEDLE_LOSE_STR)
+    {
+        strnfmt(part, sizeof(part),
+            "Weakening needle: attack %d vs Dexterity; drains Strength.",
+            needle_skill);
+        CHEST_EFFECT_ADD(part);
+    }
+    if (trap & CHEST_FLAME)
+    {
+        strnfmt(part, sizeof(part),
+            "Flame trap: %dd4 pure fire damage.", 10 + bonus * 2);
+        CHEST_EFFECT_ADD(part);
+    }
+#undef CHEST_EFFECT_ADD
+}
+
+static bool chest_can_look(const object_type* o_ptr)
+{
+    if (!o_ptr || chest_trap_fully_known(o_ptr))
+        return false;
+
+    return !chest_was_inspected(o_ptr)
+        || (p_ptr->skill_base[S_PER] > object_runtime_payload(o_ptr));
+}
+
+static void chest_mark_looked(object_type* o_ptr, bool full)
+{
+    byte trap;
+
+    if (!o_ptr)
+        return;
+
+    trap = object_chest_trap_flags(o_ptr);
+    o_ptr->ident |= IDENT_CHEST_LOOKED;
+    if (trap)
+        o_ptr->ident |= IDENT_CHEST_TRAP_PRESENT;
+    else
+        o_ptr->ident &= ~IDENT_CHEST_TRAP_PRESENT;
+    object_set_runtime_payload(o_ptr, p_ptr->skill_base[S_PER]);
+
+    if (full)
+    {
+        o_ptr->ident |= IDENT_CHEST_TRAP_FULL;
+        object_known(o_ptr);
+    }
+}
+
+static bool do_cmd_chest_minigame(int y, int x, s16b o_idx)
+{
+    enum
+    {
+        CHEST_ACTION_LOOK,
+        CHEST_ACTION_DISARM,
+        CHEST_ACTION_OPEN
+    };
+    ui_question_option options[3];
+    int actions[3];
+    int count = 0;
+    int choice;
+    int action;
+    int result;
+    int score;
+    int difficulty;
+    bool fully_known;
+    bool trap_known;
+    bool looked;
+    bool pause_before_prompt = false;
+    byte trap;
+    char title[96];
+    char desc[768];
+    char line[240];
+    char effects[480];
+    char previous[240];
+    char look_label[64];
+    char disarm_label[64];
+    char open_label[64];
+    object_type* o_ptr;
+    skill_roll_details roll;
+
+    if (o_idx <= 0 || o_idx >= o_max)
+    {
+        chest_minigame_clear_retry();
+        return false;
+    }
+
+    o_ptr = &o_list[o_idx];
+    if (!o_ptr->k_idx || o_ptr->tval != TV_CHEST || o_ptr->pval == 0)
+    {
+        chest_minigame_clear_retry();
+        return false;
+    }
+
+    previous[0] = '\0';
+    if (chest_retry.active && chest_retry.y == y && chest_retry.x == x)
+    {
+        /* Command repetition may consume the retry before request_command()
+         * sees its queued open command.  Avoid leaving that command stale if
+         * this attempt finishes the interaction. */
+        if (p_ptr->command_new == 'o')
+            p_ptr->command_new = 0;
+        pause_before_prompt = chest_retry.pause_before_prompt;
+        SDL_strlcpy(previous, chest_retry.previous, sizeof(previous));
+    }
+    chest_minigame_clear_retry();
+
+    trap = object_chest_trap_flags(o_ptr);
+    fully_known = chest_trap_fully_known(o_ptr);
+    trap_known = chest_trap_presence_known(o_ptr);
+    looked = chest_was_inspected(o_ptr);
+
+    object_desc(title, sizeof(title), o_ptr, true, 3);
+    desc[0] = '\0';
+    if (previous[0])
+        chest_desc_append(desc, sizeof(desc), previous);
+
+    if (o_ptr->pval < 0)
+    {
+        chest_desc_append(desc, sizeof(desc),
+            "The trap and lock are disabled.");
+    }
+    else if (fully_known && trap)
+    {
+        chest_desc_append(desc, sizeof(desc),
+            "You know how this trap works, making it easier to disarm.");
+        chest_trap_effect_desc(effects, sizeof(effects), o_ptr);
+        chest_desc_append(desc, sizeof(desc), effects);
+    }
+    else if (trap_known)
+    {
+        chest_desc_append(desc, sizeof(desc),
+            "The chest is trapped, but you do not know how the trap works.");
+    }
+    else if (fully_known)
+    {
+        chest_desc_append(desc, sizeof(desc),
+            "This chest is not trapped.");
+    }
+    else if (looked && !trap)
+    {
+        chest_desc_append(desc, sizeof(desc),
+            "This chest is not trapped.");
+    }
+    else
+    {
+        chest_desc_append(desc, sizeof(desc),
+            "This chest may be trapped. You can inspect it before opening.");
+    }
+
+    if (!fully_known && looked && !chest_can_look(o_ptr))
+    {
+        chest_desc_append(desc, sizeof(desc),
+            "You need higher base Perception to inspect it again.");
+    }
+
+    if (trap_known && o_ptr->pval > 0)
+    {
+        chest_desc_append(desc, sizeof(desc),
+            "The Open anyway percentage is only the chance to pick the lock. "
+            "If the lock is picked, the trap triggers with 100% certainty, "
+            "then the chest opens.");
+    }
+
+    strnfmt(look_label, sizeof(look_label), "Look for trap: %d%%",
+        player_skill_check_success_percent(p_ptr->skill_use[S_PER],
+            chest_look_difficulty(o_ptr), CHEST_LOOK_DIE_SIDES,
+            CHEST_LOOK_DIE_SIDES));
+
+    score = p_ptr->skill_use[S_PER];
+    if (p_ptr->active_ability[S_PER][PER_REWIRE_TRAPS])
+        score += 5;
+    strnfmt(disarm_label, sizeof(disarm_label), "Disarm: %d%%",
+        player_skill_check_success_percent(
+            score, chest_disarm_difficulty(o_ptr), 10, 10));
+
+    if (o_ptr->pval > 0)
+    {
+        strnfmt(open_label, sizeof(open_label),
+            trap_known ? "Open anyway (lock): %d%%" : "Open: %d%%",
+            player_skill_check_success_percent(p_ptr->skill_use[S_PER],
+                chest_lock_difficulty(o_ptr), 10, 10));
+    }
+    else
+    {
+        SDL_strlcpy(open_label, "Open: 100%", sizeof(open_label));
+    }
+
+#define CHEST_MENU_ADD(action_, key_, label_, attr_)                          \
+    do                                                                        \
+    {                                                                         \
+        options[count] = (ui_question_option){                                \
+            (key_), (label_), (attr_), false                                  \
+        };                                                                    \
+        actions[count] = (action_);                                            \
+        count++;                                                              \
+    } while (0)
+
+    if (o_ptr->pval > 0 && chest_can_look(o_ptr))
+        CHEST_MENU_ADD(CHEST_ACTION_LOOK, 'l', look_label, TERM_L_BLUE);
+    if (o_ptr->pval > 0 && trap_known)
+        CHEST_MENU_ADD(CHEST_ACTION_DISARM, 'd', disarm_label, TERM_L_GREEN);
+    CHEST_MENU_ADD(CHEST_ACTION_OPEN, 'o', open_label, TERM_ORANGE);
+#undef CHEST_MENU_ADD
+
+    if (pause_before_prompt && Term && !character_icky)
+    {
+        Term_fresh();
+        Term_xtra(TERM_XTRA_DELAY, CHEST_MINIGAME_RETRY_DELAY_MS);
+    }
+
+    choice = ui_question_ask(title, desc, options, count, y, x, 0);
+    if (choice < 0 || choice >= count)
+    {
+        p_ptr->energy_use = 0;
+        return false;
+    }
+
+    action = actions[choice];
+    p_ptr->energy_use = 100;
+    p_ptr->previous_action[0] = ACTION_MISC;
+
+    if (action == CHEST_ACTION_LOOK)
+    {
+        score = p_ptr->skill_use[S_PER];
+        difficulty = chest_look_difficulty(o_ptr);
+        result = show_interaction_skill_roll_animation_sided(
+            "Inspecting the chest", "Looking for a trap", y, x, score,
+            difficulty, CHEST_LOOK_DIE_SIDES, CHEST_LOOK_DIE_SIDES, &roll);
+        chest_mark_looked(o_ptr, result > 0);
+
+        if (result > 0 && trap)
+        {
+            msg_print("You identify the chest's trap and understand its mechanism.");
+            SDL_strlcpy(line,
+                "Inspection succeeded. You identified the trap.",
+                sizeof(line));
+        }
+        else if (result > 0)
+        {
+            msg_print("You confirm that the chest has no trap.");
+            SDL_strlcpy(line,
+                "Inspection succeeded. The chest is not trapped.",
+                sizeof(line));
+        }
+        else if (trap)
+        {
+            msg_print("You find signs that the chest is trapped.");
+            SDL_strlcpy(line,
+                "Inspection failed. You only learned that a trap is present.",
+                sizeof(line));
+        }
+        else
+        {
+            msg_print("You find no trap on the chest.");
+            SDL_strlcpy(line,
+                "Inspection failed. You only learned that no trap is present.",
+                sizeof(line));
+        }
+
+        flush();
+        chest_minigame_schedule_retry(y, x, line, result <= 0);
+        return true;
+    }
+
+    if (action == CHEST_ACTION_DISARM)
+    {
+        score = p_ptr->skill_use[S_PER];
+        if (p_ptr->active_ability[S_PER][PER_REWIRE_TRAPS])
+            score += 5;
+        difficulty = chest_disarm_difficulty(o_ptr);
+        result = show_interaction_skill_roll_animation("Disarming the chest",
+            "Testing the trap mechanism", y, x, score, difficulty, &roll);
+
+        if (result > 0)
+        {
+            msg_print("You have disarmed the chest.");
+            o_ptr->pval = 0 - o_ptr->pval;
+            SDL_strlcpy(line,
+                "Disarm succeeded. The trap and lock are disabled.",
+                sizeof(line));
+        }
+        else if (result > -3)
+        {
+            msg_print("You failed to disarm the chest.");
+            SDL_strlcpy(line,
+                "Disarm failed. The trap remains armed.", sizeof(line));
+        }
+        else
+        {
+            msg_print("You set off the trap!");
+            chest_trap(y, x, o_idx);
+            SDL_strlcpy(line,
+                "Disarm failed. The trap was triggered.", sizeof(line));
+        }
+
+        flush();
+        if (!p_ptr->is_dead && o_ptr->pval != 0)
+            chest_minigame_schedule_retry(y, x, line, result <= 0);
+        return !p_ptr->is_dead && o_ptr->pval != 0;
+    }
+
+    /* Opening is always available.  Unlike the legacy flow, choosing it does
+     * not silently make a separate disarm attempt first. */
+    if (o_ptr->pval > 0)
+    {
+        score = p_ptr->skill_use[S_PER];
+        difficulty = chest_lock_difficulty(o_ptr);
+        result = show_interaction_skill_roll_animation("Picking the chest lock",
+            "Working the lockpick", y, x, score, difficulty, &roll);
+        if (result <= 0)
+        {
+            flush();
+            message(MSG_LOCKPICK_FAIL, 0, "You failed to pick the lock.");
+            SDL_strlcpy(line,
+                "Lockpick failed. The chest remains locked.", sizeof(line));
+            chest_minigame_schedule_retry(y, x, line, true);
+            return true;
+        }
+
+        message(MSG_LOCKPICK_FAIL, 0, "You have picked the lock.");
+    }
+
+    sound(MSG_CHEST_OPEN);
+    chest_trap(y, x, o_idx);
+    chest_death(y, x, o_idx);
+    chest_minigame_clear_retry();
+    return false;
+}
+
 /*
- * Attempt to open the given chest at the given location
- *
- * Assume there is no monster blocking the destination
- *
- * Returns true if repeated commands may continue
+ * Legacy chest opening used when the chest minigame is disabled.
  */
-bool do_cmd_open_chest(int y, int x, s16b o_idx)
+static bool do_cmd_open_chest_legacy(int y, int x, s16b o_idx)
 {
     int score, power, difficulty, result;
     skill_roll_details lock_roll;
@@ -4392,8 +5102,8 @@ bool do_cmd_open_chest(int y, int x, s16b o_idx)
         /* Determine trap power based on the chest pval (power is 1--7)*/
         power = 1 + (o_ptr->pval / 4);
 
-        // Base difficulty is the lock power + 5
-        difficulty = power + 5;
+        // Base difficulty is the lock power plus the lockpick baseline.
+        difficulty = power + CHEST_LOCK_BASE_DIFFICULTY;
 
         /* Penalize some conditions */
         if (p_ptr->blind || no_light() || p_ptr->image)
@@ -4417,7 +5127,8 @@ bool do_cmd_open_chest(int y, int x, s16b o_idx)
                 /* Chest traps are concealed and fiddly: harder to disarm than
                  * a floor trap of the same depth, and harder still on better
                  * (higher-pval) chests. */
-                difficulty = power + (o_ptr->pval / 4) + 3;
+                difficulty = power + (o_ptr->pval / 4)
+                    + CHEST_DISARM_BASE_DIFFICULTY;
                 if (p_ptr->blind || no_light() || p_ptr->image)
                     difficulty += 5;
                 if (p_ptr->confused)
@@ -4485,7 +5196,7 @@ bool do_cmd_open_chest(int y, int x, s16b o_idx)
  *
  * Returns true if repeated commands may continue
  */
-bool do_cmd_disarm_chest(int y, int x, s16b o_idx)
+static bool do_cmd_disarm_chest_legacy(int y, int x, s16b o_idx)
 {
     int score, power, difficulty, result;
     skill_roll_details roll;
@@ -4505,7 +5216,8 @@ bool do_cmd_disarm_chest(int y, int x, s16b o_idx)
     {
         if ((o_ptr->pval > 0) && object_chest_trap_flags(o_ptr))
         {
-            int find_diff = (o_ptr->pval / 2) + 15;
+            int find_diff = (o_ptr->pval / 2)
+                + CHEST_CONCEALED_TRAP_BASE_DIFFICULTY;
 
             if (p_ptr->blind || no_light() || p_ptr->image)
                 find_diff += 5;
@@ -4550,7 +5262,8 @@ bool do_cmd_disarm_chest(int y, int x, s16b o_idx)
 
     // Chest traps are concealed and fiddly: harder to disarm than a floor trap
     // of the same depth, and harder still on better (higher-pval) chests.
-    difficulty = power + (o_ptr->pval / 4) + 3;
+    difficulty = power + (o_ptr->pval / 4)
+        + CHEST_DISARM_BASE_DIFFICULTY;
 
     /* Penalize some conditions */
     if (p_ptr->blind || no_light() || p_ptr->image)
@@ -4600,4 +5313,22 @@ bool do_cmd_disarm_chest(int y, int x, s16b o_idx)
 
     /* Result */
     return (more);
+}
+
+bool do_cmd_open_chest(int y, int x, s16b o_idx)
+{
+    if (chest_trap_minigame)
+        return do_cmd_chest_minigame(y, x, o_idx);
+
+    chest_minigame_clear_retry();
+    return do_cmd_open_chest_legacy(y, x, o_idx);
+}
+
+bool do_cmd_disarm_chest(int y, int x, s16b o_idx)
+{
+    if (chest_trap_minigame)
+        return do_cmd_chest_minigame(y, x, o_idx);
+
+    chest_minigame_clear_retry();
+    return do_cmd_disarm_chest_legacy(y, x, o_idx);
 }

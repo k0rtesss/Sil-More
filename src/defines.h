@@ -66,6 +66,8 @@
 
 /* Marker before the serialized supplies block in savefiles that include it. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
+#define SAVEFILE_QUIVER_BLOCK_MAGIC 0x51A8
+#define SAVEFILE_CARRIED_EXTRA_BLOCK_MAGIC 0xC471
 /* Marker before the serialized jewelry preset block in 0.9.6.7+ savefiles. */
 #define SAVEFILE_JEWELRY_PRESET_BLOCK_MAGIC 0x4A57
 /* Packed one-byte Morgoth summons state in 0.9.6.4+ savefiles. */
@@ -361,7 +363,19 @@
 #define THRALL_QUEST_POTION_CLARITY 11
 #define THRALL_QUEST_FLASK_OIL 12
 #define THRALL_QUEST_WOODEN_TORCH 13
-#define THRALL_QUEST_MAX 14
+#define THRALL_QUEST_DARK_BREAD 14
+#define THRALL_QUEST_DRIED_MEAT 15
+#define THRALL_QUEST_LEMBAS 16
+#define THRALL_QUEST_MAX 17
+
+/* Per-monster thrall quest progress (monster_type.thrall_quest_completed). */
+#define THRALL_QUEST_STATE_ACTIVE 0
+#define THRALL_QUEST_STATE_REWARDED 1
+#define THRALL_QUEST_STATE_REWARD_PENDING 2
+
+/* Experience granted for completing quests. */
+#define QUEST_COMPLETION_EXP 300
+#define THRALL_QUEST_COMPLETION_EXP 75
 
 /*
  * Artefact "seen" flags (a_info[].seen).
@@ -380,6 +394,14 @@
 #define DISC_LORE_BIG_CAVE_ICE  0x04
 #define DISC_LORE_BIG_CAVE_FIRE 0x08
 #define DISC_LORE_BIG_CAVE_POIS 0x10
+
+/*
+ * Run-wide Quick Access offers (player_type.quick_access_prompt_flags).
+ */
+#define QUICK_ACCESS_PROMPT_STAFF 0x01
+#define QUICK_ACCESS_PROMPT_HORN  0x02
+#define QUICK_ACCESS_PROMPT_MASK  \
+    (QUICK_ACCESS_PROMPT_STAFF | QUICK_ACCESS_PROMPT_HORN)
 
 /*
  * Maximum size of the "view" array (see "cave/cave-view.c")
@@ -483,7 +505,15 @@
 #define PLAYER_ACTIVE_WEAPON_NONE 0
 #define PLAYER_ACTIVE_WEAPON_MELEE 1
 #define PLAYER_ACTIVE_WEAPON_RANGED_1 2
-#define PLAYER_ACTIVE_WEAPON_RANGED_2 3
+#define PLAYER_ACTIVE_WEAPON_BELT 3
+/* Serialized compatibility name for saves written with two quivers. */
+#define PLAYER_ACTIVE_WEAPON_RANGED_2 PLAYER_ACTIVE_WEAPON_BELT
+
+/* Physical active-weapon kinds used by readiness ability rules. */
+#define PLAYER_ACTIVE_WEAPON_KIND_NONE 0
+#define PLAYER_ACTIVE_WEAPON_KIND_MELEE 1
+#define PLAYER_ACTIVE_WEAPON_KIND_BOW 2
+#define PLAYER_ACTIVE_WEAPON_KIND_THROWING 3
 
 /*
  * Internal command queued by pointer/touch UI for exact active-mode changes.
@@ -491,6 +521,20 @@
  * (see support/input.c), so KTRL('V') (0x16) is used instead.
  */
 #define CMD_ACTIVE_WEAPON_MODE KTRL('V')
+
+/*
+ * Internal command queued by the desktop context shortcut popup.  Unlike the
+ * generic 'u' command, this acts on the floor item that supplied the popup
+ * instead of reopening the inventory browser.
+ */
+#define CMD_CONTEXT_FLOOR_ACTION KTRL('U')
+
+/*
+ * Internal command queued by the minus button on the desktop context popup.
+ * It temporarily suppresses further square-action popups without consuming a
+ * player turn.
+ */
+#define CMD_SUPPRESS_CONTEXT_POPUPS KTRL('B')
 
 /*
  * OPTION: Maximum number of macros (see "support/macro.c")
@@ -561,6 +605,8 @@
 #define FUEL_LAMP 5000 /* Maximum amount of fuel in a lantern */
 #define FUEL_FLASK 2500 /* Maximum amount of fuel in a flask of oil */
 #define FUEL_MALLORN 200 /* Maximum amount of fuel in a mallorn torch */
+#define FUEL_TORCH_DEFAULT 1000 /* Normal starting fuel for a wooden torch */
+#define FUEL_MALLORN_DEFAULT 100 /* Normal starting fuel for a mallorn torch */
 
 /*
  * More maximum values
@@ -657,6 +703,11 @@
 #define ARC_DEADLY_HAIL 7
 #define ARC_DEX 8
 #define ARC_SKIRMISHING 9
+
+/* Data-driven ability carriage-efficiency targets. */
+#define ABILITY_CARRIAGE_NONE 0
+#define ABILITY_CARRIAGE_THROWING 1
+#define ABILITY_CARRIAGE_ARROWS 2
 
 /*
  * Evasion abilities
@@ -807,12 +858,10 @@
 #define ATT_IMPALE 11
 
 /*
- * Maximum number of "normal" pack slots, and the index of the "overflow"
- * slot, which can hold an item, but only temporarily, since it causes the
- * pack to "overflow", dropping the "last" item onto the ground.  Since this
- * value is used as an actual slot, it must be less than "INVEN_WIELD" (below).
- * Note that "INVEN_PACK" is probably hard-coded by its use in savefiles, and
- * by the fact that the screen can only show 23 items plus a one-line prompt.
+ * Number of legacy physical carried slots.  This is no longer the player's
+ * carried-entry limit: additional Pack, Harness, and Jewelry Pouch entries
+ * live in the expandable carried store.  Slot 23 remains reserved so the
+ * serialized equipment indexes below never change.
  */
 #define INVEN_PACK 23
 
@@ -833,13 +882,23 @@
 #define INVEN_HANDS 35
 #define INVEN_FEET 36
 #define INVEN_QUIVER1 37
-#define INVEN_QUIVER2 38
+#define INVEN_BELT 38
+/* Slot 38 was the second quiver and must never be renumbered in savefiles. */
+#define INVEN_QUIVER2 INVEN_BELT
 #define INVEN_HORN 39
 
 /*
  * Total number of inventory slots (hard-coded).
  */
 #define INVEN_TOTAL 40
+
+/* Expandable carried entries and dedicated stores use disjoint synthetic
+ * handle ranges.  These are runtime handles, not savefile slot indexes. */
+#define CARRIED_EXTRA_INDEX 1000
+#define QUIVER_INDEX 0x20000000
+#define QUIVER_ARROW_CAPACITY 48
+#define QUIVER_INDEX_END (QUIVER_INDEX + QUIVER_ARROW_CAPACITY)
+#define PICKUP_SLOT_ACTIVE_THROWING (-2)
 
 /*
  * A "stack" of items is limited to less than 100 items (hard-coded).
@@ -1008,7 +1067,7 @@
 #define COL_TERRAIN 61 /* "Web" or "Pit" or "Sun" */
 
 #define ROW_PARTITION ROW_STATUS
-#define COL_PARTITION 66 /* "Room"/"Ruin"/"Cave"/"BigCa"/"Labir"/"Chasm" */
+#define COL_PARTITION 66 /* "Room"/"Ruin"/"Caves"/"BigCa"/"Labir"/"Chasm" */
 
 #define ROW_DEPTH ROW_STATUS
 #define COL_DEPTH 72 /* "Lev NNN" / "NNNN ft" */
@@ -1295,6 +1354,14 @@
 #define FEAT_FORGE_UNIQUE_HEAD 0x4C /*  */
 #define FEAT_FORGE_UNIQUE_TAIL 0x4F /*  */
 
+/* Tunneling thresholds shared by terrain interaction and forge sabotage. */
+#define TUNNEL_DIFFICULTY_RUBBLE 1
+#define TUNNEL_DIFFICULTY_QUARTZ 2
+#define TUNNEL_DIFFICULTY_GRANITE 3
+
+/* Reward for denying a normal or enchanted forge to Morgoth's army. */
+#define FORGE_DESTROY_EXP 75
+
 // Vaults
 #define MAX_GREATER_VAULTS 8
 
@@ -1407,6 +1474,9 @@
 /* The "sval" codes for TV_METAL */
 #define SV_METAL_MITHRIL 0 /*  */
 #define SV_METAL_STAR_IRON 1 /*  */
+
+/* Earliest depth at which cave quartz can yield mithril. */
+#define MITHRIL_VEIN_MIN_DEPTH 12
 
 /* The "sval" codes for TV_ARROW */
 #define SV_NORMAL_ARROW 1 /*  */
@@ -1953,9 +2023,12 @@
     0x00010000 /* Dropped by a unique; used for skeleton-note hoard text */
 #define IDENT_CHASM_SANCTUM_DROP                                              \
     0x00020000 /* Generated in a chasm sanctum; persists after ambush trigger */
-#define IDENT_UNUSED_XXX4XXXX 0x00040000 /* Unused */
-#define IDENT_UNUSED_XXX8XXXX 0x00080000 /* Unused */
-#define IDENT_UNUSED_XX1XXXXX 0x00100000 /* Unused */
+#define IDENT_CHEST_LOOKED                                                   \
+    0x00040000 /* Chest trap inspection attempted at the stored Perception base */
+#define IDENT_CHEST_TRAP_PRESENT                                            \
+    0x00080000 /* Inspection established that a chest trap is present */
+#define IDENT_CHEST_TRAP_FULL                                               \
+    0x00100000 /* Inspection revealed the exact chest trap mechanism */
 #define IDENT_UNUSED_XX2XXXXX 0x00200000 /* Unused */
 #define IDENT_UNUSED_XX4XXXXX 0x00400000 /* Unused */
 #define IDENT_UNUSED_XX8XXXXX 0x00800000 /* Unused */
@@ -1989,6 +2062,10 @@
  */
 #define OBJECT_RUNTIME_STATE_NONE 0
 #define OBJECT_RUNTIME_STATE_FIRE_BROKEN 1
+/* Only weapon objects use this part of the otherwise generic payload. */
+#define OBJECT_RUNTIME_HARNESS_COLOR_MASK 0x000000ffL
+#define OBJECT_RUNTIME_HARNESS_COLOR_MARKER 0x00000080L
+#define OBJECT_RUNTIME_HARNESS_COLOR_VALUE_MASK 0x0000007fL
 
 /*
  * Number of special inscriptions, plus one.
@@ -2153,6 +2230,7 @@
 #define TR4_PROT_POIS      0x00200000L /* Item protection counts against poison attacks */
 #define TR4_PROT_DARK      0x00400000L /* Item protection counts against dark attacks */
 #define TR4_LIGHT_ARMOR    0x00800000L /* Light armour (robe/leather/boots/gloves/cloaks; via (Light) ego on shields/helms) */
+#define TR4_HARNESS_STOWABLE 0x01000000L /* Harness item may be stored in the Pack */
 #define TR4_MIN_DEPTH_SPEED TR4_DEEP_CALL /* Compatibility alias */
 
 /*
@@ -2458,6 +2536,8 @@
 #define MFLAG_HIT_BY_RANGED 0x00020000 /* Monster has been hit with a spell */
 #define MFLAG_HIT_BY_MELEE                                                     \
     0x00040000 /* Monster was just meleed by player last turn */
+#define MFLAG_DURUIN_PROVOKED                                                   \
+    0x00080000 /* Duruin may leave his inner bastion enclosure */
 
 /*
  * New monster race bit flags
@@ -2815,7 +2895,7 @@
 #define OPT_assassination_over_charge (OPT_GAME_PLAY + 4)
 /* Confirm before making direct attacks; useful for pacifist runs */
 #define OPT_pacifist_attack_warning (OPT_GAME_PLAY + 5)
-/* Confirm before spending a turn to switch between melee and ranged weapons */
+/* Confirm before paid melee/ranged active switches */
 #define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
 // reserved legacy slot: auto_haggle
 // reserved legacy slot: auto_scum
@@ -2904,6 +2984,17 @@
 #define OPT_story_object_desc 117
 #define OPT_hide_secondary_action_ring 118
 #define OPT_mirror_monster_tile_facing 119
+#define OPT_styled_player_health_bar 120
+#define OPT_styled_monster_health_bars 121
+#define OPT_styled_monster_tile_health_bars 122
+#define OPT_pixel_monster_status_icons 123
+#define OPT_lockpick_minigame 124
+#define OPT_chest_trap_minigame 125
+
+#define MONSTER_TILE_HEALTH_BARS_SHOW 0
+#define MONSTER_TILE_HEALTH_BARS_DAMAGED_ONLY 1
+#define MONSTER_TILE_HEALTH_BARS_OFF 2
+#define MONSTER_TILE_HEALTH_BARS_MAX MONSTER_TILE_HEALTH_BARS_OFF
 
 /*
  * Settings retired by the 0.9.7 interface refactor. These are not legacy
@@ -2926,6 +3017,7 @@
 #define MONSTER_TILE_FACING_NONE  0
 #define MONSTER_TILE_FACING_LEFT  1
 #define MONSTER_TILE_FACING_RIGHT 2
+#define MONSTER_TILE_FACING_RANDOM 3
 
 /* Intro screen style constants */
 #define INTRO_STYLE_FLAME       0   /* Flame Imperishable (Ainulindalë) */
@@ -3024,6 +3116,8 @@
 #define assassination_over_charge op_ptr->opt[OPT_assassination_over_charge]
 #define pacifist_attack_warning op_ptr->opt[OPT_pacifist_attack_warning]
 #define active_weapon_switch_confirm op_ptr->opt[OPT_active_weapon_switch_confirm]
+#define lockpick_minigame op_ptr->opt[OPT_lockpick_minigame]
+#define chest_trap_minigame op_ptr->opt[OPT_chest_trap_minigame]
 #define load_blitz_by_default op_ptr->opt[OPT_load_blitz_by_default]
 #define depth_in_feet op_ptr->opt[OPT_depth_in_feet]
 // reserved legacy slot: stack_force_notes
@@ -3112,6 +3206,11 @@
 #define story_monster_desc_pane op_ptr->opt[OPT_story_monster_desc_pane]
 #define story_object_desc op_ptr->opt[OPT_story_object_desc]
 #define hide_secondary_action_ring op_ptr->opt[OPT_hide_secondary_action_ring]
+#define styled_player_health_bar op_ptr->opt[OPT_styled_player_health_bar]
+#define styled_monster_health_bars op_ptr->opt[OPT_styled_monster_health_bars]
+#define styled_monster_tile_health_bars \
+    (op_ptr->monster_tile_health_bar_mode != MONSTER_TILE_HEALTH_BARS_OFF)
+#define pixel_monster_status_icons op_ptr->opt[OPT_pixel_monster_status_icons]
 #define disable_skeleton_note_tutorial                                           \
     op_ptr->opt[OPT_disable_skeleton_note_tutorial]
 #define smaller_level_size op_ptr->opt[OPT_smaller_level_size]
@@ -3518,6 +3617,7 @@
  */
 #define cave_empty_bold(Y, X)                                                  \
     (cave_floor_bold(Y, X) && (cave_feat[Y][X] != FEAT_CHASM)                  \
+        && (cave_feat[Y][X] != FEAT_RUBBLE)                                    \
         && (cave_m_idx[Y][X] == 0))
 
 /*

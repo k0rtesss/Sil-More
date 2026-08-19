@@ -72,7 +72,7 @@ int monster_skill(monster_type* m_ptr, int skill_type)
         {
             int before = skill;
             skill -= penalty;
-            log_debug(
+            log_trace(
                 "Song of Challenge penalty applied (r_idx=%d skill=%d -> %d, "
                 "delta=%d, effect=%d/%d)",
                 (int)m_ptr->r_idx, before, skill, penalty,
@@ -100,7 +100,7 @@ int monster_skill(monster_type* m_ptr, int skill_type)
         {
             int before = skill;
             skill -= penalty;
-            log_debug(
+            log_trace(
                 "Song of Elbereth penalty applied (r_idx=%d skill=%d -> %d, "
                 "delta=%d, effect=%d/%d)",
                 (int)m_ptr->r_idx, before, skill, penalty,

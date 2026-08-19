@@ -214,6 +214,16 @@ errr parse_k_info(char* buf, header* head)
         k_ptr->cost = cost;
     }
 
+    /* Process 'Y' for storage pool and per-item volume in tenths of an
+     * imperial quart. */
+    else if (buf[0] == 'Y')
+    {
+        if (!k_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        return parse_object_storage_line(buf, &k_ptr->storage, &k_ptr->volume);
+    }
+
     /* Process 'A' for "Allocation" (one line only) */
     else if (buf[0] == 'A')
     {

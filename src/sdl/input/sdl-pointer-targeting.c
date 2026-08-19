@@ -3,8 +3,7 @@
 
 bool sdl_pointer_attack_mode_is_ranged(int mode)
 {
-    return mode == SDL_POINTER_ATTACK_RANGED_1
-        || mode == SDL_POINTER_ATTACK_RANGED_2;
+    return mode == SDL_POINTER_ATTACK_RANGED_1;
 }
 
 bool sdl_pointer_attack_manual_modifier_active(void)
@@ -124,6 +123,18 @@ bool sdl_pointer_attack_panel_mode_highlighted(int mode)
         && sdl_pointer_attack_panel_display_mode() == mode;
 }
 
+bool sdl_pointer_attack_panel_quiver_highlighted(int mode)
+{
+    int display_mode = sdl_pointer_attack_panel_display_mode();
+
+    if (!sdl_pointer_attack_mode_is_ranged(mode))
+        return false;
+    if (sdl_pointer_attack_mode_is_ranged(display_mode))
+        return display_mode == mode;
+
+    return player_last_ranged_weapon_mode() == mode;
+}
+
 const char* sdl_pointer_attack_mode_name(int mode)
 {
     switch (mode) {
@@ -132,7 +143,7 @@ const char* sdl_pointer_attack_mode_name(int mode)
     case SDL_POINTER_ATTACK_RANGED_1:
         return "Ranged";
     case SDL_POINTER_ATTACK_RANGED_2:
-        return "Ranged 2";
+        return "Ranged";
     default:
         return "Pointer attack";
     }
@@ -166,11 +177,10 @@ void sdl_pointer_attack_reset_to_melee(void)
 
 void sdl_pointer_attack_set_mode(int mode)
 {
-    int power_throw_slot;
-    bool power_throw_mode;
-
     if (mode == SDL_POINTER_ATTACK_NONE)
         mode = SDL_POINTER_ATTACK_MELEE;
+    if (mode == SDL_POINTER_ATTACK_RANGED_2)
+        mode = SDL_POINTER_ATTACK_RANGED_1;
 
     if (sdl_pointer_attack_current_mode() == mode) {
         g_pointer_attack.panel_hover_mode = SDL_POINTER_ATTACK_NONE;
@@ -186,22 +196,41 @@ void sdl_pointer_attack_set_mode(int mode)
     sdl_pointer_attack_cancel_touch_press();
     sdl_mouse_path_cancel();
 
-    power_throw_slot = (p_ptr && character_generated)
-        ? player_power_throw_quiver_slot() : 0;
-    power_throw_mode = (power_throw_slot == INVEN_QUIVER1
-            && mode == SDL_POINTER_ATTACK_RANGED_1)
-        || (power_throw_slot == INVEN_QUIVER2
-            && mode == SDL_POINTER_ATTACK_RANGED_2);
-
     if (p_ptr && character_generated) {
-        if (!power_throw_mode)
-        {
-            player_queue_active_weapon_mode(mode);
-            sdl_enqueue_bypassed_command(CMD_ACTIVE_WEAPON_MODE);
-        }
+        player_queue_active_weapon_mode(mode);
+        sdl_enqueue_bypassed_command(CMD_ACTIVE_WEAPON_MODE);
     }
     else
         msg_format("%s pointer mode.", sdl_pointer_attack_mode_name(mode));
+    sdl_pointer_attack_refresh_mode_display(true);
+}
+
+void sdl_pointer_attack_activate_panel_choice(int mode, bool quiver_only)
+{
+    if (!sdl_pointer_attack_input_context_active())
+        return;
+
+    g_pointer_attack.panel_hover_mode = SDL_POINTER_ATTACK_NONE;
+    sdl_pointer_attack_clear_pending();
+    sdl_pointer_attack_clear_hover();
+    sdl_pointer_attack_clear_touch_selection();
+    sdl_pointer_attack_cancel_touch_press();
+    sdl_mouse_path_cancel();
+
+    if (quiver_only)
+    {
+        if (!sdl_pointer_attack_mode_is_ranged(mode))
+            return;
+        /* A quiver-row click opens the shared active-weapon chooser so the
+         * player can select any arrow stack in the mixed Quiver. */
+        sdl_enqueue_bypassed_command('\t');
+    }
+    else
+    {
+        /* Both combat rows are one melee/ranged toggle. */
+        sdl_enqueue_bypassed_command('\t');
+    }
+
     sdl_pointer_attack_refresh_mode_display(true);
 }
 
@@ -258,14 +287,24 @@ int sdl_pointer_attack_ranged_range(int mode)
     if (!sdl_pointer_attack_mode_is_ranged(mode))
         return 0;
 
-    ammo = &inventory[(mode == SDL_POINTER_ATTACK_RANGED_2)
-        ? INVEN_QUIVER2 : INVEN_QUIVER1];
-    if (!ammo->k_idx)
-        return 0;
+    {
+        int slot = player_active_throwing_weapon_slot();
 
-    object_flags4(ammo, &f1, &f2, &f3, &f4);
-    if (player_can_treat_as_throwing_flags(ammo, f3))
+        if (slot >= 0)
+            ammo = &inventory[slot];
+        else
+        {
+            slot = player_quiver_selected_arrow_slot();
+            ammo = player_quiver_arrow_object(slot);
+        }
+    }
+    if (ammo)
+        object_flags4(ammo, &f1, &f2, &f3, &f4);
+    if (ammo && player_can_treat_as_throwing_flags(ammo, f3))
         return throwing_range(ammo);
+
+    if (!ammo)
+        return 0;
 
     bow = &inventory[INVEN_BOW];
     if (!bow->tval || !p_ptr->ammo_tval)
@@ -744,7 +783,13 @@ bool sdl_pointer_attack_handle_touch_up(float x, float y,
     manual = sdl_pointer_attack_manual_modifier_active();
 
     if (repeat_target) {
-        (void)sdl_pointer_attack_queue_target(mode, manual, map_y, map_x);
+        if (sdl_pointer_attack_queue_target(mode, manual, map_y, map_x)) {
+            /* The second tap commits the highlighted target.  Do not leave
+             * either half of the touch preview latched while the resulting
+             * command is processed. */
+            sdl_pointer_attack_clear_touch_selection();
+            sdl_pointer_attack_clear_hover();
+        }
         return true;
     }
 
@@ -800,9 +845,10 @@ bool sdl_pointer_attack_flush_pending_press(Uint64 now_ns)
     y = g_pointer_attack.touch_start_y;
     sdl_pointer_attack_cancel_touch_press();
     sdl_pointer_attack_clear_touch_selection();
-
-    if (!sdl_mouse_recall_handle_right_click(x, y))
-        sdl_pointer_attack_clear_hover();
+    /* Long-press switches from attacking to recall.  Clear the hover too so
+     * its red target does not reappear after the recall overlay closes. */
+    sdl_pointer_attack_clear_hover();
+    (void)sdl_mouse_recall_handle_right_click(x, y);
 
     return true;
 }
@@ -1009,7 +1055,7 @@ bool sdl_pointer_attack_take_command(int* command, int* dir)
 
         target_set_location(target_y, target_x);
         health_track(0);
-        *command = (mode == SDL_POINTER_ATTACK_RANGED_2) ? 'F' : 'f';
+        *command = 'f';
         *dir = 5;
         return true;
     }
@@ -1055,7 +1101,7 @@ bool sdl_pointer_attack_take_command(int* command, int* dir)
     health_track(m_idx);
     if (sdl_pointer_attack_mode_is_ranged(mode)) {
         target_set_monster(m_idx);
-        *command = (mode == SDL_POINTER_ATTACK_RANGED_2) ? 'F' : 'f';
+        *command = 'f';
         *dir = 5;
     } else {
         *command = ';';
@@ -1315,6 +1361,7 @@ static void sdl_pointer_aim_select_clear_mouse_press(void)
 
 void sdl_pointer_aim_select_begin(int range, bool allow_vertical)
 {
+    sdl_touch_target_layout_begin();
     sdl_pointer_aim_begin(range, allow_vertical);
     g_pointer_aim.select_mode = true;
     g_pointer_aim.select_manual = false;
@@ -1345,6 +1392,7 @@ void sdl_pointer_aim_select_end(void)
     sdl_pointer_aim_select_clear_mouse_press();
     sdl_pointer_aim_select_clear_event();
     sdl_pointer_aim_end();
+    sdl_touch_target_layout_end();
 }
 
 void sdl_pointer_aim_select_set_choices(const int* ys, const int* xs,
@@ -1770,7 +1818,12 @@ bool sdl_pointer_aim_handle_touch_up(float x, float y,
     {
         if (repeat_target)
         {
-            (void)sdl_pointer_aim_queue_grid(map_y, map_x);
+            if (sdl_pointer_aim_queue_grid(map_y, map_x)) {
+                /* Match touch attack targeting: once the second tap commits
+                 * the direction, the preview square has served its purpose. */
+                sdl_pointer_aim_clear_touch_selection();
+                sdl_pointer_aim_clear_hover();
+            }
         }
         else if (sdl_pointer_aim_resolve_grid(map_y, map_x, NULL, NULL))
         {
@@ -1976,7 +2029,6 @@ static void sdl_pointer_aim_render_choice_prompt(void)
 {
     const sdl_view* view = &g_views[PANE_MAIN];
     TTF_Font* font;
-    SDL_Surface* surface;
     SDL_Texture* texture;
     SDL_FRect box;
     SDL_FRect text_dst;
@@ -1991,6 +2043,8 @@ static void sdl_pointer_aim_render_choice_prompt(void)
     float view_w = (float)(sdl_main_view_visual_cols(view) * view->cell_w);
     float view_h = (float)(sdl_main_view_visual_rows(view) * view->cell_h);
     float cell_h = (float)view->cell_h;
+    int text_w = 0;
+    int text_h = 0;
 
     if (!g_pointer_aim.select_prompt[0])
         return;
@@ -2004,18 +2058,15 @@ static void sdl_pointer_aim_render_choice_prompt(void)
 
     pad = sdl_touch_pane_clampf((float)font_px * 0.4f, 8.0f, 16.0f);
     gap = sdl_touch_pane_clampf(cell_h * 0.4f, 6.0f, 14.0f);
-    surface = sdl_object_tooltip_render_text_surface(font,
-        g_pointer_aim.select_prompt, text_color, view_w - pad * 2.0f);
-    if (!surface)
+    texture = sdl_ui_wrapped_text_texture(font,
+        g_pointer_aim.select_prompt,
+        MAX(1, (int)(view_w - pad * 2.0f + 0.5f)), text_color,
+        &text_w, &text_h);
+    if (!texture)
         return;
-    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
-    if (!texture) {
-        SDL_DestroySurface(surface);
-        return;
-    }
 
-    box.w = (float)surface->w + pad * 2.0f;
-    box.h = (float)surface->h + pad * 2.0f;
+    box.w = (float)text_w + pad * 2.0f;
+    box.h = (float)text_h + pad * 2.0f;
 
     /* Centre on the player horizontally and sit just below the bottom row of
      * adjacent doors; flip above if there is no room below. */
@@ -2034,17 +2085,14 @@ static void sdl_pointer_aim_render_choice_prompt(void)
     if (box.y + box.h > view_y + view_h - gap)
         box.y = view_y + view_h - gap - box.h;
 
-    text_dst = (SDL_FRect){ box.x + pad, box.y + pad, (float)surface->w,
-        (float)surface->h };
+    text_dst = (SDL_FRect){ box.x + pad, box.y + pad, (float)text_w,
+        (float)text_h };
 
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 232);
     SDL_RenderFillRect(g_state.renderer, &box);
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b, 200);
     SDL_RenderRect(g_state.renderer, &box);
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_RenderTexture(g_state.renderer, texture, NULL, &text_dst);
-    SDL_DestroyTexture(texture);
-    SDL_DestroySurface(surface);
 }
 
 /* Highlight each adjacent candidate grid; the current selection is brighter. */
@@ -2132,6 +2180,13 @@ bool sdl_mouse_stuck_door_bash_take_command(int* command, int* dir)
     {
         log_debug("Queued stuck-door bash target is no longer valid at (%d,%d)",
             bash_y, bash_x);
+        return true;
+    }
+    if (lockpick_minigame)
+    {
+        sdl_mouse_note_feature_for_action(bash_y, bash_x);
+        *command = 'o';
+        *dir = bash_dir;
         return true;
     }
     if (!get_check_near(bash_y, bash_x,

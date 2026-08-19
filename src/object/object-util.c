@@ -135,6 +135,8 @@ void object_prep(object_type* o_ptr, int k_idx)
     o_ptr->number = 1;
 
     o_ptr->weight = object_roll_base_weight(k_ptr);
+    o_ptr->storage = k_ptr->storage;
+    o_ptr->volume = k_ptr->volume;
 
     /* Default bonuses to attack and defence */
     o_ptr->att = k_ptr->att;
@@ -159,6 +161,71 @@ void object_prep(object_type* o_ptr, int k_idx)
     /* Hack -- cursed items are always "cursed" */
     if (k_ptr->flags3 & (TR3_LIGHT_CURSE | TR3_HEAVY_CURSE | TR3_PERMA_CURSE))
         o_ptr->ident |= (IDENT_CURSED);
+}
+
+/* Return the protection sides currently provided by an object. */
+int object_effective_protection_sides(const object_type* o_ptr)
+{
+    int ps;
+    int depth;
+    u32b f1, f2, f3, f4;
+
+    if (!o_ptr)
+        return 0;
+
+    ps = o_ptr->ps;
+    if (ps <= 0 || !p_ptr)
+        return ps;
+
+    object_flags4(o_ptr, &f1, &f2, &f3, &f4);
+    if (!(f4 & TR4_DEPTH_SCALE_PS))
+        return ps;
+
+    depth = p_ptr->depth;
+    if (depth < 0)
+        depth = 0;
+
+    return ps + depth / 5;
+}
+
+/* Return per-item volume after ego and optional carriage reductions. */
+int object_effective_volume_with_reduction(const object_type* o_ptr,
+    int extra_reduction_percent)
+{
+    int volume;
+    int strongest_reduction = MIN(extra_reduction_percent, 0);
+    byte egos[2];
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->storage == OBJECT_STORAGE_NONE
+        || o_ptr->volume <= 0)
+        return 0;
+
+    volume = o_ptr->volume;
+    egos[0] = object_ego_prefix(o_ptr);
+    egos[1] = object_ego_suffix(o_ptr);
+    for (int i = 0; i < 2; i++)
+    {
+        if (z_info && e_info && egos[i] > 0 && egos[i] < z_info->e_max)
+        {
+            int reduction = e_info[egos[i]].volume_adjustment_percent;
+
+            if (reduction < strongest_reduction)
+                strongest_reduction = reduction;
+        }
+    }
+
+    /* Apply one base-relative reduction; prefix and suffix do not stack. */
+    if (strongest_reduction < 0)
+        volume = (volume * (100 + strongest_reduction) + 50) / 100;
+
+    /* A volume-bearing item always occupies at least 0.1 qt. */
+    return MAX(1, volume);
+}
+
+/* Return intrinsic per-item volume after data-driven ego adjustments. */
+int object_effective_volume(const object_type* o_ptr)
+{
+    return object_effective_volume_with_reduction(o_ptr, 0);
 }
 
 /*

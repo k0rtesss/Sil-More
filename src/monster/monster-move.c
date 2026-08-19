@@ -706,29 +706,37 @@ void monster_swap(int y1, int x1, int y2, int x2)
 
         object_flags(o_ptr, &f1, &f2, &f3);
 
-        if (!forgo_attacking_unwary || (m_ptr->alertness >= ALERTNESS_ALERT))
+        if ((distance(y1, x1, p_ptr->py, p_ptr->px) > 1)
+            && (distance(y2, x2, p_ptr->py, p_ptr->px) == 1)
+            && !p_ptr->truce && !p_ptr->confused && !p_ptr->afraid
+            && (f3 & (TR3_POLEARM))
+            && (p_ptr->focused
+                || p_ptr->previous_action[0] == ACTION_READY_MELEE))
         {
-            if ((distance(y1, x1, p_ptr->py, p_ptr->px) > 1)
-                && (distance(y2, x2, p_ptr->py, p_ptr->px) == 1)
-                && !p_ptr->truce && !p_ptr->confused && !p_ptr->afraid
-                && (f3 & (TR3_POLEARM)) && p_ptr->focused)
+            char o_name[80];
+
+            /* Get the basic name of the object */
+            object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
+
+            if (forgo_attacking_unwary
+                && (m_ptr->alertness < ALERTNESS_ALERT))
             {
-                char o_name[80];
-
-                /* Get the basic name of the object */
-                object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-
-                if (valorous_oath_auto_attack_safety && chosen_oath(OATH_VALOROUS)
-                    && !oath_invalid(OATH_VALOROUS)
-                    && (m_ptr->stance == STANCE_FLEEING))
-                {
-                    msg_format("%^s comes into reach of your %s, but you hold back.", m_name, o_name);
-                }
-                else
-                {
-                    msg_format("%^s comes into reach of your %s.", m_name, o_name);
-                    py_attack_aux(y2, x2, ATT_POLEARM);
-                }
+                msg_format("%^s comes into reach of your %s, but you hold back "
+                           "from attacking an unwary foe.",
+                    m_name, o_name);
+            }
+            else if (valorous_oath_auto_attack_safety
+                && chosen_oath(OATH_VALOROUS) && !oath_invalid(OATH_VALOROUS)
+                && (m_ptr->stance == STANCE_FLEEING))
+            {
+                msg_format("%^s comes into reach of your %s, but you hold back.",
+                    m_name, o_name);
+            }
+            else
+            {
+                msg_format(
+                    "%^s comes into reach of your %s.", m_name, o_name);
+                py_attack_aux(y2, x2, ATT_POLEARM);
             }
         }
     }
@@ -777,6 +785,23 @@ s16b player_place(int y, int x)
 /*
  * Place a copy of a monster in the dungeon XXX XXX
  */
+static byte monster_initial_random_tile_facing(int m_idx, int r_idx)
+{
+    u32b hash = (u32b)m_idx;
+
+    /*
+     * Keep cosmetic facing independent of the gameplay RNG stream and the
+     * monster's position, so it remains unchanged after movement or reload.
+     */
+    hash ^= (u32b)r_idx * 0x9e3779b9U;
+    hash ^= hash >> 16;
+    hash *= 0x7feb352dU;
+    hash ^= hash >> 15;
+
+    return (hash & 1U) ? MONSTER_TILE_FACING_LEFT
+                       : MONSTER_TILE_FACING_RIGHT;
+}
+
 s16b monster_place(int y, int x, monster_type* n_ptr)
 {
     s16b m_idx;
@@ -806,6 +831,10 @@ s16b monster_place(int y, int x, monster_type* n_ptr)
         /* Location */
         m_ptr->fy = y;
         m_ptr->fx = x;
+
+        /* Set once at placement so random-facing races never flicker. */
+        m_ptr->visual_random_facing = monster_initial_random_tile_facing(
+            m_idx, m_ptr->r_idx);
 
         /* Update the monster */
         update_mon(m_idx, true);

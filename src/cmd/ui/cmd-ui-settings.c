@@ -4,6 +4,8 @@
 #include "sdl-sound.h"
 
 extern struct sound_config g_sound_config;
+extern int sdl_log_pane_current_rows(enum pane_type pane);
+extern void sdl_log_pane_set_rows(enum pane_type pane, int rows);
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
@@ -17,6 +19,9 @@ extern struct sound_config g_sound_config;
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/question.h"
 #include <SDL3/SDL_keyboard.h>
+
+#define SIL_MORE_PRIVACY_POLICY_URL \
+    "https://k0rtesss.github.io/Sil-More/privacy-policy.html"
 
 enum {
     SETTINGS_PREV_OPTION_PAGE = -1001,
@@ -103,8 +108,10 @@ struct settings_value_choice
 #define SOUND_OPTION_ROW_BASE 2048
 #define SOUND_OPTION_ROW(index) (SOUND_OPTION_ROW_BASE + (index))
 #define IFACE_PANE_ROW_BASE 4096
-#define IFACE_PANE_ROW_MAX 32
+#define IFACE_PANE_ROW_MAX 40
 #define IFACE_DICE_ROLL_MS_STEP 500
+#define IFACE_OVERLAY_LOG_ROWS_MIN 1
+#define IFACE_OVERLAY_LOG_ROWS_MAX 20
 
 static const struct settings_value_choice running_delay_choices[] = {
     { 0, "0 ms" },
@@ -140,6 +147,9 @@ static const struct option_group_marker interface_option_groups[] = {
     { OPT_look_objects_sort_by_difficulty, "Look" },
     { OPT_look_nearby_filter_default, "Look" },
     { OPT_song_list_sort_by_recent, "Look" },
+    { OPT_styled_player_health_bar, "Health Bars" },
+    { OPT_styled_monster_health_bars, "Health Bars" },
+    { OPT_styled_monster_tile_health_bars, "Health Bars" },
     { OPT_hide_supporting_panes_fullscreen, "Panels" },
     { OPT_hitpoint_warning, "Warnings" },
     { OPT_supply_menu_random_icons, "Items" },
@@ -165,6 +175,8 @@ static const struct option_group_marker gameplay_option_groups[] = {
     { OPT_active_weapon_switch_confirm, "Combat Behavior" },
     { OPT_forgo_attacking_unwary, "Combat Behavior" },
     { OPT_assassination_over_charge, "Combat Behavior" },
+    { OPT_lockpick_minigame, "Interaction" },
+    { OPT_chest_trap_minigame, "Interaction" },
     { OPT_stop_singing_on_rest, "Rest and Song" },
     { OPT_visual_recognition, "Information" },
     { OPT_know_monster_info, "Information" },
@@ -181,6 +193,7 @@ static const struct option_group_marker gameplay_option_groups[] = {
 static const struct option_group_marker visual_option_groups[] = {
     { OPT_stealth_vision, "Overlays" },
     { OPT_sleep_icon, "Overlays" },
+    { OPT_pixel_monster_status_icons, "Overlays" },
     { OPT_artifact_unique_color, "Items" },
     { OPT_unidentified_items_slate, "Items" },
     { OPT_delay_factor, "Animation" },
@@ -296,36 +309,6 @@ static bool option_group_starts_at(const struct option_group_marker* groups,
     return !previous || !streq(current, previous);
 }
 
-static int option_group_count_before(const struct option_group_marker* groups,
-    const int* settings, int selected_index)
-{
-    int count = 0;
-
-    if (!groups || !settings || selected_index < 0)
-        return 0;
-
-    for (int i = 0; i <= selected_index; i++)
-        if (option_group_starts_at(groups, settings, i))
-            count++;
-
-    return count;
-}
-
-static int option_group_total_rows(const struct option_group_marker* groups,
-    const int* settings, int setting_count)
-{
-    int count = 0;
-
-    if (!groups || !settings)
-        return 0;
-
-    for (int i = 0; i < setting_count; i++)
-        if (option_group_starts_at(groups, settings, i))
-            count++;
-
-    return count;
-}
-
 static bool option_page_uses_app_config(int page)
 {
     return (page == INTERFACE_PAGE) || (page == TEXT_PAGE)
@@ -439,17 +422,6 @@ static cptr settings_ui_pick_label(int max_chars, cptr long_label,
     return "";
 }
 
-static int settings_menu_visible_rows(int list_start_row, int footer_rows)
-{
-    int hgt = Term ? Term->hgt : 24;
-    int rows = hgt - list_start_row - footer_rows;
-
-    if (rows < 1)
-        rows = 1;
-
-    return rows;
-}
-
 static void settings_menu_begin_scroll_area(int list_start_row, int visible_rows)
 {
     ui_scroll_area_begin(list_start_row, list_start_row + visible_rows - 1,
@@ -523,6 +495,9 @@ static void settings_ui_put_fitted(int row, int col, byte attr, cptr text)
 #define SETTINGS_CLICK_SAVE 32004
 #define SETTINGS_CLICK_RENAME_SELECTED 32005
 #define SETTINGS_CLICK_RENAME_GROUP 32006
+#define SETTINGS_CLICK_QUICK_ACCESS_SIZE 32007
+#define SETTINGS_CLICK_QUICK_ACCESS_ROW 32008
+#define SETTINGS_CLICK_QUICK_ACCESS_ADD_CELL 32009
 #define SETTINGS_CLICK_PANE_FIELD_BASE 32100
 /*
  * Per-row "Reset to default" buttons in the pixel/semantic settings menus.
@@ -530,123 +505,6 @@ static void settings_ui_put_fitted(int row, int col, byte attr, cptr text)
  * mouse or touch user can reset a single setting without a keyboard key.
  */
 #define SETTINGS_CLICK_RESET_ROW_BASE 32200
-
-static void settings_ui_add_return_click_targets(int row, int col, cptr text)
-{
-    static cptr tokens[] = {
-        "Esc", "ESC", "Escape", "Enter", "Return", "return",
-        "Back", "back", "accept"
-    };
-
-    if (!text)
-        return;
-
-    for (int i = 0; i < (int)N_ELEMENTS(tokens); i++)
-        ui_menu_click_add_text_token(SETTINGS_CLICK_RETURN, col, row, text,
-            tokens[i]);
-}
-
-static void settings_ui_put_return_prompt(int row, int col, byte attr,
-    cptr long_text, cptr medium_text, cptr short_text)
-{
-    char buf[160];
-    int width = settings_ui_line_width(col);
-
-    settings_ui_fit_text(buf, sizeof(buf),
-        settings_ui_pick_label(width, long_text, medium_text, short_text),
-        width);
-    Term_putstr(col, row, width, attr, buf);
-    settings_ui_add_return_click_targets(row, col, buf);
-}
-
-static cptr settings_ui_wrap_line(cptr text, int max_chars, char* buf,
-    size_t buflen)
-{
-    cptr start;
-    cptr end;
-    cptr split = NULL;
-    size_t copy_len;
-
-    if (!buf || !buflen)
-        return text;
-
-    buf[0] = '\0';
-
-    if (!text)
-        return text;
-
-    while (*text == ' ')
-        text++;
-
-    if (!*text || max_chars <= 0)
-        return text;
-
-    start = text;
-    end = text;
-
-    while (*end && *end != '\n' && (end - start) < max_chars)
-    {
-        if (*end == ' ')
-            split = end;
-        end++;
-    }
-
-    if (*end == '\n')
-    {
-        copy_len = (size_t)(end - start);
-        text = end + 1;
-    }
-    else if (*end && (end - start) >= max_chars)
-    {
-        if (split && split > start)
-        {
-            copy_len = (size_t)(split - start);
-            text = split + 1;
-        }
-        else
-        {
-            copy_len = (size_t)(end - start);
-            text = end;
-        }
-    }
-    else
-    {
-        copy_len = (size_t)(end - start);
-        text = end;
-    }
-
-    if (copy_len >= buflen)
-        copy_len = buflen - 1;
-
-    memcpy(buf, start, copy_len);
-    buf[copy_len] = '\0';
-
-    while (*text == ' ')
-        text++;
-
-    return text;
-}
-
-static void settings_ui_draw_wrapped_block(int row, int col, int max_width,
-    int max_rows, byte attr, cptr text)
-{
-    int i;
-    cptr rest = text;
-    char line_buf[160];
-
-    if (max_width < 1 || max_rows <= 0)
-        return;
-
-    for (i = 0; i < max_rows; i++)
-        Term_erase(col, row + i, max_width);
-
-    for (i = 0; i < max_rows && rest && *rest; i++)
-    {
-        rest = settings_ui_wrap_line(rest, max_width, line_buf,
-            sizeof(line_buf));
-        Term_putstr(col, row + i, max_width, attr, line_buf);
-    }
-}
 
 static void settings_ui_format_field(char* buf, size_t buflen, cptr text,
     bool selected)
@@ -790,6 +648,18 @@ static cptr option_menu_label(int opt)
     case OPT_hitpoint_warning:
         return compact ? (narrow ? "HP warn" : "HP warning")
                        : "Hitpoint warning threshold (0% to 90%)";
+    case OPT_styled_player_health_bar:
+        return compact ? (narrow ? "Styled HP bar" : "Styled health bar")
+                       : "Use styled player health bar in the left panel";
+    case OPT_styled_monster_health_bars:
+        return compact ? (narrow ? "Monster HP bars" : "Monster health bars")
+                       : "Use styled monster health bars in panes/overlays";
+    case OPT_styled_monster_tile_health_bars:
+        return compact ? (narrow ? "Tile HP bars" : "Monster tile HP bars")
+                       : "Monster tile health bars";
+    case OPT_pixel_monster_status_icons:
+        return compact ? (narrow ? "Pixel status" : "Pixel monster status")
+                       : "Use pixel-rendered monster status icons";
     case OPT_hide_supporting_panes_fullscreen:
         return compact ? (narrow ? "Hide panes FS" : "Hide panes full-screen")
                        : "Hide supporting panes on full-screen screens";
@@ -869,6 +739,8 @@ static cptr option_menu_label(int opt)
         case OPT_active_weapon_switch_confirm: return narrow ? "Weapon switch" : "Confirm weapon switch";
         case OPT_forgo_attacking_unwary: return narrow ? "Skip unwary hits" : "Forgo unwary attacks";
         case OPT_assassination_over_charge: return narrow ? "Stealth over charge" : "Assassination over Charge";
+        case OPT_lockpick_minigame: return narrow ? "Door minigame" : "Locked-door minigame";
+        case OPT_chest_trap_minigame: return narrow ? "Chest minigame" : "Chest trap minigame";
         case OPT_stop_singing_on_rest: return narrow ? "Stop song on rest" : "Stop singing on rest";
         case OPT_know_monster_info: return narrow ? "Know monsters" : "Know monster info";
         case OPT_visual_recognition: return narrow ? "Need light to spot" : "Need light to spot";
@@ -890,7 +762,7 @@ static cptr option_menu_label(int opt)
         case OPT_mirror_player_tile_facing:
             return narrow ? "Direction anim" : "Directional character animation";
         case OPT_mirror_monster_tile_facing:
-            return narrow ? "Monster facing" : "Directional monster animation";
+            return narrow ? "Monster facing" : "Monster tile facing";
         case OPT_look_nearby_filter_default: return narrow ? "Look near def" : "Look nearby default";
         case OPT_birth_discon_stair: return narrow ? "Disc. stairs" : "Disconnected stairs";
         case OPT_birth_ironman: return narrow ? "Straight down" : "Straight down";
@@ -956,19 +828,13 @@ static void option_menu_format_line(char* buf, size_t buflen, cptr label,
     }
 }
 
-static bool settings_semantic_menu_begin(cptr title, int selected_choice)
+static void settings_semantic_menu_begin(cptr title, int selected_choice)
 {
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
 
-    if (!sdl_character_sheet_screen_begin_select(selected_choice,
-            title ? title : ""))
-    {
-        return false;
-    }
-
+    sdl_character_sheet_screen_begin_select(selected_choice, title ? title : "");
     sdl_character_sheet_screen_set_select_menu_style(true);
-    return true;
 }
 
 static void settings_semantic_menu_hide(void)
@@ -1043,8 +909,23 @@ static void option_apply_side_effects(int opt)
         redraw_monster_subwindows();
     if (opt == OPT_hide_supporting_panes_fullscreen)
         sdl_refresh_supporting_panes_layout();
+    if (opt == OPT_styled_player_health_bar)
+    {
+        p_ptr->redraw |= PR_BASIC;
+        sdl_left_panel_source_invalidate();
+    }
+    if (opt == OPT_styled_monster_health_bars)
+    {
+        p_ptr->redraw |= PR_HEALTHBAR;
+        p_ptr->window |= (PW_MONSTER | PW_MONLIST);
+        redraw_monster_subwindows();
+        sdl_left_panel_source_invalidate();
+    }
+    if (opt == OPT_styled_monster_tile_health_bars)
+        p_ptr->redraw |= PR_MAP;
     if (opt == OPT_stealth_vision || opt == OPT_visual_recognition
         || opt == OPT_sleep_icon || opt == OPT_mirror_player_tile_facing
+        || opt == OPT_pixel_monster_status_icons
         || opt == OPT_handcrafted_player_tile_facing
         || opt == OPT_mirror_monster_tile_facing)
         p_ptr->redraw |= (PR_MAP);
@@ -1086,11 +967,59 @@ static void option_set_player_tile_facing_mode(byte mode)
     option_apply_side_effects(OPT_mirror_player_tile_facing);
 }
 
+static byte option_monster_tile_health_bar_mode(void)
+{
+    if (!op_ptr)
+        return MONSTER_TILE_HEALTH_BARS_SHOW;
+
+    if (op_ptr->monster_tile_health_bar_mode > MONSTER_TILE_HEALTH_BARS_MAX)
+        return MONSTER_TILE_HEALTH_BARS_SHOW;
+
+    return op_ptr->monster_tile_health_bar_mode;
+}
+
+static cptr option_monster_tile_health_bar_mode_label(void)
+{
+    switch (option_monster_tile_health_bar_mode())
+    {
+    case MONSTER_TILE_HEALTH_BARS_DAMAGED_ONLY: return "only damaged";
+    case MONSTER_TILE_HEALTH_BARS_OFF:          return "off";
+    default:                                    return "show";
+    }
+}
+
+static void option_set_monster_tile_health_bar_mode(byte mode)
+{
+    if (!op_ptr)
+        return;
+
+    if (mode > MONSTER_TILE_HEALTH_BARS_MAX)
+        mode = MONSTER_TILE_HEALTH_BARS_SHOW;
+
+    op_ptr->monster_tile_health_bar_mode = mode;
+    op_ptr->opt[OPT_styled_monster_tile_health_bars]
+        = (mode != MONSTER_TILE_HEALTH_BARS_OFF);
+    option_apply_side_effects(OPT_styled_monster_tile_health_bars);
+}
+
 #define SETTINGS_VALUE_PICKER_MAX 96
 
-static bool settings_pick_value(cptr title, cptr desc,
+static bool settings_question_button_choice_present(
+    const ui_question_button* buttons, int button_count, int choice)
+{
+    for (int i = 0; buttons && i < button_count; i++)
+    {
+        if (buttons[i].choice == choice)
+            return true;
+    }
+
+    return false;
+}
+
+static bool settings_pick_value_ex_buttons(cptr title, cptr desc,
     const struct settings_value_choice* choices, int count, int current_value,
-    int* out_value)
+    int* out_value, bool letter_shortcuts, const ui_question_button* buttons,
+    int button_count, int* out_button_choice)
 {
     ui_question_option options[SETTINGS_VALUE_PICKER_MAX];
     char labels[SETTINGS_VALUE_PICKER_MAX][96];
@@ -1099,6 +1028,8 @@ static bool settings_pick_value(cptr title, cptr desc,
 
     if (!choices || count <= 0 || !out_value)
         return false;
+    if (out_button_choice)
+        *out_button_choice = 0;
 
     if (count > SETTINGS_VALUE_PICKER_MAX)
         count = SETTINGS_VALUE_PICKER_MAX;
@@ -1110,20 +1041,75 @@ static bool settings_pick_value(cptr title, cptr desc,
 
         SDL_strlcpy(labels[i], choices[i].label ? choices[i].label : "",
             sizeof(labels[i]));
-        options[i].key = (i < 26) ? (char)I2A(i) : 0;
+        options[i].key = (letter_shortcuts && count <= 26 && i < 26)
+            ? (char)I2A(i) : 0;
         options[i].label = labels[i];
         options[i].attr = (choices[i].value == current_value)
             ? TERM_L_BLUE : TERM_WHITE;
+        options[i].disabled = false;
     }
 
-    choice = ui_question_ask_overlay(title ? title : "Choose Value", desc, options,
-        count, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, default_index);
+    choice = ui_question_ask_overlay_buttons(title ? title : "Choose Value",
+        desc, options, count, buttons, button_count, UI_QUESTION_GLOBAL,
+        UI_QUESTION_GLOBAL, default_index);
 
     if (choice < 0 || choice >= count)
+    {
+        if (out_button_choice
+            && settings_question_button_choice_present(buttons, button_count,
+                choice))
+        {
+            *out_button_choice = choice;
+            return true;
+        }
         return false;
+    }
 
     *out_value = choices[choice].value;
     return true;
+}
+
+static bool settings_pick_value_ex(cptr title, cptr desc,
+    const struct settings_value_choice* choices, int count, int current_value,
+    int* out_value, bool letter_shortcuts)
+{
+    return settings_pick_value_ex_buttons(title, desc, choices, count,
+        current_value, out_value, letter_shortcuts, NULL, 0, NULL);
+}
+
+static bool settings_pick_value(cptr title, cptr desc,
+    const struct settings_value_choice* choices, int count, int current_value,
+    int* out_value)
+{
+    return settings_pick_value_ex(title, desc, choices, count, current_value,
+        out_value, true);
+}
+
+static bool settings_pick_integer_range(cptr title, cptr desc, int min_value,
+    int max_value, int current_value, bool show_sign, int* out_value)
+{
+    struct settings_value_choice choices[SETTINGS_VALUE_PICKER_MAX];
+    char labels[SETTINGS_VALUE_PICKER_MAX][24];
+    int count;
+
+    if (!out_value || max_value < min_value)
+        return false;
+
+    count = max_value - min_value + 1;
+    if (count > SETTINGS_VALUE_PICKER_MAX)
+        return false;
+
+    for (int i = 0; i < count; i++) {
+        int value = min_value + i;
+
+        strnfmt(labels[i], sizeof(labels[i]), show_sign ? "%+d" : "%d",
+            value);
+        choices[i].value = value;
+        choices[i].label = labels[i];
+    }
+
+    return settings_pick_value(title, desc, choices, count, current_value,
+        out_value);
 }
 
 static bool option_pick_from_choices(int opt,
@@ -1203,6 +1189,11 @@ static bool option_pick_value(int opt, bool* handled)
         { PLAYER_TILE_FACING_OFF, "off" },
         { PLAYER_TILE_FACING_MIRROR, "mirror" },
         { PLAYER_TILE_FACING_HANDCRAFTED, "handcrafted" }
+    };
+    static const struct settings_value_choice monster_tile_health_choices[] = {
+        { MONSTER_TILE_HEALTH_BARS_SHOW, "Show" },
+        { MONSTER_TILE_HEALTH_BARS_DAMAGED_ONLY, "Only damaged" },
+        { MONSTER_TILE_HEALTH_BARS_OFF, "Off" }
     };
 
     if (handled)
@@ -1359,6 +1350,18 @@ static bool option_pick_value(int opt, bool* handled)
         }
         return false;
 
+    case OPT_styled_monster_tile_health_bars:
+        value = option_monster_tile_health_bar_mode();
+        if (option_pick_from_choices(opt, monster_tile_health_choices,
+                (int)N_ELEMENTS(monster_tile_health_choices), value, &value,
+                handled)
+            && value != option_monster_tile_health_bar_mode())
+        {
+            option_set_monster_tile_health_bar_mode((byte)value);
+            return true;
+        }
+        return false;
+
     default:
         return false;
     }
@@ -1460,13 +1463,24 @@ enum iface_pane_field {
     IFACE_PANE_FIELD_ENABLED = 0,
     IFACE_PANE_FIELD_PLACEMENT,
     IFACE_PANE_FIELD_FONT,
-    IFACE_PANE_FIELD_TILE_SCALE,
-    IFACE_PANE_FIELD_BUTTON_COUNT,
+    IFACE_PANE_FIELD_SIZE,
+    IFACE_PANE_FIELD_COLUMNS,
+    IFACE_PANE_FIELD_ROWS,
+    IFACE_PANE_FIELD_QA_ARROWS,
+    IFACE_PANE_FIELD_QA_LAUNCH,
     IFACE_PANE_FIELD_BUTTONS,
     IFACE_PANE_FIELD_LP_LAUNCH,
     IFACE_PANE_FIELD_LP_COMPACT,
+    IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR,
+    IFACE_PANE_FIELD_LP_TOUCH_EDGE,
+    IFACE_PANE_FIELD_QUICK_TOUCH_SIDE,
+    IFACE_PANE_FIELD_LOG_ROWS,
+    IFACE_PANE_FIELD_OVERLAY_LOG_BORDER,
     IFACE_PANE_FIELD_DICE_LOCK,
-    IFACE_PANE_FIELD_DICE_OVERLAY
+    IFACE_PANE_FIELD_DICE_OVERLAY,
+    IFACE_PANE_FIELD_MAIN_MENU_BUTTON,
+    IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS,
+    IFACE_PANE_FIELD_POPUP_NOTIFICATION
 };
 
 struct iface_pane_row {
@@ -1475,11 +1489,15 @@ struct iface_pane_row {
     enum iface_pane_field field;
 };
 
+#define IFACE_PANE_PLACEMENT_ORDER_STRIDE (MAX_PANE_CONFIGS + 1)
+
 static bool pane_type_is_overlay(enum pane_type type);
 static const char* pane_type_display_name(enum pane_type type);
 static int build_interface_pane_rows(struct iface_pane_row* rows, int max_rows,
     struct option_group_marker* markers, int* marker_count);
 static cptr iface_pane_row_label(const struct iface_pane_row* row);
+static cptr iface_pane_row_description(const struct iface_pane_row* row);
+static int iface_pane_row_live_index(const struct iface_pane_row* row);
 static void iface_pane_row_value(const struct iface_pane_row* row, char* buf,
     size_t buflen);
 static bool option_pick_value(int opt, bool* handled);
@@ -1616,6 +1634,10 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
                     : PLAYER_TILE_FACING_MIRROR)
                 : PLAYER_TILE_FACING_OFF);
         break;
+    case OPT_styled_monster_tile_health_bars:
+        option_set_monster_tile_health_bar_mode(
+            MONSTER_TILE_HEALTH_BARS_SHOW);
+        break;
     default:
         op_ptr->opt[o] = option_norm[o];
         option_apply_side_effects(o);
@@ -1639,7 +1661,6 @@ extern void do_cmd_options_aux(int page, cptr info)
     int ch;
 
     int i, k = 0, n = 0;
-    int scroll = 0;
 
     int opt[OPT_PAGE_PER + IFACE_PANE_ROW_MAX];
     struct iface_pane_row pane_rows[IFACE_PANE_ROW_MAX];
@@ -1668,7 +1689,21 @@ extern void do_cmd_options_aux(int page, cptr info)
         /* Collect options on this "page" */
         if (option_page[page][i] != OPT_NONE)
         {
-            opt[n++] = option_page[page][i];
+            int candidate = option_page[page][i];
+
+#if defined(__ANDROID__) || defined(SIL_IOS)
+            /* These settings control ordinary supporting panes, which mobile
+             * builds never create.  Overlay presentation remains available
+             * through the Interface page's overlay rows below. */
+            if (candidate == OPT_hide_supporting_panes_fullscreen
+                || candidate == OPT_story_monster_desc_pane
+                || candidate == OPT_story_lists_inven_pane
+                || candidate == OPT_story_lists_equip_pane)
+            {
+                continue;
+            }
+#endif
+            opt[n++] = candidate;
         }
     }
 
@@ -1707,83 +1742,23 @@ extern void do_cmd_options_aux(int page, cptr info)
     /* Interact with the player */
     while (true)
     {
-        int first_row = 3;
-        int footer_rows = (page == CHALLENGE_PAGE) ? 4 : 2;
-        int visible_rows = Term->hgt - footer_rows - first_row;
-        int total_rows = n + option_group_total_rows(groups, opt, n);
-        int selected_display_row = k
-            + option_group_count_before(groups, opt, k);
-        int display_row = 0;
-        int max_scroll;
-        bool pixel_menu;
-
-        if (visible_rows < 1)
-            visible_rows = 1;
-
-        max_scroll = total_rows - visible_rows;
-        if (max_scroll < 0)
-            max_scroll = 0;
-
-        if (sdl_touch_only_device_active())
-        {
-            /* Touch-only menus are viewport-driven: dragging pans the list,
-             * and tapping selects/sets.  Do not let the highlighted option
-             * pull the viewport back after the drag event is consumed. */
-            (void)ui_scroll_area_take_touch_scrolled();
-        }
-        else if (selected_display_row < scroll)
-            scroll = selected_display_row;
-        else if (selected_display_row >= scroll + visible_rows)
-            scroll = selected_display_row - visible_rows + 1;
-        if (scroll > max_scroll)
-            scroll = max_scroll;
-        if (scroll < 0)
-            scroll = 0;
-
-        pixel_menu = settings_semantic_menu_begin(info, k);
-        if (pixel_menu && page == CHALLENGE_PAGE)
+        settings_semantic_menu_begin(info, k);
+        if (page == CHALLENGE_PAGE)
         {
             sdl_character_sheet_screen_set_select_description(
                 "Challenge options can only be changed during character creation "
                 "or on the very first turn.");
         }
 
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(first_row, visible_rows);
-            if (sdl_touch_only_device_active())
-            {
-                /* Touch-only: drag pans the option list without moving the
-                 * highlighted option (tap an option to select it). */
-                ui_scroll_area_set_offset_target(&scroll, max_scroll);
-            }
-
-            /* Prompt XXX XXX XXX */
-            strnfmt(buf, sizeof(buf), "%s", info);
-            settings_ui_put_fitted(1, 2, TERM_WHITE, buf);
-        }
-
         /* Display the options */
         for (i = 0; i < n; i++)
         {
             byte a = TERM_WHITE;
-            int row;
             cptr group_label = option_group_starts_at(groups, opt, i)
                 ? option_group_for_setting(groups, opt[i]) : NULL;
 
             if (group_label)
-            {
-                row = first_row + display_row - scroll;
-                if (pixel_menu)
-                    sdl_character_sheet_screen_add_select_heading(
-                        group_label);
-                else if (row >= first_row && row < first_row + visible_rows)
-                    Term_putstr(2, row, -1, TERM_SLATE, group_label);
-                display_row++;
-            }
+                sdl_character_sheet_screen_add_select_heading(group_label);
 
             /* Color current option */
             if (i == k)
@@ -1798,6 +1773,11 @@ extern void do_cmd_options_aux(int page, cptr info)
                     &pane_rows[opt[i] - IFACE_PANE_ROW_BASE];
 
                 iface_pane_row_value(prow, value_str, sizeof(value_str));
+                if (prow->field == IFACE_PANE_FIELD_QA_LAUNCH
+                    && !get_sdl_touch_top_panel_arrows_visible())
+                {
+                    a = TERM_SLATE;
+                }
                 option_menu_format_line(buf, sizeof(buf),
                     iface_pane_row_label(prow), value_str);
             }
@@ -2036,14 +2016,18 @@ extern void do_cmd_options_aux(int page, cptr info)
                     option_menu_label(opt[i]),
                     option_player_tile_facing_mode_label());
             }
+            else if (opt[i] == OPT_styled_monster_tile_health_bars)
+            {
+                option_menu_format_line(buf, sizeof(buf),
+                    option_menu_label(opt[i]),
+                    option_monster_tile_health_bar_mode_label());
+            }
             else
             {
                 option_menu_format_line(buf, sizeof(buf), option_menu_label(opt[i]),
                     op_ptr->opt[opt[i]] ? "yes" : "no ");
             }
 
-            row = first_row + display_row - scroll;
-            if (pixel_menu)
             {
                 char semantic_buf[160];
 
@@ -2061,68 +2045,26 @@ extern void do_cmd_options_aux(int page, cptr info)
                     sdl_character_sheet_screen_set_last_select_row_reset(
                         SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
-            else if (row >= first_row && row < first_row + visible_rows)
+        }
+
+        {
+            /* Describe the focused option.  Standard game options carry help
+             * text in option_desc[]; special rows (pane toggles, sound) have
+             * none yet, so the band is left empty.  The challenge page keeps
+             * its own note set above. */
+            if (page != CHALLENGE_PAGE)
             {
-                c_prt(a, buf, row, 4);
-                ui_menu_click_add_full_row(i, row);
+                cptr od = NULL;
+                int o = opt[k];
+
+                if (page == INTERFACE_PAGE && o >= IFACE_PANE_ROW_BASE)
+                    od = iface_pane_row_description(
+                        &pane_rows[o - IFACE_PANE_ROW_BASE]);
+                else if (!is_sound_page && o >= 0 && o < OPT_MAX)
+                    od = option_desc[o];
+                sdl_character_sheet_screen_set_select_description(
+                    od ? od : "");
             }
-            display_row++;
-        }
-
-        if (!pixel_menu && total_rows > visible_rows)
-        {
-            strnfmt(buf, sizeof(buf), "(scroll: rows %d-%d of %d)",
-                scroll + 1, MIN(scroll + visible_rows, total_rows), total_rows);
-            settings_ui_put_fitted(Term->hgt - 2, 2, TERM_SLATE, buf);
-        }
-
-        if (!pixel_menu && page == CHALLENGE_PAGE)
-        {
-            settings_ui_put_fitted(Term->hgt - 4, 2, TERM_L_WHITE,
-                settings_ui_pick_label(settings_ui_line_width(2),
-                    "Challenge options can only be changed during character creation",
-                    "Challenge options only change during character creation",
-                    "Challenge options only change at birth"));
-            settings_ui_put_fitted(Term->hgt - 3, 2, TERM_L_WHITE,
-                settings_ui_pick_label(settings_ui_line_width(2),
-                    "or on the very first turn",
-                    "or on the first turn",
-                    "or on turn 1"));
-
-            if (playerturn == 0)
-            {
-                settings_ui_put_return_prompt(Term->hgt - 1, 2, TERM_SLATE,
-                    "(tap/click select; tap selected or Space chooses; Left/Right nudges; Enter/Esc accept)",
-                    "(tap selected/Space choose; Left/Right set; Enter/Esc accept)",
-                    "(tap choose; arrows set; Enter/Esc)");
-                ui_menu_click_add_full_row(SETTINGS_CLICK_RETURN, Term->hgt - 1);
-            }
-            else
-            {
-                settings_ui_put_return_prompt(Term->hgt - 1, 2, TERM_SLATE,
-                    "(press Return to go back)",
-                    "(press Enter to go back)",
-                    "(Enter back)");
-                ui_menu_click_add_full_row(SETTINGS_CLICK_RETURN, Term->hgt - 1);
-            }
-        }
-        else if (!pixel_menu)
-        {
-            settings_ui_put_return_prompt(Term->hgt - 1, 2, TERM_SLATE,
-                "(tap/click select; tap selected or Space chooses; Left/Right nudges; Enter/Esc accept)",
-                "(tap selected/Space choose; Left/Right set; Enter/Esc accept)",
-                "(tap choose; arrows set; Enter/Esc)");
-            ui_menu_click_add_full_row(SETTINGS_CLICK_RETURN, Term->hgt - 1);
-        }
-
-        if (!pixel_menu)
-        {
-            /* Hilite current option */
-            move_cursor(first_row + selected_display_row - scroll,
-                MIN(54, Term->wid - 1));
-        }
-        else
-        {
             sdl_character_sheet_screen_commit_select(k);
         }
 
@@ -2528,6 +2470,14 @@ extern void do_cmd_options_aux(int page, cptr info)
                         ? (byte)(mode + 1)
                         : PLAYER_TILE_FACING_MAX);
                 }
+                else if (opt[k] == OPT_styled_monster_tile_health_bars)
+                {
+                    byte mode = option_monster_tile_health_bar_mode();
+                    option_set_monster_tile_health_bar_mode(
+                        (mode < MONSTER_TILE_HEALTH_BARS_MAX)
+                        ? (byte)(mode + 1)
+                        : MONSTER_TILE_HEALTH_BARS_MAX);
+                }
                 else
                 {
                     op_ptr->opt[opt[k]] = true;
@@ -2709,6 +2659,14 @@ extern void do_cmd_options_aux(int page, cptr info)
                         ? (byte)(mode - 1)
                         : PLAYER_TILE_FACING_OFF);
                 }
+                else if (opt[k] == OPT_styled_monster_tile_health_bars)
+                {
+                    byte mode = option_monster_tile_health_bar_mode();
+                    option_set_monster_tile_health_bar_mode(
+                        (mode > MONSTER_TILE_HEALTH_BARS_SHOW)
+                        ? (byte)(mode - 1)
+                        : MONSTER_TILE_HEALTH_BARS_SHOW);
+                }
                 else
                 {
                     op_ptr->opt[opt[k]] = false;
@@ -2732,28 +2690,38 @@ extern void do_cmd_options_aux(int page, cptr info)
             {
                 const struct iface_pane_row* prow =
                     &pane_rows[opt[k] - IFACE_PANE_ROW_BASE];
+                int pane_idx = iface_pane_row_live_index(prow);
                 if (prow->field == IFACE_PANE_FIELD_FONT
-                    && get_sdl_pane_font_size(prow->pane_cfg_index) != 0)
+                    && get_sdl_pane_font_size(pane_idx) != 0)
                 {
-                    set_sdl_pane_font_size(prow->pane_cfg_index, 0);
+                    set_sdl_pane_font_size(pane_idx, 0);
                     sdl_apply_config();
                     app_settings_dirty = true;
                 }
-                else if (prow->field == IFACE_PANE_FIELD_TILE_SCALE
-                    && get_sdl_touch_top_panel_tile_scale()
-                        != get_sdl_touch_top_panel_default_tile_scale())
+                else if (prow->field == IFACE_PANE_FIELD_SIZE
+                    && get_sdl_touch_top_panel_size()
+                        != get_sdl_touch_top_panel_default_size())
                 {
-                    set_sdl_touch_top_panel_tile_scale(
-                        get_sdl_touch_top_panel_default_tile_scale());
+                    set_sdl_touch_top_panel_size(
+                        get_sdl_touch_top_panel_default_size());
                     sdl_apply_config();
                     app_settings_dirty = true;
                 }
-                else if (prow->field == IFACE_PANE_FIELD_BUTTON_COUNT
-                    && get_sdl_touch_top_panel_button_count()
-                        != get_sdl_touch_top_panel_default_button_count())
+                else if (prow->field == IFACE_PANE_FIELD_COLUMNS
+                    && get_sdl_touch_top_panel_columns()
+                        != get_sdl_touch_top_panel_default_columns())
                 {
-                    set_sdl_touch_top_panel_button_count(
-                        get_sdl_touch_top_panel_default_button_count());
+                    set_sdl_touch_top_panel_columns(
+                        get_sdl_touch_top_panel_default_columns());
+                    sdl_apply_config();
+                    app_settings_dirty = true;
+                }
+                else if (prow->field == IFACE_PANE_FIELD_ROWS
+                    && get_sdl_touch_top_panel_rows()
+                        != get_sdl_touch_top_panel_default_rows())
+                {
+                    set_sdl_touch_top_panel_rows(
+                        get_sdl_touch_top_panel_default_rows());
                     sdl_apply_config();
                     app_settings_dirty = true;
                 }
@@ -2771,6 +2739,14 @@ extern void do_cmd_options_aux(int page, cptr info)
                 {
                     set_sdl_dice_roll_overlay_ms(
                         SDL_DICE_ROLL_OVERLAY_DEFAULT_MS);
+                    app_settings_dirty = true;
+                }
+                else if (prow->field == IFACE_PANE_FIELD_POPUP_NOTIFICATION
+                    && get_sdl_popup_notification_ms()
+                        != SDL_POPUP_NOTIFICATION_DEFAULT_MS)
+                {
+                    set_sdl_popup_notification_ms(
+                        SDL_POPUP_NOTIFICATION_DEFAULT_MS);
                     app_settings_dirty = true;
                 }
             }
@@ -2805,7 +2781,7 @@ extern void do_cmd_options_aux(int page, cptr info)
 }
 
 /*
- * Display and manage SDL pane settings
+ * Display and manage SDL general settings
  * Interactive menu to edit SDL configuration
  */
 static int get_supporting_pane_config_count(void);
@@ -2814,6 +2790,8 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed);
 static void do_cmd_touch_pane_button_editor(bool* settings_changed);
 static void do_cmd_touch_button_settings(bool* settings_changed);
 static void do_cmd_touch_profile_settings(bool* settings_changed);
+static void touch_top_widget_format_size(char* buf, size_t buflen, float size);
+static bool touch_top_widget_pick_size(void);
 static void do_cmd_touch_settings(bool* settings_changed)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((unused))
@@ -2945,6 +2923,14 @@ void do_cmd_pane_settings(void)
     enum {
         PANE_SETTING_MIN_TERMINAL_SIZE = 0,
         PANE_SETTING_MAIN_VIEW_SCALE,
+        PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET,
+        PANE_SETTING_COMPACT_INVENTORY_MENUS,
+        PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET,
+        PANE_SETTING_CAMERA_VERTICAL_DISTANCE,
+        PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE,
+#if defined(__ANDROID__) || defined(SIL_IOS)
+        PANE_SETTING_MOBILE_PORTRAIT_MODE,
+#endif
         PANE_SETTING_ENABLE_SIDE_PANES,
         PANE_SETTING_ENABLE_BOTTOM_PANES,
         PANE_SETTING_FULLSCREEN,
@@ -2956,16 +2942,34 @@ void do_cmd_pane_settings(void)
         PANE_SETTING_VIEW_PANE_CONFIGURATION,
         PANE_SETTING_PANE_FONT_SIZES,
         PANE_SETTING_OPEN_CONFIG_FILE,
+        PANE_SETTING_RESET_ALL,
         PANE_SETTING_SAVE_RETURN,
         PANE_SETTING_COUNT
     };
     int k = 0;
     int n = PANE_SETTING_COUNT;
+    bool pane_setting_visible[PANE_SETTING_COUNT];
     bool done = false;
     bool settings_changed = false;
     int dir;
     const char* config_path = get_sdl_config_path();
     const char* config_label = (config_path && config_path[0]) ? config_path : "sil_sdl.json";
+
+    for (int i = 0; i < PANE_SETTING_COUNT; i++)
+        pane_setting_visible[i] = true;
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    /* Mobile uses the full display and supports overlay panes only.  Do not
+     * offer ordinary pane/window controls whose values are fixed by the
+     * platform policy. */
+    pane_setting_visible[PANE_SETTING_ENABLE_SIDE_PANES] = false;
+    pane_setting_visible[PANE_SETTING_ENABLE_BOTTOM_PANES] = false;
+    pane_setting_visible[PANE_SETTING_FULLSCREEN] = false;
+    pane_setting_visible[PANE_SETTING_WHITE_PANE_BORDERS] = false;
+    pane_setting_visible[PANE_SETTING_HIDE_FULLSCREEN_PANES] = false;
+    pane_setting_visible[PANE_SETTING_AUX_VIEW_FONT_SIZE] = false;
+    pane_setting_visible[PANE_SETTING_VIEW_PANE_CONFIGURATION] = false;
+    pane_setting_visible[PANE_SETTING_PANE_FONT_SIZES] = false;
+#endif
 
     /* Save screen */
     screen_save();
@@ -2974,36 +2978,19 @@ void do_cmd_pane_settings(void)
     {
         int row_width;
         int label_hint;
-        bool pixel_menu;
-
-        pixel_menu = settings_semantic_menu_begin("SDL Pane Settings", k);
-        if (!pixel_menu)
-        {
-            /* Clear screen */
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-
-            /* Display title */
-            settings_ui_put_fitted(1, 2, TERM_WHITE, "SDL Pane Settings");
-        }
+        settings_semantic_menu_begin("General Settings", k);
 
         /* Display current settings */
         char buf[96];
         char value_buf[32];
-        int y0 = 3;
         byte a;
         char font_value[24];
         row_width = settings_ui_line_width(2);
         label_hint = MAX(10, row_width - 12);
-        if (!pixel_menu)
-            settings_menu_begin_scroll_area(y0,
-                MIN(n, settings_menu_visible_rows(y0, 3)));
-
 #define ADD_PANE_SETTING_ROW(CHOICE, OFFSET, ATTR, TEXT)                       \
         do {                                                                   \
-            if (pixel_menu)                                                    \
-            {                                                                  \
+            (void)(OFFSET);                                                    \
+            if (pane_setting_visible[(CHOICE)]) {                              \
                 char semantic_line[160];                                       \
                 settings_semantic_line_from_menu_line(semantic_line,           \
                     sizeof(semantic_line), (TEXT));                            \
@@ -3011,12 +2998,6 @@ void do_cmd_pane_settings(void)
                 if ((CHOICE) < PANE_SETTING_VIEW_PANE_CONFIGURATION)           \
                     sdl_character_sheet_screen_set_last_select_row_reset(      \
                         SETTINGS_CLICK_RESET_ROW_BASE + (CHOICE));             \
-            }                                                                  \
-            else                                                               \
-            {                                                                  \
-                c_prt((ATTR), (TEXT), y0 + (OFFSET), 2);                       \
-                ui_menu_click_add((CHOICE), 2, y0 + (OFFSET),                  \
-                    (int)strlen(TEXT));                                        \
             }                                                                  \
         } while (0)
 
@@ -3042,7 +3023,85 @@ void do_cmd_pane_settings(void)
             value_buf, row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MAIN_VIEW_SCALE, 1, a, buf);
 
-        /* Option 2: Enable Side Panes */
+        /* Option 2: terminal-menu scale relative to the layout maximum. */
+        a = (k == PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET)
+            ? TERM_L_BLUE : TERM_WHITE;
+        strnfmt(value_buf, sizeof(value_buf), "%+d",
+            get_sdl_terminal_menu_scale_offset());
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Terminal Menu Scale Offset",
+                "Menu Scale Offset",
+                "Menu Scale"),
+            value_buf, row_width, 4);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET, 2, a,
+            buf);
+
+        a = (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
+            ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Compact Inventory Menus",
+                "Compact Item Menus",
+                "Compact Menus"),
+            get_sdl_compact_inventory_menus() ? "yes" : "no",
+            row_width, 3);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_COMPACT_INVENTORY_MENUS, 3, a, buf);
+
+        /* Extra zoom applied when mobile gameplay starts. */
+        a = (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
+            ? TERM_L_BLUE : TERM_WHITE;
+        strnfmt(value_buf, sizeof(value_buf), "%+d",
+            get_sdl_mobile_starting_zoom_offset());
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Mobile Starting Zoom Offset",
+                "Mobile Start Zoom",
+                "Start Zoom"),
+            value_buf, row_width, 4);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET, 3, a,
+            buf);
+
+        a = (k == PANE_SETTING_CAMERA_VERTICAL_DISTANCE)
+            ? TERM_L_BLUE : TERM_WHITE;
+        strnfmt(value_buf, sizeof(value_buf), "%d",
+            get_sdl_camera_center_clearance_vertical());
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Camera Vertical Recenter Distance",
+                "Camera Vertical Distance",
+                "Camera Vertical"),
+            value_buf, row_width, 3);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_CAMERA_VERTICAL_DISTANCE, 4, a, buf);
+
+        a = (k == PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE)
+            ? TERM_L_BLUE : TERM_WHITE;
+        strnfmt(value_buf, sizeof(value_buf), "%d",
+            get_sdl_camera_center_clearance_horizontal());
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Camera Horizontal Recenter Distance",
+                "Camera Horizontal Distance",
+                "Camera Horizontal"),
+            value_buf, row_width, 3);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE, 5, a,
+            buf);
+
+#if defined(__ANDROID__) || defined(SIL_IOS)
+        a = (k == PANE_SETTING_MOBILE_PORTRAIT_MODE)
+            ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Orientation",
+                "Orientation",
+                "Orient."),
+            get_sdl_mobile_portrait_mode() ? "portrait" : "landscape",
+            row_width, 3);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_MOBILE_PORTRAIT_MODE, 4,
+            a, buf);
+#endif
+
+        /* Option 4: Enable Side Panes */
         a = (k == PANE_SETTING_ENABLE_SIDE_PANES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3051,9 +3110,9 @@ void do_cmd_pane_settings(void)
                 "Side Panes"),
             get_sdl_enable_right_panes() ? "yes" : "no",
             row_width, 3);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_ENABLE_SIDE_PANES, 2, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_ENABLE_SIDE_PANES, 4, a, buf);
 
-        /* Option 3: Enable Bottom Panes */
+        /* Option 5: Enable Bottom Panes */
         a = (k == PANE_SETTING_ENABLE_BOTTOM_PANES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3062,21 +3121,21 @@ void do_cmd_pane_settings(void)
                 "Bottom Panes"),
             get_sdl_enable_bottom_panes() ? "yes" : "no",
             row_width, 3);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_ENABLE_BOTTOM_PANES, 3, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_ENABLE_BOTTOM_PANES, 5, a, buf);
 
-        /* Option 4: Fullscreen */
+        /* Option 6: Fullscreen */
         a = (k == PANE_SETTING_FULLSCREEN) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf), "Fullscreen",
             get_sdl_fullscreen() ? "yes" : "no", row_width, 3);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_FULLSCREEN, 4, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_FULLSCREEN, 6, a, buf);
 
-        /* Option 5: Tiles */
+        /* Option 7: Tiles */
         a = (k == PANE_SETTING_TILES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf), "Tiles [Alt+A]",
             get_sdl_tiles() ? "yes" : "no", row_width, 3);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_TILES, 5, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_TILES, 7, a, buf);
 
-        /* Option 6: Use Unsafe Area */
+        /* Option 8: Use Unsafe Area */
         a = (k == PANE_SETTING_USE_UNSAFE_AREA) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3085,9 +3144,9 @@ void do_cmd_pane_settings(void)
                 "Unsafe Area"),
             get_sdl_use_unsafe_area() ? "yes" : "no",
             row_width, 3);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_USE_UNSAFE_AREA, 6, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_USE_UNSAFE_AREA, 8, a, buf);
 
-        /* Option 7: White Pane Borders */
+        /* Option 9: White Pane Borders */
         a = (k == PANE_SETTING_WHITE_PANE_BORDERS) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3096,9 +3155,9 @@ void do_cmd_pane_settings(void)
                 "White Borders"),
             get_sdl_show_pane_borders() ? "white" : "black",
             row_width, 5);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_WHITE_PANE_BORDERS, 7, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_WHITE_PANE_BORDERS, 9, a, buf);
 
-        /* Option 8: Hide supporting panes on full-screen screens */
+        /* Option 10: Hide supporting panes on full-screen screens */
         a = (k == PANE_SETTING_HIDE_FULLSCREEN_PANES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3107,9 +3166,9 @@ void do_cmd_pane_settings(void)
                 "Hide panes on full-screen"),
             op_ptr->opt[OPT_hide_supporting_panes_fullscreen] ? "yes" : "no",
             row_width, 3);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_HIDE_FULLSCREEN_PANES, 8, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_HIDE_FULLSCREEN_PANES, 10, a, buf);
 
-        /* Option 9: Aux View Font Size */
+        /* Option 11: Aux View Font Size */
         a = (k == PANE_SETTING_AUX_VIEW_FONT_SIZE) ? TERM_L_BLUE : TERM_WHITE;
         format_font_size_value(font_value, sizeof(font_value),
             get_sdl_aux_view_font_size(), get_sdl_effective_aux_view_font_size(),
@@ -3120,9 +3179,9 @@ void do_cmd_pane_settings(void)
                 "Default Aux Font (0=auto)",
                 "Aux Font"),
             font_value, row_width, 6);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_AUX_VIEW_FONT_SIZE, 9, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_AUX_VIEW_FONT_SIZE, 11, a, buf);
 
-        /* Option 10: View Pane Configuration (supporting panes only) */
+        /* Option 12: View Pane Configuration (supporting panes only) */
         a = (k == PANE_SETTING_VIEW_PANE_CONFIGURATION) ? TERM_L_BLUE : TERM_WHITE;
         strnfmt(buf, sizeof(buf), "%s (%d)",
             settings_ui_pick_label(row_width,
@@ -3135,9 +3194,9 @@ void do_cmd_pane_settings(void)
             settings_ui_fit_text(fitted_buf, sizeof(fitted_buf), buf, row_width);
             SDL_strlcpy(buf, fitted_buf, sizeof(buf));
         }
-        ADD_PANE_SETTING_ROW(PANE_SETTING_VIEW_PANE_CONFIGURATION, 10, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_VIEW_PANE_CONFIGURATION, 12, a, buf);
 
-        /* Option 11: Pane Font Sizes */
+        /* Option 13: Pane Font Sizes */
         a = (k == PANE_SETTING_PANE_FONT_SIZES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_fit_text(buf, sizeof(buf),
             settings_ui_pick_label(row_width,
@@ -3145,9 +3204,9 @@ void do_cmd_pane_settings(void)
                 "Pane Fonts",
                 "Pane Fonts"),
             row_width);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_PANE_FONT_SIZES, 11, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_PANE_FONT_SIZES, 13, a, buf);
 
-        /* Option 12: Open SDL Config File */
+        /* Option 14: Open SDL Config File */
         a = (k == PANE_SETTING_OPEN_CONFIG_FILE) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3155,61 +3214,114 @@ void do_cmd_pane_settings(void)
                 "Open SDL Config",
                 "Open Config"),
             sdl_config_path_leaf(config_label), row_width, 12);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_OPEN_CONFIG_FILE, 12, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_OPEN_CONFIG_FILE, 14, a, buf);
 
-        /* Option 13: Save/Return */
+        /* Option 15: Reset all interface settings */
+        a = (k == PANE_SETTING_RESET_ALL) ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_fit_text(buf, sizeof(buf),
+            settings_ui_pick_label(row_width,
+                "Reset All Interface Settings",
+                "Reset All Settings",
+                "Reset All"),
+            row_width);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_RESET_ALL, 15, a, buf);
+
+        /* Option 16: Return (changes are saved automatically on exit). */
         a = (k == PANE_SETTING_SAVE_RETURN) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_fit_text(buf, sizeof(buf),
-            settings_changed ? "Save Changes and Return"
-                             : "Return to Options Menu",
+            "Return to Options Menu",
             row_width);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_SAVE_RETURN, 13, a, buf);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_SAVE_RETURN, 16, a, buf);
 
 #undef ADD_PANE_SETTING_ROW
 
-        if (!pixel_menu)
-            for (int click_i = 0; click_i < n; click_i++)
-                ui_menu_click_add_full_row(click_i, y0 + click_i);
-
-        /* Display help */
-        if (pixel_menu)
+        /* Display help: describe the focused setting (empty band when a row
+         * has no description yet). */
         {
-            char desc[512];
+            static const char* const pane_setting_desc[PANE_SETTING_COUNT] = {
+                [PANE_SETTING_MIN_TERMINAL_SIZE] =
+                    "Smallest character grid the game will use. Larger minimums "
+                    "keep text big but leave less room for side and bottom "
+                    "panes on small windows.",
+                [PANE_SETTING_MAIN_VIEW_SCALE] =
+                    "Zoom level of the main map. Higher values enlarge the map "
+                    "and its font but show less of the level at once.",
+                [PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET] =
+                    "Scale of full-screen terminal menus relative to the "
+                    "largest scale that fits. Set to 0 for the maximum; -1 "
+                    "uses one step below it.",
+                [PANE_SETTING_COMPACT_INVENTORY_MENUS] =
+                    "Use shorter category names in Equipped, Inventory, and "
+                    "Supplies. When focus moves to the item list, hide the "
+                    "category pane and use its space for item names.",
+                [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
+                    "Extra zoom steps applied when gameplay starts on mobile. "
+                    "Set to 0 to start at the configured main-map scale. The "
+                    "result is limited to what the screen can display.",
+                [PANE_SETTING_CAMERA_VERTICAL_DISTANCE] =
+                    "Recenter when the player comes within this many rows of "
+                    "a horizontal screen edge or visible overlay. This also "
+                    "sets the vertical camera lead. The default is 5 on "
+                    "desktop and 3 on mobile.",
+                [PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE] =
+                    "Recenter when the player comes within this many columns "
+                    "of a vertical screen edge or visible overlay. This also "
+                    "sets the horizontal camera lead. The default is 5 on "
+                    "desktop and 3 on mobile.",
+#if defined(__ANDROID__) || defined(SIL_IOS)
+                [PANE_SETTING_MOBILE_PORTRAIT_MODE] =
+                    "Choose the device's real portrait or landscape "
+                    "orientation. Pane and overlay "
+                    "layouts are saved separately for portrait and landscape.",
+#endif
+                [PANE_SETTING_ENABLE_SIDE_PANES] =
+                    "Show panes to the side of the map (inventory, monster "
+                    "list, and more). Also toggled in play with Alt+I.",
+                [PANE_SETTING_ENABLE_BOTTOM_PANES] =
+                    "Show panes below the map (messages, combat rolls, and "
+                    "more). Also toggled in play with Alt+L.",
+                [PANE_SETTING_FULLSCREEN] =
+                    "Run the game fullscreen instead of in a window.",
+                [PANE_SETTING_TILES] =
+                    "Draw the map with graphical tiles instead of letters. "
+                    "Also toggled in play with Alt+A.",
+                [PANE_SETTING_USE_UNSAFE_AREA] =
+                    "Let the display extend into a screen notch or rounded "
+                    "cutout. Off keeps everything within the safe area.",
+                [PANE_SETTING_WHITE_PANE_BORDERS] =
+                    "Use white rather than black separator lines for ordinary "
+                    "panes. Configure the overlay-log border in Interface > "
+                    "Overlay Log.",
+                [PANE_SETTING_HIDE_FULLSCREEN_PANES] =
+                    "On full-screen menus (inventory, character sheet, and the "
+                    "like), hide the supporting panes to reduce clutter.",
+                [PANE_SETTING_AUX_VIEW_FONT_SIZE] =
+                    "Font size for the supporting panes. Set to 0 (auto) to let "
+                    "the game pick a size that fits.",
+                [PANE_SETTING_VIEW_PANE_CONFIGURATION] =
+                    "Open the layout editor to move and resize panes for the "
+                    "current orientation. Portrait and landscape layouts are "
+                    "saved separately; the number in brackets is how many "
+                    "panes are configured.",
+                [PANE_SETTING_PANE_FONT_SIZES] =
+                    "Set the font size of each pane individually.",
+                [PANE_SETTING_OPEN_CONFIG_FILE] =
+                    "Open the raw sil_sdl.json config file in your system's "
+                    "default editor.",
+                [PANE_SETTING_RESET_ALL] =
+                    "Reset the complete interface configuration at once, "
+                    "including pane layout, fonts, controls, display, and "
+                    "interface options.",
+                [PANE_SETTING_SAVE_RETURN] =
+                    "Return to the Options menu. Changes are saved "
+                    "automatically.",
+            };
+            cptr d = (k >= 0 && k < PANE_SETTING_COUNT)
+                ? pane_setting_desc[k] : NULL;
 
-            if (settings_changed)
-                strnfmt(desc, sizeof(desc),
-                    "Direction keys change values. 0 sets the default aux font to auto. O opens the SDL config file. Changes apply immediately and will be saved to %s on exit.",
-                    config_label);
-            else
-                SDL_strlcpy(desc,
-                    "Direction keys change values. 0 sets the default aux font to auto. O opens the SDL config file. Escape or Enter returns to Options.",
-                    sizeof(desc));
-            sdl_character_sheet_screen_set_select_description(desc);
+            sdl_character_sheet_screen_set_select_description(d ? d : "");
             sdl_character_sheet_screen_commit_select(k);
         }
-        else
-        {
-            int y = Term->hgt - 3;
-
-            if (settings_changed)
-            {
-                settings_ui_put_fitted(y++, 2, TERM_YELLOW,
-                    settings_ui_pick_label(settings_ui_line_width(2),
-                        "Settings changed - changes take effect immediately.",
-                        "Settings changed - active immediately.",
-                        "Changes apply immediately."));
-                settings_ui_put_fitted(y++, 2, TERM_YELLOW,
-                    settings_ui_pick_label(settings_ui_line_width(2),
-                        "Will be saved to your SDL config file on exit.",
-                        "Saved to your SDL config on exit.",
-                        "Saved on exit."));
-            }
-            settings_ui_put_return_prompt(y++, 2, TERM_SLATE,
-                "(direction keys to set, 0 = auto font, o = open config, Return/Escape to accept)",
-                "(Dir move, Left/Right set, 0 auto, o open config, Enter/Esc)",
-                "(Dir move, Left/Right set, 0 auto, o config, Enter/Esc)");
-        }
-
         /* Get key */
         hide_cursor = true;
         char ch = inkey();
@@ -3244,8 +3356,34 @@ void do_cmd_pane_settings(void)
                         set_sdl_min_terminal_mode(def.min_terminal_mode);
                         break;
                     case PANE_SETTING_MAIN_VIEW_SCALE:
-                        set_sdl_main_view_scale(def.main_view_scale);
+                        set_sdl_main_view_scale(get_sdl_max_scale());
                         break;
+                    case PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET:
+                        set_sdl_terminal_menu_scale_offset(
+                            SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
+                                get_sdl_main_view_scale()));
+                        break;
+                    case PANE_SETTING_COMPACT_INVENTORY_MENUS:
+                        set_sdl_compact_inventory_menus(
+                            def.compact_inventory_menus);
+                        break;
+                    case PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET:
+                        set_sdl_mobile_starting_zoom_offset(
+                            def.mobile_starting_zoom_offset);
+                        break;
+                    case PANE_SETTING_CAMERA_VERTICAL_DISTANCE:
+                        set_sdl_camera_center_clearance_vertical(
+                            def.camera_center_clearance_vertical);
+                        break;
+                    case PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE:
+                        set_sdl_camera_center_clearance_horizontal(
+                            def.camera_center_clearance_horizontal);
+                        break;
+#if defined(__ANDROID__) || defined(SIL_IOS)
+                    case PANE_SETTING_MOBILE_PORTRAIT_MODE:
+                        set_sdl_mobile_portrait_mode(def.mobile_portrait_mode);
+                        break;
+#endif
                     case PANE_SETTING_ENABLE_SIDE_PANES:
                         set_sdl_enable_right_panes(def.enable_right_panes);
                         break;
@@ -3281,13 +3419,15 @@ void do_cmd_pane_settings(void)
                 else if (clicked_choice >= 0 && clicked_choice < n)
                 {
                     bool was_current = (clicked_choice == k);
+                    bool touch_primary = sdl_touch_only_device_active()
+                        && click_action == UI_MENU_CLICK_PRIMARY;
 
                     k = clicked_choice;
                     if (click_action == UI_MENU_CLICK_HOVER)
                         continue;
                     if (click_action == UI_MENU_CLICK_SECONDARY)
                         ch = '4';
-                    else if (was_current)
+                    else if (was_current || touch_primary)
                         ch = ' ';
                     else
                         continue;
@@ -3342,6 +3482,17 @@ void do_cmd_pane_settings(void)
                 sdl_open_config_file();
                 break;
             }
+            if (k == PANE_SETTING_RESET_ALL)
+            {
+                settings_semantic_menu_hide();
+                if (get_check("Reset all interface settings to defaults? "))
+                {
+                    sdl_reset_interface_settings_to_defaults();
+                    settings_changed = false;
+                    msg_print("All interface settings reset to defaults.");
+                }
+                break;
+            }
 
             /* Save if changed, then exit */
             if (settings_changed)
@@ -3359,14 +3510,18 @@ void do_cmd_pane_settings(void)
         case '8':
         {
             /* Move up */
-            k = (n + k - 1) % n;
+            do {
+                k = (n + k - 1) % n;
+            } while (!pane_setting_visible[k]);
             break;
         }
 
         case '2':
         {
             /* Move down */
-            k = (k + 1) % n;
+            do {
+                k = (k + 1) % n;
+            } while (!pane_setting_visible[k]);
             break;
         }
 
@@ -3393,7 +3548,93 @@ void do_cmd_pane_settings(void)
         case ' ':
         {
             /* Toggle or activate current option */
-            if (k == PANE_SETTING_ENABLE_SIDE_PANES)
+            if (k == PANE_SETTING_MAIN_VIEW_SCALE)
+            {
+                int old_value = get_sdl_main_view_scale();
+                int value = old_value;
+
+                if (settings_pick_integer_range("Main Terminal Scale", NULL,
+                        get_sdl_min_main_view_scale(), get_sdl_max_scale(),
+                        old_value, false, &value)
+                    && value != old_value)
+                {
+                    set_sdl_main_view_scale(value);
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+            }
+            else if (k == PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET)
+            {
+                int old_value = get_sdl_terminal_menu_scale_offset();
+                int value = old_value;
+
+                if (settings_pick_integer_range("Terminal Menu Scale Offset",
+                        NULL,
+                        SDL_TERMINAL_MENU_SCALE_OFFSET_MIN,
+                        SDL_TERMINAL_MENU_SCALE_OFFSET_MAX, old_value, true,
+                        &value)
+                    && value != old_value)
+                {
+                    set_sdl_terminal_menu_scale_offset(value);
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+            }
+            else if (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
+            {
+                set_sdl_compact_inventory_menus(
+                    !get_sdl_compact_inventory_menus());
+                settings_changed = true;
+            }
+            else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
+            {
+                int old_value = get_sdl_mobile_starting_zoom_offset();
+                int value = old_value;
+
+                if (settings_pick_integer_range("Mobile Starting Zoom Offset",
+                        NULL,
+                        SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN,
+                        SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX, old_value, true,
+                        &value)
+                    && value != old_value)
+                {
+                    set_sdl_mobile_starting_zoom_offset(value);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_VERTICAL_DISTANCE)
+            {
+                int old_value = get_sdl_camera_center_clearance_vertical();
+                int value = old_value;
+
+                if (settings_pick_integer_range(
+                        "Camera Vertical Recenter Distance", NULL,
+                        SDL_CAMERA_CENTER_CLEARANCE_MIN,
+                        SDL_CAMERA_CENTER_CLEARANCE_MAX, old_value, false,
+                        &value)
+                    && value != old_value)
+                {
+                    set_sdl_camera_center_clearance_vertical(value);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE)
+            {
+                int old_value = get_sdl_camera_center_clearance_horizontal();
+                int value = old_value;
+
+                if (settings_pick_integer_range(
+                        "Camera Horizontal Recenter Distance", NULL,
+                        SDL_CAMERA_CENTER_CLEARANCE_MIN,
+                        SDL_CAMERA_CENTER_CLEARANCE_MAX, old_value, false,
+                        &value)
+                    && value != old_value)
+                {
+                    set_sdl_camera_center_clearance_horizontal(value);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_ENABLE_SIDE_PANES)
             {
                 set_sdl_enable_right_panes(!get_sdl_enable_right_panes());
                 settings_changed = true;
@@ -3405,6 +3646,13 @@ void do_cmd_pane_settings(void)
                 settings_changed = true;
                 sdl_apply_config();
             }
+#if defined(__ANDROID__) || defined(SIL_IOS)
+            else if (k == PANE_SETTING_MOBILE_PORTRAIT_MODE)
+            {
+                set_sdl_mobile_portrait_mode(!get_sdl_mobile_portrait_mode());
+                settings_changed = true;
+            }
+#endif
             else if (k == PANE_SETTING_FULLSCREEN)
             {
                 set_sdl_fullscreen(!get_sdl_fullscreen());
@@ -3454,6 +3702,16 @@ void do_cmd_pane_settings(void)
                 settings_semantic_menu_hide();
                 sdl_open_config_file();
             }
+            else if (k == PANE_SETTING_RESET_ALL)
+            {
+                settings_semantic_menu_hide();
+                if (get_check("Reset all interface settings to defaults? "))
+                {
+                    sdl_reset_interface_settings_to_defaults();
+                    settings_changed = false;
+                    msg_print("All interface settings reset to defaults.");
+                }
+            }
             else if (k == PANE_SETTING_SAVE_RETURN) /* Save/Return */
             {
                 if (settings_changed)
@@ -3485,6 +3743,61 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
+            else if (k == PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET)
+            {
+                val = get_sdl_terminal_menu_scale_offset();
+                if (val < SDL_TERMINAL_MENU_SCALE_OFFSET_MAX)
+                {
+                    set_sdl_terminal_menu_scale_offset(val + 1);
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+            }
+            else if (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
+            {
+                if (!get_sdl_compact_inventory_menus())
+                {
+                    set_sdl_compact_inventory_menus(true);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
+            {
+                val = get_sdl_mobile_starting_zoom_offset();
+                if (val < SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX)
+                {
+                    set_sdl_mobile_starting_zoom_offset(val + 1);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_VERTICAL_DISTANCE)
+            {
+                val = get_sdl_camera_center_clearance_vertical();
+                if (val < SDL_CAMERA_CENTER_CLEARANCE_MAX)
+                {
+                    set_sdl_camera_center_clearance_vertical(val + 1);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE)
+            {
+                val = get_sdl_camera_center_clearance_horizontal();
+                if (val < SDL_CAMERA_CENTER_CLEARANCE_MAX)
+                {
+                    set_sdl_camera_center_clearance_horizontal(val + 1);
+                    settings_changed = true;
+                }
+            }
+#if defined(__ANDROID__) || defined(SIL_IOS)
+            else if (k == PANE_SETTING_MOBILE_PORTRAIT_MODE)
+            {
+                if (!get_sdl_mobile_portrait_mode())
+                {
+                    set_sdl_mobile_portrait_mode(true);
+                    settings_changed = true;
+                }
+            }
+#endif
             else if (k == PANE_SETTING_ENABLE_SIDE_PANES) /* Enable Side Panes */
             {
                 set_sdl_enable_right_panes(true);
@@ -3568,6 +3881,61 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
+            else if (k == PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET)
+            {
+                val = get_sdl_terminal_menu_scale_offset();
+                if (val > SDL_TERMINAL_MENU_SCALE_OFFSET_MIN)
+                {
+                    set_sdl_terminal_menu_scale_offset(val - 1);
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+            }
+            else if (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
+            {
+                if (get_sdl_compact_inventory_menus())
+                {
+                    set_sdl_compact_inventory_menus(false);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
+            {
+                val = get_sdl_mobile_starting_zoom_offset();
+                if (val > SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN)
+                {
+                    set_sdl_mobile_starting_zoom_offset(val - 1);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_VERTICAL_DISTANCE)
+            {
+                val = get_sdl_camera_center_clearance_vertical();
+                if (val > SDL_CAMERA_CENTER_CLEARANCE_MIN)
+                {
+                    set_sdl_camera_center_clearance_vertical(val - 1);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE)
+            {
+                val = get_sdl_camera_center_clearance_horizontal();
+                if (val > SDL_CAMERA_CENTER_CLEARANCE_MIN)
+                {
+                    set_sdl_camera_center_clearance_horizontal(val - 1);
+                    settings_changed = true;
+                }
+            }
+#if defined(__ANDROID__) || defined(SIL_IOS)
+            else if (k == PANE_SETTING_MOBILE_PORTRAIT_MODE)
+            {
+                if (get_sdl_mobile_portrait_mode())
+                {
+                    set_sdl_mobile_portrait_mode(false);
+                    settings_changed = true;
+                }
+            }
+#endif
             else if (k == PANE_SETTING_ENABLE_SIDE_PANES) /* Enable Side Panes */
             {
                 set_sdl_enable_right_panes(false);
@@ -3645,7 +4013,7 @@ void do_cmd_pane_settings(void)
 
         default:
         {
-            bell("Illegal command for pane settings!");
+            bell("Illegal command for general settings!");
             break;
         }
         }
@@ -3678,6 +4046,7 @@ static const char* pane_type_name(enum pane_type type)
     case PANE_DESCRIPTION: return "DESCRIPTION";
     case PANE_OVERLAY_MENU: return "OVERLAY_MENU";
     case PANE_COMBAT: return "COMBAT";
+    case PANE_STATUS_DEPTH: return "STATUS_DEPTH";
     default: return "UNKNOWN";
     }
 }
@@ -3703,22 +4072,10 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
 
     if (pane_count <= 0)
     {
-        if (settings_semantic_menu_begin("Pane Fonts", -1))
-        {
-            sdl_character_sheet_screen_set_select_description(
-                "No configurable panes are configured.");
-            sdl_character_sheet_screen_commit_select(-1);
-        }
-        else
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            Term_putstr(2, 1, -1, TERM_L_BLUE, "Pane Fonts");
-            Term_putstr(2, 3, -1, TERM_WHITE, "No configurable panes are configured.");
-            Term_putstr(2, Term->hgt - 1, -1, TERM_L_BLUE, "Press any key to return...");
-            ui_menu_click_add_full_row(SETTINGS_CLICK_RETURN, Term->hgt - 1);
-            Term_fresh();
-        }
+        settings_semantic_menu_begin("Pane Fonts", -1);
+        sdl_character_sheet_screen_set_select_description(
+            "No configurable panes are configured.");
+        sdl_character_sheet_screen_commit_select(-1);
         (void)inkey();
         settings_semantic_menu_hide();
         screen_load();
@@ -3733,24 +4090,9 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
 
         while (!done)
         {
-            int y0 = 4;
             int row_width;
-            int term_wid;
-            bool pixel_menu;
-
-            pixel_menu = settings_semantic_menu_begin("Pane Fonts", sel);
-            term_wid = settings_ui_term_wid();
+            settings_semantic_menu_begin("Pane Fonts", sel);
             row_width = settings_ui_line_width(2);
-            if (!pixel_menu)
-            {
-                Term_clear();
-                ui_menu_click_begin();
-                ui_menu_click_set_hover_enabled(true);
-                settings_menu_begin_scroll_area(y0,
-                    MIN(pane_count, settings_menu_visible_rows(y0, 4)));
-                settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Pane Fonts");
-                settings_ui_put_fitted(2, 2, TERM_WHITE, "==========");
-            }
 
             for (int i = 0; i < pane_count; i++)
             {
@@ -3776,7 +4118,6 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
                     enabled ? "on" : "off");
                 settings_ui_format_pair_line(line_buf, sizeof(line_buf), label_buf,
                     font_field, row_width, 6);
-                if (pixel_menu)
                 {
                     char semantic_line[160];
 
@@ -3786,40 +4127,20 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
                     sdl_character_sheet_screen_set_last_select_row_reset(
                         SETTINGS_CLICK_RESET_ROW_BASE + i);
                 }
-                else if ((y0 + i) < Term->hgt - 5)
-                {
-                    c_prt(a, line_buf, y0 + i, 2);
-                    ui_menu_click_add_full_row(i, y0 + i);
-                }
             }
 
-            if (pixel_menu)
             {
-                sdl_character_sheet_screen_set_select_description(
-                    "Up and down select a pane. Left/Right or N/Y change the font size. 0 (or the row's Reset) sets the selected pane font to auto. Changes apply immediately.");
+                char fdesc[160];
+                enum pane_type ftype =
+                    (enum pane_type)get_sdl_pane_type(pane_indices[sel]);
+
+                strnfmt(fdesc, sizeof(fdesc),
+                    "Font size for the %s pane. Left/Right adjusts it; 0 (or "
+                    "the row's Reset) uses the automatic size.",
+                    pane_type_name(ftype));
+                sdl_character_sheet_screen_set_select_description(fdesc);
                 sdl_character_sheet_screen_commit_select(sel);
             }
-            else
-            {
-                int y = Term->hgt - 4;
-                settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                    settings_ui_pick_label(term_wid - 2,
-                        "Up/Down: select pane   Left/Right: change font size",
-                        "Up/Down select pane   Left/Right set font size",
-                        "Up/Down select   Left/Right set"));
-                settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                    settings_ui_pick_label(term_wid - 2,
-                        "0: auto (uses default aux font / auto main-based size)",
-                        "0: auto font size",
-                        "0 auto font"));
-                settings_ui_put_return_prompt(y++, 2, TERM_SLATE,
-                    "Esc/Enter: return (changes apply immediately)",
-                    "Esc/Enter: return",
-                    "Esc/Enter return");
-
-                Term_fresh();
-            }
-
             hide_cursor = true;
             char ch = inkey();
             hide_cursor = false;
@@ -3955,6 +4276,7 @@ static const char* pane_type_short_name(enum pane_type type)
     case PANE_DESCRIPTION: return "DESC";
     case PANE_OVERLAY_MENU: return "MENU";
     case PANE_COMBAT: return "COM";
+    case PANE_STATUS_DEPTH: return "STAT+DEPTH";
     default: return "UNK";
     }
 }
@@ -4106,7 +4428,8 @@ static bool pane_type_is_overlay(enum pane_type type)
 {
     return (type == PANE_LEFT_PANEL) || (type == PANE_STATUS)
         || (type == PANE_DEPTH) || (type == PANE_ROLLS)
-        || (type == PANE_OVERLAY_MENU) || (type == PANE_COMBAT);
+        || (type == PANE_OVERLAY_MENU) || (type == PANE_COMBAT)
+        || (type == PANE_STATUS_DEPTH);
 }
 
 static const char* pane_type_display_name(enum pane_type type)
@@ -4120,16 +4443,16 @@ static const char* pane_type_display_name(enum pane_type type)
     case PANE_ROLLS: return "Overlay Log";
     case PANE_OVERLAY_MENU: return "Quick Access";
     case PANE_COMBAT: return "Combat";
+    case PANE_STATUS_DEPTH: return "Status & Depth";
     case PANE_LOG: return "Log";
     default: return pane_type_name(type);
     }
 }
 
 /*
- * Build the inline pane rows (and their per-pane group headers) shown on the
- * Interface options page.  One section per configured overlay pane; Left Panel
- * shows its launch/compact extras (its enabled/placement are fixed elsewhere),
- * other overlays show enabled/placement.  All show a font-size row.
+ * Build the inline SDL rows (and their group headers) shown on the Interface
+ * options page.  Global interface controls come first, followed by one section
+ * per configured overlay pane and the remaining overlay timing controls.
  *
  * Returns the number of rows written.
  */
@@ -4140,10 +4463,47 @@ static int build_interface_pane_rows(struct iface_pane_row* rows, int max_rows,
     int mark_count = 0;
     int total = get_pane_config_count();
 
+    if (row_count + 1 <= max_rows)
+    {
+        rows[row_count].pane_cfg_index = -1;
+        rows[row_count].type = PANE_MAX;
+        rows[row_count].field = IFACE_PANE_FIELD_MAIN_MENU_BUTTON;
+        markers[mark_count].setting_id = IFACE_PANE_ROW_BASE + row_count;
+        markers[mark_count].label = "Main Menu";
+        mark_count++;
+        row_count++;
+    }
+
+#if !SIL_SDL_MOBILE_BUILD
+    if (row_count + 1 <= max_rows)
+    {
+        rows[row_count].pane_cfg_index = -1;
+        rows[row_count].type = PANE_MAX;
+        rows[row_count].field = IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS;
+        markers[mark_count].setting_id = IFACE_PANE_ROW_BASE + row_count;
+        markers[mark_count].label = "Square Action Popups";
+        mark_count++;
+        row_count++;
+    }
+#endif
+
+#if SIL_SDL_MOBILE_BUILD
+    if (row_count + 1 <= max_rows)
+    {
+        rows[row_count].pane_cfg_index = -1;
+        rows[row_count].type = PANE_MAX;
+        rows[row_count].field = IFACE_PANE_FIELD_QUICK_TOUCH_SIDE;
+        markers[mark_count].setting_id = IFACE_PANE_ROW_BASE + row_count;
+        markers[mark_count].label = "Quick Touch";
+        mark_count++;
+        row_count++;
+    }
+#endif
+
     for (int i = 0; i < total; i++)
     {
         enum pane_type type = (enum pane_type)get_sdl_pane_type(i);
-        enum iface_pane_field fields[6];
+        enum iface_pane_field fields[9];
         int field_count = 0;
 
         if (!pane_type_is_overlay(type))
@@ -4153,14 +4513,19 @@ static int build_interface_pane_rows(struct iface_pane_row* rows, int max_rows,
         {
             fields[field_count++] = IFACE_PANE_FIELD_LP_LAUNCH;
             fields[field_count++] = IFACE_PANE_FIELD_LP_COMPACT;
+            fields[field_count++] = IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR;
+            fields[field_count++] = IFACE_PANE_FIELD_LP_TOUCH_EDGE;
             fields[field_count++] = IFACE_PANE_FIELD_FONT;
         }
         else if (type == PANE_OVERLAY_MENU)
         {
             fields[field_count++] = IFACE_PANE_FIELD_ENABLED;
             fields[field_count++] = IFACE_PANE_FIELD_PLACEMENT;
-            fields[field_count++] = IFACE_PANE_FIELD_BUTTON_COUNT;
-            fields[field_count++] = IFACE_PANE_FIELD_TILE_SCALE;
+            fields[field_count++] = IFACE_PANE_FIELD_SIZE;
+            fields[field_count++] = IFACE_PANE_FIELD_COLUMNS;
+            fields[field_count++] = IFACE_PANE_FIELD_ROWS;
+            fields[field_count++] = IFACE_PANE_FIELD_QA_ARROWS;
+            fields[field_count++] = IFACE_PANE_FIELD_QA_LAUNCH;
             fields[field_count++] = IFACE_PANE_FIELD_BUTTONS;
         }
         else
@@ -4168,6 +4533,10 @@ static int build_interface_pane_rows(struct iface_pane_row* rows, int max_rows,
             fields[field_count++] = IFACE_PANE_FIELD_ENABLED;
             fields[field_count++] = IFACE_PANE_FIELD_PLACEMENT;
             fields[field_count++] = IFACE_PANE_FIELD_FONT;
+            if (type == PANE_ROLLS) {
+                fields[field_count++] = IFACE_PANE_FIELD_LOG_ROWS;
+                fields[field_count++] = IFACE_PANE_FIELD_OVERLAY_LOG_BORDER;
+            }
         }
 
         if (row_count + field_count > max_rows)
@@ -4204,6 +4573,17 @@ static int build_interface_pane_rows(struct iface_pane_row* rows, int max_rows,
         row_count++;
     }
 
+    if (row_count + 1 <= max_rows)
+    {
+        rows[row_count].pane_cfg_index = -1;
+        rows[row_count].type = PANE_MAX;
+        rows[row_count].field = IFACE_PANE_FIELD_POPUP_NOTIFICATION;
+        markers[mark_count].setting_id = IFACE_PANE_ROW_BASE + row_count;
+        markers[mark_count].label = "Popup Notifications";
+        mark_count++;
+        row_count++;
+    }
+
     if (marker_count)
         *marker_count = mark_count;
     return row_count;
@@ -4229,21 +4609,152 @@ static cptr iface_pane_row_label(const struct iface_pane_row* row)
     case IFACE_PANE_FIELD_ENABLED: return "Enabled";
     case IFACE_PANE_FIELD_PLACEMENT: return "Placement";
     case IFACE_PANE_FIELD_FONT: return "Font Size";
-    case IFACE_PANE_FIELD_TILE_SCALE: return "Tile Scale";
-    case IFACE_PANE_FIELD_BUTTON_COUNT: return "Squares";
+    case IFACE_PANE_FIELD_SIZE: return "Size";
+    case IFACE_PANE_FIELD_COLUMNS: return "Columns";
+    case IFACE_PANE_FIELD_ROWS: return "Rows";
+    case IFACE_PANE_FIELD_QA_ARROWS: return "Arrows";
+    case IFACE_PANE_FIELD_QA_LAUNCH: return "Launch State";
     case IFACE_PANE_FIELD_BUTTONS: return "Assignments";
     case IFACE_PANE_FIELD_LP_LAUNCH: return "Launch State";
     case IFACE_PANE_FIELD_LP_COMPACT: return "Compact Mode";
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+        return "Compact Health Bar";
+    case IFACE_PANE_FIELD_LP_TOUCH_EDGE: return "Touch Left Edge";
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE: return "Button Side";
+    case IFACE_PANE_FIELD_LOG_ROWS: return "Lines";
+    case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER: return "White Border";
     case IFACE_PANE_FIELD_DICE_LOCK: return "Lock Time";
     case IFACE_PANE_FIELD_DICE_OVERLAY: return "Result Time";
+    case IFACE_PANE_FIELD_MAIN_MENU_BUTTON: return "Show Fixed Button";
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS: return "Show Popups";
+    case IFACE_PANE_FIELD_POPUP_NOTIFICATION: return "Display Time";
     default: return "?";
     }
+}
+
+static cptr iface_pane_row_description(const struct iface_pane_row* row)
+{
+    if (!row)
+        return NULL;
+
+    if (row->field == IFACE_PANE_FIELD_MAIN_MENU_BUTTON)
+    {
+        return "Show the fixed Menu button at the top center during play. "
+            "Top-center panes begin directly below it while enabled. This is "
+            "saved separately for portrait and landscape.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS)
+    {
+        return "Show compact action shortcuts after entering a square with an "
+            "item, stair, forge, or other available square action. The minus "
+            "button hides these popups for 10 player turns.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_PLACEMENT)
+    {
+        return "The number is this pane's stack order at that position. "
+            "Choosing an occupied number inserts this pane there and shifts "
+            "the other panes. Portrait and landscape are saved separately.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_QA_ARROWS)
+    {
+        return "Show the Quick Access border arrow used to open and hide the "
+            "panel. With arrows off, Quick Access remains open. This is saved "
+            "separately for portrait and landscape.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_QA_LAUNCH)
+    {
+        return "Choose whether Quick Access starts open or hidden when arrows "
+            "are enabled. With arrows off, it is always open. This is saved "
+            "separately for portrait and landscape.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_BUTTONS)
+    {
+        return "Assign the Quick Access short-press and long-press actions "
+            "for the current orientation. Portrait and landscape are saved "
+            "separately.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_LP_TOUCH_EDGE)
+    {
+        return "Move the Left Panel and every left-aligned overlay to the "
+            "screen's left layout edge. This is saved separately for "
+            "portrait and landscape.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR)
+    {
+        return "Show the player health bar above the vertical compact Left "
+            "Panel. It begins flush with the pane's top edge and has no top "
+            "padding. Row compact mode and the full panel are unchanged. "
+            "This is saved separately for portrait and landscape.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_QUICK_TOUCH_SIDE)
+    {
+        return "Choose the screen side used by the portrait Quick Touch "
+            "buttons. The Button Wheel uses the opposite side. This is saved "
+            "separately for portrait and landscape.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_LOG_ROWS)
+    {
+        return "Set the requested number of visible Overlay Log lines for "
+            "the current orientation. Portrait and landscape are saved "
+            "separately.";
+    }
+
+    if (row->field == IFACE_PANE_FIELD_ENABLED
+        || row->field == IFACE_PANE_FIELD_FONT
+        || row->field == IFACE_PANE_FIELD_SIZE
+        || row->field == IFACE_PANE_FIELD_COLUMNS
+        || row->field == IFACE_PANE_FIELD_ROWS
+        || row->field == IFACE_PANE_FIELD_QA_ARROWS
+        || row->field == IFACE_PANE_FIELD_QA_LAUNCH
+        || row->field == IFACE_PANE_FIELD_LP_LAUNCH
+        || row->field == IFACE_PANE_FIELD_LP_COMPACT
+        || row->field == IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR
+        || row->field == IFACE_PANE_FIELD_LP_TOUCH_EDGE
+        || row->field == IFACE_PANE_FIELD_QUICK_TOUCH_SIDE
+        || row->field == IFACE_PANE_FIELD_LOG_ROWS
+        || row->field == IFACE_PANE_FIELD_OVERLAY_LOG_BORDER
+        || row->field == IFACE_PANE_FIELD_MAIN_MENU_BUTTON
+        || row->field == IFACE_PANE_FIELD_DICE_LOCK
+        || row->field == IFACE_PANE_FIELD_DICE_OVERLAY
+        || row->field == IFACE_PANE_FIELD_POPUP_NOTIFICATION)
+    {
+        return "This overlay value belongs to the current orientation's "
+            "saved layout. Portrait and landscape can be configured "
+            "independently.";
+    }
+
+    return NULL;
+}
+
+static int iface_pane_row_live_index(const struct iface_pane_row* row)
+{
+    int total;
+
+    if (!row || row->type == PANE_MAX)
+        return -1;
+
+    total = get_pane_config_count();
+    for (int i = 0; i < total; i++) {
+        if ((enum pane_type)get_sdl_pane_type(i) == row->type)
+            return i;
+    }
+
+    return row->pane_cfg_index;
 }
 
 static void iface_pane_row_value(const struct iface_pane_row* row, char* buf,
     size_t buflen)
 {
-    int idx = row->pane_cfg_index;
+    int idx = iface_pane_row_live_index(row);
 
     if (!buf || !buflen)
         return;
@@ -4254,20 +4765,36 @@ static void iface_pane_row_value(const struct iface_pane_row* row, char* buf,
         SDL_strlcpy(buf, get_sdl_pane_enabled(idx) ? "on" : "off", buflen);
         break;
     case IFACE_PANE_FIELD_PLACEMENT:
-        SDL_strlcpy(buf,
+        strnfmt(buf, buflen, "%s %d",
             pane_placement_display_name(
                 (enum pane_placement)get_sdl_pane_where(idx)),
-            buflen);
+            get_sdl_pane_stack_order(idx));
         break;
     case IFACE_PANE_FIELD_FONT:
         format_font_size_value(buf, buflen, get_sdl_pane_font_size(idx),
             get_sdl_pane_effective_font_size(idx), 16);
         break;
-    case IFACE_PANE_FIELD_TILE_SCALE:
-        strnfmt(buf, buflen, "%dx", get_sdl_touch_top_panel_tile_scale());
+    case IFACE_PANE_FIELD_SIZE:
+        touch_top_widget_format_size(buf, buflen,
+            get_sdl_touch_top_panel_size());
         break;
-    case IFACE_PANE_FIELD_BUTTON_COUNT:
-        strnfmt(buf, buflen, "%d", get_sdl_touch_top_panel_button_count());
+    case IFACE_PANE_FIELD_COLUMNS:
+        strnfmt(buf, buflen, "%d", get_sdl_touch_top_panel_columns());
+        break;
+    case IFACE_PANE_FIELD_ROWS:
+        strnfmt(buf, buflen, "%d", get_sdl_touch_top_panel_rows());
+        break;
+    case IFACE_PANE_FIELD_QA_ARROWS:
+        SDL_strlcpy(buf, get_sdl_touch_top_panel_arrows_visible()
+            ? "on" : "off", buflen);
+        break;
+    case IFACE_PANE_FIELD_QA_LAUNCH:
+        SDL_strlcpy(buf,
+            !get_sdl_touch_top_panel_arrows_visible()
+                ? "always open"
+                : (get_sdl_touch_top_panel_default_open()
+                    ? "open" : "hidden"),
+            buflen);
         break;
     case IFACE_PANE_FIELD_BUTTONS:
         SDL_strlcpy(buf, "open", buflen);
@@ -4282,11 +4809,41 @@ static void iface_pane_row_value(const struct iface_pane_row* row, char* buf,
                 ? "row" : "column",
             buflen);
         break;
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+        SDL_strlcpy(buf, get_sdl_left_panel_compact_health_bar()
+            ? "on" : "off", buflen);
+        break;
+    case IFACE_PANE_FIELD_LP_TOUCH_EDGE:
+        SDL_strlcpy(buf, get_sdl_left_overlays_touch_screen_edge()
+            ? "on" : "off", buflen);
+        break;
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
+        SDL_strlcpy(buf, get_sdl_quick_touch_buttons_on_left()
+            ? "left" : "right", buflen);
+        break;
+    case IFACE_PANE_FIELD_LOG_ROWS:
+        strnfmt(buf, buflen, "%d", sdl_log_pane_current_rows(PANE_ROLLS));
+        break;
+    case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER:
+        SDL_strlcpy(buf, get_sdl_show_overlay_log_border() ? "on" : "off",
+            buflen);
+        break;
     case IFACE_PANE_FIELD_DICE_LOCK:
         iface_format_ms_value(buf, buflen, get_sdl_dice_roll_lock_ms());
         break;
     case IFACE_PANE_FIELD_DICE_OVERLAY:
         iface_format_ms_value(buf, buflen, get_sdl_dice_roll_overlay_ms());
+        break;
+    case IFACE_PANE_FIELD_MAIN_MENU_BUTTON:
+        SDL_strlcpy(buf, get_sdl_show_main_menu_button() ? "on" : "off",
+            buflen);
+        break;
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
+        SDL_strlcpy(buf, get_sdl_show_context_square_popups() ? "on" : "off",
+            buflen);
+        break;
+    case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
+        iface_format_ms_value(buf, buflen, get_sdl_popup_notification_ms());
         break;
     default:
         SDL_strlcpy(buf, "", buflen);
@@ -4300,10 +4857,15 @@ static void iface_pane_row_apply_change(const struct iface_pane_row* row)
     {
     case IFACE_PANE_FIELD_LP_LAUNCH:
     case IFACE_PANE_FIELD_LP_COMPACT:
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
+    case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER:
         sdl_request_redraw();
         break;
     case IFACE_PANE_FIELD_DICE_LOCK:
     case IFACE_PANE_FIELD_DICE_OVERLAY:
+    case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
     case IFACE_PANE_FIELD_BUTTONS:
         break;
     default:
@@ -4317,8 +4879,20 @@ static bool iface_pane_pick_from_choices(const struct iface_pane_row* row,
     int* out_value, bool* handled)
 {
     char title[96];
-    cptr group = (row->type == PANE_MAX) ? "Dice Roll Overlay"
-                                         : pane_type_display_name(row->type);
+    cptr group;
+
+    if (row->field == IFACE_PANE_FIELD_MAIN_MENU_BUTTON)
+        group = "Main Menu";
+    else if (row->field == IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS)
+        group = "Square Action Popups";
+    else if (row->field == IFACE_PANE_FIELD_QUICK_TOUCH_SIDE)
+        group = "Quick Touch";
+    else if (row->field == IFACE_PANE_FIELD_POPUP_NOTIFICATION)
+        group = "Popup Notifications";
+    else if (row->type == PANE_MAX)
+        group = "Dice Roll Overlay";
+    else
+        group = pane_type_display_name(row->type);
 
     if (handled)
         *handled = true;
@@ -4339,6 +4913,10 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
         { 0, "off" },
         { 1, "on" }
     };
+    static const struct settings_value_choice hidden_open_choices[] = {
+        { 0, "hidden" },
+        { 1, "open" }
+    };
     static const struct settings_value_choice compact_full_choices[] = {
         { 0, "compact" },
         { 1, "full" }
@@ -4347,13 +4925,17 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
         { SDL_LEFT_PANEL_COMPACT_COLUMN, "column" },
         { SDL_LEFT_PANEL_COMPACT_ROW, "row" }
     };
+    static const struct settings_value_choice left_right_choices[] = {
+        { 1, "left" },
+        { 0, "right" }
+    };
 
     if (handled)
         *handled = false;
     if (!row)
         return false;
 
-    idx = row->pane_cfg_index;
+    idx = iface_pane_row_live_index(row);
 
     switch (row->field)
     {
@@ -4377,18 +4959,35 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
             PLACE_TOP_CENTER, PLACE_BOTTOM_CENTER, PLACE_LEFT_CENTER,
             PLACE_RIGHT_CENTER
         };
-        struct settings_value_choice choices[N_ELEMENTS(placements)];
+        struct settings_value_choice choices[
+            N_ELEMENTS(placements) * MAX_PANE_CONFIGS];
+        char labels[N_ELEMENTS(placements) * MAX_PANE_CONFIGS][48];
         int count = 0;
-        int current = get_sdl_pane_where(idx);
+        enum pane_placement current_where =
+            (enum pane_placement)get_sdl_pane_where(idx);
+        int current_order = get_sdl_pane_stack_order(idx);
+        int current = current_where * IFACE_PANE_PLACEMENT_ORDER_STRIDE
+            + current_order;
 
         for (int i = 0; i < (int)N_ELEMENTS(placements); i++)
         {
+            int other_count;
+
             if (!pane_type_allows_placement(row->type, placements[i]))
                 continue;
 
-            choices[count].value = placements[i];
-            choices[count].label = pane_placement_display_name(placements[i]);
-            count++;
+            other_count = get_sdl_pane_stack_count(placements[i]);
+            if (placements[i] == current_where)
+                other_count--;
+
+            for (int order = 1; order <= other_count + 1; order++) {
+                choices[count].value = placements[i]
+                    * IFACE_PANE_PLACEMENT_ORDER_STRIDE + order;
+                strnfmt(labels[count], sizeof(labels[count]), "%s %d",
+                    pane_placement_display_name(placements[i]), order);
+                choices[count].label = labels[count];
+                count++;
+            }
         }
 
         if (count <= 0)
@@ -4398,7 +4997,11 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
                 handled)
             && value != current)
         {
-            set_sdl_pane_where(idx, (enum pane_placement)value);
+            enum pane_placement placement = (enum pane_placement)(
+                value / IFACE_PANE_PLACEMENT_ORDER_STRIDE);
+            int order = value % IFACE_PANE_PLACEMENT_ORDER_STRIDE;
+
+            set_sdl_pane_where_order(idx, placement, order);
             changed = true;
         }
         break;
@@ -4407,18 +5010,26 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
     case IFACE_PANE_FIELD_FONT:
         return false;
 
-    case IFACE_PANE_FIELD_TILE_SCALE:
-    {
-        struct settings_value_choice choices[SDL_TOUCH_TOP_PANEL_TILE_SCALE_MAX];
-        char labels[SDL_TOUCH_TOP_PANEL_TILE_SCALE_MAX][8];
-        int count = 0;
-        int current = get_sdl_touch_top_panel_tile_scale();
+    case IFACE_PANE_FIELD_SIZE:
+        if (handled)
+            *handled = true;
+        changed = touch_top_widget_pick_size();
+        break;
 
-        for (int scale = SDL_TOUCH_TOP_PANEL_TILE_SCALE_MIN;
-             scale <= SDL_TOUCH_TOP_PANEL_TILE_SCALE_MAX; scale++)
+    case IFACE_PANE_FIELD_COLUMNS:
+    {
+        struct settings_value_choice choices[SDL_TOUCH_TOP_PANEL_COLUMNS_MAX + 1];
+        char labels[SDL_TOUCH_TOP_PANEL_COLUMNS_MAX + 1][8];
+        int count = 0;
+        int current = get_sdl_touch_top_panel_columns();
+        int max_columns = SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX
+            / get_sdl_touch_top_panel_rows();
+
+        for (int columns = SDL_TOUCH_TOP_PANEL_COLUMNS_MIN;
+             columns <= max_columns; columns++)
         {
-            strnfmt(labels[count], sizeof(labels[count]), "%dx", scale);
-            choices[count].value = scale;
+            strnfmt(labels[count], sizeof(labels[count]), "%d", columns);
+            choices[count].value = columns;
             choices[count].label = labels[count];
             count++;
         }
@@ -4427,37 +5038,55 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
                 handled)
             && value != current)
         {
-            set_sdl_touch_top_panel_tile_scale(value);
+            set_sdl_touch_top_panel_columns(value);
             changed = true;
         }
         break;
     }
 
-    case IFACE_PANE_FIELD_BUTTON_COUNT:
+    case IFACE_PANE_FIELD_ROWS:
     {
-        struct settings_value_choice choices[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT + 1];
-        char labels[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT + 1][8];
-        int count = 0;
-        int current = get_sdl_touch_top_panel_button_count();
+        static const struct settings_value_choice row_choices[] = {
+            { 1, "1" }, { 2, "2" },
+        };
+        int current = get_sdl_touch_top_panel_rows();
 
-        for (int buttons = SDL_TOUCH_TOP_PANEL_BUTTON_COUNT_MIN;
-             buttons <= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT; buttons++)
-        {
-            strnfmt(labels[count], sizeof(labels[count]), "%d", buttons);
-            choices[count].value = buttons;
-            choices[count].label = labels[count];
-            count++;
-        }
-
-        if (iface_pane_pick_from_choices(row, choices, count, current, &value,
-                handled)
+        if (iface_pane_pick_from_choices(row, row_choices,
+                (int)N_ELEMENTS(row_choices), current, &value, handled)
             && value != current)
         {
-            set_sdl_touch_top_panel_button_count(value);
+            set_sdl_touch_top_panel_rows(value);
             changed = true;
         }
         break;
     }
+
+    case IFACE_PANE_FIELD_QA_ARROWS:
+        value = get_sdl_touch_top_panel_arrows_visible() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, off_on_choices,
+                (int)N_ELEMENTS(off_on_choices), value, &value, handled)
+            && value != (get_sdl_touch_top_panel_arrows_visible() ? 1 : 0))
+        {
+            set_sdl_touch_top_panel_arrows_visible(value != 0);
+            changed = true;
+        }
+        break;
+
+    case IFACE_PANE_FIELD_QA_LAUNCH:
+        if (!get_sdl_touch_top_panel_arrows_visible()) {
+            if (handled)
+                *handled = true;
+            break;
+        }
+        value = get_sdl_touch_top_panel_default_open() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, hidden_open_choices,
+                (int)N_ELEMENTS(hidden_open_choices), value, &value, handled)
+            && value != (get_sdl_touch_top_panel_default_open() ? 1 : 0))
+        {
+            set_sdl_touch_top_panel_default_open(value != 0);
+            changed = true;
+        }
+        break;
 
     case IFACE_PANE_FIELD_BUTTONS:
         return false;
@@ -4484,8 +5113,100 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
         }
         break;
 
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+        value = get_sdl_left_panel_compact_health_bar() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, off_on_choices,
+                (int)N_ELEMENTS(off_on_choices), value, &value, handled)
+            && value != (get_sdl_left_panel_compact_health_bar() ? 1 : 0))
+        {
+            set_sdl_left_panel_compact_health_bar(value != 0);
+            changed = true;
+        }
+        break;
+
+    case IFACE_PANE_FIELD_LP_TOUCH_EDGE:
+        value = get_sdl_left_overlays_touch_screen_edge() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, off_on_choices,
+                (int)N_ELEMENTS(off_on_choices), value, &value, handled)
+            && value != (get_sdl_left_overlays_touch_screen_edge() ? 1 : 0))
+        {
+            set_sdl_left_overlays_touch_screen_edge(value != 0);
+            changed = true;
+        }
+        break;
+
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
+        value = get_sdl_quick_touch_buttons_on_left() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, left_right_choices,
+                (int)N_ELEMENTS(left_right_choices), value, &value, handled)
+            && value != (get_sdl_quick_touch_buttons_on_left() ? 1 : 0))
+        {
+            set_sdl_quick_touch_buttons_on_left(value != 0);
+            changed = true;
+        }
+        break;
+
+    case IFACE_PANE_FIELD_LOG_ROWS:
+    {
+        struct settings_value_choice choices[IFACE_OVERLAY_LOG_ROWS_MAX];
+        char labels[IFACE_OVERLAY_LOG_ROWS_MAX][8];
+        int count = 0;
+        int current = sdl_log_pane_current_rows(PANE_ROLLS);
+
+        for (int rows = IFACE_OVERLAY_LOG_ROWS_MIN;
+             rows <= IFACE_OVERLAY_LOG_ROWS_MAX; rows++)
+        {
+            strnfmt(labels[count], sizeof(labels[count]), "%d", rows);
+            choices[count].value = rows;
+            choices[count].label = labels[count];
+            count++;
+        }
+        if (iface_pane_pick_from_choices(row, choices, count, current, &value,
+                handled)
+            && value != current)
+        {
+            sdl_log_pane_set_rows(PANE_ROLLS, value);
+            changed = true;
+        }
+        break;
+    }
+
+    case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER:
+        value = get_sdl_show_overlay_log_border() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, off_on_choices,
+                (int)N_ELEMENTS(off_on_choices), value, &value, handled)
+            && value != (get_sdl_show_overlay_log_border() ? 1 : 0))
+        {
+            set_sdl_show_overlay_log_border(value != 0);
+            changed = true;
+        }
+        break;
+
+    case IFACE_PANE_FIELD_MAIN_MENU_BUTTON:
+        value = get_sdl_show_main_menu_button() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, off_on_choices,
+                (int)N_ELEMENTS(off_on_choices), value, &value, handled)
+            && value != (get_sdl_show_main_menu_button() ? 1 : 0))
+        {
+            set_sdl_show_main_menu_button(value != 0);
+            changed = true;
+        }
+        break;
+
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
+        value = get_sdl_show_context_square_popups() ? 1 : 0;
+        if (iface_pane_pick_from_choices(row, off_on_choices,
+                (int)N_ELEMENTS(off_on_choices), value, &value, handled)
+            && value != (get_sdl_show_context_square_popups() ? 1 : 0))
+        {
+            set_sdl_show_context_square_popups(value != 0);
+            changed = true;
+        }
+        break;
+
     case IFACE_PANE_FIELD_DICE_LOCK:
     case IFACE_PANE_FIELD_DICE_OVERLAY:
+    case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
     {
         struct settings_value_choice choices[
             SDL_DICE_ROLL_TIMING_MAX_MS / IFACE_DICE_ROLL_MS_STEP + 1];
@@ -4494,7 +5215,9 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
         int count = 0;
         int current = (row->field == IFACE_PANE_FIELD_DICE_LOCK)
             ? get_sdl_dice_roll_lock_ms()
-            : get_sdl_dice_roll_overlay_ms();
+            : ((row->field == IFACE_PANE_FIELD_DICE_OVERLAY)
+                ? get_sdl_dice_roll_overlay_ms()
+                : get_sdl_popup_notification_ms());
 
         current = ((current + IFACE_DICE_ROLL_MS_STEP / 2)
             / IFACE_DICE_ROLL_MS_STEP) * IFACE_DICE_ROLL_MS_STEP;
@@ -4513,12 +5236,16 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
         {
             int old_value = (row->field == IFACE_PANE_FIELD_DICE_LOCK)
                 ? get_sdl_dice_roll_lock_ms()
-                : get_sdl_dice_roll_overlay_ms();
+                : ((row->field == IFACE_PANE_FIELD_DICE_OVERLAY)
+                    ? get_sdl_dice_roll_overlay_ms()
+                    : get_sdl_popup_notification_ms());
 
             if (row->field == IFACE_PANE_FIELD_DICE_LOCK)
                 set_sdl_dice_roll_lock_ms(value);
-            else
+            else if (row->field == IFACE_PANE_FIELD_DICE_OVERLAY)
                 set_sdl_dice_roll_overlay_ms(value);
+            else
+                set_sdl_popup_notification_ms(value);
             changed = (value != old_value);
         }
         break;
@@ -4542,7 +5269,7 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
  */
 static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
 {
-    int idx = row->pane_cfg_index;
+    int idx = iface_pane_row_live_index(row);
     bool changed = false;
 
     switch (row->field)
@@ -4561,13 +5288,24 @@ static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
     case IFACE_PANE_FIELD_PLACEMENT:
     {
         enum pane_placement cur = (enum pane_placement)get_sdl_pane_where(idx);
-        enum pane_placement next =
-            pane_next_allowed_placement(row->type, cur, (delta < 0) ? -1 : 1);
-        if (next != cur)
-        {
-            set_sdl_pane_where(idx, next);
-            changed = true;
+        int cur_order = get_sdl_pane_stack_order(idx);
+        int cur_count = get_sdl_pane_stack_count(cur);
+        enum pane_placement next = cur;
+        int next_order = cur_order;
+
+        if (delta < 0 && cur_order > 1) {
+            next_order--;
+        } else if (delta > 0 && cur_order < cur_count) {
+            next_order++;
+        } else {
+            next = pane_next_allowed_placement(row->type, cur,
+                (delta < 0) ? -1 : 1);
+            next_order = (delta < 0)
+                ? get_sdl_pane_stack_count(next) + 1 : 1;
         }
+
+        set_sdl_pane_where_order(idx, next, next_order);
+        changed = true;
         break;
     }
     case IFACE_PANE_FIELD_FONT:
@@ -4580,18 +5318,73 @@ static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
         changed = true;
         break;
     }
-    case IFACE_PANE_FIELD_TILE_SCALE:
+    case IFACE_PANE_FIELD_SIZE:
     {
-        int value = get_sdl_touch_top_panel_tile_scale();
-        set_sdl_touch_top_panel_tile_scale(value + ((delta < 0) ? -1 : 1));
-        changed = (get_sdl_touch_top_panel_tile_scale() != value);
+        float value = get_sdl_touch_top_panel_size();
+        float next;
+
+        if (value == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+            next = (delta < 0) ? SDL_TOUCH_TOP_PANEL_SIZE_MAX
+                               : SDL_TOUCH_TOP_PANEL_SIZE_MIN;
+        } else {
+            next = value + ((delta < 0) ? -SDL_TOUCH_TOP_PANEL_SIZE_STEP
+                                        : SDL_TOUCH_TOP_PANEL_SIZE_STEP);
+            if (next < SDL_TOUCH_TOP_PANEL_SIZE_MIN)
+                next = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+            else if (next > SDL_TOUCH_TOP_PANEL_SIZE_MAX)
+                next = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+        }
+        set_sdl_touch_top_panel_size(next);
+        changed = (get_sdl_touch_top_panel_size() != value);
         break;
     }
-    case IFACE_PANE_FIELD_BUTTON_COUNT:
+    case IFACE_PANE_FIELD_COLUMNS:
     {
-        int value = get_sdl_touch_top_panel_button_count();
-        set_sdl_touch_top_panel_button_count(value + ((delta < 0) ? -1 : 1));
-        changed = (get_sdl_touch_top_panel_button_count() != value);
+        int value = get_sdl_touch_top_panel_columns();
+        set_sdl_touch_top_panel_columns(value + ((delta < 0) ? -1 : 1));
+        changed = (get_sdl_touch_top_panel_columns() != value);
+        break;
+    }
+    case IFACE_PANE_FIELD_ROWS:
+    {
+        int value = get_sdl_touch_top_panel_rows();
+        int next = (delta == 0)
+            ? (value == SDL_TOUCH_TOP_PANEL_ROWS_MIN
+                ? SDL_TOUCH_TOP_PANEL_ROWS_MAX
+                : SDL_TOUCH_TOP_PANEL_ROWS_MIN)
+            : value + ((delta < 0) ? -1 : 1);
+        if (next != value)
+        {
+            set_sdl_touch_top_panel_rows(next);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_QA_ARROWS:
+    {
+        bool cur = get_sdl_touch_top_panel_arrows_visible();
+        bool next = (delta == 0) ? !cur : (delta > 0);
+        if (next != cur)
+        {
+            set_sdl_touch_top_panel_arrows_visible(next);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_QA_LAUNCH:
+    {
+        bool cur;
+        bool next;
+
+        if (!get_sdl_touch_top_panel_arrows_visible())
+            break;
+        cur = get_sdl_touch_top_panel_default_open();
+        next = (delta == 0) ? !cur : (delta > 0);
+        if (next != cur)
+        {
+            set_sdl_touch_top_panel_default_open(next);
+            changed = true;
+        }
         break;
     }
     case IFACE_PANE_FIELD_BUTTONS:
@@ -4615,6 +5408,87 @@ static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
                 : SDL_LEFT_PANEL_COMPACT_ROW);
         changed = true;
         break;
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+    {
+        bool cur = get_sdl_left_panel_compact_health_bar();
+        bool next = (delta == 0) ? !cur : (delta > 0);
+
+        if (next != cur) {
+            set_sdl_left_panel_compact_health_bar(next);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_LP_TOUCH_EDGE:
+    {
+        bool cur = get_sdl_left_overlays_touch_screen_edge();
+        bool next = (delta == 0) ? !cur : (delta > 0);
+
+        if (next != cur) {
+            set_sdl_left_overlays_touch_screen_edge(next);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
+    {
+        bool cur = get_sdl_quick_touch_buttons_on_left();
+        bool next = (delta == 0) ? !cur : (delta < 0);
+
+        if (next != cur) {
+            set_sdl_quick_touch_buttons_on_left(next);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_LOG_ROWS:
+    {
+        int value = sdl_log_pane_current_rows(PANE_ROLLS);
+        int next = value + ((delta < 0) ? -1 : 1);
+
+        if (next < IFACE_OVERLAY_LOG_ROWS_MIN)
+            next = IFACE_OVERLAY_LOG_ROWS_MIN;
+        if (next > IFACE_OVERLAY_LOG_ROWS_MAX)
+            next = IFACE_OVERLAY_LOG_ROWS_MAX;
+        if (next != value) {
+            sdl_log_pane_set_rows(PANE_ROLLS, next);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER:
+    {
+        bool cur = get_sdl_show_overlay_log_border();
+        bool next = (delta == 0) ? !cur : (delta > 0);
+        if (next != cur)
+        {
+            set_sdl_show_overlay_log_border(next);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_MAIN_MENU_BUTTON:
+    {
+        bool cur = get_sdl_show_main_menu_button();
+        bool next = (delta == 0) ? !cur : (delta > 0);
+        if (next != cur)
+        {
+            set_sdl_show_main_menu_button(next);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
+    {
+        bool cur = get_sdl_show_context_square_popups();
+        bool next = (delta == 0) ? !cur : (delta > 0);
+        if (next != cur)
+        {
+            set_sdl_show_context_square_popups(next);
+            changed = true;
+        }
+        break;
+    }
     case IFACE_PANE_FIELD_DICE_LOCK:
     {
         int value = get_sdl_dice_roll_lock_ms();
@@ -4631,6 +5505,15 @@ static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
                                         : IFACE_DICE_ROLL_MS_STEP);
         set_sdl_dice_roll_overlay_ms(next);
         changed = (get_sdl_dice_roll_overlay_ms() != value);
+        break;
+    }
+    case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
+    {
+        int value = get_sdl_popup_notification_ms();
+        int next = value + ((delta < 0) ? -IFACE_DICE_ROLL_MS_STEP
+                                        : IFACE_DICE_ROLL_MS_STEP);
+        set_sdl_popup_notification_ms(next);
+        changed = (get_sdl_popup_notification_ms() != value);
         break;
     }
     default:
@@ -4668,7 +5551,7 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
     if (!row)
         return false;
 
-    idx = row->pane_cfg_index;
+    idx = iface_pane_row_live_index(row);
     sdl_config_set_defaults(&def);
 
     switch (row->field)
@@ -4700,32 +5583,62 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
             changed = true;
         }
         break;
-    case IFACE_PANE_FIELD_TILE_SCALE:
+    case IFACE_PANE_FIELD_SIZE:
     {
-        int d = get_sdl_touch_top_panel_default_tile_scale();
-        if (get_sdl_touch_top_panel_tile_scale() != d)
+        float d = get_sdl_touch_top_panel_default_size();
+        if (get_sdl_touch_top_panel_size() != d)
         {
-            set_sdl_touch_top_panel_tile_scale(d);
+            set_sdl_touch_top_panel_size(d);
             changed = true;
         }
         break;
     }
-    case IFACE_PANE_FIELD_BUTTON_COUNT:
+    case IFACE_PANE_FIELD_COLUMNS:
     {
-        int d = get_sdl_touch_top_panel_default_button_count();
-        if (get_sdl_touch_top_panel_button_count() != d)
+        int d = get_sdl_touch_top_panel_default_columns();
+        if (get_sdl_touch_top_panel_columns() != d)
         {
-            set_sdl_touch_top_panel_button_count(d);
+            set_sdl_touch_top_panel_columns(d);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_ROWS:
+    {
+        int d = get_sdl_touch_top_panel_default_rows();
+        if (get_sdl_touch_top_panel_rows() != d)
+        {
+            set_sdl_touch_top_panel_rows(d);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_QA_ARROWS:
+    {
+        bool d = get_sdl_touch_top_panel_arrows_default_visible();
+        if (get_sdl_touch_top_panel_arrows_visible() != d)
+        {
+            set_sdl_touch_top_panel_arrows_visible(d);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_QA_LAUNCH:
+    {
+        bool d = get_sdl_touch_top_panel_default_open_default();
+        if (get_sdl_touch_top_panel_default_open() != d)
+        {
+            set_sdl_touch_top_panel_default_open(d);
             changed = true;
         }
         break;
     }
     case IFACE_PANE_FIELD_LP_LAUNCH:
         if (get_sdl_left_panel_expanded_on_launch()
-            != def.left_panel_expanded_on_launch)
+            != get_sdl_left_panel_expanded_default_on_launch())
         {
             set_sdl_left_panel_expanded_on_launch(
-                def.left_panel_expanded_on_launch);
+                get_sdl_left_panel_expanded_default_on_launch());
             changed = true;
         }
         break;
@@ -4733,6 +5646,54 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
         if (get_sdl_left_panel_compact_mode() != def.left_panel_compact_mode)
         {
             set_sdl_left_panel_compact_mode(def.left_panel_compact_mode);
+            changed = true;
+        }
+        break;
+    case IFACE_PANE_FIELD_LP_COMPACT_HEALTH_BAR:
+        if (get_sdl_left_panel_compact_health_bar()
+            != def.left_panel_compact_health_bar)
+        {
+            set_sdl_left_panel_compact_health_bar(
+                def.left_panel_compact_health_bar);
+            changed = true;
+        }
+        break;
+    case IFACE_PANE_FIELD_LP_TOUCH_EDGE:
+        if (get_sdl_left_overlays_touch_screen_edge()
+            != def.left_overlays_touch_screen_edge)
+        {
+            set_sdl_left_overlays_touch_screen_edge(
+                def.left_overlays_touch_screen_edge);
+            changed = true;
+        }
+        break;
+    case IFACE_PANE_FIELD_QUICK_TOUCH_SIDE:
+    {
+        bool d = get_sdl_quick_touch_buttons_default_on_left();
+
+        if (get_sdl_quick_touch_buttons_on_left() != d) {
+            set_sdl_quick_touch_buttons_on_left(d);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_LOG_ROWS:
+    {
+        int d = get_sdl_pane_default_rows(idx);
+
+        if (sdl_log_pane_current_rows(PANE_ROLLS) != d) {
+            sdl_log_pane_set_rows(PANE_ROLLS, d);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER:
+        if (get_sdl_show_overlay_log_border()
+            != (get_sdl_mobile_portrait_mode()
+                ? false : def.show_overlay_log_border))
+        {
+            set_sdl_show_overlay_log_border(get_sdl_mobile_portrait_mode()
+                ? false : def.show_overlay_log_border);
             changed = true;
         }
         break;
@@ -4747,6 +5708,34 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
         if (get_sdl_dice_roll_overlay_ms() != def.dice_roll_overlay_ms)
         {
             set_sdl_dice_roll_overlay_ms(def.dice_roll_overlay_ms);
+            changed = true;
+        }
+        break;
+    case IFACE_PANE_FIELD_MAIN_MENU_BUTTON:
+    {
+        bool default_visible = get_sdl_mobile_portrait_mode()
+            ? false : def.show_main_menu_button;
+
+        if (get_sdl_show_main_menu_button() != default_visible)
+        {
+            set_sdl_show_main_menu_button(default_visible);
+            changed = true;
+        }
+        break;
+    }
+    case IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS:
+        if (get_sdl_show_context_square_popups()
+            != def.show_context_square_popups)
+        {
+            set_sdl_show_context_square_popups(
+                def.show_context_square_popups);
+            changed = true;
+        }
+        break;
+    case IFACE_PANE_FIELD_POPUP_NOTIFICATION:
+        if (get_sdl_popup_notification_ms() != def.popup_notification_ms)
+        {
+            set_sdl_popup_notification_ms(def.popup_notification_ms);
             changed = true;
         }
         break;
@@ -4787,22 +5776,10 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
 
     if (pane_count <= 0)
     {
-        if (settings_semantic_menu_begin("Pane Layout", -1))
-        {
-            sdl_character_sheet_screen_set_select_description(
-                "No configurable panes are configured.");
-            sdl_character_sheet_screen_commit_select(-1);
-        }
-        else
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            Term_putstr(2, 1, -1, TERM_L_BLUE, "Pane Layout");
-            Term_putstr(2, 3, -1, TERM_WHITE, "No configurable panes are configured.");
-            Term_putstr(2, Term->hgt - 1, -1, TERM_L_BLUE, "Press any key to return...");
-            ui_menu_click_add_full_row(SETTINGS_CLICK_RETURN, Term->hgt - 1);
-            Term_fresh();
-        }
+        settings_semantic_menu_begin("Pane Layout", -1);
+        sdl_character_sheet_screen_set_select_description(
+            "No configurable panes are configured.");
+        sdl_character_sheet_screen_commit_select(-1);
         (void)inkey();
         settings_semantic_menu_hide();
         screen_load();
@@ -4818,24 +5795,9 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
 
     while (!done)
     {
-        int y0 = 4;
-        int term_wid;
-        int row_width;
-        bool pixel_menu;
+        int row_width = settings_ui_line_width(2);
 
-        pixel_menu = settings_semantic_menu_begin("Pane Layout", sel);
-        term_wid = settings_ui_term_wid();
-        row_width = settings_ui_line_width(2);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(y0,
-                MIN(pane_count, settings_menu_visible_rows(y0, 4)));
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Pane Layout");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "===========");
-        }
+        settings_semantic_menu_begin("Pane Layout", sel);
 
         for (int i = 0; i < pane_count; i++)
         {
@@ -4904,71 +5866,14 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                 strnfmt(line_buf, sizeof(line_buf), "%s %s %s r%s c%s",
                     type_buf, where_field, enabled_field, rows_field,
                     cols_field);
-            if (pixel_menu)
-            {
-                settings_semantic_add_row(i, line_buf, a);
-                sdl_character_sheet_screen_set_last_select_row_reset(
-                    SETTINGS_CLICK_RESET_ROW_BASE + i);
-            }
-            else if ((y0 + i) < Term->hgt - 5)
-            {
-                settings_ui_put_fitted(y0 + i, 2, a, line_buf);
-                {
-                int row = y0 + i;
-                int where_col = 2 + (int)strlen(type_buf) + 1;
-                int enabled_col = where_col + (int)strlen(where_field) + 1;
-                int rows_col = enabled_col + (int)strlen(enabled_field) + 2;
-                int cols_col = rows_col + (int)strlen(rows_field) + 2;
-                int base = SETTINGS_CLICK_PANE_FIELD_BASE + i * 4;
-
-                if (!where_locked)
-                    ui_menu_click_add(base + 1, where_col, row,
-                        (int)strlen(where_field));
-                if (!enabled_locked)
-                    ui_menu_click_add(base + 0, enabled_col, row,
-                        (int)strlen(enabled_field));
-                if (!left_panel && !rows_locked)
-                    ui_menu_click_add(base + 2, rows_col, row,
-                        (int)strlen(rows_field));
-                if (!left_panel && !cols_locked)
-                    ui_menu_click_add(base + 3, cols_col, row,
-                        (int)strlen(cols_field));
-                ui_menu_click_add_full_row(i, row);
-                }
-            }
+            settings_semantic_add_row(i, line_buf, a);
+            sdl_character_sheet_screen_set_last_select_row_reset(
+                SETTINGS_CLICK_RESET_ROW_BASE + i);
         }
 
-        if (pixel_menu)
-        {
-            sdl_character_sheet_screen_set_select_description(
-                "Up and down select a pane. Space chooses the active field. Left/Right or N/Y toggles, cycles, or adjusts the active value. 0 sets rows or columns to auto. Changes apply immediately.");
-            sdl_character_sheet_screen_commit_select(sel);
-        }
-        else
-        {
-            int y = Term->hgt - 4;
-            settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                settings_ui_pick_label(term_wid - 2,
-                    "Up/Down: select pane   Space: choose on/off, where, rows, cols",
-                    "Up/Down select pane   Space switch field",
-                    "Up/Down select   Space field"));
-                settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                    settings_ui_pick_label(term_wid - 2,
-                    "Left/Right: toggle, cycle, or +/- value   0: set rows/cols to auto",
-                    "Left/Right: toggle, cycle, or +/- value   0: auto",
-                    "Left/Right set   0 auto"));
-            settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                settings_ui_pick_label(term_wid - 2,
-                    "Each side/overlay slot shares cols with its first pane; each bottom slot shares rows",
-                    "Side/overlay slots share cols; bottom slots share rows",
-                    "Side/overlay cols; bottom rows"));
-            settings_ui_put_return_prompt(y++, 2, TERM_SLATE,
-                "ESC/Enter: return (changes apply immediately)",
-                "ESC/Enter: return",
-                "Esc/Enter return");
-
-            Term_fresh();
-        }
+        sdl_character_sheet_screen_set_select_description(
+            "Up and down select a pane. Space chooses the active field. Left/Right or N/Y toggles, cycles, or adjusts the active value. 0 sets rows or columns to auto. Changes apply immediately.");
+        sdl_character_sheet_screen_commit_select(sel);
 
         hide_cursor = true;
         char ch = inkey();
@@ -5226,6 +6131,7 @@ static const int touch_pane_second_action_choices[] = {
  * to the full touch-pane editor, not to these contextual shortcuts. */
 static const int touch_context_action_choices[] = {
     GAMEPAD_BIND_NONE,
+    'm',
     TOUCH_BIND_MAIN_MENU_KNOWLEDGE, TOUCH_BIND_MAIN_MENU_HINTS_QUESTS,
     TOUCH_BIND_TOGGLE_TILES,
     INPUT_BIND_CONFIRM,
@@ -5233,7 +6139,7 @@ static const int touch_context_action_choices[] = {
     'u', 's', 'f',
     'a', 'x',
     'M', 'h', 'y', '\t',
-    'z', 'Z',
+    'z', 'g', 'Z',
     'o', 'c', 'D', 'X',
     '-', KTRL('A'), 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b',
@@ -5370,10 +6276,10 @@ static void touch_corner_action_label(int binding, char* buf, size_t buflen)
 
     switch (binding) {
     case 'f':
-        SDL_strlcpy(buf, "Shoot", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     case 'F':
-        SDL_strlcpy(buf, "Shoot 2", buflen);
+        SDL_strlcpy(buf, "Ranged", buflen);
         return;
     default:
         touch_pane_action_label_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, binding,
@@ -5394,8 +6300,10 @@ static bool settings_choice_value_seen(const struct settings_value_choice* choic
     return false;
 }
 
-static bool touch_pick_action_value(cptr title, int panel, bool corner_labels,
-    const int* values, int value_count, int current_value, int* out_value)
+static bool touch_pick_action_value_buttons(cptr title, int panel,
+    bool corner_labels, const int* values, int value_count, int current_value,
+    const ui_question_button* buttons, int button_count, int* out_value,
+    int* out_button_choice)
 {
     struct settings_value_choice choices[SETTINGS_VALUE_PICKER_MAX];
     char labels[SETTINGS_VALUE_PICKER_MAX][80];
@@ -5423,8 +6331,16 @@ static bool touch_pick_action_value(cptr title, int panel, bool corner_labels,
         count++;
     }
 
-    return settings_pick_value(title ? title : "Choose Action", NULL, choices,
-        count, current_value, out_value);
+    return settings_pick_value_ex_buttons(title ? title : "Choose Action",
+        NULL, choices, count, current_value, out_value, false, buttons,
+        button_count, out_button_choice);
+}
+
+static bool touch_pick_action_value(cptr title, int panel, bool corner_labels,
+    const int* values, int value_count, int current_value, int* out_value)
+{
+    return touch_pick_action_value_buttons(title, panel, corner_labels, values,
+        value_count, current_value, NULL, 0, out_value, NULL);
 }
 
 enum {
@@ -5433,8 +6349,6 @@ enum {
     TOUCH_CONTROL_PANE_KEY_LABELS,
     TOUCH_CONTROL_PANE_INVENTORY_EQUIPMENT_CYCLE,
     TOUCH_CONTROL_PANE_PLACEMENT,
-    TOUCH_CONTROL_TOP_WIDGET_MODE,
-    TOUCH_CONTROL_TOP_WIDGET_DEFAULT_OPEN,
     TOUCH_CONTROL_MENU_INVENTORY_EQUIPMENT,
     TOUCH_CONTROL_MENU_SUPPLY,
     TOUCH_CONTROL_MENU_OTHER,
@@ -5475,6 +6389,22 @@ enum {
     TOUCH_TOP_WIDGET_BUTTON_7_LONG_TAP,
     TOUCH_TOP_WIDGET_BUTTON_8_TAP,
     TOUCH_TOP_WIDGET_BUTTON_8_LONG_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_9_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_9_LONG_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_10_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_10_LONG_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_11_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_11_LONG_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_12_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_12_LONG_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_13_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_13_LONG_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_14_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_14_LONG_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_15_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_15_LONG_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_16_TAP,
+    TOUCH_TOP_WIDGET_BUTTON_16_LONG_TAP,
     TOUCH_TOP_WIDGET_BUTTON_COUNT
 };
 
@@ -5582,6 +6512,38 @@ static const touch_control_binding_row touch_top_widget_binding_rows[] = {
         TOUCH_CONTROL_BINDING_TOP_PANEL, 7, false },
     { TOUCH_TOP_WIDGET_BUTTON_8_LONG_TAP, "Quick Access 8 Long Tap",
         TOUCH_CONTROL_BINDING_TOP_PANEL, 7, true },
+    { TOUCH_TOP_WIDGET_BUTTON_9_TAP, "Quick Access 9 Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 8, false },
+    { TOUCH_TOP_WIDGET_BUTTON_9_LONG_TAP, "Quick Access 9 Long Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 8, true },
+    { TOUCH_TOP_WIDGET_BUTTON_10_TAP, "Quick Access 10 Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 9, false },
+    { TOUCH_TOP_WIDGET_BUTTON_10_LONG_TAP, "Quick Access 10 Long Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 9, true },
+    { TOUCH_TOP_WIDGET_BUTTON_11_TAP, "Quick Access 11 Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 10, false },
+    { TOUCH_TOP_WIDGET_BUTTON_11_LONG_TAP, "Quick Access 11 Long Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 10, true },
+    { TOUCH_TOP_WIDGET_BUTTON_12_TAP, "Quick Access 12 Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 11, false },
+    { TOUCH_TOP_WIDGET_BUTTON_12_LONG_TAP, "Quick Access 12 Long Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 11, true },
+    { TOUCH_TOP_WIDGET_BUTTON_13_TAP, "Quick Access 13 Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 12, false },
+    { TOUCH_TOP_WIDGET_BUTTON_13_LONG_TAP, "Quick Access 13 Long Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 12, true },
+    { TOUCH_TOP_WIDGET_BUTTON_14_TAP, "Quick Access 14 Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 13, false },
+    { TOUCH_TOP_WIDGET_BUTTON_14_LONG_TAP, "Quick Access 14 Long Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 13, true },
+    { TOUCH_TOP_WIDGET_BUTTON_15_TAP, "Quick Access 15 Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 14, false },
+    { TOUCH_TOP_WIDGET_BUTTON_15_LONG_TAP, "Quick Access 15 Long Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 14, true },
+    { TOUCH_TOP_WIDGET_BUTTON_16_TAP, "Quick Access 16 Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 15, false },
+    { TOUCH_TOP_WIDGET_BUTTON_16_LONG_TAP, "Quick Access 16 Long Tap",
+        TOUCH_CONTROL_BINDING_TOP_PANEL, 15, true },
 };
 
 static const touch_control_binding_row touch_thumb_binding_rows[] = {
@@ -5821,10 +6783,10 @@ static bool touch_top_widget_binding_label(int row, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Horn", buflen);
         break;
     case 'f':
-        SDL_strlcpy(buf, "Fire", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
         break;
     case 'F':
-        SDL_strlcpy(buf, "Fire 2nd", buflen);
+        SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);
         break;
     case 'Z':
         SDL_strlcpy(buf, "Rest", buflen);
@@ -5834,6 +6796,25 @@ static bool touch_top_widget_binding_label(int row, char* buf, size_t buflen)
             value, buf, buflen);
         break;
     }
+    return true;
+}
+
+static bool touch_top_widget_remove_cell(int slot)
+{
+    int count = get_sdl_touch_top_panel_cell_count();
+
+    if (slot < 0 || slot >= count)
+        return false;
+
+    for (int i = slot; i < count - 1; i++) {
+        set_sdl_touch_top_panel_binding(i, false,
+            get_sdl_touch_top_panel_binding(i + 1, false));
+        set_sdl_touch_top_panel_binding(i, true,
+            get_sdl_touch_top_panel_binding(i + 1, true));
+    }
+    set_sdl_touch_top_panel_binding(count - 1, false, GAMEPAD_BIND_NONE);
+    set_sdl_touch_top_panel_binding(count - 1, true, GAMEPAD_BIND_NONE);
+    set_sdl_touch_top_panel_cell_count(count - 1);
     return true;
 }
 
@@ -5854,19 +6835,25 @@ static bool touch_top_widget_cycle_binding_row(int row, int delta)
     idx = touch_action_choice_index(choices, choice_count,
         touch_control_binding_value(binding));
     idx = ((idx + delta) % choice_count + choice_count) % choice_count;
-    touch_control_set_binding(binding, choices[idx]);
+    if (choices[idx] == GAMEPAD_BIND_NONE)
+        return touch_top_widget_remove_cell(binding->index);
+    else
+        touch_control_set_binding(binding, choices[idx]);
     return true;
 }
 
 static bool touch_top_widget_reset_binding_row(int row)
 {
     const touch_control_binding_row* binding = touch_top_widget_binding_for_row(row);
+    int value;
 
     if (!binding)
         return false;
 
-    touch_control_set_binding(binding,
-        touch_control_binding_default_value(binding));
+    value = touch_control_binding_default_value(binding);
+    if (value == GAMEPAD_BIND_NONE)
+        return touch_top_widget_remove_cell(binding->index);
+    touch_control_set_binding(binding, value);
     return true;
 }
 
@@ -5874,7 +6861,172 @@ static bool touch_top_widget_pick_binding_row(int row)
 {
     const touch_control_binding_row* binding = touch_top_widget_binding_for_row(row);
 
-    return touch_control_pick_binding(binding, binding ? binding->label : NULL);
+    return binding ? do_cmd_touch_top_widget_pick_button(binding->index) : false;
+}
+
+static int touch_top_widget_editor_binding_row(int row)
+{
+    if (row < 0 || row >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        return -1;
+    return row * 2;
+}
+
+static void touch_top_widget_format_size(char* buf, size_t buflen, float size)
+{
+    int quarters;
+
+    if (!buf || !buflen)
+        return;
+    if (size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+        SDL_strlcpy(buf, "Stretch", buflen);
+        return;
+    }
+
+    quarters = (int)(size * 4.0f + 0.5f);
+    if ((quarters % 4) == 0)
+        strnfmt(buf, buflen, "%dx", quarters / 4);
+    else if ((quarters % 2) == 0)
+        strnfmt(buf, buflen, "%d.5x", quarters / 4);
+    else
+        strnfmt(buf, buflen, "%d.%s5x", quarters / 4,
+            (quarters % 4) == 1 ? "2" : "7");
+}
+
+static bool touch_top_widget_pick_size(void)
+{
+    struct settings_value_choice choices[32];
+    char labels[32][12];
+    float current_size = get_sdl_touch_top_panel_size();
+    int current = (current_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+        ? 0 : (int)(current_size * 4.0f + 0.5f);
+    int picked = current;
+    int count = 0;
+
+    choices[count].value = 0;
+    choices[count].label = "Stretch";
+    count++;
+    for (int quarters = 4; quarters <= 32; quarters++) {
+        touch_top_widget_format_size(labels[count], sizeof(labels[count]),
+            (float)quarters / 4.0f);
+        choices[count].value = quarters;
+        choices[count].label = labels[count];
+        count++;
+    }
+
+    if (!settings_pick_value_ex("Quick Access Size",
+            "Stretch fills the clear horizontal space. Fixed sizes use quarter-step scaling.",
+            choices, count, current, &picked, false)
+        || picked == current)
+    {
+        return false;
+    }
+
+    set_sdl_touch_top_panel_size((picked == 0)
+        ? SDL_TOUCH_TOP_PANEL_SIZE_STRETCH : (float)picked / 4.0f);
+    return true;
+}
+
+bool do_cmd_touch_top_widget_pick_button(int slot)
+{
+    const touch_control_binding_row* binding;
+    char title[48];
+    int choice_count = 0;
+    const int* choices;
+    int current;
+    int picked = GAMEPAD_BIND_NONE;
+    int button_choice = 0;
+    bool changed = false;
+
+    while (true)
+    {
+        char row_label[16];
+        int cell_count = get_sdl_touch_top_panel_cell_count();
+        ui_question_button buttons[] = {
+            { SETTINGS_CLICK_QUICK_ACCESS_SIZE, 's', "Size", TERM_L_WHITE,
+                false },
+            { SETTINGS_CLICK_QUICK_ACCESS_ADD_CELL, 'a', "Add Cell",
+                TERM_L_WHITE,
+                cell_count >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX },
+            { SETTINGS_CLICK_QUICK_ACCESS_ROW, 'r', row_label, TERM_L_WHITE,
+                false },
+        };
+
+        if (slot < 0 || slot >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+            break;
+
+        SDL_strlcpy(row_label,
+            (get_sdl_touch_top_panel_rows() < SDL_TOUCH_TOP_PANEL_ROWS_MAX)
+                ? "Add Row" : "Remove Row",
+            sizeof(row_label));
+
+        binding = touch_top_widget_binding_for_row(slot * 2);
+        if (!binding)
+            break;
+
+        choices = touch_control_binding_choices(binding, &choice_count);
+        if (!choices || choice_count <= 0)
+            break;
+
+        strnfmt(title, sizeof(title), "Quick Access %d", slot + 1);
+        current = touch_control_binding_value(binding);
+        if (!touch_pick_action_value_buttons(title,
+                SDL_TOUCH_PANE_PANEL_MAIN, false, choices, choice_count,
+                current, buttons, (int)N_ELEMENTS(buttons), &picked,
+                &button_choice))
+        {
+            break;
+        }
+
+        if (button_choice == SETTINGS_CLICK_QUICK_ACCESS_SIZE)
+        {
+            changed |= touch_top_widget_pick_size();
+            continue;
+        }
+
+        if (button_choice == SETTINGS_CLICK_QUICK_ACCESS_ADD_CELL)
+        {
+            if (cell_count >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX) {
+                bell("Quick access is already at the maximum number of cells.");
+                continue;
+            }
+            slot = cell_count;
+            continue;
+        }
+
+        if (button_choice == SETTINGS_CLICK_QUICK_ACCESS_ROW)
+        {
+            int rows = get_sdl_touch_top_panel_rows();
+
+            set_sdl_touch_top_panel_rows(
+                rows < SDL_TOUCH_TOP_PANEL_ROWS_MAX ? rows + 1 : rows - 1);
+            changed = true;
+            continue;
+        }
+
+        if (picked == GAMEPAD_BIND_NONE)
+        {
+            if (slot < cell_count)
+                changed |= touch_top_widget_remove_cell(slot);
+            break;
+        }
+
+        if (picked != current || slot >= cell_count)
+        {
+            touch_control_set_binding(binding, picked);
+            if (slot >= cell_count)
+                set_sdl_touch_top_panel_cell_count(slot + 1);
+            changed = true;
+        }
+        break;
+    }
+
+    if (changed)
+    {
+        if (!save_pane_config_to_json())
+            msg_print("Quick access changed, but saving sil_sdl.json failed.");
+    }
+
+    return changed;
 }
 
 static bool touch_thumb_binding_label(int row, char* buf, size_t buflen)
@@ -5954,10 +7106,6 @@ static const char* touch_control_row_name(int row)
         return "Inv/Equip Pane Cycle";
     case TOUCH_CONTROL_PANE_PLACEMENT:
         return "Touch Pane Side";
-    case TOUCH_CONTROL_TOP_WIDGET_MODE:
-        return "Quick Access Squares";
-    case TOUCH_CONTROL_TOP_WIDGET_DEFAULT_OPEN:
-        return "Quick Access Starts";
     case TOUCH_CONTROL_MENU_INVENTORY_EQUIPMENT:
         return "Inventory/Equipped Touch";
     case TOUCH_CONTROL_MENU_SUPPLY:
@@ -6102,11 +7250,6 @@ static void touch_control_reset_to_default(void)
     set_sdl_touch_pane_inventory_equipment_cycle(
         get_sdl_touch_pane_inventory_equipment_default_cycle());
     set_sdl_touch_pane_placement(SDL_TOUCH_PANE_PLACEMENT_RIGHT);
-    set_sdl_touch_top_panel_mode(get_sdl_touch_top_panel_default_mode());
-    set_sdl_touch_top_panel_button_count(
-        get_sdl_touch_top_panel_default_button_count());
-    set_sdl_touch_top_panel_default_open(
-        get_sdl_touch_top_panel_default_open_default());
     for (int i = 0; i < SDL_TOUCH_MENU_CATEGORY_COUNT; i++) {
         set_sdl_touch_menu_commands_enabled(i,
             get_sdl_touch_menu_commands_default_enabled(i));
@@ -6148,6 +7291,8 @@ static void touch_top_widget_reset_buttons_to_default(void)
         set_sdl_touch_top_panel_binding(i, true,
             get_sdl_touch_top_panel_default_binding(i, true));
     }
+    set_sdl_touch_top_panel_cell_count(
+        get_sdl_touch_top_panel_default_cell_count());
 }
 
 static void touch_corner_action_buttons_reset_to_default(void)
@@ -6197,63 +7342,35 @@ static const char* touch_corner_up_down_side_label(int side)
 static void do_cmd_touch_pane_button_editor(bool* settings_changed)
 {
     int highlight = 0;
-    int top = 0;
     int panel = SDL_TOUCH_PANE_PANEL_MAIN;
     bool done = false;
     bool changed = false;
-    int term_w, term_h;
-    const int list_start_row = 5;
 
     screen_save();
 
     while (!done)
     {
-        int row;
-        int visible_rows;
         int row_width;
         int total_rows = TOUCH_PANE_SETTING_COUNT
             + SDL_TOUCH_PANE_VISIBLE_BUTTON_COUNT;
-        bool pixel_menu;
 
-        Term_get_size(&term_w, &term_h);
         row_width = settings_ui_line_width(2);
-        visible_rows = term_h - list_start_row - 6;
-        if (visible_rows < 5)
-            visible_rows = 5;
 
         if (highlight < 0)
             highlight = 0;
         if (highlight >= total_rows)
             highlight = total_rows - 1;
 
-        if (top > highlight)
-            top = highlight;
-        if (top + visible_rows <= highlight)
-            top = highlight - visible_rows + 1;
-        if (top < 0)
-            top = 0;
+        settings_semantic_menu_begin("Touch Pane Buttons", highlight);
 
-        pixel_menu = settings_semantic_menu_begin("Touch Pane Buttons",
-            highlight);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row, visible_rows);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Touch Pane Buttons");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "==================");
-        }
-
-        row = list_start_row;
-        for (int i = pixel_menu ? 0 : top;
-             i < total_rows && (pixel_menu || i < top + visible_rows); i++)
+        for (int i = 0; i < total_rows; i++)
         {
             char action_buf[80];
             char label_buf[SDL_TOUCH_PANE_LABEL_LEN];
             char left_buf[64];
             char line_buf[128];
             byte a = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
+
             int button_index = touch_pane_row_button_index(i);
 
             if (button_index < 0)
@@ -6274,7 +7391,6 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
 
             settings_ui_format_pair_line(line_buf, sizeof(line_buf), left_buf,
                 action_buf, row_width, 14);
-            if (pixel_menu)
             {
                 char semantic_line[160];
 
@@ -6284,12 +7400,6 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
                 sdl_character_sheet_screen_set_last_select_row_reset(
                     SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
-            else
-            {
-                c_prt(a, line_buf, row, 2);
-                ui_menu_click_add_full_row(i, row);
-            }
-            row++;
         }
 
         {
@@ -6299,89 +7409,23 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             get_sdl_touch_pane_panel_name(panel, panel_name, sizeof(panel_name));
             strnfmt(info_buf, sizeof(info_buf), "Editing %s panel%s",
                 panel_name, (panel == SDL_TOUCH_PANE_PANEL_SECOND) ? " (empty = main panel)" : "");
-            if (pixel_menu)
-            {
-                char desc[512];
+            char desc[512];
 
-                settings_semantic_add_pair_row(SETTINGS_CLICK_SWITCH_GROUP,
-                    "Switch Button Panel", "Tab", TERM_SLATE);
-                settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_SELECTED,
-                    "Rename Button Label", "L", TERM_SLATE);
-                settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_GROUP,
-                    "Rename Panel", "P", TERM_SLATE);
-                settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                    "Reset Selected", "X", TERM_SLATE);
-                settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                    "Reset Panel Buttons", "M", TERM_SLATE);
-                strnfmt(desc, sizeof(desc),
-                    "%s. Space chooses an action. Left/Right nudges the selected action. Main panel must keep Confirm on at least one button.",
-                    info_buf);
-                sdl_character_sheet_screen_set_select_description(desc);
-                sdl_character_sheet_screen_commit_select(highlight);
-            }
-            else
-            {
-                settings_ui_put_fitted(3, 2, TERM_SLATE, info_buf);
-            }
-        }
-        if (!pixel_menu)
-        {
-            row = list_start_row + visible_rows + 1;
-            {
-                cptr prompt = settings_ui_pick_label(row_width,
-                    "Up/Down: select setting/button   Left/Right: previous/next value   l/View: rename button label",
-                    "Up/Down select   Left/Right value   l/View rename",
-                    "Up/Down select   Left/Right value");
-                int prompt_row = row++;
-
-                settings_ui_put_fitted(prompt_row, 2, TERM_SLATE, prompt);
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RENAME_SELECTED, 2,
-                    prompt_row, prompt, "rename");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RENAME_SELECTED, 2,
-                    prompt_row, prompt, "View");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RENAME_SELECTED, 2,
-                    prompt_row, prompt, "l/");
-            }
-            {
-                cptr prompt = settings_ui_pick_label(row_width,
-                    "Space choose selected   Tab switch button panel   x reset selected",
-                    "Space choose   Tab switch   x reset",
-                    "Space choose   Tab switch");
-                int prompt_row = row++;
-
-                settings_ui_put_fitted(prompt_row, 2, TERM_SLATE, prompt);
-                ui_menu_click_add_text_token(SETTINGS_CLICK_SWITCH_GROUP, 2,
-                    prompt_row, prompt, "Tab");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_SWITCH_GROUP, 2,
-                    prompt_row, prompt, "switch");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "x");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "reset");
-            }
-            {
-                cptr prompt = settings_ui_pick_label(row_width,
-                    "p: rename panel   M: reset all panel buttons   Main panel must keep Confirm (pick)",
-                    "p rename panel   M reset panel   Keep main confirm",
-                    "p rename   M reset   Keep confirm");
-                int prompt_row = row++;
-
-                settings_ui_put_fitted(prompt_row, 2, TERM_SLATE, prompt);
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RENAME_GROUP, 2,
-                    prompt_row, prompt, "rename panel");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RENAME_GROUP, 2,
-                    prompt_row, prompt, "p ");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "M:");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "reset panel");
-            }
-            settings_ui_put_return_prompt(row++, 2, TERM_SLATE,
-                "Esc/Enter: return",
-                "Esc/Enter: return",
-                "Esc/Enter return");
-
-            Term_fresh();
+            settings_semantic_add_pair_row(SETTINGS_CLICK_SWITCH_GROUP,
+                "Switch Button Panel", "Tab", TERM_SLATE);
+            settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_SELECTED,
+                "Rename Button Label", "L", TERM_SLATE);
+            settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_GROUP,
+                "Rename Panel", "P", TERM_SLATE);
+            settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
+                "Reset Selected", "X", TERM_SLATE);
+            settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
+                "Reset Panel Buttons", "M", TERM_SLATE);
+            strnfmt(desc, sizeof(desc),
+                "%s. Space chooses an action. Left/Right nudges the selected action. Main panel must keep Confirm on at least one button.",
+                info_buf);
+            sdl_character_sheet_screen_set_select_description(desc);
+            sdl_character_sheet_screen_commit_select(highlight);
         }
 
         hide_cursor = true;
@@ -6710,42 +7754,42 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
     int highlight = 0;
     bool done = false;
     bool changed = false;
-    const int list_start_row = 5;
 
     screen_save();
 
     while (!done)
     {
         int row_width = settings_ui_line_width(2);
-        bool pixel_menu;
+        int total_rows = get_sdl_touch_top_panel_cell_count();
 
-        pixel_menu = settings_semantic_menu_begin("Quick Access Buttons",
-            highlight);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row,
-                TOUCH_TOP_WIDGET_BUTTON_COUNT);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Quick Access Buttons");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "====================");
-        }
+        if (total_rows > 0 && highlight >= total_rows)
+            highlight = total_rows - 1;
+        if (highlight < 0)
+            highlight = 0;
 
-        for (int i = 0; i < TOUCH_TOP_WIDGET_BUTTON_COUNT; i++)
+        settings_semantic_menu_begin("Quick Access Buttons", highlight);
+
+        for (int i = 0; i < total_rows; i++)
         {
-            const touch_control_binding_row* binding =
-                touch_top_widget_binding_for_row(i);
             char action_buf[80];
+            char button_buf[32];
             char line_buf[128];
             byte a = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
+            cptr label = button_buf;
+            int slot = i;
+            const touch_control_binding_row* binding =
+                touch_top_widget_binding_for_row(
+                    touch_top_widget_editor_binding_row(slot));
 
             if (!binding)
                 continue;
-            touch_top_widget_binding_label(i, action_buf, sizeof(action_buf));
+            touch_top_widget_binding_label(
+                touch_top_widget_editor_binding_row(slot),
+                action_buf, sizeof(action_buf));
+            strnfmt(button_buf, sizeof(button_buf), "Quick Access %d",
+                slot + 1);
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                binding->label, action_buf, row_width, 24);
-            if (pixel_menu)
+                label, action_buf, row_width, 24);
             {
                 char semantic_line[160];
 
@@ -6753,56 +7797,20 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
                     sizeof(semantic_line), line_buf);
                 settings_semantic_add_row(i, semantic_line, a);
                 sdl_character_sheet_screen_set_last_select_row_reset(
-                    SETTINGS_CLICK_RESET_ROW_BASE + i);
-            }
-            else
-            {
-                c_prt(a, line_buf, list_start_row + i, 2);
-                ui_menu_click_add_full_row(i, list_start_row + i);
+                    SETTINGS_CLICK_RESET_ROW_BASE + slot);
             }
         }
 
-        if (pixel_menu)
-        {
-            settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "X", TERM_SLATE);
-            settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset All Quick Access Buttons", "M", TERM_SLATE);
-            sdl_character_sheet_screen_set_select_description(
-                "Space chooses an action. Left/Right nudges the selected action. X resets selected, M resets all. Escape or Enter returns.");
-            sdl_character_sheet_screen_commit_select(highlight);
-        }
-        else
-        {
-                settings_ui_put_fitted(list_start_row + TOUCH_TOP_WIDGET_BUTTON_COUNT + 2,
-                2, TERM_SLATE,
-                settings_ui_pick_label(row_width,
-                    "Up/Down: select button   Space choose action   Left/Right previous/next",
-                    "Up/Down select   Space choose   Left/Right action",
-                    "Up/Down select   Left/Right action"));
-            {
-                cptr prompt = settings_ui_pick_label(row_width,
-                    "x reset selected   M/Map reset all quick access buttons",
-                    "x reset selected   Map reset all",
-                    "x reset   Map all");
-                int prompt_row = list_start_row + TOUCH_TOP_WIDGET_BUTTON_COUNT + 3;
-
-                settings_ui_put_fitted(prompt_row, 2, TERM_SLATE, prompt);
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "x");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "selected");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "Map");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "all");
-            }
-            settings_ui_put_return_prompt(list_start_row + TOUCH_TOP_WIDGET_BUTTON_COUNT + 4,
-                2, TERM_SLATE, "Esc/Enter: return", "Esc/Enter: return",
-                "Esc/Enter return");
-
-            Term_fresh();
-        }
+        settings_semantic_add_pair_row(SETTINGS_CLICK_QUICK_ACCESS_ADD_CELL,
+            "Add Cell", total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX
+                ? "Max" : "+1", TERM_SLATE);
+        settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
+            "Reset Selected", "X", TERM_SLATE);
+        settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
+            "Reset All Quick Access Buttons", "M", TERM_SLATE);
+        sdl_character_sheet_screen_set_select_description(
+            "Add Cell opens a new action picker. Choosing Unbound removes that cell. Rows balance the current cells across one or two rows. X resets selected, M resets all.");
+        sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
         char ch = inkey();
@@ -6830,9 +7838,16 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
                         continue;
                     ch = 'M';
                     click_generated = true;
+                } else if (clicked_choice
+                    == SETTINGS_CLICK_QUICK_ACCESS_ADD_CELL)
+                {
+                    if (click_action == UI_MENU_CLICK_HOVER)
+                        continue;
+                    ch = 'a';
+                    click_generated = true;
                 } else if (clicked_choice >= SETTINGS_CLICK_RESET_ROW_BASE
                     && clicked_choice < SETTINGS_CLICK_RESET_ROW_BASE
-                        + TOUCH_TOP_WIDGET_BUTTON_COUNT)
+                        + total_rows)
                 {
                     if (click_action == UI_MENU_CLICK_HOVER)
                         continue;
@@ -6840,7 +7855,7 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
                     ch = 'x';
                     click_generated = true;
                 } else if (clicked_choice >= 0
-                    && clicked_choice < TOUCH_TOP_WIDGET_BUTTON_COUNT)
+                    && clicked_choice < total_rows)
                 {
                     bool was_current = (clicked_choice == highlight);
 
@@ -6850,9 +7865,13 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
                     if (click_action == UI_MENU_CLICK_SECONDARY)
                         ch = '4';
                     else if (was_current)
+                    {
                         ch = ' ';
+                    }
                     else
+                    {
                         continue;
+                    }
                     click_generated = true;
                 }
             }
@@ -6875,29 +7894,45 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
             break;
         case '-':
         case '8':
-            highlight = (TOUCH_TOP_WIDGET_BUTTON_COUNT + highlight - 1)
-                % TOUCH_TOP_WIDGET_BUTTON_COUNT;
+            if (total_rows > 0)
+                highlight = (total_rows + highlight - 1) % total_rows;
             break;
         case '2':
-            highlight = (highlight + 1) % TOUCH_TOP_WIDGET_BUTTON_COUNT;
+            if (total_rows > 0)
+                highlight = (highlight + 1) % total_rows;
             break;
         case 'n':
         case '4':
-            changed |= touch_top_widget_cycle_binding_row(highlight, -1);
+            if (highlight < total_rows)
+                changed |= touch_top_widget_cycle_binding_row(
+                    touch_top_widget_editor_binding_row(highlight), -1);
             break;
         case 'y':
         case '6':
-            changed |= touch_top_widget_cycle_binding_row(highlight, 1);
+            if (highlight < total_rows)
+                changed |= touch_top_widget_cycle_binding_row(
+                    touch_top_widget_editor_binding_row(highlight), 1);
             break;
         case ' ':
         case 't':
         case '5':
-            changed |= touch_top_widget_pick_binding_row(highlight);
+            if (highlight < total_rows)
+                changed |= touch_top_widget_pick_binding_row(
+                    touch_top_widget_editor_binding_row(highlight));
+            break;
+        case 'a':
+        case 'A':
+            if (total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX)
+                bell("Quick access is already at the maximum number of cells.");
+            else
+                changed |= do_cmd_touch_top_widget_pick_button(total_rows);
             break;
         case 'r':
         case 'x':
         case 'X':
-            changed |= touch_top_widget_reset_binding_row(highlight);
+            if (highlight < total_rows)
+                changed |= touch_top_widget_reset_binding_row(
+                    touch_top_widget_editor_binding_row(highlight));
             break;
         case 'R':
         case 'M':
@@ -6924,25 +7959,14 @@ static void do_cmd_touch_thumb_button_editor(bool* settings_changed)
     int highlight = 0;
     bool done = false;
     bool changed = false;
-    const int list_start_row = 5;
 
     screen_save();
 
     while (!done)
     {
         int row_width = settings_ui_line_width(2);
-        bool pixel_menu;
 
-        pixel_menu = settings_semantic_menu_begin("Thumb Buttons", highlight);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row, total_rows);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Thumb Buttons");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "=============");
-        }
+        settings_semantic_menu_begin("Thumb Buttons", highlight);
 
         for (int i = 0; i < total_rows; i++)
         {
@@ -6968,7 +7992,6 @@ static void do_cmd_touch_thumb_button_editor(bool* settings_changed)
 
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
                 label, action_buf, row_width, 24);
-            if (pixel_menu)
             {
                 char semantic_line[160];
 
@@ -6978,54 +8001,15 @@ static void do_cmd_touch_thumb_button_editor(bool* settings_changed)
                 sdl_character_sheet_screen_set_last_select_row_reset(
                     SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
-            else
-            {
-                c_prt(a, line_buf, list_start_row + i, 2);
-                ui_menu_click_add_full_row(i, list_start_row + i);
-            }
         }
 
-        if (pixel_menu)
-        {
-            settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "X", TERM_SLATE);
-            settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset All Thumb Buttons", "M", TERM_SLATE);
-            sdl_character_sheet_screen_set_select_description(
-                "Space toggles On/Off or chooses an action. Left/Right nudges the selected row. X resets selected, M resets all. Escape or Enter returns.");
-            sdl_character_sheet_screen_commit_select(highlight);
-        }
-        else
-        {
-            settings_ui_put_fitted(list_start_row + total_rows + 2,
-                2, TERM_SLATE,
-                settings_ui_pick_label(row_width,
-                    "Up/Down: select row   Space toggle/choose   Left/Right previous/next",
-                    "Up/Down select   Space toggle/choose   Left/Right",
-                    "Up/Down select   Left/Right change"));
-            {
-                cptr prompt = settings_ui_pick_label(row_width,
-                    "x reset selected   M/Map reset all thumb buttons",
-                    "x reset selected   Map reset all",
-                    "x reset   Map all");
-                int prompt_row = list_start_row + total_rows + 3;
-
-                settings_ui_put_fitted(prompt_row, 2, TERM_SLATE, prompt);
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "x");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "selected");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "Map");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "all");
-            }
-            settings_ui_put_return_prompt(list_start_row + total_rows + 4,
-                2, TERM_SLATE, "Esc/Enter: return", "Esc/Enter: return",
-                "Esc/Enter return");
-
-            Term_fresh();
-        }
+        settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
+            "Reset Selected", "X", TERM_SLATE);
+        settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
+            "Reset All Thumb Buttons", "M", TERM_SLATE);
+        sdl_character_sheet_screen_set_select_description(
+            "Space toggles On/Off or chooses an action. Left/Right nudges the selected row. X resets selected, M resets all. Escape or Enter returns.");
+        sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
         char ch = inkey();
@@ -7173,14 +8157,12 @@ static void do_cmd_touch_button_settings(bool* settings_changed)
     int highlight = 0;
     bool done = false;
     bool changed = false;
-    const int list_start_row = 5;
 
     screen_save();
 
     while (!done)
     {
         int row_width = settings_ui_line_width(2);
-        bool pixel_menu;
         static cptr labels[TOUCH_BUTTON_MENU_COUNT] = {
             "Touch Pane Buttons",
             "Quick Access Buttons",
@@ -7189,46 +8171,19 @@ static void do_cmd_touch_button_settings(bool* settings_changed)
             "Return"
         };
 
-        pixel_menu = settings_semantic_menu_begin("Touch Buttons Config",
-            highlight);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row, TOUCH_BUTTON_MENU_COUNT);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Touch Buttons Config");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "====================");
-        }
+        settings_semantic_menu_begin("Touch Buttons Config", highlight);
 
         for (int i = 0; i < TOUCH_BUTTON_MENU_COUNT; i++) {
             char line_buf[128];
             byte a = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
 
             settings_ui_fit_text(line_buf, sizeof(line_buf), labels[i], row_width);
-            if (pixel_menu)
-                settings_semantic_add_row(i, line_buf, a);
-            else
-            {
-                c_prt(a, line_buf, list_start_row + i, 2);
-                ui_menu_click_add_full_row(i, list_start_row + i);
-            }
+            settings_semantic_add_row(i, line_buf, a);
         }
 
-        if (pixel_menu)
-        {
-            sdl_character_sheet_screen_set_select_description(
-                "Enter or Space opens the selected row. Escape returns to Touch Settings.");
-            sdl_character_sheet_screen_commit_select(highlight);
-        }
-        else
-        {
-            settings_ui_put_return_prompt(list_start_row + TOUCH_BUTTON_MENU_COUNT + 2,
-                2, TERM_SLATE, "Esc: return; Enter open selected row",
-                "Esc return; Enter open row", "Esc return");
-
-            Term_fresh();
-        }
+        sdl_character_sheet_screen_set_select_description(
+            "Enter or Space opens the selected row. Escape returns to Touch Settings.");
+        sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
         char ch = inkey();
@@ -7323,7 +8278,6 @@ static void do_cmd_touch_profile_settings(bool* settings_changed)
     int highlight = 0;
     bool done = false;
     bool changed = false;
-    const int list_start_row = 5;
 
     for (int i = 0; i < (int)N_ELEMENTS(profiles); i++) {
         if (profiles[i] == get_sdl_touch_profile()) {
@@ -7337,20 +8291,8 @@ static void do_cmd_touch_profile_settings(bool* settings_changed)
     while (!done)
     {
         int row_width = settings_ui_line_width(2);
-        bool pixel_menu;
 
-        pixel_menu = settings_semantic_menu_begin("Set Touch Profile",
-            highlight);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row,
-                (int)N_ELEMENTS(profiles));
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Set Touch Profile");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "=================");
-        }
+        settings_semantic_menu_begin("Set Touch Profile", highlight);
 
         for (int i = 0; i < (int)N_ELEMENTS(profiles); i++)
         {
@@ -7363,7 +8305,6 @@ static void do_cmd_touch_profile_settings(bool* settings_changed)
                 sizeof(action_buf));
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
                 touch_profile_label(profiles[i]), action_buf, row_width, 10);
-            if (pixel_menu)
             {
                 char semantic_line[160];
 
@@ -7371,32 +8312,11 @@ static void do_cmd_touch_profile_settings(bool* settings_changed)
                     sizeof(semantic_line), line_buf);
                 settings_semantic_add_row(i, semantic_line, a);
             }
-            else
-            {
-                c_prt(a, line_buf, list_start_row + i, 2);
-                ui_menu_click_add_full_row(i, list_start_row + i);
-            }
         }
 
-        if (pixel_menu)
-        {
-            sdl_character_sheet_screen_set_select_description(
-                "Space or Enter applies the highlighted touch profile defaults. Escape returns.");
-            sdl_character_sheet_screen_commit_select(highlight);
-        }
-        else
-        {
-            settings_ui_put_fitted(list_start_row + (int)N_ELEMENTS(profiles) + 2,
-                2, TERM_SLATE,
-                settings_ui_pick_label(row_width,
-                    "Enter applies the highlighted profile defaults.",
-                    "Enter applies profile defaults.",
-                    "Space apply profile."));
-            settings_ui_put_return_prompt(list_start_row + (int)N_ELEMENTS(profiles) + 3,
-                2, TERM_SLATE, "Esc: return", "Esc: return", "Esc return");
-
-            Term_fresh();
-        }
+        sdl_character_sheet_screen_set_select_description(
+            "Space or Enter applies the highlighted touch profile defaults. Escape returns.");
+        sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
         char ch = inkey();
@@ -7484,26 +8404,14 @@ static void do_cmd_touch_settings(bool* settings_changed)
     int highlight = 0;
     bool done = false;
     bool changed = false;
-    const int list_start_row = 5;
 
     screen_save();
 
     while (!done)
     {
         int row_width = settings_ui_line_width(2);
-        bool pixel_menu;
 
-        pixel_menu = settings_semantic_menu_begin("Touch Settings",
-            highlight);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row, TOUCH_SETTINGS_COUNT);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Touch Setting");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "=============");
-        }
+        settings_semantic_menu_begin("Touch Settings", highlight);
 
         for (int i = 0; i < TOUCH_SETTINGS_COUNT; i++)
         {
@@ -7536,7 +8444,6 @@ static void do_cmd_touch_settings(bool* settings_changed)
 
             settings_ui_format_pair_line(line_buf, sizeof(line_buf), label,
                 action_buf, row_width, 24);
-            if (pixel_menu)
             {
                 char semantic_line[160];
 
@@ -7547,27 +8454,11 @@ static void do_cmd_touch_settings(bool* settings_changed)
                     sdl_character_sheet_screen_set_last_select_row_reset(
                         SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
-            else
-            {
-                c_prt(a, line_buf, list_start_row + i, 2);
-                ui_menu_click_add_full_row(i, list_start_row + i);
-            }
         }
 
-        if (pixel_menu)
-        {
-            sdl_character_sheet_screen_set_select_description(
-                "Enter opens or toggles the selected row. Left/Right changes values where available. Escape returns.");
-            sdl_character_sheet_screen_commit_select(highlight);
-        }
-        else
-        {
-            settings_ui_put_return_prompt(list_start_row + TOUCH_SETTINGS_COUNT + 2,
-                2, TERM_SLATE, "Esc: return; Enter open or toggle selected row",
-                "Esc return; Enter open/toggle row", "Esc return");
-
-            Term_fresh();
-        }
+        sdl_character_sheet_screen_set_select_description(
+            "Enter opens or toggles the selected row. Left/Right changes values where available. Escape returns.");
+        sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
         char ch = inkey();
@@ -7686,57 +8577,26 @@ static void do_cmd_touch_settings(bool* settings_changed)
 static void do_cmd_touch_control_settings(bool* settings_changed)
 {
     int highlight = 0;
-    int top = 0;
     bool done = false;
     bool changed = false;
-    int term_w, term_h;
-    const int list_start_row = 5;
 
     screen_save();
 
     while (!done)
     {
-        int row;
-        int visible_rows;
         int row_width;
         int total_rows = TOUCH_CONTROL_COUNT;
-        bool pixel_menu;
 
-        Term_get_size(&term_w, &term_h);
         row_width = settings_ui_line_width(2);
-        visible_rows = term_h - list_start_row - 5;
-        if (visible_rows < 5)
-            visible_rows = 5;
 
         if (highlight < 0)
             highlight = 0;
         if (highlight >= total_rows)
             highlight = total_rows - 1;
 
-        if (top > highlight)
-            top = highlight;
-        if (top + visible_rows <= highlight)
-            top = highlight - visible_rows + 1;
-        if (top < 0)
-            top = 0;
+        settings_semantic_menu_begin("Detailed Touch Controls", highlight);
 
-        pixel_menu = settings_semantic_menu_begin("Detailed Touch Controls",
-            highlight);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row, visible_rows);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Detailed Touch Controls");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "=======================");
-            settings_ui_put_fitted(3, 2, TERM_SLATE,
-                "Controls touch menus, game-screen layers, movement, overlays, and swipes.");
-        }
-
-        row = list_start_row;
-        for (int i = pixel_menu ? 0 : top;
-             i < total_rows && (pixel_menu || i < top + visible_rows); i++)
+        for (int i = 0; i < total_rows; i++)
         {
             char action_buf[80];
             char line_buf[128];
@@ -7761,13 +8621,6 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
             } else if (i == TOUCH_CONTROL_PANE_PLACEMENT) {
                 SDL_strlcpy(action_buf,
                     touch_pane_placement_label(get_sdl_touch_pane_placement()),
-                    sizeof(action_buf));
-            } else if (i == TOUCH_CONTROL_TOP_WIDGET_MODE) {
-                strnfmt(action_buf, sizeof(action_buf), "%d",
-                    get_sdl_touch_top_panel_button_count());
-            } else if (i == TOUCH_CONTROL_TOP_WIDGET_DEFAULT_OPEN) {
-                SDL_strlcpy(action_buf,
-                    get_sdl_touch_top_panel_default_open() ? "Open" : "Hidden",
                     sizeof(action_buf));
             } else if (touch_control_is_menu_command_row(i)) {
                 SDL_strlcpy(action_buf,
@@ -7802,7 +8655,6 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
 
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
                 touch_control_row_name(i), action_buf, row_width, 24);
-            if (pixel_menu)
             {
                 char semantic_line[160];
 
@@ -7812,56 +8664,15 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
                 sdl_character_sheet_screen_set_last_select_row_reset(
                     SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
-            else
-            {
-                c_prt(a, line_buf, row, 2);
-                ui_menu_click_add_full_row(i, row);
-            }
-            row++;
         }
 
-        if (pixel_menu)
-        {
-            settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "X", TERM_SLATE);
-            settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset All Touch Controls", "M", TERM_SLATE);
-            sdl_character_sheet_screen_set_select_description(
-                "Controls touch menus, game-screen layers, movement, overlays, and swipes. Space chooses binding rows; Left/Right nudges values; X resets selected, M resets all.");
-            sdl_character_sheet_screen_commit_select(highlight);
-        }
-        else
-        {
-            row = list_start_row + visible_rows + 1;
-            settings_ui_put_fitted(row++, 2, TERM_SLATE,
-                settings_ui_pick_label(row_width,
-                    "Up/Down: select item   Space choose binding   Left/Right previous/next value",
-                    "Up/Down select   Space choose   Left/Right value",
-                    "Up/Down select   Left/Right value"));
-            {
-                cptr prompt = settings_ui_pick_label(row_width,
-                    "x reset selected   M/Map reset all touch control settings",
-                    "x reset selected   Map reset all",
-                    "x reset   Map all");
-                int prompt_row = row++;
-
-                settings_ui_put_fitted(prompt_row, 2, TERM_SLATE, prompt);
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "x");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "selected");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "Map");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "all");
-            }
-            settings_ui_put_return_prompt(row++, 2, TERM_SLATE,
-                "Esc/Enter: return",
-                "Esc/Enter: return",
-                "Esc/Enter return");
-
-            Term_fresh();
-        }
+        settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
+            "Reset Selected", "X", TERM_SLATE);
+        settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
+            "Reset All Touch Controls", "M", TERM_SLATE);
+        sdl_character_sheet_screen_set_select_description(
+            "Controls touch menus, game-screen layers, movement, overlays, and swipes. Space chooses binding rows; Left/Right nudges values; X resets selected, M resets all.");
+        sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
         char ch = inkey();
@@ -7962,11 +8773,6 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
             } else if (highlight == TOUCH_CONTROL_PANE_PLACEMENT) {
                 set_sdl_touch_pane_placement(SDL_TOUCH_PANE_PLACEMENT_LEFT);
                 sdl_apply_config();
-            } else if (highlight == TOUCH_CONTROL_TOP_WIDGET_MODE) {
-                set_sdl_touch_top_panel_button_count(
-                    get_sdl_touch_top_panel_button_count() - 1);
-            } else if (highlight == TOUCH_CONTROL_TOP_WIDGET_DEFAULT_OPEN) {
-                set_sdl_touch_top_panel_default_open(false);
             } else if (touch_control_is_menu_command_row(highlight)) {
                 set_sdl_touch_menu_commands_enabled(
                     touch_control_menu_category_for_row(highlight), false);
@@ -8022,12 +8828,6 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
                         ? SDL_TOUCH_PANE_PLACEMENT_RIGHT
                         : SDL_TOUCH_PANE_PLACEMENT_LEFT);
                 sdl_apply_config();
-            } else if (highlight == TOUCH_CONTROL_TOP_WIDGET_MODE) {
-                set_sdl_touch_top_panel_button_count(
-                    get_sdl_touch_top_panel_button_count() + 1);
-            } else if (highlight == TOUCH_CONTROL_TOP_WIDGET_DEFAULT_OPEN) {
-                set_sdl_touch_top_panel_default_open(
-                    !get_sdl_touch_top_panel_default_open());
             } else if (touch_control_is_menu_command_row(highlight)) {
                 int category = touch_control_menu_category_for_row(highlight);
 
@@ -8075,12 +8875,6 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
             } else if (highlight == TOUCH_CONTROL_PANE_PLACEMENT) {
                 set_sdl_touch_pane_placement(SDL_TOUCH_PANE_PLACEMENT_RIGHT);
                 sdl_apply_config();
-            } else if (highlight == TOUCH_CONTROL_TOP_WIDGET_MODE) {
-                set_sdl_touch_top_panel_button_count(
-                    get_sdl_touch_top_panel_default_button_count());
-            } else if (highlight == TOUCH_CONTROL_TOP_WIDGET_DEFAULT_OPEN) {
-                set_sdl_touch_top_panel_default_open(
-                    get_sdl_touch_top_panel_default_open_default());
             } else if (touch_control_is_menu_command_row(highlight)) {
                 int category = touch_control_menu_category_for_row(highlight);
 
@@ -8130,35 +8924,21 @@ static void do_cmd_mouse_settings(bool* settings_changed)
     enum {
         MOUSE_SETTING_ENABLE = 0,
         MOUSE_SETTING_MOVEMENT,
+        MOUSE_SETTING_TILE_POINTER,
         MOUSE_SETTING_TUTORIAL,
         MOUSE_SETTING_COUNT
     };
     int highlight = 0;
     bool done = false;
     bool changed = false;
-    const int list_start_row = 5;
 
     screen_save();
 
     while (!done)
     {
-        int row_width;
-        bool pixel_menu;
+        int row_width = settings_ui_line_width(2);
 
-        row_width = settings_ui_line_width(2);
-
-        pixel_menu = settings_semantic_menu_begin("Mouse Input", highlight);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row, MOUSE_SETTING_COUNT);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Mouse Input");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "===========");
-            settings_ui_put_fitted(3, 2, TERM_SLATE,
-                "Controls desktop mouse input and map movement.");
-        }
+        settings_semantic_menu_begin("Mouse Input", highlight);
 
         for (int i = 0; i < MOUSE_SETTING_COUNT; i++)
         {
@@ -8178,13 +8958,17 @@ static void do_cmd_mouse_settings(bool* settings_changed)
                 SDL_strlcpy(action_buf,
                     mouse_movement_mode_label(get_sdl_mouse_movement_mode()),
                     sizeof(action_buf));
+            } else if (i == MOUSE_SETTING_TILE_POINTER) {
+                label = "Tile Pointer";
+                SDL_strlcpy(action_buf,
+                    get_sdl_mouse_tile_pointer() ? "On" : "Off",
+                    sizeof(action_buf));
             } else {
                 label = "Mouse tutorial";
             }
 
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
                 label, action_buf, row_width, 18);
-            if (pixel_menu)
             {
                 char semantic_line[160];
 
@@ -8195,55 +8979,28 @@ static void do_cmd_mouse_settings(bool* settings_changed)
                     sdl_character_sheet_screen_set_last_select_row_reset(
                         SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
-            else
-            {
-                c_prt(a, line_buf, list_start_row + i, 2);
-                ui_menu_click_add_full_row(i, list_start_row + i);
-            }
         }
 
-        if (pixel_menu)
         {
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
                 "Reset Selected", "X", TERM_SLATE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
                 "Reset All", "M", TERM_SLATE);
-            sdl_character_sheet_screen_set_select_description(
-                "Controls desktop mouse input and map movement. Left/Right changes values, Space toggles or opens tutorial, X resets selected, M resets all.");
+            static const char* const mouse_setting_desc[MOUSE_SETTING_COUNT] = {
+                [MOUSE_SETTING_ENABLE] = "Turn mouse input on or off.",
+                [MOUSE_SETTING_MOVEMENT] =
+                    ("How clicking the map moves you: walk to the clicked spot, "
+                     "single step toward it, or disabled."),
+                [MOUSE_SETTING_TILE_POINTER] =
+                    "Use tile row 12, column 31 as the mouse pointer.",
+                [MOUSE_SETTING_TUTORIAL] =
+                    "Replay the mouse-controls tutorial.",
+            };
+            cptr md = (highlight >= 0 && highlight < MOUSE_SETTING_COUNT)
+                ? mouse_setting_desc[highlight] : NULL;
+
+            sdl_character_sheet_screen_set_select_description(md ? md : "");
             sdl_character_sheet_screen_commit_select(highlight);
-        }
-        else
-        {
-            settings_ui_put_fitted(list_start_row + MOUSE_SETTING_COUNT + 2, 2,
-                TERM_SLATE,
-                settings_ui_pick_label(row_width,
-                    "Up/Down: select item   Left/Right: previous/next value   Space toggle, cycle, or show",
-                    "Up/Down select   Left/Right value   Space toggle/cycle/show",
-                    "Up/Down select   Left/Right value"));
-            {
-                cptr prompt = settings_ui_pick_label(row_width,
-                    "x reset selected   M/Map reset all mouse input settings",
-                    "x reset selected   Map reset all",
-                    "x reset   Map all");
-                int prompt_row = list_start_row + MOUSE_SETTING_COUNT + 3;
-
-                settings_ui_put_fitted(prompt_row, 2, TERM_SLATE, prompt);
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "x");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                    prompt_row, prompt, "selected");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "Map");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                    prompt_row, prompt, "all");
-            }
-            settings_ui_put_return_prompt(list_start_row + MOUSE_SETTING_COUNT + 4,
-                2, TERM_SLATE,
-                "Esc/Enter: return",
-                "Esc/Enter: return",
-                "Esc/Enter return");
-
-            Term_fresh();
         }
 
         hide_cursor = true;
@@ -8341,6 +9098,9 @@ static void do_cmd_mouse_settings(bool* settings_changed)
                 set_sdl_mouse_movement_mode(
                     mouse_movement_mode_cycle(get_sdl_mouse_movement_mode(), -1));
                 changed = true;
+            } else if (highlight == MOUSE_SETTING_TILE_POINTER) {
+                set_sdl_mouse_tile_pointer(false);
+                changed = true;
             }
             break;
 
@@ -8355,6 +9115,9 @@ static void do_cmd_mouse_settings(bool* settings_changed)
             } else if (highlight == MOUSE_SETTING_MOVEMENT) {
                 set_sdl_mouse_movement_mode(
                     mouse_movement_mode_cycle(get_sdl_mouse_movement_mode(), 1));
+                changed = true;
+            } else if (highlight == MOUSE_SETTING_TILE_POINTER) {
+                set_sdl_mouse_tile_pointer(!get_sdl_mouse_tile_pointer());
                 changed = true;
             } else if (highlight == MOUSE_SETTING_TUTORIAL) {
                 settings_semantic_menu_hide();
@@ -8372,6 +9135,10 @@ static void do_cmd_mouse_settings(bool* settings_changed)
             } else if (highlight == MOUSE_SETTING_MOVEMENT) {
                 set_sdl_mouse_movement_mode(get_sdl_mouse_movement_default_mode());
                 changed = true;
+            } else if (highlight == MOUSE_SETTING_TILE_POINTER) {
+                set_sdl_mouse_tile_pointer(
+                    get_sdl_mouse_default_tile_pointer());
+                changed = true;
             }
             break;
 
@@ -8379,6 +9146,7 @@ static void do_cmd_mouse_settings(bool* settings_changed)
         case 'M':
             set_sdl_mouse_enabled(get_sdl_mouse_default_enabled());
             set_sdl_mouse_movement_mode(get_sdl_mouse_movement_default_mode());
+            set_sdl_mouse_tile_pointer(get_sdl_mouse_default_tile_pointer());
             changed = true;
             break;
 
@@ -8398,99 +9166,63 @@ static void do_cmd_mouse_settings(bool* settings_changed)
 
 void do_cmd_controller_settings(void);
 
-static bool legacy_options_choice_is_disabled(int choice)
+static bool other_options_choice_is_disabled(int choice)
 {
     return (choice == 3);
 }
 
-static int legacy_options_menu(int* highlight)
+static int other_options_menu(int* highlight)
 {
     int ch;
-    int options = 4;
-    int term_wid = 80;
-    int term_hgt = 24;
-    int title_row = 1;
-    int row;
-    int list_start_row;
-    int visible_rows;
-    int line_row;
+    int options = 5;
     int clicked_choice = 0;
     bool death_view = death_spectator_active();
-    bool pixel_menu;
-
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_hgt < 20)
-        title_row = 0;
 
     if (*highlight < 1)
         *highlight = 1;
     else if (*highlight > options)
         *highlight = options;
 
-    if (death_view && legacy_options_choice_is_disabled(*highlight))
+    if (death_view && other_options_choice_is_disabled(*highlight))
         *highlight = options;
 
-    pixel_menu = settings_semantic_menu_begin("Other Options", *highlight);
+    settings_semantic_menu_begin("Other Options", *highlight);
 
-#define ADD_LEGACY_MENU_ROW(CHOICE, LABEL, ATTR)                               \
+#define ADD_OTHER_OPTIONS_ROW(CHOICE, LABEL, ATTR)                             \
     do {                                                                       \
-        if (pixel_menu)                                                        \
-            settings_semantic_add_row((CHOICE), (LABEL), (ATTR));              \
-        else                                                                   \
-        {                                                                      \
-            line_row = row++;                                                  \
-            Term_putstr(2, line_row, -1, (ATTR), (LABEL));                     \
-            ui_menu_click_add_full_row((CHOICE), line_row);                    \
-        }                                                                      \
+        settings_semantic_add_row((CHOICE), (LABEL), (ATTR));                  \
     } while (0)
 
-    if (!pixel_menu)
-    {
-        row = title_row + 2;
-        list_start_row = row;
-        visible_rows = settings_menu_visible_rows(list_start_row, 3);
-
-        Term_putstr(2, title_row, -1, TERM_WHITE, "Other Options");
-        ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
-        settings_menu_begin_scroll_area(list_start_row,
-            MIN(options, visible_rows));
-    }
-
-    ADD_LEGACY_MENU_ROW(1, "m) Choose Palette",
+    ADD_OTHER_OPTIONS_ROW(1, "m) Choose Palette",
         (*highlight == 1) ? TERM_L_BLUE : TERM_WHITE);
-    ADD_LEGACY_MENU_ROW(2, "n) Write a note",
+    ADD_OTHER_OPTIONS_ROW(2, "n) Write a note",
         (*highlight == 2) ? TERM_L_BLUE : TERM_WHITE);
-    ADD_LEGACY_MENU_ROW(3, "s) Suicide",
+    ADD_OTHER_OPTIONS_ROW(3, "s) Suicide",
         death_view ? TERM_L_DARK
                    : ((*highlight == 3) ? TERM_L_BLUE : TERM_WHITE));
-    ADD_LEGACY_MENU_ROW(4, "o) Return to Options",
+    ADD_OTHER_OPTIONS_ROW(4, "p) Privacy Policy",
         (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE);
+    ADD_OTHER_OPTIONS_ROW(5, "o) Return to Options",
+        (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE);
 
-#undef ADD_LEGACY_MENU_ROW
+#undef ADD_OTHER_OPTIONS_ROW
 
     {
         char verbuf[128];
         strnfmt(verbuf, sizeof(verbuf), "%s %s", VERSION_NAME, VERSION_STRING);
-        if (pixel_menu)
-        {
-            sdl_character_sheet_screen_set_select_description(verbuf);
-            sdl_character_sheet_screen_commit_select(*highlight);
-        }
-        else if (row < term_hgt)
-            Term_putstr(2, row, term_wid - 2, TERM_SLATE, verbuf);
-    }
+        static const char* const other_options_row_desc[] = {
+            NULL,
+            "Choose the color palette used throughout the game.",
+            "Write a note into your character's journal.",
+            "End your current character permanently.",
+            "Open the Sil-More privacy policy in your web browser.",
+            "Return to the Options menu.",
+        };
+        cptr d = (*highlight >= 1 && *highlight <= 5)
+            ? other_options_row_desc[*highlight] : NULL;
 
-    if (!pixel_menu)
-    {
-        settings_ui_put_return_prompt(term_hgt - 1, 2, TERM_SLATE,
-            "tap/click a row to open; drag/wheel move selection; Esc return",
-            "tap/click open; drag/wheel move; Esc return",
-            "tap open; drag/wheel; Esc");
-        ui_menu_click_add_full_row(4, term_hgt - 1);
-
-        Term_fresh();
-        Term_gotoxy(2, title_row + 1 + *highlight);
+        sdl_character_sheet_screen_set_select_description(d ? d : verbuf);
+        sdl_character_sheet_screen_commit_select(*highlight);
     }
 
     hide_cursor = true;
@@ -8505,17 +9237,17 @@ static int legacy_options_menu(int* highlight)
             if (click_action == UI_MENU_CLICK_HOVER && clicked_choice < 0)
                 return (0);
             if (clicked_choice == -1)
-                clicked_choice = 4;
+                clicked_choice = 5;
             else if (clicked_choice == -2)
                 clicked_choice = *highlight;
             if (clicked_choice == SETTINGS_CLICK_RETURN)
-                clicked_choice = 7;
+                clicked_choice = 5;
             if (clicked_choice < 1 || clicked_choice > options)
                 return (0);
             *highlight = clicked_choice;
             if (click_action == UI_MENU_CLICK_HOVER)
                 return (0);
-            if (death_view && legacy_options_choice_is_disabled(*highlight))
+            if (death_view && other_options_choice_is_disabled(*highlight))
             {
                 msg_print("You can no longer take that action.");
                 return (0);
@@ -8550,16 +9282,22 @@ static int legacy_options_menu(int* highlight)
         return (3);
     }
 
-    if ((ch == 'o') || (ch == 'O') || (ch == 'q') || (ch == 'Q')
-        || (ch == ESCAPE))
+    if ((ch == 'p') || (ch == 'P'))
     {
         *highlight = 4;
         return (4);
     }
 
+    if ((ch == 'o') || (ch == 'O') || (ch == 'q') || (ch == 'Q')
+        || (ch == ESCAPE))
+    {
+        *highlight = 5;
+        return (5);
+    }
+
     if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
     {
-        if (death_view && legacy_options_choice_is_disabled(*highlight))
+        if (death_view && other_options_choice_is_disabled(*highlight))
         {
             msg_print("You can no longer take that action.");
             return (0);
@@ -8571,21 +9309,21 @@ static int legacy_options_menu(int* highlight)
     if (ch == '8')
     {
         *highlight = (*highlight + (options - 2)) % options + 1;
-        while (death_view && legacy_options_choice_is_disabled(*highlight))
+        while (death_view && other_options_choice_is_disabled(*highlight))
             *highlight = (*highlight + (options - 2)) % options + 1;
     }
 
     if (ch == '2')
     {
         *highlight = *highlight % options + 1;
-        while (death_view && legacy_options_choice_is_disabled(*highlight))
+        while (death_view && other_options_choice_is_disabled(*highlight))
             *highlight = *highlight % options + 1;
     }
 
     return (0);
 }
 
-static void do_cmd_legacy_options(void)
+static void do_cmd_other_options(void)
 {
     int choice = 0;
     int highlight = 1;
@@ -8594,7 +9332,7 @@ static void do_cmd_legacy_options(void)
 
     while (!return_to_options)
     {
-        choice = legacy_options_menu(&highlight);
+        choice = other_options_menu(&highlight);
         settings_semantic_menu_hide();
 
         switch (choice)
@@ -8623,6 +9361,16 @@ static void do_cmd_legacy_options(void)
         }
         case 4:
         {
+            if (!SDL_OpenURL(SIL_MORE_PRIVACY_POLICY_URL))
+            {
+                msg_format("Could not open the privacy policy (%s)",
+                    SDL_GetError());
+            }
+            Term_clear();
+            break;
+        }
+        case 5:
+        {
             settings_semantic_menu_hide();
             return_to_options = true;
             Term_clear();
@@ -8636,69 +9384,33 @@ int options_menu(int* highlight)
 {
     int ch;
     int options = 9;
-    int term_wid = 80;
-    int term_hgt = 24;
-    int title_row = 1;
-    int row;
-    int list_start_row;
-    int visible_rows;
-    int line_row;
     int clicked_choice = 0;
     char line_buf[80];
     bool steamdeck = steamdeck_controls_active();
     bool menu_letters = sdl_menu_letters_enabled();
     bool allow_debug_menu = false;
-    bool pixel_menu;
 #ifdef SHOW_DEBUG_OPTIONS_MENU
     allow_debug_menu = true;
 #endif
     if (allow_debug_menu && p_ptr->noscore)
         options++;
 
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_hgt < 20)
-        title_row = 0;
-
     if (*highlight < 1)
         *highlight = 1;
     else if (*highlight > options)
         *highlight = options;
 
-    pixel_menu = settings_semantic_menu_begin("Options", *highlight);
+    settings_semantic_menu_begin("Options", *highlight);
 
 #define ADD_OPTIONS_MENU_ROW(CHOICE, KEY, TEXT)                                \
     do {                                                                       \
         keyed_menu_entry_label(line_buf, sizeof(line_buf), (KEY), (TEXT));     \
-        if (pixel_menu)                                                        \
-        {                                                                      \
-            settings_semantic_add_row((CHOICE), line_buf,                      \
-                (*highlight == (CHOICE)) ? TERM_L_BLUE : TERM_WHITE);          \
-        }                                                                      \
-        else                                                                   \
-        {                                                                      \
-            line_row = row++;                                                  \
-            Term_putstr(2, line_row, -1,                                      \
-                (*highlight == (CHOICE)) ? TERM_L_BLUE : TERM_WHITE,           \
-                line_buf);                                                     \
-            ui_menu_click_add_full_row((CHOICE), line_row);                    \
-        }                                                                      \
+        settings_semantic_add_row((CHOICE), line_buf,                          \
+            (*highlight == (CHOICE)) ? TERM_L_BLUE : TERM_WHITE);              \
     } while (0)
 
-    if (!pixel_menu)
-    {
-        row = title_row + 2;
-        list_start_row = row;
-        visible_rows = settings_menu_visible_rows(list_start_row, 3);
-
-        Term_putstr(2, title_row, -1, TERM_WHITE, "Options");
-        ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
-        settings_menu_begin_scroll_area(list_start_row,
-            MIN(options, visible_rows));
-    }
-
     ADD_OPTIONS_MENU_ROW(1, 'a', "Input Options");
-    ADD_OPTIONS_MENU_ROW(2, 'b', "Pane Settings");
+    ADD_OPTIONS_MENU_ROW(2, 'b', "General Settings");
     ADD_OPTIONS_MENU_ROW(3, 'c', "Interface Options");
     ADD_OPTIONS_MENU_ROW(4, 'd', "Visual Options");
     ADD_OPTIONS_MENU_ROW(5, 'e', "Text Options");
@@ -8716,28 +9428,26 @@ int options_menu(int* highlight)
     {
         char verbuf[128];
         strnfmt(verbuf, sizeof(verbuf), "%s %s", VERSION_NAME, VERSION_STRING);
-        if (pixel_menu)
-        {
-            sdl_character_sheet_screen_set_select_description(verbuf);
-            sdl_character_sheet_screen_commit_select(*highlight);
-        }
-        else if (row < term_hgt)
-            Term_putstr(2, row, term_wid - 2, TERM_SLATE, verbuf);
-    }
+        static const char* const options_row_desc[] = {
+            NULL,
+            "Keyboard, controller, and mouse input settings and tutorials.",
+            "Window layout: panes, terminal scale, fullscreen, tiles, and "
+            "fonts.",
+            "How information is presented and how menus and the HUD behave.",
+            "Map and tile appearance, highlighting, and related visuals.",
+            "Fonts and text rendering options.",
+            "Rules and quality-of-life options that affect play.",
+            "Sound effects and volume.",
+            "Palette, notes, and other miscellaneous actions.",
+            "Close the menu and return to play.",
+            "Developer and debugging toggles.",
+        };
+        cptr d = (*highlight >= 1
+            && *highlight < (int)N_ELEMENTS(options_row_desc))
+            ? options_row_desc[*highlight] : NULL;
 
-    if (!pixel_menu)
-    {
-        settings_ui_put_return_prompt(term_hgt - 1, 2, TERM_SLATE,
-            "tap/click a row to open; drag/wheel move selection; Esc return",
-            "tap/click open; drag/wheel move; Esc return",
-            "tap open; drag/wheel; Esc");
-        ui_menu_click_add_full_row(9, term_hgt - 1);
-
-        /* Flush the prompt */
-        Term_fresh();
-
-        /* Place cursor at current choice */
-        Term_gotoxy(2, title_row + 1 + *highlight);
+        sdl_character_sheet_screen_set_select_description(d ? d : verbuf);
+        sdl_character_sheet_screen_commit_select(*highlight);
     }
 
     /* Get key (while allowing menu commands) */
@@ -8862,34 +9572,14 @@ static void do_cmd_keyboard_input_settings(void)
 
     while (!done)
     {
-        char line[96];
         int ch;
         int clicked_choice = 0;
-        int row = 3;
-        bool pixel_menu = settings_semantic_menu_begin("Keyboard Input",
-            selected);
-
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(row, 5);
-            settings_ui_put_fitted(1, 2, TERM_WHITE, "Keyboard Input");
-        }
+        settings_semantic_menu_begin("Keyboard Input", selected);
 
 #define ADD_KEYBOARD_ROW(CHOICE, LABEL, VALUE)                                \
         do {                                                                   \
-            if (pixel_menu)                                                    \
-                settings_semantic_add_pair_row((CHOICE), (LABEL), (VALUE),    \
-                    selected == (CHOICE) ? TERM_L_BLUE : TERM_WHITE);          \
-            else                                                               \
-            {                                                                  \
-                option_menu_format_line(line, sizeof(line), (LABEL), (VALUE)); \
-                c_prt(selected == (CHOICE) ? TERM_L_BLUE : TERM_WHITE,         \
-                    line, row, 2);                                             \
-                ui_menu_click_add_full_row((CHOICE), row++);                  \
-            }                                                                  \
+            settings_semantic_add_pair_row((CHOICE), (LABEL), (VALUE),        \
+                selected == (CHOICE) ? TERM_L_BLUE : TERM_WHITE);              \
         } while (0)
 
         ADD_KEYBOARD_ROW(1, "Movement preset",
@@ -8902,14 +9592,24 @@ static void do_cmd_keyboard_input_settings(void)
 
 #undef ADD_KEYBOARD_ROW
 
-        if (pixel_menu)
-            sdl_character_sheet_screen_commit_select(selected);
-        else
         {
-            settings_ui_put_return_prompt(Term->hgt - 1, 2, TERM_SLATE,
-                "Enter toggles/opens; Esc returns",
-                "Enter select; Esc return", "Enter; Esc");
-            Term_fresh();
+            static const char* const keyboard_row_desc[] = {
+                NULL,
+                "Pick how you move: a built-in preset (Classic Sil, Modern "
+                "Arrows, WASD Grid, or Vi Keys), shown with descriptions and a "
+                "recommendation.",
+                "Switch the command keys to an Angband-style layout. Changes "
+                "command letters only, not how you move.",
+                "Edit individual movement key bindings, or cycle the movement "
+                "preset.",
+                "Rebind the in-game command keys (the keymap).",
+                "Return to the Input options menu.",
+            };
+            cptr d = (selected >= 1 && selected <= 5)
+                ? keyboard_row_desc[selected] : NULL;
+
+            sdl_character_sheet_screen_set_select_description(d ? d : "");
+            sdl_character_sheet_screen_commit_select(selected);
         }
 
         hide_cursor = true;
@@ -8969,12 +9669,12 @@ static void do_cmd_keyboard_input_settings(void)
         {
             if (selected == 1)
             {
-                u16b preset = sdl_config_next_movement_preset(
-                    config.movement_keyboard_preset);
-
-                sdl_config_set_default_movement_bindings(&config, preset);
-                sdl_config_apply_keyboard_keymaps(&config);
-                save_pane_config_to_json();
+                /* Open the full chooser so the per-preset descriptions and the
+                 * general recommendation are visible while picking, instead of
+                 * blind-cycling the preset. */
+                settings_semantic_menu_hide();
+                (void)keyboard_preset_choose_and_apply();
+                Term_clear();
             }
             else if (selected == 2)
             {
@@ -9002,95 +9702,121 @@ static void do_cmd_keyboard_input_settings(void)
     settings_semantic_menu_hide();
 }
 
-static int input_options_menu(int* highlight)
+enum input_option_action {
+    INPUT_OPTION_NONE = 0,
+    INPUT_OPTION_UI_MODE,
+    INPUT_OPTION_KEYBOARD,
+    INPUT_OPTION_CONTROLLER,
+    INPUT_OPTION_TOUCH_TUTORIAL,
+    INPUT_OPTION_MOUSE,
+    INPUT_OPTION_WHEEL_TUTORIAL,
+    INPUT_OPTION_ZONES_TUTORIAL,
+    INPUT_OPTION_RETURN,
+};
+
+struct input_option_row {
+    enum input_option_action action;
+    char key;
+    char label[64];
+    cptr description;
+};
+
+static int input_option_rows_collect(struct input_option_row* rows,
+    int max_rows)
 {
+    int count = 0;
+
+#define ADD_INPUT_OPTION(ACTION, KEY, LABEL, DESCRIPTION)                     \
+    do {                                                                       \
+        if (count < max_rows) {                                                \
+            rows[count].action = (ACTION);                                    \
+            rows[count].key = (KEY);                                          \
+            SDL_strlcpy(rows[count].label, (LABEL),                           \
+                sizeof(rows[count].label));                                   \
+            rows[count].description = (DESCRIPTION);                          \
+            count++;                                                          \
+        }                                                                      \
+    } while (0)
+
+    {
+        char mode_label[64];
+
+        strnfmt(mode_label, sizeof(mode_label), "Input UI: %s",
+            get_sdl_input_ui_mode_label(get_sdl_input_ui_mode()));
+#if SIL_SDL_MOBILE_BUILD
+        ADD_INPUT_OPTION(INPUT_OPTION_UI_MODE, 'a', mode_label,
+            "Choose Auto, Touch, or Controller presentation. Auto leaves the "
+            "choice to the game's device and input detection. Touch and "
+            "Controller force an override. Left/Right or Enter changes the "
+            "mode; R resets Auto.");
+#else
+        ADD_INPUT_OPTION(INPUT_OPTION_UI_MODE, 'a', mode_label,
+            "Choose Auto, Keyboard, or Controller presentation. Auto leaves "
+            "the choice to the game's device and input detection. Keyboard "
+            "and Controller force an override. Left/Right or Enter changes "
+            "the mode; R resets Auto.");
+#endif
+    }
+    if (SDL_HasKeyboard()) {
+        ADD_INPUT_OPTION(INPUT_OPTION_KEYBOARD, 'b', "Keyboard Input",
+            "Keyboard movement presets, the Angband keyset, and key "
+            "rebinding.");
+    }
+    if (SDL_HasGamepad()) {
+        ADD_INPUT_OPTION(INPUT_OPTION_CONTROLLER, 'c', "Controller Settings",
+            "Set up the connected game controller or Steam Deck: button "
+            "mapping, sticks, and deadzones.");
+    }
+    if (sdl_touch_tutorial_device_available()) {
+        ADD_INPUT_OPTION(INPUT_OPTION_TOUCH_TUTORIAL, 'd', "Touch Tutorial",
+            "Replay the touch-controls tutorial.");
+    }
+    if (SDL_HasMouse()) {
+        ADD_INPUT_OPTION(INPUT_OPTION_MOUSE, 'e', "Mouse Input",
+            "Mouse behavior, including click-to-move and pointer options.");
+    }
+    ADD_INPUT_OPTION(INPUT_OPTION_WHEEL_TUTORIAL, 'f',
+        "Character Wheel Tutorial",
+        "Replay the player action-wheel tutorial.");
+    ADD_INPUT_OPTION(INPUT_OPTION_ZONES_TUTORIAL, 'g', "Zones Tutorial",
+        "Replay the screen-zones tutorial.");
+    ADD_INPUT_OPTION(INPUT_OPTION_RETURN, 'o', "Return to Options",
+        "Return to the Options menu.");
+
+#undef ADD_INPUT_OPTION
+
+    return count;
+}
+
+static enum input_option_action input_options_menu(int* highlight)
+{
+    struct input_option_row rows[8];
+    int options = input_option_rows_collect(rows, (int)N_ELEMENTS(rows));
     int ch;
-    bool touch_available = sdl_touch_tutorial_device_available();
-    int mouse_choice = touch_available ? 4 : 3;
-    int wheel_choice = mouse_choice + 1;
-    int zones_choice = wheel_choice + 1;
-    int return_choice = zones_choice + 1;
-    int options = return_choice;
-    int term_wid = 80;
-    int term_hgt = 24;
-    int title_row = 1;
-    int row;
-    int list_start_row;
-    int visible_rows;
-    int line_row;
     int clicked_choice = 0;
     char line_buf[80];
     bool steamdeck = steamdeck_controls_active();
     bool menu_letters = sdl_menu_letters_enabled();
-    bool pixel_menu;
-
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_hgt < 20)
-        title_row = 0;
 
     if (*highlight < 1)
         *highlight = 1;
     else if (*highlight > options)
         *highlight = options;
 
-    pixel_menu = settings_semantic_menu_begin("Input Options", *highlight);
+    settings_semantic_menu_begin("Input Options", *highlight);
 
-#define ADD_INPUT_MENU_ROW(CHOICE, KEY, TEXT)                                  \
-    do {                                                                       \
-        keyed_menu_entry_label(line_buf, sizeof(line_buf), (KEY), (TEXT));     \
-        if (pixel_menu)                                                        \
-        {                                                                      \
-            settings_semantic_add_row((CHOICE), line_buf,                      \
-                (*highlight == (CHOICE)) ? TERM_L_BLUE : TERM_WHITE);          \
-        }                                                                      \
-        else                                                                   \
-        {                                                                      \
-            line_row = row++;                                                  \
-            Term_putstr(2, line_row, -1,                                      \
-                (*highlight == (CHOICE)) ? TERM_L_BLUE : TERM_WHITE,           \
-                line_buf);                                                     \
-            ui_menu_click_add_full_row((CHOICE), line_row);                    \
-        }                                                                      \
-    } while (0)
+    for (int i = 0; i < options; i++) {
+        int choice = i + 1;
 
-    if (!pixel_menu)
-    {
-        row = title_row + 2;
-        list_start_row = row;
-        visible_rows = settings_menu_visible_rows(list_start_row, 3);
-
-        Term_putstr(2, title_row, -1, TERM_WHITE, "Input Options");
-        ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
-        settings_menu_begin_scroll_area(list_start_row,
-            MIN(options, visible_rows));
+        keyed_menu_entry_label(line_buf, sizeof(line_buf), rows[i].key,
+            rows[i].label);
+        settings_semantic_add_row(choice, line_buf,
+            (*highlight == choice) ? TERM_L_BLUE : TERM_WHITE);
     }
 
-    ADD_INPUT_MENU_ROW(1, 'a', "Keyboard Input");
-    ADD_INPUT_MENU_ROW(2, 'b', "Controller Settings");
-    if (touch_available)
-        ADD_INPUT_MENU_ROW(3, 'c', "Touch Tutorial");
-    ADD_INPUT_MENU_ROW(mouse_choice, 'd', "Mouse Input");
-    ADD_INPUT_MENU_ROW(wheel_choice, 'e', "Character Wheel Tutorial");
-    ADD_INPUT_MENU_ROW(zones_choice, 'f', "Zones Tutorial");
-    ADD_INPUT_MENU_ROW(return_choice, 'o', "Return to Options");
-
-#undef ADD_INPUT_MENU_ROW
-
-    if (pixel_menu)
-        sdl_character_sheet_screen_commit_select(*highlight);
-
-    if (!pixel_menu)
-    {
-        settings_ui_put_return_prompt(term_hgt - 1, 2, TERM_SLATE,
-            "tap/click a row to open; drag/wheel move selection; Esc return",
-            "tap/click open; drag/wheel move; Esc return",
-            "tap open; drag/wheel; Esc");
-        ui_menu_click_add_full_row(return_choice, term_hgt - 1);
-
-        Term_fresh();
-        Term_gotoxy(2, title_row + 1 + *highlight);
-    }
+    sdl_character_sheet_screen_set_select_description(
+        rows[*highlight - 1].description);
+    sdl_character_sheet_screen_commit_select(*highlight);
 
     hide_cursor = true;
     ch = inkey();
@@ -9102,117 +9828,100 @@ static int input_options_menu(int* highlight)
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
             if (click_action == UI_MENU_CLICK_HOVER && clicked_choice < 0)
-                return (0);
-            if (clicked_choice == -1)
-                clicked_choice = return_choice;
+                return INPUT_OPTION_NONE;
+            if (clicked_choice == -1
+                || clicked_choice == SETTINGS_CLICK_RETURN)
+            {
+                clicked_choice = options;
+            }
             else if (clicked_choice == -2)
                 clicked_choice = *highlight;
-            if (clicked_choice == SETTINGS_CLICK_RETURN)
-                clicked_choice = return_choice;
             if (clicked_choice < 1 || clicked_choice > options)
-                return (0);
+                return INPUT_OPTION_NONE;
             *highlight = clicked_choice;
             if (click_action == UI_MENU_CLICK_HOVER)
-                return (0);
-            return (*highlight);
+                return INPUT_OPTION_NONE;
+            return rows[*highlight - 1].action;
         }
     }
 
     ch = settings_menu_key(ch, '8', '2', false);
 
-    if (menu_letters && ((ch == 'a') || (ch == 'A')))
+    if (rows[*highlight - 1].action == INPUT_OPTION_UI_MODE
+        && (ch == '4' || ch == '6' || ch == 'r' || ch == 'R'))
     {
-        *highlight = 1;
-        return (1);
+        int mode = get_sdl_input_ui_mode();
+
+        if (ch == 'r' || ch == 'R') {
+            mode = get_sdl_input_ui_default_mode();
+        } else {
+            int delta = (ch == '4') ? -1 : 1;
+
+            mode = (mode + delta + SDL_INPUT_UI_MODE_COUNT)
+                % SDL_INPUT_UI_MODE_COUNT;
+        }
+        set_sdl_input_ui_mode(mode);
+        return INPUT_OPTION_NONE;
     }
 
-    if (menu_letters && ((ch == 'b') || (ch == 'B')))
-    {
-        *highlight = 2;
-        return (2);
+    if (menu_letters) {
+        for (int i = 0; i < options; i++) {
+            if (tolower((unsigned char)ch)
+                == tolower((unsigned char)rows[i].key))
+            {
+                *highlight = i + 1;
+                return rows[i].action;
+            }
+        }
     }
 
-    if (touch_available && menu_letters && ((ch == 'c') || (ch == 'C')))
+    if ((menu_letters && (ch == 'q' || ch == 'Q'))
+        || ch == ESCAPE || (steamdeck && ch == steamdeck_back_key()))
     {
-        *highlight = 3;
-        return (3);
+        *highlight = options;
+        return INPUT_OPTION_RETURN;
     }
 
-    if (menu_letters && ((ch == 'd') || (ch == 'D')))
-    {
-        *highlight = mouse_choice;
-        return (mouse_choice);
-    }
-
-    if (menu_letters && ((ch == 'e') || (ch == 'E')))
-    {
-        *highlight = wheel_choice;
-        return (wheel_choice);
-    }
-
-    if (menu_letters && ((ch == 'f') || (ch == 'F')))
-    {
-        *highlight = zones_choice;
-        return (zones_choice);
-    }
-
-    if ((menu_letters && ((ch == 'o') || (ch == 'O') || (ch == 'q')))
-        || (ch == ESCAPE) || (steamdeck && ch == steamdeck_back_key()))
-    {
-        *highlight = return_choice;
-        return (return_choice);
-    }
-
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6')
+    if (ch == '\r' || ch == '\n' || ch == ' ' || ch == '6'
         || (steamdeck && ch == steamdeck_confirm_key()))
     {
-        return (*highlight);
+        return rows[*highlight - 1].action;
     }
 
     if (ch == '8')
-    {
         *highlight = (*highlight + (options - 2)) % options + 1;
-    }
 
     if (ch == '2')
-    {
         *highlight = *highlight % options + 1;
-    }
 
-    return (0);
+    return INPUT_OPTION_NONE;
 }
 
 static void do_cmd_input_options_submenu(int* highlight)
 {
-    int choice = 0;
+    enum input_option_action choice = INPUT_OPTION_NONE;
     bool return_to_options = false;
 
     Term_clear();
 
     while (!return_to_options)
     {
-        bool touch_available = sdl_touch_tutorial_device_available();
-        int mouse_choice = touch_available ? 4 : 3;
-        int wheel_choice = mouse_choice + 1;
-        int zones_choice = wheel_choice + 1;
-        int return_choice = zones_choice + 1;
-
         choice = input_options_menu(highlight);
         settings_semantic_menu_hide();
 
-        if (choice == wheel_choice) {
+        if (choice == INPUT_OPTION_WHEEL_TUTORIAL) {
             sdl_character_wheel_request_tutorial_from_settings();
             return_to_options = true;
             Term_clear();
             continue;
         }
-        if (choice == zones_choice) {
+        if (choice == INPUT_OPTION_ZONES_TUTORIAL) {
             sdl_zones_request_tutorial_from_settings();
             return_to_options = true;
             Term_clear();
             continue;
         }
-        if (choice == return_choice) {
+        if (choice == INPUT_OPTION_RETURN) {
             return_to_options = true;
             Term_clear();
             continue;
@@ -9220,38 +9929,35 @@ static void do_cmd_input_options_submenu(int* highlight)
 
         switch (choice)
         {
-        case 1:
+        case INPUT_OPTION_UI_MODE:
+            set_sdl_input_ui_mode((get_sdl_input_ui_mode() + 1)
+                % SDL_INPUT_UI_MODE_COUNT);
+            Term_clear();
+            break;
+        case INPUT_OPTION_KEYBOARD:
             settings_semantic_menu_hide();
             do_cmd_keyboard_input_settings();
             Term_clear();
             break;
-        case 2:
+        case INPUT_OPTION_CONTROLLER:
             settings_semantic_menu_hide();
             do_cmd_controller_settings();
             Term_clear();
             break;
-        case 3:
+        case INPUT_OPTION_TOUCH_TUTORIAL:
             settings_semantic_menu_hide();
-            if (touch_available) {
-                sdl_touch_request_tutorial_from_settings();
-                return_to_options = true;
-            } else {
-                do_cmd_mouse_settings(NULL);
-                if (sdl_mouse_settings_tutorial_requested())
-                    return_to_options = true;
-            }
+            sdl_touch_request_tutorial_from_settings();
+            return_to_options = true;
             Term_clear();
             break;
-        case 4:
+        case INPUT_OPTION_MOUSE:
             settings_semantic_menu_hide();
-            if (touch_available) {
-                do_cmd_mouse_settings(NULL);
-                if (sdl_mouse_settings_tutorial_requested())
-                    return_to_options = true;
-            } else {
+            do_cmd_mouse_settings(NULL);
+            if (sdl_mouse_settings_tutorial_requested())
                 return_to_options = true;
-            }
             Term_clear();
+            break;
+        default:
             break;
         }
     }
@@ -9398,7 +10104,7 @@ void do_cmd_options(void)
         }
         case 8:
         {
-            do_cmd_legacy_options();
+            do_cmd_other_options();
             if (p_ptr && (p_ptr->leaving || !p_ptr->playing))
                 return_to_game = true;
             Term_clear();
@@ -9532,63 +10238,6 @@ static bool entry_has_binding(int mode, const struct keybind_entry* entry)
     }
 
     return false;
-}
-
-static int count_action_bindings(int mode, const struct keybind_entry* entry)
-{
-    int key;
-    int count = 0;
-
-    if (!entry || !entry->action)
-        return 0;
-
-    if (key_provides_action(mode, entry->key_code, entry->action,
-            entry->requires_keymap))
-        count++;
-
-    if (entry->extra_default_keys)
-    {
-        const char* extra = entry->extra_default_keys;
-        while (*extra)
-        {
-            if (key_provides_action(mode, (byte)*extra, entry->action, false))
-                count++;
-            extra++;
-        }
-    }
-
-    for (key = 0; key < 256; key++)
-    {
-        cptr current = keymap_act[mode][key];
-
-        if (!current || !streq(current, entry->action))
-            continue;
-
-        if (key_matches_default(entry, (byte)key))
-            continue;
-
-        count++;
-    }
-
-    return count;
-}
-
-static void summarize_action_bindings_compact(int mode,
-    const struct keybind_entry* entry, char* buf, size_t buflen)
-{
-    int count;
-
-    if (!buf || !buflen)
-        return;
-
-    count = count_action_bindings(mode, entry);
-
-    if (count <= 0)
-        SDL_strlcpy(buf, "none", buflen);
-    else if (count == 1)
-        SDL_strlcpy(buf, "1 key", buflen);
-    else
-        strnfmt(buf, buflen, "%d keys", count);
 }
 
 /*
@@ -9915,7 +10564,7 @@ static const movement_input_binding* movement_find_binding(
 
 /*
  * True when the active bindings map a bare letter key (no modifier) to a
- * movement action. Such presets (WASD/QEZC, Vi) replace the matching letter
+ * movement action. Such presets (WASD Grid, Vi) replace the matching letter
  * commands while in the dungeon, so the menu warns about it.
  */
 static bool movement_bindings_shadow_letters(const struct sdl_config* cfg)
@@ -10186,7 +10835,7 @@ static void do_cmd_movement_keybinds(void)
             "Enter bind  R reset selected  P cycle preset  S save  Esc return");
         if (movement_bindings_shadow_letters(&config))
             settings_ui_put_fitted(4, 2, TERM_YELLOW,
-                "Note: letter keys move; hold Alt for their command (Alt+w wield, Alt+Shift+s stealth).");
+                "Note: letter keys control movement; hold Alt for their command (Alt+w wield, Alt+x examine, Alt+Shift+s stealth).");
 
         display_end = top + visible_rows;
         if (display_end > entry_count)
@@ -10325,12 +10974,7 @@ void do_cmd_keybinds(void)
     bool showing_primary = true;
     int highlight_primary = 0;
     int highlight_secondary = 0;
-    int top_primary = 0;
-    int top_secondary = 0;
     const char* default_file = "sil_sdl.json";
-    const int list_start_row = 5;
-    int term_w, term_h;
-    int visible_rows;
     static const struct keybind_entry primary_keybinds[] = {
         {'i', NULL, "Inventory", "i", false},
         {'e', NULL, "Equipment", "e", false},
@@ -10341,8 +10985,8 @@ void do_cmd_keybinds(void)
         {'h', "H@", "Character sheet (h / H / @)", "h", false},
         {'\t', NULL, "Change active weapon", "Tab", false},
         {'y', NULL, "Abilities", "y", false},
-        {'f', NULL, "Fire (primary quiver)", "f", false},
-        {'F', NULL, "Fire (secondary quiver)", "F", false},
+        {'f', NULL, "Ranged attack (active weapon)", "f", false},
+        {'F', NULL, "Ranged attack (active weapon)", "F", false},
         {'l', NULL, "Look around", "l", false},
         {'T', NULL, "Tunnel / dig", "T", false},
         {'b', NULL, "Bash door", "b", false},
@@ -10353,7 +10997,6 @@ void do_cmd_keybinds(void)
         {'w', NULL, "Wear / wield equipment", "w", false},
         {'r', NULL, "Remove equipment", "r", false},
         {'g', NULL, "Pick up items", "g", false},
-        {KTRL('F'), NULL, "Swap quivers", "\006", false},
         {'o', NULL, "Open door / chest", "o", false},
         {'c', NULL, "Close door", "c", false},
         {'D', NULL, "Disarm trap / chest", "D", false},
@@ -10361,7 +11004,7 @@ void do_cmd_keybinds(void)
         {'-', NULL, "Fletch arrows", "-", false},
         {'{', NULL, "Inscribe item", "{", false},
         {'a', NULL, "Activate staff", "a", false},
-        {KTRL('A'), NULL, "Swap staff", "\001", false},
+        {KTRL('A'), NULL, "Activate Harness staff", "\001", false},
         {'E', NULL, "Eat food", "E", false},
         {'t', NULL, "Throw item", "t", false},
         {'p', NULL, "Blow horn", "p", false},
@@ -10381,11 +11024,6 @@ void do_cmd_keybinds(void)
         {'[', NULL, "Monster list", "[", false},
         {']', NULL, "Object list", "]", false},
     };
-
-    Term_get_size(&term_w, &term_h);
-    visible_rows = term_h - list_start_row - 6;
-    if (visible_rows < 5)
-        visible_rows = 5;
 
     int primary_count = (int)N_ELEMENTS(primary_keybinds);
     int secondary_count = (int)N_ELEMENTS(secondary_keybinds);
@@ -10408,32 +11046,13 @@ void do_cmd_keybinds(void)
         const struct keybind_entry* keybinds;
         int num_keybinds;
         int* highlight_ptr;
-        int* top_ptr;
         int highlight;
-        int display_end;
-        int row;
         int i;
-        bool compact_width;
-        bool detail_mode;
         char binding_buf[80];
         char detail_binding_buf[512];
-        char detail_buf[560];
         char line_buf[128];
         int row_width;
-        int detail_rows;
-        int bottom_reserved;
-        int detail_row;
-        int info_row;
-        bool pixel_menu;
 
-        Term_get_size(&term_w, &term_h);
-        compact_width = (term_w < 70);
-        detail_mode = compact_width;
-        detail_rows = detail_mode ? 3 : 0;
-        bottom_reserved = detail_rows + 3;
-        visible_rows = term_h - list_start_row - bottom_reserved;
-        if (visible_rows < 5)
-            visible_rows = 5;
         row_width = settings_ui_line_width(2);
 
         if (showing_primary)
@@ -10441,14 +11060,12 @@ void do_cmd_keybinds(void)
             keybinds = primary_keybinds;
             num_keybinds = primary_count;
             highlight_ptr = &highlight_primary;
-            top_ptr = &top_primary;
         }
         else
         {
             keybinds = secondary_keybinds;
             num_keybinds = secondary_count;
             highlight_ptr = &highlight_secondary;
-            top_ptr = &top_secondary;
         }
 
         if (*highlight_ptr >= num_keybinds)
@@ -10456,84 +11073,17 @@ void do_cmd_keybinds(void)
         if (*highlight_ptr < 0)
             *highlight_ptr = 0;
 
-        if (*top_ptr > *highlight_ptr)
-            *top_ptr = *highlight_ptr;
-        if (*top_ptr + visible_rows <= *highlight_ptr)
-            *top_ptr = *highlight_ptr - visible_rows + 1;
-        if (*top_ptr < 0)
-            *top_ptr = 0;
-        if (num_keybinds > visible_rows)
-        {
-            int max_top = num_keybinds - visible_rows;
-            if (*top_ptr > max_top)
-                *top_ptr = max_top;
-        }
-        else
-        {
-            *top_ptr = 0;
-        }
-
         highlight = *highlight_ptr;
 
-        pixel_menu = settings_semantic_menu_begin("Keybind Configuration",
-            highlight);
-        if (!pixel_menu)
-        {
-            /* Clear screen */
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row, visible_rows);
+        settings_semantic_menu_begin("Keybind Configuration", highlight);
 
-            /* Title */
-            settings_ui_put_fitted(1, 0, TERM_WHITE, "Keybind Configuration");
-            if (compact_width)
-            {
-                cptr nav_prompt = "Up/Down move  Enter bind  Tab switch  Esc return";
-                settings_ui_put_fitted(2, 0, TERM_WHITE,
-                    nav_prompt);
-                settings_ui_add_return_click_targets(2, 0, nav_prompt);
-                ui_menu_click_add_text_token(SETTINGS_CLICK_SWITCH_GROUP, 0, 2,
-                    nav_prompt, "Tab");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_SWITCH_GROUP, 0, 2,
-                    nav_prompt, "switch");
-                settings_ui_put_fitted(3, 0, TERM_WHITE,
-                    showing_primary ? "Primary commands" : "Supplementary commands");
-            }
-            else
-            {
-                cptr nav_prompt =
-                    "Arrow to navigate, Enter to bind, Tab to switch groups, Escape to return";
-                settings_ui_put_fitted(2, 0, TERM_WHITE,
-                    nav_prompt);
-                settings_ui_add_return_click_targets(2, 0, nav_prompt);
-                ui_menu_click_add_text_token(SETTINGS_CLICK_SWITCH_GROUP, 0, 2,
-                    nav_prompt, "Tab");
-                ui_menu_click_add_text_token(SETTINGS_CLICK_SWITCH_GROUP, 0, 2,
-                    nav_prompt, "switch");
-                settings_ui_put_fitted(3, 0, TERM_WHITE,
-                    showing_primary ? "Primary Commands: Essential for the gameplay"
-                                    : "Supplementary Commands");
-            }
-        }
-
-        /* List visible keybinds */
-        display_end = pixel_menu ? num_keybinds : (*top_ptr + visible_rows);
-        if (display_end > num_keybinds)
-            display_end = num_keybinds;
-        for (i = pixel_menu ? 0 : *top_ptr; i < display_end; i++)
+        for (i = 0; i < num_keybinds; i++)
         {
-            int entry_row = list_start_row + (i - *top_ptr);
-            if (detail_mode)
-                summarize_action_bindings_compact(mode, &keybinds[i],
-                    binding_buf, sizeof(binding_buf));
-            else
-                describe_action_bindings(mode, &keybinds[i], binding_buf,
-                    sizeof(binding_buf));
+            describe_action_bindings(mode, &keybinds[i], binding_buf,
+                sizeof(binding_buf));
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
                 keybinds[i].key_name, binding_buf, row_width, 12);
 
-            if (pixel_menu)
             {
                 char semantic_line[160];
 
@@ -10544,36 +11094,8 @@ void do_cmd_keybinds(void)
                 sdl_character_sheet_screen_set_last_select_row_reset(
                     SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
-            else
-            {
-                /* Display the keybind */
-                if (i == highlight)
-                {
-                    /* Highlighted */
-                    c_prt(TERM_L_BLUE, line_buf, entry_row, 2);
-                }
-                else
-                {
-                    /* Normal */
-                    prt(line_buf, entry_row, 2);
-                }
-                ui_menu_click_add_full_row(i, entry_row);
-            }
         }
 
-        if (!pixel_menu)
-        {
-            /* Clear any leftover rows */
-            for (i = display_end; i < *top_ptr + visible_rows; i++)
-            {
-                row = list_start_row + (i - *top_ptr);
-                Term_erase(2, row, term_w > 2 ? term_w - 2 : 0);
-            }
-        }
-
-        detail_row = list_start_row + visible_rows;
-        info_row = detail_row + detail_rows;
-        if (pixel_menu)
         {
             char desc[1024];
 
@@ -10595,56 +11117,6 @@ void do_cmd_keybinds(void)
             sdl_character_sheet_screen_set_select_description(desc);
             sdl_character_sheet_screen_commit_select(highlight);
         }
-        else if (detail_mode)
-        {
-            describe_action_bindings(mode, &keybinds[highlight],
-                detail_binding_buf, sizeof(detail_binding_buf));
-            strnfmt(detail_buf, sizeof(detail_buf), "Bindings: %s",
-                detail_binding_buf);
-            settings_ui_draw_wrapped_block(detail_row, 2, row_width,
-                detail_rows, TERM_SLATE, detail_buf);
-        }
-
-        if (!pixel_menu && compact_width)
-        {
-            cptr save_prompt = "s: save keybinds";
-            cptr reset_prompt = "r: reset selected";
-
-            settings_ui_put_fitted(info_row, 2, TERM_WHITE, save_prompt);
-            ui_menu_click_add_text_token(SETTINGS_CLICK_SAVE, 2, info_row,
-                save_prompt, "s:");
-            ui_menu_click_add_text_token(SETTINGS_CLICK_SAVE, 2, info_row,
-                save_prompt, "save");
-            settings_ui_put_fitted(info_row + 1, 2, TERM_WHITE, reset_prompt);
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                info_row + 1, reset_prompt, "r:");
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                info_row + 1, reset_prompt, "reset");
-        }
-        else if (!pixel_menu)
-        {
-            strnfmt(line_buf, sizeof(line_buf), "Press 's' to save keybinds to %s",
-                default_file);
-            settings_ui_put_fitted(info_row, 2, TERM_WHITE,
-                line_buf);
-            ui_menu_click_add_text_token(SETTINGS_CLICK_SAVE, 2, info_row,
-                line_buf, "'s'");
-            ui_menu_click_add_text_token(SETTINGS_CLICK_SAVE, 2, info_row,
-                line_buf, "save");
-            settings_ui_put_fitted(info_row + 1, 2, TERM_WHITE,
-                "Press 'r' to reset selected keybind to default");
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                info_row + 1, "Press 'r' to reset selected keybind to default",
-                "'r'");
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                info_row + 1, "Press 'r' to reset selected keybind to default",
-                "reset");
-        }
-        if (!pixel_menu && dirty)
-            c_prt(TERM_YELLOW, "Unsaved changes", info_row + 2, 2);
-        else if (!pixel_menu)
-            Term_erase(2, info_row + 2,
-                term_w > 2 ? term_w - 2 : 0);
 
         /* Get input */
         ch = inkey();
@@ -10764,31 +11236,13 @@ void do_cmd_keybinds(void)
                 if (manual_key)
                 {
                     char prompt[80];
-                    char prompt_long[96];
-                    char prompt_short[80];
-                    int entry_row = list_start_row + (highlight - *top_ptr);
                     char bind_key;
 
                     settings_semantic_menu_hide();
 
-                    /* Clear the action area */
-                    Term_erase(2, entry_row, 255);
-
-                    /* Prompt for a key outside the common command list. */
-                    strnfmt(prompt_long, sizeof(prompt_long),
-                        "Press key to use for %s (Escape to cancel):",
-                        keybinds[highlight].key_name);
-                    strnfmt(prompt_short, sizeof(prompt_short),
+                    strnfmt(prompt, sizeof(prompt),
                         "Bind %s (Esc cancels):", keybinds[highlight].key_name);
-                    strnfmt(prompt, sizeof(prompt), "%s",
-                        settings_ui_pick_label(row_width, prompt_long,
-                            prompt_short, prompt_short));
-                    settings_ui_put_fitted(entry_row, 2, TERM_YELLOW, prompt);
-                    Term_fresh();
-
-                    flush();
-                    bind_key = inkey();
-                    if (bind_key == ESCAPE || bind_key == 0)
+                    if (!get_com(prompt, &bind_key))
                         break;
 
                     new_key = (byte)bind_key;
@@ -10870,17 +11324,20 @@ void do_cmd_keybinds(void)
 
 typedef enum controller_entry_type {
     CONTROLLER_ENTRY_TOGGLE = 0,
+    CONTROLLER_ENTRY_CYCLE,
     CONTROLLER_ENTRY_ACTION,
 } controller_entry_type;
 
 typedef enum controller_toggle_id {
     CONTROLLER_TOGGLE_ENABLED = 0,
-    CONTROLLER_TOGGLE_AUTO_MODE,
-    CONTROLLER_TOGGLE_STEAMDECK_MODE,
     CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE,
     CONTROLLER_TOGGLE_DPAD,
     CONTROLLER_TOGGLE_LEFT_STICK,
 } controller_toggle_id;
+
+typedef enum controller_setting_id {
+    CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY = 0,
+} controller_setting_id;
 
 typedef struct controller_entry {
     controller_entry_type type;
@@ -10917,7 +11374,7 @@ static const char* controller_gamepad_button_label(int button)
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4 (Right Paddle 1)";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5 (Right Paddle 2)";
     case SDL_GAMEPAD_BUTTON_START: return "Start (Menu)";
-    case SDL_GAMEPAD_BUTTON_BACK: return "Back (View)";
+    case SDL_GAMEPAD_BUTTON_BACK: return "View / Select";
     case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "Left Stick Click";
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "Right Stick Click";
     case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide (Steam)";
@@ -10936,6 +11393,52 @@ static const char* controller_gamepad_button_label(int button)
     }
 }
 
+static int controller_dpad_diagonal_delay_count(void)
+{
+    return (SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS
+        - SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
+        / SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS + 1;
+}
+
+static int controller_dpad_diagonal_delay_index(int value)
+{
+    int index;
+    int count = controller_dpad_diagonal_delay_count();
+
+    if (value <= SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
+        return 0;
+    if (value >= SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS)
+        return count - 1;
+
+    index = (value - SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS
+        + SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS / 2)
+        / SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS;
+    if (index < 0)
+        index = 0;
+    if (index >= count)
+        index = count - 1;
+    return index;
+}
+
+static void controller_adjust_setting(int setting_id, int delta)
+{
+    if (setting_id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
+        int count = controller_dpad_diagonal_delay_count();
+        int index = controller_dpad_diagonal_delay_index(
+            get_sdl_gamepad_dpad_diagonal_delay_ms());
+
+        index += delta;
+        if (index < 0)
+            index = count - 1;
+        else if (index >= count)
+            index = 0;
+
+        set_sdl_gamepad_dpad_diagonal_delay_ms(
+            SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS
+            + index * SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS);
+    }
+}
+
 static const char* controller_gamepad_button_short_label(int button)
 {
     switch (button) {
@@ -10950,7 +11453,7 @@ static const char* controller_gamepad_button_short_label(int button)
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5";
     case SDL_GAMEPAD_BUTTON_START: return "Start";
-    case SDL_GAMEPAD_BUTTON_BACK: return "Back";
+    case SDL_GAMEPAD_BUTTON_BACK: return "View";
     case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "L3";
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "R3";
     case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide";
@@ -11493,30 +11996,6 @@ static void controller_combo_binding_short_label(int modifier_type,
     strnfmt(buf, buflen, "%s + %s", mod_buf, base_buf);
 }
 
-static int controller_action_total_binding_count(int binding)
-{
-    return controller_action_binding_count(binding, NULL, NULL)
-        + controller_combo_action_binding_count(binding, NULL, NULL, NULL, NULL);
-}
-
-static void controller_action_binding_summary(int binding, char* buf,
-    size_t buflen)
-{
-    int count;
-
-    if (!buf || !buflen)
-        return;
-
-    count = controller_action_total_binding_count(binding);
-
-    if (count <= 0)
-        SDL_strlcpy(buf, "none", buflen);
-    else if (count == 1)
-        SDL_strlcpy(buf, "1 bind", buflen);
-    else
-        strnfmt(buf, buflen, "%d binds", count);
-}
-
 static void controller_action_binding_label(int binding, char* buf, size_t buflen)
 {
     if (!buf || !buflen)
@@ -11725,12 +12204,6 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
         case CONTROLLER_TOGGLE_ENABLED:
             SDL_strlcpy(buf, get_sdl_gamepad_enabled() ? "On" : "Off", buflen);
             break;
-        case CONTROLLER_TOGGLE_AUTO_MODE:
-            SDL_strlcpy(buf, get_sdl_gamepad_auto_mode() ? "On" : "Off", buflen);
-            break;
-        case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-            SDL_strlcpy(buf, get_sdl_steamdeck_mode() ? "On" : "Off", buflen);
-            break;
         case CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE:
             SDL_strlcpy(buf,
                 get_sdl_steamdeck_inv_equip_same_button_cycle() ? "On" : "Off",
@@ -11747,6 +12220,15 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
             break;
         }
         break;
+    case CONTROLLER_ENTRY_CYCLE:
+        if (entry->id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
+            int delay = get_sdl_gamepad_dpad_diagonal_delay_ms();
+
+            strnfmt(buf, buflen, "%d ms", delay);
+        } else {
+            SDL_strlcpy(buf, "(unknown)", buflen);
+        }
+        break;
     case CONTROLLER_ENTRY_ACTION:
         controller_action_binding_label(entry->id, buf, buflen);
         break;
@@ -11761,12 +12243,6 @@ static void controller_set_toggle(int toggle_id, bool value)
     switch (toggle_id) {
     case CONTROLLER_TOGGLE_ENABLED:
         set_sdl_gamepad_enabled(value);
-        break;
-    case CONTROLLER_TOGGLE_AUTO_MODE:
-        set_sdl_gamepad_auto_mode(value);
-        break;
-    case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-        set_sdl_steamdeck_mode(value);
         break;
     case CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE:
         set_sdl_steamdeck_inv_equip_same_button_cycle(value);
@@ -11787,10 +12263,6 @@ static bool controller_toggle_default_value(int toggle_id)
     switch (toggle_id) {
     case CONTROLLER_TOGGLE_ENABLED:
         return get_sdl_gamepad_default_enabled();
-    case CONTROLLER_TOGGLE_AUTO_MODE:
-        return get_sdl_gamepad_default_auto_mode();
-    case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-        return get_sdl_steamdeck_default_mode();
     case CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE:
         return get_sdl_steamdeck_default_inv_equip_same_button_cycle();
     case CONTROLLER_TOGGLE_DPAD:
@@ -12020,16 +12492,12 @@ void do_cmd_controller_settings(void)
 {
     bool done = false;
     int highlight = 0;
-    int top = 0;
-    int term_w, term_h;
-    const int list_start_row = 5;
 
     static const controller_entry entries[] = {
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_ENABLED, "Controller Input" },
-        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_AUTO_MODE, "Auto Controller Mode" },
-        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_STEAMDECK_MODE, "Controller UI Mode" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE, "Inv/Equip Same-Button Cycle" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_DPAD, "D-pad Movement" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY, "D-pad Diagonal Delay" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_LEFT_STICK, "Left Stick Movement" },
         { CONTROLLER_ENTRY_ACTION, '\r', "Enter" },
         { CONTROLLER_ENTRY_ACTION, INPUT_BIND_CONFIRM, "Confirm (Space)" },
@@ -12046,9 +12514,8 @@ void do_cmd_controller_settings(void)
         { CONTROLLER_ENTRY_ACTION, 's', "Sing / change song" },
         { CONTROLLER_ENTRY_ACTION, 'S', "Toggle stealth" },
         { CONTROLLER_ENTRY_ACTION, 'h', "Character sheet" },
-        { CONTROLLER_ENTRY_ACTION, 'f', "Fire (primary)" },
-        { CONTROLLER_ENTRY_ACTION, 'F', "Fire (secondary)" },
-        { CONTROLLER_ENTRY_ACTION, KTRL('F'), "Swap quivers" },
+        { CONTROLLER_ENTRY_ACTION, 'f', "Ranged attack (active weapon)" },
+        { CONTROLLER_ENTRY_ACTION, 'F', "Ranged attack (active weapon)" },
         { CONTROLLER_ENTRY_ACTION, 'l', "Look around" },
         { CONTROLLER_ENTRY_ACTION, 'T', "Tunnel / dig" },
         { CONTROLLER_ENTRY_ACTION, 'b', "Bash door" },
@@ -12067,7 +12534,7 @@ void do_cmd_controller_settings(void)
         { CONTROLLER_ENTRY_ACTION, '-', "Fletch arrows" },
         { CONTROLLER_ENTRY_ACTION, '{', "Inscribe item" },
         { CONTROLLER_ENTRY_ACTION, 'a', "Activate staff" },
-        { CONTROLLER_ENTRY_ACTION, KTRL('A'), "Swap staff" },
+        { CONTROLLER_ENTRY_ACTION, KTRL('A'), "Activate Harness staff" },
         { CONTROLLER_ENTRY_ACTION, 'E', "Eat food" },
         { CONTROLLER_ENTRY_ACTION, 't', "Throw item" },
         { CONTROLLER_ENTRY_ACTION, 'p', "Blow horn" },
@@ -12094,93 +12561,24 @@ void do_cmd_controller_settings(void)
     while (!done) {
         char value_buf[64];
         char detail_value_buf[512];
-        char detail_buf[560];
         char line_buf[128];
-        int row;
         bool steamdeck = steamdeck_controls_active();
-        bool compact_width;
-        bool detail_mode;
         int row_width;
-        int detail_rows;
-        int bottom_reserved;
-        int detail_row;
-        int info_row;
-        bool pixel_menu;
 
-        Term_get_size(&term_w, &term_h);
-        compact_width = (term_w < 70);
-        detail_mode = compact_width;
-        detail_rows = detail_mode ? 4 : 0;
-        bottom_reserved = detail_rows + 2;
         row_width = settings_ui_line_width(2);
-        int visible_rows = term_h - list_start_row - bottom_reserved;
-        if (visible_rows < 5)
-            visible_rows = 5;
 
         if (highlight < 0)
             highlight = 0;
         if (highlight >= entry_count)
             highlight = entry_count - 1;
 
-        if (top > highlight)
-            top = highlight;
-        if (top + visible_rows <= highlight)
-            top = highlight - visible_rows + 1;
-        if (top < 0)
-            top = 0;
-        if (entry_count > visible_rows) {
-            int max_top = entry_count - visible_rows;
-            if (top > max_top)
-                top = max_top;
-        } else {
-            top = 0;
-        }
+        settings_semantic_menu_begin("Controller Settings", highlight);
 
-        pixel_menu = settings_semantic_menu_begin("Controller Settings",
-            highlight);
-        if (!pixel_menu)
-        {
-            Term_clear();
-            ui_menu_click_begin();
-            ui_menu_click_set_hover_enabled(true);
-            settings_menu_begin_scroll_area(list_start_row, visible_rows);
-            settings_ui_put_fitted(1, 0, TERM_WHITE, "Controller Settings");
-            if (steamdeck) {
-                char confirm_label[16];
-                char back_label[16];
-                char prompt_buf[80];
-                /* Steam Deck UI: A=bind, B=back */
-                controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
-                controller_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    compact_width ? "D-pad %s add  %s back"
-                                  : "D-pad navigate  %s add  %s back",
-                    confirm_label, back_label);
-                settings_ui_put_fitted(2, 0, TERM_WHITE, prompt_buf);
-                settings_ui_add_return_click_targets(2, 0, prompt_buf);
-            } else {
-                cptr nav_prompt = compact_width
-                    ? "Up/Down move  Enter add  Esc return"
-                    : "Directions navigate, Enter add, Escape return";
-                settings_ui_put_fitted(2, 0, TERM_WHITE,
-                    nav_prompt);
-                settings_ui_add_return_click_targets(2, 0, nav_prompt);
-            }
-        }
-
-        for (int i = pixel_menu ? 0 : top;
-             i < entry_count && (pixel_menu || i < top + visible_rows); i++) {
-            int entry_row = list_start_row + (i - top);
-            if (detail_mode && entries[i].type == CONTROLLER_ENTRY_ACTION)
-                controller_action_binding_summary(entries[i].id, value_buf,
-                    sizeof(value_buf));
-            else
-                controller_entry_value(&entries[i], value_buf,
-                    sizeof(value_buf));
+        for (int i = 0; i < entry_count; i++) {
+            controller_entry_value(&entries[i], value_buf, sizeof(value_buf));
             settings_ui_format_pair_line(line_buf, sizeof(line_buf), entries[i].label,
                 value_buf, row_width, 12);
 
-            if (pixel_menu)
             {
                 char semantic_line[160];
 
@@ -12191,26 +12589,9 @@ void do_cmd_controller_settings(void)
                 sdl_character_sheet_screen_set_last_select_row_reset(
                     SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
-            else {
-                if (i == highlight) {
-                    c_prt(TERM_L_BLUE, line_buf, entry_row, 2);
-                } else {
-                    prt(line_buf, entry_row, 2);
-                }
-                ui_menu_click_add_full_row(i, entry_row);
-            }
         }
 
-        if (!pixel_menu)
         {
-            for (row = list_start_row + (entry_count - top); row < list_start_row + visible_rows; row++) {
-                Term_erase(2, row, term_w > 2 ? term_w - 2 : 0);
-            }
-        }
-
-        detail_row = list_start_row + visible_rows;
-        info_row = detail_row + detail_rows;
-        if (pixel_menu) {
             char desc[1024];
 
             if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
@@ -12219,10 +12600,43 @@ void do_cmd_controller_settings(void)
                 strnfmt(desc, sizeof(desc),
                     "Bindings: %s. Enter or Space adds a controller control. R resets selected, M resets all. Changes are saved on exit.",
                     detail_value_buf);
+            } else if (entries[highlight].type == CONTROLLER_ENTRY_CYCLE) {
+                cptr cycle_desc;
+
+                switch (entries[highlight].id) {
+                case CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY:
+                    cycle_desc =
+                        "Wait this long for a second D-pad direction to form a diagonal. "
+                        "50 ms is the fastest setting, but makes diagonals harder to enter.";
+                    break;
+                default:
+                    cycle_desc = "";
+                    break;
+                }
+                strnfmt(desc, sizeof(desc), "%s", cycle_desc);
             } else {
-                strnfmt(desc, sizeof(desc),
-                    "Enter or Space toggles %s. R resets it to default, M resets all bindings. Changes are saved on exit.",
-                    entries[highlight].label);
+                cptr toggle_desc;
+
+                switch (entries[highlight].id) {
+                case CONTROLLER_TOGGLE_ENABLED:
+                    toggle_desc = "Turn controller input on or off.";
+                    break;
+                case CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE:
+                    toggle_desc =
+                        "Cycle inventory and equipment with one button instead "
+                        "of two separate buttons.";
+                    break;
+                case CONTROLLER_TOGGLE_DPAD:
+                    toggle_desc = "Move with the D-pad.";
+                    break;
+                case CONTROLLER_TOGGLE_LEFT_STICK:
+                    toggle_desc = "Move with the left analog stick.";
+                    break;
+                default:
+                    toggle_desc = "";
+                    break;
+                }
+                strnfmt(desc, sizeof(desc), "%s", toggle_desc);
             }
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
                 "Reset Selected", steamdeck ? "X" : "R", TERM_SLATE);
@@ -12230,59 +12644,7 @@ void do_cmd_controller_settings(void)
                 "Reset All", steamdeck ? "Y" : "M", TERM_SLATE);
             sdl_character_sheet_screen_set_select_description(desc);
             sdl_character_sheet_screen_commit_select(highlight);
-        } else if (detail_mode) {
-            if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
-                controller_describe_action_bindings_compact(entries[highlight].id,
-                    detail_value_buf, sizeof(detail_value_buf));
-                strnfmt(detail_buf, sizeof(detail_buf), "Bindings: %s",
-                    detail_value_buf);
-            } else {
-                strnfmt(detail_buf, sizeof(detail_buf),
-                    "Press Enter to toggle %s.", entries[highlight].label);
-            }
-            settings_ui_draw_wrapped_block(detail_row, 2, row_width, detail_rows,
-                TERM_SLATE, detail_buf);
         }
-
-        if (!pixel_menu && steamdeck) {
-            char reset_label[16];
-            char reset_all_label[16];
-            char prompt_buf[80];
-            /* Steam Deck UI: X=reset selected, Y=reset all */
-            controller_prompt_label(steamdeck_alt_action_key(), "X", reset_label, sizeof(reset_label));
-            controller_prompt_label(steamdeck_secondary_key(), "Y", reset_all_label, sizeof(reset_all_label));
-            strnfmt(prompt_buf, sizeof(prompt_buf),
-                compact_width ? "[%s] reset  [%s] reset all"
-                              : "Reset: [%s] selected, [%s] all",
-                reset_label, reset_all_label);
-            settings_ui_put_fitted(info_row, 2, TERM_WHITE,
-                prompt_buf);
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                info_row, prompt_buf, reset_label);
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                info_row, prompt_buf, compact_width ? "reset" : "selected");
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                info_row, prompt_buf, reset_all_label);
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                info_row, prompt_buf, compact_width ? "reset all" : "all");
-        } else if (!pixel_menu) {
-            cptr reset_prompt = compact_width
-                ? "r: reset selected  R: reset all"
-                : "Press 'r' to reset selected binding, 'R' to reset all bindings";
-            settings_ui_put_fitted(info_row, 2, TERM_WHITE,
-                reset_prompt);
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                info_row, reset_prompt, compact_width ? "r:" : "'r'");
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_SELECTED, 2,
-                info_row, reset_prompt, "selected");
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                info_row, reset_prompt, compact_width ? "R:" : "'R'");
-            ui_menu_click_add_text_token(SETTINGS_CLICK_RESET_ALL, 2,
-                info_row, reset_prompt, "reset all");
-        }
-        if (!pixel_menu)
-            settings_ui_put_fitted(info_row + 1, 2, TERM_WHITE,
-                compact_width ? "Saves on exit." : "Changes are saved on exit.");
 
         char ch = inkey();
 
@@ -12343,6 +12705,11 @@ void do_cmd_controller_settings(void)
             highlight = (highlight + entry_count - 1) % entry_count;
         } else if (ch == '2') {
             highlight = (highlight + 1) % entry_count;
+        } else if (ch == '4' || ch == '6') {
+            if (entries[highlight].type == CONTROLLER_ENTRY_CYCLE) {
+                controller_adjust_setting(entries[highlight].id,
+                    (ch == '6') ? 1 : -1);
+            }
         } else if (ch == 'r' || (steamdeck && ch == steamdeck_alt_action_key())) {
             if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
                 controller_clear_effective_action_bindings(entries[highlight].id);
@@ -12351,6 +12718,15 @@ void do_cmd_controller_settings(void)
                 } else {
                     msg_print("No default binding for action.");
                 }
+                message_flush();
+            } else if (entries[highlight].type == CONTROLLER_ENTRY_CYCLE) {
+                if (entries[highlight].id
+                    == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY)
+                {
+                    set_sdl_gamepad_dpad_diagonal_delay_ms(
+                        get_sdl_gamepad_default_dpad_diagonal_delay_ms());
+                }
+                msg_format("Reset %s to default.", entries[highlight].label);
                 message_flush();
             } else {
                 controller_set_toggle(entries[highlight].id,
@@ -12364,12 +12740,13 @@ void do_cmd_controller_settings(void)
             message_flush();
         } else if (ch == '\r' || ch == '\n' || ch == ' ') {
             const controller_entry* entry = &entries[highlight];
-            int entry_row = list_start_row + (highlight - top);
 
             if (entry->type == CONTROLLER_ENTRY_TOGGLE) {
                 char cur[16];
                 controller_entry_value(entry, cur, sizeof(cur));
                 controller_set_toggle(entry->id, streq(cur, "Off"));
+            } else if (entry->type == CONTROLLER_ENTRY_CYCLE) {
+                controller_adjust_setting(entry->id, 1);
             } else {
                 char prompt[80];
                 char prompt_long[96];
@@ -12379,8 +12756,6 @@ void do_cmd_controller_settings(void)
                 int cap_id = 0;
                 int cap_modifier = GAMEPAD_BIND_NONE;
                 bool allow_modifier_combo = !controller_action_is_modifier(entry->id);
-                settings_semantic_menu_hide();
-                Term_erase(2, entry_row, 255);
                 if (steamdeck) {
                     char cancel_label[16];
                     controller_prompt_label(steamdeck_back_key(), "B", cancel_label, sizeof(cancel_label));
@@ -12410,8 +12785,8 @@ void do_cmd_controller_settings(void)
                 strnfmt(prompt, sizeof(prompt), "%s",
                     settings_ui_pick_label(row_width, prompt_long, prompt_medium,
                         prompt_short));
-                settings_ui_put_fitted(entry_row, 2, TERM_YELLOW, prompt);
-                Term_fresh();
+                sdl_character_sheet_screen_set_select_description(prompt);
+                sdl_character_sheet_screen_commit_select(highlight);
 
                 flush();
                 if (!sdl_gamepad_capture_begin(allow_modifier_combo)) {
@@ -12792,13 +13167,11 @@ void do_cmd_macros(void)
     {
         int term_wid = 80;
         int term_hgt = 24;
-        int title_row = 1;
         int menu_row = 3;
         int action_label_row;
         int action_row;
         int command_row;
         int input_row;
-        bool pixel_menu;
 
         Term_get_size(&term_wid, &term_hgt);
         action_label_row = MAX(menu_row + 11, term_hgt - 4);
@@ -12809,59 +13182,24 @@ void do_cmd_macros(void)
         /* Analyze the current action */
         ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
-        pixel_menu = settings_semantic_menu_begin("Interact with Macros", '1');
-        if (pixel_menu)
-        {
-            sdl_character_sheet_screen_set_select_description(tmp);
-            settings_semantic_add_row('1', "1) Load a user pref file",
-                TERM_WHITE);
+        settings_semantic_menu_begin("Interact with Macros", '1');
+        sdl_character_sheet_screen_set_select_description(tmp);
+        settings_semantic_add_row('1', "1) Load a user pref file",
+            TERM_WHITE);
 #ifdef ALLOW_MACROS
-            settings_semantic_add_row('2', "2) Append macros to a file",
-                TERM_WHITE);
-            settings_semantic_add_row('3', "3) Query a macro", TERM_WHITE);
-            settings_semantic_add_row('4', "4) Create a macro", TERM_WHITE);
-            settings_semantic_add_row('5', "5) Remove a macro", TERM_WHITE);
-            settings_semantic_add_row('6', "6) Append keymaps to a file",
-                TERM_WHITE);
-            settings_semantic_add_row('7', "7) Query a keymap", TERM_WHITE);
-            settings_semantic_add_row('8', "8) Create a keymap", TERM_WHITE);
-            settings_semantic_add_row('9', "9) Remove a keymap", TERM_WHITE);
-            settings_semantic_add_row('0', "0) Enter a new action",
-                TERM_WHITE);
+        settings_semantic_add_row('2', "2) Append macros to a file",
+            TERM_WHITE);
+        settings_semantic_add_row('3', "3) Query a macro", TERM_WHITE);
+        settings_semantic_add_row('4', "4) Create a macro", TERM_WHITE);
+        settings_semantic_add_row('5', "5) Remove a macro", TERM_WHITE);
+        settings_semantic_add_row('6', "6) Append keymaps to a file",
+            TERM_WHITE);
+        settings_semantic_add_row('7', "7) Query a keymap", TERM_WHITE);
+        settings_semantic_add_row('8', "8) Create a keymap", TERM_WHITE);
+        settings_semantic_add_row('9', "9) Remove a keymap", TERM_WHITE);
+        settings_semantic_add_row('0', "0) Enter a new action", TERM_WHITE);
 #endif /* ALLOW_MACROS */
-            sdl_character_sheet_screen_commit_select('1');
-        }
-        else
-        {
-            /* Clear screen */
-            Term_clear();
-
-            /* Describe */
-            prt("Interact with Macros", title_row, 0);
-
-            /* Describe that action */
-            prt("Current action:", action_label_row, 0);
-
-            /* Display the current action */
-            Term_putstr(0, action_row, term_wid, TERM_WHITE, tmp);
-
-            /* Selections */
-            prt("(1) Load a user pref file", menu_row, 5);
-#ifdef ALLOW_MACROS
-            prt("(2) Append macros to a file", menu_row + 1, 5);
-            prt("(3) Query a macro", menu_row + 2, 5);
-            prt("(4) Create a macro", menu_row + 3, 5);
-            prt("(5) Remove a macro", menu_row + 4, 5);
-            prt("(6) Append keymaps to a file", menu_row + 5, 5);
-            prt("(7) Query a keymap", menu_row + 6, 5);
-            prt("(8) Create a keymap", menu_row + 7, 5);
-            prt("(9) Remove a keymap", menu_row + 8, 5);
-            prt("(0) Enter a new action", menu_row + 9, 5);
-#endif /* ALLOW_MACROS */
-
-            /* Prompt */
-            prt("Command: ", command_row, 0);
-        }
+        sdl_character_sheet_screen_commit_select('1');
 
         /* Get a command */
         ch = inkey();
@@ -13357,61 +13695,22 @@ void do_cmd_visuals(void)
     /* Interact until done */
     while (1)
     {
-        bool pixel_menu;
-
-        pixel_menu = settings_semantic_menu_begin("Interact with Visuals", '1');
-        if (pixel_menu)
-        {
-            settings_semantic_add_row('1', "1) Load a user pref file",
-                TERM_WHITE);
+        settings_semantic_menu_begin("Interact with Visuals", '1');
+        settings_semantic_add_row('1', "1) Load a user pref file", TERM_WHITE);
 #ifdef ALLOW_VISUALS
-            settings_semantic_add_row('2', "2) Dump monster attr/chars",
-                TERM_WHITE);
-            settings_semantic_add_row('3', "3) Dump object attr/chars",
-                TERM_WHITE);
-            settings_semantic_add_row('4', "4) Dump feature attr/chars",
-                TERM_WHITE);
-            settings_semantic_add_row('5', "5) Dump flavor attr/chars",
-                TERM_WHITE);
-            settings_semantic_add_row('6', "6) Change monster attr/chars",
-                TERM_WHITE);
-            settings_semantic_add_row('7', "7) Change object attr/chars",
-                TERM_WHITE);
-            settings_semantic_add_row('8', "8) Change feature attr/chars",
-                TERM_WHITE);
-            settings_semantic_add_row('9', "9) Change flavor attr/chars",
-                TERM_WHITE);
+        settings_semantic_add_row('2', "2) Dump monster attr/chars", TERM_WHITE);
+        settings_semantic_add_row('3', "3) Dump object attr/chars", TERM_WHITE);
+        settings_semantic_add_row('4', "4) Dump feature attr/chars", TERM_WHITE);
+        settings_semantic_add_row('5', "5) Dump flavor attr/chars", TERM_WHITE);
+        settings_semantic_add_row('6', "6) Change monster attr/chars", TERM_WHITE);
+        settings_semantic_add_row('7', "7) Change object attr/chars", TERM_WHITE);
+        settings_semantic_add_row('8', "8) Change feature attr/chars", TERM_WHITE);
+        settings_semantic_add_row('9', "9) Change flavor attr/chars", TERM_WHITE);
 #endif
-            settings_semantic_add_row('0', "0) Reset visuals", TERM_WHITE);
-            sdl_character_sheet_screen_set_select_description(
-                "Visual preference tools. Editor actions open the existing attr/char editor after this menu hides.");
-            sdl_character_sheet_screen_commit_select('1');
-        }
-        else
-        {
-            /* Clear screen */
-            Term_clear();
-
-            /* Ask for a choice */
-            prt("Interact with Visuals", 2, 0);
-
-            /* Give some choices */
-            prt("(1) Load a user pref file", 4, 5);
-#ifdef ALLOW_VISUALS
-            prt("(2) Dump monster attr/chars", 5, 5);
-            prt("(3) Dump object attr/chars", 6, 5);
-            prt("(4) Dump feature attr/chars", 7, 5);
-            prt("(5) Dump flavor attr/chars", 8, 5);
-            prt("(6) Change monster attr/chars", 9, 5);
-            prt("(7) Change object attr/chars", 10, 5);
-            prt("(8) Change feature attr/chars", 11, 5);
-            prt("(9) Change flavor attr/chars", 12, 5);
-#endif
-            prt("(0) Reset visuals", 13, 5);
-
-            /* Prompt */
-            prt("Command: ", 15, 0);
-        }
+        settings_semantic_add_row('0', "0) Reset visuals", TERM_WHITE);
+        sdl_character_sheet_screen_set_select_description(
+            "Visual preference tools. Editor actions open the existing attr/char editor after this menu hides.");
+        sdl_character_sheet_screen_commit_select('1');
 
         /* Prompt */
         ch = inkey();

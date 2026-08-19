@@ -355,6 +355,30 @@ static bool player_moved_on_previous_turn(void)
     return (action >= 1) && (action <= 9) && (action != 5);
 }
 
+static void restore_target_after_implicit_fire(
+    bool target_set, int target_who, int target_row, int target_col)
+{
+    if (!target_set)
+    {
+        target_set_monster(0);
+        return;
+    }
+
+    if (target_who > 0)
+    {
+        if ((target_who < mon_max) && target_able(target_who))
+            target_set_monster(target_who);
+        else
+            target_set_monster(0);
+        return;
+    }
+
+    if (in_bounds_fully(target_row, target_col))
+        target_set_location(target_row, target_col);
+    else
+        target_set_monster(0);
+}
+
 void do_cmd_fire(int quiver)
 {
     int dir, item;
@@ -409,78 +433,53 @@ void do_cmd_fire(int quiver)
     bool puncture = false;
     bool returning_arrow = false;
     bool warding_girdle_active = false;
+    bool clear_location_target = false;
+    int arrows_spent = 0;
+    int selected_arrows = 0;
 
-    // Determine the projectile in the requested quiver
-    if (quiver == 1)
+    /* Both f and F attack with the active ranged weapon. */
+    if (quiver != 1
+        || player_active_weapon_mode() != PLAYER_ACTIVE_WEAPON_RANGED_1)
     {
-        o_ptr = &inventory[INVEN_QUIVER1];
-        item = INVEN_QUIVER1;
-
-        if (!o_ptr->k_idx)
-        {
-            msg_print("You have nothing in your 1st quiver.");
-            return;
-        }
-    }
-    else
-    {
-        o_ptr = &inventory[INVEN_QUIVER2];
-        item = INVEN_QUIVER2;
-
-        if (!o_ptr->k_idx)
-        {
-            msg_print("You have nothing in your 2nd quiver.");
-            return;
-        }
+        msg_print("You must ready a ranged weapon before making a ranged attack.");
+        return;
     }
 
-    returning_arrow = false;
-
-    /* Determine whether the item should be thrown directly */
-    object_flags4(o_ptr, &ammo_f1, &ammo_f2, &ammo_f3, &ammo_f4);
-
-    if (player_can_power_throw_from_quiver(item))
+    if (player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
     {
+        item = player_active_throwing_weapon_slot();
+        if (item < 0)
+        {
+            msg_print("You have no active throwing weapon.");
+            return;
+        }
         do_cmd_throw_from_slot(item);
         return;
     }
 
-    {
-        int requested_mode = player_active_weapon_mode_for_quiver(quiver);
-        bool quick_throw = player_can_quick_throw_from_quiver(item)
-            && player_can_treat_as_throwing_flags(o_ptr, ammo_f3);
-
-        if (player_active_weapon_mode() != requested_mode)
-        {
-            if (player_active_weapon_is_melee() && quick_throw)
-            {
-                do_cmd_throw_from_slot(item);
-                return;
-            }
-
-            if (!player_set_active_weapon_mode(requested_mode, true, true))
-                return;
-
-            if (p_ptr->energy_use > 0)
-                return;
-        }
-    }
-
-    if (player_can_treat_as_throwing_flags(o_ptr, ammo_f3))
-    {
-        do_cmd_throw_from_slot(item);
-        return;
-    }
-
-    /* Get the "bow" (if any) */
+    /* Get the active bow before asking which ammunition to spend. */
     j_ptr = &inventory[INVEN_BOW];
-
-    /* Require a usable launcher */
     if (!j_ptr->tval || !p_ptr->ammo_tval)
     {
         msg_print("You have nothing to fire with.");
         return;
     }
+
+    item = player_quiver_selected_arrow_slot();
+    if (item < 0)
+    {
+        msg_print("You have no arrows in your quiver.");
+        return;
+    }
+    o_ptr = player_quiver_arrow_object(item);
+    if (!o_ptr)
+    {
+        msg_print("You have no arrows in your quiver.");
+        return;
+    }
+    selected_arrows = o_ptr->number;
+    returning_arrow = false;
+    object_flags4(o_ptr, &ammo_f1, &ammo_f2, &ammo_f3, &ammo_f4);
 
     /* Base range */
     tdis = archery_range(j_ptr);
@@ -521,6 +520,7 @@ void do_cmd_fire(int quiver)
     {
         ty = p_ptr->target_row;
         tx = p_ptr->target_col;
+        clear_location_target = (p_ptr->target_who == 0);
 
         m_ptr = &mon_list[cave_m_idx[ty][tx]];
         r_ptr = &r_info[m_ptr->r_idx];
@@ -555,7 +555,8 @@ void do_cmd_fire(int quiver)
 
     /* Set pickup on fired arrow */
     i_ptr->pickup = true;
-    i_ptr->pickup_slot = item;
+    i_ptr->pickup_slot = INVEN_QUIVER1;
+    p_ptr->redraw |= PR_QUIVER;
 
     /* Set bonus: warding girdle glyphs on impact */
     warding_girdle_active
@@ -608,6 +609,8 @@ void do_cmd_fire(int quiver)
 
     for (shot = 0; shot < shots; shot++)
     {
+        if (shot >= selected_arrows)
+            break;
         bool hit_wall = false;
         bool ghost_arrow = false;
         bool warding_girdle_triggered = false;
@@ -623,19 +626,8 @@ void do_cmd_fire(int quiver)
         targets_remaining = false;
 
         /* Reduce and describe inventory */
-        if (!returning_arrow && item >= 0)
-        {
-            inven_item_increase(item, -1);
-            inven_item_describe(item);
-            inven_item_optimize(item);
-        }
-
-        /* Reduce and describe floor item */
-        else if (!returning_arrow)
-        {
-            floor_item_increase(0 - item, -1);
-            floor_item_optimize(0 - item);
-        }
+        if (!returning_arrow)
+            arrows_spent++;
 
         /* Project along the path */
         for (i = 0; i < path_n; ++i)
@@ -843,6 +835,7 @@ void do_cmd_fire(int quiver)
                 }
 
                 song_disguise_note_player_attack(cave_m_idx[y][x]);
+                varda_quest_note_duruin_ranged_attack(m_ptr);
 
                 /* If it hit */
                 if (hit_result > 0)
@@ -1252,6 +1245,9 @@ void do_cmd_fire(int quiver)
             drop_near(i_ptr, breakage_chance(i_ptr, hit_wall), final_y, final_x);
     }
 
+    if (arrows_spent > 0)
+        player_quiver_remove_arrows(item, arrows_spent);
+
     /* Have to set this here as well, just in case... */
     /* Monsters might notice */
     player_attacked = true;
@@ -1263,12 +1259,28 @@ void do_cmd_fire(int quiver)
         attacks_of_opportunity(first_y, first_x);
     else
         attacks_of_opportunity(0, 0);
+
+    /* A manually aimed empty square is an input for this shot, not a lasting
+     * target.  Location targets never invalidate by themselves, so retaining
+     * one leaves the target cursor highlighted indefinitely.  Monster targets
+     * remain tracked as before. */
+    if (clear_location_target)
+    {
+        target_set_monster(0);
+        health_track(0);
+        (void)Term_set_cursor(false);
+        Term_fresh();
+    }
 }
 
 bool do_cmd_fire_at_adjacent(int y, int x)
 {
     int dir;
     int quiver;
+    bool old_target_set;
+    int old_target_who;
+    int old_target_row;
+    int old_target_col;
 
     if (!player_active_weapon_is_ranged())
         return false;
@@ -1280,265 +1292,229 @@ bool do_cmd_fire_at_adjacent(int y, int x)
         return false;
 
     quiver = player_active_weapon_quiver_number();
+    old_target_set = p_ptr->target_set ? true : false;
+    old_target_who = p_ptr->target_who;
+    old_target_row = p_ptr->target_row;
+    old_target_col = p_ptr->target_col;
+
     p_ptr->command_dir = dir;
     do_cmd_fire(quiver);
+    restore_target_after_implicit_fire(
+        old_target_set, old_target_who, old_target_row, old_target_col);
     return true;
 }
 
-/*handle special effects of throwing certain potions*/
-static bool thrown_potion_effects(object_type* o_ptr, bool* is_dead, int m_idx)
+static cptr thrown_potion_effect_log_message(const object_type* o_ptr)
 {
-    monster_type* m_ptr = &mon_list[m_idx];
-    monster_race* r_ptr = &r_info[m_ptr->r_idx];
-    monster_lore* l_ptr = &l_list[m_ptr->r_idx];
+    if (!o_ptr || o_ptr->tval != TV_POTION)
+        return NULL;
 
-    int y = m_ptr->fy;
-    int x = m_ptr->fx;
-
-    bool ident = false;
-
-    bool un_confuse = false;
-    bool un_stun = false;
-
-    bool used_potion = true;
-
-    /* Hold the monster name */
-    char m_name[80];
-    char m_poss[80];
-
-    /* Get the monster name*/
-    monster_desc(m_name, sizeof(m_name), m_ptr, 0);
-
-    /* Get the monster possessive ("his"/"her"/"its") */
-    monster_desc(m_poss, sizeof(m_name), m_ptr, 0x22);
-
-    /* Analyze the potion */
     switch (o_ptr->sval)
     {
     case SV_POTION_SLOWNESS:
-    {
-        /*slowness explosion at the site, radius 0*/
-        ident = explosion(-1, 0, y, x, 0, 0, 10, GF_SLOW);
-        break;
-    }
-
+        return "A slowing vapour bursts from the bottle.";
     case SV_POTION_CONFUSION:
+        return "A bewildering haze bursts from the bottle.";
+    case SV_POTION_true_SIGHT:
+        return "A clarifying mist bursts from the bottle.";
+    case SV_POTION_POISON:
+        return "A poisonous cloud bursts from the bottle.";
+    case SV_POTION_ORCISH_LIQUOR:
+        return "The liquor bursts into flame.";
+    case SV_POTION_BLINDNESS:
+        return "A blinding spray bursts from the bottle.";
+    case SV_POTION_DEC_DEX:
+        return "A slick haze bursts from the bottle.";
+    case SV_POTION_DEC_GRA:
+        return "A spirit-severing mist bursts from the bottle.";
+    default:
+        return NULL;
+    }
+}
+
+/* Apply a supported potion to the impact tile and every adjacent tile. */
+static bool thrown_potion_effects(object_type* o_ptr, int center_y, int center_x)
+{
+    bool ident = false;
+    bool affected = false;
+    cptr effect_message;
+    int y, x;
+
+    if (!potion_has_thrown_effect(o_ptr))
+        return false;
+
+    effect_message = thrown_potion_effect_log_message(o_ptr);
+    if (effect_message)
+        msg_print(effect_message);
+
+    /* Projection effects already handle every monster and item in the radius,
+     * including their normal applied/resisted log messages. */
+    switch (o_ptr->sval)
     {
-        /*confusion explosion at the site, radius 0*/
-        ident = explosion(-1, 0, y, x, 0, 0, 10, GF_CONFUSION);
+    case SV_POTION_SLOWNESS:
+        ident = explosion(-1, 1, center_y, center_x, 0, 0, 10, GF_SLOW);
+        break;
+    case SV_POTION_CONFUSION:
+        ident = explosion(-1, 1, center_y, center_x, 0, 0, 10, GF_CONFUSION);
+        break;
+    case SV_POTION_POISON:
+        ident = explosion(-1, 1, center_y, center_x, 5, 4, 0, GF_POIS);
+        break;
+    case SV_POTION_ORCISH_LIQUOR:
+        ident = explosion(-1, 1, center_y, center_x, 3, 4, 0, GF_FIRE);
+        break;
+    default:
+        /* The remaining effects are monster-specific and are applied below. */
         break;
     }
 
-    case SV_POTION_true_SIGHT:
+    for (y = center_y - 1; y <= center_y + 1; y++)
     {
-        if ((!m_ptr->ml) && (r_ptr->flags2 & (RF2_INVISIBLE)))
+        for (x = center_x - 1; x <= center_x + 1; x++)
         {
-            /* Mark as visible */
-            m_ptr->ml = true;
+            int m_idx;
+            monster_type* m_ptr;
+            monster_race* r_ptr;
+            monster_lore* l_ptr;
+            char m_name[80];
 
-            /*re-draw the spot*/
-            lite_spot(y, x);
+            if (!in_bounds(y, x) || distance(center_y, center_x, y, x) > 1)
+                continue;
+            if ((y != center_y || x != center_x)
+                && !los(center_y, center_x, y, x))
+            {
+                continue;
+            }
 
-            /* Update the monster name*/
+            m_idx = cave_m_idx[y][x];
+            if (m_idx <= 0)
+                continue;
+
+            m_ptr = &mon_list[m_idx];
+            r_ptr = &r_info[m_ptr->r_idx];
+            l_ptr = &l_list[m_ptr->r_idx];
             monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
-            /*monster forgets player history*/
-            msg_format("%^s appears for an instant!", m_name);
-
-            /*update the lore*/
-            l_ptr->flags2 |= (RF2_INVISIBLE);
-
-            ident = true;
-        }
-
-        /* Potion isn't idntified */
-        else
-            used_potion = false;
-
-        break;
-    }
-
-    case SV_POTION_POISON:
-    {
-        /*poison burst at the site, radius 0*/
-        ident = explosion(-1, 0, y, x, 5, 4, 0, GF_POIS);
-        break;
-    }
-
-    case SV_POTION_ORCISH_LIQUOR:
-    {
-        /* Flammable rotgut bursts into flame on impact. */
-        ident = explosion(-1, 0, y, x, 3, 4, 0, GF_FIRE);
-        break;
-    }
-
-    case SV_POTION_BLINDNESS:
-    {
-        /* The blinding draught makes the foe lose your trail. */
-        if (m_ptr->alertness >= ALERTNESS_UNWARY)
-        {
-            set_alertness(
-                m_ptr, rand_range(ALERTNESS_MIN, ALERTNESS_UNWARY - 1));
-
-            if (m_ptr->ml)
+            switch (o_ptr->sval)
             {
-                msg_format("%^s is blinded and loses your trail.", m_name);
-                ident = true;
-            }
-        }
-        else
-        {
-            used_potion = false;
-        }
+            case SV_POTION_true_SIGHT:
+                if (!m_ptr->ml && (r_ptr->flags2 & RF2_INVISIBLE))
+                {
+                    m_ptr->ml = true;
+                    lite_spot(y, x);
+                    monster_desc(m_name, sizeof(m_name), m_ptr, 0);
+                    msg_format("%^s appears for an instant!", m_name);
+                    l_ptr->flags2 |= RF2_INVISIBLE;
+                    ident = true;
+                    affected = true;
+                }
+                break;
 
-        break;
-    }
+            case SV_POTION_BLINDNESS:
+                if (m_ptr->alertness >= ALERTNESS_UNWARY)
+                {
+                    set_alertness(m_ptr,
+                        rand_range(ALERTNESS_MIN, ALERTNESS_UNWARY - 1));
+                    if (m_ptr->ml)
+                    {
+                        msg_format("%^s is blinded and loses your trail.",
+                            m_name);
+                        ident = true;
+                    }
+                    affected = true;
+                }
+                break;
 
-    case SV_POTION_DEC_DEX:
-    {
-        /* Slippery fumes throw the foe off balance, costing it a turn. */
-        if (!m_ptr->skip_next_turn)
-        {
-            m_ptr->skip_next_turn = true;
+            case SV_POTION_DEC_DEX:
+                if (!m_ptr->skip_next_turn)
+                {
+                    m_ptr->skip_next_turn = true;
+                    if (m_ptr->ml)
+                    {
+                        msg_format("%^s staggers, thrown off balance.", m_name);
+                        ident = true;
+                    }
+                    affected = true;
+                }
+                break;
 
-            if (m_ptr->ml)
-            {
-                msg_format("%^s staggers, thrown off balance.", m_name);
-                ident = true;
-            }
-        }
-        else
-        {
-            used_potion = false;
-        }
+            case SV_POTION_DEC_GRA:
+                if (m_ptr->ml && (r_ptr->flags3 & RF3_NO_STUN))
+                    l_ptr->flags3 |= RF3_NO_STUN;
 
-        break;
-    }
+                if (!(r_ptr->flags2 & RF2_MINDLESS)
+                    && !monster_race_is_vala(m_ptr->r_idx)
+                    && !(r_ptr->flags3 & RF3_NO_STUN))
+                {
+                    m_ptr->stunned
+                        = (byte)MIN(m_ptr->stunned + damroll(4, 4), 255);
+                    if (m_ptr->alertness >= ALERTNESS_UNWARY)
+                    {
+                        set_alertness(m_ptr,
+                            rand_range(ALERTNESS_MIN, ALERTNESS_UNWARY - 1));
+                    }
+                    if (m_ptr->ml)
+                    {
+                        msg_format("%^s's spirit reels; it stands witless.",
+                            m_name);
+                        ident = true;
+                    }
+                    affected = true;
+                }
+                break;
 
-    case SV_POTION_DEC_GRA:
-    {
-        /*
-         * Disconnection severs the foe's spirit from its body for a moment,
-         * leaving it dazed and witless.  The mindless have no spirit to sever,
-         * and a few beings cannot be reached this way.
-         */
-        if ((r_ptr->flags2 & (RF2_MINDLESS))
-            || monster_race_is_vala(m_ptr->r_idx)
-            || (r_ptr->flags3 & (RF3_NO_STUN)))
-        {
-            if (m_ptr->ml && (r_ptr->flags3 & (RF3_NO_STUN)))
-                l_ptr->flags3 |= (RF3_NO_STUN);
-
-            used_potion = false;
-        }
-        else
-        {
-            m_ptr->stunned = (byte)MIN(m_ptr->stunned + damroll(4, 4), 255);
-
-            /* Its spirit recoils inward: it loses your trail for a moment. */
-            if (m_ptr->alertness >= ALERTNESS_UNWARY)
-                set_alertness(
-                    m_ptr, rand_range(ALERTNESS_MIN, ALERTNESS_UNWARY - 1));
-
-            if (m_ptr->ml)
-            {
-                msg_format("%^s's spirit reels; it stands witless.", m_name);
-                ident = true;
-            }
-        }
-
-        break;
-    }
-
-    /*potion just gets thrown as normal object*/
-    default:
-    {
-        used_potion = false;
-
-        break;
-    }
-    }
-
-    /*monster is now dead, skip messages below*/
-    if (cave_m_idx[y][x] == 0)
-    {
-        un_confuse = false;
-        un_stun = false;
-        *is_dead = true;
-    }
-
-    if (un_confuse)
-    {
-        if (m_ptr->confused)
-        {
-            /* No longer confused */
-            m_ptr->confused = 0;
-
-            /* Dump a message */
-            if (m_ptr->ml)
-            {
-                msg_format("%^s is no longer confused.", m_name);
-
-                ident = true;
+            default:
+                break;
             }
         }
     }
 
-    if (un_stun)
+    if (!affected)
     {
-        if (m_ptr->stunned)
+        switch (o_ptr->sval)
         {
-            /* No longer confused */
-            m_ptr->stunned = 0;
-
-            /* Dump a message */
-            if (m_ptr->ml)
-            {
-                msg_format("%^s is no longer stunned.", m_name);
-
-                ident = true;
-            }
+        case SV_POTION_true_SIGHT:
+            msg_print("The clarifying mist reveals nothing.");
+            break;
+        case SV_POTION_BLINDNESS:
+            msg_print("The blinding spray has no apparent effect.");
+            break;
+        case SV_POTION_DEC_DEX:
+            msg_print("The slick haze has no apparent effect.");
+            break;
+        case SV_POTION_DEC_GRA:
+            msg_print("The spirit-severing mist has no apparent effect.");
+            break;
+        default:
+            break;
         }
     }
 
-    /*inform them of the potion, mark it as known*/
-    if ((ident) && (!(k_info[o_ptr->k_idx].aware)))
+    /* An observed effect identifies the potion. */
+    if (ident && !k_info[o_ptr->k_idx].aware)
     {
         char o_name[80];
 
-        /* Identify it fully */
         object_aware(o_ptr);
         object_known(o_ptr);
-
-        /* Description */
         object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
-
-        /* Describe the potion */
         msg_format("You threw %s.", o_name);
-
-        /* Combine / Reorder the pack (later) */
-        p_ptr->notice |= (PN_COMBINE | PN_REORDER);
-
-        /* Window stuff */
-        p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
     }
 
-    /* Redraw if necessary*/
-    if (used_potion)
-        p_ptr->redraw |= (PR_HEALTHBAR);
-
-    /* Handle stuff */
+    p_ptr->redraw |= PR_HEALTHBAR;
     handle_stuff();
-
-    return (used_potion);
+    return true;
 }
 
-static bool quiver_slot_can_be_thrown(int slot)
+static bool active_throwing_slot_can_be_thrown(int slot)
 {
     object_type* o_ptr;
     u32b f1 = 0, f2 = 0, f3 = 0, f4 = 0;
 
-    if (slot != INVEN_QUIVER1 && slot != INVEN_QUIVER2)
+    if (slot != player_active_throwing_weapon_slot()
+        || player_active_weapon_kind() != PLAYER_ACTIVE_WEAPON_KIND_THROWING)
         return false;
 
     o_ptr = &inventory[slot];
@@ -1549,26 +1525,38 @@ static bool quiver_slot_can_be_thrown(int slot)
     return player_can_treat_as_throwing_flags(o_ptr, f3);
 }
 
-/* Whether a resolved slot is a legal source to quick-throw from. */
-static bool throw_slot_is_valid(int item)
+static object_type* throw_item_object(int item)
 {
-    if (item == INVEN_QUIVER1 || item == INVEN_QUIVER2)
-        return quiver_slot_can_be_thrown(item);
+    if (item >= SUPPLIES_INDEX)
+        return supplies_entry_at(item - SUPPLIES_INDEX);
+    return player_inventory_object(item);
+}
 
-    if (item >= 0 && item < INVEN_PACK)
+/* Whether a resolved slot is a legal source for t's throw command. */
+static bool throw_command_slot_is_valid(int item)
+{
+    object_type* o_ptr;
+
+    if (player_can_quick_throw_from_harness(item)
+        || player_can_power_throw_from_harness(item))
     {
-        object_type* o_ptr = &inventory[item];
-
-        return o_ptr->k_idx && (o_ptr->tval == TV_POTION)
-            && player_can_throw_potions();
+        return true;
     }
+
+    o_ptr = throw_item_object(item);
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    if (item >= SUPPLIES_INDEX || player_inventory_handle_is_carried(item))
+        return player_can_throw_potions() && potion_has_thrown_effect(o_ptr);
 
     return false;
 }
 
 /*
- * Build the list of inventory slots the player may quick-throw: any quiver
- * holding a throwing weapon, plus every carried potion when Alchemy is known.
+ * Build the list of inventory slots available to t: Quick Throw daggers and
+ * currently eligible Power Throw weapons anywhere on the Harness, plus
+ * carried potions with real thrown effects when Alchemy is known.
  * Returns the number of candidates written to "slots".
  */
 static int collect_throw_candidates(int* slots, int max)
@@ -1579,19 +1567,46 @@ static int collect_throw_candidates(int* slots, int max)
     if (!slots || max <= 0)
         return 0;
 
-    if ((n < max) && quiver_slot_can_be_thrown(INVEN_QUIVER1))
-        slots[n++] = INVEN_QUIVER1;
-    if ((n < max) && quiver_slot_can_be_thrown(INVEN_QUIVER2))
-        slots[n++] = INVEN_QUIVER2;
+    for (i = 0; i < INVEN_TOTAL && n < max; i++)
+    {
+        if (player_can_quick_throw_from_harness(i)
+            || player_can_power_throw_from_harness(i))
+        {
+            slots[n++] = i;
+        }
+    }
+
+    for (i = 0; i < player_carried_extra_entry_count() && n < max; i++)
+    {
+        int item = CARRIED_EXTRA_INDEX + i;
+
+        if (player_can_quick_throw_from_harness(item)
+            || player_can_power_throw_from_harness(item))
+        {
+            slots[n++] = item;
+        }
+    }
 
     if (player_can_throw_potions())
     {
-        for (i = 0; (i < INVEN_PACK) && (n < max); i++)
+        for (i = 0; (i < supplies_entry_count()) && (n < max); i++)
         {
-            object_type* o_ptr = &inventory[i];
+            object_type* o_ptr = supplies_entry_at(i);
 
-            if (o_ptr->k_idx && (o_ptr->tval == TV_POTION))
-                slots[n++] = i;
+            if (potion_has_thrown_effect(o_ptr))
+                slots[n++] = SUPPLIES_INDEX + i;
+        }
+
+        /* Keep compatibility with saves that have not ingested pack supplies. */
+        for (int ordinal = 0;
+             ordinal < player_pack_entry_count() && n < max;
+             ordinal++)
+        {
+            int item = player_pack_entry_handle_at(ordinal);
+            object_type* o_ptr = player_inventory_object(item);
+
+            if (potion_has_thrown_effect(o_ptr))
+                slots[n++] = item;
         }
     }
 
@@ -1599,103 +1614,103 @@ static int collect_throw_candidates(int* slots, int max)
 }
 
 /*
- * Item-tester hook used by the throw chooser overlay: accept only quick-throw
- * candidates (quiver throwing weapons and, with Alchemy, carried potions).
+ * Choose a Quick Throw or Power Throw source.  When several Harness or Belt
+ * weapons are eligible, the player chooses the physical source.
  */
-static bool select_throw_slot(bool automatic, int* item)
+static bool select_throw_slot(int* item)
 {
-    int slots[INVEN_PACK + 2];
+    int capacity = INVEN_TOTAL + supplies_entry_count()
+        + player_pack_entry_count();
+    int* slots;
     int count;
 
     if (!item)
         return false;
 
-    if (automatic)
-    {
-        int active_slot = player_active_weapon_quiver_slot();
-
-        if (active_slot && quiver_slot_can_be_thrown(active_slot))
-        {
-            *item = active_slot;
-            return true;
-        }
-
-        if (player_active_weapon_is_melee())
-        {
-            int quick_slot = player_quick_throw_quiver_slot();
-            if (quick_slot)
-            {
-                *item = quick_slot;
-                return true;
-            }
-
-            quick_slot = player_power_throw_quiver_slot();
-            if (quick_slot)
-            {
-                *item = quick_slot;
-                return true;
-            }
-        }
-
-        msg_print("Your active quiver has nothing designed for throwing.");
-        return false;
-    }
-
-    count = collect_throw_candidates(slots, (int)(sizeof(slots) / sizeof(slots[0])));
+    slots = mem_alloc_array(MAX(capacity, 1), int);
+    count = collect_throw_candidates(slots, capacity);
 
     if (count <= 0)
     {
         msg_print("You have nothing ready to throw.");
+        slots = mem_free(slots);
         return false;
     }
     if (count == 1)
     {
         *item = slots[0];
+        slots = mem_free(slots);
         return true;
     }
 
     /*
-     * More than one possibility (daggers in both quivers and/or potions):
+     * More than one possibility (Harness/Belt weapons and/or potions):
      * choose from a small overlay anchored at the player, like the trap and
      * door interaction popups.  This never draws on the message row.
      */
     {
-        ui_question_option options[INVEN_PACK + 2];
-        char labels[INVEN_PACK + 2][80];
+        ui_question_option* options = mem_alloc_array(count,
+            ui_question_option);
+        const object_type** object_icons = mem_alloc_array(count,
+            const object_type*);
+        char (*labels)[80] = SDL_calloc((size_t)count, sizeof(*labels));
         int i;
         int choice;
 
         for (i = 0; i < count; i++)
         {
-            object_type* o_ptr = &inventory[slots[i]];
+            object_type* o_ptr = throw_item_object(slots[i]);
             char o_name[80];
 
+            if (!o_ptr || !o_ptr->k_idx)
+            {
+                slots = mem_free(slots);
+                options = mem_free(options);
+                object_icons = mem_free(object_icons);
+                labels = mem_free(labels);
+                return false;
+            }
             object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
-            if (slots[i] == INVEN_QUIVER1)
-                strnfmt(labels[i], sizeof(labels[i]), "%s (1st quiver)", o_name);
-            else if (slots[i] == INVEN_QUIVER2)
-                strnfmt(labels[i], sizeof(labels[i]), "%s (2nd quiver)", o_name);
+            if (slots[i] == INVEN_BELT)
+                strnfmt(labels[i], sizeof(labels[i]), "%s (belt)", o_name);
+            else if (slots[i] >= 0 && slots[i] < INVEN_TOTAL)
+                strnfmt(labels[i], sizeof(labels[i]), "%s (Harness)", o_name);
             else
                 strnfmt(labels[i], sizeof(labels[i]), "%s", o_name);
 
             options[i].key = (char)('a' + i);
             options[i].label = labels[i];
-            options[i].attr = TERM_L_WHITE;
+            options[i].attr = weapon_glows(o_ptr)
+                ? object_display_color(o_ptr, TERM_L_BLUE)
+                : object_display_color(o_ptr,
+                      tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+            options[i].disabled = false;
+            object_icons[i] = o_ptr;
         }
 
-        choice = ui_question_ask("Quick throw", "Choose what to hurl.", options,
-            count, p_ptr->py, p_ptr->px, 0);
+        choice = ui_question_ask_objects("Throw", "Choose what to hurl.",
+            options, object_icons, count, p_ptr->py, p_ptr->px, 0);
 
         if (choice < 0 || choice >= count)
+        {
+            slots = mem_free(slots);
+            options = mem_free(options);
+            object_icons = mem_free(object_icons);
+            labels = mem_free(labels);
             return false;
+        }
 
         *item = slots[choice];
+        slots = mem_free(slots);
+        options = mem_free(options);
+        object_icons = mem_free(object_icons);
+        labels = mem_free(labels);
         return true;
     }
 }
 
 /*
- * Throw an object from a quiver.
+ * Throw an active weapon, or use Quick Throw/Power Throw from the Harness.
  *
  * Note: "unseen" monsters are very hard to hit.
  *
@@ -1736,6 +1751,9 @@ void do_cmd_throw(bool automatic)
     bool has_impale_ability = false;
     bool power_throw_candidate = false;
     bool power_throw_attack = false;
+    bool active_throwing_depleted = false;
+    bool from_supplies = false;
+    int supply_index = -1;
     int power_throw_y = 0;
     int power_throw_x = 0;
     int remaining_impale_targets = 0;
@@ -1766,29 +1784,33 @@ void do_cmd_throw(bool automatic)
     {
         item = preset_item;
         automatic = false;
-        if (item != INVEN_QUIVER1 && item != INVEN_QUIVER2)
+        if (!active_throwing_slot_can_be_thrown(item))
         {
             throw_pending_slot = THROW_PENDING_NONE;
-            msg_print("You can only throw items from a quiver.");
+            msg_print("You can only make a normal throw with your active throwing weapon.");
             return;
         }
     }
 
     throw_pending_slot = THROW_PENDING_NONE;
 
-    if (!preset && !select_throw_slot(automatic, &item))
+    if (!preset && !select_throw_slot(&item))
         return;
 
-    /* Get the object */
-    if (!throw_slot_is_valid(item))
+    /* Preset callers use the active throwing weapon; t is Quick/Power Throw. */
+    if ((preset && !active_throwing_slot_can_be_thrown(item))
+        || (!preset && !throw_command_slot_is_valid(item)))
     {
         msg_print("You cannot throw that.");
         return;
     }
 
-    o_ptr = &inventory[item];
+    from_supplies = (item >= SUPPLIES_INDEX);
+    if (from_supplies)
+        supply_index = item - SUPPLIES_INDEX;
+    o_ptr = throw_item_object(item);
 
-    if (!o_ptr->k_idx)
+    if (!o_ptr || !o_ptr->k_idx)
     {
         if (preset)
             msg_print("You have nothing ready to throw.");
@@ -1796,7 +1818,7 @@ void do_cmd_throw(bool automatic)
     }
 
     /* Hack -- Cannot remove cursed items */
-    if ((item >= INVEN_WIELD) && cursed_p(o_ptr))
+    if (player_inventory_handle_is_equipped(item) && cursed_p(o_ptr))
     {
         if (p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
         {
@@ -1822,8 +1844,8 @@ void do_cmd_throw(bool automatic)
     /* Examine the item */
     object_flags4(o_ptr, &f1, &f2, &f3, &f4);
     {
-        bool throwing_potion = (o_ptr->tval == TV_POTION)
-            && player_can_throw_potions();
+        bool throwing_potion = player_can_throw_potions()
+            && potion_has_thrown_effect(o_ptr);
 
         if (!player_can_treat_as_throwing_flags(o_ptr, f3) && !throwing_potion)
         {
@@ -1832,33 +1854,25 @@ void do_cmd_throw(bool automatic)
         }
     }
 
-    power_throw_candidate = player_can_power_throw_from_quiver(item);
+    power_throw_candidate = player_can_power_throw_from_harness(item);
 
-    // Aim automatically if asked
+    /* Aim at the nearest clear enemy if asked.  Do not retain an older,
+     * farther target: this mode is the one-tap Quick Touch action. */
     if (automatic)
     {
-        if (target_okay(tdis))
-            dir = 5;
+        int target_m_idx;
 
-        else
+        get_sorted_target_list(TARGET_KILL, tdis);
+        if (!temp_n)
         {
-            /* Prepare the "temp" array */
-            get_sorted_target_list(TARGET_KILL, tdis);
-
-            /* Monster */
-            if (temp_n)
-            {
-                target_set_monster(cave_m_idx[temp_y[0]][temp_x[0]]);
-                health_track(cave_m_idx[temp_y[0]][temp_x[0]]);
-                dir = 5;
-            }
-
-            else
-            {
-                msg_print("No clear target for automatic throwing.");
-                return;
-            }
+            msg_print("No clear target for automatic throwing.");
+            return;
         }
+
+        target_m_idx = cave_m_idx[temp_y[0]][temp_x[0]];
+        target_set_monster(target_m_idx);
+        health_track(target_m_idx);
+        dir = 5;
 
         if (p_ptr->confused)
         {
@@ -1875,11 +1889,13 @@ void do_cmd_throw(bool automatic)
     else if (!get_aim_dir(&dir, tdis))
         return;
 
-    int original_slot = (item >= INVEN_WIELD) ? item : -1;
+    int original_slot = player_inventory_handle_is_equipped(item) ? item : -1;
 
-    /* If we're throwing from equipment (including quivers), set redraw flag */
-    bool throwing_from_equipment = (original_slot >= INVEN_WIELD);
-    if (throwing_from_equipment && (original_slot == INVEN_QUIVER1 || original_slot == INVEN_QUIVER2))
+    /* The belt and active ranged rows may change when a weapon is thrown. */
+    bool throwing_from_equipment =
+        player_inventory_handle_is_equipped(original_slot);
+    if (throwing_from_equipment
+        && (original_slot == INVEN_WIELD || original_slot == INVEN_BELT))
     {
         p_ptr->redraw |= (PR_QUIVER);
     }
@@ -1895,8 +1911,8 @@ void do_cmd_throw(bool automatic)
     /* Check for "target request" */
     if (dir == 5)
     {
-        log_debug("do_cmd_throw: dir=5, checking target_okay(tdis=%d)", tdis);
-        log_debug("do_cmd_throw: BEFORE target_okay: target_row=%d target_col=%d target_who=%d",
+        log_trace("do_cmd_throw: dir=5, checking target_okay(tdis=%d)", tdis);
+        log_trace("do_cmd_throw: BEFORE target_okay: target_row=%d target_col=%d target_who=%d",
             p_ptr->target_row, p_ptr->target_col, p_ptr->target_who);
         
         if (!target_okay(tdis))
@@ -1905,7 +1921,7 @@ void do_cmd_throw(bool automatic)
             return;
         }
 
-        log_debug("do_cmd_throw: AFTER target_okay: target_row=%d target_col=%d target_who=%d",
+        log_trace("do_cmd_throw: AFTER target_okay: target_row=%d target_col=%d target_who=%d",
             p_ptr->target_row, p_ptr->target_col, p_ptr->target_who);
 
         ty = p_ptr->target_row;
@@ -1983,6 +1999,12 @@ void do_cmd_throw(bool automatic)
         }
     }
 
+    /* Eligibility was first checked before targeting.  Revalidate the
+     * authoritative ownership/readiness state before arming the combined
+     * attack so a stale candidate can never reach combat resolution. */
+    if (power_throw_candidate && !player_power_throw_ready())
+        power_throw_candidate = false;
+
     if (power_throw_candidate)
     {
         if (dir == 5 && !spatial_target && p_ptr->target_who > 0
@@ -2007,27 +2029,10 @@ void do_cmd_throw(bool automatic)
         }
     }
 
-    /*
-     * A Power Throw is made from melee stance.  Other quivered throws switch
-     * to their ranged mode unless they qualify for the dagger quick-throw.
-     */
-    if (item == INVEN_QUIVER1 || item == INVEN_QUIVER2)
+    if (!preset && power_throw_candidate && !power_throw_attack)
     {
-        int requested_mode = (item == INVEN_QUIVER2)
-            ? PLAYER_ACTIVE_WEAPON_RANGED_2
-            : PLAYER_ACTIVE_WEAPON_RANGED_1;
-
-        if (player_active_weapon_mode() != requested_mode
-            && !power_throw_attack
-            && !(player_active_weapon_is_melee()
-                && player_can_quick_throw_from_quiver(item)))
-        {
-            if (!player_set_active_weapon_mode(requested_mode, true, true))
-                return;
-
-            if (p_ptr->energy_use > 0)
-                return;
-        }
+        msg_print("Power Throw requires an adjacent enemy.");
+        return;
     }
 
     /* Set dummy variables to pass to project_path (so it doesn't clobber the real ones). */
@@ -2039,7 +2044,7 @@ void do_cmd_throw(bool automatic)
         path_flg = 0;
 
     /* DEBUG: Log throw parameters before path calculation */
-    log_debug("do_cmd_throw: dir=%d py=%d px=%d ty=%d tx=%d tdis=%d spatial=%d",
+    log_trace("do_cmd_throw: dir=%d py=%d px=%d ty=%d tx=%d tdis=%d spatial=%d",
         dir, p_ptr->py, p_ptr->px, ty, tx, tdis, spatial_target ? 1 : 0);
 
     /* Calculate the path */
@@ -2048,10 +2053,10 @@ void do_cmd_throw(bool automatic)
     path_n = ABS(path_n);
 
     /* DEBUG: Log path result */
-    log_debug("do_cmd_throw: path_n=%d after project_path", path_n);
+    log_trace("do_cmd_throw: path_n=%d after project_path", path_n);
     if (path_n > 0)
     {
-        log_debug("do_cmd_throw: first grid=(%d,%d) last grid=(%d,%d)",
+        log_trace("do_cmd_throw: first grid=(%d,%d) last grid=(%d,%d)",
             GRID_Y(path_g[0]), GRID_X(path_g[0]),
             GRID_Y(path_g[path_n-1]), GRID_X(path_g[path_n-1]));
     }
@@ -2071,20 +2076,30 @@ void do_cmd_throw(bool automatic)
     /* Single object */
     i_ptr->number = 1;
 
-    /* Set pickup on thrown quiver weapons so they can return to the quiver. */
+    /* Remember the active hand or belt so a surviving weapon can return. */
     i_ptr->pickup = true;
-    if ((original_slot == INVEN_QUIVER1) || (original_slot == INVEN_QUIVER2))
+    if (preset)
+        i_ptr->pickup_slot = PICKUP_SLOT_ACTIVE_THROWING;
+    else if (original_slot == INVEN_BELT)
         i_ptr->pickup_slot = original_slot;
     else
         i_ptr->pickup_slot = -1;
 
     /* Reduce and describe inventory */
-    if (item >= 0)
+    if (from_supplies)
     {
+        (void)supplies_consume_quantity(supply_index, 1);
+    }
+    else if (item >= 0)
+    {
+        /* Keep the throwing mode through this attack, but remember that its
+         * last weapon leaves the active hand empty. */
+        active_throwing_depleted = preset && item == INVEN_WIELD
+            && o_ptr->number == 1;
         inven_item_increase(item, -1);
         inven_item_describe(item);
         inven_item_optimize(item);
-        if ((item == INVEN_QUIVER1 || item == INVEN_QUIVER2)
+        if ((item == INVEN_QUIVER1 || item == INVEN_BELT)
             && inventory[item].k_idx && inventory[item].number <= 0)
         {
             if (p_ptr->equip_cnt > 0)
@@ -2218,14 +2233,15 @@ void do_cmd_throw(bool automatic)
             m_ptr = &mon_list[cave_m_idx[y][x]];
             r_ptr = &r_info[m_ptr->r_idx];
 
-            bool potion_effect = false;
-            int pdam = 0;
+            bool potion_effect = potion_has_thrown_effect(i_ptr);
             bool fatal_blow = false;
             int dist = distance(p_ptr->py, p_ptr->px, m_ptr->fy, m_ptr->fx);
             int throw_attack_penalty = throwing_range_attack_penalty(dist, tdis);
             int throw_ds_penalty = throwing_range_ds_penalty(dist, tdis);
             bool power_throw_hit = power_throw_attack
                 && y == power_throw_y && x == power_throw_x;
+            int power_throw_concentration_bonus = 0;
+            int power_throw_focus_bonus = 0;
             object_type* melee_o_ptr = &inventory[INVEN_WIELD];
             u32b melee_f1 = 0, melee_f2 = 0, melee_f3 = 0, melee_f4 = 0;
             int melee_attack_mod = 0;
@@ -2241,8 +2257,20 @@ void do_cmd_throw(bool automatic)
 
             // Unaware targets are easier to hit with well-placed throws too.
             int stealth_bonus = stealth_melee_bonus(m_ptr, true);
-            total_attack_mod
-                = total_player_attack(m_ptr, attack_mod + stealth_bonus);
+            if (power_throw_hit)
+            {
+                power_throw_concentration_bonus = concentration_bonus(y, x);
+                power_throw_focus_bonus = focused_attack_bonus();
+                total_attack_mod = total_player_attack_ex(m_ptr,
+                    attack_mod + stealth_bonus + power_throw_concentration_bonus
+                        + power_throw_focus_bonus,
+                    false, false);
+            }
+            else
+            {
+                total_attack_mod
+                    = total_player_attack(m_ptr, attack_mod + stealth_bonus);
+            }
             total_attack_mod += (dist / 5) - throw_attack_penalty;
 
             /* Monsters might notice */
@@ -2349,8 +2377,11 @@ void do_cmd_throw(bool automatic)
                 object_flags4(melee_o_ptr, &melee_f1, &melee_f2,
                     &melee_f3, &melee_f4);
                 melee_attack_mod = p_ptr->skill_use[S_MEL];
-                melee_total_attack_mod = total_player_attack(
-                    m_ptr, melee_attack_mod + melee_stealth_bonus);
+                melee_total_attack_mod = total_player_attack_ex(m_ptr,
+                    melee_attack_mod + melee_stealth_bonus
+                        + power_throw_concentration_bonus
+                        + power_throw_focus_bonus,
+                    false, false);
                 melee_hit_result = hit_roll_details(melee_total_attack_mod,
                     total_evasion_mod, PLAYER, m_ptr, false,
                     &melee_attack_die, &melee_evasion_die);
@@ -2386,6 +2417,7 @@ void do_cmd_throw(bool automatic)
             }
 
             song_disguise_note_player_attack(cave_m_idx[y][x]);
+            varda_quest_note_duruin_ranged_attack(m_ptr);
 
             /* Resolve every successful component against one protection roll. */
             if (hit_result > 0 || melee_hit_result > 0)
@@ -2399,8 +2431,11 @@ void do_cmd_throw(bool automatic)
                 bool thrown_hit = hit_result > 0;
                 bool melee_hit = melee_hit_result > 0;
 
-                msg_print("Power Throw combines all successful weapon damage "
-                          "against one armor roll.");
+                if (power_throw_hit)
+                {
+                    msg_print("Power Throw combines all successful weapon "
+                              "damage against one armor roll.");
+                }
 
                 /* Note the collision */
                 hit_body = thrown_hit;
@@ -2583,26 +2618,6 @@ void do_cmd_throw(bool automatic)
                         target_set_monster(cave_m_idx[y][x]);
                 }
 
-                /*special effects sometimes reveal the kind of potion*/
-                if (i_ptr->tval == TV_POTION)
-                {
-                    /*record monster hit points*/
-                    pdam = m_ptr->hp;
-
-                    msg_print("The bottle breaks.");
-
-                    /*returns true if the damage has already been handled*/
-                    potion_effect = (thrown_potion_effects(
-                        i_ptr, &fatal_blow, cave_m_idx[y][x]));
-
-                    /*check the change in monster hp*/
-                    pdam -= m_ptr->hp;
-
-                    /*monster could have been healed*/
-                    if (pdam < 0)
-                        pdam = 0;
-                }
-
                 // if a slay was noticed, then identify the weapon
                 if (noticed_flag)
                 {
@@ -2700,8 +2715,8 @@ void do_cmd_throw(bool automatic)
                     }
 
                     /* Message if applicable*/
-                    if ((!potion_effect) || (pdam > 0))
-                        message_pain(cave_m_idx[y][x], (pdam ? pdam : net_dam));
+                    if (!potion_effect)
+                        message_pain(cave_m_idx[y][x], net_dam);
                 }
 
                 if (remaining_impale_targets > 0)
@@ -2728,9 +2743,13 @@ void do_cmd_throw(bool automatic)
         }
     }
 
-    // need to print this message even if the potion missed
-    if (!hit_body && (i_ptr->tval == TV_POTION))
+    /* Potions burst at their final impact grid, even on a near miss, and
+     * splash every grid within radius one. */
+    if (i_ptr->tval == TV_POTION)
+    {
         msg_print("The bottle breaks.");
+        (void)thrown_potion_effects(i_ptr, y, x);
+    }
 
     /* Have to set this here as well, just in case... */
     /* Monsters might notice */
@@ -2744,13 +2763,13 @@ void do_cmd_throw(bool automatic)
         j /= 4;
 
     /* DEBUG: Log final drop position */
-    log_debug("do_cmd_throw: dropping at y=%d x=%d (player at %d,%d) hit_body=%d",
+    log_trace("do_cmd_throw: dropping at y=%d x=%d (player at %d,%d) hit_body=%d",
         y, x, p_ptr->py, p_ptr->px, hit_body ? 1 : 0);
 
     /* Drop (or break) near that location */
     drop_near(i_ptr, j, y, x);
 
-    if (power_throw_attack)
+    if (power_throw_attack || active_throwing_depleted)
     {
         (void)player_set_active_weapon_mode(
             PLAYER_ACTIVE_WEAPON_MELEE, false, false);

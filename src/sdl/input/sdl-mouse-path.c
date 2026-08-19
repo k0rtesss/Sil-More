@@ -7,41 +7,6 @@ bool sdl_mouse_path_grid_is_open_floor(int y, int x)
         && cave_feat[y][x] != FEAT_CHASM;
 }
 
-void sdl_mouse_path_feature_visual(int feat, byte* a, char* c)
-{
-    feature_type* f_ptr;
-
-    if (!a || !c)
-        return;
-
-    f_ptr = &f_info[feat];
-    if (graphics_are_ascii()) {
-        *a = f_ptr->d_attr;
-        *c = f_ptr->d_char;
-    } else {
-        *a = f_ptr->x_attr;
-        *c = f_ptr->x_char;
-    }
-}
-
-bool sdl_mouse_path_minimap_draws_terrain(int y, int x)
-{
-    byte a = TERM_DARK;
-    byte ta = TERM_DARK;
-    byte dark_a = TERM_DARK;
-    char c = ' ';
-    char tc = ' ';
-    char dark_c = ' ';
-
-    if (!p_ptr || !in_bounds(y, x))
-        return false;
-
-    map_info(y, x, &a, &c, &ta, &tc);
-    sdl_mouse_path_feature_visual(FEAT_NONE, &dark_a, &dark_c);
-
-    return (ta != dark_a) || (tc != dark_c);
-}
-
 bool sdl_mouse_path_grid_known(int y, int x)
 {
     u16b info;
@@ -57,10 +22,9 @@ bool sdl_mouse_path_grid_known(int y, int x)
         return true;
 
     info = cave_info[y][x];
-    return ((info & (CAVE_MARK | CAVE_SEEN)) != 0)
-        || ((info & CAVE_VIEW) && sdl_mouse_path_grid_is_open_floor(y, x))
-        || (sdl_mouse_path_grid_is_open_floor(y, x)
-            && sdl_mouse_path_minimap_draws_terrain(y, x));
+    /* CAVE_VIEW includes unlit line-of-sight grids.  Treating those as known
+     * lets the path preview reveal otherwise hidden corridor geometry. */
+    return (info & (CAVE_MARK | CAVE_SEEN)) != 0;
 }
 
 bool sdl_mouse_feature_known_for_action(int y, int x)
@@ -268,6 +232,12 @@ bool sdl_mouse_path_dirs_sprint_compatible(int newer_dir, int older_dir)
         || (newer_dir == cycle[chome[older_dir] + 1]);
 }
 
+bool sdl_mouse_path_grid_is_leapable_obstacle(int y, int x)
+{
+    return sdl_mouse_feature_known_for_action(y, x)
+        && player_grid_is_leapable_obstacle(y, x);
+}
+
 bool sdl_mouse_path_grid_is_safe_leap_landing(int y, int x)
 {
     int m_idx;
@@ -294,7 +264,7 @@ bool sdl_mouse_path_state_has_run_up(int y, int x, int dir, byte state)
     return sdl_mouse_path_dirs_sprint_compatible(dir, previous_dir);
 }
 
-bool sdl_mouse_path_can_step_into_chasm(int y, int x, int dir,
+bool sdl_mouse_path_can_step_into_leapable_obstacle(int y, int x, int dir,
     byte state)
 {
     int mid_y;
@@ -320,9 +290,7 @@ bool sdl_mouse_path_can_step_into_chasm(int y, int x, int dir,
 
     if (!in_bounds(mid_y, mid_x) || !in_bounds(land_y, land_x))
         return false;
-    if (cave_feat[mid_y][mid_x] != FEAT_CHASM)
-        return false;
-    if (!sdl_mouse_feature_known_for_action(mid_y, mid_x))
+    if (!sdl_mouse_path_grid_is_leapable_obstacle(mid_y, mid_x))
         return false;
 
     return sdl_mouse_path_grid_is_safe_leap_landing(land_y, land_x);
@@ -421,6 +389,7 @@ void sdl_mouse_path_search_free(void)
 {
     SDL_free(g_mouse_path_search.cost);
     SDL_free(g_mouse_path_search.heap_pos);
+    SDL_free(g_mouse_path_search.visit_generation);
     SDL_free(g_mouse_path_search.parent_grid);
     SDL_free(g_mouse_path_search.parent_state);
     SDL_free(g_mouse_path_search.heap_priority);
@@ -438,6 +407,8 @@ bool sdl_mouse_path_search_ensure(size_t state_count)
 
     g_mouse_path_search.cost = (int*)SDL_calloc(state_count, sizeof(int));
     g_mouse_path_search.heap_pos = (int*)SDL_calloc(state_count, sizeof(int));
+    g_mouse_path_search.visit_generation =
+        (u16b*)SDL_calloc(state_count, sizeof(u16b));
     g_mouse_path_search.parent_grid =
         (u16b*)SDL_calloc(state_count, sizeof(u16b));
     g_mouse_path_search.parent_state =
@@ -450,6 +421,7 @@ bool sdl_mouse_path_search_ensure(size_t state_count)
         (byte*)SDL_calloc(state_count, sizeof(byte));
 
     if (!g_mouse_path_search.cost || !g_mouse_path_search.heap_pos
+        || !g_mouse_path_search.visit_generation
         || !g_mouse_path_search.parent_grid
         || !g_mouse_path_search.parent_state
         || !g_mouse_path_search.heap_priority
@@ -461,6 +433,31 @@ bool sdl_mouse_path_search_ensure(size_t state_count)
 
     g_mouse_path_search.capacity = state_count;
     return true;
+}
+
+static void sdl_mouse_path_search_begin(void)
+{
+    g_mouse_path_search.current_generation++;
+    if (g_mouse_path_search.current_generation == 0) {
+        memset(g_mouse_path_search.visit_generation, 0,
+            g_mouse_path_search.capacity
+                * sizeof(*g_mouse_path_search.visit_generation));
+        g_mouse_path_search.current_generation = 1;
+    }
+}
+
+static void sdl_mouse_path_search_touch(size_t idx)
+{
+    if (g_mouse_path_search.visit_generation[idx]
+        == g_mouse_path_search.current_generation)
+    {
+        return;
+    }
+
+    g_mouse_path_search.visit_generation[idx] =
+        g_mouse_path_search.current_generation;
+    g_mouse_path_search.cost[idx] = 0x3f3f3f3f;
+    g_mouse_path_search.heap_pos[idx] = -1;
 }
 
 bool sdl_mouse_path_heap_less(int a, int b)
@@ -545,7 +542,10 @@ bool sdl_mouse_path_heap_insert_or_decrease(u16b grid, byte state,
     int priority)
 {
     size_t idx = sdl_mouse_path_search_grid_state_index(grid, state);
-    int pos = g_mouse_path_search.heap_pos[idx];
+    int pos;
+
+    sdl_mouse_path_search_touch(idx);
+    pos = g_mouse_path_search.heap_pos[idx];
 
     if (pos >= 0)
     {
@@ -607,7 +607,7 @@ bool sdl_mouse_path_build_from_search(int target_y, int target_x,
     byte state = target_state;
     int reverse_len = 0;
 
-    while (here != start) {
+    while (true) {
         int y = GRID_Y(here);
         int x = GRID_X(here);
         size_t idx;
@@ -618,14 +618,21 @@ bool sdl_mouse_path_build_from_search(int target_y, int target_x,
             return false;
         if (state >= SDL_MOUSE_PATH_ROUTE_STATE_COUNT)
             return false;
-        if (reverse_len >= SDL_MOUSE_PATH_MAX_GRIDS)
-            return false;
-
         idx = sdl_mouse_path_search_grid_state_index(here, state);
         parent = g_mouse_path_search.parent_grid[idx];
         parent_state = g_mouse_path_search.parent_state[idx];
 
-        if ((parent == here) && (parent_state == state))
+        /* A run-up route may leave the player's starting grid and return to it
+         * with a different direction state before crossing the obstacle.  The
+         * grid alone therefore does not identify the search root.  Stop only
+         * at the self-parented root state; otherwise retain the revisited
+         * starting grid and its preceding run-up steps in the path. */
+        if ((parent == here) && (parent_state == state)) {
+            if (here != start)
+                return false;
+            break;
+        }
+        if (reverse_len >= SDL_MOUSE_PATH_MAX_GRIDS)
             return false;
         if (!in_bounds(GRID_Y(parent), GRID_X(parent)))
             return false;
@@ -658,12 +665,10 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
 
     g_mouse_path_search.width = map_wid;
     g_mouse_path_search.heap_size = 0;
-    memset(g_mouse_path_search.cost, 0x3f,
-        state_count * sizeof(*g_mouse_path_search.cost));
-    memset(g_mouse_path_search.heap_pos, 0xFF,
-        state_count * sizeof(*g_mouse_path_search.heap_pos));
+    sdl_mouse_path_search_begin();
 
     start_idx = sdl_mouse_path_search_grid_state_index(start_grid, start_state);
+    sdl_mouse_path_search_touch(start_idx);
     g_mouse_path_search.cost[start_idx] = 0;
     g_mouse_path_search.parent_grid[start_idx] = start_grid;
     g_mouse_path_search.parent_state[start_idx] = start_state;
@@ -699,7 +704,7 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
             int dir = dirs[i];
             int ny = y + ddy[dir];
             int nx = x + ddx[dir];
-            bool chasm_step = false;
+            bool leap_step = false;
             byte next_state;
             u16b next_grid;
             size_t next_idx;
@@ -708,7 +713,7 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
 
             if (!in_bounds(ny, nx))
                 continue;
-            if (cave_feat[y][x] == FEAT_CHASM) {
+            if (sdl_mouse_path_grid_is_leapable_obstacle(y, x)) {
                 int previous_dir = sdl_mouse_path_route_state_dir(state);
 
                 if (dir != previous_dir)
@@ -716,9 +721,12 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
                 if (!sdl_mouse_path_grid_is_safe_leap_landing(ny, nx))
                     continue;
             } else if (!sdl_mouse_path_grid_walkable(ny, nx)) {
-                if (!sdl_mouse_path_can_step_into_chasm(y, x, dir, state))
+                if (!sdl_mouse_path_can_step_into_leapable_obstacle(
+                        y, x, dir, state))
+                {
                     continue;
-                chasm_step = true;
+                }
+                leap_step = true;
             }
 
             next_state = sdl_mouse_path_next_route_state(
@@ -726,10 +734,11 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
             next_grid = GRID(ny, nx);
             next_idx = sdl_mouse_path_search_grid_state_index(
                 next_grid, next_state);
+            sdl_mouse_path_search_touch(next_idx);
             next_cost =
                 base_cost + sdl_mouse_path_route_edge_cost(
                     state, dir, sprint_enabled);
-            if (chasm_step)
+            if (leap_step)
                 next_cost += SDL_MOUSE_PATH_COST_NORMAL;
 
             if (next_cost >= g_mouse_path_search.cost[next_idx])
@@ -815,6 +824,20 @@ bool sdl_mouse_path_compute(int target_y, int target_x)
 
     if ((target_y == p_ptr->py) && (target_x == p_ptr->px))
         return false;
+
+    /* Match keyboard walking for an adjacent unexplored grid.  Do not inspect
+     * its real terrain here: both an unknown floor and an unknown wall get the
+     * same one-step preview, and the movement command discovers the result. */
+    if (!sdl_mouse_path_grid_known(target_y, target_x)
+        && ABS(target_y - p_ptr->py) <= 1
+        && ABS(target_x - p_ptr->px) <= 1)
+    {
+        g_mouse_path.path[0] = GRID(target_y, target_x);
+        g_mouse_path.path_len = 1;
+        g_mouse_path.path_valid = true;
+        return true;
+    }
+
     if (!sdl_mouse_path_grid_walkable(target_y, target_x))
     {
         blocked_target_kind =
@@ -873,6 +896,11 @@ bool sdl_mouse_path_start_follow_grid(int map_y, int map_x)
     g_state.need_present = true;
     Term_keypress(UI_MENU_CLICK_WAKE_KEY);
     return true;
+}
+
+bool sdl_mouse_path_is_following(void)
+{
+    return g_mouse_path.follow_active;
 }
 
 void sdl_mouse_path_cancel(void)
@@ -1159,6 +1187,11 @@ bool sdl_mouse_path_handle_right_click(float x, float y)
 
     if (!sdl_main_screen_click_shortcuts_active())
         return false;
+    /* A right click on the final map must fall through to recall.  Feature
+     * actions (doors, chests, and so on) are gameplay actions and therefore
+     * must not intercept it. */
+    if (death_spectator_active())
+        return false;
     if (!sdl_main_view_point_to_map(x, y, &map_y, &map_x))
         return false;
 
@@ -1188,5 +1221,3 @@ bool sdl_mouse_consume_wake_key(void)
     (void)Term_inkey(&ch, false, true);
     return true;
 }
-
-

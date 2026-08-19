@@ -373,7 +373,7 @@ void do_cmd_view_monsters()
             prt("Monsters you can see (press [ to toggle):", 0, 0);
         else
             prt("Monsters on screen (press [ to toggle):", 0, 0);
-        get_char = inkey();
+        get_char = (char)steamdeck_menu_key(inkey(), 0, 0);
         show_los = !show_los;
         screen_load();
     }
@@ -399,7 +399,7 @@ void do_cmd_view_objects()
             prt("Objects you can see (press ] to toggle):", 0, 0);
         else
             prt("Objects on screen (press ] to toggle):", 0, 0);
-        get_char = inkey();
+        get_char = (char)steamdeck_menu_key(inkey(), 0, 0);
         show_los = !show_los;
         screen_load();
     }
@@ -695,7 +695,19 @@ void redraw_monster_subwindows(void)
         Term_activate(angband_term[j]);
 
         if (p_ptr->monster_race_idx)
-            display_roff(p_ptr->monster_race_idx, NULL);
+        {
+            monster_type* m_ptr = NULL;
+
+            if (p_ptr->health_who > 0 && p_ptr->health_who < mon_max
+                && mon_list[p_ptr->health_who].r_idx
+                && mon_list[p_ptr->health_who].ml
+                && mon_list[p_ptr->health_who].r_idx
+                    == p_ptr->monster_race_idx)
+            {
+                m_ptr = &mon_list[p_ptr->health_who];
+            }
+            display_roff(p_ptr->monster_race_idx, m_ptr);
+        }
 
         Term_fresh();
         Term_activate(old);
@@ -920,6 +932,9 @@ typedef struct unified_sidebar_compact_entry
     byte text_attr;
     char symbol[2];
     char text[128];
+    s16b health_m_idx;
+    byte health_offset;
+    byte health_len;
 } unified_sidebar_compact_entry;
 
 static bool unified_sidebar_use_compact_layout(void)
@@ -1012,7 +1027,7 @@ static void unified_sidebar_clear_row(int row, int width)
 static int unified_sidebar_compact_build_entries(
     const unified_look_state* state,
     unified_sidebar_compact_entry* entries,
-    int max_entries)
+    int max_entries, bool preserve_full_names)
 {
     int entry_count = 0;
     int entity_index = 0;
@@ -1022,6 +1037,10 @@ static int unified_sidebar_compact_build_entries(
     if (!state || !entries || max_entries <= 0)
         return 0;
 
+    /* The portrait SDL overlay measures its panel directly in pixels.  Do not
+     * pre-shorten those labels to the much narrower terminal column count. */
+    if (preserve_full_names)
+        text_width = (int)sizeof(entries[0].text) - 1;
     if (text_width < 8)
         text_width = 8;
 
@@ -1042,6 +1061,7 @@ static int unified_sidebar_compact_build_entries(
             int morale_color = TERM_WHITE;
             int morale_num = 0;
             int name_budget;
+            bool show_health;
 
             if (!m_idx)
                 continue;
@@ -1057,7 +1077,13 @@ static int unified_sidebar_compact_build_entries(
             r_ptr = &r_info[m_ptr->r_idx];
             monster_desc_race(m_name, sizeof(m_name), m_ptr->r_idx);
 
-            monster_health_bar_text(m_ptr, hp_bar, sizeof(hp_bar), 8);
+            show_health = monster_health_bar_allowed(m_ptr);
+            if (show_health && styled_monster_health_bars)
+                SDL_strlcpy(hp_bar, "--------", sizeof(hp_bar));
+            else if (show_health)
+                monster_health_bar_text(m_ptr, hp_bar, sizeof(hp_bar), 8);
+            else
+                hp_bar[0] = '\0';
 
             if (m_ptr->alertness < ALERTNESS_UNWARY)
             {
@@ -1083,7 +1109,11 @@ static int unified_sidebar_compact_build_entries(
                     : (m_ptr->morale / 10);
             }
 
-            strnfmt(suffix, sizeof(suffix), " %s %d", hp_bar, morale_num);
+            if (show_health)
+                strnfmt(suffix, sizeof(suffix), " %s %d", hp_bar,
+                    morale_num);
+            else
+                strnfmt(suffix, sizeof(suffix), " %d", morale_num);
             name_budget = text_width - (int)strlen(suffix);
             if (name_budget < 4)
                 name_budget = 4;
@@ -1100,6 +1130,12 @@ static int unified_sidebar_compact_build_entries(
             entry->symbol[0] = monster_char(r_ptr);
             entry->symbol[1] = '\0';
             strnfmt(entry->text, sizeof(entry->text), "%s%s", name_buf, suffix);
+            if (show_health && styled_monster_health_bars)
+            {
+                entry->health_m_idx = (s16b)m_idx;
+                entry->health_offset = (byte)MIN(strlen(name_buf) + 1, 255);
+                entry->health_len = 8;
+            }
         }
     }
 
@@ -1188,6 +1224,9 @@ static int unified_sidebar_compact_build_entries(
             entry->symbol[0] = object_char(o_ptr);
             entry->symbol[1] = '\0';
             strnfmt(entry->text, sizeof(entry->text), "%s%s", name_buf, suffix);
+            entry->health_m_idx = 0;
+            entry->health_offset = 0;
+            entry->health_len = 0;
         }
 
         objects = mem_free(objects);
@@ -1244,7 +1283,7 @@ static bool show_unified_sidebar_compact(unified_look_state* state)
     max_entries = MAX(1, mon_max + o_max);
     entries = mem_alloc_array(max_entries, unified_sidebar_compact_entry);
     entry_count = unified_sidebar_compact_build_entries(state, entries,
-        max_entries);
+        max_entries, false);
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
 
@@ -1282,7 +1321,27 @@ static bool show_unified_sidebar_compact(unified_look_state* state)
         if (use_bigtile)
             Term_putch(pictogram_col + 1, row, 255, -1);
 
-        Term_putstr(text_col, row, -1, text_attr, entry->text);
+        if (entry->health_m_idx > 0 && entry->health_m_idx < mon_max
+            && entry->health_len > 0)
+        {
+            int suffix_offset = entry->health_offset + entry->health_len;
+
+            if (entry->health_offset > 0)
+                Term_putstr(text_col, row, entry->health_offset, text_attr,
+                    entry->text);
+            Term_gotoxy(text_col + entry->health_offset, row);
+            monster_health_bar_put(&mon_list[entry->health_m_idx],
+                entry->health_len);
+            if (entry->text[suffix_offset])
+            {
+                Term_putstr(text_col + suffix_offset, row, -1, text_attr,
+                    entry->text + suffix_offset);
+            }
+        }
+        else
+        {
+            Term_putstr(text_col, row, -1, text_attr, entry->text);
+        }
 
         if (highlight_this)
         {
@@ -1351,7 +1410,7 @@ static bool show_unified_sidebar_pixel(unified_look_state* state)
     max_entries = MAX(1, mon_max + o_max);
     entries = mem_alloc_array(max_entries, unified_sidebar_compact_entry);
     entry_count = unified_sidebar_compact_build_entries(state, entries,
-        max_entries);
+        max_entries, sdl_mobile_portrait_layout_active());
 
     has_sidebar_selection = (state->selected_entity >= 0)
         && (state->in_sidebar_mode || (state->look_mode == 0));
@@ -1530,6 +1589,7 @@ void show_unified_sidebar(unified_look_state* state)
             monster_race* r_ptr = &r_info[m_ptr->r_idx];
             char m_name[40];
             char morale_text[8];
+            bool show_health;
 
             /* Show only visible monsters on screen (like the [ monsters menu) */
             /* Skip empty monster slots */
@@ -1546,7 +1606,11 @@ void show_unified_sidebar(unified_look_state* state)
 
             /* Create compact HP bar */
             char hp_bar[10];
-            monster_health_bar_text(m_ptr, hp_bar, sizeof(hp_bar), 8);
+            show_health = monster_health_bar_allowed(m_ptr);
+            if (show_health)
+                monster_health_bar_text(m_ptr, hp_bar, sizeof(hp_bar), 8);
+            else
+                hp_bar[0] = '\0';
 
             /* Create morale number with proper color */
             int morale_color = TERM_WHITE;
@@ -1590,7 +1654,10 @@ void show_unified_sidebar(unified_look_state* state)
             char morale_display[12];
 
             /* Format health and morale as compact strings */
-            strnfmt(hp_display, sizeof(hp_display), " %s", hp_bar);
+            if (show_health)
+                strnfmt(hp_display, sizeof(hp_display), " %s", hp_bar);
+            else
+                hp_display[0] = '\0';
             strnfmt(morale_display, sizeof(morale_display), " %s", morale_text);
 
             /* Calculate available width for the whole line */

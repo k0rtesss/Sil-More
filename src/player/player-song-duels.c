@@ -4,6 +4,7 @@
 #include "externs.h"
 #include "player/player-song-internal.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
@@ -356,6 +357,23 @@ static int song_duel_reduce_monster_hp(monster_type* m_ptr, int steps)
 
         /* Morgoth's anger state depends on current HP% (and maxHP can change here). */
         maybe_update_morgoth_state_from_hp(m_ptr);
+        if (m_ptr->ml
+            && (styled_monster_health_bars || styled_monster_tile_health_bars))
+        {
+            int m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
+
+            if (styled_monster_health_bars)
+            {
+                p_ptr->window |= PW_MONLIST;
+                if (p_ptr->health_who == m_idx)
+                {
+                    p_ptr->redraw |= PR_HEALTHBAR;
+                    p_ptr->window |= PW_MONSTER;
+                }
+            }
+            if (styled_monster_tile_health_bars)
+                lite_spot(m_ptr->fy, m_ptr->fx);
+        }
 
         return hp_loss;
     }
@@ -495,6 +513,9 @@ static void song_duel_finish_monster_loss(monster_type* m_ptr, int song, int son
         if (dec_stat(A_GRA, 1, false))
             msg_print("You feel drained.");
     }
+
+    if (m_ptr >= mon_list && m_ptr < mon_list + mon_max)
+        legendary_song_observe_monster((int)(m_ptr - mon_list), 0);
 
     m_ptr->song = SNG_NOTHING;
     m_ptr->song_lockout_timer = SONG_DUEL_LOCKOUT_TURNS;

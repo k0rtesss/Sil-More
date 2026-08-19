@@ -811,8 +811,6 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
         if ((r_ptr->flags2 & (RF2_TAKE_ITEM))
             || (r_ptr->flags2 & (RF2_KILL_ITEM)))
         {
-            u32b f1, f2, f3;
-
             char m_name[80];
             char o_name[120];
 
@@ -829,9 +827,6 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
 
                 /* Get the next object */
                 next_o_idx = o_ptr->next_o_idx;
-
-                /* Extract some flags */
-                object_flags(o_ptr, &f1, &f2, &f3);
 
                 /* Don't pick up cursed items */
                 if ((r_ptr->flags2 & (RF2_TAKE_ITEM))

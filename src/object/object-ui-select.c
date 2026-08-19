@@ -3,10 +3,12 @@
 #include "angband.h"
 #include "externs.h"
 #include "object/object-ui-select.h"
+#include "object/object-ui-enhanced.h"
 #include "object/object-internal.h"
 #include "log/log.h"
 #include "sdl-config.h"
 #include "supplies.h"
+#include "ui/menu-click.h"
 #include <ctype.h>
 
 
@@ -100,6 +102,607 @@ bool get_item_okay(int item)
 
     /* Verify the item */
     return (item_tester_okay(o_ptr));
+}
+
+static void object_choice_label_for_item(char label[OBJECT_CHOICE_LABEL_LEN],
+    int item)
+{
+    char c = '\0';
+
+    if (!label)
+        return;
+
+    label[0] = '\0';
+
+    if (inventory_item_is_supply_summary(item))
+        c = supplies_label_char();
+    else if (item >= SUPPLIES_INDEX)
+        c = supplies_label_for_entry(item - SUPPLIES_INDEX);
+    else if (item < 0)
+        c = '-';
+    else if (player_inventory_handle_is_carried(item))
+        c = player_inventory_label(item);
+    else
+        c = index_to_label(item);
+
+    if (!c)
+        c = '?';
+
+    strnfmt(label, OBJECT_CHOICE_LABEL_LEN, "%c)", c);
+}
+
+static byte object_choice_attr_for_object(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return TERM_SLATE;
+
+    return weapon_glows(o_ptr)
+        ? object_display_color(o_ptr, TERM_L_BLUE)
+        : object_display_color(o_ptr,
+              tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+}
+
+static void object_choice_append_weight(char* text, size_t text_size,
+    int weight)
+{
+    char suffix[24];
+    size_t text_len;
+    size_t suffix_len;
+    size_t keep_len;
+
+    if (!show_weights || !text || text_size == 0 || weight < 0)
+        return;
+
+    strnfmt(suffix, sizeof(suffix), "  %2d.%1d lb", weight / 10,
+        weight % 10);
+    suffix_len = strlen(suffix);
+    if (suffix_len + 1 >= text_size)
+        return;
+
+    text_len = strlen(text);
+    if (text_len + suffix_len >= text_size)
+    {
+        keep_len = text_size - suffix_len - 1;
+        while (keep_len > 0 && isspace((unsigned char)text[keep_len - 1]))
+            keep_len--;
+        text[keep_len] = '\0';
+    }
+
+    SDL_strlcat(text, suffix, text_size);
+}
+
+static void object_choice_append_volume(char* text, size_t text_size,
+    const object_type* o_ptr)
+{
+    enum inventory_limit_group group;
+    char suffix[24];
+    size_t text_len;
+    size_t suffix_len;
+    size_t keep_len;
+    int volume;
+
+    if (!text || text_size == 0 || !o_ptr || !o_ptr->k_idx)
+        return;
+
+    group = inventory_limit_group_for_object(o_ptr);
+    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
+        return;
+
+    volume = inventory_limit_space_for_object(o_ptr);
+    if (volume <= 0)
+        return;
+
+    strnfmt(suffix, sizeof(suffix), "  %d.%d qt", volume / 10, volume % 10);
+    suffix_len = strlen(suffix);
+    if (suffix_len + 1 >= text_size)
+        return;
+
+    text_len = strlen(text);
+    if (text_len + suffix_len >= text_size)
+    {
+        keep_len = text_size - suffix_len - 1;
+        while (keep_len > 0 && isspace((unsigned char)text[keep_len - 1]))
+            keep_len--;
+        text[keep_len] = '\0';
+    }
+
+    SDL_strlcat(text, suffix, text_size);
+}
+
+static void object_choice_copy_title(char* out, size_t out_size, cptr title)
+{
+    size_t len;
+
+    if (!out || out_size == 0)
+        return;
+
+    SDL_strlcpy(out, (title && title[0]) ? title : "Choose item", out_size);
+    len = strlen(out);
+    while (len > 0 && isspace((unsigned char)out[len - 1]))
+        out[--len] = '\0';
+}
+
+void object_choice_entry_make(object_choice_entry* entry, int item,
+    object_type* o_ptr, cptr label, cptr prefix)
+{
+    char desc[80];
+    char text[OBJECT_CHOICE_TEXT_LEN];
+    int weight = -1;
+
+    if (!entry)
+        return;
+
+    memset(entry, 0, sizeof(*entry));
+    entry->item = item;
+    entry->o_ptr = o_ptr;
+    entry->attr = object_choice_attr_for_object(o_ptr);
+
+    if (label && label[0])
+        SDL_strlcpy(entry->label, label, sizeof(entry->label));
+    else
+        object_choice_label_for_item(entry->label, item);
+
+    if (inventory_item_is_supply_summary(item))
+    {
+        format_supply_summary(text, sizeof(text));
+        object_choice_append_weight(text, sizeof(text), supplies_limit_weight());
+        SDL_strlcpy(entry->text, text, sizeof(entry->text));
+        entry->attr = TERM_L_WHITE;
+        return;
+    }
+
+    if (!o_ptr || !o_ptr->k_idx)
+    {
+        if (item >= INVEN_WIELD && item < INVEN_TOTAL)
+            SDL_strlcpy(desc, describe_empty_slot(item), sizeof(desc));
+        else
+            SDL_strlcpy(desc, "(empty)", sizeof(desc));
+    }
+    else if (item < 0)
+    {
+        object_desc_floor(desc, sizeof(desc), o_ptr, true, 3);
+    }
+    else
+    {
+        object_desc(desc, sizeof(desc), o_ptr, true, 3);
+    }
+
+    if (prefix && prefix[0])
+    {
+        strnfmt(text, sizeof(text), "%s: %s", prefix, desc);
+    }
+    else if (item < 0)
+    {
+        strnfmt(text, sizeof(text), "On floor: %s", desc);
+    }
+    else if (item >= SUPPLIES_INDEX)
+    {
+        strnfmt(text, sizeof(text), "Supplies: %s", desc);
+    }
+    else if (item >= INVEN_WIELD && item < INVEN_TOTAL)
+    {
+        strnfmt(text, sizeof(text), "%s: %s", mention_use(item), desc);
+    }
+    else
+    {
+        SDL_strlcpy(text, desc, sizeof(text));
+    }
+
+    if (o_ptr && o_ptr->k_idx)
+        weight = o_ptr->weight * MAX(o_ptr->number, 1);
+    object_choice_append_weight(text, sizeof(text), weight);
+    object_choice_append_volume(text, sizeof(text), o_ptr);
+    SDL_strlcpy(entry->text, text, sizeof(entry->text));
+}
+
+static bool object_choice_label_matches_key(cptr label, int key)
+{
+    int c;
+
+    if (!label || !label[0])
+        return false;
+
+    c = (unsigned char)label[0];
+    if (c == '-')
+        return key == '-';
+
+    return tolower((unsigned char)c) == tolower((unsigned char)key);
+}
+
+static void object_choice_inspect(const object_choice_entry* entry)
+{
+    if (!entry)
+        return;
+
+    if (inventory_item_is_supply_summary(entry->item))
+    {
+        bell("Open supplies to inspect a specific item.");
+        return;
+    }
+
+    if (!entry->o_ptr || !entry->o_ptr->k_idx)
+    {
+        bell("There is nothing to inspect.");
+        return;
+    }
+
+    sdl_question_menu_clear();
+    ui_menu_click_clear();
+    describe_item_with_comparisons(entry->item, true);
+}
+
+static void object_choice_show(cptr title, cptr desc,
+    const object_choice_entry entries[], int count, int highlight,
+    int* scroll_offset, bool scroll_follow_highlight)
+{
+    char clean_title[80];
+
+    object_choice_copy_title(clean_title, sizeof(clean_title), title);
+    sdl_question_menu_begin(clean_title);
+    sdl_question_menu_set_scroll_offset_target(scroll_offset,
+        scroll_follow_highlight);
+    if (desc && desc[0])
+        sdl_question_menu_set_desc(desc);
+
+    for (int i = 0; i < count; i++)
+    {
+        if (entries[i].o_ptr && entries[i].o_ptr->k_idx)
+        {
+            sdl_question_menu_add_object_entry(i, entries[i].label,
+                entries[i].text, entries[i].attr, entries[i].o_ptr);
+        }
+        else
+        {
+            sdl_question_menu_add_entry(i, entries[i].label,
+                entries[i].text, entries[i].attr);
+        }
+    }
+
+    sdl_question_menu_set_highlight(highlight);
+    sdl_question_menu_finish();
+}
+
+bool object_choice_overlay(cptr title, cptr desc,
+    const object_choice_entry entries[], int count, int default_index,
+    int* out_entry)
+{
+    int highlight;
+    bool done = false;
+    bool success = false;
+    bool steamdeck = steamdeck_controls_active();
+    bool saved_hide_cursor = hide_cursor;
+    bool scroll_follow_highlight = true;
+    int scroll_offset = 0;
+
+    if (out_entry)
+        *out_entry = -1;
+
+    if (!entries || count <= 0 || !out_entry)
+        return false;
+
+    highlight = (default_index >= 0 && default_index < count)
+        ? default_index
+        : 0;
+
+    message_flush();
+    p_ptr->redraw |= (PR_MAP);
+    handle_stuff();
+    Term_fresh();
+
+    hide_cursor = true;
+    (void)Term_set_cursor(false);
+
+    while (!done)
+    {
+        int key;
+
+        ui_menu_click_begin();
+        ui_menu_click_set_hover_enabled(true);
+        ui_menu_click_set_outside_cancel_enabled(true);
+        ui_menu_click_set_touch_category(
+            SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
+        object_choice_show(title, desc, entries, count, highlight,
+            &scroll_offset, scroll_follow_highlight);
+
+        key = inkey();
+        if (sdl_question_menu_take_touch_scrolled())
+            scroll_follow_highlight = false;
+
+        {
+            int clicked_choice = 0;
+            int click_action = UI_MENU_CLICK_PRIMARY;
+
+            if (ui_menu_click_take_action(&clicked_choice, &click_action))
+            {
+                if (clicked_choice >= 0 && clicked_choice < count)
+                {
+                    bool same_choice = (clicked_choice == highlight);
+
+                    if (click_action == UI_MENU_CLICK_HOVER)
+                    {
+                        highlight = clicked_choice;
+                        continue;
+                    }
+
+                    highlight = clicked_choice;
+                    if (!same_choice)
+                        continue;
+
+                    if (click_action == UI_MENU_CLICK_SECONDARY)
+                    {
+                        object_choice_inspect(&entries[highlight]);
+                        continue;
+                    }
+
+                    *out_entry = highlight;
+                    success = true;
+                    done = true;
+                }
+                else if (click_action == UI_MENU_CLICK_HOVER)
+                {
+                    continue;
+                }
+
+                continue;
+            }
+            else if (key == UI_MENU_CLICK_WAKE_KEY)
+            {
+                continue;
+            }
+        }
+
+        if (steamdeck && key == steamdeck_back_key())
+            key = ESCAPE;
+        else if (steamdeck && key == steamdeck_confirm_key())
+            key = '\r';
+        else if (steamdeck && key == steamdeck_info_key())
+            key = 'x';
+
+        switch (key)
+        {
+        case ESCAPE:
+            done = true;
+            break;
+
+        case '\r':
+        case '\n':
+        case ' ':
+        case '6':
+#ifdef KC_ENTER
+        case KC_ENTER:
+#endif
+            *out_entry = highlight;
+            success = true;
+            done = true;
+            break;
+
+        case '8':
+        case 'k':
+        case 'K':
+#ifdef ARROW_UP
+        case ARROW_UP:
+#endif
+            highlight = (highlight + count - 1) % count;
+            scroll_follow_highlight = true;
+            break;
+
+        case '2':
+        case 'j':
+        case 'J':
+#ifdef ARROW_DOWN
+        case ARROW_DOWN:
+#endif
+            highlight = (highlight + 1) % count;
+            scroll_follow_highlight = true;
+            break;
+
+        case '4':
+        case 'x':
+        case 'X':
+#ifdef ARROW_LEFT
+        case ARROW_LEFT:
+#endif
+#ifdef ARROW_RIGHT
+        case ARROW_RIGHT:
+#endif
+            object_choice_inspect(&entries[highlight]);
+            break;
+
+        default:
+        {
+            bool matched = false;
+
+            for (int i = 0; i < count; i++)
+            {
+                if (!object_choice_label_matches_key(entries[i].label, key))
+                    continue;
+
+                highlight = i;
+                scroll_follow_highlight = true;
+                *out_entry = i;
+                success = true;
+                done = true;
+                matched = true;
+                break;
+            }
+
+            if (!matched)
+                bell("Illegal item choice!");
+            break;
+        }
+        }
+    }
+
+    hide_cursor = saved_hide_cursor;
+    sdl_question_menu_clear();
+    ui_menu_click_clear();
+    Term_fresh();
+
+    return success;
+}
+
+static bool object_item_select_add_entry(object_choice_entry entries[],
+    int* count, int capacity, int item)
+{
+    object_type* o_ptr;
+    bool empty_throw_slot = item >= INVEN_WIELD && item < INVEN_TOTAL
+        && !inventory[item].k_idx && throw_slot_menu_active
+        && throw_slot_enabled[item];
+
+    if (!entries || !count || *count >= capacity)
+        return false;
+
+    if (!inventory_item_is_supply_summary(item) && !empty_throw_slot
+        && !get_item_okay(item))
+    {
+        return false;
+    }
+    if (inventory_item_is_supply_summary(item)
+        && !supplies_visible_for_current_filter())
+    {
+        return false;
+    }
+
+    o_ptr = inventory_item_is_supply_summary(item)
+        ? NULL
+        : inventory_item_to_object_ptr(item);
+
+    object_choice_entry_make(&entries[*count], item, o_ptr, NULL, NULL);
+    (*count)++;
+    return true;
+}
+
+bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
+    int* item_out)
+{
+    object_choice_entry* entries;
+    int capacity = MAX_FLOOR_STACK + supplies_entry_count()
+        + player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD) + 1;
+    int count = 0;
+    int selected = -1;
+    int floor_list[MAX_FLOOR_STACK];
+    int floor_num = 0;
+    bool include_equip_in_inventory =
+        (mode & USE_INVEN) && (mode & USE_EQUIP);
+    bool old_include_equip =
+        inventory_menu_set_include_equip(include_equip_in_inventory);
+
+    if (!item_out)
+        return false;
+
+    *item_out = -1;
+    entries = mem_alloc_array(MAX(capacity, 1), object_choice_entry);
+
+    if (mode & USE_INVEN)
+    {
+        int supply_count = inventory_visible_supply_count();
+
+        for (int ord = 0; ord < supply_count; ord++)
+        {
+            int item = inventory_visible_supply_item_at(ord);
+
+            if (item >= SUPPLIES_INDEX)
+                object_item_select_add_entry(entries, &count,
+                    capacity, item);
+        }
+
+        for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
+        {
+            int item = player_pack_entry_handle_at(ordinal);
+
+            object_item_select_add_entry(entries, &count,
+                capacity, item);
+        }
+
+        if (include_equip_in_inventory)
+        {
+            for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+            {
+                if (!inventory[i].k_idx)
+                    continue;
+
+                object_item_select_add_entry(entries, &count,
+                    capacity, i);
+            }
+        }
+    }
+
+    if ((mode & USE_EQUIP) && !include_equip_in_inventory)
+    {
+        for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+        {
+            bool include_slot = false;
+
+            if (!player_equipment_slot_counts_as_equipped(i)
+                && !(throw_slot_menu_active && throw_slot_enabled[i]))
+            {
+                continue;
+            }
+
+            if (inventory[i].k_idx)
+                include_slot = get_item_okay(i);
+            else if (throw_slot_menu_active && throw_slot_enabled[i])
+                include_slot = true;
+
+            if (include_slot)
+                object_item_select_add_entry(entries, &count,
+                    capacity, i);
+        }
+    }
+
+    if (mode & USE_FLOOR)
+    {
+        floor_num = scan_floor(floor_list, MAX_FLOOR_STACK, p_ptr->py,
+            p_ptr->px, 0x00);
+        for (int i = 0; i < floor_num; i++)
+        {
+            int o_idx = floor_list[i];
+
+            if (o_idx <= 0 || o_idx >= o_max)
+                continue;
+            if (!o_list[o_idx].k_idx || supplies_is_supply_object(&o_list[o_idx]))
+                continue;
+
+            object_item_select_add_entry(entries, &count,
+                capacity, 0 - o_idx);
+        }
+    }
+
+    if (count <= 0)
+    {
+        inventory_menu_set_include_equip(old_include_equip);
+        if (none_msg)
+            msg_print(none_msg);
+        entries = mem_free(entries);
+        return false;
+    }
+
+    if (!object_choice_overlay(reason ? reason : "Choose item", NULL, entries,
+            count, 0, &selected))
+    {
+        inventory_menu_set_include_equip(old_include_equip);
+        entries = mem_free(entries);
+        return false;
+    }
+
+    if (selected < 0 || selected >= count)
+    {
+        inventory_menu_set_include_equip(old_include_equip);
+        entries = mem_free(entries);
+        return false;
+    }
+
+    if (!get_item_allow(entries[selected].item))
+    {
+        inventory_menu_set_include_equip(old_include_equip);
+        entries = mem_free(entries);
+        return false;
+    }
+
+    *item_out = entries[selected].item;
+    entries = mem_free(entries);
+    inventory_menu_set_include_equip(old_include_equip);
+    return true;
 }
 
 /*
@@ -447,6 +1050,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         } else if (p_ptr->command_wrk == (USE_EQUIP)) {                             \
             for (int ii = INVEN_WIELD; ii < INVEN_TOTAL; ++ii) {                    \
                 bool include_slot = false;                                          \
+                if (!player_equipment_slot_counts_as_equipped(ii)                   \
+                    && !(throw_slot_menu_active && throw_slot_enabled[ii]))          \
+                    continue;                                                       \
                 if (inventory[ii].k_idx) {                                          \
                     include_slot = get_item_okay(ii);                               \
                 } else if (throw_slot_menu_active && throw_slot_enabled[ii]) {      \
@@ -1036,6 +1642,8 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             if (!click_taken && which == UI_MENU_CLICK_WAKE_KEY)
                 continue;
         }
+
+        which = (char)steamdeck_menu_key(which, 0, 0);
 
         /* Parse it */
         switch (which)

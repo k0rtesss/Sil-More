@@ -8,6 +8,7 @@
 #include <math.h>
 
 static bool queue_deferred_pickup_pack_drop(int item, int amount, bool refill_oil_pool);
+static void flush_deferred_pickup_drop(void);
 
 static void strip_brass_lantern_turns_suffix(char* o_name, const object_type* o_ptr)
 {
@@ -24,12 +25,18 @@ static void strip_brass_lantern_turns_suffix(char* o_name, const object_type* o_
         *fuel_suffix = '\0';
 }
 
-void give_player_item(object_type * o_ptr)
+static void give_player_item_internal(object_type* o_ptr,
+    object_storage_type destination)
 {
     char o_name[80];
     object_type copy = *o_ptr;
+    int quiver_before = player_quiver_arrow_count();
 
     int slot = inven_carry(o_ptr, true);
+    int quiver_added = player_quiver_arrow_count() - quiver_before;
+    int source_remaining = MAX(o_ptr->number, 0);
+    int carried_outside_quiver = MAX(0,
+        copy.number - source_remaining - quiver_added);
 
     if (slot == SUPPLIES_INDEX)
     {
@@ -40,29 +47,229 @@ void give_player_item(object_type * o_ptr)
             label = 'a';
         msg_format("You add %s to your supplies (%c).", o_name, label);
         sound(MSG_PICK);
+        handle_stuff();
+        return;
+    }
+
+    if (quiver_added > 0)
+    {
+        object_type quivered;
+
+        object_copy(&quivered, &copy);
+        quivered.number = quiver_added;
+        object_desc(o_name, sizeof(o_name), &quivered, true, 3);
+        msg_format("You add %s to your quiver (%d/%d arrows).", o_name,
+            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY);
+        sound(MSG_PICK);
+        p_ptr->redraw |= PR_QUIVER;
+    }
+
+    if (slot >= QUIVER_INDEX && slot < QUIVER_INDEX_END)
+    {
+        handle_stuff();
         return;
     }
 
     if (slot < 0)
+    {
+        if (quiver_added > 0)
+            handle_stuff();
         return;
+    }
     
     /* Play pickup sound */
-    sound(MSG_PICK);
+    if (quiver_added <= 0)
+        sound(MSG_PICK);
 
-    /* reset the pointer to the new location to pick up the count of the item
-       in the inventory */
-    o_ptr = &inventory[slot];
+    /* Resolve the returned handle through the expandable inventory store too.
+     * inven_carry() may return a synthetic handle once the legacy fixed slots
+     * are full. */
+    o_ptr = player_inventory_object(slot);
+    if (!o_ptr || !o_ptr->k_idx)
+    {
+        log_warn("Pickup returned an invalid inventory handle: %d", slot);
+        return;
+    }
 
     object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
-    msg_format("You have %s (%c).", o_name, index_to_label(slot));
+    if (copy.tval == TV_ARROW && quiver_added > 0
+        && carried_outside_quiver > 0)
+    {
+        object_type overflow;
 
-    /* Update quiver display if this was a throwing weapon or arrow */
-    if ((slot == INVEN_QUIVER1 || slot == INVEN_QUIVER2) ||
-        (copy.tval == TV_ARROW))
+        object_copy(&overflow, &copy);
+        overflow.number = carried_outside_quiver;
+        object_desc(o_name, sizeof(o_name), &overflow, true, 3);
+        msg_format("The remaining %s go into your Pack (%c).", o_name,
+            player_inventory_label(slot));
+    }
+    else if (destination == OBJECT_STORAGE_PACK)
+        msg_format("You store %s in your Pack (%c).", o_name,
+            player_inventory_label(slot));
+    else if (destination == OBJECT_STORAGE_HARNESS)
+        msg_format("You store %s in your Harness (%c).", o_name,
+            player_inventory_label(slot));
+    else
+        msg_format("You have %s (%c).", o_name, player_inventory_label(slot));
+
+    /* Update the shared arrow-quiver display when arrows were recovered. */
+    if (copy.tval == TV_ARROW)
     {
         p_ptr->redraw |= (PR_QUIVER);
     }
+
+    /* Burden changes are inventory-derived; show speed/status immediately. */
+    handle_stuff();
+}
+
+void give_player_item(object_type * o_ptr)
+{
+    give_player_item_internal(o_ptr, OBJECT_STORAGE_NONE);
+}
+
+static void give_player_item_to_storage(object_type* o_ptr,
+    object_storage_type destination)
+{
+    give_player_item_internal(o_ptr, destination);
+}
+
+static int pickup_max_volume_quantity(const object_type* incoming,
+    enum inventory_limit_group* group_out, int* quiver_quantity_out)
+{
+    enum inventory_limit_group group;
+    object_type pack_remainder;
+    const object_type* volume_object = incoming;
+    int quiver_quantity = 0;
+    int pack_quantity;
+
+    if (group_out)
+        *group_out = INV_LIMIT_NONE;
+    if (quiver_quantity_out)
+        *quiver_quantity_out = 0;
+    if (!incoming || !incoming->k_idx || incoming->number <= 0)
+        return 0;
+
+    /* A returning arrow stack may fill the Quiver first and send only its
+     * remainder to the Pack.  Capacity projection must clear the transient
+     * Quiver marker from that remainder just as inven_carry() does. */
+    if (incoming->tval == TV_ARROW
+        && (incoming->pickup_slot == INVEN_QUIVER1 || incoming->pickup))
+    {
+        quiver_quantity = MIN(incoming->number,
+            player_quiver_arrow_space());
+        if (quiver_quantity >= incoming->number)
+        {
+            if (quiver_quantity_out)
+                *quiver_quantity_out = quiver_quantity;
+            return incoming->number;
+        }
+
+        object_copy(&pack_remainder, incoming);
+        pack_remainder.number -= quiver_quantity;
+        pack_remainder.storage = OBJECT_STORAGE_PACK;
+        pack_remainder.pickup = false;
+        pack_remainder.pickup_slot = -1;
+        volume_object = &pack_remainder;
+    }
+
+    group = inventory_limit_group_for_object(volume_object);
+    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
+        return 0;
+
+    pack_quantity = inventory_limit_max_carryable_quantity(volume_object);
+    if (group_out)
+        *group_out = group;
+    if (quiver_quantity_out)
+        *quiver_quantity_out = quiver_quantity;
+
+    return MIN(incoming->number, quiver_quantity + pack_quantity);
+}
+
+static bool pickup_volume_stack_has_partial_fit(const object_type* incoming)
+{
+    enum inventory_limit_group group;
+    object_type preview;
+    int max_qty;
+
+    if (!incoming || !incoming->k_idx || incoming->number <= 1)
+        return false;
+
+    max_qty = pickup_max_volume_quantity(incoming, &group, NULL);
+    if (max_qty <= 0 || max_qty >= incoming->number)
+        return false;
+
+    /* Recheck the fitting portion through the real carry preflight.  Besides
+     * guarding the projection, this clears the failed whole-stack limit state
+     * before the quantity prompt is shown. */
+    object_copy(&preview, incoming);
+    preview.number = max_qty;
+    return inven_carry_okay(&preview);
+}
+
+static bool pickup_partial_volume_stack(object_type* floor_object,
+    const object_type* incoming, object_storage_type destination)
+{
+    enum inventory_limit_group group;
+    object_type partial;
+    char prompt[160];
+    cptr capacity_name;
+    int max_qty;
+    int quiver_quantity;
+    int qty;
+    int picked;
+
+    if (!floor_object || !floor_object->k_idx || !incoming
+        || !incoming->k_idx || incoming->number <= 1)
+    {
+        return false;
+    }
+
+    max_qty = pickup_max_volume_quantity(incoming, &group,
+        &quiver_quantity);
+    if (max_qty <= 0 || max_qty >= incoming->number)
+        return false;
+
+    capacity_name = quiver_quantity > 0 ? "Quiver and Pack"
+                                        : inventory_limit_group_name(group);
+    strnfmt(prompt, sizeof(prompt),
+        "Your %s can only hold %d of %d. Pick up how many? (0-%d): ",
+        capacity_name, max_qty, incoming->number, max_qty);
+    qty = get_quantity_touch_category_force_prompt_action(prompt, "Pick Up",
+        max_qty, SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
+
+    if (qty <= 0)
+    {
+        msg_print("You leave it on the ground.");
+        flush_deferred_pickup_drop();
+        return true;
+    }
+
+    object_copy(&partial, incoming);
+    partial.number = qty;
+    if (destination == OBJECT_STORAGE_PACK
+        || destination == OBJECT_STORAGE_HARNESS)
+    {
+        give_player_item_to_storage(&partial, destination);
+    }
+    else
+    {
+        give_player_item(&partial);
+    }
+
+    picked = qty - MAX(partial.number, 0);
+    if (picked > 0)
+    {
+        floor_object->number = MAX(0, floor_object->number - picked);
+        break_truce(false);
+    }
+    else
+    {
+        msg_print("You leave it on the ground.");
+    }
+
+    flush_deferred_pickup_drop();
+    return true;
 }
 
 /*
@@ -74,8 +281,17 @@ static bool item_tester_limit_group(const object_type* o_ptr);
 static bool pack_item_matches_replacement_type(const object_type* incoming,
                                                const object_type* candidate)
 {
+    enum inventory_limit_group incoming_group;
+
     if (!incoming || !candidate || !candidate->k_idx)
         return false;
+
+    incoming_group = inventory_limit_group_for_object(incoming);
+    if (incoming_group == INV_LIMIT_PACK
+        || incoming_group == INV_LIMIT_HARNESS)
+    {
+        return inventory_limit_group_for_object(candidate) == incoming_group;
+    }
 
     if (player_oil_container_object(incoming)
         && player_oil_container_object(candidate))
@@ -158,26 +374,18 @@ static bool staff_channel_target_matches(const object_type* donor,
 static object_type* find_staff_channel_target(const object_type* donor,
                                               int* target_slot)
 {
-    object_type* wielded = &inventory[INVEN_STAFF];
-
     if (target_slot)
         *target_slot = -1;
 
-    if (staff_channel_target_matches(donor, wielded))
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        if (target_slot)
-            *target_slot = INVEN_STAFF;
-        return wielded;
-    }
-
-    for (int i = 0; i < INVEN_PACK; i++)
-    {
-        object_type* pack_obj = &inventory[i];
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* pack_obj = player_inventory_object(item);
 
         if (staff_channel_target_matches(donor, pack_obj))
         {
             if (target_slot)
-                *target_slot = i;
+                *target_slot = item;
             return pack_obj;
         }
     }
@@ -327,13 +535,13 @@ static bool prompt_replace_pack_item(const object_type* incoming)
             return false;
         }
 
-        if ((item < 0) || (item >= INVEN_PACK))
+        if (!player_inventory_handle_is_carried(item))
         {
             bell("Illegal object choice!");
             continue;
         }
 
-        object_type* drop_ptr = &inventory[item];
+        object_type* drop_ptr = player_inventory_object(item);
 
         if (!drop_ptr->k_idx)
         {
@@ -344,7 +552,11 @@ static bool prompt_replace_pack_item(const object_type* incoming)
         if (!queue_deferred_pickup_pack_drop(item, drop_ptr->number,
                 player_oil_container_object(incoming)
                     && player_oil_container_object(drop_ptr)))
+        {
+            if (player_pack_action_pending())
+                return false;
             continue;
+        }
 
         /* Let inventory housekeeping run before we attempt the pickup again */
         p_ptr->notice |= (PN_COMBINE | PN_REORDER);
@@ -382,6 +594,27 @@ static object_type deferred_pickup_drop;
 static int deferred_pickup_drop_oil = 0;
 static bool deferred_pickup_refill_oil_pool = false;
 static bool brass_lamp_pickup_overflow_checked = false;
+static int pack_replacement_pickup_o_idx = 0;
+
+static bool delay_pickup_for_pack_replacement(const object_type* affected)
+{
+    object_type* incoming;
+
+    if (!affected || !affected->k_idx
+        || inventory_limit_group_for_object(affected) != INV_LIMIT_PACK
+        || pack_replacement_pickup_o_idx <= 0
+        || pack_replacement_pickup_o_idx >= o_max)
+    {
+        return false;
+    }
+
+    incoming = &o_list[pack_replacement_pickup_o_idx];
+    if (!incoming->k_idx)
+        return false;
+
+    return player_pack_action_start_forced(PLAYER_PACK_ACTION_PICKUP,
+        0 - pack_replacement_pickup_o_idx, 0, false, incoming);
+}
 
 static void clear_deferred_pickup_drop(void)
 {
@@ -559,11 +792,14 @@ static bool queue_deferred_pickup_pack_drop(int item, int amount,
     char o_name[80];
     int oil_to_drop = 0;
 
-    if ((item < 0) || (item >= INVEN_PACK) || amount <= 0)
+    if (!player_inventory_handle_is_carried(item) || amount <= 0)
         return false;
 
-    drop_ptr = &inventory[item];
+    drop_ptr = player_inventory_object(item);
     if (!drop_ptr->k_idx)
+        return false;
+
+    if (delay_pickup_for_pack_replacement(drop_ptr))
         return false;
 
     if (amount > drop_ptr->number)
@@ -607,6 +843,37 @@ static bool queue_deferred_pickup_pack_drop(int item, int amount,
     return true;
 }
 
+static bool queue_deferred_pickup_equipment_drop(int item, int amount)
+{
+    object_type* drop_ptr;
+
+    if (item < INVEN_WIELD || item >= INVEN_TOTAL || amount <= 0)
+        return false;
+
+    drop_ptr = &inventory[item];
+    if (!drop_ptr->k_idx || cursed_p(drop_ptr))
+        return false;
+
+    if (delay_pickup_for_pack_replacement(drop_ptr))
+        return false;
+
+    if (amount > drop_ptr->number)
+        amount = drop_ptr->number;
+
+    if (!queue_deferred_pickup_drop(drop_ptr, amount, 0, false))
+        return false;
+
+    inven_item_increase(item, -amount);
+    inven_item_describe(item);
+    inven_item_optimize(item);
+    p_ptr->update |= (PU_BONUS | PU_MANA);
+    p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST | PR_MAP | PR_QUIVER
+        | PR_MEL | PR_ARC);
+    p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
+    handle_stuff();
+    return true;
+}
+
 static bool confirm_oil_pickup_overflow_with_bonus(const object_type* o_ptr,
     int oil_amount, int lantern_bonus)
 {
@@ -629,25 +896,6 @@ static bool confirm_oil_pickup_overflow(const object_type* o_ptr, int oil_amount
     return confirm_oil_pickup_overflow_with_bonus(o_ptr, oil_amount, 0);
 }
 
-static bool pack_has_two_slot_throwable(void)
-{
-    for (int item = 0; item <= INVEN_PACK; item++)
-    {
-        const object_type* o_ptr = &inventory[item];
-
-        if (!o_ptr->k_idx)
-            continue;
-
-        if (inventory_limit_group_for_object(o_ptr) == INV_LIMIT_THROWABLE
-            && inventory_limit_space_for_object(o_ptr) == 2)
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 static void format_inventory_limit_reason(char* buf, size_t max,
     const object_type* incoming, cptr label, int limit)
 {
@@ -656,25 +904,22 @@ static void format_inventory_limit_reason(char* buf, size_t max,
     if (!buf || max == 0)
         return;
 
-    if (group == INV_LIMIT_THROWABLE)
+    if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
     {
         int used = inventory_limit_usage_for_group(group);
-        int needed = inventory_limit_space_for_object(incoming);
+        int needed = inventory_limit_additional_space_for_object(incoming);
+        int left = MAX(limit - used, 0);
+        int shortage;
 
-        if (pack_has_two_slot_throwable())
-        {
-            strnfmt(buf, max,
-                "No room: %d/%d throwable slots used. Your spear stack uses "
-                "2 slots; this item needs %d slot%s.",
-                used, limit, needed, (needed == 1) ? "" : "s");
-        }
-        else
-        {
-            strnfmt(buf, max,
-                "No room: %d/%d throwable slots used; this item needs %d "
-                "slot%s.",
-                used, limit, needed, (needed == 1) ? "" : "s");
-        }
+        if (needed <= 0)
+            needed = inventory_limit_space_for_object(incoming);
+        shortage = MAX(used + needed - limit, 0);
+        strnfmt(buf, max,
+            "No room in %s: %d.%d/%d.%d qt used (%d.%d qt left). "
+            "Incoming needs %d.%d qt; short by %d.%d qt.",
+            inventory_limit_group_name(group), used / 10, used % 10,
+            limit / 10, limit % 10, left / 10, left % 10,
+            needed / 10, needed % 10, shortage / 10, shortage % 10);
     }
     else if (label)
     {
@@ -720,7 +965,7 @@ static pickup_failure_result prompt_replace_light_limit_item(
         if (menu_group != INVENTORY_MENU_GROUP_ALL)
         {
             bool chose_replacement;
-            char reason[160];
+            char reason[240];
 
             format_inventory_limit_reason(reason, sizeof(reason), incoming,
                 label, limit);
@@ -785,20 +1030,21 @@ static pickup_failure_result prompt_replace_light_limit_item(
         }
         else
         {
-            if ((item < 0) || (item >= INVEN_TOTAL))
+            if (!player_inventory_handle_valid(item))
             {
                 bell("Illegal object choice!");
                 continue;
             }
 
-            drop_ptr = &inventory[item];
+            drop_ptr = player_inventory_object(item);
             if (!drop_ptr->k_idx)
             {
                 bell("That slot is empty.");
                 continue;
             }
 
-            if ((item >= INVEN_WIELD) && cursed_p(drop_ptr))
+            if (item >= INVEN_WIELD && item < INVEN_TOTAL
+                && cursed_p(drop_ptr))
             {
                 char equipped_name[80];
                 object_desc(equipped_name, sizeof(equipped_name), drop_ptr, true,
@@ -815,7 +1061,8 @@ static pickup_failure_result prompt_replace_light_limit_item(
             continue;
         }
 
-        if ((item >= INVEN_WIELD) && (item == wield_slot(incoming)))
+        if (item >= INVEN_WIELD && item < INVEN_TOTAL
+            && item == wield_slot(incoming))
         {
             log_debug("pickup light replace: equipping floor item %d directly "
                 "into slot %d instead of dropping first", floor_o_idx, item);
@@ -867,16 +1114,22 @@ static pickup_failure_result prompt_replace_light_limit_item(
         }
         else
         {
-            if ((item < INVEN_WIELD)
+            if (player_inventory_handle_is_carried(item)
                 && !queue_deferred_pickup_pack_drop(item, remove_amt,
                     player_oil_container_object(incoming)
                         && player_oil_container_object(drop_ptr)))
             {
+                if (player_pack_action_pending())
+                    break;
                 continue;
             }
 
-            if (item >= INVEN_WIELD)
+            if (item >= INVEN_WIELD && item < INVEN_TOTAL)
+            {
+                if (delay_pickup_for_pack_replacement(drop_ptr))
+                    break;
                 inven_drop(item, remove_amt);
+            }
         }
 
         p_ptr->notice |= (PN_COMBINE | PN_REORDER);
@@ -977,9 +1230,9 @@ static int carried_oil_flask_count(void)
             count += MAX(s_ptr->number, 1);
     }
 
-    for (int i = 0; i < INVEN_PACK; i++)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        object_type* o_ptr = player_pack_entry_at(ordinal);
         if (o_ptr->k_idx && o_ptr->tval == TV_FLASK)
             count += MAX(o_ptr->number, 1);
     }
@@ -1011,14 +1264,15 @@ static int discard_oil_flasks_for_lamp(int needed_slots)
         if (removed)
             continue;
 
-        for (int i = 0; i < INVEN_PACK; i++)
+        for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
         {
-            object_type* o_ptr = &inventory[i];
+            int item = player_pack_entry_handle_at(ordinal);
+            object_type* o_ptr = player_inventory_object(item);
             if (!o_ptr->k_idx || o_ptr->tval != TV_FLASK)
                 continue;
 
-            inven_item_increase(i, -1);
-            inven_item_optimize(i);
+            inven_item_increase(item, -1);
+            inven_item_optimize(item);
             discarded++;
             needed_slots--;
             removed = true;
@@ -1128,9 +1382,11 @@ static int oil_flasks_replaced_for_lamp_oil_amount(int needed_slots)
         needed_slots -= amount;
     }
 
-    for (int i = 0; i < INVEN_PACK && needed_slots > 0; i++)
+    for (int ordinal = 0;
+         ordinal < player_pack_entry_count() && needed_slots > 0;
+         ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        object_type* o_ptr = player_pack_entry_at(ordinal);
         int amount;
 
         if (!object_is_oil_flask(o_ptr))
@@ -1176,13 +1432,17 @@ static bool brass_lamp_pickup_oil_would_overflow_after_discard(
     return current_oil + oil_amount > resulting_capacity;
 }
 
-static bool auto_replace_flasks_for_brass_lamp(const object_type* incoming,
-    bool* aborted)
+bool prepare_brass_lamp_flask_replacement(const object_type* incoming,
+    int* flasks_to_replace, int* flask_oil, bool* aborted)
 {
     int incoming_slots;
     int needed_slots;
     int discarded_flask_oil;
-    int discarded;
+
+    if (flasks_to_replace)
+        *flasks_to_replace = 0;
+    if (flask_oil)
+        *flask_oil = 0;
 
     if (aborted)
         *aborted = false;
@@ -1215,16 +1475,28 @@ static bool auto_replace_flasks_for_brass_lamp(const object_type* incoming,
             msg_print("You leave it on the ground.");
             return false;
         }
-
-        brass_lamp_pickup_overflow_checked = true;
     }
 
-    discarded = discard_oil_flasks_for_lamp(needed_slots);
+    if (flasks_to_replace)
+        *flasks_to_replace = needed_slots;
+    if (flask_oil)
+        *flask_oil = discarded_flask_oil;
+
+    return true;
+}
+
+bool commit_brass_lamp_flask_replacement(int flasks_to_replace, int flask_oil)
+{
+    int discarded;
+
+    if (flasks_to_replace <= 0)
+        return false;
+
+    discarded = discard_oil_flasks_for_lamp(flasks_to_replace);
     if (discarded > 0)
     {
-        brass_lamp_pickup_overflow_checked = true;
-        if (discarded_flask_oil > 0)
-            player_gain_lamp_oil(discarded_flask_oil, true);
+        if (flask_oil > 0)
+            player_gain_lamp_oil(flask_oil, true);
         msg_format("Your lamp replaces %d oil flask%s, keeping the oil in "
             "your lamp stores.",
             discarded, (discarded == 1) ? "" : "s");
@@ -1232,7 +1504,26 @@ static bool auto_replace_flasks_for_brass_lamp(const object_type* incoming,
         p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
     }
 
-    return discarded > 0;
+    return discarded == flasks_to_replace;
+}
+
+static bool auto_replace_flasks_for_brass_lamp(const object_type* incoming,
+    bool* aborted)
+{
+    int flasks_to_replace = 0;
+    int flask_oil = 0;
+
+    if (!prepare_brass_lamp_flask_replacement(incoming,
+            &flasks_to_replace, &flask_oil, aborted))
+    {
+        return false;
+    }
+
+    if (!commit_brass_lamp_flask_replacement(flasks_to_replace, flask_oil))
+        return false;
+
+    brass_lamp_pickup_overflow_checked = true;
+    return true;
 }
 
 /*
@@ -1243,18 +1534,51 @@ static bool auto_replace_flasks_for_brass_lamp(const object_type* incoming,
  * Delete the object afterwards.
  */
 static bool prepare_floor_object_for_pickup(int o_idx, object_type* o_ptr);
-static void py_pickup_aux_internal(int o_idx, bool allow_channel);
+static object_storage_type pickup_destination_for_preference(
+    const object_type* o_ptr, object_storage_type preferred_storage)
+{
+    if (preferred_storage == OBJECT_STORAGE_PACK
+        && object_can_store_directly_in_pack(o_ptr))
+    {
+        return OBJECT_STORAGE_PACK;
+    }
+
+    if (preferred_storage == OBJECT_STORAGE_HARNESS
+        && object_can_choose_pack_or_harness(o_ptr))
+    {
+        return OBJECT_STORAGE_HARNESS;
+    }
+
+    return OBJECT_STORAGE_NONE;
+}
+
+static void py_pickup_aux_internal(int o_idx, bool allow_channel,
+    object_storage_type preferred_storage);
 
 void py_pickup_aux(int o_idx)
 {
-    py_pickup_aux_internal(o_idx, true);
+    py_pickup_aux_internal(o_idx, true, OBJECT_STORAGE_NONE);
 }
 
-static void py_pickup_aux_internal(int o_idx, bool allow_channel)
+void py_pickup_aux_to_pack(int o_idx)
+{
+    py_pickup_aux_internal(o_idx, false, OBJECT_STORAGE_PACK);
+}
+
+void py_pickup_aux_to_harness(int o_idx)
+{
+    py_pickup_aux_internal(o_idx, false, OBJECT_STORAGE_HARNESS);
+}
+
+static void py_pickup_aux_internal(int o_idx, bool allow_channel,
+    object_storage_type preferred_storage)
 {
     object_type* o_ptr;
+    object_type forced_storage_object;
+    object_type* pickup_ptr = NULL;
+    object_storage_type pickup_storage;
     char o_name[120];
-    
+
     o_ptr = &o_list[o_idx];
 
     if (object_is_searched_skeleton(o_ptr))
@@ -1263,18 +1587,99 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel)
     if (allow_channel && player_channel_floor_staff(o_ptr, o_idx))
         return;
 
+    pickup_storage = pickup_destination_for_preference(o_ptr,
+        preferred_storage);
+    if (pickup_storage != OBJECT_STORAGE_NONE)
+    {
+        if (pickup_storage == OBJECT_STORAGE_PACK
+            && player_pack_action_start_forced(
+                PLAYER_PACK_ACTION_PICKUP, 0 - o_idx, pickup_storage, false,
+                o_ptr))
+        {
+            return;
+        }
+
+        /* Keep the floor object's normal location metadata untouched while
+         * the destination-directed copy is checked and carried. */
+        object_copy(&forced_storage_object, o_ptr);
+        forced_storage_object.storage = pickup_storage;
+        forced_storage_object.pickup = false;
+        forced_storage_object.pickup_slot = -1;
+        pickup_ptr = &forced_storage_object;
+    }
+
+    /* Pack-destination pickups use the same three-turn action from keyboard,
+     * pile, contextual, and automatic pickup routes. */
+    if (pickup_storage == OBJECT_STORAGE_NONE
+        && o_ptr->tval == TV_ARROW
+        && (o_ptr->pickup || o_ptr->pickup_slot == INVEN_QUIVER1))
+    {
+        int quiver_space = player_quiver_arrow_space();
+
+        if (o_ptr->number > quiver_space
+            && player_pack_action_start_forced(PLAYER_PACK_ACTION_PICKUP,
+                0 - o_idx, 0, false, o_ptr))
+        {
+            return;
+        }
+    }
+    else if (pickup_storage == OBJECT_STORAGE_NONE
+        && player_pack_action_start(PLAYER_PACK_ACTION_PICKUP, 0 - o_idx, 0,
+            false, o_ptr))
+    {
+        return;
+    }
+
     // Remember the floor position even if give_player_item wipes the object
     int pickup_y = o_ptr->iy;
     int pickup_x = o_ptr->ix;
 
-    /*hack - don't pickup &nothings*/
-    if (o_ptr->k_idx)
+    if (pickup_storage != OBJECT_STORAGE_NONE)
     {
-        if (!prepare_floor_object_for_pickup(o_idx, o_ptr))
+        pack_replacement_pickup_o_idx = o_idx;
+        if (!prepare_floor_object_for_pickup(o_idx, pickup_ptr))
+        {
+            pack_replacement_pickup_o_idx = 0;
+            flush_deferred_pickup_drop();
+            return;
+        }
+        pack_replacement_pickup_o_idx = 0;
+
+        /* Check for Oath of the Smith violation just as normal pickup does. */
+        if (smith_oath_forbids_object(pickup_ptr)
+            && !smith_oath_confirm_break())
         {
             flush_deferred_pickup_drop();
             return;
         }
+
+        if (pickup_partial_volume_stack(o_ptr, pickup_ptr, pickup_storage))
+            return;
+
+        give_player_item_to_storage(pickup_ptr, pickup_storage);
+        break_truce(false);
+
+        /* inven_carry() leaves any stack excess in its source object. */
+        if (pickup_ptr->number < o_ptr->number)
+            o_ptr->number = pickup_ptr->number;
+        if (o_ptr->number <= 0)
+            delete_object_idx(o_idx);
+
+        flush_deferred_pickup_drop();
+        return;
+    }
+
+    /*hack - don't pickup &nothings*/
+    if (o_ptr->k_idx)
+    {
+        pack_replacement_pickup_o_idx = o_idx;
+        if (!prepare_floor_object_for_pickup(o_idx, o_ptr))
+        {
+            pack_replacement_pickup_o_idx = 0;
+            flush_deferred_pickup_drop();
+            return;
+        }
+        pack_replacement_pickup_o_idx = 0;
 
         if (pickup_brass_lamp(o_idx, o_ptr))
             return;
@@ -1288,6 +1693,9 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel)
                 return;
             }
         }
+
+        if (pickup_partial_volume_stack(o_ptr, o_ptr, OBJECT_STORAGE_NONE))
+            return;
 
         /* Check for supply items with partial pickup option */
         if (supplies_is_supply_object(o_ptr) && o_ptr->number > 1)
@@ -1304,8 +1712,9 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel)
                         "Your supply cache can only hold %d of %d. Pick up how many? (0-%d): ",
                         max_qty, o_ptr->number, max_qty);
                 
-                int qty = get_quantity_touch_category_force_prompt(prompt,
-                    max_qty, SDL_TOUCH_MENU_CATEGORY_SUPPLY);
+                int qty = get_quantity_touch_category_force_prompt_action(
+                    prompt, "Pick Up", max_qty,
+                    SDL_TOUCH_MENU_CATEGORY_SUPPLY);
                 
                 if (qty <= 0)
                 {
@@ -1383,6 +1792,7 @@ void do_cmd_pickup_from_pile(void)
         int floor_num;
 
         ui_question_option options[MAX_FLOOR_STACK];
+        const object_type* object_icons[MAX_FLOOR_STACK];
         char names[MAX_FLOOR_STACK][80];
 
         /*start with everything updated*/
@@ -1410,11 +1820,16 @@ void do_cmd_pickup_from_pile(void)
             object_desc(names[i], sizeof(names[i]), o_ptr, true, 3);
             options[i].key = (i < 26) ? (char)('a' + i) : 0;
             options[i].label = names[i];
-            options[i].attr = TERM_L_WHITE;
+            options[i].attr = weapon_glows(o_ptr)
+                ? object_display_color(o_ptr, TERM_L_BLUE)
+                : object_display_color(o_ptr,
+                      tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+            options[i].disabled = false;
+            object_icons[i] = o_ptr;
         }
 
-        item = ui_question_ask("Pick up which object?", NULL, options,
-            floor_num, p_ptr->py, p_ptr->px, 0);
+        item = ui_question_ask_objects("Pick up which object?", NULL,
+            options, object_icons, floor_num, p_ptr->py, p_ptr->px, 0);
 
         /*player chose escape*/
         if (item < 0)
@@ -1444,20 +1859,18 @@ static void report_pack_limit_failure(const char* o_name, bool still)
         cptr label = inven_carry_limit_label();
         int limit = inven_carry_limit_value();
 
-        if (inven_carry_limit_group() == INV_LIMIT_THROWABLE)
+        if (inven_carry_limit_group() == INV_LIMIT_PACK
+            || inven_carry_limit_group() == INV_LIMIT_HARNESS)
         {
-            int used = inventory_limit_usage_for_group(INV_LIMIT_THROWABLE);
+            enum inventory_limit_group group = inven_carry_limit_group();
+            int used = inventory_limit_usage_for_group(group);
+            int left = MAX(limit - used, 0);
 
-            if (pack_has_two_slot_throwable())
-            {
-                msg_format("Your pack's throwable slots are full (%d/%d); "
-                           "your spear stack uses 2 slots.", used, limit);
-            }
-            else
-            {
-                msg_format("Your pack's throwable slots are full (%d/%d).",
-                           used, limit);
-            }
+            msg_format("Your %s %s full: %d.%d/%d.%d qt used "
+                       "(%d.%d qt left).",
+                inventory_limit_group_name(group), still ? "is still" : "is",
+                used / 10, used % 10, limit / 10, limit % 10,
+                left / 10, left % 10);
             return;
         }
 
@@ -1555,13 +1968,29 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
     if (sdl_is_story_font_enabled())
         sdl_story_font_disable();
 
-    if (inven_carry_limit_group() == INV_LIMIT_THROWABLE)
+    if (inven_carry_limit_group() == INV_LIMIT_PACK
+        || inven_carry_limit_group() == INV_LIMIT_HARNESS)
     {
-        char reason[160];
+        char reason[200];
+        int incoming_space = inventory_limit_space_for_object(incoming);
 
         format_inventory_limit_reason(reason, sizeof(reason), incoming, label,
             limit);
         msg_print(reason);
+
+        if (incoming_space > limit)
+        {
+            msg_format("It needs %d.%d qt, more than the %d.%d qt maximum; "
+                       "it cannot fit even when this pool is empty.",
+                incoming_space / 10, incoming_space % 10,
+                limit / 10, limit % 10);
+            inventory_menu_set_expand_supplies(old_expand_supplies);
+            replacement_filter_incoming = old_filter;
+            item_tester_hook = old_item_tester_hook;
+            item_tester_tval = old_item_tester_tval;
+            item_tester_full = old_item_tester_full;
+            return false;
+        }
     }
     else if (label)
         msg_format("You already carry %s (limit %d).", label, limit);
@@ -1576,14 +2005,16 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
         if (menu_group != INVENTORY_MENU_GROUP_ALL)
         {
             bool chose_replacement;
-            char reason[160];
+            char reason[240];
 
             format_inventory_limit_reason(reason, sizeof(reason), incoming,
                 label, limit);
 
             msg_print("What to replace?");
             chose_replacement = open_inventory_replacement_menu(menu_group,
-                incoming, false, false, reason, &menu_item);
+                incoming,
+                inven_carry_limit_group() == INV_LIMIT_HARNESS,
+                false, reason, &menu_item);
 
             if (!chose_replacement)
             {
@@ -1637,14 +2068,14 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
                 continue;
             }
         }
-        else if ((item < 0) || (item >= INVEN_PACK))
+        else if (!player_inventory_handle_valid(item))
         {
             bell("Illegal object choice!");
             continue;
         }
         else
         {
-            drop_ptr = &inventory[item];
+            drop_ptr = player_inventory_object(item);
 
             if (!drop_ptr->k_idx)
             {
@@ -1682,14 +2113,46 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
         }
         else
         {
+            enum inventory_limit_group group = inven_carry_limit_group();
+
             if (item >= SUPPLIES_INDEX)
             {
                 msg_print("That will not make enough room.");
                 continue;
             }
 
-            if (!queue_deferred_pickup_pack_drop(item, drop_ptr->number, false))
+            remove_amt = drop_ptr->number;
+            if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
+            {
+                for (int amount = 1; amount <= drop_ptr->number; amount++)
+                {
+                    int projected = inventory_limit_usage_after_replacing(
+                        incoming, drop_ptr, amount);
+
+                    if (projected >= 0 && projected <= limit)
+                    {
+                        remove_amt = amount;
+                        break;
+                    }
+                }
+            }
+
+            if (item >= INVEN_WIELD && item < INVEN_TOTAL)
+            {
+                if (!queue_deferred_pickup_equipment_drop(item, remove_amt))
+                {
+                    if (player_pack_action_pending())
+                        break;
+                    continue;
+                }
+            }
+            else if (!queue_deferred_pickup_pack_drop(item, remove_amt,
+                         false))
+            {
+                if (player_pack_action_pending())
+                    break;
                 continue;
+            }
         }
 
         p_ptr->notice |= (PN_COMBINE | PN_REORDER);
@@ -1744,11 +2207,6 @@ static pickup_failure_result handle_zero_limit_pickup(object_type* incoming,
         return PICKUP_FAILURE_ABORT;
     }
 
-    screen_save();
-    show_equip();
-    msg_print(NULL);
-    screen_load();
-
     char equipped_name[80];
     object_desc(equipped_name, sizeof(equipped_name), equip_ptr, true, 3);
 
@@ -1785,17 +2243,35 @@ static pickup_failure_result resolve_pickup_failure(object_type* incoming,
                                                     const char* incoming_name,
                                                     bool attempted_replacement)
 {
+    object_type pack_fallback;
+    object_type* limit_incoming = incoming;
     bool has_lamp_oil_fallback = object_is_brass_lamp(incoming)
         && (incoming->number == 1) && (incoming->timeout > 0);
 
     if (inven_carry_limit_failed())
     {
+        /* Generic arrow pickup preflights a Pack fallback when the Quiver is
+         * full.  Use that same location metadata for replacement filtering
+         * and volume projection instead of the floor object's stale Quiver
+         * recovery marker. */
+        if (inven_carry_limit_group() == INV_LIMIT_PACK
+            && incoming->tval == TV_ARROW
+            && inventory_limit_group_for_object(incoming) != INV_LIMIT_PACK)
+        {
+            object_copy(&pack_fallback, incoming);
+            pack_fallback.storage = OBJECT_STORAGE_PACK;
+            pack_fallback.pickup = false;
+            pack_fallback.pickup_slot = -1;
+            limit_incoming = &pack_fallback;
+        }
+
         if (inven_carry_limit_value() <= 0)
-            return handle_zero_limit_pickup(incoming, floor_o_idx,
+            return handle_zero_limit_pickup(limit_incoming, floor_o_idx,
                                             incoming_name);
 
         pickup_failure_result limit_result =
-            handle_group_limit_pickup(incoming, floor_o_idx, incoming_name);
+            handle_group_limit_pickup(limit_incoming, floor_o_idx,
+                incoming_name);
 
         if ((limit_result == PICKUP_FAILURE_ABORT) && !has_lamp_oil_fallback)
             report_pack_limit_failure(incoming_name, attempted_replacement);
@@ -1833,6 +2309,9 @@ static bool prepare_floor_object_for_pickup(int o_idx, object_type* o_ptr)
 
     while (!inven_carry_okay(o_ptr))
     {
+        if (pickup_volume_stack_has_partial_fit(o_ptr))
+            break;
+
         pickup_failure_result failure = resolve_pickup_failure(
             o_ptr, o_idx, o_name, attempted_replacement);
 
@@ -1858,7 +2337,7 @@ static bool prepare_floor_object_for_pickup(int o_idx, object_type* o_ptr)
     return true;
 }
 
-void py_pickup(void)
+static void py_pickup_with_preference(object_storage_type preferred_storage)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;
@@ -1888,7 +2367,8 @@ void py_pickup(void)
         /* Hack -- disturb */
         disturb(0, 0);
 
-        if (player_channel_floor_staff(o_ptr, this_o_idx))
+        if (preferred_storage == OBJECT_STORAGE_NONE
+            && player_channel_floor_staff(o_ptr, this_o_idx))
         {
             done_pickup = true;
             continue;
@@ -1911,9 +2391,11 @@ void py_pickup(void)
         p_ptr->energy_use = 100;
 
         /* Pick up the object */
-        py_pickup_aux_internal(this_o_idx, false);
+        py_pickup_aux_internal(this_o_idx, false, preferred_storage);
 
         done_pickup = true;
+        if (player_pack_action_pending())
+            break;
     }
 
     if (!done_pickup)
@@ -1921,4 +2403,19 @@ void py_pickup(void)
         p_ptr->previous_action[0] = ACTION_NOTHING;
         p_ptr->energy_use = 0;
     }
+}
+
+void py_pickup(void)
+{
+    py_pickup_with_preference(OBJECT_STORAGE_NONE);
+}
+
+void py_pickup_to_pack(void)
+{
+    py_pickup_with_preference(OBJECT_STORAGE_PACK);
+}
+
+void py_pickup_to_harness(void)
+{
+    py_pickup_with_preference(OBJECT_STORAGE_HARNESS);
 }

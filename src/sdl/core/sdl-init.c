@@ -17,6 +17,7 @@ void sdl_quit_hook(cptr str)
 
     // Release cached mouse route search buffers.
     sdl_mouse_path_search_free();
+    sdl_mouse_cursor_shutdown();
     
     // Clean up story fonts
     sdl_story_font_cache_clear();
@@ -133,7 +134,11 @@ errr init_sdl(int argc, char **argv)
     // Check if config file exists
     bool config_exists = SDL_GetPathInfo(config_file_path, NULL);
     enum sdl_config_load_status config_load_status = SDL_CONFIG_LOAD_OK;
+    struct sdl_config_load_info config_load_info = { 0 };
     char startup_issue_summary[SDL_STARTUP_ISSUE_MAX];
+#if SIL_SDL_DESKTOP_HANDHELD_BUILD
+    bool desktop_input_prompted = false;
+#endif
 
     startup_issue_summary[0] = '\0';
 
@@ -148,7 +153,7 @@ errr init_sdl(int argc, char **argv)
             &pane_config_count, true);
         sdl_seed_all_pane_profiles_from_active();
         config_load_status = sdl_config_load(config_file_path, &config,
-            g_pane_profiles, SDL_PANE_PROFILE_COUNT);
+            g_pane_profiles, SDL_PANE_PROFILE_COUNT, &config_load_info);
         sdl_apply_stored_pane_profile(config.min_terminal_mode);
 
         if (config_load_status == SDL_CONFIG_LOAD_READ_FAILED) {
@@ -198,9 +203,6 @@ errr init_sdl(int argc, char **argv)
     sdl_normalize_unified_log_pane_profiles(true);
     sdl_ensure_default_pane_profiles_present(false);
     sdl_normalize_unified_log_pane_profiles(true);
-    if (!config_exists)
-        sdl_apply_screen_aspect_pane_default_profiles(profile_pixels_w,
-            profile_pixels_h);
     sdl_apply_stored_pane_profile(config.min_terminal_mode);
 
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -347,10 +349,15 @@ errr init_sdl(int argc, char **argv)
 
     g_startup_device_class = sdl_detect_startup_device_class(screen_pixels_w,
         screen_pixels_h);
+    g_mobile_touch_tablet =
+        g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH
+        && g_gamepad_state.pad_count == 0
+        && sdl_mobile_device_is_tablet();
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD
     if (!config_exists && g_gamepad_state.pad_count > 0
         && g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP)
     {
+        desktop_input_prompted = true;
         g_startup_device_class =
             sdl_prompt_desktop_startup_input_device(screen_pixels_w,
                 screen_pixels_h);
@@ -362,15 +369,100 @@ errr init_sdl(int argc, char **argv)
         g_gamepad_state.pad_count,
         (g_gamepad_state.pad_count == 1) ? "" : "s",
         config_exists ? ", loaded config" : ", first start");
+#if SIL_SDL_MOBILE_BUILD
+    if (g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH) {
+        log_info("Mobile touch device form factor: %s (logical display %dx%d)",
+            g_mobile_touch_tablet ? "tablet" : "phone", screen.w, screen.h);
+    }
+#endif
+
+    /* Builds between the round-wheel rollout and full touch-config
+     * persistence saved a partial touchControl object.  On touch-only mobile
+     * devices, repair only the keys that were absent; preserve any explicit
+     * profile or explicit disabled-wheel choice from older complete configs. */
+    if (config_exists && config_load_status == SDL_CONFIG_LOAD_OK
+        && g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH)
+    {
+        bool repaired = false;
+
+        if (!config_load_info.touch_profile_present) {
+            config.touch_profile = SDL_TOUCH_PROFILE_ROUND_WHEEL;
+            repaired = true;
+        }
+        if (!config_load_info.touch_round_movement_present
+            && config.touch_profile == SDL_TOUCH_PROFILE_ROUND_WHEEL)
+        {
+            config.touch_round_movement_enabled = true;
+            repaired = true;
+        }
+        if (repaired) {
+            log_info("Repaired missing mobile touch profile settings: profile=%s round_wheel=%s",
+                config.touch_profile == SDL_TOUCH_PROFILE_ROUND_WHEEL
+                    ? "round-wheel" : "saved",
+                config.touch_round_movement_enabled ? "on" : "off");
+        }
+    }
 
     if (!config_exists) {
+#if SIL_SDL_MOBILE_BUILD
+        bool startup_portrait =
+            g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH
+            && sdl_prompt_mobile_startup_portrait_mode();
+
+        config.mobile_portrait_mode = startup_portrait;
+        if (startup_portrait) {
+            /* Finalize first-start portrait profiles at the point where the
+             * user selects that default.  Saved profiles never pass here. */
+            for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
+                int profile_index = SDL_PANE_PROFILE_INDEX(
+                    SDL_PANE_ORIENTATION_PORTRAIT, mode);
+
+                sdl_pane_profile_apply_portrait_defaults(
+                    &g_pane_profiles[profile_index]);
+            }
+        }
+        sdl_apply_mobile_tablet_default_profiles();
+        sdl_apply_stored_pane_profile(config.min_terminal_mode);
+#endif
         sdl_apply_first_start_device_defaults(g_startup_device_class);
+#if SIL_SDL_DESKTOP_HANDHELD_BUILD
+        if (desktop_input_prompted) {
+            config.input_ui_mode =
+                (g_startup_device_class
+                    == SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER)
+                ? SDL_INPUT_UI_MODE_CONTROLLER
+                : SDL_INPUT_UI_MODE_PLATFORM;
+            log_info("First-start desktop input selection: input_ui=%s",
+                get_sdl_input_ui_mode_label(config.input_ui_mode));
+        }
+#endif
+#if SIL_SDL_MOBILE_BUILD
+        {
+            int quick_access_count = get_sdl_touch_top_panel_cell_count();
+            bool has_main_menu_shortcut = false;
+
+            for (int i = 0; i < quick_access_count; i++) {
+                if (get_sdl_touch_top_panel_binding(i, false) == 'm'
+                    || get_sdl_touch_top_panel_binding(i, true) == 'm')
+                {
+                    has_main_menu_shortcut = true;
+                    break;
+                }
+            }
+            log_info("First-start orientation defaults applied: portrait=%s "
+                     "fixed_menu=%s quick_access_cells=%d "
+                     "quick_access_menu=%s",
+                config.mobile_portrait_mode ? "yes" : "no",
+                config.show_main_menu_button ? "on" : "off",
+                quick_access_count,
+                has_main_menu_shortcut ? "yes" : "no");
+        }
+#endif
     }
-    if (sdl_touch_only_mobile_device_active())
-        sdl_touch_apply_profile(SDL_TOUCH_PROFILE_ROUND_WHEEL);
 
     g_touch_pane_mobile_open = config.touch_pane_default_open;
-    g_touch_top_panel_open = config.touch_top_panel_default_open;
+    g_touch_top_panel_open = !config.touch_top_panel_arrows_visible
+        || config.touch_top_panel_default_open;
     
     log_info("SDL Configuration:");
     log_info("  Main view scale: %d", config.main_view_scale);
@@ -423,6 +515,9 @@ errr init_sdl(int argc, char **argv)
     }
 
     sdl_ensure_window_size_for_min_terminal(&screen, &window_width, &window_height);
+
+    /* SDL consults this hint while it creates the mobile window. */
+    sdl_set_mobile_orientation_hint(config.mobile_portrait_mode);
 
     sdl_window_create(window_width, window_height, config.fullscreen, config.tiles);
 
@@ -487,6 +582,6 @@ errr init_sdl(int argc, char **argv)
 
 /*
  * Get SDL configuration info as formatted string
- * Called from cmd4.c for the pane settings menu
+ * Called from cmd4.c for the general settings menu
  */
 

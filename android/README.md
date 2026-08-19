@@ -78,7 +78,13 @@ Or use repo helper scripts from root:
 - `./install-android-apk.ps1 -Config Debug`
 - `./deploy-android.ps1 -LaunchApp`
 
-The APK helpers default to the `Sideload` delivery flavor, which uses package ID `com.silmore.myapp.sideload` and launcher label `Sil-More APK`. That package can coexist on the same phone with the Google Play/internal-testing app, which remains `com.silmore.myapp`. Pass `-Delivery Play` only when you intentionally want an APK with the Play package ID.
+The APK helpers default to the `Sideload` delivery flavor. Release APKs use package ID `com.silmore.myapp.sideload`; debug APKs use `com.silmore.myapp.sideload.debug`, so the debug app can coexist with both the release sideload APK and the Google Play/internal-testing app (`com.silmore.myapp`). Pass `-Delivery Play` only when you intentionally want an APK with the Play package ID.
+
+All repo install and deploy helpers update the selected package in place with `adb install -r`. They never uninstall a package or clear its app data. If an update cannot preserve data, such as when the signing key does not match, the helper stops with an error. Existing saves are visible only when the package ID matches the installed copy; debug, sideload release, and Play builds intentionally use separate app-private storage.
+
+For a one-step debug build, install, and optional launch:
+
+`./deploy-android-debug.ps1 -LaunchApp`
 
 `deploy-android.ps1` defaults to `Release` when `-Config` is omitted, and to `Sideload` when `-Delivery` is omitted.
 
@@ -102,10 +108,10 @@ $env:SIL_MORE_RELEASE_KEY_ALIAS = 'upload'
 $env:SIL_MORE_RELEASE_STORE_PASSWORD = '<keystore password>'
 $env:SIL_MORE_RELEASE_KEY_PASSWORD = '<key password>'
 
-.\build-android-bundle.ps1 -CompileSdk 35
+.\build-android-bundle.ps1
 ```
 
-`SIL_MORE_RELEASE_KEY_PASSWORD` may be omitted if the key password is the same as the keystore password; the script will prompt and lets Enter reuse the keystore password. Install Android SDK Platform 35 before passing `-CompileSdk 35`. The script defaults to `-TargetSdk 35` and writes `sil-more-<version>.aab` in the repo root.
+`SIL_MORE_RELEASE_KEY_PASSWORD` may be omitted if the key password is the same as the keystore password; the script will prompt and lets Enter reuse the keystore password. Install Android SDK Platform 36 and Build Tools 36.0.0 before building. The script defaults to `-CompileSdk 36 -TargetSdk 36` and writes `sil-more-<version>.aab` in the repo root.
 
 The Play Store AAB script always builds the `Play` delivery flavor, preserving package ID `com.silmore.myapp` for Google Play/internal testing.
 

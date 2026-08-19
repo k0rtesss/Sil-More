@@ -7,6 +7,7 @@
 #include "init.h"
 #include "item_set.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "metarun.h"
 #include "score/score_guid.h"
 #include "sdl-sound.h"
@@ -16,6 +17,8 @@
 #include <stdio.h>
 void cleanup_angband(void)
 {
+    meta_state_shutdown();
+
     /* Free the macros */
     macro_free();
 
@@ -46,6 +49,7 @@ void cleanup_angband(void)
     mem_free_null(cave_m_idx);
     mem_free_null(cave_feat);
     mem_free_null(cave_color);
+    mem_free_null(cave_natural);
     mem_free_null(cave_rewired);
     mem_free_null(cave_info);
     mem_free_null(cave_light);

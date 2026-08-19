@@ -138,6 +138,8 @@ static void regen_monsters(void)
         /* Allow hp regeneration, if needed. */
         if (m_ptr->hp != m_ptr->maxhp)
         {
+            int old_hp = m_ptr->hp;
+
             /* Some monsters regenerate quickly */
             if (r_ptr->flags2 & (RF2_REGENERATE))
             {
@@ -157,6 +159,23 @@ static void regen_monsters(void)
             /* Fully healed -> flag minimum range for recalculation */
             if (m_ptr->hp == m_ptr->maxhp)
                 m_ptr->min_range = 0;
+
+            if (m_ptr->ml && m_ptr->hp != old_hp
+                && (styled_monster_health_bars
+                    || styled_monster_tile_health_bars))
+            {
+                if (styled_monster_health_bars)
+                {
+                    p_ptr->window |= PW_MONLIST;
+                    if (p_ptr->health_who == i)
+                    {
+                        p_ptr->redraw |= PR_HEALTHBAR;
+                        p_ptr->window |= PW_MONSTER;
+                    }
+                }
+                if (styled_monster_tile_health_bars)
+                    lite_spot(m_ptr->fy, m_ptr->fx);
+            }
         }
 
         /* Allow mana regeneration, if needed. */
@@ -365,26 +384,19 @@ void process_world(void)
     if (o_ptr->tval == TV_LIGHT)
     {
         /* Hack -- Use some fuel */
-        if (player_light_has_fuel(o_ptr)
+        if (!p_ptr->resting_light_off && !p_ptr->smithing
+            && player_light_has_fuel(o_ptr)
             && !((o_ptr->sval == SV_LIGHT_LANTERN)
                 && (object_ego_prefix(o_ptr) == EGO_BROKEN_BRASS_LANTERN)))
         {
             /* Decrease life-span */
             int fuel = 1;
             if (fuelable_light_p(o_ptr)
-                && (level_partition_kind_for_point(p_ptr->py, p_ptr->px) == LEVEL_PART_CAVEY))
+                && (level_partition_kind_for_point(p_ptr->py, p_ptr->px) == LEVEL_PART_CAVEY)
+                && cave_natural[p_ptr->py][p_ptr->px])
             {
-                /*
-                 * Small caves: double fuel drain only while standing in the actual
-                 * CA-blob cave area (not merely anywhere in the partition).
-                 *
-                 * CA blobs are generated as (dark) "room" grids; corridors/links are not.
-                 */
-                if ((cave_info[p_ptr->py][p_ptr->px] & (CAVE_ROOM)) &&
-                    !(cave_info[p_ptr->py][p_ptr->px] & (CAVE_GLOW)))
-                {
-                    fuel = 2;
-                }
+                /* Natural cave pockets make fuelable lights burn twice as fast. */
+                fuel = 2;
             }
 
             player_light_add_fuel(o_ptr, -fuel);
@@ -438,6 +450,8 @@ void process_world(void)
 
         /* Skip non-objects */
         if (!o_ptr->k_idx)
+            continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
         /* Recharge activatable objects */

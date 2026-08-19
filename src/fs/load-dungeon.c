@@ -5,6 +5,7 @@
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "score/score_guid.h"
 #include <string.h>
@@ -16,6 +17,54 @@
 #include <stdbool.h>
 #include "metarun.h"
 #include "fs/load-internal.h"
+
+/*
+ * Read one dungeon RLE pair.  The low-level reader returns zero at EOF, so
+ * verify that both bytes actually advanced the stream before inspecting them.
+ */
+static bool read_dungeon_rle_pair(byte* count, byte* value, cptr stream_name)
+{
+    u32b start_offset = load_byte_offset;
+
+    rd_byte(count);
+    rd_byte(value);
+    if ((load_byte_offset - start_offset) != 2)
+    {
+        log_error("rd_dungeon: truncated %s RLE pair at offset %u",
+            stream_name, (unsigned)start_offset);
+        note(format("Truncated %s dungeon data.", stream_name));
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * Older writers can emit one empty prefix when the first grid's value is not
+ * zero.  Consume that single compatibility pair, but reject any later empty
+ * run so corrupt input always makes progress or fails.
+ */
+static int dungeon_rle_pair_status(
+    byte count, bool* first_pair, cptr stream_name)
+{
+    if (count != 0)
+    {
+        *first_pair = false;
+        return 1;
+    }
+
+    if (*first_pair)
+    {
+        *first_pair = false;
+        log_trace("rd_dungeon: skipped legacy empty %s RLE prefix", stream_name);
+        return 0;
+    }
+
+    log_error("rd_dungeon: zero-length %s RLE run at offset %u",
+        stream_name, (unsigned)(load_byte_offset - 2));
+    note(format("Invalid zero-length %s dungeon run.", stream_name));
+    return -1;
+}
 
 /*
  * Read the dungeon
@@ -47,6 +96,9 @@ errr rd_dungeon(void)
 
     u16b limit;
     bool defer_player_placement = false;
+    bool read_door_choices_after_color = false;
+    bool rewired_magic_prefetched = false;
+    bool natural_magic_prefetched = false;
     s16b header_py = 0;
     s16b header_px = 0;
 
@@ -119,6 +171,7 @@ errr rd_dungeon(void)
         {
             cave_o_idx[y][x] = 0;
             cave_m_idx[y][x] = 0;
+            cave_natural[y][x] = 0;
         }
     }
 
@@ -126,12 +179,21 @@ errr rd_dungeon(void)
 
     log_trace("[load:%06u] === BEGIN CAVE_INFO RLE ===", (unsigned)load_byte_offset);
     /* Load the dungeon data */
+    bool first_rle_pair = true;
     for (x = y = 0; y < p_ptr->cur_map_hgt;)
     {
+        int pair_status;
+
         maybe_show_startup_loading_overlay();
         /* Grab RLE info */
-        rd_byte(&count);
-        rd_byte(&tmp8u);
+        if (!read_dungeon_rle_pair(&count, &tmp8u, "cave_info"))
+            return (-1);
+        pair_status =
+            dungeon_rle_pair_status(count, &first_rle_pair, "cave_info");
+        if (pair_status < 0)
+            return (-1);
+        if (pair_status == 0)
+            continue;
 
         /* Apply the RLE info */
         for (i = count; i > 0; i--)
@@ -169,11 +231,20 @@ errr rd_dungeon(void)
         }
 
         log_trace("[load:%06u] === BEGIN CAVE_INFO_HI RLE ===", (unsigned)load_byte_offset);
+        first_rle_pair = true;
         for (x = y = 0; y < p_ptr->cur_map_hgt;)
         {
+            int pair_status;
+
             maybe_show_startup_loading_overlay();
-            rd_byte(&count);
-            rd_byte(&tmp8u);
+            if (!read_dungeon_rle_pair(&count, &tmp8u, "cave_info_hi"))
+                return (-1);
+            pair_status = dungeon_rle_pair_status(
+                count, &first_rle_pair, "cave_info_hi");
+            if (pair_status < 0)
+                return (-1);
+            if (pair_status == 0)
+                continue;
 
             for (i = count; i > 0; i--)
             {
@@ -214,12 +285,21 @@ errr rd_dungeon(void)
 
     log_trace("[load:%06u] === BEGIN CAVE_FEAT RLE ===", (unsigned)load_byte_offset);
     /* Load the dungeon data */
+    first_rle_pair = true;
     for (x = y = 0; y < p_ptr->cur_map_hgt;)
     {
+        int pair_status;
+
         maybe_show_startup_loading_overlay();
         /* Grab RLE info */
-        rd_byte(&count);
-        rd_byte(&tmp8u);
+        if (!read_dungeon_rle_pair(&count, &tmp8u, "cave_feat"))
+            return (-1);
+        pair_status =
+            dungeon_rle_pair_status(count, &first_rle_pair, "cave_feat");
+        if (pair_status < 0)
+            return (-1);
+        if (pair_status == 0)
+            continue;
 
         /* Apply the RLE info */
         for (i = count; i > 0; i--)
@@ -246,7 +326,15 @@ errr rd_dungeon(void)
     {
         const u16b DOOR_CHOICES_MAGIC = 0xD00D;
         u16b maybe_magic;
+        u32b probe_offset = load_byte_offset;
         rd_u16b(&maybe_magic);
+        if ((load_byte_offset - probe_offset) != 2)
+        {
+            log_error("rd_dungeon: truncated cave_color RLE probe at offset %u",
+                (unsigned)probe_offset);
+            note("Truncated cave_color dungeon data.");
+            return (-1);
+        }
         log_trace("[load:%06u] Probe value: 0x%04X (expecting 0x%04X for magic)", 
                  (unsigned)(load_byte_offset - 2), (unsigned)maybe_magic, (unsigned)DOOR_CHOICES_MAGIC);
         if (maybe_magic == DOOR_CHOICES_MAGIC) {
@@ -269,7 +357,10 @@ errr rd_dungeon(void)
 
     /*** Run length decoding of cave_color (style encoding) ***/
     log_trace("[load:%06u] === BEGIN CAVE_COLOR RLE ===", (unsigned)load_byte_offset);
+    first_rle_pair = true;
     for (x = y = 0; y < p_ptr->cur_map_hgt;) {
+        int pair_status;
+
         maybe_show_startup_loading_overlay();
         /* Grab RLE info, using prefetched pair if available first */
         if (color_rle_pair_prefetched) {
@@ -279,9 +370,15 @@ errr rd_dungeon(void)
             log_trace("[load:%06u] Using prefetched cave_color RLE pair: count=%u value=0x%02X", 
                      (unsigned)load_byte_offset, (unsigned)count, (unsigned)tmp8u);
         } else {
-            rd_byte(&count);
-            rd_byte(&tmp8u);
+            if (!read_dungeon_rle_pair(&count, &tmp8u, "cave_color"))
+                return (-1);
         }
+        pair_status =
+            dungeon_rle_pair_status(count, &first_rle_pair, "cave_color");
+        if (pair_status < 0)
+            return (-1);
+        if (pair_status == 0)
+            continue;
         /* Apply the RLE info */
         for (i = count; i > 0; i--) {
             cave_color[y][x] = tmp8u;
@@ -310,6 +407,7 @@ errr rd_dungeon(void)
             for (int i = to_read; i < n; ++i) { byte skip; rd_byte(&skip); }
             log_debug("Read door-choices block after cave_color: magic=0x%04X, len=%d (used=%d)", DOOR_CHOICES_MAGIC, n, to_read);
             styles_load_level_door_choices(buf, to_read);
+            read_door_choices_after_color = true;
         } else {
             /* Not our magic; interpret it as the first two bytes of the next section. */
             objects_count_prefetch = maybe_magic;
@@ -317,26 +415,124 @@ errr rd_dungeon(void)
         }
     }
 
+    /*
+     * Extension blocks after door choices are magic-driven.  This accepts the
+     * parallel-branch formats that wrote legendary, rewired, or natural data
+     * in different combinations while still staging the first object count.
+     */
+    legendary_area_map_reset();
+    if (read_door_choices_after_color)
+    {
+        u16b extension_magic = 0;
+
+        rd_u16b(&extension_magic);
+        if (extension_magic == SAVEFILE_LEGENDARY_AREA_MAGIC)
+        {
+            byte legendary_version = 0;
+            u16b active_count = 0;
+            u16b active_id = META_DUNGEON_LEGENDARY_AREA_ID_NONE;
+            guid64 active_guid = { 0, 0 };
+            bool active_seen = false;
+
+            rd_byte(&legendary_version);
+            if (legendary_version != SAVEFILE_LEGENDARY_AREA_VERSION)
+            {
+                note(format("Invalid legendary-area map version %u",
+                    (unsigned)legendary_version));
+                return (-1);
+            }
+
+            rd_u16b(&active_count);
+            if (active_count > 8)
+            {
+                note(format("Invalid legendary-area active count %u",
+                    (unsigned)active_count));
+                return (-1);
+            }
+            for (int ai = 0; ai < active_count; ai++)
+            {
+                u16b area_id = 0;
+                guid64 record_guid = { 0, 0 };
+                byte entry_seen = 0;
+
+                rd_u16b(&area_id);
+                rd_u32b(&record_guid.hi);
+                rd_u32b(&record_guid.lo);
+                rd_byte(&entry_seen);
+                if (active_id == META_DUNGEON_LEGENDARY_AREA_ID_NONE)
+                {
+                    active_id = area_id;
+                    active_guid = record_guid;
+                    active_seen = entry_seen != 0;
+                }
+            }
+
+            if (!legendary_area_map_ensure())
+                return (-1);
+
+            for (x = y = 0; y < p_ptr->cur_map_hgt;)
+            {
+                u16b area_id = 0;
+                u32b pair_offset = load_byte_offset;
+
+                rd_byte(&count);
+                rd_u16b(&area_id);
+                if ((load_byte_offset - pair_offset) != 3 || count == 0)
+                {
+                    note("Invalid legendary-area map run length");
+                    return (-1);
+                }
+                for (i = count; i > 0; i--)
+                {
+                    legendary_area_id[y][x] = area_id;
+                    if (++x >= p_ptr->cur_map_wid)
+                    {
+                        x = 0;
+                        if (++y >= p_ptr->cur_map_hgt)
+                            break;
+                    }
+                }
+            }
+
+            if (active_id != META_DUNGEON_LEGENDARY_AREA_ID_NONE
+                && !legendary_area_restore_after_load(active_id, active_guid,
+                    active_seen))
+            {
+                log_warn("Could not restore active legendary-area record");
+            }
+            legendary_area_discard_unresolved_loaded_records();
+
+            rd_u16b(&extension_magic);
+        }
+
+        if (extension_magic == 0xC2F0)
+            rewired_magic_prefetched = true;
+        else if (extension_magic == 0xC3F0)
+            natural_magic_prefetched = true;
+        else
+            objects_count_prefetch = extension_magic;
+    }
+
     /* Optional extension: rewired-trap difficulty (0.9.7.2+).  New saves always
      * write the door-choices block above, so the stream is positioned exactly
      * here; older saves lack this block and skip it via the version gate. */
-    if (savefile_has_cave_rewired)
+    if (rewired_magic_prefetched)
     {
-        const u16b CAVE_REWIRED_MAGIC = 0xC2F0;
-        u16b magic = 0;
-        rd_u16b(&magic);
-        if (magic != CAVE_REWIRED_MAGIC)
-        {
-            note(format("Invalid cave_rewired marker 0x%04X", magic));
-            return (-1);
-        }
-
         log_trace("[load:%06u] === BEGIN CAVE_REWIRED RLE ===", (unsigned)load_byte_offset);
+        first_rle_pair = true;
         for (x = y = 0; y < p_ptr->cur_map_hgt;)
         {
+            int pair_status;
+
             maybe_show_startup_loading_overlay();
-            rd_byte(&count);
-            rd_byte(&tmp8u);
+            if (!read_dungeon_rle_pair(&count, &tmp8u, "cave_rewired"))
+                return (-1);
+            pair_status = dungeon_rle_pair_status(
+                count, &first_rle_pair, "cave_rewired");
+            if (pair_status < 0)
+                return (-1);
+            if (pair_status == 0)
+                continue;
 
             for (i = count; i > 0; i--)
             {
@@ -351,6 +547,50 @@ errr rd_dungeon(void)
             }
         }
         log_trace("[load:%06u] === END CAVE_REWIRED RLE ===", (unsigned)load_byte_offset);
+
+        {
+            u16b extension_magic = 0;
+
+            rd_u16b(&extension_magic);
+            if (extension_magic == 0xC3F0)
+                natural_magic_prefetched = true;
+            else
+                objects_count_prefetch = extension_magic;
+        }
+    }
+
+    /* Optional extension: natural CA-cave footprint (0.9.7.4+). */
+    if (natural_magic_prefetched)
+    {
+        log_trace("[load:%06u] === BEGIN CAVE_NATURAL RLE ===", (unsigned)load_byte_offset);
+        first_rle_pair = true;
+        for (x = y = 0; y < p_ptr->cur_map_hgt;)
+        {
+            int pair_status;
+
+            maybe_show_startup_loading_overlay();
+            if (!read_dungeon_rle_pair(&count, &tmp8u, "cave_natural"))
+                return (-1);
+            pair_status = dungeon_rle_pair_status(
+                count, &first_rle_pair, "cave_natural");
+            if (pair_status < 0)
+                return (-1);
+            if (pair_status == 0)
+                continue;
+
+            for (i = count; i > 0; i--)
+            {
+                cave_natural[y][x] = tmp8u ? 1 : 0;
+
+                if (++x >= p_ptr->cur_map_wid)
+                {
+                    x = 0;
+                    if (++y >= p_ptr->cur_map_hgt)
+                        break;
+                }
+            }
+        }
+        log_trace("[load:%06u] === END CAVE_NATURAL RLE ===", (unsigned)load_byte_offset);
     }
 
     /*** Player ***/

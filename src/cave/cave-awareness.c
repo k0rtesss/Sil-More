@@ -12,6 +12,8 @@ void health_track(int m_idx)
 
     /* Redraw (later) */
     p_ptr->redraw |= (PR_HEALTHBAR);
+    if (styled_monster_health_bars)
+        p_ptr->window |= PW_MONSTER;
 }
 
 /*
@@ -85,6 +87,13 @@ void disturb(int stop_stealth, int unused_flag)
     {
         /* Cancel */
         p_ptr->resting = 0;
+
+        /* Relight a torch or lamp that was turned off for this rest. */
+        if (p_ptr->resting_light_off)
+        {
+            p_ptr->resting_light_off = false;
+            calc_torch();
+        }
 
         /* Redraw the state (later) */
         p_ptr->redraw |= (PR_STATE);

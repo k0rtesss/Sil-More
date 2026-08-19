@@ -82,6 +82,7 @@ void get_extra(void)
     p_ptr->lore = 0;
     p_ptr->knowledge_points = 0;
     p_ptr->discovery_lore_flags = 0;
+    p_ptr->quick_access_prompt_flags = 0;
     log_debug("Set starting experience to %d", p_ptr->exp);
 
     /* Player is not singing */
@@ -210,6 +211,8 @@ void player_wipe(void)
     {
         object_wipe(&inventory[i]);
     }
+    player_carried_extra_reset_store();
+    player_quiver_reset_store();
 
     /* Start with no artefacts made yet */
     /* and clear the slots for in-game randarts */
@@ -459,7 +462,8 @@ static void give_start_items(const start_item *list)
         inven_slot = carry_slot;
 
         /* Auto-wield if slot empty */
-        if (slot >= INVEN_WIELD && inventory[slot].tval == 0)
+        if (inven_slot < INVEN_TOTAL && slot >= INVEN_WIELD
+            && inventory[slot].tval == 0)
         {
             o_ptr = &inventory[slot];
             object_copy(o_ptr, i_ptr);

@@ -10,6 +10,7 @@
 #include <SDL3/SDL_timer.h>
 
 #define INTERACTION_ROLL_ANIM_FRAME_MS 250
+#define INTERACTION_ROLL_BASH_REDUCTION_MS 1000
 
 static bool is_open(int feat) { return (feat == FEAT_OPEN); }
 
@@ -44,26 +45,29 @@ static u32b interaction_roll_visual_seed(cptr title, cptr action, int y, int x,
 }
 
 static int interaction_roll_visual_die(u32b seed, int frame, int salt,
-    int previous)
+    int previous, int sides)
 {
     u32b x = seed;
     int die;
+
+    if (sides < 1)
+        sides = 1;
 
     x ^= (u32b)(frame + 1) * 1103515245u;
     x ^= (u32b)(salt + 1) * 374761393u;
     x = interaction_roll_mix32(x);
 
-    die = (int)(x % 10u) + 1;
+    die = (int)(x % (u32b)sides) + 1;
     if (die == previous)
-        die = (die % 10) + 1;
+        die = (die % sides) + 1;
 
     return die;
 }
 
 static void interaction_roll_format_total(
-    char* buf, size_t buf_sz, cptr label, int die, int bonus)
+    char* buf, size_t buf_sz, cptr label, int die, int sides, int bonus)
 {
-    strnfmt(buf, buf_sz, "%-10s d10 %2d %c %d = %d", label, die,
+    strnfmt(buf, buf_sz, "%-10s d%d %2d %c %d = %d", label, sides, die,
         (bonus < 0) ? '-' : '+', ABS(bonus), die + bonus);
 }
 
@@ -92,11 +96,12 @@ static void interaction_roll_render_overlay(cptr title, cptr action, int y,
     sdl_question_menu_add_text(action, final ? TERM_L_WHITE : TERM_L_BLUE);
 
     interaction_roll_format_total(
-        line, sizeof(line), "You", skill_die, roll->skill);
+        line, sizeof(line), "You", skill_die, roll->skill_sides, roll->skill);
     sdl_question_menu_add_text(line, TERM_WHITE);
 
     interaction_roll_format_total(
-        line, sizeof(line), "Difficulty", difficulty_die, roll->difficulty);
+        line, sizeof(line), "Difficulty", difficulty_die,
+        roll->difficulty_sides, roll->difficulty);
     sdl_question_menu_add_text(line, TERM_WHITE);
 
     if (final)
@@ -180,10 +185,10 @@ static void interaction_roll_add_final_throw(cptr label,
 
     sdl_question_menu_add_text(label, TERM_L_WHITE);
     interaction_roll_format_total(line, sizeof(line), "You", roll->skill_die,
-        roll->skill);
+        roll->skill_sides, roll->skill);
     sdl_question_menu_add_text(line, TERM_WHITE);
     interaction_roll_format_total(line, sizeof(line), "Difficulty",
-        roll->difficulty_die, roll->difficulty);
+        roll->difficulty_die, roll->difficulty_sides, roll->difficulty);
     sdl_question_menu_add_text(line, TERM_WHITE);
     interaction_roll_add_final_result(roll);
 }
@@ -236,9 +241,11 @@ void show_interaction_skill_roll_status(cptr title, int y, int x,
     interaction_roll_present_frame();
 }
 
-int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
+static int show_interaction_skill_roll_animation_actor_sided(
+    monster_type* actor, cptr title,
     cptr action, int y, int x, int skill, int difficulty,
-    skill_roll_details* roll)
+    int skill_sides, int difficulty_sides, skill_roll_details* roll,
+    int lock_adjust_ms)
 {
     skill_roll_details local_roll;
     skill_roll_details preview_roll;
@@ -255,12 +262,20 @@ int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
     if (!roll)
         roll = &local_roll;
 
+    if (skill_sides < 1)
+        skill_sides = 1;
+    if (difficulty_sides < 1)
+        difficulty_sides = 1;
+
     if (!Term || character_icky)
-        return skill_check_details(actor, skill, difficulty, NULL, roll);
+        return skill_check_details_sided(actor, skill, difficulty, NULL,
+            skill_sides, difficulty_sides, roll);
 
     memset(&preview_roll, 0, sizeof(preview_roll));
     preview_roll.skill = skill;
     preview_roll.difficulty = difficulty;
+    preview_roll.skill_sides = skill_sides;
+    preview_roll.difficulty_sides = difficulty_sides;
 
     if (p_ptr)
     {
@@ -271,6 +286,9 @@ int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
     saved_hide_cursor = hide_cursor;
     hide_cursor = true;
     lock_ms = get_sdl_dice_roll_lock_ms();
+    lock_ms += lock_adjust_ms;
+    if (lock_ms < 0)
+        lock_ms = 0;
     overlay_ms = get_sdl_dice_roll_overlay_ms();
     visual_seed = interaction_roll_visual_seed(title, action, y, x, skill,
         difficulty);
@@ -278,9 +296,9 @@ int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
     while (elapsed_ms < lock_ms)
     {
         int skill_die = interaction_roll_visual_die(visual_seed, frame, 0,
-            prev_skill_die);
+            prev_skill_die, skill_sides);
         int difficulty_die = interaction_roll_visual_die(visual_seed, frame, 1,
-            prev_difficulty_die);
+            prev_difficulty_die, difficulty_sides);
         int delay_ms = MIN(INTERACTION_ROLL_ANIM_FRAME_MS,
             lock_ms - elapsed_ms);
 
@@ -293,7 +311,8 @@ int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
         frame++;
     }
 
-    result = skill_check_details(actor, skill, difficulty, NULL, roll);
+    result = skill_check_details_sided(actor, skill, difficulty, NULL,
+        skill_sides, difficulty_sides, roll);
     interaction_roll_render_overlay(title, action, y, x, roll, roll->skill_die,
         roll->difficulty_die, true, false, overlay_ms);
 
@@ -301,6 +320,14 @@ int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
     interaction_roll_present_frame();
 
     return result;
+}
+
+int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
+    cptr action, int y, int x, int skill, int difficulty,
+    skill_roll_details* roll)
+{
+    return show_interaction_skill_roll_animation_actor_sided(actor, title,
+        action, y, x, skill, difficulty, 10, 10, roll, 0);
 }
 
 /*
@@ -311,8 +338,25 @@ int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
 int show_interaction_skill_roll_animation(cptr title, cptr action, int y,
     int x, int skill, int difficulty, skill_roll_details* roll)
 {
-    return show_interaction_skill_roll_animation_actor(
-        PLAYER, title, action, y, x, skill, difficulty, roll);
+    return show_interaction_skill_roll_animation_actor_sided(
+        PLAYER, title, action, y, x, skill, difficulty, 10, 10, roll, 0);
+}
+
+int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
+    int y, int x, int skill, int difficulty, int skill_sides,
+    int difficulty_sides, skill_roll_details* roll)
+{
+    return show_interaction_skill_roll_animation_actor_sided(PLAYER, title,
+        action, y, x, skill, difficulty, skill_sides, difficulty_sides, roll,
+        0);
+}
+
+static int show_interaction_skill_roll_animation_bash(cptr title, cptr action,
+    int y, int x, int skill, int difficulty, skill_roll_details* roll)
+{
+    return show_interaction_skill_roll_animation_actor_sided(PLAYER, title,
+        action, y, x, skill, difficulty, 10, 10, roll,
+        -INTERACTION_ROLL_BASH_REDUCTION_MS);
 }
 
 /*
@@ -413,7 +457,7 @@ static int count_chests(int* y, int* x, bool trapped)
             continue;
 
         /* No (known) traps here */
-        if (trapped
+        if (trapped && !chest_trap_minigame
             && (!object_known_p(o_ptr) || (o_ptr->pval < 0)
                 || !object_chest_trap_flags(o_ptr)))
         {
@@ -446,6 +490,198 @@ static bool get_interact_dir(cptr prompt, bool (*test)(int y, int x),
 static bool grid_is_open_target(int y, int x);
 static bool grid_is_disarm_target(int y, int x);
 static bool grid_is_tunnel_target(int y, int x);
+static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
+    bool* out_rolled);
+
+typedef struct door_minigame_retry_state
+{
+    bool active;
+    bool pause_before_prompt;
+    int y;
+    int x;
+    char previous[240];
+} door_minigame_retry_state;
+
+typedef enum door_minigame_choice
+{
+    DOOR_CHOICE_LOCKPICK,
+    DOOR_CHOICE_BASH,
+    DOOR_CHOICE_LEAVE
+} door_minigame_choice;
+
+#define DOOR_MINIGAME_RETRY_DELAY_MS 1000
+#define DOOR_JAM_CHANCE_PER_MISS 10
+#define DOOR_JAM_CHANCE_MAX 75
+#define DOOR_LOCKPICK_BASE_DIFFICULTY 8
+#define FLOOR_TRAP_DISARM_BASE_DIFFICULTY 6
+
+static door_minigame_retry_state door_retry;
+
+static void door_minigame_clear_retry(void)
+{
+    memset(&door_retry, 0, sizeof(door_retry));
+}
+
+static bool door_minigame_retry_target(int* y, int* x)
+{
+    if (!door_retry.active)
+        return false;
+
+    if (y)
+        *y = door_retry.y;
+    if (x)
+        *x = door_retry.x;
+    return true;
+}
+
+static void door_minigame_schedule_retry(int y, int x, cptr previous,
+    bool pause_before_prompt)
+{
+    door_retry.active = true;
+    door_retry.pause_before_prompt = pause_before_prompt;
+    door_retry.y = y;
+    door_retry.x = x;
+    SDL_strlcpy(door_retry.previous, previous ? previous : "",
+        sizeof(door_retry.previous));
+    p_ptr->command_new = 'o';
+}
+
+static int door_condition_penalty(void)
+{
+    int penalty = 0;
+
+    if (p_ptr->blind || no_light() || p_ptr->image)
+        penalty += 5;
+    if (p_ptr->confused)
+        penalty += 5;
+    return penalty;
+}
+
+static int door_lockpick_difficulty(int y, int x)
+{
+    int power = cave_feat[y][x] - FEAT_DOOR_HEAD;
+
+    return (power & 0x07) + DOOR_LOCKPICK_BASE_DIFFICULTY
+        + door_condition_penalty();
+}
+
+static int door_bash_difficulty(int y, int x)
+{
+    return (cave_feat[y][x] - FEAT_DOOR_HEAD) & 0x07;
+}
+
+/* Overall chance that a lockpick attempt jams the door.  Each possible failed
+ * throw contributes its actual per-point jam chance up to the cap, so the
+ * displayed percentage describes the whole attempt rather than only failures. */
+static int door_lockpick_jam_percent(int skill, int difficulty)
+{
+    int total_jam_chance = 0;
+    int outcomes = 0;
+    int alternate_throws = (p_ptr && p_ptr->cursed) ? 10 : 1;
+
+    for (int skill_die = 1; skill_die <= 10; skill_die++)
+    {
+        for (int skill_alt = 1; skill_alt <= alternate_throws; skill_alt++)
+        {
+            int kept_skill_die = (p_ptr && p_ptr->cursed)
+                ? MIN(skill_die, skill_alt) : skill_die;
+
+            for (int difficulty_die = 1; difficulty_die <= 10;
+                 difficulty_die++)
+            {
+                int result = skill + kept_skill_die
+                    - difficulty - difficulty_die;
+
+                outcomes++;
+                if (result < 0)
+                    total_jam_chance += MIN(DOOR_JAM_CHANCE_MAX,
+                        (0 - result) * DOOR_JAM_CHANCE_PER_MISS);
+            }
+        }
+    }
+
+    return outcomes
+        ? (total_jam_chance + outcomes / 2) / outcomes : 0;
+}
+
+static int door_minigame_question(int y, int x)
+{
+    ui_question_option options[3];
+    int actions[3];
+    int count = 0;
+    int choice;
+    int power = cave_feat[y][x] - FEAT_DOOR_HEAD;
+    bool stuck = power >= 0x08;
+    char desc[480];
+    char lockpick_label[64];
+    char bash_label[64];
+
+    strnfmt(bash_label, sizeof(bash_label), "Bash: %d%%",
+        player_skill_check_success_percent(p_ptr->stat_use[A_STR] * 2,
+            door_bash_difficulty(y, x), 10, 10));
+
+    desc[0] = '\0';
+    if (door_retry.active && door_retry.y == y && door_retry.x == x
+        && door_retry.previous[0])
+    {
+        /* A repeated command can reach this retry before request_command()
+         * consumes the queued open command.  Consume it here as well so a
+         * successful retry cannot leave a stale extra open command behind. */
+        if (p_ptr->command_new == 'o')
+            p_ptr->command_new = 0;
+        SDL_strlcpy(desc, door_retry.previous, sizeof(desc));
+        SDL_strlcat(desc, " ", sizeof(desc));
+    }
+
+    if (stuck)
+    {
+        SDL_strlcat(desc,
+            "The lock is jammed. The door can only be bashed open.",
+            sizeof(desc));
+        options[count]
+            = (ui_question_option){ 'b', bash_label, TERM_ORANGE, false };
+        actions[count++] = DOOR_CHOICE_BASH;
+        options[count]
+            = (ui_question_option){ 'l', "Leave", TERM_SLATE, false };
+        actions[count++] = DOOR_CHOICE_LEAVE;
+    }
+    else
+    {
+        strnfmt(lockpick_label, sizeof(lockpick_label),
+            "Lockpick: %d%% (jam: %d%%)",
+            player_skill_check_success_percent(p_ptr->skill_use[S_PER],
+                door_lockpick_difficulty(y, x), 10, 10),
+            door_lockpick_jam_percent(p_ptr->skill_use[S_PER],
+                door_lockpick_difficulty(y, x)));
+        SDL_strlcat(desc,
+            "The door is locked. Pick the lock or force it open. A failed "
+            "lockpick may jam it.", sizeof(desc));
+        options[count]
+            = (ui_question_option){
+                'p', lockpick_label, TERM_L_GREEN, false
+            };
+        actions[count++] = DOOR_CHOICE_LOCKPICK;
+        options[count]
+            = (ui_question_option){ 'b', bash_label, TERM_ORANGE, false };
+        actions[count++] = DOOR_CHOICE_BASH;
+        options[count]
+            = (ui_question_option){ 'l', "Leave", TERM_SLATE, false };
+        actions[count++] = DOOR_CHOICE_LEAVE;
+    }
+
+    if (door_retry.active && door_retry.pause_before_prompt
+        && Term && !character_icky)
+    {
+        Term_fresh();
+        Term_xtra(TERM_XTRA_DELAY, DOOR_MINIGAME_RETRY_DELAY_MS);
+    }
+
+    choice = ui_question_ask(stuck ? "Stuck door" : "Locked door", desc,
+        options, count, y, x, 0);
+    if (choice < 0 || choice >= count)
+        return DOOR_CHOICE_LEAVE;
+    return actions[choice];
+}
 
 /*
  * Determine if a given grid may be "opened"
@@ -494,14 +730,101 @@ bool do_cmd_open_aux(int y, int x)
     if (!do_cmd_open_test(y, x))
         return (false);
 
-    /* Jammed door */
-    if (cave_feat[y][x] >= FEAT_DOOR_HEAD + 0x08)
+    if (lockpick_minigame
+        && cave_feat[y][x] >= FEAT_DOOR_HEAD + 0x01)
     {
-        /* Stuck */
-        msg_print("The door appears to be stuck.");
+        door_minigame_choice choice = (door_minigame_choice)
+            door_minigame_question(y, x);
+        char previous[240];
+
+        door_minigame_clear_retry();
+
+        if (choice == DOOR_CHOICE_LEAVE)
+        {
+            p_ptr->energy_use = 0;
+            return false;
+        }
+
+        if (choice == DOOR_CHOICE_BASH)
+        {
+            bool rolled = false;
+
+            (void)do_cmd_bash_aux(y, x, &roll, &rolled);
+            if (cave_known_closed_door_bold(y, x))
+            {
+                if (rolled)
+                {
+                    SDL_strlcpy(previous,
+                        "Bash failed. The door holds.",
+                        sizeof(previous));
+                }
+                else
+                {
+                    SDL_strlcpy(previous,
+                        "Bash failed. The door remains closed.",
+                        sizeof(previous));
+                }
+                flush();
+                door_minigame_schedule_retry(y, x, previous, true);
+                more = true;
+            }
+            return more;
+        }
+
+        score = p_ptr->skill_use[S_PER];
+        power = (cave_feat[y][x] - FEAT_DOOR_HEAD) & 0x07;
+        difficulty = door_lockpick_difficulty(y, x);
+        result = show_interaction_skill_roll_animation("Picking the lock",
+            "Working the lockpick", y, x, score, difficulty, &roll);
+
+        if (result > 0)
+        {
+            message(MSG_OPENDOOR, 0, "You have picked the lock.");
+            cave_set_feat(y, x, FEAT_OPEN);
+            p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
+            return false;
+        }
+        else
+        {
+            int jam_chance = MIN(DOOR_JAM_CHANCE_MAX,
+                MAX(0, 0 - result) * DOOR_JAM_CHANCE_PER_MISS);
+            bool jammed = jam_chance > 0 && rand_int(100) < jam_chance;
+
+            flush();
+            if (jammed)
+            {
+                cave_set_feat(y, x, FEAT_DOOR_HEAD + 0x08 + power);
+                message(MSG_LOCKPICK_FAIL, 0,
+                    "The pick twists in the lock, jamming it fast!");
+                SDL_strlcpy(previous,
+                    "Lockpick failed and jammed the door.",
+                    sizeof(previous));
+            }
+            else
+            {
+                message(MSG_LOCKPICK_FAIL, 0,
+                    "You failed to pick the lock.");
+                SDL_strlcpy(previous,
+                    "Lockpick failed. The door remains locked.",
+                    sizeof(previous));
+            }
+            door_minigame_schedule_retry(y, x, previous, true);
+            return true;
+        }
     }
 
-    /* Locked door */
+    /* Legacy jammed-door prompt. */
+    if (cave_feat[y][x] >= FEAT_DOOR_HEAD + 0x08)
+    {
+        if (get_check_near(y, x,
+                "Stuck door, do you want to bash it? "))
+        {
+            more = do_cmd_bash_aux(y, x, NULL, NULL);
+        }
+    }
+
+    /* Legacy locked-door behavior.  The setting explicitly suppresses the
+     * new throw overlay when disabled. */
     else if (cave_feat[y][x] >= FEAT_DOOR_HEAD + 0x01)
     {
         /* Get the score in favour (=perception) */
@@ -510,8 +833,8 @@ bool do_cmd_open_aux(int y, int x)
         /* Determine door power based on the door power (1 to 7)*/
         power = cave_feat[y][x] - FEAT_DOOR_HEAD;
 
-        // Base difficulty is the door power + 5
-        difficulty = power + 5;
+        // Base difficulty is the door power plus the lockpick baseline.
+        difficulty = power + DOOR_LOCKPICK_BASE_DIFFICULTY;
 
         /* Penalize some conditions */
         if (p_ptr->blind || no_light() || p_ptr->image)
@@ -519,8 +842,7 @@ bool do_cmd_open_aux(int y, int x)
         if (p_ptr->confused)
             difficulty += 5;
 
-        result = show_interaction_skill_roll_animation("Picking the lock",
-            "Working the lockpick", y, x, score, difficulty, &roll);
+        result = skill_check(PLAYER, score, difficulty, NULL);
 
         /* Success */
         if (result > 0)
@@ -573,39 +895,71 @@ void do_cmd_open(void)
 {
     int y = 0, x = 0, dir;
 
-    s16b o_idx;
+    s16b o_idx = 0;
 
     bool more = false;
+    bool retry_target = false;
+    bool door_target = false;
+    bool chest_target = false;
 
     int num_doors, num_chests;
 
-    /* Count closed doors */
-    num_doors = count_feats(&y, &x, is_closed, false);
+    door_target = lockpick_minigame && door_minigame_retry_target(&y, &x);
+    chest_target = !door_target && chest_trap_minigame
+        && chest_minigame_retry_target(&y, &x);
+    retry_target = door_target || chest_target;
 
-    /* Count chests (locked) */
-    num_chests = count_chests(&y, &x, false);
-
-    if ((num_doors + num_chests) == 0)
+    if (retry_target)
     {
-        msg_print("There is nothing in your square (or adjacent) to open.");
-        return;
+        bool adjacent = (ABS(y - p_ptr->py) <= 1)
+            && (ABS(x - p_ptr->px) <= 1);
+
+        if (!adjacent || y < 0 || x < 0 || y >= p_ptr->cur_map_hgt
+            || x >= p_ptr->cur_map_wid
+            || (door_target && !cave_known_closed_door_bold(y, x))
+            || (chest_target
+                && (!(o_idx = chest_check(y, x))
+                    || o_list[o_idx].pval == 0)))
+        {
+            door_minigame_clear_retry();
+            chest_minigame_clear_retry();
+            msg_print("That lock is no longer available.");
+            return;
+        }
+
+        dir = motion_dir(p_ptr->py, p_ptr->px, y, x);
+        p_ptr->command_dir = dir;
     }
+    else
+    {
+        /* Count closed doors */
+        num_doors = count_feats(&y, &x, is_closed, false);
 
-    /* Honour a pre-supplied direction, else pick a target interactively */
-    if (p_ptr->command_dir)
-        dir = p_ptr->command_dir;
-    else if (!get_interact_dir("Open what?", grid_is_open_target, false,
-                 &dir))
-        return;
+        /* Count chests (locked) */
+        num_chests = count_chests(&y, &x, false);
 
-    p_ptr->command_dir = dir;
+        if ((num_doors + num_chests) == 0)
+        {
+            msg_print("There is nothing in your square (or adjacent) to open.");
+            return;
+        }
 
-    /* Get location */
-    y = p_ptr->py + ddy[dir];
-    x = p_ptr->px + ddx[dir];
+        /* Honour a pre-supplied direction, else pick a target interactively */
+        if (p_ptr->command_dir)
+            dir = p_ptr->command_dir;
+        else if (!get_interact_dir("Open what?", grid_is_open_target, false,
+                     &dir))
+            return;
 
-    /* Check for chests */
-    o_idx = chest_check(y, x);
+        p_ptr->command_dir = dir;
+
+        /* Get location */
+        y = p_ptr->py + ddy[dir];
+        x = p_ptr->px + ddx[dir];
+
+        /* Check for chests */
+        o_idx = chest_check(y, x);
+    }
 
     /* Verify legality */
     if (!o_idx && !do_cmd_open_test(y, x))
@@ -618,7 +972,7 @@ void do_cmd_open(void)
     p_ptr->previous_action[0] = ACTION_MISC;
 
     /* Apply confusion */
-    if (confuse_dir(&dir))
+    if (!retry_target && confuse_dir(&dir))
     {
         /* Get location */
         y = p_ptr->py + ddy[dir];
@@ -847,7 +1201,9 @@ static bool grid_is_known_trapped_chest(int y, int x)
         return false;
 
     o_ptr = &o_list[o_idx];
-    return (o_ptr->pval > 0) && object_known_p(o_ptr)
+    return (o_ptr->pval > 0)
+        && (chest_trap_minigame ? chest_trap_presence_known(o_ptr)
+                                : object_known_p(o_ptr))
         && object_chest_trap_flags(o_ptr);
 }
 
@@ -865,7 +1221,8 @@ static bool grid_is_known_trap(int y, int x)
 
 static bool grid_is_disarm_target(int y, int x)
 {
-    return grid_is_known_trap(y, x) || grid_is_known_trapped_chest(y, x);
+    return grid_is_known_trap(y, x) || grid_is_known_trapped_chest(y, x)
+        || (chest_trap_minigame && grid_is_closed_chest(y, x));
 }
 
 static bool grid_is_tunnel_target(int y, int x)
@@ -949,6 +1306,28 @@ bool trap_disarm_power(int feat, int* power)
     return true;
 }
 
+/* Keep the floor-trap preview and the actual disarm roll on the same values. */
+static int trap_disarm_score(void)
+{
+    int score = p_ptr->skill_use[S_PER];
+
+    if (p_ptr->active_ability[S_PER][PER_REWIRE_TRAPS])
+        score += 5;
+    return score;
+}
+
+static int trap_disarm_difficulty(int power)
+{
+    int difficulty = FLOOR_TRAP_DISARM_BASE_DIFFICULTY + power
+        + p_ptr->depth / 6;
+
+    if (p_ptr->blind || no_light() || p_ptr->image)
+        difficulty += 5;
+    if (p_ptr->confused)
+        difficulty += 5;
+    return difficulty;
+}
+
 /*
  * Whether a trap can be "rewired" (re-keyed to catch monsters) by a player who
  * has the Rewire Traps ability.  Only disarmable, offensive "device" traps
@@ -1028,9 +1407,9 @@ static object_type* grid_question_best_digger(int* out_score)
     }
     else
     {
-        for (int i = 0; i < INVEN_PACK; i++)
+        for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
         {
-            o_ptr = &inventory[i];
+            o_ptr = player_pack_entry_at(ordinal);
             if (!o_ptr->k_idx)
                 continue;
 
@@ -1142,10 +1521,12 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
     int dir;
     int feat;
     int choice;
+    s16b chest_o_idx;
     bool step_choice[6];
     char title[80];
     char desc[480];
     char line[160];
+    char disarm_label[64];
 
     if (out_command)
         *out_command = 0;
@@ -1161,15 +1542,41 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
     desc[0] = '\0';
     memset(step_choice, 0, sizeof(step_choice));
 
-#define GRID_Q_ADD(cmd_, key_, label_, attr_)                                 \
+    /* These targets own richer cyclic overlays.  A pointer/long-press has
+     * already selected the grid, so route straight to the canonical minigame
+     * instead of presenting a redundant Pick/Bash or Open/Disarm popup. */
+    if (lockpick_minigame && cave_known_closed_door_bold(y, x)
+        && feat >= FEAT_DOOR_HEAD + 0x01 && feat <= FEAT_DOOR_TAIL)
+    {
+        if (out_command)
+            *out_command = 'o';
+        if (out_dir)
+            *out_dir = dir;
+        return true;
+    }
+    chest_o_idx = chest_check(y, x);
+    if (chest_trap_minigame && chest_o_idx
+        && o_list[chest_o_idx].pval != 0)
+    {
+        if (out_command)
+            *out_command = 'o';
+        if (out_dir)
+            *out_dir = dir;
+        return true;
+    }
+
+#define GRID_Q_ADD_EX(cmd_, key_, label_, attr_, disabled_)                   \
     do                                                                        \
     {                                                                         \
         options[count].key = (key_);                                          \
         options[count].label = (label_);                                      \
         options[count].attr = (attr_);                                        \
+        options[count].disabled = (disabled_);                                \
         commands[count] = (cmd_);                                             \
         count++;                                                              \
     } while (0)
+#define GRID_Q_ADD(cmd_, key_, label_, attr_)                                 \
+    GRID_Q_ADD_EX((cmd_), (key_), (label_), (attr_), false)
 
     /* --- Alert thrall --- */
     if ((cave_m_idx[y][x] > 0) && mon_list[cave_m_idx[y][x]].ml
@@ -1185,7 +1592,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "thrall to hear the request, offer the needed item, or claim an "
             "earned reward.",
             sizeof(desc));
-        GRID_Q_ADD(';', 't', "Talk", TERM_L_WHITE);
+        GRID_Q_ADD(';', 't', "Talk", TERM_L_GREEN);
     }
 
     /* --- Dark / unknown square --- */
@@ -1197,7 +1604,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "darkness without stepping in - an unseen enemy might lurk "
             "there, or your blow may just find a wall.",
             sizeof(desc));
-        GRID_Q_ADD('/', 's', "Strike at it", TERM_L_WHITE);
+        GRID_Q_ADD('/', 's', "Strike at it", TERM_L_RED);
     }
 
     /* --- Open / broken doors --- */
@@ -1208,7 +1615,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "An open doorway. Closing it would slow pursuers and block line "
             "of sight.",
             sizeof(desc));
-        GRID_Q_ADD('c', 'c', "Close it", TERM_L_WHITE);
+        GRID_Q_ADD('c', 'c', "Close it", TERM_L_GREEN);
     }
     else if (feat == FEAT_BROKEN)
     {
@@ -1237,7 +1644,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 "normally: it must be forced with your shoulder, and the "
                 "crash will carry. Bashing tests your Strength.",
                 bash_power);
-            GRID_Q_ADD('b', 'b', "Bash it open", TERM_L_WHITE);
+            GRID_Q_ADD('b', 'b', "Bash it open", TERM_ORANGE);
         }
         else if (power >= 0x01)
         {
@@ -1247,9 +1654,9 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 "The door is locked (lock difficulty %d). Picking the lock "
                 "quietly tests your Perception; bashing it down tests your "
                 "Strength and makes a great noise.",
-                power + 5);
-            GRID_Q_ADD('o', 'o', "Pick the lock", TERM_L_WHITE);
-            GRID_Q_ADD('b', 'b', "Bash it open", TERM_L_WHITE);
+                power + DOOR_LOCKPICK_BASE_DIFFICULTY);
+            GRID_Q_ADD('o', 'o', "Pick the lock", TERM_L_GREEN);
+            GRID_Q_ADD('b', 'b', "Bash it open", TERM_ORANGE);
         }
         else
         {
@@ -1266,8 +1673,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 grid_question_append(desc, sizeof(desc),
                     "Words of warding glimmer about its frame.");
             }
-            GRID_Q_ADD('o', 'o', "Open it", TERM_L_WHITE);
-            GRID_Q_ADD('b', 'b', "Bash it open", TERM_L_WHITE);
+            GRID_Q_ADD('o', 'o', "Open it", TERM_L_GREEN);
+            GRID_Q_ADD('b', 'b', "Bash it open", TERM_ORANGE);
         }
     }
 
@@ -1297,23 +1704,24 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         }
         else if (can_rewire)
         {
-            strnfmt(line, sizeof(line),
-                "Rewiring it tests your Perception (difficulty %d); the wider "
-                "your margin, the harder foes find it to notice or undo.",
-                power);
-            grid_question_append(desc, sizeof(desc), line);
+            strnfmt(disarm_label, sizeof(disarm_label), "Rewire: %d%%",
+                player_skill_check_success_percent(trap_disarm_score(),
+                    trap_disarm_difficulty(power), 10, 10));
+            grid_question_append(desc, sizeof(desc),
+                "A bad failure may set it off; the wider your successful "
+                "margin, the harder foes find it to notice or undo.");
             /* Same command as disarm: do_cmd_disarm_aux re-keys it when you
              * have the ability (see the rewire branch there). */
-            GRID_Q_ADD('D', 'd', "Rewire it", TERM_L_WHITE);
+            GRID_Q_ADD('D', 'd', disarm_label, TERM_L_BLUE);
         }
         else if (disarmable)
         {
-            strnfmt(line, sizeof(line),
-                "Disarming it tests your Perception (difficulty %d); failing "
-                "badly may set it off.",
-                power);
-            grid_question_append(desc, sizeof(desc), line);
-            GRID_Q_ADD('D', 'd', "Disarm it", TERM_L_WHITE);
+            strnfmt(disarm_label, sizeof(disarm_label), "Disarm: %d%%",
+                player_skill_check_success_percent(trap_disarm_score(),
+                    trap_disarm_difficulty(power), 10, 10));
+            grid_question_append(desc, sizeof(desc),
+                "A bad failure may set it off.");
+            GRID_Q_ADD('D', 'd', disarm_label, TERM_L_GREEN);
         }
         else
         {
@@ -1321,7 +1729,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             grid_question_append(desc, sizeof(desc), line);
         }
 
-        GRID_Q_ADD(';', 'w', "Step onto it", TERM_L_WHITE);
+        GRID_Q_ADD(';', 'w', "Step onto it", TERM_L_RED);
         step_choice[count - 1] = true;
     }
 
@@ -1345,7 +1753,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         {
             if (feat == FEAT_RUBBLE)
             {
-                difficulty = 1;
+                difficulty = TUNNEL_DIFFICULTY_RUBBLE;
                 SDL_strlcpy(title, "Pile of rubble", sizeof(title));
                 SDL_strlcpy(desc,
                     "Broken rock blocks the way. It is the easiest of "
@@ -1364,7 +1772,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 bool star_ground
                     = (part_kind == LEVEL_PART_CHASM) && in_chasm_area;
 
-                difficulty = 2;
+                difficulty = TUNNEL_DIFFICULTY_QUARTZ;
                 SDL_strlcpy(title, "Quartz vein", sizeof(title));
                 SDL_strlcpy(desc,
                     "A vein of milky quartz seams the rock (digging "
@@ -1382,7 +1790,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             else
             {
                 /* Granite (secret doors look the same; say nothing) */
-                difficulty = 3;
+                difficulty = TUNNEL_DIFFICULTY_GRANITE;
                 SDL_strlcpy(title, "Granite wall", sizeof(title));
                 SDL_strlcpy(desc,
                     "A wall of solid granite (digging difficulty 3).",
@@ -1392,10 +1800,11 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             if (digger)
             {
                 char o_name[80];
+                bool can_tunnel = (digging_score >= difficulty)
+                    && (p_ptr->stat_use[A_STR] >= difficulty);
 
                 object_desc(o_name, sizeof(o_name), digger, false, -1);
-                if ((digging_score >= difficulty)
-                    && (p_ptr->stat_use[A_STR] >= difficulty))
+                if (can_tunnel)
                 {
                     strnfmt(line, sizeof(line),
                         "Your %s (digging %d) is up to the task, though the "
@@ -1416,12 +1825,16 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                         digging_score);
                 }
                 grid_question_append(desc, sizeof(desc), line);
-                GRID_Q_ADD('T', 't', "Tunnel through", TERM_L_WHITE);
+                GRID_Q_ADD_EX('T', 't', "Tunnel through", TERM_ORANGE,
+                    !can_tunnel);
+                if (!can_tunnel)
+                    GRID_Q_ADD(0, 0, "Never mind", TERM_SLATE);
             }
             else
             {
                 grid_question_append(desc, sizeof(desc),
                     "You carry no shovel or mattock to dig with.");
+                GRID_Q_ADD_EX('T', 't', "Tunnel through", TERM_ORANGE, true);
                 GRID_Q_ADD(0, 0, "Never mind", TERM_SLATE);
             }
         }
@@ -1452,14 +1865,14 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                     "You have found a trap on it. A separate disarm attempt "
                     "can fail safely; opening it will try the lock and then "
                     "the trap, setting off the trap if that attempt fails.");
-                GRID_Q_ADD('D', 'd', "Disarm the trap", TERM_L_WHITE);
+                GRID_Q_ADD('D', 'd', "Disarm the trap", TERM_L_GREEN);
             }
             else if (!object_known_p(o_ptr))
             {
                 grid_question_append(desc, sizeof(desc),
                     "It has not been searched for traps.");
             }
-            GRID_Q_ADD('o', 'o', "Open it", TERM_L_WHITE);
+            GRID_Q_ADD('o', 'o', "Open it", TERM_L_GREEN);
         }
     }
 
@@ -1477,7 +1890,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "The bones of some unfortunate. Searching them may turn up "
             "something of use.",
             sizeof(desc));
-        GRID_Q_ADD('/', 's', "Search it", TERM_L_WHITE);
+        GRID_Q_ADD('/', 's', "Search it", TERM_L_BLUE);
     }
 
     /* --- Empty floor --- */
@@ -1488,10 +1901,11 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "Nothing lies there that you can see. You could strike at the "
             "square without stepping in - an unseen enemy might lurk there.",
             sizeof(desc));
-        GRID_Q_ADD('/', 's', "Strike at it", TERM_L_WHITE);
+        GRID_Q_ADD('/', 's', "Strike at it", TERM_L_RED);
     }
 
 #undef GRID_Q_ADD
+#undef GRID_Q_ADD_EX
 
     if (count == 0)
         return false;
@@ -1695,7 +2109,8 @@ static bool twall(int y, int x)
             
             log_debug("twall: PASSED chance check! Attempting drop at depth=%d", depth);
             
-            bool try_mithril = allow_mithril && (depth >= 12) && (rand_int(100) < 45);
+            bool try_mithril = allow_mithril
+                && (depth >= MITHRIL_VEIN_MIN_DEPTH) && (rand_int(100) < 45);
 
             log_debug("twall: try_star_iron=%d try_mithril=%d", allow_star_iron, try_mithril);
 
@@ -1801,7 +2216,6 @@ static bool twall(int y, int x)
  */
 static bool do_cmd_tunnel_aux(int y, int x)
 {
-    int i;
     int item;
     bool more = false;
     bool digger_choice = false;
@@ -1832,9 +2246,9 @@ static bool do_cmd_tunnel_aux(int y, int x)
     else
     {
         // find one or more diggers in the pack
-        for (i = 0; i < INVEN_PACK; i++)
+        for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
         {
-            o_ptr = &inventory[i];
+            o_ptr = player_pack_entry_at(ordinal);
 
             object_flags(o_ptr, &f1, &f2, &f3);
 
@@ -1862,9 +2276,9 @@ static bool do_cmd_tunnel_aux(int y, int x)
             else
             {
                 /* Get the object */
-                if (item >= 0)
+                if (player_inventory_handle_valid(item))
                 {
-                    digger_ptr = &inventory[item];
+                    digger_ptr = player_inventory_object(item);
                 }
                 else
                 {
@@ -1911,7 +2325,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
     /* Granite */
     if (cave_feat[y][x] >= FEAT_WALL_EXTRA)
     {
-        difficulty = 3;
+        difficulty = TUNNEL_DIFFICULTY_GRANITE;
         SDL_strlcpy(success_message, "You break through the granite.",
             sizeof(success_message));
 
@@ -1929,7 +2343,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
     /* Quartz */
     else if (cave_feat[y][x] >= FEAT_QUARTZ)
     {
-        difficulty = 2;
+        difficulty = TUNNEL_DIFFICULTY_QUARTZ;
         SDL_strlcpy(success_message, "You shatter the quartz.",
             sizeof(success_message));
 
@@ -1947,7 +2361,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
     /* Rubble */
     else if (cave_feat[y][x] == FEAT_RUBBLE)
     {
-        difficulty = 1;
+        difficulty = TUNNEL_DIFFICULTY_RUBBLE;
         SDL_strlcpy(
             success_message, "You clear the rubble.", sizeof(success_message));
 
@@ -1965,7 +2379,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
     /* Secret doors */
     else
     {
-        difficulty = 3;
+        difficulty = TUNNEL_DIFFICULTY_GRANITE;
         SDL_strlcpy(success_message, "You uncover a secret door.",
             sizeof(success_message));
 
@@ -2263,12 +2677,8 @@ bool do_cmd_disarm_aux(int y, int x)
     /* Get the trap name */
     name = (f_name + f_info[cave_feat[y][x]].name);
 
-    /* Get the score in favour (=perception) */
-    score = p_ptr->skill_use[S_PER];
-
-    /* Mastery of trap mechanisms (Rewire Traps) makes disarming easier. */
-    if (p_ptr->active_ability[S_PER][PER_REWIRE_TRAPS])
-        score += 5;
+    /* Get the score in favour (=perception), including trap mastery. */
+    score = trap_disarm_score();
 
     /* Determine trap power based on the dungeon level (1--7)*/
     // power = 1 + p_ptr->depth / 5;
@@ -2359,13 +2769,7 @@ bool do_cmd_disarm_aux(int y, int x)
     // Base difficulty is the trap power, made harder with depth so that
     // skilled characters cannot trivially disarm deep traps (and so more of
     // them are set off when an attempt fails badly).
-    difficulty = power + p_ptr->depth / 6;
-
-    /* Penalize some conditions */
-    if (p_ptr->blind || no_light() || p_ptr->image)
-        difficulty += 5;
-    if (p_ptr->confused)
-        difficulty += 5;
+    difficulty = trap_disarm_difficulty(power);
 
     /* With the Rewire Traps ability, a successful disarm of a suitable trap
      * re-keys it instead of removing it (see below). */
@@ -2591,13 +2995,17 @@ static bool do_cmd_bash_test(int y, int x)
  *
  * Returns true if repeated commands may continue
  */
-static bool do_cmd_bash_aux(int y, int x)
+static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
+    bool* out_rolled)
 {
     int score, difficulty, power, result;
     skill_roll_details roll;
 
     bool more = false;
     bool success = false;
+
+    if (out_rolled)
+        *out_rolled = false;
 
     /* Verify legality */
     if (!do_cmd_bash_test(y, x))
@@ -2665,8 +3073,12 @@ static bool do_cmd_bash_aux(int y, int x)
         difficulty = 0;
         difficulty += power;
 
-        result = show_interaction_skill_roll_animation("Bashing the door",
+        result = show_interaction_skill_roll_animation_bash("Bashing the door",
             "Putting your shoulder into it", y, x, score, difficulty, &roll);
+        if (out_roll)
+            *out_roll = roll;
+        if (out_rolled)
+            *out_rolled = true;
 
         if (result > 0)
         {
@@ -2726,6 +3138,13 @@ static bool do_cmd_bash_aux(int y, int x)
 
     if (!success)
     {
+        /*
+         * Match other retryable interaction failures: discard input queued
+         * during the roll animation so it cannot consume the next bash
+         * confirmation before the player sees it.
+         */
+        flush();
+
         if (cave_known_closed_door_bold(y, x))
         {
             /* Message */
@@ -2833,7 +3252,7 @@ void do_cmd_bash(void)
     else
     {
         /* Bash the door */
-        if (!do_cmd_bash_aux(y, x))
+        if (!do_cmd_bash_aux(y, x, NULL, NULL))
         {
             /* Cancel repeat */
             disturb(0, 0);
@@ -2855,6 +3274,7 @@ void do_cmd_bash(void)
 void do_cmd_alter(void)
 {
     int y, x, dir;
+    s16b chest_o_idx = 0;
 
     int feat;
     bool chest_trap = false;
@@ -2906,19 +3326,27 @@ void do_cmd_alter(void)
     }
 
     // check for chests and chest traps
-    if (cave_o_idx[y][x])
+    if (chest_trap_minigame)
+        chest_o_idx = chest_check(y, x);
+    else if (cave_o_idx[y][x]
+        && o_list[cave_o_idx[y][x]].tval == TV_CHEST)
+        chest_o_idx = cave_o_idx[y][x];
+    if (chest_o_idx)
+    {
+        object_type* o_ptr = &o_list[chest_o_idx];
+
+        chest_present = true;
+
+        if ((o_ptr->pval > 0) && object_chest_trap_flags(o_ptr)
+            && (chest_trap_minigame ? chest_trap_presence_known(o_ptr)
+                                    : object_known_p(o_ptr)))
+            chest_trap = true;
+    }
+    else if (cave_o_idx[y][x])
     {
         object_type* o_ptr = &o_list[cave_o_idx[y][x]];
 
-        if (o_ptr->tval == TV_CHEST)
-        {
-            chest_present = true;
-
-            if ((o_ptr->pval > 0) && object_chest_trap_flags(o_ptr)
-                && object_known_p(o_ptr))
-                chest_trap = true;
-        }
-        else if ((o_ptr->tval == TV_SKELETON)
+        if ((o_ptr->tval == TV_SKELETON)
             && !object_is_searched_skeleton(o_ptr))
         {
             skeleton_present = true;
@@ -2960,7 +3388,7 @@ void do_cmd_alter(void)
     else if (cave_known_closed_door_bold(y, x))
     {
         /* Bash */
-        do_cmd_bash_aux(y, x);
+        do_cmd_bash_aux(y, x, NULL, NULL);
     }
 
     /* Disarm known dungeon traps */
@@ -2974,14 +3402,14 @@ void do_cmd_alter(void)
     else if (chest_trap)
     {
         /* Disarm */
-        more = do_cmd_disarm_chest(y, x, cave_o_idx[y][x]);
+        more = do_cmd_disarm_chest(y, x, chest_o_idx);
     }
 
     /* Open chest with no known traps */
     else if (chest_present)
     {
         /* Disarm */
-        more = do_cmd_open_chest(y, x, cave_o_idx[y][x]);
+        more = do_cmd_open_chest(y, x, chest_o_idx);
     }
 
     /* Search a skeleton */
@@ -3036,8 +3464,11 @@ void do_cmd_alter(void)
     /* Pick up items */
     else if ((dir == 5) && (cave_o_idx[y][x]))
     {
-        /* Get item */
-        do_cmd_pickup();
+        /* Space/interact here uses the same contextual destination handling
+         * as the floor-item UI.  In particular, arrows must offer Quiver or
+         * Pack instead of silently falling through to Pack. */
+        (void)floor_context_perform_action(0,
+            FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT);
     }
 
     /* Oops */

@@ -6,6 +6,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "fs/save-internal.h"
 #include <stdio.h>
 
@@ -222,6 +223,68 @@ void wr_dungeon(void)
     }
     log_trace("[save:%06u] === END DOOR_CHOICES ===", (unsigned)save_byte_offset);
 
+    log_trace("[save:%06u] === BEGIN LEGENDARY_AREA_ID ===",
+        (unsigned)save_byte_offset);
+    {
+        guid64 record_guid = { 0, 0 };
+        bool entry_seen = false;
+        bool has_active = legendary_area_get_save_record(
+            META_DUNGEON_LEGENDARY_AREA_ID_PRIMARY, &record_guid,
+            &entry_seen);
+        u16b prev_id = META_DUNGEON_LEGENDARY_AREA_ID_NONE;
+        int run_count = 0;
+        bool have_run = false;
+
+        legendary_area_map_ensure();
+        wr_u16b(SAVEFILE_LEGENDARY_AREA_MAGIC);
+        wr_byte(SAVEFILE_LEGENDARY_AREA_VERSION);
+        wr_u16b(has_active ? 1 : 0);
+        if (has_active)
+        {
+            wr_u16b(META_DUNGEON_LEGENDARY_AREA_ID_PRIMARY);
+            wr_u32b(record_guid.hi);
+            wr_u32b(record_guid.lo);
+            wr_byte(entry_seen ? 1 : 0);
+        }
+
+        for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        {
+            for (x = 0; x < p_ptr->cur_map_wid; x++)
+            {
+                u16b id = legendary_area_id ? legendary_area_id[y][x]
+                                             : META_DUNGEON_LEGENDARY_AREA_ID_NONE;
+
+                if (!have_run)
+                {
+                    prev_id = id;
+                    run_count = 1;
+                    have_run = true;
+                }
+                else if (id != prev_id || run_count == MAX_UCHAR)
+                {
+                    wr_byte((byte)run_count);
+                    wr_u16b(prev_id);
+                    prev_id = id;
+                    run_count = 1;
+                }
+                else
+                {
+                    run_count++;
+                }
+            }
+        }
+
+        if (run_count)
+        {
+            wr_byte((byte)run_count);
+            wr_u16b(prev_id);
+        }
+        log_debug("Writing legendary-area block: active=%d",
+            has_active ? 1 : 0);
+    }
+    log_trace("[save:%06u] === END LEGENDARY_AREA_ID ===",
+        (unsigned)save_byte_offset);
+
     /*** Run-Length-Encoding of cave_rewired (rewired-trap difficulty) ***/
     /* New in 0.9.7.2; read on load only when savefile_has_cave_rewired. */
     log_trace("[save:%06u] === BEGIN CAVE_REWIRED RLE ===", (unsigned)save_byte_offset);
@@ -263,6 +326,45 @@ void wr_dungeon(void)
         }
     }
     log_trace("[save:%06u] === END CAVE_REWIRED RLE ===", (unsigned)save_byte_offset);
+
+    /*** Run-Length-Encoding of the natural CA-cave footprint ***/
+    /* New in 0.9.7.4; read on load only when savefile_has_cave_natural. */
+    log_trace("[save:%06u] === BEGIN CAVE_NATURAL RLE ===", (unsigned)save_byte_offset);
+    {
+        const u16b CAVE_NATURAL_MAGIC = 0xC3F0;
+
+        wr_u16b(CAVE_NATURAL_MAGIC);
+
+        count = 0;
+        prev_char = 0;
+
+        for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        {
+            for (x = 0; x < p_ptr->cur_map_wid; x++)
+            {
+                tmp8u = cave_natural[y][x] ? 1 : 0;
+
+                if ((tmp8u != prev_char) || (count == MAX_UCHAR))
+                {
+                    wr_byte((byte)count);
+                    wr_byte((byte)prev_char);
+                    prev_char = tmp8u;
+                    count = 1;
+                }
+                else
+                {
+                    count++;
+                }
+            }
+        }
+
+        if (count)
+        {
+            wr_byte((byte)count);
+            wr_byte((byte)prev_char);
+        }
+    }
+    log_trace("[save:%06u] === END CAVE_NATURAL RLE ===", (unsigned)save_byte_offset);
 
     /*** Compact ***/
 

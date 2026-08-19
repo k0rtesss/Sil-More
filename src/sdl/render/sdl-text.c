@@ -1,6 +1,221 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+/* Stable proportional UI labels used to be rasterized and uploaded on every
+ * present.  Cache white glyph textures and tint them at draw time instead. */
+enum {
+    SDL_UI_TEXT_CACHE_MAX = 256,
+    SDL_UI_TEXT_CACHE_PIXEL_BUDGET = 8 * 1024 * 1024,
+};
+
+typedef struct sdl_ui_text_cache_entry {
+    bool valid;
+    TTF_Font* font;
+    SDL_Renderer* renderer;
+    int wrap_width;
+    char* text;
+    SDL_Texture* texture;
+    int width;
+    int height;
+    Uint64 last_used;
+} sdl_ui_text_cache_entry;
+
+static sdl_ui_text_cache_entry g_ui_text_cache[SDL_UI_TEXT_CACHE_MAX];
+static Uint64 g_ui_text_cache_clock;
+static size_t g_ui_text_cache_pixels;
+
+static void sdl_ui_text_cache_entry_clear(sdl_ui_text_cache_entry* entry)
+{
+    if (!entry)
+        return;
+    if (entry->texture)
+        SDL_DestroyTexture(entry->texture);
+    if (entry->text)
+        SDL_free(entry->text);
+    SDL_zero(*entry);
+}
+
+void sdl_ui_text_cache_clear(void)
+{
+    for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++)
+        sdl_ui_text_cache_entry_clear(&g_ui_text_cache[i]);
+    g_ui_text_cache_pixels = 0;
+    g_ui_text_cache_clock = 0;
+}
+
+void sdl_ui_text_cache_clear_font(TTF_Font* font)
+{
+    if (!font)
+        return;
+
+    for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++) {
+        sdl_ui_text_cache_entry* entry = &g_ui_text_cache[i];
+        size_t pixels;
+
+        if (!entry->valid || entry->font != font)
+            continue;
+        pixels = (size_t)entry->width * (size_t)entry->height;
+        if (g_ui_text_cache_pixels >= pixels)
+            g_ui_text_cache_pixels -= pixels;
+        else
+            g_ui_text_cache_pixels = 0;
+        sdl_ui_text_cache_entry_clear(entry);
+    }
+}
+
+static sdl_ui_text_cache_entry* sdl_ui_text_cache_oldest(void)
+{
+    sdl_ui_text_cache_entry* oldest = NULL;
+
+    for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++) {
+        sdl_ui_text_cache_entry* entry = &g_ui_text_cache[i];
+
+        if (!entry->valid)
+            return entry;
+        if (!oldest || entry->last_used < oldest->last_used)
+            oldest = entry;
+    }
+    return oldest;
+}
+
+static sdl_ui_text_cache_entry* sdl_ui_text_cache_oldest_valid(void)
+{
+    sdl_ui_text_cache_entry* oldest = NULL;
+
+    for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++) {
+        sdl_ui_text_cache_entry* entry = &g_ui_text_cache[i];
+
+        if (!entry->valid || entry->last_used == g_ui_text_cache_clock)
+            continue;
+        if (!oldest || entry->last_used < oldest->last_used)
+            oldest = entry;
+    }
+    return oldest;
+}
+
+static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
+    cptr text_value, int wrap_width, SDL_Color color, int* out_width,
+    int* out_height)
+{
+    sdl_ui_text_cache_entry* victim;
+    SDL_Surface* surface;
+    SDL_Texture* texture;
+    char* text_copy;
+    size_t pixels;
+    SDL_Color white = { 255, 255, 255, 255 };
+
+    if (out_width)
+        *out_width = 0;
+    if (out_height)
+        *out_height = 0;
+    if (!g_state.renderer || !font || !text_value || !text_value[0])
+        return NULL;
+
+    for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++) {
+        sdl_ui_text_cache_entry* entry = &g_ui_text_cache[i];
+
+        if (!entry->valid || entry->font != font
+            || entry->renderer != g_state.renderer
+            || entry->wrap_width != wrap_width
+            || strcmp(entry->text, text_value) != 0)
+        {
+            continue;
+        }
+        entry->last_used = ++g_ui_text_cache_clock;
+        SDL_SetTextureColorMod(entry->texture, color.r, color.g, color.b);
+        SDL_SetTextureAlphaMod(entry->texture, color.a);
+        if (out_width)
+            *out_width = entry->width;
+        if (out_height)
+            *out_height = entry->height;
+        return entry->texture;
+    }
+
+    surface = wrap_width > 0
+        ? TTF_RenderText_Blended_Wrapped(font, text_value, 0, white,
+            wrap_width)
+        : TTF_RenderText_Blended(font, text_value, 0, white);
+    if (!surface)
+        return NULL;
+    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
+    if (!texture) {
+        SDL_DestroySurface(surface);
+        return NULL;
+    }
+    text_copy = SDL_strdup(text_value);
+    if (!text_copy) {
+        SDL_DestroyTexture(texture);
+        SDL_DestroySurface(surface);
+        return NULL;
+    }
+
+    pixels = (size_t)surface->w * (size_t)surface->h;
+    while (g_ui_text_cache_pixels + pixels
+        > SDL_UI_TEXT_CACHE_PIXEL_BUDGET)
+    {
+        sdl_ui_text_cache_entry* oldest = sdl_ui_text_cache_oldest_valid();
+        size_t old_pixels;
+
+        if (!oldest)
+            break;
+        old_pixels = (size_t)oldest->width * (size_t)oldest->height;
+        if (g_ui_text_cache_pixels >= old_pixels)
+            g_ui_text_cache_pixels -= old_pixels;
+        sdl_ui_text_cache_entry_clear(oldest);
+    }
+
+    victim = sdl_ui_text_cache_oldest();
+    if (!victim) {
+        SDL_free(text_copy);
+        SDL_DestroyTexture(texture);
+        SDL_DestroySurface(surface);
+        return NULL;
+    }
+    if (victim->valid) {
+        size_t old_pixels = (size_t)victim->width * (size_t)victim->height;
+
+        if (g_ui_text_cache_pixels >= old_pixels)
+            g_ui_text_cache_pixels -= old_pixels;
+        sdl_ui_text_cache_entry_clear(victim);
+    }
+
+    victim->valid = true;
+    victim->font = font;
+    victim->renderer = g_state.renderer;
+    victim->wrap_width = wrap_width;
+    victim->text = text_copy;
+    victim->texture = texture;
+    victim->width = surface->w;
+    victim->height = surface->h;
+    victim->last_used = ++g_ui_text_cache_clock;
+    g_ui_text_cache_pixels += pixels;
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureColorMod(texture, color.r, color.g, color.b);
+    SDL_SetTextureAlphaMod(texture, color.a);
+    if (out_width)
+        *out_width = surface->w;
+    if (out_height)
+        *out_height = surface->h;
+    SDL_DestroySurface(surface);
+    return texture;
+}
+
+SDL_Texture* sdl_ui_text_texture(TTF_Font* font, cptr text_value,
+    SDL_Color color, int* out_width, int* out_height)
+{
+    return sdl_ui_text_texture_internal(font, text_value, 0, color,
+        out_width, out_height);
+}
+
+SDL_Texture* sdl_ui_wrapped_text_texture(TTF_Font* font, cptr text_value,
+    int wrap_width, SDL_Color color, int* out_width, int* out_height)
+{
+    if (wrap_width < 1)
+        wrap_width = 1;
+    return sdl_ui_text_texture_internal(font, text_value, wrap_width, color,
+        out_width, out_height);
+}
+
 void sdl_apply_story_font_state(bool active)
 {
     log_trace("Story font state apply: active=%s depth=%d term=%p",
@@ -344,45 +559,40 @@ int sdl_render_story_text_free_px(sdl_view* d, TTF_Font* font, float x_px, int y
     }
     text_buf[len] = '\0';
 
-    SDL_Surface* text_surface = TTF_RenderText_Blended(font, text_buf, 0, col);
-    if (!text_surface)
+    int texture_w = 0;
+    int texture_h = 0;
+    SDL_Texture* text_texture = sdl_ui_text_texture(font, text_buf, col,
+        &texture_w, &texture_h);
+    if (!text_texture)
         return 0;
 
     int adv_w_unscaled = 0;
     TTF_MeasureString(font, text_buf, len, 0, &adv_w_unscaled, NULL);
 
     float cell_h_f = (float)d->cell_h;
-    float surf_h_f = (float)text_surface->h;
-    float scale = (surf_h_f > 0.0f) ? (cell_h_f / surf_h_f) : 1.0f;
+    float texture_h_f = (float)texture_h;
+    float scale = (texture_h_f > 0.0f) ? (cell_h_f / texture_h_f) : 1.0f;
     float advance_w = (float)adv_w_unscaled * scale;
-    float render_w = (float)text_surface->w * scale;
+    float render_w = (float)texture_w * scale;
 
     if (max_w_px > 0.0f && advance_w > max_w_px)
         advance_w = max_w_px;
 
-    SDL_Texture* text_texture = SDL_CreateTextureFromSurface(g_state.renderer, text_surface);
-    if (text_texture)
-    {
-        SDL_FRect dst = {
-            x_px,
-            (float)(y * d->cell_h),
-            render_w,
-            cell_h_f
-        };
-        SDL_FRect clip = {
-            x_px,
-            (float)(y * d->cell_h),
-            max_w_px,
-            cell_h_f
-        };
+    SDL_FRect dst = {
+        x_px,
+        (float)(y * d->cell_h),
+        render_w,
+        cell_h_f
+    };
+    SDL_FRect clip = {
+        x_px,
+        (float)(y * d->cell_h),
+        max_w_px,
+        cell_h_f
+    };
 
-        SDL_SetTextureBlendMode(text_texture, SDL_BLENDMODE_BLEND);
-        sdl_render_texture_with_clip(text_texture, &dst,
-            max_w_px > 0.0f ? &clip : NULL);
-        SDL_DestroyTexture(text_texture);
-    }
-
-    SDL_DestroySurface(text_surface);
+    sdl_render_texture_with_clip(text_texture, &dst,
+        max_w_px > 0.0f ? &clip : NULL);
     return (int)advance_w;
 }
 
@@ -423,6 +633,52 @@ SDL_Color sdl_color_from_attr(byte attr)
     };
 
     return col;
+}
+
+/*
+ * Draw a continuous health bar into an already laid-out rectangle.  The fill
+ * level is stored as 1..255 in terminal metadata so it survives save/restore
+ * and can be rendered consistently by panes and overlays.
+ */
+void sdl_render_health_bar_rect(const SDL_FRect* rect, byte level,
+    byte fill_attr)
+{
+    SDL_Color fill_color;
+    SDL_Color track_color;
+    SDL_Color frame_color;
+    SDL_FRect fill;
+    float inner_w;
+
+    if (!rect || rect->w < 2.0f || rect->h < 2.0f || level == 0)
+        return;
+
+    fill_color = sdl_color_from_attr(sdl_ui_text_fg_attr(fill_attr));
+    track_color = sdl_color_from_attr(TERM_L_DARK);
+    frame_color = sdl_color_from_attr(TERM_SLATE);
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, track_color.r, track_color.g,
+        track_color.b, 255);
+    SDL_RenderFillRect(g_state.renderer, rect);
+
+    fill = *rect;
+    fill.x += 1.0f;
+    fill.y += 1.0f;
+    inner_w = rect->w - 2.0f;
+    fill.w = inner_w * ((float)level / 255.0f);
+    fill.h -= 2.0f;
+    if (fill.w > 0.0f && fill.h > 0.0f)
+    {
+        if (fill.w < 1.0f)
+            fill.w = 1.0f;
+        SDL_SetRenderDrawColor(g_state.renderer, fill_color.r, fill_color.g,
+            fill_color.b, 255);
+        SDL_RenderFillRect(g_state.renderer, &fill);
+    }
+
+    SDL_SetRenderDrawColor(g_state.renderer, frame_color.r, frame_color.g,
+        frame_color.b, 255);
+    SDL_RenderRect(g_state.renderer, rect);
 }
 
 void sdl_fill_cell_span_with_attr(sdl_view* d, int x, int y, int n,

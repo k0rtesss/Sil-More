@@ -8,6 +8,7 @@ extern struct sound_config g_sound_config;
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include <ctype.h>
 #include "h-define.h"
 #include "metarun.h"
@@ -682,6 +683,263 @@ static int ability_menu_current_song_score(void)
     return MAX(0, p_ptr->skill_use[S_SNG]);
 }
 
+static bool ability_menu_weapon_skill_bonus_text(int skilltype,
+    int abilitynum, char* bonus_text, size_t text_size)
+{
+    cptr target_skill = NULL;
+    cptr partner_name = NULL;
+    cptr partner_skill = NULL;
+    int partner_skilltype = -1;
+    int partner_abilitynum = -1;
+    bool current;
+    int bonus;
+
+    if (!bonus_text || text_size == 0)
+        return false;
+
+    if (skilltype == S_MEL && abilitynum == MEL_WARDEN)
+    {
+        target_skill = "Archery";
+        partner_name = "Versatility";
+        partner_skill = "Melee";
+        partner_skilltype = S_ARC;
+        partner_abilitynum = ARC_VERSATILITY;
+    }
+    else if (skilltype == S_ARC && abilitynum == ARC_VERSATILITY)
+    {
+        target_skill = "Melee";
+        partner_name = "Warden";
+        partner_skill = "Archery";
+        partner_skilltype = S_MEL;
+        partner_abilitynum = MEL_WARDEN;
+    }
+    else
+        return false;
+
+    current = p_ptr->have_ability[skilltype][abilitynum]
+        && p_ptr->active_ability[skilltype][abilitynum];
+    bonus = current
+        ? ability_current_skill_bonus(skilltype, abilitynum)
+        : ability_potential_skill_bonus(skilltype, abilitynum);
+
+    strnfmt(bonus_text, text_size, "%s bonus: +%d %s.",
+        current ? "Current" : "Potential", bonus, target_skill);
+
+    if (!current
+        && p_ptr->active_ability[partner_skilltype][partner_abilitynum])
+    {
+        size_t used = strlen(bonus_text);
+
+        strnfcat(bonus_text, text_size, &used,
+            " With both active, %s's %s bonus becomes +%d.",
+            partner_name, partner_skill,
+            ability_potential_skill_bonus_with_partner(partner_skilltype,
+                partner_abilitynum));
+    }
+
+    return true;
+}
+
+static bool ability_menu_other_bonus_text(int skilltype, int abilitynum,
+    char* bonus_text, size_t text_size)
+{
+    bool current;
+    int bonus;
+
+    if (!bonus_text || text_size == 0)
+        return false;
+
+    current = p_ptr->have_ability[skilltype][abilitynum]
+        && p_ptr->active_ability[skilltype][abilitynum];
+    bonus_text[0] = '\0';
+
+    switch (skilltype)
+    {
+    case S_EVN:
+        switch (abilitynum)
+        {
+        case EVN_DODGING:
+            if (current)
+            {
+                strnfmt(bonus_text, text_size,
+                    "Current bonus: %+d evasion while moving in light armour.",
+                    dodging_bonus());
+            }
+            else
+            {
+                strnfmt(bonus_text, text_size,
+                    "Potential bonus: +3 evasion when you move while wearing only light armour.");
+            }
+            break;
+
+        case EVN_PARRY:
+            bonus = inventory[INVEN_WIELD].k_idx
+                ? inventory[INVEN_WIELD].evn : 0;
+            if (current)
+            {
+                strnfmt(bonus_text, text_size,
+                    "Current bonus: %+d evasion from your primary melee weapon.",
+                    player_active_weapon_is_melee() ? bonus : 0);
+            }
+            else
+            {
+                strnfmt(bonus_text, text_size,
+                    "Potential bonus: %+d evasion from your primary melee weapon when melee is active.",
+                    bonus);
+            }
+            break;
+
+        default:
+            break;
+        }
+        break;
+
+    case S_STL:
+        if (abilitynum == STL_ASSASSINATION)
+        {
+            bonus = p_ptr->skill_use[S_STL];
+            if (current)
+            {
+                strnfmt(bonus_text, text_size,
+                    "Current bonus: %+d melee vs non-alert creatures and Song of Disguise targets.",
+                    bonus);
+            }
+            else
+            {
+                strnfmt(bonus_text, text_size,
+                    "Potential bonus: %+d melee vs non-alert creatures and Song of Disguise targets.",
+                    bonus);
+            }
+        }
+        break;
+
+    case S_PER:
+        switch (abilitynum)
+        {
+        case PER_FOCUSED_ATTACK:
+            bonus = p_ptr->skill_use[S_PER] / 2;
+            if (current)
+            {
+                strnfmt(bonus_text, text_size,
+                    "Current bonus: up to %+d attack after passing the previous turn.",
+                    bonus);
+            }
+            else
+            {
+                strnfmt(bonus_text, text_size,
+                    "Potential bonus: up to %+d attack after passing the previous turn.",
+                    bonus);
+            }
+            break;
+
+        case PER_CONCENTRATION:
+            bonus = p_ptr->skill_use[S_PER] / 2;
+            if (current)
+            {
+                int current_bonus = 0;
+
+                if (p_ptr->last_attack_m_idx > 0
+                    && p_ptr->last_attack_m_idx < mon_max
+                    && mon_list[p_ptr->last_attack_m_idx].r_idx)
+                {
+                    current_bonus = MIN(p_ptr->consecutive_attacks, bonus);
+                }
+
+                strnfmt(bonus_text, text_size,
+                    "Current bonus: up to %+d attack on the same target (currently %+d).",
+                    bonus, current_bonus);
+            }
+            else
+            {
+                strnfmt(bonus_text, text_size,
+                    "Potential bonus: up to %+d attack per consecutive round on the same target.",
+                    bonus);
+            }
+            break;
+
+        case PER_MASTER_HUNTER:
+            bonus = p_ptr->skill_use[S_PER] / 2;
+            if (current)
+            {
+                strnfmt(bonus_text, text_size,
+                    "Current bonus: up to %+d attack per previous kill of the same monster type.",
+                    bonus);
+            }
+            else
+            {
+                strnfmt(bonus_text, text_size,
+                    "Potential bonus: up to %+d attack per previous kill of the same monster type.",
+                    bonus);
+            }
+            break;
+
+        default:
+            break;
+        }
+        break;
+
+    case S_WIL:
+        switch (abilitynum)
+        {
+        case WIL_STRENGTH_IN_ADVERSITY:
+            if (current)
+            {
+                bonus = 0;
+                if (health_level(p_ptr->chp, p_ptr->mhp)
+                    <= HEALTH_BADLY_WOUNDED)
+                    bonus = 1;
+                if (health_level(p_ptr->chp, p_ptr->mhp)
+                    <= HEALTH_ALMOST_DEAD)
+                    bonus = 3;
+
+                strnfmt(bonus_text, text_size,
+                    "Current bonus: %+d Strength, %+d Dexterity, %+d Grace at current health.",
+                    bonus, bonus, bonus);
+            }
+            else
+            {
+                strnfmt(bonus_text, text_size,
+                    "Potential bonus: +1 Strength, Dexterity, and Grace at 50%% HP; +3 each at 25%% HP.");
+            }
+            break;
+
+        case WIL_VENGEANCE:
+            if (current)
+            {
+                strnfmt(bonus_text, text_size,
+                    "Current bonus: %+d melee damage die ready after taking melee damage.",
+                    p_ptr->vengeance);
+            }
+            else
+            {
+                strnfmt(bonus_text, text_size,
+                    "Potential bonus: +1 melee damage die after taking melee damage.");
+            }
+            break;
+
+        default:
+            break;
+        }
+        break;
+
+    default:
+        break;
+    }
+
+    return bonus_text[0] != '\0';
+}
+
+static bool ability_menu_dynamic_bonus_text(int skilltype, int abilitynum,
+    char* bonus_text, size_t text_size)
+{
+    if (ability_menu_weapon_skill_bonus_text(skilltype, abilitynum,
+            bonus_text, text_size))
+        return true;
+
+    return ability_menu_other_bonus_text(skilltype, abilitynum, bonus_text,
+        text_size);
+}
+
 static int ability_menu_minor_song_score(int song_skill)
 {
     if (song_skill <= 0)
@@ -925,6 +1183,20 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
     }
 }
 
+static void ability_menu_render_dynamic_bonus(int skilltype,
+    int abilitynum)
+{
+    char bonus_text[320];
+    char rendered_text[340];
+
+    if (!ability_menu_dynamic_bonus_text(skilltype, abilitynum,
+            bonus_text, sizeof(bonus_text)))
+        return;
+
+    strnfmt(rendered_text, sizeof(rendered_text), "\n\n%s", bonus_text);
+    text_out_to_screen(TERM_L_GREEN, rendered_text);
+}
+
 /* ------------------------------------------------------------------
  * add_random_curse()
  *    Marks the item cursed
@@ -1100,7 +1372,8 @@ static int song_menu_collect_available(int songs[], int max_songs)
         if (!song_menu_is_singable(i))
             continue;
 
-        if (!p_ptr->active_ability[S_SNG][i])
+        if (!p_ptr->active_ability[S_SNG][i]
+            && !legendary_area_song_is_available(i))
             continue;
 
         if (count < max_songs)
@@ -1291,9 +1564,13 @@ void do_cmd_change_song()
 
                 if (clicked_choice >= 0 && clicked_choice < total_options)
                 {
+                    bool same_choice = (highlight == clicked_choice);
+
                     highlight = clicked_choice;
 
                     if (click_action == UI_MENU_CLICK_HOVER)
+                        continue;
+                    if (!same_choice)
                         continue;
 
                     song_choice = song_menu_choice_from_highlight(highlight,
@@ -1420,7 +1697,8 @@ void do_cmd_change_song()
                 {
                     song_choice = -1;
                 }
-                else if (p_ptr->active_ability[S_SNG][song_choice])
+                else if (p_ptr->active_ability[S_SNG][song_choice]
+                    || legendary_area_song_is_available(song_choice))
                 {
                     log_debug("Player selected song %d", song_choice);
                     done = true;
@@ -1445,6 +1723,12 @@ void do_cmd_change_song()
 
     if (song_choice >= 0)
     {
+        if (death_spectator_active())
+        {
+            msg_print("You cannot do that during this final look.");
+            return;
+        }
+
         bool choice_stops_current_song = (song_choice == p_ptr->song1)
             || ((p_ptr->song2 != SNG_NOTHING) && (song_choice == p_ptr->song2));
 
@@ -1690,6 +1974,8 @@ int artifact_bane_bonus(monster_type* m_ptr)
         // Skip empty slots
         if (!o_ptr->k_idx)
             continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
 
         // Check all abilities on this item
         for (j = 0; j < o_ptr->abilities; j++)
@@ -1742,6 +2028,8 @@ int artifact_spider_bane_bonus(void)
 
         // Skip empty slots
         if (!o_ptr->k_idx)
+            continue;
+        if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
         // Check all abilities on this item
@@ -1949,7 +2237,7 @@ int bane_menu(int* highlight)
     if (compact_layout)
     {
         Term_putstr(desc_col, nav_row_1, term_wid - desc_col, TERM_SLATE,
-            sdl_touch_only_device_active() ? "Tap a row to select"
+            sdl_touch_only_device_active() ? "Tap row; selected row chooses"
                 : (steamdeck ? "D-pad navigate" : "Dir navigate"));
         {
             char prompt[96];
@@ -2017,8 +2305,10 @@ int bane_menu(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= options)
             {
+                bool same_choice = (*highlight == clicked_choice);
+
                 *highlight = clicked_choice;
-                if (click_action != UI_MENU_CLICK_HOVER)
+                if (click_action != UI_MENU_CLICK_HOVER && same_choice)
                     return (*highlight);
             }
             return (0);
@@ -2376,7 +2666,7 @@ int oath_menu(int* highlight)
 
         // Navigation instructions at bottom
         Term_putstr(desc_col, nav_row_1, term_wid - desc_col, TERM_SLATE,
-            sdl_touch_only_device_active() ? "Tap a row to select"
+            sdl_touch_only_device_active() ? "Tap row; selected row chooses"
                 : (steamdeck ? "D-pad navigate" : "Dir navigate"));
         {
             char prompt[96];
@@ -2445,8 +2735,10 @@ int oath_menu(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= visible_count)
             {
+                bool same_choice = (*highlight == clicked_choice);
+
                 *highlight = clicked_choice;
-                if (click_action != UI_MENU_CLICK_HOVER)
+                if (click_action != UI_MENU_CLICK_HOVER && same_choice)
                     return visible_oaths[*highlight - 1];
             }
             return (0);
@@ -2509,6 +2801,9 @@ typedef struct ability_browser_layout
     int visible_w;
     int title_row;
     int summary_row;
+    int summary_rows;
+    int skill_row;
+    int skill_rows;
     int header_row;
     int divider_row;
     int list_row;
@@ -2523,6 +2818,13 @@ typedef struct ability_browser_layout
     int ability_divider_col;
     int desc_col;
     int desc_w;
+    bool stacked;
+    int ability_row;
+    int ability_rows;
+    int ability_entry_rows;
+    int desc_header_row;
+    int desc_row;
+    int desc_rows;
 } ability_browser_layout;
 
 typedef struct ability_browser_entry
@@ -2536,6 +2838,7 @@ typedef struct ability_browser_entry
 typedef struct ability_browser_desc_line
 {
     byte attr;
+    bool keep_with_next;
     char text[ABILITY_BROWSER_DESC_LINE_LEN];
 } ability_browser_desc_line;
 
@@ -2709,13 +3012,34 @@ static byte ability_browser_selected_attr(byte source_attr)
     return (byte)(TERM_UI_SELECTED + TERM_L_BLUE);
 }
 
-static void ability_browser_init_layout(ability_browser_layout* layout)
+static bool ability_browser_wrap_next(cptr* cursor, int width, char* line,
+    size_t line_len);
+
+static int ability_browser_wrapped_rows(cptr text, int width)
+{
+    const char* cursor = text;
+    char line[180];
+    int rows = 0;
+
+    if (!text || !text[0] || width <= 0)
+        return 1;
+
+    while (ability_browser_wrap_next(&cursor, width, line, sizeof(line)))
+        rows++;
+
+    return MAX(rows, 1);
+}
+
+static void ability_browser_init_layout(ability_browser_layout* layout,
+    int ability_count, cptr summary)
 {
     int min_ability_w = 28;
     int min_desc_w = 26;
     int ability_w;
     int visible_col;
     int visible_w;
+    int max_summary_rows;
+    bool portrait;
 
     Term_get_size(&layout->term_wid, &layout->term_hgt);
 
@@ -2738,13 +3062,39 @@ static void ability_browser_init_layout(ability_browser_layout* layout)
 
     layout->visible_col = visible_col;
     layout->visible_w = visible_w;
+    portrait = sdl_mobile_portrait_layout_active();
     layout->title_row = 0;
     layout->summary_row = (layout->term_hgt > 1) ? 1 : 0;
-    layout->header_row = (layout->term_hgt > 3) ? 3 : layout->summary_row;
-    layout->divider_row = (layout->term_hgt > 4) ? 4 : layout->header_row;
+    max_summary_rows = MAX(1, layout->term_hgt - 8);
+    layout->summary_rows = portrait
+        ? MIN(ability_browser_wrapped_rows(summary, layout->visible_w),
+            max_summary_rows)
+        : 1;
+    layout->skill_row = layout->summary_row + layout->summary_rows;
+    if (layout->skill_row >= layout->term_hgt)
+    {
+        layout->summary_rows = 1;
+        layout->skill_row = (layout->term_hgt > layout->summary_row + 1)
+            ? layout->summary_row + 1
+            : layout->summary_row;
+    }
+    layout->skill_rows = (portrait && layout->term_hgt > 4) ? 2 : 1;
+    layout->header_row = (layout->term_hgt
+            > layout->skill_row + layout->skill_rows)
+        ? layout->skill_row + layout->skill_rows
+        : layout->summary_row;
+    layout->divider_row = (layout->term_hgt > layout->header_row + 1)
+        ? layout->header_row + 1
+        : layout->header_row;
     layout->list_row = layout->divider_row + 1;
-    layout->prompt_row = layout->term_hgt - 1;
-    layout->status_row = (layout->prompt_row > layout->list_row)
+    layout->prompt_row = layout->term_hgt - 1
+        - sdl_touch_menu_button_reserved_rows();
+    if (layout->prompt_row < layout->list_row)
+        layout->prompt_row = layout->list_row;
+    /* The portrait summary and selected ability row already contain the
+     * status footer's information.  Reclaim that duplicate row for the
+     * stacked information panel so it cannot look like description text. */
+    layout->status_row = (!portrait && layout->prompt_row > layout->list_row)
         ? layout->prompt_row - 1
         : layout->prompt_row;
     layout->list_rows = layout->status_row - layout->list_row;
@@ -2772,6 +3122,44 @@ static void ability_browser_init_layout(ability_browser_layout* layout)
     layout->desc_w = layout->visible_col + layout->visible_w - layout->desc_col;
     if (layout->desc_w < 1)
         layout->desc_w = 1;
+    layout->stacked = false;
+    layout->ability_row = layout->list_row;
+    layout->ability_rows = layout->list_rows;
+    layout->ability_entry_rows = 1;
+    layout->desc_header_row = layout->header_row;
+    layout->desc_row = layout->list_row;
+    layout->desc_rows = layout->list_rows;
+
+    if (portrait && layout->list_rows >= 3)
+    {
+        int ability_rows = MAX(ability_count, 1);
+        int desc_rows;
+
+        /* Portrait is tall enough to keep one compact row per ability.  Size
+         * the section to its contents instead of reserving two or three rows
+         * per name and then capping the whole list at six rows. */
+        if (ability_rows > layout->list_rows - 2)
+            ability_rows = MAX(1, layout->list_rows - 2);
+        desc_rows = layout->list_rows - ability_rows - 1;
+        if (desc_rows < 1)
+        {
+            desc_rows = 1;
+            ability_rows = MAX(1, layout->list_rows - desc_rows - 1);
+        }
+
+        layout->stacked = true;
+        layout->ability_col = layout->visible_col;
+        layout->ability_w = layout->visible_w;
+        layout->ability_divider_col = -1;
+        layout->desc_col = layout->visible_col;
+        layout->desc_w = layout->visible_w;
+        layout->ability_row = layout->list_row;
+        layout->ability_rows = ability_rows;
+        layout->ability_entry_rows = 1;
+        layout->desc_header_row = layout->ability_row + ability_rows;
+        layout->desc_row = layout->desc_header_row + 1;
+        layout->desc_rows = desc_rows;
+    }
 }
 
 static void ability_desc_add_line(ability_browser_desc_line lines[],
@@ -2781,10 +3169,25 @@ static void ability_desc_add_line(ability_browser_desc_line lines[],
         return;
 
     lines[*line_count].attr = attr;
+    lines[*line_count].keep_with_next = false;
     ability_browser_fit_text(lines[*line_count].text,
         sizeof(lines[*line_count].text), text ? text : "",
         ABILITY_BROWSER_DESC_LINE_LEN - 1);
     (*line_count)++;
+}
+
+static void ability_desc_add_heading(ability_browser_desc_line lines[],
+    int* line_count, byte attr, cptr text)
+{
+    int heading_index;
+
+    if (!line_count)
+        return;
+
+    heading_index = *line_count;
+    ability_desc_add_line(lines, line_count, attr, text);
+    if (*line_count > heading_index)
+        lines[heading_index].keep_with_next = true;
 }
 
 static void ability_desc_add_blank(ability_browser_desc_line lines[],
@@ -2834,6 +3237,47 @@ static int ability_browser_wrap_take(cptr text, int max_bytes, int max_cols)
         return bytes;
 
     return utf8_sequence_len_n(text, max_bytes);
+}
+
+static bool ability_browser_wrap_next(cptr* cursor, int width, char* line,
+    size_t line_len)
+{
+    cptr p;
+    int take;
+    int copy_len;
+
+    if (!cursor || !*cursor || !line || line_len == 0 || width <= 0)
+        return false;
+
+    p = *cursor;
+    while (*p == ' ' || *p == '\t' || *p == '\n')
+        p++;
+    if (!*p) {
+        *cursor = p;
+        line[0] = '\0';
+        return false;
+    }
+
+    take = ability_browser_wrap_take(p, (int)strlen(p), width);
+    if (take <= 0)
+        return false;
+    copy_len = take;
+    while (copy_len > 0
+        && (p[copy_len - 1] == ' ' || p[copy_len - 1] == '\t'))
+    {
+        copy_len--;
+    }
+    copy_len = utf8_safe_prefix_len(p, copy_len);
+    if (copy_len >= (int)line_len)
+        copy_len = utf8_safe_prefix_len(p, (int)line_len - 1);
+
+    SDL_memcpy(line, p, (size_t)copy_len);
+    line[copy_len] = '\0';
+    p += take;
+    while (*p == ' ' || *p == '\t' || *p == '\n')
+        p++;
+    *cursor = p;
+    return true;
 }
 
 static void ability_desc_add_wrapped_segment(ability_browser_desc_line lines[],
@@ -2953,17 +3397,69 @@ static int ability_menu_skill_options(void)
     return ability_menu_show_special_skill() ? S_MAX : (S_MAX - 1);
 }
 
+static int ability_browser_skill_point_cost(int skill_level)
+{
+    return skill_level * 100;
+}
+
 static int ability_browser_next_skill_cost(int skilltype)
 {
     if (skilltype < 0 || skilltype >= S_MAX || skilltype == S_SPC)
         return 0;
 
-    return (p_ptr->skill_base[skilltype] + 1) * 100;
+    return ability_browser_skill_point_cost(p_ptr->skill_base[skilltype] + 1);
+}
+
+static int ability_browser_skill_training_cost(int current_base,
+    int required_base)
+{
+    int cost = 0;
+
+    for (int skill_level = current_base + 1;
+         skill_level <= required_base; skill_level++)
+    {
+        cost += ability_browser_skill_point_cost(skill_level);
+    }
+
+    return cost;
+}
+
+static void ability_browser_build_summary(int skilltype, char* summary,
+    size_t summary_len)
+{
+    char next_skill[32];
+    char ability_price[32];
+
+    if (!summary || summary_len == 0)
+        return;
+
+    if (skilltype >= 0 && skilltype < S_MAX && skilltype != S_SPC)
+    {
+        strnfmt(next_skill, sizeof(next_skill), "%d XP",
+            ability_browser_next_skill_cost(skilltype));
+        strnfmt(ability_price, sizeof(ability_price), "%d XP",
+            ability_purchase_exp_cost(skilltype));
+    }
+    else
+    {
+        SDL_strlcpy(next_skill, "granted", sizeof(next_skill));
+        SDL_strlcpy(ability_price, "n/a", sizeof(ability_price));
+    }
+
+    strnfmt(summary, summary_len,
+        "XP %ld | %s base %d, current %d | next skill +1: %s | ability price %s",
+        (long)p_ptr->new_exp,
+        (skilltype >= 0 && skilltype < S_MAX) ? skill_names_full[skilltype]
+                                              : "Skill",
+        (skilltype >= 0 && skilltype < S_MAX) ? p_ptr->skill_base[skilltype] : 0,
+        (skilltype >= 0 && skilltype < S_MAX) ? p_ptr->skill_use[skilltype] : 0,
+        next_skill, ability_price);
 }
 
 static bool ability_browser_train_skill(int skilltype)
 {
     int cost;
+    int old_base;
     char prompt[120];
 
     if (skilltype < 0 || skilltype >= S_MAX || skilltype == S_SPC)
@@ -2984,6 +3480,7 @@ static bool ability_browser_train_skill(int skilltype)
         return false;
     }
 
+    old_base = p_ptr->skill_base[skilltype];
     cost = ability_browser_next_skill_cost(skilltype);
     if (cost > p_ptr->new_exp)
     {
@@ -3005,21 +3502,23 @@ static bool ability_browser_train_skill(int skilltype)
 
     msg_format("%s increased to %d.", skill_names_full[skilltype],
         p_ptr->skill_base[skilltype]);
+    if (old_base == 0)
+        sdl_quick_access_suggest_skill_shortcut(skilltype);
     return true;
 }
 
-static byte ability_browser_skill_color(int skilltype)
+byte ability_skill_color(int skilltype)
 {
     switch (skilltype)
     {
-    case S_MEL: return TERM_L_RED;
+    case S_MEL: return TERM_RED;
     case S_ARC: return TERM_ORANGE;
     case S_EVN: return TERM_GREEN;
-    case S_STL: return TERM_L_GREEN;
-    case S_PER: return TERM_YELLOW;
-    case S_WIL: return TERM_L_WHITE;
-    case S_SMT: return TERM_L_UMBER;
-    case S_SNG: return TERM_VIOLET;
+    case S_STL: return TERM_L_UMBER;
+    case S_PER: return TERM_VIOLET;
+    case S_WIL: return TERM_YELLOW;
+    case S_SMT: return TERM_L_RED;
+    case S_SNG: return TERM_L_GREEN;
     case S_SPC: return TERM_VIOLET;
     default: return TERM_WHITE;
     }
@@ -3027,7 +3526,7 @@ static byte ability_browser_skill_color(int skilltype)
 
 static byte ability_browser_skill_attr(int skilltype, bool hovered)
 {
-    return hovered ? TERM_L_BLUE : ability_browser_skill_color(skilltype);
+    return hovered ? TERM_L_BLUE : ability_skill_color(skilltype);
 }
 
 static cptr ability_browser_skill_trait_suffix(int skilltype)
@@ -3053,58 +3552,133 @@ static cptr ability_browser_skill_trait_suffix(int skilltype)
     return "";
 }
 
+static void ability_browser_build_skill_tokens(int skill_options,
+    int skill_cur, bool full_labels, char tokens[][40], int token_widths[])
+{
+    for (int skill = 0; skill < skill_options; skill++)
+    {
+        cptr base_label = full_labels ? skill_names_full[skill]
+                                      : skill_names[skill];
+        cptr suffix = ability_browser_skill_trait_suffix(skill);
+        char label[32];
+
+        strnfmt(label, sizeof(label), "%s%s", base_label, suffix);
+        if (skill == skill_cur)
+            strnfmt(tokens[skill], 40, "[%s]", label);
+        else
+            strnfmt(tokens[skill], 40, " %s ", label);
+        token_widths[skill] = ability_browser_cell_width_n(tokens[skill],
+            (int)strlen(tokens[skill]));
+    }
+}
+
+static int ability_browser_skill_tab_split(const int token_widths[],
+    int skill_options)
+{
+    int total_width = 0;
+    int first_width = 0;
+    int best_split = MAX(1, skill_options / 2);
+    int best_max_width = 0x7fffffff;
+    int best_difference = 0x7fffffff;
+
+    if (skill_options < 2)
+        return skill_options;
+
+    for (int skill = 0; skill < skill_options; skill++)
+        total_width += token_widths[skill];
+
+    for (int split = 1; split < skill_options; split++)
+    {
+        int second_width;
+        int max_width;
+        int difference;
+
+        first_width += token_widths[split - 1];
+        second_width = total_width - first_width;
+        max_width = MAX(first_width, second_width);
+        difference = (first_width > second_width)
+            ? first_width - second_width
+            : second_width - first_width;
+
+        if (max_width < best_max_width
+            || (max_width == best_max_width
+                && difference < best_difference))
+        {
+            best_split = split;
+            best_max_width = max_width;
+            best_difference = difference;
+        }
+    }
+
+    return best_split;
+}
+
+static int ability_browser_skill_tab_width(const int token_widths[],
+    int skill_options, int split)
+{
+    int first_width = 0;
+    int second_width = 0;
+
+    for (int skill = 0; skill < skill_options; skill++)
+    {
+        if (skill < split)
+            first_width += token_widths[skill];
+        else
+            second_width += token_widths[skill];
+    }
+
+    return MAX(first_width, second_width);
+}
+
 static void ability_browser_draw_skill_summary(
     const ability_browser_layout* layout, int skill_options, int skill_cur,
     int skill_hover)
 {
-    int col = layout->skill_col;
+    char tokens[S_MAX][40];
+    int token_widths[S_MAX];
     int end_col = layout->skill_col + layout->skill_w;
-    int tab_row = (layout->term_hgt > 2) ? 2 : layout->summary_row;
+    int split = skill_options;
+    bool full_labels = (layout->skill_rows > 1 || layout->skill_w >= 78);
+    int col = layout->skill_col;
+    int tab_row = layout->skill_row;
 
-    Term_erase(layout->skill_col, tab_row, layout->skill_w);
+    ability_browser_build_skill_tokens(skill_options, skill_cur, full_labels,
+        tokens, token_widths);
+    if (layout->skill_rows > 1)
+        split = ability_browser_skill_tab_split(token_widths, skill_options);
+
+    if (ability_browser_skill_tab_width(token_widths, skill_options, split)
+        > layout->skill_w && full_labels)
+    {
+        full_labels = false;
+        ability_browser_build_skill_tokens(skill_options, skill_cur,
+            full_labels, tokens, token_widths);
+        if (layout->skill_rows > 1)
+            split = ability_browser_skill_tab_split(token_widths,
+                skill_options);
+    }
+
+    for (int row = 0; row < layout->skill_rows; row++)
+        Term_erase(layout->skill_col, tab_row + row, layout->skill_w);
     for (int skill = 0; skill < skill_options; skill++)
     {
-        cptr base_label = (layout->skill_w >= 78)
-            ? skill_names_full[skill]
-            : skill_names[skill];
-        cptr suffix = ability_browser_skill_trait_suffix(skill);
-        cptr label = base_label;
-        bool selected = (skill == skill_cur);
         bool hovered = (skill == skill_hover);
         byte attr = ability_browser_skill_attr(skill, hovered);
-        int token_len;
-        int click_width;
-        char label_buf[32];
-        char token[32];
+        int token_len = (int)strlen(tokens[skill]);
 
-        if (col >= end_col)
-            break;
-
-        if (suffix[0])
+        if (layout->skill_rows > 1 && skill == split)
         {
-            strnfmt(label_buf, sizeof(label_buf), "%s%s", base_label, suffix);
-            label = label_buf;
+            tab_row++;
+            col = layout->skill_col;
         }
 
-        if (selected)
-            strnfmt(token, sizeof(token), "[%s]", label);
-        else
-            strnfmt(token, sizeof(token), " %s ", label);
-        token_len = (int)strlen(token);
-
-        if (col + token_len > end_col)
+        if (col + token_widths[skill] > end_col)
             break;
 
-        Term_putstr(col, tab_row, token_len, attr, token);
-        click_width = token_len;
-        if (skill + 1 < skill_options && col + click_width < end_col)
-            click_width++;
+        Term_putstr(col, tab_row, token_len, attr, tokens[skill]);
         ui_menu_click_add(ABILITY_MENU_CLICK_SKILL_BASE + skill,
-            col, tab_row, click_width);
-        col += token_len;
-
-        if (skill + 1 < skill_options && col < end_col)
-            Term_putstr(col++, tab_row, 1, TERM_L_DARK, " ");
+            col, tab_row, token_widths[skill]);
+        col += token_widths[skill];
     }
 }
 
@@ -3151,12 +3725,24 @@ static bool ability_inactive_reason(int skilltype, int abilitynum,
             {
                 reason = "Requires an equipped melee weapon.";
             }
-            else if (!player_power_throw_weapon_eligible(
-                         &inventory[INVEN_QUIVER1])
-                && !player_power_throw_weapon_eligible(
-                    &inventory[INVEN_QUIVER2]))
+            else
             {
-                reason = "Requires a spear or hand axe in a quiver.";
+                bool has_weapon = false;
+
+                for (int slot = 0; slot < INVEN_TOTAL; slot++)
+                {
+                    if (slot != INVEN_WIELD
+                        && inventory_limit_group_for_object(&inventory[slot])
+                            == INV_LIMIT_HARNESS
+                        && player_power_throw_weapon_eligible(
+                            &inventory[slot]))
+                    {
+                        has_weapon = true;
+                        break;
+                    }
+                }
+                if (!has_weapon)
+                    reason = "Requires an inactive Harness spear or hand axe.";
             }
             break;
         case MEL_TWO_WEAPON:
@@ -3352,7 +3938,8 @@ static int ability_browser_collect_entries(int skilltype,
         }
     }
 
-    if (skilltype == S_SMT || skilltype == S_ARC || skilltype == S_MEL)
+    if (skilltype == S_SMT || skilltype == S_ARC || skilltype == S_MEL
+        || skilltype == S_PER)
         ability_browser_sort_entries(entries, count);
 
     return count;
@@ -3421,6 +4008,8 @@ static void ability_browser_draw_ability_list(
     int name_col = level_col + 4;
     int state_col = layout->ability_col + layout->ability_w - 8;
     int name_w = state_col - name_col - 1;
+    int entry_rows = MAX(layout->ability_entry_rows, 1);
+    int visible_entries = MAX(layout->ability_rows / entry_rows, 1);
 
     if (name_w < 1)
         name_w = 1;
@@ -3430,10 +4019,10 @@ static void ability_browser_draw_ability_list(
     ability_browser_put_fitted(layout->ability_col, layout->header_row,
         layout->ability_w, TERM_SLATE, "Lvl Ability                       State");
 
-    for (int i = 0; i < layout->list_rows; i++)
+    for (int i = 0; i < visible_entries; i++)
     {
         int idx = entry_top + i;
-        int y = layout->list_row + i;
+        int y = layout->ability_row + i * entry_rows;
         const ability_browser_entry* entry;
         char state[32];
         char level[8];
@@ -3444,6 +4033,7 @@ static void ability_browser_draw_ability_list(
         byte prefix_attr;
         byte level_attr;
         byte state_attr;
+        cptr name_cursor;
 
         if (idx >= entry_count)
             break;
@@ -3458,8 +4048,12 @@ static void ability_browser_draw_ability_list(
         level_attr = highlighted ? row_attr : TERM_SLATE;
         state_attr = highlighted ? row_attr : entry->attr;
 
-        ability_browser_fill_row(layout->ability_col, y, layout->ability_w,
-            highlighted ? row_attr : TERM_DARK);
+        for (int line_idx = 0; line_idx < entry_rows; line_idx++) {
+            ability_browser_fill_row(layout->ability_col, y + line_idx,
+                layout->ability_w, highlighted ? row_attr : TERM_DARK);
+            ui_menu_click_add(ABILITY_MENU_CLICK_ABILITY_BASE + idx,
+                layout->ability_col, y + line_idx, layout->ability_w);
+        }
 
         if (selected)
             indexed_menu_focus_prefix(prefix, sizeof(prefix), idx);
@@ -3469,16 +4063,24 @@ static void ability_browser_draw_ability_list(
 
         strnfmt(level, sizeof(level), "%2d", entry->b_ptr->level);
         ability_browser_put_fitted(level_col, y, 2, level_attr, level);
-        ability_browser_put_fitted(name_col, y, name_w, row_attr,
-            entry->name);
+        name_cursor = entry->name;
+        for (int line_idx = 0; line_idx < entry_rows; line_idx++) {
+            char name_line[96];
+
+            if (!ability_browser_wrap_next(&name_cursor, name_w, name_line,
+                    sizeof(name_line)))
+            {
+                name_line[0] = '\0';
+            }
+            ability_browser_put_fitted(name_col, y + line_idx, name_w,
+                row_attr, name_line);
+        }
 
         ability_browser_entry_state(state, sizeof(state), skilltype, entry);
         ability_browser_put_fitted(state_col, y,
             layout->ability_col + layout->ability_w - state_col,
             state_attr, state);
 
-        ui_menu_click_add(ABILITY_MENU_CLICK_ABILITY_BASE + idx,
-            layout->ability_col, y, layout->ability_w);
     }
 }
 
@@ -3719,7 +4321,7 @@ static void ability_browser_add_prerequisites(
     uses_knowledge = ability_uses_knowledge_points(skilltype, b_ptr->abilitynum);
 
     ability_desc_add_blank(lines, line_count);
-    ability_desc_add_line(lines, line_count, TERM_YELLOW, "Requirements");
+    ability_desc_add_heading(lines, line_count, TERM_YELLOW, "Requirements");
 
     if (b_ptr->lore_req > 0)
     {
@@ -3805,6 +4407,16 @@ static void ability_browser_add_prerequisites(
             skill_names_full[i], limit, have);
         ability_desc_add_wrapped(lines, line_count,
             (have < limit) ? TERM_L_GREEN : TERM_L_DARK, buf, width);
+    }
+
+    if (b_ptr->level > p_ptr->skill_base[skilltype])
+    {
+        int skill_xp = ability_browser_skill_training_cost(
+            p_ptr->skill_base[skilltype], b_ptr->level);
+
+        strnfmt(buf, sizeof(buf), "Skill XP: %d needed to reach level %d",
+            skill_xp, b_ptr->level);
+        ability_desc_add_wrapped(lines, line_count, TERM_L_DARK, buf, width);
     }
 
     if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
@@ -3930,7 +4542,7 @@ static void ability_browser_add_current_blocks(
     ability_browser_desc_line lines[], int* line_count, int skilltype,
     const ability_type* b_ptr, int width)
 {
-    char buf[220];
+    char buf[320];
 
     if (!b_ptr)
         return;
@@ -3946,6 +4558,14 @@ static void ability_browser_add_current_blocks(
             ability_desc_add_wrapped(lines, line_count, TERM_L_GREEN,
                 bonus_text, width);
         }
+    }
+
+    if (ability_menu_dynamic_bonus_text(skilltype, b_ptr->abilitynum,
+            buf, sizeof(buf)))
+    {
+        ability_desc_add_blank(lines, line_count);
+        ability_desc_add_wrapped(lines, line_count, TERM_L_GREEN, buf,
+            width);
     }
 
     if (skilltype == S_SPC && b_ptr->abilitynum == SPC_NIENA_MERCY
@@ -4155,10 +4775,18 @@ static int ability_browser_build_description(int skilltype,
         char* death_message = oath_death_message(oath_id);
 
         ability_desc_add_blank(lines, &line_count);
-        ability_desc_add_line(lines, &line_count, TERM_RED, "Broken oath");
         if (death_message && death_message[0])
+        {
+            ability_desc_add_heading(lines, &line_count, TERM_RED,
+                "Broken oath");
             ability_desc_add_wrapped(lines, &line_count, TERM_RED,
                 death_message, width);
+        }
+        else
+        {
+            ability_desc_add_line(lines, &line_count, TERM_RED,
+                "Broken oath");
+        }
     }
     else
     {
@@ -4174,7 +4802,8 @@ static int ability_browser_build_description(int skilltype,
         if (effect_text && effect_text[0])
         {
             ability_desc_add_blank(lines, &line_count);
-            ability_desc_add_line(lines, &line_count, TERM_YELLOW, "Effect");
+            ability_desc_add_heading(lines, &line_count, TERM_YELLOW,
+                "Effect");
             ability_desc_add_wrapped(lines, &line_count, TERM_L_WHITE,
                 effect_text, width);
         }
@@ -4185,7 +4814,8 @@ static int ability_browser_build_description(int skilltype,
         if (desc_text && desc_text[0])
         {
             ability_desc_add_blank(lines, &line_count);
-            ability_desc_add_line(lines, &line_count, TERM_YELLOW, "Lore");
+            ability_desc_add_heading(lines, &line_count, TERM_YELLOW,
+                "Lore");
             ability_desc_add_wrapped(lines, &line_count, TERM_SLATE,
                 desc_text, width);
         }
@@ -4314,12 +4944,12 @@ static int ability_browser_highlight_match(cptr line, int offset, byte* attr,
 
             if (ability_browser_phrase_matches_exact(line, offset, full_name))
             {
-                *attr = ability_browser_skill_color(skill);
+                *attr = ability_skill_color(skill);
                 return (int)strlen(full_name);
             }
             if (ability_browser_phrase_matches_exact(line, offset, short_name))
             {
-                *attr = ability_browser_skill_color(skill);
+                *attr = ability_skill_color(skill);
                 return (int)strlen(short_name);
             }
         }
@@ -4421,27 +5051,39 @@ static void ability_browser_draw_description(
     bool focused)
 {
     char label[64];
-    int visible_rows = layout->list_rows;
+    int visible_rows = layout->desc_rows;
+    int content_rows = visible_rows;
+    int header_row = layout->stacked ? layout->desc_header_row
+                                     : layout->header_row;
 
-    ability_browser_put_fitted(layout->desc_col, layout->header_row,
+    /* In the stacked portrait layout, do not leave a section heading as the
+     * final visible line while its contents start below the viewport. */
+    if (layout->stacked && content_rows > 1
+        && desc_top + content_rows < line_count
+        && lines[desc_top + content_rows - 1].keep_with_next)
+    {
+        content_rows--;
+    }
+
+    ability_browser_put_fitted(layout->desc_col, header_row,
         layout->desc_w, focused ? TERM_L_BLUE : TERM_SLATE, "Information");
 
-    if (line_count > visible_rows)
+    if (desc_top > 0 || line_count > content_rows)
     {
         strnfmt(label, sizeof(label), "[%d-%d/%d]", desc_top + 1,
-            MIN(desc_top + visible_rows, line_count), line_count);
+            MIN(desc_top + content_rows, line_count), line_count);
         ability_browser_put_fitted(
             layout->desc_col + MAX(0, layout->desc_w - (int)strlen(label)),
-            layout->header_row, (int)strlen(label), TERM_L_BLUE, label);
+            header_row, (int)strlen(label), TERM_L_BLUE, label);
     }
 
     for (int i = 0; i < visible_rows; i++)
     {
         int idx = desc_top + i;
-        int y = layout->list_row + i;
+        int y = layout->desc_row + i;
 
         Term_erase(layout->desc_col, y, layout->desc_w);
-        if (idx >= line_count)
+        if (i >= content_rows || idx >= line_count)
             continue;
 
         ability_browser_draw_colored_text_line(layout->desc_col, y,
@@ -4450,14 +5092,84 @@ static void ability_browser_draw_description(
     }
 }
 
+static void ability_browser_draw_summary(const ability_browser_layout* layout,
+    int skilltype, cptr summary, bool train_hovered)
+{
+    const char* cursor = summary;
+    const char* train_start = NULL;
+    const char* train_end = NULL;
+    char line[180];
+
+    if (!layout || !summary)
+        return;
+
+    if (skilltype >= 0 && skilltype < S_MAX && skilltype != S_SPC)
+    {
+        train_start = strstr(summary, " | ");
+        if (train_start)
+        {
+            train_start += 3;
+            train_end = strstr(train_start, " | ability price");
+        }
+    }
+
+    for (int row_offset = 0; row_offset < layout->summary_rows; row_offset++)
+    {
+        const char* line_start;
+        const char* line_end;
+        int row = layout->summary_row + row_offset;
+
+        Term_erase(layout->visible_col, row, layout->visible_w);
+        while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n')
+            cursor++;
+        line_start = cursor;
+        if (!ability_browser_wrap_next(&cursor, layout->visible_w, line,
+                sizeof(line)))
+        {
+            continue;
+        }
+        line_end = line_start + strlen(line);
+        ability_browser_draw_colored_text_line_ex(layout->visible_col, row,
+            layout->visible_w, TERM_WHITE, line, false);
+
+        if (train_start && train_end && line_end > train_start
+            && line_start < train_end)
+        {
+            const char* segment_start = (line_start > train_start)
+                ? line_start
+                : train_start;
+            const char* segment_end = (line_end < train_end)
+                ? line_end
+                : train_end;
+            int prefix_bytes = (int)(segment_start - line_start);
+            int segment_bytes = (int)(segment_end - segment_start);
+            int prefix_w = ability_browser_cell_width_n(line_start,
+                prefix_bytes);
+            int segment_w = ability_browser_cell_width_n(segment_start,
+                segment_bytes);
+            int segment_col = layout->visible_col + prefix_w;
+            byte train_attr = train_hovered
+                ? ability_browser_selected_attr(TERM_L_BLUE)
+                : TERM_L_BLUE;
+
+            if (segment_w > 0)
+            {
+                if (train_hovered)
+                    ability_browser_fill_row(segment_col, row, segment_w,
+                        train_attr);
+                Term_putstr(segment_col, row, segment_bytes, train_attr,
+                    segment_start);
+                ui_menu_click_add_span(ABILITY_MENU_CLICK_TRAIN, segment_col,
+                    row, segment_col + segment_w);
+            }
+        }
+    }
+}
+
 static void ability_browser_draw_frame(const ability_browser_layout* layout,
-    int skilltype, bool train_hovered)
+    int skilltype, cptr summary, bool train_hovered)
 {
     char title[96];
-    char summary[160];
-    char visible_summary[160];
-    char next_skill[32];
-    char ability_price[32];
 
     Term_clear();
 
@@ -4466,76 +5178,7 @@ static void ability_browser_draw_frame(const ability_browser_layout* layout,
                                               : "Skills");
     ability_browser_put_fitted(layout->visible_col, layout->title_row,
         layout->visible_w, TERM_L_WHITE + TERM_SHADE, title);
-
-    if (skilltype >= 0 && skilltype < S_MAX && skilltype != S_SPC)
-    {
-        strnfmt(next_skill, sizeof(next_skill), "%d XP",
-            ability_browser_next_skill_cost(skilltype));
-        strnfmt(ability_price, sizeof(ability_price), "%d XP",
-            ability_purchase_exp_cost(skilltype));
-    }
-    else
-    {
-        SDL_strlcpy(next_skill, "granted", sizeof(next_skill));
-        SDL_strlcpy(ability_price, "n/a", sizeof(ability_price));
-    }
-
-    strnfmt(summary, sizeof(summary),
-        "XP %ld | %s base %d, current %d | next skill +1: %s | ability price %s",
-        (long)p_ptr->new_exp,
-        (skilltype >= 0 && skilltype < S_MAX) ? skill_names_full[skilltype]
-                                              : "Skill",
-        (skilltype >= 0 && skilltype < S_MAX) ? p_ptr->skill_base[skilltype] : 0,
-        (skilltype >= 0 && skilltype < S_MAX) ? p_ptr->skill_use[skilltype] : 0,
-        next_skill, ability_price);
-
-    ability_browser_fit_text(visible_summary, sizeof(visible_summary),
-        summary, layout->visible_w);
-    ability_browser_draw_colored_text_line_ex(layout->visible_col,
-        layout->summary_row, layout->visible_w, TERM_WHITE,
-        visible_summary, false);
-    if (skilltype >= 0 && skilltype < S_MAX && skilltype != S_SPC)
-    {
-        cptr skill_start = strstr(visible_summary, " | ");
-        cptr ability_start;
-        int start_offset = 0;
-        int end_offset = (int)strlen(visible_summary);
-
-        if (skill_start)
-            start_offset = (int)(skill_start - visible_summary) + 3;
-
-        ability_start = strstr(visible_summary + start_offset,
-            " | ability price");
-        if (ability_start)
-            end_offset = (int)(ability_start - visible_summary);
-
-        if (end_offset > start_offset)
-        {
-            byte train_attr = train_hovered
-                ? ability_browser_selected_attr(TERM_L_BLUE)
-                : TERM_L_BLUE;
-            char train_text[160];
-            int train_len = end_offset - start_offset;
-
-            if (train_len >= (int)sizeof(train_text))
-                train_len = (int)sizeof(train_text) - 1;
-            SDL_memcpy(train_text, visible_summary + start_offset,
-                (size_t)train_len);
-            train_text[train_len] = '\0';
-
-            if (train_hovered)
-            {
-                ability_browser_fill_row(layout->visible_col + start_offset,
-                    layout->summary_row, train_len, train_attr);
-            }
-            Term_putstr(layout->visible_col + start_offset,
-                layout->summary_row, train_len, train_attr, train_text);
-        }
-
-        ui_menu_click_add_span(ABILITY_MENU_CLICK_TRAIN,
-            layout->visible_col + start_offset, layout->summary_row,
-            layout->visible_col + end_offset);
-    }
+    ability_browser_draw_summary(layout, skilltype, summary, train_hovered);
 
     for (int i = layout->visible_col;
         i < layout->visible_col + layout->visible_w; i++)
@@ -4644,9 +5287,9 @@ static void ability_browser_draw_prompt(const ability_browser_layout* layout)
          * below scans this string for them, so dropping them would remove
          * those tap targets on touch. */
         const char* variants[] = {
-            "Tap a row to buy/toggle, train, prev skill, scroll, i skills",
-            "Tap row: buy/toggle, train, scroll, i skills",
-            "Tap to buy/toggle"
+            "Tap row to select; selected row buy/toggle, train, prev skill, scroll, i skills",
+            "Selected row: buy/toggle, train, scroll, i skills",
+            "Selected row buy/toggle"
         };
 
         terminal_prompt_pick_variant(prompt, sizeof(prompt), layout->visible_w,
@@ -4788,8 +5431,31 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         if (skip_purchase)
             return false;
 
-        if (!get_check("Gain this ability? "))
-            return false;
+        {
+            char gain_name[80];
+            char prompt[160];
+
+            if (banechoice > 0)
+            {
+                strnfmt(gain_name, sizeof(gain_name), "%s-%s",
+                    bane_name[banechoice], b_name + b_ptr->name);
+            }
+            else if (oathchoice > 0)
+            {
+                strnfmt(gain_name, sizeof(gain_name), "%s: %s",
+                    b_name + b_ptr->name, oath_name_short(oathchoice));
+            }
+            else
+            {
+                SDL_strlcpy(gain_name, b_name + b_ptr->name,
+                    sizeof(gain_name));
+            }
+
+            strnfmt(prompt, sizeof(prompt), "Gain %s for %d XP? ",
+                gain_name, exp_cost);
+            if (!get_check(prompt))
+                return false;
+        }
 
         p_ptr->innate_ability[skilltype][abilitynum] = true;
         p_ptr->have_ability[skilltype][abilitynum] = true;
@@ -4839,6 +5505,7 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         }
 
         msg_print("Ability gained.");
+        sdl_quick_access_suggest_ability_shortcut(skilltype, abilitynum);
     }
     else
     {
@@ -4972,10 +5639,14 @@ int abilities_menu1(int* highlight)
 
         if (clicked_choice >= 1 && clicked_choice <= options)
         {
+            bool same_choice = (*highlight == clicked_choice);
+
             *highlight = clicked_choice;
             if (click_action == UI_MENU_CLICK_HOVER)
                 return (0);
-            return (*highlight);
+            if (same_choice)
+                return (*highlight);
+            return (0);
         }
     }
 
@@ -5192,7 +5863,8 @@ int abilities_menu2(int skilltype, int* highlight)
         visible_count++;
     }
 
-    if (skilltype == S_SMT || skilltype == S_ARC || skilltype == S_MEL)
+    if (skilltype == S_SMT || skilltype == S_ARC || skilltype == S_MEL
+        || skilltype == S_PER)
     {
         ability_menu_sort_entries_by_level(visible_entries, visible_attrs,
             visible_abilities, visible_count);
@@ -5392,6 +6064,9 @@ int abilities_menu2(int skilltype, int* highlight)
 
                     if (skilltype == S_SNG && !song_bonus_rendered)
                         ability_menu_render_song_bonus_block(b_ptr);
+
+                    ability_menu_render_dynamic_bonus(skilltype,
+                        b_ptr->abilitynum);
 
                     /* For Nienna's Gift of Mercy, show current bonus */
                     if (skilltype == S_SPC && b_ptr->abilitynum == SPC_NIENA_MERCY &&
@@ -5615,8 +6290,11 @@ int abilities_menu2(int skilltype, int* highlight)
 
                 if (selected_index >= 0 && selected_index < visible_count)
                 {
+                    bool same_choice =
+                        (*highlight == visible_abilities[selected_index] + 1);
+
                     *highlight = visible_abilities[selected_index] + 1;
-                    if (click_action != UI_MENU_CLICK_HOVER)
+                    if (click_action != UI_MENU_CLICK_HOVER && same_choice)
                         return (*highlight);
                     return (0);
                 }
@@ -5744,19 +6422,21 @@ void do_cmd_ability_screen(void)
         ability_browser_layout layout;
         ability_browser_entry entries[ABILITIES_MAX];
         ability_browser_desc_line desc_lines[ABILITY_BROWSER_DESC_MAX_LINES];
+        char summary[160];
         int skill_options;
         int skilltype;
         int entry_count;
         int desc_line_count;
         int desc_max_top;
         int desc_wrap_w;
+        int ability_visible_entries;
         int hover_choice;
         int skill_hover = -1;
         bool train_hovered = false;
+        bool viewport_scrolled;
         int ch;
         bool steamdeck = steamdeck_controls_active();
 
-        ability_browser_init_layout(&layout);
         skill_options = ability_menu_skill_options();
         if (skill_options < 1)
             skill_options = 1;
@@ -5769,6 +6449,10 @@ void do_cmd_ability_screen(void)
         skilltype = skill_cur;
         entry_count = ability_browser_collect_entries(skilltype, entries,
             ABILITIES_MAX);
+        ability_browser_build_summary(skilltype, summary, sizeof(summary));
+        ability_browser_init_layout(&layout, entry_count, summary);
+        ability_visible_entries = MAX(1, layout.ability_rows
+            / MAX(layout.ability_entry_rows, 1));
 
         if (entry_count <= 0)
         {
@@ -5783,13 +6467,14 @@ void do_cmd_ability_screen(void)
                 entry_cur = 0;
         }
 
-        if (sdl_touch_only_device_active())
+        viewport_scrolled = ui_scroll_area_take_touch_scrolled();
+        if (sdl_touch_only_device_active() || viewport_scrolled)
         {
-            /* Touch-only menus are viewport-driven: dragging pans the list,
+            /* Pointer scrolling is viewport-driven: dragging pans the list,
              * and tapping selects.  Do not let the off-screen selection pull
-             * the viewport back on the next redraw. */
-            int max_entry_top = MAX(0, entry_count - layout.list_rows);
-            (void)ui_scroll_area_take_touch_scrolled();
+             * the viewport back on the redraw caused by that drag. */
+            int max_entry_top = MAX(0,
+                entry_count - ability_visible_entries);
             if (entry_top > max_entry_top)
                 entry_top = max_entry_top;
         }
@@ -5797,8 +6482,8 @@ void do_cmd_ability_screen(void)
         {
             if (entry_cur < entry_top)
                 entry_top = entry_cur;
-            if (entry_cur >= entry_top + layout.list_rows)
-                entry_top = entry_cur - layout.list_rows + 1;
+            if (entry_cur >= entry_top + ability_visible_entries)
+                entry_top = entry_cur - ability_visible_entries + 1;
         }
         if (entry_top < 0)
             entry_top = 0;
@@ -5811,7 +6496,7 @@ void do_cmd_ability_screen(void)
         desc_line_count = ability_browser_build_description(skilltype,
             (entry_count > 0) ? &entries[entry_cur] : NULL, desc_lines,
             desc_wrap_w);
-        desc_max_top = MAX(0, desc_line_count - layout.list_rows);
+        desc_max_top = MAX(0, desc_line_count - layout.desc_rows);
         if (desc_top > desc_max_top)
             desc_top = desc_max_top;
         if (desc_top < 0)
@@ -5824,26 +6509,24 @@ void do_cmd_ability_screen(void)
         ui_menu_click_set_touch_exit_button(true);
         ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
         ui_scroll_area_begin_cols(layout.ability_col,
-            layout.ability_col + layout.ability_w - 1, layout.list_row,
-            MAX(layout.list_row, layout.status_row - 1),
+            layout.ability_col + layout.ability_w - 1, layout.ability_row,
+            layout.ability_row + layout.ability_rows - 1,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
         ui_scroll_area_set_keys('8', '2', '6', '4');
-        if (sdl_touch_only_device_active())
-        {
-            /* Touch-only: drag pans the ability list without moving the
-             * selection (tap an ability to pick it). */
-            ui_scroll_area_set_offset_target(&entry_top,
-                MAX(0, entry_count - layout.list_rows));
-        }
+        /* A drag in the left (or portrait top) region pans the ability
+         * viewport without moving the selected ability. */
+        ui_scroll_area_set_offset_target(&entry_top,
+            MAX(0, entry_count - ability_visible_entries));
         if (layout.desc_w > 0)
         {
             (void)ui_scroll_area_add_cols(layout.desc_col,
-                layout.desc_col + layout.desc_w - 1, layout.list_row,
-                MAX(layout.list_row, layout.status_row - 1),
+                layout.desc_col + layout.desc_w - 1, layout.desc_row,
+                layout.desc_row + layout.desc_rows - 1,
                 SDL_TOUCH_MENU_CATEGORY_OTHER);
             ui_scroll_area_set_keys('8', '2', '6', '4');
-            if (sdl_touch_only_device_active())
-                ui_scroll_area_set_offset_target(&desc_top, desc_max_top);
+            /* A drag in the right (or portrait bottom) region scrolls only
+             * the description belonging to the selected ability. */
+            ui_scroll_area_set_offset_target(&desc_top, desc_max_top);
         }
 
         if (ui_menu_click_get_hover_choice(&hover_choice)
@@ -5852,7 +6535,7 @@ void do_cmd_ability_screen(void)
             train_hovered = true;
         }
 
-        ability_browser_draw_frame(&layout, skilltype, train_hovered);
+        ability_browser_draw_frame(&layout, skilltype, summary, train_hovered);
 
         if (ui_menu_click_get_hover_choice(&hover_choice)
             && hover_choice >= ABILITY_MENU_CLICK_SKILL_BASE
@@ -5887,11 +6570,30 @@ void do_cmd_ability_screen(void)
                 }
                 else
                 {
-                    strnfmt(status, sizeof(status),
+                    char status_full[180];
+                    char status_mid[180];
+                    char status_short[180];
+                    const char* variants[] = {
+                        status_full, status_mid, status_short
+                    };
+
+                    strnfmt(status_full, sizeof(status_full),
                         "%s: %s | next %s point costs %d XP",
                         entries[entry_cur].name, state,
                         skill_names_full[skilltype],
                         ability_browser_next_skill_cost(skilltype));
+                    strnfmt(status_mid, sizeof(status_mid),
+                        "%s: %s | next %s: %d XP",
+                        entries[entry_cur].name, state,
+                        skill_names_full[skilltype],
+                        ability_browser_next_skill_cost(skilltype));
+                    strnfmt(status_short, sizeof(status_short),
+                        "%s | %s +1: %d XP", state,
+                        skill_names_full[skilltype],
+                        ability_browser_next_skill_cost(skilltype));
+                    terminal_prompt_pick_variant(status, sizeof(status),
+                        layout.visible_w, true, variants,
+                        N_ELEMENTS(variants));
                 }
             }
             else
@@ -5909,10 +6611,11 @@ void do_cmd_ability_screen(void)
 
         if (column == 0 && entry_count > 0)
             Term_gotoxy(layout.ability_col,
-                layout.list_row + (entry_cur - entry_top));
+                layout.ability_row + (entry_cur - entry_top)
+                    * MAX(layout.ability_entry_rows, 1));
         else
             Term_gotoxy(layout.desc_col,
-                layout.list_row + MIN(layout.list_rows - 1,
+                layout.desc_row + MIN(layout.desc_rows - 1,
                     MAX(0, desc_top ? 1 : 0)));
 
         hide_cursor = true;
@@ -5933,16 +6636,13 @@ void do_cmd_ability_screen(void)
                     if (clicked_entry >= 0 && clicked_entry < entry_count)
                     {
                         bool same = (entry_cur == clicked_entry);
-                        bool touch_primary =
-                            sdl_touch_only_device_active()
-                            && click_action == UI_MENU_CLICK_PRIMARY;
 
                         entry_cur = clicked_entry;
                         column = 0;
                         desc_top = 0;
                         if (click_action == UI_MENU_CLICK_HOVER)
                             continue;
-                        if (!same && !touch_primary)
+                        if (!same)
                             continue;
                         ch = ' ';
                     }
@@ -6056,7 +6756,7 @@ void do_cmd_ability_screen(void)
 
         if (ch == '9')
         {
-            desc_top -= layout.list_rows;
+            desc_top -= layout.desc_rows;
             if (desc_top < 0)
                 desc_top = 0;
             column = 1;
@@ -6065,7 +6765,7 @@ void do_cmd_ability_screen(void)
 
         if (ch == '3')
         {
-            desc_top += layout.list_rows;
+            desc_top += layout.desc_rows;
             if (desc_top > desc_max_top)
                 desc_top = desc_max_top;
             column = 1;
@@ -6147,5 +6847,5 @@ void do_cmd_ability_screen(void)
     screen_load();
 
     handle_stuff();
-    inven_enforce_current_pack_limits();
+    inven_update_current_pack_limits();
 }

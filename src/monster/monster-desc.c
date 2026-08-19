@@ -1,6 +1,56 @@
 /* File: monster-desc.c */
 
 #include "monster-internal.h"
+#include "meta_state.h"
+
+static void display_monlist_with_health_bars(void)
+{
+    int line = 0;
+
+    for (int idx = 1; idx < mon_max && line < Term->hgt; idx++)
+    {
+        monster_type* m_ptr = &mon_list[idx];
+        monster_race* r_ptr;
+        char m_name[80];
+        int symbol_cols;
+        int name_col;
+        int name_cols;
+        int bar_col;
+
+        if (!m_ptr->r_idx || !m_ptr->ml)
+            continue;
+
+        r_ptr = &r_info[m_ptr->r_idx];
+        monster_desc_race(m_name, sizeof(m_name), m_ptr->r_idx);
+        symbol_cols = use_bigtile ? 2 : 1;
+        name_col = symbol_cols + 2;
+        bar_col = MAX(name_col + 4, Term->wid - 9);
+        name_cols = bar_col - name_col - 1;
+
+        Term_erase(0, line, 255);
+        Term_putch(1, line, monster_attr(r_ptr), monster_char(r_ptr));
+        if (use_bigtile && 2 < Term->wid)
+            Term_putch(2, line, 255, -1);
+
+        if (name_cols > 0)
+        {
+            if ((int)strlen(m_name) > name_cols)
+                m_name[name_cols] = '\0';
+            Term_putstr(name_col, line, name_cols, TERM_WHITE, m_name);
+        }
+
+        if (bar_col + 8 <= Term->wid)
+        {
+            Term_gotoxy(bar_col, line);
+            monster_health_bar_put(m_ptr, 8);
+        }
+
+        line++;
+    }
+
+    for (; line < Term->hgt; line++)
+        Term_erase(0, line, 255);
+}
 
 /*
  * Display visible monsters in a window
@@ -29,6 +79,12 @@ void display_monlist(void)
         Term_putstr(
             3, 3, 35, TERM_L_WHITE, "What you see is not to be believed.");
 
+        return;
+    }
+
+    if (styled_monster_health_bars)
+    {
+        display_monlist_with_health_bars();
         return;
     }
 
@@ -191,6 +247,8 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
         r_ptr = &r_info[m_ptr->r_idx];
     }
 
+    meta_monster_apply_runtime_overrides();
+
     name = (r_name + r_ptr->name);
 
     /* Can we "see" it (forced, or not hidden + visible) */
@@ -324,6 +382,18 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
         {
             /* Start with the name (thus nominative and objective) */
             SDL_strlcpy(desc, name, max);
+            {
+                const meta_monster_record* record =
+                    meta_monster_find_record_for_race((u16b)m_ptr->r_idx);
+
+                if (record && record->rank > 0)
+                {
+                    int stars = MIN(3, record->rank);
+
+                    while (stars-- > 0)
+                        SDL_strlcat(desc, "*", max);
+                }
+            }
         }
 
         /* It could be an indefinite monster */
@@ -377,11 +447,22 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
 void monster_desc_race(char* desc, size_t max, int r_idx)
 {
     monster_race* r_ptr = &r_info[r_idx];
+    const meta_monster_record* record;
+
+    meta_monster_apply_runtime_overrides();
 
     cptr name = (r_name + r_ptr->name);
 
     /* Write the name */
     SDL_strlcpy(desc, name, max);
+    record = meta_monster_find_record_for_race((u16b)r_idx);
+    if (record && record->rank > 0)
+    {
+        int stars = MIN(3, record->rank);
+
+        while (stars-- > 0)
+            SDL_strlcat(desc, "*", max);
+    }
 }
 
 /*
@@ -426,4 +507,3 @@ void lore_treasure(int m_idx, int num_item)
         p_ptr->window |= (PW_MONSTER);
     }
 }
-

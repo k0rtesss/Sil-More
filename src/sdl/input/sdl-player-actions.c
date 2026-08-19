@@ -47,16 +47,28 @@ bool sdl_main_view_point_is_player_grid(float x, float y)
     return map_y == p_ptr->py && map_x == p_ptr->px;
 }
 
-bool sdl_player_has_equipped_staff(void)
+static object_type* sdl_player_first_harness_activatable(int tval)
 {
-    return inventory[INVEN_STAFF].k_idx
-        && inventory[INVEN_STAFF].tval == TV_STAFF;
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++) {
+        object_type* o_ptr = player_pack_entry_at(ordinal);
+
+        if (o_ptr->k_idx && o_ptr->tval == tval
+            && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS) {
+            return o_ptr;
+        }
+    }
+
+    return NULL;
 }
 
-bool sdl_player_has_equipped_horn(void)
+bool sdl_player_has_harness_staff(void)
 {
-    return inventory[INVEN_HORN].k_idx
-        && inventory[INVEN_HORN].tval == TV_HORN;
+    return sdl_player_first_harness_activatable(TV_STAFF) != NULL;
+}
+
+bool sdl_player_has_harness_horn(void)
+{
+    return sdl_player_first_harness_activatable(TV_HORN) != NULL;
 }
 
 bool sdl_player_has_singable_song(void)
@@ -80,6 +92,13 @@ enum {
     SDL_PLAYER_ACTION_MENU_SECTOR_SEGMENTS = 12
 };
 
+static bool sdl_player_action_menu_desktop_layout(void)
+{
+    return g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP
+        || g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER
+        || g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_HANDHELD;
+}
+
 static cptr sdl_player_action_menu_description_for_kind(int kind)
 {
     switch (kind) {
@@ -98,19 +117,19 @@ static cptr sdl_player_action_menu_description_for_kind(int kind)
     case SDL_PLAYER_ACTION_EXAMINE:
         return "Examine: look at your square or inspect the floor item.";
     case SDL_PLAYER_ACTION_ACTIVATE:
-        return "Staff: activate your equipped staff.";
+        return "Staff: choose and activate a staff from your Harness.";
     case SDL_PLAYER_ACTION_HORN:
-        return "Horn: blow your equipped horn.";
+        return "Horn: choose and sound a horn from your Harness.";
     case SDL_PLAYER_ACTION_SHOOT:
         return "Ready: switch between melee and ranged weapons.";
     case SDL_PLAYER_ACTION_QUICK_THROW:
-        return "Throw: hurl a quick-throw dagger, use a readied Power Throw, or throw a potion with Alchemy.";
+        return "Quick Throw: hurl an eligible dagger or an Alchemy potion whose effect splashes the impact square and every adjacent square.";
     case SDL_PLAYER_ACTION_REST:
         return "Rest: rest until disturbed or fully recovered.";
     case SDL_PLAYER_ACTION_SWAP_QUIVERS:
-        return "Swap quivers: exchange your 1st and 2nd quivers.";
+        return "Arrows: choose the active arrow type from your mixed Quiver.";
     case SDL_PLAYER_ACTION_CHANGE_STAFF:
-        return "Swap staff: exchange your staff with one from your pack.";
+        return "Staff: choose and activate a staff from your Harness.";
     case SDL_PLAYER_ACTION_CLOSE_DOOR:
         return "Close: shut an adjacent open door. Doors open automatically "
                "when you move into them.";
@@ -121,7 +140,7 @@ static cptr sdl_player_action_menu_description_for_kind(int kind)
     }
 }
 
-static cptr sdl_player_action_menu_fallback_for_kind(int kind)
+cptr sdl_player_action_menu_fallback_for_kind(int kind)
 {
     switch (kind) {
     case SDL_PLAYER_ACTION_WAIT: return "Z";
@@ -134,17 +153,18 @@ static cptr sdl_player_action_menu_fallback_for_kind(int kind)
     case SDL_PLAYER_ACTION_ACTIVATE: return "Staff";
     case SDL_PLAYER_ACTION_HORN: return "Horn";
     case SDL_PLAYER_ACTION_SHOOT: return "Tab";
-    case SDL_PLAYER_ACTION_QUICK_THROW: return "Throw";
+    case SDL_PLAYER_ACTION_QUICK_THROW:
+        return "Throw";
     case SDL_PLAYER_ACTION_REST: return "Rest";
-    case SDL_PLAYER_ACTION_SWAP_QUIVERS: return "Swap";
-    case SDL_PLAYER_ACTION_CHANGE_STAFF: return "Swap";
+    case SDL_PLAYER_ACTION_SWAP_QUIVERS: return "Arrows";
+    case SDL_PLAYER_ACTION_CHANGE_STAFF: return "Staff";
     case SDL_PLAYER_ACTION_CLOSE_DOOR: return "Close";
     case SDL_PLAYER_ACTION_BASH_DOOR: return "Bash";
     default: return "";
     }
 }
 
-static void sdl_player_action_menu_tile_for_kind(int kind, byte* out_attr,
+void sdl_player_action_menu_tile_for_kind(int kind, byte* out_attr,
     char* out_char)
 {
     byte row = 12;
@@ -152,74 +172,60 @@ static void sdl_player_action_menu_tile_for_kind(int kind, byte* out_attr,
 
     switch (kind) {
     case SDL_PLAYER_ACTION_WAIT:
-        row = 19; col = 8;  /* sleep icon */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_WAIT;
         break;
     case SDL_PLAYER_ACTION_USE:
-        row = 5; col = 8;   /* flask/oil, a common useable item */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_USE;
         break;
     case SDL_PLAYER_ACTION_STEALTH:
-        row = 5; col = 3;   /* shadow cloak */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_STEALTH;
         break;
     case SDL_PLAYER_ACTION_SING:
-        row = 11; col = 27; /* amulet, for voice/song choices */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_SING;
         break;
     case SDL_PLAYER_ACTION_EXCHANGE:
-        row = 12; col = 30; /* seen/target icon */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_EXCHANGE;
         break;
     case SDL_PLAYER_ACTION_FLETCH:
-        row = 5; col = 27;  /* arrows */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_FLETCH;
         break;
     case SDL_PLAYER_ACTION_EXAMINE:
-        row = 12; col = 10; /* question mark */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_DESCRIPTION;
         break;
     case SDL_PLAYER_ACTION_ACTIVATE:
-        row = 6; col = 8;   /* quarterstaff */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_ACTIVATE_STAFF;
         break;
     case SDL_PLAYER_ACTION_HORN:
-        row = 4; col = 2;   /* horn-shaped atlas tile */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_BLOW_HORN;
         break;
     case SDL_PLAYER_ACTION_SHOOT:
-    {
-        object_type* icon_obj = NULL;
-
-        if (p_ptr && player_active_weapon_is_ranged())
-            icon_obj = &inventory[INVEN_WIELD];
-        else if (inventory[INVEN_BOW].k_idx)
-            icon_obj = &inventory[INVEN_BOW];
-        else if (inventory[INVEN_QUIVER1].k_idx)
-            icon_obj = &inventory[INVEN_QUIVER1];
-        else if (inventory[INVEN_QUIVER2].k_idx)
-            icon_obj = &inventory[INVEN_QUIVER2];
-
-        if (icon_obj && icon_obj->k_idx)
-        {
-            if (out_attr)
-                *out_attr = object_attr(icon_obj);
-            if (out_char)
-                *out_char = object_char(icon_obj);
-            return;
-        }
-
-        row = 5; col = 29;  /* shortbow */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_RANGED_ATTACK;
         break;
-    }
     case SDL_PLAYER_ACTION_QUICK_THROW:
     {
-        int slot = player_quick_throw_quiver_slot();
-        if (!slot)
-            slot = player_power_throw_quiver_slot();
-        object_type* icon_obj = slot ? &inventory[slot] : NULL;
+        int slot = player_quick_throw_harness_slot();
+        object_type* icon_obj = slot >= 0 ? &inventory[slot] : NULL;
 
-        /* Prefer a quick-throw dagger; otherwise show a carried potion. */
+        /* Prefer a quick-throw dagger; otherwise show an effective potion. */
         if ((!icon_obj || !icon_obj->k_idx) && player_has_throwable_potion())
         {
-            for (int i = 0; i < INVEN_PACK; i++)
+            for (int i = 0; i < supplies_entry_count(); i++)
             {
-                if (inventory[i].k_idx && inventory[i].tval == TV_POTION)
+                object_type* o_ptr = supplies_entry_at(i);
+
+                if (potion_has_thrown_effect(o_ptr))
                 {
-                    icon_obj = &inventory[i];
+                    icon_obj = o_ptr;
                     break;
                 }
+            }
+
+            for (int ordinal = 0; (!icon_obj || !icon_obj->k_idx)
+                    && ordinal < player_pack_entry_count(); ordinal++)
+            {
+                object_type* o_ptr = player_pack_entry_at(ordinal);
+                if (potion_has_thrown_effect(o_ptr))
+                    icon_obj = o_ptr;
             }
         }
 
@@ -232,21 +238,36 @@ static void sdl_player_action_menu_tile_for_kind(int kind, byte* out_attr,
             return;
         }
 
-        row = 5; col = 1;   /* dagger */
+        row = 6; col = 0;   /* dagger */
         break;
     }
     case SDL_PLAYER_ACTION_REST:
-        row = 19; col = 8;  /* sleep icon */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_REST;
         break;
     case SDL_PLAYER_ACTION_SWAP_QUIVERS:
-    case SDL_PLAYER_ACTION_CHANGE_STAFF:
-        row = 12; col = 30; /* swap/target icon */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_CHANGE_QUIVERS;
         break;
+    case SDL_PLAYER_ACTION_CHANGE_STAFF:
+    {
+        object_type* icon_obj = sdl_player_first_harness_activatable(TV_STAFF);
+
+        if (icon_obj && icon_obj->k_idx)
+        {
+            if (out_attr)
+                *out_attr = object_attr(icon_obj);
+            if (out_char)
+                *out_char = object_char(icon_obj);
+            return;
+        }
+
+        row = 4; col = 24;  /* crossed silver staves when rendered */
+        break;
+    }
     case SDL_PLAYER_ACTION_CLOSE_DOOR:
-        row = 0; col = 11;  /* open door (the door you close) */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_CLOSE_DOOR;
         break;
     case SDL_PLAYER_ACTION_BASH_DOOR:
-        row = 0; col = 10;  /* closed door (the door you bash) */
+        row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_BASH_DOOR;
         break;
     default:
         break;
@@ -291,9 +312,28 @@ static bool sdl_player_can_ready_weapon_entry(void)
     if (player_active_weapon_is_ranged())
         return true;
 
-    return (inventory[INVEN_BOW].k_idx && inventory[INVEN_BOW].tval == TV_BOW)
-        || inventory[INVEN_QUIVER1].k_idx
-        || inventory[INVEN_QUIVER2].k_idx;
+    if (inventory[INVEN_BOW].k_idx && inventory[INVEN_BOW].tval == TV_BOW)
+        return true;
+    for (int item = 0; item < INVEN_TOTAL; item++)
+    {
+        if (inventory[item].k_idx
+            && inventory_limit_group_for_object(&inventory[item])
+                == INV_LIMIT_HARNESS
+            && player_can_treat_as_throwing(&inventory[item]))
+        {
+            return true;
+        }
+    }
+    for (int item = 0; item < player_carried_extra_entry_count(); item++)
+    {
+        object_type* o_ptr = player_carried_extra_entry_at(item);
+
+        if (o_ptr && o_ptr->k_idx
+            && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS
+            && player_can_treat_as_throwing(o_ptr))
+            return true;
+    }
+    return false;
 }
 
 /* Whether an adjacent known grid satisfies the given feature test. */
@@ -341,6 +381,47 @@ static bool sdl_player_has_adjacent_closed_door(void)
     return sdl_player_adjacent_feat(sdl_player_door_is_closed);
 }
 
+static cptr sdl_player_floor_use_action_name(void)
+{
+    int floor_list[MAX_FLOOR_STACK];
+    int floor_num;
+    int item_count = 0;
+    const object_type* first_item = NULL;
+    int first_item_index = 0;
+    static char items_label[32];
+
+    if (!p_ptr)
+        return "Use";
+
+    floor_num = scan_floor(floor_list, MAX_FLOOR_STACK, p_ptr->py, p_ptr->px,
+        0x00);
+    for (int i = 0; i < floor_num; i++) {
+        int o_idx = floor_list[i];
+        const object_type* o_ptr;
+
+        if (o_idx <= 0 || o_idx >= o_max)
+            continue;
+        o_ptr = &o_list[o_idx];
+        if (!o_ptr->k_idx || object_is_searched_skeleton(o_ptr))
+            continue;
+
+        if (!first_item) {
+            first_item = o_ptr;
+            first_item_index = 0 - o_idx;
+        }
+        item_count++;
+    }
+
+    if (item_count > 1) {
+        strnfmt(items_label, sizeof(items_label), "Items (%d)...", item_count);
+        return items_label;
+    }
+    if (first_item)
+        return item_use_action_name(first_item, first_item_index);
+
+    return "Use";
+}
+
 int sdl_player_action_menu_collect(player_action_menu_entry* entries)
 {
     int count = 0;
@@ -348,7 +429,7 @@ int sdl_player_action_menu_collect(player_action_menu_entry* entries)
     sdl_player_action_menu_add_entry(entries, &count, SDL_PLAYER_ACTION_WAIT,
         'z', "Wait");
     sdl_player_action_menu_add_entry(entries, &count, SDL_PLAYER_ACTION_USE,
-        'u', "Use");
+        'u', sdl_player_floor_use_action_name());
     if (sdl_player_can_ready_weapon_entry()) {
         sdl_player_action_menu_add_entry(entries, &count,
             SDL_PLAYER_ACTION_SHOOT, '\t',
@@ -376,11 +457,11 @@ int sdl_player_action_menu_collect(player_action_menu_entry* entries)
         sdl_player_action_menu_add_entry(entries, &count,
             SDL_PLAYER_ACTION_BASH_DOOR, 'b', "Bash");
     }
-    if (sdl_player_has_equipped_staff()) {
+    if (sdl_player_has_harness_staff()) {
         sdl_player_action_menu_add_entry(entries, &count,
             SDL_PLAYER_ACTION_ACTIVATE, 'a', "Staff");
     }
-    if (sdl_player_has_equipped_horn()) {
+    if (sdl_player_has_harness_horn()) {
         sdl_player_action_menu_add_entry(entries, &count,
             SDL_PLAYER_ACTION_HORN, 'p', "Horn");
     }
@@ -407,18 +488,12 @@ int sdl_player_action_menu_collect_secondary(int primary_kind,
             sdl_player_action_menu_add_entry(entries, &count,
                 SDL_PLAYER_ACTION_FLETCH, '-', "Fletch");
         }
-        sdl_player_action_menu_add_entry(entries, &count,
-            SDL_PLAYER_ACTION_SWAP_QUIVERS, KTRL('F'), "Quivers");
         break;
     case SDL_PLAYER_ACTION_STEALTH:
         if (p_ptr && p_ptr->active_ability[S_STL][STL_EXCHANGE_PLACES]) {
             sdl_player_action_menu_add_entry(entries, &count,
                 SDL_PLAYER_ACTION_EXCHANGE, 'X', "Xchg");
         }
-        break;
-    case SDL_PLAYER_ACTION_ACTIVATE:
-        sdl_player_action_menu_add_entry(entries, &count,
-            SDL_PLAYER_ACTION_CHANGE_STAFF, KTRL('A'), "Swap");
         break;
     case SDL_PLAYER_ACTION_CLOSE_DOOR:
         if (sdl_player_has_adjacent_closed_door()) {
@@ -444,8 +519,6 @@ int sdl_player_action_menu_secondary_owner(int kind)
         return SDL_PLAYER_ACTION_SHOOT;
     case SDL_PLAYER_ACTION_EXCHANGE:
         return SDL_PLAYER_ACTION_STEALTH;
-    case SDL_PLAYER_ACTION_CHANGE_STAFF:
-        return SDL_PLAYER_ACTION_ACTIVATE;
     case SDL_PLAYER_ACTION_BASH_DOOR:
         /* Bash is Close's secondary only when Close is on the ring (an open
          * door is adjacent); otherwise Bash is itself a promoted primary. */
@@ -517,12 +590,27 @@ static bool sdl_player_action_menu_kinds_related(int a, int b)
 bool sdl_player_has_floor_item_underfoot(void)
 {
     int floor_list[MAX_FLOOR_STACK];
+    int floor_num;
 
     if (!p_ptr)
         return false;
 
-    return scan_floor(floor_list, MAX_FLOOR_STACK, p_ptr->py, p_ptr->px,
-        0x00) > 0;
+    floor_num = scan_floor(floor_list, MAX_FLOOR_STACK, p_ptr->py, p_ptr->px,
+        0x00);
+
+    for (int i = 0; i < floor_num; i++) {
+        int o_idx = floor_list[i];
+        const object_type* o_ptr;
+
+        if (o_idx <= 0 || o_idx >= o_max)
+            continue;
+
+        o_ptr = &o_list[o_idx];
+        if (o_ptr->k_idx && !object_is_searched_skeleton(o_ptr))
+            return true;
+    }
+
+    return false;
 }
 
 bool sdl_player_action_menu_kind_supports_secondary(int kind)
@@ -812,6 +900,7 @@ bool sdl_player_action_menu_layout(player_action_menu_entry* entries,
     float icon_size;
     float icon_radius;
     float max_outer;
+    bool desktop_layout;
     float step;
     float first_start;
     int count;
@@ -834,15 +923,11 @@ bool sdl_player_action_menu_layout(player_action_menu_entry* entries,
     if (count <= 0)
         return false;
 
-#if SIL_SDL_MOBILE_BUILD
+    desktop_layout = sdl_player_action_menu_desktop_layout();
     max_outer = ((bounds.w < bounds.h) ? bounds.w : bounds.h) * 0.5f - 4.0f;
-    outer_radius = sdl_touch_pane_clampf((float)view->cell_h * 5.8f,
-        108.0f, 204.0f);
-#else
-    max_outer = ((bounds.w < bounds.h) ? bounds.w : bounds.h) * 0.5f - 8.0f;
-    outer_radius = sdl_touch_pane_clampf((float)view->cell_h * 5.1f,
-        96.0f, 176.0f);
-#endif
+    outer_radius = desktop_layout
+        ? sdl_touch_pane_clampf((float)view->cell_h * 5.4f, 104.0f, 196.0f)
+        : sdl_touch_pane_clampf((float)view->cell_h * 6.7f, 124.0f, 236.0f);
     if (outer_radius > max_outer)
         outer_radius = max_outer;
     if (outer_radius < 44.0f)
@@ -855,7 +940,6 @@ bool sdl_player_action_menu_layout(player_action_menu_entry* entries,
     center_y = sdl_touch_pane_clampf(center_y, bounds.y + outer_radius,
         bounds.y + bounds.h - outer_radius);
 
-#if SIL_SDL_MOBILE_BUILD
     inner_radius = outer_radius * 0.32f;
     if (inner_radius < 32.0f)
         inner_radius = 32.0f;
@@ -863,17 +947,7 @@ bool sdl_player_action_menu_layout(player_action_menu_entry* entries,
         inner_radius = outer_radius - 44.0f;
 
     icon_size = sdl_touch_pane_clampf((outer_radius - inner_radius) * 0.56f,
-        34.0f, 68.0f);
-#else
-    inner_radius = outer_radius * 0.36f;
-    if (inner_radius < 30.0f)
-        inner_radius = 30.0f;
-    if (inner_radius > outer_radius - 34.0f)
-        inner_radius = outer_radius - 34.0f;
-
-    icon_size = sdl_touch_pane_clampf((outer_radius - inner_radius) * 0.52f,
-        26.0f, 56.0f);
-#endif
+        38.0f, 76.0f);
     icon_radius = inner_radius + (outer_radius - inner_radius) * 0.58f;
     step = (SDL_PLAYER_ACTION_MENU_PI * 2.0f) / (float)count;
     first_start = -SDL_PLAYER_ACTION_MENU_PI * 0.5f - step * 0.5f;
@@ -919,6 +993,7 @@ static bool sdl_player_action_menu_layout_secondary(int owner_kind,
     float ring_width;
     float icon_size;
     float icon_radius;
+    bool desktop_layout;
     float step;
 
     if (!entries || !out_count)
@@ -943,18 +1018,16 @@ static bool sdl_player_action_menu_layout_secondary(int owner_kind,
     if (sec_count <= 0)
         return false;
 
+    desktop_layout = sdl_player_action_menu_desktop_layout();
     ring_inner = owner->outer_radius;
-#if SIL_SDL_MOBILE_BUILD
     ring_width = sdl_touch_pane_clampf(
-        (owner->outer_radius - owner->inner_radius) * 0.70f,
-        42.0f, 72.0f);
-    icon_size = sdl_touch_pane_clampf(ring_width * 0.64f, 30.0f, 58.0f);
-#else
-    ring_width = sdl_touch_pane_clampf(
-        (owner->outer_radius - owner->inner_radius) * 0.62f,
-        34.0f, 58.0f);
-    icon_size = sdl_touch_pane_clampf(ring_width * 0.62f, 22.0f, 48.0f);
-#endif
+        (owner->outer_radius - owner->inner_radius)
+            * (desktop_layout ? 0.72f : 0.85f),
+        desktop_layout ? 42.0f : 50.0f,
+        desktop_layout ? 72.0f : 88.0f);
+    icon_size = sdl_touch_pane_clampf(ring_width * 0.78f, 38.0f, 76.0f);
+    if (icon_size > owner->rect.w)
+        icon_size = owner->rect.w;
     ring_outer = ring_inner + ring_width;
     icon_radius = ring_inner + (ring_outer - ring_inner) * 0.5f;
     step = (owner->end_angle - owner->start_angle) / (float)sec_count;
@@ -1410,7 +1483,6 @@ void sdl_player_exchange_activate_hover(void)
 void sdl_player_action_menu_activate_kind(int kind, bool secondary)
 {
     int command = 0;
-    bool select_floor = false;
 
     switch (kind) {
     case SDL_PLAYER_ACTION_EXCHANGE:
@@ -1420,8 +1492,8 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
         command = secondary ? 'Z' : 'z';
         break;
     case SDL_PLAYER_ACTION_USE:
-        command = 'u';
-        select_floor = !secondary && sdl_player_has_floor_item_underfoot();
+        command = (!secondary && sdl_player_has_floor_item_underfoot())
+            ? CMD_CONTEXT_FLOOR_ACTION : 'u';
         break;
     case SDL_PLAYER_ACTION_STEALTH:
         command = 'S';
@@ -1434,7 +1506,6 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
         break;
     case SDL_PLAYER_ACTION_EXAMINE:
         command = 'x';
-        select_floor = !secondary && sdl_player_has_floor_item_underfoot();
         break;
     case SDL_PLAYER_ACTION_ACTIVATE:
         command = 'a';
@@ -1452,10 +1523,10 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
         command = 'Z';
         break;
     case SDL_PLAYER_ACTION_SWAP_QUIVERS:
-        command = KTRL('F');
+        command = '\t';
         break;
     case SDL_PLAYER_ACTION_CHANGE_STAFF:
-        command = KTRL('A');
+        command = 'a';
         break;
     case SDL_PLAYER_ACTION_CLOSE_DOOR:
         command = 'c';
@@ -1471,8 +1542,6 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
     sdl_player_exchange_cancel();
     sdl_mouse_path_cancel();
     sdl_enqueue_bypassed_command(command);
-    if (select_floor)
-        Term_keypress('-');
 }
 
 bool sdl_player_action_menu_open(void)
@@ -2245,7 +2314,6 @@ static void sdl_player_action_menu_render_tooltip(
 {
     SDL_Rect screen;
     TTF_Font* font;
-    SDL_Surface* surface;
     SDL_Texture* texture;
     SDL_FRect box;
     SDL_FRect text_dst;
@@ -2257,6 +2325,8 @@ static void sdl_player_action_menu_render_tooltip(
     float max_box_w;
     float max_text_w;
     int font_px;
+    int text_w = 0;
+    int text_h = 0;
 
     if (!entry || !entry->description || !entry->description[0])
         return;
@@ -2280,27 +2350,21 @@ static void sdl_player_action_menu_render_tooltip(
         return;
 
     max_text_w = max_box_w - pad * 2.0f;
-    surface = sdl_object_tooltip_render_text_surface(font,
-        entry->description, text_color, max_text_w);
-    if (!surface)
+    texture = sdl_ui_wrapped_text_texture(font, entry->description,
+        MAX(1, (int)(max_text_w + 0.5f)), text_color, &text_w, &text_h);
+    if (!texture)
         return;
 
-    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
-    if (!texture) {
-        SDL_DestroySurface(surface);
-        return;
-    }
-
-    box.w = (float)surface->w + pad * 2.0f;
-    box.h = (float)surface->h + pad * 2.0f;
+    box.w = (float)text_w + pad * 2.0f;
+    box.h = (float)text_h + pad * 2.0f;
     sdl_player_action_menu_place_tooltip(&box, entry, avoid_radius, &screen,
         screen_margin, gap);
 
     text_dst = (SDL_FRect){
         .x = box.x + pad,
         .y = box.y + pad,
-        .w = (float)surface->w,
-        .h = (float)surface->h,
+        .w = (float)text_w,
+        .h = (float)text_h,
     };
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
@@ -2310,11 +2374,7 @@ static void sdl_player_action_menu_render_tooltip(
         166);
     SDL_RenderRect(g_state.renderer, &box);
 
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_RenderTexture(g_state.renderer, texture, NULL, &text_dst);
-
-    SDL_DestroyTexture(texture);
-    SDL_DestroySurface(surface);
 }
 
 void sdl_player_action_menu_render(void)

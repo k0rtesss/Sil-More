@@ -1,102 +1,298 @@
 #include "angband.h"
 #include "externs.h"
-#include "sdl-config.h"
+#include "object/object-internal.h"
+#include "object/object-ui-select.h"
 
-static void cmd6_prompt_label(int binding, const char* fallback, char* buf,
-    size_t buflen)
+static bool reject_broken_item_use(const object_type* o_ptr)
 {
-    if (!buf || !buflen)
-        return;
+    if (!object_has_broken_prefix(o_ptr))
+        return false;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
-    if (!buf[0] || streq(buf, "(unbound)") || streq(buf, "Multiple"))
-        SDL_strlcpy(buf, fallback ? fallback : "", buflen);
+    msg_print("Broken items must be repaired before they can be used.");
+    return true;
 }
 
-static void format_staff_prompt_name(char* buf, size_t max,
-    const object_type* o_ptr, bool pref)
+typedef enum understanding_gem_source_type
 {
-    char full[80];
-    const char* staff_of;
+    UNDERSTANDING_GEM_SOURCE_NONE,
+    UNDERSTANDING_GEM_SOURCE_PACK,
+    UNDERSTANDING_GEM_SOURCE_SUPPLIES
+} understanding_gem_source_type;
 
-    if (!buf || max == 0)
-        return;
+typedef struct understanding_gem_source
+{
+    understanding_gem_source_type type;
+    object_type* o_ptr;
+    int index;
+} understanding_gem_source;
 
-    buf[0] = '\0';
-
-    if (!o_ptr || !o_ptr->k_idx)
-        return;
-
-    object_desc(full, sizeof(full), o_ptr, pref, 0);
-
-    if (o_ptr->tval != TV_STAFF)
-    {
-        SDL_strlcpy(buf, full, max);
-        return;
-    }
-
-    staff_of = strstr(full, "Staff of ");
-    if (!staff_of)
-    {
-        SDL_strlcpy(buf, full, max);
-        return;
-    }
-
-    if (!pref)
-    {
-        SDL_strlcpy(buf, staff_of, max);
-        return;
-    }
-
-    if (!strncmp(full, "The ", 4))
-        strnfmt(buf, max, "The %s", staff_of);
-    else if (!strncmp(full, "no more ", 8))
-        strnfmt(buf, max, "no more %s", staff_of);
-    else
-        strnfmt(buf, max, "a %s", staff_of);
+static bool understanding_gem_matches(const object_type* o_ptr)
+{
+    return o_ptr && o_ptr->k_idx && o_ptr->number > 0
+        && o_ptr->tval == TV_GEM && o_ptr->sval == SV_GEM_UNDERSTANDING
+        && object_aware_p(o_ptr) && !object_has_broken_prefix(o_ptr);
 }
 
-static void format_horn_prompt_name(char* buf, size_t max,
-    const object_type* o_ptr, bool pref)
+static int carried_understanding_gem_count(
+    understanding_gem_source* first_source)
 {
-    char full[80];
-    const char* horn_of;
+    int count = 0;
 
-    if (!buf || max == 0)
-        return;
+    if (first_source)
+        *first_source = (understanding_gem_source){
+            UNDERSTANDING_GEM_SOURCE_NONE, NULL, -1
+        };
 
-    buf[0] = '\0';
-
-    if (!o_ptr || !o_ptr->k_idx)
-        return;
-
-    object_desc(full, sizeof(full), o_ptr, pref, 0);
-
-    if (o_ptr->tval != TV_HORN)
+    for (int i = 0; i < supplies_entry_count(); i++)
     {
-        SDL_strlcpy(buf, full, max);
-        return;
+        object_type* o_ptr = supplies_entry_at(i);
+
+        if (!understanding_gem_matches(o_ptr))
+            continue;
+
+        if (first_source
+            && first_source->type == UNDERSTANDING_GEM_SOURCE_NONE)
+        {
+            first_source->type = UNDERSTANDING_GEM_SOURCE_SUPPLIES;
+            first_source->o_ptr = o_ptr;
+            first_source->index = i;
+        }
+        count += o_ptr->number;
     }
 
-    horn_of = strstr(full, "Horn of ");
-    if (!horn_of)
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
     {
-        SDL_strlcpy(buf, full, max);
-        return;
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
+
+        if (!understanding_gem_matches(o_ptr))
+            continue;
+
+        if (first_source
+            && first_source->type == UNDERSTANDING_GEM_SOURCE_NONE)
+        {
+            first_source->type = UNDERSTANDING_GEM_SOURCE_PACK;
+            first_source->o_ptr = o_ptr;
+            first_source->index = item;
+        }
+        count += o_ptr->number;
     }
 
-    if (!pref)
+    return count;
+}
+
+static bool understanding_gem_target(const object_type* viewed_o_ptr,
+    object_type** target_o_ptr, int* target_item)
+{
+    int floor_list[MAX_FLOOR_STACK];
+    int floor_num;
+
+    if (target_o_ptr)
+        *target_o_ptr = NULL;
+    if (target_item)
+        *target_item = 0;
+
+    if (!viewed_o_ptr || !viewed_o_ptr->k_idx
+        || !object_is_unidentified_for_display(viewed_o_ptr))
     {
-        SDL_strlcpy(buf, horn_of, max);
-        return;
+        return false;
     }
 
-    if (!strncmp(full, "The ", 4))
-        strnfmt(buf, max, "The %s", horn_of);
-    else if (!strncmp(full, "no more ", 8))
-        strnfmt(buf, max, "no more %s", horn_of);
-    else
-        strnfmt(buf, max, "a %s", horn_of);
+    {
+        int item = player_inventory_handle_for_object(viewed_o_ptr);
+
+        if (item >= 0)
+        {
+            if (target_o_ptr)
+                *target_o_ptr = player_inventory_object(item);
+            if (target_item)
+                *target_item = item;
+            return true;
+        }
+    }
+
+    for (int i = 0; i < supplies_entry_count(); i++)
+    {
+        object_type* o_ptr = supplies_entry_at(i);
+
+        if (viewed_o_ptr != o_ptr)
+            continue;
+
+        if (target_o_ptr)
+            *target_o_ptr = o_ptr;
+        if (target_item)
+            *target_item = SUPPLIES_INDEX + i;
+        return true;
+    }
+
+    floor_num = scan_floor(floor_list, MAX_FLOOR_STACK, p_ptr->py, p_ptr->px,
+        0x00);
+    for (int i = 0; i < floor_num; i++)
+    {
+        int o_idx = floor_list[i];
+
+        if (o_idx <= 0 || o_idx >= o_max || viewed_o_ptr != &o_list[o_idx])
+            continue;
+
+        if (target_o_ptr)
+            *target_o_ptr = &o_list[o_idx];
+        if (target_item)
+            *target_item = 0 - o_idx;
+        return true;
+    }
+
+    return false;
+}
+
+int understanding_gem_count_for_item_description(
+    const object_type* viewed_o_ptr)
+{
+    if (!character_dungeon || !p_ptr || !p_ptr->playing || p_ptr->is_dead)
+        return 0;
+
+    if (!understanding_gem_target(viewed_o_ptr, NULL, NULL))
+        return 0;
+
+    return carried_understanding_gem_count(NULL);
+}
+
+bool do_cmd_use_understanding_gem_on_item(const object_type* viewed_o_ptr)
+{
+    understanding_gem_source source;
+    object_type* target_o_ptr;
+    int target_item;
+
+    if (!character_dungeon || !p_ptr || !p_ptr->playing || p_ptr->is_dead)
+        return false;
+    if (!understanding_gem_target(viewed_o_ptr, &target_o_ptr, &target_item))
+        return false;
+    if (carried_understanding_gem_count(&source) <= 0 || !source.o_ptr)
+        return false;
+
+    sound(MSG_USE_GEM);
+    p_ptr->energy_use = 100;
+    p_ptr->previous_action[0] = ACTION_MISC;
+
+    do_ident_item(target_item, target_o_ptr);
+    break_truce(false);
+
+    p_ptr->notice |= (PN_COMBINE | PN_REORDER);
+    object_tried(source.o_ptr);
+    p_ptr->window |= (PW_INVEN | PW_EQUIP);
+    source.o_ptr->xtra1++;
+
+    if (source.type == UNDERSTANDING_GEM_SOURCE_SUPPLIES)
+    {
+        supplies_consume_quantity(source.index, 1);
+        supplies_refresh_entry(source.index);
+    }
+    else if (source.type == UNDERSTANDING_GEM_SOURCE_PACK)
+    {
+        inven_item_increase(source.index, -1);
+        inven_item_describe(source.index);
+        inven_item_optimize(source.index);
+    }
+
+    return true;
+}
+
+static byte harness_activatable_tval = 0;
+
+static int carried_inventory_index(const object_type* o_ptr)
+{
+    return player_inventory_handle_for_object(o_ptr);
+}
+
+static bool item_tester_hook_harness_activatable(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->tval != harness_activatable_tval)
+        return false;
+
+    if (carried_inventory_index(o_ptr) < 0)
+        return false;
+
+    return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS;
+}
+
+static bool choose_harness_activatable(byte tval, cptr prompt, cptr none_msg,
+    object_type** chosen_o_ptr, int* chosen_item)
+{
+    byte old_item_tester_tval = item_tester_tval;
+    bool (*old_item_tester_hook)(const object_type*) = item_tester_hook;
+    bool old_item_tester_full = item_tester_full;
+    int count = 0;
+    int item = -1;
+    bool picked;
+
+    if (chosen_o_ptr)
+        *chosen_o_ptr = NULL;
+    if (chosen_item)
+        *chosen_item = -1;
+
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
+    {
+        int handle = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(handle);
+
+        if (!o_ptr->k_idx || o_ptr->tval != tval
+            || inventory_limit_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
+        {
+            continue;
+        }
+
+        count++;
+        item = handle;
+    }
+
+    /* The retired slots can only be populated transiently by an old save. */
+    for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+
+        if (!o_ptr->k_idx || o_ptr->tval != tval
+            || inventory_limit_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
+        {
+            continue;
+        }
+
+        count++;
+        item = i;
+    }
+
+    if (count == 0)
+    {
+        msg_print(none_msg);
+        return false;
+    }
+
+    if (count > 1)
+    {
+        harness_activatable_tval = tval;
+        item_tester_tval = 0;
+        item_tester_hook = item_tester_hook_harness_activatable;
+        item_tester_full = false;
+
+        picked = open_inventory_item_select_menu(USE_INVEN | USE_EQUIP,
+            prompt, none_msg, &item);
+
+        harness_activatable_tval = 0;
+        item_tester_tval = old_item_tester_tval;
+        item_tester_hook = old_item_tester_hook;
+        item_tester_full = old_item_tester_full;
+
+        if (!picked)
+            return false;
+    }
+
+    if (!player_inventory_handle_valid(item))
+        return false;
+
+    if (chosen_o_ptr)
+        *chosen_o_ptr = player_inventory_object(item);
+    if (chosen_item)
+        *chosen_item = item;
+
+    return true;
 }
 
 static void msg_print_object_identified(const object_type* o_ptr)
@@ -113,12 +309,6 @@ typedef struct sanctity_target_entry
     int item;
     object_type* o_ptr;
 } sanctity_target_entry;
-
-enum
-{
-    MAX_SANCTITY_TARGETS =
-        INVEN_PACK + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK
-};
 
 static bool item_tester_hook_sanctity_target(const object_type* o_ptr)
 {
@@ -163,14 +353,17 @@ static int sanctity_collect_targets(sanctity_target_entry entries[],
 
     sanctity_target_excluded = gem_o_ptr;
 
-    for (int i = 0; i < INVEN_PACK && count < max_entries; i++)
+    for (int ordinal = 0;
+         ordinal < player_pack_entry_count() && count < max_entries;
+         ordinal++)
     {
-        object_type* o_ptr = &inventory[i];
+        int item = player_pack_entry_handle_at(ordinal);
+        object_type* o_ptr = player_inventory_object(item);
 
         if (!item_tester_hook_sanctity_target(o_ptr))
             continue;
 
-        entries[count].item = i;
+        entries[count].item = item;
         entries[count].o_ptr = o_ptr;
         count++;
     }
@@ -208,310 +401,44 @@ static int sanctity_collect_targets(sanctity_target_entry entries[],
 static bool sanctity_choose_target_from_entries(
     const sanctity_target_entry entries[], int count, int* out_item)
 {
-    int current = 0;
-    int top = 0;
-    int term_wid = 80;
-    int term_hgt = 24;
-    int list_row = 2;
-    int help_row;
-    int prompt_row;
-    int page_size;
-    bool steamdeck = steamdeck_controls_active();
+    object_choice_entry* choices;
+    int selected = -1;
+    char desc[80];
 
     if (!entries || count <= 0 || !out_item)
         return false;
 
-    if (Term)
-        Term_get_size(&term_wid, &term_hgt);
+    choices = mem_alloc_array(count, object_choice_entry);
 
-    if (term_wid < 40)
-        term_wid = 40;
-    if (term_hgt < 8)
-        term_hgt = 8;
-
-    help_row = term_hgt - 2;
-    prompt_row = term_hgt - 1;
-    page_size = help_row - list_row;
-    if (page_size < 1)
-        page_size = 1;
-
-    screen_save();
-
-    while (true)
+    for (int i = 0; i < count; i++)
     {
-        int visible_count;
-        char buf[160];
-        char key;
+        char label[6];
 
-        if (current < top)
-            top = current;
-        if (current >= top + page_size)
-            top = current - page_size + 1;
-
-        visible_count = count - top;
-        if (visible_count > page_size)
-            visible_count = page_size;
-
-        Term_clear();
-        ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
-        ui_menu_click_set_outside_cancel_enabled(true);
-        ui_menu_click_set_touch_category(
-            SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
-        ui_scroll_area_begin(list_row, help_row - 1,
-            SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
-        ui_scroll_area_set_keys('8', '2', '6', '4');
-
-        prt("Cleanse which item?", 0, 0);
-        strnfmt(buf, sizeof(buf), "%d eligible sanctity target%s",
-            count, (count == 1) ? "" : "s");
-        prt(buf, 1, 0);
-
-        for (int i = 0; i < visible_count; i++)
-        {
-            int row = list_row + i;
-            int item = entries[top + i].item;
-            object_type* o_ptr = entries[top + i].o_ptr;
-            char prefix[32];
-            char desc[80];
-            char label[4];
-            int desc_col = steamdeck ? 17 : 20;
-            int max_desc = term_wid - desc_col - 1;
-            bool highlighted = (top + i == current);
-            byte label_attr = highlighted ? TERM_L_BLUE : TERM_WHITE;
-            byte desc_attr;
-
-            if (max_desc < 0)
-                max_desc = 0;
-            if (max_desc >= (int)sizeof(desc))
-                max_desc = (int)sizeof(desc) - 1;
-
-            if (item >= 0)
-            {
-                strnfmt(prefix, sizeof(prefix), "%-12s:", mention_use(item));
-                object_desc(desc, sizeof(desc), o_ptr, true, 3);
-            }
-            else
-            {
-                strnfmt(prefix, sizeof(prefix), "%-12s:", "On floor");
-                object_desc_floor(desc, sizeof(desc), o_ptr, true, 3);
-            }
-            desc[max_desc] = '\0';
-
-            desc_attr = highlighted
-                ? TERM_L_BLUE
-                : object_display_color(o_ptr,
-                    tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-
-            if (!steamdeck && i < 26)
-                strnfmt(label, sizeof(label), "%c)", I2A(i));
-            else
-                SDL_strlcpy(label, "  ", sizeof(label));
-
-            Term_erase(0, row, 255);
-            Term_putstr(0, row, 2, label_attr, highlighted ? "> " : "  ");
-            if (steamdeck)
-                Term_putstr(2, row, -1, label_attr, prefix);
-            else
-            {
-                Term_putstr(2, row, -1, label_attr, label);
-                Term_putstr(5, row, -1, label_attr, prefix);
-            }
-            Term_putstr(desc_col, row, -1, desc_attr, desc);
-            ui_menu_click_add_full_row(top + i, row);
-        }
-
-        for (int i = list_row + visible_count; i < help_row; i++)
-            Term_erase(0, i, 255);
-
-        if (count > page_size)
-        {
-            strnfmt(buf, sizeof(buf), "Showing %d-%d of %d",
-                top + 1, top + visible_count, count);
-            prt(buf, help_row, 0);
-        }
-        else
-        {
-            prt("", help_row, 0);
-        }
-
-        if (steamdeck)
-        {
-            char confirm_label[16];
-            char back_label[16];
-            char prompt_buf[80];
-            const char* variants[3];
-            char prompt_full[80];
-            char prompt_mid[80];
-            char prompt_short[80];
-
-            cmd6_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
-                sizeof(confirm_label));
-            cmd6_prompt_label(steamdeck_back_key(), "B", back_label,
-                sizeof(back_label));
-            strnfmt(prompt_full, sizeof(prompt_full),
-                "D-pad choose  %s select  %s cancel", confirm_label,
-                back_label);
-            strnfmt(prompt_mid, sizeof(prompt_mid), "%s select  %s cancel",
-                confirm_label, back_label);
-            strnfmt(prompt_short, sizeof(prompt_short), "%s select",
-                confirm_label);
-            variants[0] = prompt_full;
-            variants[1] = prompt_mid;
-            variants[2] = prompt_short;
-            terminal_prompt_pick_variant(prompt_buf, sizeof(prompt_buf),
-                term_wid, false, variants, N_ELEMENTS(variants));
-            prt(prompt_buf, prompt_row, 0);
-            ui_menu_click_add_text_token(-2, 0, prompt_row, prompt_buf,
-                "select");
-            ui_menu_click_add_text_token(-1, 0, prompt_row, prompt_buf,
-                "cancel");
-        }
-        else if (sdl_touch_only_device_active())
-        {
-            char prompt_buf[80];
-            const char* variants[] = {
-                "Tap a row to select, tap away to exit",
-                "Tap to select, tap away to exit",
-                "Tap to select"
-            };
-            terminal_prompt_pick_variant(prompt_buf, sizeof(prompt_buf),
-                term_wid, false, variants, N_ELEMENTS(variants));
-            prt(prompt_buf, prompt_row, 0);
-        }
-        else
-        {
-            char prompt_buf[80];
-            const char* variants[] = {
-                "Letters choose  Dir move  Enter select  Esc cancel",
-                "Letters choose  Enter select  Esc cancel",
-                "Enter select  Esc cancel"
-            };
-            terminal_prompt_pick_variant(prompt_buf, sizeof(prompt_buf),
-                term_wid, false, variants, N_ELEMENTS(variants));
-            prt(prompt_buf, prompt_row, 0);
-            ui_menu_click_add_text_token(-2, 0, prompt_row, prompt_buf,
-                "select");
-            ui_menu_click_add_text_token(-1, 0, prompt_row, prompt_buf,
-                "cancel");
-        }
-        Term_fresh();
-
-        key = inkey();
-
-        {
-            int clicked_choice = 0;
-            int click_action = UI_MENU_CLICK_PRIMARY;
-
-            if (ui_menu_click_take_action(&clicked_choice, &click_action))
-            {
-                ui_menu_click_clear();
-                if (clicked_choice >= 0 && clicked_choice < count)
-                {
-                    if (click_action == UI_MENU_CLICK_HOVER
-                        || clicked_choice != current)
-                    {
-                        current = clicked_choice;
-                        continue;
-                    }
-                    key = '\r';
-                }
-                else if (click_action == UI_MENU_CLICK_HOVER)
-                    continue;
-                else if (clicked_choice == -1)
-                    key = ESCAPE;
-                else if (clicked_choice == -2)
-                    key = '\r';
-            }
-        }
-
-        if (steamdeck && key == steamdeck_back_key())
-        {
-            ui_menu_click_clear();
-            ui_scroll_area_clear();
-            screen_load();
-            return false;
-        }
-
-        switch (key)
-        {
-        case ESCAPE:
-            ui_menu_click_clear();
-            ui_scroll_area_clear();
-            screen_load();
-            return false;
-
-        case '\r':
-        case '\n':
-        case ' ':
-#ifdef KC_ENTER
-        case KC_ENTER:
-#endif
-            *out_item = entries[current].item;
-            ui_menu_click_clear();
-            ui_scroll_area_clear();
-            screen_load();
-            return true;
-
-        case '8':
-        case 'k':
-        case 'K':
-#ifdef ARROW_UP
-        case ARROW_UP:
-#endif
-            current = (current > 0) ? current - 1 : count - 1;
-            break;
-
-        case '2':
-        case 'j':
-        case 'J':
-#ifdef ARROW_DOWN
-        case ARROW_DOWN:
-#endif
-            current = (current + 1 < count) ? current + 1 : 0;
-            break;
-
-        default:
-        {
-            int pick;
-
-            if (steamdeck && key == steamdeck_back_key())
-            {
-                ui_menu_click_clear();
-                ui_scroll_area_clear();
-                screen_load();
-                return false;
-            }
-
-            if (steamdeck && key == steamdeck_confirm_key())
-            {
-                *out_item = entries[current].item;
-                ui_menu_click_clear();
-                ui_scroll_area_clear();
-                screen_load();
-                return true;
-            }
-
-            if (steamdeck)
-                break;
-
-            if (!isalpha((unsigned char)key))
-                break;
-
-            pick = A2I((char)tolower((unsigned char)key));
-            if (pick >= 0 && pick < visible_count)
-            {
-                *out_item = entries[top + pick].item;
-                ui_menu_click_clear();
-                ui_scroll_area_clear();
-                screen_load();
-                return true;
-            }
-
-            break;
-        }
-        }
+        strnfmt(label, sizeof(label), "%c)", index_to_label(i));
+        object_choice_entry_make(&choices[i], entries[i].item,
+            entries[i].o_ptr, label,
+            (entries[i].item < 0) ? "On floor"
+                                  : mention_use(entries[i].item));
     }
+
+    strnfmt(desc, sizeof(desc), "%d eligible sanctity target%s", count,
+        (count == 1) ? "" : "s");
+    if (!object_choice_overlay("Cleanse which item?", desc, choices, count, 0,
+            &selected))
+    {
+        choices = mem_free(choices);
+        return false;
+    }
+
+    if (selected < 0 || selected >= count)
+    {
+        choices = mem_free(choices);
+        return false;
+    }
+
+    *out_item = entries[selected].item;
+    choices = mem_free(choices);
+    return true;
 }
 
 static bool sanctity_choose_target(const object_type* gem_o_ptr,
@@ -519,23 +446,30 @@ static bool sanctity_choose_target(const object_type* gem_o_ptr,
 {
     int chosen_item;
     int count;
-    sanctity_target_entry entries[MAX_SANCTITY_TARGETS];
+    int capacity = player_pack_entry_count()
+        + (INVEN_TOTAL - INVEN_WIELD) + MAX_FLOOR_STACK;
+    sanctity_target_entry* entries;
 
     if (!target_o_ptr)
         return false;
 
-    count = sanctity_collect_targets(entries, N_ELEMENTS(entries), gem_o_ptr);
+    entries = mem_alloc_array(MAX(capacity, 1), sanctity_target_entry);
+    count = sanctity_collect_targets(entries, capacity, gem_o_ptr);
     if (count <= 0)
     {
         msg_print("You have no target to cleanse.");
+        entries = mem_free(entries);
         return false;
     }
 
     if (!sanctity_choose_target_from_entries(entries, count, &chosen_item))
+    {
+        entries = mem_free(entries);
         return false;
+    }
 
-    *target_o_ptr = (chosen_item >= 0) ? &inventory[chosen_item]
-        : &o_list[0 - chosen_item];
+    *target_o_ptr = inventory_item_to_object_ptr(chosen_item);
+    entries = mem_free(entries);
     return ((*target_o_ptr != NULL) && (*target_o_ptr)->k_idx);
 }
 
@@ -631,9 +565,17 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
         supplies_clear_pending_action();
 
         /* Get the item (in the pack) */
-        if (item >= 0)
+        if (item >= SUPPLIES_INDEX)
         {
-            o_ptr = &inventory[item];
+            supply_index = item - SUPPLIES_INDEX;
+            o_ptr = supplies_entry_at(supply_index);
+            from_supplies = true;
+        }
+        else if (player_inventory_handle_valid(item))
+        {
+            o_ptr = player_inventory_object(item);
+            from_supplies = false;
+            supply_index = -1;
         }
 
         /* Get the item (on the floor) */
@@ -642,11 +584,16 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
             o_ptr = &o_list[0 - item];
         }
 
-        from_supplies = false;
-        supply_index = -1;
     }
 
     if (!o_ptr)
+        return;
+
+    if (player_pack_action_start(PLAYER_PACK_ACTION_EAT, item, 0, false,
+            o_ptr))
+        return;
+
+    if (reject_broken_item_use(o_ptr))
         return;
 
     /* Sound */
@@ -774,9 +721,17 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
         supplies_clear_pending_action();
 
         /* Get the item (in the pack) */
-        if (item >= 0)
+        if (item >= SUPPLIES_INDEX)
         {
-            o_ptr = &inventory[item];
+            supply_index = item - SUPPLIES_INDEX;
+            o_ptr = supplies_entry_at(supply_index);
+            from_supplies = true;
+        }
+        else if (player_inventory_handle_valid(item))
+        {
+            o_ptr = player_inventory_object(item);
+            from_supplies = false;
+            supply_index = -1;
         }
 
         /* Get the item (on the floor) */
@@ -785,11 +740,16 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
             o_ptr = &o_list[0 - item];
         }
 
-        from_supplies = false;
-        supply_index = -1;
     }
 
     if (!o_ptr)
+        return;
+
+    if (player_pack_action_start(PLAYER_PACK_ACTION_QUAFF, item, 0, false,
+            o_ptr))
+        return;
+
+    if (reject_broken_item_use(o_ptr))
         return;
 
     /* Sound */
@@ -870,20 +830,23 @@ void do_cmd_play_instrument(object_type* default_o_ptr, int default_item)
     /* Use specified item if possible */
     if (default_o_ptr != NULL)
     {
+        int carried_item = carried_inventory_index(default_o_ptr);
+
         o_ptr = default_o_ptr;
+
+        if (default_item < 0 || carried_item < 0)
+        {
+            msg_print("Pick up the horn before sounding it.");
+            return;
+        }
     }
-    /* Get an item */
+    /* Choose any carried horn from the Harness. */
     else
     {
-        object_type* horn_slot = &inventory[INVEN_HORN];
-
-        if (horn_slot->k_idx)
+        if (!choose_harness_activatable(TV_HORN,
+                "Sound which horn?", "You have no horn in your Harness.",
+                &o_ptr, NULL))
         {
-            o_ptr = horn_slot;
-        }
-        else
-        {
-            msg_print("You are not carrying a horn.");
             return;
         }
     }
@@ -897,42 +860,12 @@ void do_cmd_play_instrument(object_type* default_o_ptr, int default_item)
         return;
     }
 
-    if (o_ptr != &inventory[INVEN_HORN])
-    {
-        object_type* equipped = &inventory[INVEN_HORN];
-        char incoming_name[80];
-        char equipped_name[80];
-        char prompt[160];
-        const char* source = "your equipment";
-
-        if (default_item < 0)
-            source = "the floor";
-        else if (default_item < INVEN_WIELD)
-            source = "your pack";
-
-        format_horn_prompt_name(incoming_name, sizeof(incoming_name), o_ptr, true);
-
-        if (equipped->k_idx)
-        {
-            format_horn_prompt_name(
-                equipped_name, sizeof(equipped_name), equipped, false);
-            msg_format("You cannot sound a horn from %s.", source);
-            strnfmt(prompt, sizeof(prompt),
-                "Replace your %s with %s?",
-                equipped_name, incoming_name);
-        }
-        else
-        {
-            msg_format("You cannot sound a horn from %s.", source);
-            strnfmt(prompt, sizeof(prompt),
-                "Equip %s now?",
-                incoming_name);
-        }
-
-        if (get_check(prompt))
-            do_cmd_wield(o_ptr, default_item);
+    if (player_pack_action_start(PLAYER_PACK_ACTION_PLAY,
+            carried_inventory_index(o_ptr), 0, false, o_ptr))
         return;
-    }
+
+    if (reject_broken_item_use(o_ptr))
+        return;
 
     /* Not identified yet */
     ident = false;
@@ -991,30 +924,28 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
 
     bool use_charge;
 
-    int supply_index = supplies_current_action();
-    bool from_supplies = (supply_index >= 0);
-    
     /* Use specified item if possible */
     if (default_o_ptr != NULL)
     {
+        int carried_item = carried_inventory_index(default_o_ptr);
+
         o_ptr = default_o_ptr;
-        item = from_supplies ? SUPPLIES_INDEX : default_item;
+
+        if (default_item < 0 || carried_item < 0)
+        {
+            msg_print("Pick up the staff before activating it.");
+            return;
+        }
+
+        item = carried_item;
     }
-    /* Get an item */
+    /* Choose any carried staff from the Harness. */
     else
     {
-        object_type* staff_slot = &inventory[INVEN_STAFF];
-
-        if (staff_slot->k_idx)
+        if (!choose_harness_activatable(TV_STAFF,
+                "Activate which staff?", "You have no staff in your Harness.",
+                &o_ptr, &item))
         {
-            o_ptr = staff_slot;
-            item = INVEN_STAFF;
-            from_supplies = false;
-            supply_index = -1;
-        }
-        else
-        {
-            msg_print("You are not wielding a walking staff.");
             return;
         }
     }
@@ -1028,52 +959,12 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
         return;
     }
 
-    if (o_ptr->tval == TV_STAFF && o_ptr != &inventory[INVEN_STAFF])
-    {
-        object_type* wielded = &inventory[INVEN_STAFF];
-        char incoming_name[80];
-        char equipped_name[80];
-        char prompt[160];
-        const char* source = from_supplies ? "your supplies" : (default_item >= 0 ? "your pack" : "the floor");
-
-        if (!from_supplies && item < 0
-            && player_channel_floor_staff(o_ptr, 0 - item))
-        {
-            return;
-        }
-
-        format_staff_prompt_name(incoming_name, sizeof(incoming_name), o_ptr, true);
-
-        if (from_supplies)
-        {
-            msg_print("You cannot use a staff from supplies.");
-            msg_print("Move it to your pack and equip it first.");
-            return;
-        }
-
-        if (wielded->k_idx)
-        {
-            format_staff_prompt_name(
-                equipped_name, sizeof(equipped_name), wielded, false);
-            msg_format("You cannot activate a staff from %s.", source);
-            strnfmt(prompt, sizeof(prompt),
-                "Replace your %s with %s?",
-                equipped_name, incoming_name);
-        }
-        else
-        {
-            msg_format("You cannot activate a staff from %s.", source);
-            strnfmt(prompt, sizeof(prompt),
-                "Equip %s now?",
-                incoming_name);
-        }
-
-        if (get_check(prompt))
-        {
-            do_cmd_wield(o_ptr, default_item);
-        }
+    if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE_STAFF, item, 0,
+            false, o_ptr))
         return;
-    }
+
+    if (reject_broken_item_use(o_ptr))
+        return;
 
     if (o_ptr->ident & (IDENT_EMPTY))
     {
@@ -1138,17 +1029,9 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
     // mark times used
     o_ptr->xtra1++;
 
-    if (from_supplies && supply_index >= 0)
-    {
-        supplies_refresh_entry(supply_index);
-    }
-    else if (item >= 0)
+    if (item >= 0)
     {
         inven_item_charges(item);
-    }
-    else
-    {
-        floor_item_charges(0 - item);
     }
 }
 
@@ -1202,9 +1085,17 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
         supplies_clear_pending_action();
 
         /* Get the item (in the pack) */
-        if (item >= 0)
+        if (item >= SUPPLIES_INDEX)
         {
-            o_ptr = &inventory[item];
+            supply_index = item - SUPPLIES_INDEX;
+            o_ptr = supplies_entry_at(supply_index);
+            from_supplies = true;
+        }
+        else if (player_inventory_handle_valid(item))
+        {
+            o_ptr = player_inventory_object(item);
+            from_supplies = false;
+            supply_index = -1;
         }
 
         /* Get the item (on the floor) */
@@ -1213,11 +1104,16 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
             o_ptr = &o_list[0 - item];
         }
 
-        from_supplies = false;
-        supply_index = -1;
     }
 
     if (!o_ptr)
+        return;
+
+    if (player_pack_action_start(PLAYER_PACK_ACTION_USE_GEM, item, 0, false,
+            o_ptr))
+        return;
+
+    if (reject_broken_item_use(o_ptr))
         return;
 
     if (o_ptr->number <= 0)
@@ -1304,6 +1200,9 @@ static bool item_tester_hook_activate(const object_type* o_ptr)
 {
     u32b f1, f2, f3;
 
+    if (object_has_broken_prefix(o_ptr))
+        return (false);
+
     /* Not known */
     if (!object_known_p(o_ptr))
         return (false);
@@ -1326,34 +1225,34 @@ static bool item_tester_hook_activate(const object_type* o_ptr)
  * Note that it always takes a turn to activate an artefact, even if
  * the user hits "escape" at the "direction" prompt.
  */
-void do_cmd_activate(void)
+void do_cmd_activate_by_index(int item)
 {
-    int item, lev, score, difficulty;
+    int lev, score, difficulty;
     bool ident;
     object_type* o_ptr;
 
-    cptr q, s;
-
-    /* Prepare the hook */
-    item_tester_hook = item_tester_hook_activate;
-
-    /* Get an item */
-    q = "Activate which item? ";
-    s = "You have nothing to activate.";
-    if (!open_inventory_item_select_menu(USE_EQUIP, q, s, &item))
-        return;
-
-    /* Get the item (in the pack) */
-    if (item >= 0)
+    if (player_inventory_handle_valid(item))
     {
-        o_ptr = &inventory[item];
+        o_ptr = player_inventory_object(item);
     }
-
-    /* Get the item (on the floor) */
-    else
+    else if (item < 0 && 0 - item > 0 && 0 - item < o_max)
     {
         o_ptr = &o_list[0 - item];
     }
+    else
+    {
+        return;
+    }
+
+    if (!o_ptr->k_idx)
+        return;
+
+    if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE, item, 0, false,
+            o_ptr))
+        return;
+
+    if (reject_broken_item_use(o_ptr))
+        return;
 
     /* Take a turn */
     p_ptr->energy_use = 100;
@@ -1391,4 +1290,20 @@ void do_cmd_activate(void)
 
     /* Activate the object */
     (void)use_object(o_ptr, &ident);
+}
+
+void do_cmd_activate(void)
+{
+    int item;
+
+    /* Prepare the hook */
+    item_tester_hook = item_tester_hook_activate;
+
+    if (!open_inventory_item_select_menu(USE_EQUIP, "Activate which item? ",
+            "You have nothing to activate.", &item))
+    {
+        return;
+    }
+
+    do_cmd_activate_by_index(item);
 }

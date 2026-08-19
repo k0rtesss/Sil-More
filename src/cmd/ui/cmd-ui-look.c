@@ -3,6 +3,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "cmd/ui/cmd-ui-internal.h"
+#include "support/input.h"
 
 void do_cmd_target(void)
 {
@@ -634,11 +635,16 @@ static void unified_look_print_controller_prompt(
         sizeof(prev_label));
     unified_look_prompt_label(steamdeck_next_page_key(), "R1", next_label,
         sizeof(next_label));
-    unified_look_prompt_label(' ', "A", exam_label, sizeof(exam_label));
-    unified_look_prompt_label('f', "B", target_label, sizeof(target_label));
-    unified_look_prompt_label('u', "X", obj_label, sizeof(obj_label));
-    unified_look_prompt_label('s', "Y", mode_label, sizeof(mode_label));
-    unified_look_prompt_label(ESCAPE, "Esc", back_label, sizeof(back_label));
+    unified_look_prompt_label(steamdeck_confirm_key(), "A", exam_label,
+        sizeof(exam_label));
+    unified_look_prompt_label(steamdeck_alt_action_key(), "X", target_label,
+        sizeof(target_label));
+    unified_look_prompt_label(steamdeck_info_key(), "View", obj_label,
+        sizeof(obj_label));
+    unified_look_prompt_label(steamdeck_secondary_key(), "Y", mode_label,
+        sizeof(mode_label));
+    unified_look_prompt_label(steamdeck_back_key(), "B", back_label,
+        sizeof(back_label));
 
     strnfmt(prev_full, sizeof(prev_full), "%s Prev", prev_label);
     strnfmt(next_full, sizeof(next_full), "%s Next", next_label);
@@ -866,43 +872,19 @@ static void unified_look_resume_pointer_handlers(void)
 
 static bool unified_look_examine_object_at(int y, int x, bool use_story_font)
 {
-    object_type* o_ptr;
+    int o_idx;
 
     if (!unified_look_can_show_marked_object_at(y, x))
         return false;
 
-    o_ptr = &o_list[cave_o_idx[y][x]];
+    o_idx = cave_o_idx[y][x];
 
     if (use_story_font)
         sdl_story_font_disable();
     unified_look_pause_pointer_handlers();
 
-    (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
     screen_save();
-
-    if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-    {
-        int slot = wield_slot(o_ptr);
-        const object_type* compare_objects[2];
-        const char* compare_headings[2];
-        char selected_heading[32];
-        char equipped_heading[32];
-
-        strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-        strnfmt(equipped_heading, sizeof(equipped_heading), "%s",
-            mention_use(slot));
-
-        compare_objects[0] = o_ptr;
-        compare_headings[0] = selected_heading;
-        compare_objects[1] = inventory[slot].k_idx ? &inventory[slot] : NULL;
-        compare_headings[1] = equipped_heading;
-
-        object_info_screen_multi(compare_objects, compare_headings, 2);
-    }
-    else
-    {
-        object_info_screen(o_ptr);
-    }
+    describe_item_with_comparisons(0 - o_idx, true);
 
     screen_load();
     unified_look_resume_pointer_handlers();
@@ -933,8 +915,7 @@ static bool unified_look_examine_monster_at(int y, int x, bool use_story_font)
     handle_stuff();
 
     screen_save();
-    if (!screen_roff(m_ptr->r_idx, m_ptr))
-        (void)inkey();
+    (void)screen_roff(m_ptr->r_idx, m_ptr);
     screen_load();
 
     unified_look_resume_pointer_handlers();
@@ -1328,14 +1309,25 @@ void do_cmd_unified_look(void)
             need_redraw = false;
         }
         
+        /* Unified look keeps a saved-screen overlay active, but its terminal
+         * cursor intentionally marks the selected map cell. */
+        inkey_request_text_cursor();
+
         /* Get input */
         query = inkey();
-        query = steamdeck_menu_key(query, 'e', 'i');
+        bool pointer_click_pending = ui_menu_click_has_pending();
+
+        if (!pointer_click_pending)
+        {
+            query = steamdeck_menu_key(query, 'e', 'i');
+            if (controller_controls && query == steamdeck_alt_action_key())
+                query = 't';
+            else if (controller_controls && query == steamdeck_info_key())
+                query = 'u';
+        }
         log_trace("Unified look key input: '%c' (%d) [char: %c, isupper: %d]", 
                  query, (int)query, (query >= 32 && query <= 126) ? query : '?', 
                  (query >= 'A' && query <= 'Z') ? 1 : 0);
-
-        bool pointer_click_pending = ui_menu_click_has_pending();
 
         /* Keep the overlay live while cycling sidebar selection to avoid
          * flashing back to the map between adjacent redraws. */
@@ -1591,11 +1583,7 @@ void do_cmd_unified_look(void)
                             screen_save();
                             
                             /* Show monster recall */
-                            if (!screen_roff(m_ptr->r_idx, m_ptr))
-                            {
-                                /* Wait for input */
-                                inkey();
-                            }
+                            (void)screen_roff(m_ptr->r_idx, m_ptr);
                             
                             /* Restore screen */
                             screen_load();
@@ -1613,44 +1601,11 @@ void do_cmd_unified_look(void)
                         /* Object was highlighted - examine object */
                         log_trace("EXAMINATION: Highlighted entity is object, examining object %d", cursor_o_idx);
                         /* Object examination */
-                        object_type* o_ptr = &o_list[cursor_o_idx];
-                        (void)player_try_identify_smithing_object_on_examine(
-                            o_ptr, false);
                         log_trace("EXAMINATION: Showing object info screen");
                         /* Save screen */
                         screen_save();
-                        /* Show object info, with comparison if applicable */
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
+                        describe_item_with_comparisons(0 - cursor_o_idx,
+                            true);
 
                         /* Restore screen */
                         screen_load();
@@ -1670,11 +1625,7 @@ void do_cmd_unified_look(void)
                             screen_save();
                             
                             /* Show monster recall */
-                            if (!screen_roff(m_ptr->r_idx, m_ptr))
-                            {
-                                /* Wait for input */
-                                inkey();
-                            }
+                            (void)screen_roff(m_ptr->r_idx, m_ptr);
                             
                             /* Restore screen */
                             screen_load();
@@ -1709,42 +1660,9 @@ void do_cmd_unified_look(void)
                     if (has_object)
                     {
                         log_trace("EXAMINATION: Examining object at cursor position");
-                        object_type* o_ptr = &o_list[cursor_o_idx];
-                        (void)player_try_identify_smithing_object_on_examine(
-                            o_ptr, false);
                         screen_save();
-
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
+                        describe_item_with_comparisons(0 - cursor_o_idx,
+                            true);
 
                         screen_load();
                     }
@@ -1753,8 +1671,7 @@ void do_cmd_unified_look(void)
                         log_trace("EXAMINATION: Examining visible monster at cursor position");
                         monster_type* m_ptr = &mon_list[cursor_m_idx];
                         screen_save();
-                        if (!screen_roff(m_ptr->r_idx, m_ptr))
-                            inkey();
+                        (void)screen_roff(m_ptr->r_idx, m_ptr);
                         screen_load();
                     }
                     else
@@ -2167,11 +2084,7 @@ command_key:
                             screen_save();
                             
                             /* Show monster recall */
-                            if (!screen_roff(m_ptr->r_idx, m_ptr))
-                            {
-                                /* Wait for input */
-                                inkey();
-                            }
+                            (void)screen_roff(m_ptr->r_idx, m_ptr);
                             
                             /* Restore screen */
                             screen_load();
@@ -2189,44 +2102,11 @@ command_key:
                         /* Object was highlighted - examine object */
                         log_trace("EXAMINATION: Highlighted entity is object, examining object %d", cursor_o_idx);
                         /* Object examination */
-                        object_type* o_ptr = &o_list[cursor_o_idx];
-                        (void)player_try_identify_smithing_object_on_examine(
-                            o_ptr, false);
                         log_trace("EXAMINATION: Showing object info screen");
                         /* Save screen */
                         screen_save();
-                        /* Show object info, with comparison if applicable */
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
+                        describe_item_with_comparisons(0 - cursor_o_idx,
+                            true);
 
                         /* Restore screen */
                         screen_load();
@@ -2246,11 +2126,7 @@ command_key:
                             screen_save();
                             
                             /* Show monster recall */
-                            if (!screen_roff(m_ptr->r_idx, m_ptr))
-                            {
-                                /* Wait for input */
-                                inkey();
-                            }
+                            (void)screen_roff(m_ptr->r_idx, m_ptr);
                             
                             /* Restore screen */
                             screen_load();
@@ -2285,42 +2161,9 @@ command_key:
                     if (has_object)
                     {
                         log_trace("EXAMINATION: Examining object at cursor position");
-                        object_type* o_ptr = &o_list[cursor_o_idx];
-                        (void)player_try_identify_smithing_object_on_examine(
-                            o_ptr, false);
                         screen_save();
-
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
+                        describe_item_with_comparisons(0 - cursor_o_idx,
+                            true);
 
                         screen_load();
                     }
@@ -2329,8 +2172,7 @@ command_key:
                         log_trace("EXAMINATION: Examining visible monster at cursor position");
                         monster_type* m_ptr = &mon_list[cursor_m_idx];
                         screen_save();
-                        if (!screen_roff(m_ptr->r_idx, m_ptr))
-                            inkey();
+                        (void)screen_roff(m_ptr->r_idx, m_ptr);
                         screen_load();
                     }
                     else
@@ -3248,15 +3090,7 @@ void do_cmd_query_symbol(void)
                 /* Recall on screen */
                 recall_key = screen_roff(who[i], NULL);
 
-                if (recall_key)
-                {
-                    query = (char)recall_key;
-                }
-                else
-                {
-                    /* Hack -- Complete the prompt (again) */
-                    Term_addstr(-1, TERM_WHITE, " [(r)ecall, ESC]");
-                }
+                query = (char)recall_key;
             }
 
             /* Command */

@@ -1,47 +1,128 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+enum {
+    SDL_TOUCH_TUTORIAL_PANEL_ALPHA = 242,
+    SDL_TOUCH_TUTORIAL_PANEL_SHADOW_ALPHA = 190,
+    SDL_TOUCH_TUTORIAL_FOOTER_ALPHA = 220
+};
+
+static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
+{
+    const float scale = 1.14f;
+
+    return (int)sdl_touch_pane_clampf(
+        px * scale, min_px * scale, max_px * scale);
+}
+
+static TTF_Font* sdl_touch_tutorial_font_for_height(int font_px)
+{
+    return sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
+}
+
+static int sdl_touch_tutorial_story_width_n(TTF_Font* font, cptr text,
+    int len)
+{
+    int width = 0;
+
+    if (!font || !text || len <= 0)
+        return 0;
+
+    TTF_MeasureString(font, text, len, 0, &width, NULL);
+    return width;
+}
+
+static float sdl_touch_tutorial_explicit_line_width(TTF_Font* font,
+    cptr text)
+{
+    float max_w = 0.0f;
+    cptr p = text;
+
+    if (!font || !p)
+        return 0.0f;
+
+    while (*p) {
+        cptr start = p;
+        int len = 0;
+        int width;
+
+        while (p[len] && p[len] != '\n')
+            len++;
+
+        width = sdl_touch_tutorial_story_width_n(font, start, len);
+        if ((float)width > max_w)
+            max_w = (float)width;
+
+        p += len;
+        if (*p == '\n')
+            p++;
+    }
+
+    return max_w;
+}
+
+static void sdl_touch_tutorial_rich_strip(cptr src, char* dst, size_t dstlen);
+
+static float sdl_touch_tutorial_callout_width_for_text(cptr title,
+    int title_px, cptr body, int body_px, float pad)
+{
+    TTF_Font* title_font = sdl_touch_tutorial_font_for_height(title_px);
+    TTF_Font* body_font = sdl_touch_tutorial_font_for_height(body_px);
+    float text_w = 0.0f;
+
+    if (title && title[0])
+    {
+        float w = sdl_touch_tutorial_explicit_line_width(title_font, title);
+        if (w > text_w)
+            text_w = w;
+    }
+
+    if (body && body[0])
+    {
+        char plain[2048];
+        float w;
+
+        sdl_touch_tutorial_rich_strip(body, plain, sizeof(plain));
+        w = sdl_touch_tutorial_explicit_line_width(body_font, plain);
+        if (w > text_w)
+            text_w = w;
+    }
+
+    return text_w + pad * 2.0f;
+}
+
 float sdl_touch_tutorial_draw_text_line(cptr text, float x, float y,
     float max_w, int font_px, SDL_Color color, bool centered)
 {
     TTF_Font* font;
-    SDL_Surface* surface;
     SDL_Texture* texture;
     SDL_FRect dst;
     float scale = 1.0f;
+    int text_w = 0;
+    int text_h = 0;
 
     if (!text || !text[0] || font_px <= 0)
         return 0.0f;
 
-    font = sdl_story_font_for_height(font_px);
+    font = sdl_touch_tutorial_font_for_height(font_px);
     if (!font)
         return 0.0f;
 
-    surface = TTF_RenderText_Blended(font, text, 0, color);
-    if (!surface)
+    texture = sdl_ui_text_texture(font, text, color, &text_w, &text_h);
+    if (!texture)
         return 0.0f;
 
-    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
-    if (!texture) {
-        SDL_DestroySurface(surface);
-        return 0.0f;
-    }
-
-    if (max_w > 0.0f && surface->w > 0 && (float)surface->w > max_w)
-        scale = max_w / (float)surface->w;
+    if (max_w > 0.0f && text_w > 0 && (float)text_w > max_w)
+        scale = max_w / (float)text_w;
 
     dst = (SDL_FRect){
-        .x = centered ? x - (float)surface->w * scale * 0.5f : x,
+        .x = centered ? x - (float)text_w * scale * 0.5f : x,
         .y = y,
-        .w = (float)surface->w * scale,
-        .h = (float)surface->h * scale,
+        .w = (float)text_w * scale,
+        .h = (float)text_h * scale,
     };
 
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
-
-    SDL_DestroyTexture(texture);
-    SDL_DestroySurface(surface);
     return dst.h;
 }
 
@@ -141,7 +222,7 @@ float sdl_touch_tutorial_draw_wrapped(cptr text, float x, float y,
     int line_count;
     float line_h;
 
-    font = sdl_story_font_for_height(font_px);
+    font = sdl_touch_tutorial_font_for_height(font_px);
     if (!font)
         return 0.0f;
 
@@ -166,7 +247,7 @@ float sdl_touch_tutorial_draw_wrapped_centered(cptr text, float x,
     int line_count;
     float line_h;
 
-    font = sdl_story_font_for_height(font_px);
+    font = sdl_touch_tutorial_font_for_height(font_px);
     if (!font)
         return 0.0f;
 
@@ -191,12 +272,304 @@ int sdl_touch_tutorial_line_count(cptr text, int font_px, float max_w)
     if (!text || !text[0])
         return 0;
 
-    font = sdl_story_font_for_height(font_px);
+    font = sdl_touch_tutorial_font_for_height(font_px);
     if (!font)
         return 0;
 
     return sdl_touch_tutorial_wrap_lines(text, font, max_w, lines,
         SDL_TOUCH_TUTORIAL_MAX_LINES);
+}
+
+/* ------------------------------------------------------------------------
+ * Inline colour markup for tutorial-box body text.
+ *
+ * Body strings may tag short spans so the important words stand out from the
+ * default light-grey prose.  Tags are zero-width and normally wrap a whole
+ * space-delimited token (trailing punctuation included):
+ *
+ *   <a>..</a>  gesture / action verb   (Tap, Hold, Click, Swipe)   -> L_GREEN
+ *   <t>..</t>  on-screen target / term (map, action wheel, Str)    -> L_BLUE
+ *   <n>..</n>  caveat / placement note (Default placement, only)   -> ORANGE
+ *   <r>..</r>  strong warning / penalty                            -> L_RED
+ *   <y>..</y>  key / formula                                       -> YELLOW
+ *   <g>..</g>  affinity (mirrors the trait legend)                 -> GREEN
+ *   <v>..</v>  unique power (mirrors the trait legend)             -> VIOLET
+ *   <u>..</u>  curse (mirrors the trait legend)                    -> UMBER
+ *   </>        also closes a span (back to the default colour)
+ *
+ * A tag may also fall inside a token (e.g. "<a>Tap</a>:"); the part after the
+ * tag is then "glued" to the previous piece with no separating space.  The
+ * renderer wraps with the same greedy algorithm as the plain helpers so box
+ * sizing (which measures the visible text) and drawing agree.
+ * ------------------------------------------------------------------------ */
+
+enum {
+    SDL_TOUCH_TUTORIAL_RICH_MAX_PIECES = 512,
+    SDL_TOUCH_TUTORIAL_RICH_PIECE_LEN = 48,
+    SDL_TOUCH_TUTORIAL_RICH_MAX_LINE_PIECES = 256
+};
+
+typedef struct sdl_touch_tutorial_rich_piece {
+    char text[SDL_TOUCH_TUTORIAL_RICH_PIECE_LEN];
+    SDL_Color color;
+    bool space_before;  /* whitespace separated this piece from the previous */
+    bool hard_break;    /* a newline preceded this piece */
+} sdl_touch_tutorial_rich_piece;
+
+static bool sdl_touch_tutorial_rich_tag_color(char code, SDL_Color* out)
+{
+    int attr;
+
+    switch (code) {
+    case 'a': attr = TERM_L_GREEN; break;
+    case 't': attr = TERM_L_BLUE;  break;
+    case 'n': attr = TERM_ORANGE;  break;
+    case 'r': attr = TERM_L_RED;   break;
+    case 'y': attr = TERM_YELLOW;  break;
+    case 'g': attr = TERM_GREEN;   break;
+    case 'v': attr = TERM_VIOLET;  break;
+    case 'u': attr = TERM_UMBER;   break;
+    default: return false;
+    }
+
+    if (out)
+        *out = g_state.palette[attr];
+    return true;
+}
+
+/* True if p points at a colour tag ("<x>" or a "</...>" close). */
+static bool sdl_touch_tutorial_rich_at_tag(const char* p)
+{
+    if (!p || *p != '<')
+        return false;
+    if (p[1] == '/')
+        return true;
+    return p[1] && p[2] == '>'
+        && sdl_touch_tutorial_rich_tag_color(p[1], NULL);
+}
+
+/* Copy text with the colour tags removed (for plain-text measurement). */
+static void sdl_touch_tutorial_rich_strip(cptr src, char* dst, size_t dstlen)
+{
+    const char* p = (src && src[0]) ? src : "";
+    size_t o = 0;
+
+    if (!dst || dstlen == 0)
+        return;
+
+    while (*p && o + 1 < dstlen) {
+        if (sdl_touch_tutorial_rich_at_tag(p)) {
+            if (p[1] == '/') {
+                while (*p && *p != '>')
+                    p++;
+            } else {
+                p += 2;
+            }
+            if (*p == '>')
+                p++;
+            continue;
+        }
+        dst[o++] = *p++;
+    }
+    dst[o] = '\0';
+}
+
+static int sdl_touch_tutorial_rich_parse(cptr text, SDL_Color def,
+    sdl_touch_tutorial_rich_piece* pieces, int max_pieces)
+{
+    SDL_Color cur = def;
+    const char* p = (text && text[0]) ? text : "";
+    int count = 0;
+    bool pending_space = false;
+    bool pending_break = false;
+    bool first = true;
+
+    while (*p) {
+        if (*p == '\n') {
+            pending_break = true;
+            pending_space = true;
+            p++;
+            continue;
+        }
+        if (isspace((unsigned char)*p)) {
+            pending_space = true;
+            p++;
+            continue;
+        }
+        if (sdl_touch_tutorial_rich_at_tag(p)) {
+            if (p[1] == '/') {
+                cur = def;
+                while (*p && *p != '>')
+                    p++;
+            } else {
+                (void)sdl_touch_tutorial_rich_tag_color(p[1], &cur);
+                p += 2;
+            }
+            if (*p == '>')
+                p++;
+            continue;
+        }
+
+        {
+            char buf[SDL_TOUCH_TUTORIAL_RICH_PIECE_LEN];
+            int len = 0;
+            SDL_Color start = cur;
+
+            while (*p && !isspace((unsigned char)*p)
+                && !sdl_touch_tutorial_rich_at_tag(p))
+            {
+                if (len < (int)sizeof(buf) - 1)
+                    buf[len++] = *p;
+                p++;
+            }
+            buf[len] = '\0';
+            if (len == 0)
+                continue;
+
+            if (count < max_pieces) {
+                sdl_touch_tutorial_rich_piece* pc = &pieces[count++];
+
+                SDL_strlcpy(pc->text, buf, sizeof(pc->text));
+                pc->color = start;
+                pc->space_before = first ? false : pending_space;
+                pc->hard_break = pending_break;
+            }
+            first = false;
+            pending_space = false;
+            pending_break = false;
+        }
+    }
+
+    return count;
+}
+
+/*
+ * Wrap and (optionally) draw marked-up body text.  Returns the total height.
+ * With draw == false nothing is rendered, so callers can size a box first.
+ */
+static float sdl_touch_tutorial_rich_draw_or_measure(cptr text, float x,
+    float y, float max_w, int font_px, SDL_Color def_color, bool centered,
+    bool draw)
+{
+    sdl_touch_tutorial_rich_piece pieces[SDL_TOUCH_TUTORIAL_RICH_MAX_PIECES];
+    int line_idx[SDL_TOUCH_TUTORIAL_RICH_MAX_LINE_PIECES];
+    TTF_Font* font;
+    float line_h;
+    int piece_count;
+    int line_count = 0;
+    int space_w;
+    int i = 0;
+
+    if (font_px <= 0)
+        return 0.0f;
+    font = sdl_touch_tutorial_font_for_height(font_px);
+    if (!font)
+        return 0.0f;
+
+    piece_count = sdl_touch_tutorial_rich_parse(text, def_color, pieces,
+        (int)N_ELEMENTS(pieces));
+    if (piece_count <= 0)
+        return 0.0f;
+
+    line_h = (float)font_px * 1.30f;
+    space_w = sdl_touch_pane_story_text_width(font, " ");
+
+    while (i < piece_count) {
+        char cur[SDL_TOUCH_TUTORIAL_LINE_LEN];
+        int n = 0;
+
+        cur[0] = '\0';
+
+        while (i < piece_count) {
+            const sdl_touch_tutorial_rich_piece* pc = &pieces[i];
+            char candidate[SDL_TOUCH_TUTORIAL_LINE_LEN];
+            bool want_space;
+            int cand_w;
+
+            if (n > 0 && pc->hard_break)
+                break;
+
+            want_space = (n > 0) && pc->space_before;
+            if (cur[0] == '\0')
+                SDL_strlcpy(candidate, pc->text, sizeof(candidate));
+            else
+                strnfmt(candidate, sizeof(candidate), "%s%s%s", cur,
+                    want_space ? " " : "", pc->text);
+
+            cand_w = sdl_touch_pane_story_text_width(font, candidate);
+            if (n > 0 && want_space && max_w > 1.0f && (float)cand_w > max_w)
+                break;
+
+            SDL_strlcpy(cur, candidate, sizeof(cur));
+            if (n < (int)N_ELEMENTS(line_idx))
+                line_idx[n] = i;
+            n++;
+            i++;
+        }
+
+        if (n <= 0) {
+            i++;
+            continue;
+        }
+
+        if (draw) {
+            int draw_n = MIN(n, (int)N_ELEMENTS(line_idx));
+            float ly = y + line_h * (float)line_count;
+            float lx;
+            float draw_w = 0.0f;
+
+            for (int k = 0; k < draw_n; k++) {
+                const sdl_touch_tutorial_rich_piece* pc = &pieces[line_idx[k]];
+
+                if (k > 0 && pc->space_before)
+                    draw_w += (float)space_w;
+                draw_w += (float)sdl_touch_pane_story_text_width(font,
+                    pc->text);
+            }
+
+            lx = centered ? x - draw_w * 0.5f : x;
+            for (int k = 0; k < draw_n; k++) {
+                const sdl_touch_tutorial_rich_piece* pc = &pieces[line_idx[k]];
+
+                if (k > 0 && pc->space_before)
+                    lx += (float)space_w;
+                (void)sdl_touch_tutorial_draw_text_line(pc->text, lx, ly,
+                    0.0f, font_px, pc->color, false);
+                lx += (float)sdl_touch_pane_story_text_width(font, pc->text);
+            }
+        }
+
+        line_count++;
+    }
+
+    return line_h * (float)line_count;
+}
+
+static float sdl_touch_tutorial_draw_rich(cptr text, float x, float y,
+    float max_w, int font_px, SDL_Color color)
+{
+    return sdl_touch_tutorial_rich_draw_or_measure(text, x, y, max_w, font_px,
+        color, false, true);
+}
+
+static float sdl_touch_tutorial_draw_rich_centered(cptr text, float x, float y,
+    float max_w, int font_px, SDL_Color color)
+{
+    return sdl_touch_tutorial_rich_draw_or_measure(text, x, y, max_w, font_px,
+        color, true, true);
+}
+
+static int sdl_touch_tutorial_rich_line_count(cptr text, int font_px,
+    float max_w)
+{
+    float h;
+
+    if (font_px <= 0)
+        return 0;
+
+    h = sdl_touch_tutorial_rich_draw_or_measure(text, 0.0f, 0.0f, max_w,
+        font_px, g_state.palette[TERM_L_WHITE], false, false);
+    return (int)SDL_lroundf(h / ((float)font_px * 1.30f));
 }
 
 void sdl_touch_tutorial_draw_screen_dim(const SDL_Rect* screen,
@@ -220,20 +593,55 @@ float sdl_touch_tutorial_top_reserved_height(const SDL_Rect* screen)
     float reserved = 0.0f;
     SDL_FRect main_menu_rect;
     SDL_FRect depth_rect;
+    SDL_FRect status_depth_rect;
+    SDL_FRect terminal_header_rect;
 
     if (!screen)
         return 0.0f;
 
-    if (sdl_main_menu_pane_current_rect(&main_menu_rect)
-        && main_menu_rect.h > reserved)
-    {
-        reserved = main_menu_rect.h;
-    }
+    /*
+     * Reserve the actual bottom edge of every top-attached text region.  The
+     * old height-only check missed multi-row status/depth panels and assumed
+     * every rectangle began at screen y=0.
+     */
+#define RESERVE_TOP_RECT(rect_) \
+    do { \
+        const SDL_FRect* r_ = &(rect_); \
+        float screen_top_ = (float)screen->y; \
+        float screen_bottom_ = (float)(screen->y + screen->h); \
+        float top_limit_ = screen_top_ + (float)screen->h * 0.30f; \
+        float bottom_; \
+        if (r_->w > 1.0f && r_->h > 1.0f \
+            && r_->x + r_->w > (float)screen->x \
+            && r_->x < (float)(screen->x + screen->w) \
+            && r_->y < top_limit_ && r_->y + r_->h > screen_top_) \
+        { \
+            bottom_ = MIN(r_->y + r_->h, screen_bottom_) - screen_top_; \
+            if (bottom_ > reserved) \
+                reserved = bottom_; \
+        } \
+    } while (0)
+
+    if (sdl_main_menu_pane_current_rect(&main_menu_rect))
+        RESERVE_TOP_RECT(main_menu_rect);
     if (sdl_depth_menu_pane_current_rect(&depth_rect))
+        RESERVE_TOP_RECT(depth_rect);
+    if (sdl_status_depth_pane_current_rect(&status_depth_rect))
+        RESERVE_TOP_RECT(status_depth_rect);
+
+    /*
+     * ROW_MAP is the first dungeon row.  Everything above it is the live
+     * health/voice/status header seen behind the tutorial in portrait mode.
+     */
+    if (Term && ROW_MAP > 0
+        && sdl_touch_tutorial_cell_rect(0, 0, Term->wid, ROW_MAP,
+            &terminal_header_rect))
     {
-        if (depth_rect.h > reserved)
-            reserved = depth_rect.h;
+        RESERVE_TOP_RECT(terminal_header_rect);
     }
+
+#undef RESERVE_TOP_RECT
+
     if (reserved > 0.0f) {
         return reserved + sdl_touch_pane_clampf(
             (float)screen->h * 0.010f, 6.0f, 12.0f);
@@ -265,41 +673,153 @@ float sdl_touch_tutorial_default_header_y(const SDL_Rect* screen)
         + sdl_touch_tutorial_top_reserved_height(screen);
 }
 
+typedef struct sdl_touch_tutorial_header_layout {
+    SDL_FRect panel;
+    float center_x;
+    float text_y;
+    float title_max_w;
+    float body_max_w;
+    float title_h;
+    float body_y;
+    float body_h;
+    float page_x;
+    int title_px;
+    int body_px;
+    char page_buf[32];
+} sdl_touch_tutorial_header_layout;
+
+static bool sdl_touch_tutorial_header_compute(const SDL_Rect* screen,
+    cptr title, cptr body, int page, int page_count, float y,
+    sdl_touch_tutorial_header_layout* out)
+{
+    TTF_Font* title_font;
+    TTF_Font* body_font;
+    float margin;
+    float pad;
+    float panel_w;
+    float page_reserve = 0.0f;
+    int title_w = 0;
+    int title_h = 0;
+    int page_w = 0;
+
+    if (!screen || !out)
+        return false;
+
+    memset(out, 0, sizeof(*out));
+    margin = sdl_touch_pane_clampf((float)screen->w * 0.035f,
+        10.0f, 34.0f);
+    pad = sdl_touch_pane_clampf((float)screen->h * 0.012f,
+        8.0f, 15.0f);
+    panel_w = (float)screen->w - margin * 2.0f;
+    if (panel_w > 1180.0f)
+        panel_w = 1180.0f;
+    if (panel_w <= pad * 2.0f + 80.0f)
+        return false;
+
+    out->title_px = sdl_touch_tutorial_text_px((float)screen->h * 0.052f,
+        30.0f, 50.0f);
+    out->body_px = sdl_touch_tutorial_text_px((float)screen->h * 0.032f,
+        22.0f, 34.0f);
+    title_font = sdl_touch_tutorial_font_for_height(out->title_px);
+    body_font = sdl_touch_tutorial_font_for_height(out->body_px);
+    if (!title_font || !body_font)
+        return false;
+
+    if (page_count > 0) {
+        strnfmt(out->page_buf, sizeof(out->page_buf), "%d/%d",
+            page + 1, page_count);
+        page_w = sdl_touch_tutorial_story_width_n(body_font, out->page_buf,
+            (int)strlen(out->page_buf));
+        page_reserve = (float)page_w
+            + sdl_touch_pane_clampf((float)screen->w * 0.018f,
+                10.0f, 22.0f);
+    }
+
+    if (!TTF_GetStringSize(title_font, title ? title : "", 0, &title_w,
+            &title_h))
+    {
+        title_h = out->title_px;
+    }
+
+    out->panel = (SDL_FRect){
+        .x = (float)screen->x + ((float)screen->w - panel_w) * 0.5f,
+        .y = y - pad,
+        .w = panel_w,
+        .h = 0.0f,
+    };
+    out->center_x = out->panel.x + out->panel.w * 0.5f;
+    out->text_y = y;
+    out->title_max_w = out->panel.w - pad * 2.0f
+        - page_reserve * 2.0f;
+    if (out->title_max_w < out->panel.w * 0.52f)
+        out->title_max_w = out->panel.w * 0.52f;
+    out->body_max_w = out->panel.w - pad * 2.0f;
+    out->title_h = (float)MAX(title_h, 1);
+    out->body_y = out->text_y + out->title_h + 5.0f;
+    out->body_h = sdl_touch_tutorial_rich_draw_or_measure(body,
+        out->center_x, out->body_y, out->body_max_w, out->body_px,
+        g_state.palette[TERM_L_WHITE], true, false);
+    out->panel.h = out->body_y + out->body_h + pad - out->panel.y;
+    out->page_x = out->panel.x + out->panel.w - pad - (float)page_w;
+
+    return true;
+}
+
+static float sdl_touch_tutorial_header_bottom(const SDL_Rect* screen,
+    cptr title, cptr body, int page, int page_count)
+{
+    sdl_touch_tutorial_header_layout layout;
+
+    if (!screen
+        || !sdl_touch_tutorial_header_compute(screen, title, body, page,
+            page_count, sdl_touch_tutorial_default_header_y(screen), &layout))
+    {
+        return screen ? sdl_touch_tutorial_default_header_y(screen) : 0.0f;
+    }
+
+    return layout.panel.y + layout.panel.h;
+}
+
 float sdl_touch_tutorial_draw_header_at(const SDL_Rect* screen,
     cptr title, cptr body, int page, int page_count, float y)
 {
     SDL_Color title_color = g_state.palette[TERM_YELLOW];
     SDL_Color text_color = g_state.palette[TERM_L_WHITE];
-    float x;
-    float max_w;
-    int title_px;
-    int body_px;
-    char page_buf[32];
+    sdl_touch_tutorial_header_layout layout;
+    SDL_FRect shadow;
 
-    if (!screen)
+    if (!sdl_touch_tutorial_header_compute(screen, title, body, page,
+            page_count, y, &layout))
+    {
         return 0.0f;
+    }
 
-    x = (float)screen->x + (float)screen->w * 0.5f;
-    max_w = (float)screen->w * 0.82f;
-    title_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.052f,
-        30.0f, 50.0f);
-    body_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.032f,
-        22.0f, 34.0f);
+    shadow = layout.panel;
+    shadow.x += 3.0f;
+    shadow.y += 3.0f;
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_SHADOW_ALPHA);
+    SDL_RenderFillRect(g_state.renderer, &shadow);
+    SDL_SetRenderDrawColor(g_state.renderer, 3, 5, 7,
+        SDL_TOUCH_TUTORIAL_PANEL_ALPHA);
+    SDL_RenderFillRect(g_state.renderer, &layout.panel);
+    SDL_SetRenderDrawColor(g_state.renderer, title_color.r, title_color.g,
+        title_color.b, 230);
+    SDL_RenderRect(g_state.renderer, &layout.panel);
 
-    y += sdl_touch_tutorial_draw_text_line(title, x, y, max_w, title_px,
-        title_color, true);
-    y += 5.0f;
-    y += sdl_touch_tutorial_draw_wrapped_centered(body, x, y, max_w, body_px,
-        text_color);
+    (void)sdl_touch_tutorial_draw_text_line(title, layout.center_x,
+        layout.text_y, layout.title_max_w, layout.title_px, title_color, true);
+    (void)sdl_touch_tutorial_draw_rich_centered(body, layout.center_x,
+        layout.body_y, layout.body_max_w, layout.body_px, text_color);
 
-    strnfmt(page_buf, sizeof(page_buf), "%d/%d", page + 1, page_count);
-    (void)sdl_touch_tutorial_draw_text_line(page_buf,
-        (float)(screen->x + screen->w) - 18.0f,
-        (float)screen->y + 10.0f
-            + sdl_touch_tutorial_top_reserved_height(screen),
-        80.0f, body_px, text_color, false);
+    if (page_count > 0) {
+        (void)sdl_touch_tutorial_draw_text_line(layout.page_buf,
+            layout.page_x, layout.text_y,
+            layout.panel.w * 0.16f, layout.body_px, text_color, false);
+    }
 
-    return y;
+    return layout.panel.y + layout.panel.h;
 }
 
 float sdl_touch_tutorial_draw_header(const SDL_Rect* screen, cptr title,
@@ -320,6 +840,32 @@ static void sdl_touch_tutorial_prompt_label(int binding, const char* fallback,
         SDL_strlcpy(buf, fallback, buflen);
 }
 
+/*
+ * Reserve enough room for both footer lines plus a real bottom margin.  The
+ * old percentage clamp topped out at exactly two line advances, so the second
+ * line's glyphs could extend below the screen at large window sizes.
+ */
+static float sdl_touch_tutorial_footer_height(const SDL_Rect* screen)
+{
+    int font_px;
+    float line_h;
+    float bottom_pad;
+    float legacy_h;
+
+    if (!screen)
+        return 0.0f;
+
+    font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
+        22.0f, 30.0f);
+    line_h = (float)font_px * 1.30f;
+    bottom_pad = sdl_touch_pane_clampf((float)screen->h * 0.008f,
+        6.0f, 10.0f);
+    legacy_h = sdl_touch_pane_clampf((float)screen->h * 0.090f,
+        54.0f, 78.0f);
+
+    return MAX(legacy_h, line_h * 2.0f + bottom_pad);
+}
+
 void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
     bool single_page)
 {
@@ -327,20 +873,21 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
     int font_px;
     float line_h;
     float y;
-    char advance_text[96];
-    char page_text[96];
+    char advance_text[160];
+    char page_text[192];
 
     if (!screen)
         return;
 
-    font_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.030f,
+    font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
         22.0f, 30.0f);
     line_h = (float)font_px * 1.30f;
     y = (float)(screen->y + screen->h)
-        - sdl_touch_pane_clampf((float)screen->h * 0.090f, 54.0f, 78.0f);
+        - sdl_touch_tutorial_footer_height(screen);
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 185);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_FOOTER_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &(SDL_FRect){
         .x = (float)screen->x,
         .y = y - 8.0f,
@@ -364,33 +911,44 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
         sdl_touch_tutorial_prompt_label(steamdeck_next_page_key(), "R1",
             next_label, sizeof(next_label));
 
-        strnfmt(advance_text, sizeof(advance_text), "%s to %s",
-            confirm_label, single_page ? "close" : "continue");
+        strnfmt(advance_text, sizeof(advance_text),
+            "<y>%s</y> to <a>%s</a>", confirm_label,
+            single_page ? "close" : "continue");
         strnfmt(page_text, sizeof(page_text),
-            "%s/%s changes page   %s closes", prev_label, next_label,
-            back_label);
+            "<y>%s/%s</y> changes page   <y>%s</y> <a>closes</a>",
+            prev_label, next_label, back_label);
+    }
+    else if (!mouse && sdl_touch_tutorial_device_available())
+    {
+        SDL_strlcpy(advance_text,
+            single_page ? "<a>Tap</a> to <a>close</a>"
+                        : "<a>Tap</a> for the <a>next page</a>",
+            sizeof(advance_text));
+        SDL_strlcpy(page_text,
+            single_page ? "<t>Touch guide</t>"
+                        : "<t>Touch each page in order; the last tap closes</t>",
+            sizeof(page_text));
     }
     else
     {
         SDL_strlcpy(advance_text,
             mouse
-                ? (single_page ? "Click or Space to close"
-                               : "Click or Space for next")
-                : (single_page ? "Tap or Space to close"
-                               : "Tap or Space for next"),
+                ? (single_page ? "<a>Click</a> or <y>Space</y> to <a>close</a>"
+                               : "<a>Click</a> or <y>Space</y> for <a>next</a>")
+                : (single_page ? "<a>Tap</a> or <y>Space</y> to <a>close</a>"
+                               : "<a>Tap</a> or <y>Space</y> for <a>next</a>"),
             sizeof(advance_text));
-        SDL_strlcpy(page_text, "Left/Right changes page   Esc closes",
+        SDL_strlcpy(page_text,
+            "<y>Left/Right</y> changes page   <y>Esc</y> <a>closes</a>",
             sizeof(page_text));
     }
 
-    (void)sdl_touch_tutorial_draw_text_line(
-        advance_text,
+    (void)sdl_touch_tutorial_draw_rich_centered(advance_text,
         (float)screen->x + (float)screen->w * 0.5f, y,
-        (float)screen->w * 0.90f, font_px, text_color, true);
-    (void)sdl_touch_tutorial_draw_text_line(
-        page_text,
+        (float)screen->w * 0.90f, font_px, text_color);
+    (void)sdl_touch_tutorial_draw_rich_centered(page_text,
         (float)screen->x + (float)screen->w * 0.5f, y + line_h,
-        (float)screen->w * 0.90f, font_px, text_color, true);
+        (float)screen->w * 0.90f, font_px, text_color);
 }
 
 bool sdl_touch_tutorial_cell_rect(int col, int row, int cols, int rows,
@@ -468,6 +1026,28 @@ bool sdl_touch_tutorial_view_rect(enum pane_type pane, SDL_FRect* out)
     return true;
 }
 
+static bool sdl_touch_tutorial_status_rect(SDL_FRect* out)
+{
+    status_pane_layout layout;
+    SDL_Rect anchor;
+
+    if (!out)
+        return false;
+
+    if (sdl_status_pane_layout(&layout)) {
+        *out = layout.panel;
+    } else if (sdl_status_pane_current_rect(&anchor, NULL)) {
+        *out = (SDL_FRect){
+            (float)anchor.x, (float)anchor.y,
+            (float)anchor.w, (float)anchor.h
+        };
+    } else {
+        return false;
+    }
+
+    return out->w > 0.0f && out->h > 0.0f;
+}
+
 void sdl_touch_tutorial_clamp_box_to_screen(SDL_FRect* box,
     const SDL_Rect* screen, float margin)
 {
@@ -516,7 +1096,12 @@ void sdl_touch_tutorial_draw_compact_zone_label(
 {
     SDL_Color text = g_state.palette[TERM_YELLOW];
     SDL_Color border = g_state.palette[TERM_L_WHITE];
+    TTF_Font* font;
+    SDL_FRect badge;
+    float badge_pad_x;
+    float badge_pad_y;
     int font_px;
+    int label_w;
     float text_y;
     float max_w;
 
@@ -526,33 +1111,54 @@ void sdl_touch_tutorial_draw_compact_zone_label(
         return;
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, 18, 96, 156, 96);
+    SDL_SetRenderDrawColor(g_state.renderer, 18, 96, 156, 72);
     SDL_RenderFillRect(g_state.renderer, zone);
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b,
         228);
     SDL_RenderRect(g_state.renderer, zone);
 
-    font_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.032f,
-        18.0f, 28.0f);
-    text_y = zone->y + zone->h * 0.5f - (float)font_px * 0.60f;
-    if (text_y < zone->y + 1.0f)
-        text_y = zone->y + 1.0f;
-    if (text_y + (float)font_px * 1.2f > zone->y + zone->h)
-        text_y = zone->y + zone->h - (float)font_px * 1.2f;
-    if (text_y < (float)screen->y)
-        text_y = (float)screen->y;
+    if (sdl_touch_only_mobile_device_active()) {
+        font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.038f,
+            24.0f, 34.0f);
+    } else {
+        font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.032f,
+            18.0f, 28.0f);
+    }
+    font = sdl_touch_tutorial_font_for_height(font_px);
+    if (!font)
+        return;
+    label_w = sdl_touch_tutorial_story_width_n(font, label,
+        (int)strlen(label));
+    badge_pad_x = sdl_touch_pane_clampf((float)font_px * 0.36f,
+        5.0f, 10.0f);
+    badge_pad_y = sdl_touch_pane_clampf((float)font_px * 0.16f,
+        3.0f, 6.0f);
+    badge.w = MIN(zone->w - 4.0f, (float)label_w + badge_pad_x * 2.0f);
+    badge.h = MIN(zone->h - 4.0f,
+        (float)font_px * 1.20f + badge_pad_y * 2.0f);
+    if (badge.w <= 8.0f || badge.h <= 8.0f)
+        return;
+    badge.x = zone->x + (zone->w - badge.w) * 0.5f;
+    badge.y = zone->y + (zone->h - badge.h) * 0.5f;
 
-    max_w = zone->w - 8.0f;
-    if (max_w < 24.0f)
-        max_w = zone->w;
+    SDL_SetRenderDrawColor(g_state.renderer, 3, 8, 12,
+        SDL_TOUCH_TUTORIAL_PANEL_ALPHA);
+    SDL_RenderFillRect(g_state.renderer, &badge);
+    SDL_SetRenderDrawColor(g_state.renderer, text.r, text.g, text.b, 238);
+    SDL_RenderRect(g_state.renderer, &badge);
+
+    text_y = badge.y + (badge.h - (float)font_px * 1.20f) * 0.5f;
+    if (text_y < badge.y + 1.0f)
+        text_y = badge.y + 1.0f;
+    max_w = badge.w - badge_pad_x * 2.0f;
 
     (void)sdl_touch_tutorial_draw_text_line(label,
-        zone->x + zone->w * 0.5f, text_y, max_w, font_px, text, true);
+        badge.x + badge.w * 0.5f, text_y, max_w, font_px, text, true);
 }
 
 void sdl_touch_tutorial_draw_compact_zone_legend(
     const SDL_Rect* screen, float min_y, const char* const* lines,
-    int line_count, bool mouse)
+    int line_count, bool mouse, bool mobile_section)
 {
     SDL_Color title_color = g_state.palette[TERM_YELLOW];
     SDL_Color text_color = g_state.palette[TERM_L_WHITE];
@@ -563,35 +1169,28 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
     float pad;
     float line_h;
     float title_h;
+    float text_w;
     float w;
     float h;
+    int body_lines;
     int font_px;
     int title_px;
+    int min_font_px;
 
     if (!screen || !lines || line_count <= 0)
         return;
 
     footer_top = (float)(screen->y + screen->h)
-        - sdl_touch_pane_clampf((float)screen->h * 0.090f, 54.0f, 78.0f)
+        - sdl_touch_tutorial_footer_height(screen)
         - 10.0f;
     available_h = footer_top - min_y - 8.0f;
     if (available_h < 56.0f)
-        available_h = (float)screen->h * 0.48f;
+        return;
 
-    font_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.030f,
-        16.0f, 24.0f);
+    font_px = mobile_section
+        ? sdl_touch_tutorial_text_px((float)screen->h * 0.036f, 22.0f, 30.0f)
+        : sdl_touch_tutorial_text_px((float)screen->h * 0.030f, 16.0f, 24.0f);
     pad = sdl_touch_pane_clampf((float)screen->h * 0.012f, 5.0f, 9.0f);
-
-    for (;;) {
-        title_px = font_px + 2;
-        line_h = (float)font_px * 1.22f;
-        title_h = (float)title_px * 1.22f;
-        h = pad * 2.0f + title_h + 4.0f
-            + line_h * (float)line_count;
-        if (h <= available_h || font_px <= 14)
-            break;
-        font_px--;
-    }
 
     w = (float)screen->w * 0.88f;
     if (w > 760.0f)
@@ -602,6 +1201,49 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
         w = (float)screen->w - pad * 2.0f;
     if (w <= 40.0f)
         return;
+    text_w = w - pad * 2.0f;
+
+    min_font_px = mobile_section ? 16 : 14;
+    {
+        int low_px = min_font_px;
+        int high_px = MAX(font_px, min_font_px);
+        int chosen_px = min_font_px;
+
+        while (low_px <= high_px) {
+            int candidate_px = low_px + (high_px - low_px) / 2;
+            int candidate_title_px = candidate_px + 2;
+            float candidate_line_h = (float)candidate_px * 1.30f;
+            float candidate_title_h = (float)candidate_title_px * 1.22f;
+            int candidate_lines = 0;
+            float candidate_h;
+
+            for (int i = 0; i < line_count; ++i)
+                candidate_lines += MAX(1,
+                    sdl_touch_tutorial_rich_line_count(lines[i],
+                        candidate_px, text_w));
+            candidate_h = pad * 2.0f + candidate_title_h + 4.0f
+                + candidate_line_h * (float)candidate_lines;
+            if (candidate_h <= available_h) {
+                chosen_px = candidate_px;
+                low_px = candidate_px + 1;
+            } else {
+                high_px = candidate_px - 1;
+            }
+        }
+        font_px = chosen_px;
+    }
+
+    title_px = font_px + 2;
+    line_h = (float)font_px * 1.30f;
+    title_h = (float)title_px * 1.22f;
+    body_lines = 0;
+    for (int i = 0; i < line_count; ++i)
+        body_lines += MAX(1, sdl_touch_tutorial_rich_line_count(lines[i],
+            font_px, text_w));
+    h = pad * 2.0f + title_h + 4.0f
+        + line_h * (float)body_lines;
+    if (h > available_h)
+        return;
 
     box = (SDL_FRect){
         .x = (float)screen->x + ((float)screen->w - w) * 0.5f,
@@ -609,8 +1251,6 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
         .w = w,
         .h = h,
     };
-    if (box.y + box.h > footer_top)
-        box.y = footer_top - box.h;
     sdl_touch_tutorial_clamp_box_to_screen(&box, screen, pad);
 
     shadow = box;
@@ -618,9 +1258,11 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
     shadow.y += 3.0f;
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 168);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_SHADOW_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &shadow);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 224);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &box);
     SDL_SetRenderDrawColor(g_state.renderer, title_color.r, title_color.g,
         title_color.b, 236);
@@ -635,9 +1277,9 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
             box.x + box.w * 0.5f, y, text_w, title_px, title_color, true);
         y += 4.0f;
         for (int i = 0; i < line_count; i++) {
-            (void)sdl_touch_tutorial_draw_text_line(lines[i], box.x + pad, y,
-                text_w, font_px, text_color, false);
-            y += line_h;
+            float used = sdl_touch_tutorial_draw_rich(lines[i], box.x + pad,
+                y, text_w, font_px, text_color);
+            y += MAX(line_h, used);
         }
     }
 }
@@ -702,9 +1344,9 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
     if (!screen || !zone || zone->w <= 1.0f || zone->h <= 1.0f)
         return;
 
-    title_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.042f,
+    title_px = sdl_touch_tutorial_text_px((float)screen->h * 0.042f,
         26.0f, 38.0f);
-    detail_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.034f,
+    detail_px = sdl_touch_tutorial_text_px((float)screen->h * 0.034f,
         22.0f, 32.0f);
     pad = sdl_touch_pane_clampf((float)screen->h * 0.016f, 10.0f, 18.0f);
 
@@ -720,7 +1362,8 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
     if (box_w > max_box_w)
         box_w = max_box_w;
     text_w = box_w - pad * 2.0f;
-    detail_lines = sdl_touch_tutorial_line_count(detail, detail_px, text_w);
+    detail_lines = sdl_touch_tutorial_rich_line_count(detail, detail_px,
+        text_w);
 
     box_h = pad * 2.0f + (float)title_px * 1.25f;
     if (detail_lines > 0)
@@ -749,9 +1392,11 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
     shadow.y += 3.0f;
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 168);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_SHADOW_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &shadow);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 222);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &box);
     SDL_SetRenderDrawColor(g_state.renderer, title_color.r, title_color.g,
         title_color.b, 242);
@@ -761,7 +1406,7 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
         box.x + box.w * 0.5f, box.y + pad, text_w,
         title_px, title_color, true);
     if (detail_lines > 0) {
-        (void)sdl_touch_tutorial_draw_wrapped_centered(detail,
+        (void)sdl_touch_tutorial_draw_rich_centered(detail,
             box.x + box.w * 0.5f,
             box.y + pad + (float)title_px * 1.34f,
             text_w, detail_px, detail_color);
@@ -775,6 +1420,7 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
     SDL_Color text_color = g_state.palette[TERM_L_WHITE];
     SDL_FRect box;
     SDL_FRect shadow;
+    float footer_top;
     float pad;
     float text_w;
     float h;
@@ -786,29 +1432,35 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
         return;
 
     pad = sdl_touch_pane_clampf((float)screen->h * 0.018f, 11.0f, 20.0f);
-    title_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.040f,
+    title_px = sdl_touch_tutorial_text_px((float)screen->h * 0.040f,
         26.0f, 38.0f);
-    body_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.034f,
+    body_px = sdl_touch_tutorial_text_px((float)screen->h * 0.034f,
         22.0f, 32.0f);
     text_w = w - pad * 2.0f;
     if (text_w <= 40.0f)
         return;
 
-    body_lines = sdl_touch_tutorial_line_count(body, body_px, text_w);
+    body_lines = sdl_touch_tutorial_rich_line_count(body, body_px, text_w);
     h = pad * 2.0f + (float)body_lines * (float)body_px * 1.30f;
     if (title && title[0])
         h += (float)title_px * 1.35f + 5.0f;
 
     box = (SDL_FRect){ .x = x, .y = y, .w = w, .h = h };
+    footer_top = (float)(screen->y + screen->h)
+        - sdl_touch_tutorial_footer_height(screen) - pad;
+    if (box.y + box.h > footer_top)
+        box.y = footer_top - box.h;
     sdl_touch_tutorial_clamp_box_to_screen(&box, screen, pad);
     shadow = box;
     shadow.x += 3.0f;
     shadow.y += 3.0f;
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 174);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_SHADOW_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &shadow);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 224);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &box);
     SDL_SetRenderDrawColor(g_state.renderer, title_color.r, title_color.g,
         title_color.b, 235);
@@ -820,12 +1472,12 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
             box.x + box.w * 0.5f, y, text_w, title_px, title_color, true);
         y += 5.0f;
     }
-    (void)sdl_touch_tutorial_draw_wrapped(body, box.x + pad, y, text_w,
+    (void)sdl_touch_tutorial_draw_rich(body, box.x + pad, y, text_w,
         body_px, text_color);
 }
 
 void sdl_touch_tutorial_draw_main_screen_zones_compact(
-    const SDL_Rect* screen, float header_bottom, bool mouse)
+    const SDL_Rect* screen, float header_bottom, bool mouse, int section)
 {
     SDL_FRect rect;
     SDL_Rect pane_rect;
@@ -835,6 +1487,8 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
     const char* legend_lines[8];
     int legend_n = 0;
     bool supporting_pane_seen = false;
+    bool show_main = section < 0 || section == 0;
+    bool show_overlays = section < 0 || section == 1;
 
     if (!screen || !Term)
         return;
@@ -842,90 +1496,110 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
     term_h = Term->hgt;
     map_cols = SCREEN_WID * (use_bigtile ? 2 : 1);
 
-    if (sdl_main_menu_pane_current_rect(&rect)) {
+    if (show_main && sdl_main_menu_pane_current_rect(&rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Menu");
         legend_lines[legend_n++] = mouse
-            ? "Menu: click for the main menu."
-            : "Menu: tap for the main menu.";
+            ? "<t>Menu:</t> <a>click</a> for the <t>main menu</t>."
+            : "<t>Menu:</t> <a>tap</a> for the <t>main menu</t>.";
     }
 
-    if (sdl_depth_menu_pane_current_rect(&rect)) {
+    if (show_main && sdl_depth_menu_pane_current_rect(&rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Depth");
         legend_lines[legend_n++] = mouse
-            ? "Depth: click for the map; use +/- for temporary zoom."
-            : "Depth: tap for the map; use +/- for temporary zoom.";
+            ? "<t>Depth:</t> <a>click</a> for the <t>map</t>; use <y>+/-</y> for <n>temporary zoom</n>."
+            : "<t>Depth:</t> <a>tap</a> for the <t>map</t>; <a>pinch</a> the main map for <n>temporary zoom</n>.";
     }
 
     panel_rows = term_h - ROW_MAP;
     if (ROW_STATUS > ROW_MAP)
         panel_rows = ROW_STATUS - ROW_MAP;
-    if (!get_sdl_hide_left_panel() && COL_MAP > 0 && panel_rows > 0
+    if (show_main && !get_sdl_hide_left_panel() && COL_MAP > 0
+        && panel_rows > 0
         && sdl_touch_tutorial_cell_rect(0, ROW_MAP, COL_MAP,
             panel_rows, &rect))
     {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Character");
         legend_lines[legend_n++] = mouse
-            ? "Character: click sidebar rows for matching sheets."
-            : "Character: tap sidebar rows for matching sheets.";
+            ? "<t>Character:</t> <a>click</a> sidebar rows for matching sheets."
+            : "<t>Character:</t> <a>tap</a> sidebar rows for matching sheets.";
     }
 
-    if (SCREEN_HGT > 0 && map_cols > 0
+    if (show_main && SCREEN_HGT > 0 && map_cols > 0
         && sdl_touch_tutorial_cell_rect(COL_MAP, ROW_MAP, map_cols,
             SCREEN_HGT, &rect))
     {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect,
             "Map / Player");
         legend_lines[legend_n++] = mouse
-            ? "Map/player: left-click to path or target; right-click for actions."
-            : "Map/player: tap to path or target; hold for actions.";
+            ? "<t>Map/player:</t> <a>left-click</a> to path or target; <a>right-click</a> for actions."
+            : "<t>Map/player:</t> <a>tap</a> to path or target; <a>hold</a> for actions.";
     }
 
-    if (sdl_combat_overlay_pane_current_rect(&pane_rect)) {
+    if (show_overlays && sdl_combat_overlay_pane_current_rect(&pane_rect)) {
         rect = (SDL_FRect){ (float)pane_rect.x, (float)pane_rect.y,
             (float)pane_rect.w, (float)pane_rect.h };
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Combat");
+        if (section >= 0 && legend_n < (int)N_ELEMENTS(legend_lines)) {
+            legend_lines[legend_n++] = mouse
+                ? "<t>Combat:</t> <a>click</a> an attack row to choose its mode."
+                : "<t>Combat:</t> <a>tap</a> an attack row to choose its mode.";
+        }
     }
-    {
+    if (show_overlays) {
         SDL_FRect qa_rects[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
 
         if (sdl_touch_top_panel_compute_layout_for_display(qa_rects, &rect)) {
             sdl_touch_top_panel_render_buttons(qa_rects);
             sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Quick");
+            if (section >= 0 && legend_n < (int)N_ELEMENTS(legend_lines)) {
+                legend_lines[legend_n++] = mouse
+                    ? "<t>Quick:</t> <a>click</a> a command; <a>right-click</a> to edit it."
+                    : "<t>Quick:</t> <a>tap</a> a command; <a>hold</a> for its description and edit control.";
+            }
         }
     }
-    if (sdl_status_pane_current_rect(&pane_rect, NULL)) {
-        rect = (SDL_FRect){ (float)pane_rect.x, (float)pane_rect.y,
-            (float)pane_rect.w, (float)pane_rect.h };
+    if (show_overlays && sdl_touch_tutorial_status_rect(&rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Status");
+        if (section >= 0 && legend_n < (int)N_ELEMENTS(legend_lines))
+            legend_lines[legend_n++] =
+                "<t>Status:</t> current conditions and remaining durations.";
     }
-    if (sdl_touch_tutorial_view_rect(PANE_ROLLS, &rect))
+    if (show_overlays && sdl_touch_tutorial_view_rect(PANE_ROLLS, &rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Rolls");
-    if (legend_n < (int)N_ELEMENTS(legend_lines)) {
+        if (section >= 0 && legend_n < (int)N_ELEMENTS(legend_lines)) {
+            legend_lines[legend_n++] = mouse
+                ? "<t>Rolls:</t> <a>click</a> to open <t>combat history</t>."
+                : "<t>Rolls:</t> <a>tap</a> to open <t>combat history</t>.";
+        }
+    }
+    if (show_overlays && section < 0
+        && legend_n < (int)N_ELEMENTS(legend_lines))
+    {
         legend_lines[legend_n++] = mouse
-            ? "Overlays: click combat, quick access, status, depth, or rolls."
-            : "Overlays: tap combat, quick access, status, depth, or rolls.";
+            ? "<t>Overlays:</t> <a>click</a> combat, quick access, status, depth, or rolls."
+            : "<t>Overlays:</t> <a>tap</a> combat, quick access, status, depth, or rolls.";
     }
 
-    if (sdl_touch_tutorial_view_rect(PANE_INVENTORY, &rect)) {
+    if (show_overlays && sdl_touch_tutorial_view_rect(PANE_INVENTORY, &rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Inventory");
         supporting_pane_seen = true;
     }
-    if (sdl_touch_tutorial_view_rect(PANE_WORN, &rect)) {
+    if (show_overlays && sdl_touch_tutorial_view_rect(PANE_WORN, &rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Equipment");
         supporting_pane_seen = true;
     }
-    if (sdl_touch_tutorial_view_rect(PANE_LOG, &rect)) {
+    if (show_overlays && sdl_touch_tutorial_view_rect(PANE_LOG, &rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Messages");
         supporting_pane_seen = true;
     }
     if (supporting_pane_seen && legend_n < (int)N_ELEMENTS(legend_lines)) {
         legend_lines[legend_n++] = mouse
-            ? "Panes: click inventory, equipment, or messages panes."
-            : "Panes: tap inventory, equipment, or messages panes.";
+            ? "<t>Panes:</t> <a>click</a> inventory, equipment, or messages panes."
+            : "<t>Panes:</t> <a>tap</a> inventory, equipment, or messages panes.";
     }
 
     sdl_touch_tutorial_draw_compact_zone_legend(screen, header_bottom,
-        legend_lines, legend_n, mouse);
+        legend_lines, legend_n, mouse, section >= 0);
 }
 
 void sdl_touch_tutorial_draw_main_screen_zones(
@@ -949,16 +1623,23 @@ void sdl_touch_tutorial_draw_main_screen_zones(
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Main menu",
             mouse
-                ? "Click: open the main menu."
-                : "Tap: open the main touch menu.");
+                ? "<a>Click:</a> open the <t>main menu</t>."
+                : "<a>Tap:</a> open the <t>main touch menu</t>.");
     }
 
     if (sdl_depth_menu_pane_current_rect(&rect)) {
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Depth pane",
             mouse
-                ? "Click depth: open the map.\n+/-: change temporary zoom."
-                : "Tap depth: open the map.\n+/-: change temporary zoom.");
+                ? "<a>Click depth:</a> open the <t>map</t>.\n<a>+/-:</a> change <n>temporary zoom</n>."
+                : "<a>Tap depth:</a> open the <t>map</t>.\n<a>Pinch the main map:</a> change <n>temporary zoom</n>.");
+    }
+    if (sdl_status_depth_pane_current_rect(&rect)) {
+        sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
+            "Status & depth",
+            "Shows the current <t>partition and depth</t> at the right, "
+            "with <t>temporary conditions</t> filling leftward and wrapping "
+            "onto rows above.");
     }
 
     panel_rows = term_h - ROW_MAP;
@@ -971,8 +1652,8 @@ void sdl_touch_tutorial_draw_main_screen_zones(
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Character panel",
             mouse
-                ? "Click rows: character, skills, abilities, song, supplies, inventory, and attack-mode shortcuts.\nUse when: you want the relevant screen without opening the full menu."
-                : "Tap rows: character, skills, abilities, song, supplies, inventory, and attack-mode shortcuts.\nUse when: you want the relevant screen without opening the full menu.");
+                ? "<a>Click rows:</a> character, skills, abilities, song, supplies, inventory, and attack-mode shortcuts.\n<n>Use when:</n> you want the relevant screen without opening the full menu."
+                : "<a>Tap rows:</a> character, skills, abilities, song, supplies, inventory, and attack-mode shortcuts.\n<n>Use when:</n> you want the relevant screen without opening the full menu.");
     }
 
     if (SCREEN_HGT > 0 && map_cols > 0
@@ -982,8 +1663,8 @@ void sdl_touch_tutorial_draw_main_screen_zones(
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Map / player",
             mouse
-                ? "Left-click: path to an explored or open square, or select a target.\nRight-click: open contextual actions, look, or special movement choices.\nMouse Movement: choose On, Off, or Right click only in Mouse Input."
-                : "Tap: path to an explored or open square, or select a target.\nHold/right-click: open contextual actions, look, or special movement choices.\nPlayer square: action wheel; Use/Desc act on the floor item, hold/right-click them for full item menus.");
+                ? "<a>Left-click:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Right-click:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Mouse Movement:</t> choose On, Off, or Right click only in <t>Mouse Input</t>."
+                : "<a>Tap:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Hold:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Player square:</t> action wheel; <a>Use/Desc</a> act on the floor item, <a>hold</a> them for full item menus.");
     }
 
     if (sdl_combat_overlay_pane_current_rect(&pane_rect)) {
@@ -992,8 +1673,8 @@ void sdl_touch_tutorial_draw_main_screen_zones(
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Combat overlay",
             mouse
-                ? "Click an attack row to choose the matching attack mode.\nDefault placement: lower-left corner."
-                : "Tap an attack row to choose the matching attack mode.\nDefault placement: lower-left corner.");
+                ? "<a>Click</a> an attack row to choose the matching <t>attack mode</t>.\n<n>Default placement: lower-left corner.</n>"
+                : "<a>Tap</a> an attack row to choose the matching <t>attack mode</t>.\n<n>Default placement: lower-left corner.</n>");
     }
     {
         SDL_FRect qa_rects[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
@@ -1003,45 +1684,43 @@ void sdl_touch_tutorial_draw_main_screen_zones(
             sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
                 "Quick access",
                 mouse
-                    ? "Click an icon for its command; right-click for its alternate.\nDefault placement: bottom center. Item descriptions open above this anchor. Edit buttons in Touch Settings."
-                    : "Tap an icon for its command; hold for its alternate.\nDefault placement: bottom center. Item descriptions open above this anchor. Edit buttons in Touch Settings.");
+                    ? "<a>Click</a> an icon for its command; <a>right-click</a> to edit it.\n<n>Default placement: bottom center.</n> Item descriptions open above this anchor. Edit buttons in <t>Touch Settings</t>."
+                    : "<a>Tap</a> an icon for its command; <a>hold</a> for its description. The square changes it; the cross closes the description.\n<n>Default placement: bottom center.</n> Item descriptions open above this anchor. Edit buttons in <t>Touch Settings</t>.");
         }
     }
-    if (sdl_status_pane_current_rect(&pane_rect, NULL)) {
-        rect = (SDL_FRect){ (float)pane_rect.x, (float)pane_rect.y,
-            (float)pane_rect.w, (float)pane_rect.h };
+    if (sdl_touch_tutorial_status_rect(&rect)) {
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Status overlay",
-            "Shows temporary conditions and remaining durations.\nDefault placement: lower-right corner.");
+            "Shows <t>temporary conditions</t> and remaining durations.\n<n>Default placement: lower-right corner.</n>");
     }
     if (sdl_touch_tutorial_view_rect(PANE_ROLLS, &rect)) {
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Roll log overlay",
             mouse
-                ? "Click: open combat history.\nDefault placement: upper-right, below the depth control."
-                : "Tap: open combat history.\nDefault placement: upper-right, below the depth control.");
+                ? "<a>Click:</a> open <t>combat history</t>.\n<n>Default placement: upper-right, below the depth control.</n>"
+                : "<a>Tap:</a> open <t>combat history</t>.\n<n>Default placement: upper-right, below the depth control.</n>");
     }
 
     if (sdl_touch_tutorial_view_rect(PANE_INVENTORY, &rect)) {
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Inventory pane",
             mouse
-                ? "Click: open inventory.\nUse for: inspecting, using, dropping, or managing carried items without going through the main menu."
-                : "Tap: open inventory.\nUse for: inspecting, using, dropping, or managing carried items without going through the main menu.");
+                ? "<a>Click:</a> open <t>inventory</t>.\n<n>Use for:</n> inspecting, using, dropping, or managing carried items without going through the main menu."
+                : "<a>Tap:</a> open <t>inventory</t>.\n<n>Use for:</n> inspecting, using, dropping, or managing carried items without going through the main menu.");
     }
     if (sdl_touch_tutorial_view_rect(PANE_WORN, &rect)) {
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Equipment pane",
             mouse
-                ? "Click: open equipment.\nUse for: inspecting worn gear, comparing equipment, taking items off, and checking current loadout."
-                : "Tap: open equipment.\nUse for: inspecting worn gear, comparing equipment, taking items off, and checking current loadout.");
+                ? "<a>Click:</a> open <t>equipment</t>.\n<n>Use for:</n> inspecting worn gear, comparing equipment, taking items off, and checking current loadout."
+                : "<a>Tap:</a> open <t>equipment</t>.\n<n>Use for:</n> inspecting worn gear, comparing equipment, taking items off, and checking current loadout.");
     }
     if (sdl_touch_tutorial_view_rect(PANE_LOG, &rect)) {
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Messages pane",
             mouse
-                ? "Click: review recent log entries.\nUse after: combat rounds, warnings, sounds, prompts, or long automatic actions."
-                : "Tap: review recent log entries.\nUse after: combat rounds, warnings, sounds, prompts, or long automatic actions.");
+                ? "<a>Click:</a> review recent log entries.\n<n>Use after:</n> combat rounds, warnings, sounds, prompts, or long automatic actions."
+                : "<a>Tap:</a> review recent log entries.\n<n>Use after:</n> combat rounds, warnings, sounds, prompts, or long automatic actions.");
     }
     for (int i = 0; i < callout_count; i++)
         sdl_touch_tutorial_draw_zone_highlight(&callouts[i].zone);
@@ -1054,30 +1733,46 @@ void sdl_touch_tutorial_draw_main_screen_zones(
 void sdl_touch_tutorial_draw_zones_page(const SDL_Rect* screen,
     int page, int page_count, bool mouse)
 {
-    bool compact = sdl_touch_tutorial_compact_layout(screen);
+    bool mobile_sections = !mouse && sdl_touch_only_mobile_device_active();
     float header_bottom;
+    cptr title;
+    cptr body;
+
+    if (mobile_sections && page == 0) {
+        title = "Touch: Dungeon & Menus";
+        body = "<a>Tap</a> the highlighted play areas. Use the map to move or target; <a>hold</a> for contextual actions.";
+    } else if (mobile_sections) {
+        title = "Touch: Quick Controls & Status";
+        body = "<a>Tap</a> overlays for fast commands and views. <a>Hold</a> quick-access buttons to edit them.";
+    } else {
+        title = mouse ? "Main Screen Mouse Controls" : "Default Touch Layout";
+        body = mouse
+            ? "<a>Click</a> highlighted regions to open views and menus. <a>Left-click</a> the <t>map</t> to move; <a>right-click</a> for actions."
+            : "<a>Tap</a> highlighted regions to open views. The fixed overlays use the placements shown here.";
+    }
 
     sdl_touch_tutorial_draw_screen_dim(screen, 112);
-    header_bottom = sdl_touch_tutorial_draw_header(screen,
-        mouse ? "Main Screen Mouse Controls" : "Default Touch Layout",
-        mouse
-            ? (compact
-                ? "Click highlighted regions to open views and menus. Left-click the map to move; right-click for actions."
-                : "Click highlighted regions to open views and menus. Left-click the map to move; right-click for actions. Mouse Movement can be changed any time in Options > Input Options > Mouse Input.")
-            : (compact
-                ? "Tap highlighted regions to open views. The fixed overlays use the placements shown here."
-                : "Tap highlighted regions to open views. Combat is lower left, quick access bottom center, status lower right, and depth/rolls upper right."),
+    header_bottom = sdl_touch_tutorial_header_bottom(screen, title, body,
         page, page_count);
 
-    if (compact)
-        sdl_touch_tutorial_draw_main_screen_zones_compact(screen,
-            header_bottom, mouse);
-    else
-        sdl_touch_tutorial_draw_main_screen_zones(screen, mouse,
-            header_bottom + sdl_touch_pane_clampf((float)screen->h * 0.018f,
-                10.0f, 20.0f));
+    /*
+     * Keep explanations in one measured legend instead of painting up to
+     * eight large prompt boxes over one another on roomy desktop layouts.
+     * The compact target badges still identify every live rectangle.
+     */
+    sdl_touch_tutorial_draw_main_screen_zones_compact(screen,
+        header_bottom, mouse, mobile_sections ? page : -1);
+
+    /* Target highlights may extend through the header area; paint it last. */
+    (void)sdl_touch_tutorial_draw_header(screen, title, body,
+        page, page_count);
 
     sdl_touch_tutorial_draw_footer(screen, mouse, page_count == 1);
+}
+
+static int sdl_touch_tutorial_zone_page_count(bool mouse)
+{
+    return (!mouse && sdl_touch_only_mobile_device_active()) ? 2 : 1;
 }
 
 void sdl_touch_tutorial_draw_overlay_menu(const SDL_Rect* screen)
@@ -1101,12 +1796,14 @@ void sdl_touch_tutorial_draw_pane_page(const SDL_Rect* screen, int page,
     SDL_Color text = g_state.palette[TERM_YELLOW];
     SDL_Color border = g_state.palette[TERM_L_WHITE];
     bool have_pane = false;
+    float header_bottom;
+    cptr header_title = "Preset: Touch pane + touch screen";
+    cptr header_body =
+        "Visible command pad. <a>Tap</a> buttons for actions; <a>hold</a> for alternates. Change presets any time in <t>Touch Settings</t>.";
 
     sdl_touch_tutorial_draw_screen_dim(screen, 128);
-    sdl_touch_tutorial_draw_header(screen,
-        "Preset: Touch pane + touch screen",
-        "Visible command pad. Tap buttons for actions; hold for alternates. Change presets any time in Touch Settings.",
-        page, page_count);
+    header_bottom = sdl_touch_tutorial_header_bottom(screen, header_title,
+        header_body, page, page_count);
 
     have_pane = sdl_touch_pane_current_rect(&pane)
         && sdl_touch_pane_compute_layout(&pane, slot_rects);
@@ -1161,7 +1858,7 @@ void sdl_touch_tutorial_draw_pane_page(const SDL_Rect* screen, int page,
             float margin = sdl_touch_pane_clampf((float)screen->w * 0.025f,
                 18.0f, 36.0f);
             cptr body =
-                "Tap: use the command printed on the button. Tap 2nd Panel to swap panes, then tap it again to return.\nSecond panel: Esc -> Ctrl, Stealth -> Exchange, Inv -> Equip, Supply -> Fletch, View -> Map, Sing -> Smith, Char -> Ability, Desc -> Quaff.\nChar opens character details. Supply opens supplies. Shoot fires with the f key.\nConfirm (pick): confirms prompts, picks up, enters, or waits depending on context.\nDirection buttons: step in one of eight directions; long-touch movement uses the active profile's alternate movement behavior.\nPresets: change this layout any time in Options > Input Options > Touch Settings.";
+                "<a>Tap:</a> use the command printed on the button. <a>Tap</a> <t>2nd Panel</t> to swap panes, then <a>tap</a> it again to return.\n<t>Second panel adds:</t> <y>interaction</y>, <y>Exchange</y>, <y>Equip</y>, <y>Fletch</y>, <y>Map</y>, <y>Smith</y>, <y>Ability</y>, and <y>Quaff</y>.\n<t>Char</t> opens character details. <t>Supply</t> opens supplies. <t>Shoot</t> fires your selected arrows.\n<t>Confirm (pick):</t> confirms prompts, picks up, enters, or waits depending on context.\n<t>Direction buttons:</t> step in one of eight directions; <a>long-touch</a> movement uses the active profile's <n>alternate movement</n> behavior.\n<n>Presets:</n> change this layout any time in Options > Input Options > <t>Touch Settings</t>.";
 
             if (pane.x < screen->x + screen->w / 2) {
                 panel_x = (float)(pane.x + pane.w) + margin;
@@ -1176,43 +1873,44 @@ void sdl_touch_tutorial_draw_pane_page(const SDL_Rect* screen, int page,
             }
 
             sdl_touch_tutorial_draw_info_panel(screen, panel_x,
-                (float)screen->y + (float)screen->h * 0.28f, panel_w,
+                MAX((float)screen->y + (float)screen->h * 0.28f,
+                    header_bottom + 12.0f), panel_w,
                 "Touch pane buttons", body);
         }
     } else {
-        SDL_Color body = g_state.palette[TERM_L_WHITE];
         float max_w = (float)screen->w * 0.70f;
         float x = (float)screen->x + (float)screen->w * 0.15f;
-        float y = (float)screen->y + (float)screen->h * 0.38f;
-        int font_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.038f,
-            22.0f, 32.0f);
+        float y = MAX((float)screen->y + (float)screen->h * 0.38f,
+            header_bottom + 12.0f);
 
-        (void)sdl_touch_tutorial_draw_wrapped(
-            "The touch pane is currently hidden or disabled. Choose the Touch pane + touch screen profile to show it by default.",
-            x, y, max_w, font_px, body);
+        sdl_touch_tutorial_draw_info_panel(screen, x, y, max_w,
+            "Touch pane unavailable",
+            "The <t>touch pane</t> is currently <n>hidden or disabled</n>. Choose the <t>Touch pane + touch screen</t> profile to show it by default.");
     }
 
+    (void)sdl_touch_tutorial_draw_header(screen, header_title, header_body,
+        page, page_count);
     sdl_touch_tutorial_draw_footer(screen, false, page_count == 1);
 }
 
 void sdl_touch_tutorial_draw_movement_page(const SDL_Rect* screen,
     int page, int page_count)
 {
-    SDL_Color text = g_state.palette[TERM_L_WHITE];
     SDL_Color zone_text = g_state.palette[TERM_YELLOW];
     SDL_Color border = g_state.palette[TERM_L_WHITE];
     SDL_FRect zone_rects[TOUCH_ZONE_COUNT];
     float x;
     float y;
     float max_w;
-    int font_px;
+    float header_bottom;
+    cptr header_title = "Preset: Corners + quick access";
+    cptr header_body =
+        "Pane hidden. <t>Side corner zones</t> handle movement and fast commands. Change presets any time in <t>Touch Settings</t>.";
 
     sdl_touch_tutorial_draw_screen_dim(screen, 142);
     sdl_touch_tutorial_draw_overlay_menu(screen);
-    sdl_touch_tutorial_draw_header(screen,
-        "Preset: Corners + quick access",
-        "Pane hidden. Side corner zones handle movement and fast commands. Change presets any time in Touch Settings.",
-        page, page_count);
+    header_bottom = sdl_touch_tutorial_header_bottom(screen, header_title,
+        header_body, page, page_count);
 
     if (sdl_touch_zone_compute_layout_for_screen(screen, zone_rects)) {
         for (int i = 0; i < TOUCH_ZONE_COUNT; i++) {
@@ -1232,21 +1930,23 @@ void sdl_touch_tutorial_draw_movement_page(const SDL_Rect* screen,
         }
         sdl_touch_tutorial_draw_info_panel(screen,
             (float)screen->x + (float)screen->w * 0.27f,
-            (float)screen->y + (float)screen->h * 0.56f,
+            MAX((float)screen->y + (float)screen->h * 0.56f,
+                header_bottom + 12.0f),
             (float)screen->w * 0.46f, "Corners preset",
-            "Tap arrows: step in the shown direction.\nThe top and bottom non-arrow buttons use configurable commands.\nHold center blocks or command buttons for alternate bindings.\nSwipe edge: reveal or hide touch controls.\nChange preset and corner side in Touch Settings.");
+            "<a>Tap arrows:</a> step in the shown direction.\nThe top and bottom non-arrow buttons use <t>configurable commands</t>.\n<a>Hold</a> center blocks or command buttons for <n>alternate bindings</n>.\n<a>Swipe edge:</a> reveal or hide touch controls.\nChange <t>preset</t> and corner side in <t>Touch Settings</t>.");
     } else {
         x = (float)screen->x + (float)screen->w * 0.14f;
-        y = (float)screen->y + (float)screen->h * 0.34f;
+        y = MAX((float)screen->y + (float)screen->h * 0.34f,
+            header_bottom + 12.0f);
         max_w = (float)screen->w * 0.72f;
-        font_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.038f,
-            22.0f, 32.0f);
 
-        (void)sdl_touch_tutorial_draw_wrapped(
-            "Tap the side corner arrows to move. The non-arrow top and bottom buttons are configurable commands.",
-            x, y, max_w, font_px, text);
+        sdl_touch_tutorial_draw_info_panel(screen, x, y, max_w,
+            "Corners preset unavailable",
+            "<a>Tap</a> the <t>side corner arrows</t> to move. The non-arrow top and bottom buttons are <t>configurable commands</t>.");
     }
 
+    (void)sdl_touch_tutorial_draw_header(screen, header_title, header_body,
+        page, page_count);
     sdl_touch_tutorial_draw_footer(screen, false, page_count == 1);
 }
 
@@ -1265,20 +1965,21 @@ void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
     float panel_w;
     float panel_y;
     bool have_wheel;
+    cptr header_title = "Button Wheel + Quick Access";
+    cptr header_body =
+        "The <t>wheel</t> uses the open right-side lane between the upper and lower overlays. <t>Quick access</t> stays at <n>bottom center</n>.";
 
     sdl_touch_tutorial_draw_screen_dim(screen, 150);
     sdl_touch_tutorial_draw_overlay_menu(screen);
-    header_bottom = sdl_touch_tutorial_draw_header(screen,
-        "Button Wheel + Quick Access",
-        "The wheel uses the open right-side lane between the upper and lower overlays. Quick access stays at bottom center.",
-        page, page_count);
+    header_bottom = sdl_touch_tutorial_header_bottom(screen, header_title,
+        header_body, page, page_count);
 
     have_wheel = sdl_touch_round_compute_layout(&cx, &cy, &radius,
         &inner_radius, NULL);
     if (!have_wheel) {
         radius = sdl_touch_pane_clampf((float)screen->h * 0.115f,
             58.0f, 122.0f);
-        inner_radius = radius * 0.58f;
+        inner_radius = radius * 0.45f;
         cx = (float)screen->x + (float)screen->w * 0.78f;
         cy = header_bottom + radius + sdl_touch_pane_clampf(
             (float)screen->h * 0.12f, 52.0f, 84.0f);
@@ -1335,8 +2036,10 @@ void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
 
     sdl_touch_tutorial_draw_info_panel(screen,
         panel_x, panel_y, panel_w, "Button wheel controls",
-        "Outer arrows: tap a direction to step.\nInner wheel: press and drag toward a direction, then release.\nCenter: tap to repeat the last direction.\nSwipe edge: reveal or hide the touch pane.\nQuick access: tap a button for its command; hold it for the long-touch command.\nDescription cards open above the bottom-center quick-access overlay.");
+        "<t>Outer arrows:</t> <a>tap</a> a direction to step.\n<t>Inner wheel:</t> <a>press and drag</a> toward a direction, then release. Drag 1.3x the centre-to-arrow distance until <g>Run</g> appears to run on release.\n<t>Center:</t> <a>tap</a> to repeat the last direction.\n<a>Swipe edge:</a> reveal or hide the touch pane.\n<t>Quick access:</t> <a>tap</a> a button for its command; <a>hold</a> for its description. The square changes it; the cross closes the description.\n<t>Status changes:</t> the wheel re-centres and shrinks inside the open lane as the condition panel grows.\nDescription cards open above the bottom-center quick-access overlay.");
 
+    (void)sdl_touch_tutorial_draw_header(screen, header_title, header_body,
+        page, page_count);
     sdl_touch_tutorial_draw_footer(screen, false, page_count == 1);
 }
 
@@ -1468,6 +2171,7 @@ void sdl_touch_tutorial_draw_page(int page, bool full, int page_count,
     bool mouse)
 {
     SDL_Rect screen = sdl_get_layout_screen_rect();
+    int zone_page_count = sdl_touch_tutorial_zone_page_count(mouse);
     bool old_suppress_top_panel;
     bool rendered;
 
@@ -1481,20 +2185,13 @@ void sdl_touch_tutorial_draw_page(int page, bool full, int page_count,
     if (!rendered)
         return;
 
-    if (!full) {
-        sdl_touch_tutorial_draw_zones_page(&screen, 0, 1, mouse);
+    if (page < zone_page_count) {
+        sdl_touch_tutorial_draw_zones_page(&screen, page, page_count, mouse);
         return;
     }
 
-    switch (page) {
-    case 0:
-        sdl_touch_tutorial_draw_zones_page(&screen, page, page_count, false);
-        break;
-    case 1:
-    default:
+    if (full)
         sdl_touch_tutorial_draw_buttonwheel_page(&screen, page, page_count);
-        break;
-    }
 }
 
 void sdl_touch_tutorial_prepare_snapshot(void)
@@ -1519,7 +2216,8 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
 {
     sdl_view* d;
     int page = 0;
-    int page_count = full ? 2 : 1;
+    int page_count = sdl_touch_tutorial_zone_page_count(mouse)
+        + (full ? 1 : 0);
     bool done = false;
     Uint64 accept_after_ns;
 
@@ -1600,78 +2298,78 @@ typedef struct birth_coach_step {
 static const birth_coach_step birth_coach_sheet_steps[] = {
     { "Vitals", 0, 0, "Vitals",
         "Your live status at a glance.\n"
-        "Exp: spent / earned - the pool you spend on skills and abilities.\n"
-        "Burden: weight carried / the most you can bear before slowing.\n"
-        "Depth c/m: current depth / the shallowest you may climb back to.\n"
-        "Health and Voice: your hit points and song points.\n"
-        "Melee & Bows show (to-hit, damage); Armor shows [evasion, protection]." },
+        "<t>Exp:</t> spent / earned - the pool you spend on skills and abilities.\n"
+        "<t>Burden:</t> weight carried / the most you can bear before slowing.\n"
+        "<t>Depth c/m:</t> current depth / the shallowest you may climb back to.\n"
+        "<t>Health and Voice:</t> your hit points and song points.\n"
+        "<t>Melee & Bows</t> show <y>(to-hit, damage)</y>; <t>Armor</t> shows <y>[evasion, protection]</y>." },
     { "Combat", 0, 0, "Combat numbers",
         "Your offence and defence, pulled out on wide screens.\n"
-        "Melee / Bows: (to-hit bonus, damage dice).\n"
-        "Armor: [evasion, protection] - dodge first, then soak.\n"
+        "<t>Melee / Bows:</t> <y>(to-hit bonus, damage dice)</y>.\n"
+        "<t>Armor:</t> <y>[evasion, protection]</y> - dodge first, then soak.\n"
         "See the two Combat steps at the end for how these are used." },
     { "Traits", 0, 0, "Traits",
         "Innate strengths and flaws from your hero and house.\n"
-        "++ mastery and + affinity make a skill cheaper and stronger.\n"
-        "- and -- are penalties; UNIQUE marks a special power.\n"
-        "Curses such as Doom of Mandos are shown in umber.\n"
+        "<a>++ mastery</a> and <g>+ affinity</g> make a skill cheaper and stronger.\n"
+        "<r>- and --</r> are penalties; <v>UNIQUE</v> marks a special power.\n"
+        "<u>Curses</u> such as Doom of Mandos are shown in umber.\n"
         "Lean into your affinities and play around your curses." },
     { "Attributes", 0, 0, "Attributes",
-        "Str, Dex, Con, Gra - the roots every skill grows from.\n"
-        "Str: melee damage dice and carrying capacity.\n"
-        "Dex: feeds melee, evasion, archery and stealth.\n"
-        "Con: your hit points and resilience.\n"
-        "Gra: feeds will, perception, song, smithing and voice.\n"
-        "Read each as Current = Base +equip +misc -drain." },
+        "<t>Str, Dex, Con, Gra</t> - the roots every skill grows from.\n"
+        "<t>Str:</t> melee damage dice and carrying capacity.\n"
+        "<t>Dex:</t> feeds melee, evasion, archery and stealth.\n"
+        "<t>Con:</t> your hit points and resilience.\n"
+        "<t>Gra:</t> feeds will, perception, song, smithing and voice.\n"
+        "Read each as <y>Current = Base +equip +misc -drain</y>." },
     { "Skills", 0, 0, "Skills",
         "What you train by spending experience.\n"
-        "Total = Base +stat +equip +misc.\n"
-        "Melee / Archery: chance to hit.  Evasion: avoid being hit.\n"
-        "Stealth / Perception: stay unseen and notice things.\n"
-        "Will resists fear & magic; Smithing forges; Song sings powers.\n"
-        "Click a skill, or press i, to raise it." },
+        "<y>Total = Base +stat +equip +misc</y>.\n"
+        "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
+        "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
+        "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+        "<a>Click</a> a skill, or press <a>i</a>, to raise it." },
     { "Skills", 0, 0, "Combat: attack & evasion",
-        "Whether a blow lands is one opposed roll:\n"
-        "  you: 1d20 + Melee   vs   them: 1d20 + Evasion.\n"
+        "Whether a blow lands is one <y>opposed roll</y>:\n"
+        "  you: <y>1d20 + Melee</y>   vs   them: <y>1d20 + Evasion</y>.\n"
         "The higher total wins; a tie misses.\n"
-        "Evasion is active dodging, so it is reduced when you are\n"
-        "surrounded - fight in doorways and corridors to keep it.\n"
-        "Archery uses the same roll, your Archery vs their Evasion.\n"
-        "Beat their roll by a wide margin to land a critical hit,\n"
+        "<t>Evasion</t> is active dodging, so it is <n>reduced when you are\n"
+        "surrounded</n> - fight in doorways and corridors to keep it.\n"
+        "Archery uses the same roll, your <t>Archery</t> vs their <t>Evasion</t>.\n"
+        "Beat their roll by a wide margin to land a <r>critical hit</r>,\n"
         "which rolls extra damage dice." },
     { "Skills", 0, 0, "Combat: damage & armour",
         "Damage is rolled only after a hit connects:\n"
-        "  damage dice = weapon dice + Strength (capped by weapon weight).\n"
-        "A foe's armour is shown as [Evasion, Protection].\n"
-        "Protection rolls a value within that range each blow and is\n"
-        "subtracted from your damage - only the excess wounds them.\n"
+        "  <y>damage dice = weapon dice + Strength</y> (capped by weapon weight).\n"
+        "A foe's armour is shown as <y>[Evasion, Protection]</y>.\n"
+        "<t>Protection</t> rolls a value within that range each blow and is\n"
+        "subtracted from your damage - <n>only the excess wounds them</n>.\n"
         "So heavy armour can shrug off small hits entirely;\n"
-        "criticals (extra dice) are how you punch through it.\n"
-        "Your own Armor line works the same way against their attacks." },
+        "<r>criticals</r> (extra dice) are how you punch through it.\n"
+        "Your own <t>Armor</t> line works the same way against their attacks." },
 };
 
 static const birth_coach_step birth_coach_select_step = {
     NULL, 0, 8999, "Choose your hero",
-    "The screen shows description, traits and a power rating.\n"
-    "A higher power rating means an easier start - ideal when you are new.\n"
-    "Pick the hero whose strengths match the run you want."
+    "The screen shows description, traits and a <t>power rating</t>.\n"
+    "A higher <t>power rating</t> means an easier start - <n>ideal when you are new</n>.\n"
+    "<a>Pick</a> the hero whose strengths match the run you want."
 };
 
 static const birth_coach_step birth_coach_stats_step = {
     NULL, 0, 999, "Assign attributes",
-    "Spend your points across Str, Dex, Con and Gra.\n"
-    "Str: melee dice & capacity.  Dex: melee/evasion/archery/stealth.\n"
-    "Con: hit points.  Gra: will/perception/song/smithing & voice.\n"
-    "Cost = price of the next point; Points Left = your budget.\n"
+    "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
+    "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+    "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+    "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.\n"
     "Every point ripples into the skills shown alongside."
 };
 
 static const birth_coach_step birth_coach_skills_step = {
     NULL, 0, 999, "Buy skills",
-    "Spend experience on the eight skills.\n"
-    "Total = Base +stat +equip +misc.\n"
-    "Base also sets how dear abilities are to buy later.\n"
-    "Cost climbs the higher the skill; Points Left = your experience."
+    "Spend experience on the <t>eight skills</t>.\n"
+    "<y>Total = Base +stat +equip +misc</y>.\n"
+    "<n>Base also sets how dear abilities are to buy later.</n>\n"
+    "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience."
 };
 
 static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
@@ -1692,11 +2390,11 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
         if (sdl_touch_only_device_active())
         {
             SDL_strlcpy(buf,
-                "Swipe or tap the side arrows to browse heroes.\n"
-                "Tap the hero name or Choose to confirm; Back returns to peoples.\n"
-                "The screen shows description, traits and a power rating.\n"
-                "A higher power rating means an easier start - ideal when you are new.\n"
-                "Pick the hero whose strengths match the run you want.",
+                "<a>Swipe</a> or <a>tap</a> the side arrows to browse heroes.\n"
+                "<a>Tap</a> the hero name or <a>Choose</a> to confirm; <a>Back</a> returns to peoples.\n"
+                "The screen shows description, traits and a <t>power rating</t>.\n"
+                "A higher <t>power rating</t> means an easier start - <n>ideal when you are new</n>.\n"
+                "<a>Pick</a> the hero whose strengths match the run you want.",
                 buflen);
         }
         else if (steamdeck_controls_active())
@@ -1706,22 +2404,22 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
             sdl_touch_tutorial_prompt_label(steamdeck_back_key(), "B",
                 back_label, sizeof(back_label));
             strnfmt(buf, buflen,
-                "D-pad/left stick Up/Down moves the highlight.\n"
-                "Right or %s confirms; Left or %s returns to peoples.\n"
-                "The screen shows description, traits and a power rating.\n"
-                "A higher power rating means an easier start - ideal when you are new.\n"
-                "Pick the hero whose strengths match the run you want.",
+                "<a>D-pad/left stick Up/Down</a> moves the highlight.\n"
+                "Right or <a>%s</a> confirms; Left or <a>%s</a> returns to peoples.\n"
+                "The screen shows description, traits and a <t>power rating</t>.\n"
+                "A higher <t>power rating</t> means an easier start - <n>ideal when you are new</n>.\n"
+                "<a>Pick</a> the hero whose strengths match the run you want.",
                 confirm_label, back_label);
         }
         else
         {
             SDL_strlcpy(buf,
-                "Use Up/Down to move the highlight, or click a hero to highlight it.\n"
-                "Enter confirms; Esc returns to peoples.\n"
-                "Click the highlighted hero again to confirm.\n"
-                "The screen shows description, traits and a power rating.\n"
-                "A higher power rating means an easier start - ideal when you are new.\n"
-                "Pick the hero whose strengths match the run you want.",
+                "Use <a>Up/Down</a> to move the highlight, or <a>click</a> a hero to highlight it.\n"
+                "<a>Enter</a> confirms; <a>Esc</a> returns to peoples.\n"
+                "<a>Click</a> the highlighted hero again to confirm.\n"
+                "The screen shows description, traits and a <t>power rating</t>.\n"
+                "A higher <t>power rating</t> means an easier start - <n>ideal when you are new</n>.\n"
+                "<a>Pick</a> the hero whose strengths match the run you want.",
                 buflen);
         }
         return buf;
@@ -1732,12 +2430,12 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
         if (sdl_touch_only_device_active())
         {
             SDL_strlcpy(buf,
-                "Spend your points across Str, Dex, Con and Gra.\n"
-                "Tap a stat to select it; tap it again to raise it.\n"
-                "Long-tap a stat to lower it. Confirm accepts; Back returns to heroes.\n"
-                "Str: melee dice & capacity.  Dex: melee/evasion/archery/stealth.\n"
-                "Con: hit points.  Gra: will/perception/song/smithing & voice.\n"
-                "Cost = price of the next point; Points Left = your budget.",
+                "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
+                "<a>Tap</a> a stat to select it; <a>tap it again</a> to raise it.\n"
+                "<a>Long-tap</a> a stat to lower it. <a>Confirm</a> accepts; <a>Back</a> returns to heroes.\n"
+                "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+                "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+                "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 buflen);
         }
         else if (steamdeck_controls_active())
@@ -1747,24 +2445,24 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
             sdl_touch_tutorial_prompt_label(steamdeck_back_key(), "B",
                 back_label, sizeof(back_label));
             strnfmt(buf, buflen,
-                "Spend your points across Str, Dex, Con and Gra.\n"
-                "D-pad Up/Down picks a stat; Left/Right lowers or raises it.\n"
-                "%s accepts; %s returns to heroes.\n"
-                "Str: melee dice & capacity.  Dex: melee/evasion/archery/stealth.\n"
-                "Con: hit points.  Gra: will/perception/song/smithing & voice.\n"
-                "Cost = price of the next point; Points Left = your budget.",
+                "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
+                "<a>D-pad Up/Down</a> picks a stat; <a>Left/Right</a> lowers or raises it.\n"
+                "<a>%s</a> accepts; <a>%s</a> returns to heroes.\n"
+                "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+                "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+                "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 confirm_label, back_label);
         }
         else
         {
             SDL_strlcpy(buf,
-                "Spend your points across Str, Dex, Con and Gra.\n"
-                "Up/Down picks a stat; Left/Right lowers or raises it.\n"
-                "Enter accepts; Esc returns to heroes.\n"
-                "Click a stat to select it; click again to raise; right-click lowers.\n"
-                "Str: melee dice & capacity.  Dex: melee/evasion/archery/stealth.\n"
-                "Con: hit points.  Gra: will/perception/song/smithing & voice.\n"
-                "Cost = price of the next point; Points Left = your budget.",
+                "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
+                "<a>Up/Down</a> picks a stat; <a>Left/Right</a> lowers or raises it.\n"
+                "<a>Enter</a> accepts; <a>Esc</a> returns to heroes.\n"
+                "<a>Click</a> a stat to select it; <a>click again</a> to raise; <a>right-click</a> lowers.\n"
+                "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+                "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+                "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 buflen);
         }
         return buf;
@@ -1775,12 +2473,12 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
         if (sdl_touch_only_device_active())
         {
             SDL_strlcpy(buf,
-                "Spend experience on the eight skills.\n"
-                "Tap a skill to select it; tap it again to raise it.\n"
-                "Long-tap a skill to lower it. Confirm accepts; Back returns to attributes.\n"
-                "Total = Base +stat +equip +misc.\n"
-                "Base also sets how dear abilities are to buy later.\n"
-                "Cost climbs the higher the skill; Points Left = your experience.",
+                "Spend experience on the <t>eight skills</t>.\n"
+                "<a>Tap</a> a skill to select it; <a>tap it again</a> to raise it.\n"
+                "<a>Long-tap</a> a skill to lower it. <a>Confirm</a> accepts; <a>Back</a> returns to attributes.\n"
+                "<y>Total = Base +stat +equip +misc</y>.\n"
+                "<n>Base also sets how dear abilities are to buy later.</n>\n"
+                "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience.",
                 buflen);
         }
         else if (steamdeck_controls_active())
@@ -1790,24 +2488,24 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
             sdl_touch_tutorial_prompt_label(steamdeck_back_key(), "B",
                 back_label, sizeof(back_label));
             strnfmt(buf, buflen,
-                "Spend experience on the eight skills.\n"
-                "D-pad Up/Down picks a skill; Left/Right lowers or raises it.\n"
-                "%s accepts; %s returns to attributes.\n"
-                "Total = Base +stat +equip +misc.\n"
-                "Base also sets how dear abilities are to buy later.\n"
-                "Cost climbs the higher the skill; Points Left = your experience.",
+                "Spend experience on the <t>eight skills</t>.\n"
+                "<a>D-pad Up/Down</a> picks a skill; <a>Left/Right</a> lowers or raises it.\n"
+                "<a>%s</a> accepts; <a>%s</a> returns to attributes.\n"
+                "<y>Total = Base +stat +equip +misc</y>.\n"
+                "<n>Base also sets how dear abilities are to buy later.</n>\n"
+                "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience.",
                 confirm_label, back_label);
         }
         else
         {
             SDL_strlcpy(buf,
-                "Spend experience on the eight skills.\n"
-                "Up/Down picks a skill; Left/Right lowers or raises it.\n"
-                "Enter accepts; Esc returns to attributes.\n"
-                "Click a skill to select it; click again to raise; right-click lowers.\n"
-                "Total = Base +stat +equip +misc.\n"
-                "Base also sets how dear abilities are to buy later.\n"
-                "Cost climbs the higher the skill; Points Left = your experience.",
+                "Spend experience on the <t>eight skills</t>.\n"
+                "<a>Up/Down</a> picks a skill; <a>Left/Right</a> lowers or raises it.\n"
+                "<a>Enter</a> accepts; <a>Esc</a> returns to attributes.\n"
+                "<a>Click</a> a skill to select it; <a>click again</a> to raise; <a>right-click</a> lowers.\n"
+                "<y>Total = Base +stat +equip +misc</y>.\n"
+                "<n>Base also sets how dear abilities are to buy later.</n>\n"
+                "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience.",
                 buflen);
         }
         return buf;
@@ -1820,11 +2518,11 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
         {
             SDL_strlcpy(buf,
                 "What you train by spending experience.\n"
-                "Total = Base +stat +equip +misc.\n"
-                "Melee / Archery: chance to hit.  Evasion: avoid being hit.\n"
-                "Stealth / Perception: stay unseen and notice things.\n"
-                "Will resists fear & magic; Smithing forges; Song sings powers.\n"
-                "Tap a skill once to focus it, then tap again or tap Increase to raise it.",
+                "<y>Total = Base +stat +equip +misc</y>.\n"
+                "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
+                "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
+                "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+                "<a>Tap</a> a skill once to focus it, then <a>tap again</a> or <a>tap Increase</a> to raise it.",
                 buflen);
         }
         else if (steamdeck_controls_active())
@@ -1833,22 +2531,22 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 confirm_label, sizeof(confirm_label));
             strnfmt(buf, buflen,
                 "What you train by spending experience.\n"
-                "Total = Base +stat +equip +misc.\n"
-                "Melee / Archery: chance to hit.  Evasion: avoid being hit.\n"
-                "Stealth / Perception: stay unseen and notice things.\n"
-                "Will resists fear & magic; Smithing forges; Song sings powers.\n"
-                "D-pad or left stick moves focus; %s raises the focused skill.",
+                "<y>Total = Base +stat +equip +misc</y>.\n"
+                "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
+                "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
+                "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+                "<a>D-pad or left stick</a> moves focus; <a>%s</a> raises the focused skill.",
                 confirm_label);
         }
         else
         {
             SDL_strlcpy(buf,
                 "What you train by spending experience.\n"
-                "Total = Base +stat +equip +misc.\n"
-                "Melee / Archery: chance to hit.  Evasion: avoid being hit.\n"
-                "Stealth / Perception: stay unseen and notice things.\n"
-                "Will resists fear & magic; Smithing forges; Song sings powers.\n"
-                "Click a skill twice, or press i/Space, to raise skills.",
+                "<y>Total = Base +stat +equip +misc</y>.\n"
+                "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
+                "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
+                "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+                "<a>Click</a> a skill twice, or press <a>i/Space</a>, to raise skills.",
                 buflen);
         }
         return buf;
@@ -1961,13 +2659,13 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
 {
     SDL_Color title_color = g_state.palette[TERM_YELLOW];
     SDL_Color text_color = g_state.palette[TERM_L_WHITE];
-    char lines[48][SDL_TOUCH_TUTORIAL_LINE_LEN];
     SDL_FRect box;
     SDL_FRect shadow;
-    TTF_Font* font = NULL;
     float pad = sdl_touch_pane_clampf((float)screen->h * 0.017f, 12.0f, 22.0f);
     float footer_top = (float)(screen->y + screen->h)
-        - sdl_touch_pane_clampf((float)screen->h * 0.090f, 54.0f, 78.0f) - pad;
+        - sdl_touch_tutorial_footer_height(screen) - pad;
+    float max_box_w;
+    float natural_box_w;
     float box_w;
     float text_w;
     float box_h = 0.0f;
@@ -1975,19 +2673,29 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     float title_h;
     float avail_h;
     float y;
-    int title_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.050f,
+    int title_px = sdl_touch_tutorial_text_px((float)screen->h * 0.050f,
         28.0f, 44.0f);
-    int detail_px = (int)sdl_touch_pane_clampf((float)screen->h * 0.038f,
+    int detail_px = sdl_touch_tutorial_text_px((float)screen->h * 0.038f,
         22.0f, 36.0f);
     int n = 0;
+
+    max_box_w = (float)screen->w - pad * 2.0f;
+    if (max_box_w <= 40.0f)
+        return;
 
     box_w = (float)screen->w * 0.64f;
     if (box_w > 1160.0f)
         box_w = 1160.0f;
-    if (box_w > (float)screen->w - pad * 2.0f)
-        box_w = (float)screen->w - pad * 2.0f;
     if (box_w < 340.0f)
-        box_w = (float)screen->w - pad * 2.0f;
+        box_w = 340.0f;
+
+    natural_box_w = sdl_touch_tutorial_callout_width_for_text(title,
+        title_px, body, detail_px, pad);
+    if (natural_box_w > box_w)
+        box_w = natural_box_w;
+    if (box_w > max_box_w)
+        box_w = max_box_w;
+
     text_w = box_w - pad * 2.0f;
     if (text_w < 40.0f)
         return;
@@ -1997,19 +2705,38 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
         avail_h = (float)screen->h * 0.82f;
 
     /* Shrink the body font until the wrapped text fits the vertical budget. */
-    for (;;) {
-        font = sdl_story_font_for_height(detail_px);
-        n = sdl_touch_tutorial_wrap_lines(body, font, text_w, lines,
-            (int)N_ELEMENTS(lines));
-        line_h = (float)detail_px * 1.30f;
-        title_h = (float)title_px * 1.25f;
-        box_h = pad * 2.0f + title_h + 6.0f + (float)n * line_h;
-        if (box_h <= avail_h || detail_px <= 18)
-            break;
-        detail_px--;
-        if (title_px > detail_px + 8)
-            title_px--;
+    {
+        int initial_title_px = title_px;
+        int title_gap = MAX(initial_title_px - detail_px, 8);
+        int low_px = 18;
+        int high_px = MAX(detail_px, 18);
+        int chosen_px = 18;
+
+        while (low_px <= high_px) {
+            int candidate_px = low_px + (high_px - low_px) / 2;
+            int candidate_title_px = MIN(initial_title_px,
+                candidate_px + title_gap);
+            int candidate_lines = sdl_touch_tutorial_rich_line_count(body,
+                candidate_px, text_w);
+            float candidate_line_h = (float)candidate_px * 1.30f;
+            float candidate_title_h = (float)candidate_title_px * 1.25f;
+            float candidate_h = pad * 2.0f + candidate_title_h + 6.0f
+                + (float)candidate_lines * candidate_line_h;
+
+            if (candidate_h <= avail_h) {
+                chosen_px = candidate_px;
+                low_px = candidate_px + 1;
+            } else {
+                high_px = candidate_px - 1;
+            }
+        }
+        detail_px = chosen_px;
+        title_px = MIN(initial_title_px, detail_px + title_gap);
     }
+    n = sdl_touch_tutorial_rich_line_count(body, detail_px, text_w);
+    line_h = (float)detail_px * 1.30f;
+    title_h = (float)title_px * 1.25f;
+    box_h = pad * 2.0f + title_h + 6.0f + (float)n * line_h;
 
     /* Place beside the block: below it if there is room, else above, else at the
      * top of the free area; centred when no block is supplied. */
@@ -2034,9 +2761,11 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     shadow.y += 3.0f;
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 170);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_SHADOW_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &shadow);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 230);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &box);
     SDL_SetRenderDrawColor(g_state.renderer, title_color.r, title_color.g,
         title_color.b, 242);
@@ -2046,11 +2775,8 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     (void)sdl_touch_tutorial_draw_text_line(title, box.x + box.w * 0.5f, y,
         text_w, title_px, title_color, true);
     y += title_h + 6.0f;
-    for (int i = 0; i < n; i++) {
-        (void)sdl_touch_tutorial_draw_text_line(lines[i], box.x + pad, y,
-            text_w, detail_px, text_color, false);
-        y += line_h;
-    }
+    (void)sdl_touch_tutorial_draw_rich(body, box.x + pad, y, text_w,
+        detail_px, text_color);
 }
 
 /* Draw one step: dim the screen, frame the target block, and pin a detailed
@@ -2210,22 +2936,22 @@ const sdl_touch_tutorial_choice sdl_touch_tutorial_choices[] = {
     {
         SDL_TOUCH_PROFILE_TOUCH_PANE,
         "Touch pane + touch screen",
-        "Visible command pad with movement and common actions on screen. Best for phones and first touch games."
+        "<t>Visible command pad</t> with movement and common actions on screen. <n>Best for phones and first touch games.</n>"
     },
     {
         SDL_TOUCH_PROFILE_CORNERS,
         "Corners + quick access",
-        "Side corner movement zones and a short quick-access command pane. Best when you want more map space."
+        "<t>Side corner movement zones</t> and a short quick-access command pane. <n>Best when you want more map space.</n>"
     },
     {
         SDL_TOUCH_PROFILE_ROUND_WHEEL,
         "Button wheel + quick access",
-        "Outer movement buttons with an inner drag wheel and a longer quick-access command pane. Best for one-thumb movement once you know the layout."
+        "Outer movement buttons with an <t>inner drag wheel</t> and a longer quick-access command pane. <n>Best for one-thumb movement once you know the layout.</n>"
     },
     {
         SDL_TOUCH_TUTORIAL_CHOICE_REPLAY,
         "Start tutorial again",
-        "Replay the touch tutorial before choosing a preset."
+        "<a>Replay</a> the touch tutorial before choosing a preset."
     },
 };
 
@@ -2331,20 +3057,22 @@ void sdl_touch_tutorial_draw_choice_card(const SDL_FRect* rect,
         return;
 
     pad = sdl_touch_pane_clampf(rect->h * 0.13f, 8.0f, 17.0f);
-    title_px = (int)sdl_touch_pane_clampf(rect->h * 0.205f, 17.0f, 28.0f);
-    body_px = (int)sdl_touch_pane_clampf(rect->h * 0.148f, 13.0f, 21.0f);
+    title_px = sdl_touch_tutorial_text_px(rect->h * 0.205f, 17.0f, 28.0f);
+    body_px = sdl_touch_tutorial_text_px(rect->h * 0.148f, 13.0f, 21.0f);
 
     shadow = *rect;
     shadow.x += 3.0f;
     shadow.y += 3.0f;
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 150);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_PANEL_SHADOW_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &shadow);
     if (highlighted)
-        SDL_SetRenderDrawColor(g_state.renderer, 24, 84, 138, 218);
+        SDL_SetRenderDrawColor(g_state.renderer, 24, 84, 138, 236);
     else
-        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 222);
+        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+            SDL_TOUCH_TUTORIAL_PANEL_ALPHA);
     SDL_RenderFillRect(g_state.renderer, rect);
     SDL_SetRenderDrawColor(g_state.renderer, border_color.r, border_color.g,
         border_color.b, 238);
@@ -2366,7 +3094,7 @@ void sdl_touch_tutorial_draw_choice_card(const SDL_FRect* rect,
             + (float)body_px * 1.55f)
     {
         y += (float)title_px * 1.35f;
-        (void)sdl_touch_tutorial_draw_wrapped(choice->body, text_x, y,
+        (void)sdl_touch_tutorial_draw_rich(choice->body, text_x, y,
             text_w, body_px, body_color);
     }
 }
@@ -2375,16 +3103,11 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
     SDL_FRect choice_rects[SDL_TOUCH_TUTORIAL_CHOICE_COUNT])
 {
     SDL_Rect screen = sdl_get_layout_screen_rect();
-    SDL_Color title_color = g_state.palette[TERM_YELLOW];
     SDL_Color text_color = g_state.palette[TERM_L_WHITE];
     sdl_view* d = sdl_view_from_term(Term);
     bool old_suppress_top_panel;
     bool rendered;
-    float x;
     float y;
-    float max_w;
-    int title_px;
-    int body_px;
     int footer_px;
     int current_index;
 
@@ -2399,22 +3122,8 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         return false;
 
     sdl_touch_tutorial_draw_screen_dim(&screen, 172);
-    x = (float)screen.x + (float)screen.w * 0.5f;
-    y = sdl_touch_tutorial_default_header_y(&screen);
-    max_w = (float)screen.w * 0.86f;
-    title_px = (int)sdl_touch_pane_clampf((float)screen.h * 0.050f,
-        28.0f, 46.0f);
-    body_px = (int)sdl_touch_pane_clampf((float)screen.h * 0.030f,
-        18.0f, 28.0f);
-    footer_px = (int)sdl_touch_pane_clampf((float)screen.h * 0.028f,
+    footer_px = sdl_touch_tutorial_text_px((float)screen.h * 0.028f,
         16.0f, 24.0f);
-
-    y += sdl_touch_tutorial_draw_text_line("Choose Touch Preset", x, y,
-        max_w, title_px, title_color, true);
-    y += 5.0f;
-    (void)sdl_touch_tutorial_draw_wrapped_centered(
-        "Pick the control layout to use now, or replay the tutorial before choosing.",
-        x, y, max_w, body_px, text_color);
 
     sdl_touch_tutorial_choice_layout(&screen, choice_rects);
     current_index = sdl_touch_tutorial_current_choice_index();
@@ -2424,10 +3133,15 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
             current_index == i);
     }
 
+    (void)sdl_touch_tutorial_draw_header(&screen, "Choose Touch Preset",
+        "Pick the <t>control layout</t> to use now, or <a>replay the tutorial</a> before choosing.",
+        0, 0);
+
     y = (float)(screen.y + screen.h)
         - sdl_touch_pane_clampf((float)screen.h * 0.076f, 42.0f, 62.0f);
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 185);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_FOOTER_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &(SDL_FRect){
         .x = (float)screen.x,
         .y = y - 8.0f,
@@ -2435,8 +3149,11 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         .h = (float)(screen.y + screen.h) - y + 8.0f,
     });
     (void)sdl_touch_tutorial_draw_text_line(
-        "Tap/click a choice   Up/Down selects   Enter applies   Esc keeps current",
-        x, y, (float)screen.w * 0.92f, footer_px, text_color, true);
+        sdl_touch_tutorial_device_available()
+            ? "Tap a choice to apply it   Back keeps the current preset"
+            : "Click a choice   Up/Down selects   Enter applies   Esc keeps current",
+        (float)screen.x + (float)screen.w * 0.5f, y,
+        (float)screen.w * 0.92f, footer_px, text_color, true);
 
     SDL_RenderPresent(g_state.renderer);
     sdl_restore_render_target(d);
@@ -2792,11 +3509,11 @@ static cptr sdl_character_wheel_coach_body(int input, char* buf, size_t buflen)
     case SDL_WHEEL_COACH_INPUT_TOUCH:
         SDL_strlcpy(buf,
             "Everything you can do while standing on your square - wait, use an "
-            "item, ready your bow, sing, and more - lives on this wheel.\n"
-            "Open it: tap your own square on the map.\n"
-            "Choose: drag to a wedge and lift your finger to run that action.\n"
-            "Second action: a wedge's outer ring holds a related action.\n"
-            "Close: tap the centre, or tap outside the wheel.",
+            "item, ready your bow, sing, and more - lives on this <t>wheel</t>.\n"
+            "<t>Open it:</t> <a>tap</a> your own square on the <t>map</t>.\n"
+            "<t>Choose:</t> <a>drag</a> to a wedge and lift your finger to run that action.\n"
+            "<t>Second action:</t> a wedge's <t>outer ring</t> holds a related action.\n"
+            "<t>Close:</t> <a>tap</a> the centre, or <a>tap</a> outside the wheel.",
             buflen);
         return buf;
     case SDL_WHEEL_COACH_INPUT_CONTROLLER:
@@ -2806,22 +3523,22 @@ static cptr sdl_character_wheel_coach_body(int input, char* buf, size_t buflen)
             back_label, sizeof(back_label));
         strnfmt(buf, buflen,
             "Everything you can do while standing on your square - wait, use an "
-            "item, ready your bow, sing, and more - lives on this wheel.\n"
-            "Open it: press and hold %s while standing still.\n"
-            "Choose: D-pad Left/Right turns the ring; Up/Down reaches the outer "
+            "item, ready your bow, sing, and more - lives on this <t>wheel</t>.\n"
+            "<t>Open it:</t> <a>press and hold</a> <y>%s</y> while standing still.\n"
+            "<t>Choose:</t> <y>D-pad Left/Right</y> turns the ring; <y>Up/Down</y> reaches the outer "
             "ring of second actions.\n"
-            "Run it: press %s on the highlighted wedge.\n"
-            "Close: press %s or Start.",
+            "<t>Run it:</t> <a>press</a> <y>%s</y> on the highlighted wedge.\n"
+            "<t>Close:</t> <a>press</a> <y>%s</y> or <y>Start</y>.",
             confirm_label, confirm_label, back_label);
         return buf;
     default:
         SDL_strlcpy(buf,
             "Everything you can do while standing on your square - wait, use an "
-            "item, ready your bow, sing, and more - lives on this wheel.\n"
-            "Open it: right-click your own square on the map.\n"
-            "Choose: move the cursor to a wedge and left-click to run that action.\n"
-            "Second action: a wedge's outer ring holds a related action.\n"
-            "Close: right-click again, or press Esc.",
+            "item, ready your bow, sing, and more - lives on this <t>wheel</t>.\n"
+            "<t>Open it:</t> <a>right-click</a> your own square on the <t>map</t>.\n"
+            "<t>Choose:</t> move the cursor to a wedge and <a>left-click</a> to run that action.\n"
+            "<t>Second action:</t> a wedge's <t>outer ring</t> holds a related action.\n"
+            "<t>Close:</t> <a>right-click</a> again, or <a>press</a> <y>Esc</y>.",
             buflen);
         return buf;
     }
@@ -2965,11 +3682,11 @@ bool sdl_zones_settings_tutorial_requested(void)
 }
 
 /* The zones overview ("Default Touch Layout" / "Main Screen Mouse Controls")
- * shown as a single page, on demand from Input Options.  Mouse language is used
- * off mobile, tap language on mobile. */
+ * shown on demand from Input Options.  Touch-only mobile gets two larger,
+ * focused pages; other layouts keep the single live-screen overview. */
 void sdl_zones_show_tutorial(void)
 {
-    sdl_touch_tutorial_run(false, !sdl_touch_tutorial_full_mode());
+    sdl_touch_tutorial_run(false, !sdl_touch_tutorial_device_available());
 }
 
 /* Show the requested zones tutorial immediately from a clean command context
@@ -3106,5 +3823,3 @@ void sdl_mouse_maybe_show_first_game_tutorial(void)
     sdl_touch_tutorial_run(false, true);
     sdl_mouse_mark_tutorial_seen_and_save();
 }
-
-

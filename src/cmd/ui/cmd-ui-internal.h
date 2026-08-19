@@ -27,6 +27,10 @@ enum
     SUPPLY_CLICK_PREVIEW = -8,
     SUPPLY_CLICK_DELETE = -9,
     SUPPLY_CLICK_TAB = -10,
+    SUPPLY_CLICK_PAGE_JEWELRY = -11,
+    SUPPLY_CLICK_PRESET_SAVE = -12,
+    SUPPLY_CLICK_PRESET_NAME = -13,
+    SUPPLY_CLICK_PRESET_CLEAR = -14,
     SUPPLY_CLICK_GROUP_BASE = 1000,
     SUPPLY_CLICK_ENTRY_BASE = 10000
 };
@@ -132,12 +136,22 @@ struct knowledge_browser_layout
     int list_row;
     int list_rows;
     int status_row;
+    int status_rows;
     int prompt_row;
     int group_col;
     int group_w;
     int divider_col;
     int list_col;
     int list_w;
+    /* The ordinary browser is a side-by-side group/list view.  Mobile
+     * portrait inventory uses the same data and rendering helpers, but gives
+     * each list its own full-width vertical band. */
+    bool stacked;
+    int group_row;
+    int group_rows;
+    int entry_header_row;
+    int entry_row;
+    int entry_rows;
 };
 
 struct knowledge_browser_state
@@ -151,6 +165,9 @@ struct knowledge_browser_state
 };
 
 extern int g_knowledge_last_page;
+
+/* SDL viewport predicate: true only for a genuine mobile portrait layout. */
+extern bool sdl_mobile_portrait_layout_active(void);
 
 bool indexed_menu_letters_enabled(void);
 void indexed_menu_entry_label(char* buf, size_t buflen, int index, cptr text);

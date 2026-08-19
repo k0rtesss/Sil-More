@@ -2,17 +2,44 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "object/object-inventory-limits.h"
-#include "object/object-internal.h"
 #include "log/log.h"
+#include "object/object-internal.h"
+#include "object/object-inventory-limits.h"
 #include "supplies.h"
-
 
 static bool carry_limit_last_failed = false;
 static enum inventory_limit_group carry_limit_last_group = INV_LIMIT_NONE;
 static int carry_limit_last_limit = 0;
 static char carry_limit_last_label[64];
-static enum inventory_limit_group pack_limit_prompt_group = INV_LIMIT_NONE;
+static int grandfathered_volume[INV_LIMIT_HARNESS + 1] = { 0 };
+
+static bool inventory_limit_is_volume_group(enum inventory_limit_group group)
+{
+    return group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS;
+}
+
+bool object_can_choose_pack_or_harness(const object_type* o_ptr)
+{
+    u32b f1, f2, f3, f4;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    object_flags4(o_ptr, &f1, &f2, &f3, &f4);
+    return (f4 & TR4_HARNESS_STOWABLE) != 0;
+}
+
+bool object_can_store_directly_in_pack(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    /* Honor the data-driven Y:PACK storage class directly. */
+    return o_ptr->storage == OBJECT_STORAGE_PACK
+        || o_ptr->tval == TV_ARROW
+        || object_can_choose_pack_or_harness(o_ptr);
+}
+
 void clear_inventory_limit_failure(void)
 {
     carry_limit_last_failed = false;
@@ -23,7 +50,7 @@ void clear_inventory_limit_failure(void)
 
 bool inven_index_valid(int item, cptr context)
 {
-    if ((item >= 0) && (item < INVEN_TOTAL))
+    if (player_inventory_handle_valid(item))
         return true;
 
     log_error("%s: invalid inventory slot %d",
@@ -31,196 +58,266 @@ bool inven_index_valid(int item, cptr context)
     return false;
 }
 
-static bool object_is_truly_two_handed(const object_type* o_ptr)
+static enum inventory_limit_group volume_group_for_object(
+    const object_type* o_ptr)
 {
-    if (!o_ptr)
-        return false;
+    if (!o_ptr || !o_ptr->k_idx)
+        return INV_LIMIT_NONE;
+    if (o_ptr->tval == TV_RING || o_ptr->tval == TV_AMULET)
+        return INV_LIMIT_JEWELRY;
+    if (object_effective_volume(o_ptr) <= 0)
+        return INV_LIMIT_NONE;
+    if (object_is_quivered_arrow(o_ptr))
+        return INV_LIMIT_NONE;
+    /* Arrow kinds retain their generation/equipment classification.  Their
+     * carried location is a gameplay rule: loose arrows use the Pack. */
+    if (o_ptr->tval == TV_ARROW)
+        return INV_LIMIT_PACK;
 
-    switch (o_ptr->tval)
+    if (o_ptr->storage == OBJECT_STORAGE_PACK)
+        return INV_LIMIT_PACK;
+    if (o_ptr->storage == OBJECT_STORAGE_HARNESS)
+        return INV_LIMIT_HARNESS;
+
+    return INV_LIMIT_NONE;
+}
+
+static int volume_limit_for_group(enum inventory_limit_group group)
+{
+    int limit;
+
+    if (group == INV_LIMIT_PACK)
+        limit = INVENTORY_PACK_VOLUME_CAP;
+    else if (group == INV_LIMIT_HARNESS)
+        limit = INVENTORY_HARNESS_VOLUME_CAP;
+    else
+        return -1;
+
+    if (p_ptr && group == INV_LIMIT_PACK
+        && p_ptr->active_ability[S_WIL][WIL_CON])
     {
-        case TV_HAFTED:
-            return (o_ptr->sval == SV_QUARTERSTAFF);
-        case TV_POLEARM:
-            return (o_ptr->sval == SV_GREAT_SPEAR) || (o_ptr->sval == SV_GLAIVE)
-                || (o_ptr->sval == SV_GREAT_AXE);
-        case TV_SWORD:
-            return (o_ptr->sval == SV_GREAT_SWORD)
-                || (o_ptr->sval == SV_STAR_IRON_GREAT_SWORD);
-        default:
-            break;
+        limit += INVENTORY_CONSTITUTION_PACK_VOLUME_BONUS;
+    }
+    if (p_ptr && group == INV_LIMIT_HARNESS
+        && p_ptr->active_ability[S_PER][PER_GRA])
+    {
+        limit += INVENTORY_GRACE_HARNESS_VOLUME_BONUS;
     }
 
-    return false;
+    return limit;
 }
 
-static bool object_is_inventory_throwable(const object_type* o_ptr)
+static int arrow_volume_for_quantity(int arrows, int bundle_volume)
 {
-    if (!o_ptr)
-        return false;
+    s64b numerator;
 
-    if (o_ptr->tval == TV_SWORD && o_ptr->sval == SV_DAGGER)
-        return true;
+    if (arrows <= 0 || bundle_volume <= 0)
+        return 0;
 
-    if (o_ptr->tval == TV_POLEARM)
-        return o_ptr->sval == SV_HAND_AXE || o_ptr->sval == SV_SPEAR;
-
-    return false;
+    /* Y gives the volume of a reference bundle.  Prorate smaller quantities
+     * in tenths of a quart so spare Pack space can accept part of a stack. */
+    numerator = (s64b)arrows * bundle_volume;
+    return (int)((numerator + INVENTORY_ARROW_VOLUME_BUNDLE - 1)
+        / INVENTORY_ARROW_VOLUME_BUNDLE);
 }
 
-static int inventory_throwable_space_cost(const object_type* o_ptr)
+static const ability_type* active_carriage_ability(byte target)
 {
-    if (o_ptr && o_ptr->tval == TV_POLEARM && o_ptr->sval == SV_SPEAR)
-        return 2;
+    const ability_type* best = NULL;
 
-    return 1;
+    if (!p_ptr || !z_info || !b_info || target == ABILITY_CARRIAGE_NONE)
+        return NULL;
+
+    for (int i = 0; i < z_info->b_max; i++)
+    {
+        const ability_type* b_ptr = &b_info[i];
+
+        if (b_ptr->carriage_target != target
+            || b_ptr->carriage_reduction_percent == 0)
+        {
+            continue;
+        }
+        if (b_ptr->skilltype >= S_MAX || b_ptr->abilitynum >= ABILITIES_MAX)
+            continue;
+        if (!p_ptr->active_ability[b_ptr->skilltype][b_ptr->abilitynum])
+            continue;
+        if (!best || b_ptr->carriage_reduction_percent
+                > best->carriage_reduction_percent)
+        {
+            best = b_ptr;
+        }
+    }
+
+    return best;
+}
+
+static const ability_type* carriage_ability_for_object(
+    const object_type* o_ptr)
+{
+    u32b f1, f2, f3;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return NULL;
+
+    if (o_ptr->tval == TV_ARROW)
+        return active_carriage_ability(ABILITY_CARRIAGE_ARROWS);
+
+    if (volume_group_for_object(o_ptr) != INV_LIMIT_HARNESS)
+        return NULL;
+
+    object_flags(o_ptr, &f1, &f2, &f3);
+    if (f3 & TR3_THROWING)
+        return active_carriage_ability(ABILITY_CARRIAGE_THROWING);
+
+    return NULL;
+}
+
+static int carried_unit_volume(const object_type* o_ptr,
+    enum inventory_limit_group group, bool apply_carriage_efficiency)
+{
+    const ability_type* b_ptr = NULL;
+    int reduction = 0;
+
+    (void)group;
+
+    if (apply_carriage_efficiency)
+        b_ptr = carriage_ability_for_object(o_ptr);
+    if (b_ptr)
+        reduction = 0 - b_ptr->carriage_reduction_percent;
+
+    return object_effective_volume_with_reduction(o_ptr, reduction);
+}
+
+static int inventory_volume_last_slot(enum inventory_limit_group group)
+{
+    /* Worn Pack apparel is outside the backpack.  Harness objects remain on
+     * the Harness when wielded, worn, quivered, or placed at the Belt. */
+    return group == INV_LIMIT_HARNESS ? INVEN_TOTAL - 1 : INVEN_PACK - 1;
+}
+
+static int projected_inventory_volume_usage_internal(
+    enum inventory_limit_group group, const object_type* removed,
+    int remove_quantity, const object_type* incoming,
+    bool apply_carriage_efficiency)
+{
+    int usage = 0;
+    int arrows = 0;
+    int arrow_volume = 0;
+
+    if (!inventory_limit_is_volume_group(group))
+        return 0;
+
+    for (int i = 0; i <= inventory_volume_last_slot(group); i++)
+    {
+        const object_type* o_ptr = &inventory[i];
+        int number = o_ptr->number;
+        int volume;
+
+        if (o_ptr == removed)
+            number = MAX(0, number - MAX(remove_quantity, 0));
+        if (!o_ptr->k_idx || number <= 0)
+            continue;
+        if (volume_group_for_object(o_ptr) != group)
+            continue;
+
+        volume = carried_unit_volume(o_ptr, group,
+            apply_carriage_efficiency);
+        if (o_ptr->tval == TV_ARROW)
+        {
+            arrows += number;
+            arrow_volume = MAX(arrow_volume, volume);
+        }
+        else
+        {
+            usage += volume * number;
+        }
+    }
+
+    for (int i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        const object_type* o_ptr = player_carried_extra_entry_at(i);
+        int number;
+        int volume;
+
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        number = o_ptr->number;
+        if (o_ptr == removed)
+            number = MAX(0, number - MAX(remove_quantity, 0));
+        if (number <= 0 || volume_group_for_object(o_ptr) != group)
+            continue;
+
+        volume = carried_unit_volume(o_ptr, group,
+            apply_carriage_efficiency);
+        if (o_ptr->tval == TV_ARROW)
+        {
+            arrows += number;
+            arrow_volume = MAX(arrow_volume, volume);
+        }
+        else
+        {
+            usage += volume * number;
+        }
+    }
+
+    if (incoming && incoming->k_idx
+        && volume_group_for_object(incoming) == group)
+    {
+        int number = MAX(incoming->number, 1);
+        int volume = carried_unit_volume(incoming, group,
+            apply_carriage_efficiency);
+
+        if (incoming->tval == TV_ARROW)
+        {
+            arrows += number;
+            arrow_volume = MAX(arrow_volume, volume);
+        }
+        else
+        {
+            usage += volume * number;
+        }
+    }
+
+    usage += arrow_volume_for_quantity(arrows, arrow_volume);
+    return usage;
+}
+
+static int projected_inventory_volume_usage(enum inventory_limit_group group,
+    const object_type* removed, int remove_quantity,
+    const object_type* incoming)
+{
+    return projected_inventory_volume_usage_internal(group, removed,
+        remove_quantity, incoming, true);
+}
+
+static int inventory_volume_usage(enum inventory_limit_group group)
+{
+    return projected_inventory_volume_usage(group, NULL, 0, NULL);
 }
 
 static bool get_inventory_limit_info(const object_type* o_ptr,
-                                     enum inventory_limit_group* group,
-                                     int* limit,
-                                     int* cost)
+    enum inventory_limit_group* group, int* limit, int* cost)
 {
-    enum inventory_limit_group local_group = INV_LIMIT_NONE;
-    int local_limit = 0;
-    int local_cost = 1;
-    bool found = true;
+    enum inventory_limit_group local_group = volume_group_for_object(o_ptr);
 
-    if (!o_ptr || !o_ptr->k_idx)
-    {
-        found = false;
-    }
-    else
-    {
-        switch (o_ptr->tval)
-        {
-            case TV_ARROW:
-                local_group = INV_LIMIT_ARROW;
-                local_limit = 2;
-                break;
-            case TV_BOW:
-                local_group = INV_LIMIT_BOW;
-                local_limit = 1;
-                break;
-            case TV_STAFF:
-                local_group = INV_LIMIT_STAFF;
-                local_limit = 1;
-                break;
-            case TV_HORN:
-                local_group = INV_LIMIT_HORN;
-                local_limit = 2;
-                break;
-            case TV_DIGGING:
-                local_group = INV_LIMIT_DIGGING;
-                local_limit = 1;
-                break;
-            case TV_BOOTS:
-                local_group = INV_LIMIT_BOOTS;
-                local_limit = 2;
-                break;
-            case TV_GLOVES:
-                local_group = INV_LIMIT_GLOVES;
-                local_limit = 2;
-                break;
-            case TV_HELM:
-            case TV_CROWN:
-                local_group = INV_LIMIT_HELM_CROWN;
-                local_limit = 1;
-                break;
-            case TV_SHIELD:
-                if (o_ptr->sval == SV_ROUND_SHIELD || o_ptr->sval == SV_BROKEN_SHIELD)
-                {
-                    local_group = INV_LIMIT_ROUND_SHIELD;
-                    local_limit = 1;
-                }
-                else
-                {
-                    local_group = INV_LIMIT_OTHER_SHIELD;
-                    local_limit = 0;
-                }
-                break;
-            case TV_CLOAK:
-                local_group = INV_LIMIT_CLOAK;
-                local_limit = 3;
-                break;
-            case TV_SOFT_ARMOR:
-                if (o_ptr->sval == SV_ROBE)
-                {
-                    local_group = INV_LIMIT_CLOAK;
-                    local_limit = 3;
-                }
-                else
-                {
-                    local_group = INV_LIMIT_SOFT_ARMOUR;
-                    local_limit = 1;
-                }
-                break;
-            case TV_MAIL:
-                local_group = INV_LIMIT_MAIL;
-                local_limit = 0;
-                break;
-            case TV_HAFTED:
-            case TV_POLEARM:
-            case TV_SWORD:
-                if (object_is_inventory_throwable(o_ptr))
-                {
-                    local_group = INV_LIMIT_THROWABLE;
-                    local_limit = 2;
-                    local_cost = inventory_throwable_space_cost(o_ptr);
-                }
-                else
-                {
-                    local_group = INV_LIMIT_MELEE_WEAPON;
-                    local_limit = 2;
-                    local_cost = object_is_truly_two_handed(o_ptr) ? 2 : 1;
-                }
-                break;
-            default:
-                found = false;
-                break;
-        }
-    }
-
-    if (found)
-    {
-        if (p_ptr->active_ability[S_EVN][EVN_HEAVY_ARMOUR])
-        {
-            if (local_group == INV_LIMIT_MAIL
-                || local_group == INV_LIMIT_HELM_CROWN
-                || local_group == INV_LIMIT_ROUND_SHIELD
-                || local_group == INV_LIMIT_OTHER_SHIELD)
-            {
-                local_limit += 1;
-            }
-        }
-    }
+    if (!inventory_limit_is_volume_group(local_group))
+        return false;
 
     if (group)
         *group = local_group;
     if (limit)
-        *limit = local_limit;
+        *limit = volume_limit_for_group(local_group);
     if (cost)
-        *cost = local_cost;
+        *cost = carried_unit_volume(o_ptr, local_group, true);
 
-    return found;
+    return true;
 }
 
-static bool inventory_limit_counts_stacks(enum inventory_limit_group group)
-{
-    if (group == INV_LIMIT_ARROW)
-        return true;
-
-    if (group == INV_LIMIT_THROWABLE)
-        return true;
-
-    return false;
-}
-
+/* Volume always follows quantity, even when an incoming object can stack. */
 bool inventory_limit_is_stack_counted(const object_type* o_ptr)
 {
-    enum inventory_limit_group group;
-
-    return get_inventory_limit_info(o_ptr, &group, NULL, NULL)
-        && inventory_limit_counts_stacks(group);
+    (void)o_ptr;
+    return false;
 }
 
 int object_stack_limit(const object_type* o_ptr)
@@ -230,157 +327,60 @@ int object_stack_limit(const object_type* o_ptr)
 
     if (o_ptr->tval == TV_RING)
         return 1;
-
     if (o_ptr->tval == TV_SWORD && o_ptr->sval == SV_DAGGER)
         return 7;
-
     if (o_ptr->tval == TV_POLEARM && o_ptr->sval == SV_SPEAR)
-        return 5;
-
+        return 4;
     if (o_ptr->tval == TV_POLEARM && o_ptr->sval == SV_HAND_AXE)
         return 3;
-
     if (o_ptr->tval == TV_ARROW)
         return 48;
-
     if (o_ptr->tval == TV_HORN)
         return 1;
 
     return MAX_STACK_SIZE - 1;
 }
 
-static int inventory_limit_usage(enum inventory_limit_group group)
-{
-    int usage = 0;
-
-    if (group == INV_LIMIT_NONE)
-        return 0;
-
-    for (int idx = 0; idx <= INVEN_PACK; idx++)
-    {
-        object_type* slot_ptr = &inventory[idx];
-
-        if (!slot_ptr->k_idx)
-            continue;
-
-        enum inventory_limit_group slot_group;
-        int slot_limit;
-        int slot_cost;
-
-        if (!get_inventory_limit_info(slot_ptr, &slot_group, &slot_limit,
-                                       &slot_cost))
-            continue;
-
-        if (slot_group != group)
-            continue;
-
-        if (inventory_limit_counts_stacks(slot_group))
-            usage += slot_cost;
-        else
-            usage += slot_cost * MAX(slot_ptr->number, 1);
-    }
-
-    return usage;
-}
-
-static void fill_inventory_limit_label(enum inventory_limit_group group,
-                                       const object_type* o_ptr)
+static void fill_inventory_limit_label(enum inventory_limit_group group)
 {
     switch (group)
     {
-        case INV_LIMIT_ARROW:
-            SDL_strlcpy(carry_limit_last_label, "arrow stacks",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_BOW:
-            SDL_strlcpy(carry_limit_last_label, "bows",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_STAFF:
-            SDL_strlcpy(carry_limit_last_label, "walking staves",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_HORN:
-            SDL_strlcpy(carry_limit_last_label, "horns",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_DIGGING:
-            SDL_strlcpy(carry_limit_last_label, "digging tools",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_BOOTS:
-            SDL_strlcpy(carry_limit_last_label, "pairs of boots",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_GLOVES:
-            SDL_strlcpy(carry_limit_last_label, "pairs of gloves",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_HELM_CROWN:
-            SDL_strlcpy(carry_limit_last_label, "helms or crowns",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_ROUND_SHIELD:
-            SDL_strlcpy(carry_limit_last_label, "round shields",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_OTHER_SHIELD:
-            SDL_strlcpy(carry_limit_last_label, "non-round shields",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_CLOAK:
-            SDL_strlcpy(carry_limit_last_label, "cloaks",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_SOFT_ARMOUR:
-            SDL_strlcpy(carry_limit_last_label, "soft armour",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_MAIL:
-            SDL_strlcpy(carry_limit_last_label, "mail armour",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_MELEE_WEAPON:
-            if (object_is_truly_two_handed(o_ptr))
-                SDL_strlcpy(carry_limit_last_label,
-                          "two-handed melee weapons",
-                          sizeof(carry_limit_last_label));
-            else
-                SDL_strlcpy(carry_limit_last_label, "melee weapons",
-                          sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_THROWABLE:
-            SDL_strlcpy(carry_limit_last_label, "throwing weapons",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_SUPPLY_WEIGHT:
-            SDL_strlcpy(carry_limit_last_label, "supply weight",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_TORCHES:
-            SDL_strlcpy(carry_limit_last_label, "torches",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_BRASS_LAMPS:
-            SDL_strlcpy(carry_limit_last_label, "oil container slots",
-                      sizeof(carry_limit_last_label));
-            break;
-        case INV_LIMIT_LESSER_JEWEL:
-        case INV_LIMIT_FEANORIAN_LAMP:
-            SDL_strlcpy(carry_limit_last_label,
-                "lesser jewels or Fëanorian lamps",
-                sizeof(carry_limit_last_label));
-            break;
-        default:
-            SDL_strlcpy(carry_limit_last_label, "items of this type",
-                      sizeof(carry_limit_last_label));
-            break;
+    case INV_LIMIT_PACK:
+        SDL_strlcpy(carry_limit_last_label, "Pack volume",
+            sizeof(carry_limit_last_label));
+        break;
+    case INV_LIMIT_HARNESS:
+        SDL_strlcpy(carry_limit_last_label, "Harness volume",
+            sizeof(carry_limit_last_label));
+        break;
+    case INV_LIMIT_JEWELRY:
+        SDL_strlcpy(carry_limit_last_label, "Jewelry Pouch",
+            sizeof(carry_limit_last_label));
+        break;
+    case INV_LIMIT_SUPPLY_WEIGHT:
+        SDL_strlcpy(carry_limit_last_label, "supply weight",
+            sizeof(carry_limit_last_label));
+        break;
+    case INV_LIMIT_TORCHES:
+        SDL_strlcpy(carry_limit_last_label, "torches",
+            sizeof(carry_limit_last_label));
+        break;
+    case INV_LIMIT_BRASS_LAMPS:
+        SDL_strlcpy(carry_limit_last_label, "oil container slots",
+            sizeof(carry_limit_last_label));
+        break;
+    case INV_LIMIT_LESSER_JEWEL:
+    case INV_LIMIT_FEANORIAN_LAMP:
+        SDL_strlcpy(carry_limit_last_label,
+            "lesser jewels or Feanorian lamps",
+            sizeof(carry_limit_last_label));
+        break;
+    default:
+        SDL_strlcpy(carry_limit_last_label, "items of this type",
+            sizeof(carry_limit_last_label));
+        break;
     }
 }
-
-void set_inventory_limit_failure(enum inventory_limit_group group,
-                                        int limit,
-                                        const object_type* o_ptr);
 
 static enum inventory_limit_group light_limit_group(const object_type* o_ptr)
 {
@@ -389,7 +389,6 @@ static enum inventory_limit_group light_limit_group(const object_type* o_ptr)
 
     if (player_oil_container_object(o_ptr))
         return INV_LIMIT_BRASS_LAMPS;
-
     if (o_ptr->tval != TV_LIGHT)
         return INV_LIMIT_NONE;
 
@@ -406,8 +405,17 @@ static enum inventory_limit_group light_limit_group(const object_type* o_ptr)
     }
 }
 
-bool player_light_capacity_okay(const object_type* o_ptr,
-                                       bool record_failure)
+void set_inventory_limit_failure(enum inventory_limit_group group, int limit,
+    const object_type* o_ptr)
+{
+    (void)o_ptr;
+    carry_limit_last_failed = true;
+    carry_limit_last_group = group;
+    carry_limit_last_limit = limit;
+    fill_inventory_limit_label(group);
+}
+
+bool player_light_capacity_okay(const object_type* o_ptr, bool record_failure)
 {
     int cap;
     enum inventory_limit_group group;
@@ -416,10 +424,7 @@ bool player_light_capacity_okay(const object_type* o_ptr,
         return true;
 
     cap = player_light_carry_cap(o_ptr);
-    if (cap <= 0)
-        return true;
-
-    if (player_light_available_capacity(o_ptr) >= o_ptr->number)
+    if (cap <= 0 || player_light_available_capacity(o_ptr) >= o_ptr->number)
         return true;
 
     if (record_failure)
@@ -432,285 +437,186 @@ bool player_light_capacity_okay(const object_type* o_ptr,
     return false;
 }
 
-void set_inventory_limit_failure(enum inventory_limit_group group,
-                                        int limit,
-                                        const object_type* o_ptr)
+int inventory_limit_additional_space_for_object(const object_type* o_ptr)
 {
-    carry_limit_last_failed = true;
-    carry_limit_last_group = group;
-    carry_limit_last_limit = limit;
-    fill_inventory_limit_label(group, o_ptr);
+    enum inventory_limit_group group;
+    int current;
+    int projected;
+
+    if (!get_inventory_limit_info(o_ptr, &group, NULL, NULL))
+        return 0;
+
+    current = inventory_volume_usage(group);
+    projected = projected_inventory_volume_usage(group, NULL, 0, o_ptr);
+    return MAX(projected - current, 0);
+}
+
+int inventory_limit_max_carryable_quantity(const object_type* o_ptr)
+{
+    enum inventory_limit_group group;
+    object_type incoming;
+    int requested;
+    int current;
+    int allowed;
+    int result = 0;
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->number <= 0
+        || !get_inventory_limit_info(o_ptr, &group, &allowed, NULL))
+    {
+        return 0;
+    }
+
+    requested = o_ptr->number;
+    current = inventory_volume_usage(group);
+    allowed = MAX(allowed, grandfathered_volume[group]);
+    object_copy(&incoming, o_ptr);
+
+    /* Keep this quantity calculation on the same projection path as the
+     * actual limit check.  In particular, arrow volume is prorated from its
+     * reference bundle and rounded to tenths of a quart. */
+    for (int quantity = 1; quantity <= requested; quantity++)
+    {
+        int projected;
+
+        incoming.number = quantity;
+        projected = projected_inventory_volume_usage(group, NULL, 0,
+            &incoming);
+        if (projected > allowed)
+            break;
+        if (projected >= current)
+            result = quantity;
+    }
+
+    return result;
+}
+
+int inventory_limit_removal_space_for_object(const object_type* o_ptr)
+{
+    enum inventory_limit_group group;
+    int current;
+    int projected;
+
+    if (!get_inventory_limit_info(o_ptr, &group, NULL, NULL))
+        return 0;
+
+    current = inventory_volume_usage(group);
+    projected = projected_inventory_volume_usage(group, o_ptr,
+        MAX(o_ptr->number, 1), NULL);
+    return MAX(current - projected, 0);
+}
+
+int inventory_limit_usage_after_replacing(const object_type* incoming,
+    const object_type* removed, int remove_quantity)
+{
+    enum inventory_limit_group group = volume_group_for_object(incoming);
+
+    if (!inventory_limit_is_volume_group(group) || !removed
+        || volume_group_for_object(removed) != group || remove_quantity <= 0)
+    {
+        return -1;
+    }
+
+    return projected_inventory_volume_usage(group, removed, remove_quantity,
+        incoming);
+}
+
+bool inventory_type_slot_available(const object_type* o_ptr,
+    bool record_failure)
+{
+    enum inventory_limit_group group;
+    int limit;
+    int allowed;
+    int additional;
+
+    if (!get_inventory_limit_info(o_ptr, &group, &limit, NULL))
+        return true;
+
+    /* A loaded legacy character may keep, rearrange, and restore possessions
+     * up to the volume present at load time, but may never increase that
+     * historical high-water mark. */
+    allowed = MAX(limit, grandfathered_volume[group]);
+    additional = inventory_limit_additional_space_for_object(o_ptr);
+    if (inventory_volume_usage(group) + additional <= allowed)
+        return true;
+
+    if (record_failure)
+        set_inventory_limit_failure(group, allowed, o_ptr);
+
+    return false;
 }
 
 bool inven_carry_limit_can_replace(const object_type* o_ptr)
 {
     enum inventory_limit_group group;
-    int limit;
-    int cost;
 
-    if (!carry_limit_last_failed)
-        return false;
-
-    if (carry_limit_last_limit <= 0)
-        return false;
-
-    if (!o_ptr)
+    if (!carry_limit_last_failed || carry_limit_last_limit <= 0 || !o_ptr)
         return false;
 
     if (carry_limit_last_group == INV_LIMIT_SUPPLY_WEIGHT)
     {
         return supplies_weight_counts_to_limit(o_ptr)
-            && (o_ptr->weight > 0) && (MAX(o_ptr->number, 1) > 0);
+            && o_ptr->weight > 0 && MAX(o_ptr->number, 1) > 0;
     }
 
     if (o_ptr->k_idx
         && (o_ptr->tval == TV_LIGHT || o_ptr->tval == TV_FLASK))
     {
         group = light_limit_group(o_ptr);
-        if (group == INV_LIMIT_NONE)
-            return false;
-
-        return (group == carry_limit_last_group) && (MAX(o_ptr->number, 1) > 0);
+        return group != INV_LIMIT_NONE && group == carry_limit_last_group
+            && MAX(o_ptr->number, 1) > 0;
     }
 
-    if (!get_inventory_limit_info(o_ptr, &group, &limit, &cost))
-        return false;
-
-    if (group != carry_limit_last_group)
-        return false;
-
-    return (cost > 0);
+    group = volume_group_for_object(o_ptr);
+    return group != INV_LIMIT_NONE && group == carry_limit_last_group
+        && object_effective_volume(o_ptr) > 0;
 }
 
-bool inventory_type_slot_available(const object_type* o_ptr,
-                                          bool record_failure)
+void inven_update_current_pack_limits(void)
 {
-    enum inventory_limit_group group;
-    int limit;
-    int cost;
-    int units;
-
-    if (!get_inventory_limit_info(o_ptr, &group, &limit, &cost))
-        return true;
-
-    if (limit <= 0)
-    {
-        if (record_failure)
-            set_inventory_limit_failure(group, limit, o_ptr);
-        return false;
-    }
-
-    units = inventory_limit_counts_stacks(group) ? 1
-                                                 : MAX(o_ptr->number, 1);
-
-    int used = inventory_limit_usage(group);
-
-    if (used + cost * units <= limit)
-        return true;
-
-    if (record_failure)
-        set_inventory_limit_failure(group, limit, o_ptr);
-
-    return false;
-}
-
-static bool inventory_limit_group_is_heavy_armour(
-    enum inventory_limit_group group)
-{
-    return (group == INV_LIMIT_MAIL) || (group == INV_LIMIT_HELM_CROWN)
-        || (group == INV_LIMIT_ROUND_SHIELD)
-        || (group == INV_LIMIT_OTHER_SHIELD);
-}
-
-static bool item_tester_hook_pack_limit_group(const object_type* o_ptr)
-{
-    enum inventory_limit_group group;
-    int limit;
-    int cost;
-
-    if (!get_inventory_limit_info(o_ptr, &group, &limit, &cost))
-        return false;
-
-    return (group == pack_limit_prompt_group);
-}
-
-static int inventory_limit_group_first_slot(enum inventory_limit_group group,
-    int* limit)
-{
-    for (int item = 0; item <= INVEN_PACK; item++)
-    {
-        object_type* o_ptr = &inventory[item];
-        enum inventory_limit_group slot_group;
-        int slot_limit;
-        int slot_cost;
-
-        if (!o_ptr->k_idx)
-            continue;
-
-        if (!get_inventory_limit_info(o_ptr, &slot_group, &slot_limit,
-                &slot_cost))
-            continue;
-
-        if (slot_group != group)
-            continue;
-
-        if (limit)
-            *limit = slot_limit;
-
-        return item;
-    }
-
-    return -1;
-}
-
-static int inventory_limit_group_last_slot(enum inventory_limit_group group)
-{
-    for (int item = INVEN_PACK; item >= 0; item--)
-    {
-        object_type* o_ptr = &inventory[item];
-        enum inventory_limit_group slot_group;
-        int slot_limit;
-        int slot_cost;
-
-        if (!o_ptr->k_idx)
-            continue;
-
-        if (!get_inventory_limit_info(o_ptr, &slot_group, &slot_limit,
-                &slot_cost))
-            continue;
-
-        if (slot_group == group)
-            return item;
-    }
-
-    return -1;
-}
-
-static cptr inventory_limit_group_drop_prompt(enum inventory_limit_group group)
-{
-    switch (group)
-    {
-        case INV_LIMIT_HELM_CROWN:
-            return "Drop which helm or crown? ";
-        case INV_LIMIT_ROUND_SHIELD:
-            return "Drop which round shield? ";
-        case INV_LIMIT_OTHER_SHIELD:
-            return "Drop which shield? ";
-        case INV_LIMIT_MAIL:
-            return "Drop which mail armour? ";
-        case INV_LIMIT_HORN:
-            return "Drop which horn? ";
-        default:
-            return "Drop which excess item? ";
-    }
-}
-
-static cptr inventory_limit_group_label(enum inventory_limit_group group,
-    int limit)
-{
-    switch (group)
-    {
-        case INV_LIMIT_HELM_CROWN:
-            return (limit == 1) ? "helm or crown" : "helms or crowns";
-        case INV_LIMIT_ROUND_SHIELD:
-            return (limit == 1) ? "round shield" : "round shields";
-        case INV_LIMIT_OTHER_SHIELD:
-            return (limit == 1) ? "shield" : "shields";
-        case INV_LIMIT_MAIL:
-            return "mail armour";
-        case INV_LIMIT_HORN:
-            return (limit == 1) ? "horn" : "horns";
-        default:
-            return (limit == 1) ? "item of this type"
-                                : "items of this type";
-    }
-}
-
-void inven_enforce_current_pack_limits(void)
-{
-    static const enum inventory_limit_group heavy_armour_groups[] = {
-        INV_LIMIT_MAIL,
-        INV_LIMIT_OTHER_SHIELD,
-        INV_LIMIT_HELM_CROWN,
-        INV_LIMIT_ROUND_SHIELD,
+    static const enum inventory_limit_group volume_groups[] = {
+        INV_LIMIT_PACK, INV_LIMIT_HARNESS
     };
 
+    /* A capacity loss may leave either pool overfull.  Keep the possessions;
+     * calc_bonuses() applies encumbrance until usage falls within the current
+     * limit.  Only reduce the legacy-load high-water allowance here so an
+     * overfilled pool cannot be increased again after the player lightens it. */
+
     if (!character_generated || character_xtra || character_icky
-        || p_ptr->is_dead)
+        || !p_ptr || p_ptr->is_dead)
     {
         return;
     }
 
-    for (size_t i = 0; i < N_ELEMENTS(heavy_armour_groups); i++)
+    for (size_t i = 0; i < N_ELEMENTS(volume_groups); i++)
     {
-        enum inventory_limit_group group = heavy_armour_groups[i];
-        bool warned = false;
+        enum inventory_limit_group group = volume_groups[i];
+        int limit = volume_limit_for_group(group);
+        int usage = inventory_volume_usage(group);
 
-        while (true)
+        if (grandfathered_volume[group] > 0)
         {
-            int limit = 0;
-            int item = inventory_limit_group_first_slot(group, &limit);
-            int used;
-
-            if (item < 0)
-                break;
-
-            used = inventory_limit_usage(group);
-            if (used <= limit)
-                break;
-
-            if (!inventory_limit_group_is_heavy_armour(group))
-                break;
-
-            if (!warned)
-            {
-                if (limit > 0)
-                {
-                    msg_format("Your pack can now hold only %d %s.", limit,
-                        inventory_limit_group_label(group, limit));
-                }
-                else
-                {
-                    msg_format("Your pack can no longer hold %s.",
-                        inventory_limit_group_label(group, limit));
-                }
-
-                warned = true;
-            }
-
-            if (limit > 0)
-            {
-                bool old_item_tester_full = item_tester_full;
-                byte old_item_tester_tval = item_tester_tval;
-                bool (*old_item_tester_hook)(const object_type*)
-                    = item_tester_hook;
-
-                item_tester_full = false;
-                item_tester_tval = 0;
-                pack_limit_prompt_group = group;
-                item_tester_hook = item_tester_hook_pack_limit_group;
-
-                if (!open_inventory_item_select_menu(USE_INVEN,
-                        inventory_limit_group_drop_prompt(group),
-                        "You have nothing suitable to drop.", &item))
-                {
-                    item = inventory_limit_group_last_slot(group);
-                    if (item >= 0)
-                        msg_print("No choice made; dropping one excess item.");
-                }
-
-                pack_limit_prompt_group = INV_LIMIT_NONE;
-                item_tester_hook = old_item_tester_hook;
-                item_tester_tval = old_item_tester_tval;
-                item_tester_full = old_item_tester_full;
-            }
-
-            if ((item < 0) || (item >= INVEN_WIELD) || !inventory[item].k_idx)
-                break;
-
-            inven_drop(item, 1);
-            handle_stuff();
+            if (usage <= limit)
+                grandfathered_volume[group] = 0;
+            else if (usage < grandfathered_volume[group])
+                grandfathered_volume[group] = usage;
         }
+    }
+}
+
+void inventory_limit_grandfather_current_overflow(void)
+{
+    static const enum inventory_limit_group volume_groups[] = {
+        INV_LIMIT_PACK, INV_LIMIT_HARNESS
+    };
+
+    for (size_t i = 0; i < N_ELEMENTS(volume_groups); i++)
+    {
+        enum inventory_limit_group group = volume_groups[i];
+        int used = inventory_volume_usage(group);
+        int limit = volume_limit_for_group(group);
+
+        grandfathered_volume[group] = (used > limit) ? used : 0;
     }
 }
 
@@ -726,12 +632,8 @@ enum inventory_limit_group inven_carry_limit_group(void)
 
 cptr inven_carry_limit_label(void)
 {
-    if (!carry_limit_last_failed)
+    if (!carry_limit_last_failed || !carry_limit_last_label[0])
         return NULL;
-
-    if (!carry_limit_last_label[0])
-        return NULL;
-
     return carry_limit_last_label;
 }
 
@@ -743,7 +645,7 @@ int inven_carry_limit_value(void)
 bool inven_carry_limit_is_supply_weight(void)
 {
     return carry_limit_last_failed
-        && (carry_limit_last_group == INV_LIMIT_SUPPLY_WEIGHT);
+        && carry_limit_last_group == INV_LIMIT_SUPPLY_WEIGHT;
 }
 
 enum inventory_limit_group inventory_limit_group_for_object(
@@ -762,10 +664,7 @@ enum inventory_limit_group inventory_limit_group_for_object(
             return group;
     }
 
-    if (get_inventory_limit_info(o_ptr, &group, NULL, NULL))
-        return group;
-
-    return INV_LIMIT_NONE;
+    return volume_group_for_object(o_ptr);
 }
 
 bool inventory_limit_info_for_object(const object_type* o_ptr,
@@ -783,6 +682,9 @@ bool inventory_limit_info_for_object(const object_type* o_ptr,
     if (group)
         *group = local_group;
 
+    if (inventory_limit_is_volume_group(local_group))
+        return get_inventory_limit_info(o_ptr, NULL, limit, cost);
+
     if (local_group == INV_LIMIT_TORCHES
         || local_group == INV_LIMIT_BRASS_LAMPS
         || local_group == INV_LIMIT_LESSER_JEWEL
@@ -791,108 +693,114 @@ bool inventory_limit_info_for_object(const object_type* o_ptr,
         if (limit)
             *limit = player_light_carry_cap(o_ptr);
         if (cost)
+        {
             *cost = player_oil_container_object(o_ptr)
-                ? player_oil_container_slot_cost(o_ptr)
-                : 1;
+                ? player_oil_container_slot_cost(o_ptr) : 1;
+        }
         return true;
     }
 
-    return get_inventory_limit_info(o_ptr, NULL, limit, cost);
+    return false;
 }
 
 int inventory_limit_usage_for_group(enum inventory_limit_group group)
 {
-    int usage = 0;
-
-    if (group == INV_LIMIT_NONE)
-        return 0;
-
-    if (group >= INV_LIMIT_ARROW && group <= INV_LIMIT_THROWABLE)
-        return inventory_limit_usage(group);
-
+    if (inventory_limit_is_volume_group(group))
+        return inventory_volume_usage(group);
+    if (group == INV_LIMIT_SUPPLY_WEIGHT)
+        return supplies_limit_weight() / 10;
+    if (group == INV_LIMIT_TORCHES)
+        return player_carried_torch_count();
     if (group == INV_LIMIT_BRASS_LAMPS)
         return player_oil_container_slots_used();
-
-    for (int i = 0; i < INVEN_TOTAL; i++)
+    if (group == INV_LIMIT_LESSER_JEWEL
+        || group == INV_LIMIT_FEANORIAN_LAMP)
     {
-        object_type* o_ptr = &inventory[i];
-        enum inventory_limit_group object_group;
-        int cost;
-
-        if (!o_ptr->k_idx)
-            continue;
-
-        object_group = inventory_limit_group_for_object(o_ptr);
-        if (object_group != group)
-            continue;
-
-        if (!inventory_limit_info_for_object(o_ptr, NULL, NULL, &cost))
-            cost = 1;
-
-        usage += cost * MAX(o_ptr->number, 1);
+        return player_carried_light_count_for_sval(SV_LIGHT_LESSER_JEWEL)
+            + player_carried_light_count_for_sval(SV_LIGHT_FEANORIAN);
     }
 
-    return usage;
+    return 0;
+}
+
+static int inventory_limit_space_for_object_internal(
+    const object_type* o_ptr, bool apply_carriage_efficiency)
+{
+    enum inventory_limit_group group;
+    int cost;
+    int number;
+
+    if (!inventory_limit_info_for_object(o_ptr, &group, NULL, &cost)
+        || cost <= 0)
+    {
+        return 0;
+    }
+
+    if (inventory_limit_is_volume_group(group))
+        cost = carried_unit_volume(o_ptr, group, apply_carriage_efficiency);
+
+    number = MAX(o_ptr->number, 1);
+    if (o_ptr->tval == TV_ARROW)
+        return arrow_volume_for_quantity(number, cost);
+
+    return cost * number;
 }
 
 int inventory_limit_space_for_object(const object_type* o_ptr)
 {
-    enum inventory_limit_group group;
-    int cost;
-    int units;
+    return inventory_limit_space_for_object_internal(o_ptr, true);
+}
 
-    if (!inventory_limit_info_for_object(o_ptr, &group, NULL, &cost))
+int inventory_limit_intrinsic_space_for_object(const object_type* o_ptr)
+{
+    return inventory_limit_space_for_object_internal(o_ptr, false);
+}
+
+int inventory_limit_carriage_savings_for_object(const object_type* o_ptr)
+{
+    int intrinsic = inventory_limit_intrinsic_space_for_object(o_ptr);
+    int carried = inventory_limit_space_for_object(o_ptr);
+
+    return MAX(intrinsic - carried, 0);
+}
+
+int inventory_limit_carriage_savings_for_group(
+    enum inventory_limit_group group)
+{
+    int intrinsic;
+    int carried;
+
+    if (!inventory_limit_is_volume_group(group))
         return 0;
 
-    if (cost <= 0)
-        return 0;
+    intrinsic = projected_inventory_volume_usage_internal(group, NULL, 0,
+        NULL, false);
+    carried = inventory_volume_usage(group);
+    return MAX(intrinsic - carried, 0);
+}
 
-    units = inventory_limit_counts_stacks(group) ? 1
-                                                 : MAX(o_ptr->number, 1);
+cptr inventory_limit_carriage_ability_name_for_object(
+    const object_type* o_ptr)
+{
+    const ability_type* b_ptr;
 
-    return cost * units;
+    if (inventory_limit_carriage_savings_for_object(o_ptr) <= 0)
+        return NULL;
+
+    b_ptr = carriage_ability_for_object(o_ptr);
+    if (!b_ptr || !b_name || !b_ptr->name)
+        return NULL;
+
+    return b_name + b_ptr->name;
 }
 
 int inventory_limit_limit_for_group(enum inventory_limit_group group)
 {
-    int limit;
+    if (inventory_limit_is_volume_group(group))
+        return volume_limit_for_group(group);
 
     switch (group)
     {
-    case INV_LIMIT_ARROW:
-        return 2;
-    case INV_LIMIT_BOW:
-        return 1;
-    case INV_LIMIT_STAFF:
-        return 1;
-    case INV_LIMIT_HORN:
-        return 2;
-    case INV_LIMIT_DIGGING:
-        return 1;
-    case INV_LIMIT_BOOTS:
-        return 2;
-    case INV_LIMIT_GLOVES:
-        return 2;
-    case INV_LIMIT_HELM_CROWN:
-        limit = 1;
-        break;
-    case INV_LIMIT_ROUND_SHIELD:
-        limit = 1;
-        break;
-    case INV_LIMIT_OTHER_SHIELD:
-        limit = 0;
-        break;
-    case INV_LIMIT_CLOAK:
-        return 3;
-    case INV_LIMIT_SOFT_ARMOUR:
-        return 1;
-    case INV_LIMIT_MAIL:
-        limit = 0;
-        break;
-    case INV_LIMIT_MELEE_WEAPON:
-        return 2;
-    case INV_LIMIT_THROWABLE:
-        return 2;
     case INV_LIMIT_SUPPLY_WEIGHT:
         return supplies_current_weight_cap() / 10;
     case INV_LIMIT_TORCHES:
@@ -905,11 +813,6 @@ int inventory_limit_limit_for_group(enum inventory_limit_group group)
     default:
         return -1;
     }
-
-    if (p_ptr->active_ability[S_EVN][EVN_HEAVY_ARMOUR])
-        limit += 1;
-
-    return limit;
 }
 
 bool inventory_limit_object_matches_group(
@@ -923,36 +826,12 @@ cptr inventory_limit_group_name(enum inventory_limit_group group)
 {
     switch (group)
     {
-    case INV_LIMIT_ARROW:
-        return "arrow stacks";
-    case INV_LIMIT_BOW:
-        return "bows";
-    case INV_LIMIT_STAFF:
-        return "walking staves";
-    case INV_LIMIT_HORN:
-        return "horns";
-    case INV_LIMIT_DIGGING:
-        return "digging tools";
-    case INV_LIMIT_BOOTS:
-        return "boots";
-    case INV_LIMIT_GLOVES:
-        return "gloves";
-    case INV_LIMIT_HELM_CROWN:
-        return "helms/crowns";
-    case INV_LIMIT_ROUND_SHIELD:
-        return "round shields";
-    case INV_LIMIT_OTHER_SHIELD:
-        return "other shields";
-    case INV_LIMIT_CLOAK:
-        return "cloaks/robes";
-    case INV_LIMIT_SOFT_ARMOUR:
-        return "soft armour";
-    case INV_LIMIT_MAIL:
-        return "mail armour";
-    case INV_LIMIT_MELEE_WEAPON:
-        return "melee weapons";
-    case INV_LIMIT_THROWABLE:
-        return "throwables";
+    case INV_LIMIT_PACK:
+        return "Pack";
+    case INV_LIMIT_HARNESS:
+        return "Harness";
+    case INV_LIMIT_JEWELRY:
+        return "Jewelry Pouch";
     case INV_LIMIT_SUPPLY_WEIGHT:
         return "supply weight";
     case INV_LIMIT_TORCHES:

@@ -235,6 +235,79 @@ const struct pane_config* sdl_combat_overlay_pane_config(void)
     return NULL;
 }
 
+const struct pane_config* sdl_status_depth_pane_config(void)
+{
+    for (int i = 0; i < pane_config_count; i++) {
+        if (pane_config[i].pane == PANE_STATUS_DEPTH)
+            return &pane_config[i];
+    }
+
+    return NULL;
+}
+
+static bool sdl_combat_overlay_adjacent_to_left_panel(
+    enum pane_placement where, bool* out_combat_after_left)
+{
+    int left_index = -1;
+    int combat_index = -1;
+    int first;
+    int last;
+
+    if (out_combat_after_left)
+        *out_combat_after_left = false;
+
+    for (int i = 0; i < pane_config_count; i++) {
+        if (pane_config[i].pane == PANE_LEFT_PANEL)
+            left_index = i;
+        else if (pane_config[i].pane == PANE_COMBAT)
+            combat_index = i;
+    }
+    if (left_index < 0 || combat_index < 0)
+        return false;
+    if (!pane_config[left_index].enabled || !pane_config[combat_index].enabled)
+        return false;
+    if (pane_config[left_index].where != where
+        || pane_config[combat_index].where != where)
+    {
+        return false;
+    }
+
+    first = MIN(left_index, combat_index);
+    last = MAX(left_index, combat_index);
+    for (int i = first + 1; i < last; i++) {
+        if (pane_config[i].enabled && pane_config[i].where == where)
+            return false;
+    }
+
+    if (out_combat_after_left)
+        *out_combat_after_left = combat_index > left_index;
+    return true;
+}
+
+bool sdl_combat_overlay_connected_to_left_panel(bool* out_combat_below)
+{
+    const struct pane_config* pc = sdl_combat_overlay_pane_config();
+    bool combat_after_left = false;
+
+    if (out_combat_below)
+        *out_combat_below = false;
+
+    if (!pc
+        || !sdl_left_panel_pane_presentation_active()
+        || !sdl_combat_overlay_pane_presentation_active()
+        || !sdl_combat_overlay_adjacent_to_left_panel(pc->where,
+            &combat_after_left))
+    {
+        return false;
+    }
+
+    if (out_combat_below) {
+        *out_combat_below = combat_after_left
+            != sdl_left_panel_pane_placement_is_bottom(pc->where);
+    }
+    return true;
+}
+
 bool sdl_combat_overlay_pane_current_rect(SDL_Rect* out_rect)
 {
     const struct pane_config* pc = sdl_combat_overlay_pane_config();
@@ -247,6 +320,10 @@ bool sdl_combat_overlay_pane_current_rect(SDL_Rect* out_rect)
     int content_h;
     int panel_w;
     int panel_h;
+    int top_padding_h;
+    int bottom_padding_h;
+    bool combat_below = false;
+    bool connected;
 
     if (out_rect)
         *out_rect = (SDL_Rect){ 0 };
@@ -273,7 +350,10 @@ bool sdl_combat_overlay_pane_current_rect(SDL_Rect* out_rect)
     if (content_w < 1 || content_h < 1)
         return false;
     panel_w = content_w + cell_w * 2;
-    panel_h = content_h + cell_h;
+    connected = sdl_combat_overlay_connected_to_left_panel(&combat_below);
+    top_padding_h = (connected && combat_below) ? 0 : cell_w;
+    bottom_padding_h = (connected && !combat_below) ? 0 : cell_w;
+    panel_h = content_h + top_padding_h + bottom_padding_h;
 
     rect = *pane;
     if (rect.w > panel_w) {
@@ -337,6 +417,63 @@ bool sdl_combat_overlay_pane_current_rect(SDL_Rect* out_rect)
     if (sdl_rect_has_area(&screen)) {
         int screen_right = screen.x + screen.w;
         int screen_bottom = screen.y + screen.h;
+        const SDL_Rect* left = &g_pane_rects[PANE_LEFT_PANEL];
+        SDL_Rect overlap;
+        bool combat_after_left = false;
+        bool shares_left_slot = sdl_left_panel_pane_runtime_active()
+            && pc->where == sdl_left_panel_pane_placement()
+            && sdl_rect_has_area(left);
+        bool adjacent_to_left = shares_left_slot
+            && sdl_combat_overlay_adjacent_to_left_panel(pc->where,
+                &combat_after_left);
+
+        /* The measured left panel replaces its nominal overlay slot after
+         * generic layout.  Anchor Combat to that measured rectangle when the
+         * two panes share a placement so independently-sized panes do not
+         * appear horizontally shifted within the same stack. */
+        if (shares_left_slot) {
+            if (sdl_left_panel_pane_placement_is_right(pc->where)) {
+                rect.x = left->x + left->w - rect.w;
+            } else if (sdl_left_panel_pane_placement_is_horizontal_center(
+                    pc->where))
+            {
+                rect.x = left->x + (left->w - rect.w) / 2;
+            } else {
+                rect.x = left->x;
+            }
+        }
+
+        /* LEFT_PANEL is measured and rendered independently of the nominal
+         * overlay slot geometry.  If Combat shares that slot, keep its real
+         * panel below (or above for a bottom anchor) the measured left panel
+         * instead of drawing over it. */
+        if (shares_left_slot) {
+            bool overlaps = SDL_GetRectIntersection(&rect, left, &overlap);
+            if (adjacent_to_left || overlaps) {
+                int below = left->y + left->h;
+                int above = left->y - rect.h;
+                bool place_below = !sdl_left_panel_pane_placement_is_bottom(
+                    pc->where);
+
+                if (adjacent_to_left) {
+                    place_below = combat_after_left
+                        != sdl_left_panel_pane_placement_is_bottom(pc->where);
+                }
+
+                if (!place_below) {
+                    rect.y = above;
+                    if (rect.y < screen.y
+                        && below + rect.h <= screen_bottom)
+                    {
+                        rect.y = below;
+                    }
+                } else {
+                    rect.y = below;
+                    if (rect.y + rect.h > screen_bottom && above >= screen.y)
+                        rect.y = above;
+                }
+            }
+        }
 
         if (rect.x < screen.x) {
             rect.w -= screen.x - rect.x;
@@ -361,6 +498,8 @@ bool sdl_combat_overlay_pane_current_rect(SDL_Rect* out_rect)
 
 bool sdl_combat_overlay_pane_content_rect(SDL_Rect* out_rect)
 {
+    const struct pane_config* pc = sdl_combat_overlay_pane_config();
+    const SDL_Rect* left = &g_pane_rects[PANE_LEFT_PANEL];
     SDL_Rect panel;
     SDL_Rect rect;
     int cell_h;
@@ -368,6 +507,10 @@ bool sdl_combat_overlay_pane_content_rect(SDL_Rect* out_rect)
     int content_w;
     int content_h;
     int margin_x;
+    int margin_y;
+    bool combat_below = false;
+    bool connected;
+    bool align_with_compact_left_row;
 
     if (out_rect)
         *out_rect = (SDL_Rect){ 0 };
@@ -385,19 +528,46 @@ bool sdl_combat_overlay_pane_content_rect(SDL_Rect* out_rect)
     content_h = sdl_combat_overlay_source_row_count() * cell_h;
     if (content_w < 1 || content_h < 1)
         return false;
+    connected = sdl_combat_overlay_connected_to_left_panel(&combat_below);
+    margin_y = (connected && combat_below) ? 0 : cell_w;
 
-    margin_x = (panel.w > content_w) ? (panel.w - content_w) / 2 : 0;
-    if (margin_x > cell_w)
-        margin_x = cell_w;
+    align_with_compact_left_row = pc
+        && sdl_left_panel_pane_runtime_active()
+        && sdl_left_panel_pane_collapsed()
+        && sdl_left_panel_compact_row_mode()
+        && pc->where == sdl_left_panel_pane_placement()
+        && sdl_rect_has_area(left);
+    if (align_with_compact_left_row) {
+        int side_padding = cell_w;
 
-    rect = (SDL_Rect){
-        .x = panel.x + margin_x,
-        .y = panel.y,
-        .w = panel.w - margin_x * 2,
-        .h = panel.h,
-    };
-    if (rect.w > content_w)
-        rect.w = content_w;
+        rect = panel;
+        rect.y += margin_y;
+        rect.h -= margin_y;
+        rect.x += side_padding;
+        rect.w -= side_padding * 2;
+        if (rect.w > content_w)
+            rect.w = content_w;
+        if (sdl_left_panel_pane_placement_is_right(pc->where)) {
+            rect.x = panel.x + panel.w - side_padding - rect.w;
+        } else if (sdl_left_panel_pane_placement_is_horizontal_center(
+                pc->where))
+        {
+            rect.x = panel.x + (panel.w - rect.w) / 2;
+        }
+    } else {
+        margin_x = (panel.w > content_w) ? (panel.w - content_w) / 2 : 0;
+        if (margin_x > cell_w)
+            margin_x = cell_w;
+
+        rect = (SDL_Rect){
+            .x = panel.x + margin_x,
+            .y = panel.y + margin_y,
+            .w = panel.w - margin_x * 2,
+            .h = panel.h - margin_y,
+        };
+        if (rect.w > content_w)
+            rect.w = content_w;
+    }
     if (rect.h > content_h)
         rect.h = content_h;
     if (rect.w <= 0 || rect.h <= 0)
@@ -655,18 +825,42 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
     if (p_ptr->stealth_mode)
         sdl_status_pane_add(entries, max_entries, &count, "Stealth",
             "", TERM_L_BLUE);
-    if (p_ptr->focused)
+    /* Waiting marks every character as focused.  Only expose that shared
+     * state as "Focused" when the player actually has Focused Attack;
+     * Polearm Mastery consumes it for a separate reaction mechanic. */
+    if (p_ptr->focused
+        && p_ptr->active_ability[S_PER][PER_FOCUSED_ATTACK])
         sdl_status_pane_add(entries, max_entries, &count, "Focused",
             "", TERM_L_BLUE);
+    if (p_ptr->active_ability[S_PER][PER_CONCENTRATION]
+        && p_ptr->consecutive_attacks > 0
+        && p_ptr->last_attack_m_idx > 0
+        && p_ptr->last_attack_m_idx < mon_max
+        && mon_list[p_ptr->last_attack_m_idx].r_idx)
     {
-        int power_throw_slot = player_power_throw_quiver_slot();
+        int bonus = MIN(p_ptr->consecutive_attacks,
+            p_ptr->skill_use[S_PER] / 2);
 
-        if (power_throw_slot)
+        if (bonus > 0)
         {
-            cptr quiver = (power_throw_slot == INVEN_QUIVER2)
-                ? "2nd quiver" : "1st quiver";
+            strnfmt(detail, sizeof(detail), "+%d", bonus);
+            sdl_status_pane_add(entries, max_entries, &count,
+                "Concentration", detail, TERM_L_BLUE);
+        }
+    }
+    {
+        int sources = 0;
+
+        for (int slot = 0; slot < INVEN_TOTAL; slot++)
+        {
+            if (player_can_power_throw_from_harness(slot))
+                sources++;
+        }
+        if (sources > 0)
+        {
+            cptr source = sources > 1 ? "choose" : "Harness";
             sdl_status_pane_add(entries, max_entries, &count, "Power Throw",
-                quiver, TERM_YELLOW);
+                source, TERM_YELLOW);
         }
     }
     if (sdl_status_pane_current_song_detail(detail, sizeof(detail)))
@@ -818,7 +1012,9 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
     if (p_ptr->was_entranced)
         sdl_status_pane_add(entries, max_entries, &count, "Waking",
             "", TERM_ORANGE);
-    if (p_ptr->vengeance > 0) {
+    if (p_ptr->vengeance > 0
+        && p_ptr->active_ability[S_WIL][WIL_VENGEANCE])
+    {
         strnfmt(detail, sizeof(detail), "%d", p_ptr->vengeance);
         sdl_status_pane_add(entries, max_entries, &count, "Vengeance",
             detail, TERM_L_RED);
@@ -896,6 +1092,8 @@ int sdl_status_pane_layout_entries(TTF_Font* font,
     int max_span_w = 0;
     int normal_count = 0;
     int normal_columns;
+    int column_limit = sdl_mobile_portrait_layout_active() ? 4
+        : SDL_STATUS_PANE_COLUMNS;
     int content_w;
     int column_w;
     int row = 0;
@@ -916,7 +1114,10 @@ int sdl_status_pane_layout_entries(TTF_Font* font,
     if (max_content_w <= column_gap_x)
         column_gap_x = 0;
 
-    max_column_w = (max_content_w - column_gap_x) / SDL_STATUS_PANE_COLUMNS;
+    if (column_limit < 1)
+        column_limit = 1;
+    max_column_w = (max_content_w
+        - column_gap_x * (column_limit - 1)) / column_limit;
     if (max_column_w < 1)
         max_column_w = max_content_w;
 
@@ -973,10 +1174,10 @@ int sdl_status_pane_layout_entries(TTF_Font* font,
     if (item_count <= 0)
         return 0;
 
-    normal_columns = (normal_count > 1) ? SDL_STATUS_PANE_COLUMNS : 1;
+    normal_columns = MIN(MAX(normal_count, 1), column_limit);
     if (max_normal_w > 0)
         content_w = max_normal_w * normal_columns
-            + ((normal_columns > 1) ? column_gap_x : 0);
+            + column_gap_x * (normal_columns - 1);
     else
         content_w = max_span_w;
 
@@ -987,7 +1188,8 @@ int sdl_status_pane_layout_entries(TTF_Font* font,
         content_w = max_content_w;
 
     column_w = (normal_columns > 1)
-        ? (content_w - column_gap_x) / normal_columns
+        ? (content_w - column_gap_x * (normal_columns - 1))
+            / normal_columns
         : content_w;
     if (column_w < 1)
         column_w = content_w;
@@ -1035,41 +1237,47 @@ void sdl_status_pane_draw_text(TTF_Font* font, cptr text,
     SDL_Color color, float x, float y, float max_w, float row_h,
     bool right_align)
 {
-    SDL_Surface* surface;
     SDL_Texture* texture;
     SDL_FRect dst;
     float scale = 1.0f;
+    int text_w = 0;
+    int text_h = 0;
 
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return;
 
-    surface = TTF_RenderText_Blended(font, text, 0, color);
-    if (!surface)
+    texture = sdl_ui_text_texture(font, text, color, &text_w, &text_h);
+    if (!texture)
         return;
 
-    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
-    if (!texture) {
-        SDL_DestroySurface(surface);
-        return;
-    }
+    if (text_w > 0 && (float)text_w > max_w)
+        scale = max_w / (float)text_w;
 
-    if (surface->w > 0 && (float)surface->w > max_w)
-        scale = max_w / (float)surface->w;
-
-    dst.w = (float)surface->w * scale;
-    dst.h = (float)surface->h * scale;
+    dst.w = (float)text_w * scale;
+    dst.h = (float)text_h * scale;
     dst.x = right_align ? x + max_w - dst.w : x;
     dst.y = y + (row_h - dst.h) * 0.5f;
 
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
-
-    SDL_DestroyTexture(texture);
-    SDL_DestroySurface(surface);
 }
 
-bool sdl_status_pane_layout(status_pane_layout* out)
+static Uint64 sdl_status_pane_hash_bytes(Uint64 hash, const void* data,
+    size_t len)
 {
+    const byte* bytes = (const byte*)data;
+
+    for (size_t i = 0; i < len; i++) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+static bool sdl_status_pane_layout_compute(status_pane_layout* out)
+{
+    static bool stable_cache_valid;
+    static Uint64 stable_cache_hash;
+    static status_pane_layout stable_cache_layout;
     status_pane_entry entries[SDL_STATUS_PANE_MAX_ENTRIES];
     SDL_Rect anchor;
     SDL_Rect screen;
@@ -1094,6 +1302,8 @@ bool sdl_status_pane_layout(status_pane_layout* out)
     int row_count = 0;
     int panel_w;
     int panel_h;
+    int column_limit;
+    Uint64 layout_hash = 1469598103934665603ULL;
 
     if (!out)
         return false;
@@ -1109,7 +1319,36 @@ bool sdl_status_pane_layout(status_pane_layout* out)
     font_px = sdl_effective_pane_cell_height_for_type(PANE_STATUS);
     if (font_px < 8)
         font_px = 8;
-    font = sdl_story_font_for_height(font_px);
+    screen = sdl_get_layout_screen_rect();
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &anchor,
+        sizeof(anchor));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &screen,
+        sizeof(screen));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &where,
+        sizeof(where));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &font_px,
+        sizeof(font_px));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+        &g_state.system_scale, sizeof(g_state.system_scale));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+        &g_story_font_generation, sizeof(g_story_font_generation));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &count,
+        sizeof(count));
+    for (int i = 0; i < count; i++) {
+        layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+            entries[i].label, strlen(entries[i].label) + 1);
+        layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+            entries[i].detail, strlen(entries[i].detail) + 1);
+        layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+            &entries[i].attr, sizeof(entries[i].attr));
+    }
+    if (stable_cache_valid && stable_cache_hash == layout_hash) {
+        *out = stable_cache_layout;
+        return true;
+    }
+
+    font = sdl_story_font_for_height_slot(font_px,
+        SDL_STORY_FONT_SLOT_STATUS);
     if (!font)
         return false;
 
@@ -1128,7 +1367,6 @@ bool sdl_status_pane_layout(status_pane_layout* out)
     gap_x = item_pad_x;
     min_item_w = font_px * 3;
 
-    screen = sdl_get_layout_screen_rect();
     max_panel_w = screen.w - pad_x * 2;
     max_panel_h = screen.h - pad_y * 2;
     if (max_panel_w <= 0 || max_panel_h <= 0)
@@ -1140,8 +1378,20 @@ bool sdl_status_pane_layout(status_pane_layout* out)
     max_rows = (max_panel_h - pad_y * 2) / row_h;
     if (max_rows <= 0)
         return false;
+    column_limit = sdl_mobile_portrait_layout_active() ? 4
+        : SDL_STATUS_PANE_COLUMNS;
+    if (sdl_mobile_portrait_layout_active() && max_rows > 2)
+        max_rows = 2;
 
+    /* Reserve one cell for the
+     * "More" item when truncating, instead of starting at all 48 entries and
+     * reformatting/remeasuring them once for every failed row count. */
     visible_count = count;
+    if (visible_count > max_rows * column_limit) {
+        visible_count = max_rows * column_limit - 1;
+        if (visible_count < 0)
+            visible_count = 0;
+    }
     for (;;) {
         more_count = count - visible_count;
         layout_count = sdl_status_pane_layout_entries(font, entries,
@@ -1170,12 +1420,52 @@ bool sdl_status_pane_layout(status_pane_layout* out)
     out->panel = sdl_overlay_panel_rect(&anchor, where, panel_w,
         panel_h, &screen);
     out->layout_count = layout_count;
+    out->content_w = content_w;
     out->font_px = font_px;
     out->row_h = row_h;
     out->pad_x = pad_x;
     out->pad_y = pad_y;
     out->item_pad_x = item_pad_x;
+    out->right_align = sdl_left_panel_pane_placement_is_right(where);
 
+    stable_cache_layout = *out;
+    stable_cache_hash = layout_hash;
+    stable_cache_valid = true;
+
+    return true;
+}
+
+bool sdl_status_pane_layout(status_pane_layout* out)
+{
+    static Uint64 cached_generation;
+    static status_pane_layout cached_layout;
+    static bool cached_result;
+    SDL_Rect anchor;
+    SDL_Rect screen;
+    enum pane_placement where;
+
+    if (!out)
+        return false;
+    if (cached_generation == g_sdl_present_generation) {
+        *out = cached_layout;
+    } else {
+        cached_result = sdl_status_pane_layout_compute(&cached_layout);
+        cached_generation = g_sdl_present_generation;
+        *out = cached_layout;
+    }
+
+    if (!cached_result)
+        return false;
+
+    /* Stack reflow can move the status anchor after its shape was cached for
+     * this frame. Keep the measured contents, but always resolve the live
+     * panel position from the current anchor. */
+    if (!sdl_status_pane_current_rect(&anchor, &where))
+        return false;
+    screen = sdl_get_layout_screen_rect();
+    out->panel = sdl_overlay_panel_rect(&anchor, where,
+        (int)(out->panel.w + 0.5f), (int)(out->panel.h + 0.5f), &screen);
+    out->right_align = sdl_left_panel_pane_placement_is_right(where);
     return true;
 }
 
@@ -1187,7 +1477,8 @@ void sdl_status_pane_render(void)
     if (!sdl_status_pane_layout(&layout))
         return;
 
-    font = sdl_story_font_for_height(layout.font_px);
+    font = sdl_story_font_for_height_slot(layout.font_px,
+        SDL_STORY_FONT_SLOT_STATUS);
     if (!font)
         return;
 
@@ -1197,6 +1488,11 @@ void sdl_status_pane_render(void)
 
     {
         float text_x = layout.panel.x + (float)layout.pad_x;
+
+        if (layout.right_align) {
+            text_x = layout.panel.x + layout.panel.w
+                - (float)layout.pad_x - (float)layout.content_w;
+        }
 
         for (int i = 0; i < layout.layout_count; i++) {
             status_pane_layout_item* item = &layout.items[i];
@@ -1214,8 +1510,296 @@ void sdl_status_pane_render(void)
             color = sdl_status_pane_color(item->attr);
             sdl_status_pane_draw_text(font, item->line, color,
                 item_text_x, row_y, item_text_w, (float)layout.row_h,
-                false);
+                layout.right_align);
         }
+    }
+}
+
+static int sdl_status_depth_pane_pack(TTF_Font* font,
+    const status_pane_entry* entries, int visible_count, int more_count,
+    cptr depth_label, status_depth_pane_layout_item* items, int max_items,
+    int max_content_w, int max_rows, int gap_x, int* out_content_w,
+    int* out_row_count)
+{
+    int item_count = 0;
+    int row = 0;
+    int used_w = 0;
+    int row_used_w = 0;
+    int token_count = 1 + visible_count + (more_count > 0 ? 1 : 0);
+
+    if (out_content_w)
+        *out_content_w = 0;
+    if (out_row_count)
+        *out_row_count = 0;
+    if (!font || !depth_label || !depth_label[0] || !items
+        || max_items <= 0 || max_content_w <= 0 || max_rows <= 0)
+    {
+        return -1;
+    }
+
+    for (int token = 0; token < token_count; token++) {
+        status_depth_pane_layout_item item = { 0 };
+        int right;
+
+        if (token == 0) {
+            SDL_strlcpy(item.line, depth_label, sizeof(item.line));
+            item.attr = TERM_L_WHITE;
+        } else if (token <= visible_count) {
+            sdl_status_pane_entry_line(&entries[token - 1], item.line,
+                sizeof(item.line));
+            item.attr = entries[token - 1].attr;
+        } else {
+            strnfmt(item.line, sizeof(item.line), "More +%d", more_count);
+            item.attr = TERM_SLATE;
+        }
+
+        item.w = sdl_status_pane_text_width(font, item.line);
+        if (item.w < 1)
+            continue;
+        if (item.w > max_content_w)
+            item.w = max_content_w;
+
+        right = row_used_w > 0 ? row_used_w + gap_x : 0;
+        if (right + item.w > max_content_w) {
+            row++;
+            row_used_w = 0;
+            right = 0;
+        }
+        if (row >= max_rows || item_count >= max_items)
+            return -1;
+
+        item.row_from_bottom = row;
+        item.right = right;
+        items[item_count++] = item;
+        row_used_w = right + item.w;
+        if (row_used_w > used_w)
+            used_w = row_used_w;
+    }
+
+    if (out_content_w)
+        *out_content_w = used_w;
+    if (out_row_count)
+        *out_row_count = row + 1;
+    return item_count;
+}
+
+static bool g_status_depth_pane_layout_computing;
+
+static bool sdl_status_depth_pane_layout_compute(
+    status_depth_pane_layout* out)
+{
+    static bool stable_cache_valid;
+    static Uint64 stable_cache_hash;
+    static status_depth_pane_layout stable_cache_layout;
+    const struct pane_config* pc = sdl_status_depth_pane_config();
+    status_pane_entry entries[SDL_STATUS_PANE_MAX_ENTRIES];
+    SDL_Rect anchor;
+    SDL_Rect screen;
+    TTF_Font* font;
+    char depth_label[64];
+    int count;
+    int font_px;
+    int max_panel_w;
+    int max_panel_h;
+    int max_content_w;
+    int max_rows;
+    int visible_count;
+    int more_count;
+    int layout_count;
+    int content_w = 0;
+    int row_count = 0;
+    int panel_w;
+    int panel_h;
+    Uint64 layout_hash = 1469598103934665603ULL;
+
+    if (!out)
+        return false;
+    *out = (status_depth_pane_layout){ 0 };
+
+    if (!pc || !pc->enabled || !character_generated || !character_dungeon
+        || character_icky || !p_ptr || screen_saved_fullscreen_active())
+    {
+        return false;
+    }
+    if (!sdl_layout_matches_supporting_pane_visibility())
+        return false;
+    if (!sdl_overlay_pane_anchor_rect(PANE_STATUS_DEPTH, &anchor))
+        return false;
+
+    sdl_depth_menu_pane_label(depth_label, sizeof(depth_label));
+    if (!depth_label[0])
+        return false;
+    count = sdl_status_pane_collect(entries, SDL_STATUS_PANE_MAX_ENTRIES);
+
+    font_px = sdl_effective_pane_cell_height_for_type(PANE_STATUS_DEPTH);
+    if (font_px < 8)
+        font_px = 8;
+    screen = sdl_get_layout_screen_rect();
+
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &anchor,
+        sizeof(anchor));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &screen,
+        sizeof(screen));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &pc->where,
+        sizeof(pc->where));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &font_px,
+        sizeof(font_px));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+        &g_state.system_scale, sizeof(g_state.system_scale));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+        &g_story_font_generation, sizeof(g_story_font_generation));
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, depth_label,
+        strlen(depth_label) + 1);
+    layout_hash = sdl_status_pane_hash_bytes(layout_hash, &count,
+        sizeof(count));
+    for (int i = 0; i < count; i++) {
+        layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+            entries[i].label, strlen(entries[i].label) + 1);
+        layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+            entries[i].detail, strlen(entries[i].detail) + 1);
+        layout_hash = sdl_status_pane_hash_bytes(layout_hash,
+            &entries[i].attr, sizeof(entries[i].attr));
+    }
+    if (stable_cache_valid && stable_cache_hash == layout_hash) {
+        *out = stable_cache_layout;
+        return true;
+    }
+
+    font = sdl_story_font_for_height_slot(font_px,
+        SDL_STORY_FONT_SLOT_STATUS);
+    if (!font)
+        return false;
+
+    out->font_px = font_px;
+    out->row_h = (int)((float)font_px * 1.35f + 0.5f);
+    if (out->row_h < font_px + 2)
+        out->row_h = font_px + 2;
+    out->pad_x = (int)((float)font_px * 0.55f + 0.5f);
+    out->pad_y = (int)((float)font_px * 0.30f + 0.5f);
+    if (out->pad_x < 6)
+        out->pad_x = 6;
+    if (out->pad_y < 3)
+        out->pad_y = 3;
+    out->gap_x = out->pad_x;
+
+    max_panel_w = screen.w - out->pad_x * 2;
+    max_panel_h = screen.h - out->pad_y * 2;
+    if (max_panel_w <= 0 || max_panel_h <= 0)
+        return false;
+
+    max_content_w = max_panel_w - out->pad_x * 2;
+    max_rows = (max_panel_h - out->pad_y * 2) / out->row_h;
+    if (max_content_w <= 0 || max_rows <= 0)
+        return false;
+
+    visible_count = count;
+    for (;;) {
+        more_count = count - visible_count;
+        layout_count = sdl_status_depth_pane_pack(font, entries,
+            visible_count, more_count, depth_label, out->items,
+            (int)N_ELEMENTS(out->items), max_content_w, max_rows,
+            out->gap_x, &content_w, &row_count);
+        if (layout_count >= 0)
+            break;
+        if (visible_count <= 0)
+            return false;
+        visible_count--;
+    }
+
+    if (layout_count <= 0)
+        return false;
+    panel_w = out->pad_x * 2 + content_w;
+    panel_h = out->pad_y * 2 + row_count * out->row_h;
+    if (panel_w > max_panel_w)
+        panel_w = max_panel_w;
+    if (panel_h > max_panel_h)
+        panel_h = max_panel_h;
+
+    out->panel = sdl_overlay_panel_rect(&anchor, pc->where, panel_w,
+        panel_h, &screen);
+    out->layout_count = layout_count;
+    out->row_count = row_count;
+    out->content_w = content_w;
+
+    stable_cache_layout = *out;
+    stable_cache_hash = layout_hash;
+    stable_cache_valid = true;
+    return true;
+}
+
+bool sdl_status_depth_pane_layout(status_depth_pane_layout* out)
+{
+    static Uint64 cached_generation;
+    static status_depth_pane_layout cached_layout;
+    static bool cached_result;
+    const struct pane_config* pc = sdl_status_depth_pane_config();
+    SDL_Rect anchor;
+    SDL_Rect screen;
+
+    if (!out)
+        return false;
+    if (g_status_depth_pane_layout_computing)
+        return false;
+    if (cached_generation != g_sdl_present_generation) {
+        g_status_depth_pane_layout_computing = true;
+        cached_result = sdl_status_depth_pane_layout_compute(&cached_layout);
+        g_status_depth_pane_layout_computing = false;
+        cached_generation = g_sdl_present_generation;
+    }
+    *out = cached_layout;
+    if (!cached_result || !pc || !pc->enabled)
+        return false;
+
+    if (!sdl_overlay_pane_anchor_rect(PANE_STATUS_DEPTH, &anchor))
+        return false;
+    screen = sdl_get_layout_screen_rect();
+    out->panel = sdl_overlay_panel_rect(&anchor, pc->where,
+        (int)(out->panel.w + 0.5f), (int)(out->panel.h + 0.5f), &screen);
+    return true;
+}
+
+bool sdl_status_depth_pane_current_rect(SDL_FRect* out)
+{
+    status_depth_pane_layout layout;
+
+    if (out)
+        *out = (SDL_FRect){ 0 };
+    if (!sdl_status_depth_pane_layout(&layout))
+        return false;
+    if (out)
+        *out = layout.panel;
+    return layout.panel.w > 0.0f && layout.panel.h > 0.0f;
+}
+
+void sdl_status_depth_pane_render(void)
+{
+    status_depth_pane_layout layout;
+    TTF_Font* font;
+    float content_right;
+
+    if (!sdl_status_depth_pane_layout(&layout))
+        return;
+    font = sdl_story_font_for_height_slot(layout.font_px,
+        SDL_STORY_FONT_SLOT_STATUS);
+    if (!font)
+        return;
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, 5, 7, 9,
+        SDL_OVERLAY_LOG_PANE_ALPHA);
+    SDL_RenderFillRect(g_state.renderer, &layout.panel);
+
+    content_right = layout.panel.x + layout.panel.w - (float)layout.pad_x;
+    for (int i = 0; i < layout.layout_count; i++) {
+        const status_depth_pane_layout_item* item = &layout.items[i];
+        SDL_Color color = sdl_status_pane_color(item->attr);
+        float item_x = content_right - (float)item->right - (float)item->w;
+        float item_y = layout.panel.y + (float)layout.pad_y
+            + (float)((layout.row_count - 1 - item->row_from_bottom)
+                * layout.row_h);
+
+        sdl_status_pane_draw_text(font, item->line, color, item_x, item_y,
+            (float)item->w, (float)layout.row_h, false);
     }
 }
 
@@ -1225,12 +1809,17 @@ bool sdl_overlay_pane_anchor_rect(enum pane_type pane_type,
     const sdl_view* view = &g_views[PANE_MAIN];
     SDL_Rect anchor;
     SDL_Rect screen;
+    bool force_main_anchor;
 
     if (!out)
         return false;
     *out = (SDL_Rect){ 0 };
 
+    force_main_anchor = pane_type == PANE_DESCRIPTION
+        && g_description_overlay_full_main_anchor_depth > 0;
+
     if (pane_type == PANE_DESCRIPTION
+        && !force_main_anchor
         && g_description_overlay_main_anchor_depth > 0)
     {
         SDL_Rect panes[PANE_MAX] = { 0 };
@@ -1247,7 +1836,8 @@ bool sdl_overlay_pane_anchor_rect(enum pane_type pane_type,
         }
     }
 
-    if (pane_type > PANE_MAIN && pane_type < PANE_MAX
+    if (!force_main_anchor
+        && pane_type > PANE_MAIN && pane_type < PANE_MAX
         && sdl_rect_has_area(&g_pane_rects[pane_type]))
     {
         *out = g_pane_rects[pane_type];
@@ -1294,5 +1884,16 @@ void sdl_pop_description_overlay_main_anchor(void)
 {
     if (g_description_overlay_main_anchor_depth > 0)
         g_description_overlay_main_anchor_depth--;
+}
+
+void sdl_push_description_overlay_full_main_anchor(void)
+{
+    g_description_overlay_full_main_anchor_depth++;
+}
+
+void sdl_pop_description_overlay_full_main_anchor(void)
+{
+    if (g_description_overlay_full_main_anchor_depth > 0)
+        g_description_overlay_full_main_anchor_depth--;
 }
 

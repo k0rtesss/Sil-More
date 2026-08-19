@@ -895,6 +895,7 @@ void update_view(void)
 
             if (!o_ptr->k_idx) continue;
             if (slot == INVEN_LITE) continue;
+            if (!player_equipment_slot_counts_as_equipped(slot)) continue;
 
             object_flags(o_ptr, &f1, &f2, &f3);
             if (f2 & TR2_DARKNESS)
@@ -1061,6 +1062,13 @@ void update_view(void)
             obj_light += o_ptr->pval;
         }
 
+        // A floor weapon glowing in response to nearby enemies lights its
+        // own square and the surrounding squares.
+        if (!o_ptr->held_m_idx && weapon_glows(o_ptr))
+        {
+            obj_light += 1;
+        }
+
         obj_rad = ABS(obj_light);
 
         // Do darkness or light for this object
@@ -1136,13 +1144,6 @@ void update_view(void)
         if (cave_light[y][x] <= 0)
         {
             fast_cave_info[g] &= ~(CAVE_SEEN);
-
-            /* Hack -- Forget "boring" grids */
-            if (cave_floorlike_bold(y, x) && (cave_info[y][x] & (CAVE_GLOW)))
-            {
-                /* Forget */
-                cave_info[y][x] &= ~(CAVE_MARK);
-            }
         }
     }
 
@@ -1248,7 +1249,9 @@ void update_view(void)
         }
     }
 
-    // Sil: disturb the player when the lighting changes unexpectedly
+    /* Disturb the player when lighting changes unexpectedly.  Starting
+     * smithing deliberately replaces the equipped fuel light with forge
+     * light; the separate monster update still disturbs on visibility. */
     for (i = py - MAX_SIGHT; i <= py + MAX_SIGHT; i++)
     {
         for (j = px - MAX_SIGHT; j <= px + MAX_SIGHT; j++)
@@ -1271,7 +1274,8 @@ void update_view(void)
                             if ((p_ptr->old_light >= 0)
                                 || (distance(py, px, i, j) > player_rad + 1))
                             {
-                                disturb(0, 0);
+                                if (!p_ptr->smithing_starting)
+                                    disturb(0, 0);
                                 // msg_format("(%d,%d) Disturbed on loss of
                                 // light.",i,j);
                             }
@@ -1290,7 +1294,8 @@ void update_view(void)
                             if ((p_ptr->old_light >= 0)
                                 || (distance(py, px, i, j) > player_rad + 1))
                             {
-                                disturb(0, 0);
+                                if (!p_ptr->smithing_starting)
+                                    disturb(0, 0);
                                 // msg_format("(%d,%d) Disturbed on gain of
                                 // light.",i,j);
                             }
@@ -1366,6 +1371,11 @@ void update_view(void)
             }
         }
     }
+
+    /* Passing through a grid gives the player persistent terrain knowledge.
+     * For ordinary floors, CAVE_MARK enables navigation while the existing
+     * lighting code still chooses the normal or dark floor visual. */
+    cave_info[py][px] |= CAVE_MARK;
 
     /* Save 'view_n' */
     view_n = fast_view_n;

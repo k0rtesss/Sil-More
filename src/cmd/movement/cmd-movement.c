@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "externs.h"
+#include "cmd/world/cmd-interact-chest.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -648,6 +649,8 @@ void do_cmd_toggle_stealth(void)
 
         /* Redraw the state */
         p_ptr->redraw |= (PR_STATE);
+        if (pixel_monster_status_icons)
+            p_ptr->redraw |= (PR_MAP);
     }
 
     /* Start stealth mode */
@@ -667,6 +670,15 @@ void do_cmd_toggle_stealth(void)
 
         /* Redraw stuff */
         p_ptr->redraw |= (PR_STATE | PR_SPEED);
+        if (pixel_monster_status_icons)
+            p_ptr->redraw |= (PR_MAP);
+    }
+
+    if (pixel_monster_status_icons)
+    {
+        force_map_redraw();
+        handle_stuff();
+        Term_fresh();
     }
 }
 
@@ -748,6 +760,9 @@ void do_cmd_walk(void)
 {
     int y, x, dir;
 
+    /* A movement command supersedes a lingering interaction-roll result. */
+    sdl_question_menu_clear_nonblocking();
+
     /* Get a direction (or abort) */
     if (!get_rep_dir(&dir))
         return;
@@ -807,6 +822,9 @@ void do_cmd_walk(void)
 void do_cmd_run(void)
 {
     int y, x, dir;
+
+    /* A movement command supersedes a lingering interaction-roll result. */
+    sdl_question_menu_clear_nonblocking();
 
     /* Hack XXX XXX XXX */
     if (p_ptr->confused)
@@ -880,16 +898,36 @@ void do_cmd_hold(void)
     search();
 }
 
-/*
- * Get items
- */
-void do_cmd_pickup(void)
+static void do_cmd_pickup_with_preference(
+    object_storage_type preferred_storage)
 {
+    s16b chest_o_idx;
+
+    /* A deliberate pickup attempt is also an interaction with a closed
+     * chest.  Route it through the same minigame instead of allowing pickup
+     * to bypass the first trap decision.  Passive/automatic pickup remains
+     * unchanged so merely stepping onto the tile does not open an overlay. */
+    chest_o_idx = chest_trap_minigame
+        ? chest_check(p_ptr->py, p_ptr->px) : 0;
+    if (chest_o_idx && o_list[chest_o_idx].pval != 0)
+    {
+        p_ptr->energy_use = 100;
+        p_ptr->previous_action[0] = ACTION_MISC;
+        (void)do_cmd_open_chest(
+            p_ptr->py, p_ptr->px, chest_o_idx);
+        return;
+    }
+
     // Usually pickup if there is an object here
     if (cave_o_idx[p_ptr->py][p_ptr->px])
     {
         /* Handle "objects" */
-        py_pickup();
+        if (preferred_storage == OBJECT_STORAGE_PACK)
+            py_pickup_to_pack();
+        else if (preferred_storage == OBJECT_STORAGE_HARNESS)
+            py_pickup_to_harness();
+        else
+            py_pickup();
     }
 
     else
@@ -898,15 +936,41 @@ void do_cmd_pickup(void)
     }
 }
 
+/* Get items, preferring the Pack when an item can be stored in either pool. */
+void do_cmd_pickup(void)
+{
+    do_cmd_pickup_with_preference(OBJECT_STORAGE_PACK);
+}
+
+/* Get items, preferring the Harness when an item can be stored in either pool. */
+void do_cmd_pickup_to_harness(void)
+{
+    do_cmd_pickup_with_preference(OBJECT_STORAGE_HARNESS);
+}
+
 /*
  * Rest (restores hit points and mana and such)
  */
 void do_cmd_rest(void)
 {
+    object_type* light = &inventory[INVEN_LITE];
+
     /* Prompt for time if needed */
     if (p_ptr->command_arg == 0)
     {
         p_ptr->command_arg = (-2);
+    }
+
+    /* Offer to save fuel from an equipped torch or lamp while resting. */
+    p_ptr->resting_light_off = false;
+    if (fuelable_light_p(light) && player_light_has_fuel(light)
+        && !((light->sval == SV_LIGHT_LANTERN)
+            && (object_ego_prefix(light) == EGO_BROKEN_BRASS_LANTERN)))
+    {
+        cptr light_name = (light->sval == SV_LIGHT_LANTERN) ? "lamp" : "torch";
+
+        p_ptr->resting_light_off = get_check(format(
+            "Turn off your %s while resting to save fuel? ", light_name));
     }
 
     // typically resting ends your current song
@@ -925,10 +989,16 @@ void do_cmd_rest(void)
     /* Save the rest code */
     p_ptr->resting = p_ptr->command_arg;
 
+    /* Apply the light change before the first resting turn is displayed. */
+    if (p_ptr->resting_light_off)
+        calc_torch();
+
     /* Cancel the arg */
     p_ptr->command_arg = 0;
 
     /* Cancel stealth mode */
+    if (p_ptr->stealth_mode && pixel_monster_status_icons)
+        p_ptr->redraw |= (PR_MAP);
     p_ptr->stealth_mode = false;
 
     /* Recalculate bonuses */

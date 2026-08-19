@@ -68,7 +68,7 @@ bool sdl_pane_layout_config_draggable(int index)
     if (type == PANE_TOUCH || type == PANE_MAP || type == PANE_LEFT_PANEL
         || type == PANE_STATUS || type == PANE_DEPTH
         || type == PANE_DESCRIPTION || type == PANE_OVERLAY_MENU
-        || type == PANE_COMBAT)
+        || type == PANE_COMBAT || type == PANE_STATUS_DEPTH)
     {
         return false;
     }
@@ -351,7 +351,7 @@ static void sdl_log_pane_switch_to(enum pane_type pane)
         if (!pane_placement_is_overlay(pane_config[index].where))
             pane_config[index].where = PLACE_TOP_RIGHT;
         if (pane_config[index].rect.rows <= 0)
-            pane_config[index].rect.rows = SDL_OVERLAY_LOG_PANE_DEFAULT_ROWS;
+            pane_config[index].rect.rows = get_sdl_pane_default_rows(index);
         pane_config[index].rect.cols = 0;
     }
 
@@ -478,12 +478,19 @@ int sdl_log_pane_current_rows(enum pane_type pane)
         ? SDL_OVERLAY_LOG_PANE_DEFAULT_ROWS : SDL_LOG_PANE_DEFAULT_ROWS;
     int rows;
 
+#if SIL_SDL_MOBILE_BUILD
+    if (pane == PANE_ROLLS && config.mobile_portrait_mode)
+        default_rows = SDL_PORTRAIT_OVERLAY_LOG_PANE_DEFAULT_ROWS;
+#endif
     if (index < 0)
         return default_rows;
 
-    rows = get_sdl_pane_current_rows(index);
+    /* Row +/- edits the persisted request.  The live pane can be shorter when
+     * a layout clips it, so using live rows here can make repeated increments
+     * keep writing the same configured value. */
+    rows = pane_config[index].rect.rows;
     if (rows <= 0)
-        rows = pane_config[index].rect.rows;
+        rows = get_sdl_pane_current_rows(index);
     if (rows <= 0)
         rows = default_rows;
 
@@ -1064,6 +1071,7 @@ const char* sdl_side_pane_menu_label(enum pane_type pane)
     case PANE_DESCRIPTION: return "Description";
     case PANE_OVERLAY_MENU: return "Quick Access";
     case PANE_COMBAT: return "Combat";
+    case PANE_STATUS_DEPTH: return "Status & Depth";
     default: return "Pane";
     }
 }
@@ -1080,7 +1088,8 @@ bool sdl_side_pane_menu_config_is_entry(int index)
         return false;
     if (type == PANE_TOUCH || type == PANE_LEFT_PANEL || type == PANE_STATUS
         || type == PANE_DEPTH || type == PANE_DESCRIPTION
-        || type == PANE_OVERLAY_MENU || type == PANE_COMBAT)
+        || type == PANE_OVERLAY_MENU || type == PANE_COMBAT
+        || type == PANE_STATUS_DEPTH)
     {
         return false;
     }
@@ -1601,5 +1610,3 @@ void sdl_side_pane_menu_render(void)
             0.30f, 0.40f);
     }
 }
-
-

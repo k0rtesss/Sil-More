@@ -237,6 +237,7 @@ extern byte* temp_x;
 extern u16b (*cave_info)[256];
 extern byte (*cave_feat)[MAX_DUNGEON_WID];
 extern byte (*cave_color)[MAX_DUNGEON_WID];
+extern byte (*cave_natural)[MAX_DUNGEON_WID];
 extern byte (*cave_rewired)[MAX_DUNGEON_WID];
 extern s16b (*cave_light)[MAX_DUNGEON_WID];
 extern s16b (*cave_o_idx)[MAX_DUNGEON_WID];
@@ -403,7 +404,7 @@ extern bool use_background_colors;
 extern metarun metar;
 extern int meta_fd;
 /* metarun/score helpers */
-extern void clear_scorefile(void);
+extern bool clear_scorefile(void);
 extern bool autoload_alive_from_scores(void);
 extern void metarun_finalize_scores_and_saves(void);
 extern void backup_and_clear_saves(void);
@@ -531,12 +532,12 @@ extern cptr active_narrative_banner_text(void);
 extern bool active_narrative_banner_consumes_input(void);
 extern void clear_active_narrative_banner(void);
 extern bool dismiss_active_narrative_banner(void);
-extern void sdl_narrative_banner_show(bool line_delay);
+extern void sdl_narrative_banner_show(bool line_delay, bool fast_fade);
+extern void sdl_popup_notification_show(cptr text);
 extern void styles_reload_messages_from_text(void);
 extern void styles_clear_display_messages(void);
 extern int p_ptr_depth_proxy(void);
 extern void styles_set_loaded_level_primary(int sidx);
-extern void print_fade_centered(cptr text);
 /* Persisted door-style variant choices for consistency across save/load */
 extern int styles_get_choice_capacity(void);
 extern void styles_copy_level_door_choices(byte* out_buf, int max_n);
@@ -572,10 +573,15 @@ extern void make_alert(monster_type* m_ptr);
 extern void set_alertness(monster_type* m_ptr, int alertness);
 extern void perceive(void);
 extern int success_chance(int sides, int skill, int difficulty);
+extern int player_skill_check_success_percent(int skill, int difficulty,
+    int skill_sides, int difficulty_sides);
 extern int skill_check(
     monster_type* m_ptr1, int skill, int difficulty, monster_type* m_ptr2);
 extern int skill_check_details(monster_type* m_ptr1, int skill, int difficulty,
     monster_type* m_ptr2, skill_roll_details* details);
+extern int skill_check_details_sided(monster_type* m_ptr1, int skill,
+    int difficulty, monster_type* m_ptr2, int skill_sides,
+    int difficulty_sides, skill_roll_details* details);
 extern int light_penalty(const monster_type* m_ptr);
 extern bool check_hit(int power, bool display_roll);
 extern int hit_roll(int att, int evn, const monster_type* m_ptr1,
@@ -584,6 +590,8 @@ extern int hit_roll_details(int att, int evn, const monster_type* m_ptr1,
     const monster_type* m_ptr2, bool display_roll, int* attack_die,
     int* evasion_die);
 extern int total_player_attack(monster_type* m_ptr, int base);
+extern int total_player_attack_ex(monster_type* m_ptr, int base,
+    bool include_concentration, bool include_focus);
 extern int total_player_evasion(monster_type* m_ptr, bool archery);
 extern int total_monster_attack(monster_type* m_ptr, int base);
 extern int total_monster_evasion(monster_type* m_ptr, bool archery);
@@ -616,8 +624,18 @@ extern int slay_bonus(
 extern int prt_after_sharpness(const object_type* o_ptr, u32b* noticed_flag);
 extern void search(void);
 extern void do_cmd_pickup_from_pile(void);
+extern void do_cmd_pickup_to_harness(void);
 extern void py_pickup_aux(int o_idx);
+extern void py_pickup_aux_to_pack(int o_idx);
+extern void py_pickup_aux_to_harness(int o_idx);
 extern void py_pickup(void);
+extern void py_pickup_to_pack(void);
+extern void py_pickup_to_harness(void);
+extern bool prepare_brass_lamp_flask_replacement(
+    const object_type* incoming, int* flasks_to_replace, int* flask_oil,
+    bool* aborted);
+extern bool commit_brass_lamp_flask_replacement(
+    int flasks_to_replace, int flask_oil);
 extern bool player_channel_floor_staff(object_type* donor, int floor_o_idx);
 extern bool smith_oath_forbids_object(const object_type* o_ptr);
 extern bool smith_oath_confirm_break(void);
@@ -672,6 +690,9 @@ extern bool trap_disarm_power(int feat, int* power);
 extern bool trap_is_rewireable(int feat);
 extern int show_interaction_skill_roll_animation(cptr title, cptr action,
     int y, int x, int skill, int difficulty, skill_roll_details* roll);
+extern int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
+    int y, int x, int skill, int difficulty, int skill_sides,
+    int difficulty_sides, skill_roll_details* roll);
 extern int show_interaction_skill_roll_animation_actor(monster_type* actor,
     cptr title, cptr action, int y, int x, int skill, int difficulty,
     skill_roll_details* roll);
@@ -692,6 +713,7 @@ extern void do_cmd_spike(void);
 extern void chest_release_contents(struct object_type* o_ptr, int y, int x,
     int destroy_typ);
 extern bool do_cmd_walk_test(int y, int x);
+extern bool player_grid_is_leapable_obstacle(int y, int x);
 extern void do_cmd_walk(void);
 extern void do_cmd_jump(void);
 extern void do_cmd_run(void);
@@ -710,6 +732,7 @@ extern bool throw_slot_enabled[INVEN_TOTAL];
 
 /* cmd3.c */
 extern void do_cmd_use_item_by_index(int item);
+extern bool do_cmd_move_item_to_storage(int item, byte target_storage);
 extern void do_cmd_use_item(void);
 extern void do_cmd_use_item_enhanced(void);
 extern void do_cmd_inven(void);
@@ -717,7 +740,9 @@ extern void do_cmd_inven_direct(void);
 extern void do_cmd_equip(void);
 extern void do_cmd_equip_direct(void);
 extern void do_cmd_wield(object_type* default_o_ptr, int default_item);
-extern void do_cmd_wield_to_slot(
+extern bool do_cmd_wield_to_slot(
+    object_type* default_o_ptr, int default_item, int forced_slot);
+extern bool do_cmd_wield_stack_to_slot(
     object_type* default_o_ptr, int default_item, int forced_slot);
 extern void do_cmd_wield_wrapper(void);
 extern void do_cmd_wield_enhanced(void);
@@ -727,6 +752,7 @@ extern bool do_cmd_jewelry_preset_store(int preset);
 extern bool do_cmd_jewelry_preset_clear(int preset);
 extern void do_cmd_jewelry_preset_shortcut(void);
 extern void do_cmd_drop_item_by_index(int item);
+extern bool do_cmd_drop_item_by_index_confirm(int item, bool confirm);
 extern void do_cmd_drop(void);
 extern bool open_supplies_menu_with_context(supply_menu_action default_action, int default_group, bool default_focus, bool default_hotkey);
 extern bool open_inventory_menu_page(supply_menu_page page);
@@ -742,6 +768,50 @@ extern void do_cmd_destroy(void);
 extern bool do_cmd_delete_item_by_index(int item);
 extern void do_cmd_observe(void);
 extern void do_cmd_observe_enhanced(void);
+extern cptr item_use_action_name(const object_type* o_ptr, int item);
+
+#define FLOOR_CONTEXT_MAX_ACTIONS 8
+
+typedef enum floor_context_action_kind
+{
+    FLOOR_CONTEXT_ACTION_NONE = 0,
+    FLOOR_CONTEXT_ACTION_DETAILS,
+    FLOOR_CONTEXT_ACTION_USE,
+    FLOOR_CONTEXT_ACTION_READY_THROW,
+    FLOOR_CONTEXT_ACTION_PACK,
+    FLOOR_CONTEXT_ACTION_HARNESS,
+    FLOOR_CONTEXT_ACTION_SUPPLIES,
+    FLOOR_CONTEXT_ACTION_QUIVER,
+    FLOOR_CONTEXT_ACTION_JEWELRY,
+    FLOOR_CONTEXT_ACTION_PICKUP,
+    FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT,
+    FLOOR_CONTEXT_ACTION_ITEMS,
+    FLOOR_CONTEXT_ACTION_CLOSE
+} floor_context_action_kind;
+
+typedef struct floor_context_action
+{
+    floor_context_action_kind kind;
+    int key;
+    byte attr;
+    char label[32];
+    char token[40];
+} floor_context_action;
+
+extern int floor_context_collect_item_actions(int floor_item,
+    bool include_details, bool include_close, floor_context_action actions[],
+    int capacity);
+extern int floor_context_collect_square_actions(bool include_details,
+    floor_context_action actions[], int capacity);
+extern bool floor_context_perform_action(int floor_item,
+    floor_context_action_kind kind);
+extern bool floor_context_action_for_key(int floor_item, int key,
+    floor_context_action_kind* kind);
+extern void do_cmd_queue_floor_context_action(
+    floor_context_action_kind kind);
+extern bool do_cmd_context_square_action_popup(void);
+extern void do_cmd_context_floor_item_action(void);
+extern void do_cmd_suppress_context_square_popups(void);
 extern bool touch_shortcut_context_action(int binding, bool description_open,
     int* out_key, char* label, size_t label_len);
 extern void do_cmd_uninscribe(void);
@@ -775,6 +845,8 @@ extern void do_cmd_character_sheet(void);
 extern void character_sheet_show_birth_preview(void);
 extern cptr character_sheet_skill_description(int skill);
 extern cptr character_sheet_trait_description(cptr label);
+extern void character_sheet_format_vital_description(cptr label, char* buf,
+    size_t buflen);
 extern void character_sheet_format_stat_hint(int stat, int value,
     bool has_value, char* buf, size_t buflen);
 extern void character_sheet_format_trait_description(cptr label, int skill,
@@ -784,6 +856,7 @@ extern void do_cmd_change_song(void);
 extern void wipe_screen_from(int col);
 extern int ability_index(int skilltype, int abilitynum);
 extern int ability_requirement_level(const ability_type* b_ptr);
+extern byte ability_skill_color(int skilltype);
 extern void ability_log_reset(void);
 extern void ability_log_record_gain(int skilltype, int abilitynum);
 extern void ability_log_sync_missing(void);
@@ -817,33 +890,39 @@ extern void do_cmd_smithing_screen(void);
 extern void create_smithing_item(void);
 #define MAIN_MENU_CHARACTER 1
 #define MAIN_MENU_INVENTORY 2
-#define MAIN_MENU_KNOWLEDGE 3
-#define MAIN_MENU_HINTS_QUESTS 4
-#define MAIN_MENU_HALLS_OF_MANDOS 5
-#define MAIN_MENU_MAP 6
-#define MAIN_MENU_LOG_HISTORY 7
-#define MAIN_MENU_STORY 8
-#define MAIN_MENU_STORY_STATS 9
-#define MAIN_MENU_BLITZ 10
-#define MAIN_MENU_OPTIONS 11
-#define MAIN_MENU_HELP 12
-#define MAIN_MENU_ABOUT 13
-#define MAIN_MENU_SAVE 14
-#define MAIN_MENU_SAVE_QUIT 15
-#define MAIN_MENU_RETURN_GAME 16
-#define MAIN_MENU_MAX 16
+#define MAIN_MENU_SMITHING 3
+#define MAIN_MENU_KNOWLEDGE 4
+#define MAIN_MENU_HINTS_QUESTS 5
+#define MAIN_MENU_HALLS_OF_MANDOS 6
+#define MAIN_MENU_MAP 7
+#define MAIN_MENU_LOG_HISTORY 8
+#define MAIN_MENU_STORY 9
+#define MAIN_MENU_STORY_STATS 10
+#define MAIN_MENU_BLITZ 11
+#define MAIN_MENU_OPTIONS 12
+#define MAIN_MENU_HELP 13
+#define MAIN_MENU_ABOUT 14
+#define MAIN_MENU_SAVE 15
+#define MAIN_MENU_SAVE_QUIT 16
+#define MAIN_MENU_RETURN_GAME 17
+#define MAIN_MENU_MAX 17
 extern cptr main_menu_title(int choice);
 extern int main_menu_keyboard_key(int choice);
 extern void main_menu_shortcut_label(int choice, char* buf, size_t buflen);
 extern int main_menu_choice_from_key(int key);
 extern bool main_menu_choice_is_disabled(int choice);
 extern bool do_cmd_main_menu_execute_choice(int choice);
+extern void sdl_quick_access_suggest_skill_shortcut(int skill);
+extern void sdl_quick_access_suggest_ability_shortcut(int skill, int ability);
+extern void sdl_quick_access_suggest_starting_shortcuts(void);
+extern void sdl_quick_access_suggest_equipped_item(int tval);
 extern void do_cmd_main_menu(void);
 extern void do_cmd_messages(void);
 extern void do_cmd_messages_with_filter(int initial_filter);
 extern void do_cmd_options_aux(int page, cptr info);
 extern void do_cmd_options(void);
 extern void do_cmd_pane_settings(void);
+extern bool do_cmd_touch_top_widget_pick_button(int slot);
 extern void do_cmd_macros(void);
 extern void do_cmd_keybinds(void);
 extern void do_cmd_visuals(void);
@@ -876,6 +955,10 @@ extern void display_koff(int k_idx);
 extern void do_cmd_eat_food(object_type* default_o_ptr, int default_item);
 extern void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item);
 extern void do_cmd_use_gem(object_type* default_o_ptr, int default_item);
+extern int understanding_gem_count_for_item_description(
+    const object_type* viewed_o_ptr);
+extern bool do_cmd_use_understanding_gem_on_item(
+    const object_type* viewed_o_ptr);
 extern void self_knowledge_defer_display_push(void);
 extern void self_knowledge_defer_display_pop(void);
 extern bool self_knowledge_display_pending(void);
@@ -883,6 +966,7 @@ extern void do_cmd_activate_staff(object_type* default_o_ptr, int default_item);
 extern void do_cmd_play_instrument(
     object_type* default_o_ptr, int default_item);
 extern void do_cmd_activate(void);
+extern void do_cmd_activate_by_index(int item);
 
 /* dungeon/ */
 extern bool can_be_pseudo_ided(const object_type* o_ptr);
@@ -935,6 +1019,7 @@ extern errr file_character(cptr name, bool full);
 extern bool show_buffer(cptr name, int line);
 extern bool show_file(cptr name, cptr what, int line);
 extern void do_cmd_help(void);
+extern void do_cmd_help_menu(void);
 extern void process_player_name(bool sf);
 extern bool get_name(void);
 extern void do_cmd_escape(int);
@@ -950,7 +1035,16 @@ extern void exit_game_panic(void);
 extern errr create_score(high_score* the_score);
 extern int score_points(const high_score* score);
 extern int score_count_alive_entries(void);
+extern int score_count_story_alive_entries(void);
+extern int score_count_alive_entries_at_path(const char* score_path);
+extern bool score_count_story_alive_entries_checked(int* alive_count);
+extern bool score_count_alive_entries_at_path_checked(const char* score_path,
+                                                      int* alive_count);
+extern bool score_story_ledger_exists(void);
 extern u32b score_sum_dead_points(void);
+extern u32b score_sum_story_dead_points(void);
+extern int collect_story_high_scores(high_score* out, int capacity,
+                                     bool sort_by_score);
 #ifdef HANDLE_SIGNALS
 extern void (*(*signal_aux)(int, void (*)(int)))(int);
 #endif
@@ -965,11 +1059,10 @@ extern int meta_write(const metarun*);
 extern errr meta_read(metarun*);
 extern int meta_seek(int i);
 extern int meta_fill(bool);
+extern void print_story_intro(void);
 extern void print_story(int last_parts, bool fade_in);
-/* Generic fade-in line printer for arbitrary text */
-extern void print_fade_line(cptr text, int row, int indent);
 extern const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll);
-extern void clear_scorefile(void);
+extern bool clear_scorefile(void);
 extern bool autoload_alive_from_scores(void);
 extern bool mobile_autosave_game(cptr reason);
 
@@ -1003,6 +1096,8 @@ extern s16b hint_messages_map_hgt_for_save(void);
 extern byte hint_messages_message_line_count(int index);
 extern const char* hint_messages_message_line(int index, int line);
 extern void hint_messages_message_meta(int index, hint_message_meta* out);
+extern void hint_text_for_current_platform(const char* src, char* out,
+    size_t out_sz);
 extern bool hint_messages_short_tip(int index, char* out, size_t out_sz);
 extern bool hint_messages_short_tip_for_source(int y, int x, char* out,
     size_t out_sz);
@@ -1198,8 +1293,8 @@ extern byte object_attr_graphics_override(
 extern char object_char_graphics_override(
     const object_type* o_ptr, char base_char);
 extern char index_to_label(int i);
-extern s16b label_to_inven(int c);
-extern s16b label_to_equip(int c);
+extern int label_to_inven(int c);
+extern int label_to_equip(int c);
 extern s16b wield_slot(const object_type* o_ptr);
 extern cptr describe_empty_slot(int i);
 extern cptr mention_use(int i);
@@ -1225,6 +1320,7 @@ extern bool player_can_treat_as_throwing(const object_type* o_ptr);
 extern bool player_can_treat_as_throwing_flags(const object_type* o_ptr, u32b f3);
 extern bool weapon_is_impale_eligible(const object_type* o_ptr);
 extern int get_paired_artefact(int art_idx);
+extern bool potion_has_thrown_effect(const object_type* o_ptr);
 
 /* object/object-*.c */
 extern void excise_object_idx(int o_idx);
@@ -1249,6 +1345,10 @@ extern void object_wipe(object_type* o_ptr);
 extern void object_copy(object_type* o_ptr, const object_type* j_ptr);
 extern byte object_chest_trap_flags(const object_type* o_ptr);
 extern void object_prep(object_type* o_ptr, int k_idx);
+extern int object_effective_protection_sides(const object_type* o_ptr);
+extern int object_effective_volume(const object_type* o_ptr);
+extern int object_effective_volume_with_reduction(const object_type* o_ptr,
+    int extra_reduction_percent);
 extern void object_refresh_weight(object_type* o_ptr);
 extern void object_into_artefact(object_type* o_ptr, artefact_type* a_ptr);
 extern u32b object_kind_pval_flags1(const object_kind* k_ptr);
@@ -1259,6 +1359,7 @@ extern void object_apply_pval_delta_with_mask(object_type* o_ptr, u32b mask, int
 extern bool object_apply_ego_affix(object_type* o_ptr, int e_idx, bool smithing);
 extern bool object_break_brass_lantern(object_type* o_ptr);
 extern bool object_is_fire_broken(const object_type* o_ptr);
+extern bool object_has_broken_prefix(const object_type* o_ptr);
 extern bool object_break_shafted_weapon_by_fire(object_type* o_ptr);
 extern bool object_repair_fire_broken_weapon(object_type* o_ptr);
 extern void object_into_special(object_type* o_ptr, int lev, bool smithing);
@@ -1406,7 +1507,23 @@ extern void floor_item_describe(int item);
 extern void floor_item_increase(int item, int num);
 extern void floor_item_optimize(int item);
 extern void check_pack_overflow(void);
+extern void player_carried_extra_reset_store(void);
+extern int player_carried_extra_entry_count(void);
+extern object_type* player_carried_extra_entry_at(int index);
+extern bool player_carried_extra_load(const object_type* o_ptr);
+extern bool player_carried_extra_handle_valid(int item);
+extern object_type* player_inventory_object(int item);
+extern int player_inventory_handle_for_object(const object_type* o_ptr);
+extern bool player_inventory_handle_valid(int item);
+extern bool player_inventory_handle_is_carried(int item);
+extern bool player_inventory_handle_is_equipped(int item);
+extern int player_pack_entry_count(void);
+extern int player_pack_entry_handle_at(int ordinal);
+extern object_type* player_pack_entry_at(int ordinal);
+extern char player_inventory_label(int item);
 extern bool inven_carry_okay(const object_type* o_ptr);
+extern bool inventory_type_slot_available(const object_type* o_ptr,
+    bool record_failure);
 extern bool inven_carry_okay_after_removing(
     const object_type* o_ptr, int remove_item, int remove_amt);
 extern bool inven_carry_limit_failed(void);
@@ -1415,21 +1532,9 @@ extern bool inven_carry_limit_failed(void);
 enum inventory_limit_group
 {
     INV_LIMIT_NONE = 0,
-    INV_LIMIT_ARROW,
-    INV_LIMIT_BOW,
-    INV_LIMIT_STAFF,
-    INV_LIMIT_HORN,
-    INV_LIMIT_DIGGING,
-    INV_LIMIT_BOOTS,
-    INV_LIMIT_GLOVES,
-    INV_LIMIT_HELM_CROWN,
-    INV_LIMIT_ROUND_SHIELD,
-    INV_LIMIT_OTHER_SHIELD,
-    INV_LIMIT_CLOAK,
-    INV_LIMIT_SOFT_ARMOUR,
-    INV_LIMIT_MAIL,
-    INV_LIMIT_MELEE_WEAPON,
-    INV_LIMIT_THROWABLE,
+    INV_LIMIT_PACK,
+    INV_LIMIT_HARNESS,
+    INV_LIMIT_JEWELRY,
     INV_LIMIT_SUPPLY_WEIGHT,
     INV_LIMIT_TORCHES,
     INV_LIMIT_BRASS_LAMPS,
@@ -1446,19 +1551,54 @@ extern bool inven_carry_limit_is_supply_weight(void);
 extern bool inven_carry_limit_can_replace(const object_type* o_ptr);
 extern enum inventory_limit_group inventory_limit_group_for_object(
     const object_type* o_ptr);
+extern bool object_can_choose_pack_or_harness(const object_type* o_ptr);
+extern bool object_can_store_directly_in_pack(const object_type* o_ptr);
 extern bool inventory_limit_info_for_object(const object_type* o_ptr,
     enum inventory_limit_group* group, int* limit, int* cost);
 extern int inventory_limit_usage_for_group(enum inventory_limit_group group);
 extern int inventory_limit_limit_for_group(enum inventory_limit_group group);
 extern int inventory_limit_space_for_object(const object_type* o_ptr);
+extern int inventory_limit_intrinsic_space_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_carriage_savings_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_carriage_savings_for_group(
+    enum inventory_limit_group group);
+extern cptr inventory_limit_carriage_ability_name_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_additional_space_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_removal_space_for_object(
+    const object_type* o_ptr);
+extern int inventory_limit_usage_after_replacing(const object_type* incoming,
+    const object_type* removed, int remove_quantity);
+extern int inventory_limit_max_carryable_quantity(const object_type* o_ptr);
 extern bool inventory_limit_object_matches_group(
     enum inventory_limit_group group, const object_type* o_ptr);
 extern cptr inventory_limit_group_name(enum inventory_limit_group group);
 extern int object_stack_limit(const object_type* o_ptr);
-extern s16b inven_carry(object_type* o_ptr, bool combine_ammo);
-extern s16b inven_takeoff(int item, int amt);
+extern bool object_is_quivered_arrow(const object_type* o_ptr);
+extern bool inventory_slot_is_quivered_arrow(int item);
+extern void player_quiver_reset_store(void);
+extern int player_quiver_store_entry_count(void);
+extern object_type* player_quiver_store_entry_at(int index);
+extern object_type* player_quiver_arrow_object(int handle);
+extern int player_quiver_absorb_arrow(object_type* o_ptr);
+extern void player_quiver_remove_arrows(int handle, int amount);
+extern int player_quiver_arrow_count(void);
+extern int player_quiver_total_weight(void);
+extern int player_quiver_arrow_space(void);
+extern int player_quiver_first_arrow_slot(void);
+extern int player_quiver_selected_arrow_slot(void);
+extern int player_quiver_selected_arrow_index(void);
+extern void player_quiver_restore_selected_arrow(int index);
+extern bool player_quiver_select_arrow(int handle);
+extern int player_quiver_arrow_slots(int* slots, int max);
+extern int inven_carry(object_type* o_ptr, bool combine_ammo);
+extern int inven_takeoff(int item, int amt);
 extern void inven_drop(int item, int amt);
-extern void inven_enforce_current_pack_limits(void);
+extern void inven_update_current_pack_limits(void);
+extern void inventory_limit_grandfather_current_overflow(void);
 extern void combine_pack(void);
 extern void reorder_pack(bool display_message);
 extern void steal_object_from_monster(int y, int x);
@@ -1583,18 +1723,74 @@ extern bool sdl_welcome_screen_set_status(cptr status);
 extern bool sdl_welcome_screen_show_loading(cptr status);
 extern void sdl_welcome_screen_hide(void);
 extern bool sdl_welcome_screen_active(void);
+extern void sdl_poetry_screen_begin(cptr title, cptr body,
+    cptr transition, cptr prompt);
+extern void sdl_poetry_sequence_layout_begin(void);
+extern void sdl_poetry_sequence_layout_end(void);
+extern void sdl_poetry_screen_begin_choices(cptr title);
+extern void sdl_poetry_screen_begin_blocks(cptr title, cptr prompt);
+extern int sdl_poetry_screen_add_block(cptr text, byte attr);
+extern void sdl_poetry_screen_set_block_visible(int block, bool visible);
+extern void sdl_poetry_screen_set_block_alpha(int block, byte alpha);
+extern void sdl_poetry_screen_set_block_attr(int block, byte attr);
+extern void sdl_poetry_screen_add_choice(int choice, cptr label, cptr body);
+extern void sdl_poetry_screen_set_choice_visible(int choice, bool visible,
+    byte label_attr, byte body_attr);
+extern void sdl_poetry_screen_set_choice_alpha(int choice, byte alpha);
+extern void sdl_poetry_screen_set_highlight(int choice);
+extern void sdl_poetry_screen_set_prompt(cptr prompt, bool visible);
+extern void sdl_poetry_screen_set_alpha(byte title_alpha, byte body_alpha,
+    byte transition_alpha, byte prompt_alpha);
+extern void sdl_poetry_screen_update(bool title_visible,
+    byte title_attr, bool body_visible, byte body_attr,
+    bool transition_visible, byte transition_attr, bool prompt_visible);
+extern void sdl_poetry_screen_hide(void);
+extern bool sdl_poetry_screen_active(void);
+extern bool sdl_pause_text_screen_begin(void);
+extern void sdl_pause_text_screen_add_line(cptr text, byte attr, int indent);
+extern void sdl_pause_text_screen_set_visible_lines(int visible_lines);
+extern void sdl_pause_text_screen_hide(void);
+extern bool sdl_pause_text_screen_active(void);
+extern bool sdl_tale_screen_begin(cptr title);
+extern void sdl_tale_screen_add_entry(cptr heading, cptr body);
+extern void sdl_tale_screen_set_manuscript(bool enabled);
+extern int sdl_tale_screen_current_page_entry_count(void);
+extern int sdl_tale_screen_current_page_entry_at(int position);
+extern int sdl_tale_screen_entry_character_count(int entry);
+extern int sdl_tale_screen_entry_character_at(int entry, int position);
+extern void sdl_tale_screen_set_active_entry(int active_entry, byte alpha);
+extern void sdl_tale_screen_set_typewriter_entry(int active_entry,
+    int visible_characters, bool cursor_visible);
+extern void sdl_tale_screen_set_prompt(cptr prompt, bool visible,
+    bool final);
+extern bool sdl_tale_screen_advance_page(void);
+extern bool sdl_tale_screen_is_last_page(void);
+extern void sdl_tale_screen_hide(void);
+extern bool sdl_tale_screen_active(void);
+extern void sdl_halls_screen_begin(cptr subtitle, cptr page_status,
+    bool detailed, int outside_choice);
+extern int sdl_halls_screen_page_capacity(bool detailed);
+extern void sdl_halls_screen_add_entry(int choice, cptr rank, cptr name,
+    cptr score, cptr outcome, cptr details, cptr honors,
+    byte honors_attr, cptr score_increases, cptr score_decreases,
+    byte attr, bool selected);
+extern void sdl_halls_screen_set_empty(cptr text);
+extern void sdl_halls_screen_add_action(int choice, cptr label, byte attr,
+    bool enabled);
+extern void sdl_halls_screen_hide(void);
+extern bool sdl_halls_screen_active(void);
 extern bool sdl_character_sheet_screen_active(void);
 extern void sdl_character_sheet_screen_hide(void);
-extern bool sdl_character_sheet_screen_begin_live(int focus_choice);
-extern bool sdl_character_sheet_screen_begin_birth_preview(void);
+extern void sdl_character_sheet_screen_begin_live(int focus_choice);
+extern void sdl_character_sheet_screen_begin_birth_preview(void);
 extern void sdl_character_sheet_screen_add_live_item(int choice, int kind,
     int skill, int value_kind, cptr label, cptr desc);
-extern bool sdl_character_sheet_screen_show_birth_stats(const int* stats,
+extern void sdl_character_sheet_screen_show_birth_stats(const int* stats,
     const int* costs, int selected_stat, int points_left);
-extern bool sdl_character_sheet_screen_show_birth_skills(const int* old_base,
+extern void sdl_character_sheet_screen_show_birth_skills(const int* old_base,
     const int* skill_gain, const int* costs, int selected_skill,
     int points_left);
-extern bool sdl_character_sheet_screen_begin_select(int focus_choice,
+extern void sdl_character_sheet_screen_begin_select(int focus_choice,
     cptr title);
 extern void sdl_character_sheet_screen_set_select_menu_style(bool enabled);
 extern void sdl_character_sheet_screen_set_select_dynamic_description(
@@ -1604,12 +1800,17 @@ extern void sdl_character_sheet_screen_add_select_row(int choice, cptr label,
     int attr, cptr desc);
 extern void sdl_character_sheet_screen_set_last_select_row_reset(
     int reset_choice);
+extern void sdl_character_sheet_screen_set_last_select_row_confirmable(
+    bool confirmable);
 extern void sdl_character_sheet_screen_add_select_detail(cptr text, int attr,
     cptr desc);
 extern void sdl_character_sheet_screen_set_select_detail_size_hint(
-    int stat_rows, int trait_rows);
+    int stat_rows, int ability_rows, int trait_rows);
+extern void sdl_character_sheet_screen_set_select_ability_rows(int rows);
 extern void sdl_character_sheet_screen_set_select_title_detail(cptr title,
     cptr suffix, int suffix_attr);
+extern void sdl_character_sheet_screen_add_select_title_candidate(cptr title,
+    cptr suffix);
 extern void sdl_character_sheet_screen_begin_select_rating_summary(cptr title);
 extern void sdl_character_sheet_screen_add_select_rating(cptr group,
     cptr stars, int count, int attr, cptr desc);
@@ -1617,13 +1818,14 @@ extern void sdl_character_sheet_screen_add_select_heading(cptr label);
 extern void sdl_character_sheet_screen_set_select_intro(cptr text);
 extern void sdl_character_sheet_screen_set_select_frame(cptr top, cptr bottom);
 extern void sdl_character_sheet_screen_show_select_choice_page_only(void);
+extern void sdl_character_sheet_screen_open_select_choice_page(void);
 /* Race "book" page-turn: click ids (mouse) + navigation API for birth/. */
 #define SDL_SELECT_CLICK_PAGE_PREV (-20)
 #define SDL_SELECT_CLICK_PAGE_NEXT (-21)
 /* Mobile character carousel: triangle ids that step to the prev/next hero. */
 #define SDL_SELECT_CLICK_CAROUSEL_PREV (-22)
 #define SDL_SELECT_CLICK_CAROUSEL_NEXT (-23)
-/* Narrative book: an on-screen "Close" button for mouse/touch traversal. */
+/* Narrative book: an on-screen exit button for mouse/touch traversal. */
 #define SDL_SELECT_CLICK_CLOSE (-24)
 extern bool sdl_character_sheet_screen_mobile_carousel_active(void);
 extern void sdl_character_sheet_screen_reset_select_page(void);
@@ -1632,12 +1834,18 @@ extern int sdl_character_sheet_screen_select_page_count(void);
 extern bool sdl_character_sheet_screen_page_turning(void);
 extern void sdl_character_sheet_screen_begin_page_turn(int dir);
 extern void sdl_character_sheet_screen_begin_page_turn_to(int page);
+extern bool sdl_character_sheet_screen_scroll_book(int direction);
+extern void sdl_character_sheet_screen_set_book_focus(int choice);
+extern int sdl_character_sheet_screen_book_action_page(int choice);
 extern void sdl_character_sheet_screen_set_select_size_hint(cptr longest_desc);
+extern void sdl_character_sheet_screen_add_select_description_candidate(
+    cptr text);
+extern void sdl_character_sheet_screen_add_select_welcome(cptr text);
 extern void sdl_character_sheet_screen_set_select_description(cptr text);
 extern bool sdl_character_sheet_screen_commit_select(int selected_index);
 /* Narrative "book" (N pages with optional actions): quest text, stats, etc.  Reuses the page-turn
  * navigation accessors above (select_page / page_turning / begin_page_turn). */
-extern bool sdl_character_sheet_screen_begin_book(cptr title);
+extern void sdl_character_sheet_screen_begin_book(cptr title);
 extern void sdl_character_sheet_screen_add_book_paragraph(cptr text);
 extern void sdl_character_sheet_screen_add_book_paragraph_colored(cptr text,
     int attr);
@@ -1649,6 +1857,10 @@ extern void sdl_character_sheet_screen_add_book_contents(cptr label,
 extern void sdl_character_sheet_screen_set_book_lamp(u32b current,
     u32b maximum, int page);
 extern void sdl_character_sheet_screen_set_book_close_button(bool enabled);
+extern void sdl_character_sheet_screen_set_book_close_label(cptr label);
+extern void sdl_character_sheet_screen_set_book_target_page_count(
+    int page_count);
+extern int sdl_character_sheet_screen_book_contents_page(int contents_index);
 extern void sdl_character_sheet_screen_break_book_page(void);
 extern void sdl_character_sheet_screen_highlight_book_paragraph(void);
 extern void sdl_character_sheet_screen_commit_book(void);
@@ -1692,6 +1904,7 @@ extern void sdl_pop_saved_screen_left_panel_pane(void);
 #define SDL_STATUS_CLICK_VIEW 4
 extern int sdl_pointer_attack_current_mode(void);
 extern bool sdl_pointer_attack_panel_mode_highlighted(int mode);
+extern bool sdl_pointer_attack_panel_quiver_highlighted(int mode);
 extern bool sdl_pointer_attack_take_command(int* command, int* dir);
 extern void sdl_pointer_attack_reset_to_melee(void);
 extern void sdl_pointer_aim_begin(int range, bool allow_vertical);
@@ -1706,6 +1919,7 @@ extern bool sdl_pointer_aim_select_take_event(int* kind, int* y, int* x);
 extern void sdl_pointer_aim_select_set_choices(const int* ys, const int* xs,
     int count, cptr prompt);
 extern bool sdl_mouse_path_take_step_command(int* command, int* dir);
+extern bool sdl_mouse_path_is_following(void);
 extern bool sdl_mouse_recall_process_pending(void);
 extern bool sdl_log_pane_display_process_pending(void);
 extern int sdl_log_pane_display_filter(int pane);
@@ -1757,10 +1971,15 @@ extern bool askfor_name(char* buf, size_t len);
 extern bool term_get_string(cptr prompt, char* buf, size_t len);
 extern bool get_string_panel(cptr prompt, char* buf, size_t len);
 extern s16b get_quantity(cptr prompt, int max);
+extern s16b get_quantity_action(cptr prompt, cptr action, int max);
 extern s16b get_quantity_touch_category(cptr prompt, int max,
     int touch_category);
+extern s16b get_quantity_touch_category_action(cptr prompt, cptr action,
+    int max, int touch_category);
 extern s16b get_quantity_touch_category_force_prompt(cptr prompt, int max,
     int touch_category);
+extern s16b get_quantity_touch_category_force_prompt_action(cptr prompt,
+    cptr action, int max, int touch_category);
 extern bool get_check(cptr prompt);
 extern bool get_check_near(int y, int x, cptr prompt);
 extern bool get_check_oath_multiline(cptr prompt);
@@ -1771,6 +1990,11 @@ extern void ui_menu_click_set_outside_cancel_enabled(bool enabled);
 extern bool ui_menu_click_outside_cancel_enabled(void);
 extern void ui_menu_click_set_touch_exit_button(bool enabled);
 extern bool ui_menu_click_touch_exit_button_active(void);
+extern int sdl_touch_menu_button_reserved_rows(void);
+extern void ui_menu_click_add_touch_button(int choice, cptr label, byte attr);
+extern int ui_menu_click_touch_button_count(void);
+extern bool ui_menu_click_touch_button_get(int index, int* choice,
+    cptr* label, byte* attr);
 extern bool ui_menu_click_is_active(void);
 extern void ui_menu_click_set_touch_category(int category);
 extern int ui_menu_click_get_touch_category(void);
@@ -1856,9 +2080,25 @@ extern int editing_buffer_put_str(
 extern cptr get_ext_color_name(byte ext_color);
 
 /* Player/status/upkeep modules */
+extern bool player_pack_action_start(player_pack_action_kind kind, int item,
+    int arg, bool flag, const object_type* o_ptr);
+extern bool player_pack_action_start_forced(player_pack_action_kind kind,
+    int item, int arg, bool flag, const object_type* o_ptr);
+extern bool player_pack_action_pending(void);
+extern int player_pack_action_turns_left(void);
+extern bool player_pack_action_completing(player_pack_action_kind kind);
+extern int player_pack_action_completion_arg(void);
+extern void player_pack_action_process(void);
+extern void player_pack_action_interrupt(void);
+extern void player_pack_action_cancel(void);
+extern void player_pack_action_reset(void);
+extern bool player_pack_item_action_blocked(const object_type* o_ptr);
+extern cptr player_pack_item_action_restriction_message(void);
 extern byte total_mdd(const object_type* o_ptr);
 extern byte strength_modified_ds(const object_type* o_ptr, int str_adjustment);
 extern byte total_mds(const object_type* o_ptr, int str_adjustment);
+extern byte total_mds_for_weapon_mode(
+    const object_type* o_ptr, int str_adjustment, int mode);
 extern bool two_handed_melee(void);
 extern bool armour_is_light(const object_type* o_ptr);
 extern bool wearing_only_light_armour(void);
@@ -1866,34 +2106,66 @@ extern int hand_and_a_half_bonus(const object_type* o_ptr);
 extern int axe_bonus(const object_type* o_ptr);
 extern int polearm_bonus(const object_type* o_ptr);
 extern byte total_ads(const object_type* j_ptr);
+extern byte total_ads_for_weapon_mode(const object_type* j_ptr, int mode);
 extern int player_active_weapon_mode(void);
+extern void player_active_weapon_name(char* buf, size_t buflen);
 extern bool player_active_weapon_is_melee(void);
 extern bool player_active_weapon_is_ranged(void);
+extern bool player_active_weapon_stats_preview(int mode, int* attack,
+    int* dd, int* ds, bool* throwing);
+extern bool player_active_weapon_offhand_stats_preview(int* attack,
+    int* dd, int* ds);
 extern bool player_active_weapon_mode_is_ranged(int mode);
 extern int player_active_weapon_mode_for_quiver(int quiver);
+extern int player_last_ranged_weapon_mode(void);
+extern int player_selected_ranged_quiver_number(void);
+extern int player_opposite_active_weapon_mode(void);
 extern int player_active_weapon_quiver_slot(void);
 extern int player_active_weapon_quiver_number(void);
+extern void player_active_weapon_sync_loaded_state(void);
+extern void player_active_weapon_assign_harness_color(object_type* o_ptr);
+extern void player_active_weapon_forget_harness_color(object_type* o_ptr);
+extern byte player_active_weapon_harness_color(const object_type* o_ptr);
+extern int player_active_weapon_kind(void);
+extern int player_active_throwing_weapon_slot(void);
+extern bool player_active_weapon_change_is_free(int old_kind, int new_kind);
+extern bool player_active_weapon_wield_change_is_free(
+    int slot, const object_type* incoming, bool combine);
+extern void player_active_weapon_free_change_commit(void);
+extern void player_active_weapon_begin_player_turn(void);
 extern bool player_set_active_weapon_mode(
     int mode, bool confirm, bool take_turn);
+extern bool player_ready_bow_with_arrow(int arrow_item);
+extern bool player_ready_throwing_weapon(object_type* o_ptr, int item);
 extern void do_cmd_toggle_active_weapon(void);
 extern void player_queue_active_weapon_mode(int mode);
+extern void player_queue_ranged_quiver_mode(int mode);
 extern void do_cmd_pending_active_weapon_mode(void);
 extern bool player_weapon_slot_combat_bonuses_active(
     int slot, const object_type* o_ptr);
+extern bool player_weapon_slot_combat_bonuses_active_for_mode(
+    int mode, int slot, const object_type* o_ptr);
+extern bool player_equipment_slot_is_active(int slot);
+extern bool player_equipment_slot_counts_as_equipped(int slot);
+extern bool player_quiver_counts_as_equipped(void);
 extern bool player_shield_counts_for_active_weapon(const object_type* o_ptr);
-extern bool player_can_quick_throw_from_quiver(int slot);
-extern int player_quick_throw_quiver_slot(void);
+extern bool object_is_belt_weapon(const object_type* o_ptr);
+extern bool player_can_quick_throw_from_harness(int slot);
+extern int player_quick_throw_harness_slot(void);
 extern bool player_power_throw_weapon_eligible(const object_type* o_ptr);
 extern bool player_power_throw_ready(void);
-extern bool player_can_power_throw_from_quiver(int slot);
-extern int player_power_throw_quiver_slot(void);
+extern int player_power_throw_target_m_idx(void);
+extern bool player_can_power_throw_from_harness(int slot);
 extern bool player_can_throw_potions(void);
 extern bool player_has_throwable_potion(void);
 extern bool player_quick_throw_available(void);
 extern void cnv_stat(int val, char* out_val);
 extern int health_level(int current, int max);
+extern bool monster_health_bar_allowed(const monster_type* m_ptr);
 extern int monster_health_bar_text(
     const monster_type* m_ptr, char* buf, size_t buflen, int max_symbols);
+extern int monster_health_bar_put(
+    const monster_type* m_ptr, int max_symbols);
 extern bool get_alertness_text(
     monster_type* m_ptr, int text_size, char* text, int* color);
 extern byte health_attr(int current, int max);
@@ -1913,6 +2185,10 @@ extern int song_effective_skill(int song);
 extern int ability_score(int skilltype, int abilitynum);
 extern bool ability_requirements_currently_met(int skilltype, int abilitynum);
 extern void update_active_ability_requirements(void);
+extern int ability_current_skill_bonus(int skilltype, int abilitynum);
+extern int ability_potential_skill_bonus(int skilltype, int abilitynum);
+extern int ability_potential_skill_bonus_with_partner(
+    int skilltype, int abilitynum);
 extern int ability_bonus(int skilltype, int abilitynum);
 extern bool ability_requirement_is_suspended(int skilltype, int abilitynum);
 extern bool object_grants_usable_ability(const object_type* o_ptr,
@@ -1969,15 +2245,34 @@ extern bool similar_monsters(int m1y, int m1x, int m2y, int m2x);
 extern void scare_onlooking_friends(const monster_type* m_ptr, int amount);
 extern void create_chosen_artefact(byte name1, int y, int x, bool identify);
 extern int drop_loot(monster_type* m_ptr);
+extern void award_quest_completion_exp(void);
 extern void apply_quest_rewards(int quest_idx);
 extern bool check_quest_eligibility(int quest_idx, int depth);
-extern void do_cmd_quest_status(void);
-extern bool do_cmd_quest_status_tabs(void);
-extern bool do_cmd_quest_status_tabs_in_place(void);
+typedef enum hint_quest_page
+{
+    HINT_QUEST_PAGE_EXIT = 0,
+    HINT_QUEST_PAGE_HINTS,
+    HINT_QUEST_PAGE_QUESTS,
+    HINT_QUEST_PAGE_THRALLS
+} hint_quest_page;
+enum {
+    HINT_QUEST_CLICK_HINTS_TAB = -20101,
+    HINT_QUEST_CLICK_QUESTS_TAB = -20102,
+    HINT_QUEST_CLICK_THRALLS_TAB = -20103,
+    HINT_QUEST_CLICK_RETURN = -20104,
+    HINT_QUEST_CLICK_CONTINUE = -20105
+};
+extern hint_quest_page do_cmd_quest_status_page(void);
 extern cptr* extract_quest_init_texts(int quest_idx, int* count);
 extern cptr* extract_quest_completion_texts(int quest_idx, int* count);
 extern void free_quest_texts(cptr* texts, int count);
 extern void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title_color, byte text_color);
+extern void quest_typewriter_menu_pages(cptr title, cptr texts[],
+    int total_texts, byte title_color, byte text_color,
+    int target_page_count);
+extern int quest_reward_book_choice(cptr title, cptr texts[], int total_texts,
+    cptr prompt, const int values[], cptr labels[], const bool enabled[],
+    int choice_count, int initial_choice, void (*inspect)(int value));
 extern void tulkas_quest_interaction(void);
 extern void check_tulkas_quest_interaction(void);
 extern void check_tulkas_quest_completion(int r_idx);
@@ -1995,6 +2290,9 @@ extern void varda_quest_interaction(void);
 extern void check_varda_quest_interaction(void);
 extern void check_varda_quest_completion(int r_idx);
 extern bool varda_quest_bastion_level_active(void);
+extern void varda_quest_note_duruin_ranged_attack(monster_type* m_ptr);
+extern bool varda_quest_duruin_can_enter(
+    const monster_type* m_ptr, int y, int x);
 extern void varda_quest_notice_bastion_level_entry(void);
 extern bool varda_quest_confirm_leave_bastion(void);
 extern void varda_quest_fail_if_bastion_missed(void);
@@ -2136,22 +2434,39 @@ extern int get_sdl_main_view_scale(void);
 extern void set_sdl_main_view_scale(int value);
 extern int get_sdl_effective_main_view_scale(void);
 extern bool set_sdl_main_view_zoom_scale(int value);
-extern bool sdl_prepare_first_gameplay_main_view_zoom(int delta);
+extern int get_sdl_terminal_menu_scale_offset(void);
+extern void set_sdl_terminal_menu_scale_offset(int value);
+extern bool get_sdl_compact_inventory_menus(void);
+extern void set_sdl_compact_inventory_menus(bool value);
+extern bool get_sdl_show_context_square_popups(void);
+extern void set_sdl_show_context_square_popups(bool value);
+extern int get_sdl_mobile_starting_zoom_offset(void);
+extern void set_sdl_mobile_starting_zoom_offset(int value);
+extern bool get_sdl_mobile_portrait_mode(void);
+extern void set_sdl_mobile_portrait_mode(bool value);
+extern bool sdl_prepare_first_gameplay_main_view_zoom(void);
 extern int get_sdl_min_main_view_scale(void);
 extern int get_sdl_platform_max_main_view_scale(void);
 extern int get_sdl_terminal_menu_scale(void);
 extern void sdl_push_terminal_menu_scale(void);
 extern void sdl_pop_terminal_menu_scale(void);
 extern int sdl_description_overlay_max_cols(void);
+extern int sdl_description_overlay_capture_cols(int terminal_cols,
+    bool interactive);
+extern int sdl_description_overlay_visible_cols(void);
 extern int sdl_description_overlay_text_px(void);
 extern int sdl_description_overlay_story_text_width(cptr text, int len, int slot);
 extern void sdl_push_description_overlay_main_anchor(void);
 extern void sdl_pop_description_overlay_main_anchor(void);
+extern void sdl_push_description_overlay_full_main_anchor(void);
+extern void sdl_pop_description_overlay_full_main_anchor(void);
 extern bool sdl_description_overlay_present(const byte* attrs,
     const char* chars, const byte* tattrs, const char* tchars,
-    const byte* story, int width, int height, int target_cols, int scroll,
-    bool interactive, int* out_visible_rows, int* out_max_scroll);
+    const byte* story, const byte* health, int width, int height,
+    int target_cols, int scroll, bool interactive, int* out_visible_rows,
+    int* out_max_scroll);
 extern void sdl_description_overlay_set_footer(cptr text, bool always);
+extern void sdl_description_overlay_set_footer_gap(bool enabled);
 extern void sdl_description_overlay_clear_footer_actions(void);
 extern void sdl_description_overlay_add_footer_action(int key, cptr token);
 extern void sdl_description_overlay_set_avoid_term_rect(int col, int row,
@@ -2170,18 +2485,42 @@ extern void sdl_song_menu_clear(void);
 extern void sdl_question_menu_begin(cptr title);
 extern void sdl_question_menu_set_anchor_grid(int y, int x);
 extern void sdl_question_menu_set_desc(cptr text);
+extern void sdl_question_menu_set_help(cptr text);
+extern bool sdl_question_menu_toggle_help(void);
 extern void sdl_question_menu_add_entry(int choice, cptr letter, cptr text,
     byte attr);
+extern void sdl_question_menu_add_object_entry(int choice, cptr letter,
+    cptr text, byte attr, const object_type* o_ptr);
+extern void sdl_question_menu_add_button(int choice, cptr text, byte attr);
 extern void sdl_question_menu_add_text(cptr text, byte attr);
 extern void sdl_question_menu_set_highlight(int choice);
 extern void sdl_question_menu_finish(void);
 extern void sdl_question_menu_clear(void);
+extern void sdl_question_menu_clear_nonblocking(void);
+extern void sdl_question_menu_set_scroll_offset_target(int* offset,
+    bool follow_highlight);
+extern bool sdl_question_menu_take_touch_scrolled(void);
 extern void sdl_question_menu_set_blocking_input(bool blocking);
 extern bool sdl_question_menu_blocks_input(void);
 extern void sdl_question_menu_set_nonblocking(bool nonblocking);
+extern void sdl_question_menu_set_context_hint(void);
+extern void sdl_question_menu_clear_context_hint(void);
+extern bool sdl_question_menu_context_hint_active(void);
 extern void sdl_question_menu_set_timeout_ms(int ms);
+extern void sdl_hint_quest_menu_begin(hint_quest_page page, cptr title,
+    cptr section, bool show_tabs, bool center_body, int selected_choice);
+extern void sdl_hint_quest_menu_add_block(cptr text, byte attr, int indent,
+    int choice);
+extern void sdl_hint_quest_menu_add_button(int choice, cptr label, byte attr);
+extern void sdl_hint_quest_menu_finish(void);
+extern void sdl_hint_quest_menu_prepare_page_turn(
+    hint_quest_page next_page);
+extern void sdl_hint_quest_menu_prepare_leaf_turn(
+    hint_quest_page next_page, int direction);
+extern void sdl_hint_quest_menu_hide(void);
+extern bool sdl_hint_quest_menu_active(void);
 extern void sdl_suspend_main_view_zoom_for_saved_screen(void);
-extern void sdl_resume_main_view_zoom_for_saved_screen(void);
+extern bool sdl_resume_main_view_zoom_for_saved_screen(void);
 extern void sdl_reset_main_view_zoom(void);
 extern void sdl_set_present_suppressed(bool suppressed);
 extern int get_sdl_min_terminal_mode(void);
@@ -2193,8 +2532,16 @@ extern int get_sdl_dice_roll_lock_ms(void);
 extern void set_sdl_dice_roll_lock_ms(int value);
 extern int get_sdl_dice_roll_overlay_ms(void);
 extern void set_sdl_dice_roll_overlay_ms(int value);
+extern int get_sdl_popup_notification_ms(void);
+extern void set_sdl_popup_notification_ms(int value);
+extern bool get_sdl_show_main_menu_button(void);
+extern void set_sdl_show_main_menu_button(bool value);
 extern int get_sdl_margin(void);
 extern void set_sdl_margin(int value);
+extern int get_sdl_camera_center_clearance_vertical(void);
+extern void set_sdl_camera_center_clearance_vertical(int value);
+extern int get_sdl_camera_center_clearance_horizontal(void);
+extern void set_sdl_camera_center_clearance_horizontal(int value);
 extern bool get_sdl_fullscreen(void);
 extern void set_sdl_fullscreen(bool value);
 extern bool get_sdl_tiles(void);
@@ -2208,9 +2555,15 @@ extern bool get_sdl_enable_bottom_panes(void);
 extern void set_sdl_enable_bottom_panes(bool value);
 extern bool get_sdl_show_pane_borders(void);
 extern void set_sdl_show_pane_borders(bool value);
+extern bool get_sdl_left_overlays_touch_screen_edge(void);
+extern void set_sdl_left_overlays_touch_screen_edge(bool value);
+extern bool get_sdl_show_overlay_log_border(void);
+extern void set_sdl_show_overlay_log_border(bool value);
 extern bool g_hide_left_panel;
 #ifdef USE_SDL
 extern bool g_sdl_left_panel_pane_source_active;
+extern void sdl_side_map_pane_forget_level(void);
+extern void sdl_side_map_pane_invalidate_cell(int y, int x);
 #endif
 extern bool g_suppress_hidden_left_panel_overlay;
 extern byte g_hidden_left_panel_overlay_start_row;
@@ -2218,6 +2571,7 @@ extern byte g_hidden_left_panel_overlay_rows;
 extern byte g_hidden_left_panel_overlay_start_cols[16];
 extern byte g_hidden_left_panel_overlay_widths[16];
 extern byte g_hidden_left_panel_overlay_attack_modes[16];
+extern bool g_hidden_left_panel_overlay_attack_quivers[16];
 extern byte g_hidden_left_panel_overlay_attack_start_cols[16];
 extern byte g_hidden_left_panel_overlay_attack_end_cols[16];
 extern byte g_hidden_left_panel_overlay_click_actions[16];
@@ -2229,13 +2583,22 @@ extern byte g_left_panel_quiver_attack_end_cols[2];
 extern bool get_sdl_hide_left_panel(void);
 extern bool sdl_left_panel_pane_renders_character_panel(void);
 extern bool get_sdl_left_panel_expanded_on_launch(void);
+extern bool get_sdl_left_panel_expanded_default_on_launch(void);
 extern void set_sdl_left_panel_expanded_on_launch(bool value);
 extern int get_sdl_left_panel_compact_mode(void);
 extern void set_sdl_left_panel_compact_mode(int mode);
+extern bool get_sdl_left_panel_compact_health_bar(void);
+extern void set_sdl_left_panel_compact_health_bar(bool value);
+extern bool get_sdl_quick_touch_buttons_on_left(void);
+extern void set_sdl_quick_touch_buttons_on_left(bool value);
+extern bool get_sdl_quick_touch_buttons_default_on_left(void);
 extern void redraw_hidden_left_panel_overlay(void);
 extern int get_sdl_pane_type(int index);
 extern int get_sdl_pane_where(int index);
 extern void set_sdl_pane_where(int index, int where);
+extern int get_sdl_pane_stack_order(int index);
+extern int get_sdl_pane_stack_count(int where);
+extern void set_sdl_pane_where_order(int index, int where, int order);
 extern bool get_sdl_pane_enabled(int index);
 extern bool get_sdl_pane_default_enabled(int index);
 extern int get_sdl_pane_default_where(int index);
@@ -2255,6 +2618,7 @@ extern int  get_sdl_intro_style(void);
 extern void set_sdl_intro_style(int style);
 extern void sdl_config_load_app_options(const char* filename);
 extern void sdl_config_reset_app_options_to_defaults(void);
+extern void sdl_reset_interface_settings_to_defaults(void);
 extern void sdl_reset_interface_settings_to_defaults_for_migration(void);
 extern bool sdl_config_should_force_intro_flame(void);
 extern void sdl_config_mark_intro_seen(void);
@@ -2266,27 +2630,28 @@ extern int get_sdl_max_main_view_zoom_scale(void);
 extern void sdl_apply_config(void);
 extern void sdl_apply_config_no_redraw(void);
 extern void sdl_request_redraw(void);
-extern bool sdl_main_menu_overlay_begin(void);
+extern void sdl_main_menu_overlay_begin(void);
 extern bool steamdeck_controls_active(void);
 extern bool sdl_menu_letters_enabled(void);
 extern bool portable_controls_active(void);
 extern bool get_sdl_gamepad_enabled(void);
 extern void set_sdl_gamepad_enabled(bool value);
-extern bool get_sdl_gamepad_auto_mode(void);
-extern void set_sdl_gamepad_auto_mode(bool value);
-extern bool get_sdl_steamdeck_mode(void);
-extern void set_sdl_steamdeck_mode(bool value);
+extern int get_sdl_input_ui_mode(void);
+extern void set_sdl_input_ui_mode(int mode);
+extern const char* get_sdl_input_ui_mode_label(int mode);
+extern int get_sdl_input_ui_default_mode(void);
 extern bool get_sdl_steamdeck_inv_equip_same_button_cycle(void);
 extern void set_sdl_steamdeck_inv_equip_same_button_cycle(bool value);
 extern bool get_sdl_gamepad_use_dpad(void);
 extern void set_sdl_gamepad_use_dpad(bool value);
+extern int get_sdl_gamepad_dpad_diagonal_delay_ms(void);
+extern void set_sdl_gamepad_dpad_diagonal_delay_ms(int value);
 extern bool get_sdl_gamepad_use_left_stick(void);
 extern void set_sdl_gamepad_use_left_stick(bool value);
 extern bool get_sdl_gamepad_default_enabled(void);
-extern bool get_sdl_gamepad_default_auto_mode(void);
-extern bool get_sdl_steamdeck_default_mode(void);
 extern bool get_sdl_steamdeck_default_inv_equip_same_button_cycle(void);
 extern bool get_sdl_gamepad_default_use_dpad(void);
+extern int get_sdl_gamepad_default_dpad_diagonal_delay_ms(void);
 extern bool get_sdl_gamepad_default_use_left_stick(void);
 extern int get_sdl_gamepad_button_binding(int button);
 extern void set_sdl_gamepad_button_binding(int button, int binding);
@@ -2309,12 +2674,16 @@ extern int get_sdl_gamepad_default_shoulder_combo_binding(void);
 extern void sdl_gamepad_reset_bindings_to_default(void);
 extern void sdl_gamepad_action_binding_label(int binding, char* buf, size_t buflen);
 extern void sdl_gamepad_action_binding_short_label(int binding, char* buf, size_t buflen);
+extern bool sdl_gamepad_control_available(int type, int id);
 extern int get_sdl_mouse_movement_mode(void);
 extern void set_sdl_mouse_movement_mode(int mode);
 extern int get_sdl_mouse_movement_default_mode(void);
 extern bool get_sdl_mouse_enabled(void);
 extern void set_sdl_mouse_enabled(bool enabled);
 extern bool get_sdl_mouse_default_enabled(void);
+extern bool get_sdl_mouse_tile_pointer(void);
+extern void set_sdl_mouse_tile_pointer(bool enabled);
+extern bool get_sdl_mouse_default_tile_pointer(void);
 extern void sdl_screen_back_gesture_begin(void);
 extern void sdl_screen_back_gesture_end(void);
 extern bool sdl_hover_tooltip_show_text(int col, int row, int cols, cptr text,
@@ -2373,6 +2742,8 @@ extern bool sdl_mouse_settings_tutorial_requested(void);
 extern void sdl_mouse_show_requested_tutorial(void);
 extern void sdl_mouse_show_tutorial(void);
 extern void sdl_mouse_maybe_show_first_game_tutorial(void);
+extern void keyboard_preset_maybe_show_first_game_selection(void);
+extern bool keyboard_preset_choose_and_apply(void);
 extern void sdl_character_wheel_request_tutorial_from_settings(void);
 extern bool sdl_character_wheel_settings_tutorial_requested(void);
 extern void sdl_zones_request_tutorial_from_settings(void);
@@ -2397,18 +2768,24 @@ extern int get_sdl_touch_corner_up_down_default_side(void);
 extern int get_sdl_touch_corner_action_binding(int index);
 extern void set_sdl_touch_corner_action_binding(int index, int binding);
 extern int get_sdl_touch_corner_action_default_binding(int index);
-extern int get_sdl_touch_top_panel_mode(void);
-extern void set_sdl_touch_top_panel_mode(int mode);
-extern int get_sdl_touch_top_panel_default_mode(void);
+extern bool get_sdl_touch_top_panel_arrows_visible(void);
+extern void set_sdl_touch_top_panel_arrows_visible(bool value);
+extern bool get_sdl_touch_top_panel_arrows_default_visible(void);
 extern bool get_sdl_touch_top_panel_default_open(void);
 extern void set_sdl_touch_top_panel_default_open(bool value);
 extern bool get_sdl_touch_top_panel_default_open_default(void);
-extern int get_sdl_touch_top_panel_button_count(void);
-extern void set_sdl_touch_top_panel_button_count(int count);
-extern int get_sdl_touch_top_panel_default_button_count(void);
-extern int get_sdl_touch_top_panel_tile_scale(void);
-extern void set_sdl_touch_top_panel_tile_scale(int scale);
-extern int get_sdl_touch_top_panel_default_tile_scale(void);
+extern float get_sdl_touch_top_panel_size(void);
+extern void set_sdl_touch_top_panel_size(float size);
+extern float get_sdl_touch_top_panel_default_size(void);
+extern int get_sdl_touch_top_panel_columns(void);
+extern void set_sdl_touch_top_panel_columns(int columns);
+extern int get_sdl_touch_top_panel_default_columns(void);
+extern int get_sdl_touch_top_panel_cell_count(void);
+extern void set_sdl_touch_top_panel_cell_count(int count);
+extern int get_sdl_touch_top_panel_default_cell_count(void);
+extern int get_sdl_touch_top_panel_rows(void);
+extern void set_sdl_touch_top_panel_rows(int rows);
+extern int get_sdl_touch_top_panel_default_rows(void);
 extern int get_sdl_touch_top_panel_binding(int index, bool long_press);
 extern void set_sdl_touch_top_panel_binding(int index, bool long_press, int binding);
 extern int get_sdl_touch_top_panel_default_binding(int index, bool long_press);
@@ -2430,7 +2807,7 @@ extern int steamdeck_confirm_key(void);   /* A button (SOUTH) - for confirm/ok *
 extern int steamdeck_prev_page_key(void); /* L1 button - for previous page/tab */
 extern int steamdeck_next_page_key(void); /* R1 button - for next page/tab */
 extern int steamdeck_menu_key(int key, int prev_page_key, int next_page_key);
-extern int steamdeck_info_key(void);      /* RS Right - for info/recall */
+extern int steamdeck_info_key(void);      /* View/Select - info/recall */
 extern int steamdeck_alt_action_key(void);/* X button (WEST) - for alternate action */
 extern int steamdeck_secondary_key(void); /* Y button (NORTH) - for secondary action */
 #define GAMEPAD_CAPTURE_BUTTON 0
@@ -2458,6 +2835,7 @@ extern int sdl_story_font_text_width(cptr text, int len);
 extern int sdl_overlay_log_wrap(const char* msg, int max_segs, int* out_off,
     int* out_len);
 extern int sdl_get_cell_width(void);
+extern int sdl_get_active_cell_width(void);
 extern int sdl_main_view_visible_col0(void);
 extern int sdl_main_view_visible_cols(void);
 extern bool sdl_left_panel_pane_map_coverage(int* start_col, int* cols,
@@ -2466,5 +2844,7 @@ extern bool sdl_combat_overlay_pane_map_coverage(int* start_col, int* cols,
     int* start_row, int* rows);
 extern bool sdl_overlay_log_pane_map_coverage(int* start_col, int* cols,
     int* start_row, int* rows);
+extern int sdl_map_overlay_map_coverages(int max_rects, int* start_cols,
+    int* cols, int* start_rows, int* rows);
 extern void binding_action_label(int binding, char* buf, size_t buflen);
 extern void binding_action_short(int binding, char* buf, size_t buflen);

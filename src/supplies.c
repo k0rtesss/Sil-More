@@ -13,6 +13,7 @@ typedef struct supply_entry
 typedef struct jewelry_preset
 {
     bool set;
+    char name[JEWELRY_PRESET_NAME_MAX];
     object_type slot[JEWELRY_PRESET_SLOT_MAX];
 } jewelry_preset;
 
@@ -153,6 +154,8 @@ bool supplies_group_matches_kind(int group, int tval, int sval)
     case SUPPLY_GROUP_LIGHTS:
         return ((tval == TV_LIGHT) && supplies_is_light_kind(sval))
             || (tval == TV_FLASK);
+    case SUPPLY_GROUP_JEWELRY:
+        return tval == TV_RING || tval == TV_AMULET;
     case SUPPLY_GROUP_SUPPLY:
         return (tval == TV_FOOD) || (tval == TV_POTION)
             || (tval == TV_GEM) || (tval == TV_FLASK)
@@ -224,6 +227,7 @@ void jewelry_presets_reset(void)
     for (int preset = 0; preset < JEWELRY_PRESET_MAX; preset++)
     {
         g_jewelry_presets[preset].set = false;
+        g_jewelry_presets[preset].name[0] = '\0';
         for (int slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
             object_wipe(&g_jewelry_presets[preset].slot[slot]);
     }
@@ -235,6 +239,66 @@ bool jewelry_preset_is_set(int preset)
         return false;
 
     return g_jewelry_presets[preset].set;
+}
+
+bool jewelry_preset_objects_match(const object_type* a, const object_type* b)
+{
+    if (!a || !b || !a->k_idx || !b->k_idx)
+        return false;
+
+    if (a->k_idx != b->k_idx || a->tval != b->tval || a->sval != b->sval)
+        return false;
+    if (a->pval != b->pval || a->weight != b->weight)
+        return false;
+    if (a->name1 != b->name1)
+        return false;
+    if (object_ego_prefix(a) != object_ego_prefix(b)
+        || object_ego_suffix(a) != object_ego_suffix(b))
+        return false;
+    if (a->att != b->att || a->evn != b->evn)
+        return false;
+    if (a->dd != b->dd || a->ds != b->ds
+        || a->pd != b->pd || a->ps != b->ps)
+        return false;
+    if (a->abilities != b->abilities)
+        return false;
+    if (memcmp(a->stat_bonus, b->stat_bonus, sizeof(a->stat_bonus)) != 0)
+        return false;
+    if (memcmp(a->skill_bonus, b->skill_bonus, sizeof(a->skill_bonus)) != 0)
+        return false;
+    if (memcmp(a->skilltype, b->skilltype, sizeof(a->skilltype)) != 0)
+        return false;
+    if (memcmp(a->abilitynum, b->abilitynum, sizeof(a->abilitynum)) != 0)
+        return false;
+    if (memcmp(a->bane_type, b->bane_type, sizeof(a->bane_type)) != 0)
+        return false;
+    if (a->unused1 != b->unused1)
+        return false;
+
+    return true;
+}
+
+bool jewelry_preset_is_equipped(int preset)
+{
+    static const int inventory_slots[JEWELRY_PRESET_SLOT_MAX] = {
+        INVEN_LEFT, INVEN_RIGHT, INVEN_NECK
+    };
+
+    if (!jewelry_preset_is_set(preset))
+        return false;
+
+    for (int slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
+    {
+        const object_type* saved = jewelry_preset_object(preset, slot);
+
+        if (!saved || !jewelry_preset_objects_match(
+                &inventory[inventory_slots[slot]], saved))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 int jewelry_preset_count(void)
@@ -284,6 +348,24 @@ void jewelry_preset_clear(int preset)
     g_jewelry_presets[preset].set = false;
     for (int slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
         object_wipe(&g_jewelry_presets[preset].slot[slot]);
+}
+
+const char* jewelry_preset_name(int preset)
+{
+    if (!jewelry_preset_index_ok(preset))
+        return "";
+
+    return g_jewelry_presets[preset].name;
+}
+
+bool jewelry_preset_set_name(int preset, const char* name)
+{
+    if (!jewelry_preset_index_ok(preset) || !name)
+        return false;
+
+    SDL_strlcpy(g_jewelry_presets[preset].name, name,
+        sizeof(g_jewelry_presets[preset].name));
+    return true;
 }
 
 const object_type* jewelry_preset_object(int preset, int slot)
@@ -340,6 +422,15 @@ static int player_carried_oil_container_slots(void)
         if (cost <= 0)
             continue;
         slots += cost * MAX(o_ptr->number, 1);
+    }
+
+    for (int i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        object_type* o_ptr = player_carried_extra_entry_at(i);
+        int cost = player_oil_container_slot_cost(o_ptr);
+
+        if (cost > 0)
+            slots += cost * MAX(o_ptr->number, 1);
     }
 
     for (int i = 0; i < g_supply_count; i++)
@@ -1622,21 +1713,31 @@ void supplies_ingest_pack(void)
 {
     supplies_init();
 
-    for (int i = 0; i < INVEN_PACK; i++)
+    while (true)
     {
-        object_type* o_ptr = &inventory[i];
-        if (!o_ptr->k_idx)
-            continue;
-        if (!supplies_is_supply_object(o_ptr))
-            continue;
-
+        int item = -1;
+        object_type* o_ptr = NULL;
         object_type copy;
-        object_copy(&copy, o_ptr);
-        if (!supplies_absorb_object(&copy))
-            continue;
-        inven_item_increase(i, -o_ptr->number);
-        inven_item_optimize(i);
-        i--;
+
+        for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
+        {
+            object_type* candidate = player_pack_entry_at(ordinal);
+
+            if (!supplies_is_supply_object(candidate))
+                continue;
+            object_copy(&copy, candidate);
+            if (!supplies_absorb_object(&copy))
+                continue;
+            item = player_pack_entry_handle_at(ordinal);
+            o_ptr = candidate;
+            break;
+        }
+
+        if (!o_ptr)
+            break;
+
+        inven_item_increase(item, -o_ptr->number);
+        inven_item_optimize(item);
     }
 }
 

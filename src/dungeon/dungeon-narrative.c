@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "dungeon-internal.h"
+#include "meta_state.h"
 
 int g_banner_force_redraw_remaining = 0;
 char g_active_partition_banner_text[1024] = "";
@@ -20,12 +21,16 @@ static int last_narrated_style_idx = -1;
 /* Forward declarations for partition kind helpers (defined later in file). */
 static bool is_big_partition_kind(level_partition_kind kind);
 static bool is_small_cave_partition_kind(level_partition_kind kind);
+static cptr partition_display_name(level_partition_kind kind);
 
 char greater_vault_xp_name[80] = "";
 bool greater_vault_xp_awarded = false;
 
 void reset_level_entry_tracking(void)
 {
+#ifdef USE_SDL
+    sdl_side_map_pane_forget_level();
+#endif
     g_labyrinth_view_active = false;
     g_banner_force_redraw_remaining = 0;
     g_active_partition_banner_text[0] = '\0';
@@ -37,6 +42,7 @@ void reset_level_entry_tracking(void)
     last_partition_kind = LEVEL_PART_NONE;
     partition_narrated_mask = 0;
     last_narrated_style_idx = -1;
+    legendary_area_level_reset();
 }
 
 static byte narrative_banner_turn_setting(void)
@@ -201,6 +207,7 @@ static void display_narrative_text(cptr text, int narrative_mode,
 {
     bool banner_with_delay =
         (narrative_mode == PARTITION_NARRATIVE_BANNER_DELAY);
+    bool command_transition = p_ptr && (p_ptr->command_cmd != 0);
 
     if (!text || !text[0])
         return;
@@ -215,17 +222,40 @@ static void display_narrative_text(cptr text, int narrative_mode,
         && !banner_with_delay)
         return;
 
-    g_active_partition_banner_text[0] = '\0';
+    /* Crossing into a narrated partition is a meaningful interruption, not
+     * camera maintenance.  Stop normal running and SDL auto-walk before the
+     * banner is presented so the player cannot continue through it. */
+    if (command_transition)
+        disturb(0, 0);
+
+    /*
+     * Partition entry is detected while cleaning up the movement command,
+     * before the dungeon loop's next normal refresh.  Present the completed
+     * move first so the player changes grids before the banner begins fading
+     * in.  Initial level-entry banners have no active command and retain their
+     * normal fade speed.
+     */
+    if (command_transition)
+    {
+        /* Do not let either the previous banner or the new banner flash at
+         * full opacity on the movement frame before the fade begins. */
+        clear_active_narrative_banner();
+        handle_stuff();
+        Term_fresh();
+    }
+
     SDL_strlcpy(g_active_partition_banner_text, text,
         sizeof(g_active_partition_banner_text));
     g_active_partition_banner_consumes_input =
         (narrative_banner_turn_setting() == 0);
     g_active_partition_banner_skip_next_decay =
-        (p_ptr && (p_ptr->command_cmd != 0));
+        command_transition;
     g_banner_force_redraw_remaining = g_active_partition_banner_consumes_input
         ? 1
         : narrative_banner_turn_setting();
-    sdl_narrative_banner_show(line_delay || banner_with_delay);
+
+    sdl_narrative_banner_show(
+        line_delay || banner_with_delay, command_transition);
 }
 
 static void display_partition_narrative(int old_sidx, int new_sidx,
@@ -275,6 +305,63 @@ static bool is_big_partition_kind(level_partition_kind kind)
 static bool is_small_cave_partition_kind(level_partition_kind kind)
 {
     return (kind == LEVEL_PART_CAVEY);
+}
+
+static cptr partition_display_name(level_partition_kind kind)
+{
+    switch (kind)
+    {
+    case LEVEL_PART_ROOMY:
+        return "Roomy";
+    case LEVEL_PART_CAVEY:
+        return "Cavey";
+    case LEVEL_PART_RUINED:
+        return "Ruined";
+    case LEVEL_PART_LABYRINTH:
+        return "Labyrinth";
+    case LEVEL_PART_CHASM:
+        return "Chasm";
+    case LEVEL_PART_BIG_CAVE:
+        return "Big Cave";
+    default:
+        return NULL;
+    }
+}
+
+static cptr partition_popup_name(level_partition_kind kind)
+{
+    switch (kind)
+    {
+    case LEVEL_PART_ROOMY:
+        return "Rooms";
+    case LEVEL_PART_CAVEY:
+        return "Caves";
+    case LEVEL_PART_RUINED:
+        return "Ruins";
+    case LEVEL_PART_LABYRINTH:
+        return "Labyrinth";
+    case LEVEL_PART_CHASM:
+        return "Chasm";
+    case LEVEL_PART_BIG_CAVE:
+        if (p_ptr)
+        {
+            switch (level_partition_big_cave_type_for_point(
+                p_ptr->py, p_ptr->px))
+            {
+            case BIG_CAVE_FIRE:
+                return "Fire";
+            case BIG_CAVE_ICE:
+                return "Cold";
+            case BIG_CAVE_POIS:
+                return "Poison";
+            default:
+                break;
+            }
+        }
+        return "Big Cave";
+    default:
+        return NULL;
+    }
 }
 
 static byte partition_discovery_lore_flag(level_partition_kind kind)
@@ -438,6 +525,37 @@ void handle_partition_entry(bool force_message, int narrative_mode)
     level_partition_kind kind = level_partition_kind_for_point(p_ptr->py, p_ptr->px);
     int sidx = styles_decode_color_style(cave_color[p_ptr->py][p_ptr->px]);
 
+    if ((pi >= 0) && (pi != last_partition_pi) && !p_ptr->restoring)
+    {
+        cptr name = partition_display_name(kind);
+        cptr popup_name = partition_popup_name(kind);
+        if (name)
+        {
+            char entry_message[80];
+            strnfmt(entry_message, sizeof(entry_message),
+                "You have entered a %s partition.", name);
+            queue_message_recall_only(entry_message);
+        }
+        if (popup_name)
+            sdl_popup_notification_show(popup_name);
+    }
+
+    /*
+     * Greater vaults have their own first-entry narrative.  Their cells carry
+     * vault-specific styles, so the generic partition-style banner would be
+     * misleading on both first entry and later re-entry after the vault name
+     * has been cleared.
+     */
+    if (cave_info[p_ptr->py][p_ptr->px] & CAVE_G_VAULT)
+    {
+        if (pi >= 0 && pi < 32)
+            partition_narrated_mask |= (u32b)(1U << pi);
+
+        last_partition_pi = pi;
+        last_partition_kind = kind;
+        return;
+    }
+
     bool is_big = is_big_partition_kind(kind);
     bool was_big = is_big_partition_kind(last_partition_kind);
     bool entered_big = false;
@@ -472,7 +590,7 @@ void handle_partition_entry(bool force_message, int narrative_mode)
                 display_partition_narrative(last_narrated_style_idx, sidx, kind);
 
             if (is_small_cave_partition_kind(kind))
-                msg_print("Here torch and lamp drink their fuel twice as fast.");
+                msg_print("In the natural caves here, torch and lamp drink their fuel twice as fast.");
 
             partition_narrated_mask |= bit;
             last_narrated_style_idx = sidx;

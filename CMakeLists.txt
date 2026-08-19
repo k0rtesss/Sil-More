@@ -140,6 +140,21 @@ if (SIL_BUILD_WITH_SDL_SOURCES)
 
   if (EXISTS "${SIL_EXTERNAL_DIR}/SDL_image/CMakeLists.txt")
     add_subdirectory("${SIL_EXTERNAL_DIR}/SDL_image" "${CMAKE_BINARY_DIR}/_deps/SDL_image")
+
+    # Vendored zlib's CMakeLists.txt renames its tracked zconf.h to the
+    # gitignored zconf.h.included during every out-of-source configure.
+    # Put the pristine header back so configuring Android does not leave the
+    # nested SDL_image submodule dirty.
+    set(_sil_zlib_source_dir "${SIL_EXTERNAL_DIR}/SDL_image/external/zlib")
+    if (NOT EXISTS "${_sil_zlib_source_dir}/zconf.h"
+        AND EXISTS "${_sil_zlib_source_dir}/zconf.h.included")
+      configure_file(
+        "${_sil_zlib_source_dir}/zconf.h.included"
+        "${_sil_zlib_source_dir}/zconf.h"
+        COPYONLY
+      )
+    endif()
+    unset(_sil_zlib_source_dir)
   else()
     message(FATAL_ERROR "SIL_BUILD_WITH_SDL_SOURCES=ON but external/SDL_image is missing. Run 'git submodule update --init --recursive' from the repo root or disable SIL_BUILD_WITH_SDL_SOURCES.")
   endif()
@@ -331,8 +346,10 @@ set(SIL_MORE_SOURCES
     src/sdl/render/sdl-present.c
     src/sdl/render/sdl-term-callbacks.c
     src/sdl/render/sdl-text.c
-    src/sdl/ui/sdl-main-menu.c
-    src/sdl/ui/sdl-menus.c
+      src/sdl/ui/sdl-main-menu.c
+      src/sdl/ui/sdl-halls-screen.c
+      src/sdl/ui/sdl-hint-quest-menu.c
+      src/sdl/ui/sdl-menus.c
     src/sdl/ui/sdl-pane-menus.c
     src/sdl/ui/sdl-panes.c
     src/sdl/ui/sdl-screens.c
@@ -397,6 +414,7 @@ set(SIL_MORE_SOURCES
     src/thrall_quest.c
     src/player/ability-log.c
     src/player/player-active-weapon.c
+    src/player/player-pack-action.c
     src/player/combat-stats.c
     src/player/effects.c
     src/player/experience.c

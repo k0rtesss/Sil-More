@@ -434,8 +434,15 @@ void prt_state(void)
         SDL_strlcpy(text, "Entranced!", sizeof(text));
     }
 
+    /* Searching the Pack */
+    if (player_pack_action_pending())
+    {
+        strnfmt(text, sizeof(text), "Pack %5d",
+            player_pack_action_turns_left());
+    }
+
     /* Smithing */
-    if (p_ptr->smithing)
+    else if (p_ptr->smithing)
     {
         SDL_strlcpy(text, "Smithing  ", sizeof(text));
     }
@@ -609,7 +616,7 @@ static const char* partition_abbrev_for_point(int y, int x)
     case LEVEL_PART_RUINED:
         return "Ruin";
     case LEVEL_PART_CAVEY:
-        return "Cave";
+        return "Caves";
     case LEVEL_PART_BIG_CAVE:
         return "BigCa";
     case LEVEL_PART_LABYRINTH:
@@ -860,6 +867,15 @@ bool status_state_text(char* out_long, size_t out_long_sz,
         return true;
     }
 
+    if (player_pack_action_pending())
+    {
+        strnfmt(out_long, out_long_sz, "Pack %d",
+            player_pack_action_turns_left());
+        strnfmt(out_short, out_short_sz, "Pk%d",
+            player_pack_action_turns_left());
+        return true;
+    }
+
     if (p_ptr->smithing)
     {
         SDL_strlcpy(out_long, "Smithing", out_long_sz);
@@ -942,7 +958,7 @@ static const char* status_partition_short(const char* long_label)
         return "Rm";
     if (!strcmp(long_label, "Ruin"))
         return "Ru";
-    if (!strcmp(long_label, "Cave"))
+    if (!strcmp(long_label, "Caves"))
         return "Cv";
     if (!strcmp(long_label, "BigCa"))
         return "BC";

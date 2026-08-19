@@ -227,6 +227,7 @@ void set_alertness(monster_type* m_ptr, int alertness)
     char m_name[80];
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     bool redisplay = false;
+    bool became_alert;
     bool is_non_alert_thrall =
         m_ptr->r_idx == R_IDX_HUMAN_THRALL || m_ptr->r_idx == R_IDX_ELF_THRALL;
 
@@ -252,6 +253,9 @@ void set_alertness(monster_type* m_ptr, int alertness)
     {
         alertness = ALERTNESS_UNWARY;
     }
+
+    became_alert = (m_ptr->alertness < ALERTNESS_ALERT)
+        && (alertness >= ALERTNESS_ALERT);
 
     /* Get the monster name */
     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
@@ -412,6 +416,12 @@ void set_alertness(monster_type* m_ptr, int alertness)
 
     // do the actual alerting
     m_ptr->alertness = alertness;
+
+    /* An alerting monster skips its next AI turn to notice the player.  Mark
+     * it active now so player actions during that notice turn still respect
+     * the combat restriction. */
+    if (became_alert)
+        m_ptr->mflag |= (MFLAG_ACTV);
 
     // redisplay the monster
     if (redisplay)

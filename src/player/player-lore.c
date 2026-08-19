@@ -642,6 +642,13 @@ void update_lore(u32b update_flags)
         update_lore_aux(o_ptr);
     }
 
+    for (i = 0; i < player_quiver_store_entry_count(); i++)
+    {
+        o_ptr = player_quiver_store_entry_at(i);
+        if (o_ptr && o_ptr->k_idx)
+            update_lore_aux(o_ptr);
+    }
+
     int supply_count = supplies_entry_count();
     for (int s_idx = 0; s_idx < supply_count; s_idx++)
     {

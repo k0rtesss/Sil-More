@@ -1,6 +1,47 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+static bool g_description_overlay_mouse_release_claimed = false;
+static bool g_description_overlay_finger_release_claimed = false;
+static SDL_FingerID g_description_overlay_release_finger_id = 0;
+
+static void sdl_description_overlay_claim_mouse_release(void)
+{
+    g_description_overlay_mouse_release_claimed = true;
+}
+
+static void sdl_description_overlay_claim_finger_release(SDL_FingerID finger_id)
+{
+    g_description_overlay_finger_release_claimed = true;
+    g_description_overlay_release_finger_id = finger_id;
+}
+
+static bool sdl_description_overlay_consume_mouse_release(
+    const SDL_MouseButtonEvent* button)
+{
+    if (!button || !g_description_overlay_mouse_release_claimed)
+        return false;
+    if (button->button != SDL_BUTTON_LEFT || button->which == SDL_TOUCH_MOUSEID)
+        return false;
+
+    g_description_overlay_mouse_release_claimed = false;
+    return true;
+}
+
+static bool sdl_description_overlay_consume_finger_release(
+    SDL_FingerID finger_id)
+{
+    if (!g_description_overlay_finger_release_claimed
+        || g_description_overlay_release_finger_id != finger_id)
+    {
+        return false;
+    }
+
+    g_description_overlay_finger_release_claimed = false;
+    g_description_overlay_release_finger_id = 0;
+    return true;
+}
+
 static u16b sdl_keyboard_capture_modifiers_from_sdl(SDL_Keymod mod)
 {
     u16b modifiers = 0;
@@ -59,7 +100,6 @@ static bool sdl_keyboard_capture_handle_keydown(
 void resize(const SDL_Rect* screen)
 {
     Uint64 start_ns = SDL_GetTicksNS();
-    log_warn("resize enter");
     SDL_Rect panes[PANE_MAX] = {0};
     bool show_supporting_panes = sdl_should_show_supporting_panes();
     bool touch_pane_hidden = sdl_touch_pane_hidden_mode_active();
@@ -67,6 +107,10 @@ void resize(const SDL_Rect* screen)
     bool include_bottom = config.enable_bottom_panes;
     int main_view_scale = sdl_current_main_view_scale();
     int layout_main_view_scale = sdl_main_view_layout_scale();
+
+    g_sdl_present_generation++;
+    if (g_sdl_present_generation == 0)
+        g_sdl_present_generation = 1;
 
     if (!show_supporting_panes)
     {
@@ -113,13 +157,14 @@ void resize(const SDL_Rect* screen)
 
     g_inventory_pane_layout_rows = -1;
     g_supply_pane_layout_rows = -1;
-    if (show_supporting_panes && panes[PANE_INVENTORY].w > 0
-        && panes[PANE_INVENTORY].h > 0)
+    /* Record the dynamic size that this layout attempt used even when the
+     * pane was pruned for lack of room.  Otherwise the visibility matcher
+     * sees -1 forever and requests another full resize on every pane update. */
+    if (show_supporting_panes && sdl_inventory_pane_dynamic_configured())
     {
         g_inventory_pane_layout_rows = sdl_inventory_pane_desired_rows();
     }
-    if (show_supporting_panes && panes[PANE_SUPPLY].w > 0
-        && panes[PANE_SUPPLY].h > 0)
+    if (show_supporting_panes && sdl_supply_pane_dynamic_configured())
     {
         g_supply_pane_layout_rows = sdl_supply_pane_desired_rows();
     }
@@ -130,6 +175,7 @@ void resize(const SDL_Rect* screen)
     }
 
     memcpy(g_pane_rects, panes, sizeof(g_pane_rects));
+    sdl_reset_top_right_overlay_offset();
     g_touch_pane_hidden_layout_active = touch_pane_hidden;
     g_touch_pane_proto_layout_active = sdl_touch_pane_proto_mode_active();
 
@@ -163,6 +209,7 @@ void resize(const SDL_Rect* screen)
     }
     sdl_view_link_term(&g_views[0], 0);
     sdl_update_left_panel_pane_rect();
+    sdl_apply_top_right_overlay_offset();
     sdl_mark_active_supporting_panes_dirty(panes);
 
     Term_activate(&g_views[0].t);
@@ -204,7 +251,10 @@ void sdl_handle_renderer_reset(void)
         ? config.monospace_font
         : "lib/xtra/font/VictorMono-Medium.ttf";
 
+    sdl_select_page_turn_free();
     sdl_left_panel_canvas_destroy();
+    sdl_minimap_map_texture_cache_clear();
+    sdl_side_map_pane_texture_cache_clear();
     sdl_mono_font_cache_clear();
 
     // Recreate all view canvases
@@ -279,12 +329,81 @@ void sdl_handle_renderer_reset(void)
 }
 
 #if SIL_SDL_MOBILE_BUILD
+enum {
+    SDL_MOBILE_LIFECYCLE_EVENT_COUNT = 6
+};
+
+static Uint32 g_mobile_lifecycle_dispatch_event;
+static SDL_AtomicInt g_mobile_lifecycle_dispatch_serial;
+static SDL_AtomicInt
+    g_mobile_lifecycle_failed_serial[SDL_MOBILE_LIFECYCLE_EVENT_COUNT];
+static int g_mobile_lifecycle_last_dispatch_serial;
+
+static int sdl_mobile_lifecycle_event_index(Uint32 type)
+{
+    switch (type)
+    {
+    case SDL_EVENT_WILL_ENTER_BACKGROUND:
+        return 0;
+    case SDL_EVENT_DID_ENTER_BACKGROUND:
+        return 1;
+    case SDL_EVENT_TERMINATING:
+        return 2;
+    case SDL_EVENT_WILL_ENTER_FOREGROUND:
+        return 3;
+    case SDL_EVENT_DID_ENTER_FOREGROUND:
+        return 4;
+    case SDL_EVENT_LOW_MEMORY:
+        return 5;
+    default:
+        return -1;
+    }
+}
+
 bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
 {
+    bool dispatched;
+    int event_index;
+    int serial = 0;
+    Uint32 type;
+
     if (!ev)
         return false;
 
-    switch (ev->type)
+    dispatched = (g_mobile_lifecycle_dispatch_event != 0
+        && ev->type == g_mobile_lifecycle_dispatch_event);
+    type = ev->type;
+    if (dispatched)
+    {
+        type = (Uint32)ev->user.code;
+        serial = (int)(intptr_t)ev->user.data1;
+    }
+    event_index = sdl_mobile_lifecycle_event_index(type);
+    if (event_index < 0)
+        return false;
+
+    /*
+     * Once the watch is installed, its private event is the sole owner of
+     * lifecycle state changes.  SDL may also enqueue the original lifecycle
+     * event; consume that duplicate without saving or changing foreground
+     * state.  Sequence numbers also reject a delayed private event from an
+     * older background/foreground transition.
+     */
+    if (!dispatched && g_mobile_lifecycle_watch_registered)
+    {
+        serial = SDL_SetAtomicInt(
+            &g_mobile_lifecycle_failed_serial[event_index], 0);
+        if (serial == 0)
+            return true;
+    }
+    if (serial != 0)
+    {
+        if (serial <= g_mobile_lifecycle_last_dispatch_serial)
+            return true;
+        g_mobile_lifecycle_last_dispatch_serial = serial;
+    }
+
+    switch (type)
     {
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
         if (!g_mobile_lifecycle_autosaved
@@ -303,8 +422,11 @@ bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_TERMINATING:
-        if (mobile_autosave_game("terminating"))
+        if (!g_mobile_lifecycle_autosaved
+            && mobile_autosave_game("terminating"))
+        {
             g_mobile_lifecycle_autosaved = true;
+        }
         return true;
 
     case SDL_EVENT_WILL_ENTER_FOREGROUND:
@@ -323,8 +445,39 @@ bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
 
 bool SDLCALL sdl_mobile_lifecycle_event_watch(void* userdata, SDL_Event* ev)
 {
+    SDL_Event dispatch;
+    int event_index;
+    int serial;
+
     (void)userdata;
-    (void)sdl_mobile_lifecycle_handle_event(ev);
+    if (!ev || g_mobile_lifecycle_dispatch_event == 0)
+    {
+        return true;
+    }
+    event_index = sdl_mobile_lifecycle_event_index(ev->type);
+    if (event_index < 0)
+        return true;
+
+    /*
+     * SDL may invoke event watches from a non-game thread.  Never inspect or
+     * mutate game state here: post a private wake event so autosave and score
+     * persistence run from the normal SDL/game event loop.
+     */
+    SDL_zero(dispatch);
+    dispatch.type = g_mobile_lifecycle_dispatch_event;
+    dispatch.user.code = (Sint32)ev->type;
+    serial = SDL_AddAtomicInt(&g_mobile_lifecycle_dispatch_serial, 1) + 1;
+    dispatch.user.data1 = (void*)(intptr_t)serial;
+    if (!SDL_PushEvent(&dispatch))
+    {
+        /*
+         * The original lifecycle event may still reach the normal queue.
+         * Mark its serial so that main-thread handling can safely fall back
+         * without allowing an older private event to undo a newer transition.
+         */
+        SDL_SetAtomicInt(&g_mobile_lifecycle_failed_serial[event_index],
+            serial);
+    }
     return true;
 }
 
@@ -332,6 +485,15 @@ void sdl_mobile_lifecycle_register(void)
 {
     if (g_mobile_lifecycle_watch_registered)
         return;
+
+    if (g_mobile_lifecycle_dispatch_event == 0)
+        g_mobile_lifecycle_dispatch_event = SDL_RegisterEvents(1);
+    if (g_mobile_lifecycle_dispatch_event == 0)
+    {
+        log_warn("Failed to register mobile lifecycle dispatch event: %s",
+            SDL_GetError());
+        return;
+    }
 
     if (SDL_AddEventWatch(sdl_mobile_lifecycle_event_watch, NULL))
     {
@@ -731,6 +893,53 @@ static bool sdl_event_targets_touch_top_panel(const SDL_Event* ev)
     return false;
 }
 
+static bool sdl_resize_event_is_duplicate(const SDL_Rect* screen,
+    Uint64 event_timestamp)
+{
+    static bool have_last;
+    static SDL_Rect last_screen;
+    static float last_scale;
+    static Uint64 last_timestamp;
+    Uint64 timestamp = event_timestamp ? event_timestamp : SDL_GetTicksNS();
+    bool same_geometry;
+    bool same_burst;
+
+    if (!screen)
+        return false;
+    same_geometry = have_last
+        && screen->x == last_screen.x && screen->y == last_screen.y
+        && screen->w == last_screen.w && screen->h == last_screen.h
+        && g_state.system_scale == last_scale;
+    same_burst = last_timestamp && timestamp >= last_timestamp
+        && timestamp - last_timestamp <= 100000000ULL;
+
+    last_screen = *screen;
+    last_scale = g_state.system_scale;
+    last_timestamp = timestamp;
+    have_last = true;
+    return same_geometry && same_burst;
+}
+
+/* A round-wheel gesture needs its finger-down event so release can emit the
+ * chosen direction.  If a zero-turn narrative banner swallowed that down but
+ * disappeared before release, the first apparent move after the banner would
+ * do nothing. */
+static bool sdl_event_starts_touch_round_input(const SDL_Event* ev)
+{
+    float x;
+    float y;
+
+    if (!ev || ev->type != SDL_EVENT_FINGER_DOWN)
+        return false;
+    if (ev->tfinger.windowID != SDL_GetWindowID(g_state.window))
+        return false;
+    if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
+        return false;
+
+    return sdl_touch_round_layer_controls_active()
+        && !sdl_touch_round_point_excluded(x, y);
+}
+
 static bool sdl_narrative_banner_consume_input_event(const SDL_Event* ev)
 {
     if (!active_narrative_banner_consumes_input())
@@ -740,9 +949,32 @@ static bool sdl_narrative_banner_consume_input_event(const SDL_Event* ev)
     if (sdl_event_targets_touch_top_panel(ev))
         return false;
 
+    if (sdl_event_starts_touch_round_input(ev)) {
+        clear_active_narrative_banner();
+        /*
+         * The banner is composited over the gameplay frame.  Refreshing every
+         * terminal here exposes intermediate left/combat pane frames while
+         * the banner closes; only the covered map needs repainting.
+         */
+        p_ptr->redraw |= PR_MAP;
+        redraw_stuff();
+        Term_fresh();
+        g_state.need_present = true;
+        /* Wake request_command() out of its banner-dismissal inkey().  The
+         * finger-down continues below so the matching release can submit the
+         * actual movement in the next command-input context. */
+        Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+        return false;
+    }
+
     clear_active_narrative_banner();
-    do_cmd_redraw();
+    p_ptr->redraw |= PR_MAP;
+    redraw_stuff();
+    Term_fresh();
     g_state.need_present = true;
+    /* The event itself is consumed, so provide the sentinel that lets the
+     * banner-dismissal inkey() finish instead of swallowing the next input. */
+    Term_keypress(UI_MENU_CLICK_WAKE_KEY);
     return true;
 }
 
@@ -788,7 +1020,11 @@ bool sdl_quit_transition_active(void)
         && p_ptr
         && character_icky == 0
         && !screen_saved_fullscreen_active()
-        && !death_spectator_active()
+        /* The postmortem tomb menu runs after the player has died, while the
+         * dungeon is still active long enough to show scores, messages, and
+         * the character sheet.  It is an interactive menu, not a quit
+         * transition, so do not consume its input. */
+        && !p_ptr->is_dead
         /* A modal yes/no prompt (get_check) genuinely needs the user's answer,
          * even though p_ptr->leaving is already set.  The clearest case is the
          * wizard/cheat "Die?" confirm: death sets both is_dead and leaving while
@@ -932,16 +1168,18 @@ static bool sdl_question_overlay_consume_pointer(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_MOUSE_BUTTON_UP:
-    case SDL_EVENT_MOUSE_WHEEL:
         return true;
+
+    case SDL_EVENT_MOUSE_WHEEL:
+        return sdl_question_menu_handle_mouse_wheel(&ev->wheel);
 
     case SDL_EVENT_FINGER_DOWN:
         if (ev->tfinger.windowID == SDL_GetWindowID(g_state.window))
         {
             sdl_note_touch_event_device(ev->tfinger.touchID);
             if (sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y)
-                && !sdl_question_menu_handle_pointer(x, y,
-                       UI_MENU_CLICK_PRIMARY))
+                && !sdl_question_menu_handle_touch_down(x, y,
+                       ev->tfinger.fingerID))
             {
                 Term_keypress(ESCAPE);
             }
@@ -952,12 +1190,74 @@ static bool sdl_question_overlay_consume_pointer(const SDL_Event* ev)
         if (ev->tfinger.windowID == SDL_GetWindowID(g_state.window)
             && sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
         {
-            sdl_question_menu_handle_hover_pointer(x, y);
+            sdl_question_menu_handle_touch_motion(x, y,
+                ev->tfinger.fingerID);
         }
         return true;
 
     case SDL_EVENT_FINGER_UP:
+        if (ev->tfinger.windowID == SDL_GetWindowID(g_state.window)
+            && sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
+        {
+            sdl_question_menu_handle_touch_up(x, y, ev->tfinger.fingerID);
+        }
+        return true;
+
     case SDL_EVENT_FINGER_CANCELED:
+        sdl_question_menu_cancel_touch();
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+/* The full-window poetry choice screen owns pointer input while its choices
+ * are live.  Mouse hover follows the keyboard highlight; a click/tap is fed
+ * through the shared menu-click channel so the game-side chooser remains the
+ * single authority for selection. */
+static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
+{
+    float x;
+    float y;
+
+    switch (ev->type)
+    {
+    case SDL_EVENT_MOUSE_MOTION:
+        if (ev->motion.which != SDL_TOUCH_MOUSEID)
+        {
+            (void)sdl_poetry_screen_handle_hover_pointer(
+                (float)ev->motion.x, (float)ev->motion.y);
+        }
+        return true;
+
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        if (ev->button.which != SDL_TOUCH_MOUSEID)
+        {
+            int action = (ev->button.button == SDL_BUTTON_RIGHT)
+                ? UI_MENU_CLICK_SECONDARY : UI_MENU_CLICK_PRIMARY;
+            (void)sdl_poetry_screen_handle_pointer((float)ev->button.x,
+                (float)ev->button.y, action);
+        }
+        return true;
+
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+    case SDL_EVENT_MOUSE_WHEEL:
+    case SDL_EVENT_FINGER_DOWN:
+    case SDL_EVENT_FINGER_MOTION:
+    case SDL_EVENT_FINGER_CANCELED:
+        return true;
+
+    case SDL_EVENT_FINGER_UP:
+        if (ev->tfinger.windowID == SDL_GetWindowID(g_state.window))
+        {
+            sdl_note_touch_event_device(ev->tfinger.touchID);
+            if (sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
+            {
+                (void)sdl_poetry_screen_handle_pointer(x, y,
+                    UI_MENU_CLICK_PRIMARY);
+            }
+        }
         return true;
 
     default:
@@ -981,6 +1281,13 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         return;
     if (sdl_event_is_disabled_mouse_input(ev))
         return;
+    if ((ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN
+            || ev->type == SDL_EVENT_MOUSE_BUTTON_UP)
+        && ev->button.which != SDL_TOUCH_MOUSEID)
+    {
+        sdl_mouse_cursor_button_state(ev->button.button,
+            ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN);
+    }
 
     if (ev->type == SDL_EVENT_QUIT) {
         Term_keypress(27); // ESC or define a quit signal
@@ -1048,6 +1355,14 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         return;
     } else if (sdl_screen_back_gesture_handle_event(ev)) {
         return;
+    } else if (sdl_poetry_screen_captures_pointer()
+        && sdl_poetry_screen_consume_pointer(ev)) {
+        return;
+    } else if (sdl_halls_screen_handle_pointer_event(ev)) {
+        return;
+    } else if (sdl_hint_quest_menu_active()
+        && sdl_hint_quest_menu_handle_event(ev)) {
+        return;
     } else if (sdl_question_menu_captures_pointer()
         && sdl_question_overlay_consume_pointer(ev)) {
         return;
@@ -1056,8 +1371,28 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
     } else if (ev->type == SDL_EVENT_MOUSE_MOTION) {
         if (ev->motion.which == SDL_TOUCH_MOUSEID)
             return;
+        if (sdl_tale_screen_handle_hover_pointer((float)ev->motion.x,
+            (float)ev->motion.y))
+        {
+            return;
+        }
         if (sdl_welcome_screen_handle_pointer_motion((float)ev->motion.x,
             (float)ev->motion.y))
+        {
+            return;
+        }
+        /*
+         * Context shortcut popups own every pixel in their panel.  Let them
+         * replace or clear hover help before the map tooltip path sees the
+         * same coordinates.
+         */
+        if (sdl_question_menu_handle_hover_pointer((float)ev->motion.x,
+            (float)ev->motion.y))
+        {
+            return;
+        }
+        if (sdl_touch_top_panel_handle_description_hover(
+                (float)ev->motion.x, (float)ev->motion.y))
         {
             return;
         }
@@ -1066,6 +1401,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         if (g_touch_pane_yes_no_prompt_active
             && sdl_touch_pane_handle_yes_no_prompt_hover(
                 (float)ev->motion.x, (float)ev->motion.y))
+        {
+            return;
+        }
+        if (sdl_description_overlay_handle_close_hover((float)ev->motion.x,
+                (float)ev->motion.y))
         {
             return;
         }
@@ -1139,11 +1479,6 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
-        if (sdl_question_menu_handle_hover_pointer((float)ev->motion.x,
-            (float)ev->motion.y))
-        {
-            return;
-        }
         if (sdl_character_panel_handle_pointer_motion((float)ev->motion.x,
             (float)ev->motion.y, true, 0))
         {
@@ -1180,7 +1515,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         }
         if (sdl_touch_top_panel_handle_pointer_motion((float)ev->motion.x,
-            (float)ev->motion.y, 0))
+            (float)ev->motion.y, true, 0))
         {
             return;
         }
@@ -1207,6 +1542,33 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         if (sdl_menu_scroll_handle_mouse_wheel(&ev->wheel))
             return;
     } else if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        if (ev->button.button == SDL_BUTTON_LEFT
+            && ev->button.which != SDL_TOUCH_MOUSEID)
+        {
+            if (sdl_touch_top_panel_handle_description_pointer(
+                    (float)ev->button.x, (float)ev->button.y))
+            {
+                return;
+            }
+            if (sdl_description_overlay_handle_close_pointer(
+                    (float)ev->button.x, (float)ev->button.y))
+            {
+                sdl_description_overlay_claim_mouse_release();
+                return;
+            }
+            if (sdl_description_overlay_handle_footer_pointer(
+                    (float)ev->button.x, (float)ev->button.y))
+            {
+                sdl_description_overlay_claim_mouse_release();
+                return;
+            }
+            if (sdl_description_overlay_contains_point((float)ev->button.x,
+                    (float)ev->button.y))
+            {
+                sdl_description_overlay_claim_mouse_release();
+                return;
+            }
+        }
         if (ev->button.which != SDL_TOUCH_MOUSEID
             && sdl_log_pane_menu_handle_pointer_down((float)ev->button.x,
                 (float)ev->button.y, 0, true))
@@ -1232,6 +1594,17 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             {
                 return;
             }
+            if (sdl_tale_screen_handle_pointer((float)ev->button.x,
+                (float)ev->button.y))
+            {
+                return;
+            }
+            if ((sdl_pause_text_screen_active()
+                    || sdl_poetry_screen_active())
+                && sdl_pointer_dismiss_any_key_prompt())
+            {
+                return;
+            }
             if (sdl_touch_pane_handle_yes_no_prompt_pointer((float)ev->button.x,
                 (float)ev->button.y))
             {
@@ -1239,11 +1612,6 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             }
             if (ui_key_wait_dismiss_is_active()
                 && sdl_pointer_dismiss_any_key_prompt())
-            {
-                return;
-            }
-            if (sdl_description_overlay_handle_footer_pointer(
-                    (float)ev->button.x, (float)ev->button.y))
             {
                 return;
             }
@@ -1394,6 +1762,13 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         else if (ev->button.button == SDL_BUTTON_RIGHT) {
             if (ev->button.which == SDL_TOUCH_MOUSEID)
                 return;
+            if (sdl_main_menu_button_handle_secondary_pointer(
+                    (float)ev->button.x, (float)ev->button.y))
+            {
+                return;
+            }
+            if (sdl_welcome_screen_cycle_intro(1))
+                return;
             if (g_player_action_menu.active) {
                 (void)sdl_player_action_menu_handle_pointer_down(
                     (float)ev->button.x, (float)ev->button.y, 0, true, true);
@@ -1432,6 +1807,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             }
             if (sdl_question_menu_handle_pointer((float)ev->button.x,
                     (float)ev->button.y, UI_MENU_CLICK_SECONDARY))
+            {
+                return;
+            }
+            if (sdl_touch_top_panel_handle_secondary_pointer(
+                    (float)ev->button.x, (float)ev->button.y))
             {
                 return;
             }
@@ -1492,6 +1872,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         }
     } else if (ev->type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        if (sdl_description_overlay_consume_mouse_release(&ev->button))
+            return;
         if (ev->button.which != SDL_TOUCH_MOUSEID
             && sdl_log_pane_menu_handle_pointer_up((float)ev->button.x,
                 (float)ev->button.y, 0, true))
@@ -1583,11 +1965,38 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         sdl_note_touch_event_device(ev->tfinger.touchID);
         if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
             return;
+        if (sdl_touch_top_panel_handle_description_pointer(x, y))
+            return;
         /* A persistent long-press popup stays up until the next press; dismiss
          * it here so any touch clears it, mirroring the mouse right-click. */
         (void)sdl_object_tooltip_dismiss_persistent_on_press();
         if (sdl_touch_exit_button_handle_pointer(x, y))
             return;
+        if (sdl_description_overlay_handle_close_pointer(x, y))
+        {
+            sdl_description_overlay_claim_finger_release(ev->tfinger.fingerID);
+            return;
+        }
+        if (sdl_description_overlay_handle_footer_pointer(x, y))
+        {
+            sdl_description_overlay_claim_finger_release(ev->tfinger.fingerID);
+            return;
+        }
+        if (sdl_description_overlay_touch_scroll_handle_pointer_down(x, y,
+                ev->tfinger.fingerID))
+        {
+            return;
+        }
+        if (sdl_description_overlay_contains_point(x, y))
+        {
+            if (sdl_menu_scroll_handle_pointer_down(x, y,
+                    ev->tfinger.fingerID))
+            {
+                return;
+            }
+            sdl_description_overlay_claim_finger_release(ev->tfinger.fingerID);
+            return;
+        }
         if (sdl_log_pane_menu_handle_pointer_down(x, y,
             ev->tfinger.fingerID, false))
         {
@@ -1613,6 +2022,14 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
+        if (sdl_tale_screen_handle_pointer(x, y))
+            return;
+        if ((sdl_pause_text_screen_active()
+                || sdl_poetry_screen_active())
+            && sdl_pointer_dismiss_any_key_prompt())
+        {
+            return;
+        }
         if (sdl_touch_pane_handle_yes_no_prompt_pointer(x, y))
             return;
         if (ui_key_wait_dismiss_is_active()
@@ -1620,11 +2037,34 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
-        if (sdl_description_overlay_handle_footer_pointer(x, y))
+        /* Question/roll popups are drawn above Quick Touch.  Give their
+         * visible panel first refusal so an obscured thumb button cannot
+         * activate through the popup. */
+        if (sdl_question_menu_handle_pointer(x, y, UI_MENU_CLICK_PRIMARY))
             return;
+        /* The thumb button remains visible during fire targeting and item
+         * descriptions. Claim it before aim-map handling, and before the
+         * later "tap away to cancel" path, so tapping the button fires the
+         * button action. */
+        if (sdl_touch_thumb_handle_pointer_down(x, y, false,
+                ev->tfinger.fingerID))
+        {
+            return;
+        }
+        /* In aim-select mode the visible round wheel is a direct
+         * fire-in-direction control.  Claim its sectors before the map
+         * target handler interprets the same touch as an exact square. */
+        if (g_pointer_aim.active && g_pointer_aim.select_mode
+            && !g_pointer_aim.select_location
+            && sdl_touch_round_handle_pointer_down(x, y,
+                ev->tfinger.fingerID))
+        {
+            return;
+        }
         if (sdl_pointer_aim_handle_touch_down(x, y, ev->tfinger.fingerID))
             return;
-        if (sdl_main_menu_pane_handle_pointer(x, y))
+        if (sdl_main_menu_button_handle_long_press_down(x, y,
+                ev->tfinger.fingerID))
             return;
         if (sdl_depth_menu_pane_handle_pointer(x, y))
             return;
@@ -1663,8 +2103,6 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         }
         if (sdl_song_menu_handle_pointer(x, y, UI_MENU_CLICK_PRIMARY))
             return;
-        if (sdl_question_menu_handle_pointer(x, y, UI_MENU_CLICK_PRIMARY))
-            return;
         if (sdl_touch_hidden_indicator_handle_pointer_down(x, y, true))
             return;
         if (sdl_main_screen_menu_pointer_hits_cell(x, y)
@@ -1683,14 +2121,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
-        /* Claim thumb-button taps before the "tap away to cancel" handler, so a
-         * tap on a thumb button while an item description popup is open fires
-         * the button instead of closing the popup. */
-        if (sdl_touch_thumb_handle_pointer_down(x, y, false,
-                ev->tfinger.fingerID))
-        {
-            return;
-        }
+        /* Thumb-button taps are claimed earlier in the finger-down path. */
         if (ui_menu_click_outside_cancel_enabled()
             && sdl_menu_touch_handle_pointer_down(x, y,
                 ev->tfinger.fingerID, false))
@@ -1800,6 +2231,16 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         sdl_note_touch_event_device(ev->tfinger.touchID);
         if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
             return;
+        if (sdl_description_overlay_touch_scroll_handle_pointer_motion(x, y,
+                ev->tfinger.fingerID))
+        {
+            return;
+        }
+        if (sdl_main_menu_button_handle_long_press_motion(x, y,
+                ev->tfinger.fingerID))
+        {
+            return;
+        }
         if (sdl_log_pane_menu_handle_long_press_motion(x, y,
             ev->tfinger.fingerID))
         {
@@ -1872,7 +2313,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
                     ev->tfinger.fingerID);
                 return;
             }
-            if (sdl_touch_top_panel_handle_pointer_motion(x, y,
+            if (sdl_touch_top_panel_handle_pointer_motion(x, y, false,
                     ev->tfinger.fingerID))
             {
                 return;
@@ -1917,7 +2358,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
-        if (sdl_touch_top_panel_handle_pointer_motion(x, y,
+        if (sdl_touch_top_panel_handle_pointer_motion(x, y, false,
             ev->tfinger.fingerID))
         {
             return;
@@ -1940,6 +2381,23 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         sdl_note_touch_event_device(ev->tfinger.touchID);
         if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
+            return;
+        if (sdl_description_overlay_touch_scroll_handle_pointer_up(
+                ev->tfinger.fingerID))
+        {
+            return;
+        }
+        if (sdl_description_overlay_consume_finger_release(
+                ev->tfinger.fingerID))
+        {
+            return;
+        }
+        if (sdl_main_menu_button_handle_long_press_up(x, y,
+                ev->tfinger.fingerID))
+        {
+            return;
+        }
+        if (sdl_menu_scroll_handle_pointer_up(ev->tfinger.fingerID))
             return;
         if (sdl_log_pane_menu_handle_long_press_up(x, y,
             ev->tfinger.fingerID))
@@ -2059,8 +2517,6 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         if (sdl_touch_zone_handle_pointer_up(x, y, ev->tfinger.fingerID))
             return;
-        if (sdl_menu_scroll_handle_pointer_up(ev->tfinger.fingerID))
-            return;
         if (sdl_pointer_attack_handle_touch_up(x, y, ev->tfinger.fingerID))
             return;
         if (sdl_map_touch_handle_pointer_up(x, y, ev->tfinger.fingerID))
@@ -2071,6 +2527,19 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         if (ev->tfinger.windowID != SDL_GetWindowID(g_state.window))
             return;
         sdl_note_touch_event_device(ev->tfinger.touchID);
+        if (sdl_description_overlay_touch_scroll_handle_pointer_up(
+                ev->tfinger.fingerID))
+        {
+            return;
+        }
+        if (g_description_overlay_finger_release_claimed
+            && g_description_overlay_release_finger_id == ev->tfinger.fingerID)
+        {
+            g_description_overlay_finger_release_claimed = false;
+            g_description_overlay_release_finger_id = 0;
+            return;
+        }
+        sdl_main_menu_button_cancel_long_press(ev->tfinger.fingerID);
         if (g_touch_swipe.active && g_touch_swipe.finger_id == ev->tfinger.fingerID)
             sdl_touch_swipe_cancel();
         if (g_welcome_touch_press.active
@@ -2182,19 +2651,6 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         }
     } else if (ev->type == SDL_EVENT_KEY_DOWN) {
         int key = ev->key.key;
-        if (ev->common.timestamp) {
-            Uint64 now_ns = SDL_GetTicksNS();
-
-            if (now_ns > ev->common.timestamp) {
-                Uint64 queued_ms =
-                    (now_ns - ev->common.timestamp) / 1000000ULL;
-
-                if (queued_ms >= 50) {
-                    log_warn("[SLOWINPUT] key waited %llu ms in SDL queue",
-                        (unsigned long long)queued_ms);
-                }
-            }
-        }
 
         if (sdl_keyboard_capture_handle_keydown(&ev->key))
             return;
@@ -2232,6 +2688,33 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
                 sdl_player_action_menu_cancel();
                 sdl_player_exchange_cancel();
                 return;
+            }
+
+            /* Some controller backends expose the D-pad as keyboard arrows
+             * even while controller UI mode is active.  Keep those events
+             * inside the character wheel instead of treating them as a
+             * reason to dismiss it. */
+            if (g_player_action_menu.active && steamdeck_controls_active()) {
+                switch (key) {
+                case SDLK_UP:
+                case SDLK_KP_8:
+                    sdl_player_action_menu_move_hover_vertical(-1);
+                    return;
+                case SDLK_DOWN:
+                case SDLK_KP_2:
+                    sdl_player_action_menu_move_hover_vertical(1);
+                    return;
+                case SDLK_LEFT:
+                case SDLK_KP_4:
+                    sdl_player_action_menu_move_hover(-1);
+                    return;
+                case SDLK_RIGHT:
+                case SDLK_KP_6:
+                    sdl_player_action_menu_move_hover(1);
+                    return;
+                default:
+                    break;
+                }
             }
 
             sdl_player_action_menu_cancel();
@@ -2375,21 +2858,31 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         sdl_gamepad_handle_device(&ev->gdevice);
     } else if (ev->type == SDL_EVENT_WINDOW_RESIZED
         || ev->type == SDL_EVENT_WINDOW_SAFE_AREA_CHANGED) {
+        bool layout_state_changed;
+        int old_zoom;
+
         log_debug("window resized to %dx%d", ev->window.data1, ev->window.data2);
         sdl_refresh_safe_area();
         sdl_refresh_platform_max_main_view_scales_for_current_layout(
             "window resize");
-        (void)sdl_recover_layout_for_current_window("window resize", true, NULL);
+        layout_state_changed = sdl_recover_layout_for_current_window(
+            "window resize", true, NULL);
+        old_zoom = g_main_view_zoom_scale;
         sdl_clamp_main_view_zoom_to_current_layout();
+        layout_state_changed |= old_zoom != g_main_view_zoom_scale;
 #if SIL_SDL_HANDHELD_DEFAULTS_BUILD
-        (void)sdl_mobile_maybe_apply_first_start_auto_scale("window resize");
+        layout_state_changed |= sdl_mobile_maybe_apply_first_start_auto_scale(
+            "window resize");
 #endif
         {
             SDL_Rect screen = sdl_get_layout_screen_rect();
+            bool duplicate = sdl_resize_event_is_duplicate(&screen,
+                ev->common.timestamp);
 
             log_debug("new layout size %dx%d at (%d,%d)",
                 screen.w, screen.h, screen.x, screen.y);
-            resize(&screen);
+            if (layout_state_changed || !duplicate)
+                resize(&screen);
         }
     } else if (ev->type == SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED ||
         ev->type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED ||
@@ -2397,6 +2890,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 
         float scale = SDL_GetWindowDisplayScale(g_state.window);
         bool scale_changed = (scale != g_state.system_scale);
+        bool layout_state_changed = scale_changed;
+        int old_zoom;
 
         if (scale_changed) {
             log_info("new system scale is %g", scale);
@@ -2407,18 +2902,24 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         sdl_refresh_safe_area();
         sdl_refresh_platform_max_main_view_scales_for_current_layout(
             "display scale change");
-        (void)sdl_recover_layout_for_current_window("display scale change",
-            true, NULL);
+        layout_state_changed |= sdl_recover_layout_for_current_window(
+            "display scale change", true, NULL);
+        old_zoom = g_main_view_zoom_scale;
         sdl_clamp_main_view_zoom_to_current_layout();
+        layout_state_changed |= old_zoom != g_main_view_zoom_scale;
 #if SIL_SDL_HANDHELD_DEFAULTS_BUILD
-        (void)sdl_mobile_maybe_apply_first_start_auto_scale("display scale change");
+        layout_state_changed |= sdl_mobile_maybe_apply_first_start_auto_scale(
+            "display scale change");
 #endif
         {
             SDL_Rect screen = sdl_get_layout_screen_rect();
+            bool duplicate = sdl_resize_event_is_duplicate(&screen,
+                ev->common.timestamp);
 
             log_debug("window pixel/display update layout=%dx%d at (%d,%d) (scale_changed=%d)",
                 screen.w, screen.h, screen.x, screen.y, scale_changed ? 1 : 0);
-            resize(&screen);
+            if (layout_state_changed || !duplicate)
+                resize(&screen);
         }
     }
     // Handle GPU reset events (commonly triggered by NVIDIA drivers on mode switches,
@@ -2428,10 +2929,20 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         log_warn("Renderer device/targets reset detected - recreating textures");
         sdl_handle_renderer_reset();
     }
-    // Handle window restored (after minimize/alt-tab on some systems)
+    // Restore fullscreen stacking after startup, minimize, or Alt+Tab.  A
+    // redraw alone leaves a display-sized window underneath the taskbar on
+    // Windows even though SDL still reports SDL_WINDOW_FULLSCREEN.
     else if (ev->type == SDL_EVENT_WINDOW_RESTORED ||
+             ev->type == SDL_EVENT_WINDOW_FOCUS_GAINED ||
              ev->type == SDL_EVENT_WINDOW_EXPOSED) {
-        log_debug("Window restored/exposed - forcing redraw");
+        if (config.fullscreen
+            && ev->type != SDL_EVENT_WINDOW_EXPOSED)
+        {
+            (void)sdl_window_reassert_fullscreen(
+                ev->type == SDL_EVENT_WINDOW_RESTORED
+                    ? "window restore" : "focus gain");
+        }
+        log_debug("Window restored/focused/exposed - forcing redraw");
         g_state.need_present = true;
         Term_redraw();
     }

@@ -15,6 +15,8 @@ static bool new_paragraph = false;
 #define OBJECT_INFO_CAPTURE_MAX_ROWS 2048
 #define OBJECT_INFO_CAPTURE_ROWS_PER_OBJECT 64
 #define OBJECT_INFO_CAPTURE_STORY_COLS 200
+#define OBJECT_INFO_MAX_ACTIONS 8
+#define OBJECT_INFO_UNDERSTANDING_KEY 'i'
 
 typedef struct object_info_screen_capture
 {
@@ -905,6 +907,7 @@ static void format_min_depth_bonus_depths(char* buf, size_t buflen, int units)
 static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b f4)
 {
     cptr good[24], bad[14];
+    char depth_scale_desc[96];
     char deep_call_desc[120];
     char deep_call_equipped_bonus[16];
     char deep_call_inventory_bonus[16];
@@ -916,8 +919,13 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     {
         good[gc++] = (format(
             "can be thrown effectively (%d squares)", throwing_range(o_ptr)));
-        good[gc++] = "can be placed in quiver (passive abilities remain active for 2nd quiver)";
+        if (object_is_belt_weapon(o_ptr))
+            good[gc++] = "can be placed at the belt (belt passive abilities remain active)";
+        else if (!(f4 & TR4_HARNESS_STOWABLE))
+            good[gc++] = "stays on the Harness";
     }
+    if (f4 & TR4_HARNESS_STOWABLE)
+        good[gc++] = "can be kept ready on the Harness or moved to the Pack for storage";
 
     /* Collect stuff which can't be categorized */
     if (((o_ptr->tval == TV_LIGHT) && artefact_p(o_ptr))
@@ -948,7 +956,12 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     if (f4 & (TR4_ARMOR_SHATTER))
         good[gc++] = "can shatter the armor of your foes with each successful blow";
     if (f4 & (TR4_DEPTH_SCALE_PS))
-        good[gc++] = "gains protection as you delve deeper";
+    {
+        strnfmt(depth_scale_desc, sizeof(depth_scale_desc),
+            "gains protection as you delve deeper (currently %dd%d)",
+            o_ptr->pd, object_effective_protection_sides(o_ptr));
+        good[gc++] = depth_scale_desc;
+    }
     if (f3 & (TR3_WILL_DRAIN))
         good[gc++] = "drains the will of your enemies when you strike them";
     if (f4 & (TR4_PAIRED))
@@ -1368,7 +1381,8 @@ static bool describe_archery(const object_type* o_ptr)
     }
     if (o_ptr->tval == TV_ARROW)
     {
-        if ((&inventory[INVEN_BOW])->k_idx)
+        if (inventory[INVEN_BOW].k_idx
+            && player_equipment_slot_counts_as_equipped(INVEN_BOW))
         {
             if (o_ptr->number == 1)
             {
@@ -1447,7 +1461,8 @@ static bool describe_weapon_damage(const object_type* o_ptr)
             int hand_half_bonus_potential;
             int one_handed_ds_int, two_handed_ds_int;
             byte one_handed_ds, two_handed_ds;
-            bool is_currently_equipped = (&inventory[INVEN_WIELD] == o_ptr);
+            bool is_currently_equipped = (&inventory[INVEN_WIELD] == o_ptr)
+                && player_equipment_slot_counts_as_equipped(INVEN_WIELD);
             
             /* Determine potential hand-and-a-half bonus (when wielded two-handed) */
             if (c_info[p_ptr->pcharacter].flags_u & UNQ_MEL_MAEDHROS)
@@ -1550,28 +1565,28 @@ static bool describe_potion_throw(const object_type* o_ptr)
     switch (o_ptr->sval)
     {
     case SV_POTION_SLOWNESS:
-        good[gc++] = "bursts into a slowing vapour that hinders a nearby foe";
+        good[gc++] = "bursts into a slowing vapour across the impact square and every adjacent square";
         break;
     case SV_POTION_CONFUSION:
-        good[gc++] = "bursts into a bewildering haze that confuses a nearby foe";
+        good[gc++] = "bursts into a bewildering haze across the impact square and every adjacent square";
         break;
     case SV_POTION_POISON:
-        good[gc++] = "bursts into a cloud of poison that harms a nearby foe";
+        good[gc++] = "bursts into a cloud of poison across the impact square and every adjacent square";
         break;
     case SV_POTION_ORCISH_LIQUOR:
-        good[gc++] = "bursts into flame, scorching a nearby foe";
+        good[gc++] = "bursts into flame across the impact square and every adjacent square";
         break;
     case SV_POTION_BLINDNESS:
-        good[gc++] = "bursts into a blinding spray, making a nearby foe lose your trail";
+        good[gc++] = "bursts into a blinding spray across the impact square and every adjacent square";
         break;
     case SV_POTION_DEC_DEX:
-        good[gc++] = "bursts into a slick haze that throws a nearby foe off balance";
+        good[gc++] = "bursts into a slick haze across the impact square and every adjacent square";
         break;
     case SV_POTION_DEC_GRA:
-        good[gc++] = "bursts into a spirit-severing mist that leaves a nearby foe reeling and witless";
+        good[gc++] = "bursts into a spirit-severing mist across the impact square and every adjacent square";
         break;
     case SV_POTION_true_SIGHT:
-        good[gc++] = "bursts into a clarifying mist that reveals a nearby unseen foe";
+        good[gc++] = "bursts into a clarifying mist across the impact square and every adjacent square";
         break;
     default:
         good[gc++] = "shatters without any lasting effect";
@@ -1580,6 +1595,20 @@ static bool describe_potion_throw(const object_type* o_ptr)
 
     output_desc_list("If thrown, it ", good, gc);
     return true;
+}
+
+static int object_info_inventory_volume(const object_type* o_ptr)
+{
+    enum inventory_limit_group group;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return 0;
+
+    group = inventory_limit_group_for_object(o_ptr);
+    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
+        return 0;
+
+    return inventory_limit_space_for_object(o_ptr);
 }
 
 bool object_info_out(const object_type* o_ptr)
@@ -2332,13 +2361,21 @@ static bool screen_out_head(const object_type* o_ptr)
     /* Print, in colour */
     text_out_c(name_color, o_name);
 
+    /* Show carried volume before weight information. */
+    {
+        int volume = object_info_inventory_volume(o_ptr);
+        if (volume > 0)
+            text_out_c(TERM_L_UMBER,
+                format(" %d.%d qt", volume / 10, volume % 10));
+    }
+
     /* Show weight information */
     {
         char weight_buf[64];
         int total_weight = o_ptr->weight * o_ptr->number;
         int each_weight = o_ptr->weight;
         if (o_ptr->number > 1) {
-            strnfmt(weight_buf, sizeof(weight_buf), " %3d.%1d lb (%3d.%1d lb each)",
+            strnfmt(weight_buf, sizeof(weight_buf), " %3d.%1d lb (%d.%1d lb each)",
                 total_weight / 10, total_weight % 10, each_weight / 10, each_weight % 10);
         } else {
             strnfmt(weight_buf, sizeof(weight_buf), " %3d.%1d lb", total_weight / 10, total_weight % 10);
@@ -2580,7 +2617,7 @@ static int object_info_screen_capture_used_cols(term* t, int rows)
 static bool object_info_screen_capture_build(
     const object_type** objects, const char** headings, int count,
     object_info_screen_capture* capture, int preferred_width,
-    bool use_story_font)
+    bool use_story_font, bool interactive)
 {
     term scratch;
     term* saved_term = Term;
@@ -2595,7 +2632,6 @@ static bool object_info_screen_capture_build(
     int term_wid = 80;
     int term_hgt = 24;
     int target_wid;
-    int max_target_wid;
     int capture_hgt;
     int used_rows;
     int used_cols;
@@ -2607,10 +2643,8 @@ static bool object_info_screen_capture_build(
     SDL_memset(&scratch, 0, sizeof(scratch));
 
     Term_get_size(&term_wid, &term_hgt);
-    target_wid = term_wid;
-    max_target_wid = sdl_description_overlay_max_cols();
-    if (max_target_wid > 0 && target_wid > max_target_wid)
-        target_wid = max_target_wid;
+    target_wid = sdl_description_overlay_capture_cols(term_wid,
+        interactive);
     if (target_wid < 20)
         target_wid = 20;
     term_wid = use_story_font ? preferred_width : target_wid;
@@ -2720,7 +2754,7 @@ bool object_info_overlay_show_multi(const object_type** objects,
     overlay_width = object_info_screen_preferred_capture_width(use_story_font);
 
     if (!object_info_screen_capture_build(objects, headings, count, &capture,
-            overlay_width, use_story_font))
+            overlay_width, use_story_font, false))
         return false;
 
     object_info_overlay_capture_release();
@@ -2732,6 +2766,7 @@ bool object_info_overlay_show_multi(const object_type** objects,
             object_info_overlay_capture.tattrs,
             object_info_overlay_capture.tchars,
             object_info_overlay_capture.story,
+            NULL,
             object_info_overlay_capture.width,
             object_info_overlay_capture.height,
             object_info_overlay_capture.target_cols, 0, false, NULL, NULL))
@@ -2758,6 +2793,41 @@ static bool object_info_screen_key_is_action(int key,
     return false;
 }
 
+static bool object_info_screen_action_key_available(int key,
+    const object_info_screen_action* actions, int action_count)
+{
+    if (!actions || action_count <= 0)
+        return true;
+
+    for (int i = 0; i < action_count; i++)
+    {
+        if (actions[i].key == key)
+            return false;
+    }
+
+    return true;
+}
+
+static void object_info_understanding_action_token(char* buf, size_t buflen,
+    int count)
+{
+    if (!buf || buflen == 0)
+        return;
+
+    if (count == 1)
+    {
+        strnfmt(buf, buflen, "i Identify (1 gem)");
+    }
+    else if (count > 999)
+    {
+        strnfmt(buf, buflen, "i Identify (999+ gems)");
+    }
+    else
+    {
+        strnfmt(buf, buflen, "i Identify (%d gems)", count);
+    }
+}
+
 static void object_info_configure_footer(cptr footer,
     const object_info_screen_action* actions, int action_count)
 {
@@ -2777,7 +2847,6 @@ static char object_info_screen_capture_view(
     const object_info_screen_action* actions, int action_count)
 {
     int scroll = 0;
-    bool overlay_active = false;
     char result = 0;
 
     if (!capture)
@@ -2795,12 +2864,12 @@ static char object_info_screen_capture_view(
         object_info_configure_footer(footer, actions, action_count);
         if (!sdl_description_overlay_present(capture->attrs, capture->chars,
                 capture->tattrs, capture->tchars, capture->story,
+                NULL,
                 capture->width, capture->height, capture->target_cols, scroll,
                 true, &visible_rows, &max_scroll))
         {
             break;
         }
-        overlay_active = true;
         if (scroll > max_scroll)
             scroll = max_scroll;
         ui_scroll_area_begin(0, MAX(0, term_hgt - 1),
@@ -2854,8 +2923,6 @@ static char object_info_screen_capture_view(
         }
     }
 
-    if (overlay_active)
-        sdl_description_overlay_clear();
     sdl_description_overlay_clear_footer_actions();
     sdl_description_overlay_set_footer(NULL, false);
     ui_scroll_area_clear();
@@ -2874,8 +2941,14 @@ char object_info_screen_multi_with_actions(const object_type** objects,
     const object_info_screen_action* actions, int action_count)
 {
     object_info_screen_capture capture;
+    object_info_screen_action effective_actions[OBJECT_INFO_MAX_ACTIONS];
+    char effective_footer[160];
+    char understanding_token[32];
     bool have_capture = false;
+    bool use_understanding = false;
     char result = 0;
+    int effective_action_count = 0;
+    int understanding_count = 0;
     bool use_story_font;
 
     if (count <= 0 || objects == NULL)
@@ -2887,17 +2960,52 @@ char object_info_screen_multi_with_actions(const object_type** objects,
     SDL_memset(&capture, 0, sizeof(capture));
     use_story_font = story_object_desc_enabled();
 
+    if (actions && action_count > 0)
+    {
+        effective_action_count = MIN(action_count, OBJECT_INFO_MAX_ACTIONS);
+        for (int i = 0; i < effective_action_count; i++)
+            effective_actions[i] = actions[i];
+    }
+
+    understanding_count =
+        understanding_gem_count_for_item_description(objects[0]);
+    if (understanding_count > 0
+        && effective_action_count < OBJECT_INFO_MAX_ACTIONS
+        && object_info_screen_action_key_available(
+            OBJECT_INFO_UNDERSTANDING_KEY, effective_actions,
+            effective_action_count))
+    {
+        object_info_understanding_action_token(understanding_token,
+            sizeof(understanding_token), understanding_count);
+        effective_actions[effective_action_count].key =
+            OBJECT_INFO_UNDERSTANDING_KEY;
+        effective_actions[effective_action_count].token = understanding_token;
+        effective_action_count++;
+
+        if (footer && footer[0])
+        {
+            strnfmt(effective_footer, sizeof(effective_footer), "%s  %s",
+                understanding_token, footer);
+        }
+        else
+        {
+            strnfmt(effective_footer, sizeof(effective_footer), "%s",
+                understanding_token);
+        }
+        footer = effective_footer;
+    }
+
     character_icky++;
 
     have_capture =
         object_info_screen_capture_build(objects, headings, count, &capture,
             object_info_screen_preferred_capture_width(use_story_font),
-            use_story_font);
+            use_story_font, true);
     if (have_capture)
     {
-        result = object_info_screen_capture_view(&capture, footer, actions,
-            action_count);
-        object_info_screen_capture_free(&capture);
+        result = object_info_screen_capture_view(&capture, footer,
+            effective_action_count ? effective_actions : NULL,
+            effective_action_count);
     }
     else
     {
@@ -2906,16 +3014,31 @@ char object_info_screen_multi_with_actions(const object_type** objects,
 
     character_icky--;
 
+    /*
+     * Clear and present the SDL overlay only after leaving the modal state.
+     * Mobile pane visibility depends on character_icky, so presenting while
+     * it is still incremented leaves the gameplay UI hidden until another
+     * input happens to request a frame.
+     */
+    if (have_capture)
+    {
+        sdl_description_overlay_clear();
+        object_info_screen_capture_free(&capture);
+    }
+
     text_out_hook = text_out_to_screen;
     text_out_wrap = 0;
     text_out_indent = 0;
     new_paragraph = false;
 
+    use_understanding = (result == OBJECT_INFO_UNDERSTANDING_KEY
+        && understanding_count > 0);
+    if (use_understanding)
+    {
+        (void)do_cmd_use_understanding_gem_on_item(objects[0]);
+        return 0;
+    }
+
     return result;
 }
-
-
-
-
-
 

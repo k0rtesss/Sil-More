@@ -6,142 +6,126 @@
 #include "sdl-config.h"
 #include "quest/quest-internal.h"
 
-static int quest_typewriter_text_start_row(int hgt)
+static void quest_book_flush_paragraph(char *para, size_t *para_len)
 {
-    if (hgt <= 3)
-        return MAX(0, hgt - 2);
+    if (!para || !para_len || *para_len == 0)
+        return;
 
-    return 3;
+    sdl_character_sheet_screen_add_book_paragraph(para);
+    para[0] = '\0';
+    *para_len = 0;
 }
 
-static int quest_typewriter_last_text_row(int hgt)
+static bool quest_book_line_is(cptr line, size_t line_len, cptr marker)
 {
-    int start_row = quest_typewriter_text_start_row(hgt);
-    int last_row = hgt - 2;
+    size_t marker_len;
 
-    if (last_row < start_row)
-        last_row = start_row;
-
-    return last_row;
-}
-
-static void quest_typewriter_draw_title(cptr title, byte title_color, int wid)
-{
-    int title_col = MAX(0, (wid - (int)strlen(title)) / 2);
-
-    Term_putstr(title_col, 1, -1, title_color, title);
-}
-
-static bool quest_typewriter_next_page(cptr title, byte title_color, int wid,
-    int hgt, int *row, int *col)
-{
-    char prompt[48];
-    int prompt_row = MAX(0, hgt - 1);
-    int prompt_col;
-    char k;
-
-    any_key_prompt_text(prompt, sizeof(prompt), "continue");
-    prompt_col = MAX(0, (wid - (int)strlen(prompt)) / 2);
-    Term_erase(0, prompt_row, 255);
-    Term_putstr(prompt_col, prompt_row, -1, TERM_L_WHITE, prompt);
-    Term_fresh();
-
-    k = inkey();
-    if (k == 'Q' || k == 'q')
+    if (!line || !marker)
         return false;
-
-    Term_clear();
-    quest_typewriter_draw_title(title, title_color, wid);
-    *row = quest_typewriter_text_start_row(hgt);
-    *col = 0;
-    return true;
+    marker_len = strlen(marker);
+    return line_len == marker_len && !strncmp(line, marker, marker_len);
 }
 
-static bool quest_typewriter_ensure_row(cptr title, byte title_color, int wid,
-    int hgt, int *row, int *col)
+/* Add one logical input line to a narrative book.  Non-empty adjacent lines
+ * belong to the same reflowable paragraph; an empty line ends it. */
+static void quest_book_add_line(cptr line, size_t line_len, char *para,
+    size_t para_size, size_t *para_len)
 {
-    if (*row <= quest_typewriter_last_text_row(hgt))
-        return true;
+    size_t copy_len;
 
-    return quest_typewriter_next_page(title, title_color, wid, hgt, row, col);
+    if (!para || para_size == 0 || !para_len)
+        return;
+    if (!line)
+        line_len = 0;
+
+    if (quest_book_line_is(line, line_len, "[newpage]"))
+    {
+        quest_book_flush_paragraph(para, para_len);
+        sdl_character_sheet_screen_break_book_page();
+        return;
+    }
+    if (quest_book_line_is(line, line_len, "[highlight]"))
+    {
+        quest_book_flush_paragraph(para, para_len);
+        sdl_character_sheet_screen_highlight_book_paragraph();
+        return;
+    }
+    if (line_len == 0)
+    {
+        quest_book_flush_paragraph(para, para_len);
+        return;
+    }
+
+    if (*para_len > 0 && *para_len + 1 < para_size)
+        para[(*para_len)++] = ' ';
+    copy_len = MIN(line_len, para_size - 1 - *para_len);
+    if (copy_len > 0)
+    {
+        memcpy(para + *para_len, line, copy_len);
+        *para_len += copy_len;
+    }
+    para[*para_len] = '\0';
+}
+
+static void quest_book_add_texts(cptr texts[], int total_texts)
+{
+    char para[1024];
+    size_t para_len = 0;
+
+    para[0] = '\0';
+    for (int idx = 0; idx < total_texts; idx++)
+    {
+        cptr text = texts ? texts[idx] : NULL;
+        cptr line;
+
+        if (!text || !text[0])
+        {
+            quest_book_add_line(NULL, 0, para, sizeof(para), &para_len);
+            continue;
+        }
+
+        line = text;
+        while (*line)
+        {
+            cptr end = line;
+
+            while (*end && *end != '\r' && *end != '\n')
+                end++;
+            quest_book_add_line(line, (size_t)(end - line), para,
+                sizeof(para), &para_len);
+            if (!*end)
+                break;
+            if (*end == '\r' && end[1] == '\n')
+                end++;
+            line = end + 1;
+        }
+    }
+    quest_book_flush_paragraph(para, &para_len);
 }
 
 /*
  * Show quest narrative as a parchment "book" with page-turn navigation, reusing
- * the SDL front-end's character-sheet book.  The incoming texts[] are the line
- * entries from extract_quest_*_texts(): consecutive non-empty lines form one
- * paragraph and an empty entry is a paragraph break.  Each paragraph is re-flowed
- * onto the page (terminal line breaks are dropped), then the book paginates.
- *
- * Returns false when the book cannot be shown (no SDL screen), so the caller can
- * fall back to the terminal typewriter below.
+ * the SDL front-end's character-sheet book.  The incoming texts[] may be line
+ * entries from extract_quest_*_texts() or complete multiline speeches.  In
+ * either form, consecutive non-empty lines form one paragraph and an empty line
+ * is a paragraph break.  Each paragraph is re-flowed onto the page, then the
+ * book paginates.
  */
-static bool quest_show_book(cptr title, cptr texts[], int total_texts)
+static void quest_show_book(cptr title, cptr texts[], int total_texts,
+    int target_page_count)
 {
-    char para[1024];
-    size_t para_len = 0;
-    int idx;
     bool done = false;
 
     screen_save();
     screen_push_supporting_panes_hidden();
 
-    if (!sdl_character_sheet_screen_begin_book(title))
-    {
-        screen_pop_supporting_panes_hidden();
-        screen_load();
-        return false;
-    }
+    sdl_character_sheet_screen_begin_book(title);
+    if (target_page_count < 0)
+        target_page_count = sdl_touch_only_device_active() ? 4 : 3;
+    sdl_character_sheet_screen_set_book_target_page_count(target_page_count);
 
-    /* Build paragraphs from the line entries and push them into the book.  The
-     * extra (idx == total_texts) pass flushes the final paragraph. */
-    para[0] = '\0';
-    for (idx = 0; idx <= total_texts; idx++)
-    {
-        cptr line = (idx < total_texts) ? texts[idx] : NULL;
-
-        /* A "[newpage]" line flushes the current paragraph and forces the next
-         * one onto a fresh page, so an author can lay out a logical page turn. */
-        if (line && streq(line, "[newpage]"))
-        {
-            if (para_len > 0)
-                sdl_character_sheet_screen_add_book_paragraph(para);
-            para[0] = '\0';
-            para_len = 0;
-            sdl_character_sheet_screen_break_book_page();
-        }
-        /* A "[highlight]" line flushes the current paragraph and marks the next
-         * one as the quest's task or reward, drawn in light blue so the player
-         * can find it without reading the whole passage. */
-        else if (line && streq(line, "[highlight]"))
-        {
-            if (para_len > 0)
-                sdl_character_sheet_screen_add_book_paragraph(para);
-            para[0] = '\0';
-            para_len = 0;
-            sdl_character_sheet_screen_highlight_book_paragraph();
-        }
-        else if (line && line[0])
-        {
-            if (para_len > 0 && para_len + 1 < sizeof(para))
-            {
-                para[para_len++] = ' ';
-                para[para_len] = '\0';
-            }
-            if (para_len < sizeof(para))
-            {
-                SDL_strlcpy(para + para_len, line, sizeof(para) - para_len);
-                para_len += strlen(para + para_len);
-            }
-        }
-        else
-        {
-            if (para_len > 0)
-                sdl_character_sheet_screen_add_book_paragraph(para);
-            para[0] = '\0';
-            para_len = 0;
-        }
-    }
+    /* Build paragraphs from both line-array and embedded-newline input. */
+    quest_book_add_texts(texts, total_texts);
     sdl_character_sheet_screen_commit_book();
 
     /* Page-turn input loop (mirrors the race-book loop in get_player_choice). */
@@ -205,6 +189,32 @@ static bool quest_show_book(cptr title, cptr texts[], int total_texts)
             continue;
         }
 
+        if (c == '8' || c == 'k' || c == 'K' || c == '-')
+        {
+            (void)sdl_character_sheet_screen_scroll_book(-1);
+            continue;
+        }
+        if (c == '2' || c == 'j' || c == 'J' || c == '+')
+        {
+            (void)sdl_character_sheet_screen_scroll_book(+1);
+            continue;
+        }
+
+#ifdef KC_PGUP
+        if (c == KC_PGUP)
+        {
+            (void)sdl_character_sheet_screen_scroll_book(-1);
+            continue;
+        }
+#endif
+#ifdef KC_PGDOWN
+        if (c == KC_PGDOWN)
+        {
+            (void)sdl_character_sheet_screen_scroll_book(+1);
+            continue;
+        }
+#endif
+
         if (c == '6' || c == ' ' || c == '\r' || c == '\n')
         {
             if (page < count - 1)
@@ -219,223 +229,327 @@ static bool quest_show_book(cptr title, cptr texts[], int total_texts)
     sdl_character_sheet_screen_hide();
     screen_pop_supporting_panes_hidden();
     screen_load();
-    return true;
 }
 
-/*
- * Quest typewriter menu function - displays quest dialog with typewriter effect
- * Based on print_story_intro() style
- */
-void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title_color, byte text_color)
+static int quest_reward_first_enabled(const bool enabled[], int choice_count,
+    int initial_choice)
 {
-    int wid, h;
-    int wrap_width;
-    int row, col;
-    const int indent = 2;
-    bool skipped = false;
+    if (choice_count <= 0)
+        return -1;
+    if (initial_choice >= 0 && initial_choice < choice_count
+        && (!enabled || enabled[initial_choice]))
+    {
+        return initial_choice;
+    }
+    for (int i = 0; i < choice_count; i++)
+        if (!enabled || enabled[i])
+            return i;
+    return -1;
+}
 
-    /* Prefer the parchment book (SDL front-end) with page-turn navigation; fall
-     * back to the terminal typewriter when it is unavailable. */
-    if (quest_show_book(title, texts, total_texts))
-        return;
+static int quest_reward_next_enabled(const bool enabled[], int choice_count,
+    int selection, int direction)
+{
+    int next = selection;
 
-    /* Save screen and start fresh */
+    if (choice_count <= 0 || selection < 0)
+        return selection;
+    for (int tries = 0; tries < choice_count; tries++)
+    {
+        next = (next + (direction > 0 ? 1 : choice_count - 1))
+            % choice_count;
+        if (!enabled || enabled[next])
+            return next;
+    }
+    return selection;
+}
+
+static void quest_reward_build_book(cptr title, cptr texts[], int total_texts,
+    cptr prompt, cptr labels[], const bool enabled[], int choice_count,
+    int selection, bool can_inspect)
+{
+    bool letters = sdl_menu_letters_enabled();
+
+    sdl_character_sheet_screen_begin_book(title);
+    sdl_character_sheet_screen_set_book_target_page_count(0);
+    quest_book_add_texts(texts, total_texts);
+
+    if (total_texts > 0)
+        sdl_character_sheet_screen_break_book_page();
+    sdl_character_sheet_screen_add_book_paragraph_colored(
+        (prompt && prompt[0]) ? prompt : "Choose your reward:", TERM_L_BLUE);
+    if (can_inspect)
+        sdl_character_sheet_screen_add_book_paragraph_colored(
+            "Press X or ? to inspect the highlighted reward.", TERM_SLATE);
+    for (int i = 0; i < choice_count; i++)
+    {
+        char line[256];
+        cptr label = (labels && labels[i]) ? labels[i] : "Reward";
+
+        if (letters)
+            strnfmt(line, sizeof(line), "%c) %s%s", 'a' + i, label,
+                (enabled && !enabled[i]) ? " (unavailable)" : "");
+        else
+            strnfmt(line, sizeof(line), "%s%s", label,
+                (enabled && !enabled[i]) ? " (unavailable)" : "");
+
+        if (!enabled || enabled[i])
+            sdl_character_sheet_screen_add_book_action_colored(line, i,
+                TERM_YELLOW);
+        else
+            sdl_character_sheet_screen_add_book_paragraph_colored(line,
+                TERM_L_DARK);
+    }
+    sdl_character_sheet_screen_set_book_close_button(true);
+    sdl_character_sheet_screen_set_book_close_label("Choose later");
+    sdl_character_sheet_screen_commit_book();
+    sdl_character_sheet_screen_set_book_focus(selection);
+}
+
+/* Show story prose and every available reward in the same paginated parchment
+ * book.  Returns the selected values[] entry, or -1 when the player leaves the
+ * book so the quest can remain pending and be revisited. */
+int quest_reward_book_choice(cptr title, cptr texts[], int total_texts,
+    cptr prompt, const int values[], cptr labels[], const bool enabled[],
+    int choice_count, int initial_choice, void (*inspect)(int value))
+{
+    int selection = quest_reward_first_enabled(enabled, choice_count,
+        initial_choice);
+    int result = -1;
+    bool done = false;
+
+    if (selection < 0 || !values || !labels)
+        return -1;
+
     screen_save();
     screen_push_supporting_panes_hidden();
+    quest_reward_build_book(title, texts, total_texts, prompt, labels, enabled,
+        choice_count, selection, inspect != NULL);
 
-    /* Get terminal size after any hidden-pane layout change */
-    Term_get_size(&wid, &h);
-    wrap_width = wid - indent * 2;
-    row = quest_typewriter_text_start_row(h);
-    col = 0;
+    while (!done)
+    {
+        int key;
+        int clicked = -1;
+        int action = UI_MENU_CLICK_PRIMARY;
+        int page;
+        int page_count;
+        int selection_page;
+        bool inspect_now = false;
 
-    Term_clear();
-    Term_flush();
-    ui_menu_click_begin();
-    for (int click_row = 0; click_row < h; click_row++)
-        ui_menu_click_add_full_row('\r', click_row);
+        ui_menu_click_begin();
+        ui_menu_click_set_hover_enabled(true);
+        key = inkey();
 
-    /* Display title */
-    quest_typewriter_draw_title(title, title_color, wid);
-
-    for (int idx = 0; idx < total_texts; idx++) {
-        const char *s = texts[idx];
-
-        /* Handle empty lines as paragraph breaks */
-        if (!s || strlen(s) == 0) {
-            /* Empty line - just advance row for paragraph break */
-            row++;
-            col = 0;
-            if ((idx + 1 < total_texts)
-                && !quest_typewriter_ensure_row(title, title_color, wid, h, &row, &col)) {
-                Term_clear();
-                ui_menu_click_clear();
-                screen_pop_supporting_panes_hidden();
-                screen_load();
-                return;
+        if (ui_menu_click_take_action(&clicked, &action))
+        {
+            ui_menu_click_clear();
+            if (action == UI_MENU_CLICK_HOVER)
+                continue;
+            if (clicked == SDL_SELECT_CLICK_CLOSE)
+            {
+                done = true;
+                continue;
             }
-            /* Short pause for empty line */
-            if (!skipped) Term_xtra(TERM_XTRA_DELAY, 200);
-            continue;
-        }
-
-        col = 0;
-
-        /* Print this string with proper word wrapping and typewriter effect */
-        int i = 0;
-        while (s[i]) {
-            /* Handle explicit newlines */
-            if (s[i] == '\n') {
-                row++;
-                col = 0;
-                i++;
-                if (!quest_typewriter_ensure_row(title, title_color, wid, h, &row, &col)) {
-                    Term_clear();
-                    ui_menu_click_clear();
-                    screen_pop_supporting_panes_hidden();
-                    screen_load();
-                    return;
+            if ((clicked == SDL_SELECT_CLICK_PAGE_NEXT
+                    || clicked == SDL_SELECT_CLICK_PAGE_PREV)
+                && !sdl_character_sheet_screen_page_turning())
+            {
+                page = sdl_character_sheet_screen_select_page();
+                page_count = sdl_character_sheet_screen_select_page_count();
+                if (clicked == SDL_SELECT_CLICK_PAGE_PREV && page > 0)
+                    sdl_character_sheet_screen_begin_page_turn(-1);
+                else if (clicked == SDL_SELECT_CLICK_PAGE_NEXT
+                    && page < page_count - 1)
+                {
+                    sdl_character_sheet_screen_begin_page_turn(+1);
+                }
+                else if (clicked == SDL_SELECT_CLICK_PAGE_NEXT)
+                {
+                    result = values[selection];
+                    done = true;
                 }
                 continue;
             }
-
-            /* Find the end of the current word (or until we hit wrap width) */
-            int word_start = i;
-            int word_len = 0;
-            bool has_space_after = false;
-
-            /* Build the current word/phrase until we hit whitespace, newline, or exceed reasonable length */
-            while (s[i] && s[i] != '\n' && word_len < wrap_width) {
-                if (s[i] == ' ' || s[i] == '\t') {
-                    has_space_after = true;
-                    break;
+            if (clicked >= 0 && clicked < choice_count
+                && (!enabled || enabled[clicked]))
+            {
+                if (action == UI_MENU_CLICK_SECONDARY && inspect)
+                {
+                    selection = clicked;
+                    inspect_now = true;
                 }
-                word_len++;
-                i++;
-            }
-
-            log_trace("WRAP DEBUG: word='%.*s', word_len=%d, col=%d, wrap_width=%d", word_len, &s[word_start], word_len, col, wrap_width);
-
-            /* Check if this word fits on the current line */
-            if (col + word_len > wrap_width && col > 0) {
-                /* Word doesn't fit, wrap to next line */
-                log_trace("WRAP DEBUG: Wrapping word to next line (col=%d + word_len=%d > wrap_width=%d)", col, word_len, wrap_width);
-                row++;
-                col = 0;
-                if (!quest_typewriter_ensure_row(title, title_color, wid, h, &row, &col)) {
-                    Term_clear();
-                    ui_menu_click_clear();
-                    screen_pop_supporting_panes_hidden();
-                    screen_load();
-                    return;
+                else if (clicked != selection)
+                {
+                    selection = clicked;
+                    sdl_character_sheet_screen_set_book_focus(selection);
+                    continue;
                 }
-            }
-
-            /* Print the word character by character with typewriter effect */
-            if (skipped) {
-                /* Skip mode: print entire word instantly */
-                for (int j = word_start; j < word_start + word_len; j++) {
-                    Term_putch(indent + col, row, text_color, s[j]);
-                    col++;
-                }
-            }
-            else {
-                /* Normal mode: typewriter effect with character-by-character */
-                for (int j = word_start; j < word_start + word_len; j++) {
-                    /* Check for ESC or Enter key press to skip typewriter effect */
-                    char check_key;
-                    if (Term_inkey(&check_key, false, false) == 0) {
-                        /* Only respond to ESC or Enter - consume and check */
-                        Term_inkey(&check_key, false, true);
-                        if (check_key == ESCAPE || check_key == '\n' || check_key == '\r') {
-                            skipped = true;
-                            /* Print rest of current word instantly */
-                            for (int k = j; k < word_start + word_len; k++) {
-                                Term_putch(indent + col, row, text_color, s[k]);
-                                col++;
-                            }
-                            break; /* Exit to continue with rest of text in skip mode */
-                        }
-                        /* Other keys are ignored (already consumed) */
-                    }
-
-                    /* Print character with typewriter effect */
-                    Term_putch(indent + col, row, text_color, s[j]);
-                    Term_fresh();
-                    col++;
-
-                    /* Delay 25 ms after each character for typewriter effect */
-                    Term_xtra(TERM_XTRA_DELAY, 25);
-                }
-            }
-
-            /* Handle the space/whitespace after the word */
-            if (has_space_after) {
-                if (s[i] == ' ') {
-                    /* Only print space if we're not at the end of a line */
-                    if (col < wrap_width) {
-                        Term_putch(indent + col, row, text_color, ' ');
-                        if (!skipped) Term_fresh();
-                        col++;
-
-                        /* Delay for space too (unless skipped) */
-                        if (!skipped) Term_xtra(TERM_XTRA_DELAY, 25);
-                    }
-                    i++; /* Skip the space */
-                }
-                else if (s[i] == '\t') {
-                    /* Handle tab - convert to spaces but respect wrap width */
-                    int tab_spaces = 4 - (col % 4);
-                    for (int t = 0; t < tab_spaces && col < wrap_width; t++) {
-                        Term_putch(indent + col, row, text_color, ' ');
-                        if (!skipped) Term_fresh();
-                        col++;
-
-                        /* Delay for tab spaces (unless skipped) */
-                        if (!skipped) Term_xtra(TERM_XTRA_DELAY, 25);
-                    }
-                    i++; /* Skip the tab */
+                else
+                {
+                    result = values[selection];
+                    done = true;
+                    continue;
                 }
             }
         }
-
-        /* Move to next line after text */
-        row++;
-        col = 0;
-        if ((idx + 1 < total_texts)
-            && !quest_typewriter_ensure_row(title, title_color, wid, h, &row, &col)) {
-            Term_clear();
+        else if (key == UI_MENU_CLICK_WAKE_KEY)
+        {
             ui_menu_click_clear();
+            continue;
+        }
+        ui_menu_click_clear();
+
+        if (done)
+            continue;
+        if (steamdeck_controls_active())
+        {
+            if (key == steamdeck_confirm_key())
+                key = '\r';
+            else if (key == steamdeck_alt_action_key())
+                key = 'x';
+            else
+                key = steamdeck_menu_key(key, '4', '6');
+        }
+        if (sdl_character_sheet_screen_page_turning())
+            continue;
+
+        page = sdl_character_sheet_screen_select_page();
+        page_count = sdl_character_sheet_screen_select_page_count();
+        selection_page =
+            sdl_character_sheet_screen_book_action_page(selection);
+
+        if (key == ESCAPE || key == 'q' || key == 'Q')
+        {
+            done = true;
+        }
+        else if (key == '4')
+        {
+            if (page > 0)
+                sdl_character_sheet_screen_begin_page_turn(-1);
+        }
+        else if (key == '6')
+        {
+            if (page < page_count - 1)
+                sdl_character_sheet_screen_begin_page_turn(+1);
+        }
+        else if (key == '\r' || key == '\n' || key == ' ')
+        {
+            if (selection_page >= 0 && page < selection_page)
+                sdl_character_sheet_screen_begin_page_turn(+1);
+            else
+            {
+                result = values[selection];
+                done = true;
+            }
+        }
+        else if (key == '8' || key == 'k' || key == 'K' || key == '-')
+        {
+            if (selection_page >= 0 && page < selection_page)
+                (void)sdl_character_sheet_screen_scroll_book(-1);
+            else
+            {
+                selection = quest_reward_next_enabled(enabled, choice_count,
+                    selection, -1);
+                sdl_character_sheet_screen_set_book_focus(selection);
+                selection_page =
+                    sdl_character_sheet_screen_book_action_page(selection);
+                if (selection_page >= 0 && selection_page != page)
+                    sdl_character_sheet_screen_begin_page_turn_to(
+                        selection_page);
+            }
+        }
+        else if (key == '2' || key == 'j' || key == 'J' || key == '+')
+        {
+            if (selection_page >= 0 && page < selection_page)
+                (void)sdl_character_sheet_screen_scroll_book(+1);
+            else
+            {
+                selection = quest_reward_next_enabled(enabled, choice_count,
+                    selection, +1);
+                sdl_character_sheet_screen_set_book_focus(selection);
+                selection_page =
+                    sdl_character_sheet_screen_book_action_page(selection);
+                if (selection_page >= 0 && selection_page != page)
+                    sdl_character_sheet_screen_begin_page_turn_to(
+                        selection_page);
+            }
+        }
+        else if ((key == 'x' || key == 'X' || key == '?') && inspect)
+        {
+            inspect_now = true;
+        }
+        else if (sdl_menu_letters_enabled()
+            && key >= 'a' && key < 'a' + choice_count
+            && (!enabled || enabled[key - 'a']))
+        {
+            result = values[key - 'a'];
+            done = true;
+        }
+        else if (sdl_menu_letters_enabled()
+            && key >= 'A' && key < 'A' + choice_count
+            && (!enabled || enabled[key - 'A']))
+        {
+            result = values[key - 'A'];
+            done = true;
+        }
+#ifdef KC_PGUP
+        else if (key == KC_PGUP)
+        {
+            (void)sdl_character_sheet_screen_scroll_book(-1);
+        }
+#endif
+#ifdef KC_PGDOWN
+        else if (key == KC_PGDOWN)
+        {
+            (void)sdl_character_sheet_screen_scroll_book(+1);
+        }
+#endif
+
+        if (inspect_now)
+        {
+            int old_page = sdl_character_sheet_screen_select_page();
+
+            sdl_character_sheet_screen_hide();
             screen_pop_supporting_panes_hidden();
             screen_load();
-            return;
+            inspect(values[selection]);
+            screen_save();
+            screen_push_supporting_panes_hidden();
+            quest_reward_build_book(title, texts, total_texts, prompt, labels,
+                enabled, choice_count, selection, inspect != NULL);
+            sdl_character_sheet_screen_set_book_page(old_page);
         }
-
-        /* 400ms pause after each line of text (unless skipped) */
-        if (!skipped) Term_xtra(TERM_XTRA_DELAY, 400);
     }
 
-    /* Refresh screen to show all text if skipped */
-    if (skipped) Term_fresh();
-
-    /* Final prompt */
-    {
-        char prompt_buf[48];
-        any_key_prompt_text(prompt_buf, sizeof(prompt_buf), "continue");
-        Term_putstr(15, h - 1, -1, TERM_L_WHITE, prompt_buf);
-    }
-    ui_menu_click_begin();
-    for (int click_row = 0; click_row < h; click_row++)
-        ui_menu_click_add_full_row('\r', click_row);
-    inkey();
     ui_menu_click_clear();
-
-    /* Flush any queued keypresses that accumulated during the typewriter effect */
-    Term_flush();
-
-    Term_clear();
+    sdl_character_sheet_screen_hide();
     screen_pop_supporting_panes_hidden();
     screen_load();
+    return result;
+}
+
+/* The public entry points retain their historical names, but quest dialogue is
+ * now rendered exclusively by the SDL parchment book. */
+static void quest_typewriter_menu_internal(cptr title, cptr texts[],
+    int total_texts, byte title_color, byte text_color, int target_page_count)
+{
+    (void)title_color;
+    (void)text_color;
+    quest_show_book(title, texts, total_texts, target_page_count);
+}
+
+void quest_typewriter_menu(cptr title, cptr texts[], int total_texts,
+    byte title_color, byte text_color)
+{
+    quest_typewriter_menu_internal(title, texts, total_texts, title_color,
+        text_color, -1);
+}
+
+void quest_typewriter_menu_pages(cptr title, cptr texts[], int total_texts,
+    byte title_color, byte text_color, int target_page_count)
+{
+    quest_typewriter_menu_internal(title, texts, total_texts, title_color,
+        text_color, MAX(0, target_page_count));
 }
 
 /*

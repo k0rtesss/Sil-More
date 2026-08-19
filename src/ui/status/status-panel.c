@@ -53,6 +53,7 @@ byte g_hidden_left_panel_overlay_start_row = 0;
 byte g_hidden_left_panel_overlay_start_cols[16] = { 0 };
 byte g_hidden_left_panel_overlay_widths[16] = { 0 };
 byte g_hidden_left_panel_overlay_attack_modes[16] = { 0 };
+bool g_hidden_left_panel_overlay_attack_quivers[16] = { false };
 byte g_hidden_left_panel_overlay_attack_start_cols[16] = { 0 };
 byte g_hidden_left_panel_overlay_attack_end_cols[16] = { 0 };
 byte g_hidden_left_panel_overlay_click_actions[16] = { 0 };
@@ -66,7 +67,7 @@ bool g_suppress_hidden_left_panel_overlay = false;
 
 static byte left_panel_selected_attack_attr(void)
 {
-    return (byte)(TERM_UI_SELECTED + TERM_YELLOW);
+    return (byte)(TERM_UI_SELECTED + TERM_L_BLUE);
 }
 
 static byte left_panel_selected_quiver_attr(void)
@@ -86,9 +87,8 @@ static byte left_panel_selected_bg_from_attr(byte attr)
 
 static bool pointer_attack_ranged_panel_highlighted(void)
 {
-    return sdl_pointer_attack_panel_mode_highlighted(SDL_POINTER_ATTACK_RANGED_1)
-        || sdl_pointer_attack_panel_mode_highlighted(
-            SDL_POINTER_ATTACK_RANGED_2);
+    return sdl_pointer_attack_panel_mode_highlighted(
+        SDL_POINTER_ATTACK_RANGED_1);
 }
 
 static byte pointer_attack_panel_attr(int mode, byte base_attr)
@@ -107,14 +107,14 @@ static byte pointer_attack_panel_bg_attr(int mode)
 
 static byte pointer_attack_quiver_panel_attr(int mode, byte base_attr)
 {
-    return sdl_pointer_attack_panel_mode_highlighted(mode)
+    return sdl_pointer_attack_panel_quiver_highlighted(mode)
         ? left_panel_selected_quiver_attr()
         : base_attr;
 }
 
 static byte pointer_attack_quiver_panel_bg_attr(int mode)
 {
-    return sdl_pointer_attack_panel_mode_highlighted(mode)
+    return sdl_pointer_attack_panel_quiver_highlighted(mode)
         ? left_panel_selected_quiver_attr()
         : 0;
 }
@@ -131,20 +131,6 @@ static byte pointer_attack_ranged_panel_bg_attr(void)
     return pointer_attack_ranged_panel_highlighted()
         ? left_panel_selected_attack_attr()
         : 0;
-}
-
-static bool pointer_attack_ammo_is_throwing(const object_type* ammo)
-{
-    u32b f1 = 0;
-    u32b f2 = 0;
-    u32b f3 = 0;
-    u32b f4 = 0;
-
-    if (!ammo || !ammo->k_idx)
-        return false;
-
-    object_flags4(ammo, &f1, &f2, &f3, &f4);
-    return player_can_treat_as_throwing_flags(ammo, f3);
 }
 
 byte panel_touch_zone_attr(int action, int row, byte base_attr)
@@ -169,111 +155,34 @@ byte status_touch_zone_attr(int action, int col, int width,
 
 static const object_type* pointer_attack_ranged_ammo_for_mode(int mode)
 {
-    switch (mode)
-    {
-    case SDL_POINTER_ATTACK_RANGED_1:
-        return &inventory[INVEN_QUIVER1];
-    case SDL_POINTER_ATTACK_RANGED_2:
-        return &inventory[INVEN_QUIVER2];
-    default:
+    int slot;
+
+    if (mode != SDL_POINTER_ATTACK_RANGED_1)
         return NULL;
-    }
+    slot = player_active_throwing_weapon_slot();
+    if (slot >= 0)
+        return &inventory[slot];
+    slot = player_quiver_selected_arrow_slot();
+    return player_quiver_arrow_object(slot);
 }
 
 static int pointer_attack_ranged_display_mode(void)
 {
-    int mode = sdl_pointer_attack_current_mode();
-
-    if (mode == SDL_POINTER_ATTACK_RANGED_1
-        || mode == SDL_POINTER_ATTACK_RANGED_2)
-    {
-        const object_type* ammo = pointer_attack_ranged_ammo_for_mode(mode);
-
-        if (ammo && ammo->k_idx)
-            return mode;
-    }
-
-    if (pointer_attack_ammo_is_throwing(&inventory[INVEN_QUIVER1]))
-        return SDL_POINTER_ATTACK_RANGED_1;
-    if (pointer_attack_ammo_is_throwing(&inventory[INVEN_QUIVER2]))
-        return SDL_POINTER_ATTACK_RANGED_2;
-
+    /* The active ranged row represents either the bow/Quiver pair or the
+     * active throwing weapon.  Quick and Power Throw use their own action. */
     return SDL_POINTER_ATTACK_RANGED_1;
-}
-
-static int pointer_attack_throwing_display_attack(const object_type* o_ptr)
-{
-    const object_type* wield = &inventory[INVEN_WIELD];
-    int attack = p_ptr->skill_use[S_MEL] + o_ptr->att;
-
-    attack -= wield->att;
-    attack -= axe_bonus(wield);
-    attack -= polearm_bonus(wield);
-    attack += axe_bonus(o_ptr);
-    attack += polearm_bonus(o_ptr);
-
-    if (p_ptr->active_ability[S_MEL][MEL_THROWING]
-        || object_grants_ability(o_ptr, S_MEL, MEL_THROWING))
-    {
-        attack += 1;
-    }
-
-    return attack;
 }
 
 static bool pointer_attack_ranged_display_stats(int* attack, int* dd, int* ds,
     bool* throwing)
 {
-    int mode = pointer_attack_ranged_display_mode();
-    const object_type* ammo = pointer_attack_ranged_ammo_for_mode(mode);
-
-    if (attack)
-        *attack = p_ptr->skill_use[S_ARC];
-    if (dd)
-        *dd = p_ptr->add;
-    if (ds)
-        *ds = p_ptr->ads;
-    if (throwing)
-        *throwing = false;
-
-    if (ammo && ammo->k_idx)
-    {
-        u32b f1 = 0;
-        u32b f2 = 0;
-        u32b f3 = 0;
-        u32b f4 = 0;
-
-        object_flags4(ammo, &f1, &f2, &f3, &f4);
-        if (player_can_treat_as_throwing_flags(ammo, f3))
-        {
-            int throw_ds = strength_modified_ds(ammo, 0);
-
-            if (attack)
-                *attack = pointer_attack_throwing_display_attack(ammo);
-            if (dd)
-                *dd = ammo->dd;
-            if (ds)
-                *ds = MAX(0, throw_ds);
-            if (throwing)
-                *throwing = true;
-            return true;
-        }
-
-        if ((&inventory[INVEN_BOW])->k_idx && ammo->tval == TV_ARROW)
-        {
-            if (attack)
-                *attack += ammo->att;
-            return true;
-        }
-    }
-
-    return (&inventory[INVEN_BOW])->k_idx ? true : false;
+    return player_active_weapon_stats_preview(
+        PLAYER_ACTIVE_WEAPON_RANGED_1, attack, dd, ds, throwing);
 }
 
 static bool pointer_attack_melee_has_offhand(void)
 {
-    return ((&inventory[INVEN_ARM])->k_idx)
-        && ((&inventory[INVEN_ARM])->tval != TV_SHIELD);
+    return player_active_weapon_offhand_stats_preview(NULL, NULL, NULL);
 }
 
 static bool left_panel_object_icon_is_usable(const object_type* o_ptr)
@@ -415,6 +324,8 @@ static const object_type* left_panel_armour_display_object(void)
         object_type* o_ptr = &inventory[slots[i]];
 
         if (!o_ptr->k_idx)
+            continue;
+        if (!player_equipment_slot_counts_as_equipped(slots[i]))
             continue;
         if (slots[i] == INVEN_ARM && o_ptr->tval != TV_SHIELD)
             continue;
@@ -714,13 +625,17 @@ void prt_exp(void)
 void prt_mel(void)
 {
     char buf[32];
-    bool has_offhand = pointer_attack_melee_has_offhand();
+    int main_attack = 0;
+    int main_dd;
+    int main_ds;
+    int offhand_attack = 0;
+    int offhand_dd = 0;
+    int offhand_ds = 0;
+    bool has_main;
+    bool has_offhand;
     bool can_use_offhand_row = (ROW_MEL - 1) != ROW_LIGHT;
     int main_row = ROW_MEL;
     byte melee_bg_attr = pointer_attack_panel_bg_attr(SDL_POINTER_ATTACK_MELEE);
-
-    if (has_offhand && can_use_offhand_row)
-        main_row = ROW_MEL - 1;
 
     /*
      * Clear the secondary melee row only when it is not reserved for the light
@@ -731,13 +646,25 @@ void prt_mel(void)
         Term_erase(COL_MEL, ROW_MEL - 1, 12);
     Term_erase(COL_MEL, ROW_MEL, 12);
 
+    /* The combat panel presents only the active combat set. */
+    if (!player_active_weapon_is_melee())
+        return;
+
+    has_main = player_active_weapon_stats_preview(
+        PLAYER_ACTIVE_WEAPON_MELEE, &main_attack, &main_dd, &main_ds, NULL);
+    has_offhand = player_active_weapon_offhand_stats_preview(
+        &offhand_attack, &offhand_dd, &offhand_ds);
+    if (has_offhand && can_use_offhand_row)
+        main_row = ROW_MEL - 1;
+
     /* Melee attacks */
     int meleeColour
         = p_ptr->active_ability[S_MEL][MEL_SMITE] ? TERM_L_RED : TERM_L_WHITE;
     meleeColour = pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE,
         meleeColour);
-    strnfmt(buf, sizeof(buf), "(%+d,%dd%d)", p_ptr->skill_use[S_MEL],
-        p_ptr->mdd, p_ptr->mds);
+    if (!has_main)
+        main_attack = main_dd = main_ds = 0;
+    strnfmt(buf, sizeof(buf), "(%+d,%dd%d)", main_attack, main_dd, main_ds);
     prt_pointer_attack_value_row_icon(
         p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK] ? "M2x" : "Mel",
         pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE, TERM_L_WHITE),
@@ -746,9 +673,8 @@ void prt_mel(void)
 
     if (has_offhand && can_use_offhand_row)
     {
-        strnfmt(buf, sizeof(buf), "(%+d,%dd%d)",
-            p_ptr->skill_use[S_MEL] + p_ptr->offhand_mel_mod, p_ptr->mdd2,
-            p_ptr->mds2);
+        strnfmt(buf, sizeof(buf), "(%+d,%dd%d)", offhand_attack, offhand_dd,
+            offhand_ds);
         prt_pointer_attack_value_row_icon("Off",
             pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE, TERM_L_WHITE),
             pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE, TERM_L_WHITE),
@@ -769,6 +695,10 @@ void prt_arc(void)
 
     /* Clear the line so shorter values don't leave stale characters */
     Term_erase(COL_ARC, ROW_ARC, 12);
+
+    /* Inactive ranged equipment belongs to the Harness, not this panel. */
+    if (!player_active_weapon_is_ranged())
+        return;
 
     /* Range attacks */
     if (pointer_attack_ranged_display_stats(&attack, &dd, &ds, &throwing))
@@ -823,33 +753,23 @@ void prt_arc(void)
 
 }
 
-/*
- * Prints current quiver status (current/max for both quivers)
- * Right-aligned to 12 character width, like other stats
- * Same type: icon in middle between counts
- * Different: icon before each count
- */
+/* Print the active ranged-source status, right-aligned like combat rows. */
 void prt_quiver(void)
 {
-    char buf1[16];
-    char buf2[16];
-    object_type* q1_ptr = &inventory[INVEN_QUIVER1];
-    object_type* q2_ptr = &inventory[INVEN_QUIVER2];
+    char buf[16];
+    object_type* q1_ptr = NULL;
     int q1_current = 0;
     int q1_max = 0;
-    int q2_current = 0;
-    int q2_max = 0;
-    bool same_type = false;
+    int q1_total = 0;
+    bool arrow_quiver = false;
     int total_width;
     int start_col;
+    int q1_start;
+    int col;
     byte q1_text_attr = pointer_attack_quiver_panel_attr(
         SDL_POINTER_ATTACK_RANGED_1, TERM_L_WHITE);
-    byte q2_text_attr = pointer_attack_quiver_panel_attr(
-        SDL_POINTER_ATTACK_RANGED_2, TERM_L_WHITE);
     byte q1_bg_attr = pointer_attack_quiver_panel_bg_attr(
         SDL_POINTER_ATTACK_RANGED_1);
-    byte q2_bg_attr = pointer_attack_quiver_panel_bg_attr(
-        SDL_POINTER_ATTACK_RANGED_2);
 
     for (int i = 0; i < 2; i++)
     {
@@ -861,117 +781,51 @@ void prt_quiver(void)
     /* Clear the entire line (12 characters) */
     Term_erase(COL_QUIVER, ROW_QUIVER, 12);
 
-    /* Get quiver 1 info */
-    if (q1_ptr->k_idx)
-    {
-        q1_current = q1_ptr->number;
-        q1_max = object_stack_limit(q1_ptr);
-    }
+    if (!player_active_weapon_is_ranged())
+        return;
 
-    /* Get quiver 2 info */
-    if (q2_ptr->k_idx)
     {
-        q2_current = q2_ptr->number;
-        q2_max = object_stack_limit(q2_ptr);
-    }
+        int slot = player_active_throwing_weapon_slot();
 
-    /* Check if both quivers have the same item type */
-    if (q1_ptr->k_idx && q2_ptr->k_idx)
-    {
-        if (q1_ptr->tval == q2_ptr->tval && q1_ptr->sval == q2_ptr->sval)
+        if (slot >= 0)
         {
-            same_type = true;
+            q1_ptr = &inventory[slot];
+            q1_current = q1_ptr->number;
+            q1_max = object_stack_limit(q1_ptr);
+        }
+        else
+        {
+            slot = player_quiver_selected_arrow_slot();
+            if (slot < 0)
+                return;
+            q1_ptr = player_quiver_arrow_object(slot);
+            if (!q1_ptr)
+                return;
+            q1_current = q1_ptr->number;
+            q1_total = player_quiver_arrow_count();
+            q1_max = QUIVER_ARROW_CAPACITY;
+            arrow_quiver = true;
         }
     }
-
-    /* Format the count strings */
-    strnfmt(buf1, sizeof(buf1), "%d/%d", q1_current, q1_max);
-    strnfmt(buf2, sizeof(buf2), "%d/%d", q2_current, q2_max);
-
-    /* Calculate total width */
-    if (same_type)
-    {
-        /* Layout: "11/48[->][->]7/7" */
-        total_width = strlen(buf1) + (use_bigtile ? 2 : 2) + strlen(buf2);
-    }
+    if (arrow_quiver)
+        strnfmt(buf, sizeof(buf), "%d|%d/%d", q1_current, q1_total, q1_max);
     else
-    {
-        /* Layout: "[|][|]11/48[/][/]7/7" */
-        total_width = 0;
-        if (q1_ptr->k_idx)
-            total_width += (use_bigtile ? 2 : 2) + strlen(buf1);
-        if (q2_ptr->k_idx)
-            total_width += (use_bigtile ? 2 : 2) + strlen(buf2);
-    }
+        strnfmt(buf, sizeof(buf), "%d/%d", q1_current, q1_max);
+    total_width = 2 + (int)strlen(buf);
 
-    /* Right-align: start at column that makes it end at column 11 */
     start_col = COL_QUIVER + 12 - total_width;
-    if (start_col < COL_QUIVER) start_col = COL_QUIVER;
+    if (start_col < COL_QUIVER)
+        start_col = COL_QUIVER;
 
-    int col = start_col;
-
-    if (same_type)
-    {
-        /* Same type: counts with icon in middle */
-        byte shared_icon_bg_attr = q1_bg_attr ? q1_bg_attr : q2_bg_attr;
-        int q1_start;
-        int q2_start;
-
-        /* Q1 count */
-        q1_start = col;
-        Term_putstr(col, ROW_QUIVER, -1, q1_text_attr, buf1);
-        col += strlen(buf1);
-        g_left_panel_quiver_attack_modes[0] = SDL_POINTER_ATTACK_RANGED_1;
-        g_left_panel_quiver_attack_start_cols[0] = (byte)q1_start;
-        g_left_panel_quiver_attack_end_cols[0] = (byte)col;
-
-        /* Icon in middle */
-        col += left_panel_put_object_icon(q1_ptr, ROW_QUIVER, col, false,
-            shared_icon_bg_attr);
-
-        /* Q2 count */
-        q2_start = col;
-        Term_putstr(col, ROW_QUIVER, -1, q2_text_attr, buf2);
-        col += strlen(buf2);
-        g_left_panel_quiver_attack_modes[1] = SDL_POINTER_ATTACK_RANGED_2;
-        g_left_panel_quiver_attack_start_cols[1] = (byte)q2_start;
-        g_left_panel_quiver_attack_end_cols[1] = (byte)col;
-    }
-    else
-    {
-        /* Different types: icon before each count */
-        if (q1_ptr->k_idx)
-        {
-            /* Q1: "[icon][icon]cur/max" */
-            int q1_start;
-
-            col += left_panel_put_object_icon(q1_ptr, ROW_QUIVER, col, false,
-                q1_bg_attr);
-
-            q1_start = col;
-            Term_putstr(col, ROW_QUIVER, -1, q1_text_attr, buf1);
-            col += strlen(buf1);
-            g_left_panel_quiver_attack_modes[0] = SDL_POINTER_ATTACK_RANGED_1;
-            g_left_panel_quiver_attack_start_cols[0] = (byte)q1_start;
-            g_left_panel_quiver_attack_end_cols[0] = (byte)col;
-        }
-
-        if (q2_ptr->k_idx)
-        {
-            /* Q2: "[icon][icon]cur/max" */
-            int q2_start;
-
-            col += left_panel_put_object_icon(q2_ptr, ROW_QUIVER, col, false,
-                q2_bg_attr);
-
-            q2_start = col;
-            Term_putstr(col, ROW_QUIVER, -1, q2_text_attr, buf2);
-            col += strlen(buf2);
-            g_left_panel_quiver_attack_modes[1] = SDL_POINTER_ATTACK_RANGED_2;
-            g_left_panel_quiver_attack_start_cols[1] = (byte)q2_start;
-            g_left_panel_quiver_attack_end_cols[1] = (byte)col;
-        }
-    }
+    col = start_col;
+    col += left_panel_put_object_icon(q1_ptr, ROW_QUIVER, col, false,
+        q1_bg_attr);
+    q1_start = col;
+    Term_putstr(col, ROW_QUIVER, -1, q1_text_attr, buf);
+    col += strlen(buf);
+    g_left_panel_quiver_attack_modes[0] = SDL_POINTER_ATTACK_RANGED_1;
+    g_left_panel_quiver_attack_start_cols[0] = (byte)q1_start;
+    g_left_panel_quiver_attack_end_cols[0] = (byte)col;
 }
 
 /*
@@ -1042,45 +896,55 @@ void prt_hp(void)
 }
 
 /*
- * Prints a small, monospace graphical health bar under the name.
- * Uses 'x' characters up to 12 symbols to represent current HP proportionally.
- * Colour matches health_attr() (green/yellow/red, etc).
+ * Prints the original monospace player-health meter under the name.
+ * The styled SDL left pane replaces these 'x' glyphs with a pixel-accurate
+ * bar, while other terminal renderers retain the established display.
  */
 void prt_char_health_graphic(void)
 {
-    char bar[13]; /* 12 symbols + NUL */
-    int max_symbols = 12;
+    char bar[13];
+    const int max_symbols = 12;
     int filled = 0;
     byte color;
 
-    /* Clear the line first (12 chars) */
-    c_put_str(TERM_WHITE, "            ", ROW_NAME + 1, COL_NAME);
+    Term_erase(COL_NAME, ROW_NAME + 1, 12);
 
-    /* Defensive: avoid division by zero */
     if (p_ptr->mhp <= 0)
         return;
 
-    /* Scale current HP to number of symbols (ceiling) */
+    /* Scale current HP to the twelve-character field (ceiling). */
     filled = (max_symbols * p_ptr->chp + p_ptr->mhp - 1) / p_ptr->mhp;
     if (filled < 0)
         filled = 0;
     if (filled > max_symbols)
         filled = max_symbols;
 
-    /* Build the bar using 'x' for filled and spaces for remainder */
     for (int i = 0; i < filled; i++)
         bar[i] = 'x';
     for (int i = filled; i < max_symbols; i++)
         bar[i] = ' ';
     bar[max_symbols] = '\0';
 
-    /* Colour according to health */
     color = health_attr(p_ptr->chp, p_ptr->mhp);
     color = panel_touch_zone_attr(SDL_PANEL_CLICK_CHARACTER, ROW_NAME + 1,
         color);
 
-    /* Print using a monospace field (no story font) */
-    c_put_str(color, format("%12s", bar), ROW_NAME + 1, COL_NAME);
+    c_put_str(color, bar, ROW_NAME + 1, COL_NAME);
+}
+
+/*
+ * Peaceful monsters are not combat targets, so do not represent them with a
+ * combat health meter in any UI.
+ */
+bool monster_health_bar_allowed(const monster_type* m_ptr)
+{
+    const monster_race* r_ptr;
+
+    if (!m_ptr || !m_ptr->r_idx || m_ptr->r_idx >= z_info->r_max)
+        return false;
+
+    r_ptr = &r_info[m_ptr->r_idx];
+    return !(r_ptr->flags1 & RF1_PEACEFUL);
 }
 
 /*
@@ -1097,7 +961,8 @@ int monster_health_bar_text(
 
     buf[0] = '\0';
 
-    if (!m_ptr || (max_symbols <= 0) || (m_ptr->maxhp <= 0))
+    if (!monster_health_bar_allowed(m_ptr) || (max_symbols <= 0)
+        || (m_ptr->maxhp <= 0))
         return 0;
 
     len = (max_symbols * m_ptr->hp + m_ptr->maxhp - 1) / m_ptr->maxhp;
@@ -1122,6 +987,52 @@ int monster_health_bar_text(
     buf[writable] = '\0';
 
     return writable;
+}
+
+/*
+ * Write a monster health meter at the current cursor.  SDL retains exact fill
+ * metadata for a continuous bar; other frontends keep the compact glyph
+ * fallback.  Confusion and stun letters remain in the fallback and are also
+ * used as labels by the styled renderer.
+ */
+int monster_health_bar_put(const monster_type* m_ptr, int max_symbols)
+{
+    char filled[32];
+    char track[32];
+    int fill_len;
+    byte attr;
+
+    if (!Term || !monster_health_bar_allowed(m_ptr) || m_ptr->maxhp <= 0
+        || max_symbols <= 0)
+        return 0;
+    if (max_symbols >= (int)sizeof(track))
+        max_symbols = (int)sizeof(track) - 1;
+
+    fill_len = monster_health_bar_text(m_ptr, filled, sizeof(filled),
+        max_symbols);
+    attr = health_attr(m_ptr->hp, m_ptr->maxhp);
+
+    if (!styled_monster_health_bars)
+    {
+        if (fill_len > 0)
+            Term_addstr(fill_len, attr, filled);
+        else
+            Term_addstr(1, TERM_L_DARK, "-");
+        return MAX(fill_len, 1);
+    }
+
+    for (int i = 0; i < max_symbols - fill_len; i++)
+        track[i] = '-';
+    track[max_symbols - fill_len] = '\0';
+
+    Term_health_bar_begin(m_ptr->hp, m_ptr->maxhp);
+    if (fill_len > 0)
+        Term_addstr(fill_len, attr, filled);
+    if (fill_len < max_symbols)
+        Term_addstr(max_symbols - fill_len, TERM_L_DARK, track);
+    Term_health_bar_end();
+
+    return max_symbols;
 }
 
 static enum pane_placement hidden_left_panel_placement(void)
@@ -1226,11 +1137,17 @@ static int hidden_left_panel_start_col_for_width(int width)
 static bool current_light_status(bool* infinite, long* fuel, byte* fuel_attr,
                                  byte* icon_attr, char* icon)
 {
-    object_type* o_ptr = &inventory[INVEN_LITE];
+    object_type* o_ptr;
     bool light_is_infinite = false;
     long light_fuel = 0;
     byte attr = TERM_L_WHITE;
 
+    /* Window expose/resize events can redraw the terminal while the startup
+     * parsers are still allocating gameplay arrays. */
+    if (!inventory)
+        return false;
+
+    o_ptr = &inventory[INVEN_LITE];
     if (!o_ptr->k_idx)
         return false;
 
@@ -1401,7 +1318,9 @@ static void hidden_left_panel_add_line_mode(hidden_overlay_line* lines,
     lines[*count].icon_attr = TERM_WHITE;
     lines[*count].icon_char = ' ';
     lines[*count].pointer_attack_mode = (byte)pointer_attack_mode;
+    lines[*count].pointer_attack_quiver = false;
     lines[*count].click_action = SDL_PANEL_CLICK_NONE;
+    lines[*count].health_m_idx = 0;
     (*count)++;
 }
 
@@ -1433,7 +1352,9 @@ static void hidden_left_panel_add_icon_line_mode(hidden_overlay_line* lines,
     lines[*count].icon_attr = icon_attr;
     lines[*count].icon_char = icon_char;
     lines[*count].pointer_attack_mode = (byte)pointer_attack_mode;
+    lines[*count].pointer_attack_quiver = false;
     lines[*count].click_action = SDL_PANEL_CLICK_NONE;
+    lines[*count].health_m_idx = 0;
     (*count)++;
 }
 
@@ -1450,16 +1371,20 @@ static void hidden_left_panel_add_quiver_line(hidden_overlay_line* lines,
 {
     char buf[32];
     byte attr;
+    int old_count;
 
     if (!q_ptr || !q_ptr->k_idx || q_ptr->number <= 0)
         return;
 
     strnfmt(buf, sizeof(buf), "%d", q_ptr->number);
     attr = pointer_attack_quiver_panel_attr(pointer_attack_mode, TERM_L_WHITE);
+    old_count = *count;
 
     hidden_left_panel_add_icon_line_mode(lines, count, max_lines, attr,
         buf, buf, object_attr(q_ptr), object_char(q_ptr),
         pointer_attack_mode);
+    if (*count > old_count)
+        lines[*count - 1].pointer_attack_quiver = true;
 }
 
 static int hidden_left_panel_line_width(const hidden_overlay_line* line,
@@ -1579,6 +1504,15 @@ static int hidden_left_panel_draw_line(const hidden_overlay_line* line, int row,
 
     if (text[0])
     {
+        if (line->health_m_idx > 0 && line->health_m_idx < mon_max
+            && mon_list[line->health_m_idx].r_idx)
+        {
+            Term_gotoxy(col, row);
+            written += monster_health_bar_put(
+                &mon_list[line->health_m_idx], 8);
+            return written;
+        }
+
         int text_len = (int)strlen(text);
         if (col + text_len > Term->wid)
             text_len = Term->wid - col;
@@ -1604,8 +1538,11 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
     byte hp_color;
     byte voice_color;
 
-    if (!lines || !Term || !p_ptr || max_lines <= 0)
+    if (!lines || !Term || !p_ptr || !op_ptr || !inventory
+        || !character_generated || max_lines <= 0)
+    {
         return 0;
+    }
 
     hp_color = health_attr(p_ptr->chp, p_ptr->mhp);
     if (p_ptr->csp >= p_ptr->msp)
@@ -1649,7 +1586,7 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
             if (count > old_count)
                 lines[count - 1].click_action = SDL_PANEL_CLICK_SUPPLIES_LIGHTS;
         }
-        else if (!inventory[INVEN_LITE].k_idx)
+        else if (!inventory || !inventory[INVEN_LITE].k_idx)
         {
             int old_count = count;
             hidden_left_panel_add_line(lines, &count, max_lines, TERM_SLATE,
@@ -1659,12 +1596,28 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
         }
     }
 
+    if (player_active_weapon_is_melee())
     {
         const object_type* icon_obj = left_panel_melee_display_object();
+        int toggle_mode = player_opposite_active_weapon_mode();
+        int main_attack = 0;
+        int main_dd = 0;
+        int main_ds = 0;
+        int offhand_attack = 0;
+        int offhand_dd = 0;
+        int offhand_ds = 0;
+        bool has_main = player_active_weapon_stats_preview(
+            PLAYER_ACTIVE_WEAPON_MELEE, &main_attack, &main_dd, &main_ds,
+            NULL);
+        bool has_offhand = player_active_weapon_offhand_stats_preview(
+            &offhand_attack, &offhand_dd, &offhand_ds);
+
+        if (!has_main)
+            main_attack = main_dd = main_ds = 0;
 
         strnfmt(buf, sizeof(buf), "%s(%+d,%dd%d)",
             p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK] ? "M2" : "M",
-            p_ptr->skill_use[S_MEL], p_ptr->mdd, p_ptr->mds);
+            main_attack, main_dd, main_ds);
         SDL_strlcpy(short_buf, buf, sizeof(short_buf));
         {
             int old_count = count;
@@ -1673,24 +1626,23 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
                     pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE,
                         TERM_L_WHITE),
                     buf, short_buf, object_attr(icon_obj), object_char(icon_obj),
-                    SDL_POINTER_ATTACK_MELEE);
+                    toggle_mode);
             else
                 hidden_left_panel_add_line_mode(lines, &count, max_lines,
                     pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE,
                         TERM_L_WHITE),
-                    buf, SDL_POINTER_ATTACK_MELEE);
+                    buf, toggle_mode);
             if (count > old_count)
                 SDL_strlcpy(lines[count - 1].short_text, short_buf,
                     sizeof(lines[count - 1].short_text));
         }
 
-        if (pointer_attack_melee_has_offhand())
+        if (has_offhand)
         {
             const object_type* offhand_icon = left_panel_offhand_display_object();
 
             strnfmt(buf, sizeof(buf), "O(%+d,%dd%d)",
-                p_ptr->skill_use[S_MEL] + p_ptr->offhand_mel_mod, p_ptr->mdd2,
-                p_ptr->mds2);
+                offhand_attack, offhand_dd, offhand_ds);
             SDL_strlcpy(short_buf, buf, sizeof(short_buf));
             {
                 int old_count = count;
@@ -1700,12 +1652,12 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
                         pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE,
                             TERM_L_WHITE),
                         buf, short_buf, object_attr(offhand_icon),
-                        object_char(offhand_icon), SDL_POINTER_ATTACK_MELEE);
+                        object_char(offhand_icon), toggle_mode);
                 else
                     hidden_left_panel_add_line_mode(lines, &count, max_lines,
                         pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE,
                             TERM_L_WHITE),
-                        buf, SDL_POINTER_ATTACK_MELEE);
+                        buf, toggle_mode);
                 if (count > old_count)
                     SDL_strlcpy(lines[count - 1].short_text, short_buf,
                         sizeof(lines[count - 1].short_text));
@@ -1713,7 +1665,9 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
         }
     }
 
+    if (player_active_weapon_is_ranged())
     {
+        int toggle_mode = player_opposite_active_weapon_mode();
         int arc_attack = 0;
         int arc_dd = 0;
         int arc_ds = 0;
@@ -1738,11 +1692,11 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
                             max_lines,
                             pointer_attack_ranged_panel_attr(TERM_UMBER),
                             buf, short_buf, object_attr(icon_obj),
-                            object_char(icon_obj), SDL_POINTER_ATTACK_RANGED_1);
+                            object_char(icon_obj), toggle_mode);
                     else
                         hidden_left_panel_add_line_mode(lines, &count, max_lines,
                             pointer_attack_ranged_panel_attr(TERM_UMBER),
-                            buf, SDL_POINTER_ATTACK_RANGED_1);
+                            buf, toggle_mode);
                     if (count > old_count)
                         SDL_strlcpy(lines[count - 1].short_text, short_buf,
                             sizeof(lines[count - 1].short_text));
@@ -1751,11 +1705,26 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
         }
     }
 
+    if (player_active_weapon_is_ranged())
     {
-        hidden_left_panel_add_quiver_line(lines, &count, max_lines,
-            &inventory[INVEN_QUIVER1], SDL_POINTER_ATTACK_RANGED_1);
-        hidden_left_panel_add_quiver_line(lines, &count, max_lines,
-            &inventory[INVEN_QUIVER2], SDL_POINTER_ATTACK_RANGED_2);
+        int slot = player_active_throwing_weapon_slot();
+        object_type display;
+
+        if (slot < 0)
+            slot = player_quiver_selected_arrow_slot();
+        if (slot >= 0)
+        {
+            object_type* source = (slot >= QUIVER_INDEX
+                && slot < QUIVER_INDEX_END)
+                ? player_quiver_arrow_object(slot)
+                : player_inventory_object(slot);
+            if (source)
+            {
+                object_copy(&display, source);
+                hidden_left_panel_add_quiver_line(lines, &count, max_lines,
+                    &display, SDL_POINTER_ATTACK_RANGED_1);
+            }
+        }
     }
 
     {
@@ -1841,7 +1810,8 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
     if (p_ptr->health_who
         && mon_list[p_ptr->health_who].ml
         && !p_ptr->image
-        && (mon_list[p_ptr->health_who].hp > 0))
+        && (mon_list[p_ptr->health_who].hp > 0)
+        && monster_health_bar_allowed(&mon_list[p_ptr->health_who]))
     {
         monster_type* m_ptr = &mon_list[p_ptr->health_who];
         char health_bar[10];
@@ -1849,8 +1819,22 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
 
         attr = health_attr(m_ptr->hp, m_ptr->maxhp);
         monster_health_bar_text(m_ptr, health_bar, sizeof(health_bar), 8);
+        if (styled_monster_health_bars)
+        {
+            int len = (int)strlen(health_bar);
 
-        hidden_left_panel_add_line(lines, &count, max_lines, attr, health_bar);
+            while (len < 8)
+                health_bar[len++] = '-';
+            health_bar[len] = '\0';
+        }
+
+        {
+            int old_count = count;
+            hidden_left_panel_add_line(lines, &count, max_lines, attr,
+                health_bar);
+            if (count > old_count)
+                lines[count - 1].health_m_idx = p_ptr->health_who;
+        }
     }
 
     return count;
@@ -1878,6 +1862,7 @@ bool hidden_left_panel_sync_mask(const hidden_overlay_line* lines, int line_coun
         byte new_start_col = 0;
         byte new_width = 0;
         byte new_mode = SDL_POINTER_ATTACK_NONE;
+        bool new_quiver = false;
         byte new_start = 0;
         byte new_end = 0;
         byte new_click_action = SDL_PANEL_CLICK_NONE;
@@ -1909,6 +1894,7 @@ bool hidden_left_panel_sync_mask(const hidden_overlay_line* lines, int line_coun
                 && text_start < width)
             {
                 new_mode = lines[i].pointer_attack_mode;
+                new_quiver = lines[i].pointer_attack_quiver;
                 new_start = (byte)MIN(start_col + text_start, 255);
                 new_end = (byte)MIN(start_col + width, 255);
             }
@@ -1923,6 +1909,7 @@ bool hidden_left_panel_sync_mask(const hidden_overlay_line* lines, int line_coun
         g_hidden_left_panel_overlay_start_cols[i] = new_start_col;
         g_hidden_left_panel_overlay_widths[i] = new_width;
         g_hidden_left_panel_overlay_attack_modes[i] = new_mode;
+        g_hidden_left_panel_overlay_attack_quivers[i] = new_quiver;
         g_hidden_left_panel_overlay_attack_start_cols[i] = new_start;
         g_hidden_left_panel_overlay_attack_end_cols[i] = new_end;
         g_hidden_left_panel_overlay_click_actions[i] = new_click_action;
@@ -1935,6 +1922,7 @@ bool hidden_left_panel_sync_mask(const hidden_overlay_line* lines, int line_coun
         g_hidden_left_panel_overlay_start_cols[i] = 0;
         g_hidden_left_panel_overlay_widths[i] = 0;
         g_hidden_left_panel_overlay_attack_modes[i] = SDL_POINTER_ATTACK_NONE;
+        g_hidden_left_panel_overlay_attack_quivers[i] = false;
         g_hidden_left_panel_overlay_attack_start_cols[i] = 0;
         g_hidden_left_panel_overlay_attack_end_cols[i] = 0;
         g_hidden_left_panel_overlay_click_actions[i] = SDL_PANEL_CLICK_NONE;

@@ -6,8 +6,10 @@
 #define MAX_PANE_CONFIGS 16
 #define PANE_LOG_OVERLAY_COMBAT_COLS 48
 #define PANE_COMBAT_OVERLAY_COLS 12
-#define PANE_COMBAT_OVERLAY_ROWS 4
-#define PANE_COMBAT_OVERLAY_MIN_ROWS 3
+#define PANE_COMBAT_OVERLAY_ROWS 2
+#define PANE_COMBAT_OVERLAY_MAX_ROWS 3
+#define PANE_COMBAT_OVERLAY_MIN_ROWS 2
+#define PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW (-2)
 /* Visible (translucent) width of the overlay log; cells left of this stay
  * transparent so the panel reads as a narrow right-hand band. */
 #define PANE_LOG_OVERLAY_VISIBLE_COLS 31
@@ -32,7 +34,8 @@ enum pane_type {
     PANE_DESCRIPTION = 15, // modal item/monster description overlay
     PANE_OVERLAY_MENU = 16, // touch/mouse overlay command menu
     PANE_COMBAT = 17, // detached melee/archery/quiver overlay
-    PANE_MAX = 18,
+    PANE_STATUS_DEPTH = 18, // combined status and depth SDL overlay
+    PANE_MAX = 19,
 };
 
 // Where the pane is placed.
@@ -106,6 +109,8 @@ bool pane_placement_is_overlay(enum pane_placement where);
 bool pane_type_allows_placement(enum pane_type type, enum pane_placement where);
 int pane_primary_min_cells(enum pane_type type, enum pane_placement where);
 int pane_log_overlay_left_margin(int term_cols);
+int pane_log_overlay_vertical_margin_px(int cell_height);
+int pane_log_overlay_vertical_padding_px(int cell_height);
 int pane_secondary_min_cells(enum pane_type type, enum pane_placement where);
 enum pane_placement pane_first_allowed_placement(enum pane_type type);
 enum pane_placement pane_next_allowed_placement(enum pane_type type,

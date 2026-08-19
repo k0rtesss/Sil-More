@@ -119,7 +119,10 @@ void move_cursor_relative(int y, int x)
         return;
 
     /* Go there */
-    (void)Term_gotoxy(vx, vy);
+    if (use_bigtile)
+        (void)Term_gotoxy_big(vx, vy);
+    else
+        (void)Term_gotoxy(vx, vy);
 }
 
 /*
@@ -133,6 +136,8 @@ void move_cursor_relative(int y, int x)
  */
 void print_rel(char c, byte a, int y, int x)
 {
+    byte ta = 0;
+    char tc = 0;
     int ky, kx;
     int vy, vx;
     int cell_w;
@@ -164,8 +169,22 @@ void print_rel(char c, byte a, int y, int x)
     if (hidden_left_panel_masked_span(vy, vx, cell_w))
         return;
 
+    /*
+     * Transparent tile animations need the real dungeon terrain beneath
+     * them.  Without it, a thrown weapon is composited over an opaque blank
+     * cell for every frame instead of flying cleanly across the map.
+     */
+    if (!graphics_are_ascii() && (a & TILE_FLAG)
+        && (((byte)c) & TILE_FLAG))
+    {
+        byte ignored_a;
+        char ignored_c;
+
+        map_info(y, x, &ignored_a, &ignored_c, &ta, &tc);
+    }
+
     /* Hack -- Queue it */
-    Term_queue_char(vx, vy, a, c, 0, 0);
+    Term_queue_char(vx, vy, a, c, ta, tc);
 
     if (use_bigtile)
     {
@@ -269,6 +288,13 @@ void lite_spot(int y, int x)
     int vy, vx;
     int cell_w;
 
+#ifdef USE_SDL
+    /* The retained side minimap includes grids outside the main viewport.
+     * Notify it before the viewport checks below so off-screen monsters,
+     * objects, and terrain do not leave stale cached cells. */
+    sdl_side_map_pane_invalidate_cell(y, x);
+#endif
+
     /* Location relative to panel */
     ky = y - p_ptr->wy;
 
@@ -371,10 +397,18 @@ void prt_map(void)
             /* Check bounds */
             if (!in_bounds(y, x))
             {
-                Term_queue_char(vx, vy, TERM_DARK, ' ', TERM_DARK, ' ');
+                /* Outside the generated map must look exactly like unexplored
+                 * space, or the viewport reveals the map boundary. */
+                cave_feature_visual(&f_info[FEAT_NONE], &a, &c);
+                Term_queue_char(vx, vy, a, c, a, c);
                 if (use_bigtile)
-                    Term_queue_char(vx + 1, vy, TERM_DARK, ' ', TERM_DARK,
-                        ' ');
+                {
+                    if (a & 0x80)
+                        Term_queue_char(vx + 1, vy, 255, -1, 0, 0);
+                    else
+                        Term_queue_char(vx + 1, vy, TERM_WHITE, ' ',
+                            TERM_WHITE, ' ');
+                }
                 continue;
             }
 
@@ -749,12 +783,15 @@ void do_cmd_view_map(void)
 #ifdef USE_SDL
     {
         bool sdl_map = false;
+        bool saved_hide_cursor = hide_cursor;
 
         sdl_minimap_begin();
         Term_fresh();
         sdl_map = sdl_display_pixel_map(&cy, &cx);
         if (sdl_map)
         {
+            hide_cursor = true;
+            (void)Term_set_cursor(false);
             Term_fresh();
 
             while (true)
@@ -811,12 +848,15 @@ void do_cmd_view_map(void)
                 break;
             }
 
+            hide_cursor = saved_hide_cursor;
+            (void)Term_set_cursor(false);
             sdl_minimap_end();
             screen_pop_supporting_panes_hidden();
             screen_load();
             return;
         }
 
+        hide_cursor = saved_hide_cursor;
         sdl_minimap_end();
     }
 #endif

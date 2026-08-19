@@ -11,7 +11,16 @@ typedef struct ui_question_option {
     char key;
     cptr label;
     byte attr;
+    bool disabled;
 } ui_question_option;
+
+typedef struct ui_question_button {
+    int choice;
+    char key;
+    cptr label;
+    byte attr;
+    bool disabled;
+} ui_question_button;
 
 /*
  * Ask a question through the SDL question overlay (never the top message
@@ -21,12 +30,29 @@ typedef struct ui_question_option {
  *
  * Blocks in an inkey loop: arrows scroll the highlighted answer,
  * Enter/Space/click/tap confirm, letter shortcuts pick directly, Escape
- * cancels.  Returns the chosen option index, or -1 on cancel.
+ * cancels.  Disabled choices are drawn in grey, skipped by arrow navigation,
+ * and cannot be confirmed by any input method.  Returns the chosen option
+ * index, or -1 on cancel.
  */
 #define UI_QUESTION_GLOBAL (-1)
 
 int ui_question_ask(cptr title, cptr desc, const ui_question_option* options,
     int count, int anchor_y, int anchor_x, int default_index);
+
+/* As above, with an optional inventory-style object icon for each row. */
+struct object_type;
+int ui_question_ask_objects(cptr title, cptr desc,
+    const ui_question_option* options,
+    const struct object_type* const object_icons[], int count, int anchor_y,
+    int anchor_x, int default_index);
+
+/* As above, but exposes desc from an info control instead of taking permanent
+ * space above the choices.  The control toggles the explanation above the
+ * same choices on mouse, touch, and keyboard. */
+int ui_question_ask_objects_with_help(cptr title, cptr desc,
+    const ui_question_option* options,
+    const struct object_type* const object_icons[], int count, int anchor_y,
+    int anchor_x, int default_index);
 
 /*
  * Same modal overlay, but preserves whatever screen/menu is already painted
@@ -36,5 +62,10 @@ int ui_question_ask(cptr title, cptr desc, const ui_question_option* options,
 int ui_question_ask_overlay(cptr title, cptr desc,
     const ui_question_option* options, int count, int anchor_y, int anchor_x,
     int default_index);
+
+int ui_question_ask_overlay_buttons(cptr title, cptr desc,
+    const ui_question_option* options, int count,
+    const ui_question_button* buttons, int button_count, int anchor_y,
+    int anchor_x, int default_index);
 
 #endif /* INCLUDED_UI_QUESTION_H */
