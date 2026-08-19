@@ -1123,9 +1123,8 @@ void self_knowledge(void)
         }
     }
 
-    // Show either curse or flag information, not both
+    // Each use has an independent 1-in-6 chance to reveal an active curse.
     bool show_curse = (n_active > 0) && one_in_(6);
-    bool show_flag = (n > 0) && one_in_(6);
 
     if (show_curse) {
         int pick = active_ids[rand_int(n_active)];
@@ -1140,9 +1139,11 @@ void self_knowledge(void)
         i++;
         CURSE_SEEN_SET(pick);
     }
-    if (show_flag) {
-        const flag_name *d = &info_flags_desc[cand[rand_int(n)]];
-        strnfmt(s[i], 200, "You sense a hidden trait.");
+
+    // Character traits are self-knowledge, so always show every active trait.
+    for (int trait = 0; trait < n; trait++) {
+        const flag_name *d = &info_flags_desc[cand[trait]];
+        strnfmt(s[i], 200, "Character trait");
         strnfmt(t[i], 200, "%s", d->name);
         good[i] = true;
         i++;

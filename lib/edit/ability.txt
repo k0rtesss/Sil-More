@@ -217,7 +217,7 @@ T:45:0:99  # Ring
 N:22:Point Blank Archery
 I:1:2:4
 D:Loosing arrows at point-blank range as did the defenders of Menegroth during the ruinous assault of the Dwarves of Nogrod. In the close confines of the Thousand Caves, the elven archers learned to fire even as their enemies bore down upon them, too swift to be struck before the arrow flew.
-E:No attack of opportunity from the target when firing at point blank. A round shield still grants evasion and armour while a shortbow is active.
+E:When you shoot an adjacent monster, that target does not make an attack of opportunity. Other adjacent alert enemies still can. Point Blank Archery lets you make a round shield active with a shortbow.
 T:19:0:99  # Bows
 T:31:1:1   # Gloves (leather gloves only)
 

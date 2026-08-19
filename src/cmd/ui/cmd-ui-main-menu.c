@@ -3298,11 +3298,9 @@ void do_cmd_messages_with_filter(int initial_filter)
             ui_menu_click_clear();
             ui_scroll_area_clear();
 
-            /* Prompt */
-            prt("Highlight: ", hgt - 1, 0);
-
             /* Get a "shower" string, or continue */
-            if (!askfor_aux(shower, sizeof(shower)))
+            if (!get_string_panel("Highlight Log Text", shower,
+                    sizeof(shower)))
                 continue;
 
             /* Okay */
@@ -3317,11 +3315,9 @@ void do_cmd_messages_with_filter(int initial_filter)
             ui_menu_click_clear();
             ui_scroll_area_clear();
 
-            /* Prompt */
-            prt("Find: ", hgt - 1, 0);
-
             /* Get a "finder" string, or continue */
-            if (!askfor_aux(finder, sizeof(finder)))
+            if (!get_string_panel("Search Message Log", finder,
+                    sizeof(finder)))
                 continue;
 
             /* Show it */

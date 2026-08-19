@@ -1926,8 +1926,8 @@ void do_cmd_combat_history_legacy(void)
             ui_menu_click_clear();
             ui_scroll_area_clear();
 
-            prt("Find: ", hgt - 1, 0);
-            if (!askfor_aux(finder, sizeof(finder))) continue;
+            if (!get_string_panel("Search Combat History", finder,
+                    sizeof(finder))) continue;
             
             /* Search through combat rolls */
             for (z = i + 1; z < n; z++) {

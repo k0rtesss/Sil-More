@@ -11,13 +11,15 @@
 #include "log/log.h"
 #include "sdl-config.h"
 #include "sdl-sound.h"
+#include "ui/command-reference.h"
+#include "ui/question.h"
 #include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#define HELP_SOURCE_PAGE_COUNT 10
+#define HELP_SOURCE_PAGE_COUNT 12
 
 /* Drop-in replacement for show_help_screen(int i)
  * Adds a tiny role-based colour shim for consistent, accessible styling.
@@ -178,7 +180,7 @@ void binding_action_label(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Stealth (S)", buflen);
         return;
     case KTRL('A'):
-        SDL_strlcpy(buf, "Activate Harness staff (^A)", buflen);
+        SDL_strlcpy(buf, "Activate Harness staff (legacy ^A)", buflen);
         return;
     case KTRL('F'):
         SDL_strlcpy(buf, "Choose active arrows (^F)", buflen);
@@ -208,7 +210,7 @@ void binding_action_label(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Equipped / remove (r)", buflen);
         return;
     case 'a':
-        SDL_strlcpy(buf, "Harness staff (a)", buflen);
+        SDL_strlcpy(buf, "Activate Harness staff (a)", buflen);
         return;
     case 'M':
         SDL_strlcpy(buf, "Map (M)", buflen);
@@ -415,7 +417,7 @@ void binding_action_short(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Stealth", buflen);
         return;
     case KTRL('A'):
-        SDL_strlcpy(buf, "Activate Harness staff", buflen);
+        SDL_strlcpy(buf, "Activate staff (legacy)", buflen);
         return;
     case KTRL('F'):
         SDL_strlcpy(buf, "Choose active arrows", buflen);
@@ -445,7 +447,7 @@ void binding_action_short(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Equipped / remove", buflen);
         return;
     case 'a':
-        SDL_strlcpy(buf, "Harness staff", buflen);
+        SDL_strlcpy(buf, "Activate Harness staff", buflen);
         return;
     case 'M':
         SDL_strlcpy(buf, "Map", buflen);
@@ -572,10 +574,9 @@ static bool help_controller_available(void)
     return SDL_HasGamepad();
 }
 
-/* Source page 10 expands the combat primer and source page 9 is the storage
- * primer.  Pages 5 and 7 are keyboard reference pages; page 8 is the live
- * controller map.  Keep mechanics, storage, and terrain/items on every device,
- * but suppress command-key columns when no keyboard is attached. */
+/* Source page 10 expands the combat primer, page 9 is storage, page 11 covers
+ * survival/checks/colour semantics, and pages 7/12 are generated from the
+ * canonical keyboard command catalog. */
 static int help_collect_source_pages(int pages[HELP_SOURCE_PAGE_COUNT])
 {
     int count = 0;
@@ -586,11 +587,14 @@ static int help_collect_source_pages(int pages[HELP_SOURCE_PAGE_COUNT])
     pages[count++] = 10;
     pages[count++] = 4;
     pages[count++] = 9;
+    pages[count++] = 11;
     if (help_keyboard_available())
         pages[count++] = 5;
     pages[count++] = 6;
     if (help_keyboard_available())
         pages[count++] = 7;
+    if (help_keyboard_available())
+        pages[count++] = 12;
     if (help_controller_available())
         pages[count++] = 8;
 
@@ -1760,10 +1764,15 @@ static void show_help_screen_legacy(int source_page, int display_page,
         x = col;
         put_role(ROLE_BODY, "- A ", row, x); x += 4;
         put_role(ROLE_TERM, "Gem of Self Knowledge", row, x); x += 21;
-        put_role(ROLE_BODY, " reports status and may reveal ", row, x); x += 31;
-        put_role(ROLE_BAD, "curses", row, x); x += 6;
-        put_role(ROLE_BODY, " or ", row, x); x += 4;
+        put_role(ROLE_BODY, " always shows status and ", row, x); x += 25;
         put_role(ROLE_TERM, "traits", row, x); x += 6;
+        put_role(ROLE_BODY, ".", row, x);
+        row++;
+        x = col;
+        put_role(ROLE_BODY, "- Each use makes a ", row, x); x += 19;
+        put_role(ROLE_WARN, "1-in-6 random roll (16.7%)", row, x); x += 26;
+        put_role(ROLE_BODY, " to reveal one active ", row, x); x += 22;
+        put_role(ROLE_BAD, "curse", row, x); x += 5;
         put_role(ROLE_BODY, ".", row, x);
         row += 2;
 
@@ -1965,13 +1974,14 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, ".", row, x);
         row++;
         x = col;
-        put_role(ROLE_BODY, "- Shooting by ", row, x); x += 14;
-        put_role(ROLE_BAD, "alert foes", row, x); x += 10;
-        put_role(ROLE_BODY, " risks ", row, x); x += 7;
-        put_role(ROLE_BAD, "strikes", row, x); x += 7;
-        put_role(ROLE_BODY, "; ", row, x); x += 2;
+        put_role(ROLE_BODY, "- Firing beside ", row, x); x += 16;
+        put_role(ROLE_BAD, "alert enemies", row, x); x += 13;
+        put_role(ROLE_BODY, " can provoke an attack of opportunity from each.", row, x);
+        row++;
+        x = col;
+        put_role(ROLE_BODY, "- The Archery ability ", row, x); x += 22;
         put_role(ROLE_GOOD, "Point Blank", row, x); x += 11;
-        put_role(ROLE_BODY, " blocks your target only.", row, x);
+        put_role(ROLE_BODY, " stops only the adjacent target you shoot; other foes still attack.", row, x);
         row++;
         x = col;
         put_role(ROLE_BODY, "- Hit ", row, x); x += 6;
@@ -1997,7 +2007,12 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_GOOD, "critical die", row, x); x += 12;
         put_role(ROLE_BODY, " adds one weapon Damage die before Protection is rolled.", row, x);
         row++;
-        put_role(ROLE_BODY, "- Heavier weapons need larger margins; abilities and some foes alter criticals.", row, col);
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Critical base", row, x); x += 13;
+        put_role(ROLE_BODY, " is the fixed part of hit margin needed per bonus die: default ", row, x); x += 65;
+        put_role(ROLE_WARN, "7", row, x); x += 1;
+        put_role(ROLE_BODY, " + weapon weight in lb.", row, x);
         row += 2;
 
         help_emit_heading("ACTIVE WEAPON", row, col); row++;
@@ -2015,7 +2030,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         x = col;
         put_role(ROLE_BODY, "- One-hand melee/throwing can use shields; ", row, x); x += 43;
         put_role(ROLE_GOOD, "Point Blank", row, x); x += 11;
-        put_role(ROLE_BODY, " allows shortbow + round.", row, x);
+        put_role(ROLE_BODY, " ability lets an active shortbow keep a round shield's Evasion and Protection.", row, x);
         row++;
         x = col;
         put_role(ROLE_BODY, "- Changing only arrows is ", row, x); x += 26;
@@ -2173,7 +2188,12 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BAD, "23 - 3 = 20 health lost", row, x); x += 23;
         put_role(ROLE_BODY, ".", row, x);
         row++;
-        put_role(ROLE_BODY, "- Critical thresholds vary with weapon weight, abilities, and resistant foes.", row, col);
+        put_role(ROLE_BODY,
+            "- Critical base is margin per bonus die before weapon weight: normally 7.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Example: a 3 lb weapon needs about 10 margin per die; Finesse lowers this to 8.",
+            row, col);
         break;
     }
 
@@ -2515,67 +2535,61 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
     case 7:
     {
-        /* SIL-MORE: ADVANCED COMMANDS */
+        /* SIL-MORE: CORE COMMANDS FROM THE CANONICAL KEYBIND CATALOG */
         if (include_header)
         {
-            sprintf(page_header, "HELP [%d/%d]: ADVANCED COMMANDS", display_page, total_pages);
+            sprintf(page_header, "HELP [%d/%d]: CORE COMMANDS", display_page, total_pages);
             put_role(ROLE_HEADER, page_header, 0, 1);
         }
 
         {
             char key_buf[48];
+            int split = (COMMAND_PRIMARY_KEYBIND_COUNT + 1) / 2;
 
-#define HELP_ADV_COMMAND(KEY, ACTION, TEXT)                                   \
-            do {                                                               \
-                help_describe_action_bindings((KEY), NULL, (ACTION),          \
-                    key_buf, sizeof(key_buf));                                \
-                put_role(ROLE_KEY, key_buf, row, col);                        \
-                put_role(ROLE_UI, (TEXT), row, col + 18);                     \
-                row++;                                                         \
-            } while (0)
+            help_emit_heading("Current bindings (also shown in Options > Keybinds)",
+                1, 2);
+            for (int n = 0; n < COMMAND_PRIMARY_KEYBIND_COUNT; n++)
+            {
+                const struct keybind_entry* entry = &command_primary_keybinds[n];
+                int column = (n / split) ? 41 : 2;
+                int command_row = 3 + (n % split);
 
-            row = 3;
-            col = 2;
-            help_emit_heading("Items & ready gear", row - 2, col);
-            HELP_ADV_COMMAND('i', "i", "inventory browser");
-            HELP_ADV_COMMAND('e', "e", "Equipped browser");
-            HELP_ADV_COMMAND('r', "r", "Equipped / remove");
-            HELP_ADV_COMMAND('j', "j", "Supplies browser");
-            HELP_ADV_COMMAND('J', "J", "jewelry sets");
-            HELP_ADV_COMMAND('g', "g", "pickup; prefer Pack");
-            HELP_ADV_COMMAND('w', "w", "equip / wield");
-            HELP_ADV_COMMAND('u', "u", "contextual item use");
-            HELP_ADV_COMMAND('\t', "\t", "active weapon setup");
-            HELP_ADV_COMMAND('f', "f", "active ranged attack");
-            HELP_ADV_COMMAND(KTRL('F'), "\006", "choose active arrows");
-            HELP_ADV_COMMAND('a', "a", "Harness staff");
-            HELP_ADV_COMMAND('p', "p", "Harness horn");
-            HELP_ADV_COMMAND('E', "E", "eat food");
-            HELP_ADV_COMMAND('q', "q", "quaff potion");
-            HELP_ADV_COMMAND('t', "t", "throw selected item");
-            HELP_ADV_COMMAND(KTRL('T'), "\024", "quick throw");
+                help_describe_action_bindings(entry->key_code,
+                    entry->extra_default_keys, entry->action, key_buf,
+                    sizeof(key_buf));
+                put_role(ROLE_KEY, key_buf, command_row, column);
+                put_role(ROLE_UI, entry->key_name, command_row, column + 15);
+            }
+        }
+        break;
+    }
 
-            row = 3;
-            col = 42;
-            help_emit_heading("World & information", row - 2, col);
-            HELP_ADV_COMMAND('s', "s", "sing");
-            HELP_ADV_COMMAND('S', "S", "stealth mode");
-            HELP_ADV_COMMAND('y', "y", "learn abilities");
-            HELP_ADV_COMMAND('H', "H", "train skills");
-            HELP_ADV_COMMAND('Z', "Z", "rest");
-            HELP_ADV_COMMAND('-', "-", "fletch arrows");
-            HELP_ADV_COMMAND('X', "X", "exchange places");
-            HELP_ADV_COMMAND('l', "l", "unified look");
-            HELP_ADV_COMMAND('M', "M", "full map");
-            HELP_ADV_COMMAND('~', "~", "knowledge browser");
-            HELP_ADV_COMMAND('[', "[", "nearby monsters");
-            HELP_ADV_COMMAND(']', "]", "nearby objects");
-            HELP_ADV_COMMAND(KTRL('Q'), "\021", "combat history");
-            HELP_ADV_COMMAND(KTRL('P'), "\020", "prior messages");
-            HELP_ADV_COMMAND('O', "O", "options");
-            HELP_ADV_COMMAND('?', "?", "help");
+    case 12:
+    {
+        /* SIL-MORE: COMPLETE SUPPLEMENTARY COMMAND CATALOG */
+        if (include_header)
+        {
+            sprintf(page_header, "HELP [%d/%d]: ALL OTHER COMMANDS",
+                display_page, total_pages);
+            put_role(ROLE_HEADER, page_header, 0, 1);
+        }
 
-#undef HELP_ADV_COMMAND
+        {
+            char key_buf[48];
+            int split = (COMMAND_SECONDARY_KEYBIND_COUNT + 1) / 2;
+
+            for (int n = 0; n < COMMAND_SECONDARY_KEYBIND_COUNT; n++)
+            {
+                const struct keybind_entry* entry = &command_secondary_keybinds[n];
+                int column = (n / split) ? 41 : 2;
+                int command_row = 1 + (n % split);
+
+                help_describe_action_bindings(entry->key_code,
+                    entry->extra_default_keys, entry->action, key_buf,
+                    sizeof(key_buf));
+                put_role(ROLE_KEY, key_buf, command_row, column);
+                put_role(ROLE_UI, entry->key_name, command_row, column + 15);
+            }
         }
         break;
     }
@@ -2884,37 +2898,44 @@ static void show_help_screen_legacy(int source_page, int display_page,
         }
         row += 2;
 
-        help_emit_heading("CAPACITY & LOCATION", row, col); row++;
+        help_emit_heading("WHAT THE LIMITS MEAN", row, col); row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "qt", row, x); x += 2;
+        put_role(ROLE_BODY, " measures volume; ", row, x); x += 18;
+        put_role(ROLE_TERM, "lb", row, x); x += 2;
+        put_role(ROLE_BODY, " measures weight. These are separate limits.", row, x);
+        row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_TERM, "Pack", row, x); x += 4;
-        put_role(ROLE_BODY, ": ", row, x); x += 2;
-        put_role(ROLE_GOOD, "26.0 qt", row, x); x += 7;
-        put_role(ROLE_BODY, " (quarts) stored gear. ", row, x); x += 23;
+        put_role(ROLE_BODY, " holds ", row, x); x += 7;
+        put_role(ROLE_GOOD, "26.0 qt stored gear", row, x); x += 19;
+        put_role(ROLE_BODY, "; ", row, x); x += 2;
         put_role(ROLE_TERM, "Harness", row, x); x += 7;
-        put_role(ROLE_BODY, ": ", row, x); x += 2;
-        put_role(ROLE_GOOD, "21.0 qt", row, x); x += 7;
-        put_role(ROLE_BODY, " ready gear.", row, x);
+        put_role(ROLE_BODY, " holds ", row, x); x += 7;
+        put_role(ROLE_GOOD, "21.0 qt ready gear", row, x); x += 18;
+        put_role(ROLE_BODY, ". They do not share space.", row, x);
         row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_TERM, "Constitution", row, x); x += 12;
-        put_role(ROLE_BODY, " adds ", row, x); x += 6;
+        put_role(ROLE_BODY, " (Will ability) adds ", row, x); x += 21;
         put_role(ROLE_GOOD, "+6.0 qt", row, x); x += 7;
         put_role(ROLE_BODY, " to ", row, x); x += 4;
         put_role(ROLE_TERM, "Pack", row, x); x += 4;
-        put_role(ROLE_BODY, "; Perception ", row, x); x += 13;
+        put_role(ROLE_BODY, "; ", row, x); x += 2;
         put_role(ROLE_TERM, "Grace", row, x); x += 5;
-        put_role(ROLE_BODY, " adds ", row, x); x += 6;
+        put_role(ROLE_BODY, " (Perception ability) adds ", row, x); x += 27;
         put_role(ROLE_GOOD, "+6.0 qt", row, x); x += 7;
         put_role(ROLE_BODY, " to ", row, x); x += 4;
         put_role(ROLE_TERM, "Harness", row, x); x += 7;
         put_role(ROLE_BODY, ".", row, x);
         row++;
         x = col;
-        put_role(ROLE_BODY, "- Excess Pack or Harness volume ", row, x); x += 32;
+        put_role(ROLE_BODY, "- Exceeding either volume limit or total carried weight ", row, x); x += 57;
         put_role(ROLE_BAD, "slows you", row, x); x += 9;
-        put_role(ROLE_BODY, "; remove items or restore capacity.", row, x);
+        put_role(ROLE_BODY, "; severe overload stops movement.", row, x);
         row++;
         x = col;
         put_role(ROLE_BODY, "- Worn ", row, x); x += 7;
@@ -2968,7 +2989,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, ".", row, x);
         row += 2;
 
-        help_emit_heading("PICKUP & TRANSFERS", row, col); row++;
+        help_emit_heading("WHERE PICKUP PUTS THINGS", row, col); row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_KEY, "g", row, x); x += 1;
@@ -3006,7 +3027,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, ".", row, x);
         row += 2;
 
-        help_emit_heading("PACK ACTIONS", row, col); row++;
+        help_emit_heading("USING STORED PACK GEAR", row, col); row++;
         x = col;
         put_role(ROLE_BODY, "- Reaching into the ", row, x); x += 20;
         put_role(ROLE_TERM, "Pack", row, x); x += 4;
@@ -3039,6 +3060,83 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, " selects the ", row, x); x += 13;
         put_role(ROLE_GOOD, "active weapon, shield, and arrow setup", row, x); x += 38;
         put_role(ROLE_BODY, " from ready gear.", row, x);
+        break;
+    }
+
+    case 11:
+    {
+        /* SIL-MORE: SURVIVAL, AUTOMATIC CHECKS, SPEED, AND COLOUR */
+        int x;
+
+        row = 0; col = 1;
+        if (include_header)
+        {
+            sprintf(page_header,
+                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SURVIVAL & CHECKS",
+                display_page, total_pages);
+            put_role(ROLE_HEADER, page_header, row, col);
+        }
+        row += 2;
+
+        help_emit_heading("FOOD & HUNGER", row, col); row++;
+        put_role(ROLE_BODY,
+            "- Food is consumed as turns pass. Press E to eat food from your carried supplies.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- No hunger label means your state is normal; the panel appears only when it changes.",
+            row++, col);
+        x = col;
+        put_role(ROLE_WARN, "- Hungry", row, x); x += 8;
+        put_role(ROLE_BODY, " is a warning. ", row, x); x += 15;
+        put_role(ROLE_BAD, "Weak", row, x); x += 4;
+        put_role(ROLE_BODY, " gives -1 Strength.", row, x);
+        row++;
+        put_role(ROLE_BAD,
+            "- Starving deals 1 damage each world update and prevents health regeneration.",
+            row++, col);
+        row++;
+
+        help_emit_heading("INTERACTION CHECKS", row, col); row++;
+        put_role(ROLE_BODY,
+            "- Locked doors and trapped chests present choices; this is not a timing minigame.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Each percentage is the exact chance that the automatic opposed roll succeeds.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Choose once; the game rolls immediately. Ties fail, and an action spends one turn.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Leave spends no turn. The prompt states failure risks such as jamming or traps.",
+            row++, col);
+        row++;
+
+        help_emit_heading("TEXT COLOUR CONTRACT", row, col); row++;
+        x = col;
+        put_role(ROLE_TERM, "Blue", row, x); x += 4;
+        put_role(ROLE_BODY, " = named game term; ", row, x); x += 20;
+        put_role(ROLE_GOOD, "green", row, x); x += 5;
+        put_role(ROLE_BODY, " = benefit/success; ", row, x); x += 20;
+        put_role(ROLE_WARN, "orange", row, x); x += 6;
+        put_role(ROLE_BODY, " = warning/cost; ", row, x); x += 17;
+        put_role(ROLE_BAD, "red", row, x); x += 3;
+        put_role(ROLE_BODY, " = harm/danger.", row, x);
+        row++;
+        x = col;
+        put_role(ROLE_SECTION, "- Yellow", row, x); x += 8;
+        put_role(ROLE_BODY, " = headings; ", row, x); x += 13;
+        put_role(ROLE_UI, "brown", row, x); x += 5;
+        put_role(ROLE_BODY, " = UI labels; white = normal text and literal keys.", row, x);
+        row++;
+        put_role(ROLE_BODY,
+            "- Map glyph and element colours identify things; nearby words still state the meaning.",
+            row++, col);
+        row++;
+
+        help_emit_heading("SPEED", row, col); row++;
+        put_role(ROLE_BODY,
+            "- Normal is speed 2 (100%); speed 3 is 150%, speed 4 is 200%. Lore shows both.",
+            row, col);
         break;
     }
     }
@@ -3123,7 +3221,8 @@ static void help_combat_example_visuals(byte* player_attr, char* player_char,
 enum {
     HELP_CLICK_PREV = 1,
     HELP_CLICK_NEXT,
-    HELP_CLICK_QUIT
+    HELP_CLICK_QUIT,
+    HELP_CLICK_SEARCH
 };
 
 typedef enum help_menu_action {
@@ -3194,12 +3293,276 @@ static int help_menu_collect_entries(help_menu_entry* entries, int max_entries)
         "Show the tappable or clickable regions on the current main screen.");
     /* Keep the reference document last: this is the final destination after
      * the device-specific tutorial replays. */
-    ADD_HELP_MENU_ENTRY(HELP_MENU_PAGES, 'h', "Help Pages",
-        "Open the gameplay reference. Input pages match connected hardware and current bindings.");
+    ADD_HELP_MENU_ENTRY(HELP_MENU_PAGES, 'h', "Gameplay Reference",
+        "Search mechanics, survival rules, storage, combat formulas, and current controls.");
 
 #undef ADD_HELP_MENU_ENTRY
 
     return count;
+}
+
+#define HELP_SEARCH_MAX_RESULTS HELP_DOC_DISPLAY_MAX_ROWS
+#define HELP_SEARCH_LABEL_SIZE 256
+#define HELP_SEARCH_RESULTS_PER_PAGE 100
+#define HELP_SEARCH_PREVIOUS_PAGE 5001
+#define HELP_SEARCH_NEXT_PAGE 5002
+
+typedef struct {
+    int page;
+    char label[HELP_SEARCH_LABEL_SIZE];
+} help_search_result;
+
+static help_search_result g_help_search_results[HELP_SEARCH_MAX_RESULTS];
+
+static void help_search_trim_text(char* text)
+{
+    char* start;
+    size_t len;
+
+    if (!text || !text[0])
+        return;
+
+    start = text;
+    while (*start && isspace((unsigned char)*start))
+        start++;
+    if (start != text)
+        memmove(text, start, strlen(start) + 1);
+
+    len = strlen(text);
+    while (len > 0 && isspace((unsigned char)text[len - 1]))
+        text[--len] = '\0';
+}
+
+static bool help_search_document_row_text(int source_y, char* buf,
+    size_t buflen)
+{
+    help_row_cell_t cells[HELP_DOC_MAX_COLS];
+    int first_used = 0;
+    int last_used = -1;
+    size_t cursor = 0;
+    bool has_content = false;
+
+    if (!buf || buflen < 1)
+        return false;
+
+    help_build_compact_source_row(source_y, cells, &first_used, &last_used,
+        &has_content, NULL);
+    if (!has_content)
+    {
+        buf[0] = '\0';
+        return false;
+    }
+
+    for (int x = first_used; x <= last_used && cursor + 1 < buflen; x++)
+        buf[cursor++] = cells[x].used ? cells[x].ch : ' ';
+    buf[cursor] = '\0';
+    help_search_trim_text(buf);
+    return buf[0] != '\0';
+}
+
+static bool help_search_display_row_text(int row, char* buf, size_t buflen)
+{
+    const help_display_row_t* display_row;
+    char cells[HELP_DOC_MAX_COLS];
+    int first_used = HELP_DOC_MAX_COLS;
+    int last_used = -1;
+    size_t cursor = 0;
+
+    if (!buf || buflen < 1 || row < 0 || row >= g_help_display_rows_n)
+        return false;
+
+    display_row = &g_help_display_rows[row];
+    if (!display_row->has_content)
+    {
+        buf[0] = '\0';
+        return false;
+    }
+
+    memset(cells, ' ', sizeof(cells));
+    for (int n = 0; n < display_row->span_count; n++)
+    {
+        const help_display_span_t* span =
+            &g_help_display_spans[display_row->span_start + n];
+
+        if (!span->text)
+            continue;
+        for (int i = 0; span->text[i]; i++)
+        {
+            int x = span->x + i;
+
+            if (x < 0 || x >= HELP_DOC_MAX_COLS)
+                continue;
+            cells[x] = span->text[i];
+            if (x < first_used)
+                first_used = x;
+            if (x > last_used)
+                last_used = x;
+        }
+    }
+
+    if (last_used < first_used)
+    {
+        buf[0] = '\0';
+        return false;
+    }
+    for (int x = first_used; x <= last_used && cursor + 1 < buflen; x++)
+        buf[cursor++] = cells[x];
+    buf[cursor] = '\0';
+    help_search_trim_text(buf);
+    return buf[0] != '\0';
+}
+
+static int help_search_page_for_position(int position, const int* page_starts,
+    const int* page_ends, int total_pages)
+{
+    for (int page = 0; page < total_pages; page++)
+    {
+        if (position >= page_starts[page] && position <= page_ends[page])
+            return page + 1;
+    }
+    return 0;
+}
+
+static void help_search_add_result(cptr query, int page, cptr line,
+    int* stored_count, int* total_count)
+{
+    help_search_result* result;
+
+    if (!query || !query[0] || page < 1 || !line || !line[0]
+        || !SDL_strcasestr(line, query))
+    {
+        return;
+    }
+
+    (*total_count)++;
+    if (*stored_count >= HELP_SEARCH_MAX_RESULTS)
+        return;
+
+    result = &g_help_search_results[*stored_count];
+    result->page = page;
+    strnfmt(result->label, sizeof(result->label), "Page %d | %s", page,
+        line);
+    (*stored_count)++;
+}
+
+static int help_search_collect_legacy(cptr query, const int* source_pages,
+    int source_page_count, int* total_count)
+{
+    int stored_count = 0;
+    char line[HELP_DOC_MAX_COLS + 1];
+
+    *total_count = 0;
+    for (int page = 0; page < source_page_count; page++)
+    {
+        g_help_doc_ops_n = 0;
+        g_help_doc_string_pool_used = 0;
+        g_help_record_ops = true;
+        g_help_record_base_y = 0;
+        g_help_record_page_min_y = INT_MAX;
+        g_help_record_page_max_y = INT_MIN;
+        show_help_screen_legacy(source_pages[page], page + 1,
+            source_page_count, false);
+        g_help_record_ops = false;
+
+        if (g_help_record_page_max_y == INT_MIN)
+            continue;
+        for (int row = 0; row <= g_help_record_page_max_y; row++)
+        {
+            if (help_search_document_row_text(row, line, sizeof(line)))
+            {
+                help_search_add_result(query, page + 1, line, &stored_count,
+                    total_count);
+            }
+        }
+    }
+    return stored_count;
+}
+
+static int help_search_collect_dynamic(cptr query, bool compact, int doc_hgt,
+    const int* page_starts, const int* page_ends, int total_pages,
+    int* total_count)
+{
+    int stored_count = 0;
+    int row_count = compact ? g_help_display_rows_n : doc_hgt;
+    char line[HELP_DOC_MAX_COLS + 1];
+
+    *total_count = 0;
+    for (int row = 0; row < row_count; row++)
+    {
+        int page = help_search_page_for_position(row, page_starts, page_ends,
+            total_pages);
+        bool has_text = compact
+            ? help_search_display_row_text(row, line, sizeof(line))
+            : help_search_document_row_text(row, line, sizeof(line));
+
+        if (has_text)
+        {
+            help_search_add_result(query, page, line, &stored_count,
+                total_count);
+        }
+    }
+    return stored_count;
+}
+
+static int help_search_choose_result(cptr query, int stored_count,
+    int total_count)
+{
+    ui_question_option options[HELP_SEARCH_RESULTS_PER_PAGE];
+    ui_question_button buttons[2];
+    char title[128];
+    char desc[192];
+    int result_page = 0;
+
+    if (stored_count <= 0)
+        return 0;
+
+    while (result_page * HELP_SEARCH_RESULTS_PER_PAGE < stored_count)
+    {
+        int start = result_page * HELP_SEARCH_RESULTS_PER_PAGE;
+        int shown_count = MIN(HELP_SEARCH_RESULTS_PER_PAGE,
+            stored_count - start);
+        int end = start + shown_count;
+        int choice;
+
+        strnfmt(title, sizeof(title), "Search results: %s", query);
+        strnfmt(desc, sizeof(desc),
+            "%d match%s. Showing %d-%d; choose one to open its page.",
+            total_count, total_count == 1 ? "" : "es", start + 1, end);
+
+        for (int i = 0; i < shown_count; i++)
+        {
+            options[i] = (ui_question_option){
+                0, g_help_search_results[start + i].label,
+                TERM_L_WHITE, false
+            };
+        }
+        buttons[0] = (ui_question_button){
+            HELP_SEARCH_PREVIOUS_PAGE, 'p', "Previous results", TERM_L_BLUE,
+            result_page == 0
+        };
+        buttons[1] = (ui_question_button){
+            HELP_SEARCH_NEXT_PAGE, 'n', "Next results", TERM_L_BLUE,
+            end >= stored_count
+        };
+
+        choice = ui_question_ask_overlay_buttons(title, desc, options,
+            shown_count, buttons, (int)N_ELEMENTS(buttons),
+            UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
+        if (choice == HELP_SEARCH_PREVIOUS_PAGE)
+        {
+            result_page--;
+            continue;
+        }
+        if (choice == HELP_SEARCH_NEXT_PAGE)
+        {
+            result_page++;
+            continue;
+        }
+        if (choice < 0 || choice >= shown_count)
+            return 0;
+        return g_help_search_results[start + choice].page;
+    }
+    return 0;
 }
 
 void do_cmd_help_menu(void)
@@ -3467,7 +3830,7 @@ void do_cmd_help(void)
 
             if (sdl_touch_only_device_active()) {
                 SDL_strlcpy(nav,
-                    "Swipe or tap left/right to turn pages   "
+                    "Tap Search to find a topic   swipe or tap left/right   "
                     "tap Exit to close",
                     sizeof(nav));
             } else if (help_controller_available()
@@ -3485,16 +3848,16 @@ void do_cmd_help(void)
                 help_prompt_label(steamdeck_back_key(), "B", back_label,
                     sizeof(back_label));
                 strnfmt(nav, sizeof(nav),
-                    "Navigation: [%s/%s] Prev/Next  [%s] Next  [%s] Back",
+                    "Navigation: [%s/%s] Prev/Next  [%s] Next  [%s] Back  "
+                    "[/] Search",
                     prev_label, next_page_label, next_label, back_label);
             } else if (help_keyboard_available()) {
                 strnfmt(nav, sizeof(nav),
-                    "Prev   Next   Quit    "
-                    "[Left] Prev  [Right] Next  [X+1-%d] Page  [Q/Esc] Quit",
-                    total_pages);
+                    "Prev  Next  Quit   [Left/Right] Page  [/] Search  "
+                    "[X] Number  [Q/Esc] Quit");
             } else if (SDL_HasMouse()) {
                 SDL_strlcpy(nav,
-                    "Click Prev or Next to turn pages   Click Quit to close",
+                    "Click Prev or Next to turn pages   Search   Quit",
                     sizeof(nav));
             } else {
                 SDL_strlcpy(nav, "Turn pages with the available controls",
@@ -3519,6 +3882,8 @@ void do_cmd_help(void)
                 "Next");
             ui_menu_click_add_text_token(HELP_CLICK_QUIT, 1, nav_row, nav,
                 "Quit");
+            ui_menu_click_add_text_token(HELP_CLICK_SEARCH, 1, nav_row, nav,
+                "Search");
 
             if (mid_col < 1)
                 mid_col = 1;
@@ -3548,6 +3913,7 @@ void do_cmd_help(void)
                     case HELP_CLICK_PREV: ch = '4'; break;
                     case HELP_CLICK_NEXT: ch = '6'; break;
                     case HELP_CLICK_QUIT: ch = ESCAPE; break;
+                    case HELP_CLICK_SEARCH: ch = '/'; break;
                     default: break;
                     }
                 }
@@ -3587,14 +3953,55 @@ void do_cmd_help(void)
         {
             char prompt[32];
             char tmp[8];
-            strnfmt(prompt, sizeof(prompt), "Page (1-%d): ", total_pages);
-            prt(prompt, nav_row, 0);
+            strnfmt(prompt, sizeof(prompt), "Go to page (1-%d)", total_pages);
             SDL_strlcpy(tmp, "1", sizeof(tmp));
-            if (askfor_aux(tmp, sizeof(tmp)))
+            if (get_string_panel(prompt, tmp, sizeof(tmp)))
             {
                 int target = atoi(tmp);
                 if ((target >= 1) && (target <= total_pages))
                     i = target;
+            }
+        }
+        /* Search every rendered row, then let the player choose a result. */
+        else if (ch == '/')
+        {
+            char query[80];
+            int stored_count = 0;
+            int total_count = 0;
+            int target = 0;
+
+            query[0] = '\0';
+            if (get_string_panel("Search Gameplay Reference", query,
+                    sizeof(query)))
+            {
+                help_search_trim_text(query);
+                if (query[0])
+                {
+                    if (legacy)
+                    {
+                        stored_count = help_search_collect_legacy(query,
+                            source_pages, source_page_count, &total_count);
+                    }
+                    else
+                    {
+                        stored_count = help_search_collect_dynamic(query,
+                            compact_dynamic, doc_hgt, page_starts, page_ends,
+                            total_pages, &total_count);
+                    }
+
+                    if (stored_count > 0)
+                    {
+                        target = help_search_choose_result(query, stored_count,
+                            total_count);
+                    }
+                    else
+                    {
+                        bell("No reference text matches that search.");
+                    }
+
+                    if (target > 0)
+                        i = target;
+                }
             }
         }
         /* Default: next page */

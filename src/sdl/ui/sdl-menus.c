@@ -3289,9 +3289,8 @@ void sdl_unified_look_sidebar_render(void)
             bool hovered = has_hover_choice && hover_choice == item->choice;
             SDL_Color symbol_color =
                 sdl_unified_look_sidebar_attr_color(item->symbol_attr);
-            SDL_Color text_color = selected || hovered
-                ? accent
-                : sdl_unified_look_sidebar_attr_color(item->text_attr);
+            SDL_Color text_color =
+                sdl_unified_look_sidebar_attr_color(item->text_attr);
             float symbol_x = row.x;
             float text_x = row.x + layout.symbol_w;
             float text_w = row.w - layout.symbol_w;

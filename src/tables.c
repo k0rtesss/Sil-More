@@ -516,8 +516,8 @@ cptr option_desc[OPT_MAX] = {
     "Render styled monster health bars in panes and overlays", /* OPT_styled_monster_health_bars */
     "Monster tile health bars (show/only damaged/off)", /* OPT_styled_monster_tile_health_bars */
     "Render monster sleep, sight, and alert indicators with SDL pixel overlays", /* OPT_pixel_monster_status_icons */
-    "Use the lockpick and bash minigame for locked doors", /* OPT_lockpick_minigame */
-    "Use the trap-search and disarm minigame for chests", /* OPT_chest_trap_minigame */
+    "Use guided automatic checks for picking or bashing locked doors", /* OPT_lockpick_minigame */
+    "Use guided automatic checks for inspecting, disarming, and opening chests", /* OPT_chest_trap_minigame */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */

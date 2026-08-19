@@ -18,6 +18,7 @@ extern void sdl_log_pane_set_rows(enum pane_type pane, int rows);
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/question.h"
+#include "ui/command-reference.h"
 #include <SDL3/SDL_keyboard.h>
 
 #define SIL_MORE_PRIVACY_POLICY_URL \
@@ -739,8 +740,8 @@ static cptr option_menu_label(int opt)
         case OPT_active_weapon_switch_confirm: return narrow ? "Weapon switch" : "Confirm weapon switch";
         case OPT_forgo_attacking_unwary: return narrow ? "Skip unwary hits" : "Forgo unwary attacks";
         case OPT_assassination_over_charge: return narrow ? "Stealth over charge" : "Assassination over Charge";
-        case OPT_lockpick_minigame: return narrow ? "Door minigame" : "Locked-door minigame";
-        case OPT_chest_trap_minigame: return narrow ? "Chest minigame" : "Chest trap minigame";
+        case OPT_lockpick_minigame: return narrow ? "Door checks" : "Locked-door interaction checks";
+        case OPT_chest_trap_minigame: return narrow ? "Chest checks" : "Chest interaction checks";
         case OPT_stop_singing_on_rest: return narrow ? "Stop song on rest" : "Stop singing on rest";
         case OPT_know_monster_info: return narrow ? "Know monsters" : "Know monster info";
         case OPT_visual_recognition: return narrow ? "Need light to spot" : "Need light to spot";
@@ -6101,7 +6102,7 @@ static const int touch_pane_main_action_choices[] = {
     'z', '.', '/',
     'w', 'r', 'k', 'g', 'Z',
     'o', 'c', 'D', 'X',
-    '-', '{', 'a', KTRL('A'), 'E', 't', 'p', 'q',
+    '-', '{', 'E', 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b', 'L', 'm',
     KTRL('Q'), '0', '<', '>', '?', 'O', ':', '~', '[', ']', '@',
 };
@@ -6121,7 +6122,7 @@ static const int touch_pane_second_action_choices[] = {
     'z', '.', '/',
     'w', 'r', 'k', 'g', 'Z',
     'o', 'c', 'D', 'X',
-    '-', '{', 'a', KTRL('A'), 'E', 't', 'p', 'q',
+    '-', '{', 'E', 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b', 'L', 'm',
     KTRL('Q'), '0', '<', '>', '?', 'O', ':', '~', '[', ']', '@',
 };
@@ -6141,7 +6142,7 @@ static const int touch_context_action_choices[] = {
     'M', 'h', 'y', '\t',
     'z', 'g', 'Z',
     'o', 'c', 'D', 'X',
-    '-', KTRL('A'), 't', 'p', 'q',
+    '-', 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b',
     KTRL('Q'), KTRL('Y'), 'J', '0', '?', 'O',
 };
@@ -7412,15 +7413,15 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             char desc[512];
 
             settings_semantic_add_pair_row(SETTINGS_CLICK_SWITCH_GROUP,
-                "Switch Button Panel", "Tab", TERM_SLATE);
+                "Switch Button Panel", "Tab", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_SELECTED,
-                "Rename Button Label", "L", TERM_SLATE);
+                "Rename Button Label", "L", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_GROUP,
-                "Rename Panel", "P", TERM_SLATE);
+                "Rename Panel", "P", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "X", TERM_SLATE);
+                "Reset Selected", "X", TERM_ORANGE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset Panel Buttons", "M", TERM_SLATE);
+                "Reset Panel Buttons", "M", TERM_ORANGE);
             strnfmt(desc, sizeof(desc),
                 "%s. Space chooses an action. Left/Right nudges the selected action. Main panel must keep Confirm on at least one button.",
                 info_buf);
@@ -7803,11 +7804,13 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
 
         settings_semantic_add_pair_row(SETTINGS_CLICK_QUICK_ACCESS_ADD_CELL,
             "Add Cell", total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX
-                ? "Max" : "+1", TERM_SLATE);
+                ? "Max" : "+1",
+            total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX
+                ? TERM_SLATE : TERM_UMBER);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-            "Reset Selected", "X", TERM_SLATE);
+            "Reset Selected", "X", TERM_ORANGE);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-            "Reset All Quick Access Buttons", "M", TERM_SLATE);
+            "Reset All Quick Access Buttons", "M", TERM_ORANGE);
         sdl_character_sheet_screen_set_select_description(
             "Add Cell opens a new action picker. Choosing Unbound removes that cell. Rows balance the current cells across one or two rows. X resets selected, M resets all.");
         sdl_character_sheet_screen_commit_select(highlight);
@@ -8004,9 +8007,9 @@ static void do_cmd_touch_thumb_button_editor(bool* settings_changed)
         }
 
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-            "Reset Selected", "X", TERM_SLATE);
+            "Reset Selected", "X", TERM_ORANGE);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-            "Reset All Thumb Buttons", "M", TERM_SLATE);
+            "Reset All Thumb Buttons", "M", TERM_ORANGE);
         sdl_character_sheet_screen_set_select_description(
             "Space toggles On/Off or chooses an action. Left/Right nudges the selected row. X resets selected, M resets all. Escape or Enter returns.");
         sdl_character_sheet_screen_commit_select(highlight);
@@ -8667,9 +8670,9 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
         }
 
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-            "Reset Selected", "X", TERM_SLATE);
+            "Reset Selected", "X", TERM_ORANGE);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-            "Reset All Touch Controls", "M", TERM_SLATE);
+            "Reset All Touch Controls", "M", TERM_ORANGE);
         sdl_character_sheet_screen_set_select_description(
             "Controls touch menus, game-screen layers, movement, overlays, and swipes. Space chooses binding rows; Left/Right nudges values; X resets selected, M resets all.");
         sdl_character_sheet_screen_commit_select(highlight);
@@ -8983,9 +8986,9 @@ static void do_cmd_mouse_settings(bool* settings_changed)
 
         {
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "X", TERM_SLATE);
+                "Reset Selected", "X", TERM_ORANGE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset All", "M", TERM_SLATE);
+                "Reset All", "M", TERM_ORANGE);
             static const char* const mouse_setting_desc[MOUSE_SETTING_COUNT] = {
                 [MOUSE_SETTING_ENABLE] = "Turn mouse input on or off.",
                 [MOUSE_SETTING_MOVEMENT] =
@@ -10175,15 +10178,6 @@ static void describe_keycode(byte keycode, char* buf, size_t buflen)
     ascii_to_text(buf, buflen, raw);
 }
 
-struct keybind_entry
-{
-    byte key_code;
-    cptr extra_default_keys;
-    cptr key_name;
-    cptr action;
-    bool requires_keymap;
-};
-
 static bool key_matches_default(const struct keybind_entry* entry, byte key)
 {
     if (key == entry->key_code)
@@ -10975,58 +10969,10 @@ void do_cmd_keybinds(void)
     int highlight_primary = 0;
     int highlight_secondary = 0;
     const char* default_file = "sil_sdl.json";
-    static const struct keybind_entry primary_keybinds[] = {
-        {'i', NULL, "Inventory", "i", false},
-        {'e', NULL, "Equipment", "e", false},
-        {'u', NULL, "Use item", "u", false},
-        {'x', NULL, "Examine item", "x", false},
-        {'s', NULL, "Sing / change song", "s", false},
-        {'S', NULL, "Toggle stealth", "S", false},
-        {'h', "H@", "Character sheet (h / H / @)", "h", false},
-        {'\t', NULL, "Change active weapon", "Tab", false},
-        {'y', NULL, "Abilities", "y", false},
-        {'f', NULL, "Ranged attack (active weapon)", "f", false},
-        {'F', NULL, "Ranged attack (active weapon)", "F", false},
-        {'l', NULL, "Look around", "l", false},
-        {'T', NULL, "Tunnel / dig", "T", false},
-        {'b', NULL, "Bash door", "b", false},
-    };
-
-    static const struct keybind_entry secondary_keybinds[] = {
-        {'j', NULL, "Supplies overview", "j", false},
-        {'w', NULL, "Wear / wield equipment", "w", false},
-        {'r', NULL, "Remove equipment", "r", false},
-        {'g', NULL, "Pick up items", "g", false},
-        {'o', NULL, "Open door / chest", "o", false},
-        {'c', NULL, "Close door", "c", false},
-        {'D', NULL, "Disarm trap / chest", "D", false},
-        {'X', NULL, "Exchange places", "X", false},
-        {'-', NULL, "Fletch arrows", "-", false},
-        {'{', NULL, "Inscribe item", "{", false},
-        {'a', NULL, "Activate staff", "a", false},
-        {KTRL('A'), NULL, "Activate Harness staff", "\001", false},
-        {'E', NULL, "Eat food", "E", false},
-        {'t', NULL, "Throw item", "t", false},
-        {'p', NULL, "Blow horn", "p", false},
-        {'q', NULL, "Quaff potion", "q", false},
-        {'M', NULL, "View map", "M", false},
-        {'L', NULL, "Pan", "L", false},
-        {KTRL('Q'), NULL, "Combat rolls", "\021", false},
-        {'0', NULL, "Smithing screen", "0", false},
-        {'<', NULL, "Go upstairs", "<", false},
-        {'>', NULL, "Go downstairs", ">", false},
-        {'m', NULL, "Main menu", "m", false},
-        {'?', NULL, "Help", "?", false},
-        {'@', NULL, "Character sheet (alternate)", "@", false},
-        {'O', NULL, "Options menu", "O", false},
-        {':', NULL, "Take notes", ":", false},
-        {'~', NULL, "Knowledge browser", "~", false},
-        {'[', NULL, "Monster list", "[", false},
-        {']', NULL, "Object list", "]", false},
-    };
-
-    int primary_count = (int)N_ELEMENTS(primary_keybinds);
-    int secondary_count = (int)N_ELEMENTS(secondary_keybinds);
+    const struct keybind_entry* primary_keybinds = command_primary_keybinds;
+    const struct keybind_entry* secondary_keybinds = command_secondary_keybinds;
+    int primary_count = COMMAND_PRIMARY_KEYBIND_COUNT;
+    int secondary_count = COMMAND_SECONDARY_KEYBIND_COUNT;
 
     /* Determine the keyset mode */
     if (!hjkl_movement && !angband_keyset)
@@ -11075,7 +11021,10 @@ void do_cmd_keybinds(void)
 
         highlight = *highlight_ptr;
 
-        settings_semantic_menu_begin("Keybind Configuration", highlight);
+        settings_semantic_menu_begin(showing_primary
+                ? "Keybinds - Core commands"
+                : "Keybinds - All other commands",
+            highlight);
 
         for (i = 0; i < num_keybinds; i++)
         {
@@ -11102,15 +11051,15 @@ void do_cmd_keybinds(void)
             describe_action_bindings(mode, &keybinds[highlight],
                 detail_binding_buf, sizeof(detail_binding_buf));
             settings_semantic_add_pair_row(SETTINGS_CLICK_SWITCH_GROUP,
-                showing_primary ? "Show Supplementary Commands"
-                                : "Show Primary Commands",
-                "Tab", TERM_SLATE);
+                showing_primary ? "Show All Other Commands"
+                                : "Show Core Commands",
+                "Tab", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_SAVE,
-                "Save Keybinds", "S", TERM_SLATE);
+                "Save Keybinds", "S", TERM_L_GREEN);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "R", TERM_SLATE);
+                "Reset Selected", "R", TERM_ORANGE);
             strnfmt(desc, sizeof(desc),
-                "%s. Enter or Space rebinds the selected command. Tab switches groups. S saves to %s. R resets selected.%s%s",
+                "%s. Enter or Space rebinds the selected command. Tab switches between the complete Core and All Other lists. S saves to %s. R resets selected.%s%s",
                 detail_binding_buf, default_file,
                 dirty ? " " : "",
                 dirty ? "Unsaved changes." : "");
@@ -12533,8 +12482,7 @@ void do_cmd_controller_settings(void)
         { CONTROLLER_ENTRY_ACTION, 'X', "Exchange places" },
         { CONTROLLER_ENTRY_ACTION, '-', "Fletch arrows" },
         { CONTROLLER_ENTRY_ACTION, '{', "Inscribe item" },
-        { CONTROLLER_ENTRY_ACTION, 'a', "Activate staff" },
-        { CONTROLLER_ENTRY_ACTION, KTRL('A'), "Activate Harness staff" },
+        { CONTROLLER_ENTRY_ACTION, 'a', "Activate Harness staff" },
         { CONTROLLER_ENTRY_ACTION, 'E', "Eat food" },
         { CONTROLLER_ENTRY_ACTION, 't', "Throw item" },
         { CONTROLLER_ENTRY_ACTION, 'p', "Blow horn" },
@@ -12639,9 +12587,9 @@ void do_cmd_controller_settings(void)
                 strnfmt(desc, sizeof(desc), "%s", toggle_desc);
             }
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", steamdeck ? "X" : "R", TERM_SLATE);
+                "Reset Selected", steamdeck ? "X" : "R", TERM_ORANGE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset All", steamdeck ? "Y" : "M", TERM_SLATE);
+                "Reset All", steamdeck ? "Y" : "M", TERM_ORANGE);
             sdl_character_sheet_screen_set_select_description(desc);
             sdl_character_sheet_screen_commit_select(highlight);
         }
@@ -13249,7 +13197,8 @@ void do_cmd_macros(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Ask for a file */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Append macros to file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Dump the macros */
@@ -13324,7 +13273,7 @@ void do_cmd_macros(void)
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (askfor_aux(tmp, 80))
+            if (get_string_panel("Macro action", tmp, 80))
             {
                 /* Convert to ascii */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -13373,7 +13322,8 @@ void do_cmd_macros(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Ask for a file */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Append keymaps to file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Dump the macros */
@@ -13448,7 +13398,7 @@ void do_cmd_macros(void)
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (askfor_aux(tmp, 80))
+            if (get_string_panel("Keymap action", tmp, 80))
             {
                 /* Convert to ascii */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -13501,7 +13451,7 @@ void do_cmd_macros(void)
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (askfor_aux(tmp, 80))
+            if (get_string_panel("New action", tmp, 80))
             {
                 /* Extract an action */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -13776,7 +13726,8 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Monster display file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -13851,7 +13802,8 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Object display file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -13927,7 +13879,8 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Feature display file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -14003,7 +13956,8 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Flavor display file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Build the filename */

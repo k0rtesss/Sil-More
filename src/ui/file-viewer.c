@@ -626,8 +626,8 @@ bool show_file(cptr name, cptr what, int line)
         if (ch == '&')
         {
             /* Get "shower" */
-            prt("Show: ", hgt - 1, 0);
-            (void)askfor_aux(shower, sizeof(shower));
+            (void)get_string_panel("Highlight text", shower,
+                sizeof(shower));
 
             /* Make the "shower" lowercase */
             if (!case_sensitive)
@@ -638,8 +638,7 @@ bool show_file(cptr name, cptr what, int line)
         if (ch == '/')
         {
             /* Get "finder" */
-            prt("Find: ", hgt - 1, 0);
-            if (askfor_aux(finder, sizeof(finder)))
+            if (get_string_panel("Find text", finder, sizeof(finder)))
             {
                 /* Find it */
                 find = finder;
@@ -659,9 +658,8 @@ bool show_file(cptr name, cptr what, int line)
         if (ch == '#')
         {
             char tmp[80];
-            prt("Goto Line: ", hgt - 1, 0);
             SDL_strlcpy(tmp, "0", sizeof(tmp));
-            if (askfor_aux(tmp, sizeof(tmp)))
+            if (get_string_panel("Go to line", tmp, sizeof(tmp)))
             {
                 line = atoi(tmp);
             }

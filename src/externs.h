@@ -1969,6 +1969,9 @@ extern bool askfor_aux(char* buf, size_t len);
 extern bool askfor_name(char* buf, size_t len);
 extern bool term_get_string(cptr prompt, char* buf, size_t len);
 extern bool get_string_panel(cptr prompt, char* buf, size_t len);
+extern void sdl_text_input_begin(void);
+extern void sdl_text_input_reopen(void);
+extern void sdl_text_input_end(void);
 extern s16b get_quantity(cptr prompt, int max);
 extern s16b get_quantity_action(cptr prompt, cptr action, int max);
 extern s16b get_quantity_touch_category(cptr prompt, int max,

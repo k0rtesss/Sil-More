@@ -620,7 +620,11 @@ static int door_minigame_question(int y, int x)
         player_skill_check_success_percent(p_ptr->stat_use[A_STR] * 2,
             door_bash_difficulty(y, x), 10, 10));
 
-    desc[0] = '\0';
+    SDL_strlcpy(desc,
+        "Interaction check: choose an action, then the game rolls automatically. "
+        "The displayed percentage is the success probability; a tie fails. "
+        "Acting spends one turn, while Leave spends none. ",
+        sizeof(desc));
     if (door_retry.active && door_retry.y == y && door_retry.x == x
         && door_retry.previous[0])
     {
@@ -658,7 +662,7 @@ static int door_minigame_question(int y, int x)
             "lockpick may jam it.", sizeof(desc));
         options[count]
             = (ui_question_option){
-                'p', lockpick_label, TERM_L_GREEN, false
+                'p', lockpick_label, TERM_ORANGE, false
             };
         actions[count++] = DOOR_CHOICE_LOCKPICK;
         options[count]
@@ -1592,7 +1596,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "thrall to hear the request, offer the needed item, or claim an "
             "earned reward.",
             sizeof(desc));
-        GRID_Q_ADD(';', 't', "Talk", TERM_L_GREEN);
+        GRID_Q_ADD(';', 't', "Talk", TERM_WHITE);
     }
 
     /* --- Dark / unknown square --- */
@@ -1615,7 +1619,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "An open doorway. Closing it would slow pursuers and block line "
             "of sight.",
             sizeof(desc));
-        GRID_Q_ADD('c', 'c', "Close it", TERM_L_GREEN);
+        GRID_Q_ADD('c', 'c', "Close it", TERM_WHITE);
     }
     else if (feat == FEAT_BROKEN)
     {
@@ -1655,7 +1659,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 "quietly tests your Perception; bashing it down tests your "
                 "Strength and makes a great noise.",
                 power + DOOR_LOCKPICK_BASE_DIFFICULTY);
-            GRID_Q_ADD('o', 'o', "Pick the lock", TERM_L_GREEN);
+            GRID_Q_ADD('o', 'o', "Pick the lock", TERM_ORANGE);
             GRID_Q_ADD('b', 'b', "Bash it open", TERM_ORANGE);
         }
         else
@@ -1673,7 +1677,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 grid_question_append(desc, sizeof(desc),
                     "Words of warding glimmer about its frame.");
             }
-            GRID_Q_ADD('o', 'o', "Open it", TERM_L_GREEN);
+            GRID_Q_ADD('o', 'o', "Open it", TERM_WHITE);
             GRID_Q_ADD('b', 'b', "Bash it open", TERM_ORANGE);
         }
     }
@@ -1712,7 +1716,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 "margin, the harder foes find it to notice or undo.");
             /* Same command as disarm: do_cmd_disarm_aux re-keys it when you
              * have the ability (see the rewire branch there). */
-            GRID_Q_ADD('D', 'd', disarm_label, TERM_L_BLUE);
+            GRID_Q_ADD('D', 'd', disarm_label, TERM_ORANGE);
         }
         else if (disarmable)
         {
@@ -1872,7 +1876,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 grid_question_append(desc, sizeof(desc),
                     "It has not been searched for traps.");
             }
-            GRID_Q_ADD('o', 'o', "Open it", TERM_L_GREEN);
+            GRID_Q_ADD('o', 'o', "Open it", TERM_WHITE);
         }
     }
 

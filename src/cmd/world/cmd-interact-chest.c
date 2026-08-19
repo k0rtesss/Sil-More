@@ -4858,7 +4858,11 @@ static bool do_cmd_chest_minigame(int y, int x, s16b o_idx)
     looked = chest_was_inspected(o_ptr);
 
     object_desc(title, sizeof(title), o_ptr, true, 3);
-    desc[0] = '\0';
+    SDL_strlcpy(desc,
+        "Interaction check: choose an action, then the game rolls automatically. "
+        "The displayed percentage is the success probability; a tie fails. "
+        "Acting spends one turn. Closing this prompt spends none. ",
+        sizeof(desc));
     if (previous[0])
         chest_desc_append(desc, sizeof(desc), previous);
 

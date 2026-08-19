@@ -729,22 +729,27 @@ static void describe_monster_movement(
         if (display_speed > 2)
         {
             if (display_speed > 5)
-                text_out_c(TERM_L_GREEN, " incredibly");
+                text_out_c(TERM_ORANGE, " incredibly");
             else if (display_speed > 4)
-                text_out_c(TERM_L_GREEN, " extremely");
+                text_out_c(TERM_ORANGE, " extremely");
             else if (display_speed > 3)
-                text_out_c(TERM_L_GREEN, " very");
-            text_out_c(TERM_L_GREEN, " quickly");
+                text_out_c(TERM_ORANGE, " very");
+            text_out_c(TERM_ORANGE, " quickly");
         }
         else if (display_speed < 2)
         {
-            text_out_c(TERM_L_UMBER, " slowly");
+            text_out_c(TERM_L_BLUE, " slowly");
+        }
+
+        {
+            int speed_index = MAX(0, MIN(display_speed, 7));
+            text_out_c(TERM_L_BLUE,
+                format(" (speed %d; %d%% of normal)", display_speed,
+                    (extract_energy[speed_index] * 100) / extract_energy[2]));
         }
 
         if (m_ptr)
         {
-            text_out_c(
-                TERM_L_GREEN, format(" (speed %d)", display_speed));
             if (is_hasted && is_slowed)
                 text_out(" while hasted and slowed");
             else if (is_hasted)

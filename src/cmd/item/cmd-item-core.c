@@ -482,7 +482,7 @@ int floor_context_collect_item_actions(int floor_item, bool include_details,
             sizeof(use_label)))
     {
         floor_context_add_action(actions, capacity, &count,
-            FLOOR_CONTEXT_ACTION_USE, 'u', use_label, TERM_L_GREEN);
+            FLOOR_CONTEXT_ACTION_USE, 'u', use_label, TERM_L_WHITE);
     }
 
     if (!interaction_only)
@@ -492,19 +492,19 @@ int floor_context_collect_item_actions(int floor_item, bool include_details,
             floor_context_add_action(actions, capacity, &count,
                 FLOOR_CONTEXT_ACTION_QUIVER, 'v', "Quiver", TERM_L_BLUE);
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_WHITE);
+                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_BLUE);
         }
         else if (supplies_is_supply_object(o_ptr))
         {
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_SUPPLIES, 'j', "Supplies", TERM_L_GREEN);
+                FLOOR_CONTEXT_ACTION_SUPPLIES, 'j', "Supplies", TERM_L_BLUE);
         }
         else if (object_can_choose_pack_or_harness(o_ptr))
         {
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_UMBER);
+                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_BLUE);
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_WHITE);
+                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_BLUE);
         }
         else if (o_ptr->storage == OBJECT_STORAGE_JEWELRY)
         {
@@ -514,12 +514,12 @@ int floor_context_collect_item_actions(int floor_item, bool include_details,
         else if (o_ptr->storage == OBJECT_STORAGE_PACK)
         {
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_WHITE);
+                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_BLUE);
         }
         else if (o_ptr->storage == OBJECT_STORAGE_HARNESS)
         {
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_UMBER);
+                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_BLUE);
         }
         else
         {
@@ -935,20 +935,21 @@ bool do_cmd_context_square_action_popup(void)
             sdl_question_menu_add_button('x', "Description", TERM_L_BLUE);
         if (!action_is_pickup)
             sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_ACTION,
-                action_name, TERM_L_GREEN);
+                action_name, TERM_L_WHITE);
         if (!action_only)
         {
             cptr pickup_name = object_can_store_directly_in_pack(o_ptr)
                 ? "Pack" : "Pick Up";
 
-            sdl_question_menu_add_button('g', pickup_name, TERM_L_WHITE);
+            sdl_question_menu_add_button('g', pickup_name,
+                streq(pickup_name, "Pack") ? TERM_L_BLUE : TERM_L_WHITE);
             if (object_can_choose_pack_or_harness(o_ptr))
-                sdl_question_menu_add_button(' ', "Harness", TERM_L_UMBER);
+                sdl_question_menu_add_button(' ', "Harness", TERM_L_BLUE);
         }
     }
     else
     {
-        sdl_question_menu_add_button(' ', context_label, TERM_L_GREEN);
+        sdl_question_menu_add_button(' ', context_label, TERM_L_WHITE);
     }
 
     sdl_question_menu_finish();

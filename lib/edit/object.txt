@@ -2297,9 +2297,9 @@ W:7:0:5:400
 P:0:0d0:0:0d0
 A:2/70
 D:A gem of inward sight, turning the bearer's perception
-D: upon themselves. It lets you know all of your status
-D: effects and also gives a slight chance to feel current
-D: curses and traits.
+D: upon themselves. It shows all of your status effects and
+D: character traits. Each use also gives a chance
+D: to reveal one active curse.
 
 
 N:203:Warding

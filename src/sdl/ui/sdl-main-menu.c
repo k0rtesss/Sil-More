@@ -994,6 +994,7 @@ void sdl_popup_notification_render(void)
     SDL_FRect panel;
     SDL_FRect shadow;
     TTF_Font* font;
+    SDL_Color accent;
     SDL_Color text;
     Uint8 alpha;
 
@@ -1012,7 +1013,8 @@ void sdl_popup_notification_render(void)
     SDL_SetRenderDrawColor(g_state.renderer, 8, 10, 12,
         sdl_popup_notification_scaled_alpha(alpha, 226));
     SDL_RenderFillRect(g_state.renderer, &panel);
-    SDL_SetRenderDrawColor(g_state.renderer, 255, 184, 94,
+    accent = g_state.palette[TERM_L_BLUE];
+    SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b,
         sdl_popup_notification_scaled_alpha(alpha, 154));
     SDL_RenderRect(g_state.renderer, &panel);
 
@@ -1102,7 +1104,7 @@ void sdl_main_menu_pane_render(void)
         return;
 
     text = g_state.palette[g_main_menu_pane_hover
-        ? TERM_YELLOW : TERM_L_WHITE];
+        ? TERM_L_BLUE : TERM_L_WHITE];
 
     shadow = rect;
     shadow.x += 2.0f;

@@ -1908,9 +1908,7 @@ void sdl_question_menu_render(void)
                 && hover_choice == entry->choice;
             SDL_Color letter_color = g_state.palette[
                 selected || hovered ? TERM_L_BLUE : TERM_SLATE];
-            SDL_Color text_color = selected || hovered
-                ? accent
-                : g_state.palette[entry->text_attr];
+            SDL_Color text_color = g_state.palette[entry->text_attr];
             float icon_x = row.x + layout.letter_w + layout.letter_gap;
             float text_x = icon_x + layout.icon_w;
             float text_w = row.w - layout.letter_w - layout.letter_gap

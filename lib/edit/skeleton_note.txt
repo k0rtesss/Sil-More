@@ -532,23 +532,25 @@ M:ANY:TIP:100:Stealth is both sound-based and vision-based. Sound is determined 
 M:ANY:TIP:100:Your stealth score decreases if you are visible to a monster. For that to happen, your light radius has to be in its line of sight, based on its Perception.
 M:ANY:TIP:100:Sleeping monsters get Evasion set to [-5]. Sleeping monsters have a blue dot on top of their tile.
 M:ANY:TIP:100:Monsters that have noticed you have '!' on top of their tile.
-M:ANY:TIP:100:Your supply is limited by weight.
-M:ANY:TIP:100:Items in your inventory are limited by number in each category.
+M:ANY:TIP:100:Supplies have a separate 25 lb limit, raised to 50 lb by the relevant blessing. Lights and oil use their own stated limits.
+M:ANY:TIP:100:Pack and Harness have separate volume limits measured in qt; everything you carry also counts toward total weight.
 M:ANY:TIP:100:Do not forget to use diagonal movement.
 M:ANY:TIP:100:You can reassign controls in the options.
 M:ANY:TIP:100:You can zoom the main map by Alt+'+' or Alt+'-'.
 M:ANY:TIP:100:You can hide or unhide the right panel by Alt+'i'.
 M:ANY:TIP:100:You can hide or unhide the bottom panel by Alt+'l'.
 M:ANY:TIP:100:Monsters that surround you get a bonus to attack.
-M:ANY:TIP:100:Your character's special traits and curses descriptions can be seen by a Gem of Knowledge, if you are lucky.
-M:ANY:TIP:100:Removal of a curse or jinx via a Gem of Sanctity is roll-based.
+M:ANY:TIP:100:Each use of a Gem of Self Knowledge makes a random 1-in-6 roll (about 16.7%) to reveal one active curse.
+M:ANY:TIP:100:A Gem of Sanctity makes an automatic Will check against difficulty 6 plus the item's curse burden; ties fail. Curse Breaking adds +7 and also permits jinx removal.
+M:ANY:TIP:100:Door and chest percentages are success probabilities for automatic rolls. Choosing an action spends one turn; leaving spends none.
+M:ANY:TIP:100:No hunger label means your state is normal. Hungry is a warning; Weak gives -1 Strength; Starving deals damage and prevents health regeneration.
 M:ANY:TIP:100:Identification benefits from Perception, Smithing, and abilities.
 M:ANY:TIP:100:It is harder to identify cursed items.
 M:ANY:TIP:100:You can turn off these tutorial hints via options.
 M:ANY:TIP:100:Monsters have elemental attacks. There are 2 types. Mixed elemental attacks give a monster an additional damage die. Pure elemental attacks ignore almost all protection.
 M:ANY:TIP:100:Protection that is not ignored by elemental attack is stated in the item's description.
 M:ANY:TIP:100:Weapon weight provides additional damage die sides, up to your Strength, but it decreases your ability to crit.
-M:ANY:TIP:100:You get a critical hit every time the difference between your attack and monster evasion is x = 7 + weight of your weapon. For every x, you get an additional damage die.
+M:ANY:TIP:100:You get a critical hit every time the difference between your attack and monster evasion is x = critical base + weight of your weapon. For every x, you get an additional damage die. Critical base is 7 by default but can be changed by abilities.
 M:ANY:TIP:100:Weapons can be one-handed, two-handed, or one-and-a-half-handed.
 M:ANY:TIP:100:If a one-and-a-half-handed weapon is used without a shield, it gets +2 damage sides.
 M:ANY:TIP:100:Some abilities only work explicitly with one-handed or two-handed weapons.

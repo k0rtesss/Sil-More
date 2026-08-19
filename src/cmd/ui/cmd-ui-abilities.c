@@ -1112,7 +1112,7 @@ static void song_menu_show_overlay(const int songs[], int song_count,
     sdl_song_menu_begin("Songs");
 
     sdl_song_menu_add_entry(line, steamdeck ? "" : "s)", "Stop Singing",
-        TERM_SLATE);
+        TERM_L_WHITE);
     line++;
 
     for (int j = 0; j < song_count; j++)
@@ -1129,7 +1129,7 @@ static void song_menu_show_overlay(const int songs[], int song_count,
     if (p_ptr->song2 != SNG_NOTHING)
     {
         sdl_song_menu_add_entry(line, steamdeck ? "" : "x)",
-            "Exchange themes", TERM_L_BLUE);
+            "Exchange themes", TERM_L_WHITE);
         line++;
     }
 

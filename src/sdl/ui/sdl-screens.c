@@ -7905,86 +7905,6 @@ static void sdl_char_sheet_tooltip_mark_phrase(cptr text, byte* attrs,
     }
 }
 
-static bool sdl_char_sheet_tooltip_value_char(char ch)
-{
-    return isdigit((unsigned char)ch) || ch == '+' || ch == '-'
-        || ch == '.' || ch == ',' || ch == '/' || ch == '%'
-        || ch == 'd' || ch == 'D' || ch == '(' || ch == ')'
-        || ch == '[' || ch == ']';
-}
-
-static void sdl_char_sheet_tooltip_mark_value_before(cptr text, byte* attrs,
-    size_t attrs_len, cptr phrase, byte attr)
-{
-    size_t text_len;
-    size_t phrase_len;
-    const char* search;
-
-    if (!text || !attrs || !phrase || !phrase[0] || attrs_len == 0)
-        return;
-    text_len = MIN(strlen(text), attrs_len);
-    phrase_len = strlen(phrase);
-    search = text;
-
-    while (search && *search)
-    {
-        const char* match = SDL_strcasestr(search, phrase);
-        size_t end;
-        size_t start;
-
-        if (!match)
-            break;
-        end = MIN((size_t)(match - text), text_len);
-        while (end > 0 && isspace((unsigned char)text[end - 1]))
-            end--;
-        start = end;
-        while (start > 0
-            && sdl_char_sheet_tooltip_value_char(text[start - 1]))
-        {
-            start--;
-        }
-        for (size_t i = start; i < end; i++)
-            attrs[i] = attr;
-        search = match + phrase_len;
-    }
-}
-
-static void sdl_char_sheet_tooltip_mark_value_after(cptr text, byte* attrs,
-    size_t attrs_len, cptr phrase, byte attr)
-{
-    size_t text_len;
-    size_t phrase_len;
-    const char* search;
-
-    if (!text || !attrs || !phrase || !phrase[0] || attrs_len == 0)
-        return;
-    text_len = MIN(strlen(text), attrs_len);
-    phrase_len = strlen(phrase);
-    search = text;
-
-    while (search && *search)
-    {
-        const char* match = SDL_strcasestr(search, phrase);
-        size_t start;
-        size_t end;
-
-        if (!match)
-            break;
-        start = MIN((size_t)(match - text) + phrase_len, text_len);
-        while (start < text_len && isspace((unsigned char)text[start]))
-            start++;
-        end = start;
-        while (end < text_len
-            && sdl_char_sheet_tooltip_value_char(text[end]))
-        {
-            end++;
-        }
-        for (size_t i = start; i < end; i++)
-            attrs[i] = attr;
-        search = match + phrase_len;
-    }
-}
-
 static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
     byte* attrs, size_t attrs_len)
 {
@@ -7992,83 +7912,63 @@ static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
         cptr phrase;
         byte attr;
     } rules[] = {
-        { "Click/tap", TERM_L_BLUE },
-        { "right-click", TERM_L_BLUE },
-        { "long tap", TERM_L_BLUE },
-        { "Tap", TERM_L_BLUE },
-        { "selected row", TERM_L_BLUE },
+        /* UI instructions use the same brown label colour as Help. */
+        { "Click/tap", TERM_UMBER },
+        { "right-click", TERM_UMBER },
+        { "long tap", TERM_UMBER },
+        { "Tap", TERM_UMBER },
+        { "selected row", TERM_UMBER },
+
+        /* Green is reserved for an actual benefit or restoration. */
         { "increase", TERM_L_GREEN },
-        { "decrease", TERM_ORANGE },
-        { "Unspent XP", TERM_L_GREEN },
-        { "unspent", TERM_L_GREEN },
-        { "earned", TERM_L_BLUE },
-        { "increasing cost", TERM_YELLOW },
-        { "skills", TERM_L_BLUE },
-        { "abilities", TERM_VIOLET },
-        { "Strength", TERM_L_BLUE },
-        { "costs 1 speed", TERM_ORANGE },
-        { "above 150%", TERM_L_RED },
-        { "cannot move or pick up more", TERM_L_RED },
-        { "Inventory", TERM_L_BLUE },
-        { "supplies", TERM_L_BLUE },
-        { "lamp oil", TERM_YELLOW },
-        { "maximum", TERM_L_GREEN },
-        { "minimum-depth", TERM_YELLOW },
-        { "minimum", TERM_YELLOW },
-        { "current", TERM_L_BLUE },
-        { "progress", TERM_L_BLUE },
-        { "stairs", TERM_L_BLUE },
-        { "force you deeper", TERM_L_RED },
-        { "50-ft rise", TERM_YELLOW },
-        { "extra depth", TERM_ORANGE },
-        { "carried Deep Call items", TERM_ORANGE },
-        { "regeneration", TERM_L_GREEN },
-        { "timed effects", TERM_YELLOW },
-        { "minimum-depth pressure", TERM_ORANGE },
-        { "illuminates nearby tiles", TERM_YELLOW },
         { "helps you see", TERM_L_GREEN },
-        { "monsters notice you", TERM_L_RED },
-        { "attack score", TERM_L_GREEN },
-        { "enemy Evasion", TERM_L_BLUE },
-        { "Evasion", TERM_L_BLUE },
-        { "Damage", TERM_L_RED },
-        { "base weapon damage", TERM_ORANGE },
-        { "base bow damage", TERM_ORANGE },
-        { "base damage", TERM_ORANGE },
-        { "protection", TERM_L_BLUE },
-        { "Criticals", TERM_ORANGE },
-        { "slays", TERM_VIOLET },
-        { "second main-hand attack", TERM_L_GREEN },
-        { "offhand", TERM_L_BLUE },
-        { "Range", TERM_YELLOW },
-        { "physical damage", TERM_L_RED },
-        { "hit lands", TERM_L_RED },
-        { "hit points", TERM_L_BLUE },
-        { "reaching 0 is fatal", TERM_L_RED },
-        { "Constitution", TERM_L_BLUE },
-        { "maximum Health", TERM_L_GREEN },
-        { "resting", TERM_L_GREEN },
-        { "restore", TERM_L_GREEN },
-        { "song points", TERM_L_GREEN },
-        { "Singing", TERM_L_GREEN },
-        { "spends current Voice", TERM_YELLOW },
-        { "does not regenerate", TERM_ORANGE },
-        { "Grace", TERM_L_BLUE },
-        { "maximum Voice", TERM_L_GREEN },
-        { "primary song", TERM_L_GREEN },
-        { "minor theme", TERM_L_BLUE },
-        { "reduced Song skill", TERM_ORANGE },
-        { "Voice cost", TERM_YELLOW },
-        { "synergy pair", TERM_VIOLET },
+        { "regeneration", TERM_L_GREEN },
+        { "restore missing Health", TERM_L_GREEN },
+        { "resting restores", TERM_L_GREEN },
+        { "costs are reduced", TERM_L_GREEN },
+        { "not reduced", TERM_L_GREEN },
+        { "twice as effective", TERM_L_GREEN },
+        { "1.5x effective", TERM_L_GREEN },
+        { "1.75x effective", TERM_L_GREEN },
+        { "stronger", TERM_L_GREEN },
+        { "Known blessing", TERM_L_GREEN },
+        { "Unknown blessing", TERM_L_GREEN },
+        { "blessings", TERM_L_GREEN },
+        { "blessing", TERM_L_GREEN },
         { "affinity", TERM_L_GREEN },
         { "resistance", TERM_L_GREEN },
+
+        /* Orange marks a cost, pressure, or non-fatal drawback. */
+        { "decrease", TERM_ORANGE },
+        { "increasing cost", TERM_ORANGE },
+        { "costs 1 speed", TERM_ORANGE },
+        { "minimum-depth pressure", TERM_ORANGE },
+        { "extra depth", TERM_ORANGE },
+        { "50-ft rise", TERM_ORANGE },
+        { "spends current Voice", TERM_ORANGE },
+        { "spends Voice", TERM_ORANGE },
+        { "does not regenerate", TERM_ORANGE },
+        { "reduced Song skill", TERM_ORANGE },
+        { "Voice cost", TERM_ORANGE },
+
+        /* Red is limited to harm, danger, and curses. */
+        { "above 150%", TERM_L_RED },
+        { "cannot move or pick up more", TERM_L_RED },
+        { "force you deeper", TERM_L_RED },
+        { "monsters notice you", TERM_L_RED },
+        { "damage removes current Health", TERM_L_RED },
+        { "reaching 0 is fatal", TERM_L_RED },
+        { "fatal", TERM_L_RED },
         { "vulnerable", TERM_L_RED },
         { "vulnerability", TERM_L_RED },
         { "penalty", TERM_L_RED },
         { "dangerous", TERM_L_RED },
         { "endanger", TERM_L_RED },
-        { "cursed", TERM_UMBER },
-        { "curse", TERM_UMBER },
+        { "Known curse", TERM_L_RED },
+        { "Unknown curse", TERM_L_RED },
+        { "cursed", TERM_L_RED },
+        { "curses", TERM_L_RED },
+        { "curse", TERM_L_RED },
     };
     size_t text_len;
     const char* colon;
@@ -8077,65 +7977,28 @@ static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
     if (!text || !attrs || attrs_len == 0)
         return;
 
+    (void)subject_attr;
     text_len = MIN(strlen(text), attrs_len);
     SDL_memset(attrs, TERM_WHITE, attrs_len);
-    if (subject_attr == TERM_WHITE || subject_attr == TERM_L_WHITE
-        || subject_attr == TERM_SLATE || subject_attr == TERM_L_DARK)
-    {
-        subject_attr = TERM_L_BLUE;
-    }
 
-    /* Every sheet popup starts with its subject before the first colon.  Keep
-     * that label in the row's own semantic colour (skill family, trait state,
-     * or vital state) rather than tinting the entire explanation. */
+    /* The subject is always a named sheet field, so it always uses the one
+     * documented game-term colour.  Row colours still communicate state on
+     * the sheet itself; carrying them into prose caused rainbow tooltips. */
     colon = strchr(text, ':');
     if (colon && (size_t)(colon - text) < text_len)
     {
         size_t end = (size_t)(colon - text) + 1;
 
         for (size_t i = 0; i < end; i++)
-            attrs[i] = subject_attr;
+            attrs[i] = TERM_L_BLUE;
     }
 
     for (int i = 0; i < (int)N_ELEMENTS(rules); i++)
         sdl_char_sheet_tooltip_mark_phrase(text, attrs, text_len,
             rules[i].phrase, rules[i].attr);
 
-    /* Tie the displayed vital amounts to the concepts that explain them. */
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "unspent", TERM_L_GREEN);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "earned", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "lb carried", subject_attr);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "ft current", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "ft minimum", TERM_YELLOW);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "per turn", TERM_ORANGE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "base", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "from extra depth", TERM_ORANGE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "toward", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "player turns", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "The first value", TERM_YELLOW);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "hit points", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "song points", TERM_L_GREEN);
-    sdl_char_sheet_tooltip_mark_value_after(text, attrs, text_len,
-        "radius", TERM_YELLOW);
-    sdl_char_sheet_tooltip_mark_value_after(text, attrs, text_len,
-        "Progress is", TERM_L_BLUE);
-
-    /* Keep the price label distinct from action words, and reserve yellow for
-     * the actual amount.  This avoids turning most of an allocation tooltip
-     * green while still making the decision-critical number easy to scan. */
+    /* Allocation cost is the one numeric value with decision semantics: its
+     * label is UI brown and the amount uses the orange cost colour. */
     cost = SDL_strcasestr(text, "Cost to raise now:");
     if (cost)
     {
@@ -8144,7 +8007,7 @@ static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
         size_t end;
 
         for (size_t i = start; i < value && i < text_len; i++)
-            attrs[i] = TERM_L_BLUE;
+            attrs[i] = TERM_UMBER;
         while (value < text_len && isspace((unsigned char)text[value]))
             value++;
         end = value;
@@ -8154,7 +8017,7 @@ static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
             end++;
         }
         for (size_t i = value; i < end; i++)
-            attrs[i] = TERM_YELLOW;
+            attrs[i] = TERM_ORANGE;
     }
 }
 

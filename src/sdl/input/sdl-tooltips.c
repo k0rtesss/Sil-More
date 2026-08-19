@@ -327,9 +327,9 @@ typedef struct sdl_tooltip_semantic_rule {
 } sdl_tooltip_semantic_rule;
 
 /* Text-only hover/long-press popups do not carry the per-byte attributes used
- * by map tooltips.  Add restrained semantic accents at render time: controls
- * are green, their UI targets blue, warnings red/orange, and trait meanings
- * retain the same colours used by the character tutorials. */
+ * by map tooltips.  Apply the same restrained contract as Help and sheets:
+ * named UI/game targets blue, controls brown, benefits green, and
+ * costs/danger orange or red. */
 static const sdl_tooltip_semantic_rule sdl_tooltip_semantic_rules[] = {
     { "second-quiver ranged attack mode", TERM_L_BLUE },
     { "ranged attack mode", TERM_L_BLUE },
@@ -337,11 +337,11 @@ static const sdl_tooltip_semantic_rule sdl_tooltip_semantic_rules[] = {
     { "supplies for lights", TERM_L_BLUE },
     { "character details", TERM_L_BLUE },
     { "compact panel", TERM_L_BLUE },
-    { "power rating", TERM_ORANGE },
+    { "power rating", TERM_L_BLUE },
     { "song menu", TERM_L_BLUE },
-    { "right-click", TERM_L_GREEN },
-    { "left-click", TERM_L_GREEN },
-    { "long-press", TERM_L_GREEN },
+    { "right-click", TERM_UMBER },
+    { "left-click", TERM_UMBER },
+    { "long-press", TERM_UMBER },
     { "inventory", TERM_L_BLUE },
     { "abilities", TERM_L_BLUE },
     { "smithing", TERM_L_BLUE },
@@ -352,13 +352,13 @@ static const sdl_tooltip_semantic_rule sdl_tooltip_semantic_rules[] = {
     { "vulnerable", TERM_L_RED },
     { "vulnerability", TERM_L_RED },
     { "penalty", TERM_L_RED },
-    { "cursed", TERM_UMBER },
-    { "curse", TERM_UMBER },
-    { "unique", TERM_VIOLET },
-    { "click", TERM_L_GREEN },
-    { "tap", TERM_L_GREEN },
-    { "hold", TERM_L_GREEN },
-    { "select", TERM_L_GREEN },
+    { "cursed", TERM_L_RED },
+    { "curse", TERM_L_RED },
+    { "unique", TERM_L_BLUE },
+    { "click", TERM_UMBER },
+    { "tap", TERM_UMBER },
+    { "hold", TERM_UMBER },
+    { "select", TERM_UMBER },
 };
 
 static bool sdl_tooltip_semantic_word_char(char ch)

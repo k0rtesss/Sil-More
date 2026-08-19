@@ -986,8 +986,8 @@ void sdl_log_pane_menu_render(void)
     SDL_FRect panel;
     SDL_FRect shadow;
     SDL_FRect header;
-    SDL_Color border = g_state.palette[TERM_L_BLUE];
-    SDL_Color hover_border = g_state.palette[TERM_YELLOW];
+    SDL_Color border = g_state.palette[TERM_BLUE];
+    SDL_Color hover_border = g_state.palette[TERM_L_BLUE];
     SDL_Color text = g_state.palette[TERM_WHITE];
     float pad;
     int font_px;
@@ -1546,8 +1546,8 @@ void sdl_side_pane_menu_render(void)
     SDL_FRect panel;
     SDL_FRect shadow;
     SDL_FRect header;
-    SDL_Color border = g_state.palette[TERM_L_BLUE];
-    SDL_Color hover_border = g_state.palette[TERM_YELLOW];
+    SDL_Color border = g_state.palette[TERM_BLUE];
+    SDL_Color hover_border = g_state.palette[TERM_L_BLUE];
     SDL_Color text = g_state.palette[TERM_WHITE];
     SDL_Color muted = g_state.palette[TERM_SLATE];
     float pad;

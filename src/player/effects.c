@@ -1624,14 +1624,14 @@ bool set_food(int v)
         /* Starving */
         case 0:
         {
-            msg_print("You are beginning to starve!");
+            msg_print("You are beginning to starve! You lose 1 health each world update and cannot regenerate health.");
             break;
         }
 
         /* Weak */
         case 1:
         {
-            msg_print("You are getting weak from hunger!");
+            msg_print("You are getting weak from hunger (-1 Strength).");
             break;
         }
 

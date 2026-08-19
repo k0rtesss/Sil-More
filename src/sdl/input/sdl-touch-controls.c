@@ -5799,7 +5799,8 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         return;
     case KTRL('A'):
         SDL_strlcpy(buf,
-            "Staff: choose and activate a staff from your Harness.", buflen);
+            "Legacy staff shortcut: choose and activate a staff from your Harness.",
+            buflen);
         return;
     case '0':
         SDL_strlcpy(buf, "Smithing: open the forge crafting screen.", buflen);

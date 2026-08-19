@@ -2384,9 +2384,9 @@ void sdl_player_action_menu_render(void)
     int count = 0;
     SDL_Rect clip;
     SDL_Color bg = { 22, 24, 26, 236 };
-    SDL_Color hover_bg = { 88, 82, 58, 248 };
+    SDL_Color hover_bg = { 36, 47, 62, 248 };
     SDL_Color border = { 188, 202, 210, 215 };
-    SDL_Color hover_border = g_state.palette[TERM_YELLOW];
+    SDL_Color hover_border = g_state.palette[TERM_L_BLUE];
     bool has_hover = false;
     bool hover_is_secondary = false;
     int hover_owner;
