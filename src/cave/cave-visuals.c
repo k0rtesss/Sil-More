@@ -699,6 +699,17 @@ static bool monster_can_see_player_for_stealth_vision(monster_type* m_ptr)
     return true;
 }
 
+/* Rewarded quest thralls no longer need the alert icon over their tile. */
+static bool monster_alert_icon_visible(const monster_type* m_ptr)
+{
+    bool rewarded_thrall =
+        (m_ptr->r_idx == R_IDX_ALERT_HUMAN_THRALL
+            || m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
+        && m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARDED;
+
+    return m_ptr->alertness >= ALERTNESS_ALERT && !rewarded_thrall;
+}
+
 void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
 {
     byte a = TERM_DARK; // these are defaults to soothe compilation warnings
@@ -867,7 +878,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                                     if (rage_active && graphics_are_ascii()) a = TERM_RED;
                                     if (!monster_race_is_vala(m_ptr->r_idx)
                                         && !graphics_are_ascii()
-                                        && m_ptr->alertness >= ALERTNESS_ALERT) c += GRAPHICS_ALERT_MASK;
+                                        && monster_alert_icon_visible(m_ptr)) c += GRAPHICS_ALERT_MASK;
                                 }
                             }
                             
@@ -913,7 +924,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                                     if (rage_active && graphics_are_ascii()) a = TERM_RED;
                                     if (!monster_race_is_vala(m_ptr->r_idx)
                                         && !graphics_are_ascii()
-                                        && m_ptr->alertness >= ALERTNESS_ALERT) c += GRAPHICS_ALERT_MASK;
+                                        && monster_alert_icon_visible(m_ptr)) c += GRAPHICS_ALERT_MASK;
                                 }
                             }
                             
@@ -1137,7 +1148,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                 a += (MAX_COLORS * BG_DARK);
             }
             else if (!is_vala && !graphics_are_ascii()
-                && m_ptr->alertness >= ALERTNESS_ALERT)
+                && monster_alert_icon_visible(m_ptr))
             {
                 c += GRAPHICS_ALERT_MASK;
             }

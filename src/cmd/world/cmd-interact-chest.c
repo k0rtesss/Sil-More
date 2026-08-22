@@ -4608,8 +4608,16 @@ static bool chest_was_inspected(const object_type* o_ptr)
 
 bool chest_trap_fully_known(const object_type* o_ptr)
 {
-    return o_ptr && (object_known_p(o_ptr)
-        || ((o_ptr->ident & IDENT_CHEST_TRAP_FULL) != 0));
+    if (!o_ptr)
+        return false;
+
+    if (o_ptr->ident & IDENT_CHEST_TRAP_FULL)
+        return true;
+
+    /* In the minigame, generic item identification must not reveal a
+     * concealed trap.  Only a successful chest inspection grants exact trap
+     * knowledge.  Legacy mode continues to use the old object-known state. */
+    return !chest_trap_minigame && object_known_p(o_ptr);
 }
 
 bool chest_trap_presence_known(const object_type* o_ptr)
