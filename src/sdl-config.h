@@ -325,6 +325,7 @@ struct sdl_config {
     bool touch_menu_command_enabled[SDL_TOUCH_MENU_CATEGORY_COUNT];
     int touch_movement_mode;
     bool touch_round_movement_enabled;
+    bool touch_round_portrait_centered;
     int touch_zone_overlay_mode;
     int touch_zone_center_bindings[SDL_TOUCH_ZONE_CENTER_BINDING_COUNT];
     int touch_corner_up_down_side;

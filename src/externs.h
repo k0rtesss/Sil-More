@@ -2496,6 +2496,8 @@ extern void sdl_hint_quest_menu_begin(hint_quest_page page, cptr title,
     cptr section, bool show_tabs, bool center_body, int selected_choice);
 extern void sdl_hint_quest_menu_add_block(cptr text, byte attr, int indent,
     int choice);
+extern void sdl_hint_quest_menu_add_contextual_block(cptr text, byte attr,
+    int indent, int choice);
 extern void sdl_hint_quest_menu_add_button(int choice, cptr label, byte attr);
 extern void sdl_hint_quest_menu_finish(void);
 extern void sdl_hint_quest_menu_prepare_page_turn(
@@ -2741,6 +2743,9 @@ extern int get_sdl_touch_movement_default_mode(void);
 extern bool get_sdl_touch_round_movement_enabled(void);
 extern void set_sdl_touch_round_movement_enabled(bool value);
 extern bool get_sdl_touch_round_movement_default_enabled(void);
+extern bool get_sdl_touch_round_portrait_centered(void);
+extern void set_sdl_touch_round_portrait_centered(bool value);
+extern bool get_sdl_touch_round_portrait_centered_default(void);
 extern int get_sdl_touch_zone_overlay_mode(void);
 extern void set_sdl_touch_zone_overlay_mode(int mode);
 extern int get_sdl_touch_zone_overlay_default_mode(void);

@@ -5232,7 +5232,7 @@ int sdl_main_view_terminal_cols_for_map_squares(int map_cols)
     if (map_cols < 1)
         map_cols = 1;
 
-    return COL_MAP + 1 + map_cols * tile_cols;
+    return COL_MAP + map_cols * tile_cols;
 }
 
 int sdl_main_view_terminal_rows_for_map_squares(int map_rows)
@@ -5246,7 +5246,7 @@ int sdl_main_view_terminal_rows_for_map_squares(int map_rows)
 int sdl_main_view_map_cols_for_terminal_cols(int cols)
 {
     int tile_cols = use_bigtile ? 2 : 1;
-    int map_cols = (cols - COL_MAP - 1) / tile_cols;
+    int map_cols = (cols - COL_MAP) / tile_cols;
 
     return (map_cols > 0) ? map_cols : 0;
 }

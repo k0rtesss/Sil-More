@@ -11,6 +11,7 @@ enum {
     SDL_HINT_QUEST_MAX_BLOCKS = 384,
     SDL_HINT_QUEST_MAX_BUTTONS = 5,
     SDL_HINT_QUEST_MAX_HITS = 512,
+    SDL_HINT_QUEST_MAX_TEXT_RUNS = 256,
     SDL_HINT_QUEST_TEXT_LEN = 768,
     SDL_HINT_QUEST_LABEL_LEN = 48,
     SDL_HINT_QUEST_PAGE_TURN_MS = 850
@@ -21,7 +22,16 @@ typedef struct sdl_hint_quest_block {
     byte attr;
     int indent;
     int choice;
+    bool contextual;
 } sdl_hint_quest_block;
+
+typedef struct sdl_hint_quest_text_run {
+    int start;
+    int len;
+    int line;
+    float x;
+    byte attr;
+} sdl_hint_quest_text_run;
 
 typedef struct sdl_hint_quest_button {
     char label[SDL_HINT_QUEST_LABEL_LEN];
@@ -176,6 +186,392 @@ static void sdl_hint_quest_draw_text(TTF_Font* font, cptr text,
         dst.x += (rect->w - dst.w) * 0.5f;
 
     SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+}
+
+typedef struct sdl_hint_quest_context_rule {
+    cptr phrase;
+    byte attr;
+} sdl_hint_quest_context_rule;
+
+/* Match Help's colour contract without tinting whole paragraphs: blue names
+ * game terms, green marks benefits/successes, orange marks warnings/costs, red
+ * marks harm/danger, and brown names UI controls.  Longer phrases win. */
+static const sdl_hint_quest_context_rule sdl_hint_quest_context_rules[] = {
+    { "one-and-a-half-handed", TERM_L_BLUE },
+    { "mixed elemental attacks", TERM_ORANGE },
+    { "pure elemental attacks", TERM_L_RED },
+    { "elemental vulnerabilities", TERM_L_RED },
+    { "elemental vulnerability", TERM_L_RED },
+    { "elemental resistances", TERM_L_GREEN },
+    { "elemental resistance", TERM_L_GREEN },
+    { "Gem of Self Knowledge", TERM_L_BLUE },
+    { "Gem of Sanctity", TERM_L_BLUE },
+    { "potion of healing", TERM_L_BLUE },
+    { "potion of clarity", TERM_L_BLUE },
+    { "herb of sustenance", TERM_L_BLUE },
+    { "herb of restoration", TERM_L_BLUE },
+    { "herb of healing", TERM_L_BLUE },
+    { "a full wooden torch", TERM_L_BLUE },
+    { "a piece of dark bread", TERM_L_BLUE },
+    { "a strip of dried meat", TERM_L_BLUE },
+    { "a fragment of lembas", TERM_L_BLUE },
+    { "a brass lantern", TERM_L_BLUE },
+    { "a mallorn torch", TERM_L_BLUE },
+    { "a pair of boots", TERM_L_BLUE },
+    { "a flask of oil", TERM_L_BLUE },
+    { "a wooden torch", TERM_L_BLUE },
+    { "a shovel", TERM_L_BLUE },
+    { "a dagger", TERM_L_BLUE },
+    { "a cloak", TERM_L_BLUE },
+    { "You carry the requested item", TERM_L_GREEN },
+    { "success probabilities", TERM_L_GREEN },
+    { "health regeneration", TERM_L_GREEN },
+    { "bright star rating", TERM_L_GREEN },
+    { "invisible enemies", TERM_L_RED },
+    { "throwing weapons", TERM_L_BLUE },
+    { "diagonal movement", TERM_L_BLUE },
+    { "critical base", TERM_L_BLUE },
+    { "critical hit", TERM_L_BLUE },
+    { "weapon weight", TERM_L_BLUE },
+    { "damage dice", TERM_L_BLUE },
+    { "damage die", TERM_L_BLUE },
+    { "damage sides", TERM_L_BLUE },
+    { "light radius", TERM_L_BLUE },
+    { "light reserves", TERM_L_BLUE },
+    { "line of sight", TERM_L_BLUE },
+    { "stealth mode", TERM_L_BLUE },
+    { "song points", TERM_L_BLUE },
+    { "automatic rolls", TERM_L_BLUE },
+    { "automatic Will check", TERM_L_BLUE },
+    { "your Will", TERM_L_BLUE },
+    { "right panel", TERM_UMBER },
+    { "bottom panel", TERM_UMBER },
+    { "dungeon level", TERM_L_BLUE },
+    { "human thrall", TERM_L_BLUE },
+    { "elven thrall", TERM_L_BLUE },
+    { "requested item", TERM_L_BLUE },
+    { "one-handed", TERM_L_BLUE },
+    { "two-handed", TERM_L_BLUE },
+    { "Pure elemental", TERM_L_RED },
+    { "Mixed elemental", TERM_ORANGE },
+    { "vulnerabilities", TERM_L_RED },
+    { "vulnerability", TERM_L_RED },
+    { "vulnerable", TERM_L_RED },
+    { "resistances", TERM_L_GREEN },
+    { "resistance", TERM_L_GREEN },
+    { "regeneration", TERM_L_GREEN },
+    { "reward", TERM_L_GREEN },
+    { "aid", TERM_L_GREEN },
+    { "benefits", TERM_L_GREEN },
+    { "bonus", TERM_L_GREEN },
+    { "Starving", TERM_L_RED },
+    { "killed", TERM_L_RED },
+    { "cursed", TERM_L_RED },
+    { "curse", TERM_L_RED },
+    { "jinx", TERM_L_RED },
+    { "trapped", TERM_L_RED },
+    { "enemies", TERM_L_RED },
+    { "warning", TERM_ORANGE },
+    { "Hungry", TERM_ORANGE },
+    { "Weak", TERM_ORANGE },
+    { "cost", TERM_ORANGE },
+    { "locked", TERM_ORANGE },
+    { "monsters", TERM_ORANGE },
+    { "monster", TERM_ORANGE },
+    { "elemental", TERM_L_BLUE },
+    { "identification", TERM_L_BLUE },
+    { "identify", TERM_L_BLUE },
+    { "alignment", TERM_L_BLUE },
+    { "abilities", TERM_L_BLUE },
+    { "ability", TERM_L_BLUE },
+    { "Supplies", TERM_L_BLUE },
+    { "Pack", TERM_L_BLUE },
+    { "Harness", TERM_L_BLUE },
+    { "Quiver", TERM_L_BLUE },
+    { "inventory", TERM_L_BLUE },
+    { "weight", TERM_L_BLUE },
+    { "stairs", TERM_L_BLUE },
+    { "thrall", TERM_L_BLUE },
+    { "Protection", TERM_L_BLUE },
+    { "Evasion", TERM_L_BLUE },
+    { "Attack", TERM_L_BLUE },
+    { "Damage", TERM_L_BLUE },
+    { "Stealth", TERM_L_BLUE },
+    { "Perception", TERM_L_BLUE },
+    { "Constitution", TERM_L_BLUE },
+    { "Dexterity", TERM_L_BLUE },
+    { "Grace", TERM_L_BLUE },
+    { "Strength", TERM_L_BLUE },
+    { "Smithing", TERM_L_BLUE },
+    { "Song", TERM_L_BLUE },
+    { "Archery", TERM_L_BLUE },
+    { "HP", TERM_L_BLUE },
+    { "XP", TERM_L_BLUE },
+    { "light", TERM_YELLOW },
+    { "fire", TERM_L_RED },
+    { "ice", TERM_BLUE },
+    { "cold", TERM_BLUE },
+    { "poison", TERM_L_GREEN },
+    { "Location", TERM_UMBER },
+    { "controls", TERM_UMBER },
+    { "options", TERM_UMBER },
+    { "Look", TERM_UMBER },
+    { "Map", TERM_UMBER },
+};
+
+static bool sdl_hint_quest_context_word_char(char ch)
+{
+    return isalnum((unsigned char)ch) || ch == '_' || ch == '-';
+}
+
+static void sdl_hint_quest_context_attrs(cptr text, byte base_attr,
+    byte attrs[], size_t attrs_len)
+{
+    size_t text_len;
+
+    if (!text || !attrs || attrs_len == 0)
+        return;
+    text_len = MIN(strlen(text), attrs_len);
+    SDL_memset(attrs, base_attr, attrs_len);
+
+    for (size_t pos = 0; pos < text_len; )
+    {
+        size_t best_len = 0;
+        byte best_attr = base_attr;
+
+        for (int i = 0;
+             i < (int)N_ELEMENTS(sdl_hint_quest_context_rules); ++i)
+        {
+            const sdl_hint_quest_context_rule* rule
+                = &sdl_hint_quest_context_rules[i];
+            size_t len = strlen(rule->phrase);
+
+            if (len <= best_len || pos + len > text_len)
+                continue;
+            if (pos > 0
+                && sdl_hint_quest_context_word_char(text[pos - 1]))
+            {
+                continue;
+            }
+            if (SDL_strncasecmp(text + pos, rule->phrase, len) != 0)
+                continue;
+            if (pos + len < text_len
+                && sdl_hint_quest_context_word_char(text[pos + len]))
+            {
+                continue;
+            }
+
+            best_len = len;
+            best_attr = rule->attr;
+        }
+
+        if (best_len > 0)
+        {
+            for (size_t i = pos; i < pos + best_len; ++i)
+                attrs[i] = best_attr;
+            pos += best_len;
+        }
+        else
+        {
+            ++pos;
+        }
+    }
+}
+
+static float sdl_hint_quest_measure_text(TTF_Font* font, cptr text, int len)
+{
+    int width = 0;
+
+    if (!font || !text || len <= 0)
+        return 0.0f;
+    len = utf8_safe_prefix_len(text, len);
+    if (len <= 0)
+        return 0.0f;
+    TTF_MeasureString(font, text, (size_t)len, 0, &width, NULL);
+    return (float)width;
+}
+
+static int sdl_hint_quest_layout_text_runs(TTF_Font* font, cptr text,
+    const byte attrs[], float max_w, sdl_hint_quest_text_run runs[],
+    int max_runs, int* out_lines)
+{
+    int run_count = 0;
+    int line = 0;
+    float line_w = 0.0f;
+    int len = (int)strlen(text);
+    int pos = 0;
+
+    while (pos < len && run_count < max_runs)
+    {
+        bool is_space;
+        int token_start;
+        int token_len;
+        float token_w;
+
+        if (text[pos] == '\n')
+        {
+            line++;
+            line_w = 0.0f;
+            pos++;
+            continue;
+        }
+
+        is_space = (text[pos] == ' ' || text[pos] == '\t');
+        token_start = pos;
+        while (pos < len && text[pos] != '\n'
+            && ((text[pos] == ' ' || text[pos] == '\t') == is_space))
+        {
+            pos++;
+        }
+        token_len = pos - token_start;
+
+        if (is_space && line_w <= 0.0f)
+            continue;
+        token_w = sdl_hint_quest_measure_text(font, text + token_start,
+            token_len);
+        if (!is_space && line_w > 0.0f && line_w + token_w > max_w)
+        {
+            line++;
+            line_w = 0.0f;
+        }
+
+        /* Preserve the native wrapped-text behaviour on very narrow portrait
+         * layouts, where a term such as "one-and-a-half-handed" can be wider
+         * than the whole reading column. */
+        if (!is_space && token_w > max_w)
+        {
+            int offset = 0;
+
+            while (offset < token_len && run_count < max_runs)
+            {
+                size_t fit_len = 0;
+                int fit_w = 0;
+                int chunk_end;
+
+                if (!TTF_MeasureString(font,
+                        text + token_start + offset,
+                        (size_t)(token_len - offset), (int)max_w,
+                        &fit_w, &fit_len)
+                    || fit_len < 1)
+                {
+                    fit_len = (size_t)(token_len - offset);
+                }
+                chunk_end = token_start + offset + (int)fit_len;
+                for (int sub = token_start + offset;
+                     sub < chunk_end && run_count < max_runs; )
+                {
+                    byte attr = attrs[sub];
+                    int sub_end = sub + 1;
+                    float sub_w;
+
+                    while (sub_end < chunk_end && attrs[sub_end] == attr)
+                        sub_end++;
+                    sub_w = sdl_hint_quest_measure_text(font, text + sub,
+                        sub_end - sub);
+                    runs[run_count++] = (sdl_hint_quest_text_run){
+                        .start = sub,
+                        .len = sub_end - sub,
+                        .line = line,
+                        .x = line_w,
+                        .attr = attr,
+                    };
+                    line_w += sub_w;
+                    sub = sub_end;
+                }
+                offset += (int)fit_len;
+                if (offset < token_len)
+                {
+                    line++;
+                    line_w = 0.0f;
+                }
+            }
+            continue;
+        }
+
+        for (int sub = token_start;
+             sub < token_start + token_len && run_count < max_runs; )
+        {
+            byte attr = attrs[sub];
+            int sub_end = sub + 1;
+            float sub_w;
+
+            while (sub_end < token_start + token_len
+                && attrs[sub_end] == attr)
+            {
+                sub_end++;
+            }
+            sub_w = sdl_hint_quest_measure_text(font, text + sub,
+                sub_end - sub);
+            if (run_count > 0
+                && runs[run_count - 1].line == line
+                && runs[run_count - 1].attr == attr
+                && runs[run_count - 1].start + runs[run_count - 1].len
+                    == sub)
+            {
+                runs[run_count - 1].len += sub_end - sub;
+            }
+            else
+            {
+                runs[run_count++] = (sdl_hint_quest_text_run){
+                    .start = sub,
+                    .len = sub_end - sub,
+                    .line = line,
+                    .x = line_w,
+                    .attr = attr,
+                };
+            }
+            line_w += sub_w;
+            sub = sub_end;
+        }
+    }
+
+    if (out_lines)
+        *out_lines = text[0] ? line + 1 : 0;
+    return run_count;
+}
+
+static void sdl_hint_quest_draw_contextual_text(TTF_Font* font,
+    const sdl_hint_quest_block* block, const SDL_FRect* rect)
+{
+    byte attrs[SDL_HINT_QUEST_TEXT_LEN];
+    sdl_hint_quest_text_run runs[SDL_HINT_QUEST_MAX_TEXT_RUNS];
+    int run_count;
+    int line_h;
+
+    if (!font || !block || !block->text[0] || !rect || rect->w <= 0.0f)
+        return;
+    sdl_hint_quest_context_attrs(block->text, block->attr, attrs,
+        sizeof(attrs));
+    run_count = sdl_hint_quest_layout_text_runs(font, block->text, attrs,
+        rect->w, runs, N_ELEMENTS(runs), NULL);
+    line_h = TTF_GetFontHeight(font);
+    if (line_h < 1)
+        line_h = 1;
+
+    for (int i = 0; i < run_count; ++i)
+    {
+        const sdl_hint_quest_text_run* run = &runs[i];
+        char run_text[SDL_HINT_QUEST_TEXT_LEN];
+        SDL_Texture* texture;
+        SDL_FRect dst;
+        int copy_len = MIN(run->len, (int)sizeof(run_text) - 1);
+        int run_w = 0;
+        int run_h = 0;
+
+        SDL_memcpy(run_text, block->text + run->start, (size_t)copy_len);
+        run_text[copy_len] = '\0';
+        texture = sdl_ui_text_texture(font, run_text,
+            sdl_color_from_attr(run->attr), &run_w, &run_h);
+        if (!texture)
+            continue;
+        dst = (SDL_FRect){
+            .x = rect->x + run->x,
+            .y = rect->y + (float)(run->line * line_h),
+            .w = (float)run_w,
+            .h = (float)run_h,
+        };
+        SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    }
 }
 
 static int sdl_hint_quest_body_px(const SDL_Rect* screen)
@@ -856,8 +1252,15 @@ void sdl_hint_quest_menu_render(void)
                     || block->choice == g_hint_quest.hover_choice);
             byte attr = focused ? TERM_DARK : block->attr;
 
-            sdl_hint_quest_draw_text(body_font, block->text,
-                sdl_color_from_attr(attr), &rect, false, true);
+            if (block->contextual && !focused)
+            {
+                sdl_hint_quest_draw_contextual_text(body_font, block, &rect);
+            }
+            else
+            {
+                sdl_hint_quest_draw_text(body_font, block->text,
+                    sdl_color_from_attr(attr), &rect, false, true);
+            }
         }
     }
     SDL_SetRenderClipRect(g_state.renderer, NULL);
@@ -917,8 +1320,8 @@ void sdl_hint_quest_menu_begin(hint_quest_page page, cptr title,
     sdl_hint_quest_mark_dirty();
 }
 
-void sdl_hint_quest_menu_add_block(cptr text, byte attr, int indent,
-    int choice)
+static void sdl_hint_quest_menu_add_block_internal(cptr text, byte attr,
+    int indent, int choice, bool contextual)
 {
     sdl_hint_quest_block* block;
 
@@ -933,6 +1336,19 @@ void sdl_hint_quest_menu_add_block(cptr text, byte attr, int indent,
     block->attr = attr;
     block->indent = MAX(0, indent);
     block->choice = choice;
+    block->contextual = contextual;
+}
+
+void sdl_hint_quest_menu_add_block(cptr text, byte attr, int indent,
+    int choice)
+{
+    sdl_hint_quest_menu_add_block_internal(text, attr, indent, choice, false);
+}
+
+void sdl_hint_quest_menu_add_contextual_block(cptr text, byte attr, int indent,
+    int choice)
+{
+    sdl_hint_quest_menu_add_block_internal(text, attr, indent, choice, true);
 }
 
 void sdl_hint_quest_menu_add_button(int choice, cptr label, byte attr)

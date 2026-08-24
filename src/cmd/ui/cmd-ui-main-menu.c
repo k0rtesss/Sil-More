@@ -1916,7 +1916,7 @@ static hint_message_action skeleton_tip_show(int index)
         ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
         sdl_hint_quest_menu_begin(HINT_QUEST_PAGE_HINTS, "Hints & Quests",
             "Survival Tip", true, true, 0);
-        sdl_hint_quest_menu_add_block(tip_text, TERM_WHITE, 0, 0);
+        sdl_hint_quest_menu_add_contextual_block(tip_text, TERM_WHITE, 0, 0);
         sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_CONTINUE,
             "Continue", TERM_L_WHITE);
         sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
@@ -1966,6 +1966,7 @@ static hint_message_action hint_message_show_internal(int index, int* source_y, 
     hint_message_meta meta;
     byte stored_line_count;
     hint_message_action action = HINT_MESSAGE_ACTION_NONE;
+    bool tutorial;
     bool steamdeck = steamdeck_controls_active();
 
     hint_messages_ensure_level_state();
@@ -1975,6 +1976,8 @@ static hint_message_action hint_message_show_internal(int index, int* source_y, 
 
     hint_messages_message_meta(index, &meta);
     hint_message_body_text(index, body_text, sizeof(body_text));
+    tutorial = SDL_strcasestr(hint_message_title(index), "Survival Tip")
+        || SDL_strcasestr(hint_message_title(index), "Tutorial");
     if (standalone)
         screen_save();
 
@@ -1987,7 +1990,15 @@ static hint_message_action hint_message_show_internal(int index, int* source_y, 
             "Hint Message", true, true, 0);
         sdl_hint_quest_menu_add_block(
             hint_message_title(index), TERM_L_WHITE, 0, 0);
-        sdl_hint_quest_menu_add_block(body_text, TERM_WHITE, 0, 0);
+        if (tutorial)
+        {
+            sdl_hint_quest_menu_add_contextual_block(body_text, TERM_WHITE,
+                0, 0);
+        }
+        else
+        {
+            sdl_hint_quest_menu_add_block(body_text, TERM_WHITE, 0, 0);
+        }
         sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_CONTINUE,
             "Continue", TERM_L_WHITE);
         if (hint_message_has_source(&meta))
@@ -2258,8 +2269,16 @@ static hint_quest_page do_cmd_hint_messages(bool* out_pending_look,
             }
             else
                 hint_message_pixel_list_text(idx, entry, sizeof(entry));
-            sdl_hint_quest_menu_add_block(entry, TERM_WHITE, 0,
-                HINT_MESSAGE_CLICK_ENTRY_BASE + idx);
+            if (show_all_tips)
+            {
+                sdl_hint_quest_menu_add_contextual_block(entry, TERM_WHITE, 0,
+                    HINT_MESSAGE_CLICK_ENTRY_BASE + idx);
+            }
+            else
+            {
+                sdl_hint_quest_menu_add_block(entry, TERM_WHITE, 0,
+                    HINT_MESSAGE_CLICK_ENTRY_BASE + idx);
+            }
         }
 
         if (tip_n > 0)
@@ -2657,8 +2676,8 @@ static hint_message_action thrall_quest_show_internal(int m_idx,
         ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
         sdl_hint_quest_menu_begin(HINT_QUEST_PAGE_THRALLS, "Hints & Quests",
             title, true, true, 0);
-        sdl_hint_quest_menu_add_block(goal, TERM_WHITE, 0, 0);
-        sdl_hint_quest_menu_add_block(
+        sdl_hint_quest_menu_add_contextual_block(goal, TERM_WHITE, 0, 0);
+        sdl_hint_quest_menu_add_contextual_block(
             "Location: on this dungeon level. Use Look or Map to find the thrall.",
             TERM_SLATE, 0, 0);
         sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_CONTINUE,
@@ -2798,7 +2817,7 @@ static hint_quest_page do_cmd_thrall_quests(bool* out_pending_look,
             thrall_quest_format_goal(&mon_list[entries[idx]], goal,
                 sizeof(goal), false);
             strnfmt(entry, sizeof(entry), "%d. %s", idx + 1, goal);
-            sdl_hint_quest_menu_add_block(entry, TERM_WHITE, 0,
+            sdl_hint_quest_menu_add_contextual_block(entry, TERM_WHITE, 0,
                 HINT_MESSAGE_CLICK_ENTRY_BASE + idx);
         }
         if (count > 0)

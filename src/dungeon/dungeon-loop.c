@@ -13,6 +13,7 @@ void dungeon(void)
 {
     monster_type* m_ptr;
     int i;
+    int previous_depth = last_music_depth;
 
     log_debug("Entering dungeon level %d", p_ptr->depth);
 
@@ -224,6 +225,16 @@ void dungeon(void)
     /* Refresh */
     log_debug("Final terminal refresh");
     Term_fresh();
+
+    /* Confirm downward progress after the new level is visible.  Comparing
+     * against the previous displayed level avoids replaying this on restore or
+     * when a blocked descent leaves the player at the same depth. */
+    if (!p_ptr->restoring && (previous_depth >= 0)
+        && (p_ptr->depth > previous_depth))
+    {
+        msg_format("You have descended deeper into the dungeon, to %d ft.",
+            p_ptr->depth * 50);
+    }
 
     /*
      * Show partition entry messages/XP after the initial draw so they can't be

@@ -142,7 +142,17 @@
 /*
  * Number of grids in each screen (horizontally)
  */
+#ifdef USE_SDL
+/* SDL has no terminal-owned right-edge status column.  In big-tile mode an
+ * odd final terminal column can show the visible half of one more map tile;
+ * SDL clips the other half at the canvas edge.  Rounding down here leaves that
+ * whole final column black. */
+#define SCREEN_WID \
+    ((Term->wid - COL_MAP + (use_bigtile ? 1 : 0)) \
+        / (use_bigtile ? 2 : 1))
+#else
 #define SCREEN_WID ((Term->wid - COL_MAP - 1) / (use_bigtile ? 2 : 1))
+#endif
 
 /*
  * Maximum level size in blocks (each block is PANEL_HGT x PANEL_WID_FIXED)

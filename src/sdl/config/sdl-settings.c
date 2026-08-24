@@ -1559,6 +1559,8 @@ void sdl_touch_pane_load_default_bindings(void)
     g_default_touch_movement_mode = defaults.touch_movement_mode;
     g_default_touch_round_movement_enabled =
         defaults.touch_round_movement_enabled;
+    g_default_touch_round_portrait_centered =
+        defaults.touch_round_portrait_centered;
     g_default_touch_zone_overlay_mode = defaults.touch_zone_overlay_mode;
     memcpy(g_default_touch_zone_center_bindings,
         defaults.touch_zone_center_bindings,
@@ -2449,6 +2451,27 @@ bool get_sdl_touch_round_movement_default_enabled(void)
 {
     sdl_touch_pane_load_default_bindings();
     return g_default_touch_round_movement_enabled;
+}
+
+bool get_sdl_touch_round_portrait_centered(void)
+{
+    return config.touch_round_portrait_centered;
+}
+
+void set_sdl_touch_round_portrait_centered(bool value)
+{
+    if (config.touch_round_portrait_centered == value)
+        return;
+
+    config.touch_round_portrait_centered = value;
+    sdl_touch_round_cancel_press();
+    g_state.need_present = true;
+}
+
+bool get_sdl_touch_round_portrait_centered_default(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_round_portrait_centered;
 }
 
 int get_sdl_touch_zone_overlay_mode(void)

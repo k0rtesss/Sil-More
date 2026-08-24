@@ -616,6 +616,15 @@ static touch_target_layout_state g_touch_target_layout;
 
 static bool sdl_touch_thumb_description_open(void);
 
+/* Final Look restores the normal live-game flags so inspection panes and
+ * menus continue to work.  The mobile gameplay controls must still be hidden
+ * and inert while that read-only viewport is active.  Quick Access is kept
+ * separate because it is the menu path Final Look intentionally preserves. */
+static bool sdl_touch_gameplay_controls_suppressed(void)
+{
+    return death_spectator_active();
+}
+
 /* ---- Thumb buttons --------------------------------------------------------
  *
  * Semi-transparent overlay buttons that fill the left-edge gap below the
@@ -935,6 +944,8 @@ static bool sdl_touch_thumb_button_has_binding(int index)
 
 bool sdl_touch_thumb_config_enabled(void)
 {
+    if (sdl_touch_gameplay_controls_suppressed())
+        return false;
     if (!sdl_touch_only_device_active())
         return false;
     if (!config.touch_thumb_enabled)
@@ -1195,6 +1206,8 @@ static bool sdl_touch_thumb_compute_runtime_rects(
         for (int i = 0; i < rect_count; i++)
             out_rects[i] = (SDL_FRect){ 0 };
     }
+    if (sdl_touch_gameplay_controls_suppressed())
+        return false;
     if (!out_rects || rect_count < SDL_TOUCH_THUMB_RUNTIME_CAPACITY)
         return false;
     if (g_touch_target_layout.locked) {
@@ -1718,6 +1731,9 @@ static void sdl_touch_thumb_fire(int index, bool long_press)
     int binding = sdl_touch_thumb_button_binding(index, long_press);
     int key;
 
+    if (sdl_touch_gameplay_controls_suppressed())
+        return;
+
     /* A long press on a button with no long binding still does the tap action,
      * and vice versa, so a half-configured button is never a dead zone. */
     if (binding == GAMEPAD_BIND_NONE)
@@ -1757,6 +1773,10 @@ int sdl_touch_thumb_pending_timeout_ms(Uint64 now_ns)
 {
     Uint64 elapsed;
 
+    if (sdl_touch_gameplay_controls_suppressed()) {
+        sdl_touch_thumb_cancel_press();
+        return -1;
+    }
     if (!g_touch_thumb_press.active)
         return -1;
     if (!g_touch_thumb_press.long_press_enabled)
@@ -1773,6 +1793,10 @@ bool sdl_touch_thumb_flush_pending_press(Uint64 now_ns)
 {
     int index;
 
+    if (sdl_touch_gameplay_controls_suppressed()) {
+        sdl_touch_thumb_cancel_press();
+        return false;
+    }
     if (!g_touch_thumb_press.active)
         return false;
     if (!g_touch_thumb_press.long_press_enabled)
@@ -1823,6 +1847,11 @@ bool sdl_touch_thumb_handle_pointer_motion(float x, float y, bool mouse,
     float dy;
     float threshold;
 
+    if (sdl_touch_gameplay_controls_suppressed()) {
+        if (g_touch_thumb_press.active)
+            sdl_touch_thumb_cancel_press();
+        return false;
+    }
     if (!g_touch_thumb_press.active)
         return false;
     if (g_touch_thumb_press.mouse != mouse)
@@ -1859,6 +1888,11 @@ bool sdl_touch_thumb_handle_pointer_up(float x, float y, bool mouse,
     int index;
     int release_index = -1;
 
+    if (sdl_touch_gameplay_controls_suppressed()) {
+        if (g_touch_thumb_press.active)
+            sdl_touch_thumb_cancel_press();
+        return false;
+    }
     if (!g_touch_thumb_press.active)
         return false;
     if (g_touch_thumb_press.mouse != mouse)
@@ -1881,7 +1915,8 @@ bool sdl_touch_thumb_handle_pointer_up(float x, float y, bool mouse,
 
 bool sdl_touch_round_layer_config_enabled(void)
 {
-    return sdl_touch_only_mobile_device_active()
+    return !sdl_touch_gameplay_controls_suppressed()
+        && sdl_touch_only_mobile_device_active()
         && (config.touch_round_movement_enabled
             || sdl_mobile_portrait_layout_active());
 }
@@ -1981,6 +2016,124 @@ static int sdl_touch_round_collect_obstacles(SDL_Rect* rects, int max_rects)
     }
 
     return count;
+}
+
+static bool sdl_touch_round_center_x_is_clear(float x,
+    const float* blocked_left, const float* blocked_right, int blocked_count)
+{
+    for (int i = 0; i < blocked_count; i++) {
+        if (x > blocked_left[i] && x < blocked_right[i])
+            return false;
+    }
+
+    return true;
+}
+
+static void sdl_touch_round_consider_center_x(float candidate, float target,
+    float fallback, float min_x, float max_x, const float* blocked_left,
+    const float* blocked_right, int blocked_count, float* best,
+    bool* have_best)
+{
+    float candidate_distance;
+    float best_distance;
+    float candidate_fallback_distance;
+    float best_fallback_distance;
+
+    if (!best || !have_best || candidate < min_x || candidate > max_x)
+        return;
+    if (!sdl_touch_round_center_x_is_clear(candidate, blocked_left,
+            blocked_right, blocked_count))
+    {
+        return;
+    }
+
+    candidate_distance = SDL_fabsf(candidate - target);
+    best_distance = *have_best ? SDL_fabsf(*best - target) : 0.0f;
+    candidate_fallback_distance = SDL_fabsf(candidate - fallback);
+    best_fallback_distance = *have_best
+        ? SDL_fabsf(*best - fallback) : 0.0f;
+    if (!*have_best || candidate_distance < best_distance
+        || (candidate_distance == best_distance
+            && candidate_fallback_distance < best_fallback_distance))
+    {
+        *best = candidate;
+        *have_best = true;
+    }
+}
+
+/* Move horizontally toward the portrait screen centre while keeping the
+ * circle clear of every live pane and Quick Touch button.  The vertical lane
+ * already reserves the upper and lower overlay stacks (including Quick
+ * Access), so its y coordinate and ergonomic bottom alignment stay intact. */
+static float sdl_touch_round_portrait_center_x(const SDL_Rect* screen,
+    float cy, float radius, float margin, float fallback)
+{
+    SDL_Rect obstacles[PANE_MAX + 4];
+    float blocked_left[PANE_MAX + 4] = { 0 };
+    float blocked_right[PANE_MAX + 4] = { 0 };
+    const float obstacle_gap = 12.0f;
+    float padded_radius = radius + obstacle_gap;
+    float min_x;
+    float max_x;
+    float target;
+    float best = fallback;
+    bool have_best = false;
+    int obstacle_count;
+    int blocked_count = 0;
+
+    if (!screen || !sdl_rect_has_area(screen))
+        return fallback;
+
+    min_x = (float)screen->x + margin + radius;
+    max_x = (float)(screen->x + screen->w) - margin - radius;
+    if (min_x > max_x)
+        return fallback;
+    target = (float)screen->x + (float)screen->w * 0.5f;
+    target = MAX(min_x, MIN(target, max_x));
+
+    obstacle_count = sdl_touch_round_collect_obstacles(obstacles,
+        (int)N_ELEMENTS(obstacles));
+    for (int i = 0; i < obstacle_count; i++) {
+        float top;
+        float bottom;
+        float nearest_y;
+        float dy;
+        float half_chord;
+
+        if (obstacles[i].w <= 0 || obstacles[i].h <= 0)
+            continue;
+        top = (float)obstacles[i].y;
+        bottom = (float)(obstacles[i].y + obstacles[i].h);
+        nearest_y = MAX(top, MIN(cy, bottom));
+        dy = SDL_fabsf(cy - nearest_y);
+        if (dy >= padded_radius)
+            continue;
+
+        half_chord = SDL_sqrtf(padded_radius * padded_radius - dy * dy);
+        blocked_left[blocked_count] = (float)obstacles[i].x - half_chord;
+        blocked_right[blocked_count] =
+            (float)(obstacles[i].x + obstacles[i].w) + half_chord;
+        blocked_count++;
+    }
+
+    sdl_touch_round_consider_center_x(target, target, fallback, min_x, max_x,
+        blocked_left, blocked_right, blocked_count, &best, &have_best);
+    sdl_touch_round_consider_center_x(fallback, target, fallback, min_x, max_x,
+        blocked_left, blocked_right, blocked_count, &best, &have_best);
+    sdl_touch_round_consider_center_x(min_x, target, fallback, min_x, max_x,
+        blocked_left, blocked_right, blocked_count, &best, &have_best);
+    sdl_touch_round_consider_center_x(max_x, target, fallback, min_x, max_x,
+        blocked_left, blocked_right, blocked_count, &best, &have_best);
+    for (int i = 0; i < blocked_count; i++) {
+        sdl_touch_round_consider_center_x(blocked_left[i], target, fallback,
+            min_x, max_x, blocked_left, blocked_right, blocked_count, &best,
+            &have_best);
+        sdl_touch_round_consider_center_x(blocked_right[i], target, fallback,
+            min_x, max_x, blocked_left, blocked_right, blocked_count, &best,
+            &have_best);
+    }
+
+    return have_best ? best : fallback;
 }
 
 /* Shared mobile placement: panes above the available lane midpoint push the
@@ -2092,6 +2245,8 @@ bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
     bool anchor_center = false;
     bool sized = false;
 
+    if (sdl_touch_gameplay_controls_suppressed())
+        return false;
     if (g_touch_target_layout.locked) {
         if (!g_touch_target_layout.wheel_valid)
             return false;
@@ -2183,6 +2338,15 @@ bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
                 cy = (band_top + band_bottom) * 0.5f;
                 cx = (float)wheel_region.x
                     + (float)wheel_region.w * 0.5f;
+            }
+            if (get_sdl_touch_round_portrait_centered()) {
+                cx = sdl_touch_round_portrait_center_x(&screen, cy, radius,
+                    margin, cx);
+                render_clip.x = screen.x;
+                render_clip.w = screen.w;
+                clip = render_clip;
+                right_edge = (float)(screen.x + screen.w);
+                right_margin = margin;
             }
             anchor_center = true;
             sized = true;
@@ -2514,6 +2678,8 @@ static bool sdl_touch_round_drag_is_run(float dist, float inner_radius,
 
 void sdl_touch_round_send_dir(int dir, bool ctrl, bool run)
 {
+    if (sdl_touch_gameplay_controls_suppressed())
+        return;
     if (dir < 1 || dir > 9 || dir == 5)
         return;
 
@@ -2603,6 +2769,11 @@ bool sdl_touch_round_handle_pointer_motion(float x, float y,
     float dist;
     float radius;
 
+    if (sdl_touch_gameplay_controls_suppressed()) {
+        if (g_touch_round_press.active)
+            sdl_touch_round_cancel_press();
+        return false;
+    }
     if (!g_touch_round_press.active
         || g_touch_round_press.finger_id != finger_id)
     {
@@ -2658,6 +2829,11 @@ bool sdl_touch_round_handle_pointer_up(float x, float y,
     bool ctrl = false;
     bool run = false;
 
+    if (sdl_touch_gameplay_controls_suppressed()) {
+        if (g_touch_round_press.active)
+            sdl_touch_round_cancel_press();
+        return false;
+    }
     if (!g_touch_round_press.active
         || g_touch_round_press.finger_id != finger_id)
     {
@@ -2720,6 +2896,10 @@ int sdl_touch_round_pending_timeout_ms(Uint64 now_ns)
 {
     Uint64 elapsed;
 
+    if (sdl_touch_gameplay_controls_suppressed()) {
+        sdl_touch_round_cancel_press();
+        return -1;
+    }
     if (!g_touch_round_press.active)
         return -1;
     if (!g_touch_round_press.button_press)
@@ -2738,6 +2918,10 @@ int sdl_touch_round_pending_timeout_ms(Uint64 now_ns)
  * cancels the press. */
 void sdl_touch_round_flush_pending_highlight(Uint64 now_ns)
 {
+    if (sdl_touch_gameplay_controls_suppressed()) {
+        sdl_touch_round_cancel_press();
+        return;
+    }
     if (!g_touch_round_press.active)
         return;
     if (!g_touch_round_press.button_press)
@@ -3133,6 +3317,10 @@ void sdl_touch_round_render(void)
     int target_dir;
     int dir;
 
+    if (sdl_touch_gameplay_controls_suppressed()) {
+        sdl_touch_round_cancel_press();
+        return;
+    }
     if (!sdl_rect_has_area(&g_views[PANE_MAIN].rect))
         return;
     if (g_main_menu_overlay_active) {
@@ -4776,8 +4964,13 @@ static float sdl_touch_top_panel_available_width(const SDL_Rect* screen,
         float p_bottom;
         float p_mid;
 
+        /* Status & Depth measures and wraps itself around Quick Access.  It
+         * must not feed its resulting rectangle back into this calculation:
+         * doing so makes Quick Access change size or side when the status pane
+         * leaves the default shared bottom-centre stack. */
         if (!pane_config[i].enabled || pane == PANE_MAIN
-            || pane == PANE_OVERLAY_MENU)
+            || pane == PANE_OVERLAY_MENU
+            || pane == PANE_STATUS_DEPTH)
         {
             continue;
         }
@@ -5012,6 +5205,99 @@ static bool sdl_touch_top_panel_fixed_overlaps_left_combat(
 #endif
 }
 
+/* Stretch layout is self-referential near the round wheel: changing the
+ * button size changes the panel's vertical band, which changes the wheel
+ * chord and therefore the available width.  Find the largest size whose grid
+ * fits the clear span at that same size.  Feasibility is monotonic as an
+ * edge-anchored panel grows toward the screen interior, so a bounded binary
+ * search avoids the large/small oscillation of repeated direct assignment. */
+static bool sdl_touch_top_panel_fit_horizontal_stretch(
+    const SDL_Rect* screen, const SDL_Rect* anchor,
+    enum pane_placement where, int columns, int rows, float max_panel_w,
+    float max_panel_h, float* out_button_size, float* out_gap,
+    SDL_FRect* out_panel)
+{
+    float low = 0.0f;
+    float high;
+    float best_size = 0.0f;
+    float best_gap = 0.0f;
+    bool have_best = false;
+
+    if (!screen || !anchor || !out_button_size || !out_gap || !out_panel
+        || columns <= 0 || rows <= 0 || max_panel_w <= 0.0f
+        || max_panel_h <= 0.0f)
+    {
+        return false;
+    }
+
+    high = MIN(max_panel_w / (float)columns,
+        max_panel_h / (float)rows);
+    if (high <= 0.0f)
+        return false;
+
+    for (int pass = 0; pass < 24; pass++) {
+        float candidate = (low + high) * 0.5f;
+        float candidate_gap = sdl_touch_pane_clampf(candidate * 0.10f,
+            6.0f, 18.0f);
+        float grid_w = candidate * (float)columns
+            + candidate_gap * (float)(columns - 1);
+        float grid_h = candidate * (float)rows
+            + candidate_gap * (float)(rows - 1);
+        float available_w = 0.0f;
+        bool fits = grid_w <= max_panel_w && grid_h <= max_panel_h;
+
+        if (fits) {
+            SDL_FRect probe = sdl_overlay_panel_rect(anchor, where,
+                (int)(grid_w + 0.5f), (int)(grid_h + 0.5f), screen);
+
+            available_w = sdl_touch_top_panel_available_width(screen, where,
+                probe.y, grid_h, candidate_gap, NULL, NULL);
+            if (available_w > max_panel_w)
+                available_w = max_panel_w;
+            fits = grid_w <= available_w + 0.25f;
+        }
+
+        if (fits) {
+            best_size = candidate;
+            best_gap = candidate_gap;
+            have_best = true;
+            low = candidate;
+        } else {
+            high = candidate;
+        }
+    }
+
+    if (!have_best || best_size <= 0.0f)
+        return false;
+
+    {
+        float grid_w = best_size * (float)columns
+            + best_gap * (float)(columns - 1);
+        float grid_h = best_size * (float)rows
+            + best_gap * (float)(rows - 1);
+        float clear_left;
+        float clear_right;
+        SDL_FRect panel = sdl_overlay_panel_rect(anchor, where,
+            (int)(grid_w + 0.5f), (int)(grid_h + 0.5f), screen);
+
+        clear_left = panel.x;
+        clear_right = panel.x + panel.w;
+        (void)sdl_touch_top_panel_available_width(screen, where, panel.y,
+            grid_h, best_gap, &clear_left, &clear_right);
+        if (clear_right - clear_left + 0.25f < grid_w)
+            return false;
+
+        panel.x = clear_left;
+        panel.w = MAX(grid_w, clear_right - clear_left);
+        panel.h = grid_h;
+        *out_button_size = best_size;
+        *out_gap = best_gap;
+        *out_panel = panel;
+    }
+
+    return true;
+}
+
 bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
     const SDL_Rect* anchor, enum pane_placement where,
     SDL_FRect* button_rects, SDL_FRect* out_panel)
@@ -5085,6 +5371,16 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
         {
             configured_size = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
         }
+    }
+
+    if (!vertical && configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+        if (!sdl_touch_top_panel_fit_horizontal_stretch(screen, anchor, where,
+                columns, rows, max_panel_w, max_panel_h, &button_size, &gap,
+                &panel))
+        {
+            return false;
+        }
+        goto panel_ready;
     }
 
     if (vertical) {
@@ -5235,6 +5531,8 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
         panel = sdl_overlay_panel_rect(anchor, where,
             (int)(panel_w + 0.5f), (int)(panel_h + 0.5f), screen);
     }
+
+panel_ready:
     panel_w = panel.w;
     panel_h = panel.h;
 
@@ -5242,8 +5540,26 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
         *out_panel = panel;
 
     if (button_rects) {
+        float button_w = button_size;
         float grid_h = button_size * (float)rows + gap * (float)(rows - 1);
         float grid_y = panel.y + (panel.h - grid_h) * 0.5f;
+
+        /*
+         * A horizontal Stretch panel promises to consume its fitted span.
+         * Near the round wheel, the collision fit may have to reduce the row
+         * height; keeping square cells would then leave that shorter grid
+         * centred inside a much wider panel.  Stretch the cell widths instead
+         * while retaining the safe fitted height and square icon artwork.
+         */
+        if (!vertical
+            && configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+        {
+            float stretched_w = (panel.w - gap * (float)(columns - 1))
+                / (float)columns;
+
+            if (stretched_w > 0.0f)
+                button_w = stretched_w;
+        }
 
         for (int i = 0; i < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT; i++)
             button_rects[i] = (SDL_FRect){ 0 };
@@ -5258,14 +5574,14 @@ bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
 
             if (row_count > columns)
                 row_count = columns;
-            row_w = button_size * (float)row_count
+            row_w = button_w * (float)row_count
                 + gap * (float)(row_count - 1);
             row_x = panel.x + (panel.w - row_w) * 0.5f;
 
             button_rects[slot] = (SDL_FRect){
-                .x = row_x + (button_size + gap) * (float)col,
+                .x = row_x + (button_w + gap) * (float)col,
                 .y = grid_y + (button_size + gap) * (float)row,
-                .w = button_size,
+                .w = button_w,
                 .h = button_size,
             };
         }

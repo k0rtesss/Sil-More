@@ -2931,6 +2931,7 @@ void do_cmd_pane_settings(void)
         PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE,
 #if defined(__ANDROID__) || defined(SIL_IOS)
         PANE_SETTING_MOBILE_PORTRAIT_MODE,
+        PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER,
 #endif
         PANE_SETTING_ENABLE_SIDE_PANES,
         PANE_SETTING_ENABLE_BOTTOM_PANES,
@@ -3099,6 +3100,19 @@ void do_cmd_pane_settings(void)
             get_sdl_mobile_portrait_mode() ? "portrait" : "landscape",
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MOBILE_PORTRAIT_MODE, 4,
+            a, buf);
+
+        a = (k == PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER)
+            ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Portrait Button Wheel Position",
+                "Portrait Wheel Position",
+                "Wheel Position"),
+            get_sdl_touch_round_portrait_centered()
+                ? "smart center" : "side lane",
+            row_width, 12);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER, 5,
             a, buf);
 #endif
 
@@ -3274,6 +3288,12 @@ void do_cmd_pane_settings(void)
                     "Choose the device's real portrait or landscape "
                     "orientation. Pane and overlay "
                     "layouts are saved separately for portrait and landscape.",
+                [PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER] =
+                    "In portrait, Smart Center moves the button wheel as "
+                    "close as possible to the horizontal screen center while "
+                    "keeping clear of live buttons, panes, overlays, and the "
+                    "display safe area. Side Lane keeps the established "
+                    "left/right placement.",
 #endif
                 [PANE_SETTING_ENABLE_SIDE_PANES] =
                     "Show panes to the side of the map (inventory, monster "
@@ -3383,6 +3403,10 @@ void do_cmd_pane_settings(void)
 #if defined(__ANDROID__) || defined(SIL_IOS)
                     case PANE_SETTING_MOBILE_PORTRAIT_MODE:
                         set_sdl_mobile_portrait_mode(def.mobile_portrait_mode);
+                        break;
+                    case PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER:
+                        set_sdl_touch_round_portrait_centered(
+                            def.touch_round_portrait_centered);
                         break;
 #endif
                     case PANE_SETTING_ENABLE_SIDE_PANES:
@@ -3653,6 +3677,12 @@ void do_cmd_pane_settings(void)
                 set_sdl_mobile_portrait_mode(!get_sdl_mobile_portrait_mode());
                 settings_changed = true;
             }
+            else if (k == PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER)
+            {
+                set_sdl_touch_round_portrait_centered(
+                    !get_sdl_touch_round_portrait_centered());
+                settings_changed = true;
+            }
 #endif
             else if (k == PANE_SETTING_FULLSCREEN)
             {
@@ -3798,6 +3828,14 @@ void do_cmd_pane_settings(void)
                     settings_changed = true;
                 }
             }
+            else if (k == PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER)
+            {
+                if (!get_sdl_touch_round_portrait_centered())
+                {
+                    set_sdl_touch_round_portrait_centered(true);
+                    settings_changed = true;
+                }
+            }
 #endif
             else if (k == PANE_SETTING_ENABLE_SIDE_PANES) /* Enable Side Panes */
             {
@@ -3933,6 +3971,14 @@ void do_cmd_pane_settings(void)
                 if (get_sdl_mobile_portrait_mode())
                 {
                     set_sdl_mobile_portrait_mode(false);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER)
+            {
+                if (get_sdl_touch_round_portrait_centered())
+                {
+                    set_sdl_touch_round_portrait_centered(false);
                     settings_changed = true;
                 }
             }
@@ -7258,6 +7304,8 @@ static void touch_control_reset_to_default(void)
     set_sdl_touch_movement_mode(get_sdl_touch_movement_default_mode());
     set_sdl_touch_round_movement_enabled(
         get_sdl_touch_round_movement_default_enabled());
+    set_sdl_touch_round_portrait_centered(
+        get_sdl_touch_round_portrait_centered_default());
     set_sdl_touch_zone_overlay_mode(get_sdl_touch_zone_overlay_default_mode());
     for (int i = 0; i < SDL_TOUCH_ZONE_CENTER_BINDING_COUNT; i++)
         set_sdl_touch_zone_center_binding(i,

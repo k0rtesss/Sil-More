@@ -849,6 +849,7 @@ bool g_default_touch_pane_inventory_equipment_cycle = true;
 int g_default_touch_movement_mode = SDL_TOUCH_MOVEMENT_ON;
 int g_default_touch_zone_overlay_mode = SDL_TOUCH_ZONE_OVERLAY_MARKERS;
 bool g_default_touch_round_movement_enabled = false;
+bool g_default_touch_round_portrait_centered = false;
 int g_default_touch_zone_center_bindings[SDL_TOUCH_ZONE_CENTER_BINDING_COUNT];
 int g_default_touch_corner_up_down_side = SDL_TOUCH_CORNER_UP_DOWN_RIGHT;
 int g_default_touch_corner_action_bindings[SDL_TOUCH_CORNER_ACTION_BINDING_COUNT];

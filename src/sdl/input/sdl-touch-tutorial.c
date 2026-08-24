@@ -1967,7 +1967,7 @@ void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
     bool have_wheel;
     cptr header_title = "Button Wheel + Quick Access";
     cptr header_body =
-        "The <t>wheel</t> uses the open right-side lane between the upper and lower overlays. <t>Quick access</t> stays at <n>bottom center</n>.";
+        "The <t>wheel</t> uses the open lane beside Quick Touch. <t>Portrait Wheel Center</t> can move it toward the screen middle without crossing live buttons or overlays. <t>Quick access</t> stays at <n>bottom center</n>.";
 
     sdl_touch_tutorial_draw_screen_dim(screen, 150);
     sdl_touch_tutorial_draw_overlay_menu(screen);
