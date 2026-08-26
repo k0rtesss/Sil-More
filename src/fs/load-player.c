@@ -598,6 +598,14 @@ errr rd_extra(void)
             memset(&meta, 0, sizeof(meta));
             meta.source_y = -1;
             meta.source_x = -1;
+            for (int destination = 0;
+                destination < HINT_MESSAGE_DESTINATION_MAX; ++destination)
+            {
+                meta.destinations[destination].kind = HINT_DESTINATION_NONE;
+                meta.destinations[destination].y = -1;
+                meta.destinations[destination].x = -1;
+                meta.destinations[destination].max_dist = -1;
+            }
 
             if (savefile_has_hint_message_meta)
             {
@@ -609,6 +617,34 @@ errr rd_extra(void)
                 {
                     rd_string(meta.cue_dists[cue], sizeof(meta.cue_dists[cue]));
                     rd_string(meta.cue_dirs[cue], sizeof(meta.cue_dirs[cue]));
+                }
+            }
+
+            if (savefile_has_hint_message_destinations)
+            {
+                rd_byte(&meta.destination_count);
+                meta.destination_count = MIN(meta.destination_count,
+                    HINT_MESSAGE_DESTINATION_MAX);
+                for (int destination = 0;
+                    destination < HINT_MESSAGE_DESTINATION_MAX; ++destination)
+                {
+                    hint_message_destination* dst =
+                        &meta.destinations[destination];
+                    rd_byte(&dst->kind);
+                    rd_s16b(&dst->y);
+                    rd_s16b(&dst->x);
+                    rd_s16b(&dst->id);
+                    rd_s16b(&dst->min_dist);
+                    rd_s16b(&dst->max_dist);
+                    if (destination >= meta.destination_count)
+                    {
+                        dst->kind = HINT_DESTINATION_NONE;
+                        dst->y = -1;
+                        dst->x = -1;
+                        dst->id = 0;
+                        dst->min_dist = 0;
+                        dst->max_dist = -1;
+                    }
                 }
             }
 

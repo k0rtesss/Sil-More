@@ -12,6 +12,8 @@ enum {
     SDL_HINT_QUEST_MAX_BUTTONS = 5,
     SDL_HINT_QUEST_MAX_HITS = 512,
     SDL_HINT_QUEST_MAX_TEXT_RUNS = 256,
+    SDL_HINT_QUEST_CONTEXT_CACHE_MAX = 96,
+    SDL_HINT_QUEST_CONTEXT_CACHE_PIXEL_BUDGET = 8 * 1024 * 1024,
     SDL_HINT_QUEST_TEXT_LEN = 768,
     SDL_HINT_QUEST_LABEL_LEN = 48,
     SDL_HINT_QUEST_PAGE_TURN_MS = 850
@@ -32,6 +34,19 @@ typedef struct sdl_hint_quest_text_run {
     float x;
     byte attr;
 } sdl_hint_quest_text_run;
+
+typedef struct sdl_hint_quest_context_cache_entry {
+    bool valid;
+    TTF_Font* font;
+    SDL_Renderer* renderer;
+    int wrap_width;
+    byte base_attr;
+    char text[SDL_HINT_QUEST_TEXT_LEN];
+    SDL_Texture* texture;
+    int width;
+    int height;
+    Uint64 last_used;
+} sdl_hint_quest_context_cache_entry;
 
 typedef struct sdl_hint_quest_button {
     char label[SDL_HINT_QUEST_LABEL_LEN];
@@ -106,6 +121,56 @@ typedef struct sdl_hint_quest_layout {
 static sdl_hint_quest_state g_hint_quest;
 static sdl_hint_quest_press g_hint_quest_press;
 static sdl_hint_quest_turn g_hint_quest_turn;
+static sdl_hint_quest_context_cache_entry
+    g_hint_quest_context_cache[SDL_HINT_QUEST_CONTEXT_CACHE_MAX];
+static Uint64 g_hint_quest_context_cache_clock;
+static size_t g_hint_quest_context_cache_pixels;
+
+static void sdl_hint_quest_context_cache_entry_clear(
+    sdl_hint_quest_context_cache_entry* entry)
+{
+    size_t pixels;
+
+    if (!entry || !entry->valid)
+        return;
+    pixels = (size_t)entry->width * (size_t)entry->height;
+    if (g_hint_quest_context_cache_pixels >= pixels)
+        g_hint_quest_context_cache_pixels -= pixels;
+    else
+        g_hint_quest_context_cache_pixels = 0;
+    if (entry->texture)
+        SDL_DestroyTexture(entry->texture);
+    SDL_zero(*entry);
+}
+
+void sdl_hint_quest_context_cache_clear(void)
+{
+    for (int i = 0; i < SDL_HINT_QUEST_CONTEXT_CACHE_MAX; ++i)
+    {
+        sdl_hint_quest_context_cache_entry_clear(
+            &g_hint_quest_context_cache[i]);
+    }
+    g_hint_quest_context_cache_pixels = 0;
+    g_hint_quest_context_cache_clock = 0;
+}
+
+static sdl_hint_quest_context_cache_entry*
+sdl_hint_quest_context_cache_oldest(void)
+{
+    sdl_hint_quest_context_cache_entry* oldest = NULL;
+
+    for (int i = 0; i < SDL_HINT_QUEST_CONTEXT_CACHE_MAX; ++i)
+    {
+        sdl_hint_quest_context_cache_entry* entry
+            = &g_hint_quest_context_cache[i];
+
+        if (!entry->valid)
+            return entry;
+        if (!oldest || entry->last_used < oldest->last_used)
+            oldest = entry;
+    }
+    return oldest;
+}
 
 static void sdl_hint_quest_mark_dirty(void)
 {
@@ -393,11 +458,12 @@ static float sdl_hint_quest_measure_text(TTF_Font* font, cptr text, int len)
 
 static int sdl_hint_quest_layout_text_runs(TTF_Font* font, cptr text,
     const byte attrs[], float max_w, sdl_hint_quest_text_run runs[],
-    int max_runs, int* out_lines)
+    int max_runs, int* out_lines, float* out_width)
 {
     int run_count = 0;
     int line = 0;
     float line_w = 0.0f;
+    float widest = 0.0f;
     int len = (int)strlen(text);
     int pos = 0;
 
@@ -410,6 +476,7 @@ static int sdl_hint_quest_layout_text_runs(TTF_Font* font, cptr text,
 
         if (text[pos] == '\n')
         {
+            widest = MAX(widest, line_w);
             line++;
             line_w = 0.0f;
             pos++;
@@ -431,6 +498,7 @@ static int sdl_hint_quest_layout_text_runs(TTF_Font* font, cptr text,
             token_len);
         if (!is_space && line_w > 0.0f && line_w + token_w > max_w)
         {
+            widest = MAX(widest, line_w);
             line++;
             line_w = 0.0f;
         }
@@ -476,6 +544,7 @@ static int sdl_hint_quest_layout_text_runs(TTF_Font* font, cptr text,
                         .attr = attr,
                     };
                     line_w += sub_w;
+                    widest = MAX(widest, line_w);
                     sub = sub_end;
                 }
                 offset += (int)fit_len;
@@ -521,57 +590,192 @@ static int sdl_hint_quest_layout_text_runs(TTF_Font* font, cptr text,
                 };
             }
             line_w += sub_w;
+            widest = MAX(widest, line_w);
             sub = sub_end;
         }
     }
 
     if (out_lines)
         *out_lines = text[0] ? line + 1 : 0;
+    if (out_width)
+        *out_width = widest;
     return run_count;
 }
 
-static void sdl_hint_quest_draw_contextual_text(TTF_Font* font,
-    const sdl_hint_quest_block* block, const SDL_FRect* rect)
+static SDL_Texture* sdl_hint_quest_context_texture(TTF_Font* font,
+    const sdl_hint_quest_block* block, int wrap_width, int* out_width,
+    int* out_height)
 {
     byte attrs[SDL_HINT_QUEST_TEXT_LEN];
     sdl_hint_quest_text_run runs[SDL_HINT_QUEST_MAX_TEXT_RUNS];
+    sdl_hint_quest_context_cache_entry* entry;
+    SDL_Texture* texture;
+    SDL_Texture* old_target;
+    SDL_Rect old_clip = { 0 };
+    SDL_BlendMode old_draw_blend = SDL_BLENDMODE_NONE;
+    Uint8 old_r = 0;
+    Uint8 old_g = 0;
+    Uint8 old_b = 0;
+    Uint8 old_a = 0;
+    bool had_clip;
     int run_count;
+    int line_count = 0;
     int line_h;
+    float text_w = 0.0f;
+    int texture_w;
+    int texture_h;
+    size_t pixels;
 
-    if (!font || !block || !block->text[0] || !rect || rect->w <= 0.0f)
-        return;
+    if (out_width)
+        *out_width = 0;
+    if (out_height)
+        *out_height = 0;
+    if (!font || !block || !block->text[0] || wrap_width < 1
+        || !g_state.renderer)
+    {
+        return NULL;
+    }
+
+    for (int i = 0; i < SDL_HINT_QUEST_CONTEXT_CACHE_MAX; ++i)
+    {
+        entry = &g_hint_quest_context_cache[i];
+        if (!entry->valid || entry->font != font
+            || entry->renderer != g_state.renderer
+            || entry->wrap_width != wrap_width
+            || entry->base_attr != block->attr
+            || !streq(entry->text, block->text))
+        {
+            continue;
+        }
+        entry->last_used = ++g_hint_quest_context_cache_clock;
+        if (out_width)
+            *out_width = entry->width;
+        if (out_height)
+            *out_height = entry->height;
+        return entry->texture;
+    }
+
     sdl_hint_quest_context_attrs(block->text, block->attr, attrs,
         sizeof(attrs));
     run_count = sdl_hint_quest_layout_text_runs(font, block->text, attrs,
-        rect->w, runs, N_ELEMENTS(runs), NULL);
+        (float)wrap_width, runs, N_ELEMENTS(runs), &line_count, &text_w);
     line_h = TTF_GetFontHeight(font);
     if (line_h < 1)
         line_h = 1;
+    texture_w = MAX(1, (int)(text_w + 0.999f));
+    texture_h = MAX(1, line_count * line_h);
+
+    texture = SDL_CreateTexture(g_state.renderer, SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET, texture_w, texture_h);
+    if (!texture)
+        return NULL;
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+
+    old_target = SDL_GetRenderTarget(g_state.renderer);
+    had_clip = SDL_RenderClipEnabled(g_state.renderer);
+    if (had_clip)
+        SDL_GetRenderClipRect(g_state.renderer, &old_clip);
+    SDL_GetRenderDrawColor(g_state.renderer, &old_r, &old_g, &old_b, &old_a);
+    SDL_GetRenderDrawBlendMode(g_state.renderer, &old_draw_blend);
+    if (!SDL_SetRenderTarget(g_state.renderer, texture))
+    {
+        SDL_DestroyTexture(texture);
+        return NULL;
+    }
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 0);
+    SDL_RenderClear(g_state.renderer);
 
     for (int i = 0; i < run_count; ++i)
     {
         const sdl_hint_quest_text_run* run = &runs[i];
         char run_text[SDL_HINT_QUEST_TEXT_LEN];
-        SDL_Texture* texture;
+        SDL_Surface* run_surface;
+        SDL_Texture* run_texture;
         SDL_FRect dst;
         int copy_len = MIN(run->len, (int)sizeof(run_text) - 1);
-        int run_w = 0;
-        int run_h = 0;
 
         SDL_memcpy(run_text, block->text + run->start, (size_t)copy_len);
         run_text[copy_len] = '\0';
-        texture = sdl_ui_text_texture(font, run_text,
-            sdl_color_from_attr(run->attr), &run_w, &run_h);
-        if (!texture)
+        run_surface = TTF_RenderText_Blended(font, run_text, 0,
+            sdl_color_from_attr(run->attr));
+        if (!run_surface)
             continue;
+        run_texture = SDL_CreateTextureFromSurface(g_state.renderer,
+            run_surface);
+        if (!run_texture)
+        {
+            SDL_DestroySurface(run_surface);
+            continue;
+        }
+        SDL_SetTextureBlendMode(run_texture, SDL_BLENDMODE_BLEND);
         dst = (SDL_FRect){
-            .x = rect->x + run->x,
-            .y = rect->y + (float)(run->line * line_h),
-            .w = (float)run_w,
-            .h = (float)run_h,
+            .x = run->x,
+            .y = (float)(run->line * line_h),
+            .w = (float)run_surface->w,
+            .h = (float)run_surface->h,
         };
-        SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+        SDL_RenderTexture(g_state.renderer, run_texture, NULL, &dst);
+        SDL_DestroyTexture(run_texture);
+        SDL_DestroySurface(run_surface);
     }
+
+    SDL_SetRenderTarget(g_state.renderer, old_target);
+    SDL_SetRenderClipRect(g_state.renderer, had_clip ? &old_clip : NULL);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, old_draw_blend);
+    SDL_SetRenderDrawColor(g_state.renderer, old_r, old_g, old_b, old_a);
+
+    pixels = (size_t)texture_w * (size_t)texture_h;
+    while (g_hint_quest_context_cache_pixels + pixels
+        > SDL_HINT_QUEST_CONTEXT_CACHE_PIXEL_BUDGET)
+    {
+        entry = sdl_hint_quest_context_cache_oldest();
+        if (!entry || !entry->valid)
+            break;
+        sdl_hint_quest_context_cache_entry_clear(entry);
+    }
+    entry = sdl_hint_quest_context_cache_oldest();
+    if (!entry)
+    {
+        SDL_DestroyTexture(texture);
+        return NULL;
+    }
+    if (entry->valid)
+        sdl_hint_quest_context_cache_entry_clear(entry);
+    entry->valid = true;
+    entry->font = font;
+    entry->renderer = g_state.renderer;
+    entry->wrap_width = wrap_width;
+    entry->base_attr = block->attr;
+    SDL_strlcpy(entry->text, block->text, sizeof(entry->text));
+    entry->texture = texture;
+    entry->width = texture_w;
+    entry->height = texture_h;
+    entry->last_used = ++g_hint_quest_context_cache_clock;
+    g_hint_quest_context_cache_pixels += pixels;
+    if (out_width)
+        *out_width = texture_w;
+    if (out_height)
+        *out_height = texture_h;
+    return texture;
+}
+
+static void sdl_hint_quest_draw_contextual_text(TTF_Font* font,
+    const sdl_hint_quest_block* block, const SDL_FRect* rect)
+{
+    SDL_Texture* texture;
+    SDL_FRect dst;
+    int width = 0;
+    int height = 0;
+
+    if (!rect || rect->w <= 0.0f)
+        return;
+    texture = sdl_hint_quest_context_texture(font, block,
+        MAX(1, (int)(rect->w + 0.5f)), &width, &height);
+    if (!texture || width < 1 || height < 1)
+        return;
+    dst = (SDL_FRect){ rect->x, rect->y, (float)width, (float)height };
+    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
 }
 
 static int sdl_hint_quest_body_px(const SDL_Rect* screen)
@@ -1434,6 +1638,7 @@ void sdl_hint_quest_menu_hide(void)
     }
 
     sdl_hint_quest_page_turn_clear();
+    sdl_hint_quest_context_cache_clear();
     memset(&g_hint_quest, 0, sizeof(g_hint_quest));
     memset(&g_hint_quest_press, 0, sizeof(g_hint_quest_press));
     sdl_hint_quest_mark_dirty();

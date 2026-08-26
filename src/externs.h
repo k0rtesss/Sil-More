@@ -108,12 +108,35 @@ typedef struct skeleton_note_state_save {
 #define HINT_MESSAGE_META_DEFINED
 #define HINT_MESSAGE_CUE_MAX 2
 #define HINT_MESSAGE_CUE_TEXT_MAX 64
+#define HINT_MESSAGE_DESTINATION_MAX 2
+typedef enum hint_message_destination_kind {
+    HINT_DESTINATION_NONE = 0,
+    HINT_DESTINATION_FIXED_FEATURE,
+    HINT_DESTINATION_GREAT_VAULT,
+    HINT_DESTINATION_ARTEFACT,
+    HINT_DESTINATION_QUEST_GIVER,
+    HINT_DESTINATION_UNIQUE_MONSTER,
+    HINT_DESTINATION_PARTITION,
+    HINT_DESTINATION_FIXED_QUEST_SITE
+} hint_message_destination_kind;
+typedef struct hint_message_destination {
+    byte kind;
+    /* The exact target reconstructs the clue's direction and discovery state;
+     * the map exposes only its distance/direction area until it is found. */
+    s16b y;
+    s16b x;
+    s16b id;
+    s16b min_dist;
+    s16b max_dist;
+} hint_message_destination;
 typedef struct hint_message_meta {
     s16b source_y;
     s16b source_x;
     byte cue_count;
     char cue_dirs[HINT_MESSAGE_CUE_MAX][HINT_MESSAGE_CUE_TEXT_MAX];
     char cue_dists[HINT_MESSAGE_CUE_MAX][HINT_MESSAGE_CUE_TEXT_MAX];
+    byte destination_count;
+    hint_message_destination destinations[HINT_MESSAGE_DESTINATION_MAX];
 } hint_message_meta;
 #endif
 

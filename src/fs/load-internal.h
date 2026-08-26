@@ -33,6 +33,7 @@ extern bool savefile_has_cave_rewired;
 extern bool savefile_has_cave_natural;
 extern bool savefile_has_hint_messages;
 extern bool savefile_has_hint_message_meta;
+extern bool savefile_has_hint_message_destinations;
 extern bool savefile_has_thrall_quest;
 extern bool savefile_has_thrall_quest_requested;
 extern bool savefile_has_randart_flags4;

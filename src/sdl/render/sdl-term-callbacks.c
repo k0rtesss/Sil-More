@@ -1888,7 +1888,229 @@ bool sdl_minimap_hint_source_valid(const hint_message_meta* meta)
     return sdl_minimap_hint_source_in_bounds(meta);
 }
 
-void sdl_minimap_expand_bounds_for_hint_sources(int* min_y, int* min_x,
+typedef enum sdl_hint_destination_display {
+    SDL_HINT_DESTINATION_HIDDEN = 0,
+    SDL_HINT_DESTINATION_AREA,
+    SDL_HINT_DESTINATION_EXACT
+} sdl_hint_destination_display;
+
+static bool sdl_minimap_hint_destination_valid(
+    const hint_message_meta* meta, const hint_message_destination* destination)
+{
+    return meta && destination
+        && destination->kind > HINT_DESTINATION_NONE
+        && destination->kind <= HINT_DESTINATION_FIXED_QUEST_SITE
+        && sdl_minimap_focus_point_valid(meta->source_y, meta->source_x)
+        && sdl_minimap_focus_point_valid(destination->y, destination->x)
+        && destination->min_dist >= 0
+        && destination->max_dist >= destination->min_dist;
+}
+
+static monster_type* sdl_minimap_hint_destination_monster(int r_idx)
+{
+    if (r_idx <= 0)
+        return NULL;
+
+    for (int i = 1; i < mon_max; ++i) {
+        if (mon_list[i].r_idx == r_idx)
+            return &mon_list[i];
+    }
+    return NULL;
+}
+
+static bool sdl_minimap_hint_destination_artefact_found(
+    const hint_message_destination* destination)
+{
+    bool present = false;
+
+    if (!destination)
+        return true;
+    if (destination->id > 0 && z_info && a_info
+        && destination->id < z_info->art_max)
+    {
+        const artefact_type* a_ptr = &a_info[destination->id];
+
+        if ((a_ptr->seen & ART_SEEN_PHYSICAL) || a_ptr->found_num > 0)
+            return true;
+    }
+
+    for (int i = 1; i < o_max; ++i) {
+        const object_type* o_ptr = &o_list[i];
+
+        if (!o_ptr->k_idx || o_ptr->held_m_idx)
+            continue;
+        if (destination->id > 0) {
+            if (o_ptr->name1 != destination->id)
+                continue;
+        } else if (o_ptr->iy != destination->y
+            || o_ptr->ix != destination->x)
+        {
+            continue;
+        }
+
+        present = true;
+        if (o_ptr->marked)
+            return true;
+    }
+
+    /* Once the original floor object is gone, its possible-location clue is
+     * resolved even if another effect destroyed or displaced it unseen. */
+    return !present;
+}
+
+static bool sdl_minimap_hint_destination_partition_found(int partition_index)
+{
+    if (!p_ptr || partition_index < 0)
+        return false;
+
+    for (int y = 0; y < p_ptr->cur_map_hgt; ++y) {
+        for (int x = 0; x < p_ptr->cur_map_wid; ++x) {
+            if (level_partition_index_for_point(y, x) != partition_index)
+                continue;
+            if (cave_info[y][x] & (CAVE_MARK | CAVE_SEEN))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool sdl_minimap_hint_destination_known_vault_cell(
+    const hint_message_destination* destination, int* out_y, int* out_x)
+{
+    int best_y = -1;
+    int best_x = -1;
+    int best_dist = 0;
+
+    if (!p_ptr || !destination)
+        return false;
+    for (int y = 0; y < p_ptr->cur_map_hgt; ++y) {
+        for (int x = 0; x < p_ptr->cur_map_wid; ++x) {
+            int dist;
+
+            if (!(cave_info[y][x] & CAVE_G_VAULT))
+                continue;
+            if (!(cave_info[y][x] & (CAVE_MARK | CAVE_SEEN)))
+                continue;
+            dist = distance(destination->y, destination->x, y, x);
+            if (best_y >= 0 && dist >= best_dist)
+                continue;
+            best_y = y;
+            best_x = x;
+            best_dist = dist;
+        }
+    }
+
+    if (best_y < 0)
+        return false;
+    if (out_y) *out_y = best_y;
+    if (out_x) *out_x = best_x;
+    return true;
+}
+
+static sdl_hint_destination_display sdl_minimap_hint_destination_state(
+    const hint_message_meta* meta, const hint_message_destination* destination,
+    int* out_y, int* out_x)
+{
+    monster_type* m_ptr;
+
+    if (!sdl_minimap_hint_destination_valid(meta, destination))
+        return SDL_HINT_DESTINATION_HIDDEN;
+    if (out_y) *out_y = destination->y;
+    if (out_x) *out_x = destination->x;
+
+    switch ((hint_message_destination_kind)destination->kind) {
+    case HINT_DESTINATION_FIXED_FEATURE:
+    case HINT_DESTINATION_FIXED_QUEST_SITE:
+        return (cave_info[destination->y][destination->x]
+                & (CAVE_MARK | CAVE_SEEN))
+            ? SDL_HINT_DESTINATION_EXACT
+            : SDL_HINT_DESTINATION_AREA;
+    case HINT_DESTINATION_GREAT_VAULT:
+        if (sdl_minimap_hint_destination_known_vault_cell(destination,
+                out_y, out_x))
+        {
+            return SDL_HINT_DESTINATION_EXACT;
+        }
+        return SDL_HINT_DESTINATION_AREA;
+    case HINT_DESTINATION_ARTEFACT:
+        return sdl_minimap_hint_destination_artefact_found(destination)
+            ? SDL_HINT_DESTINATION_HIDDEN
+            : SDL_HINT_DESTINATION_AREA;
+    case HINT_DESTINATION_QUEST_GIVER:
+        m_ptr = sdl_minimap_hint_destination_monster(destination->id);
+        if (!m_ptr)
+            return SDL_HINT_DESTINATION_HIDDEN;
+        if (!m_ptr->encountered && !m_ptr->ml
+            && !(m_ptr->mflag & MFLAG_MARK))
+        {
+            return SDL_HINT_DESTINATION_AREA;
+        }
+        if (out_y) *out_y = m_ptr->fy;
+        if (out_x) *out_x = m_ptr->fx;
+        return SDL_HINT_DESTINATION_EXACT;
+    case HINT_DESTINATION_UNIQUE_MONSTER:
+        m_ptr = sdl_minimap_hint_destination_monster(destination->id);
+        if (!m_ptr)
+            return SDL_HINT_DESTINATION_HIDDEN;
+        return (m_ptr->encountered || m_ptr->ml
+                || (m_ptr->mflag & MFLAG_MARK))
+            ? SDL_HINT_DESTINATION_HIDDEN
+            : SDL_HINT_DESTINATION_AREA;
+    case HINT_DESTINATION_PARTITION:
+        return sdl_minimap_hint_destination_partition_found(destination->id)
+            ? SDL_HINT_DESTINATION_HIDDEN
+            : SDL_HINT_DESTINATION_AREA;
+    default:
+        return SDL_HINT_DESTINATION_HIDDEN;
+    }
+}
+
+static int sdl_minimap_hint_direction_sign(int delta)
+{
+    return (delta > 0) ? 1 : ((delta < 0) ? -1 : 0);
+}
+
+static bool sdl_minimap_grid_in_hint_destination_area(
+    const hint_message_meta* meta, const hint_message_destination* destination,
+    int y, int x)
+{
+    int target_dy;
+    int target_dx;
+    int grid_dy;
+    int grid_dx;
+    int dist;
+
+    if (!sdl_minimap_hint_destination_valid(meta, destination)
+        || !sdl_minimap_focus_point_valid(y, x))
+    {
+        return false;
+    }
+
+    target_dy = sdl_minimap_hint_direction_sign(
+        destination->y - meta->source_y);
+    target_dx = sdl_minimap_hint_direction_sign(
+        destination->x - meta->source_x);
+    grid_dy = sdl_minimap_hint_direction_sign(y - meta->source_y);
+    grid_dx = sdl_minimap_hint_direction_sign(x - meta->source_x);
+    if (target_dy != grid_dy || target_dx != grid_dx)
+        return false;
+
+    dist = distance(meta->source_y, meta->source_x, y, x);
+    return dist >= destination->min_dist
+        && dist <= destination->max_dist;
+}
+
+static void sdl_minimap_include_hint_point(int y, int x, int* min_y,
+    int* min_x, int* max_y, int* max_x, bool* any)
+{
+    if (y < *min_y) *min_y = y;
+    if (y > *max_y) *max_y = y;
+    if (x < *min_x) *min_x = x;
+    if (x > *max_x) *max_x = x;
+    *any = true;
+}
+
+void sdl_minimap_expand_bounds_for_hints(int* min_y, int* min_x,
     int* max_y, int* max_x, bool* any)
 {
     byte count;
@@ -1904,11 +2126,40 @@ void sdl_minimap_expand_bounds_for_hint_sources(int* min_y, int* min_x,
         if (!sdl_minimap_hint_source_valid(&meta))
             continue;
 
-        if (meta.source_y < *min_y) *min_y = meta.source_y;
-        if (meta.source_y > *max_y) *max_y = meta.source_y;
-        if (meta.source_x < *min_x) *min_x = meta.source_x;
-        if (meta.source_x > *max_x) *max_x = meta.source_x;
-        *any = true;
+        sdl_minimap_include_hint_point(meta.source_y, meta.source_x,
+            min_y, min_x, max_y, max_x, any);
+
+        for (int destination_index = 0;
+            destination_index < meta.destination_count; ++destination_index)
+        {
+            const hint_message_destination* destination =
+                &meta.destinations[destination_index];
+            int display_y = -1;
+            int display_x = -1;
+            sdl_hint_destination_display display =
+                sdl_minimap_hint_destination_state(&meta, destination,
+                    &display_y, &display_x);
+
+            if (display == SDL_HINT_DESTINATION_EXACT) {
+                sdl_minimap_include_hint_point(display_y, display_x,
+                    min_y, min_x, max_y, max_x, any);
+                continue;
+            }
+            if (display != SDL_HINT_DESTINATION_AREA)
+                continue;
+
+            for (int y = 0; y < p_ptr->cur_map_hgt; ++y) {
+                for (int x = 0; x < p_ptr->cur_map_wid; ++x) {
+                    if (!sdl_minimap_grid_in_hint_destination_area(
+                            &meta, destination, y, x))
+                    {
+                        continue;
+                    }
+                    sdl_minimap_include_hint_point(y, x, min_y, min_x,
+                        max_y, max_x, any);
+                }
+            }
+        }
     }
 }
 
@@ -1950,6 +2201,527 @@ void sdl_minimap_draw_hint_source_symbol(const object_type* o_ptr,
     }
 
     sdl_draw_ascii_minimap_cell(obj_a, (char)obj_c, obj_a, (char)obj_c, dst);
+}
+
+#define SDL_HINT_AREA_ARC_SEGMENTS 32
+
+static SDL_FColor sdl_minimap_hint_fcolor(SDL_Color color)
+{
+    return (SDL_FColor){
+        (float)color.r / 255.0f,
+        (float)color.g / 255.0f,
+        (float)color.b / 255.0f,
+        (float)color.a / 255.0f
+    };
+}
+
+static SDL_Color sdl_minimap_hint_destination_color(
+    const hint_message_destination* destination, byte alpha)
+{
+    SDL_Color color = { 95, 175, 255, alpha };
+
+    if (!destination)
+        return color;
+    switch ((hint_message_destination_kind)destination->kind) {
+    case HINT_DESTINATION_FIXED_FEATURE:
+        color = (SDL_Color){ 245, 165, 65, alpha };
+        break;
+    case HINT_DESTINATION_GREAT_VAULT:
+        color = (SDL_Color){ 185, 110, 245, alpha };
+        break;
+    case HINT_DESTINATION_ARTEFACT:
+        color = (SDL_Color){ 245, 205, 75, alpha };
+        break;
+    case HINT_DESTINATION_QUEST_GIVER:
+        color = (SDL_Color){ 75, 220, 130, alpha };
+        break;
+    case HINT_DESTINATION_UNIQUE_MONSTER:
+        color = (SDL_Color){ 240, 90, 90, alpha };
+        break;
+    case HINT_DESTINATION_FIXED_QUEST_SITE:
+        color = (SDL_Color){ 65, 215, 190, alpha };
+        break;
+    case HINT_DESTINATION_PARTITION:
+        switch (level_partition_kind_for_point(destination->y,
+            destination->x))
+        {
+        case LEVEL_PART_ROOMY:
+            color = (SDL_Color){ 110, 165, 225, alpha };
+            break;
+        case LEVEL_PART_CAVEY:
+            color = (SDL_Color){ 75, 195, 215, alpha };
+            break;
+        case LEVEL_PART_RUINED:
+            color = (SDL_Color){ 195, 135, 80, alpha };
+            break;
+        case LEVEL_PART_LABYRINTH:
+            color = (SDL_Color){ 175, 110, 240, alpha };
+            break;
+        case LEVEL_PART_CHASM:
+            color = (SDL_Color){ 125, 140, 175, alpha };
+            break;
+        case LEVEL_PART_BIG_CAVE:
+            switch (level_partition_big_cave_type_for_point(destination->y,
+                destination->x))
+            {
+            case BIG_CAVE_ICE:
+                color = (SDL_Color){ 90, 205, 255, alpha };
+                break;
+            case BIG_CAVE_FIRE:
+                color = (SDL_Color){ 255, 105, 60, alpha };
+                break;
+            case BIG_CAVE_POIS:
+                color = (SDL_Color){ 100, 220, 115, alpha };
+                break;
+            default:
+                color = (SDL_Color){ 70, 185, 205, alpha };
+                break;
+            }
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+    return color;
+}
+
+static void sdl_minimap_hint_destination_angles(
+    const hint_message_meta* meta, const hint_message_destination* destination,
+    float outer_dist, float* out_start, float* out_end, float* out_mid)
+{
+    const float pi = 3.1415926536f;
+    int dy = sdl_minimap_hint_direction_sign(
+        destination->y - meta->source_y);
+    int dx = sdl_minimap_hint_direction_sign(
+        destination->x - meta->source_x);
+    float start = 0.0f;
+    float end = 2.0f * pi;
+
+    if (dy == 0 && dx == 0) {
+        start = 0.0f;
+        end = 2.0f * pi;
+    } else if (dy < 0 && dx > 0) {
+        start = 1.5f * pi;
+        end = 2.0f * pi;
+    } else if (dy > 0 && dx > 0) {
+        start = 0.0f;
+        end = 0.5f * pi;
+    } else if (dy > 0 && dx < 0) {
+        start = 0.5f * pi;
+        end = pi;
+    } else if (dy < 0 && dx < 0) {
+        start = pi;
+        end = 1.5f * pi;
+    } else {
+        float mid;
+        float half_angle = SDL_atan2f(0.75f, MAX(outer_dist, 1.0f));
+
+        if (half_angle < 0.035f) half_angle = 0.035f;
+        if (half_angle > 0.22f) half_angle = 0.22f;
+        if (dx > 0) mid = 0.0f;
+        else if (dy > 0) mid = 0.5f * pi;
+        else if (dx < 0) mid = pi;
+        else mid = 1.5f * pi;
+        start = mid - half_angle;
+        end = mid + half_angle;
+    }
+
+    if (out_start) *out_start = start;
+    if (out_end) *out_end = end;
+    if (out_mid) *out_mid = (start + end) * 0.5f;
+}
+
+static void sdl_minimap_draw_hint_destination_area(
+    const hint_message_meta* meta, const hint_message_destination* destination,
+    const SDL_FRect* map_dst, int min_y, int min_x, int max_y, int max_x,
+    SDL_Color fill, float* out_label_x, float* out_label_y)
+{
+    int map_rows = max_y - min_y + 1;
+    int map_cols = max_x - min_x + 1;
+    SDL_Vertex vertices[(SDL_HINT_AREA_ARC_SEGMENTS + 1) * 2];
+    int indices[SDL_HINT_AREA_ARC_SEGMENTS * 6];
+    SDL_FPoint outer_line[SDL_HINT_AREA_ARC_SEGMENTS + 1];
+    SDL_FPoint inner_line[SDL_HINT_AREA_ARC_SEGMENTS + 1];
+    SDL_FColor fcolor = sdl_minimap_hint_fcolor(fill);
+    SDL_Color outline = fill;
+    float grid_w;
+    float grid_h;
+    float source_x;
+    float source_y;
+    float inner_dist;
+    float outer_dist;
+    float start_angle;
+    float end_angle;
+    float mid_angle;
+    float label_dist;
+    int vcount = 0;
+    int icount = 0;
+
+    if (!meta || !destination || !map_dst || map_rows <= 0 || map_cols <= 0)
+        return;
+
+    grid_w = map_dst->w / (float)map_cols;
+    grid_h = map_dst->h / (float)map_rows;
+    source_x = map_dst->x
+        + ((float)(meta->source_x - min_x) + 0.5f) * grid_w;
+    source_y = map_dst->y
+        + ((float)(meta->source_y - min_y) + 0.5f) * grid_h;
+    inner_dist = MAX(0.0f, (float)destination->min_dist * 0.94f - 0.5f);
+    outer_dist = (float)destination->max_dist + 0.75f;
+
+    if (destination->y == meta->source_y
+        && destination->x == meta->source_x)
+    {
+        inner_dist = 0.0f;
+        outer_dist = 1.15f;
+    }
+
+    sdl_minimap_hint_destination_angles(meta, destination, outer_dist,
+        &start_angle, &end_angle, &mid_angle);
+    for (int i = 0; i <= SDL_HINT_AREA_ARC_SEGMENTS; ++i) {
+        float t = (float)i / (float)SDL_HINT_AREA_ARC_SEGMENTS;
+        float angle = start_angle + (end_angle - start_angle) * t;
+        float ct = SDL_cosf(angle);
+        float st = SDL_sinf(angle);
+        SDL_FPoint inner = {
+            source_x + ct * inner_dist * grid_w,
+            source_y + st * inner_dist * grid_h
+        };
+        SDL_FPoint outer = {
+            source_x + ct * outer_dist * grid_w,
+            source_y + st * outer_dist * grid_h
+        };
+
+        vertices[vcount++] = (SDL_Vertex){ inner, fcolor, { 0.0f, 0.0f } };
+        vertices[vcount++] = (SDL_Vertex){ outer, fcolor, { 0.0f, 0.0f } };
+        inner_line[i] = inner;
+        outer_line[i] = outer;
+    }
+    for (int i = 0; i < SDL_HINT_AREA_ARC_SEGMENTS; ++i) {
+        int inner_a = i * 2;
+        int outer_a = inner_a + 1;
+        int inner_b = inner_a + 2;
+        int outer_b = inner_a + 3;
+
+        indices[icount++] = inner_a;
+        indices[icount++] = outer_a;
+        indices[icount++] = inner_b;
+        indices[icount++] = inner_b;
+        indices[icount++] = outer_a;
+        indices[icount++] = outer_b;
+    }
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_RenderGeometry(g_state.renderer, NULL, vertices, vcount, indices,
+        icount);
+    outline.a = 155;
+    SDL_SetRenderDrawColor(g_state.renderer, outline.r, outline.g, outline.b,
+        outline.a);
+    SDL_RenderLines(g_state.renderer, outer_line,
+        SDL_HINT_AREA_ARC_SEGMENTS + 1);
+    if (inner_dist > 0.0f) {
+        SDL_RenderLines(g_state.renderer, inner_line,
+            SDL_HINT_AREA_ARC_SEGMENTS + 1);
+    }
+    SDL_RenderLine(g_state.renderer, inner_line[0].x, inner_line[0].y,
+        outer_line[0].x, outer_line[0].y);
+    SDL_RenderLine(g_state.renderer,
+        inner_line[SDL_HINT_AREA_ARC_SEGMENTS].x,
+        inner_line[SDL_HINT_AREA_ARC_SEGMENTS].y,
+        outer_line[SDL_HINT_AREA_ARC_SEGMENTS].x,
+        outer_line[SDL_HINT_AREA_ARC_SEGMENTS].y);
+
+    label_dist = (inner_dist + outer_dist) * 0.5f;
+    if (out_label_x)
+        *out_label_x = source_x + SDL_cosf(mid_angle) * label_dist * grid_w;
+    if (out_label_y)
+        *out_label_y = source_y + SDL_sinf(mid_angle) * label_dist * grid_h;
+}
+
+static const char* sdl_minimap_hint_destination_label(
+    const hint_message_destination* destination)
+{
+    int feat;
+
+    if (!destination)
+        return "Destination";
+    switch ((hint_message_destination_kind)destination->kind) {
+    case HINT_DESTINATION_FIXED_FEATURE:
+        feat = destination->id;
+        if (feat == FEAT_MORE) return "Down Stair";
+        if (feat == FEAT_MORE_SHAFT) return "Down Shaft";
+        if (feat == FEAT_LESS) return "Up Stair";
+        if (feat == FEAT_LESS_SHAFT) return "Up Shaft";
+        if (feat >= FEAT_FORGE_UNIQUE_HEAD
+            && feat <= FEAT_FORGE_UNIQUE_TAIL)
+        {
+            return "Unique Forge";
+        }
+        if (feat >= FEAT_FORGE_GOOD_HEAD && feat <= FEAT_FORGE_GOOD_TAIL)
+            return "Enchanted Forge";
+        return "Forge";
+    case HINT_DESTINATION_GREAT_VAULT:
+        return "Great Vault";
+    case HINT_DESTINATION_ARTEFACT:
+        return "Hidden Artefact";
+    case HINT_DESTINATION_QUEST_GIVER:
+        return "Quest Giver";
+    case HINT_DESTINATION_UNIQUE_MONSTER:
+        return "Unique Monster";
+    case HINT_DESTINATION_PARTITION:
+        switch (level_partition_kind_for_point(destination->y,
+            destination->x))
+        {
+        case LEVEL_PART_ROOMY:
+            return "Rooms";
+        case LEVEL_PART_CAVEY:
+            return "Caves";
+        case LEVEL_PART_RUINED:
+            return "Ruins";
+        case LEVEL_PART_LABYRINTH:
+            return "Labyrinth";
+        case LEVEL_PART_CHASM:
+            return "Chasm";
+        case LEVEL_PART_BIG_CAVE:
+            switch (level_partition_big_cave_type_for_point(destination->y,
+                destination->x))
+            {
+            case BIG_CAVE_ICE:
+                return "Ice Cave";
+            case BIG_CAVE_FIRE:
+                return "Fire Cave";
+            case BIG_CAVE_POIS:
+                return "Poison Cave";
+            default:
+                return "Great Cave";
+            }
+        default:
+            return "Region";
+        }
+    case HINT_DESTINATION_FIXED_QUEST_SITE:
+        return "Quest Site";
+    default:
+        return "Destination";
+    }
+}
+
+static void sdl_minimap_draw_hint_destination_label(const char* label,
+    float anchor_x, float anchor_y, float grid_h, const SDL_FRect* map_dst,
+    bool exact, SDL_Color accent)
+{
+    sdl_view* d = sdl_view_from_term(Term);
+    SDL_FRect box;
+    SDL_Color text_color = {
+        (byte)MIN(255, (int)accent.r + 70),
+        (byte)MIN(255, (int)accent.g + 70),
+        (byte)MIN(255, (int)accent.b + 70),
+        255
+    };
+    int len;
+    int atlas_cell_w;
+    int atlas_cell_h;
+    float cell_h;
+    float cell_w;
+    float max_box_w;
+    const float pad_x = 3.0f;
+    const float pad_y = 2.0f;
+
+    if (!label || !label[0] || !map_dst || !d || !d->font_atlas)
+        return;
+    len = (int)strlen(label);
+    if (len <= 0)
+        return;
+
+    atlas_cell_w = d->font_atlas_cell_w > 0
+        ? d->font_atlas_cell_w : d->cell_w;
+    atlas_cell_h = d->font_atlas_cell_h > 0
+        ? d->font_atlas_cell_h : d->cell_h;
+    cell_h = grid_h * 1.35f;
+    if (cell_h < 8.0f) cell_h = 8.0f;
+    if (cell_h > 13.0f) cell_h = 13.0f;
+    cell_w = cell_h * 0.62f;
+    max_box_w = MAX(12.0f, map_dst->w - 4.0f);
+    if ((float)len * cell_w + 2.0f * pad_x > max_box_w) {
+        cell_w = (max_box_w - 2.0f * pad_x) / (float)len;
+        cell_h = cell_w / 0.62f;
+    }
+    if (cell_h + 2.0f * pad_y > map_dst->h - 2.0f) {
+        cell_h = map_dst->h - 2.0f - 2.0f * pad_y;
+        cell_w = cell_h * 0.62f;
+    }
+    if (cell_h < 6.0f)
+        return;
+
+    box.w = (float)len * cell_w + 2.0f * pad_x;
+    box.h = cell_h + 2.0f * pad_y;
+    box.x = anchor_x - box.w * 0.5f;
+    box.y = exact ? anchor_y - box.h - 5.0f : anchor_y - box.h * 0.5f;
+    if (box.x < map_dst->x + 1.0f)
+        box.x = map_dst->x + 1.0f;
+    if (box.x + box.w > map_dst->x + map_dst->w - 1.0f)
+        box.x = map_dst->x + map_dst->w - box.w - 1.0f;
+    if (box.y < map_dst->y + 1.0f)
+        box.y = exact ? anchor_y + 5.0f : map_dst->y + 1.0f;
+    if (box.y + box.h > map_dst->y + map_dst->h - 1.0f)
+        box.y = map_dst->y + map_dst->h - box.h - 1.0f;
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer,
+        (byte)((int)accent.r / 8), (byte)((int)accent.g / 8),
+        (byte)((int)accent.b / 8), exact ? 230 : 218);
+    SDL_RenderFillRect(g_state.renderer, &box);
+    SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b,
+        240);
+    SDL_RenderRect(g_state.renderer, &box);
+    sdl_render_mono_text_scaled(d->font_atlas, atlas_cell_w, atlas_cell_h,
+        cell_w, cell_h, box.x + pad_x, box.y + pad_y, 0, 0, len, label,
+        text_color);
+}
+
+static void sdl_minimap_draw_hint_destination_exact(int y, int x,
+    const SDL_FRect* map_dst, int min_y, int min_x, int max_y, int max_x,
+    SDL_Color accent, float* out_label_x, float* out_label_y)
+{
+    int map_rows = max_y - min_y + 1;
+    int map_cols = max_x - min_x + 1;
+    float grid_w;
+    float grid_h;
+    float center_x;
+    float center_y;
+    const float min_marker = 9.0f;
+    SDL_FRect marker;
+
+    if (!map_dst || map_rows <= 0 || map_cols <= 0
+        || y < min_y || y > max_y || x < min_x || x > max_x)
+    {
+        return;
+    }
+
+    grid_w = map_dst->w / (float)map_cols;
+    grid_h = map_dst->h / (float)map_rows;
+    marker.x = map_dst->x + (float)(x - min_x) * grid_w;
+    marker.y = map_dst->y + (float)(y - min_y) * grid_h;
+    marker.w = grid_w;
+    marker.h = grid_h;
+    center_x = marker.x + marker.w * 0.5f;
+    center_y = marker.y + marker.h * 0.5f;
+    if (marker.w < min_marker) {
+        marker.w = min_marker;
+        marker.x = center_x - marker.w * 0.5f;
+    }
+    if (marker.h < min_marker) {
+        marker.h = min_marker;
+        marker.y = center_y - marker.h * 0.5f;
+    }
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b,
+        78);
+    SDL_RenderFillRect(g_state.renderer, &marker);
+    SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b,
+        245);
+    SDL_RenderRect(g_state.renderer, &marker);
+    SDL_RenderLine(g_state.renderer, marker.x, marker.y,
+        marker.x + marker.w, marker.y + marker.h);
+    SDL_RenderLine(g_state.renderer, marker.x + marker.w, marker.y,
+        marker.x, marker.y + marker.h);
+    if (out_label_x) *out_label_x = center_x;
+    if (out_label_y) *out_label_y = center_y;
+}
+
+void sdl_minimap_draw_hint_destinations(const SDL_FRect* map_dst, int min_y,
+    int min_x, int max_y, int max_x)
+{
+#define SDL_HINT_DESTINATION_LABEL_MAX 64
+    typedef struct sdl_hint_destination_pending_label {
+        const char* text;
+        float x;
+        float y;
+        bool exact;
+        SDL_Color accent;
+    } sdl_hint_destination_pending_label;
+    byte count;
+    bool had_clip;
+    SDL_Rect old_clip;
+    SDL_Rect map_clip;
+    float grid_h;
+    sdl_hint_destination_pending_label labels[SDL_HINT_DESTINATION_LABEL_MAX];
+    int label_count = 0;
+
+    if (!map_dst || max_y < min_y || max_x < min_x)
+        return;
+    grid_h = map_dst->h / (float)(max_y - min_y + 1);
+    had_clip = SDL_RenderClipEnabled(g_state.renderer);
+    if (had_clip)
+        SDL_GetRenderClipRect(g_state.renderer, &old_clip);
+    map_clip = sdl_frect_to_clip_rect(map_dst);
+    if (had_clip) {
+        SDL_Rect intersection;
+
+        if (!SDL_GetRectIntersection(&map_clip, &old_clip, &intersection))
+            return;
+        map_clip = intersection;
+    }
+    SDL_SetRenderClipRect(g_state.renderer, &map_clip);
+
+    count = hint_messages_count_for_save();
+    for (int i = 0; i < count; ++i) {
+        hint_message_meta meta;
+
+        hint_messages_message_meta(i, &meta);
+        for (int destination_index = 0;
+            destination_index < meta.destination_count; ++destination_index)
+        {
+            const hint_message_destination* destination =
+                &meta.destinations[destination_index];
+            int display_y = -1;
+            int display_x = -1;
+            sdl_hint_destination_display display =
+                sdl_minimap_hint_destination_state(&meta, destination,
+                    &display_y, &display_x);
+            SDL_Color accent = sdl_minimap_hint_destination_color(
+                destination, 255);
+            SDL_Color fill = accent;
+            float label_x = 0.0f;
+            float label_y = 0.0f;
+            bool drew = false;
+
+            if (display == SDL_HINT_DESTINATION_AREA) {
+                fill.a = 58;
+                sdl_minimap_draw_hint_destination_area(&meta, destination,
+                    map_dst, min_y, min_x, max_y, max_x, fill, &label_x,
+                    &label_y);
+                drew = true;
+            } else if (display == SDL_HINT_DESTINATION_EXACT) {
+                sdl_minimap_draw_hint_destination_exact(display_y, display_x,
+                    map_dst, min_y, min_x, max_y, max_x, accent, &label_x,
+                    &label_y);
+                drew = true;
+            }
+
+            if (drew && label_count < SDL_HINT_DESTINATION_LABEL_MAX) {
+                labels[label_count++] =
+                    (sdl_hint_destination_pending_label){
+                        sdl_minimap_hint_destination_label(destination),
+                        label_x,
+                        label_y,
+                        display == SDL_HINT_DESTINATION_EXACT,
+                        accent
+                    };
+            }
+        }
+    }
+    for (int i = 0; i < label_count; ++i) {
+        sdl_minimap_draw_hint_destination_label(labels[i].text, labels[i].x,
+            labels[i].y, grid_h, map_dst, labels[i].exact,
+            labels[i].accent);
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, had_clip ? &old_clip : NULL);
+#undef SDL_HINT_DESTINATION_LABEL_MAX
 }
 
 void sdl_minimap_draw_hint_sources(const SDL_FRect* map_dst, int min_y,
@@ -2248,7 +3020,7 @@ bool sdl_minimap_known_bounds(int* min_y, int* min_x, int* max_y,
         any = true;
     }
 
-    sdl_minimap_expand_bounds_for_hint_sources(min_y, min_x, max_y, max_x,
+    sdl_minimap_expand_bounds_for_hints(min_y, min_x, max_y, max_x,
         &any);
 
     if (g_minimap.focus_active
@@ -2482,6 +3254,40 @@ static Uint64 sdl_side_map_pane_aux_bounds_hash(void)
         hash *= 1099511628211ULL;
         hash ^= (Uint64)(u16b)meta.source_x;
         hash *= 1099511628211ULL;
+        hash ^= (Uint64)meta.destination_count;
+        hash *= 1099511628211ULL;
+        for (int destination_index = 0;
+            destination_index < meta.destination_count; ++destination_index)
+        {
+            const hint_message_destination* destination =
+                &meta.destinations[destination_index];
+            int display_y = -1;
+            int display_x = -1;
+            sdl_hint_destination_display display =
+                sdl_minimap_hint_destination_state(&meta, destination,
+                    &display_y, &display_x);
+
+            hash ^= (Uint64)destination->kind;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->y;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->x;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->id;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->min_dist;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->max_dist;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)display;
+            hash *= 1099511628211ULL;
+            if (display == SDL_HINT_DESTINATION_EXACT) {
+                hash ^= (Uint64)(u16b)display_y;
+                hash *= 1099511628211ULL;
+                hash ^= (Uint64)(u16b)display_x;
+                hash *= 1099511628211ULL;
+            }
+        }
     }
     hash ^= (Uint64)(g_minimap.focus_active ? 1 : 0);
     hash *= 1099511628211ULL;
@@ -2770,6 +3576,8 @@ void sdl_side_map_pane_render(void)
     SDL_SetRenderClipRect(g_state.renderer, &clip);
     SDL_RenderTexture(g_state.renderer, map_texture, NULL, &map_dst);
 
+    sdl_minimap_draw_hint_destinations(&map_dst, min_y, min_x, max_y,
+        max_x);
     sdl_minimap_draw_hint_sources(&map_dst, min_y, min_x, max_y, max_x);
     sdl_side_map_pane_draw_player_marker(&map_dst, min_y, min_x, max_y,
         max_x);
@@ -3494,6 +4302,8 @@ bool sdl_display_pixel_map(int* cy, int* cx)
     SDL_SetRenderDrawColor(g_state.renderer, 255, 255, 255, 80);
     SDL_RenderRect(g_state.renderer, &map_dst);
 
+    sdl_minimap_draw_hint_destinations(&map_dst, min_y, min_x, max_y,
+        max_x);
     sdl_minimap_draw_hint_sources(&map_dst, min_y, min_x, max_y, max_x);
     sdl_minimap_draw_focused_location(&map_dst, min_y, min_x, max_y, max_x);
 

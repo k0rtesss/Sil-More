@@ -94,6 +94,7 @@ bool savefile_has_cave_rewired = false;
 bool savefile_has_cave_natural = false;
 bool savefile_has_hint_messages = false;
 bool savefile_has_hint_message_meta = false;
+bool savefile_has_hint_message_destinations = false;
 bool savefile_has_thrall_quest = false;
 bool savefile_has_thrall_quest_requested = false;
 bool savefile_has_randart_flags4 = false;
@@ -2713,6 +2714,8 @@ static errr rd_savefile_new_aux(void)
     savefile_has_cave_natural = savefile_version_at_least(0, 9, 7, 4);
     savefile_has_hint_messages = savefile_version_at_least(0, 9, 1, 10);
     savefile_has_hint_message_meta = savefile_version_at_least(0, 9, 5, 7);
+    savefile_has_hint_message_destinations =
+        savefile_version_at_least(0, 9, 7, 14);
     savefile_has_thrall_quest = savefile_version_at_least(0, 9, 1, 11);
     savefile_has_thrall_quest_requested = savefile_version_at_least(0, 9, 1, 12);
     savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);
@@ -3204,6 +3207,8 @@ bool load_player(void)
             savefile_has_cave_natural = savefile_version_at_least(0, 9, 7, 4);
             savefile_has_hint_messages = savefile_version_at_least(0, 9, 1, 10);
             savefile_has_hint_message_meta = savefile_version_at_least(0, 9, 5, 7);
+            savefile_has_hint_message_destinations =
+                savefile_version_at_least(0, 9, 7, 14);
             savefile_has_thrall_quest = savefile_version_at_least(0, 9, 1, 11);
             savefile_has_thrall_quest_requested = savefile_version_at_least(0, 9, 1, 12);
             savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);

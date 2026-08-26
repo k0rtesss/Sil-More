@@ -1716,15 +1716,6 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, " normally removes that hero from the current Tale.", row, col + 12);
         row++;
         x = col;
-        put_role(ROLE_BODY, "- Need ", row, x); x += 7;
-        put_role(ROLE_WARN, "1 living hero per 3", row, x); x += 19;
-        put_role(ROLE_BODY, " unrecovered ", row, x); x += 13;
-        put_role(ROLE_TERM, "Silmarils", row, x); x += 9;
-        put_role(ROLE_BODY, ", plus any ", row, x); x += 11;
-        put_role(ROLE_BAD, "Death-curse", row, x); x += 11;
-        put_role(ROLE_BODY, " demand.", row, x);
-        row++;
-        x = col;
         put_role(ROLE_BODY, "- The ", row, x); x += 6;
         put_role(ROLE_UI, "Tale screen", row, x); x += 11;
         put_role(ROLE_BODY, " shows the current goal and how many survivors are required.", row, x);
@@ -1768,12 +1759,6 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_TERM, "traits", row, x); x += 6;
         put_role(ROLE_BODY, ".", row, x);
         row++;
-        x = col;
-        put_role(ROLE_BODY, "- Each use makes a ", row, x); x += 19;
-        put_role(ROLE_WARN, "1-in-6 random roll (16.7%)", row, x); x += 26;
-        put_role(ROLE_BODY, " to reveal one active ", row, x); x += 22;
-        put_role(ROLE_BAD, "curse", row, x); x += 5;
-        put_role(ROLE_BODY, ".", row, x);
         row += 2;
 
         help_emit_heading("TALE-WIDE PROGRESSION", row, col); row++;
@@ -1816,26 +1801,6 @@ static void show_help_screen_legacy(int source_page, int display_page,
             sprintf(page_header, "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: START & DEPTH", display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
-        row += 2;
-
-        help_emit_heading("START", row, col); row++;
-        x = col;
-        put_role(ROLE_BODY, "- Your ", row, x); x += 7;
-        put_role(ROLE_TERM, "people", row, x); x += 6;
-        put_role(ROLE_BODY, " and ", row, x); x += 5;
-        put_role(ROLE_TERM, "hero", row, x); x += 4;
-        put_role(ROLE_BODY, " determine your starting kit, ", row, x); x += 30;
-        put_role(ROLE_GOOD, "abilities", row, x); x += 9;
-        put_role(ROLE_BODY, ", and ready gear.", row, x);
-        row++;
-        x = col;
-        put_role(ROLE_BODY, "- Check ", row, x); x += 8;
-        put_role(ROLE_UI, "Equipped", row, x); x += 8;
-        put_role(ROLE_BODY, ", ", row, x); x += 2;
-        put_role(ROLE_UI, "Inventory", row, x); x += 9;
-        put_role(ROLE_BODY, ", and ", row, x); x += 6;
-        put_role(ROLE_UI, "Supplies", row, x); x += 8;
-        put_role(ROLE_BODY, " before planning the first fight.", row, x);
         row += 2;
 
         help_emit_heading("DEPTH & DEEP CALL", row, col); row++;
@@ -2211,20 +2176,6 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row += 2;
 
         help_emit_heading("CRAFTING & PROGRESSION", row, col); row++;
-        x = col;
-        put_role(ROLE_BODY, "- Guaranteed ", row, x); x += 13;
-        put_role(ROLE_GOOD, "forges", row, x); x += 6;
-        put_role(ROLE_BODY, " appear on first entry to ", row, x); x += 26;
-        put_role(ROLE_WARN, "100 ft, 300 ft, and 500 ft", row, x); x += 26;
-        put_role(ROLE_BODY, ".", row, x);
-        row++;
-        x = col;
-        put_role(ROLE_BODY, "- If a ", row, x); x += 7;
-        put_role(ROLE_WARN, "shaft skips one", row, x); x += 15;
-        put_role(ROLE_BODY, ", its guaranteed forge moves to the ", row, x); x += 36;
-        put_role(ROLE_GOOD, "first deeper level", row, x); x += 18;
-        put_role(ROLE_BODY, ".", row, x);
-        row++;
         x = col;
         put_role(ROLE_BODY, "- Forge uses are ", row, x); x += 17;
         put_role(ROLE_WARN, "finite", row, x); x += 6;

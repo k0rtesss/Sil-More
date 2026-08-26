@@ -371,6 +371,19 @@ void wr_extra(void)
                 wr_string(meta.cue_dists[cue]);
                 wr_string(meta.cue_dirs[cue]);
             }
+            wr_byte(meta.destination_count);
+            for (int destination = 0;
+                destination < HINT_MESSAGE_DESTINATION_MAX; ++destination)
+            {
+                const hint_message_destination* dst =
+                    &meta.destinations[destination];
+                wr_byte(dst->kind);
+                wr_s16b(dst->y);
+                wr_s16b(dst->x);
+                wr_s16b(dst->id);
+                wr_s16b(dst->min_dist);
+                wr_s16b(dst->max_dist);
+            }
         }
     }
 

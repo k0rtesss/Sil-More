@@ -1186,10 +1186,23 @@ static void hint_messages_clear_for_level(s16b level_depth, s16b map_wid, s16b m
         g_hint_message_state.meta[i].source_y = -1;
         g_hint_message_state.meta[i].source_x = -1;
         g_hint_message_state.meta[i].cue_count = 0;
+        g_hint_message_state.meta[i].destination_count = 0;
         for (int cue = 0; cue < HINT_MESSAGE_CUE_MAX; ++cue)
         {
             g_hint_message_state.meta[i].cue_dirs[cue][0] = '\0';
             g_hint_message_state.meta[i].cue_dists[cue][0] = '\0';
+        }
+        for (int destination = 0;
+            destination < HINT_MESSAGE_DESTINATION_MAX; ++destination)
+        {
+            hint_message_destination* dst =
+                &g_hint_message_state.meta[i].destinations[destination];
+            dst->kind = HINT_DESTINATION_NONE;
+            dst->y = -1;
+            dst->x = -1;
+            dst->id = 0;
+            dst->min_dist = 0;
+            dst->max_dist = -1;
         }
     }
 }
@@ -1202,10 +1215,23 @@ static void hint_message_meta_copy(hint_message_meta* dst, const hint_message_me
     dst->source_y = -1;
     dst->source_x = -1;
     dst->cue_count = 0;
+    dst->destination_count = 0;
     for (int cue = 0; cue < HINT_MESSAGE_CUE_MAX; ++cue)
     {
         dst->cue_dirs[cue][0] = '\0';
         dst->cue_dists[cue][0] = '\0';
+    }
+    for (int destination = 0;
+        destination < HINT_MESSAGE_DESTINATION_MAX; ++destination)
+    {
+        hint_message_destination* dst_destination =
+            &dst->destinations[destination];
+        dst_destination->kind = HINT_DESTINATION_NONE;
+        dst_destination->y = -1;
+        dst_destination->x = -1;
+        dst_destination->id = 0;
+        dst_destination->min_dist = 0;
+        dst_destination->max_dist = -1;
     }
 
     if (!src)
@@ -1220,6 +1246,13 @@ static void hint_message_meta_copy(hint_message_meta* dst, const hint_message_me
             (cue < dst->cue_count) ? src->cue_dirs[cue] : "");
         strnfmt(dst->cue_dists[cue], HINT_MESSAGE_CUE_TEXT_MAX, "%s",
             (cue < dst->cue_count) ? src->cue_dists[cue] : "");
+    }
+    dst->destination_count = MIN(src->destination_count,
+        HINT_MESSAGE_DESTINATION_MAX);
+    for (int destination = 0;
+        destination < dst->destination_count; ++destination)
+    {
+        dst->destinations[destination] = src->destinations[destination];
     }
 }
 
@@ -3056,14 +3089,23 @@ static const char* skeleton_note_direction_phrase(int from_y, int from_x, int to
     return "to the north-west";
 }
 
-static const char* skeleton_note_distance_phrase(int dist,
-    const level_layout_info* layout, char* buf, size_t buf_sz)
+typedef enum skeleton_note_distance_band {
+    SKELETON_NOTE_DISTANCE_SHORT = 0,
+    SKELETON_NOTE_DISTANCE_SOME,
+    SKELETON_NOTE_DISTANCE_LONG,
+    SKELETON_NOTE_DISTANCE_VERY_LONG
+} skeleton_note_distance_band;
+
+static skeleton_note_distance_band skeleton_note_distance_band_for(
+    int dist, const level_layout_info* layout, int* out_min_dist,
+    int* out_max_dist)
 {
     int side = layout ? MAX(layout->map_wid, layout->map_hgt) : 0;
     int near_limit = 10;
     int mid_limit = 24;
     int far_limit = 48;
-    int max_dist = 0;
+    int max_dist = far_limit + 1;
+    skeleton_note_distance_band band;
 
     if (side > 0)
     {
@@ -3078,34 +3120,68 @@ static const char* skeleton_note_distance_phrase(int dist,
             0, 0, layout->map_hgt - 1, layout->map_wid - 1);
     }
 
-    if (!buf || buf_sz == 0)
-        return "";
     if (dist < 0)
         dist = 0;
-
     if (dist < near_limit)
     {
+        band = SKELETON_NOTE_DISTANCE_SHORT;
+        if (out_min_dist) *out_min_dist = 0;
+        if (out_max_dist) *out_max_dist = near_limit - 1;
+    }
+    else if (dist <= mid_limit)
+    {
+        band = SKELETON_NOTE_DISTANCE_SOME;
+        if (out_min_dist) *out_min_dist = near_limit;
+        if (out_max_dist) *out_max_dist = MIN(mid_limit, max_dist);
+    }
+    else if (dist <= far_limit)
+    {
+        band = SKELETON_NOTE_DISTANCE_LONG;
+        if (out_min_dist) *out_min_dist = mid_limit + 1;
+        if (out_max_dist) *out_max_dist = MIN(far_limit, max_dist);
+    }
+    else
+    {
+        band = SKELETON_NOTE_DISTANCE_VERY_LONG;
+        if (out_min_dist) *out_min_dist = far_limit + 1;
+        if (out_max_dist) *out_max_dist = max_dist;
+    }
+
+    return band;
+}
+
+static const char* skeleton_note_distance_phrase(int dist,
+    const level_layout_info* layout, char* buf, size_t buf_sz)
+{
+    int min_dist = 0;
+    int max_dist = 0;
+    skeleton_note_distance_band band = skeleton_note_distance_band_for(
+        dist, layout, &min_dist, &max_dist);
+
+    if (!buf || buf_sz == 0)
+        return "";
+
+    if (band == SKELETON_NOTE_DISTANCE_SHORT)
+    {
         strnfmt(buf, buf_sz, "a short way (less than %d squares)",
-            near_limit);
+            max_dist + 1);
         return buf;
     }
-    if (dist <= mid_limit)
+    if (band == SKELETON_NOTE_DISTANCE_SOME)
     {
-        int hi = (max_dist > 0) ? MIN(mid_limit, max_dist) : mid_limit;
         strnfmt(buf, buf_sz, "some distance (%d to %d squares)",
-            near_limit, hi);
+            min_dist, max_dist);
         return buf;
     }
-    if (dist <= far_limit)
+    if (band == SKELETON_NOTE_DISTANCE_LONG)
     {
-        int hi = (max_dist > 0) ? MIN(far_limit, max_dist) : far_limit;
         strnfmt(buf, buf_sz, "a long way (%d to %d squares)",
-            mid_limit + 1, hi);
+            min_dist, max_dist);
         return buf;
     }
 
     strnfmt(buf, buf_sz, "a very long way (more than %d squares)",
-        far_limit);
+        min_dist - 1);
     return buf;
 }
 
@@ -3248,12 +3324,16 @@ static bool skeleton_note_find_nearest_forge(
 }
 
 static bool skeleton_note_find_nearest_quest_site(
-    int from_y, int from_x, int* out_y, int* out_x, int* out_dist, const char** out_site)
+    int from_y, int from_x, int* out_y, int* out_x, int* out_dist,
+    const char** out_site, hint_message_destination_kind* out_kind,
+    int* out_id)
 {
     int best_y = -1;
     int best_x = -1;
     int best_dist = 0;
     const char* best_site = NULL;
+    hint_message_destination_kind best_kind = HINT_DESTINATION_NONE;
+    int best_id = 0;
     int seen = 0;
 
     for (int i = 1; i < mon_max; i++)
@@ -3273,6 +3353,10 @@ static bool skeleton_note_find_nearest_quest_site(
             best_x = m_ptr->fx;
             best_dist = dist;
             best_site = skeleton_note_quest_site_name(r_idx);
+            best_kind = skeleton_note_is_quest_giver_r_idx(r_idx)
+                ? HINT_DESTINATION_QUEST_GIVER
+                : HINT_DESTINATION_UNIQUE_MONSTER;
+            best_id = r_idx;
             seen = 1;
             continue;
         }
@@ -3285,6 +3369,10 @@ static bool skeleton_note_find_nearest_quest_site(
                 best_y = m_ptr->fy;
                 best_x = m_ptr->fx;
                 best_site = skeleton_note_quest_site_name(r_idx);
+                best_kind = skeleton_note_is_quest_giver_r_idx(r_idx)
+                    ? HINT_DESTINATION_QUEST_GIVER
+                    : HINT_DESTINATION_UNIQUE_MONSTER;
+                best_id = r_idx;
             }
         }
     }
@@ -3302,6 +3390,8 @@ static bool skeleton_note_find_nearest_quest_site(
                 best_x = x;
                 best_dist = dist;
                 best_site = "a forge of strange craft";
+                best_kind = HINT_DESTINATION_FIXED_QUEST_SITE;
+                best_id = cave_feat[y][x];
                 seen = 1;
             }
             else if (dist == best_dist)
@@ -3312,6 +3402,8 @@ static bool skeleton_note_find_nearest_quest_site(
                     best_y = y;
                     best_x = x;
                     best_site = "a forge of strange craft";
+                    best_kind = HINT_DESTINATION_FIXED_QUEST_SITE;
+                    best_id = cave_feat[y][x];
                 }
             }
         }
@@ -3330,6 +3422,8 @@ static bool skeleton_note_find_nearest_quest_site(
                 best_x = x;
                 best_dist = dist;
                 best_site = "a hall of doom";
+                best_kind = HINT_DESTINATION_FIXED_QUEST_SITE;
+                best_id = 0;
                 seen = 1;
             }
             else if (dist == best_dist)
@@ -3340,6 +3434,8 @@ static bool skeleton_note_find_nearest_quest_site(
                     best_y = y;
                     best_x = x;
                     best_site = "a hall of doom";
+                    best_kind = HINT_DESTINATION_FIXED_QUEST_SITE;
+                    best_id = 0;
                 }
             }
         }
@@ -3352,6 +3448,8 @@ static bool skeleton_note_find_nearest_quest_site(
     if (out_x) *out_x = best_x;
     if (out_dist) *out_dist = best_dist;
     if (out_site) *out_site = best_site ? best_site : "a Power";
+    if (out_kind) *out_kind = best_kind;
+    if (out_id) *out_id = best_id;
     return true;
 }
 
@@ -3597,10 +3695,11 @@ static const char* skeleton_note_hoard_site_for_object(
 static bool skeleton_note_find_nearest_artefact(
     int from_y, int from_x, int* out_y, int* out_x, int* out_dist,
     char* out_site, size_t out_site_sz, char* out_artefact_kind,
-    size_t out_artefact_kind_sz)
+    size_t out_artefact_kind_sz, int* out_a_idx)
 {
     int best_y = -1;
     int best_x = -1;
+    int best_a_idx = 0;
     int best_dist = 0;
     char best_site[96];
     char best_artefact_kind[64];
@@ -3623,6 +3722,7 @@ static bool skeleton_note_find_nearest_artefact(
 
             best_y = o_ptr->iy;
             best_x = o_ptr->ix;
+            best_a_idx = o_ptr->name1;
             best_dist = dist;
             vault_site[0] = '\0';
             site = skeleton_note_hoard_site_for_object(
@@ -3645,6 +3745,7 @@ static bool skeleton_note_find_nearest_artefact(
 
                 best_y = o_ptr->iy;
                 best_x = o_ptr->ix;
+                best_a_idx = o_ptr->name1;
                 vault_site[0] = '\0';
                 site = skeleton_note_hoard_site_for_object(
                     o_ptr, vault_site, sizeof(vault_site));
@@ -3662,6 +3763,7 @@ static bool skeleton_note_find_nearest_artefact(
     if (out_y) *out_y = best_y;
     if (out_x) *out_x = best_x;
     if (out_dist) *out_dist = best_dist;
+    if (out_a_idx) *out_a_idx = best_a_idx;
     if (out_site && out_site_sz > 0)
     {
         strnfmt(out_site, out_site_sz, "%s",
@@ -3887,6 +3989,13 @@ static void hint_message_meta_init(hint_message_meta* meta, int source_y, int so
     memset(meta, 0, sizeof(*meta));
     meta->source_y = (s16b)source_y;
     meta->source_x = (s16b)source_x;
+    for (int i = 0; i < HINT_MESSAGE_DESTINATION_MAX; ++i)
+    {
+        meta->destinations[i].kind = HINT_DESTINATION_NONE;
+        meta->destinations[i].y = -1;
+        meta->destinations[i].x = -1;
+        meta->destinations[i].max_dist = -1;
+    }
 }
 
 static bool hint_message_cue_is_specific(const char* dist, const char* dir)
@@ -3918,6 +4027,32 @@ static void hint_message_meta_add_cue(hint_message_meta* meta, const char* dist,
     int slot = meta->cue_count++;
     strnfmt(meta->cue_dists[slot], HINT_MESSAGE_CUE_TEXT_MAX, "%s", dist ? dist : "");
     strnfmt(meta->cue_dirs[slot], HINT_MESSAGE_CUE_TEXT_MAX, "%s", dir ? dir : "");
+}
+
+static void hint_message_meta_add_destination(hint_message_meta* meta,
+    hint_message_destination_kind kind, int y, int x, int id, int dist,
+    const level_layout_info* layout)
+{
+    hint_message_destination* destination;
+    int min_dist = 0;
+    int max_dist = -1;
+
+    if (!meta || kind == HINT_DESTINATION_NONE)
+        return;
+    if (!in_bounds(y, x))
+        return;
+    if (meta->destination_count >= HINT_MESSAGE_DESTINATION_MAX)
+        return;
+
+    (void)skeleton_note_distance_band_for(
+        dist, layout, &min_dist, &max_dist);
+    destination = &meta->destinations[meta->destination_count++];
+    destination->kind = (byte)kind;
+    destination->y = (s16b)y;
+    destination->x = (s16b)x;
+    destination->id = (s16b)id;
+    destination->min_dist = (s16b)min_dist;
+    destination->max_dist = (s16b)max_dist;
 }
 
 static const char* skeleton_hint_title(skeleton_hint_kind hint, int stairs_feat)
@@ -4071,13 +4206,14 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
     int unique_y = 0;
     int unique_x = 0;
     int unique_dist = 0;
+    int unique_r_idx = 0;
     bool unique_found = false;
     if (hint1 == SKEL_HINT_UNIQUE_MONSTER || hint2 == SKEL_HINT_UNIQUE_MONSTER)
     {
-        int r_idx = 0;
-        if (skeleton_note_find_nearest_unique(skel_y, skel_x, &r_idx, &unique_y, &unique_x, &unique_dist))
+        if (skeleton_note_find_nearest_unique(skel_y, skel_x,
+                &unique_r_idx, &unique_y, &unique_x, &unique_dist))
         {
-            unique_type = skeleton_get_unique_type_name(&r_info[r_idx]);
+            unique_type = skeleton_get_unique_type_name(&r_info[unique_r_idx]);
             unique_found = true;
         }
     }
@@ -4287,6 +4423,9 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                     dist, &layout, distance_buf[body_count],
                     sizeof(distance_buf[body_count]));
                 body_lines[body_count].site = skeleton_note_stair_site(feat);
+                hint_message_meta_add_destination(&hint_meta,
+                    HINT_DESTINATION_FIXED_FEATURE, ty, tx, feat, dist,
+                    &layout);
             }
         }
         else if (hint == SKEL_HINT_FORGE)
@@ -4302,6 +4441,9 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                     sizeof(distance_buf[body_count]));
                 body_lines[body_count].site
                     = skeleton_note_forge_site(feat, forge_site_buf, sizeof(forge_site_buf));
+                hint_message_meta_add_destination(&hint_meta,
+                    HINT_DESTINATION_FIXED_FEATURE, ty, tx, feat, dist,
+                    &layout);
             }
         }
         else if (hint == SKEL_HINT_LEVEL_SIZE)
@@ -4311,8 +4453,13 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
         else if (hint == SKEL_HINT_QUEST)
         {
             int ty = 0, tx = 0, dist = 0;
+            int destination_id = 0;
             const char* site = NULL;
-            if (skeleton_note_find_nearest_quest_site(skel_y, skel_x, &ty, &tx, &dist, &site))
+            hint_message_destination_kind destination_kind =
+                HINT_DESTINATION_NONE;
+            if (skeleton_note_find_nearest_quest_site(skel_y, skel_x,
+                    &ty, &tx, &dist, &site, &destination_kind,
+                    &destination_id))
             {
                 body_lines[body_count].dir
                     = skeleton_note_direction_phrase(skel_y, skel_x, ty, tx);
@@ -4320,6 +4467,8 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                     dist, &layout, distance_buf[body_count],
                     sizeof(distance_buf[body_count]));
                 body_lines[body_count].site = site;
+                hint_message_meta_add_destination(&hint_meta,
+                    destination_kind, ty, tx, destination_id, dist, &layout);
             }
             else
             {
@@ -4338,6 +4487,8 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                 body_lines[body_count].dist = skeleton_note_distance_phrase(
                     dist, &layout, distance_buf[body_count],
                     sizeof(distance_buf[body_count]));
+                hint_message_meta_add_destination(&hint_meta,
+                    HINT_DESTINATION_GREAT_VAULT, ty, tx, 0, dist, &layout);
             }
             else
             {
@@ -4347,13 +4498,13 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
         }
         else if (hint == SKEL_HINT_VAULT_ARTIFACT)
         {
-            int ty = 0, tx = 0, dist = 0;
+            int ty = 0, tx = 0, dist = 0, a_idx = 0;
             if (skeleton_note_find_nearest_artefact(
                     skel_y, skel_x, &ty, &tx, &dist,
                     artefact_site_buf[body_count],
                     sizeof(artefact_site_buf[body_count]),
                     artefact_kind_buf[body_count],
-                    sizeof(artefact_kind_buf[body_count])))
+                    sizeof(artefact_kind_buf[body_count]), &a_idx))
             {
                 body_lines[body_count].dir
                     = skeleton_note_direction_phrase(skel_y, skel_x, ty, tx);
@@ -4364,6 +4515,8 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                     artefact_site_buf[body_count];
                 body_lines[body_count].artefact_kind =
                     artefact_kind_buf[body_count];
+                hint_message_meta_add_destination(&hint_meta,
+                    HINT_DESTINATION_ARTEFACT, ty, tx, a_idx, dist, &layout);
             }
             else
             {
@@ -4382,6 +4535,9 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                 body_lines[body_count].dist = skeleton_note_distance_phrase(
                     unique_dist, &layout, distance_buf[body_count],
                     sizeof(distance_buf[body_count]));
+                hint_message_meta_add_destination(&hint_meta,
+                    HINT_DESTINATION_UNIQUE_MONSTER, unique_y, unique_x,
+                    unique_r_idx, unique_dist, &layout);
             }
             else
             {
@@ -4402,6 +4558,9 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                 body_lines[body_count].dist = skeleton_note_distance_phrase(
                     dist, &layout, distance_buf[body_count],
                     sizeof(distance_buf[body_count]));
+                hint_message_meta_add_destination(&hint_meta,
+                    HINT_DESTINATION_PARTITION, ty, tx,
+                    level_partition_index_for_point(ty, tx), dist, &layout);
             }
             else
             {

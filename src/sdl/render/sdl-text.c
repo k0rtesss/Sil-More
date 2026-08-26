@@ -37,6 +37,7 @@ static void sdl_ui_text_cache_entry_clear(sdl_ui_text_cache_entry* entry)
 
 void sdl_ui_text_cache_clear(void)
 {
+    sdl_hint_quest_context_cache_clear();
     for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++)
         sdl_ui_text_cache_entry_clear(&g_ui_text_cache[i]);
     g_ui_text_cache_pixels = 0;
