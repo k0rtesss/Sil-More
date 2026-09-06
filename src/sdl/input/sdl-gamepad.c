@@ -4,6 +4,35 @@
 #include "ui/menu-click.h"
 
 static SDL_JoystickID g_active_gamepad_id;
+static int g_gamepad_context_focus_kind = SDL_CONTROLLER_FOCUS_NONE;
+static int g_gamepad_context_focus_id = -1;
+static bool g_gamepad_focus_chord_pending;
+static bool g_gamepad_focus_chord_used;
+static int g_gamepad_button_modifiers[SDL_GAMEPAD_BUTTON_COUNT];
+static int g_gamepad_trigger_modifiers[GAMEPAD_TRIGGER_COUNT];
+static bool g_gamepad_right_binding_modifier_active;
+
+void sdl_gamepad_release_button_modifier(int button)
+{
+    if (button >= 0 && button < SDL_GAMEPAD_BUTTON_COUNT
+        && g_gamepad_button_modifiers[button])
+    {
+        sdl_gamepad_apply_modifier(g_gamepad_button_modifiers[button], false);
+        g_gamepad_button_modifiers[button] = 0;
+    }
+}
+
+void sdl_gamepad_reset_modifiers(void)
+{
+    memset(g_gamepad_button_modifiers, 0, sizeof(g_gamepad_button_modifiers));
+    memset(g_gamepad_trigger_modifiers, 0, sizeof(g_gamepad_trigger_modifiers));
+    g_gamepad_right_binding_modifier_active = false;
+    g_gamepad_state.shift_held = 0;
+    g_gamepad_state.ctrl_held = 0;
+    g_gamepad_state.alt_held = 0;
+    g_gamepad_focus_chord_pending = false;
+    g_gamepad_focus_chord_used = false;
+}
 
 bool sdl_gamepad_shift_active(void)
 {
@@ -786,6 +815,9 @@ void sdl_gamepad_send_shoulder_combo(void)
 
 void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt)
 {
+    log_debug("controller movement: dir=%d shift=%d ctrl=%d alt=%d ctx=%u icky=%d prompt=%d",
+        dir, shift, ctrl, alt, movement_input_active_context(), character_icky,
+        inkey_prompt_input_active());
     if (dir < 1 || dir > 9)
         return;
 
@@ -878,6 +910,37 @@ int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone)
     return (y >= 0) ? GAMEPAD_STICK_DIR_DOWN : GAMEPAD_STICK_DIR_UP;
 }
 
+static int sdl_gamepad_button_ui_direction(SDL_GamepadButton button)
+{
+    switch (button)
+    {
+    case SDL_GAMEPAD_BUTTON_DPAD_UP: return GAMEPAD_STICK_DIR_UP;
+    case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return GAMEPAD_STICK_DIR_DOWN;
+    case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return GAMEPAD_STICK_DIR_LEFT;
+    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return GAMEPAD_STICK_DIR_RIGHT;
+    default: return -1;
+    }
+}
+
+static bool sdl_gamepad_send_ui_direction(int dir)
+{
+    int key = 0;
+
+    switch (dir)
+    {
+    case GAMEPAD_STICK_DIR_UP: key = '8'; break;
+    case GAMEPAD_STICK_DIR_DOWN: key = '2'; break;
+    case GAMEPAD_STICK_DIR_LEFT: key = '4'; break;
+    case GAMEPAD_STICK_DIR_RIGHT: key = '6'; break;
+    default: break;
+    }
+    if (!key)
+        return false;
+
+    Term_keypress(key);
+    return true;
+}
+
 void sdl_gamepad_send_direction(int dir)
 {
     sdl_gamepad_send_direction_mods(dir, sdl_gamepad_shift_active(),
@@ -905,11 +968,11 @@ void sdl_gamepad_clear_pending_dpad(void)
     g_gamepad_state.dpad_pending_alt = false;
 }
 
-void sdl_gamepad_set_pending_dpad(int dir)
+void sdl_gamepad_set_pending_dpad(int dir, Uint64 press_time_ns)
 {
     g_gamepad_state.dpad_pending = true;
     g_gamepad_state.dpad_pending_dir = dir;
-    g_gamepad_state.dpad_pending_time = SDL_GetTicksNS();
+    g_gamepad_state.dpad_pending_time = press_time_ns;
     g_gamepad_state.dpad_pending_shift = sdl_gamepad_shift_active();
     g_gamepad_state.dpad_pending_ctrl = sdl_gamepad_ctrl_active();
     g_gamepad_state.dpad_pending_alt = sdl_gamepad_alt_active();
@@ -929,6 +992,16 @@ bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force)
     if (!force && now_ns - g_gamepad_state.dpad_pending_time < window_ns)
         return false;
 
+    /* SDL_PollEvent can stop at a poll-cycle sentinel with newer events still
+     * queued.  Resolve those button transitions before expiring the chord;
+     * their timestamps may still fall inside its window. */
+    if (!force && SDL_HasEvents(SDL_EVENT_GAMEPAD_BUTTON_DOWN,
+            SDL_EVENT_GAMEPAD_BUTTON_UP))
+        return false;
+
+    log_debug("controller dpad timeout: dir=%d age_ms=%llu force=%d",
+        g_gamepad_state.dpad_pending_dir,
+        (unsigned long long)((now_ns - g_gamepad_state.dpad_pending_time) / 1000000ULL), force);
     sdl_gamepad_send_direction_mods(g_gamepad_state.dpad_pending_dir,
         g_gamepad_state.dpad_pending_shift, g_gamepad_state.dpad_pending_ctrl,
         g_gamepad_state.dpad_pending_alt);
@@ -1378,6 +1451,16 @@ bool sdl_gamepad_action_is_confirm(int binding)
     return (binding == INPUT_BIND_CONFIRM || binding == ' ' || binding == '\r');
 }
 
+bool sdl_gamepad_button_is_ui_confirm(SDL_GamepadButton button)
+{
+    return button == SDL_GAMEPAD_BUTTON_SOUTH;
+}
+
+bool sdl_gamepad_button_is_ui_back(SDL_GamepadButton button)
+{
+    return button == SDL_GAMEPAD_BUTTON_EAST;
+}
+
 bool sdl_gamepad_action_binding_equals(int lhs, int rhs)
 {
     if (sdl_gamepad_action_is_confirm(lhs) && sdl_gamepad_action_is_confirm(rhs))
@@ -1645,6 +1728,24 @@ void sdl_gamepad_action_binding_short_label(int binding, char* buf, size_t bufle
     sdl_gamepad_action_binding_label_ex(binding, buf, buflen, true);
 }
 
+void sdl_gamepad_ui_prompt_label(int binding, cptr fallback, char* buf,
+    size_t buflen)
+{
+    /* UI prompts name physical controls.  Looking up a dungeon binding here
+     * would advertise the wrong button after a remap (or a binding collision). */
+    if (fallback && (streq(fallback, "A") || streq(fallback, "B")
+            || streq(fallback, "X") || streq(fallback, "Y")
+            || streq(fallback, "L1") || streq(fallback, "R1")
+            || streq(fallback, "View") || streq(fallback, "View/Select")))
+    {
+        SDL_strlcpy(buf, fallback, buflen);
+        return;
+    }
+    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
+        SDL_strlcpy(buf, fallback ? fallback : "", buflen);
+}
+
 int sdl_gamepad_capture_binding_for_input(int type, int id)
 {
     switch (type) {
@@ -1691,29 +1792,26 @@ bool sdl_gamepad_capture_queue_input(int type, int id)
     return true;
 }
 
-/* Controller UI menu helpers - return key bindings for menu actions */
+/* Stable adapters for terminal menus.  These values describe UI actions,
+ * independent of the player's configurable dungeon bindings. */
 int steamdeck_back_key(void)
 {
-    /* B button (EAST) - for back/quit in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST);
+    return ESCAPE;
 }
 
 int steamdeck_confirm_key(void)
 {
-    /* A button (SOUTH) - for confirm/ok in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_SOUTH);
+    return '\r';
 }
 
 int steamdeck_prev_page_key(void)
 {
-    /* L1 button (LEFT_SHOULDER) - for previous page/tab in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    return '[';
 }
 
 int steamdeck_next_page_key(void)
 {
-    /* R1 button (RIGHT_SHOULDER) - for next page/tab in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    return ']';
 }
 
 int steamdeck_menu_key(int key, int prev_page_key, int next_page_key)
@@ -1740,19 +1838,563 @@ int steamdeck_info_key(void)
      * controllers.  Keep optional stick directions available for gameplay,
      * but never require one for menu information or recall.
      */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK);
+    return 'h';
 }
 
 int steamdeck_alt_action_key(void)
 {
     /* X button (WEST) - for alternate action in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_WEST);
+    return 'x';
 }
 
 int steamdeck_secondary_key(void)
 {
     /* Y button (NORTH) - for secondary action in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH);
+    return 's';
+}
+
+#define SDL_GAMEPAD_CONTEXT_FOCUS_MAX_TARGETS 64
+
+static int sdl_gamepad_context_focus_collect(
+    sdl_controller_focus_target* targets, int max_targets)
+{
+    int count = 0;
+
+    if (!targets || max_targets <= 0)
+        return 0;
+
+    if (sdl_movement_input_is_modal() || g_main_menu_overlay_active
+        || g_player_action_menu.active || g_player_exchange_target.active)
+        return 0;
+
+    /* A movement-triggered action popup owns controller focus while present;
+     * never let a stick direction jump through it to a surface behind it. */
+    if (sdl_question_menu_context_hint_active())
+    {
+        return sdl_question_menu_collect_controller_focus_targets(targets,
+            max_targets);
+    }
+
+    /* Quick Access and the left pane are command-surface shortcuts.  They
+     * remain visible during targeting and direction prompts, but must not
+     * steal either stick from aim/cursor movement in those contexts. */
+    if (movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON)
+        return 0;
+
+    count += sdl_status_line_collect_controller_focus_targets(
+        targets + count, max_targets - count);
+    if (count < max_targets)
+    {
+        count += sdl_touch_top_panel_collect_controller_focus_targets(
+            targets + count, max_targets - count);
+    }
+    if (count < max_targets)
+    {
+        count += sdl_character_panel_collect_controller_focus_targets(
+            targets + count, max_targets - count);
+    }
+    if (count < max_targets)
+    {
+        count += sdl_combat_overlay_collect_controller_focus_targets(
+            targets + count, max_targets - count);
+    }
+
+    return count;
+}
+
+static int sdl_gamepad_context_focus_find(
+    const sdl_controller_focus_target* targets, int count, int kind, int id)
+{
+    for (int i = 0; i < count; i++)
+    {
+        if (targets[i].kind == kind && targets[i].id == id)
+            return i;
+    }
+
+    return -1;
+}
+
+static void sdl_gamepad_context_focus_apply(int kind, int id)
+{
+    /* Clear the previous surface before setting the new one: the setters
+     * share tooltip and hover state.  Clearing afterwards erases new focus. */
+    if (sdl_question_menu_context_hint_active())
+        sdl_question_menu_set_controller_focus(-1);
+    sdl_touch_top_panel_set_controller_focus(-1);
+    sdl_character_panel_set_controller_focus(SDL_PANEL_CLICK_NONE);
+    sdl_character_panel_set_controller_attack_focus(-1);
+    sdl_status_line_set_controller_focus(-1);
+
+    switch (kind)
+    {
+    case SDL_CONTROLLER_FOCUS_QUESTION_MENU:
+        sdl_question_menu_set_controller_focus(id);
+        break;
+    case SDL_CONTROLLER_FOCUS_QUICK_ACCESS:
+        sdl_touch_top_panel_set_controller_focus(id);
+        break;
+    case SDL_CONTROLLER_FOCUS_LEFT_PANEL:
+        sdl_character_panel_set_controller_focus(id);
+        break;
+    case SDL_CONTROLLER_FOCUS_LEFT_PANEL_ATTACK:
+        sdl_character_panel_set_controller_attack_focus(id);
+        break;
+    case SDL_CONTROLLER_FOCUS_COMBAT_JEWELRY:
+        sdl_combat_overlay_set_controller_jewelry_focus(true);
+        break;
+    case SDL_CONTROLLER_FOCUS_STATUS_LINE:
+        sdl_status_line_set_controller_focus(id);
+        break;
+    }
+
+    g_gamepad_context_focus_kind = kind;
+    g_gamepad_context_focus_id = id;
+    g_state.need_present = true;
+}
+
+void sdl_gamepad_context_focus_clear(void)
+{
+    if (g_gamepad_context_focus_kind == SDL_CONTROLLER_FOCUS_NONE)
+        return;
+
+    sdl_gamepad_context_focus_apply(SDL_CONTROLLER_FOCUS_NONE, -1);
+}
+
+void sdl_gamepad_context_focus_render(void)
+{
+    sdl_controller_focus_target targets[SDL_GAMEPAD_CONTEXT_FOCUS_MAX_TARGETS];
+    int count;
+    int current;
+    SDL_FRect rect;
+    SDL_Color colour;
+
+    if (g_gamepad_context_focus_kind == SDL_CONTROLLER_FOCUS_NONE)
+        return;
+    count = sdl_gamepad_context_focus_collect(targets,
+        SDL_GAMEPAD_CONTEXT_FOCUS_MAX_TARGETS);
+    current = sdl_gamepad_context_focus_find(targets, count,
+        g_gamepad_context_focus_kind, g_gamepad_context_focus_id);
+    if (current < 0)
+    {
+        sdl_gamepad_context_focus_clear();
+        return;
+    }
+
+    rect = targets[current].rect;
+    colour = g_state.palette[TERM_L_BLUE];
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, colour.r, colour.g, colour.b, 255);
+    SDL_RenderRect(g_state.renderer, &rect);
+    if (rect.w > 4.0f && rect.h > 4.0f)
+    {
+        rect.x += 1.0f;
+        rect.y += 1.0f;
+        rect.w -= 2.0f;
+        rect.h -= 2.0f;
+        SDL_RenderRect(g_state.renderer, &rect);
+    }
+}
+
+void sdl_gamepad_prepare_ui_navigation(void)
+{
+    sdl_gamepad_context_focus_clear();
+    sdl_gamepad_clear_pending_shoulder();
+    if (g_gamepad_state.left_bind_dir >= 0
+        && g_gamepad_state.left_bind_dir < GAMEPAD_STICK_DIR_COUNT)
+    {
+        int binding = config.gamepad_left_stick_bindings[
+            g_gamepad_state.left_bind_dir];
+
+        if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL
+            || binding == GAMEPAD_BIND_ALT)
+        {
+            sdl_gamepad_apply_modifier(binding, false);
+        }
+    }
+    if (g_gamepad_right_binding_modifier_active
+        && g_gamepad_state.right_dir >= 0
+        && g_gamepad_state.right_dir < GAMEPAD_STICK_DIR_COUNT)
+    {
+        int binding = config.gamepad_right_stick_bindings[
+            g_gamepad_state.right_dir];
+
+        if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL
+            || binding == GAMEPAD_BIND_ALT)
+        {
+            sdl_gamepad_apply_modifier(binding, false);
+        }
+    }
+
+    g_gamepad_right_binding_modifier_active = false;
+
+    g_gamepad_state.left_dir = 0;
+    g_gamepad_state.left_bind_dir = -1;
+    g_gamepad_state.left_ui_dir = sdl_gamepad_axis_to_cardinal_dir(
+        g_gamepad_state.left_x, g_gamepad_state.left_y,
+        MAX(config.gamepad_deadzone, 0));
+    g_gamepad_state.right_dir = -1;
+    g_gamepad_state.right_ui_dir = sdl_gamepad_axis_to_cardinal_dir(
+        g_gamepad_state.right_x, g_gamepad_state.right_y,
+        MAX(config.gamepad_deadzone, 0));
+    sdl_gamepad_clear_pending_left_stick();
+}
+
+static bool sdl_gamepad_native_overlay_move(int dir)
+{
+    if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
+        return false;
+
+    if (g_player_action_menu.active)
+    {
+        if (dir == GAMEPAD_STICK_DIR_LEFT)
+            sdl_player_action_menu_move_hover(-1);
+        else if (dir == GAMEPAD_STICK_DIR_RIGHT)
+            sdl_player_action_menu_move_hover(1);
+        else if (dir == GAMEPAD_STICK_DIR_UP)
+            sdl_player_action_menu_move_hover_vertical(-1);
+        else
+            sdl_player_action_menu_move_hover_vertical(1);
+        return true;
+    }
+
+    if (g_player_exchange_target.active)
+    {
+        sdl_player_exchange_move_hover(
+            (dir == GAMEPAD_STICK_DIR_LEFT || dir == GAMEPAD_STICK_DIR_UP)
+                ? -1 : 1);
+        return true;
+    }
+
+    return false;
+}
+
+static float sdl_gamepad_context_focus_center_x(
+    const sdl_controller_focus_target* target)
+{
+    return target->rect.x + target->rect.w * 0.5f;
+}
+
+static float sdl_gamepad_context_focus_center_y(
+    const sdl_controller_focus_target* target)
+{
+    return target->rect.y + target->rect.h * 0.5f;
+}
+
+static bool sdl_gamepad_context_focus_move(int dir)
+{
+    sdl_controller_focus_target targets[
+        SDL_GAMEPAD_CONTEXT_FOCUS_MAX_TARGETS];
+    SDL_Rect screen;
+    int count;
+    int current;
+    int best = -1;
+    float origin_x;
+    float origin_y;
+    float best_score = 0.0f;
+
+    if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
+        return false;
+
+    count = sdl_gamepad_context_focus_collect(targets,
+        SDL_GAMEPAD_CONTEXT_FOCUS_MAX_TARGETS);
+    current = sdl_gamepad_context_focus_find(targets, count,
+        g_gamepad_context_focus_kind, g_gamepad_context_focus_id);
+    if (count <= 0)
+    {
+        sdl_gamepad_context_focus_clear();
+        return false;
+    }
+
+    if (current >= 0)
+    {
+        origin_x = sdl_gamepad_context_focus_center_x(&targets[current]);
+        origin_y = sdl_gamepad_context_focus_center_y(&targets[current]);
+    }
+    else
+    {
+        screen = sdl_get_layout_screen_rect();
+        origin_x = (float)screen.x + (float)screen.w * 0.5f;
+        origin_y = (float)screen.y + (float)screen.h * 0.5f;
+    }
+
+    /* Prefer the nearest target in the requested half-plane, strongly
+     * weighting alignment so rows and columns feel stable. */
+    for (int i = 0; i < count; i++)
+    {
+        float dx;
+        float dy;
+        float primary;
+        float perpendicular;
+        float score;
+
+        if (i == current)
+            continue;
+        dx = sdl_gamepad_context_focus_center_x(&targets[i]) - origin_x;
+        dy = sdl_gamepad_context_focus_center_y(&targets[i]) - origin_y;
+
+        if (dir == GAMEPAD_STICK_DIR_LEFT
+            || dir == GAMEPAD_STICK_DIR_RIGHT)
+        {
+            primary = (dir == GAMEPAD_STICK_DIR_RIGHT) ? dx : -dx;
+            perpendicular = (dy < 0.0f) ? -dy : dy;
+        }
+        else
+        {
+            primary = (dir == GAMEPAD_STICK_DIR_DOWN) ? dy : -dy;
+            perpendicular = (dx < 0.0f) ? -dx : dx;
+        }
+        if (primary <= 1.0f)
+            continue;
+
+        score = primary + perpendicular * 2.5f;
+        if (best < 0 || score < best_score)
+        {
+            best = i;
+            best_score = score;
+        }
+    }
+
+    /* Wrap at an edge so every visible action remains reachable with a
+     * single stick.  Stay near the current perpendicular row/column. */
+    if (best < 0)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            float x;
+            float y;
+            float edge;
+            float perpendicular;
+            float score;
+
+            if (i == current)
+                continue;
+            x = sdl_gamepad_context_focus_center_x(&targets[i]);
+            y = sdl_gamepad_context_focus_center_y(&targets[i]);
+            if (dir == GAMEPAD_STICK_DIR_RIGHT)
+            {
+                edge = x;
+                perpendicular = y - origin_y;
+            }
+            else if (dir == GAMEPAD_STICK_DIR_LEFT)
+            {
+                edge = -x;
+                perpendicular = y - origin_y;
+            }
+            else if (dir == GAMEPAD_STICK_DIR_DOWN)
+            {
+                edge = y;
+                perpendicular = x - origin_x;
+            }
+            else
+            {
+                edge = -y;
+                perpendicular = x - origin_x;
+            }
+            if (perpendicular < 0.0f)
+                perpendicular = -perpendicular;
+            score = edge + perpendicular * 0.25f;
+            if (best < 0 || score < best_score)
+            {
+                best = i;
+                best_score = score;
+            }
+        }
+    }
+
+    if (best < 0)
+        best = (current >= 0) ? current : 0;
+
+    sdl_gamepad_context_focus_apply(targets[best].kind, targets[best].id);
+    return true;
+}
+
+static bool sdl_gamepad_combine_pending_dpad(int dir, Uint64 press_time_ns)
+{
+    int first = g_gamepad_state.dpad_pending_dir;
+    int combined;
+    Uint64 window_ns = (Uint64)sdl_gamepad_dpad_diagonal_delay_ms()
+        * 1000000ULL;
+
+    if (!g_gamepad_state.dpad_pending || !window_ns
+        || press_time_ns < g_gamepad_state.dpad_pending_time
+        || press_time_ns - g_gamepad_state.dpad_pending_time >= window_ns)
+        return false;
+
+    /* Keep the first press for the entire chord window, including a brief
+     * release while the player rolls across the D-pad.  Same-axis taps and
+     * opposite directions remain separate actions. */
+    if (!(((first == 8 || first == 2) && (dir == 4 || dir == 6))
+            || ((first == 4 || first == 6) && (dir == 8 || dir == 2))))
+        return false;
+    if (g_gamepad_state.dpad_pending_shift != sdl_gamepad_shift_active()
+        || g_gamepad_state.dpad_pending_ctrl != sdl_gamepad_ctrl_active()
+        || g_gamepad_state.dpad_pending_alt != sdl_gamepad_alt_active())
+        return false;
+
+    /* Keypad cardinal offsets compose directly: 8 + 6 - 5 = 9 (NE). */
+    combined = first + dir - 5;
+    sdl_gamepad_clear_pending_dpad();
+    sdl_gamepad_send_direction(combined);
+    return true;
+}
+
+static bool sdl_gamepad_context_focus_activate(void)
+{
+    sdl_controller_focus_target targets[
+        SDL_GAMEPAD_CONTEXT_FOCUS_MAX_TARGETS];
+    int count = sdl_gamepad_context_focus_collect(targets,
+        SDL_GAMEPAD_CONTEXT_FOCUS_MAX_TARGETS);
+    int current = sdl_gamepad_context_focus_find(targets, count,
+        g_gamepad_context_focus_kind, g_gamepad_context_focus_id);
+    sdl_controller_focus_target target;
+    bool activated = false;
+
+    /* A transient item popup has a meaningful primary action even before the
+     * player moves the right stick.  Other gameplay surfaces require an
+     * explicit focus so South retains its normal gameplay meaning. */
+    if (current < 0 && sdl_question_menu_context_hint_active() && count > 0)
+    {
+        current = 0;
+        /* Description is deliberately the first rendered item button, but
+         * South should choose the popup's primary gameplay action. */
+        for (int i = 0; i < count; i++)
+        {
+            if (targets[i].id != 'x')
+            {
+                current = i;
+                break;
+            }
+        }
+    }
+    if (current < 0)
+    {
+        sdl_gamepad_context_focus_clear();
+        return false;
+    }
+
+    target = targets[current];
+    if (target.kind == SDL_CONTROLLER_FOCUS_QUESTION_MENU)
+    {
+        activated = sdl_question_menu_activate_context_choice(target.id);
+    }
+    else if (target.kind == SDL_CONTROLLER_FOCUS_QUICK_ACCESS)
+    {
+        if (target.id == SDL_CONTROLLER_QUICK_ACCESS_TOGGLE)
+            sdl_touch_top_panel_set_open(!g_touch_top_panel_open);
+        else
+            sdl_touch_top_panel_send_slot(target.id, false);
+        activated = true;
+    }
+    else if (target.kind == SDL_CONTROLLER_FOCUS_STATUS_LINE)
+    {
+        activated = sdl_handle_status_line_click_action(
+            target.id & SDL_CONTROLLER_STATUS_ACTION_MASK);
+    }
+    else if (target.kind == SDL_CONTROLLER_FOCUS_LEFT_PANEL)
+    {
+        activated = sdl_handle_character_panel_click_action(target.id);
+    }
+    else if (target.kind == SDL_CONTROLLER_FOCUS_LEFT_PANEL_ATTACK)
+    {
+        int mode = target.id & SDL_CONTROLLER_ATTACK_MODE_MASK;
+        bool quiver = (target.id & SDL_CONTROLLER_ATTACK_QUIVER_FLAG) != 0;
+
+        if (sdl_pointer_attack_input_context_active())
+        {
+            sdl_pointer_attack_activate_panel_choice(mode, quiver);
+            activated = true;
+        }
+    }
+    else if (target.kind == SDL_CONTROLLER_FOCUS_COMBAT_JEWELRY)
+    {
+        sdl_enqueue_bypassed_command('J');
+        activated = true;
+    }
+
+    if (activated)
+        sdl_gamepad_context_focus_clear();
+    return activated;
+}
+
+static bool sdl_gamepad_context_focus_handle_button(
+    SDL_GamepadButton button, bool down)
+{
+    int dir = sdl_gamepad_button_ui_direction(button);
+
+    if (sdl_movement_input_is_modal()
+        || movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON)
+    {
+        sdl_gamepad_context_focus_clear();
+        return false;
+    }
+
+    /* Hold View/Select and use the D-pad to enter spatial focus on a pad
+     * without sticks.  A plain tap retains the configured gameplay action. */
+    if (button == SDL_GAMEPAD_BUTTON_BACK && down
+        && sdl_gamepad_single_active_modifier() == GAMEPAD_BIND_NONE
+        && config.gamepad_button_bindings[button] != GAMEPAD_BIND_SHIFT
+        && config.gamepad_button_bindings[button] != GAMEPAD_BIND_CTRL
+        && config.gamepad_button_bindings[button] != GAMEPAD_BIND_ALT)
+    {
+        g_gamepad_focus_chord_pending = true;
+        g_gamepad_focus_chord_used = false;
+        return true;
+    }
+    if (dir >= 0 && g_gamepad_focus_chord_pending)
+        g_gamepad_focus_chord_used = true;
+
+    /* A nonblocking square-action popup still owns its own choices.  D-pad is
+     * the stickless fallback and must not move the player out from under it. */
+    if (dir >= 0 && (g_gamepad_focus_chord_pending
+            || sdl_question_menu_context_hint_active()
+            || g_gamepad_context_focus_kind != SDL_CONTROLLER_FOCUS_NONE))
+    {
+        bool popup_active = sdl_question_menu_context_hint_active();
+
+        g_gamepad_state.dpad_up = false;
+        g_gamepad_state.dpad_down = false;
+        g_gamepad_state.dpad_left = false;
+        g_gamepad_state.dpad_right = false;
+        g_gamepad_state.dpad_dir = 0;
+        sdl_gamepad_clear_pending_dpad();
+        if (!down)
+            return true;
+        if (sdl_gamepad_context_focus_move(dir))
+            return true;
+
+        /* A stale gameplay-surface focus was invalidated by a new targeting
+         * or modal context.  Let this same press reach that new owner. */
+        return popup_active || g_gamepad_focus_chord_pending;
+    }
+
+    if (!down)
+        return false;
+
+    /* Start and other gameplay shortcuts leave spatial focus.  Otherwise a
+     * later South press could activate a stale row after that command ends. */
+    if (button != SDL_GAMEPAD_BUTTON_SOUTH
+        && button != SDL_GAMEPAD_BUTTON_EAST)
+        sdl_gamepad_context_focus_clear();
+
+    if (sdl_gamepad_button_is_ui_confirm(button))
+        return sdl_gamepad_context_focus_activate();
+
+    if (sdl_gamepad_button_is_ui_back(button))
+    {
+        if (sdl_question_menu_context_hint_active())
+        {
+            sdl_question_menu_clear_context_hint();
+            sdl_gamepad_context_focus_clear();
+            return true;
+        }
+        if (g_gamepad_context_focus_kind != SDL_CONTROLLER_FOCUS_NONE)
+        {
+            sdl_gamepad_context_focus_clear();
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
@@ -1841,6 +2483,25 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
 
     sdl_gamepad_mark_auto_ui();
 
+    if (!down && button == SDL_GAMEPAD_BUTTON_BACK
+        && g_gamepad_focus_chord_pending)
+    {
+        bool send_tap = !g_gamepad_focus_chord_used
+            && sdl_movement_command_input_is_live();
+        g_gamepad_focus_chord_pending = false;
+        g_gamepad_focus_chord_used = false;
+        if (send_tap && config.gamepad_button_bindings[button] != GAMEPAD_BIND_NONE)
+            sdl_gamepad_send_key(config.gamepad_button_bindings[button], false);
+        return;
+    }
+
+    /* A release must retire a held modifier even if a new UI owner now
+     * consumes that physical button. */
+    if (!down && button >= 0 && button < SDL_GAMEPAD_BUTTON_COUNT)
+    {
+        sdl_gamepad_release_button_modifier(button);
+    }
+
     if (sdl_minimap_handle_gamepad_button(button, down))
         return;
 
@@ -1861,18 +2522,84 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
     if (sdl_player_action_menu_handle_gamepad_button(button, down))
         return;
 
-    if (down && button == SDL_GAMEPAD_BUTTON_EAST
-        && steamdeck_controls_active()
+    if (sdl_gamepad_context_focus_handle_button(button, down))
+        return;
+
+    if (down && sdl_gamepad_button_is_ui_confirm(button)
+        && sdl_movement_input_is_modal())
+    {
+        /* Terminal-backed prompts must receive the semantic controller action,
+         * not whichever gameplay key happens to be bound to South.  Native and
+         * contextual overlays have already had first refusal above. */
+        Term_keypress('\r');
+        return;
+    }
+
+    if (down && sdl_gamepad_button_is_ui_back(button)
         && sdl_gamepad_back_button_is_modal())
     {
         Term_keypress(ESCAPE);
         return;
     }
 
-    if (config.gamepad_use_dpad &&
-        (button == SDL_GAMEPAD_BUTTON_DPAD_UP || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN ||
-            button == SDL_GAMEPAD_BUTTON_DPAD_LEFT || button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT))
+    if (sdl_gamepad_back_button_is_modal()
+        || (movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_NONE
+            && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON))
     {
+        int ui_key = 0;
+        switch (button)
+        {
+        case SDL_GAMEPAD_BUTTON_SOUTH: ui_key = steamdeck_confirm_key(); break;
+        case SDL_GAMEPAD_BUTTON_EAST:
+        case SDL_GAMEPAD_BUTTON_START: ui_key = ESCAPE; break;
+        case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: ui_key = steamdeck_prev_page_key(); break;
+        case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: ui_key = steamdeck_next_page_key(); break;
+        case SDL_GAMEPAD_BUTTON_BACK: ui_key = steamdeck_info_key(); break;
+        case SDL_GAMEPAD_BUTTON_WEST: ui_key = steamdeck_alt_action_key(); break;
+        case SDL_GAMEPAD_BUTTON_NORTH: ui_key = steamdeck_secondary_key(); break;
+        default: break;
+        }
+        if (ui_key)
+        {
+            sdl_gamepad_clear_pending_shoulder();
+            if (down)
+                Term_keypress(ui_key);
+            return;
+        }
+    }
+
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_UP
+        || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN
+        || button == SDL_GAMEPAD_BUTTON_DPAD_LEFT
+        || button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
+    {
+        /* An enabled movement D-pad must resolve its chord before choosing
+         * the movement or terminal queue, as it did before UI navigation was
+         * added.  Clearing held/pending state for each modal event splits
+         * Up+Right into '8' and '6' without ever using the diagonal delay.
+         * sdl_gamepad_send_direction_mods() already routes a resolved direction
+         * to the terminal when a saved screen or prompt owns the input. */
+        if (!config.gamepad_use_dpad && sdl_movement_input_is_modal())
+        {
+            g_gamepad_state.dpad_up = false;
+            g_gamepad_state.dpad_down = false;
+            g_gamepad_state.dpad_left = false;
+            g_gamepad_state.dpad_right = false;
+            g_gamepad_state.dpad_dir = 0;
+            sdl_gamepad_clear_pending_dpad();
+            if (down)
+            {
+                (void)sdl_gamepad_send_ui_direction(
+                    sdl_gamepad_button_ui_direction(button));
+            }
+            return;
+        }
+
+        /* The setting controls dungeon movement, not whether a physical
+         * D-pad may be bound as four ordinary gameplay buttons. */
+        if (!config.gamepad_use_dpad)
+            goto handle_bound_button;
+
         switch (button) {
             case SDL_GAMEPAD_BUTTON_DPAD_UP: g_gamepad_state.dpad_up = down; break;
             case SDL_GAMEPAD_BUTTON_DPAD_DOWN: g_gamepad_state.dpad_down = down; break;
@@ -1917,9 +2644,16 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
                     sdl_gamepad_clear_pending_dpad();
                     sdl_gamepad_send_direction(dir);
                 } else {
+                    Uint64 now_ns = SDL_GetTicksNS();
+                    /* Measure the physical presses, not time spent rendering
+                     * or handling other events between their dispatches.
+                     * Manually supplied events may omit the SDL timestamp. */
+                    Uint64 press_time_ns = ev->timestamp ? ev->timestamp : now_ns;
+                    if (sdl_gamepad_combine_pending_dpad(dir, press_time_ns))
+                        return;
                     if (g_gamepad_state.dpad_pending)
-                        sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
-                    sdl_gamepad_set_pending_dpad(dir);
+                        sdl_gamepad_flush_pending_dpad(now_ns, true);
+                    sdl_gamepad_set_pending_dpad(dir, press_time_ns);
                 }
             }
         }
@@ -1944,7 +2678,10 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
         if (button >= 0 && button < SDL_GAMEPAD_BUTTON_COUNT) {
             int binding = config.gamepad_button_bindings[button];
             if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL || binding == GAMEPAD_BIND_ALT) {
-                sdl_gamepad_apply_modifier(binding, down);
+                if (down && !g_gamepad_button_modifiers[button]) {
+                    g_gamepad_button_modifiers[button] = binding;
+                    sdl_gamepad_apply_modifier(binding, true);
+                }
                 return;
             }
         }
@@ -1964,6 +2701,7 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
         return;
     }
 
+handle_bound_button:
     if (button < 0 || button >= SDL_GAMEPAD_BUTTON_COUNT)
         return;
 
@@ -1989,7 +2727,10 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
         return;
 
     if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL || binding == GAMEPAD_BIND_ALT) {
-        sdl_gamepad_apply_modifier(binding, down);
+        if (down && !g_gamepad_button_modifiers[button]) {
+            g_gamepad_button_modifiers[button] = binding;
+            sdl_gamepad_apply_modifier(binding, true);
+        }
         return;
     }
 
@@ -2092,6 +2833,75 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
         if (deadzone < 0)
             deadzone = 0;
 
+        if (g_player_action_menu.active || g_player_exchange_target.active)
+        {
+            int dir = sdl_gamepad_axis_to_cardinal_dir(g_gamepad_state.left_x,
+                g_gamepad_state.left_y, deadzone);
+            int prev_ui_dir = g_gamepad_state.left_ui_dir;
+
+            g_gamepad_state.left_dir = 0;
+            g_gamepad_state.left_bind_dir = -1;
+            sdl_gamepad_clear_pending_left_stick();
+            if (dir != prev_ui_dir)
+            {
+                g_gamepad_state.left_ui_dir = dir;
+                if (dir >= 0)
+                    (void)sdl_gamepad_native_overlay_move(dir);
+            }
+            return;
+        }
+
+        if (sdl_movement_input_is_modal())
+        {
+            int dir = sdl_gamepad_axis_to_cardinal_dir(g_gamepad_state.left_x,
+                g_gamepad_state.left_y, deadzone);
+            int prev_ui_dir = g_gamepad_state.left_ui_dir;
+
+            /* Release a gameplay modifier owned by a custom stick binding
+             * before the modal surface takes ownership of the stick. */
+            if (!config.gamepad_use_left_stick
+                && g_gamepad_state.left_bind_dir >= 0
+                && g_gamepad_state.left_bind_dir < GAMEPAD_STICK_DIR_COUNT)
+            {
+                int binding = config.gamepad_left_stick_bindings[
+                    g_gamepad_state.left_bind_dir];
+
+                if (binding == GAMEPAD_BIND_SHIFT
+                    || binding == GAMEPAD_BIND_CTRL
+                    || binding == GAMEPAD_BIND_ALT)
+                {
+                    sdl_gamepad_apply_modifier(binding, false);
+                }
+            }
+            g_gamepad_state.left_dir = 0;
+            g_gamepad_state.left_bind_dir = -1;
+            sdl_gamepad_clear_pending_left_stick();
+
+            if (dir != prev_ui_dir)
+            {
+                g_gamepad_state.left_ui_dir = dir;
+                if (dir >= 0)
+                    (void)sdl_gamepad_send_ui_direction(dir);
+            }
+            return;
+        }
+
+        /* Do not leak a stick held by the departing overlay into gameplay.
+         * Re-centering explicitly hands ownership back to the dungeon. */
+        if (g_gamepad_state.left_ui_dir >= 0)
+        {
+            int dir = sdl_gamepad_axis_to_cardinal_dir(g_gamepad_state.left_x,
+                g_gamepad_state.left_y, deadzone);
+
+            if (dir < 0)
+                g_gamepad_state.left_ui_dir = -1;
+            return;
+        }
+
+        if (sdl_gamepad_axis_to_cardinal_dir(g_gamepad_state.left_x,
+                g_gamepad_state.left_y, deadzone) >= 0)
+            sdl_gamepad_context_focus_clear();
+
         if (config.gamepad_use_left_stick) {
             int dir = sdl_gamepad_axis_to_dir(g_gamepad_state.left_x, g_gamepad_state.left_y, deadzone);
             int prev_dir = g_gamepad_state.left_dir;
@@ -2159,15 +2969,76 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
             deadzone = 0;
         int dir = sdl_gamepad_axis_to_cardinal_dir(g_gamepad_state.right_x, g_gamepad_state.right_y, deadzone);
         int prev_dir = g_gamepad_state.right_dir;
+
+        if (g_player_action_menu.active || g_player_exchange_target.active)
+        {
+            int prev_ui_dir = g_gamepad_state.right_ui_dir;
+
+            g_gamepad_state.right_dir = -1;
+            if (dir != prev_ui_dir)
+            {
+                g_gamepad_state.right_ui_dir = dir;
+                if (dir >= 0)
+                    (void)sdl_gamepad_native_overlay_move(dir);
+            }
+            return;
+        }
+
+        if (sdl_movement_input_is_modal()
+            || (movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_NONE
+                && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON))
+        {
+            int prev_ui_dir = g_gamepad_state.right_ui_dir;
+
+            if (g_gamepad_right_binding_modifier_active
+                && prev_dir >= 0 && prev_dir < GAMEPAD_STICK_DIR_COUNT)
+            {
+                int binding = config.gamepad_right_stick_bindings[prev_dir];
+
+                if (binding == GAMEPAD_BIND_SHIFT
+                    || binding == GAMEPAD_BIND_CTRL
+                    || binding == GAMEPAD_BIND_ALT)
+                {
+                    sdl_gamepad_apply_modifier(binding, false);
+                }
+            }
+            g_gamepad_right_binding_modifier_active = false;
+            g_gamepad_state.right_dir = -1;
+
+            if (dir != prev_ui_dir)
+            {
+                g_gamepad_state.right_ui_dir = dir;
+                if (dir >= 0)
+                    (void)sdl_gamepad_send_ui_direction(dir);
+            }
+            return;
+        }
+
+        if (g_gamepad_state.right_ui_dir >= 0)
+        {
+            if (dir < 0)
+                g_gamepad_state.right_ui_dir = -1;
+            return;
+        }
+
         if (dir != prev_dir) {
-            if (prev_dir >= 0 && prev_dir < GAMEPAD_STICK_DIR_COUNT) {
+            if (g_gamepad_right_binding_modifier_active
+                && prev_dir >= 0 && prev_dir < GAMEPAD_STICK_DIR_COUNT) {
                 int prev_binding = config.gamepad_right_stick_bindings[prev_dir];
                 if (prev_binding == GAMEPAD_BIND_SHIFT || prev_binding == GAMEPAD_BIND_CTRL || prev_binding == GAMEPAD_BIND_ALT) {
                     sdl_gamepad_apply_modifier(prev_binding, false);
                 }
             }
+            g_gamepad_right_binding_modifier_active = false;
 
             g_gamepad_state.right_dir = dir;
+
+            if (dir >= 0
+                && sdl_gamepad_single_active_modifier() == GAMEPAD_BIND_NONE
+                && sdl_gamepad_context_focus_move(dir))
+            {
+                return;
+            }
 
             if (dir >= 0 && dir < GAMEPAD_STICK_DIR_COUNT) {
                 int active_modifier = sdl_gamepad_single_active_modifier();
@@ -2182,6 +3053,7 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
                 if (combo_binding != GAMEPAD_BIND_NONE) {
                     sdl_gamepad_send_key_raw(combo_binding);
                 } else if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL || binding == GAMEPAD_BIND_ALT) {
+                    g_gamepad_right_binding_modifier_active = true;
                     sdl_gamepad_apply_modifier(binding, true);
                 } else if (binding != GAMEPAD_BIND_NONE) {
                     sdl_gamepad_send_key(binding, false);
@@ -2196,6 +3068,28 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
         if (threshold < 0)
             threshold = 0;
         bool pressed = (ev->value >= threshold);
+
+        int trigger_index = ev->axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 0 : 1;
+        if (!pressed && g_gamepad_trigger_modifiers[trigger_index]) {
+            sdl_gamepad_apply_modifier(g_gamepad_trigger_modifiers[trigger_index], false);
+            g_gamepad_trigger_modifiers[trigger_index] = 0;
+        }
+
+        if (sdl_movement_input_is_modal() || g_main_menu_overlay_active
+            || g_player_action_menu.active || g_player_exchange_target.active)
+        {
+            int index = ev->axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 0 : 1;
+            int held = g_gamepad_trigger_modifiers[index];
+            if (held) {
+                sdl_gamepad_apply_modifier(held, false);
+                g_gamepad_trigger_modifiers[index] = 0;
+            }
+            if (index == 0)
+                g_gamepad_state.left_trigger_down = pressed;
+            else
+                g_gamepad_state.right_trigger_down = pressed;
+            return;
+        }
 
         if (ev->axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER) {
             if (pressed != g_gamepad_state.left_trigger_down) {
@@ -2215,7 +3109,13 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
                     sdl_gamepad_send_key_raw(combo_binding);
                 } else if (binding != GAMEPAD_BIND_NONE) {
                     if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL || binding == GAMEPAD_BIND_ALT) {
-                        sdl_gamepad_apply_modifier(binding, pressed);
+                        if (pressed) {
+                            g_gamepad_trigger_modifiers[0] = binding;
+                            sdl_gamepad_apply_modifier(binding, true);
+                        } else if (g_gamepad_trigger_modifiers[0]) {
+                            sdl_gamepad_apply_modifier(g_gamepad_trigger_modifiers[0], false);
+                            g_gamepad_trigger_modifiers[0] = 0;
+                        }
                     } else if (pressed) {
                         sdl_gamepad_send_key(binding, false);
                     }
@@ -2239,7 +3139,13 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
                     sdl_gamepad_send_key_raw(combo_binding);
                 } else if (binding != GAMEPAD_BIND_NONE) {
                     if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL || binding == GAMEPAD_BIND_ALT) {
-                        sdl_gamepad_apply_modifier(binding, pressed);
+                        if (pressed) {
+                            g_gamepad_trigger_modifiers[1] = binding;
+                            sdl_gamepad_apply_modifier(binding, true);
+                        } else if (g_gamepad_trigger_modifiers[1]) {
+                            sdl_gamepad_apply_modifier(g_gamepad_trigger_modifiers[1], false);
+                            g_gamepad_trigger_modifiers[1] = 0;
+                        }
                     } else if (pressed) {
                         sdl_gamepad_send_key(binding, false);
                     }
@@ -2284,6 +3190,8 @@ void sdl_gamepad_open(SDL_JoystickID id)
 
 void sdl_gamepad_close(SDL_JoystickID id)
 {
+    sdl_gamepad_context_focus_clear();
+    sdl_gamepad_reset_modifiers();
     for (int i = 0; i < g_gamepad_state.pad_count; i++) {
         if (g_gamepad_state.pads[i].id == id) {
             SDL_CloseGamepad(g_gamepad_state.pads[i].pad);
@@ -2324,9 +3232,17 @@ void sdl_gamepad_handle_device(const SDL_GamepadDeviceEvent* ev)
 
 void sdl_gamepad_init(void)
 {
+#if defined(SDL_PLATFORM_ANDROID) && !defined(NDEBUG)
+    log_set_level(LOG_DEBUG);
+#endif
     SDL_SetGamepadEventsEnabled(true);
+    sdl_gamepad_reset_modifiers();
+    g_gamepad_context_focus_kind = SDL_CONTROLLER_FOCUS_NONE;
+    g_gamepad_context_focus_id = -1;
     g_gamepad_state.left_bind_dir = -1;
     g_gamepad_state.right_dir = -1;
+    g_gamepad_state.left_ui_dir = -1;
+    g_gamepad_state.right_ui_dir = -1;
     sdl_gamepad_clear_pending_shoulder();
     SDL_UpdateGamepads();
     SDL_PumpEvents();

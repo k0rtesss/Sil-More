@@ -4177,7 +4177,7 @@ int sdl_char_sheet_collect_stats(sdl_char_sheet_line* lines,
             switch (stat)
             {
             case A_STR:
-                desc = "Strength: melee damage dice and weight capacity.";
+                desc = "Strength: weapon damage die sides and carried-weight limit.";
                 break;
             case A_DEX:
                 desc = "Dexterity: melee, evasion, archery, and stealth.";
@@ -5719,6 +5719,13 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         { "C curses", 'c' },
 #endif
     };
+    static const sdl_char_sheet_prompt_item live_controller_items[] = {
+        { "A increase", 'i' },
+        { "X abilities", 'x' },
+        { "Y story", 's' },
+        { "View help", '?' },
+        { "B back", ESCAPE },
+    };
     static const sdl_char_sheet_prompt_item birth_items[] = {
         { "Esc back", -1 },
         { "Enter confirm", -2 },
@@ -5782,7 +5789,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 
     if (controller)
     {
-        sdl_gamepad_action_binding_short_label(steamdeck_back_key(),
+        sdl_gamepad_ui_prompt_label(steamdeck_back_key(), "B",
             controller_back_label, sizeof(controller_back_label));
         if (streq(controller_back_label, "(unbound)")
             || streq(controller_back_label, "Multiple"))
@@ -5791,7 +5798,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
                 sizeof(controller_back_label));
         }
 
-        sdl_gamepad_action_binding_short_label(steamdeck_confirm_key(),
+        sdl_gamepad_ui_prompt_label(steamdeck_confirm_key(), "A",
             controller_confirm_label, sizeof(controller_confirm_label));
         if (streq(controller_confirm_label, "(unbound)")
             || streq(controller_confirm_label, "Multiple"))
@@ -5828,6 +5835,11 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     {
         items = live_items;
         item_count = (int)N_ELEMENTS(live_items);
+        if (controller)
+        {
+            items = live_controller_items;
+            item_count = (int)N_ELEMENTS(live_controller_items);
+        }
 #if SIL_SDL_MOBILE_BUILD
         if (touch_only)
         {
@@ -6373,26 +6385,26 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             char back_label[16];
             char last_label[16];
 
-            sdl_gamepad_action_binding_short_label(steamdeck_prev_page_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_prev_page_key(), "L1",
                 prev_label, sizeof(prev_label));
             if (streq(prev_label, "(unbound)") || streq(prev_label, "Multiple"))
                 SDL_strlcpy(prev_label, "L1", sizeof(prev_label));
-            sdl_gamepad_action_binding_short_label(steamdeck_next_page_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_next_page_key(), "R1",
                 next_label, sizeof(next_label));
             if (streq(next_label, "(unbound)") || streq(next_label, "Multiple"))
                 SDL_strlcpy(next_label, "R1", sizeof(next_label));
-            sdl_gamepad_action_binding_short_label(steamdeck_confirm_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_confirm_key(), "A",
                 confirm_label, sizeof(confirm_label));
             if (streq(confirm_label, "(unbound)")
                 || streq(confirm_label, "Multiple"))
             {
                 SDL_strlcpy(confirm_label, "A", sizeof(confirm_label));
             }
-            sdl_gamepad_action_binding_short_label(steamdeck_back_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_back_key(), "B",
                 back_label, sizeof(back_label));
             if (streq(back_label, "(unbound)") || streq(back_label, "Multiple"))
                 SDL_strlcpy(back_label, "B", sizeof(back_label));
-            sdl_gamepad_action_binding_short_label(steamdeck_alt_action_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_alt_action_key(), "X",
                 last_label, sizeof(last_label));
             if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
                 SDL_strlcpy(last_label, "X", sizeof(last_label));
@@ -6515,11 +6527,11 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             char next_label[16];
             char last_label[16];
 
-            sdl_gamepad_action_binding_short_label(steamdeck_next_page_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_next_page_key(), "R1",
                 next_label, sizeof(next_label));
             if (streq(next_label, "(unbound)") || streq(next_label, "Multiple"))
                 SDL_strlcpy(next_label, "R1", sizeof(next_label));
-            sdl_gamepad_action_binding_short_label(steamdeck_alt_action_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_alt_action_key(), "X",
                 last_label, sizeof(last_label));
             if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
                 SDL_strlcpy(last_label, "X", sizeof(last_label));
@@ -6592,7 +6604,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         {
             char last_label[16];
 
-            sdl_gamepad_action_binding_short_label(steamdeck_alt_action_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_alt_action_key(), "X",
                 last_label, sizeof(last_label));
             if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
                 SDL_strlcpy(last_label, "X", sizeof(last_label));
@@ -14041,6 +14053,8 @@ void sdl_character_sheet_screen_begin_live(int focus_choice)
     {
         g_sdl_character_sheet_screen.sheet_scroll = 0;
         g_sdl_character_sheet_screen.sheet_scroll_max = 0;
+        sdl_gamepad_prepare_ui_navigation();
+        sdl_gamepad_clear_pending_dpad();
     }
     g_sdl_character_sheet_screen.context = SDL_CHARACTER_SHEET_LIVE;
     g_sdl_character_sheet_screen.focus_choice = focus_choice;
@@ -15283,8 +15297,53 @@ bool sdl_character_sheet_screen_handle_pointer_button(float x, float y,
     return true;
 }
 
-bool sdl_character_sheet_screen_handle_pointer_event(
-    const SDL_Event* ev)
+static bool sdl_character_sheet_live_handle_gamepad_button(
+    const SDL_GamepadButtonEvent* ev)
+{
+    SDL_GamepadButton button;
+
+    if (!ev || g_sdl_character_sheet_screen.context
+            != SDL_CHARACTER_SHEET_LIVE)
+    {
+        return false;
+    }
+    if (!config.gamepad_enabled)
+        return true;
+
+    button = (SDL_GamepadButton)ev->button;
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_UP
+        || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN
+        || button == SDL_GAMEPAD_BUTTON_DPAD_LEFT
+        || button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
+    {
+        return false;
+    }
+
+    if (!ev->down)
+        return true;
+
+    sdl_gamepad_mark_auto_ui();
+    if (sdl_gamepad_button_is_ui_confirm(button))
+        Term_keypress(' ');
+    else if (sdl_gamepad_button_is_ui_back(button)
+        || button == SDL_GAMEPAD_BUTTON_START)
+    {
+        Term_keypress(ESCAPE);
+    }
+    else if (button == SDL_GAMEPAD_BUTTON_WEST)
+        Term_keypress('x');
+    else if (button == SDL_GAMEPAD_BUTTON_NORTH)
+        Term_keypress('s');
+    else if (button == SDL_GAMEPAD_BUTTON_BACK)
+        Term_keypress('?');
+
+    /* Shoulders and optional controls have no semantic action on the unpaged
+     * live sheet.  Consume them instead of leaking equipment/inventory or
+     * other configured gameplay bindings into this overlay. */
+    return true;
+}
+
+bool sdl_character_sheet_screen_handle_event(const SDL_Event* ev)
 {
     float x;
     float y;
@@ -15294,6 +15353,10 @@ bool sdl_character_sheet_screen_handle_pointer_event(
 
     switch (ev->type)
     {
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+    case SDL_EVENT_GAMEPAD_BUTTON_UP:
+        return sdl_character_sheet_live_handle_gamepad_button(&ev->gbutton);
+
     case SDL_EVENT_MOUSE_MOTION:
         if (ev->motion.which == SDL_TOUCH_MOUSEID)
             return true;

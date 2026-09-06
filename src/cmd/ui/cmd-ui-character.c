@@ -166,14 +166,14 @@ static const character_sheet_named_trait character_sheet_named_traits[] = {
 };
 
 static const cptr character_sheet_skill_descriptions[S_MAX] = {
-    "Melee chance to hit and control in close combat.",
-    "Ranged chance to hit with bows and thrown weapons.",
-    "Avoiding attacks; also shown in armour as hit-avoid chance.",
-    "Avoiding detection and moving quietly.",
-    "Noticing hidden doors, traps, monsters, and subtle details.",
-    "Mental resistance and force of will.",
-    "Crafting items at forges.",
-    "Power and reliability of songs.",
+    "Chance to hit in close combat and with thrown weapons.",
+    "Chance to hit with bows.",
+    "Opposes enemy attack rolls to avoid hits.",
+    "Reduces noise and helps avoid visual detection.",
+    "Detects hidden doors, traps, and invisible foes; helps identify items.",
+    "Resists fear, confusion, entrancement, and other hostile effects.",
+    "Determines which items you can craft at forges.",
+    "Determines song power and opposed song checks.",
     ""
 };
 
@@ -650,7 +650,7 @@ static cptr character_sheet_stat_description(int stat)
 {
     switch (stat)
     {
-    case A_STR: return "melee damage dice and weight capacity";
+    case A_STR: return "weapon damage die sides and carried-weight limit";
     case A_DEX: return "melee, evasion, archery, and stealth";
     case A_CON: return "maximum health";
     case A_GRA: return "will, perception, smithing, song, and voice";
@@ -1270,8 +1270,9 @@ void do_cmd_character_sheet(void)
             handle_stuff();
         }
 
-        /* File dump - 'f' or L1 */
-        else if (ch == 'f' || (steamdeck && ch == steamdeck_prev_page_key()))
+        /* File dump - keyboard command only.  Shoulders are reserved for
+         * previous/next page on controller screens that actually have pages. */
+        else if (ch == 'f')
         {
             char ftmp[80];
 

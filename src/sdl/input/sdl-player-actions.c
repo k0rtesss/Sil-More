@@ -1332,7 +1332,7 @@ bool sdl_player_exchange_begin(bool report_no_target)
     g_gamepad_state.dpad_right = false;
     g_gamepad_state.dpad_dir = 0;
     sdl_gamepad_clear_pending_dpad();
-    sdl_gamepad_clear_pending_left_stick();
+    sdl_gamepad_prepare_ui_navigation();
     g_player_exchange_target.active = true;
     sdl_player_exchange_select_default();
     g_state.need_present = true;
@@ -1558,7 +1558,7 @@ bool sdl_player_action_menu_open(void)
     g_gamepad_state.dpad_right = false;
     g_gamepad_state.dpad_dir = 0;
     sdl_gamepad_clear_pending_dpad();
-    sdl_gamepad_clear_pending_left_stick();
+    sdl_gamepad_prepare_ui_navigation();
     g_player_action_menu.active = true;
     g_player_action_menu.hover_kind = SDL_PLAYER_ACTION_NONE;
     g_state.need_present = true;
@@ -1632,14 +1632,15 @@ bool sdl_player_action_menu_handle_gamepad_button(
         break;
     }
 
-    if (button >= 0 && button < SDL_GAMEPAD_BUTTON_COUNT
-        && sdl_gamepad_action_is_confirm(config.gamepad_button_bindings[button]))
+    if (sdl_gamepad_button_is_ui_confirm(button))
     {
         return sdl_player_action_menu_handle_gamepad_confirm(
             (int)button, down);
     }
 
-    return false;
+    /* The open action wheel owns controller buttons.  Optional or remapped
+     * gameplay actions must not leak through it. */
+    return true;
 }
 
 bool sdl_player_exchange_handle_gamepad_button(
@@ -1677,15 +1678,15 @@ bool sdl_player_exchange_handle_gamepad_button(
         break;
     }
 
-    if (button >= 0 && button < SDL_GAMEPAD_BUTTON_COUNT
-        && sdl_gamepad_action_is_confirm(config.gamepad_button_bindings[button]))
+    if (sdl_gamepad_button_is_ui_confirm(button))
     {
         if (down)
             sdl_player_exchange_activate_hover();
         return true;
     }
 
-    return false;
+    /* The exchange chooser is a modal controller surface as well. */
+    return true;
 }
 
 bool sdl_player_action_menu_handle_pointer_down(float x, float y,

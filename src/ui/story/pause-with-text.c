@@ -19,73 +19,60 @@ const char entry_poetry[][100] = { { "Into the vast and echoing gloom," },
     { "" } };
 
 const char tutorial_leave_text[][100] = {
-    { "You have finished the first half of the tutorial and are ready" },
-    { "to create a new character." }, { " " },
-    { "Don't let the choices overwhelm you the first time." },
-    { "Just start with the default Race and Character, then invest most" },
-    { "of your starting experience in Melee and Evasion." },
-    { "Once the game begins, finding some weapons and armour should" },
-    { "be your top priority." }, { " " },
-    { "Remember that a key feature of Sil (and all Roguelike games)" },
-    { "is that you cannot use savepoints: if you die, that's it." },
-    { "It is thus a challenging game where you need to really *think*." },
-    { "You will die many times. When you do: reflect on what to learn" },
-    { "from that death, see if you set a high score, then think about" },
-    { "all the things you want to do differently with the next character..." },
+    { "You are ready to begin a Tale with a hero of your own." }, { " " },
+    { "For an easier first run, choose a hero with a high power rating" },
+    { "and invest early experience in Melee and Evasion." },
+    { "Read item and ability descriptions; they state exact effects and exceptions." },
+    { "Use Hints & Quests for objectives and Help for the searchable Gameplay Reference." },
+    { " " },
+    { "In normal play you may save and quit, but saves are not checkpoints:" },
+    { "death ends the run and normally removes that hero from the current Tale." },
+    { "Sil-More rewards caution. You do not need to fight every enemy;" },
+    { "retreat, recover, and use terrain whenever a battle turns against you." },
+    { "Each death can teach you what to prepare for next time." },
 
     { "" }
 };
 
 const char tutorial_win_text[][100] = {
-    { "Congratulations. You have survived a fire-drake (usually found" },
-    { "at 900 ft!), and have finished the tutorial in fine form." },
-    { "You are more than ready to create a new character." }, { " " },
-    { "Don't let the choices overwhelm you the first time." },
-    { "Just start with the default Race and Character, then invest most" },
-    { "of your starting experience in Melee and Evasion." },
-    { "Once the game begins, finding some weapons and armour should" },
-    { "be your top priority." }, { " " },
-    { "Remember that a key feature of Sil (and all Roguelike games)" },
-    { "is that you cannot use savepoints: if you die, that's it." },
-    { "It is thus a challenging game where you need to really *think*." },
-    { "You will die many times. When you do: reflect on what to learn" },
-    { "from that death, see if you set a high score, then think about" },
-    { "all the things you want to do differently with the next character..." },
+    { "You have completed the tutorial." }, { " " },
+    { "You are ready to begin a Tale with a hero of your own." }, { " " },
+    { "For an easier first run, choose a hero with a high power rating" },
+    { "and invest early experience in Melee and Evasion." },
+    { "Read item and ability descriptions; they state exact effects and exceptions." },
+    { "Use Hints & Quests for objectives and Help for the searchable Gameplay Reference." },
+    { " " },
+    { "In normal play you may save and quit, but saves are not checkpoints:" },
+    { "death ends the run and normally removes that hero from the current Tale." },
+    { "Retreat, recover, and use terrain whenever a battle turns against you." },
 
     { "" }
 };
 
 const char tutorial_early_death_text[][100] = { { "You have been slain." },
     { " " },
-    { "A key feature of Sil (and all Roguelike games) is that you cannot" },
-    { "use savepoints: if you die, that's it!" },
-    { "It is thus a challenging game where you need to really *think*." },
+    { "The run has ended. Start again when you are ready." },
     { " " },
-    { "However, it is a bit frustrating to die before the end of the" },
-    { "tutorial, so we evidently made it a bit too deadly." }, { " " },
-    { "Just restart the tutorial and you should be back to where you" },
-    { "were in a couple of minutes. Remember that if combat is not going" },
-    { "your way, you can try to escape and heal, then either come back" },
-    { "and again to defeat your adversary, or simply ignore it." },
+    { "In normal play you may save and quit, but saves are not checkpoints:" },
+    { "death ends the run and normally removes that hero from the current Tale." },
+    { " " },
+    { "When combat turns against you, retreat through controlled terrain and recover." },
+    { "You can return with a better plan or leave that enemy alone." },
+    { "Use Look, nearby lists, and combat history to learn what made the fight dangerous." },
 
     { "" } };
 
 const char tutorial_late_death_text[][100] = {
-    { "Congratulations: you have finished the tutorial." }, { " " },
-    { "You have also just been through a rite of passage: dying." },
-    { "Remember that a key feature of Sil (and all Roguelike games)" },
-    { "is that you cannot use savepoints: if you die, that's it." },
-    { "It is thus a challenging game where you need to really *think*." },
-    { "You will die many times. When you do: reflect on what to learn" },
-    { "from that death, see if you set a high score, then think about" },
-    { "all the things you want to do differently with the next character..." },
+    { "This run has ended." }, { " " },
+    { "You have also met a core rule: death ends a run." },
+    { "In normal play you may save and quit, but saves are not checkpoints," },
+    { "and death normally removes that hero from the current Tale." },
     { " " },
-    { "You are now more than ready to create a character and start playing." },
-    { " " }, { "Don't let the choices overwhelm you the first time." },
-    { "Just start with the default Race and Character, then invest most" },
-    { "of your starting experience in Melee and Evasion." },
-    { "Once the game begins, finding some weapons and armour should" },
-    { "be your top priority." },
+    { "For an easier first run, choose a hero with a high power rating" },
+    { "and invest early experience in Melee and Evasion." },
+    { "Read descriptions, review Hints & Quests, and open Help when a rule is unclear." },
+    { "Retreat and recover when a fight turns against you; not every foe must be killed." },
+    { "Each death can teach you what to prepare for next time." },
 
     { "" }
 };
@@ -150,41 +137,23 @@ static bool pause_with_text_is_tutorial(const char desc[][100])
         || desc == tutorial_late_death_text;
 }
 
-/* The legacy tutorial conclusion/death pages do not support inline spans.
- * Their source is already split into short ideas, so colour only the lines
- * carrying success, danger, or concrete next-step advice. */
+/* This renderer supports whole-line colour.  Reserve it for standalone
+ * outcome headings; keep explanatory sentences neutral instead of tinting
+ * unrelated words because a line happens to mention death or a skill. */
 static byte pause_with_text_tutorial_attr(cptr line)
 {
     if (!line)
         return TERM_WHITE;
 
-    if (strstr(line, "Congratulations") || strstr(line, "finished")
-        || strstr(line, "survived") || strstr(line, "more than ready"))
+    if (streq(line, "You have completed the tutorial."))
     {
         return TERM_L_GREEN;
     }
 
-    if (strstr(line, "slain") || strstr(line, "cannot use savepoints")
-        || strstr(line, "if you die") || strstr(line, "You will die")
-        || strstr(line, "from that death") || strstr(line, "too deadly"))
+    if (streq(line, "You have been slain."))
     {
         return TERM_L_RED;
     }
-
-    if (strstr(line, "default Race and Character")
-        || strstr(line, "starting experience")
-        || strstr(line, "Melee and Evasion")
-        || strstr(line, "weapons and armour")
-        || strstr(line, "restart the tutorial")
-        || strstr(line, "escape and heal")
-        || strstr(line, "high score")
-        || strstr(line, "top priority"))
-    {
-        return TERM_L_BLUE;
-    }
-
-    if (strstr(line, "*think*") || strstr(line, "reflect on what to learn"))
-        return TERM_YELLOW;
 
     return TERM_WHITE;
 }

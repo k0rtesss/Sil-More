@@ -1457,7 +1457,7 @@ void target_prompt_label(int binding, cptr fallback, char* buf, size_t buflen)
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
     if (!buf[0] || streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback ? fallback : "", buflen);
 }

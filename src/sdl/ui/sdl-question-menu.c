@@ -1487,6 +1487,79 @@ bool sdl_question_menu_context_hint_active(void)
     return g_question_menu.active && g_question_menu.context_hint;
 }
 
+int sdl_question_menu_collect_controller_focus_targets(
+    sdl_controller_focus_target* targets, int max_targets)
+{
+    sdl_question_menu_layout_info layout;
+    int count = 0;
+
+    if (!targets || max_targets <= 0
+        || !sdl_question_menu_context_hint_active()
+        || !sdl_question_menu_layout(&layout))
+    {
+        return 0;
+    }
+
+    for (int i = 0; i < layout.button_count && count < max_targets; i++)
+    {
+        const SDL_FRect* rect = &layout.buttons[i];
+
+        if (rect->w <= 0.0f || rect->h <= 0.0f)
+            continue;
+        targets[count++] = (sdl_controller_focus_target) {
+            .kind = SDL_CONTROLLER_FOCUS_QUESTION_MENU,
+            .id = g_question_menu.buttons[i].choice,
+            .rect = *rect,
+        };
+    }
+
+    return count;
+}
+
+void sdl_question_menu_set_controller_focus(int choice)
+{
+    int resolved = -1;
+
+    if (sdl_question_menu_context_hint_active())
+    {
+        for (int i = 0; i < g_question_menu.button_count; i++)
+        {
+            if (g_question_menu.buttons[i].choice == choice)
+            {
+                resolved = choice;
+                break;
+            }
+        }
+    }
+
+    sdl_question_menu_set_highlight(resolved);
+}
+
+bool sdl_question_menu_activate_context_choice(int choice)
+{
+    bool found = false;
+
+    if (!sdl_question_menu_context_hint_active())
+        return false;
+
+    for (int i = 0; i < g_question_menu.button_count; i++)
+    {
+        if (g_question_menu.buttons[i].choice == choice)
+        {
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        return false;
+
+    sdl_question_menu_clear();
+    /* This is an already selected command, so a keyboard remap must not
+     * reinterpret Description, Pack, or Harness as an unrelated action. */
+    sdl_enqueue_bypassed_command(choice);
+    return true;
+}
+
 void sdl_question_menu_begin(cptr title)
 {
     /* The game rebuilds blocking questions after pointer-hover wakeups.  Keep
@@ -2296,11 +2369,7 @@ bool sdl_question_menu_handle_pointer(float x, float y, int action)
         if (action != UI_MENU_CLICK_PRIMARY)
             return true;
 
-        sdl_question_menu_clear();
-        if (choice == CMD_CONTEXT_FLOOR_ACTION)
-            sdl_enqueue_bypassed_command(choice);
-        else
-            Term_keypress(choice);
+        (void)sdl_question_menu_activate_context_choice(choice);
         return true;
     }
     if (g_question_menu.nonblocking)

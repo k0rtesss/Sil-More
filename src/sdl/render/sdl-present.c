@@ -1942,6 +1942,9 @@ bool sdl_render_current_window_frame(void)
         sdl_touch_top_panel_render();
     sdl_touch_exit_button_render();
 
+    if (!hide_main_menu_overlays)
+        sdl_gamepad_context_focus_render();
+
     return true;
 }
 

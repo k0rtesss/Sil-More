@@ -17,6 +17,7 @@ static SDL_FRect g_touch_top_panel_cached_buttons[
 static Uint64 g_touch_top_panel_cached_generation;
 static bool g_touch_top_panel_cached_layout_valid;
 static int g_touch_top_panel_description_slot = -1;
+static int g_touch_top_panel_controller_focus_slot = -1;
 static SDL_FRect g_touch_top_panel_description_box;
 static SDL_FRect g_touch_top_panel_description_hover_bridge;
 static SDL_FRect g_touch_top_panel_description_change_rect;
@@ -4868,6 +4869,76 @@ int sdl_touch_top_panel_visible_button_count(void)
     return sdl_touch_top_panel_visible_slots(NULL, 0);
 }
 
+int sdl_touch_top_panel_collect_controller_focus_targets(
+    sdl_controller_focus_target* targets, int max_targets)
+{
+    SDL_FRect button_rects[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+    int visible_slots[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+    int visible_count;
+    int count = 0;
+
+    if (!targets || max_targets <= 0
+        || !sdl_touch_top_panel_layout_visible()
+        || !sdl_main_screen_click_shortcuts_active())
+    {
+        return 0;
+    }
+
+    SDL_FRect toggle;
+    if (sdl_touch_top_panel_indicator_geometry(g_touch_top_panel_open,
+            &toggle, NULL))
+    {
+        targets[count++] = (sdl_controller_focus_target) {
+            .kind = SDL_CONTROLLER_FOCUS_QUICK_ACCESS,
+            .id = SDL_CONTROLLER_QUICK_ACCESS_TOGGLE,
+            .rect = toggle,
+        };
+    }
+    if (count >= max_targets
+        || !sdl_touch_top_panel_compute_layout(button_rects, NULL))
+        return count;
+
+    visible_count = sdl_touch_top_panel_visible_slots(visible_slots,
+        SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
+    for (int i = 0; i < visible_count && count < max_targets; i++)
+    {
+        int slot = visible_slots[i];
+
+        if (button_rects[slot].w <= 0.0f || button_rects[slot].h <= 0.0f)
+            continue;
+        targets[count++] = (sdl_controller_focus_target) {
+            .kind = SDL_CONTROLLER_FOCUS_QUICK_ACCESS,
+            .id = slot,
+            .rect = button_rects[slot],
+        };
+    }
+
+    return count;
+}
+
+void sdl_touch_top_panel_set_controller_focus(int slot)
+{
+    if (slot == SDL_CONTROLLER_QUICK_ACCESS_TOGGLE)
+    {
+        SDL_FRect rect;
+        g_touch_top_panel_controller_focus_slot = -1;
+        sdl_touch_top_panel_set_hover_slot(-1);
+        if (sdl_touch_top_panel_indicator_geometry(g_touch_top_panel_open,
+                &rect, NULL))
+        {
+            (void)sdl_object_tooltip_show_text_at_rect(&rect,
+                g_touch_top_panel_open
+                    ? "[A] Collapse Quick Access. [B] Back."
+                    : "[A] Expand Quick Access. [B] Back.", false);
+        }
+        return;
+    }
+    if (slot < 0 || slot >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
+        slot = -1;
+    g_touch_top_panel_controller_focus_slot = slot;
+    sdl_touch_top_panel_set_hover_slot(slot);
+}
+
 bool sdl_touch_top_panel_current_anchor(SDL_Rect* out_screen,
     SDL_Rect* out_anchor, enum pane_placement* out_where)
 {
@@ -6126,11 +6197,13 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
             buflen);
         return;
     case '\t':
-        SDL_strlcpy(buf, "Weapon: change active melee or ranged weapon.", buflen);
+        SDL_strlcpy(buf,
+            "Weapon: change the active melee, throwing, bow, shield, and arrow setup.",
+            buflen);
         return;
     case 'y':
         SDL_strlcpy(buf,
-            "Abilities: open the ability screen to review learned abilities.",
+            "Abilities: review learned abilities and buy available ones.",
             buflen);
         return;
     case 'M':
@@ -6166,7 +6239,7 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         return;
     case 'D':
         SDL_strlcpy(buf,
-            "Disarm: choose an adjacent known trap and attempt to disarm it.",
+            "Disarm: choose an adjacent known floor trap or chest and attempt to disarm it.",
             buflen);
         return;
     case 'X':
@@ -6181,11 +6254,12 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         return;
     case 't':
         SDL_strlcpy(buf,
-            "Throw: choose an item and throw it in a selected direction.", buflen);
+            "Throw: choose an eligible Harness or Belt weapon, or an Alchemy potion, then choose a target.",
+            buflen);
         return;
     case 'p':
         SDL_strlcpy(buf,
-            "Horn: choose and sound a horn from your carried items.", buflen);
+            "Horn: choose and sound a horn from your Harness.", buflen);
         return;
     case 'q':
         SDL_strlcpy(buf,
@@ -6197,7 +6271,8 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         return;
     case 'b':
         SDL_strlcpy(buf,
-            "Bash: choose an adjacent obstacle and attempt to bash it.", buflen);
+            "Bash: choose an adjacent closed door and attempt to force it open.",
+            buflen);
         return;
     case KTRL('Q'):
         SDL_strlcpy(buf,
@@ -6328,7 +6403,7 @@ static void sdl_touch_top_panel_render_description_button(
 }
 
 static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
-    int slot, bool persistent)
+    int slot, bool persistent, bool controller_focus)
 {
     SDL_Rect screen;
     TTF_Font* font;
@@ -6357,6 +6432,9 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
         sizeof(description));
     if (!description[0])
         return;
+    if (controller_focus)
+        SDL_strlcat(description, "\n[A] Activate. [B] Back.",
+            sizeof(description));
 
     screen = sdl_get_layout_screen_rect();
     if (!sdl_rect_has_area(&screen))
@@ -6632,12 +6710,17 @@ void sdl_touch_top_panel_render_buttons(
         if (slot < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT
             && button_rects[slot].w > 0.0f && button_rects[slot].h > 0.0f)
         {
-            sdl_touch_top_panel_render_tooltip(&button_rects[slot], slot, true);
+            sdl_touch_top_panel_render_tooltip(&button_rects[slot], slot, true,
+                false);
         } else {
             sdl_touch_top_panel_close_description();
         }
     } else if (tooltip_slot >= 0) {
-        sdl_touch_top_panel_render_tooltip(tooltip_rect, tooltip_slot, true);
+        bool controller_focus = tooltip_slot
+            == g_touch_top_panel_controller_focus_slot;
+
+        sdl_touch_top_panel_render_tooltip(tooltip_rect, tooltip_slot,
+            !controller_focus, controller_focus);
     }
 }
 

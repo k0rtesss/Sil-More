@@ -1270,7 +1270,27 @@ static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
 void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 {
     (void)st;
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN
+        || ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
+    {
+        log_debug("controller input: button=%d down=%d ctx=%u icky=%d prompt=%d dpad=%d delay=%d held=%d%d%d%d pending=%d/%d",
+            ev->gbutton.button, ev->gbutton.down, movement_input_active_context(),
+            character_icky, inkey_prompt_input_active(), config.gamepad_use_dpad,
+            config.gamepad_dpad_diagonal_delay_ms, g_gamepad_state.dpad_up,
+            g_gamepad_state.dpad_down, g_gamepad_state.dpad_left,
+            g_gamepad_state.dpad_right, g_gamepad_state.dpad_pending,
+            g_gamepad_state.dpad_pending_dir);
+    }
+    else if (ev->type == SDL_EVENT_KEY_DOWN || ev->type == SDL_EVENT_KEY_UP)
+    {
+        log_debug("controller keyboard input: key=%u scancode=%d raw=%u down=%d repeat=%d ctx=%u icky=%d prompt=%d",
+            ev->key.key, ev->key.scancode, ev->key.raw, ev->key.down,
+            ev->key.repeat, movement_input_active_context(), character_icky,
+            inkey_prompt_input_active());
+    }
     sdl_normalize_event_to_render_coords(ev);
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
+        sdl_gamepad_release_button_modifier(ev->gbutton.button);
     if (sdl_sound_try_handle_event(ev)) {
         return;
     }
@@ -1283,6 +1303,16 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         return;
     if (sdl_event_is_disabled_mouse_input(ev))
         return;
+    if (ev->type == SDL_EVENT_KEY_DOWN
+        || ev->type == SDL_EVENT_FINGER_DOWN
+        || (ev->type == SDL_EVENT_MOUSE_MOTION
+            && ev->motion.which != SDL_TOUCH_MOUSEID
+            && (ev->motion.xrel != 0 || ev->motion.yrel != 0))
+        || (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN
+            && ev->button.which != SDL_TOUCH_MOUSEID))
+    {
+        sdl_gamepad_context_focus_clear();
+    }
     if ((ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN
             || ev->type == SDL_EVENT_MOUSE_BUTTON_UP)
         && ev->button.which != SDL_TOUCH_MOUSEID)
@@ -1344,6 +1374,28 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         } else if (ev->type == SDL_EVENT_FINGER_UP || ev->type == SDL_EVENT_FINGER_CANCELED) {
             return;
+        } else if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN
+            || ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
+        {
+            if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN
+                && config.gamepad_enabled)
+            {
+                SDL_GamepadButton button =
+                    (SDL_GamepadButton)ev->gbutton.button;
+
+                sdl_gamepad_mark_auto_ui();
+                if (sdl_gamepad_button_is_ui_confirm(button))
+                    sdl_touch_pane_finish_reset_confirm(true);
+                else if (sdl_gamepad_button_is_ui_back(button)
+                    || button == SDL_GAMEPAD_BUTTON_BACK
+                    || button == SDL_GAMEPAD_BUTTON_START)
+                {
+                    sdl_touch_pane_finish_reset_confirm(false);
+                }
+            }
+            return;
+        } else if (ev->type == SDL_EVENT_GAMEPAD_AXIS_MOTION) {
+            return;
         }
     } else if (sdl_yes_no_prompt_handle_modal_event(ev)) {
         return;
@@ -1368,7 +1420,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
     } else if (sdl_question_menu_captures_pointer()
         && sdl_question_overlay_consume_pointer(ev)) {
         return;
-    } else if (sdl_character_sheet_screen_handle_pointer_event(ev)) {
+    } else if (sdl_character_sheet_screen_handle_event(ev)) {
         return;
     } else if (ev->type == SDL_EVENT_MOUSE_MOTION) {
         if (ev->motion.which == SDL_TOUCH_MOUSEID)

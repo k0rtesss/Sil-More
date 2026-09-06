@@ -2150,7 +2150,9 @@ void sdl_touch_pane_render_reset_prompt(void)
     SDL_SetRenderDrawColor(g_state.renderer, frame.r, frame.g, frame.b, 220);
     SDL_RenderRect(g_state.renderer, &rect);
     sdl_touch_pane_draw_button_text(&rect, "Reset touch controls to defaults?",
-        "Confirm: Pick/Enter. Cancel: Esc.", text);
+        steamdeck_controls_active()
+            ? "[A] Reset. [B] Cancel."
+            : "Confirm: Pick/Enter. Cancel: Esc.", text);
 }
 
 void sdl_touch_pane_render_yes_no_prompt(void)

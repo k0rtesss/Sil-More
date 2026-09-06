@@ -1,6 +1,9 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+static void sdl_controller_focus_union_rect(SDL_FRect* bounds, bool* found,
+    const SDL_FRect* rect);
+
 bool sdl_point_in_rect(const SDL_Rect* rect, float x, float y)
 {
     if (!sdl_rect_has_area(rect))
@@ -619,6 +622,113 @@ bool sdl_handle_status_line_click_action(int action)
     return true;
 }
 
+int sdl_status_line_collect_controller_focus_targets(
+    sdl_controller_focus_target* targets, int max_targets)
+{
+    SDL_FRect action_rects[SDL_STATUS_CLICK_VIEW + 1] = { 0 };
+    bool action_found[SDL_STATUS_CLICK_VIEW + 1] = { false };
+    int action_start[SDL_STATUS_CLICK_VIEW + 1];
+    int count = 0;
+    int col = 0;
+
+    if (!targets || max_targets <= 0 || !Term
+        || !sdl_main_screen_click_shortcuts_active())
+    {
+        return 0;
+    }
+
+    for (int action = 0; action <= SDL_STATUS_CLICK_VIEW; action++)
+        action_start[action] = -1;
+
+    while (col < Term->wid)
+    {
+        int action = sdl_status_line_click_action_at_cell(col, ROW_STATUS);
+        int start = col;
+        SDL_FRect rect;
+
+        while (col < Term->wid
+            && sdl_status_line_click_action_at_cell(col, ROW_STATUS) == action)
+        {
+            col++;
+        }
+        if (action == SDL_STATUS_CLICK_NONE || col <= start
+            || !sdl_main_cell_rect(start, ROW_STATUS, col - start, 1, &rect))
+        {
+            continue;
+        }
+
+        if (action_start[action] < 0)
+            action_start[action] = start;
+        sdl_controller_focus_union_rect(&action_rects[action],
+            &action_found[action], &rect);
+    }
+
+    for (int action = SDL_STATUS_CLICK_MAIN_MENU;
+        action <= SDL_STATUS_CLICK_VIEW && count < max_targets; action++)
+    {
+        if (!action_found[action])
+            continue;
+        targets[count++] = (sdl_controller_focus_target) {
+            .kind = SDL_CONTROLLER_FOCUS_STATUS_LINE,
+            .id = action
+                | (action_start[action] << SDL_CONTROLLER_STATUS_COL_SHIFT),
+            .rect = action_rects[action],
+        };
+    }
+
+    return count;
+}
+
+void sdl_status_line_set_controller_focus(int encoded_status)
+{
+    int action = encoded_status & SDL_CONTROLLER_STATUS_ACTION_MASK;
+    int start = encoded_status >> SDL_CONTROLLER_STATUS_COL_SHIFT;
+    int end = start;
+    cptr prompt = NULL;
+    SDL_FRect rect;
+
+    if (!Term || action <= SDL_STATUS_CLICK_NONE
+        || action > SDL_STATUS_CLICK_VIEW || start < 0 || start >= Term->wid
+        || sdl_status_line_click_action_at_cell(start, ROW_STATUS) != action)
+    {
+        sdl_main_screen_touch_zone_selection_set(SDL_STATUS_CLICK_NONE, -1,
+            g_main_screen_panel_selected_action,
+            g_main_screen_panel_selected_row, true);
+        return;
+    }
+
+    while (end < Term->wid
+        && sdl_status_line_click_action_at_cell(end, ROW_STATUS) == action)
+    {
+        end++;
+    }
+    switch (action)
+    {
+    case SDL_STATUS_CLICK_MAIN_MENU:
+        prompt = "[A] Open Main Menu. [B] Back.";
+        break;
+    case SDL_STATUS_CLICK_SONG:
+        prompt = "[A] Open Song Menu. [B] Back.";
+        break;
+    case SDL_STATUS_CLICK_MAP:
+        prompt = "[A] Open Map. [B] Back.";
+        break;
+    case SDL_STATUS_CLICK_VIEW:
+        prompt = "[A] Open Look. [B] Back.";
+        break;
+    default:
+        break;
+    }
+
+    sdl_main_screen_touch_zone_selection_set(action, start,
+        SDL_PANEL_CLICK_NONE, -1, true);
+    if (prompt && end > start
+        && sdl_main_cell_rect(start, ROW_STATUS, end - start, 1, &rect))
+    {
+        (void)sdl_object_tooltip_show_text_at_rect(&rect, prompt, false);
+    }
+}
+
 bool sdl_main_screen_handle_corner_exempt_status_pointer(float x,
     float y)
 {
@@ -792,16 +902,23 @@ bool sdl_welcome_screen_handle_gamepad_button(SDL_GamepadButton button,
         return false;
     if (!g_sdl_blocking_key_wait)
         return false;
-    if (button != SDL_GAMEPAD_BUTTON_BACK
-        && button != SDL_GAMEPAD_BUTTON_EAST)
-    {
-        return false;
-    }
     if (!sdl_screen_shows_welcome_screen())
         return false;
 
-    Term_keypress(ESCAPE);
-    return true;
+    if (sdl_gamepad_button_is_ui_confirm(button))
+    {
+        Term_keypress('\r');
+        return true;
+    }
+    if (sdl_gamepad_button_is_ui_back(button)
+        || button == SDL_GAMEPAD_BUTTON_START
+        || button == SDL_GAMEPAD_BUTTON_BACK)
+    {
+        Term_keypress(ESCAPE);
+        return true;
+    }
+
+    return false;
 }
 
 bool sdl_pointer_activate_welcome_screen(void)
@@ -1668,6 +1785,8 @@ void sdl_minimap_focus(int y, int x)
 
 void sdl_minimap_clear_gamepad_modal_state(void)
 {
+    sdl_gamepad_context_focus_clear();
+    sdl_gamepad_reset_modifiers();
     g_gamepad_state.dpad_up = false;
     g_gamepad_state.dpad_down = false;
     g_gamepad_state.dpad_left = false;
@@ -1680,11 +1799,13 @@ void sdl_minimap_clear_gamepad_modal_state(void)
     g_gamepad_state.left_y = 0;
     g_gamepad_state.left_dir = 0;
     g_gamepad_state.left_bind_dir = -1;
+    g_gamepad_state.left_ui_dir = -1;
     sdl_gamepad_clear_pending_left_stick();
 
     g_gamepad_state.right_x = 0;
     g_gamepad_state.right_y = 0;
     g_gamepad_state.right_dir = -1;
+    g_gamepad_state.right_ui_dir = -1;
 
     g_gamepad_state.left_trigger_down = false;
     g_gamepad_state.right_trigger_down = false;
@@ -2711,8 +2832,17 @@ bool sdl_minimap_handle_gamepad_button(SDL_GamepadButton button,
         (void)sdl_minimap_pan(0, 1);
         break;
 
-    default:
+    case SDL_GAMEPAD_BUTTON_START:
+    case SDL_GAMEPAD_BUTTON_BACK:
         sdl_minimap_close();
+        break;
+
+    default:
+        if (sdl_gamepad_button_is_ui_confirm(button)
+            || sdl_gamepad_button_is_ui_back(button))
+        {
+            sdl_minimap_close();
+        }
         break;
     }
 
@@ -3402,34 +3532,44 @@ int sdl_visible_character_panel_block_top_row(int click_action)
     }
 }
 
-cptr sdl_character_panel_click_tooltip_text(int click_action)
+cptr sdl_character_panel_click_tooltip_text(int click_action, bool touch)
 {
     switch (click_action)
     {
     case SDL_PANEL_CLICK_CHARACTER:
-        return "Click: open character details.";
+        return touch ? "Tap: open character details."
+                     : "Click: open character details.";
     case SDL_PANEL_CLICK_SONG:
-        return "Click: open the song menu.";
+        return touch ? "Tap: open the song menu."
+                     : "Click: open the song menu.";
     case SDL_PANEL_CLICK_SUPPLIES_LIGHTS:
-        return "Click: open supplies for lights.";
+        return touch ? "Tap: open supplies for lights."
+                     : "Click: open supplies for lights.";
     case SDL_PANEL_CLICK_SKILL_DISTRIBUTION:
-        return "Click: spend experience.";
+        return touch ? "Tap: spend experience."
+                     : "Click: spend experience.";
     case SDL_PANEL_CLICK_INVENTORY:
-        return "Click: open inventory.";
+        return touch ? "Tap: open inventory."
+                     : "Click: open inventory.";
     case SDL_PANEL_CLICK_ABILITIES:
-        return "Click: open abilities.";
+        return touch ? "Tap: open abilities."
+                     : "Click: open abilities.";
     case SDL_PANEL_CLICK_SMITHING:
-        return "Click: open smithing.";
+        return touch ? "Tap: open smithing."
+                     : "Click: open smithing.";
     case SDL_PANEL_CLICK_EQUIPMENT:
-        return "Click: open equipment.";
+        return touch ? "Tap: open equipment."
+                     : "Click: open equipment.";
     case SDL_PANEL_CLICK_COMPACT:
-        return "Click: collapse to compact panel.";
+        return touch ? "Tap: collapse to compact panel."
+                     : "Click: collapse to compact panel.";
     default:
         return NULL;
     }
 }
 
-cptr sdl_character_panel_attack_tooltip_text(int attack_mode, bool quiver_only)
+cptr sdl_character_panel_attack_tooltip_text(int attack_mode, bool quiver_only,
+    bool touch)
 {
     static char text[640];
     char active_weapon[256];
@@ -3437,7 +3577,8 @@ cptr sdl_character_panel_attack_tooltip_text(int attack_mode, bool quiver_only)
     if (quiver_only)
     {
         if (attack_mode == SDL_POINTER_ATTACK_RANGED_1)
-            return "Click: select the quiver for ranged attacks.";
+            return touch ? "Tap: select the quiver for ranged attacks."
+                         : "Click: select the quiver for ranged attacks.";
         return NULL;
     }
 
@@ -3448,9 +3589,9 @@ cptr sdl_character_panel_attack_tooltip_text(int attack_mode, bool quiver_only)
     case SDL_POINTER_ATTACK_RANGED_2:
         player_active_weapon_name(active_weapon, sizeof(active_weapon));
         strnfmt(text, sizeof(text),
-            "Click: change active weapon.\n"
+            "%s: change active weapon.\n"
             "Current active weapon: %s.",
-            active_weapon);
+            touch ? "Tap" : "Click", active_weapon);
         return text;
     default:
         return NULL;
@@ -3538,9 +3679,9 @@ void sdl_character_panel_show_hover_tooltip(int col, int row,
 
     if (attack_mode != SDL_POINTER_ATTACK_NONE)
         text = sdl_character_panel_attack_tooltip_text(attack_mode,
-            quiver_only);
+            quiver_only, touch);
     if (!text && click_action != SDL_PANEL_CLICK_NONE)
-        text = sdl_character_panel_click_tooltip_text(click_action);
+        text = sdl_character_panel_click_tooltip_text(click_action, touch);
     if (!text)
         return;
 
@@ -3567,7 +3708,7 @@ static void sdl_combat_overlay_show_hover_tooltip(int col, int row,
     int attack_mode, bool quiver_only, bool touch)
 {
     cptr text = sdl_character_panel_attack_tooltip_text(attack_mode,
-        quiver_only);
+        quiver_only, touch);
     int anchor_col = 0;
     int anchor_cols = PANE_COMBAT_OVERLAY_COLS;
     SDL_FRect rect;
@@ -3621,11 +3762,525 @@ bool sdl_handle_character_panel_click_action(int click_action)
             sdl_inventory_equipment_cycle_binding('e'));
         return true;
     case SDL_PANEL_CLICK_COMPACT:
-        sdl_left_panel_pane_set_expanded(false);
+        sdl_left_panel_pane_set_expanded(sdl_left_panel_pane_collapsed());
         return true;
     default:
         return false;
     }
+}
+
+static void sdl_controller_focus_union_rect(SDL_FRect* bounds, bool* found,
+    const SDL_FRect* rect)
+{
+    float right;
+    float bottom;
+
+    if (!bounds || !found || !rect)
+        return;
+    if (!*found)
+    {
+        *bounds = *rect;
+        *found = true;
+        return;
+    }
+
+    right = MAX(bounds->x + bounds->w, rect->x + rect->w);
+    bottom = MAX(bounds->y + bounds->h, rect->y + rect->h);
+    bounds->x = MIN(bounds->x, rect->x);
+    bounds->y = MIN(bounds->y, rect->y);
+    bounds->w = right - bounds->x;
+    bounds->h = bottom - bounds->y;
+}
+
+static int sdl_hidden_character_panel_collect_controller_focus_targets(
+    sdl_controller_focus_target* targets, int max_targets)
+{
+    SDL_FRect action_rects[SDL_PANEL_CLICK_COMPACT + 1] = { 0 };
+    SDL_FRect attack_rects[3][2] = { 0 };
+    bool action_found[SDL_PANEL_CLICK_COMPACT + 1] = { false };
+    bool attack_found[3][2] = { false };
+    int count = 0;
+
+    if (!targets || max_targets <= 0 || g_suppress_hidden_left_panel_overlay)
+        return 0;
+
+    for (int index = 0;
+        index < g_hidden_left_panel_overlay_rows && index < 16; index++)
+    {
+        int row = g_hidden_left_panel_overlay_start_row + index;
+        int action = g_hidden_left_panel_overlay_click_actions[index];
+        int click_start = g_hidden_left_panel_overlay_click_start_cols[index];
+        int click_end = g_hidden_left_panel_overlay_click_end_cols[index];
+        int mode = g_hidden_left_panel_overlay_attack_modes[index];
+        int attack_start = g_hidden_left_panel_overlay_attack_start_cols[index];
+        int attack_end = g_hidden_left_panel_overlay_attack_end_cols[index];
+        int quiver = g_hidden_left_panel_overlay_attack_quivers[index] ? 1 : 0;
+        SDL_FRect rect;
+
+        if (action > SDL_PANEL_CLICK_NONE
+            && action <= SDL_PANEL_CLICK_COMPACT && click_end > click_start
+            && sdl_main_cell_rect(click_start, row, click_end - click_start, 1,
+                &rect))
+        {
+            sdl_controller_focus_union_rect(&action_rects[action],
+                &action_found[action], &rect);
+        }
+        if (mode >= SDL_POINTER_ATTACK_MELEE
+            && mode <= SDL_POINTER_ATTACK_RANGED_2
+            && attack_end > attack_start
+            && sdl_main_cell_rect(attack_start, row,
+                attack_end - attack_start, 1, &rect))
+        {
+            sdl_controller_focus_union_rect(
+                &attack_rects[mode - SDL_POINTER_ATTACK_MELEE][quiver],
+                &attack_found[mode - SDL_POINTER_ATTACK_MELEE][quiver],
+                &rect);
+        }
+    }
+
+    for (int action = SDL_PANEL_CLICK_CHARACTER;
+        action <= SDL_PANEL_CLICK_COMPACT && count < max_targets; action++)
+    {
+        if (!action_found[action])
+            continue;
+        targets[count++] = (sdl_controller_focus_target) {
+            .kind = SDL_CONTROLLER_FOCUS_LEFT_PANEL,
+            .id = action,
+            .rect = action_rects[action],
+        };
+    }
+    for (int mode = SDL_POINTER_ATTACK_MELEE;
+        mode <= SDL_POINTER_ATTACK_RANGED_2 && count < max_targets; mode++)
+    {
+        for (int quiver = 0; quiver <= 1 && count < max_targets; quiver++)
+        {
+            if (!attack_found[mode - SDL_POINTER_ATTACK_MELEE][quiver])
+                continue;
+            targets[count++] = (sdl_controller_focus_target) {
+                .kind = SDL_CONTROLLER_FOCUS_LEFT_PANEL_ATTACK,
+                .id = mode | (quiver
+                    ? SDL_CONTROLLER_ATTACK_QUIVER_FLAG : 0),
+                .rect = attack_rects[mode - SDL_POINTER_ATTACK_MELEE][quiver],
+            };
+        }
+    }
+
+    return count;
+}
+
+static bool sdl_combat_overlay_controller_attack_rect(int mode, bool quiver,
+    SDL_FRect* out)
+{
+    SDL_FRect bounds = { 0 };
+    bool found = false;
+
+    if (out)
+        *out = (SDL_FRect){ 0 };
+    if (!sdl_combat_overlay_pane_presentation_active()
+        || sdl_touch_zone_controls_active())
+    {
+        return false;
+    }
+
+    for (int row = 0; row < g_views[PANE_MAIN].rows; row++)
+    {
+        if ((row == ROW_QUIVER) != quiver)
+            continue;
+        for (int col = 0; col < PANE_COMBAT_OVERLAY_COLS; col++)
+        {
+            SDL_FRect cell;
+
+            if (sdl_combat_overlay_attack_mode_at_cell(col, row) != mode
+                || !sdl_combat_overlay_cell_rect(col, row, 1, 1, &cell))
+            {
+                continue;
+            }
+            sdl_controller_focus_union_rect(&bounds, &found, &cell);
+        }
+    }
+
+    if (found && out)
+        *out = bounds;
+    return found;
+}
+
+int sdl_combat_overlay_collect_controller_focus_targets(
+    sdl_controller_focus_target* targets, int max_targets)
+{
+    int count = 0;
+
+    if (!targets || max_targets <= 0
+        || !sdl_main_screen_click_shortcuts_active())
+    {
+        return 0;
+    }
+
+    for (int mode = SDL_POINTER_ATTACK_MELEE;
+        mode <= SDL_POINTER_ATTACK_RANGED_2 && count < max_targets; mode++)
+    {
+        for (int quiver = 0; quiver <= 1 && count < max_targets; quiver++)
+        {
+            SDL_FRect rect;
+
+            if (!sdl_combat_overlay_controller_attack_rect(mode,
+                    quiver != 0, &rect))
+            {
+                continue;
+            }
+            targets[count++] = (sdl_controller_focus_target) {
+                .kind = SDL_CONTROLLER_FOCUS_LEFT_PANEL_ATTACK,
+                .id = mode | SDL_CONTROLLER_ATTACK_COMBAT_FLAG
+                    | (quiver ? SDL_CONTROLLER_ATTACK_QUIVER_FLAG : 0),
+                .rect = rect,
+            };
+        }
+    }
+
+    if (count < max_targets && jewelry_preset_count() > 0)
+    {
+        SDL_FRect rect;
+
+        if (sdl_combat_overlay_cell_rect(0,
+                PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW,
+                PANE_COMBAT_OVERLAY_COLS, 1, &rect))
+        {
+            targets[count++] = (sdl_controller_focus_target) {
+                .kind = SDL_CONTROLLER_FOCUS_COMBAT_JEWELRY,
+                .id = 0,
+                .rect = rect,
+            };
+        }
+    }
+
+    return count;
+}
+
+void sdl_combat_overlay_set_controller_jewelry_focus(bool focused)
+{
+    SDL_FRect rect;
+
+    if (!focused || jewelry_preset_count() <= 0
+        || !sdl_combat_overlay_cell_rect(0,
+            PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW,
+            PANE_COMBAT_OVERLAY_COLS, 1, &rect))
+    {
+        return;
+    }
+
+    (void)sdl_object_tooltip_show_text_at_rect(&rect,
+        "[A] Open Jewelry Presets. [B] Back.", false);
+}
+
+int sdl_character_panel_collect_controller_focus_targets(
+    sdl_controller_focus_target* targets, int max_targets)
+{
+    const sdl_view* view = &g_views[PANE_MAIN];
+    sdl_left_panel_metrics metrics;
+    struct {
+        int action;
+        int first_row;
+        int end_row;
+    } blocks[4];
+    int count = 0;
+
+    if (!targets || max_targets <= 0
+        || !sdl_main_screen_click_shortcuts_active())
+    {
+        return 0;
+    }
+    if (get_sdl_hide_left_panel())
+    {
+        return sdl_hidden_character_panel_collect_controller_focus_targets(
+            targets, max_targets);
+    }
+    if (!sdl_left_panel_pane_presentation_active()
+        || !sdl_left_panel_metrics_for_view(view, &metrics))
+    {
+        return 0;
+    }
+
+    if (sdl_left_panel_pane_collapsed())
+    {
+        SDL_Rect rect = g_pane_rects[PANE_LEFT_PANEL];
+
+        if (!sdl_rect_has_area(&rect))
+            return 0;
+        targets[0] = (sdl_controller_focus_target) {
+            .kind = SDL_CONTROLLER_FOCUS_LEFT_PANEL,
+            .id = SDL_PANEL_CLICK_COMPACT,
+            .rect = {
+                .x = (float)rect.x,
+                .y = (float)rect.y,
+                .w = (float)rect.w,
+                .h = (float)rect.h,
+            },
+        };
+        return 1;
+    }
+
+    blocks[0].action = SDL_PANEL_CLICK_COMPACT;
+    blocks[0].first_row = ROW_NAME;
+    blocks[0].end_row = ROW_STAT;
+    blocks[1].action = SDL_PANEL_CLICK_ABILITIES;
+    blocks[1].first_row = ROW_STAT;
+    blocks[1].end_row = ROW_EXP;
+    blocks[2].action = SDL_PANEL_CLICK_INVENTORY;
+    blocks[2].first_row = ROW_EXP;
+    blocks[2].end_row = ROW_EVN;
+    blocks[3].action = SDL_PANEL_CLICK_EQUIPMENT;
+    blocks[3].first_row = ROW_EVN;
+    blocks[3].end_row = metrics.panel_rows;
+
+    for (int i = 0; i < (int)N_ELEMENTS(blocks) && count < max_targets; i++)
+    {
+        SDL_FRect rect;
+        int rows = blocks[i].end_row - blocks[i].first_row;
+
+        if (rows <= 0
+            || sdl_visible_character_panel_click_action_at_cell(0,
+                blocks[i].first_row) != blocks[i].action
+            || !sdl_left_panel_source_cell_rect(0, blocks[i].first_row,
+                LEFT_PANEL_CONTENT_WID, rows, &rect))
+        {
+            continue;
+        }
+
+        targets[count++] = (sdl_controller_focus_target) {
+            .kind = SDL_CONTROLLER_FOCUS_LEFT_PANEL,
+            .id = blocks[i].action,
+            .rect = rect,
+        };
+    }
+
+    /* Weapon and quiver rows are separate semantic controls layered inside
+     * the broad inventory block.  Build their rectangles from the same
+     * cell-level predicate used by mouse/touch so dynamic two-line melee and
+     * split-quiver layouts stay exact. */
+    for (int mode = SDL_POINTER_ATTACK_MELEE;
+        mode <= SDL_POINTER_ATTACK_RANGED_2 && count < max_targets; mode++)
+    {
+        for (int quiver = 0; quiver <= 1 && count < max_targets; quiver++)
+        {
+            SDL_FRect bounds = { 0 };
+            bool found = false;
+
+            for (int row = 0; row < metrics.panel_rows; row++)
+            {
+                bool row_is_quiver = row == ROW_QUIVER;
+
+                if (row_is_quiver != (quiver != 0))
+                    continue;
+                for (int col = 0; col < LEFT_PANEL_CONTENT_WID; col++)
+                {
+                    SDL_FRect cell;
+                    int cell_mode = sdl_visible_character_panel_attack_mode_at_cell(
+                        col, row);
+
+                    if (cell_mode != mode
+                        || !sdl_left_panel_source_cell_rect(col, row, 1, 1,
+                            &cell))
+                    {
+                        continue;
+                    }
+                    sdl_controller_focus_union_rect(&bounds, &found, &cell);
+                }
+            }
+            if (found)
+            {
+                targets[count++] = (sdl_controller_focus_target) {
+                    .kind = SDL_CONTROLLER_FOCUS_LEFT_PANEL_ATTACK,
+                    .id = mode | (quiver
+                        ? SDL_CONTROLLER_ATTACK_QUIVER_FLAG : 0),
+                    .rect = bounds,
+                };
+            }
+        }
+    }
+
+    return count;
+}
+
+void sdl_character_panel_set_controller_focus(int click_action)
+{
+    cptr prompt = NULL;
+    int anchor_col = 0;
+    int anchor_cols = LEFT_PANEL_CONTENT_WID;
+    int top_row = -1;
+
+    switch (click_action)
+    {
+    case SDL_PANEL_CLICK_CHARACTER:
+        prompt = "[A] Open Character Details. [B] Back.";
+        break;
+    case SDL_PANEL_CLICK_SONG:
+        prompt = "[A] Open Song Menu. [B] Back.";
+        break;
+    case SDL_PANEL_CLICK_SUPPLIES_LIGHTS:
+        prompt = "[A] Open Light Supplies. [B] Back.";
+        break;
+    case SDL_PANEL_CLICK_SKILL_DISTRIBUTION:
+        prompt = "[A] Spend Experience. [B] Back.";
+        break;
+    case SDL_PANEL_CLICK_COMPACT:
+        prompt = sdl_left_panel_pane_collapsed()
+            ? "[A] Expand character pane. [B] Back."
+            : "[A] Collapse character pane. [B] Back.";
+        break;
+    case SDL_PANEL_CLICK_ABILITIES:
+        prompt = "[A] Open Abilities. [B] Back.";
+        break;
+    case SDL_PANEL_CLICK_INVENTORY:
+        prompt = "[A] Open Inventory. [B] Back.";
+        break;
+    case SDL_PANEL_CLICK_EQUIPMENT:
+        prompt = "[A] Open Equipment. [B] Back.";
+        break;
+    case SDL_PANEL_CLICK_SMITHING:
+        prompt = "[A] Open Smithing. [B] Back.";
+        break;
+    default:
+        click_action = SDL_PANEL_CLICK_NONE;
+        break;
+    }
+
+    sdl_main_screen_touch_zone_selection_set(SDL_STATUS_CLICK_NONE, -1,
+        click_action, -1, true);
+    if (click_action == SDL_PANEL_CLICK_NONE)
+    {
+        sdl_object_tooltip_clear();
+        return;
+    }
+
+    if (get_sdl_hide_left_panel())
+    {
+        for (int index = 0;
+            index < g_hidden_left_panel_overlay_rows && index < 16; index++)
+        {
+            if (g_hidden_left_panel_overlay_click_actions[index]
+                != click_action)
+            {
+                continue;
+            }
+            anchor_col = g_hidden_left_panel_overlay_click_start_cols[index];
+            anchor_cols = g_hidden_left_panel_overlay_click_end_cols[index]
+                - anchor_col;
+            top_row = g_hidden_left_panel_overlay_start_row + index;
+            break;
+        }
+    }
+    else
+    {
+        top_row = (click_action == SDL_PANEL_CLICK_COMPACT
+                && sdl_left_panel_pane_collapsed())
+            ? 0 : sdl_visible_character_panel_block_top_row(click_action);
+    }
+    if (top_row >= 0 && prompt)
+    {
+        (void)sdl_object_tooltip_show_character_panel_text_at_cell(anchor_col,
+            top_row, MAX(1, anchor_cols), prompt, false);
+    }
+}
+
+void sdl_character_panel_set_controller_attack_focus(int encoded_attack)
+{
+    static char prompt[640];
+    int mode = encoded_attack & SDL_CONTROLLER_ATTACK_MODE_MASK;
+    bool quiver = (encoded_attack & SDL_CONTROLLER_ATTACK_QUIVER_FLAG) != 0;
+    bool combat = (encoded_attack & SDL_CONTROLLER_ATTACK_COMBAT_FLAG) != 0;
+    int anchor_col = 0;
+    int anchor_row = -1;
+    int anchor_cols = LEFT_PANEL_CONTENT_WID;
+
+    if (mode < SDL_POINTER_ATTACK_MELEE
+        || mode > SDL_POINTER_ATTACK_RANGED_2)
+    {
+        sdl_pointer_attack_set_panel_hover_mode(SDL_POINTER_ATTACK_NONE);
+        return;
+    }
+
+    if (combat)
+    {
+        SDL_FRect rect;
+
+        if (!sdl_combat_overlay_controller_attack_rect(mode, quiver, &rect))
+        {
+            sdl_pointer_attack_set_panel_hover_mode(SDL_POINTER_ATTACK_NONE);
+            return;
+        }
+        anchor_row = 0;
+    }
+    else if (get_sdl_hide_left_panel())
+    {
+        for (int index = 0;
+            index < g_hidden_left_panel_overlay_rows && index < 16; index++)
+        {
+            if (g_hidden_left_panel_overlay_attack_modes[index] == mode
+                && g_hidden_left_panel_overlay_attack_quivers[index] == quiver)
+            {
+                anchor_col = g_hidden_left_panel_overlay_attack_start_cols[index];
+                anchor_cols = g_hidden_left_panel_overlay_attack_end_cols[index]
+                    - anchor_col;
+                anchor_row = g_hidden_left_panel_overlay_start_row + index;
+                break;
+            }
+        }
+    }
+    else
+    {
+        for (int row = 0;
+            row < g_views[PANE_MAIN].rows && anchor_row < 0; row++)
+        {
+            if ((row == ROW_QUIVER) != quiver)
+                continue;
+            for (int col = 0; col < LEFT_PANEL_CONTENT_WID; col++)
+            {
+                if (sdl_visible_character_panel_attack_mode_at_cell(col, row)
+                    == mode)
+                {
+                    anchor_col = col;
+                    anchor_row = row;
+                    break;
+                }
+            }
+        }
+    }
+    if (anchor_row < 0)
+    {
+        sdl_pointer_attack_set_panel_hover_mode(SDL_POINTER_ATTACK_NONE);
+        return;
+    }
+
+    if (quiver)
+    {
+        SDL_strlcpy(prompt,
+            "[A] Choose active quiver ammunition. [B] Back.",
+            sizeof(prompt));
+    }
+    else
+    {
+        char active_weapon[256];
+
+        player_active_weapon_name(active_weapon, sizeof(active_weapon));
+        strnfmt(prompt, sizeof(prompt),
+            "[A] Change active weapon. [B] Back.\n"
+            "Current active weapon: %s.", active_weapon);
+    }
+
+    sdl_main_screen_touch_zone_selection_set(SDL_STATUS_CLICK_NONE, -1,
+        SDL_PANEL_CLICK_NONE, -1, true);
+    sdl_pointer_attack_set_panel_hover_mode(mode);
+    if (combat)
+    {
+        SDL_FRect rect;
+
+        if (sdl_combat_overlay_controller_attack_rect(mode, quiver, &rect))
+            (void)sdl_object_tooltip_show_text_at_rect(&rect, prompt, false);
+        return;
+    }
+    sdl_character_panel_tooltip_span(anchor_col, anchor_row, mode,
+        SDL_PANEL_CLICK_NONE, &anchor_col, &anchor_cols);
+    (void)sdl_object_tooltip_show_character_panel_text_at_cell(anchor_col,
+        anchor_row, anchor_cols, prompt, false);
 }
 
 bool sdl_main_screen_handle_character_panel_hover_pointer(float x, float y)

@@ -33,6 +33,9 @@ void init_logger(bool quiet, const char* exe_path)
      * SIL_LOG_LEVEL, but do not enable hot-path DEBUG logging by default.
      */
     int level = LOG_INFO;
+#ifndef NDEBUG
+    level = LOG_DEBUG;
+#endif
 #else
     int level = LOG_DEBUG;
 #endif

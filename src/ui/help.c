@@ -19,7 +19,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#define HELP_SOURCE_PAGE_COUNT 12
+#define HELP_SOURCE_PAGE_COUNT 15
 
 /* Drop-in replacement for show_help_screen(int i)
  * Adds a tiny role-based colour shim for consistent, accessible styling.
@@ -228,7 +228,7 @@ void binding_action_label(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Run (.)", buflen);
         return;
     case '/':
-        SDL_strlcpy(buf, "Alt action (/)", buflen);
+        SDL_strlcpy(buf, "Context action (/)", buflen);
         return;
     case 'w':
         SDL_strlcpy(buf, "Equip / wield (w)", buflen);
@@ -465,7 +465,7 @@ void binding_action_short(int binding, char* buf, size_t buflen)
         SDL_strlcpy(buf, "Run", buflen);
         return;
     case '/':
-        SDL_strlcpy(buf, "Alt", buflen);
+        SDL_strlcpy(buf, "Context action", buflen);
         return;
     case 'w':
         SDL_strlcpy(buf, "Equip / wield", buflen);
@@ -559,7 +559,7 @@ static void help_prompt_label(int binding, const char* fallback, char* buf, size
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback, buflen);
 }
@@ -574,20 +574,24 @@ static bool help_controller_available(void)
     return SDL_HasGamepad();
 }
 
-/* Source page 10 expands the combat primer, page 9 is storage, page 11 covers
- * survival/checks/colour semantics, and pages 7/12 are generated from the
- * canonical keyboard command catalog. */
+/* Source page 10 expands the combat primer; pages 13-15 cover character
+ * development, exploration/information, and songs/status/objectives; page 9
+ * is storage; page 11 covers survival/checks/colour semantics; and pages 7/12
+ * are generated from the canonical keyboard command catalog. */
 static int help_collect_source_pages(int pages[HELP_SOURCE_PAGE_COUNT])
 {
     int count = 0;
 
     pages[count++] = 1;
+    pages[count++] = 13;
     pages[count++] = 2;
     pages[count++] = 3;
     pages[count++] = 10;
     pages[count++] = 4;
+    pages[count++] = 14;
     pages[count++] = 9;
     pages[count++] = 11;
+    pages[count++] = 15;
     if (help_keyboard_available())
         pages[count++] = 5;
     pages[count++] = 6;
@@ -1111,7 +1115,14 @@ static void help_emit_attr(byte attr, const char* s, int row, int col)
 
 static bool help_use_legacy_layout(int wid, int hgt)
 {
-    return (wid == 80) && (hgt == 24);
+    (void)wid;
+    (void)hgt;
+
+    /* The reference has outgrown the original one-topic-per-80x24-screen
+     * layout.  In particular, Storage & Readiness now needs more body rows
+     * than that layout owns.  Always use the document paginator so every row
+     * remains reachable at the classic size as well as at responsive sizes. */
+    return false;
 }
 
 static void help_display_reset(void)
@@ -1716,6 +1727,13 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, " normally removes that hero from the current Tale.", row, col + 12);
         row++;
         x = col;
+        put_role(ROLE_BODY, "- Saving and quitting pauses a live run; it ", row, x);
+        x += (int)strlen("- Saving and quitting pauses a live run; it ");
+        put_role(ROLE_WARN, "does not create a checkpoint", row, x);
+        x += (int)strlen("does not create a checkpoint");
+        put_role(ROLE_BODY, ".", row, x);
+        row++;
+        x = col;
         put_role(ROLE_BODY, "- The ", row, x); x += 6;
         put_role(ROLE_UI, "Tale screen", row, x); x += 11;
         put_role(ROLE_BODY, " shows the current goal and how many survivors are required.", row, x);
@@ -1792,13 +1810,13 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
     case 2:
     {
-        /* SIL-MORE: START, DEPTH, ELEMENTS, AND MONSTER STATE */
+        /* SIL-MORE: DEPTH, ELEMENTS, AND MONSTER STATE */
         int x;
 
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header, "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: START & DEPTH", display_page, total_pages);
+            sprintf(page_header, "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: DEPTH & DANGER", display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -1856,6 +1874,21 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_WARN, "attack dice", row, x); x += 11;
         put_role(ROLE_BODY, ".", row, x);
         row += 2;
+
+        help_emit_heading("RESISTANCE STACKS", row, col); row++;
+        put_role(ROLE_BODY,
+            "- For your fire/cold/poison damage, resistances cancel vulnerabilities first.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- 1/2/3 net resistances leave 2/3, 1/2, or 2/5 damage, rounded down.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- 1/2/3 net vulnerabilities multiply damage by 2, 3, or 4.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Pure attacks apply these factors before subtracting allowed Protection.",
+            row++, col);
+        row++;
 
         help_emit_heading("ALERTNESS & MORALE", row, col); row++;
         x = col;
@@ -1975,7 +2008,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_TERM, "Critical base", row, x); x += 13;
-        put_role(ROLE_BODY, " is the fixed part of hit margin needed per bonus die: default ", row, x); x += 65;
+        put_role(ROLE_BODY, " is the fixed part of hit margin needed per bonus die: default ", row, x); x += 63;
         put_role(ROLE_WARN, "7", row, x); x += 1;
         put_role(ROLE_BODY, " + weapon weight in lb.", row, x);
         row += 2;
@@ -2121,6 +2154,9 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row += 2;
 
         help_emit_heading("DAMAGE & PROTECTION EXAMPLE", row, col); row++;
+        put_role(ROLE_BODY,
+            "- Assume a 3 lb longsword, a shield, and no other damage or critical bonuses.",
+            row++, col);
         x = col;
         put_role(ROLE_BODY, "- Longsword base ", row, x); x += 17;
         put_role(ROLE_BAD, "Damage", row, x); x += 6;
@@ -2157,7 +2193,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
             "- Critical base is margin per bonus die before weapon weight: normally 7.",
             row++, col);
         put_role(ROLE_BODY,
-            "- Example: a 3 lb weapon needs about 10 margin per die; Finesse lowers this to 8.",
+            "- A 3 lb weapon needs about 10 margin per die; Finesse lowers it to 8.",
             row, col);
         break;
     }
@@ -2183,17 +2219,24 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_TERM, "Smithing", row, x); x += 8;
         put_role(ROLE_BODY, " skill and abilities determine your options.", row, x);
         row++;
+        put_role(ROLE_BODY,
+            "- The Smithing screen previews difficulty, materials, forge uses, and costs.",
+            row++, col);
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
-        put_role(ROLE_KEY, "H", row, x); x += 1;
-        put_role(ROLE_BODY, " trains skills. The next rank costs ", row, x); x += 36;
+        put_role(ROLE_UI, "Train Skills", row, x);
+        x += (int)strlen("Train Skills");
+        put_role(ROLE_BODY, " raises skills. The next rank costs ", row, x);
+        x += (int)strlen(" raises skills. The next rank costs ");
         put_role(ROLE_WARN, "100 x new rank", row, x); x += 14;
         put_role(ROLE_BODY, " experience.", row, x);
         row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
-        put_role(ROLE_KEY, "y", row, x); x += 1;
-        put_role(ROLE_BODY, " buys ", row, x); x += 6;
+        put_role(ROLE_UI, "Abilities", row, x);
+        x += (int)strlen("Abilities");
+        put_role(ROLE_BODY, " lets you buy ", row, x);
+        x += (int)strlen(" lets you buy ");
         put_role(ROLE_GOOD, "abilities", row, x); x += 9;
         put_role(ROLE_BODY, "; costs rise within a skill and ", row, x); x += 32;
         put_role(ROLE_GOOD, "affinities", row, x); x += 10;
@@ -2230,9 +2273,10 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, ".", row, x);
         row++;
         x = col;
-        put_role(ROLE_BODY, "- Rest (", row, x); x += 8;
-        put_role(ROLE_KEY, "Z", row, x); x += 1;
-        put_role(ROLE_BODY, ") can wait for recovery, but monsters and ", row, x); x += 42;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_UI, "Rest", row, x); x += 4;
+        put_role(ROLE_BODY, " can wait for recovery, but monsters and ", row, x);
+        x += (int)strlen(" can wait for recovery, but monsters and ");
         put_role(ROLE_WARN, "Deep Call", row, x); x += 9;
         put_role(ROLE_BODY, " keep advancing.", row, x);
         row++;
@@ -2260,6 +2304,273 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, " explains bonuses, resistances, weight, and ", row, x); x += 44;
         put_role(ROLE_WARN, "Deep Call", row, x); x += 9;
         put_role(ROLE_BODY, " pace.", row, x);
+        break;
+    }
+
+    case 13:
+    {
+        /* SIL-MORE: ATTRIBUTES, SKILLS, EXPERIENCE, AND ABILITIES */
+        int x;
+
+        row = 0; col = 1;
+        if (include_header)
+        {
+            sprintf(page_header,
+                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CHARACTER & ADVANCEMENT",
+                display_page, total_pages);
+            put_role(ROLE_HEADER, page_header, row, col);
+        }
+        row += 2;
+
+        help_emit_heading("ATTRIBUTES", row, col); row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Strength", row, x); x += 8;
+        put_role(ROLE_BODY,
+            " raises weapon damage die sides and your carried-weight limit.",
+            row, x);
+        row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Dexterity", row, x); x += 9;
+        put_role(ROLE_BODY,
+            " contributes to Melee, Archery, Evasion, and Stealth.", row, x);
+        row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Constitution", row, x); x += 12;
+        put_role(ROLE_BODY, " sets maximum ", row, x); x += 14;
+        put_role(ROLE_GOOD, "Health", row, x); x += 6;
+        put_role(ROLE_BODY, ".", row, x);
+        row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Grace", row, x); x += 5;
+        put_role(ROLE_BODY,
+            " contributes to Will, Perception, Smithing, Song, and maximum Voice.",
+            row, x);
+        row++;
+        put_role(ROLE_BODY,
+            "- Pack and Harness volume limits are separate from Strength's weight limit.",
+            row++, col);
+        row++;
+
+        help_emit_heading("SKILLS & CHECKS", row, col); row++;
+        put_role(ROLE_BODY,
+            "- Current skill = trained base + attribute + equipment + misc.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Character Sheet focus shows the live total and exact breakdown.",
+            row++, col);
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Melee", row, x); x += 5;
+        put_role(ROLE_BODY, " governs close-combat and thrown-weapon attacks; ", row, x);
+        row++;
+        x = col + 2;
+        put_role(ROLE_TERM, "Archery", row, x); x += 7;
+        put_role(ROLE_BODY, " governs bow attacks.", row, x);
+        row++;
+        put_role(ROLE_BODY,
+            "- Evasion avoids hits; Perception finds hidden things; Will resists effects.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Stealth avoids notice; Smithing controls forging; Song powers songs.",
+            row++, col);
+        row++;
+
+        help_emit_heading("EXPERIENCE & ABILITIES", row, col); row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Experience", row, x); x += 10;
+        put_role(ROLE_BODY, " shows unspent XP and lifetime earned XP separately.", row, x);
+        row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_UI, "Train Skills", row, x);
+        x += (int)strlen("Train Skills");
+        put_role(ROLE_BODY, " raises skills; the next base rank costs ", row, x);
+        x += (int)strlen(" raises skills; the next base rank costs ");
+        put_role(ROLE_WARN, "100 x new rank", row, x); x += 14;
+        put_role(ROLE_BODY, " XP.", row, x);
+        row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_UI, "Abilities", row, x);
+        x += (int)strlen("Abilities");
+        put_role(ROLE_BODY,
+            " shows each ability's required base skill and exact cost.", row, x);
+        row++;
+        put_role(ROLE_BODY,
+            "- Later abilities in one skill usually cost more.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Affinities, penalties, traits, and curses can modify the shown cost.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Read each mechanical effect; names and lore omit some exceptions.",
+            row, col);
+        break;
+    }
+
+    case 14:
+    {
+        /* SIL-MORE: TURN-BASED EXPLORATION, DETECTION, AND INFORMATION */
+        int x;
+
+        row = 0; col = 1;
+        if (include_header)
+        {
+            sprintf(page_header,
+                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EXPLORATION & INFORMATION",
+                display_page, total_pages);
+            put_role(ROLE_HEADER, page_header, row, col);
+        }
+        row += 2;
+
+        help_emit_heading("TURN-BASED EXPLORATION", row, col); row++;
+        put_role(ROLE_BODY,
+            "- The world waits for input; movement, attacks, and most item uses spend turns.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Help, sheets, descriptions, maps, nearby lists, and lore are free.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Move in eight directions; moving into a visible foe attacks it.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Running crosses known ground and stops when something needs attention.",
+            row++, col);
+        row++;
+
+        help_emit_heading("LIGHT, SEARCHING & STEALTH", row, col); row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Light", row, x); x += 5;
+        put_role(ROLE_BODY, " reveals nearby tiles but also helps monsters see you.", row, x);
+        row++;
+        put_role(ROLE_BODY,
+            "- Moving, waiting, and resting automatically check nearby hidden features.",
+            row++, col);
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Perception", row, x); x += 10;
+        put_role(ROLE_BODY, " and local light improve detection; distance, blindness,", row, x);
+        row++;
+        put_role(ROLE_BODY,
+            "  confusion, traps, and secret doors can make the check harder.",
+            row++, col);
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_TERM, "Stealth mode", row, x); x += 12;
+        put_role(ROLE_GOOD, " reduces noise", row, x); x += 14;
+        put_role(ROLE_BODY, " but ", row, x); x += 5;
+        put_role(ROLE_WARN, "slows movement", row, x); x += 14;
+        put_role(ROLE_BODY, "; waiting avoids the speed cost.", row, x);
+        row++;
+
+        help_emit_heading("READING WHAT YOU KNOW", row, col); row++;
+        put_role(ROLE_BODY,
+            "- Descriptions separate observed facts from details you have not learned.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Examining gear can identify it; Perception and Smithing help.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Look/Map inspect places; nearby lists summarize visible monsters and items.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Knowledge records learned objects, monsters, abilities, and lore.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- For exact numbers, trust the live description and current-state panel.",
+            row, col);
+        break;
+    }
+
+    case 15:
+    {
+        /* SIL-MORE: SONGS, CONDITIONS, HINTS, QUESTS, AND THRALLS */
+        int x;
+
+        row = 0; col = 1;
+        if (include_header)
+        {
+            sprintf(page_header,
+                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SONGS, STATUS & OBJECTIVES",
+                display_page, total_pages);
+            put_role(ROLE_HEADER, page_header, row, col);
+        }
+        row += 2;
+
+        help_emit_heading("SONGS & VOICE", row, col); row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_UI, "Song menu", row, x); x += 9;
+        put_role(ROLE_BODY,
+            " chooses or stops a song. The primary starts at full ", row, x);
+        x += (int)strlen(
+            " chooses or stops a song. The primary starts at full ");
+        put_role(ROLE_TERM, "Song", row, x); x += 4;
+        put_role(ROLE_BODY, " skill.", row, x);
+        row++;
+        put_role(ROLE_BODY,
+            "- Woven Themes adds a minor theme; it normally starts at half Song skill.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Woven synergies, Silence, and hero traits can change either theme's strength.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Both song effects apply and spend their own Voice cost.",
+            row++, col);
+        x = col;
+        put_role(ROLE_BODY, "- Singing spends ", row, x); x += 17;
+        put_role(ROLE_TERM, "Voice", row, x); x += 5;
+        put_role(ROLE_BODY, ", which does not regenerate while any song is active.", row, x);
+        row++;
+        put_role(ROLE_BODY,
+            "- Stop singing before resting when you need to recover Voice.",
+            row++, col);
+        row++;
+
+        help_emit_heading("STATUS & CONSEQUENCES", row, col); row++;
+        put_role(ROLE_BODY,
+            "- Health reaching 0 is fatal; Voice fuels songs. The panel shows both.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Status rows show current conditions and remaining durations when known.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Read new messages before acting: poison, bleeding, hunger, fear, and other",
+            row++, col);
+        put_role(ROLE_BODY,
+            "  effects can change movement, combat, recovery, or available choices.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Rest advances monsters, hunger, timed effects, and minimum-depth pressure.",
+            row++, col);
+        row++;
+
+        help_emit_heading("HINTS, QUESTS & THRALLS", row, col); row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_UI, "Hints & Quests", row, x); x += 14;
+        put_role(ROLE_BODY, " keeps separate Hints, Quests, and Thralls tabs.", row, x);
+        row++;
+        put_role(ROLE_BODY,
+            "- Hints archives encountered notes; All Tips exposes the general tutorial set.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "- Quest and Thrall entries show objectives, rewards, and known locations.",
+            row++, col);
+        x = col;
+        put_role(ROLE_BODY, "- Use ", row, x); x += 6;
+        put_role(ROLE_UI, "Look", row, x); x += 4;
+        put_role(ROLE_BODY, " or ", row, x); x += 4;
+        put_role(ROLE_UI, "Map", row, x); x += 3;
+        put_role(ROLE_BODY,
+            " from an entry when offered; the live objective is authoritative.",
+            row, x);
         break;
     }
 
@@ -2373,7 +2684,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_KEY,    ",", row, col + 28);
         put_role(ROLE_KEY,    "Space", row, col + 33);
 
-        row = 3; col = 51;
+        row += 4; col = 2;
         help_emit_heading("Miscellaneous", row - 2, col);
 
 #define HELP_MISC_COMMAND(KEY, EXTRAS, ACTION, TEXT, ATTR)                    \
@@ -2381,7 +2692,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
             help_describe_action_bindings((KEY), (EXTRAS), (ACTION),          \
                 key_buf, sizeof(key_buf));                                    \
             put_role(ROLE_KEY, key_buf, row, col);                            \
-            put_role((ATTR), (TEXT), row, col + 18);                          \
+            put_role((ATTR), (TEXT), row, col + MAX(18, (int)strlen(key_buf) + 2)); \
             row++;                                                             \
         } while (0)
 
@@ -2434,7 +2745,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         c_put_str(TERM_L_GREEN, ";", row, col); put_role(ROLE_BODY, "warding glyph", row, col + 2); row++;
         c_put_str(TERM_L_WHITE, ".", row, col); put_role(ROLE_BODY, "empty floor", row, col + 2); row++;
 
-        row = 3; col = 27;
+        row += 3; col = 3;
         help_emit_heading("Items", row - 2, col - 1);
         c_put_str(TERM_L_WHITE, "| ", row, col); put_role(ROLE_BODY, "blades", row, col + 2); row++;
         c_put_str(TERM_SLATE, "/ ", row, col); put_role(ROLE_BODY, "axes & polearms", row, col + 2); row++;
@@ -2456,30 +2767,22 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         if (help_keyboard_available())
         {
-            char key_buf[48];
-
-            row = 3;
-            col = 52;
-            help_emit_heading("Item Commands", row - 2, col - 1);
-
-#define HELP_ITEM_COMMAND(KEY, ACTION, TEXT)                                  \
-            do {                                                               \
-                help_describe_action_bindings((KEY), NULL, (ACTION),          \
-                    key_buf, sizeof(key_buf));                                \
-                put_role(ROLE_KEY, key_buf, row, col);                        \
-                put_role(ROLE_UI, (TEXT), row, col + 18);                     \
-                row++;                                                         \
-            } while (0)
-
-            HELP_ITEM_COMMAND('u', "u", "use");
-            HELP_ITEM_COMMAND('d', "d", "drop");
-            HELP_ITEM_COMMAND('x', "x", "examine");
-            HELP_ITEM_COMMAND('t', "t", "throw");
-            HELP_ITEM_COMMAND(KTRL('T'), "\024", "throw (auto-target)");
-            HELP_ITEM_COMMAND('k', "k", "destroy");
-            HELP_ITEM_COMMAND('{', "{", "inscribe");
-
-#undef HELP_ITEM_COMMAND
+            row += 3;
+            col = 3;
+            help_emit_heading("Inventory Browser", row - 2, col - 1);
+            put_role(ROLE_KEY, "Space/u", row, col);
+            put_role(ROLE_UI, "use / equip", row++, col + 18);
+            put_role(ROLE_KEY, "x", row, col);
+            put_role(ROLE_UI, "preview details", row++, col + 18);
+            put_role(ROLE_KEY, "z", row, col);
+            put_role(ROLE_UI, "drop", row++, col + 18);
+            put_role(ROLE_KEY, "y", row, col);
+            put_role(ROLE_UI, "delete when offered", row++, col + 18);
+            put_role(ROLE_KEY, "Tab", row, col);
+            put_role(ROLE_UI, "change browser page", row++, col + 18);
+            put_role(ROLE_SUBTLE,
+                "The footer shows the actions available on the current page.",
+                row, col);
         }
         break;
     }
@@ -2495,21 +2798,21 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         {
             char key_buf[48];
-            int split = (COMMAND_PRIMARY_KEYBIND_COUNT + 1) / 2;
 
             help_emit_heading("Current bindings (also shown in Options > Keybinds)",
                 1, 2);
             for (int n = 0; n < COMMAND_PRIMARY_KEYBIND_COUNT; n++)
             {
                 const struct keybind_entry* entry = &command_primary_keybinds[n];
-                int column = (n / split) ? 41 : 2;
-                int command_row = 3 + (n % split);
+                int column = 2;
+                int command_row = 3 + n;
 
                 help_describe_action_bindings(entry->key_code,
                     entry->extra_default_keys, entry->action, key_buf,
                     sizeof(key_buf));
                 put_role(ROLE_KEY, key_buf, command_row, column);
-                put_role(ROLE_UI, entry->key_name, command_row, column + 15);
+                put_role(ROLE_UI, entry->key_name, command_row,
+                    column + MAX(15, (int)strlen(key_buf) + 2));
             }
         }
         break;
@@ -2527,19 +2830,19 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         {
             char key_buf[48];
-            int split = (COMMAND_SECONDARY_KEYBIND_COUNT + 1) / 2;
 
             for (int n = 0; n < COMMAND_SECONDARY_KEYBIND_COUNT; n++)
             {
                 const struct keybind_entry* entry = &command_secondary_keybinds[n];
-                int column = (n / split) ? 41 : 2;
-                int command_row = 1 + (n % split);
+                int column = 2;
+                int command_row = 1 + n;
 
                 help_describe_action_bindings(entry->key_code,
                     entry->extra_default_keys, entry->action, key_buf,
                     sizeof(key_buf));
                 put_role(ROLE_KEY, key_buf, command_row, column);
-                put_role(ROLE_UI, entry->key_name, command_row, column + 15);
+                put_role(ROLE_UI, entry->key_name, command_row,
+                    column + MAX(15, (int)strlen(key_buf) + 2));
             }
         }
         break;
@@ -2573,8 +2876,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_SOUTH);
         binding_action_label(binding, gameplay_action, sizeof(gameplay_action));
-        strnfmt(action_buf, sizeof(action_buf), "Confirm in menus; %s in play",
-            gameplay_action);
+        strnfmt(action_buf, sizeof(action_buf),
+            "Confirm / activate focus; %s in play", gameplay_action);
         put_role(ROLE_KEY, "A", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
@@ -2594,8 +2897,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST);
         binding_action_label(binding, gameplay_action, sizeof(gameplay_action));
-        strnfmt(action_buf, sizeof(action_buf), "Back in menus; %s in play",
-            gameplay_action);
+        strnfmt(action_buf, sizeof(action_buf),
+            "Back / close / exit; %s in play", gameplay_action);
         put_role(ROLE_KEY, "B", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
@@ -2609,8 +2912,9 @@ static void show_help_screen_legacy(int source_page, int display_page,
             binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_DOWN), rs_down, sizeof(rs_down));
             binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_LEFT), rs_left, sizeof(rs_left));
             binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_RIGHT), rs_right, sizeof(rs_right));
-            strnfmt(rs_line, sizeof(rs_line), "Up:%s  Down:%s  Left:%s  Right:%s",
-                    rs_up, rs_down, rs_left, rs_right);
+            strnfmt(rs_line, sizeof(rs_line),
+                "Focus UI/wheels (D-pad also); else U:%s D:%s L:%s R:%s",
+                rs_up, rs_down, rs_left, rs_right);
             cptr stick_label = "Right Stick (optional)";
             int stick_text_col = col + (int)strlen(stick_label);
 
@@ -2623,6 +2927,13 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row += 1;
 
         /* Left and right side controls */
+        put_role(ROLE_BODY,
+            "Hold View/Select + D-pad to focus visible UI without a right stick.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "D-pad moves focus; A activates; B returns to play. A View tap keeps its binding.",
+            row++, col);
+        row++;
         int left_header_row = row;
         int left_start_row = row + 2;
         help_emit_heading("LEFT SIDE CONTROLS", left_header_row, col);
@@ -2632,7 +2943,10 @@ static void show_help_screen_legacy(int source_page, int display_page,
         int text_col = 0;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        binding_action_label(binding, gameplay_action,
+            sizeof(gameplay_action));
+        strnfmt(action_buf, sizeof(action_buf),
+            "Previous page in menus; %s in play", gameplay_action);
         input = "L1 (Bumper)";
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -2673,13 +2987,16 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         int left_end_row = row;
 
-        col = 42;
-        row = left_header_row;
+        col = 1;
+        row = left_end_row + 1;
         help_emit_heading("RIGHT SIDE CONTROLS", row, col);
-        row = left_start_row;
+        row += 2;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        binding_action_label(binding, gameplay_action,
+            sizeof(gameplay_action));
+        strnfmt(action_buf, sizeof(action_buf),
+            "Next page in menus; %s in play", gameplay_action);
         input = "R1 (Bumper)";
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -2884,7 +3201,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, ".", row, x);
         row++;
         x = col;
-        put_role(ROLE_BODY, "- Exceeding either volume limit or total carried weight ", row, x); x += 57;
+        put_role(ROLE_BODY, "- Exceeding either volume limit or total carried weight ", row, x); x += 56;
         put_role(ROLE_BAD, "slows you", row, x); x += 9;
         put_role(ROLE_BODY, "; severe overload stops movement.", row, x);
         row++;
@@ -2943,11 +3260,11 @@ static void show_help_screen_legacy(int source_page, int display_page,
         help_emit_heading("WHERE PICKUP PUTS THINGS", row, col); row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
-        put_role(ROLE_KEY, "g", row, x); x += 1;
+        put_role(ROLE_UI, "Pick Up", row, x); x += 7;
         put_role(ROLE_BODY, " prefers ", row, x); x += 9;
         put_role(ROLE_TERM, "Pack", row, x); x += 4;
         put_role(ROLE_BODY, "; ", row, x); x += 2;
-        put_role(ROLE_KEY, "Space/interact", row, x); x += 14;
+        put_role(ROLE_UI, "Interact", row, x); x += 8;
         put_role(ROLE_BODY, " prefers ", row, x); x += 9;
         put_role(ROLE_TERM, "Harness", row, x); x += 7;
         put_role(ROLE_BODY, " for movable gear.", row, x);
@@ -2996,18 +3313,21 @@ static void show_help_screen_legacy(int source_page, int display_page,
         help_emit_heading("BROWSERS & READY GEAR", row, col); row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
-        put_role(ROLE_KEY, "i", row, x); x += 1;
-        put_role(ROLE_UI, ": Inventory  ", row, x); x += 13;
-        put_role(ROLE_KEY, "e/r", row, x); x += 3;
-        put_role(ROLE_UI, ": Equipped  ", row, x); x += 12;
-        put_role(ROLE_KEY, "j", row, x); x += 1;
-        put_role(ROLE_UI, ": Supplies  ", row, x); x += 12;
-        put_role(ROLE_KEY, "J", row, x); x += 1;
-        put_role(ROLE_UI, ": jewelry sets", row, x);
+        put_role(ROLE_UI, "Inventory", row, x); x += 9;
+        put_role(ROLE_BODY, " manages carried gear; ", row, x); x += 23;
+        put_role(ROLE_UI, "Equipment", row, x); x += 9;
+        put_role(ROLE_BODY, " manages worn and readied gear.", row, x);
         row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
-        put_role(ROLE_KEY, "Tab", row, x); x += 3;
+        put_role(ROLE_UI, "Supplies", row, x); x += 8;
+        put_role(ROLE_BODY, " tracks consumables; ", row, x); x += 21;
+        put_role(ROLE_UI, "Jewelry Sets", row, x); x += 12;
+        put_role(ROLE_BODY, " swaps saved ring and amulet setups.", row, x);
+        row++;
+        x = col;
+        put_role(ROLE_BODY, "- ", row, x); x += 2;
+        put_role(ROLE_UI, "Change Active", row, x); x += 13;
         put_role(ROLE_BODY, " selects the ", row, x); x += 13;
         put_role(ROLE_GOOD, "active weapon, shield, and arrow setup", row, x); x += 38;
         put_role(ROLE_BODY, " from ready gear.", row, x);
@@ -3031,10 +3351,10 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         help_emit_heading("FOOD & HUNGER", row, col); row++;
         put_role(ROLE_BODY,
-            "- Food is consumed as turns pass. Press E to eat food from your carried supplies.",
+            "- Food is consumed over time. Eat from carried Supplies before it runs low.",
             row++, col);
         put_role(ROLE_BODY,
-            "- No hunger label means your state is normal; the panel appears only when it changes.",
+            "- No hunger label means normal; the status appears only when hunger changes.",
             row++, col);
         x = col;
         put_role(ROLE_WARN, "- Hungry", row, x); x += 8;
@@ -3049,16 +3369,16 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         help_emit_heading("INTERACTION CHECKS", row, col); row++;
         put_role(ROLE_BODY,
-            "- Locked doors and trapped chests present choices; this is not a timing minigame.",
+            "- Locked doors and trapped chests offer choices, not a timing minigame.",
             row++, col);
         put_role(ROLE_BODY,
             "- Each percentage is the exact chance that the automatic opposed roll succeeds.",
             row++, col);
         put_role(ROLE_BODY,
-            "- Choose once; the game rolls immediately. Ties fail, and an action spends one turn.",
+            "- Choose once; the game rolls now. Ties fail; an action spends one turn.",
             row++, col);
         put_role(ROLE_BODY,
-            "- Leave spends no turn. The prompt states failure risks such as jamming or traps.",
+            "- Leave is free; prompts state failure risks such as jamming or traps.",
             row++, col);
         row++;
 
@@ -3080,7 +3400,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, " = UI labels; white = normal text and literal keys.", row, x);
         row++;
         put_role(ROLE_BODY,
-            "- Map glyph and element colours identify things; nearby words still state the meaning.",
+            "- Map glyph and element colours identify things; text still states the meaning.",
             row++, col);
         row++;
 
@@ -3245,7 +3565,7 @@ static int help_menu_collect_entries(help_menu_entry* entries, int max_entries)
     /* Keep the reference document last: this is the final destination after
      * the device-specific tutorial replays. */
     ADD_HELP_MENU_ENTRY(HELP_MENU_PAGES, 'h', "Gameplay Reference",
-        "Search mechanics, survival rules, storage, combat formulas, and current controls.");
+        "Search character development, exploration, combat, survival, storage, songs, objectives, and current controls.");
 
 #undef ADD_HELP_MENU_ENTRY
 
@@ -3713,7 +4033,9 @@ void do_cmd_help(void)
             layout_hgt = 1;
         nav_row = layout_hgt - 1;
         legacy = help_use_legacy_layout(wid, layout_hgt);
-        compact_dynamic = (!legacy && wid < 80);
+        /* Source rows exceed 80 columns too.  Wrap before paginating at every
+         * width so the ends of formulas and controller descriptions survive. */
+        compact_dynamic = !legacy;
 
         if (legacy)
         {
@@ -3799,8 +4121,7 @@ void do_cmd_help(void)
                 help_prompt_label(steamdeck_back_key(), "B", back_label,
                     sizeof(back_label));
                 strnfmt(nav, sizeof(nav),
-                    "Navigation: [%s/%s] Prev/Next  [%s] Next  [%s] Back  "
-                    "[/] Search",
+                    "[%s/%s] Prev/Next  [%s] Next  [%s] Back  [View] Search",
                     prev_label, next_page_label, next_label, back_label);
             } else if (help_keyboard_available()) {
                 strnfmt(nav, sizeof(nav),
@@ -3914,7 +4235,8 @@ void do_cmd_help(void)
             }
         }
         /* Search every rendered row, then let the player choose a result. */
-        else if (ch == '/')
+        else if (ch == '/' || (steamdeck_controls_active()
+                && ch == steamdeck_info_key()))
         {
             char query[80];
             int stored_count = 0;

@@ -8977,3 +8977,19 @@ The script now fully matches the game's drop generation logic for all item types
 - `src/main-sdl.c`: startup records SDL config read/parse/validation recovery and, after the first safe resize, offers a message-box prompt to reset the SDL config to display defaults instead of trapping the user in a bad config.
 - `src/sdl-config.{h,c}`: `sdl_config_load()` now returns a load status so startup can distinguish parse/read failures from a clean load.
 - `src/cmd4.c`: SDL Pane Settings now includes an `Open SDL Config File` action and `o` shortcut that opens `sil_sdl.json` via the system handler.
+
+## 2026-09-05: Review of uncommitted Help and controller goals
+- Reviewed branch `help` at `fd0e4689`; retained the existing work and fixed its input/render integration.
+- Controller terminal-menu actions and prompt labels now use stable physical roles independent of gameplay remaps. Context popup actions bypass keyboard remaps.
+- Spatial focus now clears on modal/pointer/keyboard ownership changes, has a visible outline, includes the Quick Access expander, and supports View/Select + D-pad entry while preserving a plain View tap.
+- Fixed trigger leakage, modifier ownership on release, held-stick recentering, right-stick aiming, and repeated character-sheet navigation resets.
+- Help now wraps at all widths before pagination. Serialized overlapping multi-column control sections and made key-label spacing fit live bindings.
+- Corrected fire/cold/poison resistance and vulnerability examples against `elemental_resisted_damage()` and pure-attack Protection order; clarified critical-roll and woven-song assumptions. Tutorial outcome screens keep body text neutral and use device-neutral Help wording.
+- Validation: all-core incremental Windows SDL3 build passed; `scripts/check_controller_contract.py` passed; `scripts/check_help_controller_runtime.py` executes real C event dispatch and Help recording/pagination, passing all 15 topics at 32/50/79/80/81/120 columns. All 51 tips fit the parser's 255-byte limit (max 195); tutorial rich-text tags and `git diff --check` passed.
+- Build output: `build-standard/sil-more.exe`. Deployment folders were not refreshed. Physical controller and visual interaction replay were not performed.
+
+## 2026-09-06: D-pad diagonal timing regression
+- Reproduced in the real SDL event dispatcher: Up down, Up up, then Right down inside a 300 ms window emitted Up and queued Right instead of one NE command.
+- `src/sdl/input/sdl-gamepad.c`: combine a pending cardinal with a perpendicular press for the full configured window, even if the first button has just been released. Preserve separate actions for same-axis/opposite taps, expired windows, and changed modifiers.
+- `scripts/check_help_controller_runtime.py`: added all four diagonals in both press orders, held/released first-button cases at 50 and 300 ms, repeated/opposite taps, deadline expiry, and modifier changes. The release-order reproducer failed before the fix and the expanded event suite passed afterwards.
+- Validation: all-core incremental Windows SDL3 build passed, controller contract guard passed, existing controller/Help executable checks passed, scoped diff check passed. Physical controller replay not performed. Output: `build-standard/sil-more.exe`; deployment folders not refreshed.

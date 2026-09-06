@@ -521,21 +521,24 @@ M:ORC:QUEST:100:{DIST} {DIR} is {SITE}. Snaga don't belong there.
 # --- Tips ---
 
 # Shared tutorial hints
-M:ANY:TIP:100:Evasion (+x) helps you avoid a hit. Protection [ydz] helps you absorb damage.
-M:ANY:TIP:100:Attack (+x) helps you land a hit. Damage [ydz] is what your actual hit will be.
+M:ANY:TIP:100:Evasion (+x) adds x to your d20 roll to avoid a hit. Protection [ydz] rolls y dice with z sides after a hit and absorbs that total.
+M:ANY:TIP:100:Attack (+x) adds x to your d20 roll to land a hit. Damage [ydz] rolls y dice with z sides; only damage beyond Protection removes Health.
+M:ANY:TIP:100:Melee governs close-combat and thrown-weapon attacks. Archery governs bow attacks.
 M:ANY:TIP:100:You do not need to kill all enemies; the game can be finished without killing anyone.
-M:ANY:TIP:100:Monsters can spawn on the stairs.
-M:ANY:TIP:100:You can tell item alignment by its description.
+M:ANY:TIP:100:A newly generated level can place monsters near or on its stairs. Check your surroundings before resting.
+M:ANY:TIP:100:Item lore descriptions reflect noble, neutral, or evil alignment, including the ego or artefact when known.
 M:ANY:TIP:100:If you get killed too soon, try the mightiest heroes with a 3 bright star rating.
 M:ANY:TIP:100:You can move more quietly using stealth mode with capital 'S'.
 M:ANY:TIP:100:Stealth is both sound-based and vision-based. Sound is determined by your Stealth skill.
 M:ANY:TIP:100:Your stealth score decreases if you are visible to a monster. For that to happen, your light radius has to be in its line of sight, based on its Perception.
-M:ANY:TIP:100:Sleeping monsters get Evasion set to [-5]. Sleeping monsters have a blue dot on top of their tile.
-M:ANY:TIP:100:Monsters that have noticed you have '!' on top of their tile.
+M:ANY:TIP:100:Moving, waiting, and resting automatically check nearby hidden features. Perception and local light improve detection; distance, blindness, and confusion make it harder.
+M:ANY:TIP:100:Sleeping monsters have total Evasion [-5]. With monster-status icons enabled, a blue dot marks them.
+M:ANY:TIP:100:With monster-status icons enabled, '!' marks monsters that have noticed danger.
 M:ANY:TIP:100:Supplies have a separate 25 lb limit, raised to 50 lb by the relevant blessing. Lights and oil use their own stated limits.
 M:ANY:TIP:100:Pack and Harness have separate volume limits measured in qt; everything you carry also counts toward total weight.
 M:ANY:TIP:100:Do not forget to use diagonal movement.
 M:ANY:TIP:100:You can reassign controls in the options.
+M:ANY:TIP:100:Help, the Character Sheet, descriptions, maps, nearby lists, and lore do not spend a turn. Movement, attacks, and most item actions do.
 M:ANY:TIP:100:You can zoom the main map by Alt+'+' or Alt+'-'.
 M:ANY:TIP:100:You can hide or unhide the right panel by Alt+'i'.
 M:ANY:TIP:100:You can hide or unhide the bottom panel by Alt+'l'.
@@ -547,23 +550,25 @@ M:ANY:TIP:100:No hunger label means your state is normal. Hungry is a warning; W
 M:ANY:TIP:100:Identification benefits from Perception, Smithing, and abilities.
 M:ANY:TIP:100:It is harder to identify cursed items.
 M:ANY:TIP:100:You can turn off these tutorial hints via options.
+M:ANY:TIP:100:Hints & Quests stores encountered hints and current Quest and Thrall objectives. Use Look or Map from an entry when offered.
 M:ANY:TIP:100:Monsters have elemental attacks. There are 2 types. Mixed elemental attacks give a monster an additional damage die. Pure elemental attacks ignore almost all protection.
 M:ANY:TIP:100:Protection that is not ignored by elemental attack is stated in the item's description.
-M:ANY:TIP:100:Weapon weight provides additional damage die sides, up to your Strength, but it decreases your ability to crit.
-M:ANY:TIP:100:You get a critical hit every time the difference between your attack and monster evasion is x = critical base + weight of your weapon. For every x, you get an additional damage die. Critical base is 7 by default but can be changed by abilities.
+M:ANY:TIP:100:Strength adds damage die sides up to the weapon's weight in pounds. Heavier weapons use more Strength but need larger hit margins per critical die.
+M:ANY:TIP:100:Critical dice use the margin between the final Attack and Evasion rolls. Normally each 7 + weapon weight in lb adds a die. Abilities change the threshold; some enemies resist or ignore criticals.
 M:ANY:TIP:100:Weapons can be one-handed, two-handed, or one-and-a-half-handed.
 M:ANY:TIP:100:If a one-and-a-half-handed weapon is used without a shield, it gets +2 damage sides.
 M:ANY:TIP:100:Some abilities only work explicitly with one-handed or two-handed weapons.
 M:ANY:TIP:100:Your quiver holds up to 48 arrows of any mix. Throwing weapons stay on your Harness; your belt holds one dagger or hand axe and retains its passive bonuses.
 M:ANY:TIP:100:You can stack elemental resistances and vulnerabilities.
-M:ANY:TIP:100:For each elemental resistance of that type, pure elemental damage is halved.
-M:ANY:TIP:100:For each elemental vulnerability of that type, pure elemental damage is doubled.
-M:ANY:TIP:100:If you or a monster is vulnerable to an element, the attacker gets an additional damage die.
+M:ANY:TIP:100:For pure fire, cold, and poison attacks against you, 1 net resistance stack leaves 2/3 damage; 2 leave 1/2; 3 leave 2/5. Round down, then subtract applicable Protection.
+M:ANY:TIP:100:For pure fire, cold, and poison attacks against you, 1 net vulnerability stack means double damage; 2 mean triple; 3 mean quadruple. Resistances and vulnerabilities cancel first.
+M:ANY:TIP:100:Mixed elemental attacks combine weapon damage with elemental bonus dice. A matching resistance can prevent those bonus dice; vulnerability can add another die.
 M:ANY:TIP:100:Different partitions of the map have different probabilities to spawn specific item types.
 M:ANY:TIP:100:Will helps you resist negative effects.
 M:ANY:TIP:100:Perception helps you notice invisible enemies and identify items.
 M:ANY:TIP:100:Constitution increases your HP.
-M:ANY:TIP:100:Dexterity increases your attack, evasion, archery, and stealth skills.
-M:ANY:TIP:100:Grace increases your song points and your Will, Perception, Smithing, and Song skills.
-M:ANY:TIP:100:Keep watch of your light reserves.
+M:ANY:TIP:100:Dexterity increases your Melee, Evasion, Archery, and Stealth skills.
+M:ANY:TIP:100:Grace increases maximum Voice and your Will, Perception, Smithing, and Song skills.
+M:ANY:TIP:100:Voice does not regenerate while a song is active. Stop singing before resting when you need to recover Voice.
+M:ANY:TIP:100:Keep spare light. Darkness limits sight and makes hidden-feature checks harder.
 M:ANY:TIP:100:XP is used to increase skills and buy abilities. The cost increases progressively, so try to plan your future build.

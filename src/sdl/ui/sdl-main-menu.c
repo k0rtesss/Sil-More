@@ -587,6 +587,9 @@ bool sdl_main_menu_choice_disabled_now(int choice)
 
 void sdl_main_menu_overlay_reset_nav_input(void)
 {
+    sdl_gamepad_context_focus_clear();
+    sdl_gamepad_reset_modifiers();
+    sdl_gamepad_clear_pending_shoulder();
     g_gamepad_state.dpad_up = false;
     g_gamepad_state.dpad_down = false;
     g_gamepad_state.dpad_left = false;
@@ -598,11 +601,13 @@ void sdl_main_menu_overlay_reset_nav_input(void)
     g_gamepad_state.left_y = 0;
     g_gamepad_state.left_dir = 0;
     g_gamepad_state.left_bind_dir = -1;
+    g_gamepad_state.left_ui_dir = -1;
     sdl_gamepad_clear_pending_left_stick();
 
     g_gamepad_state.right_x = 0;
     g_gamepad_state.right_y = 0;
     g_gamepad_state.right_dir = -1;
+    g_gamepad_state.right_ui_dir = -1;
 
     g_main_menu_overlay_left_stick_dir = 0;
     g_main_menu_overlay_right_stick_dir = 0;
@@ -1694,51 +1699,44 @@ bool sdl_main_menu_overlay_handle_gamepad_button(
     const SDL_GamepadButtonEvent* ev)
 {
     SDL_GamepadButton button;
-    int binding;
-    int choice;
 
     if (!g_main_menu_overlay_active || !ev)
         return false;
+    if (!config.gamepad_enabled)
+        return true;
     if (!ev->down)
         return true;
 
     sdl_gamepad_mark_auto_ui();
     button = (SDL_GamepadButton)ev->button;
-    binding = sdl_gamepad_capture_binding_for_input(GAMEPAD_CAPTURE_BUTTON,
-        (int)button);
 
-    if (button == SDL_GAMEPAD_BUTTON_DPAD_UP || binding == '8') {
-        sdl_main_menu_overlay_move(-1);
-        return true;
-    }
-    if (button == SDL_GAMEPAD_BUTTON_DPAD_DOWN || binding == '2') {
-        sdl_main_menu_overlay_move(1);
-        return true;
-    }
-    if (button == SDL_GAMEPAD_BUTTON_DPAD_LEFT
-        || binding == steamdeck_back_key())
+    /* Native overlays own physical UI semantics before configurable gameplay
+     * bindings.  Binding collisions must never make South go Back or East
+     * confirm a choice. */
+    if (sdl_gamepad_button_is_ui_back(button)
+        || button == SDL_GAMEPAD_BUTTON_START)
     {
         sdl_main_menu_overlay_close();
         return true;
     }
-    if (button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT
-        || binding == steamdeck_confirm_key())
-    {
+    if (sdl_gamepad_button_is_ui_confirm(button)) {
         sdl_main_menu_overlay_choose(g_main_menu_overlay_highlight);
         return true;
     }
 
-    choice = main_menu_choice_from_key(binding);
-    if (choice > 0) {
-        sdl_main_menu_overlay_choose(choice);
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_UP) {
+        sdl_main_menu_overlay_move(-1);
         return true;
     }
-
-    if (button == SDL_GAMEPAD_BUTTON_EAST) {
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_DOWN) {
+        sdl_main_menu_overlay_move(1);
+        return true;
+    }
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_LEFT) {
         sdl_main_menu_overlay_close();
         return true;
     }
-    if (button == SDL_GAMEPAD_BUTTON_SOUTH) {
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT) {
         sdl_main_menu_overlay_choose(g_main_menu_overlay_highlight);
         return true;
     }

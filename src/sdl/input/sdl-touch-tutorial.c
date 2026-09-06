@@ -835,7 +835,7 @@ static void sdl_touch_tutorial_prompt_label(int binding, const char* fallback,
     if (!buf || buflen == 0)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback, buflen);
 }
@@ -1743,7 +1743,7 @@ void sdl_touch_tutorial_draw_zones_page(const SDL_Rect* screen,
         body = "<a>Tap</a> the highlighted play areas. Use the map to move or target; <a>hold</a> for contextual actions.";
     } else if (mobile_sections) {
         title = "Touch: Quick Controls & Status";
-        body = "<a>Tap</a> overlays for fast commands and views. <a>Hold</a> quick-access buttons to edit them.";
+        body = "<a>Tap</a> overlays for fast commands and views. <a>Hold</a> quick-access buttons for descriptions.";
     } else {
         title = mouse ? "Main Screen Mouse Controls" : "Default Touch Layout";
         body = mouse
@@ -2298,7 +2298,7 @@ typedef struct birth_coach_step {
 static const birth_coach_step birth_coach_sheet_steps[] = {
     { "Vitals", 0, 0, "Vitals",
         "Your live status at a glance.\n"
-        "<t>Exp:</t> spent / earned - the pool you spend on skills and abilities.\n"
+        "<t>Exp:</t> unspent / earned - the pool you spend on skills and abilities.\n"
         "<t>Burden:</t> weight carried / the most you can bear before slowing.\n"
         "<t>Depth c/m:</t> current depth / the shallowest you may climb back to.\n"
         "<t>Health and Voice:</t> your hit points and song points.\n"
@@ -2310,36 +2310,36 @@ static const birth_coach_step birth_coach_sheet_steps[] = {
         "See the two Combat steps at the end for how these are used." },
     { "Traits", 0, 0, "Traits",
         "Innate strengths and flaws from your hero and house.\n"
-        "<a>++ mastery</a> and <g>+ affinity</g> make a skill cheaper and stronger.\n"
+        "<a>++ mastery</a> and <g>+ affinity</g> raise current skill and lower its ability costs.\n"
         "<r>- and --</r> are penalties; <v>UNIQUE</v> marks a special power.\n"
         "<u>Curses</u> such as Doom of Mandos are shown in umber.\n"
         "Lean into your affinities and play around your curses." },
     { "Attributes", 0, 0, "Attributes",
         "<t>Str, Dex, Con, Gra</t> - the roots every skill grows from.\n"
-        "<t>Str:</t> melee damage dice and carrying capacity.\n"
-        "<t>Dex:</t> feeds melee, evasion, archery and stealth.\n"
-        "<t>Con:</t> your hit points and resilience.\n"
+        "<t>Str:</t> weapon damage die sides and carried-weight limit.\n"
+        "<t>Dex:</t> feeds Melee, Evasion, Archery and Stealth.\n"
+        "<t>Con:</t> sets maximum Health.\n"
         "<t>Gra:</t> feeds will, perception, song, smithing and voice.\n"
         "Read each as <y>Current = Base +equip +misc -drain</y>." },
     { "Skills", 0, 0, "Skills",
         "What you train by spending experience.\n"
         "<y>Total = Base +stat +equip +misc</y>.\n"
-        "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
-        "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
-        "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+        "<t>Melee:</t> close/thrown attacks. <t>Archery:</t> bows. <t>Evasion:</t> opposes attacks.\n"
+        "<t>Stealth / Perception:</t> avoid notice and find hidden things.\n"
+        "<t>Will</t> resists hostile effects; <t>Smithing</t> forges; <t>Song</t> powers songs.\n"
         "<a>Click</a> a skill, or press <a>i</a>, to raise it." },
     { "Skills", 0, 0, "Combat: attack & evasion",
         "Whether a blow lands is one <y>opposed roll</y>:\n"
         "  you: <y>1d20 + Melee</y>   vs   them: <y>1d20 + Evasion</y>.\n"
         "The higher total wins; a tie misses.\n"
-        "<t>Evasion</t> is active dodging, so it is <n>reduced when you are\n"
-        "surrounded</n> - fight in doorways and corridors to keep it.\n"
+        "Surrounding foes gain <n>attack bonuses</n>, especially from behind -\n"
+        "fight in doorways and corridors to limit their advantage.\n"
         "Archery uses the same roll, your <t>Archery</t> vs their <t>Evasion</t>.\n"
         "Beat their roll by a wide margin to land a <r>critical hit</r>,\n"
         "which rolls extra damage dice." },
     { "Skills", 0, 0, "Combat: damage & armour",
         "Damage is rolled only after a hit connects:\n"
-        "  <y>damage dice = weapon dice + Strength</y> (capped by weapon weight).\n"
+        "  <y>damage die sides = weapon sides + Strength</y> (capped by weapon weight).\n"
         "A foe's armour is shown as <y>[Evasion, Protection]</y>.\n"
         "<t>Protection</t> rolls a value within that range each blow and is\n"
         "subtracted from your damage - <n>only the excess wounds them</n>.\n"
@@ -2358,8 +2358,8 @@ static const birth_coach_step birth_coach_select_step = {
 static const birth_coach_step birth_coach_stats_step = {
     NULL, 0, 999, "Assign attributes",
     "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
-    "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-    "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+    "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+    "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
     "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.\n"
     "Every point ripples into the skills shown alongside."
 };
@@ -2368,7 +2368,7 @@ static const birth_coach_step birth_coach_skills_step = {
     NULL, 0, 999, "Buy skills",
     "Spend experience on the <t>eight skills</t>.\n"
     "<y>Total = Base +stat +equip +misc</y>.\n"
-    "<n>Base also sets how dear abilities are to buy later.</n>\n"
+    "<n>Trained base sets which ability ranks you may buy later.</n>\n"
     "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience."
 };
 
@@ -2433,8 +2433,8 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
                 "<a>Tap</a> a stat to select it; <a>tap it again</a> to raise it.\n"
                 "<a>Long-tap</a> a stat to lower it. <a>Confirm</a> accepts; <a>Back</a> returns to heroes.\n"
-                "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-                "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+                "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+                "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
                 "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 buflen);
         }
@@ -2448,8 +2448,8 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
                 "<a>D-pad Up/Down</a> picks a stat; <a>Left/Right</a> lowers or raises it.\n"
                 "<a>%s</a> accepts; <a>%s</a> returns to heroes.\n"
-                "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-                "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+                "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+                "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
                 "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 confirm_label, back_label);
         }
@@ -2460,8 +2460,8 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "<a>Up/Down</a> picks a stat; <a>Left/Right</a> lowers or raises it.\n"
                 "<a>Enter</a> accepts; <a>Esc</a> returns to heroes.\n"
                 "<a>Click</a> a stat to select it; <a>click again</a> to raise; <a>right-click</a> lowers.\n"
-                "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-                "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+                "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+                "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
                 "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 buflen);
         }
@@ -2477,7 +2477,7 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "<a>Tap</a> a skill to select it; <a>tap it again</a> to raise it.\n"
                 "<a>Long-tap</a> a skill to lower it. <a>Confirm</a> accepts; <a>Back</a> returns to attributes.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<n>Base also sets how dear abilities are to buy later.</n>\n"
+                "<n>Trained base sets which ability ranks you may buy later.</n>\n"
                 "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience.",
                 buflen);
         }
@@ -2492,7 +2492,7 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "<a>D-pad Up/Down</a> picks a skill; <a>Left/Right</a> lowers or raises it.\n"
                 "<a>%s</a> accepts; <a>%s</a> returns to attributes.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<n>Base also sets how dear abilities are to buy later.</n>\n"
+                "<n>Trained base sets which ability ranks you may buy later.</n>\n"
                 "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience.",
                 confirm_label, back_label);
         }
@@ -2504,7 +2504,7 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "<a>Enter</a> accepts; <a>Esc</a> returns to attributes.\n"
                 "<a>Click</a> a skill to select it; <a>click again</a> to raise; <a>right-click</a> lowers.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<n>Base also sets how dear abilities are to buy later.</n>\n"
+                "<n>Trained base sets which ability ranks you may buy later.</n>\n"
                 "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience.",
                 buflen);
         }
@@ -2519,9 +2519,9 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
             SDL_strlcpy(buf,
                 "What you train by spending experience.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
-                "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
-                "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+                "<t>Melee:</t> close/thrown attacks. <t>Archery:</t> bows. <t>Evasion:</t> opposes attacks.\n"
+                "<t>Stealth / Perception:</t> avoid notice and find hidden things.\n"
+                "<t>Will</t> resists hostile effects; <t>Smithing</t> forges; <t>Song</t> powers songs.\n"
                 "<a>Tap</a> a skill once to focus it, then <a>tap again</a> or <a>tap Increase</a> to raise it.",
                 buflen);
         }
@@ -2532,9 +2532,9 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
             strnfmt(buf, buflen,
                 "What you train by spending experience.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
-                "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
-                "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+                "<t>Melee:</t> close/thrown attacks. <t>Archery:</t> bows. <t>Evasion:</t> opposes attacks.\n"
+                "<t>Stealth / Perception:</t> avoid notice and find hidden things.\n"
+                "<t>Will</t> resists hostile effects; <t>Smithing</t> forges; <t>Song</t> powers songs.\n"
                 "<a>D-pad or left stick</a> moves focus; <a>%s</a> raises the focused skill.",
                 confirm_label);
         }
@@ -2543,9 +2543,9 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
             SDL_strlcpy(buf,
                 "What you train by spending experience.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
-                "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
-                "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+                "<t>Melee:</t> close/thrown attacks. <t>Archery:</t> bows. <t>Evasion:</t> opposes attacks.\n"
+                "<t>Stealth / Perception:</t> avoid notice and find hidden things.\n"
+                "<t>Will</t> resists hostile effects; <t>Smithing</t> forges; <t>Song</t> powers songs.\n"
                 "<a>Click</a> a skill twice, or press <a>i/Space</a>, to raise skills.",
                 buflen);
         }
@@ -3504,12 +3504,13 @@ static cptr sdl_character_wheel_coach_body(int input, char* buf, size_t buflen)
 {
     char confirm_label[16];
     char back_label[16];
+    char open_label[48];
 
     switch (input) {
     case SDL_WHEEL_COACH_INPUT_TOUCH:
         SDL_strlcpy(buf,
-            "Everything you can do while standing on your square - wait, use an "
-            "item, ready your bow, sing, and more - lives on this <t>wheel</t>.\n"
+            "Common actions while standing on your square - wait, use an "
+            "item, ready your bow, sing, and more - are on this <t>wheel</t>.\n"
             "<t>Open it:</t> <a>tap</a> your own square on the <t>map</t>.\n"
             "<t>Choose:</t> <a>drag</a> to a wedge and lift your finger to run that action.\n"
             "<t>Second action:</t> a wedge's <t>outer ring</t> holds a related action.\n"
@@ -3517,24 +3518,25 @@ static cptr sdl_character_wheel_coach_body(int input, char* buf, size_t buflen)
             buflen);
         return buf;
     case SDL_WHEEL_COACH_INPUT_CONTROLLER:
+        sdl_gamepad_action_binding_short_label(INPUT_BIND_CONFIRM, open_label, sizeof(open_label));
         sdl_touch_tutorial_prompt_label(steamdeck_confirm_key(), "A",
             confirm_label, sizeof(confirm_label));
         sdl_touch_tutorial_prompt_label(steamdeck_back_key(), "B",
             back_label, sizeof(back_label));
         strnfmt(buf, buflen,
-            "Everything you can do while standing on your square - wait, use an "
-            "item, ready your bow, sing, and more - lives on this <t>wheel</t>.\n"
+            "Common actions while standing on your square - wait, use an "
+            "item, ready your bow, sing, and more - are on this <t>wheel</t>.\n"
             "<t>Open it:</t> <a>press and hold</a> <y>%s</y> while standing still.\n"
             "<t>Choose:</t> <y>D-pad Left/Right</y> turns the ring; <y>Up/Down</y> reaches the outer "
-            "ring of second actions.\n"
+            "ring of second actions. Either stick also navigates.\n"
             "<t>Run it:</t> <a>press</a> <y>%s</y> on the highlighted wedge.\n"
             "<t>Close:</t> <a>press</a> <y>%s</y> or <y>Start</y>.",
-            confirm_label, confirm_label, back_label);
+            open_label, confirm_label, back_label);
         return buf;
     default:
         SDL_strlcpy(buf,
-            "Everything you can do while standing on your square - wait, use an "
-            "item, ready your bow, sing, and more - lives on this <t>wheel</t>.\n"
+            "Common actions while standing on your square - wait, use an "
+            "item, ready your bow, sing, and more - are on this <t>wheel</t>.\n"
             "<t>Open it:</t> <a>right-click</a> your own square on the <t>map</t>.\n"
             "<t>Choose:</t> move the cursor to a wedge and <a>left-click</a> to run that action.\n"
             "<t>Second action:</t> a wedge's <t>outer ring</t> holds a related action.\n"

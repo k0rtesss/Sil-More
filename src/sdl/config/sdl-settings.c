@@ -1661,6 +1661,7 @@ void set_sdl_input_ui_mode(int mode)
         return;
 
     config.input_ui_mode = mode;
+    sdl_gamepad_context_focus_clear();
     sdl_touch_cancel_all_inputs();
     if (g_state.window) {
         sdl_resize_for_current_layout();
@@ -1694,6 +1695,8 @@ void set_sdl_gamepad_enabled(bool value)
 {
     config.gamepad_enabled = value;
     if (!value) {
+        sdl_gamepad_context_focus_clear();
+        sdl_gamepad_reset_modifiers();
         g_gamepad_state.dpad_up = false;
         g_gamepad_state.dpad_down = false;
         g_gamepad_state.dpad_left = false;
@@ -1705,10 +1708,12 @@ void set_sdl_gamepad_enabled(bool value)
         g_gamepad_state.left_y = 0;
         g_gamepad_state.left_dir = 0;
         g_gamepad_state.left_bind_dir = -1;
+        g_gamepad_state.left_ui_dir = -1;
         sdl_gamepad_clear_pending_left_stick();
         g_gamepad_state.right_x = 0;
         g_gamepad_state.right_y = 0;
         g_gamepad_state.right_dir = -1;
+        g_gamepad_state.right_ui_dir = -1;
         sdl_gamepad_clear_pending_shoulder();
         g_gamepad_state.left_trigger_down = false;
         g_gamepad_state.right_trigger_down = false;
@@ -1783,6 +1788,7 @@ bool get_sdl_gamepad_use_left_stick(void)
 void set_sdl_gamepad_use_left_stick(bool value)
 {
     config.gamepad_use_left_stick = value;
+    g_gamepad_state.left_ui_dir = -1;
     if (value) {
         if (g_gamepad_state.left_bind_dir >= 0 && g_gamepad_state.left_bind_dir < GAMEPAD_STICK_DIR_COUNT) {
             int binding = config.gamepad_left_stick_bindings[g_gamepad_state.left_bind_dir];
