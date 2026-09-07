@@ -1767,6 +1767,16 @@ int get_sdl_gamepad_dpad_diagonal_delay_ms(void)
     return config.gamepad_dpad_diagonal_delay_ms;
 }
 
+int get_sdl_gamepad_dpad_source(void)
+{
+    return sdl_gamepad_current_dpad_source();
+}
+
+void set_sdl_gamepad_dpad_source(int source)
+{
+    sdl_gamepad_set_current_dpad_source(source);
+}
+
 void set_sdl_gamepad_dpad_diagonal_delay_ms(int value)
 {
     if (value < SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)

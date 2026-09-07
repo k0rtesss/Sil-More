@@ -587,6 +587,9 @@ bool sdl_main_menu_choice_disabled_now(int choice)
 
 void sdl_main_menu_overlay_reset_nav_input(void)
 {
+    /* A movement accepted before the menu opened must not survive its wake
+     * key being consumed by the overlay and run after the menu closes. */
+    movement_input_clear_commands();
     sdl_gamepad_context_focus_clear();
     sdl_gamepad_reset_modifiers();
     sdl_gamepad_clear_pending_shoulder();

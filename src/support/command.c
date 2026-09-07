@@ -107,9 +107,6 @@ void request_command(void)
         if (sdl_log_pane_display_process_pending())
             continue;
 
-        if (request_command_take_movement())
-            break;
-
         {
             int mouse_command = 0;
             int mouse_dir = 0;
@@ -160,13 +157,16 @@ void request_command(void)
         if (sdl_log_pane_display_process_pending())
             continue;
 
-        if (request_command_take_movement())
-            break;
-
         if (ch == UI_MENU_CLICK_WAKE_KEY)
         {
             int mouse_command = 0;
             int mouse_dir = 0;
+
+            /* Consume movement with its queued wake key.  Taking it before
+             * inkey(), or after an unrelated key such as Escape, leaves wake
+             * keys behind and can replace a Menu press with an older move. */
+            if (request_command_take_movement())
+                break;
 
             if (sdl_pointer_attack_take_command(&mouse_command, &mouse_dir))
             {

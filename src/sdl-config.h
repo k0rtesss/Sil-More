@@ -7,6 +7,9 @@
 
 #define GAMEPAD_TRIGGER_COUNT 2
 #define GAMEPAD_STICK_DIR_COUNT 4
+#define GAMEPAD_DPAD_SOURCE_COUNT 3
+#define GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT 16
+#define GAMEPAD_DPAD_GUID_STRING_LEN 33
 #define TOUCH_SWIPE_DIR_COUNT 4
 #define GAMEPAD_MODIFIER_COUNT 3
 #define SDL_KEYMAP_MODE_COUNT 4
@@ -22,6 +25,10 @@
 #define GAMEPAD_STICK_DIR_DOWN 1
 #define GAMEPAD_STICK_DIR_LEFT 2
 #define GAMEPAD_STICK_DIR_RIGHT 3
+
+#define GAMEPAD_DPAD_SOURCE_STANDARD 0
+#define GAMEPAD_DPAD_SOURCE_LEFT_STICK 1
+#define GAMEPAD_DPAD_SOURCE_RIGHT_STICK 2
 
 #define TOUCH_SWIPE_DIR_UP 0
 #define TOUCH_SWIPE_DIR_DOWN 1
@@ -208,6 +215,11 @@ struct sdl_pane_profile {
     struct pane_config pane_configs[MAX_PANE_CONFIGS];
 };
 
+typedef struct gamepad_dpad_source_override {
+    char guid[GAMEPAD_DPAD_GUID_STRING_LEN];
+    int source;
+} gamepad_dpad_source_override;
+
 // SDL-specific configuration structure
 struct sdl_config {
     int main_view_scale;
@@ -298,6 +310,8 @@ struct sdl_config {
     bool steamdeck_inv_equip_same_button_cycle; // In controller UI, pressing inventory/equipment again cycles to the other menu
     bool gamepad_use_dpad;                // Use d-pad for movement
     int gamepad_dpad_diagonal_delay_ms;   // Wait for a second d-pad direction before sending a cardinal move
+    gamepad_dpad_source_override
+        gamepad_dpad_source_overrides[GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT];
     bool gamepad_use_left_stick;          // Use left stick for movement
     int gamepad_deadzone;                 // Deadzone for analog sticks
     int gamepad_trigger_threshold;        // Threshold to treat triggers as pressed
@@ -356,6 +370,9 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
 bool sdl_config_save(const char* filename, const struct sdl_config* config,
                      const struct sdl_pane_profile* pane_profiles,
                      int profile_count);
+
+int sdl_config_gamepad_dpad_source_for_guid(const char* guid);
+void sdl_config_set_gamepad_dpad_source_for_guid(const char* guid, int source);
 
 /* Seed a profile with the portrait HUD defaults formerly imposed at render
  * time.  Once seeded, the values remain ordinary editable general settings. */

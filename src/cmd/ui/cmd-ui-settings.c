@@ -11334,6 +11334,7 @@ typedef enum controller_toggle_id {
 
 typedef enum controller_setting_id {
     CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY = 0,
+    CONTROLLER_SETTING_DPAD_SOURCE,
 } controller_setting_id;
 
 typedef struct controller_entry {
@@ -11419,7 +11420,18 @@ static int controller_dpad_diagonal_delay_index(int value)
 
 static void controller_adjust_setting(int setting_id, int delta)
 {
-    if (setting_id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
+    if (setting_id == CONTROLLER_SETTING_DPAD_SOURCE) {
+        int source = get_sdl_gamepad_dpad_source();
+        if (source < 0)
+            return;
+        for (int i = 0; i < GAMEPAD_DPAD_SOURCE_COUNT; i++) {
+            source = (source + delta + GAMEPAD_DPAD_SOURCE_COUNT)
+                % GAMEPAD_DPAD_SOURCE_COUNT;
+            set_sdl_gamepad_dpad_source(source);
+            if (get_sdl_gamepad_dpad_source() == source)
+                break;
+        }
+    } else if (setting_id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
         int count = controller_dpad_diagonal_delay_count();
         int index = controller_dpad_diagonal_delay_index(
             get_sdl_gamepad_dpad_diagonal_delay_ms());
@@ -12218,7 +12230,16 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
         }
         break;
     case CONTROLLER_ENTRY_CYCLE:
-        if (entry->id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
+        if (entry->id == CONTROLLER_SETTING_DPAD_SOURCE) {
+            int source = get_sdl_gamepad_dpad_source();
+            const char* label = source == GAMEPAD_DPAD_SOURCE_STANDARD
+                ? "Standard D-pad"
+                : source == GAMEPAD_DPAD_SOURCE_LEFT_STICK
+                    ? "Left-stick emulation"
+                    : source == GAMEPAD_DPAD_SOURCE_RIGHT_STICK
+                        ? "Right-stick emulation" : "No controller";
+            SDL_strlcpy(buf, label, buflen);
+        } else if (entry->id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
             int delay = get_sdl_gamepad_dpad_diagonal_delay_ms();
 
             strnfmt(buf, buflen, "%d ms", delay);
@@ -12494,6 +12515,7 @@ void do_cmd_controller_settings(void)
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_ENABLED, "Controller Input" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE, "Inv/Equip Same-Button Cycle" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_DPAD, "D-pad Movement" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_SOURCE, "D-pad Input Source" },
         { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY, "D-pad Diagonal Delay" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_LEFT_STICK, "Left Stick Movement" },
         { CONTROLLER_ENTRY_ACTION, '\r', "Enter" },
@@ -12600,6 +12622,12 @@ void do_cmd_controller_settings(void)
                 cptr cycle_desc;
 
                 switch (entries[highlight].id) {
+                case CONTROLLER_SETTING_DPAD_SOURCE:
+                    cycle_desc =
+                        "Saved for the last controller used. Standard D-pads need no change. "
+                        "If your physical D-pad is reported as a stick, select its emulation source. "
+                        "That input uses D-pad timing; other sticks stay immediate.";
+                    break;
                 case CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY:
                     cycle_desc =
                         "Wait this long for a second D-pad direction to form a diagonal. "
@@ -12721,6 +12749,9 @@ void do_cmd_controller_settings(void)
                 {
                     set_sdl_gamepad_dpad_diagonal_delay_ms(
                         get_sdl_gamepad_default_dpad_diagonal_delay_ms());
+                } else if (entries[highlight].id
+                    == CONTROLLER_SETTING_DPAD_SOURCE) {
+                    set_sdl_gamepad_dpad_source(GAMEPAD_DPAD_SOURCE_STANDARD);
                 }
                 msg_format("Reset %s to default.", entries[highlight].label);
                 message_flush();

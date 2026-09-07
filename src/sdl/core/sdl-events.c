@@ -1267,27 +1267,23 @@ static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
     }
 }
 
+static void sdl_handle_event_mapped(sdl_state* st, SDL_Event* ev);
+
 void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 {
+    SDL_Event buttons[4];
+    int count = sdl_gamepad_remap_dpad_event(ev, buttons);
+    if (count < 0)
+        sdl_handle_event_mapped(st, ev);
+    else {
+        for (int i = 0; i < count; i++)
+            sdl_handle_event_mapped(st, &buttons[i]);
+    }
+}
+
+static void sdl_handle_event_mapped(sdl_state* st, SDL_Event* ev)
+{
     (void)st;
-    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN
-        || ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
-    {
-        log_debug("controller input: button=%d down=%d ctx=%u icky=%d prompt=%d dpad=%d delay=%d held=%d%d%d%d pending=%d/%d",
-            ev->gbutton.button, ev->gbutton.down, movement_input_active_context(),
-            character_icky, inkey_prompt_input_active(), config.gamepad_use_dpad,
-            config.gamepad_dpad_diagonal_delay_ms, g_gamepad_state.dpad_up,
-            g_gamepad_state.dpad_down, g_gamepad_state.dpad_left,
-            g_gamepad_state.dpad_right, g_gamepad_state.dpad_pending,
-            g_gamepad_state.dpad_pending_dir);
-    }
-    else if (ev->type == SDL_EVENT_KEY_DOWN || ev->type == SDL_EVENT_KEY_UP)
-    {
-        log_debug("controller keyboard input: key=%u scancode=%d raw=%u down=%d repeat=%d ctx=%u icky=%d prompt=%d",
-            ev->key.key, ev->key.scancode, ev->key.raw, ev->key.down,
-            ev->key.repeat, movement_input_active_context(), character_icky,
-            inkey_prompt_input_active());
-    }
     sdl_normalize_event_to_render_coords(ev);
     if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
         sdl_gamepad_release_button_modifier(ev->gbutton.button);

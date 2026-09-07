@@ -12,6 +12,67 @@
 
 // JSON-based configuration system using cJSON library
 
+static bool sdl_config_gamepad_dpad_source_is_valid(int source)
+{
+    return source >= GAMEPAD_DPAD_SOURCE_STANDARD
+        && source < GAMEPAD_DPAD_SOURCE_COUNT;
+}
+
+int sdl_config_gamepad_dpad_source_for_guid(const char* guid)
+{
+    if (!guid || !guid[0])
+        return GAMEPAD_DPAD_SOURCE_STANDARD;
+
+    for (int i = 0; i < GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT; i++) {
+        const gamepad_dpad_source_override* override =
+            &config.gamepad_dpad_source_overrides[i];
+
+        if (override->guid[0] && streq(override->guid, guid)
+            && sdl_config_gamepad_dpad_source_is_valid(override->source))
+        {
+            return override->source;
+        }
+    }
+
+    return GAMEPAD_DPAD_SOURCE_STANDARD;
+}
+
+void sdl_config_set_gamepad_dpad_source_for_guid(const char* guid, int source)
+{
+    int free_slot = -1;
+
+    if (!guid || !guid[0]
+        || !sdl_config_gamepad_dpad_source_is_valid(source))
+    {
+        return;
+    }
+
+    for (int i = 0; i < GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT; i++) {
+        gamepad_dpad_source_override* override =
+            &config.gamepad_dpad_source_overrides[i];
+
+        if (!override->guid[0] && free_slot < 0)
+            free_slot = i;
+        if (override->guid[0] && streq(override->guid, guid)) {
+            if (source == GAMEPAD_DPAD_SOURCE_STANDARD)
+                memset(override, 0, sizeof(*override));
+            else
+                override->source = source;
+            return;
+        }
+    }
+
+    if (source == GAMEPAD_DPAD_SOURCE_STANDARD)
+        return;
+    if (free_slot < 0) {
+        log_warn("Cannot save D-pad source: controller profile table is full");
+        return;
+    }
+    SDL_strlcpy(config.gamepad_dpad_source_overrides[free_slot].guid,
+        guid, GAMEPAD_DPAD_GUID_STRING_LEN);
+    config.gamepad_dpad_source_overrides[free_slot].source = source;
+}
+
 typedef struct sdl_default_keymap_entry {
     byte mode;
     byte key;
@@ -4217,6 +4278,38 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                 config->gamepad_dpad_diagonal_delay_ms);
         }
 
+        item = cJSON_GetObjectItemCaseSensitive(gamepad,
+            "dpadSourceOverrides");
+        if (cJSON_IsArray(item)) {
+            int count = cJSON_GetArraySize(item);
+
+            if (count > GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT)
+                count = GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT;
+            for (int i = 0; i < count; i++) {
+                cJSON* entry = cJSON_GetArrayItem(item, i);
+                cJSON* guid;
+                cJSON* source;
+
+                if (!cJSON_IsObject(entry))
+                    continue;
+                guid = cJSON_GetObjectItemCaseSensitive(entry, "guid");
+                source = cJSON_GetObjectItemCaseSensitive(entry, "source");
+                if (!cJSON_IsString(guid)
+                    || !guid->valuestring || !guid->valuestring[0]
+                    || !cJSON_IsNumber(source)
+                    || !sdl_config_gamepad_dpad_source_is_valid(source->valueint))
+                {
+                    continue;
+                }
+
+                SDL_strlcpy(config->gamepad_dpad_source_overrides[i].guid,
+                    guid->valuestring, GAMEPAD_DPAD_GUID_STRING_LEN);
+                config->gamepad_dpad_source_overrides[i].source =
+                    source->valueint;
+            }
+            log_debug("Loaded gamepad.dpadSourceOverrides (%d entries)", count);
+        }
+
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "useLeftStick");
         if (cJSON_IsBool(item)) {
             config->gamepad_use_left_stick = cJSON_IsTrue(item);
@@ -5201,6 +5294,34 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             cJSON_AddBoolToObject(gamepad, "useDpad", config->gamepad_use_dpad);
             cJSON_AddNumberToObject(gamepad, "dpadDiagonalDelayMs",
                 config->gamepad_dpad_diagonal_delay_ms);
+            {
+                cJSON* source_overrides = cJSON_CreateArray();
+
+                if (source_overrides) {
+                    for (int i = 0; i < GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT;
+                        i++) {
+                        const gamepad_dpad_source_override* override =
+                            &config->gamepad_dpad_source_overrides[i];
+                        cJSON* entry;
+
+                        if (!override->guid[0]
+                            || !sdl_config_gamepad_dpad_source_is_valid(
+                                override->source))
+                        {
+                            continue;
+                        }
+
+                        entry = cJSON_CreateObject();
+                        if (!entry)
+                            continue;
+                        cJSON_AddStringToObject(entry, "guid", override->guid);
+                        cJSON_AddNumberToObject(entry, "source", override->source);
+                        cJSON_AddItemToArray(source_overrides, entry);
+                    }
+                    cJSON_AddItemToObject(gamepad, "dpadSourceOverrides",
+                        source_overrides);
+                }
+            }
             cJSON_AddBoolToObject(gamepad, "useLeftStick", config->gamepad_use_left_stick);
             cJSON_AddNumberToObject(gamepad, "deadzone", config->gamepad_deadzone);
             cJSON_AddNumberToObject(gamepad, "triggerThreshold", config->gamepad_trigger_threshold);
@@ -5782,6 +5903,8 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->gamepad_use_dpad = true;
     config->gamepad_dpad_diagonal_delay_ms =
         SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS;
+    memset(config->gamepad_dpad_source_overrides, 0,
+        sizeof(config->gamepad_dpad_source_overrides));
     config->gamepad_use_left_stick = true;
     config->gamepad_deadzone = 12000;
     config->gamepad_trigger_threshold = 16000;

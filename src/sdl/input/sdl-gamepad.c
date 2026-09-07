@@ -815,9 +815,6 @@ void sdl_gamepad_send_shoulder_combo(void)
 
 void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt)
 {
-    log_debug("controller movement: dir=%d shift=%d ctrl=%d alt=%d ctx=%u icky=%d prompt=%d",
-        dir, shift, ctrl, alt, movement_input_active_context(), character_icky,
-        inkey_prompt_input_active());
     if (dir < 1 || dir > 9)
         return;
 
@@ -968,11 +965,21 @@ void sdl_gamepad_clear_pending_dpad(void)
     g_gamepad_state.dpad_pending_alt = false;
 }
 
-void sdl_gamepad_set_pending_dpad(int dir, Uint64 press_time_ns)
+static void sdl_gamepad_clear_dpad_state(void)
+{
+    g_gamepad_state.dpad_up = false;
+    g_gamepad_state.dpad_down = false;
+    g_gamepad_state.dpad_left = false;
+    g_gamepad_state.dpad_right = false;
+    g_gamepad_state.dpad_dir = 0;
+    sdl_gamepad_clear_pending_dpad();
+}
+
+void sdl_gamepad_set_pending_dpad(int dir)
 {
     g_gamepad_state.dpad_pending = true;
     g_gamepad_state.dpad_pending_dir = dir;
-    g_gamepad_state.dpad_pending_time = press_time_ns;
+    g_gamepad_state.dpad_pending_time = SDL_GetTicksNS();
     g_gamepad_state.dpad_pending_shift = sdl_gamepad_shift_active();
     g_gamepad_state.dpad_pending_ctrl = sdl_gamepad_ctrl_active();
     g_gamepad_state.dpad_pending_alt = sdl_gamepad_alt_active();
@@ -992,16 +999,6 @@ bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force)
     if (!force && now_ns - g_gamepad_state.dpad_pending_time < window_ns)
         return false;
 
-    /* SDL_PollEvent can stop at a poll-cycle sentinel with newer events still
-     * queued.  Resolve those button transitions before expiring the chord;
-     * their timestamps may still fall inside its window. */
-    if (!force && SDL_HasEvents(SDL_EVENT_GAMEPAD_BUTTON_DOWN,
-            SDL_EVENT_GAMEPAD_BUTTON_UP))
-        return false;
-
-    log_debug("controller dpad timeout: dir=%d age_ms=%llu force=%d",
-        g_gamepad_state.dpad_pending_dir,
-        (unsigned long long)((now_ns - g_gamepad_state.dpad_pending_time) / 1000000ULL), force);
     sdl_gamepad_send_direction_mods(g_gamepad_state.dpad_pending_dir,
         g_gamepad_state.dpad_pending_shift, g_gamepad_state.dpad_pending_ctrl,
         g_gamepad_state.dpad_pending_alt);
@@ -1482,6 +1479,137 @@ static SDL_Gamepad* sdl_gamepad_active_pad(void)
     return NULL;
 }
 
+static gamepad_entry* sdl_gamepad_entry_for_id(SDL_JoystickID id)
+{
+    for (int i = 0; i < g_gamepad_state.pad_count; i++) {
+        if (g_gamepad_state.pads[i].id == id)
+            return &g_gamepad_state.pads[i];
+    }
+    return NULL;
+}
+
+int sdl_gamepad_current_dpad_source(void)
+{
+    SDL_Gamepad* pad = sdl_gamepad_active_pad();
+    gamepad_entry* entry = pad
+        ? sdl_gamepad_entry_for_id(SDL_GetGamepadID(pad)) : NULL;
+    return entry ? sdl_config_gamepad_dpad_source_for_guid(entry->guid) : -1;
+}
+
+void sdl_gamepad_set_current_dpad_source(int source)
+{
+    SDL_Gamepad* pad = sdl_gamepad_active_pad();
+    gamepad_entry* entry = pad
+        ? sdl_gamepad_entry_for_id(SDL_GetGamepadID(pad)) : NULL;
+    if (!entry || source < 0 || source >= GAMEPAD_DPAD_SOURCE_COUNT)
+        return;
+    SDL_GamepadAxis requested_x = source == GAMEPAD_DPAD_SOURCE_RIGHT_STICK
+        ? SDL_GAMEPAD_AXIS_RIGHTX : SDL_GAMEPAD_AXIS_LEFTX;
+    if (source != GAMEPAD_DPAD_SOURCE_STANDARD
+        && (!SDL_GamepadHasAxis(pad, requested_x)
+            || !SDL_GamepadHasAxis(pad, (SDL_GamepadAxis)(requested_x + 1))))
+        return;
+
+    sdl_config_set_gamepad_dpad_source_for_guid(entry->guid, source);
+    if (sdl_config_gamepad_dpad_source_for_guid(entry->guid) != source)
+        return;
+
+    /* Retire commands/modifiers belonging to the previous input source.
+     * Profiles follow the controller GUID across disconnects and restarts. */
+    movement_input_clear_commands();
+    sdl_gamepad_context_focus_clear();
+    sdl_gamepad_reset_modifiers();
+    sdl_gamepad_clear_dpad_state();
+    sdl_gamepad_clear_pending_left_stick();
+    g_gamepad_state.left_x = g_gamepad_state.left_y = 0;
+    g_gamepad_state.right_x = g_gamepad_state.right_y = 0;
+    g_gamepad_state.left_dir = 0;
+    g_gamepad_state.left_bind_dir = g_gamepad_state.left_ui_dir = -1;
+    g_gamepad_state.right_dir = g_gamepad_state.right_ui_dir = -1;
+    for (int i = 0; i < g_gamepad_state.pad_count; i++) {
+        gamepad_entry* other = &g_gamepad_state.pads[i];
+        if (!streq(other->guid, entry->guid))
+            continue;
+        SDL_GamepadAxis x_axis = source == GAMEPAD_DPAD_SOURCE_RIGHT_STICK
+            ? SDL_GAMEPAD_AXIS_RIGHTX : SDL_GAMEPAD_AXIS_LEFTX;
+        other->mapped_dpad_x = SDL_GetGamepadAxis(other->pad, x_axis);
+        other->mapped_dpad_y = SDL_GetGamepadAxis(other->pad,
+            (SDL_GamepadAxis)(x_axis + 1));
+        other->mapped_dpad_buttons = 0;
+        other->mapped_dpad_wait_neutral =
+            abs((int)other->mapped_dpad_x) > MAX(config.gamepad_deadzone, 0)
+            || abs((int)other->mapped_dpad_y) > MAX(config.gamepad_deadzone, 0);
+    }
+    log_info("Controller D-pad source: %s (%s), source=%d",
+        SDL_GetGamepadName(pad), entry->guid, source);
+}
+
+/* Normalize selected emulated axes before any overlay or gameplay handler.
+ * Return -1 to keep the original event, or the number of D-pad transitions.
+ * This uses SDL events as delivered; it never guesses a device's identity. */
+int sdl_gamepad_remap_dpad_event(const SDL_Event* event, SDL_Event buttons[4])
+{
+    bool axis = event->type == SDL_EVENT_GAMEPAD_AXIS_MOTION;
+    bool button = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN
+        || event->type == SDL_EVENT_GAMEPAD_BUTTON_UP;
+    if (!axis && !button)
+        return -1;
+    gamepad_entry* entry = sdl_gamepad_entry_for_id(axis
+        ? event->gaxis.which : event->gbutton.which);
+    if (!entry)
+        return -1;
+    int source = sdl_config_gamepad_dpad_source_for_guid(entry->guid);
+    if (source == GAMEPAD_DPAD_SOURCE_STANDARD)
+        return -1;
+    /* The selected source owns this controller's D-pad. Ignore duplicate
+     * native D-pad reports, while leaving other controllers unchanged. */
+    if (button) {
+        return event->gbutton.button >= SDL_GAMEPAD_BUTTON_DPAD_UP
+            && event->gbutton.button <= SDL_GAMEPAD_BUTTON_DPAD_RIGHT ? 0 : -1;
+    }
+    int x_axis = source == GAMEPAD_DPAD_SOURCE_LEFT_STICK
+        ? SDL_GAMEPAD_AXIS_LEFTX : SDL_GAMEPAD_AXIS_RIGHTX;
+    if (event->gaxis.axis != x_axis && event->gaxis.axis != x_axis + 1)
+        return -1;
+    if (event->gaxis.axis == x_axis)
+        entry->mapped_dpad_x = event->gaxis.value;
+    else
+        entry->mapped_dpad_y = event->gaxis.value;
+
+    int deadzone = MAX(config.gamepad_deadzone, 0);
+    Uint8 state = 0;
+    if (entry->mapped_dpad_y < -deadzone) state |= 1;
+    if (entry->mapped_dpad_y > deadzone) state |= 2;
+    if (entry->mapped_dpad_x < -deadzone) state |= 4;
+    if (entry->mapped_dpad_x > deadzone) state |= 8;
+    if (entry->mapped_dpad_wait_neutral) {
+        if (!state)
+            entry->mapped_dpad_wait_neutral = false;
+        return 0;
+    }
+
+    int count = 0;
+    /* Release obsolete components first to avoid a transient false chord. */
+    for (int down = 0; down <= 1; down++) {
+        for (int i = 0; i < 4; i++) {
+            Uint8 bit = (Uint8)(1 << i);
+            if (!((state ^ entry->mapped_dpad_buttons) & bit)
+                || !!(state & bit) != down)
+                continue;
+            SDL_Event* mapped = &buttons[count++];
+            SDL_zero(*mapped);
+            mapped->type = down ? SDL_EVENT_GAMEPAD_BUTTON_DOWN
+                : SDL_EVENT_GAMEPAD_BUTTON_UP;
+            mapped->gbutton.timestamp = event->gaxis.timestamp;
+            mapped->gbutton.which = event->gaxis.which;
+            mapped->gbutton.button = SDL_GAMEPAD_BUTTON_DPAD_UP + i;
+            mapped->gbutton.down = (bool)down;
+        }
+    }
+    entry->mapped_dpad_buttons = state;
+    return count;
+}
+
 bool sdl_gamepad_control_available(int type, int id)
 {
     SDL_Gamepad* pad = sdl_gamepad_active_pad();
@@ -1494,6 +1622,10 @@ bool sdl_gamepad_control_available(int type, int id)
     case GAMEPAD_CAPTURE_BUTTON:
         if (id < 0 || id >= SDL_GAMEPAD_BUTTON_COUNT)
             return false;
+        if (sdl_gamepad_current_dpad_source() > GAMEPAD_DPAD_SOURCE_STANDARD
+            && id >= SDL_GAMEPAD_BUTTON_DPAD_UP
+            && id <= SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
+            return true;
         return SDL_GamepadHasButton(pad, (SDL_GamepadButton)id);
 
     case GAMEPAD_CAPTURE_TRIGGER:
@@ -1504,6 +1636,8 @@ bool sdl_gamepad_control_available(int type, int id)
         break;
 
     case GAMEPAD_CAPTURE_LEFT_STICK:
+        if (sdl_gamepad_current_dpad_source() == GAMEPAD_DPAD_SOURCE_LEFT_STICK)
+            return false;
         if (id == GAMEPAD_STICK_DIR_LEFT || id == GAMEPAD_STICK_DIR_RIGHT)
             axis = SDL_GAMEPAD_AXIS_LEFTX;
         else if (id == GAMEPAD_STICK_DIR_UP || id == GAMEPAD_STICK_DIR_DOWN)
@@ -1511,6 +1645,8 @@ bool sdl_gamepad_control_available(int type, int id)
         break;
 
     case GAMEPAD_CAPTURE_RIGHT_STICK:
+        if (sdl_gamepad_current_dpad_source() == GAMEPAD_DPAD_SOURCE_RIGHT_STICK)
+            return false;
         if (id == GAMEPAD_STICK_DIR_LEFT || id == GAMEPAD_STICK_DIR_RIGHT)
             axis = SDL_GAMEPAD_AXIS_RIGHTX;
         else if (id == GAMEPAD_STICK_DIR_UP || id == GAMEPAD_STICK_DIR_DOWN)
@@ -2208,36 +2344,6 @@ static bool sdl_gamepad_context_focus_move(int dir)
     return true;
 }
 
-static bool sdl_gamepad_combine_pending_dpad(int dir, Uint64 press_time_ns)
-{
-    int first = g_gamepad_state.dpad_pending_dir;
-    int combined;
-    Uint64 window_ns = (Uint64)sdl_gamepad_dpad_diagonal_delay_ms()
-        * 1000000ULL;
-
-    if (!g_gamepad_state.dpad_pending || !window_ns
-        || press_time_ns < g_gamepad_state.dpad_pending_time
-        || press_time_ns - g_gamepad_state.dpad_pending_time >= window_ns)
-        return false;
-
-    /* Keep the first press for the entire chord window, including a brief
-     * release while the player rolls across the D-pad.  Same-axis taps and
-     * opposite directions remain separate actions. */
-    if (!(((first == 8 || first == 2) && (dir == 4 || dir == 6))
-            || ((first == 4 || first == 6) && (dir == 8 || dir == 2))))
-        return false;
-    if (g_gamepad_state.dpad_pending_shift != sdl_gamepad_shift_active()
-        || g_gamepad_state.dpad_pending_ctrl != sdl_gamepad_ctrl_active()
-        || g_gamepad_state.dpad_pending_alt != sdl_gamepad_alt_active())
-        return false;
-
-    /* Keypad cardinal offsets compose directly: 8 + 6 - 5 = 9 (NE). */
-    combined = first + dir - 5;
-    sdl_gamepad_clear_pending_dpad();
-    sdl_gamepad_send_direction(combined);
-    return true;
-}
-
 static bool sdl_gamepad_context_focus_activate(void)
 {
     sdl_controller_focus_target targets[
@@ -2644,16 +2750,9 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
                     sdl_gamepad_clear_pending_dpad();
                     sdl_gamepad_send_direction(dir);
                 } else {
-                    Uint64 now_ns = SDL_GetTicksNS();
-                    /* Measure the physical presses, not time spent rendering
-                     * or handling other events between their dispatches.
-                     * Manually supplied events may omit the SDL timestamp. */
-                    Uint64 press_time_ns = ev->timestamp ? ev->timestamp : now_ns;
-                    if (sdl_gamepad_combine_pending_dpad(dir, press_time_ns))
-                        return;
                     if (g_gamepad_state.dpad_pending)
-                        sdl_gamepad_flush_pending_dpad(now_ns, true);
-                    sdl_gamepad_set_pending_dpad(dir, press_time_ns);
+                        sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
+                    sdl_gamepad_set_pending_dpad(dir);
                 }
             }
         }
@@ -3178,8 +3277,12 @@ void sdl_gamepad_open(SDL_JoystickID id)
         return;
     }
 
-    g_gamepad_state.pads[g_gamepad_state.pad_count].id = id;
-    g_gamepad_state.pads[g_gamepad_state.pad_count].pad = pad;
+    gamepad_entry* entry = &g_gamepad_state.pads[g_gamepad_state.pad_count];
+    memset(entry, 0, sizeof(*entry));
+    entry->id = id;
+    entry->pad = pad;
+    SDL_GUIDToString(SDL_GetJoystickGUID(SDL_GetGamepadJoystick(pad)),
+        entry->guid, sizeof(entry->guid));
     g_gamepad_state.pad_count++;
     if (!g_active_gamepad_id)
         g_active_gamepad_id = id;
@@ -3192,6 +3295,11 @@ void sdl_gamepad_close(SDL_JoystickID id)
 {
     sdl_gamepad_context_focus_clear();
     sdl_gamepad_reset_modifiers();
+    if (g_active_gamepad_id == id) {
+        movement_input_clear_commands();
+        sdl_gamepad_clear_dpad_state();
+        sdl_gamepad_clear_pending_left_stick();
+    }
     for (int i = 0; i < g_gamepad_state.pad_count; i++) {
         if (g_gamepad_state.pads[i].id == id) {
             SDL_CloseGamepad(g_gamepad_state.pads[i].pad);
@@ -3232,9 +3340,6 @@ void sdl_gamepad_handle_device(const SDL_GamepadDeviceEvent* ev)
 
 void sdl_gamepad_init(void)
 {
-#if defined(SDL_PLATFORM_ANDROID) && !defined(NDEBUG)
-    log_set_level(LOG_DEBUG);
-#endif
     SDL_SetGamepadEventsEnabled(true);
     sdl_gamepad_reset_modifiers();
     g_gamepad_context_focus_kind = SDL_CONTROLLER_FOCUS_NONE;

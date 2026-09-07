@@ -2654,6 +2654,8 @@ extern bool get_sdl_steamdeck_inv_equip_same_button_cycle(void);
 extern void set_sdl_steamdeck_inv_equip_same_button_cycle(bool value);
 extern bool get_sdl_gamepad_use_dpad(void);
 extern void set_sdl_gamepad_use_dpad(bool value);
+extern int get_sdl_gamepad_dpad_source(void);
+extern void set_sdl_gamepad_dpad_source(int source);
 extern int get_sdl_gamepad_dpad_diagonal_delay_ms(void);
 extern void set_sdl_gamepad_dpad_diagonal_delay_ms(int value);
 extern bool get_sdl_gamepad_use_left_stick(void);

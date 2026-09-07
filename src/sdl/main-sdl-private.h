@@ -334,6 +334,10 @@ enum {
 typedef struct gamepad_entry {
     SDL_JoystickID id;
     SDL_Gamepad* pad;
+    char guid[GAMEPAD_DPAD_GUID_STRING_LEN];
+    Sint16 mapped_dpad_x, mapped_dpad_y;
+    Uint8 mapped_dpad_buttons;
+    bool mapped_dpad_wait_neutral;
 } gamepad_entry;
 
 typedef struct gamepad_input_state {
@@ -3031,8 +3035,11 @@ int sdl_gamepad_axis_to_dir(Sint16 x, Sint16 y, int deadzone);
 int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone);
 void sdl_gamepad_send_direction(int dir);
 void sdl_gamepad_clear_pending_dpad(void);
-void sdl_gamepad_set_pending_dpad(int dir, Uint64 press_time_ns);
+void sdl_gamepad_set_pending_dpad(int dir);
 bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force);
+int sdl_gamepad_current_dpad_source(void);
+void sdl_gamepad_set_current_dpad_source(int source);
+int sdl_gamepad_remap_dpad_event(const SDL_Event* event, SDL_Event buttons[4]);
 void sdl_gamepad_clear_pending_left_stick(void);
 void sdl_gamepad_set_pending_left_stick(int dir);
 bool sdl_gamepad_flush_pending_left_stick(Uint64 now_ns, bool force);
@@ -3435,6 +3442,8 @@ bool get_sdl_steamdeck_inv_equip_same_button_cycle(void);
 void set_sdl_steamdeck_inv_equip_same_button_cycle(bool value);
 bool get_sdl_gamepad_use_dpad(void);
 void set_sdl_gamepad_use_dpad(bool value);
+int get_sdl_gamepad_dpad_source(void);
+void set_sdl_gamepad_dpad_source(int source);
 int get_sdl_gamepad_dpad_diagonal_delay_ms(void);
 void set_sdl_gamepad_dpad_diagonal_delay_ms(int value);
 bool get_sdl_gamepad_use_left_stick(void);
@@ -3682,7 +3691,7 @@ int sdl_gamepad_modifier_index(int binding);
 int sdl_gamepad_single_active_modifier(void);
 int sdl_gamepad_combo_binding_for_input(int modifier, int type, int id);
 void sdl_gamepad_clear_pending_dpad(void);
-void sdl_gamepad_set_pending_dpad(int dir, Uint64 press_time_ns);
+void sdl_gamepad_set_pending_dpad(int dir);
 bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force);
 void sdl_gamepad_clear_pending_left_stick(void);
 void sdl_gamepad_set_pending_left_stick(int dir);

@@ -281,6 +281,13 @@ errr callback_sdl_xtra(int n, int v)
             sdl_mouse_cursor_animation_update(flush_ns);
         }
         sdl_present_if_needed(d);
+        /* Term_flush() discards the terminal keys after this callback.
+         * Events drained above can have queued semantic movement plus wake
+         * keys, so discard both sides together.  Retire unfinished chords as
+         * well, or their timeout can resurrect input after the flush. */
+        movement_input_clear_commands();
+        sdl_gamepad_clear_pending_dpad();
+        sdl_gamepad_clear_pending_left_stick();
         return 0;
     case TERM_XTRA_CLEAR:
         if (!d || !d->canvas)
