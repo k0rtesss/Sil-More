@@ -4,6 +4,7 @@
 #include <SDL3/SDL_gamepad.h>
 #include "pane.h"
 #include "support/movement-input.h"
+#include "tutorial/tutorial.h"
 
 #define GAMEPAD_TRIGGER_COUNT 2
 #define GAMEPAD_STICK_DIR_COUNT 4
@@ -433,6 +434,11 @@ void sdl_config_reset_app_options_to_defaults(void);
 bool sdl_config_should_force_intro_flame(void);
 void sdl_config_mark_intro_seen(void);
 bool sdl_config_touch_tutorial_seen(void);
+bool get_sdl_gameplay_tutorial_enabled(void);
+void set_sdl_gameplay_tutorial_enabled(bool enabled);
+tutorial_mode get_sdl_gameplay_tutorial_mode(void);
+void set_sdl_gameplay_tutorial_mode(tutorial_mode mode);
+void cycle_sdl_gameplay_tutorial_mode(void);
 void sdl_config_mark_touch_tutorial_seen(void);
 bool sdl_config_mouse_tutorial_seen(void);
 void sdl_config_mark_mouse_tutorial_seen(void);

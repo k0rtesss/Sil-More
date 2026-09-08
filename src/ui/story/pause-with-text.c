@@ -18,64 +18,9 @@ const char entry_poetry[][100] = { { "Into the vast and echoing gloom," },
 
     { "" } };
 
-const char tutorial_leave_text[][100] = {
-    { "You are ready to begin a Tale with a hero of your own." }, { " " },
-    { "For an easier first run, choose a hero with a high power rating" },
-    { "and invest early experience in Melee and Evasion." },
-    { "Read item and ability descriptions; they state exact effects and exceptions." },
-    { "Use Hints & Quests for objectives and Help for the searchable Gameplay Reference." },
-    { " " },
-    { "In normal play you may save and quit, but saves are not checkpoints:" },
-    { "death ends the run and normally removes that hero from the current Tale." },
-    { "Sil-More rewards caution. You do not need to fight every enemy;" },
-    { "retreat, recover, and use terrain whenever a battle turns against you." },
-    { "Each death can teach you what to prepare for next time." },
 
-    { "" }
-};
 
-const char tutorial_win_text[][100] = {
-    { "You have completed the tutorial." }, { " " },
-    { "You are ready to begin a Tale with a hero of your own." }, { " " },
-    { "For an easier first run, choose a hero with a high power rating" },
-    { "and invest early experience in Melee and Evasion." },
-    { "Read item and ability descriptions; they state exact effects and exceptions." },
-    { "Use Hints & Quests for objectives and Help for the searchable Gameplay Reference." },
-    { " " },
-    { "In normal play you may save and quit, but saves are not checkpoints:" },
-    { "death ends the run and normally removes that hero from the current Tale." },
-    { "Retreat, recover, and use terrain whenever a battle turns against you." },
 
-    { "" }
-};
-
-const char tutorial_early_death_text[][100] = { { "You have been slain." },
-    { " " },
-    { "The run has ended. Start again when you are ready." },
-    { " " },
-    { "In normal play you may save and quit, but saves are not checkpoints:" },
-    { "death ends the run and normally removes that hero from the current Tale." },
-    { " " },
-    { "When combat turns against you, retreat through controlled terrain and recover." },
-    { "You can return with a better plan or leave that enemy alone." },
-    { "Use Look, nearby lists, and combat history to learn what made the fight dangerous." },
-
-    { "" } };
-
-const char tutorial_late_death_text[][100] = {
-    { "This run has ended." }, { " " },
-    { "You have also met a core rule: death ends a run." },
-    { "In normal play you may save and quit, but saves are not checkpoints," },
-    { "and death normally removes that hero from the current Tale." },
-    { " " },
-    { "For an easier first run, choose a hero with a high power rating" },
-    { "and invest early experience in Melee and Evasion." },
-    { "Read descriptions, review Hints & Quests, and open Help when a rule is unclear." },
-    { "Retreat and recover when a fight turns against you; not every foe must be killed." },
-    { "Each death can teach you what to prepare for next time." },
-
-    { "" }
-};
 
 const char throne_poetry[][100] = { { "Loud rose a din of laughter hoarse," },
     { "  self-loathing yet without remorse;" },
@@ -130,34 +75,6 @@ const char ultimate_bug_text[][100]
 
           { "" } };
 
-static bool pause_with_text_is_tutorial(const char desc[][100])
-{
-    return desc == tutorial_leave_text || desc == tutorial_win_text
-        || desc == tutorial_early_death_text
-        || desc == tutorial_late_death_text;
-}
-
-/* This renderer supports whole-line colour.  Reserve it for standalone
- * outcome headings; keep explanatory sentences neutral instead of tinting
- * unrelated words because a line happens to mention death or a skill. */
-static byte pause_with_text_tutorial_attr(cptr line)
-{
-    if (!line)
-        return TERM_WHITE;
-
-    if (streq(line, "You have completed the tutorial."))
-    {
-        return TERM_L_GREEN;
-    }
-
-    if (streq(line, "You have been slain."))
-    {
-        return TERM_L_RED;
-    }
-
-    return TERM_WHITE;
-}
-
 static void pause_with_text_semantic_add(cptr text, byte attr,
     int base_indent, int* line_count)
 {
@@ -184,7 +101,6 @@ static void pause_with_text_sdl(const char desc[][100], int row, int col,
     int banner_col = MAX(0, col - 5);
     int tail_col = banner_col + 4;
     int n_extra = 0;
-    bool tutorial_text = pause_with_text_is_tutorial(desc);
 
     (void)row;
 
@@ -224,8 +140,7 @@ static void pause_with_text_sdl(const char desc[][100], int row, int col,
 
     for (int i = 0; desc && desc[i][0]; i++)
     {
-        byte attr = tutorial_text
-            ? pause_with_text_tutorial_attr(desc[i]) : TERM_WHITE;
+        byte attr = TERM_WHITE;
 
         pause_with_text_semantic_add(desc[i], attr, col - origin_col,
             &line_count);

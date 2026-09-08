@@ -4,6 +4,7 @@
 #include "support/macro.h"
 #include "support/movement-input.h"
 #include "ui/menu-click.h"
+#include "tutorial/tutorial-game.h"
 
 /*
  * Flush all pending input.
@@ -301,6 +302,8 @@ void inkey_next_set(cptr keys)
  */
 char inkey(void)
 {
+    if (!inkey_scan)
+        tutorial_game_wait();
     bool cursor_state;
     bool text_cursor_requested = inkey_text_cursor_requested;
     bool suppress_special_cursor = character_icky > 0

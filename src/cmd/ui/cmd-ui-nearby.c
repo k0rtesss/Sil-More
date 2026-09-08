@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -355,6 +356,7 @@ void show_nearby_objects(bool line_of_sight_only)
 
 void do_cmd_view_monsters()
 {
+    tutorial_game_menu("nearby-monsters", "Review nearby monsters and their distance and direction. The toggle changes the list's line-of-sight filter.");
     char get_char = '[';
     bool show_los = true;
 
@@ -381,6 +383,7 @@ void do_cmd_view_monsters()
 
 void do_cmd_view_objects()
 {
+    tutorial_game_menu("nearby-objects", "Review known nearby objects and their direction. A listed object is not automatically collected.");
     char get_char = ']';
     bool show_los = true;
 

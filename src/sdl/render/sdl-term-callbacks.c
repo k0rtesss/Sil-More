@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "tutorial/tutorial.h"
 
 errr callback_sdl_xtra(int n, int v)
 {
@@ -8,8 +9,10 @@ errr callback_sdl_xtra(int n, int v)
     case TERM_XTRA_EVENT: {
         SDL_Event ev;
 
+        sdl_gameplay_tutorial_sync();
         sdl_present_if_needed(d);
-        sdl_input_tutorial_maybe_show_deferred();
+        if (!tutorial_is_active())
+            sdl_input_tutorial_maybe_show_deferred();
         sdl_mono_font_prewarm_process_idle();
 
         if (v) {
@@ -163,6 +166,8 @@ errr callback_sdl_xtra(int n, int v)
                     ? SDL_WaitEventTimeout(&ev, timeout_ms)
                     : SDL_WaitEvent(&ev);
                 if (got_event) {
+                    unsigned int tutorial_before_event = tutorial_revision();
+                    unsigned int tutorial_before_input = sdl_gameplay_tutorial_input_epoch();
                     sdl_handle_event(&g_state, &ev);
                     /*
                      * SDL_WaitEvent() removes one event only. Returning to
@@ -174,7 +179,9 @@ errr callback_sdl_xtra(int n, int v)
                      * new gesture while the previous command is still being
                      * resolved (and can age into a long press behind a banner).
                      */
-                    while (Term->key_head == Term->key_tail
+                    while (tutorial_revision() == tutorial_before_event
+                        && sdl_gameplay_tutorial_input_epoch() == tutorial_before_input
+                        && Term->key_head == Term->key_tail
                         && SDL_PollEvent(&ev))
                     {
                         sdl_handle_event(&g_state, &ev);

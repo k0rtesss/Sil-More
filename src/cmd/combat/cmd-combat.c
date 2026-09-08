@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -2914,6 +2915,7 @@ void py_attack_aux(int y, int x, int attack_type)
 
     /* Monsters might notice */
     player_attacked = true;
+    tutorial_game_attack(m_ptr);
 
     // Determine the number of attacks
     blows = 1;
@@ -3072,6 +3074,14 @@ void py_attack_aux(int y, int x, int attack_type)
             }
 
             total_dice = mdd + slay_bonus_dice + crit_bonus_dice;
+
+            if (crit_bonus_dice > 0) {
+                char tutorial_detail[240];
+                strnfmt(tutorial_detail, sizeof(tutorial_detail),
+                    "Your hit margin was %d with a %.1f lb weapon, adding %d critical dice. Damage now rolls %dd%d before Protection.",
+                    hit_result, weapon_weight / 10.0, crit_bonus_dice, total_dice, mds);
+                tutorial_game_explain("combat.critical", "Critical hit", tutorial_detail);
+            }
 
             dam = damroll(total_dice, mds);
             if (smite)
@@ -3268,6 +3278,8 @@ void py_attack_aux(int y, int x, int attack_type)
             if (noticed_flag)
             {
                 ident_weapon_by_use(o_ptr, m_ptr, noticed_flag);
+                if (object_known_p(o_ptr))
+                    tutorial_game_identified(o_ptr, "identification.brand");
                 noticed_flag = false;
             }
 
@@ -3505,6 +3517,7 @@ bool can_impale()
 
 void py_attack(int y, int x, int attack_type)
 {
+    if (attack_type == ATT_MAIN && !tutorial_game_action_allowed("attack", NULL)) return;
     int dir, dir0, yy, xx;
 
     dir = dir_from_delta(y - p_ptr->py, x - p_ptr->px);

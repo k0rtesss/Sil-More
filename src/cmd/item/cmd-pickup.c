@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -260,6 +261,8 @@ static bool pickup_partial_volume_stack(object_type* floor_object,
     picked = qty - MAX(partial.number, 0);
     if (picked > 0)
     {
+        tutorial_game_explain("storage.partial_pickup", "Partial pickup",
+            "Part of the stack was picked up. The remainder stays on the floor; your Pack, Harness and Quiver have separate limits.");
         floor_object->number = MAX(0, floor_object->number - picked);
         break_truce(false);
     }
@@ -1584,6 +1587,9 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel,
     if (object_is_searched_skeleton(o_ptr))
         return;
 
+    tutorial_game_item(o_ptr);
+    if (!tutorial_game_action_allowed("pickup", o_ptr)) return;
+
     if (allow_channel && player_channel_floor_staff(o_ptr, o_idx))
         return;
 
@@ -1723,6 +1729,8 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel,
                     return;
                 }
                 
+                tutorial_game_explain("storage.partial_pickup", "Partial pickup", "Only part of this stack fits. The remainder stays on the floor; inspect the destination's capacity.");
+
                 /* Create a partial object to pick up */
                 object_type partial;
                 object_copy(&partial, o_ptr);

@@ -91,7 +91,7 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:0.9.8
 
 
 ##### Non-kind (contains the 'pile' picture) #####
@@ -3063,4 +3063,73 @@ A:20/10
 F:EASY_KNOW
 D:Dense fragments of metal fallen from the heights, stronger than common steel.
 D: They can be used at a forge to create or alloy star-iron items.
+
+
+##### An Unfinished Tale: fixed vault scrolls (no random allocation) #####
+# Existing scroll tile; the text is read through the normal TV_NOTE route.
+
+N:492:& Scroll~ of the First Sentence
+G:~:w
+T:32:25
+I:2:100:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:Large, uneven letters march across the parchment: "There was a green
+D: great dragon. He lived beneath a hill, and there was no knight brave
+D: enough to knock upon his door." Below, a dragon has been drawn much
+D: larger than the hill. The writer has squeezed the door in afterwards.
+
+N:493:& Scroll~ with a Careful Correction
+G:~:w
+T:32:25
+I:2:101:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:A smaller, steadier hand has written in the margin: "A great green
+D: dragon, dear. The words must go in that order." Two curved marks
+D: exchange the offending words. Nothing has been said about the dragon,
+D: the hill, or the absence of a sufficiently courageous knight.
+
+N:494:& Scroll~ with a Stubborn Reply
+G:~:w
+T:32:25
+I:2:102:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:The large letters return, pressed so hard that the nib has almost
+D: pierced the parchment: "But why? He was green before he was great."
+D: Beneath this stands a very small dragon, carefully shaded green.
+D: Beside it is the same dragon, now too large to fit upon the leaf.
+
+N:495:& Scroll~ of Wandering Words
+G:~:w
+T:32:25
+I:2:103:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:Here the story gives way to columns of curious words. Some have been
+D: crossed out; others are joined by branching lines. Along the bottom,
+D: in the first uncertain hand, is written: "If these words will not
+D: behave, perhaps I shall make some of my own." The dragon in the
+D: margin is asleep.
+
+N:496:& Scroll~ of the Unwritten Ending
+G:~:w
+T:32:25
+I:2:104:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:Only one line has been written: "And when the dragon woke--"
+D: The rest of the scroll is blank. A heavy green scale holds the
+D: parchment flat, just below the place where the next word should be.
 

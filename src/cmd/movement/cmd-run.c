@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -195,6 +196,7 @@ static bool forge_entry_choice(int y, int x)
 
 void move_player(int dir)
 {
+    if (!tutorial_game_command_allowed(';', dir)) return;
     int py = p_ptr->py;
     int px = p_ptr->px;
 
@@ -627,6 +629,7 @@ void move_player(int dir)
 
         /* Move player */
         monster_swap(py, px, y, x);
+        tutorial_action_finished("move", "", true);
 
         /* Check for Mandos quest interaction after movement */
         check_mandos_quest_interaction();

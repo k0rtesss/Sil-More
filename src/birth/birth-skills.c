@@ -1,6 +1,7 @@
 /* File: birth/birth-skills.c */
 
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "birth/birth-internal.h"
 
 /*
@@ -30,6 +31,7 @@ void gain_skills_set_initial_skill(int skill)
  */
 extern NavResult gain_skills(void)
 {
+    tutorial_game_menu("skills", "Train base skills with experience. The next base rank costs 100 times the new rank; the displayed total also includes attributes and equipment.");
     int i;
 
     int skill = ((gain_skills_initial_skill >= 0
@@ -213,6 +215,7 @@ extern NavResult gain_skills(void)
         /* Final Look retains this browser but not skill purchases. */
         if ((ch == '4') || (ch == '6'))
         {
+            if (!tutorial_game_action_allowed("train", NULL)) continue;
             if (death_view)
             {
                 msg_print("You cannot do that during this final look.");

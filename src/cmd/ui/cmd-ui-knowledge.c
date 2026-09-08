@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -9595,6 +9596,7 @@ void do_cmd_knowledge_browser_page(int page)
     int monster_old = -1;
     knowledge_browser_state state = { 0 };
     bool done = false;
+    int tutorial_page = -1;
 
     page = knowledge_normalize_page(page);
     g_knowledge_last_page = page;
@@ -9648,6 +9650,24 @@ void do_cmd_knowledge_browser_page(int page)
     {
         knowledge_browser_layout layout;
         int ch;
+
+        if (tutorial_page != page) {
+            tutorial_page = page;
+            switch (page) {
+            case KNOWLEDGE_PAGE_ARTEFACTS:
+                tutorial_game_menu("knowledge-artefacts", "Browse known artefacts. Recall shows recorded properties; it does not grant or equip an item.");
+                break;
+            case KNOWLEDGE_PAGE_OBJECTS:
+                tutorial_game_menu("knowledge-objects", "Browse known object kinds and their descriptions. This catalogue is separate from your carried inventory.");
+                break;
+            case KNOWLEDGE_PAGE_MONSTERS:
+                tutorial_game_menu("knowledge-monsters", "Review learned creature information. Recall reflects what your character knows.");
+                break;
+            case KNOWLEDGE_PAGE_CURSES:
+                tutorial_game_menu("knowledge-curses", "Review discovered curses and their effects. Reading an entry does not remove a curse.");
+                break;
+            }
+        }
 
         /* These lists highlight the selection directly, so keep the blinking
          * text cursor hidden.  Re-asserted each iteration in case a recall
@@ -10735,6 +10755,18 @@ static char supply_controller_menu_key(char ch, int prev_page_key,
     return (char)steamdeck_menu_key(ch, prev_page_key, next_page_key);
 }
 
+/* Tutorial controls must use the same local Preview action and controller
+ * binding as this browser, rather than the dungeon's global Examine key. */
+static void supply_update_tutorial_preview(bool available, bool shown,
+    bool allow_secondary)
+{
+    char label[24] = "";
+    sdl_gameplay_tutorial_set_menu_preview(available, shown);
+    if (available)
+        (void)supply_controller_info_key(label, sizeof(label), allow_secondary);
+    sdl_gameplay_tutorial_set_menu_preview_control(label);
+}
+
 static void supply_browser_cursor_move(char ch, int* column, int* grp_cur,
     int grp_cnt, int* list_cur, int list_cnt, int page_rows, bool wrap_rows,
     bool has_groups, supply_overlay_cache* overlay_cache,
@@ -11362,6 +11394,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 Term_gotoxy(layout.group_col,
                     layout.group_row + (equip_grp_cur - equip_grp_top));
 
+            supply_update_tutorial_preview(equip_entry_cnt > 0,
+                overlay_cache.active, true);
             char ch = inkey();
             bool click_generated_command = false;
             pack_combat_notice = false;
@@ -12806,6 +12840,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 Term_gotoxy(layout.group_col,
                     layout.group_row + (inv_grp_cur - inv_grp_top));
 
+            supply_update_tutorial_preview(inventory_entry_cnt > 0,
+                overlay_cache.active, true);
             char ch = inkey();
             bool click_generated_command = false;
             pack_combat_notice = false;
@@ -13872,6 +13908,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             Term_gotoxy(draw_layout.group_col,
                 draw_layout.group_row + (grp_cur - grp_top));
 
+        supply_update_tutorial_preview(entry_cnt > 0, overlay_cache.active,
+            grp_idx[grp_cur] != SUPPLY_GROUP_JEWELRY_PRESETS);
         char ch = inkey();
         bool click_generated_command = false;
         pack_combat_notice = false;
@@ -14433,6 +14471,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         }
     }
 
+    sdl_gameplay_tutorial_set_menu_preview(false, false);
     object_info_overlay_clear();
     mem_free_null(entries);
     mem_free_null(equip_entries);

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 
 #define PACK_ACTION_TURN_COST 3
@@ -107,6 +108,9 @@ static bool player_pack_action_start_internal(player_pack_action_kind kind,
     pack_action.turns_left = PACK_ACTION_TURN_COST - 1;
     object_copy(&pack_action.object, o_ptr);
 
+    tutorial_game_explain("storage.pack_access", "Reaching into the Pack",
+        "This action takes three player turns. Attacks or your cancellation can interrupt it; tutorial reading does not spend those turns.");
+
     object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
     if ((kind == PLAYER_PACK_ACTION_PICKUP
             && arg == OBJECT_STORAGE_PACK)
@@ -155,6 +159,8 @@ void player_pack_action_interrupt(void)
         return;
 
     player_pack_action_cancel();
+    tutorial_game_explain("storage.pack_interrupted", "Pack action interrupted",
+        "An attack interrupted your Pack action. Check the item and messages before trying again.");
     msg_print("Your Pack action is interrupted!");
 }
 

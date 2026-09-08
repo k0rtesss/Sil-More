@@ -8993,3 +8993,73 @@ The script now fully matches the game's drop generation logic for all item types
 - `src/sdl/input/sdl-gamepad.c`: combine a pending cardinal with a perpendicular press for the full configured window, even if the first button has just been released. Preserve separate actions for same-axis/opposite taps, expired windows, and changed modifiers.
 - `scripts/check_help_controller_runtime.py`: added all four diagonals in both press orders, held/released first-button cases at 50 and 300 ms, repeated/opposite taps, deadline expiry, and modifier changes. The release-order reproducer failed before the fix and the expanded event suite passed afterwards.
 - Validation: all-core incremental Windows SDL3 build passed, controller contract guard passed, existing controller/Help executable checks passed, scoped diff check passed. Physical controller replay not performed. Output: `build-standard/sil-more.exe`; deployment folders not refreshed.
+
+# Contextual gameplay tutorial implementation
+
+## Accepted contract
+- User approved the full implementation plan and scenario catalogue in this chat.
+- Story/Tale only; progress per Tale across deaths/characters; global enable preference.
+- Short graphical cards; explicit Continue or required semantic action; Skip and Off always available.
+- Normal turns/resources/enemy responses for real actions. Reading/input rejected by tutorials is free.
+- Item triggers when reached/picked up, not at distant visibility. Known information only.
+- Retain Help, first-time controls, and ALL random skeleton tips unchanged. Remove obsolete Sil gameplay tutorial.
+- Reset only current Tale progress; no character/meta.raw format change; versioned per-Tale sidecar.
+- All ability/menu/status/item/terrain/monster/quest mechanics need coverage, not only opening lessons.
+
+## Baseline and ownership
+- Baseline help / 1dd6afa9 (controller selection), 2026-09-08.
+- Existing untracked android/app/src/debug/AndroidManifest.xml and docs/help-pages/ belong to user; preserve.
+- tutorial_core: Astra high, new src/tutorial core/header/persistence/catalog loader.
+- tutorial_sdl: Astra high, graphical renderer/input ownership + SDL present/event hooks.
+- tutorial_catalogue: Luna max, lib/help/tutorials.json, coverage checker and continuous review artifact.
+- Root: gameplay/menu producers, semantic command gate, settings/config, CMake/package integration, tests/review.
+
+## Required validation
+- Parallel incremental Windows build; scoped diff check; existing controller/Help checks.
+- Behavioral tutorial harness (freeze, wrong input, actual completion, stale input, skip/off, persistence).
+- Catalogue coverage and placeholders, all 107 ability records, conditions/menus/effect categories.
+- Verify resources stage to standard/portable/Android/iOS rules.
+- Physical UI/device replay must be reported separately from source/build verification.
+
+## Implementation result and verification
+- `src/tutorial/tutorial.c`: versioned JSON catalogue, semantic steps, priority queue and safe presentation checkpoints; per-Tale atomic `tutorials.json` sidecar, compatible with existing game saves. Archive suspends/restores the active lesson and queue; replay is read-only even with tutorials Off.
+- `src/tutorial/tutorial-game.c` / `tutorial-world.c`: committed action hooks, public item/status/monster/terrain/quest/Tale observations, specific remedy/target validation, ordinary-turn Pack continuations, normal level-transition snapshots, and settings/archive ownership.
+- `lib/help/tutorials.json` is the editable canonical catalogue: 510 lessons, including all 107 live ability previews. `docs/tutorial-reference.md` is the generated continuous review document; regenerate with `python scripts/check_tutorial_catalogue.py --strict-triggers --write-reference`.
+- SDL final composite draws contextual cards and live geometry highlights; its event owner discards stale presses and holds, supports keyboard/mouse/touch/controller, and preserves quit/resize/release processing. Controls tutorials suspend gameplay cards instead of competing for input.
+- Gameplay settings: Options > Other Options > Gameplay tutorials. Enable preference persists in SDL appOptions; reset applies only to the current Tale. Story only, excluding Blitz.
+- Startup now initializes the previously unused `ANGBAND_DIR_HELP` from the installed lib root. Windows packaging refreshes Help; Android Sync includes it; iOS bundles JSON. Incremental build output is `build-standard/sil-more.exe`; deployment executables were not refreshed.
+- Removed obsolete gameplay conclusion/death text and the unreferenced binary `lib/xtra/tutorial`; Help content, controls tutorial content, and `lib/edit/skeleton_note.txt` are preserved.
+- Core, action integration, SDL event-gate and strict catalogue checks pass. All-core Windows incremental build passes. Real SDL offscreen render fixtures use the game's card/font code and isolated dummy surfaces; they do not load a user save/configuration or prove physical-device interaction.
+- Existing controller checks: `check_controller_contract.py` fails its pre-existing literal modal D-pad assertion in unchanged `sdl-gamepad.c`. `check_help_controller_runtime.py` fails its pre-existing Up/Right diagonal assertion; it reproduces with the tutorial event gate bypassed. Remaining controller regression checks and all 15 Help topics at six widths pass in an isolated harness.
+- Additional edits appeared concurrently in `lib/edit/{limits,monster,object,vault}.txt`, `src/defines.h`, level-generation files and `scripts/check_unfinished_tale.py`; they belong to separate work and were preserved.
+
+## Inventory Preview tutorial lockup follow-up
+- User's screenshot showed the Inventory `x` preview already open beneath `item.first_description` step 2. The browser uses `object_info_overlay_show_multi`, which lacked the completion notification; only the separate modal reader had it, before successful presentation.
+- Both inline and modal readers now notify only after successful presentation. A transient copied description type lets `tutorial_game_wait` recognize a preview already open when the explanatory step yields to Examine. Clearing the reader/new hero/load clears that transient state. No turn, resource, or progress-format change.
+- Equipped, Inventory and Supplies publish their live Preview availability and native controller binding before input, and clear this context on exit. Tutorial controls can dispatch the local `x` Preview action without injecting the dungeon keymap-bypass prefix.
+- `check_gameplay_tutorial_integration.py` executes the real presentation entrypoints with controlled renderer results. The preserved pre-fix source fails the successful-inline-completion assertion; the fix passes success/failure, duplicate repaint, visible/closed reader, and unchanged energy/HP/Voice/turn/item resources. Static route checks cover all three browser branches and cleanup.
+- Tutorial buttons now name the real action and use keyboard, mouse, touch or controller hints. Native Preview dispatches one raw `x`; an already-shown preview is not toggled closed. Controller Menu/Start enters tutorial focus while native View Preview and A/B menu actions retain their roles. Ctrl+Tab enters tutorial focus from keyboard menus. Unavailable primary actions are omitted. Scroll hints remain visible with overflow.
+- Fresh controller axes pass through the normal translator during required actions, including native menu navigation; information/reading steps still capture them and held-axis recenter protection remains.
+- Final core/integration/SDL checks pass; 26 actual software-rendered fixtures cover input-specific Preview buttons at desktop and narrow/tiny sizes. Windows all-core build and scoped diff checks pass. This validates source, synthesized input and rendering; physical-device replay and deployment refresh were not performed.
+
+## 0.9.8.0 upgrades, feature tips and tutorial levels
+- Version components are now 0.9.8.0 (`VERSION_STRING` remains the canonical three-part 0.9.8; `VERSION_EXTRA` is 0). The user's new migration requirement supersedes the original no-save-format-change assumption above.
+- `player_type.tutorial_deferred` is serialized at the end of player extra data in 0.9.8+; older character saves default it to true without consuming a byte. It survives resaves/reloads and clears only with the next new hero's existing player wipe. Mode changes/reset cannot bypass it. Gameplay and death lessons are suppressed for deferred heroes; manual learned-lesson reading remains available.
+- Pre-0.9.8 metarun headers mark a pending upgrade notice for every Tale before the metadata header is rewritten. `tutorial_upgrade_pending` consumes one reserved byte, preserving record size. A native notice at dungeon startup acknowledges the upgrade independently of tutorial mode; only successful acknowledgment clears it. New heroes in old Tales get the appropriate available-now variant.
+- Global modes persist as `appOptions.gameplayTutorialMode`: Disabled, Normal, Extended; default Extended. The former explicit false preference migrates to Disabled, true/missing to Extended. One card/settings button cycles the three modes. Eligible cards retain their step/focus/scroll; filtered tips remain unlearned.
+- Catalogue: 146 Normal lessons and 364 additional Extended lessons (510 total). All required-action prerequisite chains remain Normal; Extended adds detailed abilities, item kinds, traits, terrain/regions and specialist mechanics. The generated reference documents every classification.
+- Skeletons/chests route to separate Normal informational `world.skeleton`/`world.chest` tips and are excluded from generic item encounter, description/examine completion and identification lessons. Historical item.skeleton/item.chest progress is preserved as unknown IDs.
+- `scripts/check_tutorial_upgrade.py` executes actual versioned byte readers/writers, metarun migration helper and notice routine with in-memory fixtures. It checks old/resaved/new heroes, stable metarun layout, multiple Tales, acknowledgment/cancel/write failure, Disabled and Blitz. Core/integration/SDL/catalogue checks also pass; software renderer covers 32 fixtures. No deployment refresh or physical-device replay.
+
+## 0.9.8 startup failure in the standard deployment
+- The named deployment's `log.txt` showed `PARSE_ERROR_OBSOLETE_FILE` in `limits.txt` at line 15: the 0.9.8 executable encountered `V:0.9.7`. `init_info_txt` requires matching major/minor/patch; invalidated raw caches correctly fell back to the outdated text templates.
+- Updated only the version header in all 25 actively loaded templates, both in source `lib/edit` and `sil-more-windows-sdl3/lib/edit`. Preserved all other bytes and concurrent content changes; excluded the unused `character - updates.txt` draft. No cache deletion or save edits were needed.
+- `cmake/ValidateTemplateVersions.cmake` now fails configuration for missing/mismatched runtime template headers. Active normal loaders are discovered from `init-info.c`; the three direct text consumers are included. Template changes trigger reconfiguration.
+- Astra high subagent audited parser consumers and added `scripts/check_template_versions.py`. Its source/deployment check, malformed/stale fixtures, extracted actual C version gate, and isolated real CMake rejection/acceptance checks all passed with `--deployed sil-more-windows-sdl3 --self-test --runtime-check --cmake-check`.
+- All-core incremental Windows build passed. Actual launches of the named deployed executable reached the main menu without ERROR/FATAL records; the second remained there for about 12 seconds before the normal Quit path. This verifies startup, not gameplay or physical-device interactions. Evidence logs are under `scripts/output/startup098-check`.
+
+## Retroid sideload launch crash
+- Device log reproduced ClassNotFoundException for com.silqh.silmore.SilMoreActivity in installed 0.9.8 sideload release. Commit 22be1a30 deleted the Java activity while the manifest retained it.
+- Restored android/app/src/main/java/com/silqh/silmore/SilMoreActivity.java exactly from that commit's parent, including native library loading, fullscreen and orientation handling.
+- Release Sideload build passed; adb install -r succeeded without clearing app data. Activity instantiated successfully; user confirmed it worked on the Retroid. Evidence: scripts/output/retroid-startup-20260908.
+

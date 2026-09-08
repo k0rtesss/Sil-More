@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "dungeon-internal.h"
+#include "tutorial/tutorial-game.h"
 
 static bool auto_pickup_okay(const object_type* o_ptr)
 {
@@ -473,6 +474,9 @@ void process_player(void)
                 note_info_screen(o_ptr);
             }
         }
+
+        /* Leaping */
+        tutorial_game_checkpoint();
 
         /* Leaping */
         if (p_ptr->leaping)

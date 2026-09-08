@@ -62,6 +62,10 @@ string(REGEX REPLACE
   "${SIL_VERSION_STRING_LINE}"
 )
 
+# The runtime rejects text templates from a different major/minor/patch.
+# Catch a partial release bump before producing an executable that cannot boot.
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ValidateTemplateVersions.cmake")
+
 # Configure SDL_mixer when built from the vendored submodule: enable only the
 # codecs we actually use (WAV + Ogg Vorbis via stb_vorbis) and keep the build
 # self-contained so it works on every platform without system codec packages.
@@ -354,6 +358,7 @@ set(SIL_MORE_SOURCES
     src/sdl/ui/sdl-panes.c
     src/sdl/ui/sdl-screens.c
     src/sdl/ui/sdl-song-menu.c
+    src/sdl/ui/sdl-gameplay-tutorial.c
     src/sdl/ui/sdl-question-menu.c
     src/melee/melee-attack.c
     src/melee/melee-attack-ranged.c
@@ -443,6 +448,9 @@ set(SIL_MORE_SOURCES
     src/score/score_runs.c
     src/score/score_ui.c
     src/sdl-config.c
+    src/tutorial/tutorial.c
+    src/tutorial/tutorial-game.c
+    src/tutorial/tutorial-world.c
     src/sdl-sound.c
     src/sound-config.c
     src/fs/io_sdl.c
@@ -543,7 +551,7 @@ if(SIL_IOS)
   file(GLOB SIL_RES_GRAF    CONFIGURE_DEPENDS "lib/xtra/graf/*.png")
   file(GLOB_RECURSE SIL_RES_SOUND LIST_DIRECTORIES false CONFIGURE_DEPENDS "lib/xtra/sound/*")
   file(GLOB_RECURSE SIL_RES_MUSIC LIST_DIRECTORIES false CONFIGURE_DEPENDS "lib/xtra/music/*")
-  file(GLOB SIL_RES_HELP    CONFIGURE_DEPENDS "lib/help/*.txt" "lib/help/*.hlp")
+  file(GLOB SIL_RES_HELP    CONFIGURE_DEPENDS "lib/help/*.txt" "lib/help/*.hlp" "lib/help/*.json")
 
   # Preserve directory structure inside the bundle's Resources/lib/ tree.
   foreach(_file ${SIL_RES_EDIT})

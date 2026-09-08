@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "dungeon-internal.h"
+#include "tutorial/tutorial-game.h"
 
 /*
  * Verify use of "wizard" mode
@@ -126,6 +127,16 @@ static void finish_command_cursor_state(void)
  */
 void process_command(void)
 {
+    if (!tutorial_game_command_allowed(p_ptr->command_cmd, p_ptr->command_dir))
+    {
+        p_ptr->command_cmd = 0;
+        p_ptr->command_new = 0;
+        p_ptr->command_rep = 0;
+        p_ptr->energy_use = 0;
+        sdl_mouse_path_cancel();
+        finish_command_cursor_state();
+        return;
+    }
     log_trace("process_command: character_icky=%d, command='%c' (%d)",
               character_icky, p_ptr->command_cmd, (int)p_ptr->command_cmd);
 

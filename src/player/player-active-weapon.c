@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/player-upkeep-internal.h"
@@ -2174,6 +2175,7 @@ static void player_polearm_switch_attack(void)
 
 bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
 {
+    if (take_turn && !tutorial_game_action_allowed("change-active", NULL)) return false;
     int old_mode = player_active_weapon_mode();
     int old_kind = player_active_weapon_kind();
     int new_kind;
@@ -2229,6 +2231,7 @@ bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
         player_active_weapon_free_change_commit();
     }
 
+    tutorial_game_action_done("change-active", NULL);
     return true;
 }
 
@@ -2374,7 +2377,7 @@ static int active_weapon_find_physical_item(const object_type* wanted,
     return -1;
 }
 
-static void apply_active_weapon_choice(const active_weapon_choice* choice)
+static void apply_active_weapon_choice_internal(const active_weapon_choice* choice)
 {
     int old_mode;
     int old_kind;
@@ -2521,6 +2524,40 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
     (void)player_set_active_weapon_mode(choice->mode, false, true);
 }
 
+static void apply_active_weapon_choice(const active_weapon_choice* choice)
+{
+    tutorial_view view;
+    const object_type *tutorial_subject = choice ? choice->o_ptr : NULL;
+    if (tutorial_get_view(&view) && !strcmp(view.action_subject, "arrows")) {
+        if (!choice || choice->item != INVEN_BOW || choice->kind != PLAYER_ACTIVE_WEAPON_KIND_BOW
+            || choice->arrow_item < 0 || choice->arrow_item == player_quiver_selected_arrow_slot()) return;
+        if (inventory[INVEN_ARM].k_idx ? choice->shield_item != INVEN_ARM
+            : choice->shield_item >= 0) return;
+        tutorial_subject = player_quiver_arrow_object(choice->arrow_item);
+    }
+    const char *action = tutorial_action_waiting()
+        && !strcmp(tutorial_current_action(), "ready") ? "ready" : "change-active";
+    if (!choice || !choice->o_ptr
+        || !tutorial_subject || !tutorial_game_begin_action(action, tutorial_subject)) return;
+    object_type subject = *tutorial_subject;
+    int old_arrow = player_quiver_selected_arrow_slot();
+    apply_active_weapon_choice_internal(choice);
+    tutorial_game_end_action();
+    bool committed = player_active_weapon_kind() == choice->kind;
+    if (!strcmp(action, "ready")) {
+        /* Readying must move the chosen physical item into an equipped slot;
+         * an already-active role alone is not evidence of success. */
+        committed = choice->target_slot >= INVEN_WIELD && choice->target_slot < INVEN_TOTAL
+            && choice->item != choice->target_slot
+            && active_weapon_same_physical_item(&subject, &inventory[choice->target_slot]);
+    } else if (subject.tval == TV_ARROW) {
+        committed = old_arrow != player_quiver_selected_arrow_slot()
+            && player_quiver_selected_arrow_slot() == choice->arrow_item;
+    }
+    if (!player_pack_action_pending() && committed)
+        tutorial_game_action_done(action, &subject);
+}
+
 bool player_ready_bow_with_arrow(int arrow_item)
 {
     active_weapon_choice choice;
@@ -2554,6 +2591,7 @@ bool player_ready_bow_with_arrow(int arrow_item)
 
 bool player_ready_throwing_weapon(object_type* o_ptr, int item)
 {
+    if (!tutorial_game_action_allowed("ready", o_ptr)) return false;
     active_weapon_choice choice;
     object_type wanted;
 
@@ -2580,6 +2618,7 @@ bool player_ready_throwing_weapon(object_type* o_ptr, int item)
 
 void do_cmd_toggle_active_weapon(void)
 {
+    tutorial_game_menu("active-weapon", "Select a compatible ready weapon, shield and arrow setup. Changing only arrows is free; other changes keep their normal turn cost and ability exceptions.");
     active_weapon_choice choice;
 
     if (!choose_active_weapon(&choice))

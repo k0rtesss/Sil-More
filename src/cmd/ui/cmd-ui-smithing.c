@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -2145,6 +2146,7 @@ void move_displayed_highlight(
 
 bool melt_metal_item(int item_num)
 {
+    if (!tutorial_game_action_allowed("smith", NULL)) return false;
     int number = 0;
     u32b f1, f2, f3;
     int total = player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD);
@@ -8514,6 +8516,7 @@ static void smithing_redraw_root_after_item_picker(void)
 
 static bool smith_reforge_item(void)
 {
+    if (!tutorial_game_action_allowed("smith", NULL)) return false;
     int slot = -1;
     int prefix_idx = 0;
     char old_name[80];
@@ -8775,6 +8778,7 @@ int smithing_menu_aux(int* highlight)
  */
 void do_cmd_smithing_screen(void)
 {
+    tutorial_game_menu("smithing", "Preview an item and read its difficulty and full costs before accepting. Creating, resuming and reforging keep their ordinary forge, resource and time costs.");
     int actiontype = -1;
     int highlight = 1;
     bool leave_menu = false;
@@ -8944,6 +8948,7 @@ void do_cmd_smithing_screen(void)
         }
         case SMT_MENU_ACCEPT:
         {
+            if (!tutorial_game_action_allowed("smith", NULL)) break;
             if (death_view)
             {
                 msg_print("You cannot do that during this final look.");

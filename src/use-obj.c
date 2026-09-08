@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "player/killer.h"
 
@@ -1094,6 +1095,47 @@ static bool use_gem(object_type* o_ptr, bool* ident)
     return use_staff_effects(o_ptr, ident, true);
 }
 
+static bool tutorial_horn_aim_allowed(const object_type *horn, int dir)
+{
+    tutorial_view view;
+    if (!tutorial_peek_view(&view) || !tutorial_action_waiting()
+        || strcmp(view.id, "item.horn.use")) return true;
+    if (dir < 1 || dir > 9 || (dir == 5 && !target_okay(0))) return false;
+    int y1 = dir == 5 ? p_ptr->target_row : p_ptr->py + MAX_RANGE * ddy[dir];
+    int x1 = dir == 5 ? p_ptr->target_col : p_ptr->px + MAX_RANGE * ddx[dir];
+    int n1y = MAX(0, MIN(40, y1 - p_ptr->py + 20));
+    int n1x = MAX(0, MIN(40, x1 - p_ptr->px + 20));
+    int centerline = 90 - get_angle_to_grid[n1y][n1x];
+    int force_dir = dir == 5 ? rough_direction(p_ptr->py, p_ptr->px, y1, x1) : dir;
+    bool target = false;
+    for (int i = 1; i < mon_max; ++i) {
+        const monster_type *monster = &mon_list[i];
+        if (!monster->r_idx || !monster->ml) continue;
+        int dy = monster->fy - p_ptr->py, dx = monster->fx - p_ptr->px;
+        if (abs(dy) > 3 || abs(dx) > 3
+            || !los(p_ptr->py, p_ptr->px, monster->fy, monster->fx)) continue;
+        bool affected = false;
+        if (horn->sval == SV_HORN_FORCE) {
+            if (force_dir < 1 || force_dir > 9 || force_dir == 5) return false;
+            for (int spread = -1; spread <= 1; ++spread) {
+                int ray = cycle[chome[force_dir] + spread];
+                for (int range = 1; range <= 3; ++range)
+                    if (dy == range * ddy[ray] && dx == range * ddx[ray]) affected = true;
+            }
+        } else {
+            int angle = ABS(get_angle_to_grid[dy + 20][dx + 20] + centerline) % 180;
+            affected = distance(p_ptr->py, p_ptr->px, monster->fy, monster->fx) <= 3
+                && ABS(90 - angle) < (90 + 6) / 4;
+        }
+        if (!affected) continue;
+        if (!tutorial_game_target_allowed(monster->fy, monster->fx)) return false;
+        if (horn->sval == SV_HORN_TERROR
+            && (l_list[monster->r_idx].flags3 & RF3_NO_FEAR)) continue;
+        target = true;
+    }
+    return target;
+}
+
 static bool play_instrument(object_type* o_ptr, bool* ident)
 {
     int voice_cost = p_ptr->active_ability[S_WIL][WIL_CHANNELING] ? 10 : 20;
@@ -1120,6 +1162,7 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
         {
             return (false);
         }
+        if (!tutorial_horn_aim_allowed(o_ptr, dir)) return false;
     }
 
     /* Base chance of success */
@@ -1890,7 +1933,12 @@ static bool activate_object(object_type* o_ptr)
 
 bool use_object(object_type* o_ptr, bool* ident)
 {
+    tutorial_view tutorial_before;
+    bool tutorial_use = tutorial_peek_view(&tutorial_before) && tutorial_action_waiting()
+        && !strcmp(tutorial_before.action, "use-item");
     bool used;
+
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return false;
 
     /* Analyze the object */
     switch (o_ptr->tval)
@@ -1932,6 +1980,18 @@ bool use_object(object_type* o_ptr, bool* ident)
     }
     }
 
+    if (used) {
+        tutorial_view tutorial_after;
+        /* A cure may remove its own eligibility (for example, restored Grace).
+         * The input gate checked it before use; retain that semantic subject
+         * until the real effect reports a committed use. */
+        if (tutorial_use && tutorial_peek_view(&tutorial_after)
+            && !strcmp(tutorial_before.id, tutorial_after.id)
+            && tutorial_before.step == tutorial_after.step
+            && tutorial_before.action_subject[0])
+            tutorial_action_finished("use-item", tutorial_before.action_subject, true);
+        else tutorial_game_item_used(o_ptr);
+    }
     return (used);
 }
 

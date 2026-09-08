@@ -1,5 +1,24 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "tutorial/tutorial.h"
+
+static bool sdl_device_tutorial_suspend_gameplay(void)
+{
+    bool visible = tutorial_is_active();
+    if (visible) {
+        tutorial_checkpoint(false);
+        sdl_gameplay_tutorial_sync();
+    }
+    return visible;
+}
+
+static void sdl_device_tutorial_restore_gameplay(bool was_visible)
+{
+    if (was_visible) {
+        tutorial_checkpoint(true);
+        sdl_gameplay_tutorial_sync();
+    }
+}
 
 enum {
     SDL_TOUCH_TUTORIAL_PANEL_ALPHA = 242,
@@ -2220,10 +2239,12 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
         + (full ? 1 : 0);
     bool done = false;
     Uint64 accept_after_ns;
+    bool gameplay_was_visible;
 
     if (!g_state.window || !g_state.renderer)
         return;
 
+    gameplay_was_visible = sdl_device_tutorial_suspend_gameplay();
     sdl_touch_tutorial_prepare_snapshot();
     d = sdl_view_from_term(Term);
     sdl_touch_cancel_all_inputs();
@@ -2263,6 +2284,7 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
     }
     g_state.need_present = false;
     sdl_touch_cancel_all_inputs();
+    sdl_device_tutorial_restore_gameplay(gameplay_was_visible);
 }
 
 /* ------------------------------------------------------------------------
@@ -3553,13 +3575,17 @@ static bool sdl_character_wheel_coach_run(void)
     Uint64 accept_after_ns;
     int input;
     bool shown = false;
+    bool gameplay_was_visible;
 
     if (!g_state.window || !g_state.renderer)
         return false;
     if (!sdl_main_screen_click_shortcuts_active())
         return false;
-    if (!sdl_player_action_menu_open())
+    gameplay_was_visible = sdl_device_tutorial_suspend_gameplay();
+    if (!sdl_player_action_menu_open()) {
+        sdl_device_tutorial_restore_gameplay(gameplay_was_visible);
         return false;
+    }
 
     input = sdl_character_wheel_coach_input();
     d = sdl_view_from_term(Term);
@@ -3628,6 +3654,7 @@ static bool sdl_character_wheel_coach_run(void)
     }
     g_state.need_present = false;
     sdl_touch_cancel_all_inputs();
+    sdl_device_tutorial_restore_gameplay(gameplay_was_visible);
     return shown;
 }
 

@@ -101,6 +101,7 @@ vault_monster_spec vault_monster_table[] = {
     {'j', "d5e4892102e9b48a", 0, false, true, true},  /* Shadow spider */
     {'k', "d2d2f0b7edcf4cf6", 0, false, true, true},  /* Lurking horror */
     {'n', "7783062d13500802", 0, false, true, true},  /* Nightthorn */
+    {'E', "90921d863b6a4eaa", 0, false, true, true},  /* Green Great Dragon */
 };
 
 int current_build_vault_type = 0;
@@ -181,6 +182,14 @@ bool place_vault_monster_token(char symbol, int y, int x)
         {
             log_warn("Vault: failed to place monster for token '%c'", symbol);
             return false;
+        }
+
+        /* This encounter begins with the tale's keeper asleep. The ordinary
+         * sleep roll can leave a newly placed monster merely unwary. */
+        if (symbol == 'E')
+        {
+            monster_type* keeper = &mon_list[cave_m_idx[y][x]];
+            keeper->alertness = MIN(keeper->alertness, ALERTNESS_UNWARY - 20);
         }
 
         {

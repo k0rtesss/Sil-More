@@ -19,6 +19,7 @@ extern void sdl_log_pane_set_rows(enum pane_type pane, int rows);
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/question.h"
 #include "ui/command-reference.h"
+#include "tutorial/tutorial-game.h"
 #include <SDL3/SDL_keyboard.h>
 
 #define SIL_MORE_PRIVACY_POLICY_URL \
@@ -9225,7 +9226,7 @@ static bool other_options_choice_is_disabled(int choice)
 static int other_options_menu(int* highlight)
 {
     int ch;
-    int options = 5;
+    int options = 6;
     int clicked_choice = 0;
     bool death_view = death_spectator_active();
 
@@ -9255,6 +9256,8 @@ static int other_options_menu(int* highlight)
         (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE);
     ADD_OTHER_OPTIONS_ROW(5, "o) Return to Options",
         (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE);
+    ADD_OTHER_OPTIONS_ROW(6, "t) Gameplay tutorials",
+        (*highlight == 6) ? TERM_L_BLUE : TERM_WHITE);
 
 #undef ADD_OTHER_OPTIONS_ROW
 
@@ -9268,8 +9271,9 @@ static int other_options_menu(int* highlight)
             "End your current character permanently.",
             "Open the Sil-More privacy policy in your web browser.",
             "Return to the Options menu.",
+            "Choose Disabled, Normal or Extended tutorials, reset this Tale's lessons, or read learned tutorials.",
         };
-        cptr d = (*highlight >= 1 && *highlight <= 5)
+        cptr d = (*highlight >= 1 && *highlight <= 6)
             ? other_options_row_desc[*highlight] : NULL;
 
         sdl_character_sheet_screen_set_select_description(d ? d : verbuf);
@@ -9313,6 +9317,12 @@ static int other_options_menu(int* highlight)
     {
         *highlight = 1;
         return (1);
+    }
+
+    if ((ch == 't') || (ch == 'T'))
+    {
+        *highlight = 6;
+        return (6);
     }
 
     if ((ch == 'n') || (ch == 'N'))
@@ -9427,12 +9437,20 @@ static void do_cmd_other_options(void)
             Term_clear();
             break;
         }
+        case 6:
+        {
+            settings_semantic_menu_hide();
+            tutorial_game_settings();
+            Term_clear();
+            break;
+        }
         }
     }
 }
 
 int options_menu(int* highlight)
 {
+    tutorial_game_menu("settings", "Input, presentation and gameplay options are separate. Gameplay tutorials can be managed in Other Options; controls tutorials and skeleton tips retain their own settings.");
     int ch;
     int options = 9;
     int clicked_choice = 0;

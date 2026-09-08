@@ -79,6 +79,7 @@
 #     2 - monster +2 levels
 #     3 - monster +3 levels
 #     4 - monster +4 levels
+#     5, 6, 8, 9, = - the five readable scrolls of An Unfinished Tale
 #     * - treasure +1 to +4 levels
 #     & - treasure +1 to +4 levels (good)
 #     ! - treasure +1 to +4 levels (great; high artefact chance)
@@ -117,6 +118,7 @@
 #     U - Ungoliant
 #     D - Glaurung
 #     K - Ancalagon the Black
+#     E - Green Great Dragon
 #     G - Gorthaur
 #     V - Morgoth
 #     C - Carcharoth
@@ -160,7 +162,7 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:0.9.8
 
 ### The Gates of Angband (type 10) -- maximum size 66x44 ??? ###
 ### This must be the first vault record
@@ -4068,3 +4070,34 @@ D:##################
 #D:#............................##
 #D:##.......T...........T.......##
 #D:###############################
+
+
+# Tolkien's childhood dragon and the disputed order of two words.
+# Scrolls are guaranteed even when random vault loot is set to Meager.
+N:520:An Unfinished Tale
+X:8:16:25:19
+S:8:1
+F:LIGHT
+M:Dry parchment whispers beneath your feet. Among these abandoned beginnings, something has outgrown its tale; in finding this forgotten chamber, you gain 500 experience.
+H:A sealed archive lies {DIST} {DIR}; its keeper sleeps among scrolls that no hand has finished.
+D:###############################
+D:#.............................#
+D:#....~.....#########..........#
+D:#..######..#.......#..######..#
+D:#..........#...!...#..........#
+D:#..........#.#...#.#..........#
+D:#..######..#.......#..######..#
+D:#..........#.6.E.8.#..........#
+D:#....*.....s.......s..........#
+D:#..........#.......#..........#
+D:#..........#...=...#.....9....#
+D:#..######..#.......#..######..#
+D:#..........#...&...#..........#
+D:#..........#.......#..........#
+D:#..######..####+####..######..#
+D:#.............................#
+D:#....*.........5.........~....#
+D:#.............................#
+D:###############s###############
+D:#############.....#############
+D:#############$$$$$#############

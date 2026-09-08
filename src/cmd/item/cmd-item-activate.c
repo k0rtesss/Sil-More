@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "object/object-internal.h"
 #include "object/object-ui-select.h"
@@ -158,6 +159,7 @@ int understanding_gem_count_for_item_description(
 
 bool do_cmd_use_understanding_gem_on_item(const object_type* viewed_o_ptr)
 {
+    if (!tutorial_game_action_allowed("use-item", NULL)) return false;
     understanding_gem_source source;
     object_type* target_o_ptr;
     int target_item;
@@ -589,6 +591,7 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_EAT, item, 0, false,
             o_ptr))
         return;
@@ -745,6 +748,7 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_QUAFF, item, 0, false,
             o_ptr))
         return;
@@ -860,6 +864,7 @@ void do_cmd_play_instrument(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_PLAY,
             carried_inventory_index(o_ptr), 0, false, o_ptr))
         return;
@@ -959,6 +964,7 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE_STAFF, item, 0,
             false, o_ptr))
         return;
@@ -1109,6 +1115,7 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_USE_GEM, item, 0, false,
             o_ptr))
         return;
@@ -1247,6 +1254,7 @@ void do_cmd_activate_by_index(int item)
     if (!o_ptr->k_idx)
         return;
 
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE, item, 0, false,
             o_ptr))
         return;

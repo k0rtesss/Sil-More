@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "cmd/world/cmd-interact-chest.h"
 #include "log/log.h"
@@ -1252,6 +1253,7 @@ static bool smith_oath_takeoff_hits_pack(const object_type* o_ptr, int source_it
 
 bool open_supplies_menu_with_context(supply_menu_action default_action, int default_group, bool default_focus, bool default_hotkey)
 {
+    tutorial_game_menu("supplies", "Browse food, potions, gems and lights. Select an item to inspect or use it; supplies have their own category and weight limits.");
     supply_menu_request request = {0};
     supply_menu_action action = default_action;
     bool hotkey = default_hotkey;
@@ -1296,6 +1298,9 @@ bool open_inventory_menu_page(supply_menu_page page)
 
 bool open_inventory_menu_category(inventory_menu_group group)
 {
+    tutorial_game_menu(group == INVENTORY_MENU_GROUP_PACK ? "pack"
+        : group == INVENTORY_MENU_GROUP_HARNESS ? "harness" : "jewelry",
+        "Pack and Harness are separate storage pools. Read the footer for Ready, Store, Use and Examine; carrying jewelry differs from wearing it.");
     supply_menu_request request = {0};
 
     request.focus_page = true;
@@ -1732,6 +1737,7 @@ static bool replace_pack_item_for_arrow_move(const object_type* incoming)
 
 static void do_cmd_unquiver_pack_arrow(int item)
 {
+    if (!tutorial_game_action_allowed("store", NULL)) return;
     object_type packed;
     object_type* o_ptr;
     int max_quantity;
@@ -1842,6 +1848,8 @@ static bool item_storage_destination_available(const object_type* o_ptr,
 
 bool do_cmd_move_item_to_storage(int item, byte target_storage)
 {
+    if (!tutorial_game_action_allowed(target_storage == OBJECT_STORAGE_HARNESS ? "ready" : "store",
+            player_inventory_object(item))) return false;
     object_type* o_ptr;
     char o_name[80];
 
@@ -1880,6 +1888,7 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     }
 
     o_ptr->storage = target_storage;
+    tutorial_game_action_done(target_storage == OBJECT_STORAGE_HARNESS ? "ready" : "store", o_ptr);
     if (target_storage == OBJECT_STORAGE_HARNESS)
         player_active_weapon_assign_harness_color(o_ptr);
     if (target_storage == OBJECT_STORAGE_PACK)
@@ -1948,9 +1957,12 @@ void do_cmd_use_item_by_index(int item)
         return;
     }
 
+    const char *tutorial_action = (o_ptr->tval == TV_POTION || o_ptr->tval == TV_FOOD
+        || o_ptr->tval == TV_GEM || o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN
+        || o_ptr->tval == TV_FLASK) ? "use-item" : "equip";
+    if (!tutorial_game_action_allowed(tutorial_action, o_ptr)) return;
     if (handle_iron_crown_silmaril_action(o_ptr, item))
         return;
-
     if (!((item < 0) && o_ptr->tval == TV_ARROW)
         && player_pack_action_start(PLAYER_PACK_ACTION_USE_ITEM, item, 0,
             false, o_ptr))
@@ -2315,6 +2327,7 @@ void do_cmd_use_item_enhanced(void)
  */
 void do_cmd_inven_direct(void)
 {
+    tutorial_game_menu("inventory", "Inspect and manage carried items. Pack, Harness and Jewelry have different readiness and capacity rules.");
     log_debug("do_cmd_inven_direct: Opening inventory browser page");
     (void)open_inventory_menu_page(SUPPLY_MENU_PAGE_INVENTORY);
 }
@@ -2324,6 +2337,7 @@ void do_cmd_inven_direct(void)
  */
 void do_cmd_equip_direct(void)
 {
+    tutorial_game_menu("equipment", "Inspect worn gear and the active setup. Removing or replacing equipment uses the normal game rules.");
     log_debug("do_cmd_equip_direct: Opening equipped browser page");
     (void)open_inventory_menu_page(SUPPLY_MENU_PAGE_EQUIPPED);
 }
@@ -2430,6 +2444,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             o_ptr = &o_list[0 - item];
         }
     }
+
+    if (!tutorial_game_action_allowed("equip", o_ptr)) return;
 
     if (o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN)
     {
@@ -3427,6 +3443,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         p_ptr->previous_action[0] = ACTION_NOTHING;
         player_active_weapon_free_change_commit();
     }
+    tutorial_game_action_done("equip", &inventory[slot]);
 
     /* Force immediate sidebar update */
     handle_stuff();
@@ -3700,6 +3717,7 @@ static void jewelry_preset_display_name(int preset, char* buf, size_t buflen)
 
 bool do_cmd_jewelry_preset_apply(int preset)
 {
+    if (!tutorial_game_action_allowed("equip", NULL)) return false;
     const object_type* targets[JEWELRY_PRESET_SLOT_MAX];
     bool target_present[JEWELRY_PRESET_SLOT_MAX];
     bool changed = false;
@@ -3864,6 +3882,7 @@ bool do_cmd_jewelry_preset_clear(int preset)
 
 void do_cmd_jewelry_preset_shortcut(void)
 {
+    tutorial_game_menu("jewelry-sets", "Record or apply a combination of rings and an amulet. Applying a set uses the normal equipment rules and requires the items to be available.");
     ui_question_option options[JEWELRY_PRESET_MAX];
     char labels[JEWELRY_PRESET_MAX][JEWELRY_PRESET_NAME_MAX + 24];
     int choice;
@@ -3898,6 +3917,7 @@ void do_cmd_jewelry_preset_shortcut(void)
  */
 void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
 {
+    if (!tutorial_game_action_allowed("remove", default_o_ptr)) return;
     int item;
     bool can_break_curse;
 
@@ -4055,6 +4075,7 @@ static bool confirm_drop_item_amount(object_type* o_ptr, int amt)
  */
 bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
 {
+    if (!tutorial_game_action_allowed("drop", NULL)) return false;
     if (item == SUPPLIES_INDEX)
     {
         open_supplies_menu_with_context(SUPPLY_MENU_ACTION_DROP, -1, false, true);
@@ -4672,6 +4693,7 @@ static void prise_silmaril(void)
 
 bool do_cmd_delete_item_by_index(int item)
 {
+    if (!tutorial_game_action_allowed("delete", NULL)) return false;
     int amt;
     int old_number;
     int old_charges = 0;
@@ -5050,6 +5072,10 @@ static bool floor_context_equip_belt_weapon(object_type* o_ptr,
 bool floor_context_perform_action(int floor_item,
     floor_context_action_kind kind)
 {
+    if (tutorial_is_active() && kind != FLOOR_CONTEXT_ACTION_DETAILS
+        && kind != FLOOR_CONTEXT_ACTION_ITEMS && kind != FLOOR_CONTEXT_ACTION_CLOSE
+        && kind != FLOOR_CONTEXT_ACTION_USE && kind != FLOOR_CONTEXT_ACTION_READY_THROW)
+        return false;
     object_type* o_ptr;
     int o_idx;
 
@@ -5338,6 +5364,7 @@ void do_cmd_uninscribe(void)
  */
 void do_cmd_inscribe(void)
 {
+    if (!tutorial_game_action_allowed("inscribe", NULL)) return;
     int item;
 
     object_type* o_ptr;
@@ -5471,6 +5498,7 @@ static bool item_tester_refuel_lantern(const object_type* o_ptr)
  */
 void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item)
 {
+    if (!tutorial_game_action_allowed("use-item", default_o_ptr)) return;
     int item;
 
     object_type* o_ptr = NULL;

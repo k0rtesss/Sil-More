@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -1054,6 +1055,7 @@ void character_sheet_format_vital_description(cptr label, char* buf,
 
 void do_cmd_character_sheet(void)
 {
+    tutorial_game_menu("character", "Inspect current attributes, skills, Health, Voice and traits. Select a value to see the effects contributing to it.");
     char ch;
     int focus_item = -1;
     bool focus_from_pointer = false;

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -1167,6 +1168,7 @@ static void unified_look_redraw_overlay(unified_look_state* state,
 
 void do_cmd_unified_look(void)
 {
+    tutorial_game_menu("look", "Move the inspection cursor and select visible creatures, known items or terrain. Looking does not move your character.");
     unified_look_state state;
     int y, x;
     char query;
@@ -2647,6 +2649,7 @@ void do_cmd_locate(void)
     }
 
     /* Calculate explored bounds */
+    tutorial_game_menu("map", "Pan through explored terrain. Moving this view does not move your character or reveal unexplored squares.");
     if (get_explored_bounds(&min_y, &max_y, &min_x, &max_x))
     {
         /* Calculate viewport bounds based on explored area */

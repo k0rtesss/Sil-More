@@ -3,6 +3,36 @@
 #include "angband.h"
 #include "level-generation/level-generation-internal.h"
 
+/* Fixed lore objects are placed independently of the random loot setting. */
+static bool place_vault_scroll_token(char symbol, int y, int x)
+{
+    int sval;
+    switch (symbol)
+    {
+    case '5': sval = SV_NOTE_TALE_BEGINNING; break;
+    case '6': sval = SV_NOTE_TALE_CORRECTION; break;
+    case '8': sval = SV_NOTE_TALE_REPLY; break;
+    case '9': sval = SV_NOTE_TALE_WORDS; break;
+    case '=': sval = SV_NOTE_TALE_ENDING; break;
+    default: return false;
+    }
+
+    s16b k_idx = lookup_kind(TV_NOTE, sval);
+    if (!k_idx)
+    {
+        log_error("Vault: missing scroll kind for token '%c'", symbol);
+        return true;
+    }
+
+    object_type scroll;
+    object_prep(&scroll, k_idx);
+    object_aware(&scroll);
+    object_known(&scroll);
+    if (!floor_carry(y, x, &scroll))
+        log_warn("Vault: could not place scroll '%c' at (%d,%d)", symbol, y, x);
+    return true;
+}
+
 
 int vault_drop_gate_percent(vault_drop_gate_kind kind)
 {
@@ -448,6 +478,9 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 continue;
 
             if (is_vault_monster_token(*t))
+                continue;
+
+            if (place_vault_scroll_token(*t, y, x))
                 continue;
 
             /* Analyze the symbol */

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
@@ -897,6 +898,7 @@ bool do_cmd_open_aux(int y, int x)
  */
 void do_cmd_open(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y = 0, x = 0, dir;
 
     s16b o_idx = 0;
@@ -1931,6 +1933,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
 
 void do_cmd_close(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y, x, dir;
 
     bool more = false;
@@ -2477,6 +2480,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
  */
 void do_cmd_tunnel(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y, x, dir;
 
     bool more = false;
@@ -2864,6 +2868,7 @@ bool do_cmd_disarm_aux(int y, int x)
  */
 void do_cmd_disarm(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y = 0, x = 0, dir;
 
     s16b o_idx;
@@ -3190,6 +3195,7 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
  */
 void do_cmd_bash(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y, x, dir;
 
     /* No closed door adjacent */
@@ -3277,6 +3283,7 @@ void do_cmd_bash(void)
  */
 void do_cmd_alter(void)
 {
+    if (tutorial_is_active() && strcmp(tutorial_current_action(), "attack")) return;
     int y, x, dir;
     s16b chest_o_idx = 0;
 
@@ -3290,6 +3297,8 @@ void do_cmd_alter(void)
     /* Get a direction */
     if (!get_rep_dir(&dir))
         return;
+
+    if (!tutorial_game_command_allowed('/', dir)) return;
 
     /* Get location */
     y = p_ptr->py + ddy[dir];

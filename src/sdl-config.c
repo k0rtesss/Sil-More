@@ -5,6 +5,7 @@
 #include "log/log.h"
 #include "pane.h"
 #include "cJSON.h"
+#include "tutorial/tutorial.h"
 #include <SDL3/SDL_keyboard.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1725,6 +1726,7 @@ static char* read_file_contents(const char* filename)
 }
 
 static bool g_app_intro_seen = false;
+static tutorial_mode g_app_gameplay_tutorial_mode = TUTORIAL_MODE_EXTENDED;
 static bool g_app_touch_tutorial_seen = false;
 static bool g_app_mouse_tutorial_seen = false;
 static bool g_app_character_wheel_tutorial_seen = false;
@@ -2035,6 +2037,23 @@ static bool sdl_config_try_load_byte_value(cJSON* parent, const char* key,
     return true;
 }
 
+/* The named mode supersedes the old boolean. An explicit legacy opt-out is
+ * retained; old opt-ins and absent preferences gain the Extended default. */
+static tutorial_mode sdl_config_gameplay_tutorial_mode_from_json(const cJSON *app_options)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(app_options, "gameplayTutorialMode");
+    if (cJSON_IsString(item)) {
+        if (!SDL_strcasecmp(item->valuestring, "Disabled")) return TUTORIAL_MODE_DISABLED;
+        if (!SDL_strcasecmp(item->valuestring, "Normal")) return TUTORIAL_MODE_NORMAL;
+        if (!SDL_strcasecmp(item->valuestring, "Extended")) return TUTORIAL_MODE_EXTENDED;
+    } else if (cJSON_IsNumber(item) && item->valuedouble == item->valueint
+        && item->valueint >= TUTORIAL_MODE_DISABLED && item->valueint <= TUTORIAL_MODE_EXTENDED) {
+        return (tutorial_mode)item->valueint;
+    }
+    item = cJSON_GetObjectItemCaseSensitive(app_options, "gameplayTutorialEnabled");
+    return cJSON_IsFalse(item) ? TUTORIAL_MODE_DISABLED : TUTORIAL_MODE_EXTENDED;
+}
+
 void sdl_config_load_app_options(const char* filename)
 {
     char* content;
@@ -2049,6 +2068,7 @@ void sdl_config_load_app_options(const char* filename)
         config_exists = SDL_GetPathInfo(filename, NULL);
 
     g_app_intro_seen = config_exists;
+    g_app_gameplay_tutorial_mode = TUTORIAL_MODE_EXTENDED;
     g_app_touch_tutorial_seen = false;
     g_app_mouse_tutorial_seen = false;
     g_app_character_wheel_tutorial_seen = false;
@@ -2087,6 +2107,8 @@ void sdl_config_load_app_options(const char* filename)
     item = cJSON_GetObjectItemCaseSensitive(app_options, "introSeen");
     if (cJSON_IsBool(item))
         g_app_intro_seen = cJSON_IsTrue(item);
+
+    g_app_gameplay_tutorial_mode = sdl_config_gameplay_tutorial_mode_from_json(app_options);
 
     item = cJSON_GetObjectItemCaseSensitive(app_options, "touchTutorialSeen");
     if (cJSON_IsBool(item))
@@ -2204,6 +2226,38 @@ void sdl_config_mark_intro_seen(void)
 bool sdl_config_touch_tutorial_seen(void)
 {
     return g_app_touch_tutorial_seen;
+}
+
+bool get_sdl_gameplay_tutorial_enabled(void)
+{
+    return g_app_gameplay_tutorial_mode != TUTORIAL_MODE_DISABLED;
+}
+
+void set_sdl_gameplay_tutorial_enabled(bool enabled)
+{
+    set_sdl_gameplay_tutorial_mode(!enabled ? TUTORIAL_MODE_DISABLED
+        : g_app_gameplay_tutorial_mode == TUTORIAL_MODE_DISABLED
+            ? TUTORIAL_MODE_EXTENDED : g_app_gameplay_tutorial_mode);
+}
+
+tutorial_mode get_sdl_gameplay_tutorial_mode(void)
+{
+    return g_app_gameplay_tutorial_mode;
+}
+
+void set_sdl_gameplay_tutorial_mode(tutorial_mode mode)
+{
+    if (mode < TUTORIAL_MODE_DISABLED || mode > TUTORIAL_MODE_EXTENDED)
+        mode = TUTORIAL_MODE_EXTENDED;
+    g_app_gameplay_tutorial_mode = mode;
+    tutorial_set_mode(mode);
+    (void)save_pane_config_to_json();
+}
+
+void cycle_sdl_gameplay_tutorial_mode(void)
+{
+    set_sdl_gameplay_tutorial_mode((tutorial_mode)
+        ((get_sdl_gameplay_tutorial_mode() + 1) % (TUTORIAL_MODE_EXTENDED + 1)));
 }
 
 void sdl_config_mark_touch_tutorial_seen(void)
@@ -5587,6 +5641,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
 
         if (app_options && op_ptr) {
             cJSON_AddBoolToObject(app_options, "introSeen", g_app_intro_seen);
+            cJSON_AddStringToObject(app_options, "gameplayTutorialMode",
+                tutorial_mode_name(g_app_gameplay_tutorial_mode));
             cJSON_AddBoolToObject(app_options, "touchTutorialSeen",
                 g_app_touch_tutorial_seen);
             cJSON_AddBoolToObject(app_options, "mouseTutorialSeen",

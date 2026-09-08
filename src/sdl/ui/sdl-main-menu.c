@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "blitz.h"
 #include "sdl/main-sdl-private.h"
 #include "ui/question.h"
@@ -678,6 +679,8 @@ void sdl_main_menu_overlay_begin(void)
 
     sdl_main_menu_overlay_scroll_to_highlight(layout.visible_count);
     g_state.need_present = true;
+    tutorial_game_menu("main-menu", "Open character views, Supplies, Knowledge, tutorials and settings from this menu.");
+    tutorial_checkpoint(true);
 }
 
 void sdl_main_menu_overlay_move(int delta)
@@ -1194,6 +1197,12 @@ static void sdl_main_menu_button_queue_disable_prompt(void)
 
     g_main_menu_button_disable_prompt_pending = true;
     Term_keypress('m');
+}
+
+void sdl_main_menu_button_cancel_input(void)
+{
+    sdl_main_menu_button_clear_press();
+    g_main_menu_button_disable_prompt_pending = false;
 }
 
 bool sdl_main_menu_button_handle_secondary_pointer(float x, float y)

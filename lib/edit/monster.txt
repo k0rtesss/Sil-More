@@ -299,7 +299,7 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:0.9.8
 
 
 ##### Non-race (contains the player picture) #####
@@ -3366,4 +3366,30 @@ T:11:4
 F:UNIQUE | MALE
 D:Clothed in shining white, he appears as a beacon of
 D: hope and strength in this fallen world.
+
+
+# A childhood tale remembered for the order of two words.
+# Explicit vault placement only: zero allocation weight also excludes the
+# dragon from the throne room's otherwise unrestricted special-vault pool.
+N:402:Green Great Dragon
+Q:90921d863b6a4eaa
+W:18:0
+G:D:G
+T:21:15
+O:FACING_RIGHT
+I:2:40d4:0
+A:40:8:2:19
+P:[+14,3d4]
+B:CLAW:HURT:(+20,3d10)
+B:BITE:WOUND:(+16,2d20)
+F:UNIQUE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:SMART | TERRITORIAL | BASH_DOOR | DRAGON
+F:DROP_1D2 | DROP_GREAT
+S:SPELL_PCT_20
+S:CONF | SCARE
+D:A great weight of green scales lies coiled among the remnants of an
+D: unfinished tale. Two words upon the oldest leaf have been marked for
+D: correction. The dragon appears unmoved by the objection. Its claws
+D: have left deep furrows in the stone, yet the fragile scrolls beneath
+D: them remain untouched.
 

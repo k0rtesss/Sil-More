@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
@@ -8,6 +9,32 @@
 
 #define THROW_PENDING_NONE -9999
 static int throw_pending_slot = THROW_PENDING_NONE;
+
+/* A guided ranged shot needs a legal, already-visible subject. Ordinary
+ * shots keep their existing targeting and oath prompts unchanged. */
+static bool tutorial_ranged_aim_allowed(int range, int ty, int tx, bool exact)
+{
+    u16b path[256];
+    int path_y=ty,path_x=tx;
+    bool found=false;
+    const char *action=tutorial_current_action();
+    if (!tutorial_action_waiting()
+        || (!strstr(action,"fire") && !strstr(action,"throw"))) return true;
+    if (exact && !tutorial_game_target_allowed(ty,tx)) goto rejected;
+    int count=ABS(project_path(path,range,p_ptr->py,p_ptr->px,&path_y,&path_x,PROJECT_THRU));
+    for (int i=0;i<count;++i) {
+        int y=GRID_Y(path[i]),x=GRID_X(path[i]);
+        int monster=cave_m_idx[y][x];
+        /* Never infer a tutorial hint from an unrevealed intervening actor. */
+        if (monster<=0 || !mon_list[monster].ml) continue;
+        if (!tutorial_game_target_allowed(y,x)) goto rejected;
+        found=true;
+    }
+    if (found) return true;
+rejected:
+    msg_print("Choose a visible hostile target for this lesson, or skip it.");
+    return false;
+}
 
 static int breakage_chance(const object_type* o_ptr, bool hit_wall)
 {
@@ -381,6 +408,8 @@ static void restore_target_after_implicit_fire(
 
 void do_cmd_fire(int quiver)
 {
+    if (!tutorial_game_action_allowed(player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_THROWING
+        ? "throw" : "fire", NULL)) return;
     int dir, item;
     int i, y, x, ty, tx;
     int ty2,
@@ -531,6 +560,8 @@ void do_cmd_fire(int quiver)
         }
     }
 
+    if (!tutorial_ranged_aim_allowed(tdis,ty,tx,dir==5)) return;
+
     /* Warn before ranged attacks that might hit fleeing enemies (Oath of Valor) */
     if (abort_for_valorous_ranged_path(tdis, ty, tx))
         return;
@@ -584,6 +615,7 @@ void do_cmd_fire(int quiver)
 
     // store the action type
     p_ptr->previous_action[0] = ACTION_ARCHERY;
+    tutorial_game_action_done("fire", &inventory[INVEN_BOW]);
 
     if (p_ptr->active_ability[S_ARC][ARC_DEADLY_HAIL])
     {
@@ -1720,6 +1752,7 @@ static bool select_throw_slot(int* item)
  */
 void do_cmd_throw(bool automatic)
 {
+    if (!tutorial_game_action_allowed("throw", NULL)) return;
     int dir, item;
     int i, j, y, x, ty, tx;
     int ty2,
@@ -2067,6 +2100,8 @@ void do_cmd_throw(bool automatic)
         return;
     }
 
+    if (!tutorial_ranged_aim_allowed(tdis,ty,tx,dir==5)) return;
+
     /* Get local object */
     i_ptr = &object_type_body;
 
@@ -2160,6 +2195,8 @@ void do_cmd_throw(bool automatic)
 
     /* Take a turn */
     p_ptr->energy_use = 100;
+
+    tutorial_game_action_done("throw", i_ptr);
 
     // store the action type
     p_ptr->previous_action[0] = ACTION_MISC;

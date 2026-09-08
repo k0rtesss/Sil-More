@@ -125,6 +125,7 @@ void metarun_clear_blessing_runtime_fields(metarun *m)
     }
 
     metarun_set_threshold_mode(m, METARUN_BLESSING_THRESHOLD_NORMAL);
+    m->tutorial_upgrade_pending = 0;
     memset(m->reserved_runtime, 0, sizeof(m->reserved_runtime));
 }
 

@@ -52,15 +52,15 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.7"
+#define VERSION_STRING "0.9.8"
 /*
- * Version components (0.9.7).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.8).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
-#define VERSION_PATCH 7
-#define VERSION_EXTRA 14  /* Save skeleton-hint destination map areas. */
+#define VERSION_PATCH 8
+#define VERSION_EXTRA 0  /* Persist tutorial deferral for upgraded characters. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
@@ -1427,7 +1427,7 @@
  * only armour and weapons and a few other items use any of these flags.
  */
 
-#define TV_NOTE 2 /* ~ Tutorial notes                      */
+#define TV_NOTE 2 /* ~ Readable notes and scrolls          */
 #define TV_SKELETON 3 /* ~ Skeletons                           */
 #define TV_METAL 4 /* ~ Piece of special metal (mithril, star iron) */
 #define TV_CHEST 7 /* ~ Chests                              */
@@ -1462,6 +1462,13 @@
 #define SV_SKELETON_ELF 2 /*  */
 /* Special sval used by skeleton_note.txt templates (not a real object sval) */
 #define SV_SKELETON_NOTE_ANY 255 /* Wildcard */
+
+/* Readable scrolls in An Unfinished Tale; leave old tutorial svals free. */
+#define SV_NOTE_TALE_BEGINNING 100
+#define SV_NOTE_TALE_CORRECTION 101
+#define SV_NOTE_TALE_REPLY 102
+#define SV_NOTE_TALE_WORDS 103
+#define SV_NOTE_TALE_ENDING 104
 
 /* The "sval" codes for TV_METAL */
 #define SV_METAL_MITHRIL 0 /*  */

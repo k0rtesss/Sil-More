@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -1166,6 +1167,7 @@ static void song_menu_show_message(cptr text)
 
 void do_cmd_change_song()
 {
+    tutorial_game_menu("songs", "Choose, change or stop a song. Each active theme spends its own Voice cost, and Voice does not regenerate while singing.");
     bool done = false;
 
     int songs[SNG_MAX];
@@ -3126,6 +3128,9 @@ static void ability_browser_build_summary(int skilltype, char* summary,
 
 static bool ability_browser_train_skill(int skilltype)
 {
+    if (!tutorial_game_action_allowed("train", NULL)) return false;
+    tutorial_game_explain_now("advancement.skills", "Train a skill", "The next base rank costs 100 times the new rank in XP. Training changes the base skill; attributes and equipment contribute separately.");
+    if (!tutorial_game_action_allowed("train", NULL)) return false;
     int cost;
     int old_base;
     char prompt[120];
@@ -4783,6 +4788,7 @@ static void ability_browser_draw_prompt(const ability_browser_layout* layout)
 
 static bool ability_browser_activate_choice(int skilltype, int abilitynum)
 {
+    if (!tutorial_game_action_allowed("buy-ability", NULL)) return false;
     int banechoice = -1;
     int oathchoice = -1;
     int highlight3 = 1;
@@ -4907,6 +4913,12 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
                     sizeof(gain_name));
             }
 
+            tutorial_game_ability(skilltype, abilitynum, true);
+            if (skilltype == S_SNG)
+                tutorial_game_explain("advancement.song", gain_name,
+                    "Buying a song does not start singing. Its description states its Voice cost; Voice does not regenerate while any song is active.");
+            tutorial_game_wait();
+            if (!tutorial_game_action_allowed("buy-ability", NULL)) return false;
             strnfmt(prompt, sizeof(prompt), "Gain %s for %d XP? ",
                 gain_name, exp_cost);
             if (!get_check(prompt))
@@ -5848,6 +5860,7 @@ int abilities_menu2(int skilltype, int* highlight)
 
 void do_cmd_ability_screen(void)
 {
+    tutorial_game_menu("abilities", "Select a skill and an ability to read its requirements, XP cost and current effect. Buying and toggling are separate from browsing.");
     int skill_cur = S_MEL;
     int entry_cur = 0;
     int entry_top = 0;

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "melee/melee-combat-display.h"
@@ -434,6 +435,7 @@ void update_combat_rolls2(int dd, int ds, int dam, int pd, int ps, int prot,
         }
 
         log_trace("[ROLL2] exit: index=%d done", combat_number - 1);
+        tutorial_game_combat_roll(&combat_rolls[0][combat_number - 1]);
         combat_rolls_mark_dirty();
     }
 }
@@ -471,6 +473,7 @@ void update_combat_rolls_no_damage(void)
         combat_rolls[0][combat_number - 1].sequence =
             log_history_next_sequence();
         log_trace("[ROLL0] stamped index=%d", combat_number - 1);
+        tutorial_game_combat_roll(&combat_rolls[0][combat_number - 1]);
         combat_rolls_mark_dirty();
     }
 }
@@ -2013,6 +2016,7 @@ void do_cmd_combat_history_legacy(void)
 
 void do_cmd_combat_history(void)
 {
+    tutorial_game_menu("combat-history", "Review attack rolls, hit margins, damage dice and Protection in completed rounds. Reading the history is free.");
     do_cmd_messages_with_filter(LOG_HISTORY_FILTER_COMBAT);
 }
 

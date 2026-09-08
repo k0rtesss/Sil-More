@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "tutorial/tutorial.h"
 
 #define SDL_TEXT_INPUT_QUEUE_LIMIT 128
 
@@ -1281,6 +1282,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         return;
     }
 #endif
+    if (sdl_gameplay_tutorial_handle_event(ev))
+        return;
     if (sdl_try_handle_touch_mouse_fallback_event(st, ev))
         return;
     if (sdl_event_is_disabled_mouse_input(ev))
@@ -2784,7 +2787,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 
         /* Handle SDL layout shortcuts before menu/game input routing so they
          * work from the initial menu onward. */
-        if (sdl_handle_global_layout_shortcut(&ev->key))
+        if (!tutorial_is_active() && sdl_handle_global_layout_shortcut(&ev->key))
             return;
 
         // Keep other Alt-based key handling limited to the dungeon.

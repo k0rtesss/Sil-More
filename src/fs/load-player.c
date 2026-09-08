@@ -17,6 +17,15 @@
 #include "metarun.h"
 #include "fs/load-internal.h"
 
+/* A legacy hero keeps this flag even after being saved by 0.9.8. Clearing
+ * tutorial history or changing the global mode cannot bypass the deferral. */
+static void rd_tutorial_character_state(void)
+{
+    byte deferred = 1;
+    if (savefile_version_at_least(0, 9, 8, 0)) rd_byte(&deferred);
+    p_ptr->tutorial_deferred = deferred != 0;
+}
+
 /*
  * Read the "extra" information
  */
@@ -700,6 +709,7 @@ errr rd_extra(void)
 
     /* Min depth counter */
     rd_s32b(&min_depth_counter);
+    rd_tutorial_character_state();
     morgoth_call_sync_loaded_stage();
     log_info("LOAD: min_depth_counter=%d, calculated min_depth()=%d", min_depth_counter, min_depth());
 

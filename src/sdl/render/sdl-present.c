@@ -1945,6 +1945,8 @@ bool sdl_render_current_window_frame(void)
     if (!hide_main_menu_overlays)
         sdl_gamepad_context_focus_render();
 
+    sdl_gameplay_tutorial_render();
+
     return true;
 }
 

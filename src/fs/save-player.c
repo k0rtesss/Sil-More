@@ -9,6 +9,11 @@
 #include "fs/save-internal.h"
 #include <stdio.h>
 
+static void wr_tutorial_character_state(void)
+{
+    wr_byte(p_ptr->tutorial_deferred ? 1 : 0);
+}
+
 /*
  * Write some "extra" info
  */
@@ -399,6 +404,7 @@ void wr_extra(void)
     }
 
     wr_s32b(min_depth_counter);
+    wr_tutorial_character_state();
     log_info("SAVE: min_depth_counter=%d, current depth=%d, calculated min_depth()=%d", 
              min_depth_counter, p_ptr->depth, min_depth());
 

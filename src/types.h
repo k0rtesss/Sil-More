@@ -1484,6 +1484,7 @@ struct player_type
     /* Generic quest/vault tracking */
     byte quest_vault_used;     /* Count of quest-designated vaults generated this game */
     byte quest_reserved[15];   /* quest_reserved[0] = quest encounters initiated this run; quest_reserved[1..6] mark quest completions recorded this run */
+    bool tutorial_deferred;    /* Pre-0.9.8 hero: tutorials start with the next new hero. */
 };
 
 /* scores.raw header version == core game version (no independent bumping) */

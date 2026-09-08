@@ -6,6 +6,7 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "ui/help.h"
 #include "externs.h"
 #include "log/log.h"
@@ -925,6 +926,13 @@ static void help_describe_action_bindings(byte default_key, cptr extra_keys,
 
     if (!buf[0])
         SDL_strlcpy(buf, "(unbound)", buflen);
+}
+
+/* Share the same movement-preset/keymap-aware labels with contextual cards. */
+void help_describe_command_bindings(int command, char* buf, size_t buflen)
+{
+    char action[2] = {(char)command, '\0'};
+    help_describe_action_bindings((byte)command, NULL, action, buf, buflen);
 }
 
 /* ------------------------------------------------------------------------
@@ -3987,6 +3995,7 @@ void do_cmd_help_menu(void)
  */
 void do_cmd_help(void)
 {
+    tutorial_game_menu("help", "Read the gameplay reference and your current control bindings. Help and descriptions do not spend game time.");
     int i = 1;
     int ch; /* int (not char) so EOF and negative key bindings compare correctly */
     bool row_has_content[HELP_DOC_MAX_ROWS];

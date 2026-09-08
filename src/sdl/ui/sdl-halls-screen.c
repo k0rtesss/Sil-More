@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl/main-sdl-private.h"
 
 /*
@@ -437,6 +438,7 @@ bool sdl_halls_screen_active(void)
 void sdl_halls_screen_begin(cptr subtitle, cptr page_status,
     bool detailed, int outside_choice)
 {
+    tutorial_game_menu("halls", "Review fallen heroes and completed runs. These records explain previous outcomes; they do not resume a finished hero.");
     memset(&g_sdl_halls, 0, sizeof(g_sdl_halls));
     g_sdl_halls.active = true;
     g_sdl_halls.detailed = detailed;

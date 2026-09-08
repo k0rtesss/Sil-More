@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -1353,6 +1354,11 @@ static void do_cmd_hint_quest_menu(hint_quest_page initial_page,
 
     while (page != HINT_QUEST_PAGE_EXIT)
     {
+        tutorial_game_menu(page == HINT_QUEST_PAGE_QUESTS ? "quests"
+            : page == HINT_QUEST_PAGE_THRALLS ? "thralls" : "hints",
+            page == HINT_QUEST_PAGE_QUESTS ? "Read your objectives, progress and consequences here."
+            : page == HINT_QUEST_PAGE_THRALLS ? "Review encountered thralls and their requests. Read the objective before deciding how to help."
+            : "Review messages and tips you have already received. Tabs open Quests and Thralls.");
         if (page == HINT_QUEST_PAGE_QUESTS)
         {
             page = do_cmd_quest_status_page();
@@ -1644,6 +1650,9 @@ static bool do_cmd_main_menu_execute_choice_impl(int actiontype,
 
 bool do_cmd_main_menu_execute_choice(int actiontype)
 {
+    if (!tutorial_game_action_allowed("open-menu", NULL)) return false;
+    if (actiontype==MAIN_MENU_BLITZ
+        && !tutorial_game_action_allowed("switch-run", NULL)) return false;
     bool pending_hint_look = false;
     int pending_hint_look_y = -1;
     int pending_hint_look_x = -1;
@@ -3030,6 +3039,7 @@ static hint_quest_page do_cmd_thrall_quests(bool* out_pending_look,
  */
 void do_cmd_messages_with_filter(int initial_filter)
 {
+    tutorial_game_menu("messages", "Review recorded messages and combat rolls. Filters change which past events are shown.");
     char ch;
 
     int i, j, n;

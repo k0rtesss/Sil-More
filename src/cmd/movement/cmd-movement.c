@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "cmd/world/cmd-interact-chest.h"
 #include "item_set.h"
@@ -30,6 +31,7 @@ bool trapped_stairs(void)
  */
 void do_cmd_go_up(void)
 {
+    if (!tutorial_game_action_allowed("stairs", NULL)) return;
     int min;
     int new;
 
@@ -391,6 +393,7 @@ void do_cmd_go_up(void)
  */
 void do_cmd_go_down(void)
 {
+    if (!tutorial_game_action_allowed("stairs", NULL)) return;
     int min;
     int new;
 
@@ -398,26 +401,6 @@ void do_cmd_go_down(void)
     if (!cave_down_stairs_bold(p_ptr->py, p_ptr->px))
     {
         msg_print("You see no down staircase here.");
-        return;
-    }
-
-    // special message for tutorial
-    if (p_ptr->game_type == -1)
-    {
-        // display the tutorial leaving text
-        if (cave_feat[p_ptr->py][p_ptr->px] == FEAT_MORE)
-        {
-            pause_with_text(tutorial_leave_text, 5, 10, NULL, 0);
-        }
-        else
-        {
-            pause_with_text(tutorial_win_text, 5, 10, NULL, 0);
-        }
-
-        p_ptr->is_dead = true;
-        p_ptr->energy_use = 100;
-        p_ptr->leaving = true;
-        close_game();
         return;
     }
 
@@ -638,6 +621,7 @@ void do_cmd_search(void)
  */
 void do_cmd_toggle_stealth(void)
 {
+    if (!tutorial_game_action_allowed("stealth", NULL)) return;
     /* Stop stealth mode */
     if (p_ptr->stealth_mode)
     {
@@ -767,6 +751,8 @@ void do_cmd_walk(void)
     if (!get_rep_dir(&dir))
         return;
 
+    if (!tutorial_game_command_allowed(';', dir)) return;
+
     // convert walking in place to 'hold'
     if (dir == 5)
     {
@@ -821,6 +807,8 @@ void do_cmd_walk(void)
  */
 void do_cmd_run(void)
 {
+    if (!tutorial_game_action_allowed("run", NULL)) return;
+    tutorial_game_explain_now("world.run", "Running", "Running repeats movement over known ground until something needs attention. Each step still spends game time.");
     int y, x, dir;
 
     /* A movement command supersedes a lingering interaction-roll result. */
@@ -860,6 +848,7 @@ void do_cmd_run(void)
  */
 void do_cmd_hold(void)
 {
+    if (!tutorial_game_action_allowed("wait", NULL)) return;
     /* Allow repeated command */
     if (p_ptr->command_arg)
     {
@@ -939,12 +928,14 @@ static void do_cmd_pickup_with_preference(
 /* Get items, preferring the Pack when an item can be stored in either pool. */
 void do_cmd_pickup(void)
 {
+    if (!tutorial_game_action_allowed("pickup", NULL)) return;
     do_cmd_pickup_with_preference(OBJECT_STORAGE_PACK);
 }
 
 /* Get items, preferring the Harness when an item can be stored in either pool. */
 void do_cmd_pickup_to_harness(void)
 {
+    if (!tutorial_game_action_allowed("pickup", NULL)) return;
     do_cmd_pickup_with_preference(OBJECT_STORAGE_HARNESS);
 }
 
@@ -953,6 +944,9 @@ void do_cmd_pickup_to_harness(void)
  */
 void do_cmd_rest(void)
 {
+    if (!tutorial_game_action_allowed("rest", NULL)) return;
+    tutorial_game_explain_now("world.rest", "Resting", "Rest advances monsters, food, effects and minimum-depth pressure. Select the normal light and song options before resting.");
+    tutorial_game_menu("rest", "Resting spends game turns. Its light and song options affect fuel and Voice recovery.");
     object_type* light = &inventory[INVEN_LITE];
 
     /* Prompt for time if needed */

@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "dungeon-internal.h"
+#include "tutorial/tutorial-game.h"
 
 /*
  * Interact with the current dungeon level.
@@ -253,6 +254,7 @@ void dungeon(void)
     keyboard_preset_maybe_show_first_game_selection();
     sdl_touch_maybe_show_first_game_tutorial();
     sdl_mouse_maybe_show_first_game_tutorial();
+    tutorial_game_start();
 
     log_info("Dungeon display setup completed successfully");
 

@@ -10,7 +10,7 @@
 # Tokens: {PART} {PART_HAZARD} {SIZEWORD} {UNIQUE_TYPE} {DIR} {DIST} {SITE}
 #         {MITHRIL} (" or mithril" at depths where cave veins can yield it)
 
-V:0.9.7
+V:0.9.8
 
 # --- Openings ---
 

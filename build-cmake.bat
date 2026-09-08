@@ -104,6 +104,9 @@ REM Always update lib/pref folder to ensure latest default JSON configs
 if exist sil-more-windows-sdl3\lib\pref rmdir /S /Q sil-more-windows-sdl3\lib\pref
 xcopy /E /I /Y /K lib\pref sil-more-windows-sdl3\lib\pref
 
+REM Always refresh the contextual tutorial catalogue and help resources.
+xcopy /E /I /Y /K lib\help sil-more-windows-sdl3\lib\help
+
 REM Always update lib/xtra/sound folder to ensure latest sound configuration
 if exist sil-more-windows-sdl3\lib\xtra\sound rmdir /S /Q sil-more-windows-sdl3\lib\xtra\sound
 xcopy /E /I /Y /K lib\xtra\sound sil-more-windows-sdl3\lib\xtra\sound
@@ -204,6 +207,9 @@ xcopy /E /I /Y /K lib\edit sil-more-windows-sdl3-portable\lib\edit
 REM Always update lib/pref folder to ensure latest default JSON configs
 if exist sil-more-windows-sdl3-portable\lib\pref rmdir /S /Q sil-more-windows-sdl3-portable\lib\pref
 xcopy /E /I /Y /K lib\pref sil-more-windows-sdl3-portable\lib\pref
+
+REM Always refresh the contextual tutorial catalogue and help resources.
+xcopy /E /I /Y /K lib\help sil-more-windows-sdl3-portable\lib\help
 REM Always update lib/xtra/sound folder to ensure latest sound configuration
 if exist sil-more-windows-sdl3-portable\lib\xtra\sound rmdir /S /Q sil-more-windows-sdl3-portable\lib\xtra\sound
 xcopy /E /I /Y /K lib\xtra\sound sil-more-windows-sdl3-portable\lib\xtra\sound

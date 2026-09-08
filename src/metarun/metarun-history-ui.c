@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "metarun-internal.h"
 
 static int compare_metarun_indices(const void *a, const void *b)
@@ -22,6 +23,7 @@ static int compare_metarun_indices(const void *a, const void *b)
 
 void list_metaruns(void)
 {
+    tutorial_game_menu("tales", "Review recorded Tales and their heroes. Tale management and the current expedition are separate.");
     screen_save();
     bool steamdeck = steamdeck_controls_active();
     char accept_label[16] = "";

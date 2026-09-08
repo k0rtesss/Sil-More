@@ -1,6 +1,7 @@
 ﻿/* File: player/player-songs.c */
 
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "player/player-song-internal.h"
 #include "log/log.h"
@@ -12,6 +13,7 @@
 
 void change_song(int song)
 {
+    if (song != SNG_NOTHING && !tutorial_game_action_allowed("song", NULL)) return;
     int song_to_change;
     int old_song;
     bool new_song_is_duel;
@@ -433,6 +435,9 @@ void change_song(int song)
             song_duel_reveal_target_stats(m_ptr, song);
         }
     }
+
+    // Display synergy message if a woven theme pair is detected
+    tutorial_game_action_done("song", NULL);
 
     // Display synergy message if a woven theme pair is detected
     if (song != SNG_NOTHING && song_to_change == 2)
