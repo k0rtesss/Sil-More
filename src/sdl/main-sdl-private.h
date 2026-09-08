@@ -323,9 +323,6 @@ enum {
 
 enum {
     MAX_GAMEPADS = 4,
-    /* Coalesce axis events from the current SDL batch, but do not add a
-     * timer delay to left-stick movement. */
-    GAMEPAD_STICK_DIAGONAL_WINDOW_MS = 0,
     SHOULDER_COMBO_WINDOW_MS = 150,
     /* Rebinding should listen immediately instead of dropping quick inputs. */
     GAMEPAD_CAPTURE_ARM_DELAY_MS = 0,
@@ -335,10 +332,15 @@ typedef struct gamepad_entry {
     SDL_JoystickID id;
     SDL_Gamepad* pad;
     char guid[GAMEPAD_DPAD_GUID_STRING_LEN];
-    Sint16 mapped_dpad_x, mapped_dpad_y;
-    Uint8 mapped_dpad_buttons;
-    bool mapped_dpad_wait_neutral;
 } gamepad_entry;
+
+typedef struct gamepad_stick_movement {
+    int dir;
+    bool pending;
+    int pending_dir;
+    Uint64 pending_time;
+    bool shift, ctrl, alt;
+} gamepad_stick_movement;
 
 typedef struct gamepad_input_state {
     gamepad_entry pads[MAX_GAMEPADS];
@@ -359,12 +361,7 @@ typedef struct gamepad_input_state {
     int left_dir;
     int left_bind_dir;
     int left_ui_dir;
-    bool left_pending;
-    int left_pending_dir;
-    Uint64 left_pending_time;
-    bool left_pending_shift;
-    bool left_pending_ctrl;
-    bool left_pending_alt;
+    gamepad_stick_movement stick_movement[2];
     Sint16 right_x;
     Sint16 right_y;
     int right_dir;
@@ -1953,15 +1950,12 @@ void sdl_format_layout_recovery_message(const char* reason, const sdl_layout_rec
 void sdl_append_issue_line(char* buf, size_t buflen, const char* line);
 bool sdl_recover_layout_for_current_window(const char* reason, bool notify_user, sdl_layout_recovery_result* recovery);
 bool sdl_prompt_reset_sdl_defaults(const char* issue_summary, int screen_width, int screen_height);
-bool sdl_resolution_matches_pair(int width, int height, int native_w, int native_h);
-bool sdl_is_desktop_handheld_resolution(int width, int height);
 bool sdl_mobile_portrait_layout_active(void);
 bool sdl_mobile_orientation_matches_layout(void);
 void sdl_mobile_portrait_scale_reference_rect(const SDL_Rect* source,
     SDL_Rect* out);
 bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
     SDL_Rect* out_right);
-sdl_startup_device_class sdl_prompt_desktop_startup_input_device( int screen_width, int screen_height);
 bool sdl_touch_pane_binding_is_direction(int binding);
 bool sdl_touch_pane_slot_uses_long_press(int slot, int binding);
 bool sdl_touch_pane_confirm_binding(int binding);
@@ -3037,12 +3031,8 @@ void sdl_gamepad_send_direction(int dir);
 void sdl_gamepad_clear_pending_dpad(void);
 void sdl_gamepad_set_pending_dpad(int dir);
 bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force);
-int sdl_gamepad_current_dpad_source(void);
-void sdl_gamepad_set_current_dpad_source(int source);
-int sdl_gamepad_remap_dpad_event(const SDL_Event* event, SDL_Event buttons[4]);
-void sdl_gamepad_clear_pending_left_stick(void);
-void sdl_gamepad_set_pending_left_stick(int dir);
-bool sdl_gamepad_flush_pending_left_stick(Uint64 now_ns, bool force);
+void sdl_gamepad_clear_pending_sticks(void);
+bool sdl_gamepad_flush_pending_sticks(Uint64 now_ns, bool force);
 void sdl_gamepad_clear_pending_confirm(void);
 bool sdl_gamepad_confirm_long_press_available(int binding);
 bool sdl_touch_top_panel_compute_layout(SDL_FRect* button_rects, SDL_FRect* out_panel);
@@ -3442,12 +3432,16 @@ bool get_sdl_steamdeck_inv_equip_same_button_cycle(void);
 void set_sdl_steamdeck_inv_equip_same_button_cycle(bool value);
 bool get_sdl_gamepad_use_dpad(void);
 void set_sdl_gamepad_use_dpad(bool value);
-int get_sdl_gamepad_dpad_source(void);
-void set_sdl_gamepad_dpad_source(int source);
 int get_sdl_gamepad_dpad_diagonal_delay_ms(void);
 void set_sdl_gamepad_dpad_diagonal_delay_ms(int value);
 bool get_sdl_gamepad_use_left_stick(void);
 void set_sdl_gamepad_use_left_stick(bool value);
+bool get_sdl_gamepad_use_right_stick(void);
+void set_sdl_gamepad_use_right_stick(bool value);
+int get_sdl_gamepad_stick_delay_ms(int stick);
+void set_sdl_gamepad_stick_delay_ms(int stick, int value);
+void sdl_gamepad_swap_stick_roles(void);
+void sdl_gamepad_reset_movement_controls(void);
 bool get_sdl_gamepad_default_enabled(void);
 bool get_sdl_steamdeck_default_inv_equip_same_button_cycle(void);
 bool get_sdl_gamepad_default_use_dpad(void);
@@ -3693,9 +3687,8 @@ int sdl_gamepad_combo_binding_for_input(int modifier, int type, int id);
 void sdl_gamepad_clear_pending_dpad(void);
 void sdl_gamepad_set_pending_dpad(int dir);
 bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force);
-void sdl_gamepad_clear_pending_left_stick(void);
-void sdl_gamepad_set_pending_left_stick(int dir);
-bool sdl_gamepad_flush_pending_left_stick(Uint64 now_ns, bool force);
+void sdl_gamepad_clear_pending_sticks(void);
+bool sdl_gamepad_flush_pending_sticks(Uint64 now_ns, bool force);
 void sdl_gamepad_clear_pending_shoulder(void);
 void sdl_gamepad_set_pending_shoulder(int button);
 bool sdl_gamepad_flush_pending_shoulder(Uint64 now_ns, bool force);
@@ -4287,9 +4280,8 @@ bool sdl_prompt_reset_sdl_defaults(const char* issue_summary,
 bool sdl_prompt_mobile_startup_portrait_mode(void);
 #endif
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD
-bool sdl_is_desktop_handheld_resolution(int width, int height);
 sdl_startup_device_class sdl_prompt_desktop_startup_input_device(
-    int screen_width, int screen_height);
+    bool* remember_choice);
 #endif
 int sdl_touch_pane_target_width_px(int pane_height_px);
 void sdl_apply_dynamic_auto_pane_sizes(struct pane_config* active,

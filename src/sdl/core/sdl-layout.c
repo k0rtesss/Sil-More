@@ -5664,73 +5664,187 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
 #endif
 
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD
-bool sdl_resolution_matches_pair(int width, int height, int native_w,
-    int native_h)
+/* Startup precedes the main window and terminal. Keep this small dialog
+ * independent of gameplay input settings so a disabled controller or mouse
+ * can still answer it. */
+static bool sdl_startup_input_text(SDL_Renderer* renderer, TTF_Font* font,
+    const char* text, float x, float y)
 {
-    return ((width == native_w && height == native_h)
-        || (width == native_h && height == native_w));
-}
-
-bool sdl_is_desktop_handheld_resolution(int width, int height)
-{
-    /* Native panel sizes for current Windows/Linux handhelds, plus common
-     * handheld performance-mode targets. Check both orientations. */
-    return sdl_resolution_matches_pair(width, height, 1280, 720)
-        || sdl_resolution_matches_pair(width, height, 1280, 800)
-        || sdl_resolution_matches_pair(width, height, 1920, 1080)
-        || sdl_resolution_matches_pair(width, height, 1920, 1200)
-        || sdl_resolution_matches_pair(width, height, 2560, 1600);
+    SDL_Color color = {235, 235, 235, 255};
+    SDL_Surface* surface = TTF_RenderText_Blended(font, text, 0, color);
+    if (!surface)
+        return false;
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FRect rect = {x, y, (float)surface->w, (float)surface->h};
+    SDL_DestroySurface(surface);
+    if (!texture)
+        return false;
+    bool ok = SDL_RenderTexture(renderer, texture, NULL, &rect);
+    SDL_DestroyTexture(texture);
+    return ok;
 }
 
 sdl_startup_device_class sdl_prompt_desktop_startup_input_device(
-    int screen_width, int screen_height)
+    bool* remember_choice)
 {
-    enum {
-        SDL_STARTUP_INPUT_MOUSE_KEYBOARD = 0,
-        SDL_STARTUP_INPUT_CONTROLLER = 1,
+    SDL_Window* window = NULL;
+    SDL_Renderer* renderer = NULL;
+    TTF_Font* font = NULL;
+    const SDL_FRect rows[] = {
+        {24, 96, 592, 40},
+        {24, 144, 592, 40},
+        {24, 200, 592, 40},
     };
-    bool handheld_resolution =
-        sdl_is_desktop_handheld_resolution(screen_width, screen_height);
-    SDL_MessageBoxButtonData buttons[2];
-    SDL_MessageBoxData messagebox = {
-        .flags = SDL_MESSAGEBOX_INFORMATION
-            | SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT,
-        .window = g_state.window,
-        .title = "Choose Input",
-        .message = "A controller is connected.\n\nUse controller input or mouse + keyboard input?\n\nMouse + Keyboard is recommended. Controller support is still a work in progress.",
-        .numbuttons = 2,
-        .buttons = buttons,
-        .colorScheme = NULL,
-    };
-    int button_id = handheld_resolution
-        ? SDL_STARTUP_INPUT_CONTROLLER
-        : SDL_STARTUP_INPUT_MOUSE_KEYBOARD;
+    int focus = 1;
+    int choice = 1;
+    bool remember = false;
+    bool done = false;
+    bool quit_requested = false;
+    bool stick_held = false;
+    bool failed = false;
 
-    buttons[0] = (SDL_MessageBoxButtonData){
-        handheld_resolution ? SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT
-                            : 0,
-        SDL_STARTUP_INPUT_CONTROLLER,
-        "Controller",
-    };
-    buttons[1] = (SDL_MessageBoxButtonData){
-        handheld_resolution ? SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT
-                            : (SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT
-                                | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT),
-        SDL_STARTUP_INPUT_MOUSE_KEYBOARD,
-        "Mouse + Keyboard",
-    };
+    *remember_choice = false;
+    if (!SDL_CreateWindowAndRenderer("Choose Input", 640, 304,
+            SDL_WINDOW_HIGH_PIXEL_DENSITY, &window, &renderer))
+        goto failure;
+    if (!SDL_SetRenderLogicalPresentation(renderer, 640, 304,
+            SDL_LOGICAL_PRESENTATION_LETTERBOX))
+        goto failure;
+    font = TTF_OpenFont(sdl_monospace_font_path(), 16.0f);
+    if (!font)
+        font = TTF_OpenFont("lib/xtra/font/VictorMono-Medium.ttf", 16.0f);
+    if (!font)
+        goto failure;
 
-    if (!SDL_ShowMessageBox(&messagebox, &button_id)) {
-        log_warn("SDL_ShowMessageBox failed during input selection: %s",
-            SDL_GetError());
-        return handheld_resolution
-            ? SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER
-            : SDL_STARTUP_DEVICE_DESKTOP;
+    while (!done) {
+        const char* labels[] = {
+            "Switch to Controller",
+            "Keep Mouse + Keyboard",
+            remember ? "[x] Remember the choice" : "[ ] Remember the choice",
+        };
+        SDL_SetRenderDrawColor(renderer, 24, 26, 32, 255);
+        SDL_RenderClear(renderer);
+        failed = !sdl_startup_input_text(renderer, font,
+            "A controller is connected.", 24, 20);
+        failed |= !sdl_startup_input_text(renderer, font,
+            "Would you like to switch to controller input?", 24, 48);
+        for (int i = 0; i < 3; i++) {
+            SDL_SetRenderDrawColor(renderer, 42, 46, 56, 255);
+            SDL_RenderFillRect(renderer, &rows[i]);
+            if (focus == i) {
+                SDL_SetRenderDrawColor(renderer, 120, 185, 245, 255);
+                SDL_RenderRect(renderer, &rows[i]);
+            }
+            failed |= !sdl_startup_input_text(renderer, font, labels[i],
+                rows[i].x + 12, rows[i].y + 8);
+        }
+        failed |= !sdl_startup_input_text(renderer, font,
+            "Change later: Options > Input Options > Input UI.", 24, 264);
+        if (failed || !SDL_RenderPresent(renderer))
+            goto failure;
+
+        SDL_Event event;
+        if (!SDL_WaitEventTimeout(&event, 100))
+            continue;
+        int activate = -1;
+        switch (event.type) {
+        case SDL_EVENT_QUIT:
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+            quit_requested = true;
+            done = true;
+            break;
+        case SDL_EVENT_GAMEPAD_ADDED:
+        case SDL_EVENT_GAMEPAD_REMOVED:
+            sdl_gamepad_handle_device(&event.gdevice);
+            if (g_gamepad_state.pad_count == 0) {
+                /* The offer no longer applies. Do not remember a forced fallback. */
+                choice = 1;
+                remember = false;
+                done = true;
+            }
+            break;
+        case SDL_EVENT_KEY_DOWN:
+            if (event.key.repeat)
+                break;
+            if (event.key.key == SDLK_ESCAPE) {
+                choice = 1;
+                remember = false;
+                done = true;
+            } else if (event.key.key == SDLK_UP
+                || (event.key.key == SDLK_TAB && (event.key.mod & SDL_KMOD_SHIFT))) {
+                focus = (focus + 2) % 3;
+            } else if (event.key.key == SDLK_DOWN || event.key.key == SDLK_TAB) {
+                focus = (focus + 1) % 3;
+            } else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_SPACE) {
+                activate = focus;
+            }
+            break;
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+            if (event.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_UP)
+                focus = (focus + 2) % 3;
+            else if (event.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_DOWN)
+                focus = (focus + 1) % 3;
+            else if (event.gbutton.button == SDL_GAMEPAD_BUTTON_SOUTH)
+                activate = focus;
+            else if (event.gbutton.button == SDL_GAMEPAD_BUTTON_EAST) {
+                choice = 1;
+                remember = false;
+                done = true;
+            }
+            break;
+        case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+            if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY) {
+                if (event.gaxis.value > -16000 && event.gaxis.value < 16000)
+                    stick_held = false;
+                else if (!stick_held) {
+                    focus = (focus + (event.gaxis.value < 0 ? 2 : 1)) % 3;
+                    stick_held = true;
+                }
+            }
+            break;
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            SDL_ConvertEventToRenderCoordinates(renderer, &event);
+            {
+                SDL_FPoint point = event.type == SDL_EVENT_MOUSE_MOTION
+                    ? (SDL_FPoint){event.motion.x, event.motion.y}
+                    : (SDL_FPoint){event.button.x, event.button.y};
+                for (int i = 0; i < 3; i++) {
+                    if (!SDL_PointInRectFloat(&point, &rows[i]))
+                        continue;
+                    focus = i;
+                    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+                        && event.button.button == SDL_BUTTON_LEFT)
+                        activate = i;
+                }
+            }
+            break;
+        default:
+            break;
+        }
+        if (activate == 2)
+            remember = !remember;
+        else if (activate >= 0) {
+            choice = activate;
+            done = true;
+        }
     }
+    goto cleanup;
 
-    if (button_id == SDL_STARTUP_INPUT_CONTROLLER)
-        return SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER;
-
-    return SDL_STARTUP_DEVICE_DESKTOP;
+failure:
+    log_warn("Could not display desktop input selection: %s; using keyboard",
+        SDL_GetError());
+    choice = 1;
+    remember = false;
+cleanup:
+    if (font)
+        TTF_CloseFont(font);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    if (quit_requested)
+        quit(NULL);
+    *remember_choice = remember;
+    return choice == 0 ? SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER
+                       : SDL_STARTUP_DEVICE_DESKTOP;
 }
 #endif

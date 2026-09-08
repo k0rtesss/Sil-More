@@ -41,6 +41,44 @@ void sdl_quit_hook(cptr str)
 }
 
 
+#if SIL_SDL_DESKTOP_HANDHELD_BUILD
+static void sdl_check_desktop_startup_input(void)
+{
+    int mode = config.input_ui_mode;
+    bool remember = false;
+
+    /* A remembered controller choice survives a launch without the device. */
+    if (g_gamepad_state.pad_count == 0) {
+        if (mode != SDL_INPUT_UI_MODE_PLATFORM)
+            log_info("No controller connected at startup; using keyboard input");
+        if (mode == SDL_INPUT_UI_MODE_CONTROLLER)
+            config.mouse_enabled = true;
+        mode = SDL_INPUT_UI_MODE_PLATFORM;
+    } else if (config.desktop_input_choice != SDL_INPUT_UI_MODE_AUTO) {
+        mode = config.desktop_input_choice;
+        if (mode == SDL_INPUT_UI_MODE_CONTROLLER)
+            config.gamepad_enabled = true;
+    } else if (mode != SDL_INPUT_UI_MODE_CONTROLLER
+        || !config.gamepad_enabled)
+    {
+        /* Auto must not bypass consent merely because enumeration found a pad. */
+        mode = sdl_prompt_desktop_startup_input_device(&remember)
+                == SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER
+            ? SDL_INPUT_UI_MODE_CONTROLLER : SDL_INPUT_UI_MODE_PLATFORM;
+        if (remember)
+            config.desktop_input_choice = mode;
+        if (mode == SDL_INPUT_UI_MODE_CONTROLLER)
+            config.gamepad_enabled = true;
+        config.mouse_enabled = (mode == SDL_INPUT_UI_MODE_PLATFORM);
+    }
+
+    config.input_ui_mode = mode;
+    g_gamepad_auto_ui = false;
+    g_startup_device_class = mode == SDL_INPUT_UI_MODE_CONTROLLER
+        ? SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER : SDL_STARTUP_DEVICE_DESKTOP;
+}
+#endif
+
 errr init_sdl(int argc, char **argv)
 {
     log_debug("init_sdl starting");
@@ -136,9 +174,6 @@ errr init_sdl(int argc, char **argv)
     enum sdl_config_load_status config_load_status = SDL_CONFIG_LOAD_OK;
     struct sdl_config_load_info config_load_info = { 0 };
     char startup_issue_summary[SDL_STARTUP_ISSUE_MAX];
-#if SIL_SDL_DESKTOP_HANDHELD_BUILD
-    bool desktop_input_prompted = false;
-#endif
 
     startup_issue_summary[0] = '\0';
 
@@ -353,16 +388,6 @@ errr init_sdl(int argc, char **argv)
         g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH
         && g_gamepad_state.pad_count == 0
         && sdl_mobile_device_is_tablet();
-#if SIL_SDL_DESKTOP_HANDHELD_BUILD
-    if (!config_exists && g_gamepad_state.pad_count > 0
-        && g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP)
-    {
-        desktop_input_prompted = true;
-        g_startup_device_class =
-            sdl_prompt_desktop_startup_input_device(screen_pixels_w,
-                screen_pixels_h);
-    }
-#endif
     log_info("Startup device profile: %s (%dx%d, %d gamepad%s detected%s)",
         sdl_startup_device_class_name(g_startup_device_class),
         screen_pixels_w, screen_pixels_h,
@@ -425,17 +450,6 @@ errr init_sdl(int argc, char **argv)
         sdl_apply_stored_pane_profile(config.min_terminal_mode);
 #endif
         sdl_apply_first_start_device_defaults(g_startup_device_class);
-#if SIL_SDL_DESKTOP_HANDHELD_BUILD
-        if (desktop_input_prompted) {
-            config.input_ui_mode =
-                (g_startup_device_class
-                    == SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER)
-                ? SDL_INPUT_UI_MODE_CONTROLLER
-                : SDL_INPUT_UI_MODE_PLATFORM;
-            log_info("First-start desktop input selection: input_ui=%s",
-                get_sdl_input_ui_mode_label(config.input_ui_mode));
-        }
-#endif
 #if SIL_SDL_MOBILE_BUILD
         {
             int quick_access_count = get_sdl_touch_top_panel_cell_count();
@@ -459,6 +473,13 @@ errr init_sdl(int argc, char **argv)
         }
 #endif
     }
+
+#if SIL_SDL_DESKTOP_HANDHELD_BUILD
+    sdl_check_desktop_startup_input();
+    log_info("Desktop startup input: %s (remembered choice: %s)",
+        get_sdl_input_ui_mode_label(config.input_ui_mode),
+        get_sdl_input_ui_mode_label(config.desktop_input_choice));
+#endif
 
     g_touch_pane_mobile_open = config.touch_pane_default_open;
     g_touch_top_panel_open = !config.touch_top_panel_arrows_visible

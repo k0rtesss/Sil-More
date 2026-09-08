@@ -3480,6 +3480,10 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                 input_ui_mode_to_string(config->input_ui_mode));
         }
 
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "desktopInputChoice");
+        if (cJSON_IsString(item) && item->valuestring)
+            config->desktop_input_choice = parse_input_ui_mode(item->valuestring);
+
         item = cJSON_GetObjectItemCaseSensitive(sdl,
             "terminalMenuScaleOffset");
         if (cJSON_IsNumber(item)) {
@@ -4316,6 +4320,17 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             log_debug("Loaded gamepad.useLeftStick: %s", config->gamepad_use_left_stick ? "true" : "false");
         }
 
+        item = cJSON_GetObjectItemCaseSensitive(gamepad, "useRightStick");
+        if (cJSON_IsBool(item))
+            config->gamepad_use_right_stick = cJSON_IsTrue(item);
+        const char* stick_delay_keys[2] = { "leftStickDelayMs", "rightStickDelayMs" };
+        for (int stick = 0; stick < 2; stick++) {
+            item = cJSON_GetObjectItemCaseSensitive(gamepad, stick_delay_keys[stick]);
+            if (cJSON_IsNumber(item))
+                config->gamepad_stick_diagonal_delay_ms[stick] =
+                    MAX(0, MIN(SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS, item->valueint));
+        }
+
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "deadzone");
         if (cJSON_IsNumber(item)) {
             config->gamepad_deadzone = item->valueint;
@@ -4444,6 +4459,10 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
                 config->gamepad_left_stick_bindings[i] = GAMEPAD_BIND_NONE;
             }
+        }
+        if (config->gamepad_use_right_stick) {
+            for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++)
+                config->gamepad_right_stick_bindings[i] = GAMEPAD_BIND_NONE;
         }
     } else {
         log_warn("'gamepad' object not found in JSON");
@@ -5157,6 +5176,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         config->show_context_square_popups);
     cJSON_AddStringToObject(sdl, "inputUiMode",
         input_ui_mode_to_string(config->input_ui_mode));
+    cJSON_AddStringToObject(sdl, "desktopInputChoice",
+        input_ui_mode_to_string(config->desktop_input_choice));
     
     // Save window position and size for windowed mode
     cJSON_AddNumberToObject(sdl, "windowX", config->window_x);
@@ -5323,6 +5344,9 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
                 }
             }
             cJSON_AddBoolToObject(gamepad, "useLeftStick", config->gamepad_use_left_stick);
+            cJSON_AddBoolToObject(gamepad, "useRightStick", config->gamepad_use_right_stick);
+            cJSON_AddNumberToObject(gamepad, "leftStickDelayMs", config->gamepad_stick_diagonal_delay_ms[0]);
+            cJSON_AddNumberToObject(gamepad, "rightStickDelayMs", config->gamepad_stick_diagonal_delay_ms[1]);
             cJSON_AddNumberToObject(gamepad, "deadzone", config->gamepad_deadzone);
             cJSON_AddNumberToObject(gamepad, "triggerThreshold", config->gamepad_trigger_threshold);
 
@@ -5898,6 +5922,7 @@ void sdl_config_set_defaults(struct sdl_config* config)
 
     // Default gamepad settings
     config->input_ui_mode = SDL_INPUT_UI_MODE_AUTO;
+    config->desktop_input_choice = SDL_INPUT_UI_MODE_AUTO;
     config->gamepad_enabled = true;
     config->steamdeck_inv_equip_same_button_cycle = true;
     config->gamepad_use_dpad = true;
@@ -5906,6 +5931,9 @@ void sdl_config_set_defaults(struct sdl_config* config)
     memset(config->gamepad_dpad_source_overrides, 0,
         sizeof(config->gamepad_dpad_source_overrides));
     config->gamepad_use_left_stick = true;
+    config->gamepad_use_right_stick = false;
+    config->gamepad_stick_diagonal_delay_ms[0] = 0;
+    config->gamepad_stick_diagonal_delay_ms[1] = 0;
     config->gamepad_deadzone = 12000;
     config->gamepad_trigger_threshold = 16000;
     config->mouse_enabled = true;

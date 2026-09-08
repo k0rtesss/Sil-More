@@ -2867,10 +2867,11 @@ static void show_help_screen_legacy(int source_page, int display_page,
         col = 1;
         help_emit_heading("MOVEMENT & ACTION", row, col); row += 2;
         strnfmt(action_buf, sizeof(action_buf),
-            "Input %s; movement: D-pad %s, left stick %s",
+            "Input %s; movement: D-pad %s, left stick %s, right stick %s",
             get_sdl_gamepad_enabled() ? "on" : "off",
             get_sdl_gamepad_use_dpad() ? "on" : "off",
-            get_sdl_gamepad_use_left_stick() ? "on" : "off");
+            get_sdl_gamepad_use_left_stick() ? "on" : "off",
+            get_sdl_gamepad_use_right_stick() ? "on" : "off");
         put_role(get_sdl_gamepad_enabled() ? ROLE_BODY : ROLE_BAD,
             action_buf, row, col); row++;
 
@@ -2902,33 +2903,31 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_KEY, "B", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
-        {
-            char rs_up[24];
-            char rs_down[24];
-            char rs_left[24];
-            char rs_right[24];
-            char rs_line[120];
-            binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_UP), rs_up, sizeof(rs_up));
-            binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_DOWN), rs_down, sizeof(rs_down));
-            binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_LEFT), rs_left, sizeof(rs_left));
-            binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_RIGHT), rs_right, sizeof(rs_right));
-            strnfmt(rs_line, sizeof(rs_line),
-                "Focus UI/wheels (D-pad also); else U:%s D:%s L:%s R:%s",
-                rs_up, rs_down, rs_left, rs_right);
-            cptr stick_label = "Right Stick (optional)";
-            int stick_text_col = col + (int)strlen(stick_label);
-
-            put_role(ROLE_KEY, stick_label, row, col);
-            put_role(ROLE_BODY, " - ", row, stick_text_col);
-            put_role(ROLE_BODY, rs_line, row, stick_text_col + 3);
-            row++;
+        for (int stick = 0; stick < 2; stick++) {
+            bool moves = stick ? get_sdl_gamepad_use_right_stick()
+                : get_sdl_gamepad_use_left_stick();
+            cptr label = stick ? "Right Stick" : "Left Stick";
+            if (moves)
+                strnfmt(action_buf, sizeof(action_buf),
+                    "Walk; cardinal delay %d ms; diagonals immediate",
+                    get_sdl_gamepad_stick_delay_ms(stick));
+            else
+                SDL_strlcpy(action_buf, "Navigate UI focus; directional bindings are configurable",
+                    sizeof(action_buf));
+            put_role(ROLE_KEY, label, row, col);
+            put_role(ROLE_BODY, " - ", row, col + (int)strlen(label));
+            put_role(ROLE_BODY, action_buf, row++, col + (int)strlen(label) + 3);
         }
+        strnfmt(action_buf, sizeof(action_buf),
+            "D-pad cardinal delay: %d ms. Stick navigation is immediate.",
+            get_sdl_gamepad_dpad_diagonal_delay_ms());
+        put_role(ROLE_BODY, action_buf, row++, col);
 
         row += 1;
 
         /* Left and right side controls */
         put_role(ROLE_BODY,
-            "Hold View/Select + D-pad to focus visible UI without a right stick.",
+            "Hold View/Select + D-pad to focus visible UI without a navigation stick.",
             row++, col);
         put_role(ROLE_BODY,
             "D-pad moves focus; A activates; B returns to play. A View tap keeps its binding.",

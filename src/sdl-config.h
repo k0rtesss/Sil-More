@@ -152,7 +152,7 @@
 #define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS 50
 #define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS 300
 #define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS 25
-#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS 200
+#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS 300
 #define SDL_CAMERA_CENTER_CLEARANCE_MIN 1
 #define SDL_CAMERA_CENTER_CLEARANCE_MAX 20
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -306,6 +306,7 @@ struct sdl_config {
 
     // Input presentation and gamepad/controller settings
     int input_ui_mode;                   // Auto, platform-native touch/keyboard, or controller UI
+    int desktop_input_choice;            // Auto = ask; otherwise remembered desktop input choice
     bool gamepad_enabled;                 // Enable gamepad input
     bool steamdeck_inv_equip_same_button_cycle; // In controller UI, pressing inventory/equipment again cycles to the other menu
     bool gamepad_use_dpad;                // Use d-pad for movement
@@ -313,6 +314,8 @@ struct sdl_config {
     gamepad_dpad_source_override
         gamepad_dpad_source_overrides[GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT];
     bool gamepad_use_left_stick;          // Use left stick for movement
+    bool gamepad_use_right_stick;         // Independent right-stick movement
+    int gamepad_stick_diagonal_delay_ms[2]; // Left/right movement only; navigation is immediate
     int gamepad_deadzone;                 // Deadzone for analog sticks
     int gamepad_trigger_threshold;        // Threshold to treat triggers as pressed
     int gamepad_button_bindings[SDL_GAMEPAD_BUTTON_COUNT];

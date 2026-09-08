@@ -186,7 +186,7 @@ errr callback_sdl_xtra(int n, int v)
             g_sdl_blocking_key_wait = old_blocking_key_wait;
             Uint64 flush_ns = SDL_GetTicksNS();
             sdl_gamepad_flush_pending_dpad(flush_ns, false);
-            sdl_gamepad_flush_pending_left_stick(flush_ns, false);
+            sdl_gamepad_flush_pending_sticks(flush_ns, false);
             sdl_gamepad_flush_pending_shoulder(flush_ns, false);
             sdl_gamepad_flush_pending_confirm(flush_ns);
             sdl_screen_back_gesture_flush_pending_press(flush_ns);
@@ -220,7 +220,7 @@ errr callback_sdl_xtra(int n, int v)
             sdl_minimap_flush_pending_redraw();
             Uint64 flush_ns = SDL_GetTicksNS();
             sdl_gamepad_flush_pending_dpad(flush_ns, false);
-            sdl_gamepad_flush_pending_left_stick(flush_ns, false);
+            sdl_gamepad_flush_pending_sticks(flush_ns, false);
             sdl_gamepad_flush_pending_shoulder(flush_ns, false);
             sdl_gamepad_flush_pending_confirm(flush_ns);
             sdl_screen_back_gesture_flush_pending_press(flush_ns);
@@ -287,7 +287,7 @@ errr callback_sdl_xtra(int n, int v)
          * well, or their timeout can resurrect input after the flush. */
         movement_input_clear_commands();
         sdl_gamepad_clear_pending_dpad();
-        sdl_gamepad_clear_pending_left_stick();
+        sdl_gamepad_clear_pending_sticks();
         return 0;
     case TERM_XTRA_CLEAR:
         if (!d || !d->canvas)

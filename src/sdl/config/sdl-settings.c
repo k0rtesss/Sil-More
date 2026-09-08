@@ -1657,6 +1657,8 @@ void set_sdl_input_ui_mode(int mode)
 {
     if (mode < SDL_INPUT_UI_MODE_AUTO || mode >= SDL_INPUT_UI_MODE_COUNT)
         mode = SDL_INPUT_UI_MODE_AUTO;
+    /* An explicit settings change replaces the remembered startup answer. */
+    config.desktop_input_choice = SDL_INPUT_UI_MODE_AUTO;
     if (config.input_ui_mode == mode)
         return;
 
@@ -1709,7 +1711,7 @@ void set_sdl_gamepad_enabled(bool value)
         g_gamepad_state.left_dir = 0;
         g_gamepad_state.left_bind_dir = -1;
         g_gamepad_state.left_ui_dir = -1;
-        sdl_gamepad_clear_pending_left_stick();
+        sdl_gamepad_clear_pending_sticks();
         g_gamepad_state.right_x = 0;
         g_gamepad_state.right_y = 0;
         g_gamepad_state.right_dir = -1;
@@ -1767,16 +1769,6 @@ int get_sdl_gamepad_dpad_diagonal_delay_ms(void)
     return config.gamepad_dpad_diagonal_delay_ms;
 }
 
-int get_sdl_gamepad_dpad_source(void)
-{
-    return sdl_gamepad_current_dpad_source();
-}
-
-void set_sdl_gamepad_dpad_source(int source)
-{
-    sdl_gamepad_set_current_dpad_source(source);
-}
-
 void set_sdl_gamepad_dpad_diagonal_delay_ms(int value)
 {
     if (value < SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS)
@@ -1795,27 +1787,69 @@ bool get_sdl_gamepad_use_left_stick(void)
     return config.gamepad_use_left_stick;
 }
 
+static void sdl_gamepad_set_stick_movement(int stick, bool value)
+{
+    sdl_gamepad_reset_movement_controls();
+    if (stick == 0)
+        config.gamepad_use_left_stick = value;
+    else
+        config.gamepad_use_right_stick = value;
+    if (value) {
+        int* bindings = stick ? config.gamepad_right_stick_bindings
+            : config.gamepad_left_stick_bindings;
+        for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++)
+            bindings[i] = GAMEPAD_BIND_NONE;
+    }
+}
+
 void set_sdl_gamepad_use_left_stick(bool value)
 {
-    config.gamepad_use_left_stick = value;
-    g_gamepad_state.left_ui_dir = -1;
-    if (value) {
-        if (g_gamepad_state.left_bind_dir >= 0 && g_gamepad_state.left_bind_dir < GAMEPAD_STICK_DIR_COUNT) {
-            int binding = config.gamepad_left_stick_bindings[g_gamepad_state.left_bind_dir];
-            if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL || binding == GAMEPAD_BIND_ALT) {
-                sdl_gamepad_apply_modifier(binding, false);
-            }
+    sdl_gamepad_set_stick_movement(0, value);
+}
+
+bool get_sdl_gamepad_use_right_stick(void)
+{
+    return config.gamepad_use_right_stick;
+}
+
+void set_sdl_gamepad_use_right_stick(bool value)
+{
+    sdl_gamepad_set_stick_movement(1, value);
+}
+
+int get_sdl_gamepad_stick_delay_ms(int stick)
+{
+    return stick >= 0 && stick < 2 ? config.gamepad_stick_diagonal_delay_ms[stick] : 0;
+}
+
+void set_sdl_gamepad_stick_delay_ms(int stick, int value)
+{
+    if (stick < 0 || stick >= 2)
+        return;
+    config.gamepad_stick_diagonal_delay_ms[stick] =
+        MAX(0, MIN(SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS, value));
+    sdl_gamepad_clear_pending_sticks();
+}
+
+void sdl_gamepad_swap_stick_roles(void)
+{
+    sdl_gamepad_reset_movement_controls();
+    bool use_left = config.gamepad_use_left_stick;
+    config.gamepad_use_left_stick = config.gamepad_use_right_stick;
+    config.gamepad_use_right_stick = use_left;
+    int delay = config.gamepad_stick_diagonal_delay_ms[0];
+    config.gamepad_stick_diagonal_delay_ms[0] = config.gamepad_stick_diagonal_delay_ms[1];
+    config.gamepad_stick_diagonal_delay_ms[1] = delay;
+    for (int dir = 0; dir < GAMEPAD_STICK_DIR_COUNT; dir++) {
+        int binding = config.gamepad_left_stick_bindings[dir];
+        config.gamepad_left_stick_bindings[dir] = config.gamepad_right_stick_bindings[dir];
+        config.gamepad_right_stick_bindings[dir] = binding;
+        for (int modifier = 0; modifier < GAMEPAD_MODIFIER_COUNT; modifier++) {
+            binding = config.gamepad_left_stick_combo_bindings[modifier][dir];
+            config.gamepad_left_stick_combo_bindings[modifier][dir] =
+                config.gamepad_right_stick_combo_bindings[modifier][dir];
+            config.gamepad_right_stick_combo_bindings[modifier][dir] = binding;
         }
-        g_gamepad_state.left_bind_dir = -1;
-        for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-            config.gamepad_left_stick_bindings[i] = GAMEPAD_BIND_NONE;
-        }
-    } else {
-        g_gamepad_state.left_x = 0;
-        g_gamepad_state.left_y = 0;
-        g_gamepad_state.left_dir = 0;
-        g_gamepad_state.left_bind_dir = -1;
-        sdl_gamepad_clear_pending_left_stick();
     }
 }
 

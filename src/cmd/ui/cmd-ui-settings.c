@@ -9805,7 +9805,8 @@ static int input_option_rows_collect(struct input_option_row* rows,
             "Choose Auto, Keyboard, or Controller presentation. Auto leaves "
             "the choice to the game's device and input detection. Keyboard "
             "and Controller force an override. Left/Right or Enter changes "
-            "the mode; R resets Auto.");
+            "the mode; R resets Auto. Changing this clears the remembered "
+            "startup choice. At launch, a missing controller switches to Keyboard.");
 #endif
     }
     if (SDL_HasKeyboard()) {
@@ -11323,6 +11324,7 @@ typedef enum controller_entry_type {
     CONTROLLER_ENTRY_TOGGLE = 0,
     CONTROLLER_ENTRY_CYCLE,
     CONTROLLER_ENTRY_ACTION,
+    CONTROLLER_ENTRY_COMMAND,
 } controller_entry_type;
 
 typedef enum controller_toggle_id {
@@ -11330,11 +11332,13 @@ typedef enum controller_toggle_id {
     CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE,
     CONTROLLER_TOGGLE_DPAD,
     CONTROLLER_TOGGLE_LEFT_STICK,
+    CONTROLLER_TOGGLE_RIGHT_STICK,
 } controller_toggle_id;
 
 typedef enum controller_setting_id {
     CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY = 0,
-    CONTROLLER_SETTING_DPAD_SOURCE,
+    CONTROLLER_SETTING_LEFT_DELAY,
+    CONTROLLER_SETTING_RIGHT_DELAY,
 } controller_setting_id;
 
 typedef struct controller_entry {
@@ -11420,17 +11424,16 @@ static int controller_dpad_diagonal_delay_index(int value)
 
 static void controller_adjust_setting(int setting_id, int delta)
 {
-    if (setting_id == CONTROLLER_SETTING_DPAD_SOURCE) {
-        int source = get_sdl_gamepad_dpad_source();
-        if (source < 0)
-            return;
-        for (int i = 0; i < GAMEPAD_DPAD_SOURCE_COUNT; i++) {
-            source = (source + delta + GAMEPAD_DPAD_SOURCE_COUNT)
-                % GAMEPAD_DPAD_SOURCE_COUNT;
-            set_sdl_gamepad_dpad_source(source);
-            if (get_sdl_gamepad_dpad_source() == source)
-                break;
-        }
+    if (setting_id == CONTROLLER_SETTING_LEFT_DELAY
+        || setting_id == CONTROLLER_SETTING_RIGHT_DELAY) {
+        int stick = setting_id == CONTROLLER_SETTING_LEFT_DELAY ? 0 : 1;
+        int count = SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS
+            / SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS + 1;
+        int index = get_sdl_gamepad_stick_delay_ms(stick)
+            / SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS;
+        index = (index + delta + count) % count;
+        set_sdl_gamepad_stick_delay_ms(stick,
+            index * SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS);
     } else if (setting_id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
         int count = controller_dpad_diagonal_delay_count();
         int index = controller_dpad_diagonal_delay_index(
@@ -12224,21 +12227,19 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
         case CONTROLLER_TOGGLE_LEFT_STICK:
             SDL_strlcpy(buf, get_sdl_gamepad_use_left_stick() ? "On" : "Off", buflen);
             break;
+        case CONTROLLER_TOGGLE_RIGHT_STICK:
+            SDL_strlcpy(buf, get_sdl_gamepad_use_right_stick() ? "On" : "Off", buflen);
+            break;
         default:
             SDL_strlcpy(buf, "(unknown)", buflen);
             break;
         }
         break;
     case CONTROLLER_ENTRY_CYCLE:
-        if (entry->id == CONTROLLER_SETTING_DPAD_SOURCE) {
-            int source = get_sdl_gamepad_dpad_source();
-            const char* label = source == GAMEPAD_DPAD_SOURCE_STANDARD
-                ? "Standard D-pad"
-                : source == GAMEPAD_DPAD_SOURCE_LEFT_STICK
-                    ? "Left-stick emulation"
-                    : source == GAMEPAD_DPAD_SOURCE_RIGHT_STICK
-                        ? "Right-stick emulation" : "No controller";
-            SDL_strlcpy(buf, label, buflen);
+        if (entry->id == CONTROLLER_SETTING_LEFT_DELAY
+            || entry->id == CONTROLLER_SETTING_RIGHT_DELAY) {
+            int stick = entry->id == CONTROLLER_SETTING_LEFT_DELAY ? 0 : 1;
+            strnfmt(buf, buflen, "%d ms", get_sdl_gamepad_stick_delay_ms(stick));
         } else if (entry->id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
             int delay = get_sdl_gamepad_dpad_diagonal_delay_ms();
 
@@ -12246,6 +12247,9 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
         } else {
             SDL_strlcpy(buf, "(unknown)", buflen);
         }
+        break;
+    case CONTROLLER_ENTRY_COMMAND:
+        SDL_strlcpy(buf, "Swap", buflen);
         break;
     case CONTROLLER_ENTRY_ACTION:
         controller_action_binding_label(entry->id, buf, buflen);
@@ -12271,6 +12275,9 @@ static void controller_set_toggle(int toggle_id, bool value)
     case CONTROLLER_TOGGLE_LEFT_STICK:
         set_sdl_gamepad_use_left_stick(value);
         break;
+    case CONTROLLER_TOGGLE_RIGHT_STICK:
+        set_sdl_gamepad_use_right_stick(value);
+        break;
     default:
         break;
     }
@@ -12287,6 +12294,8 @@ static bool controller_toggle_default_value(int toggle_id)
         return get_sdl_gamepad_default_use_dpad();
     case CONTROLLER_TOGGLE_LEFT_STICK:
         return get_sdl_gamepad_default_use_left_stick();
+    case CONTROLLER_TOGGLE_RIGHT_STICK:
+        return false;
     default:
         return false;
     }
@@ -12514,10 +12523,13 @@ void do_cmd_controller_settings(void)
     static const controller_entry entries[] = {
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_ENABLED, "Controller Input" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE, "Inv/Equip Same-Button Cycle" },
-        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_DPAD, "D-pad Movement" },
-        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_SOURCE, "D-pad Input Source" },
-        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY, "D-pad Diagonal Delay" },
-        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_LEFT_STICK, "Left Stick Movement" },
+        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_DPAD, "Move with D-pad" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY, "D-pad Move Delay" },
+        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_LEFT_STICK, "Move with Left Stick" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_LEFT_DELAY, "Left Stick Move Delay" },
+        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_RIGHT_STICK, "Move with Right Stick" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_RIGHT_DELAY, "Right Stick Move Delay" },
+        { CONTROLLER_ENTRY_COMMAND, 0, "Swap Left/Right Stick Roles" },
         { CONTROLLER_ENTRY_ACTION, '\r', "Enter" },
         { CONTROLLER_ENTRY_ACTION, INPUT_BIND_CONFIRM, "Confirm (Space)" },
         { CONTROLLER_ENTRY_ACTION, ESCAPE, "Escape" },
@@ -12604,15 +12616,19 @@ void do_cmd_controller_settings(void)
                     sizeof(semantic_line), line_buf);
                 settings_semantic_add_row(i, semantic_line,
                     (i == highlight) ? TERM_L_BLUE : TERM_WHITE);
-                sdl_character_sheet_screen_set_last_select_row_reset(
-                    SETTINGS_CLICK_RESET_ROW_BASE + i);
+                if (entries[i].type != CONTROLLER_ENTRY_COMMAND)
+                    sdl_character_sheet_screen_set_last_select_row_reset(
+                        SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
         }
 
         {
             char desc[1024];
 
-            if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
+            if (entries[highlight].type == CONTROLLER_ENTRY_COMMAND) {
+                strnfmt(desc, sizeof(desc), "Swap movement roles, movement delays, and directional bindings "
+                    "between the sticks. Stick clicks and D-pad controls stay the same.");
+            } else if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
                 controller_describe_action_bindings_compact(entries[highlight].id,
                     detail_value_buf, sizeof(detail_value_buf));
                 strnfmt(desc, sizeof(desc),
@@ -12622,11 +12638,11 @@ void do_cmd_controller_settings(void)
                 cptr cycle_desc;
 
                 switch (entries[highlight].id) {
-                case CONTROLLER_SETTING_DPAD_SOURCE:
-                    cycle_desc =
-                        "Saved for the last controller used. Standard D-pads need no change. "
-                        "If your physical D-pad is reported as a stick, select its emulation source. "
-                        "That input uses D-pad timing; other sticks stay immediate.";
+                case CONTROLLER_SETTING_LEFT_DELAY:
+                case CONTROLLER_SETTING_RIGHT_DELAY:
+                    cycle_desc = "Wait for the second movement axis before a cardinal step. "
+                        "0 ms is immediate. Recognized diagonals and menu navigation are immediate. "
+                        "Use a delay if a virtual joystick represents your physical D-pad.";
                     break;
                 case CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY:
                     cycle_desc =
@@ -12651,10 +12667,15 @@ void do_cmd_controller_settings(void)
                         "of two separate buttons.";
                     break;
                 case CONTROLLER_TOGGLE_DPAD:
-                    toggle_desc = "Move with the D-pad.";
+                    toggle_desc = "Enable D-pad movement independently of either stick.";
                     break;
                 case CONTROLLER_TOGGLE_LEFT_STICK:
-                    toggle_desc = "Move with the left analog stick.";
+                    toggle_desc = "On: walk with the left stick. Off: navigate interface focus. "
+                        "D-pad and right-stick movement can remain on.";
+                    break;
+                case CONTROLLER_TOGGLE_RIGHT_STICK:
+                    toggle_desc = "On: walk with the right stick. Off: navigate interface focus. "
+                        "D-pad and left-stick movement can remain on.";
                     break;
                 default:
                     toggle_desc = "";
@@ -12735,6 +12756,8 @@ void do_cmd_controller_settings(void)
                     (ch == '6') ? 1 : -1);
             }
         } else if (ch == 'r' || (steamdeck && ch == steamdeck_alt_action_key())) {
+            if (entries[highlight].type == CONTROLLER_ENTRY_COMMAND)
+                continue;
             if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
                 controller_clear_effective_action_bindings(entries[highlight].id);
                 if (controller_restore_action_default_bindings(entries[highlight].id)) {
@@ -12749,9 +12772,10 @@ void do_cmd_controller_settings(void)
                 {
                     set_sdl_gamepad_dpad_diagonal_delay_ms(
                         get_sdl_gamepad_default_dpad_diagonal_delay_ms());
-                } else if (entries[highlight].id
-                    == CONTROLLER_SETTING_DPAD_SOURCE) {
-                    set_sdl_gamepad_dpad_source(GAMEPAD_DPAD_SOURCE_STANDARD);
+                } else if (entries[highlight].id == CONTROLLER_SETTING_LEFT_DELAY
+                    || entries[highlight].id == CONTROLLER_SETTING_RIGHT_DELAY) {
+                    set_sdl_gamepad_stick_delay_ms(
+                        entries[highlight].id == CONTROLLER_SETTING_LEFT_DELAY ? 0 : 1, 0);
                 }
                 msg_format("Reset %s to default.", entries[highlight].label);
                 message_flush();
@@ -12768,7 +12792,9 @@ void do_cmd_controller_settings(void)
         } else if (ch == '\r' || ch == '\n' || ch == ' ') {
             const controller_entry* entry = &entries[highlight];
 
-            if (entry->type == CONTROLLER_ENTRY_TOGGLE) {
+            if (entry->type == CONTROLLER_ENTRY_COMMAND) {
+                sdl_gamepad_swap_stick_roles();
+            } else if (entry->type == CONTROLLER_ENTRY_TOGGLE) {
                 char cur[16];
                 controller_entry_value(entry, cur, sizeof(cur));
                 controller_set_toggle(entry->id, streq(cur, "Off"));

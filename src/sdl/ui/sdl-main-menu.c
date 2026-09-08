@@ -605,7 +605,7 @@ void sdl_main_menu_overlay_reset_nav_input(void)
     g_gamepad_state.left_dir = 0;
     g_gamepad_state.left_bind_dir = -1;
     g_gamepad_state.left_ui_dir = -1;
-    sdl_gamepad_clear_pending_left_stick();
+    sdl_gamepad_clear_pending_sticks();
 
     g_gamepad_state.right_x = 0;
     g_gamepad_state.right_y = 0;

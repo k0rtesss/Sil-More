@@ -1267,21 +1267,7 @@ static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
     }
 }
 
-static void sdl_handle_event_mapped(sdl_state* st, SDL_Event* ev);
-
 void sdl_handle_event(sdl_state* st, SDL_Event* ev)
-{
-    SDL_Event buttons[4];
-    int count = sdl_gamepad_remap_dpad_event(ev, buttons);
-    if (count < 0)
-        sdl_handle_event_mapped(st, ev);
-    else {
-        for (int i = 0; i < count; i++)
-            sdl_handle_event_mapped(st, &buttons[i]);
-    }
-}
-
-static void sdl_handle_event_mapped(sdl_state* st, SDL_Event* ev)
 {
     (void)st;
     sdl_normalize_event_to_render_coords(ev);
