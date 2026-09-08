@@ -1207,7 +1207,7 @@ static bool sdl_touch_thumb_compute_runtime_rects(
         for (int i = 0; i < rect_count; i++)
             out_rects[i] = (SDL_FRect){ 0 };
     }
-    if (sdl_touch_gameplay_controls_suppressed())
+    if (!sdl_touch_thumb_config_enabled())
         return false;
     if (!out_rects || rect_count < SDL_TOUCH_THUMB_RUNTIME_CAPACITY)
         return false;

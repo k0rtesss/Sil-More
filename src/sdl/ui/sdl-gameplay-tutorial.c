@@ -523,14 +523,15 @@ void sdl_gameplay_tutorial_render(void)
         && !tutorial_menu_owns_input() && screen.h<360;
     margin = MAX(8.0f, MIN(screen.w, screen.h)*0.018f);
     pad = margin;
-    font_px = (int)sdl_touch_pane_clampf(screen.h*0.028f, 16, 25);
-    if (compact_action) {font_px=14;pad=4;}
+    font_px = sdl_main_menu_pane_font_px();
+    if (compact_action) pad=4;
     font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
     if (!font) return;
     line_h = font_px*1.35f;
     width = MIN(screen.w-2*margin, 690.0f);
     height = MIN(screen.h-2*margin, MAX(210.0f, screen.h*(tutorial_menu_owns_input()?0.32f:0.43f)));
-    if (compact_action) height=MIN(100.0f,screen.h-2*margin);
+    if (compact_action)
+        height=MIN(MAX(100.0f,2*pad+line_h*2.5f+44),screen.h-2*margin);
     has_anchor = tutorial_anchor_rect(&view, &anchor);
     tutorial_card = (SDL_FRect){screen.x+(screen.w-width)/2,screen.y+screen.h-height-margin,width,height};
     if (has_anchor && anchor.y+anchor.h/2 > screen.y+screen.h/2)

@@ -3525,6 +3525,12 @@ bool sdl_touch_pane_is_left_placement(void)
 
 bool sdl_touch_only_mobile_device_active(void)
 {
+#if defined(SDL_PLATFORM_ANDROID)
+    /* Hardware presence determines touch-only controls even when a saved
+     * platform UI preference disables controller button labels. */
+    if (g_android_controller_present)
+        return false;
+#endif
 #if SIL_SDL_MOBILE_BUILD
     return g_direct_touch_present && !steamdeck_controls_active();
 #else
