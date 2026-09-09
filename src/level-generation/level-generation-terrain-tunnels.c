@@ -1,6 +1,7 @@
 /* File: level-generation-terrain-tunnels.c */
 
 #include "angband.h"
+#include "cave/cave-fixtures.h"
 #include "level-generation/level-generation-internal.h"
 
 bool h_tunnel_ok(
@@ -364,6 +365,26 @@ void apply_tunnel_niche_torch_glow(int niche_y, int niche_x, int front_dy, int f
      */
     int axis_dy = (front_dx != 0) ? 1 : 0;
     int axis_dx = (front_dy != 0) ? 1 : 0;
+
+    /* Retain the walkable niche and its existing light footprint. Mount most
+     * fixtures on the backing wall; some niches hold a floor brazier. The
+     * coordinate variation deliberately does not consume gameplay RNG. */
+    int wall_y = niche_y - front_dy;
+    int wall_x = niche_x - front_dx;
+    if (cave_feat[niche_y][niche_x] == FEAT_FLOOR
+        && !(cave_info[niche_y][niche_x] & (CAVE_ROOM | CAVE_ICKY)))
+    {
+        if (((niche_y * 7 + niche_x * 11) % 4) != 0
+            && in_bounds_fully(wall_y, wall_x)
+            && cave_feat[wall_y][wall_x] == FEAT_WALL_EXTRA
+            && !(cave_info[wall_y][wall_x] & (CAVE_ROOM | CAVE_ICKY)))
+        {
+            cave_fixture_set(wall_y, wall_x, CAVE_FIXTURE_WALL_TORCH);
+            cave_info[wall_y][wall_x] |= CAVE_GLOW;
+        }
+        else
+            cave_fixture_set(niche_y, niche_x, CAVE_FIXTURE_BRAZIER);
+    }
 
     if (cave_floor_bold(niche_y, niche_x)
         && !(cave_info[niche_y][niche_x] & (CAVE_ROOM | CAVE_ICKY)))

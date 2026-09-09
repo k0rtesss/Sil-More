@@ -700,7 +700,7 @@ bool make_attack_normal(monster_type* m_ptr)
                 total_attack_mod, total_evasion_mod, m_ptr, PLAYER, true);
         }
 
-        sound(MSG_MONSTER_ATTACK);
+        monster_sound(m_ptr, MONSTER_SOUND_MELEE_BASE + b);
 
         /* Monster hits player */
         if (!effect || (hit_result > 0))

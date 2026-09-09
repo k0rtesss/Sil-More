@@ -60,9 +60,9 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 0  /* Persist tutorial deferral for upgraded characters. */
+#define VERSION_EXTRA 1  /* Persist corridor torch/brazier decorations. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
-#define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
+#define MIN_VERSION_EXTRA 0  /* Fixtures are version-gated; accept earlier saves. */
 
 /* Marker before the serialized supplies block in 0.9.6+ savefiles. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
@@ -2989,6 +2989,7 @@
 #define OPT_pixel_monster_status_icons 123
 #define OPT_lockpick_minigame 124
 #define OPT_chest_trap_minigame 125
+#define OPT_torch_animation_always 126
 
 #define MONSTER_TILE_HEALTH_BARS_SHOW 0
 #define MONSTER_TILE_HEALTH_BARS_DAMAGED_ONLY 1
@@ -3854,6 +3855,14 @@
 #define MSG_USE_GEM 61
 #define MSG_ACTIVATE 62
 #define MSG_MONSTER_ATTACK 63
+/* Per-race audio actions; separate from message IDs and save data. */
+#define MONSTER_SOUND_ATTACK 0
+#define MONSTER_SOUND_DAMAGE 1
+#define MONSTER_SOUND_DEATH 2
+#define MONSTER_SOUND_IDLE 3
+#define MONSTER_SOUND_MAX 4
+#define MONSTER_SOUND_MELEE_BASE 32
+#define MONSTER_SOUND_RANGED_BASE 96
 #define MSG_MONSTER_ATTACK_RANGED 64
 #define MSG_MONSTER_ATTACK_BREATH 65
 #define MSG_BASHDOOR_FAIL 66

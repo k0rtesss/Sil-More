@@ -15,6 +15,7 @@ void sdl_sound_shutdown(void);
 
 /* Play the sound mapped to the specified Angband message index. */
 void sdl_sound_handle(int sound_idx);
+void sdl_sound_monster(int race_idx, int action);
 
 /* Schedule a sound to play after delay_ms milliseconds without blocking the
  * caller. Playback starts from the timer callback through SDL_mixer's

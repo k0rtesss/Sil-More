@@ -1,6 +1,7 @@
 /* File: fs/save-dungeon.c -- carved from save.c (shares state via fs/save-internal.h) */
 
 #include "angband.h"
+#include "cave/cave-fixtures.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -16,6 +17,31 @@
     (CAVE_MARK | CAVE_GLOW | CAVE_ICKY | CAVE_ROOM | CAVE_G_VAULT | CAVE_HIDDEN)
 #define IMPORTANT_FLAGS_HI (CAVE_CHASM_AREA)
 #define IMPORTANT_FLAGS_16 (IMPORTANT_FLAGS_LO | IMPORTANT_FLAGS_HI)
+
+static void wr_fixtures(void)
+{
+    int y, x;
+    u16b fixture_count = 0;
+
+    /* Sparse decorative fixtures, introduced in 0.9.8.1. Animation phase is
+     * frontend-only and intentionally absent from the savefile. */
+    for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (x = 0; x < p_ptr->cur_map_wid; x++)
+            if (cave_fixture_at(y, x))
+                fixture_count++;
+    wr_u16b(SAVEFILE_FIXTURES_MAGIC);
+    wr_u16b(fixture_count);
+    for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (x = 0; x < p_ptr->cur_map_wid; x++)
+        {
+            byte kind = cave_fixture_at(y, x);
+            if (!kind)
+                continue;
+            wr_byte((byte)y);
+            wr_byte((byte)x);
+            wr_byte(kind);
+        }
+}
 
 /*
  * Write the current dungeon
@@ -302,6 +328,8 @@ void wr_dungeon(void)
         }
     }
     log_trace("[save:%06u] === END CAVE_NATURAL RLE ===", (unsigned)save_byte_offset);
+
+    wr_fixtures();
 
     /*** Compact ***/
 

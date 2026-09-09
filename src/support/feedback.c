@@ -43,6 +43,19 @@ void sound(int val)
     sdl_sound_handle(val);
 }
 
+/* Nearby unseen monsters can be heard, but audio does not reveal their grid or
+ * alter the gameplay noise/detection system. */
+void monster_sound(const monster_type* m_ptr, int action)
+{
+    int range = action == MONSTER_SOUND_IDLE ? 10 : MAX_SIGHT;
+    if (!use_sound || !m_ptr || !m_ptr->r_idx
+        || distance(p_ptr->py, p_ptr->px, m_ptr->fy, m_ptr->fx) > range)
+        return;
+    if (action == MONSTER_SOUND_IDLE && m_ptr->alertness < ALERTNESS_UNWARY)
+        return;
+    sdl_sound_monster(m_ptr->r_idx, action);
+}
+
 /*
  * Schedule a sound to play after delay_ms milliseconds without blocking.
  * Use this when you want an audio gap between sounds (e.g. weapon swing

@@ -68,6 +68,10 @@ void sound_config_set_defaults(struct sound_config* config)
     config->enable_walk = true;
     config->enable_doors = true;
     config->enable_monster_hits = true;
+    config->enable_attack = true;
+    config->enable_damage = true;
+    config->enable_death = true;
+    config->enable_idle = true;
     config->enable_traps = true;
     config->volume_master = 1.0f;
     config->volume_combat = 1.0f;
@@ -186,6 +190,19 @@ void sound_config_load(const char* filename, struct sound_config* config)
         config->enable_doors = cJSON_IsTrue(enable_doors);
         log_debug("Loaded sound enable_doors: %s", config->enable_doors ? "true" : "false");
     }
+
+    cJSON* type_attack = cJSON_GetObjectItemCaseSensitive(root, "enableAttack");
+    if (cJSON_IsBool(type_attack))
+        config->enable_attack = cJSON_IsTrue(type_attack);
+    cJSON* type_damage = cJSON_GetObjectItemCaseSensitive(root, "enableDamage");
+    if (cJSON_IsBool(type_damage))
+        config->enable_damage = cJSON_IsTrue(type_damage);
+    cJSON* type_death = cJSON_GetObjectItemCaseSensitive(root, "enableDeath");
+    if (cJSON_IsBool(type_death))
+        config->enable_death = cJSON_IsTrue(type_death);
+    cJSON* type_idle = cJSON_GetObjectItemCaseSensitive(root, "enableIdle");
+    if (cJSON_IsBool(type_idle))
+        config->enable_idle = cJSON_IsTrue(type_idle);
 
     // Load monster hit sounds flag
     cJSON* enable_monster_hits = cJSON_GetObjectItemCaseSensitive(root, "enableMonsterHits");
@@ -372,6 +389,10 @@ void sound_config_save(const char* filename, const struct sound_config* config)
     cJSON_AddBoolToObject(root, "enableWalk", config->enable_walk);
     cJSON_AddBoolToObject(root, "enableDoors", config->enable_doors);
     cJSON_AddBoolToObject(root, "enableMonsterHits", config->enable_monster_hits);
+    cJSON_AddBoolToObject(root, "enableAttack", config->enable_attack);
+    cJSON_AddBoolToObject(root, "enableDamage", config->enable_damage);
+    cJSON_AddBoolToObject(root, "enableDeath", config->enable_death);
+    cJSON_AddBoolToObject(root, "enableIdle", config->enable_idle);
     cJSON_AddBoolToObject(root, "enableTraps", config->enable_traps);
     cJSON_AddNumberToObject(root, "volumeMaster", config->volume_master);
     cJSON_AddNumberToObject(root, "volumeCombat", config->volume_combat);

@@ -1770,6 +1770,7 @@ static const byte app_visual_options[] = {
     OPT_pixel_monster_status_icons, OPT_mirror_player_tile_facing,
     OPT_handcrafted_player_tile_facing,
     OPT_mirror_monster_tile_facing,
+    OPT_torch_animation_always,
     OPT_center_player, OPT_run_avoid_center,
     OPT_show_smithing_difficulty,
     OPT_show_smithing_difficulty_look, OPT_NONE

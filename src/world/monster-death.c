@@ -956,6 +956,9 @@ void monster_death(int m_idx)
 
     int multiplier = 1;
 
+    /* All real deaths, including environmental kills, share this path. */
+    monster_sound(m_ptr, MONSTER_SOUND_DEATH);
+
     /* Track monster death for Nienna mercy quest */
     if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE && m_ptr->r_idx != R_IDX_NIENA) {
         p_ptr->niena_monsters_killed++;
@@ -1262,6 +1265,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
             log_info("Morgoth reached 0 HP; entering god state.");
             (void)morgoth_enter_final_stage(m_idx);
 
+            monster_sound(m_ptr, MONSTER_SOUND_DAMAGE);
+
             return (false);
         }
 
@@ -1338,6 +1343,7 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
     // Wake it up if there was real damage dealt
     if (dam > 0)
     {
+        monster_sound(m_ptr, MONSTER_SOUND_DAMAGE);
         int random_level = rand_range(ALERTNESS_ALERT, ALERTNESS_QUITE_ALERT);
         set_alertness(m_ptr, MAX(m_ptr->alertness + dam, random_level + dam));
     }

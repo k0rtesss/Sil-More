@@ -6,6 +6,7 @@
 #include "fs/path.h"
 #include "log/log.h"
 #include "sound-config.h"
+#include "cJSON.h"
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
 #include <ctype.h>
@@ -75,6 +76,19 @@ static struct sound_config g_sound_config;
 static char g_sound_config_path[1024];
 static bool g_music_force_main_on_next_welcome = false;
 static bool g_sound_loaded_once = false;
+/* Allocate only for race/action pairs encountered; cache missing folders too. */
+typedef struct monster_sound_entry {
+    int race_idx;
+    int action;
+    int count;
+    char files[SDL_SOUND_MAX_VARIANTS][SDL_SOUND_NAME_LEN];
+    MIX_Audio* audio[SDL_SOUND_MAX_VARIANTS];
+    bool attempted[SDL_SOUND_MAX_VARIANTS];
+    struct monster_sound_entry* next;
+} monster_sound_entry;
+static monster_sound_entry* g_monster_sounds;
+static cJSON* g_monster_sound_config;
+static bool g_monster_sound_config_loaded;
 static SDL_Mutex* g_sound_mutex = NULL;
 static Uint64 g_sound_generation = 1;
 static Uint32 g_sound_diagnostic_event = (Uint32)-1;
@@ -204,6 +218,19 @@ static bool sound_is_door(int sound_idx)
 
 static bool is_sound_enabled(int sound_idx)
 {
+    /* Global event-type switches apply to player and monster effects alike,
+     * including delayed playback, before the existing category switches. */
+    if ((sound_idx == MSG_KILL || sound_idx == MSG_DEATH)
+        && !g_sound_config.enable_death)
+        return false;
+    if (sound_idx == MSG_HIT && !g_sound_config.enable_damage)
+        return false;
+    if ((sound_idx == MSG_SHOOT || sound_idx == MSG_MISS || sound_idx == MSG_ARMOR
+            || (sound_idx >= MSG_WEAPON_SLASH_LIGHT && sound_idx <= MSG_WEAPON_UNARMED)
+            || sound_idx == MSG_WEAPON_SLASH_MEDIUM || sound_is_monster_hit(sound_idx))
+        && !g_sound_config.enable_attack)
+        return false;
+
     if (sound_is_combat(sound_idx)) {
         return sound_state.enable_combat;
     }
@@ -274,6 +301,17 @@ static void sdl_sound_reset_bank(void)
 
 static void sdl_sound_destroy_cached_audio(void)
 {
+    cJSON_Delete(g_monster_sound_config);
+    g_monster_sound_config = NULL;
+    g_monster_sound_config_loaded = false;
+    while (g_monster_sounds) {
+        monster_sound_entry* entry = g_monster_sounds;
+        g_monster_sounds = entry->next;
+        for (int i = 0; i < entry->count; ++i)
+            if (entry->audio[i])
+                MIX_DestroyAudio(entry->audio[i]);
+        SDL_free(entry);
+    }
     for (int i = 0; i < MSG_MAX; i++) {
         for (int j = 0; j < SDL_SOUND_MAX_VARIANTS; j++) {
             if (sound_state.bank.sound_audio[i][j]) {
@@ -1325,6 +1363,132 @@ void sdl_sound_handle(int sound_idx)
     if (sample_count > 0) {
         sample_idx = (sample_count > 1) ? Rand_div(sample_count) : 0;
         (void)sdl_sound_play_sample_locked(sound_idx, sample_idx, false);
+    }
+    SDL_UnlockMutex(g_sound_mutex);
+}
+
+/* Each race explicitly assigns recordings to its individual blow slots and
+ * ranged abilities. Empty assignments remain silent. */
+static const cJSON* monster_sound_assignment(int race_idx, int action)
+{
+    static const char* const ranged[32] = {
+        "arrow1", "arrow2", "boulder", "breath_fire", "breath_cold",
+        "breath_poison", "breath_dark", "earthquake", "shriek", "screech",
+        "darkness", "forget", "scare", "confuse", "hold", "slow",
+        "hatch_spider", "dim", "song_binding", "song_piercing", "song_oaths",
+        NULL, NULL, "throw_web", "rally"
+    };
+    if (!g_monster_sound_config_loaded) {
+        char path[1024];
+        size_t length = 0;
+        g_monster_sound_config_loaded = true;
+        sdl_sound_build_path("sound/monsters/monster-sounds.json", path, sizeof(path));
+        char* data = SDL_LoadFile(path, &length);
+        if (data) {
+            g_monster_sound_config = cJSON_ParseWithLength(data, length);
+            SDL_free(data);
+            if (!g_monster_sound_config)
+                log_warn("Invalid monster sound assignments: %s", path);
+        } else {
+            log_warn("Cannot load monster sound assignments: %s", path);
+        }
+    }
+    char id[16];
+    strnfmt(id, sizeof(id), "%d", race_idx);
+    const cJSON* races = cJSON_GetObjectItemCaseSensitive(g_monster_sound_config, "monsters");
+    const cJSON* race = cJSON_GetObjectItemCaseSensitive(races, id);
+    const cJSON* assignment = NULL;
+    if (action >= MONSTER_SOUND_MELEE_BASE
+        && action < MONSTER_SOUND_MELEE_BASE + MONSTER_BLOW_MAX) {
+        const cJSON* blows = cJSON_GetObjectItemCaseSensitive(race, "melee");
+        assignment = cJSON_GetArrayItem(blows, action - MONSTER_SOUND_MELEE_BASE);
+    } else if (action >= MONSTER_SOUND_RANGED_BASE
+        && action < MONSTER_SOUND_RANGED_BASE + (int)N_ELEMENTS(ranged)) {
+        const char* name = ranged[action - MONSTER_SOUND_RANGED_BASE];
+        if (name)
+            assignment = cJSON_GetObjectItemCaseSensitive(
+                cJSON_GetObjectItemCaseSensitive(race, "ranged"), name);
+    } else {
+        const char* name = action == MONSTER_SOUND_DAMAGE ? "damage"
+            : action == MONSTER_SOUND_DEATH ? "death"
+            : action == MONSTER_SOUND_IDLE ? "idle" : NULL;
+        if (name)
+            assignment = cJSON_GetObjectItemCaseSensitive(race, name);
+    }
+    return cJSON_GetObjectItemCaseSensitive(assignment, "sounds");
+}
+
+void sdl_sound_monster(int race_idx, int action)
+{
+    if (race_idx <= 0 || !z_info || race_idx >= z_info->r_max
+        || action < 0 || action >= MONSTER_SOUND_RANGED_BASE + 32
+        || !g_sound_config.enabled || !sound_state.enable_monster_hits
+        || !sdl_sound_ensure_mutex())
+        return;
+
+    bool type_enabled = action == MONSTER_SOUND_DAMAGE ? g_sound_config.enable_damage
+        : action == MONSTER_SOUND_DEATH ? g_sound_config.enable_death
+        : action == MONSTER_SOUND_IDLE ? g_sound_config.enable_idle
+        : g_sound_config.enable_attack;
+    if (!type_enabled)
+        return;
+
+    SDL_LockMutex(g_sound_mutex);
+    /* Cosmetic randomness must not consume the dungeon/combat RNG. */
+    if (action == MONSTER_SOUND_IDLE && SDL_rand(100) >= 2) {
+        SDL_UnlockMutex(g_sound_mutex);
+        return;
+    }
+    if (!sdl_sound_ensure_mixer()) {
+        SDL_UnlockMutex(g_sound_mutex);
+        return;
+    }
+    monster_sound_entry* entry = g_monster_sounds;
+    while (entry && (entry->race_idx != race_idx || entry->action != action))
+        entry = entry->next;
+    if (!entry) {
+        entry = SDL_calloc(1, sizeof(*entry));
+        if (!entry) {
+            SDL_UnlockMutex(g_sound_mutex);
+            return;
+        }
+        entry->race_idx = race_idx;
+        entry->action = action;
+        entry->next = g_monster_sounds;
+        g_monster_sounds = entry;
+        const cJSON* sounds = monster_sound_assignment(race_idx, action);
+        const cJSON* sample;
+        cJSON_ArrayForEach(sample, sounds) {
+            if (!cJSON_IsString(sample) || !sample->valuestring[0])
+                continue;
+            if (entry->count >= SDL_SOUND_MAX_VARIANTS)
+                break;
+            char path[1024];
+            sdl_sound_build_path(sample->valuestring, path, sizeof(path));
+            if (strlen(path) >= SDL_SOUND_NAME_LEN) {
+                log_warn("Monster sound path too long: %s", path);
+                continue;
+            }
+            SDL_strlcpy(entry->files[entry->count++], path, SDL_SOUND_NAME_LEN);
+        }
+
+    }
+    if (entry->count > 0) {
+        int sample = SDL_rand(entry->count);
+        if (!entry->attempted[sample]) {
+            entry->attempted[sample] = true;
+            entry->audio[sample] = MIX_LoadAudio(sound_state.mixer,
+                entry->files[sample], true);
+            if (!entry->audio[sample])
+                log_warn("Cannot load monster sound '%s': %s",
+                    entry->files[sample], SDL_GetError());
+        }
+        if (entry->audio[sample]) {
+            MIX_Track* track = sdl_sound_acquire_sfx_track(true);
+            if (track)
+                sdl_sound_play_track_audio(track, entry->audio[sample],
+                    sound_state.volume_monster_hits, 0, true);
+        }
     }
     SDL_UnlockMutex(g_sound_mutex);
 }

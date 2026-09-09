@@ -1,6 +1,7 @@
 /* File: fs/load-dungeon.c -- carved from load.c (shares state via fs/load-internal.h) */
 
 #include "angband.h"
+#include "cave/cave-fixtures.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -63,6 +64,47 @@ static int dungeon_rle_pair_status(
         stream_name, (unsigned)(load_byte_offset - 2));
     note(format("Invalid zero-length %s dungeon run.", stream_name));
     return -1;
+}
+
+static errr rd_fixtures(void)
+{
+    int i;
+
+    /* Old saves have no fixture identities; start empty instead of guessing
+     * from CAVE_GLOW (which is also set by rooms and spells). */
+    cave_fixtures_clear();
+    if (savefile_version_at_least(0, 9, 8, 1))
+    {
+        u16b magic = 0, fixture_count = 0;
+        u32b start_offset = load_byte_offset;
+        rd_u16b(&magic);
+        rd_u16b(&fixture_count);
+        if (load_byte_offset - start_offset != 4
+            || magic != SAVEFILE_FIXTURES_MAGIC
+            || fixture_count > p_ptr->cur_map_hgt * p_ptr->cur_map_wid)
+        {
+            note("Invalid corridor fixtures header.");
+            return -1;
+        }
+        for (i = 0; i < fixture_count; i++)
+        {
+            byte fy = 0, fx = 0, kind = 0;
+            start_offset = load_byte_offset;
+            rd_byte(&fy);
+            rd_byte(&fx);
+            rd_byte(&kind);
+            if (load_byte_offset - start_offset != 3
+                || fy >= p_ptr->cur_map_hgt || fx >= p_ptr->cur_map_wid
+                || kind < CAVE_FIXTURE_WALL_TORCH || kind > CAVE_FIXTURE_BRAZIER)
+            {
+                note("Invalid corridor fixture.");
+                return -1;
+            }
+            cave_fixture_set(fy, fx, kind);
+        }
+    }
+
+    return 0;
 }
 
 /*
@@ -497,6 +539,9 @@ errr rd_dungeon(void)
         }
         log_trace("[load:%06u] === END CAVE_NATURAL RLE ===", (unsigned)load_byte_offset);
     }
+
+    if (rd_fixtures() != 0)
+        return -1;
 
     /*** Player ***/
 

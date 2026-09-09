@@ -11,7 +11,11 @@ struct sound_config {
     bool enable_inventory;     // Enable inventory sounds
     bool enable_walk;          // Enable walk sounds
     bool enable_doors;         // Enable door sounds
-    bool enable_monster_hits;  // Enable monster hit sounds
+    bool enable_monster_hits;  // Master switch for monster sounds
+    bool enable_attack; // Enable attack sounds
+    bool enable_damage; // Enable damage sounds
+    bool enable_death; // Enable death sounds
+    bool enable_idle; // Enable idle sounds
     bool enable_traps;         // Enable trap sounds
     float volume_master;       // Master volume (0.0-1.0, default: 1.0)
     float volume_combat;       // Combat sounds volume (0.0-1.0, default: 1.0)

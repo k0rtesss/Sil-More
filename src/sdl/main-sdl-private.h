@@ -3129,6 +3129,7 @@ void sdl_redraw_saved_screen_overlay_cells(const sdl_view* view, const SDL_FRect
 bool sdl_render_saved_screen_left_panel_backdrop(const sdl_view* view);
 bool sdl_render_current_window_frame(void);
 void sdl_set_present_suppressed(bool suppressed);
+extern bool g_sdl_present_suppressed;
 void sdl_present_batch_begin(void);
 void sdl_present_batch_end(void);
 void sdl_present_if_needed(sdl_view* d);
@@ -3200,6 +3201,14 @@ errr callback_sdl_wipe(int x, int y, int n);
 errr callback_sdl_text(int x, int y, int n, byte a, cptr s);
 void sdl_draw_tileset_sprite_ex(byte a, char c, const SDL_FRect* dst, bool icon, SDL_FlipMode flip);
 void sdl_draw_tileset_sprite(byte a, char c, const SDL_FRect* dst, bool icon);
+void sdl_idle_animation_clear_cells(void);
+void sdl_idle_animation_shutdown(void);
+void sdl_idle_animation_invalidate_span(int col, int row, int width);
+void sdl_idle_animation_track(int col, int row, int y, int x,
+    byte a, char c, byte ta, char tc);
+bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst);
+int sdl_idle_animation_timeout_ms(Uint64 now_ns);
+void sdl_idle_animation_update(Uint64 now_ns);
 bool sdl_map_grid_is_player(int y, int x);
 bool sdl_player_tile_directional_enabled(void);
 bool sdl_player_tile_handcrafted_enabled(void);

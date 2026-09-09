@@ -1502,6 +1502,8 @@ bool project_m(
         /* Damaged monster */
         else
         {
+            if (dam > 0)
+                monster_sound(m_ptr, MONSTER_SOUND_DAMAGE);
             // Alert it
             make_alert(m_ptr);
 

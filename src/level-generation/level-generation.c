@@ -1,6 +1,7 @@
 /* File: level-generation.c */
 
 #include "angband.h"
+#include "cave/cave-fixtures.h"
 #include "level-generation/level-generation-internal.h"
 
 bool cave_gen(void)
@@ -1609,6 +1610,8 @@ if (playerturn == 0) {
         o_max = 1;
         mon_max = 1;
         feeling = 0;
+
+        cave_fixtures_clear();
 
         /* Start with a blank cave */
         for (y = 0; y < MAX_DUNGEON_HGT; y++)

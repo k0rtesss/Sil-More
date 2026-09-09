@@ -75,6 +75,10 @@ void clear_skills_and_abilities()
  */
 enum {
     SOUND_OPT_ENABLED = 0,
+    SOUND_OPT_ATTACK_ENABLED,
+    SOUND_OPT_DAMAGE_ENABLED,
+    SOUND_OPT_DEATH_ENABLED,
+    SOUND_OPT_IDLE_ENABLED,
     SOUND_OPT_COMBAT_ENABLED,
     SOUND_OPT_MONSTER_HITS_ENABLED,
     SOUND_OPT_INVENTORY_ENABLED,
@@ -202,6 +206,7 @@ static const struct option_group_marker visual_option_groups[] = {
     { OPT_running_delay, "Animation" },
     { OPT_mirror_player_tile_facing, "Animation" },
     { OPT_mirror_monster_tile_facing, "Animation" },
+    { OPT_torch_animation_always, "Animation" },
     { OPT_center_player, "Camera" },
     { OPT_run_avoid_center, "Camera" },
     { OPT_show_level_entry_banner, "Narrative" },
@@ -244,6 +249,10 @@ static const struct option_group_marker debug_option_groups[] = {
 
 static const struct option_group_marker sound_option_groups[] = {
     { SOUND_OPTION_ROW(SOUND_OPT_ENABLED), "Master" },
+    { SOUND_OPTION_ROW(SOUND_OPT_ATTACK_ENABLED), "Sound Types" },
+    { SOUND_OPTION_ROW(SOUND_OPT_DAMAGE_ENABLED), "Sound Types" },
+    { SOUND_OPTION_ROW(SOUND_OPT_DEATH_ENABLED), "Sound Types" },
+    { SOUND_OPTION_ROW(SOUND_OPT_IDLE_ENABLED), "Sound Types" },
     { SOUND_OPTION_ROW(SOUND_OPT_COMBAT_ENABLED), "Effects" },
     { SOUND_OPTION_ROW(SOUND_OPT_MONSTER_HITS_ENABLED), "Effects" },
     { SOUND_OPTION_ROW(SOUND_OPT_INVENTORY_ENABLED), "Effects" },
@@ -590,13 +599,17 @@ static cptr sound_option_label(int index)
         {
         case SOUND_OPT_ENABLED: return narrow ? "Sounds" : "Game sounds";
         case SOUND_OPT_COMBAT_ENABLED: return narrow ? "Combat sfx" : "Combat sounds";
-        case SOUND_OPT_MONSTER_HITS_ENABLED: return narrow ? "Mon hit sfx" : "Monster hit sounds";
+        case SOUND_OPT_MONSTER_HITS_ENABLED: return narrow ? "Monster sfx" : "Monster sounds";
+        case SOUND_OPT_ATTACK_ENABLED: return narrow ? "Attack sfx" : "Attack sounds";
+        case SOUND_OPT_DAMAGE_ENABLED: return narrow ? "Damage sfx" : "Damage sounds";
+        case SOUND_OPT_DEATH_ENABLED: return narrow ? "Death sfx" : "Death sounds";
+        case SOUND_OPT_IDLE_ENABLED: return narrow ? "Idle sfx" : "Idle sounds";
         case SOUND_OPT_INVENTORY_ENABLED: return narrow ? "Inv sfx" : "Inventory sounds";
         case SOUND_OPT_WALK_ENABLED: return narrow ? "Walk sfx" : "Walk sounds";
         case SOUND_OPT_DOORS_ENABLED: return narrow ? "Door sfx" : "Door sounds";
         case SOUND_OPT_TRAPS_ENABLED: return narrow ? "Trap sfx" : "Trap sounds";
         case SOUND_OPT_COMBAT_VOLUME: return narrow ? "Combat vol" : "Combat volume";
-        case SOUND_OPT_MONSTER_HITS_VOLUME: return narrow ? "Mon hit vol" : "Monster hit volume";
+        case SOUND_OPT_MONSTER_HITS_VOLUME: return narrow ? "Monster vol" : "Monster volume";
         case SOUND_OPT_INVENTORY_VOLUME: return narrow ? "Inv vol" : "Inventory volume";
         case SOUND_OPT_WALK_VOLUME: return narrow ? "Walk vol" : "Walk volume";
         case SOUND_OPT_DOORS_VOLUME: return narrow ? "Door vol" : "Door volume";
@@ -614,13 +627,17 @@ static cptr sound_option_label(int index)
     {
     case SOUND_OPT_ENABLED: return "Enable game sounds";
     case SOUND_OPT_COMBAT_ENABLED: return "Enable combat sounds";
-    case SOUND_OPT_MONSTER_HITS_ENABLED: return "Enable monster hit sounds";
+    case SOUND_OPT_MONSTER_HITS_ENABLED: return "Enable monster sounds";
+    case SOUND_OPT_ATTACK_ENABLED: return "Enable attack sounds";
+    case SOUND_OPT_DAMAGE_ENABLED: return "Enable damage sounds";
+    case SOUND_OPT_DEATH_ENABLED: return "Enable death sounds";
+    case SOUND_OPT_IDLE_ENABLED: return "Enable idle sounds";
     case SOUND_OPT_INVENTORY_ENABLED: return "Enable inventory sounds";
     case SOUND_OPT_WALK_ENABLED: return "Enable walk sounds";
     case SOUND_OPT_DOORS_ENABLED: return "Enable door sounds";
     case SOUND_OPT_TRAPS_ENABLED: return "Enable trap sounds";
     case SOUND_OPT_COMBAT_VOLUME: return "Combat sounds volume";
-    case SOUND_OPT_MONSTER_HITS_VOLUME: return "Monster hit sounds volume";
+    case SOUND_OPT_MONSTER_HITS_VOLUME: return "Monster sounds volume";
     case SOUND_OPT_INVENTORY_VOLUME: return "Inventory sounds volume";
     case SOUND_OPT_WALK_VOLUME: return "Walk sounds volume";
     case SOUND_OPT_DOORS_VOLUME: return "Door sounds volume";
@@ -662,6 +679,8 @@ static cptr option_menu_label(int opt)
     case OPT_pixel_monster_status_icons:
         return compact ? (narrow ? "Pixel status" : "Pixel monster status")
                        : "Use pixel-rendered monster status icons";
+    case OPT_torch_animation_always:
+        return compact ? "Torch animation" : "Torch and brazier animation";
     case OPT_hide_supporting_panes_fullscreen:
         return compact ? (narrow ? "Hide panes FS" : "Hide panes full-screen")
                        : "Hide supporting panes on full-screen screens";
@@ -929,6 +948,7 @@ static void option_apply_side_effects(int opt)
         || opt == OPT_sleep_icon || opt == OPT_mirror_player_tile_facing
         || opt == OPT_pixel_monster_status_icons
         || opt == OPT_handcrafted_player_tile_facing
+        || opt == OPT_torch_animation_always
         || opt == OPT_mirror_monster_tile_facing)
         p_ptr->redraw |= (PR_MAP);
 }
@@ -1192,6 +1212,10 @@ static bool option_pick_value(int opt, bool* handled)
         { PLAYER_TILE_FACING_MIRROR, "mirror" },
         { PLAYER_TILE_FACING_HANDCRAFTED, "handcrafted" }
     };
+    static const struct settings_value_choice torch_animation_choices[] = {
+        { 1, "Always animate" },
+        { 0, "Freeze outside sight" }
+    };
     static const struct settings_value_choice monster_tile_health_choices[] = {
         { MONSTER_TILE_HEALTH_BARS_SHOW, "Show" },
         { MONSTER_TILE_HEALTH_BARS_DAMAGED_ONLY, "Only damaged" },
@@ -1332,6 +1356,18 @@ static bool option_pick_value(int opt, bool* handled)
         value = op_ptr->opt[opt] ? 1 : 0;
         if (option_pick_from_choices(opt, supply_icon_choices,
                 (int)N_ELEMENTS(supply_icon_choices), value, &value, handled)
+            && value != (op_ptr->opt[opt] ? 1 : 0))
+        {
+            op_ptr->opt[opt] = (value != 0);
+            option_apply_side_effects(opt);
+            return true;
+        }
+        return false;
+
+    case OPT_torch_animation_always:
+        value = op_ptr->opt[opt] ? 1 : 0;
+        if (option_pick_from_choices(opt, torch_animation_choices,
+                (int)N_ELEMENTS(torch_animation_choices), value, &value, handled)
             && value != (op_ptr->opt[opt] ? 1 : 0))
         {
             op_ptr->opt[opt] = (value != 0);
@@ -1541,6 +1577,18 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
             break;
         case SOUND_OPT_MONSTER_HITS_ENABLED:
             sound_cfg->enable_monster_hits = def.enable_monster_hits;
+            break;
+        case SOUND_OPT_ATTACK_ENABLED:
+            sound_cfg->enable_attack = def.enable_attack;
+            break;
+        case SOUND_OPT_DAMAGE_ENABLED:
+            sound_cfg->enable_damage = def.enable_damage;
+            break;
+        case SOUND_OPT_DEATH_ENABLED:
+            sound_cfg->enable_death = def.enable_death;
+            break;
+        case SOUND_OPT_IDLE_ENABLED:
+            sound_cfg->enable_idle = def.enable_idle;
             break;
         case SOUND_OPT_INVENTORY_ENABLED:
             sound_cfg->enable_inventory = def.enable_inventory;
@@ -1801,6 +1849,22 @@ extern void do_cmd_options_aux(int page, cptr info)
                     strnfmt(value_str, sizeof(value_str), "%s",
                         sound_cfg->enable_monster_hits ? "yes" : "no ");
                     break;
+                case SOUND_OPT_ATTACK_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_attack ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_DAMAGE_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_damage ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_DEATH_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_death ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_IDLE_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_idle ? "yes" : "no ");
+                    break;
                 case SOUND_OPT_INVENTORY_ENABLED:
                     strnfmt(value_str, sizeof(value_str), "%s",
                         sound_cfg->enable_inventory ? "yes" : "no ");
@@ -2011,6 +2075,12 @@ extern void do_cmd_options_aux(int page, cptr info)
                 option_menu_format_line(buf, sizeof(buf),
                     option_menu_label(opt[i]),
                     op_ptr->opt[opt[i]] ? "Random" : "Fixed");
+            }
+            else if (opt[i] == OPT_torch_animation_always)
+            {
+                option_menu_format_line(buf, sizeof(buf),
+                    option_menu_label(opt[i]), op_ptr->opt[opt[i]]
+                        ? "Always animate" : "Freeze outside sight");
             }
             else if (opt[i] == OPT_mirror_player_tile_facing)
             {
@@ -2254,6 +2324,22 @@ extern void do_cmd_options_aux(int page, cptr info)
                             sound_cfg->enable_monster_hits = !sound_cfg->enable_monster_hits;
                             changed = true;
                             break;
+                        case SOUND_OPT_ATTACK_ENABLED:
+                            sound_cfg->enable_attack = !sound_cfg->enable_attack;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_DAMAGE_ENABLED:
+                            sound_cfg->enable_damage = !sound_cfg->enable_damage;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_DEATH_ENABLED:
+                            sound_cfg->enable_death = !sound_cfg->enable_death;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_IDLE_ENABLED:
+                            sound_cfg->enable_idle = !sound_cfg->enable_idle;
+                            changed = true;
+                            break;
                         case SOUND_OPT_INVENTORY_ENABLED:
                             sound_cfg->enable_inventory = !sound_cfg->enable_inventory;
                             changed = true;
@@ -2331,6 +2417,18 @@ extern void do_cmd_options_aux(int page, cptr info)
                         break;
                     case SOUND_OPT_MONSTER_HITS_ENABLED:
                         sound_cfg->enable_monster_hits = true;
+                        break;
+                    case SOUND_OPT_ATTACK_ENABLED:
+                        sound_cfg->enable_attack = true;
+                        break;
+                    case SOUND_OPT_DAMAGE_ENABLED:
+                        sound_cfg->enable_damage = true;
+                        break;
+                    case SOUND_OPT_DEATH_ENABLED:
+                        sound_cfg->enable_death = true;
+                        break;
+                    case SOUND_OPT_IDLE_ENABLED:
+                        sound_cfg->enable_idle = true;
                         break;
                     case SOUND_OPT_INVENTORY_ENABLED:
                         sound_cfg->enable_inventory = true;
@@ -2520,6 +2618,18 @@ extern void do_cmd_options_aux(int page, cptr info)
                         break;
                     case SOUND_OPT_MONSTER_HITS_ENABLED:
                         sound_cfg->enable_monster_hits = false;
+                        break;
+                    case SOUND_OPT_ATTACK_ENABLED:
+                        sound_cfg->enable_attack = false;
+                        break;
+                    case SOUND_OPT_DAMAGE_ENABLED:
+                        sound_cfg->enable_damage = false;
+                        break;
+                    case SOUND_OPT_DEATH_ENABLED:
+                        sound_cfg->enable_death = false;
+                        break;
+                    case SOUND_OPT_IDLE_ENABLED:
+                        sound_cfg->enable_idle = false;
                         break;
                     case SOUND_OPT_INVENTORY_ENABLED:
                         sound_cfg->enable_inventory = false;

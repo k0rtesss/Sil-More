@@ -255,6 +255,7 @@ void sdl_handle_renderer_reset(void)
         : "lib/xtra/font/VictorMono-Medium.ttf";
 
     sdl_select_page_turn_free();
+    sdl_idle_animation_shutdown();
     sdl_left_panel_canvas_destroy();
     sdl_minimap_map_texture_cache_clear();
     sdl_side_map_pane_texture_cache_clear();

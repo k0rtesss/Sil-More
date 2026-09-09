@@ -1,0 +1,3886 @@
+{
+  "monsters": {
+    "6": {
+      "name": "Nienna, Lady of Pity",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "11": {
+      "name": "Wolf",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "12": {
+      "name": "Tanglethorn",
+      "melee": [
+        {
+          "method": "THORN",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "13": {
+      "name": "Dejected human thrall",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "14": {
+      "name": "Dejected elven thrall",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "15": {
+      "name": "Orc thrallmaster",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        },
+        {
+          "method": "WHIP",
+          "effect": "DISARM",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "16": {
+      "name": "Alert human thrall",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "17": {
+      "name": "Alert elven thrall",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "18": {
+      "name": "Tulkas Unclad",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "19": {
+      "name": "Aulë the Smith",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "20": {
+      "name": "Mandos the Doomsman",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "21": {
+      "name": "Orc skirmisher",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "22": {
+      "name": "Grimhawk",
+      "melee": [
+        {
+          "method": "PECK",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Bat/Bat_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Emerge.ogg"
+        ]
+      }
+    },
+    "23": {
+      "name": "Mewlip",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "dim": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "31": {
+      "name": "Orc scout",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "shriek": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "32": {
+      "name": "Spider hatchling",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "33": {
+      "name": "Blue serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_cold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "41": {
+      "name": "Orc soldier",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "42": {
+      "name": "Madthorn",
+      "melee": [
+        {
+          "method": "THORN",
+          "effect": "CONFUSE",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "43": {
+      "name": "Gorcrow",
+      "melee": [
+        {
+          "method": "PECK",
+          "effect": "BLIND",
+          "sounds": [
+            "sound/monsters/recordings/Bat/Bat_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Emerge.ogg"
+        ]
+      }
+    },
+    "44": {
+      "name": "Brood spider",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "hatch_spider": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "51": {
+      "name": "Orc archer",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "arrow1": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "52": {
+      "name": "White wolf",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "53": {
+      "name": "Red serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "54": {
+      "name": "Gorgol, the Butcher",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "rally": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "61": {
+      "name": "Orc warrior",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "62": {
+      "name": "Sword spider",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "63": {
+      "name": "Crebain",
+      "melee": [
+        {
+          "method": "PECK",
+          "effect": "WOUND",
+          "sounds": [
+            "sound/monsters/recordings/Bat/Bat_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "shriek": {
+          "sounds": [
+            "sound/monsters/recordings/Bat/Bonus_Bat_Sonic_Attack.ogg"
+          ]
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Emerge.ogg"
+        ]
+      }
+    },
+    "64": {
+      "name": "Phantom",
+      "melee": [
+        {
+          "method": "TOUCH",
+          "effect": "TERRIFY",
+          "sounds": [
+            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "dim": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+        ]
+      }
+    },
+    "71": {
+      "name": "Attercop",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "ENTRANCE",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "throw_web": {
+          "sounds": [
+            "sound/monsters/recordings/Spider/Bonus_Spider_Netshot_Attack.ogg"
+          ]
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "72": {
+      "name": "Nightthorn",
+      "melee": [
+        {
+          "method": "THORN",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "73": {
+      "name": "Green serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_poison": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "74": {
+      "name": "Mountain troll",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "BATTER",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "75": {
+      "name": "Tattered wight",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        },
+        {
+          "method": "TOUCH",
+          "effect": "LOSE_DEX",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "darkness": {
+          "sounds": []
+        },
+        "slow": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "76": {
+      "name": "Boldog, the Merciless",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "arrow2": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "81": {
+      "name": "Orc champion",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "82": {
+      "name": "Easterling warrior",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "83": {
+      "name": "Hummerhorn",
+      "melee": [
+        {
+          "method": "STING",
+          "effect": "CONFUSE",
+          "sounds": [
+            "sound/monsters/recordings/Hornet/Hornet_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Hornet/Hornet_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Hornet/Hornet_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Hornet/Hornet_Emerge.ogg"
+        ]
+      }
+    },
+    "84": {
+      "name": "Balcmeg, the Relentless",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "85": {
+      "name": "Lug, the Grotesque",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "91": {
+      "name": "Orc captain",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "rally": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "92": {
+      "name": "Warg",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "93": {
+      "name": "Grave wight",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        },
+        {
+          "method": "TOUCH",
+          "effect": "LOSE_STR",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "darkness": {
+          "sounds": []
+        },
+        "slow": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "94": {
+      "name": "Dark serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_dark": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "95": {
+      "name": "Orcobal, Champion of the Orcs",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "rally": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "101": {
+      "name": "Whispering shadow",
+      "melee": [
+        {
+          "method": "TOUCH",
+          "effect": "DARK",
+          "sounds": [
+            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+        ]
+      }
+    },
+    "102": {
+      "name": "Distended spider",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "103": {
+      "name": "Easterling archer",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "arrow2": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "104": {
+      "name": "Twisted bat",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "LOSE_CON",
+          "sounds": [
+            "sound/monsters/recordings/Bat/Bat_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Emerge.ogg"
+        ]
+      }
+    },
+    "105": {
+      "name": "Othrod, the Orc Lord",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        },
+        {
+          "method": "WHIP",
+          "effect": "DISARM",
+          "sounds": [
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "rally": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+        ]
+      }
+    },
+    "111": {
+      "name": "Snow troll",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "BATTER",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "COLD",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "112": {
+      "name": "Barrow wight",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        },
+        {
+          "method": "TOUCH",
+          "effect": "LOSE_GRA",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "darkness": {
+          "sounds": []
+        },
+        "slow": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "113": {
+      "name": "Lurking horror",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "ENTRANCE",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "scare": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "114": {
+      "name": "Giant",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "boulder": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "115": {
+      "name": "Uldor, the Accursed",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "arrow1": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "117": {
+      "name": "Brodda, the Easterling Lord",
+      "melee": [
+        {
+          "method": "TOUCH",
+          "effect": "LOSE_CON",
+          "sounds": []
+        },
+        {
+          "method": "TOUCH",
+          "effect": "LOSE_STR",
+          "sounds": []
+        },
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "hold": {
+          "sounds": []
+        },
+        "slow": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "121": {
+      "name": "Easterling spy",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "arrow1": {
+          "sounds": []
+        },
+        "shriek": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "122": {
+      "name": "Shadow bat",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Bat/Bat_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Bat/Bat_Emerge.ogg"
+        ]
+      }
+    },
+    "123": {
+      "name": "Sulrauko",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "BATTER",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "124": {
+      "name": "Fire-drake hatchling",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "FIRE",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "125": {
+      "name": "Ulfang the Black",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "rally": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "126": {
+      "name": "Duruin, Least of the Balrogs",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "FIRE",
+          "sounds": []
+        },
+        {
+          "method": "WHIP",
+          "effect": "DISARM",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "131": {
+      "name": "Werewolf",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "132": {
+      "name": "Shadow spider",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "BLIND",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "133": {
+      "name": "Shadow",
+      "melee": [
+        {
+          "method": "TOUCH",
+          "effect": "DARK",
+          "sounds": [
+            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+        ]
+      }
+    },
+    "134": {
+      "name": "Sapphire serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "COLD",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_cold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "135": {
+      "name": "Gilim, the Giant of Eruman",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "COLD",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "boulder": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "141": {
+      "name": "Ruby serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "FIRE",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "142": {
+      "name": "Creeping horror",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "ACID",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "scare": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "143": {
+      "name": "Ringrauko",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "COLD",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "145": {
+      "name": "Delthaur, Balrog of Terror",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "FIRE",
+          "sounds": []
+        },
+        {
+          "method": "WHIP",
+          "effect": "DISARM",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "scare": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "146": {
+      "name": "Nan, the Giant",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "boulder": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "151": {
+      "name": "Cave troll",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "BATTER",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "152": {
+      "name": "Emerald serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_poison": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "153": {
+      "name": "Oathwraith",
+      "melee": [
+        {
+          "method": "TOUCH",
+          "effect": "HUNGER",
+          "sounds": [
+            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "hold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+        ]
+      }
+    },
+    "154": {
+      "name": "Cat warrior",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "161": {
+      "name": "Amethyst serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "DARK",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_dark": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "162": {
+      "name": "Kemenrauko",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "SHATTER",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "163": {
+      "name": "Grotesque",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "164": {
+      "name": "Young cold-drake",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "scare": {
+          "sounds": []
+        },
+        "confuse": {
+          "sounds": []
+        },
+        "hold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "165": {
+      "name": "Umuiyan, the Doorkeeper",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "arrow2": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "166": {
+      "name": "Belegwath, Balrog of Shadow",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "FIRE",
+          "sounds": []
+        },
+        {
+          "method": "WHIP",
+          "effect": "DISARM",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "167": {
+      "name": "Spectre",
+      "melee": [
+        {
+          "method": "TOUCH",
+          "effect": "COLD",
+          "sounds": [
+            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+          ]
+        },
+        {
+          "method": "TOUCH",
+          "effect": "LOSE_GRA",
+          "sounds": [
+            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+        ]
+      }
+    },
+    "171": {
+      "name": "Spider of Gorgoroth",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "ENTRANCE",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "172": {
+      "name": "Greater werewolf",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "173": {
+      "name": "Adamant serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        },
+        "breath_cold": {
+          "sounds": []
+        },
+        "breath_poison": {
+          "sounds": []
+        },
+        "breath_dark": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "174": {
+      "name": "Lesser vampire",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "LOSE_CON",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "175": {
+      "name": "Cat assassin",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "arrow1": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "176": {
+      "name": "Scatha the Worm",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_cold": {
+          "sounds": []
+        },
+        "scare": {
+          "sounds": []
+        },
+        "confuse": {
+          "sounds": []
+        },
+        "hold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "177": {
+      "name": "Oikeroi, Guard of Tevildo",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "181": {
+      "name": "Young fire-drake",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "FIRE",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        },
+        "scare": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "182": {
+      "name": "Darting horror",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "HALLU",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "scare": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "183": {
+      "name": "Wraith",
+      "melee": [
+        {
+          "method": "TOUCH",
+          "effect": "DARK",
+          "sounds": [
+            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "hold": {
+          "sounds": []
+        },
+        "slow": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+        ]
+      }
+    },
+    "184": {
+      "name": "Ururauko",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "FIRE",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "185": {
+      "name": "Tevildo, Prince of Cats",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "186": {
+      "name": "Turkano, Balrog of the Hosts",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "FIRE",
+          "sounds": []
+        },
+        {
+          "method": "WHIP",
+          "effect": "DISARM",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "191": {
+      "name": "Ancient sapphire serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "COLD",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_cold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "192": {
+      "name": "Troll guard",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "BATTER",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "193": {
+      "name": "Vampire",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "LOSE_STR_CON",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "194": {
+      "name": "Nameless thing",
+      "melee": [
+        {
+          "method": "CRUSH",
+          "effect": "ACID",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "195": {
+      "name": "Smaug the Golden",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "FIRE",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        },
+        "confuse": {
+          "sounds": []
+        },
+        "hold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "196": {
+      "name": "Maeglin, Betrayer of Gondolin",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "HURT",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "201": {
+      "name": "Ancient ruby serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "FIRE",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "202": {
+      "name": "Great cold-drake",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "scare": {
+          "sounds": []
+        },
+        "confuse": {
+          "sounds": []
+        },
+        "hold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "203": {
+      "name": "Silent watcher",
+      "melee": [],
+      "ranged": {
+        "screech": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "204": {
+      "name": "Gwathrauko",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "DARK",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "205": {
+      "name": "Draugluin, Sire of Werewolves",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "206": {
+      "name": "Vallach, Balrog of Sudden Flame",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "FIRE",
+          "sounds": []
+        },
+        {
+          "method": "WHIP",
+          "effect": "DISARM",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "211": {
+      "name": "Ancient spider",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "212": {
+      "name": "Ancient emerald serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_poison": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "213": {
+      "name": "Vampire lord",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "LOSE_ALL",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "214": {
+      "name": "Dagorhir, the Elfbane",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "BATTER",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "215": {
+      "name": "Gostir, the Dread Glance",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "scare": {
+          "sounds": []
+        },
+        "confuse": {
+          "sounds": []
+        },
+        "hold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "221": {
+      "name": "Ancient amethyst serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "DARK",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_dark": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "222": {
+      "name": "Great fire-drake",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "FIRE",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        },
+        "scare": {
+          "sounds": []
+        },
+        "hold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "223": {
+      "name": "Hithrauko",
+      "melee": [
+        {
+          "method": "ENGULF",
+          "effect": "HALLU",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "224": {
+      "name": "Shelob, Spider of Darkness",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "ENTRANCE",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "225": {
+      "name": "Lungorthin, Lord of Balrogs",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "FIRE",
+          "sounds": []
+        },
+        {
+          "method": "WHIP",
+          "effect": "DISARM",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "231": {
+      "name": "Ancient adamant serpent",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        },
+        "breath_cold": {
+          "sounds": []
+        },
+        "breath_poison": {
+          "sounds": []
+        },
+        "breath_dark": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "232": {
+      "name": "Unrelenting horror",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "scare": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "233": {
+      "name": "Ancalagon the Black",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "FIRE",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "234": {
+      "name": "Thuringwethil, the Vampire Messenger",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "LOSE_ALL",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "241": {
+      "name": "Gothmog, High Captain of Balrogs",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "FIRE",
+          "sounds": []
+        },
+        {
+          "method": "WHIP",
+          "effect": "DISARM",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "242": {
+      "name": "Ungoliant, the Gloomweaver",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": [
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_dark": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+        ]
+      }
+    },
+    "243": {
+      "name": "Glaurung, the Deceiver",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "FIRE",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        },
+        "scare": {
+          "sounds": []
+        },
+        "confuse": {
+          "sounds": []
+        },
+        "hold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "244": {
+      "name": "Gorthaur, Servant of Morgoth",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "WOUND",
+          "sounds": []
+        },
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "hold": {
+          "sounds": []
+        },
+        "song_oaths": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "245": {
+      "name": "Flying cold-drake",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_cold": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "246": {
+      "name": "Flying fire-drake",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "FIRE",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "breath_fire": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    },
+    "251": {
+      "name": "Morgoth, Lord of Darkness",
+      "melee": [
+        {
+          "method": "HIT",
+          "effect": "SHATTER",
+          "sounds": []
+        }
+      ],
+      "ranged": {
+        "earthquake": {
+          "sounds": []
+        },
+        "song_binding": {
+          "sounds": []
+        },
+        "song_piercing": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "253": {
+      "name": "Carcharoth, the Jaws of Thirst",
+      "melee": [
+        {
+          "method": "BITE",
+          "effect": "POISON",
+          "sounds": []
+        }
+      ],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "260": {
+      "name": "Nienna, Lady of Pity",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "301": {
+      "name": "Fëanor, High King of the Noldor",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "302": {
+      "name": "Lúthien Tinúviel",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "303": {
+      "name": "Thingol, the Hidden King",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "304": {
+      "name": "Beren, Son of Barahir",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "305": {
+      "name": "Huan, Hound of Valinor",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "306": {
+      "name": "Eagle of Manwë",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "307": {
+      "name": "Thorondor, King of Eagles",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "308": {
+      "name": "Ent",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "309": {
+      "name": "Ent-wife",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "320": {
+      "name": "Manwë, Lord of the Breath of Arda",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "321": {
+      "name": "Varda, Lady of the Stars",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "322": {
+      "name": "Ulmo, Lord of Waters",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "323": {
+      "name": "Aulë, the Smith",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "324": {
+      "name": "Yavanna, the Giver of Fruits",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "325": {
+      "name": "Mandos, Doomsman of the Valar",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "326": {
+      "name": "Vairë, the Weaver",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "327": {
+      "name": "Lórien, Master of Dreams",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "328": {
+      "name": "Este, the Healer",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "329": {
+      "name": "Nienna, Lady of Mourning",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "330": {
+      "name": "Tulkas, the Valiant",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "331": {
+      "name": "Nessa, the Dancer",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "332": {
+      "name": "Oromë, Lord of Forests",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "333": {
+      "name": "Vana, the Ever Young",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "401": {
+      "name": "Melkor, Rightful Lord of Arda",
+      "melee": [],
+      "ranged": {},
+      "damage": {
+        "sounds": []
+      },
+      "death": {
+        "sounds": []
+      },
+      "idle": {
+        "sounds": []
+      }
+    },
+    "402": {
+      "name": "Green Great Dragon",
+      "melee": [
+        {
+          "method": "CLAW",
+          "effect": "HURT",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        },
+        {
+          "method": "BITE",
+          "effect": "WOUND",
+          "sounds": [
+            "sound/monsters/recordings/Dragon/Dragon_Attack.ogg"
+          ]
+        }
+      ],
+      "ranged": {
+        "scare": {
+          "sounds": []
+        },
+        "confuse": {
+          "sounds": []
+        }
+      },
+      "damage": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Damage.ogg"
+        ]
+      },
+      "death": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Death.ogg"
+        ]
+      },
+      "idle": {
+        "sounds": [
+          "sound/monsters/recordings/Dragon/Dragon_Emerge.ogg"
+        ]
+      }
+    }
+  }
+}

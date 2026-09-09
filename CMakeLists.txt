@@ -214,6 +214,7 @@ set(SIL_MORE_SOURCES
     src/birth/birth-ui-text.c
     src/cave/cave-awareness.c
     src/cave/cave-flow.c
+    src/cave/cave-fixtures.c
     src/cave/cave-geometry.c
     src/cave/cave-map-ui.c
     src/cave/cave-projection.c
@@ -349,6 +350,7 @@ set(SIL_MORE_SOURCES
     src/sdl/render/sdl-fonts.c
     src/sdl/render/sdl-present.c
     src/sdl/render/sdl-term-callbacks.c
+    src/sdl/render/sdl-idle-animation.c
     src/sdl/render/sdl-text.c
       src/sdl/ui/sdl-main-menu.c
       src/sdl/ui/sdl-halls-screen.c

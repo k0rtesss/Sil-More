@@ -67,6 +67,8 @@ errr callback_sdl_xtra(int n, int v)
                 sdl_popup_notification_pending_timeout_ms(now_ns);
             int mouse_cursor_timeout_ms =
                 sdl_mouse_cursor_animation_timeout_ms(now_ns);
+            int idle_animation_timeout_ms =
+                sdl_idle_animation_timeout_ms(now_ns);
             int round_wheel_timeout_ms =
                 sdl_touch_round_pending_timeout_ms(now_ns);
             int thumb_touch_timeout_ms =
@@ -155,6 +157,9 @@ errr callback_sdl_xtra(int n, int v)
             {
                 timeout_ms = round_wheel_timeout_ms;
             }
+            if (idle_animation_timeout_ms >= 0
+                && (timeout_ms < 0 || idle_animation_timeout_ms < timeout_ms))
+                timeout_ms = idle_animation_timeout_ms;
             if (timeout_ms < 0 || (thumb_touch_timeout_ms >= 0
                     && thumb_touch_timeout_ms < timeout_ms))
             {
@@ -214,6 +219,7 @@ errr callback_sdl_xtra(int n, int v)
             sdl_side_pane_menu_flush_pending_press(flush_ns);
             sdl_touch_round_flush_pending_highlight(flush_ns);
             sdl_mouse_cursor_animation_update(flush_ns);
+            sdl_idle_animation_update(flush_ns);
             sdl_music_update(); /* Update music after handling event */
         } else {
             /* Non-blocking scan so animation loops (intro fades, etc.) keep running */
@@ -248,6 +254,8 @@ errr callback_sdl_xtra(int n, int v)
             sdl_side_pane_menu_flush_pending_press(flush_ns);
             sdl_touch_round_flush_pending_highlight(flush_ns);
             sdl_mouse_cursor_animation_update(flush_ns);
+
+            sdl_idle_animation_update(flush_ns);
 
             /* Avoid pegging a CPU core when we're repeatedly asked to poll */
             if (!handled) {
@@ -299,6 +307,8 @@ errr callback_sdl_xtra(int n, int v)
     case TERM_XTRA_CLEAR:
         if (!d || !d->canvas)
             return 0;
+        if (Term == term_screen)
+            sdl_idle_animation_clear_cells();
         SDL_SetRenderTarget(g_state.renderer, d->canvas);
         SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_NONE);
         SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
@@ -349,6 +359,8 @@ errr callback_sdl_xtra(int n, int v)
                 sdl_log_pane_menu_flush_pending_press(flush_ns);
                 sdl_side_pane_menu_flush_pending_press(flush_ns);
                 sdl_mouse_cursor_animation_update(flush_ns);
+                sdl_idle_animation_update(flush_ns);
+                sdl_present_if_needed(d);
             }
         }
         return 0;
@@ -444,6 +456,7 @@ errr callback_sdl_wipe(int x, int y, int n)
     if (n <= 0)
         return 0;
     sdl_side_map_pane_invalidate_term_span(x, y, n);
+    sdl_idle_animation_invalidate_span(x, y, n);
     SDL_SetRenderTarget(g_state.renderer, d->canvas);
     SDL_Rect clip = { x * d->cell_w, y * d->cell_h, n * d->cell_w, d->cell_h };
     SDL_SetRenderClipRect(g_state.renderer, &clip);
@@ -551,6 +564,7 @@ errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
     if (n <= 0)
         return 0;
     sdl_side_map_pane_invalidate_term_span(x, y, n);
+    sdl_idle_animation_invalidate_span(x, y, n);
     SDL_SetRenderTarget(g_state.renderer, d->canvas);
 
     if (sdl_render_term_health_bar(d, x, y))
@@ -1735,6 +1749,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     bool sleep = !ui_background && (ta & GRAPHICS_SLEEP_MASK) != 0;
     bool tile_mode = g_state.use_tiles && g_state.tileset;
     bool health_bar_visible;
+    bool fixture_drawn = false;
 
     if (!dst)
         return;
@@ -1772,6 +1787,8 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     /* Terrain underlay */
     if (terrain_tile)
         sdl_draw_tileset_sprite(ta, tc, dst, false);
+    if (terrain_tile)
+        fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
     if (sdl_rage_wall_tint_active(dy, dx) && (cave_m_idx[dy][dx] != 0))
         sdl_draw_rage_tile_filter(ta, tc, dy, dx, dst);
     else if (sdl_rage_floor_tint_active(dy, dx))
@@ -1854,7 +1871,9 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     }
 
     /* Base tile */
-    if (base_tile) {
+    if (base_tile && !(fixture_drawn
+            && (a & TILE_INDEX_MASK) == (ta & TILE_INDEX_MASK)
+            && ((byte)c & TILE_INDEX_MASK) == ((byte)tc & TILE_INDEX_MASK))) {
         byte draw_a = a;
         SDL_FlipMode flip = SDL_FLIP_NONE;
 
@@ -4388,6 +4407,7 @@ errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
     if (n <= 0)
         return 0;
     //log_trace("sdl3_pict stripe start: y=%d x=%d n=%d", y, x, n);
+    sdl_idle_animation_invalidate_span(x, y, n * (use_bigtile + 1));
 
     SDL_SetRenderTarget(g_state.renderer, d->canvas);
     SDL_SetRenderClipRect(g_state.renderer, &(SDL_Rect){
@@ -4450,8 +4470,13 @@ errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
         }
 
         if (dy >= 0 && dx >= 0)
+        {
             sdl_side_map_pane_invalidate_cell(dy, dx);
+        }
         sdl_draw_map_tile_layers_at(dy, dx, a, c, tap[i], tcp[i], &dst);
+        if (dy >= 0 && dx >= 0)
+            sdl_idle_animation_track(x + i * (use_bigtile + 1), y,
+                dy, dx, a, c, tap[i], tcp[i]);
     }
 
     SDL_SetRenderClipRect(g_state.renderer, NULL);

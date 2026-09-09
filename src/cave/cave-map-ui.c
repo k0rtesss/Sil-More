@@ -1,6 +1,7 @@
 /* File: cave-map-ui.c */
 
 #include "cave-internal.h"
+#include "cave/cave-fixtures.h"
 
 static bool hidden_left_panel_mask_span_at(int vy, int* start_col,
     int* width)
@@ -341,7 +342,10 @@ void lite_spot(int y, int x)
 
     if (!graphics_are_ascii())
     {
-        bool force_visual_redraw = (cave_m_idx[y][x] < 0);
+        /* Fixture frames can change with sight/settings while the glyph stays
+         * identical (notably a permanently lit wall leaving sight). */
+        bool force_visual_redraw = (cave_m_idx[y][x] < 0)
+            || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE;
 
         if (!force_visual_redraw && mirror_monster_tile_facing
             && (cave_m_idx[y][x] > 0))
@@ -381,6 +385,10 @@ void prt_map(void)
     static bool last_rage_map_filter_active = false;
     bool force_rage_map_filter_refresh =
         (rage_map_filter_active != last_rage_map_filter_active);
+
+#ifdef USE_SDL
+    sdl_idle_animation_redraw_cached_cells(force_term_cell_redraw);
+#endif
 
     /* Assume screen */
     ty = p_ptr->wy + SCREEN_HGT;
@@ -429,7 +437,8 @@ void prt_map(void)
             }
 
             if (force_rage_map_filter_refresh
-                || (!graphics_are_ascii() && (cave_m_idx[y][x] < 0)))
+                || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)
+                    || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE)))
                 force_term_cell_redraw(vx, vy, cell_w);
         }
     }

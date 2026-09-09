@@ -2,25 +2,6 @@
 #include "externs.h"
 #include "melee/melee-attack.h"
 
-static int ranged_attack_sound(int attack)
-{
-    switch (attack)
-    {
-    case 96 + 0:  /* RF4_ARROW1 */
-    case 96 + 1:  /* RF4_ARROW2 */
-    case 96 + 2:  /* RF4_BOULDER */
-    case 96 + 23: /* RF4_THROW_WEB */
-        return MSG_MONSTER_ATTACK_RANGED;
-    case 96 + 3:  /* RF4_BRTH_FIRE */
-    case 96 + 4:  /* RF4_BRTH_COLD */
-    case 96 + 5:  /* RF4_BRTH_POIS */
-    case 96 + 6:  /* RF4_BRTH_DARK */
-        return MSG_MONSTER_ATTACK_BREATH;
-    default:
-        return -1;
-    }
-}
-
 static bool ranged_attack_targets_player(int attack)
 {
     if (attack < 96 || attack > 96 + 23)
@@ -276,11 +257,7 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
     /*Monster has cast a spell*/
     m_ptr->mflag &= ~(MFLAG_ALWAYS_CAST);
 
-    {
-        int attack_sound = ranged_attack_sound(attack);
-        if (attack_sound >= 0)
-            sound(attack_sound);
-    }
+    monster_sound(m_ptr, MONSTER_SOUND_RANGED_BASE + (attack - 96));
 
     /*** Execute the ranged attack chosen. ***/
     switch (attack)

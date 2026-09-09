@@ -618,6 +618,8 @@ static void process_monster(monster_type* m_ptr)
         }
     }
 
+    monster_sound(m_ptr, MONSTER_SOUND_IDLE);
+
     // deal with monster songs
     if (m_ptr->song != SNG_NOTHING)
     {

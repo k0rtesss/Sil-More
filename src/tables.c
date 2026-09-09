@@ -273,7 +273,7 @@ cptr option_text[OPT_MAX] = {
     "pixel_monster_status_icons", /* OPT_pixel_monster_status_icons */
     "lockpick_minigame", /* OPT_lockpick_minigame */
     "chest_trap_minigame", /* OPT_chest_trap_minigame */
-    NULL, /* reserved legacy slot */
+    "torch_animation_always", /* OPT_torch_animation_always */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -518,7 +518,7 @@ cptr option_desc[OPT_MAX] = {
     "Render monster sleep, sight, and alert indicators with SDL pixel overlays", /* OPT_pixel_monster_status_icons */
     "Use guided automatic checks for picking or bashing locked doors", /* OPT_lockpick_minigame */
     "Use guided automatic checks for inspecting, disarming, and opening chests", /* OPT_chest_trap_minigame */
-    NULL, /* reserved legacy slot */
+    "Torch and brazier animation", /* OPT_torch_animation_always */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -779,7 +779,7 @@ const bool option_norm[OPT_MAX] = {
     true, /* OPT_pixel_monster_status_icons */
     true, /* OPT_lockpick_minigame */
     true, /* OPT_chest_trap_minigame */
-    false, /* reserved legacy slot */
+    true, /* OPT_torch_animation_always */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
@@ -960,13 +960,14 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_artifact_unique_color, OPT_unidentified_items_slate,
         OPT_delay_factor, OPT_running_delay,
         OPT_mirror_player_tile_facing, OPT_mirror_monster_tile_facing,
+        OPT_torch_animation_always,
         OPT_center_player,
         OPT_run_avoid_center, OPT_show_level_entry_banner,
         OPT_show_partition_narrative, OPT_narrative_banner_turns,
         OPT_intro_style, OPT_solid_walls, OPT_hybrid_walls,
         OPT_hilite_player, OPT_hilite_target, OPT_hilite_unwary,
         OPT_show_smithing_difficulty, OPT_show_smithing_difficulty_look,
-        OPT_NONE, OPT_NONE },
+        OPT_NONE },
 
     /*** Birth ***/
 

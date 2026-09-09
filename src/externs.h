@@ -1705,6 +1705,7 @@ extern void flush_fail(void);
 extern char inkey(void);
 extern void bell(cptr reason);
 extern void sound(int val);
+extern void monster_sound(const monster_type* m_ptr, int action);
 extern void sound_delayed(int val, unsigned int delay_ms);
 extern void sdl_present_batch_begin(void);
 extern void sdl_present_batch_end(void);
@@ -2571,6 +2572,8 @@ extern bool g_hide_left_panel;
 extern bool g_sdl_left_panel_pane_source_active;
 extern void sdl_side_map_pane_forget_level(void);
 extern void sdl_side_map_pane_invalidate_cell(int y, int x);
+extern void sdl_idle_animation_redraw_cached_cells(
+    void (*redraw_cell)(int col, int row, int width));
 #endif
 extern bool g_suppress_hidden_left_panel_overlay;
 extern byte g_hidden_left_panel_overlay_start_row;

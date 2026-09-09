@@ -1555,8 +1555,19 @@ bool sdl_question_menu_activate_context_choice(int choice)
 
     sdl_question_menu_clear();
     /* This is an already selected command, so a keyboard remap must not
-     * reinterpret Description, Pack, or Harness as an unrelated action. */
-    sdl_enqueue_bypassed_command(choice);
+     * reinterpret Description, Pack, or Harness as an unrelated action.
+     * Space is a shortcut for interact-here, not an engine command: its
+     * normal /5 keymap must be expanded explicitly when bypassing keymaps.
+     * Keep the interaction path so stairs still ask for confirmation. */
+    if (choice == ' ')
+    {
+        sdl_enqueue_bypassed_command('/');
+        Term_keypress('5');
+    }
+    else
+    {
+        sdl_enqueue_bypassed_command(choice);
+    }
     return true;
 }
 

@@ -18,6 +18,7 @@ void sdl_quit_hook(cptr str)
     // Release cached mouse route search buffers.
     sdl_mouse_path_search_free();
     sdl_mouse_cursor_shutdown();
+    sdl_idle_animation_shutdown();
     
     // Clean up story fonts
     sdl_story_font_cache_clear();
