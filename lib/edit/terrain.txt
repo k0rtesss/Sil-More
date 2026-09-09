@@ -564,3 +564,9 @@ T:0:1
 N:85:molten lava
 G:~:R
 T:0:1
+
+# 0x56 --> solid ice (SDL draws the Verdant ice sheet over this underlay)
+
+N:86:solid ice
+G:=:W
+T:0:1

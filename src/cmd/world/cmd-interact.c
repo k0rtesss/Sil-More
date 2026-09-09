@@ -1507,7 +1507,8 @@ bool grid_interact_available(int y, int x)
         }
     }
 
-    if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA)
+    if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA
+        || cave_feat[y][x] == FEAT_ICE)
         return true;
 
     /* Empty floor: strike at the square without stepping in */
@@ -1917,6 +1918,19 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_RED);
     }
 
+    /* --- Solid ice --- */
+    else if (feat == FEAT_ICE)
+    {
+        SDL_strlcpy(title, "Solid ice", sizeof(title));
+        SDL_strlcpy(desc,
+            "Slippery footing gives grounded creatures -2 attack and -2 Evasion. "
+            "This affects melee, archery and thrown attacks. Movement costs "
+            "normally. Flying monsters ignore the footing penalties. Fire "
+            "attacks melt ice into shallow water; cold attacks freeze water "
+            "back into ice.", sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_WHITE);
+    }
+
     /* --- Shallow water --- */
     else if (feat == FEAT_WATER)
     {
@@ -1927,7 +1941,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "actions cost normally. Water holds no scent, and wading leaves "
             "no fresh tracks on nearby banks; sight, hearing and old land "
             "tracks still matter. Flying monsters move normally. With Leaping "
-            "and a run-up, you can jump one water tile to a known dry bank.",
+            "and a run-up, you can jump one water tile to a known dry bank. "
+            "Cold attacks freeze water into solid ice; fire melts it back.",
             sizeof(desc));
         GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_BLUE);
     }

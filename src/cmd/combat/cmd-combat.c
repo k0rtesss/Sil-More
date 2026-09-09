@@ -509,6 +509,11 @@ int total_monster_attack(monster_type* m_ptr, int base)
     int att = base;
     bool unseen = false;
 
+    /* Flying creatures do not need footing on the surface below them. */
+    if (cave_feat[m_ptr->fy][m_ptr->fx] == FEAT_ICE
+        && !(r_ptr->flags2 & RF2_FLYING))
+        att -= ICE_ATTACK_PENALTY;
+
     // penalise stunning
     if (m_ptr->stunned)
         att -= 2;
@@ -558,6 +563,10 @@ int total_monster_evasion(monster_type* m_ptr, bool archery)
     int evn = r_ptr->evn;
     evn -= m_ptr->song_evasion_penalty;
     bool unseen = false;
+
+    if (cave_feat[m_ptr->fy][m_ptr->fx] == FEAT_ICE
+        && !(r_ptr->flags2 & RF2_FLYING))
+        evn -= ICE_EVASION_PENALTY;
 
     // penalise stunning
     if (m_ptr->stunned)
@@ -3075,6 +3084,7 @@ void py_attack_aux(int y, int x, int attack_type)
             crit_bonus_dice = crit_bonus(
                 hit_result, weapon_weight, r_ptr, S_MEL, false, NULL, o_ptr);
             slay_bonus_dice = slay_bonus(o_ptr, m_ptr, &noticed_flag);
+            cave_apply_elemental_brands(y, x, o_ptr, NULL);
 
             if (f3 & TR3_CUMBERSOME)
             {

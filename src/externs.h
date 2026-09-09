@@ -507,6 +507,9 @@ extern int flow_dist(int which_flow, int y, int x);
 extern void update_flow(int cy, int cx, int which_flow);
 extern void update_smell(void);
 extern int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
+extern bool cave_transform_elemental_terrain(int y, int x, int typ);
+extern void cave_apply_elemental_brands(int y, int x,
+    const object_type* weapon, const object_type* ammunition);
 extern void player_water_movement(int from_feat, int to_feat);
 extern void player_water_displaced(int from_feat, int to_feat);
 extern int player_lava_damage(bool airborne);

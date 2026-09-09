@@ -39,6 +39,11 @@ void land(void)
     bool ended_in_air = p_ptr->leaping;
     // the player has landed
     p_ptr->leaping = false;
+    if (ended_in_air && cave_feat[p_ptr->py][p_ptr->px] == FEAT_ICE)
+    {
+        p_ptr->update |= PU_BONUS;
+        update_stuff();
+    }
     /* Successful movement already applied ground contact in monster_swap.
      * Only a blocked leap still occupies its airborne midpoint here. */
     if (ended_in_air) player_lava_exposure(false);

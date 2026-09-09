@@ -1,6 +1,47 @@
 #include "angband.h"
 #include "externs.h"
 
+/* Only the impacted surface changes. Resistance and armour belong to the
+ * occupant and cannot protect water or ice from an elemental attack. */
+bool cave_transform_elemental_terrain(int y, int x, int typ)
+{
+    int feat;
+    if (!in_bounds(y, x))
+        return false;
+    feat = cave_feat[y][x];
+    if (typ == GF_FIRE && feat == FEAT_ICE)
+        cave_set_feat(y, x, FEAT_WATER);
+    else if (typ == GF_COLD && feat == FEAT_WATER)
+        cave_set_feat(y, x, FEAT_ICE);
+    else
+        return false;
+    return true;
+}
+
+/* Combine a bow and arrow before transforming: one hit changes the original
+ * surface at most once, even when its equipment carries both brands. */
+void cave_apply_elemental_brands(int y, int x,
+    const object_type* weapon, const object_type* ammunition)
+{
+    u32b brands = 0, f1, f2, f3;
+    if (!in_bounds(y, x))
+        return;
+    if (weapon && weapon->k_idx)
+    {
+        object_flags(weapon, &f1, &f2, &f3);
+        brands |= f1;
+    }
+    if (ammunition && ammunition->k_idx)
+    {
+        object_flags(ammunition, &f1, &f2, &f3);
+        brands |= f1;
+    }
+    if (cave_feat[y][x] == FEAT_ICE && (brands & TR1_BRAND_FIRE))
+        (void)cave_transform_elemental_terrain(y, x, GF_FIRE);
+    else if (cave_feat[y][x] == FEAT_WATER && (brands & TR1_BRAND_COLD))
+        (void)cave_transform_elemental_terrain(y, x, GF_COLD);
+}
+
 /* Apply once to a completed movement, including the step back onto a bank.
  * Stationary actions and airborne crossings do not touch the surface. */
 int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne)

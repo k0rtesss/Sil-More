@@ -723,6 +723,8 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
 {
     bool lava_changed = cave_feat[y][x] != feat
         && (cave_feat[y][x] == FEAT_LAVA || feat == FEAT_LAVA);
+    bool ice_changed = cave_feat[y][x] != feat
+        && (cave_feat[y][x] == FEAT_ICE || feat == FEAT_ICE);
     if (cave_feat[y][x] != feat)
         cave_fixture_set(y, x, CAVE_FIXTURE_NONE);
     /* Change the feature */
@@ -764,6 +766,12 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     /* Notice/Redraw */
     if (character_dungeon)
     {
+        if (ice_changed && p_ptr->py == y && p_ptr->px == x)
+        {
+            p_ptr->update |= PU_BONUS;
+            /* The next blow in a multiattack must use the new footing. */
+            update_stuff();
+        }
         if (lava_changed)
         {
             p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;

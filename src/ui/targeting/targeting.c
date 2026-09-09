@@ -671,7 +671,7 @@ static bool determine_location_is_interesting(int y, int x)
     /* Check for objects first (only shown when on floors, not when in rubble) */
     /* This is checked BEFORE monsters to prevent showing unmarked objects under detected monsters */
     if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT)
-        || cave_feat[y][x] == FEAT_WATER)
+        || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_ICE)
     {
         /* Scan all objects in the grid */
         for (o_ptr = get_first_object(y, x); o_ptr;
@@ -1252,6 +1252,11 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             {
                 s3 = "";
                 name = "shallow water (move 150%, splash -3 Stealth, no scent)";
+            }
+            else if (feat == FEAT_ICE)
+            {
+                s3 = "";
+                name = "solid ice (grounded: -2 attack, -2 Evasion; fire melts it)";
             }
             else if (feat == FEAT_LAVA)
             {

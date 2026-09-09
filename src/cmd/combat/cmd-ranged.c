@@ -917,6 +917,7 @@ void do_cmd_fire(int quiver)
                         = slay_bonus(i_ptr, m_ptr, &noticed_arrow_flag);
                     slay_bonus_dice
                         += slay_bonus(j_ptr, m_ptr, &noticed_bow_flag);
+                    cave_apply_elemental_brands(y, x, j_ptr, i_ptr);
 
                     /* Calculate the damage done */
                     total_dd = j_ptr->dd + crit_bonus_dice + slay_bonus_dice;
@@ -2504,6 +2505,7 @@ void do_cmd_throw(bool automatic)
 
                     slay_bonus_dice
                         = slay_bonus(i_ptr, m_ptr, &noticed_flag);
+                    cave_apply_elemental_brands(y, x, i_ptr, NULL);
 
                     /* Calculate the damage from the thrown object */
                     total_bonus_dice = crit_bonus_dice + slay_bonus_dice;
@@ -2538,6 +2540,7 @@ void do_cmd_throw(bool automatic)
 
                     melee_slay_bonus_dice
                         = slay_bonus(melee_o_ptr, m_ptr, &melee_noticed_flag);
+                    cave_apply_elemental_brands(y, x, melee_o_ptr, NULL);
                     melee_total_dice = p_ptr->mdd + melee_crit_bonus_dice
                         + melee_slay_bonus_dice;
                     melee_ds = p_ptr->mds;

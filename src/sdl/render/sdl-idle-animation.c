@@ -2,7 +2,8 @@
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-fixtures.h"
 
-/* Fixtures share one 48x32 atlas; each liquid shares one 64x16 atlas.
+/* Fixtures share one 48x32 atlas; each animated liquid shares one 64x16 atlas.
+ * Solid ice uses one static 16x16 tile, cached here for map invalidation.
  * No I/O, texture creation, timers, threads, or heap allocation occurs in
  * the animation update. */
 /* A shared 25 Hz ceiling coalesces independent fixture deadlines. Each flame
@@ -28,12 +29,15 @@ static SDL_Texture* water_texture;
 static bool water_load_attempted;
 static SDL_Texture* lava_texture;
 static bool lava_load_attempted;
+static SDL_Texture* ice_texture;
+static bool ice_load_attempted;
 
 static byte visible_liquid(int y, int x)
 {
     u16b info;
     if (!p_ptr || !in_bounds(y, x)
-        || (cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_LAVA))
+        || (cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_LAVA
+            && cave_feat[y][x] != FEAT_ICE))
         return 0;
     info = cave_info[y][x];
     if (!(info & (CAVE_MARK | CAVE_SEEN))
@@ -45,6 +49,25 @@ static byte visible_liquid(int y, int x)
 static bool load_liquid_texture(byte feat)
 {
     SDL_Surface* atlas;
+    if (feat == FEAT_ICE)
+    {
+        if (ice_texture || ice_load_attempted)
+            return ice_texture != NULL;
+        ice_load_attempted = true;
+        atlas = IMG_Load("lib/xtra/graf/ice_sheet.png");
+        if (!atlas || atlas->w != TILE_SIZE || atlas->h != TILE_SIZE)
+        {
+            log_warn("Ice surface unavailable: %s", SDL_GetError());
+            SDL_DestroySurface(atlas);
+            return false;
+        }
+        ice_texture = SDL_CreateTextureFromSurface(g_state.renderer, atlas);
+        SDL_DestroySurface(atlas);
+        if (!ice_texture) return false;
+        SDL_SetTextureScaleMode(ice_texture, SDL_SCALEMODE_NEAREST);
+        SDL_SetTextureBlendMode(ice_texture, SDL_BLENDMODE_BLEND);
+        return true;
+    }
     SDL_Texture** texture = feat == FEAT_LAVA ? &lava_texture : &water_texture;
     bool* attempted = feat == FEAT_LAVA ? &lava_load_attempted : &water_load_attempted;
     const char* name = feat == FEAT_LAVA ? "lava_flow" : "water_surface";
@@ -89,13 +112,17 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
         if (feat == FEAT_LAVA)
             SDL_SetRenderDrawColor(g_state.renderer, live ? 240 : 90,
                 live ? 74 : 28, live ? 16 : 6, 255);
+        else if (feat == FEAT_ICE)
+            SDL_SetRenderDrawColor(g_state.renderer, live ? 156 : 58,
+                live ? 216 : 81, live ? 232 : 87, 255);
         else
             SDL_SetRenderDrawColor(g_state.renderer, 24, 78, 108, 255);
         SDL_RenderFillRect(g_state.renderer, dst);
         return true;
     }
-    SDL_Texture* texture = feat == FEAT_LAVA ? lava_texture : water_texture;
-    int frame = live ? (int)((frame_tick / 8) % 4) : 0;
+    SDL_Texture* texture = feat == FEAT_ICE ? ice_texture
+        : feat == FEAT_LAVA ? lava_texture : water_texture;
+    int frame = live && feat != FEAT_ICE ? (int)((frame_tick / 8) % 4) : 0;
     SDL_FRect src = { frame * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE };
     SDL_SetTextureColorMod(texture, live ? 255 : 96,
         live ? 255 : 96, live ? 255 : 96);
@@ -201,6 +228,9 @@ void sdl_idle_animation_redraw_cached_cells(
 
 void sdl_idle_animation_shutdown(void)
 {
+    SDL_DestroyTexture(ice_texture);
+    ice_texture = NULL;
+    ice_load_attempted = false;
     SDL_DestroyTexture(water_texture);
     water_texture = NULL;
     water_load_attempted = false;
@@ -329,6 +359,9 @@ static bool animation_context_active(void)
 
 static bool cell_can_animate(const idle_cell* cell)
 {
+    /* Track ice for pan/erase invalidation, but its solid surface never moves. */
+    if (cell->liquid_feat == FEAT_ICE)
+        return false;
     term* t = term_screen;
     term_win* scr = t ? t->scr : NULL;
     SDL_FRect window_rect;

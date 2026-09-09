@@ -195,6 +195,74 @@ void generation_tests(void) {
             for(int y=0;y<64;y++)for(int x=0;x<96;x++)assert(cave_feat[y][x]!=FEAT_WATER);
         }
     }
+
+    /* Real big-cave geometry exceeds the old 24x24 pool bound. Both shapes
+     * stay in the ice partition and never replace authored/protected cells. */
+    int icy_seeds=0, icy_min=9999, icy_max=0, icy_total=0, cave_floor_total=0;
+    for(int seed=1;seed<=100;seed++) {
+        water_map(64,96,FEAT_WALL_EXTRA); memset(dun,0,sizeof(*dun));
+        memset(room_anchor_kind,0,sizeof(room_anchor_kind));
+        Rand_state_init(seed); layout_anchor_count=0;
+        current_partition_modes[0]=QUAD_MODE_BIG_CAVE;
+        current_partition_big_cave_types[0]=BIG_CAVE_ICE;
+        assert(carve_big_cave_bounds(2,61,2,93,0,BIG_CAVE_ICE));
+        byte before[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+        for(int y=0;y<64;y++)for(int x=0;x<96;x++)before[y][x]=cave_feat[y][x];
+        cave_set_feat(30,45,FEAT_MORE); cave_set_feat(31,45,FEAT_FORGE_NORMAL_HEAD);
+        cave_set_feat(29,45,FEAT_FLOOR); cave_info[29][45]|=CAVE_G_VAULT;
+        cave_set_feat(28,45,FEAT_FLOOR); cave_o_idx[28][45]=1;
+        cave_set_feat(27,45,FEAT_FLOOR); cave_m_idx[27][45]=1;
+        place_cave_water();
+        int icy=0;
+        for(int y=1;y<63;y++)for(int x=1;x<95;x++) {
+            cave_floor_total+=before[y][x]==FEAT_FLOOR;
+            assert(cave_feat[y][x]!=FEAT_WATER);
+            if(cave_feat[y][x]!=FEAT_ICE)continue;
+            icy++; assert(before[y][x]==FEAT_FLOOR && water_area(y,x,0));
+            assert(cave_floor_bold(y,x));
+            bool neighbor=false;
+            for(int d=0;d<4;d++)neighbor |= cave_feat[y+water_dy[d]][x+water_dx[d]]==FEAT_ICE;
+            assert(neighbor);
+            assert(distance(y,x,dun->cent[0].y,dun->cent[0].x)>1);
+        }
+        icy_seeds+=icy>0;
+        icy_min=MIN(icy_min,icy);icy_max=MAX(icy_max,icy);icy_total+=icy;
+        if(seed==1) {
+            /* Preview production cavern geometry and ice placement at native
+             * tile size; the isolated harness supplies its usual base style. */
+            cave_o_idx[28][45]=cave_m_idx[27][45]=0;
+            water_preview("scripts/output/water-check/cave-ice.png",1);
+        }
+        assert(icy>=24);
+        assert(cave_feat[30][45]==FEAT_MORE && cave_feat[31][45]==FEAT_FORGE_NORMAL_HEAD);
+        assert(cave_feat[29][45]==FEAT_FLOOR && cave_feat[28][45]==FEAT_FLOOR && cave_feat[27][45]==FEAT_FLOOR);
+    }
+    /* A touching cave in the next partition cannot be reached by ice paths. */
+    water_map(40,80,FEAT_FLOOR); memset(dun,0,sizeof(*dun));
+    current_partition_rows=1;current_partition_cols=current_partition_count=2;
+    current_partition_modes[0]=QUAD_MODE_BIG_CAVE;
+    current_partition_big_cave_types[0]=BIG_CAVE_ICE;
+    current_partition_modes[1]=QUAD_MODE_CAVEY;
+    current_partition_big_cave_types[1]=BIG_CAVE_NONE;
+    dun->cent_n=2;dun->cent[0]=(coord){20,20};
+    dun->cent[1]=(coord){15,15};room_anchor_kind[1]=LAYOUT_ANCHOR_NONE;
+    dun->corner[0]=(rectangle){2,2,37,77};
+    room_anchor_kind[0]=LAYOUT_ANCHOR_CA_BLOB;
+    for(int y=1;y<39;y++)for(int x=1;x<79;x++)cave_info[y][x]|=CAVE_ROOM;
+    assert(water_area(20,20,0) && !water_area(20,60,0));
+    assert(!lake_floor(15,15,0,0) && !lake_floor(15,16,0,0));
+    coord crossing[WATER_PATH_MAX];
+    assert(river_path((coord){10,10},(coord){10,60},crossing,false,0)==0);
+    place_cave_water();
+    for(int y=1;y<39;y++)for(int x=1;x<79;x++)
+        if(cave_feat[y][x]==FEAT_ICE) {
+            assert(level_partition_index_for_point(y,x)==0);
+            assert(distance(y,x,15,15)>1);
+        }
+    printf("Ice generation: %d/100 real large caverns; connected shapes, anchors, protected features and partition boundary: PASS\n",icy_seeds);
+
+    printf("Ice density: %d-%d cells/cavern, %.1f mean, %.1f%% of generated cavern floor\n",
+        icy_min,icy_max,icy_total/100.0,100.0*icy_total/cave_floor_total);
     assert(wet_seeds>75 && river_seeds>20);
     printf("Generation: 100 real CA cave layouts, %d wet, %d with connecting rivers; excluded partitions/features: PASS\n",wet_seeds,river_seeds);
 }

@@ -48,6 +48,12 @@ bool project_f(
     /* Analyze the type */
     switch (typ)
     {
+    case GF_FIRE:
+    case GF_COLD:
+        if (cave_transform_elemental_terrain(y, x, typ))
+            obvious = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
+        break;
+
     /* Ignore most effects */
 
     /* Destroy Traps */
@@ -2043,4 +2049,3 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     /* Return "Anything seen?" */
     return (obvious);
 }
-

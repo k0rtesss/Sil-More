@@ -1294,6 +1294,9 @@
 /* Shallow water is passable terrain; keep all existing feature IDs stable. */
 #define FEAT_WATER 0x54
 #define FEAT_LAVA 0x55
+#define FEAT_ICE 0x56
+#define ICE_ATTACK_PENALTY 2
+#define ICE_EVASION_PENALTY 2
 #define LAVA_RAW_DAMAGE 60
 #define LAVA_FLYING_DAMAGE 40
 #define WATER_STEALTH_PENALTY 3
@@ -3607,7 +3610,8 @@
  * Line 2 -- forbid normal objects
  */
 #define cave_clean_bold(Y, X)                                                  \
-    (((cave_feat[Y][X] == FEAT_FLOOR) || (cave_feat[Y][X] == FEAT_WATER))        \
+    (((cave_feat[Y][X] == FEAT_FLOOR) || (cave_feat[Y][X] == FEAT_WATER)         \
+         || (cave_feat[Y][X] == FEAT_ICE))                                     \
         && (cave_o_idx[Y][X] == 0))
 
 /*

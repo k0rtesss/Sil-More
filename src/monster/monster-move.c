@@ -445,7 +445,9 @@ static bool player_environment_bonus_state_changed(int old_y, int old_x,
     int new_y, int new_x)
 {
     return level_partition_big_cave_type_for_point(old_y, old_x)
-        != level_partition_big_cave_type_for_point(new_y, new_x);
+        != level_partition_big_cave_type_for_point(new_y, new_x)
+        || cave_feat[old_y][old_x] == FEAT_ICE
+        || cave_feat[new_y][new_x] == FEAT_ICE;
 }
 
 void monster_swap(int y1, int x1, int y2, int x2)

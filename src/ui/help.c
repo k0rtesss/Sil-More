@@ -2320,6 +2320,12 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- Fire-resistant monsters take no damage. Other ground monsters die; flyers take 40 heat damage per turn.", row++, col);
         put_role(ROLE_BODY, "- Lava lights nearby squares within radius 2, with walls blocking the glow.", row++, col);
         row++;
+        help_emit_heading("SOLID ICE", row++, col);
+        put_role(ROLE_BODY, "- Ice caves contain frozen pools and rivers. Ice costs normal movement energy.", row++, col);
+        put_role(ROLE_WARN, "- Grounded creatures have -2 attack and -2 Evasion on ice, including melee, archery and thrown attacks.", row++, col);
+        put_role(ROLE_BODY, "- Flying monsters ignore the footing penalties. Cold resistance does not prevent them.", row++, col);
+        put_role(ROLE_BODY, "- Fire attacks melt ice into shallow water. Cold attacks freeze shallow water into ice.", row++, col);
+        row++;
         help_emit_heading("READ THE GAME", row, col); row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;

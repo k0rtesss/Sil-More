@@ -1469,6 +1469,8 @@ bool make_attack_normal(monster_type* m_ptr)
                     net_dam, ddesc);
 
                 dam_type = GF_FIRE;
+                (void)cave_transform_elemental_terrain(
+                    p_ptr->py, p_ptr->px, GF_FIRE);
 
                 break;
             }
@@ -1487,6 +1489,8 @@ bool make_attack_normal(monster_type* m_ptr)
                     net_dam, ddesc);
 
                 dam_type = GF_COLD;
+                (void)cave_transform_elemental_terrain(
+                    p_ptr->py, p_ptr->px, GF_COLD);
 
                 break;
             }
@@ -1910,6 +1914,10 @@ bool make_attack_normal(monster_type* m_ptr)
                     }
                 }
             }
+
+            /* Knockback into lava may have ended the game immediately. */
+            if (p_ptr->is_dead)
+                return true;
 
             // deal with cowardice
             if ((p_ptr->cowardice > 0) && (net_dam >= 10 / p_ptr->cowardice))

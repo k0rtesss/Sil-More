@@ -914,6 +914,11 @@ static void character_sheet_format_skill_item(const character_sheet_item* item,
         skill_names_full[skill], character_sheet_skill_description(skill),
         p_ptr->skill_use[skill], p_ptr->skill_base[skill], stat_mod,
         equip_mod, misc_mod, next_cost);
+
+    if (!p_ptr->leaping && cave_feat[p_ptr->py][p_ptr->px] == FEAT_ICE
+        && (skill == S_MEL || skill == S_ARC
+            || (skill == S_EVN && !p_ptr->entranced && p_ptr->stun <= 100)))
+        SDL_strlcat(buf, " Ice footing contributes -2 to the misc modifier.", buflen);
 }
 
 static void character_sheet_format_trait_item(const character_sheet_item* item,

@@ -122,6 +122,7 @@ REM Copy tileset graphic
 if not exist sil-more-windows-sdl3\lib\xtra\graf mkdir sil-more-windows-sdl3\lib\xtra\graf
 copy /Y lib\xtra\graf\16x16.png sil-more-windows-sdl3\lib\xtra\graf\
 copy /Y lib\xtra\graf\anim_*.png sil-more-windows-sdl3\lib\xtra\graf\
+copy /Y lib\xtra\graf\ice_sheet.png sil-more-windows-sdl3\lib\xtra\graf\
 
 echo.
 echo Standard version complete: sil-more-windows-sdl3\sil-more.exe
@@ -226,6 +227,7 @@ REM Copy tileset graphic
 if not exist sil-more-windows-sdl3-portable\lib\xtra\graf mkdir sil-more-windows-sdl3-portable\lib\xtra\graf
 copy /Y lib\xtra\graf\16x16.png sil-more-windows-sdl3-portable\lib\xtra\graf\
 copy /Y lib\xtra\graf\anim_*.png sil-more-windows-sdl3-portable\lib\xtra\graf\
+copy /Y lib\xtra\graf\ice_sheet.png sil-more-windows-sdl3-portable\lib\xtra\graf\
 
 echo.
 echo Local version complete: sil-more-windows-sdl3-portable\sil-more.exe
