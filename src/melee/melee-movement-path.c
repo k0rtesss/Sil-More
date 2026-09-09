@@ -54,7 +54,7 @@ bool get_move_wander(monster_type* m_ptr, int* ty, int* tx)
     int d;
 
     int dist;
-    int closest = FLOW_MAX_DIST - 1;
+    int closest = FLOW_MAX_DIST;
 
     byte y, x, y1, x1;
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
@@ -255,8 +255,8 @@ bool get_move_wander(monster_type* m_ptr, int* ty, int* tx)
             /* Random direction */
             d = ddd[rand_int(8)];
 
-            y = y1 + ddy_ddd[d];
-            x = x1 + ddx_ddd[d];
+            y = y1 + ddy[d];
+            x = x1 + ddx[d];
 
             /* Check Bounds */
             if (!in_bounds(y, x))
@@ -313,7 +313,10 @@ bool get_move_wander(monster_type* m_ptr, int* ty, int* tx)
             if (!in_bounds(y, x))
                 continue;
 
-            dist = flow_dist(m_ptr->wandering_idx, y, x);
+            int step = monster_step_cost(m_ptr, y1, x1, y, x);
+            if (!step || flow_dist(m_ptr->wandering_idx, y, x) == FLOW_MAX_DIST)
+                continue;
+            dist = step + flow_dist(m_ptr->wandering_idx, y, x);
 
             // ignore grids that are further than the current favourite
             if (closest < dist)
@@ -327,7 +330,7 @@ bool get_move_wander(monster_type* m_ptr, int* ty, int* tx)
         }
 
         // if no useful square to wander into was found, then abort
-        if (closest == FLOW_MAX_DIST - 1)
+        if (closest == FLOW_MAX_DIST)
         {
             return (false);
         }
@@ -486,8 +489,13 @@ static bool find_safety(monster_type* m_ptr, int* ty, int* tx)
                             continue;
                         }
 
-                        /* Calculate approximate cost (in monster turns) */
-                        cost = 100 / chance;
+                        /* Price the actual edge, including either water bank. */
+                        cost = monster_step_cost(m_ptr, y - conv_y, x - conv_x,
+                            yy - conv_y, xx - conv_x);
+                        if (!cost)
+                            continue;
+                        cost += monster_terrain_penalty(
+                            m_ptr, yy - conv_y, xx - conv_x);
 
                         /* Next to character */
                         if (distance(
@@ -498,8 +506,15 @@ static bool find_safety(monster_type* m_ptr, int* ty, int* tx)
                             cost += 3;
                         }
 
+                        /* A water edge can cost more than the optimistic
+                         * parent + 1 check above. Never overwrite a cheaper
+                         * route when this edge turns out to be expensive. */
+                        if (safe_cost[yy][xx]
+                            && safe_cost[yy][xx] <= parent_cost + cost)
+                            continue;
+
                         /* Mark this grid with a cost value */
-                        safe_cost[yy][xx] = parent_cost + cost;
+                        safe_cost[yy][xx] = MIN(100, parent_cost + cost);
 
                         // check whether it is a stair and the monster can use
                         // these
@@ -542,8 +557,8 @@ static bool find_safety(monster_type* m_ptr, int* ty, int* tx)
                                 for (j = 0; j < 8; j++)
                                 {
                                     /* Calculate real adjacent grids */
-                                    int yyy = yy - conv_y + ddy_ddd[i];
-                                    int xxx = xx - conv_x + ddx_ddd[i];
+                                    int yyy = yy - conv_y + ddy_ddd[j];
+                                    int xxx = xx - conv_x + ddx_ddd[j];
 
                                     /* Check bounds */
                                     if (!in_bounds(yyy, xxx))
@@ -708,7 +723,8 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
         // Set up the 'score to beat' as the score for the monster's current
         // square
         dist = distance_squared(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
-        best_score += dist;
+        best_score += dist - 20 * monster_terrain_penalty(
+            m_ptr, m_ptr->fy, m_ptr->fx);
         if (projectable(
                 m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px, PROJECT_STOP)
             && (m_ptr->cdis > 1))
@@ -754,8 +770,10 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
             // any position non-adjacent to the player will be acceptable
             acceptable = true;
 
-            // reward distance from player
-            score += dist;
+            // Balance a shooting position against footing and movement time.
+            score += dist - 20 * monster_terrain_penalty(m_ptr, y, x);
+            score -= 10 * (monster_step_cost(
+                m_ptr, m_ptr->fy, m_ptr->fx, y, x) - 1);
 
             /* reward having a shot at the player */
             if (projectable(y, x, p_ptr->py, p_ptr->px, PROJECT_STOP)
@@ -881,7 +899,10 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
                 if (flow_dist(m_idx, y, x)
                     > flow_dist(m_idx, m_ptr->fy, m_ptr->fx))
                 {
-                    if (!player_has_los_bold(y, x))
+                    if (!player_has_los_bold(y, x)
+                        && cave_passable_mon(m_ptr, y, x, &dummy) >= 50
+                        && monster_terrain_penalty(m_ptr, y, x)
+                            <= monster_terrain_penalty(m_ptr, m_ptr->fy, m_ptr->fx))
                     {
                         *ty = y;
                         *tx = x;
@@ -995,10 +1016,9 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
  *
  * When flowing, monsters prefer non-diagonal directions.
  *
- * XXX - At present, this function does not handle difficult terrain
- * intelligently.  Monsters using flow may bang right into a door that
- * they can't handle.  Fixing this may require code to set monster
- * paths.
+ * The flow stores the remaining route cost. Add the cost of entering each
+ * candidate too: choosing only the lowest neighbor flow would ignore the
+ * water, door or obstacle immediately in front of the monster.
  */
 void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
 {
@@ -1093,6 +1113,10 @@ void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
         if (!in_bounds(y, x))
             continue;
 
+        int step = monster_step_cost(m_ptr, y1, x1, y, x);
+        if (!step)
+            continue;
+
         /* We're following a scent trail */
         if (can_use_scent)
         {
@@ -1109,9 +1133,12 @@ void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
         /* We're using sound */
         else
         {
-            int dist = flow_dist(m_idx, y, x);
+            int remaining = flow_dist(m_idx, y, x);
+            if (remaining == FLOW_MAX_DIST)
+                continue;
+            int dist = step + remaining;
 
-            /* Accept louder sounds */
+            /* Accept a cheaper route, including the first step. */
             if (closest < dist)
                 continue;
             closest = dist;
@@ -1129,8 +1156,17 @@ void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
 //
 // I'm sure it could be further improved
 
-int calc_vulnerability(int fy, int fx)
+static bool vulnerability_attack_grid(monster_type* m_ptr, int y, int x)
 {
+    bool bash = false;
+    return cave_exist_mon(&r_info[m_ptr->r_idx], y, x, true, false)
+        && cave_passable_mon(m_ptr, y, x, &bash) > 0;
+}
+
+int calc_vulnerability(monster_type* m_ptr)
+{
+    int fy = m_ptr->fy;
+    int fx = m_ptr->fx;
     int py = p_ptr->py;
     int px = p_ptr->px;
     int dy, dx;
@@ -1152,16 +1188,16 @@ int calc_vulnerability(int fy, int fx)
     //                                         642
     if (dy * dx == 0)
     {
-        // increase vulnerability for each open square towards the monster
-        if (cave_floor_bold(py + dy, px + dx))
+        // Count only attack positions this monster can actually enter.
+        if (vulnerability_attack_grid(m_ptr, py + dy, px + dx))
             vulnerability++; // direction 1
-        if (cave_floor_bold(py + dx + dy, px - dy + dx))
+        if (vulnerability_attack_grid(m_ptr, py + dx + dy, px - dy + dx))
             vulnerability++; // direction 2
-        if (cave_floor_bold(py - dx + dy, px + dy + dx))
+        if (vulnerability_attack_grid(m_ptr, py - dx + dy, px + dy + dx))
             vulnerability++; // direction 3
-        if (cave_floor_bold(py + dx, px - dy))
+        if (vulnerability_attack_grid(m_ptr, py + dx, px - dy))
             vulnerability++; // direction 4
-        if (cave_floor_bold(py - dx, px + dy))
+        if (vulnerability_attack_grid(m_ptr, py - dx, px + dy))
             vulnerability++; // direction 5
 
         // increase vulnerability for monsters already engaged with the
@@ -1190,16 +1226,16 @@ int calc_vulnerability(int fy, int fx)
     //                                          m
     else
     {
-        // increase vulnerability for each open square towards the monster
-        if (cave_floor_bold(py + dy, px + dx))
+        // Count only attack positions this monster can actually enter.
+        if (vulnerability_attack_grid(m_ptr, py + dy, px + dx))
             vulnerability++; // direction 1
-        if (cave_floor_bold(py + dy, px))
+        if (vulnerability_attack_grid(m_ptr, py + dy, px))
             vulnerability++; // direction 2
-        if (cave_floor_bold(py, px + dx))
+        if (vulnerability_attack_grid(m_ptr, py, px + dx))
             vulnerability++; // direction 3
-        if (cave_floor_bold(py + dx, px - dy))
+        if (vulnerability_attack_grid(m_ptr, py + dx, px - dy))
             vulnerability++; // direction 4
-        if (cave_floor_bold(py - dx, px + dy))
+        if (vulnerability_attack_grid(m_ptr, py - dx, px + dy))
             vulnerability++; // direction 5
 
         // increase vulnerability for monsters already engaged with the

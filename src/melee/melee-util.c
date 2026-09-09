@@ -156,7 +156,7 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
         return (0);
 
     /* The grid is occupied by a monster. */
-    if (cave_m_idx[y][x] > 0)
+    if (cave_m_idx[y][x] > 0 && &mon_list[cave_m_idx[y][x]] != m_ptr)
     {
         monster_type* n_ptr = &mon_list[cave_m_idx[y][x]];
         monster_race* nr_ptr = &r_info[n_ptr->r_idx];
@@ -234,7 +234,10 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
     }
     else if (feat == FEAT_LAVA)
     {
-        if (!(r_ptr->flags2 & RF2_FLYING) && !(r_ptr->flags3 & RF3_RES_FIRE))
+        /* Flight avoids ground contact, but still takes 40 damage on entry
+         * and at the next action. Do not voluntarily enter damaging lava.
+         * Forced movement and confused collisions use monster_swap instead. */
+        if (!(r_ptr->flags3 & RF3_RES_FIRE))
             return (0);
     }
     // Light sensitive creatures and undead cannot pass sunlight
@@ -433,6 +436,60 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
         /* Any wall grid that isn't explicitly made passable is impassable. */
         return (0);
     }
+}
+
+/* A standing-square disadvantage, distinct from movement time. Cold
+ * resistance does not improve traction; only flight avoids the ice penalties
+ * in total_monster_attack() and total_monster_evasion(). Rewired traps are
+ * deliberately absent: monsters only discover tampering when they step on it. */
+int monster_terrain_penalty(monster_type* m_ptr, int y, int x)
+{
+    monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    if (!in_bounds(y, x))
+        return FLOW_MAX_DIST;
+    if (cave_feat[y][x] == FEAT_LAVA && !(r_ptr->flags3 & RF3_RES_FIRE))
+        return 100;
+    if (cave_feat[y][x] == FEAT_ICE && !(r_ptr->flags2 & RF2_FLYING))
+        return ICE_ATTACK_PENALTY;
+    return 0;
+}
+
+/* Approximate an edge in whole turns, keeping the byte-sized flow format.
+ * Return zero for forbidden movement. The player endpoint is an attack,
+ * so neither the player's footing nor a wet bank slows that action. */
+int monster_step_cost(monster_type* m_ptr,
+    int from_y, int from_x, int to_y, int to_x)
+{
+    monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    bool bash = false;
+    int chance, cost;
+    if (!in_bounds(from_y, from_x) || !in_bounds(to_y, to_x))
+        return 0;
+    chance = cave_passable_mon(m_ptr, to_y, to_x, &bash);
+    if (chance <= 0)
+        return 0;
+    if (cave_m_idx[to_y][to_x] < 0)
+        return 1;
+    cost = (100 + chance - 1) / chance;
+    if (cave_any_closed_door_bold(to_y, to_x) && !bash)
+    {
+        if (!(r_ptr->flags2 & (RF2_PASS_DOOR | RF2_PASS_WALL)))
+            cost++;
+    }
+    else if (cave_wall_bold(to_y, to_x)
+        && !(r_ptr->flags2 & RF2_PASS_WALL))
+    {
+        if (r_ptr->flags2 & RF2_KILL_WALL)
+            cost++; /* Prefer routes requiring less destructive work. */
+        else if (r_ptr->flags2 & RF2_TUNNEL_WALL)
+            cost += cave_feat[to_y][to_x] == FEAT_RUBBLE ? 1 : 2;
+    }
+    /* Actual water movement costs 150 energy. Round its extra half turn up
+     * because flows store whole turns, including the step back onto a bank. */
+    if (water_movement_energy(100, cave_feat[from_y][from_x],
+            cave_feat[to_y][to_x], (r_ptr->flags2 & RF2_FLYING) != 0) > 100)
+        cost++;
+    return cost;
 }
 
 bool attacker_at(int y, int x)

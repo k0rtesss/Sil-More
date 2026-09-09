@@ -371,6 +371,7 @@ set(SIL_MORE_SOURCES
     src/melee/melee-combat-display.c
     src/melee/melee-movement.c
     src/melee/melee-movement-path.c
+    src/melee/melee-movement-tactics.c
     src/melee/melee-movement-resolution.c
     src/melee/melee-process.c
     src/melee/melee-util.c

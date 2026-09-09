@@ -2,6 +2,7 @@
 
 #include "cave-internal.h"
 #include "cave/cave-fixtures.h"
+#include "melee/melee-util.h"
 
 /*
  * Determines how far a grid is from the source using the given flow.
@@ -42,6 +43,87 @@ int flow_dist(int which_flow, int y, int x)
  *
  */
 
+/* Positive whole-turn costs are bounded by FLOW_MAX_DIST. Cost buckets
+ * provide Dijkstra relaxation without sorting a heap for every monster turn.
+ * Each map square has at most one pending entry; decrease-key unlinks it from
+ * the previous bucket. Noise propagation below keeps its separate rules. */
+static void update_monster_flow(int cy, int cx, int which_flow,
+    monster_type* m_ptr)
+{
+    enum { FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID };
+    static int next[FLOW_CELLS];
+    static int previous[FLOW_CELLS];
+    int heads[FLOW_MAX_DIST];
+    int origin = cy * MAX_DUNGEON_WID + cx;
+
+    for (int i = 0; i < FLOW_MAX_DIST; i++)
+        heads[i] = -1;
+    heads[0] = origin;
+    next[origin] = previous[origin] = -1;
+
+    for (int cost = 0; cost < FLOW_MAX_DIST; cost++)
+    {
+        while (heads[cost] >= 0)
+        {
+            int grid = heads[cost];
+            int y = grid / MAX_DUNGEON_WID;
+            int x = grid % MAX_DUNGEON_WID;
+            heads[cost] = next[grid];
+            if (next[grid] >= 0)
+                previous[next[grid]] = -1;
+            previous[grid] = -2; /* Settled. All edge costs are positive. */
+
+            for (int d = 0; d < 8; d++)
+            {
+                int yy = y + ddy_ddd[d];
+                int xx = x + ddx_ddd[d];
+                int neighbor, edge, total, old;
+                if (!in_bounds(yy, xx))
+                    continue;
+                neighbor = yy * MAX_DUNGEON_WID + xx;
+                old = cave_cost[which_flow][yy][xx];
+                if (old < FLOW_MAX_DIST && previous[neighbor] == -2)
+                    continue;
+                /* Expand backwards: a predecessor moves INTO this square.
+                 * Forbidden predecessors receive an escape distance but do
+                 * not carry the flow through themselves. The actual player
+                 * origin is also a virtual approach target for NEVER_BLOW
+                 * monsters; their real melee permission stays unchanged. */
+                edge = grid == origin && cave_m_idx[y][x] < 0 ? 1
+                    : monster_step_cost(m_ptr, yy, xx, y, x);
+                if (!edge)
+                    continue;
+                total = cost + edge;
+                if (total >= old || total >= FLOW_MAX_DIST)
+                    continue;
+
+                if (old < FLOW_MAX_DIST)
+                {
+                    if (previous[neighbor] >= 0)
+                        next[previous[neighbor]] = next[neighbor];
+                    else
+                        heads[old] = next[neighbor];
+                    if (next[neighbor] >= 0)
+                        previous[next[neighbor]] = previous[neighbor];
+                }
+                cave_cost[which_flow][yy][xx] = total;
+                previous[neighbor] = -1;
+                next[neighbor] = heads[total];
+                if (heads[total] >= 0)
+                    previous[heads[total]] = neighbor;
+                heads[total] = neighbor;
+
+                if (cave_m_idx[yy][xx] > 0)
+                {
+                    monster_type* n_ptr = &mon_list[cave_m_idx[yy][xx]];
+                    n_ptr->target_x = 0;
+                    n_ptr->target_y = 0;
+                }
+            }
+        }
+    }
+}
+
 void update_flow(int cy, int cx, int which_flow)
 {
     int cost;
@@ -56,11 +138,9 @@ void update_flow(int cy, int cx, int which_flow)
     int next_cycle = 1;
 
     bool monster_flow = false;
-    bool bash = false;
     bool found = false;
 
     monster_type* m_ptr = NULL; // default to soothe compiler warnings
-    monster_race* r_ptr = NULL; // default to soothe compiler warnings
 
     byte flow_table[2][2][8 * FLOW_MAX_DIST];
 
@@ -70,7 +150,6 @@ void update_flow(int cy, int cx, int which_flow)
         monster_flow = true;
 
         m_ptr = &mon_list[which_flow];
-        r_ptr = &r_info[m_ptr->r_idx];
     }
 
     // pull out the relevant monster info for the wandering monster flows
@@ -87,7 +166,6 @@ void update_flow(int cy, int cx, int which_flow)
             if (!m_ptr->r_idx)
                 continue;
 
-            r_ptr = &r_info[m_ptr->r_idx];
 
             // find the first monster with this flow
             if (m_ptr->wandering_idx == which_flow)
@@ -122,6 +200,12 @@ void update_flow(int cy, int cx, int which_flow)
 
     /* Store base cost at the character location */
     cave_cost[which_flow][cy][cx] = 0;
+
+    if (monster_flow)
+    {
+        update_monster_flow(cy, cx, which_flow, m_ptr);
+        return;
+    }
 
     /* Store this grid in the flow table, note that we've done so */
     flow_table[this_cycle][0][0] = cy;
@@ -183,62 +267,7 @@ void update_flow(int cy, int cx, int which_flow)
                     if (cave_cost[which_flow][y2][x2] < FLOW_MAX_DIST)
                         continue;
 
-                    // Deal with monster pathfinding
-                    if (monster_flow)
-                    {
-                        // get the percentage chance of the monster being able
-                        // to move onto that square
-                        int chance = cave_passable_mon(m_ptr, y2, x2, &bash);
-
-                        // if there is any chance, then convert it to a number
-                        // of turns
-                        if (chance > 0)
-                        {
-                            extra_cost += (100 / chance) - 1;
-
-                            // add an extra turn for unlocking/opening doors as
-                            // this action doesn't move the monster
-                            if (cave_any_closed_door_bold(y2, x2) && !bash)
-                            {
-                                if (!((r_ptr->flags2 & (RF2_PASS_DOOR))
-                                        || (r_ptr->flags2 & (RF2_PASS_WALL))))
-                                {
-                                    extra_cost += 1;
-                                }
-                            }
-
-                            // add extra turn(s) for tunneling through
-                            // rubble/walls as this action doesn't move the
-                            // monster
-                            else if (cave_wall_bold(y2, x2)
-                                && (r_ptr->flags2 & (RF2_TUNNEL_WALL)))
-                            {
-                                if (cave_feat[y2][x2] == FEAT_RUBBLE)
-                                    extra_cost
-                                        += 1; // an extra turn to dig through
-                                else
-                                    extra_cost += 2; // two extra turns to dig
-                                                     // through granite/quartz
-                            }
-
-                            else if (cave_wall_bold(y2, x2)
-                                && (r_ptr->flags2 & (RF2_KILL_WALL)))
-                            {
-                                extra_cost += 1; // pretend it would take an
-                                                 // extra turn (to prefer routes
-                                                 // with less wall destruction
-                            }
-                        }
-
-                        // if there is no chance, just skip this square
-                        else
-                        {
-                            continue;
-                        }
-                    }
-
-                    // Deal with noise flows
-                    else
+                    // Deal with noise flows (monster flows use Dijkstra above).
                     {
                         // ignore walls
                         if (cave_wall_bold(y2, x2)

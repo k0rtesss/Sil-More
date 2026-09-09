@@ -30,6 +30,42 @@ static byte side_dirs[20][8] = { { 0, 0, 0, 0, 0, 0, 0, 0 }, /* bias right */
     { 7, 4, 8, 1, 9, 2, 6, 3 }, { 8, 7, 9, 4, 6, 1, 3, 2 },
     { 9, 8, 6, 7, 3, 4, 2, 1 } };
 
+/* A ranged creature at its preferred distance can improve its footing while
+ * keeping a shot. Water only costs time to cross; standing in it is harmless. */
+static void get_move_better_footing(monster_type* m_ptr, int* ty, int* tx)
+{
+    monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    int penalty = monster_terrain_penalty(m_ptr, m_ptr->fy, m_ptr->fx);
+    int best = 20 * penalty;
+    if (!penalty || m_ptr->confused || (r_ptr->flags2 & RF2_MINDLESS))
+        return;
+
+    for (int i = 0; i < 8; i++)
+    {
+        int y = m_ptr->fy + ddy_ddd[i];
+        int x = m_ptr->fx + ddx_ddd[i];
+        int step, score, dist;
+        bool bash = false;
+        if (!cave_exist_mon(r_ptr, y, x, false, false)
+            || cave_passable_mon(m_ptr, y, x, &bash) < 100)
+            continue;
+        dist = distance(y, x, p_ptr->py, p_ptr->px);
+        if (dist < m_ptr->min_range || dist > m_ptr->best_range
+            || !projectable(y, x, p_ptr->py, p_ptr->px, PROJECT_CHCK))
+            continue;
+        step = monster_step_cost(m_ptr, m_ptr->fy, m_ptr->fx, y, x);
+        if (!step)
+            continue;
+        score = 20 * monster_terrain_penalty(m_ptr, y, x) + 10 * step;
+        if (score < best)
+        {
+            best = score;
+            *ty = y;
+            *tx = x;
+        }
+    }
+}
+
 /*
  * Choose the probable best direction for a monster to move in.  This
  * is done by choosing a target grid and then finding the direction that
@@ -67,8 +103,7 @@ bool get_move(
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     monster_lore* l_ptr = &l_list[m_ptr->r_idx];
 
-    int i, start;
-    int y, x;
+    int i;
 
     int py = p_ptr->py;
     int px = p_ptr->px;
@@ -248,151 +283,9 @@ bool get_move(
 
         else
         {
-            // Smart monsters try harder to surround the player
-            if (r_ptr->flags2 & (RF2_SMART))
-            {
-                int fy = m_ptr->fy;
-                int fx = m_ptr->fx;
-                int count = adj_mon_count(fy, fx);
-                int dy = py - fy;
-                int dx = px - fx;
-
-                start = rand_int(8);
-
-                /* Maybe move to a less crowded square near the player if
-                 * possible */
-                for (i = start; i < 8 + start; i++)
-                {
-                    /* Pick squares near player */
-                    y = py + ddy_ddd[i % 8];
-                    x = px + ddx_ddd[i % 8];
-
-                    // if also adjacent to monster
-                    if ((ABS(fy - y) <= 1) && (ABS(fx - x) <= 1)
-                        && !((fy == y) && (fx == x)))
-                    {
-                        // if it is free...
-                        if (cave_floor_bold(y, x) && (cave_m_idx[y][x] <= 0))
-                        {
-                            // and has a lower count...
-                            if ((adj_mon_count(y, x) <= count)
-                                && ((r_ptr->flags2 & (RF2_FLANKING))
-                                    || one_in_(2)))
-                            {
-                                // then maybe set it as a new target
-                                *ty = y;
-                                *tx = x;
-                                return (true);
-                            }
-                        }
-                    }
-                }
-
-                /* If the monster didn't do that, then check for end-corridor
-                 * cases */
-
-                // if player is in an orthogonal direction, eg:
-                //
-                //  X#A
-                //  Xo@
-                //  X#B
-                //
-                if (dy * dx == 0)
-                {
-                    // if walls on either side of monster ('#')
-                    if (cave_wall_bold(fy + dx, fx + dy)
-                        && cave_wall_bold(fy - dx, fx - dy))
-                    {
-                        // if there is a monster in one of the three squares
-                        // behind ('X')
-                        if ((cave_m_idx[fy + dx - dy][fx + dy - dx] > 0)
-                            || (cave_m_idx[fy - dy][fx - dx] > 0)
-                            || (cave_m_idx[fy - dx - dy][fx - dy - dx] > 0))
-                        {
-                            // if 'A' and 'B' are free, go to one at random
-                            if ((cave_m_idx[fy + dx + dy][fx + dy + dx] <= 0)
-                                && (cave_m_idx[fy - dx + dy][fx - dy + dx]
-                                    <= 0))
-                            {
-                                if (one_in_(2))
-                                {
-                                    *ty = fy + dx + dy;
-                                    *tx = fx + dy + dx;
-                                }
-                                else
-                                {
-                                    *ty = fy - dx + dy;
-                                    *tx = fx - dy + dx;
-                                }
-                                return (true);
-                            }
-                            // if 'A' is free, go there
-                            else if (cave_m_idx[fy + dx + dy][fx + dy + dx]
-                                <= 0)
-                            {
-                                *ty = fy + dx + dy;
-                                *tx = fx + dy + dx;
-                                return (true);
-                            }
-                            // if 'B' is free, go there
-                            else if (cave_m_idx[fy - dx + dy][fx - dy + dx]
-                                <= 0)
-                            {
-                                *ty = fy - dx + dy;
-                                *tx = fx - dy + dx;
-                                return (true);
-                            }
-                        }
-                    }
-                }
-                // if player is in a diagonal direction, eg:
-                //
-                //  X#       XXX
-                //  XoA  or  #o#
-                //  X#@       A@
-                //
-                else
-                {
-                    // if walls north and south of monster ('#')
-                    if (cave_wall_bold(fy + 1, fx)
-                        && cave_wall_bold(fy - 1, fx))
-                    {
-                        // if there is a monster in one of the three squares
-                        // behind ('X')
-                        if ((cave_m_idx[fy - 1][fx - dx] > 0)
-                            || (cave_m_idx[fy][fx - dx] > 0)
-                            || (cave_m_idx[fy + 1][fx - dx] > 0))
-                        {
-                            // if 'A' is free, go there
-                            if (cave_m_idx[fy][fx + dx] <= 0)
-                            {
-                                *ty = fy;
-                                *tx = fx + dx;
-                                return (true);
-                            }
-                        }
-                    }
-                    // if walls east and west of monster ('#')
-                    else if (cave_wall_bold(fy, fx - 1)
-                        && cave_wall_bold(fy, fx + 1))
-                    {
-                        // if there is a monster in one of the three squares
-                        // behind ('X')
-                        if ((cave_m_idx[fy - dy][fx - 1] > 0)
-                            || (cave_m_idx[fy - dy][fx] > 0)
-                            || (cave_m_idx[fy - dy][fx + 1] > 0))
-                        {
-                            // if 'A' is free, go there
-                            if (cave_m_idx[fy + dy][fx] <= 0)
-                            {
-                                *ty = fy + dy;
-                                *tx = fx;
-                                return (true);
-                            }
-                        }
-                    }
-                }
-            }
+            /* Reposition only for a real tactical gain; otherwise attack. */
+            if (get_move_tactical(m_ptr, ty, tx))
+                return true;
 
             /* All other monsters attack. */
             *ty = py;
@@ -407,7 +300,7 @@ bool get_move(
         && (m_ptr->stance == STANCE_CONFIDENT))
     {
         // determine how vulnerable the player is
-        int vulnerability = calc_vulnerability(m_ptr->fy, m_ptr->fx);
+        int vulnerability = calc_vulnerability(m_ptr);
 
         // determine how hesitant the monster is
         int hesitance = calc_hesitance(m_ptr);
@@ -469,44 +362,9 @@ bool get_move(
         }
     }
 
-    /* Monster groups try to surround the character */
-    if ((!*fear)
-        && ((r_ptr->flags1 & (RF1_FRIENDS)) || (r_ptr->flags1 & (RF1_FRIEND)))
-        && (m_ptr->cdis <= 3) && (player_has_los_bold(m_ptr->fy, m_ptr->fx)))
-    {
-        /*Only if we do not have a clean path to player*/
-        if (projectable(
-                m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px, PROJECT_CHCK)
-            != PROJECT_CLEAR)
-        {
-            start = rand_int(8);
-
-            /* Find a random empty square next to the player to head for */
-            for (i = start; i < 8 + start; i++)
-            {
-                /* Pick squares near player */
-                y = py + ddy_ddd[i % 8];
-                x = px + ddx_ddd[i % 8];
-
-                /* Check Bounds */
-                if (!in_bounds(y, x))
-                    continue;
-
-                /* Ignore occupied grids */
-                if (cave_m_idx[y][x] != 0)
-                    continue;
-
-                /* Ignore grids that monster can't enter immediately */
-                if (!cave_exist_mon(r_ptr, y, x, false, true))
-                    continue;
-
-                /* Accept */
-                *ty = y;
-                *tx = x;
-                return (true);
-            }
-        }
-    }
+    /* Choose a reachable attack position using terrain and allied coverage. */
+    if (!*fear && get_move_tactical(m_ptr, ty, tx))
+        return true;
 
     /* No special moves made -- use standard movement */
 
@@ -567,7 +425,7 @@ bool get_move(
                     *tx = m_ptr->fx + ddx_ddd[i];
                 }
 
-                /* Monsters could look for better terrain... */
+                get_move_better_footing(m_ptr, ty, tx);
             }
 
             // in most cases where the monster is targetting the player, use the
@@ -902,7 +760,7 @@ bool make_move(
             int move_chance;
             bool move_bash;
         };
-        move_data moves_data[8];
+        move_data moves_data[8] = { { 0, false } };
 
         /*
          * Scan each of the eight possible directions, in the order of
@@ -1247,7 +1105,8 @@ bool push_aside(monster_type* m_ptr, monster_type* n_ptr)
             continue;
 
         /* Grid is not occupied, and the 2nd monster can exist in it. */
-        if (cave_exist_mon(nr_ptr, y, x, false, true))
+        if (cave_exist_mon(nr_ptr, y, x, false, true)
+            && monster_terrain_penalty(n_ptr, y, x) < 100)
         {
             /* Push the 2nd monster into the empty grid. */
             monster_swap(n_ptr->fy, n_ptr->fx, y, x);

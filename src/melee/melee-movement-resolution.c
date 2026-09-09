@@ -662,7 +662,8 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                 //}
 
                 /* The other monster cannot switch places */
-                if (!cave_exist_mon(nr_ptr, m_ptr->fy, m_ptr->fx, true, true))
+                if (!cave_exist_mon(nr_ptr, m_ptr->fy, m_ptr->fx, true, true)
+                    || monster_terrain_penalty(n_ptr, m_ptr->fy, m_ptr->fx) >= 100)
                 {
                     /* Try to push it aside */
                     if (!push_aside(m_ptr, n_ptr))
