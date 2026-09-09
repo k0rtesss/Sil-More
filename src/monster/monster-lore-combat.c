@@ -713,7 +713,7 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     if (r_ptr->light < 0)
         vp[vn++] = "produce an unnatural darkness";
     if (l_ptr->flags2 & RF2_FLYING)
-        vp[vn++] = "fly";
+        vp[vn++] = "fly over chasms and water without slowing";
     if (l_ptr->flags2 & RF2_OPEN_DOOR)
         vp[vn++] = "open doors";
     if (l_ptr->flags2 & RF2_PASS_DOOR)

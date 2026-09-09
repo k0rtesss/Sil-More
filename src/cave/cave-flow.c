@@ -306,6 +306,32 @@ void update_flow(int cy, int cx, int which_flow)
  * Whenever the age count loops, most of the scent trail is erased and
  * the age of the remainder is recalculated.
  */
+/* The scent stencil must not stamp the opposite bank of a narrow stream.
+ * Check every cell touched by the straight segment, including both sides of
+ * a diagonal corner; water is a barrier to scent, but never to sight. */
+static bool scent_crosses_water(int y0, int x0, int y1, int x1)
+{
+    int dx = ABS(x1 - x0), dy = ABS(y1 - y0);
+    int sx = x1 > x0 ? 1 : -1, sy = y1 > y0 ? 1 : -1;
+    int ix = 0, iy = 0;
+    while (ix < dx || iy < dy)
+    {
+        int decision = (1 + 2 * ix) * dy - (1 + 2 * iy) * dx;
+        if (decision == 0)
+        {
+            if (cave_feat[y0][x0 + sx] == FEAT_WATER
+                || cave_feat[y0 + sy][x0] == FEAT_WATER)
+                return true;
+            x0 += sx; y0 += sy; ix++; iy++;
+        }
+        else if (decision < 0) { x0 += sx; ix++; }
+        else { y0 += sy; iy++; }
+        if (cave_feat[y0][x0] == FEAT_WATER)
+            return true;
+    }
+    return false;
+}
+
 void update_smell(void)
 {
     int i, j;
@@ -348,6 +374,15 @@ void update_smell(void)
         /* Reset the age value */
         scent_when = 250 - SMELL_STRENGTH;
     }
+    /* Wading never stamps the neighboring banks. Existing land tracks age
+     * normally. An airborne player also leaves no fresh trail. */
+    if (cave_feat[py][px] == FEAT_WATER || p_ptr->leaping)
+    {
+        if (cave_feat[py][px] == FEAT_WATER)
+            cave_when[py][px] = 0;
+        return;
+    }
+
     /* Lay down new scent */
     for (i = 0; i < 5; i++)
     {
@@ -375,6 +410,9 @@ void update_smell(void)
             if (scent_adjust[i][j] == 250)
                 continue;
 
+            if (scent_crosses_water(py, px, y, x))
+                continue;
+
             /* Mark the grid with new scent */
             cave_when[y][x] = scent_when + scent_adjust[i][j];
         }
@@ -391,7 +429,7 @@ void map_feature(int y, int x)
     /* All non-walls are "checked", including rubble */
     if ((cave_feat[y][x] < FEAT_WALL_HEAD) || (cave_stair_bold(y, x))
         || (cave_feat[y][x] == FEAT_RUBBLE) || cave_forge_bold(y, x)
-        || (cave_feat[y][x] == FEAT_CHASM))
+        || (cave_feat[y][x] == FEAT_CHASM) || (cave_feat[y][x] == FEAT_WATER))
     {
         /* Memorize normal features */
         if ((cave_feat[y][x] >= FEAT_DOOR_HEAD) || (cave_stair_bold(y, x))
@@ -683,10 +721,14 @@ byte get_depth_color(int depth)
  */
 void cave_set_feat_with_color(int y, int x, int feat, int color)
 {
+    bool lava_changed = cave_feat[y][x] != feat
+        && (cave_feat[y][x] == FEAT_LAVA || feat == FEAT_LAVA);
     if (cave_feat[y][x] != feat)
         cave_fixture_set(y, x, CAVE_FIXTURE_NONE);
     /* Change the feature */
     cave_feat[y][x] = feat;
+    if (feat == FEAT_WATER && cave_when)
+        cave_when[y][x] = 0;
 
     /* Set the color (0 means use depth default) */
     if (color == 0)
@@ -722,6 +764,14 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     /* Notice/Redraw */
     if (character_dungeon)
     {
+        if (lava_changed)
+        {
+            p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+            if (p_ptr->py == y && p_ptr->px == x)
+                player_lava_exposure(p_ptr->leaping);
+            if (cave_m_idx[y][x] > 0)
+                monster_lava_exposure(cave_m_idx[y][x]);
+        }
         /* Notice */
         note_spot(y, x);
 

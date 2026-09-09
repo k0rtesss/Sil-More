@@ -4,7 +4,7 @@
 bool sdl_mouse_path_grid_is_open_floor(int y, int x)
 {
     return in_bounds(y, x) && cave_floor_bold(y, x)
-        && cave_feat[y][x] != FEAT_CHASM;
+        && cave_feat[y][x] != FEAT_CHASM && cave_feat[y][x] != FEAT_LAVA;
 }
 
 bool sdl_mouse_path_grid_known(int y, int x)
@@ -51,7 +51,7 @@ bool sdl_mouse_path_grid_is_known_danger(int y, int x)
 {
     if (!sdl_mouse_path_grid_known(y, x))
         return false;
-    if (cave_feat[y][x] == FEAT_CHASM)
+    if (cave_feat[y][x] == FEAT_CHASM || cave_feat[y][x] == FEAT_LAVA)
         return true;
     return cave_trap_bold(y, x) && !(cave_info[y][x] & (CAVE_HIDDEN));
 }
@@ -235,6 +235,9 @@ bool sdl_mouse_path_dirs_sprint_compatible(int newer_dir, int older_dir)
 bool sdl_mouse_path_grid_is_leapable_obstacle(int y, int x)
 {
     return sdl_mouse_feature_known_for_action(y, x)
+        /* Automatic routes wade. Direct movement can use Leaping. */
+        && cave_feat[y][x] != FEAT_WATER
+        && cave_feat[y][x] != FEAT_LAVA
         && player_grid_is_leapable_obstacle(y, x);
 }
 
@@ -735,9 +738,10 @@ bool sdl_mouse_path_compute_route(int target_y, int target_x,
             next_idx = sdl_mouse_path_search_grid_state_index(
                 next_grid, next_state);
             sdl_mouse_path_search_touch(next_idx);
-            next_cost =
-                base_cost + sdl_mouse_path_route_edge_cost(
-                    state, dir, sprint_enabled);
+            next_cost = base_cost + water_movement_energy(
+                sdl_mouse_path_route_edge_cost(state, dir, sprint_enabled),
+                cave_feat[y][x], cave_feat[ny][nx],
+                leap_step || sdl_mouse_path_grid_is_leapable_obstacle(y, x));
             if (leap_step)
                 next_cost += SDL_MOUSE_PATH_COST_NORMAL;
 

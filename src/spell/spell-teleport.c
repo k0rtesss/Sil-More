@@ -276,6 +276,7 @@ void teleport_player(int dis)
     sound(MSG_TELEPORT);
 
     /* Move player */
+    p_ptr->leaping = false;
     monster_swap(py, px, y, x);
 
     /* Handle stuff XXX XXX XXX */
@@ -329,6 +330,7 @@ void teleport_player_to(int ny, int nx)
     sound(MSG_TELEPORT);
 
     /* Move player */
+    p_ptr->leaping = false;
     monster_swap(py, px, y, x);
 
     /* Handle stuff XXX XXX XXX */

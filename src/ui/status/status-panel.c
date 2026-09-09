@@ -531,7 +531,7 @@ void prt_stat(int stat)
     Term_erase(COL_STAT, row, LEFT_PANEL_CONTENT_WID);
 
     /* Get the stat name */
-    if (p_ptr->stat_drain[stat] < 0)
+    if (p_ptr->stat_drain[stat] < 0 || p_ptr->stat_disease[stat] < 0)
     {
         stat_label = stat_names_reduced[stat];
     }
@@ -566,7 +566,7 @@ void prt_stat(int stat)
     cnv_stat(p_ptr->stat_use[stat], tmp);
     len = strlen(tmp);
     log_trace("prt_stat: Calling c_put_str('%s', %d, %d) for stat value", tmp, row, COL_STAT + 12 - len);
-    if (p_ptr->stat_drain[stat] < 0)
+    if (p_ptr->stat_drain[stat] < 0 || p_ptr->stat_disease[stat] < 0)
     {
         value_attr = TERM_YELLOW;
     }

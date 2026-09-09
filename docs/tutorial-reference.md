@@ -4,7 +4,7 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 510 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 513 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
@@ -12,7 +12,7 @@ The catalogue contains 510 lessons, including 107 ability previews. Every live a
 
 ## Tutorial modes
 
-Default: **Extended**. The catalogue has **146 Normal** lessons and **364 Extended** lessons. The card's single mode button cycles **Disabled → Normal → Extended → Disabled**.
+Default: **Extended**. The catalogue has **148 Normal** lessons and **365 Extended** lessons. The card's single mode button cycles **Disabled → Normal → Extended → Disabled**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
 
@@ -458,7 +458,7 @@ Level: **Normal**.
 
 **1. Info**
 
-Search a skeleton on the dungeon floor using its contextual action. A skeleton can be searched only once. It may yield food, a light, damaged gear or nothing. Searching can also reveal a note or hint; those hints have their own setting and can be reviewed later. This is a search action, not a request to equip or use the bones.
+Search a skeleton on the dungeon floor using its contextual action. A skeleton can be searched only once. It may yield food, a light, damaged gear or nothing. Searching can also reveal a note or hint; those hints have their own setting and can be reviewed later. This is a search action, not a request to equip or use the bones. Searching orc remains has a 5% chance of causing disease.
 
 Trigger: Skeleton remains are actually encountered on the player square or visibly adjacent, including already-searched remains.
 
@@ -633,6 +633,20 @@ A committed attack revealed a brand, slay or other weapon property. Read its des
 Trigger: Explicit public observation at a safe player or menu boundary.
 
 Sources: `src/cmd/item/cmd-identify.c`, `src/cmd/combat/cmd-combat.c`.
+
+## Diseased
+
+`status.diseased`
+
+Level: **Normal**.
+
+**1. Info**
+
+{detail} Disease continues while resting and never clears on its own. A potion of Healing or Miruvor cures it and restores all attribute points lost to disease; unrelated attribute drain remains. Herb of Sickness always causes disease; Dried Meat has a 20% risk, searching orc remains 5%, and each water tile entered on foot 0.5%.
+
+Trigger: The disease condition is active and its lesson is unseen or in progress, or disease has just appeared.
+
+Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 ## Poisoned
 
@@ -1025,6 +1039,26 @@ Level: **Normal**.
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
 Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
+
+## A remedy for disease
+
+`status.diseased.remedy`
+
+Level: **Normal**.
+
+**1. Info**
+
+A known potion of Healing or Miruvor is available. {detail} It ends disease and restores only the attribute points disease took. Ordinary rest and herbs of Healing or Restoration do not cure disease.
+
+**2. Action**
+
+Use a known potion of Healing or Miruvor. Only actually using a relevant potion completes this step; cancelling or choosing another item does not.
+
+Required action: `use-item`; subject: `diseased`.
+
+Trigger: Disease is active, the player can act, and a carried aware item passes item_is_remedy for diseased.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 ## A remedy for poison
 
@@ -4582,6 +4616,20 @@ Trigger: Feature 83 is on the player square or visibly adjacent and marked; secr
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
+## Shallow water
+
+`terrain.84`
+
+Level: **Extended**.
+
+**1. Info**
+
+Entering, crossing or leaving shallow water costs 150% movement energy and splashes for -3 Stealth on that action. Each water tile entered on foot has a 0.5% chance of disease. Standing still does not add infection rolls. Disease lowers Constitution by 1 immediately and a random attribute by 1 every 50 player turns; rest cannot cure it. Potions of Healing or Miruvor cure it and restore its attribute penalties. A successful leap over water avoids infection and splashing; click-to-travel wades. Water leaves no scent trail.
+
+Trigger: Feature 84 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+
+Sources: `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/effects.c`, `src/melee/melee-movement-resolution.c`.
+
 ## Imprisonment — known effect
 
 `effect.191`
@@ -4884,7 +4932,7 @@ Level: **Extended**.
 
 **1. Info**
 
-Cures stun, confusion, hallucination, poison, blindness and fear; halves current bleeding; restores 20 + floor(20% of maximum Health) and all Voice. Medicine equipment can increase the healing.
+Cures stun, confusion, hallucination, poison, blindness and fear; halves current bleeding; restores 20 + floor(20% of maximum Health) and all Voice. Medicine equipment can increase the healing. Cures disease and restores all attribute points lost to it, leaving unrelated drain unchanged.
 
 Trigger: Item kind 313 is aware and publicly encountered; no forced use.
 
@@ -4940,7 +4988,7 @@ Level: **Extended**.
 
 **1. Info**
 
-Halves current bleeding and restores 15 + floor(16% of maximum Health). Medicine equipment can increase healing. Remaining bleeding can still cause later damage.
+Halves current bleeding and restores 15 + floor(16% of maximum Health). Medicine equipment can increase healing. Remaining bleeding can still cause later damage. Cures disease and restores all attribute points lost to it, leaving unrelated drain unchanged.
 
 Trigger: Item kind 318 is aware and publicly encountered; no forced use.
 
@@ -5206,7 +5254,7 @@ Level: **Extended**.
 
 **1. Info**
 
-Halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment. It also provides ordinary herb nourishment.
+Halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment. It also provides ordinary herb nourishment. It does not cure disease.
 
 Trigger: Item kind 383 is aware and publicly encountered; no forced use.
 
@@ -5220,7 +5268,7 @@ Level: **Extended**.
 
 **1. Info**
 
-Restores every attribute by up to 3 drained points. It also provides ordinary herb nourishment. It does not remove unrelated equipment penalties.
+Restores every attribute by up to 3 drained points. It also provides ordinary herb nourishment. It does not remove unrelated equipment penalties. It does not cure disease or restore disease penalties.
 
 Trigger: Item kind 384 is aware and publicly encountered; no forced use.
 
@@ -5290,7 +5338,7 @@ Level: **Extended**.
 
 **1. Info**
 
-Drains Constitution by 1 and provides ordinary herb nourishment. Check maximum Health after attribute changes.
+Always causes disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. Provides ordinary herb nourishment.
 
 Trigger: Item kind 389 is aware and publicly encountered; no forced use.
 
@@ -5318,7 +5366,7 @@ Level: **Extended**.
 
 **1. Info**
 
-Provides about 2,000 ordinary turns of nourishment.
+Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns. Rest does not cure it; potions of Healing or Miruvor do.
 
 Trigger: Item kind 400 is aware and publicly encountered; no forced use.
 
@@ -7686,7 +7734,7 @@ Level: **Normal**.
 
 **1. Info**
 
-{detail} Rest repeats game turns until its chosen goal is met or it is interrupted. Poison, bleeding and starvation prevent ordinary Health regeneration; singing prevents Voice regeneration.
+{detail} Rest repeats game turns until its chosen goal is met or it is interrupted. Poison, bleeding and starvation prevent ordinary Health regeneration; singing prevents Voice regeneration. Disease continues to lower an attribute every 50 player turns while you rest; rest cannot cure it.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: resting.
 

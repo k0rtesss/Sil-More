@@ -431,6 +431,7 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
 
             if (sn > 0)
             {
+                p_ptr->leaping = false;
                 monster_swap(p_ptr->py, p_ptr->px, sy, sx);
             }
 

@@ -45,6 +45,7 @@ typedef struct condition_lesson {
 #define CONDITION(FIELD, NAME, EFFECT) \
     { "status." #FIELD, NAME, offsetof(player_type, FIELD), EFFECT }
 static const condition_lesson conditions[] = {
+    CONDITION(diseased, "Diseased", "Disease lowers Constitution by 1 on infection and a random attribute by 1 every 50 player turns. Rest does not cure it."),
     CONDITION(poisoned, "Poisoned", "Poison prevents ordinary Health regeneration."),
     CONDITION(cut, "Bleeding", "Bleeding prevents ordinary Health regeneration. Healing halves bleeding; it does not always stop it."),
     CONDITION(stun, "Stunned", "Stun penalizes every skill. More than 100 stun prevents acting."),
@@ -173,6 +174,8 @@ static bool item_is_remedy(const object_type *item, const char *condition)
                     return true;
             return false;
         }
+        if (!strcmp(condition, "diseased"))
+            return item->sval == SV_POTION_HEALING || item->sval == SV_POTION_MIRUVOR;
         if (item->sval == SV_POTION_MIRUVOR)
             return strstr("poisoned cut stun afraid confused blind image health voice", condition) != NULL;
         if (!strcmp(condition, "poisoned")) return item->sval == SV_POTION_ANTIDOTE;
@@ -730,6 +733,10 @@ void tutorial_game_checkpoint(void)
             || status == TUTORIAL_IN_PROGRESS)) {
             if (!strcmp(condition->id, "status.poisoned") || !strcmp(condition->id, "status.cut"))
                 strnfmt(detail, sizeof(detail), "Severity %d; at this value the next damage tick is %d Health. %s", value, (value + 4) / 5, condition->effect);
+            else if (!strcmp(condition->id, "status.diseased"))
+                strnfmt(detail, sizeof(detail), "Disease penalties: Strength %+d, Dexterity %+d, Constitution %+d, Grace %+d. %s",
+                    p_ptr->stat_disease[A_STR], p_ptr->stat_disease[A_DEX],
+                    p_ptr->stat_disease[A_CON], p_ptr->stat_disease[A_GRA], condition->effect);
             else if (!strcmp(condition->id, "status.stun"))
                 strnfmt(detail, sizeof(detail), "Stun %d: %+d to every skill. %s", value, value >= 50 ? -4 : -2, condition->effect);
             else strnfmt(detail, sizeof(detail), "%s %d. %s", condition->name, value, condition->effect);

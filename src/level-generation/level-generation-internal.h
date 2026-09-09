@@ -470,6 +470,8 @@ extern void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2, u16b 
 extern bool bounds_have_chasm_tag(int y1, int y2, int x1, int x2);
 extern bool carve_ca_blob_anchor(void);
 extern bool carve_ca_blob_anchor_bounds(int y_min, int y_max, int x_min, int x_max, int style_idx);
+extern void place_cave_water(void);
+extern void place_cave_lava(void);
 extern int prune_big_cave_detached_components( int y1, int y2, int x1, int x2, int style_idx);
 extern bool chasm_mask_has_clearance( const bool* is_cave, int h, int w, int ly, int lx, int radius);
 extern bool repair_chasm_walkable_connectivity( int y1, int y2, int x1, int x2, int bridge_style);

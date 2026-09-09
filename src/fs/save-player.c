@@ -47,6 +47,10 @@ void wr_extra(void)
     for (i = 0; i < A_MAX; ++i)
         wr_s16b(p_ptr->stat_drain[i]);
 
+    wr_s16b(p_ptr->diseased);
+    for (i = 0; i < A_MAX; ++i)
+        wr_s16b(p_ptr->stat_disease[i]);
+
     /* Dump the skill bases */
     for (i = 0; i < S_MAX; ++i)
         wr_s16b(p_ptr->skill_base[i]);

@@ -12,6 +12,9 @@ int get_scent(int y, int x)
     if (!(in_bounds(y, x)))
         return (-1);
 
+    if (cave_feat[y][x] == FEAT_WATER)
+        return (-1);
+
     /* Sent trace? */
     scent = cave_when[y][x];
 
@@ -53,6 +56,10 @@ bool cave_exist_mon(
         return (false);
 
     /*** Check passability of various features. ***/
+
+    /* Grounded creatures without fire resistance cannot survive lava. */
+    if (feat == FEAT_LAVA)
+        return (r_ptr->flags2 & RF2_FLYING) || (r_ptr->flags3 & RF3_RES_FIRE);
 
     // only flying creatures can pass chasms
     if (cave_feat[y][x] == FEAT_CHASM)
@@ -223,6 +230,11 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
     else if (feat == FEAT_CHASM)
     {
         if (!(r_ptr->flags2 & (RF2_FLYING)))
+            return (0);
+    }
+    else if (feat == FEAT_LAVA)
+    {
+        if (!(r_ptr->flags2 & RF2_FLYING) && !(r_ptr->flags3 & RF3_RES_FIRE))
             return (0);
     }
     // Light sensitive creatures and undead cannot pass sunlight

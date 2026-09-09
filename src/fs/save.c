@@ -673,7 +673,7 @@ void wr_monster(const monster_type* m_ptr)
     wr_s16b(m_ptr->alertness);
     wr_byte(m_ptr->skip_next_turn);
     wr_byte(m_ptr->mspeed);
-    wr_byte(m_ptr->energy);
+    wr_s16b(m_ptr->energy);
     wr_byte(m_ptr->stunned);
     wr_byte(m_ptr->confused);
     wr_s16b(m_ptr->hasted);

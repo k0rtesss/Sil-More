@@ -670,7 +670,8 @@ static bool determine_location_is_interesting(int y, int x)
 
     /* Check for objects first (only shown when on floors, not when in rubble) */
     /* This is checked BEFORE monsters to prevent showing unmarked objects under detected monsters */
-    if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT))
+    if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT)
+        || cave_feat[y][x] == FEAT_WATER)
     {
         /* Scan all objects in the grid */
         for (o_ptr = get_first_object(y, x); o_ptr;
@@ -1245,6 +1246,24 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             else
             {
                 s3 = (is_a_vowel(name[0])) ? "an " : "a ";
+            }
+
+            if (feat == FEAT_WATER)
+            {
+                s3 = "";
+                name = "shallow water (move 150%, splash -3 Stealth, no scent)";
+            }
+            else if (feat == FEAT_LAVA)
+            {
+                int damage = player_lava_damage_at(y, x, false);
+                s3 = "";
+                if (damage < 0)
+                    strnfmt(name_buf, sizeof(name_buf),
+                        "molten lava (instant death; jump heat %d)", player_lava_damage_at(y, x, true));
+                else
+                    strnfmt(name_buf, sizeof(name_buf),
+                        "molten lava (%d damage/turn; jump heat %d)", damage, player_lava_damage_at(y, x, true));
+                name = name_buf;
             }
 
             /* Display a message */
@@ -2173,7 +2192,7 @@ bool target_set_interactive(int mode, int range)
             }
 
             // change the terrain
-            else if (strchr(".;'^+#:%0<>", query) || inc_terrain)
+            else if (strchr(".;'^+#:%0<>_", query) || inc_terrain)
             {
                 feature_type* f_ptr;
                 feature_type* old_f_ptr;
@@ -2207,7 +2226,9 @@ bool target_set_interactive(int mode, int range)
                         f_ptr = &f_info[i];
 
                         // stop when you find one
-                        if (f_ptr->d_char == query)
+                        if (f_ptr->d_char == query
+                            || (query == '_' && i == FEAT_WATER)
+                            || (query == '`' && i == FEAT_LAVA))
                         {
                             found = true;
                             break;

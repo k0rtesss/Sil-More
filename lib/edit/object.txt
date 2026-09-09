@@ -2445,7 +2445,8 @@ D: of the healing drink of the Valar in the Blessed Realm.
 D: It cures stunning, confusion, hallucination, poison,
 D: blindness, and fear. It halves any current bleeding,
 D: restores 20 health and 20% of your maximum health,
-D: and restores all your voice.
+D: and restores all your voice. It also cures disease and
+D: restores all attribute points lost to that disease.
 
 
 N:315:Orcish Liquor
@@ -2499,6 +2500,8 @@ F:EASY_KNOW
 D:A draught of potent healing, brewed with the virtue of
 D: herbs and ancient craft. It halves any current bleeding
 D: and restores 15 health and 16% of your maximum health.
+D: It also cures disease and restores all attribute points
+D: lost to that disease.
 
 
 N:319:Voice
@@ -2859,8 +2862,8 @@ D:An herb of ancient virtue, long known to the healers of the
 D: Eldar. Its leaves, when eaten, close wounds and ease pain,
 D: mending what battle has broken. It halves any current
 D: bleeding and restores 11 health and 12% of your maximum
-D: health. Herbs provide nourishment for about 250 turns
-D: under normal conditions.
+D: health. It does not cure disease. Herbs provide nourishment
+D: for about 250 turns under normal conditions.
 
 
 N:384:Restoration
@@ -2873,7 +2876,8 @@ F:EASY_KNOW
 D:A rare herb prized above all others by the healers of the
 D: Elder Days, for it restores what has been diminished and
 D: renews what the Enemy's malice has drained. It restores all
-D: of your statistics by up to 3 points each. Herbs provide
+D: of your statistics by up to 3 drained points each. It does
+D: not cure disease or restore disease penalties. Herbs provide
 D: nourishment for about 250 turns under normal conditions.
 
 
@@ -2941,8 +2945,11 @@ P:0:0d0:0:0d0
 A:8/30
 F:EASY_KNOW
 D:A sickly herb, spotted and foul, that gnaws at the body's
-D: endurance and leaves one vulnerable to further hardship. It
-D: reduces your constitution by one point. Herbs provide
+D: endurance. Eating it always infects you with disease:
+D: -1 Constitution immediately, then -1 to a random attribute
+D: every 50 player turns until cured. Rest does not cure it.
+D: Potions of Healing or Miruvor cure it and restore only
+D: the attribute points lost to disease. It provides
 D: nourishment for about 250 turns under normal conditions.
 
 
@@ -2969,11 +2976,14 @@ W:10:0:10:3
 P:0:0d0:0:0d0
 A:10/100
 F:EASY_KNOW
-D:Strips of meat dried and salted against the long marches of
-D: war. The Edain carried such provisions on the road, for in
-D: the wilds of Beleriand fresh food was seldom to be found. It
-D: provides nourishment for about 2,000 turns under normal
-D: conditions.
+D:Strips of meat dried and salted for long marches. These
+D: poorly kept provisions are beginning to spoil, with a
+D: sour taint beneath the salt. Eating a strip provides
+D: nourishment for about 2,000 turns under normal conditions,
+D: with a 20% chance of causing disease.
+D: Disease causes -1 Constitution immediately, then -1 to a
+D: random attribute every 50 player turns until cured by a
+D: potion of Healing or Miruvor. Rest does not cure it.
 
 
 N:401:& Fragment~ of Lembas

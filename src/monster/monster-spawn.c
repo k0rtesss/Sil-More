@@ -25,7 +25,8 @@ bool place_monster_one(
         return (false);
 
     /* Require empty space */
-    if (!cave_empty_bold(y, x))
+    if (!cave_empty_bold(y, x)
+        && !(cave_feat[y][x] == FEAT_LAVA && cave_m_idx[y][x] == 0))
         return (false);
 
     /* Hack -- no creation on glyph of warding */

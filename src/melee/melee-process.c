@@ -1757,6 +1757,13 @@ void process_monsters(s16b minimum_energy)
         if (m_ptr->energy < 100)
             continue;
 
+        /* Lava also affects sleeping monsters and those missing their turn. */
+        if (monster_lava_begin_action(i))
+        {
+            monster_lava_end_action(i);
+            continue;
+        }
+
         /* Handle temporary monster attributes */
         recover_monster(m_ptr);
 
@@ -1765,7 +1772,10 @@ void process_monsters(s16b minimum_energy)
 
         /* Sleeping monsters don't get a move */
         if (m_ptr->alertness < ALERTNESS_UNWARY)
+        {
+            monster_lava_end_action(i);
             continue;
+        }
 
         // Monsters who have just noticed you miss their turns (as do those who
         // have been knocked back...)
@@ -1775,11 +1785,13 @@ void process_monsters(s16b minimum_energy)
             m_ptr->previous_action[0] = ACTION_MISC;
 
             m_ptr->skip_next_turn = false;
+            monster_lava_end_action(i);
             continue;
         }
 
         /* Let the monster take its turn */
         process_monster(m_ptr);
+        monster_lava_end_action(i);
     }
 }
 

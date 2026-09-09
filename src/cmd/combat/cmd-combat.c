@@ -2051,6 +2051,7 @@ void hit_trap(int y, int x)
             }
 
             /* Move player */
+            p_ptr->leaping = false;
             monster_swap(p_ptr->py, p_ptr->px, sy, sx);
         }
 
@@ -2445,11 +2446,18 @@ bool knock_back(int y1, int x1, int y2, int x2)
 
             p_ptr->skip_next_turn = true;
 
+            bool was_leaping = p_ptr->leaping;
+            p_ptr->leaping = false;
+
             // actually move the player
             monster_swap(y2, x2, y3, x3);
+            if (p_ptr->py == y3 && p_ptr->px == x3)
+                player_water_displaced(was_leaping ? FEAT_FLOOR : cave_feat[y2][x2],
+                    cave_feat[y3][x3]);
 
             // cannot stay in the air
             p_ptr->leaping = false;
+            if (p_ptr->is_dead) return knocked;
 
             // make some noise when landing
             stealth_score -= 5;
@@ -3312,6 +3320,7 @@ void py_attack_aux(int y, int x, int attack_type)
                 if (do_knock_back)
                 {
                     knocked = knock_back(p_ptr->py, p_ptr->px, y, x);
+                    if (!m_ptr->r_idx) break;
                 }
 
                 // Morgoth drops his iron crown if he is hit for 10 or more net

@@ -535,6 +535,13 @@ void prt_state(void)
         }
     }
 
+    /* Disease remains visible even while walking in stealth mode. */
+    else if (p_ptr->diseased)
+    {
+        attr = TERM_ORANGE;
+        SDL_strlcpy(text, "Diseased", sizeof(text));
+    }
+
     /* Stealth mode */
     else if (p_ptr->stealth_mode)
     {
@@ -1315,6 +1322,8 @@ void prt_status_line_compact(void)
         SDL_STATUS_CLICK_MAIN_MENU);
     ADD_SEG(cut_long, cut_short, cut_attr, true, SDL_STATUS_CLICK_MAIN_MENU);
     ADD_SEG(pois_long, pois_short, pois_attr, true, SDL_STATUS_CLICK_MAIN_MENU);
+    ADD_SEG(p_ptr->diseased ? "Diseased" : "", "Dis", TERM_ORANGE, true,
+        SDL_STATUS_CLICK_MAIN_MENU);
     ADD_SEG(stun_long, stun_short, stun_attr, true, SDL_STATUS_CLICK_MAIN_MENU);
     ADD_SEG(p_ptr->afraid ? "Afraid" : "", "Af", TERM_ORANGE, true,
         SDL_STATUS_CLICK_MAIN_MENU);

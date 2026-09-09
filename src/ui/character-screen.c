@@ -1996,7 +1996,9 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
     Term_erase(col, row, label_w);
     Term_erase(val_start, row, val_w);
 
-    const char* stat_label = (p_ptr->stat_drain[stat] < 0) ? stat_names_reduced[stat] : stat_names[stat];
+    const char* stat_label = (p_ptr->stat_drain[stat] < 0
+        || p_ptr->stat_disease[stat] < 0) ? stat_names_reduced[stat]
+                                          : stat_names[stat];
     char label_buf[32];
     SDL_strlcpy(label_buf, stat_label ? stat_label : "", sizeof(label_buf));
     int len = (int)strlen(label_buf);
@@ -2040,7 +2042,8 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
     if (out_col < val_start)
         out_col = val_start;
 
-    byte stat_color = (p_ptr->stat_drain[stat] < 0) ? TERM_YELLOW : TERM_L_GREEN;
+    byte stat_color = (p_ptr->stat_drain[stat] < 0
+        || p_ptr->stat_disease[stat] < 0) ? TERM_YELLOW : TERM_L_GREEN;
     byte value_attr = (stat == compact_stat_highlight) ? TERM_L_BLUE : stat_color;
     Term_putstr(out_col, row, val_len, value_attr, val_text);
 }
@@ -2303,7 +2306,7 @@ void display_player_stat_info(int row, int col)
         char trimmed_label[32];
         
         /* Get the stat name */
-        if (p_ptr->stat_drain[i] < 0)
+        if (p_ptr->stat_drain[i] < 0 || p_ptr->stat_disease[i] < 0)
         {
             stat_label = stat_names_reduced[i];
         }
@@ -2337,7 +2340,7 @@ void display_player_stat_info(int row, int col)
         /* Resulting "modified" maximum value */
         cnv_stat(p_ptr->stat_use[i], buf);
 
-        if (p_ptr->stat_drain[i] < 0)
+        if (p_ptr->stat_drain[i] < 0 || p_ptr->stat_disease[i] < 0)
             c_put_str(TERM_YELLOW, buf, row + i, col + 5);
         else
             c_put_str(TERM_L_GREEN, buf, row + i, col + 5);
@@ -2356,17 +2359,21 @@ void display_player_stat_info(int row, int col)
             c_put_str(TERM_SLATE, buf, row + i, col + 13);
         }
 
-        /* Only display stat_drain if not zero */
-        if (p_ptr->stat_drain[i] != 0)
+        /* The fixed reduction column combines drain and disease penalties. */
+        if (p_ptr->stat_drain[i] != 0 || p_ptr->stat_disease[i] != 0)
         {
+            int stat_penalty = p_ptr->stat_drain[i]
+                + p_ptr->stat_disease[i];
+
             c_put_str(TERM_SLATE, "=", row + i, col + 8);
 
             /* Internal "natural" maximum value */
             cnv_stat(p_ptr->stat_base[i], buf);
             c_put_str(TERM_GREEN, buf, row + i, col + 10);
 
-            /* Reduction */
-            strnfmt(buf, sizeof(buf), "%+3d", p_ptr->stat_drain[i]);
+            /* Drain and disease are shown together here; tooltips identify
+             * their separate contributions. */
+            strnfmt(buf, sizeof(buf), "%+3d", stat_penalty);
             c_put_str(TERM_SLATE, buf, row + i, col + 17);
         }
 

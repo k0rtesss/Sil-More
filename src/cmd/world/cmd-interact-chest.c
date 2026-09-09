@@ -4646,6 +4646,11 @@ void do_cmd_search_skeleton(int y, int x, s16b o_idx)
         return;
     }
 
+    /* Exposure happens once even when this search yields nothing. */
+    if (o_ptr->sval == SV_SKELETON_ORC && !p_ptr->diseased
+        && one_in_(DISEASE_SKELETON_ONE_IN))
+        (void)infect_disease();
+
     object_generation_mode = OB_GEN_MODE_SKELETON;
 
     skeleton_note_maybe_show(o_ptr->sval, y, x);

@@ -324,6 +324,37 @@ int main(void)
 
     {
         bool identified=false;
+        object_type miruvor={.k_idx=5,.tval=TV_POTION,.sval=SV_POTION_MIRUVOR,.number=1};
+        object_type herb={.k_idx=6,.tval=TV_FOOD,.sval=SV_FOOD_HEALING,.number=1};
+        activate("status.diseased.remedy","diseased");
+        p_ptr->diseased=50; k_info[5].aware=true; k_info[6].aware=true;
+        k_info[3].aware=false;
+        assert(!tutorial_game_action_allowed("use-item",&healing));
+        k_info[3].aware=true;
+        assert(tutorial_game_action_allowed("use-item",&healing));
+        assert(tutorial_game_action_allowed("use-item",&miruvor));
+        assert(!tutorial_game_action_allowed("use-item",&potion));
+        assert(!tutorial_game_action_allowed("use-item",&herb));
+        herb.sval=SV_FOOD_RESTORATION;
+        assert(!tutorial_game_action_allowed("use-item",&herb));
+        assert(!available_remedy("diseased"));
+        test_supply=miruvor; supply_count=1;
+        assert(available_remedy("diseased"));
+        p_ptr->entranced=1; assert(!available_remedy("diseased")); p_ptr->entranced=0;
+        p_ptr->stun=101; assert(!available_remedy("diseased")); p_ptr->stun=0;
+        supply_count=0; test_extra=healing; extra_count=1;
+        assert(available_remedy("diseased")); extra_count=0;
+        effect_calls=0; effect_commits=false;
+        assert(!use_object(&healing,&identified) && effect_calls==1);
+        assert(tutorial_lesson_status("status.diseased.remedy")==TUTORIAL_IN_PROGRESS);
+        effect_commits=true;
+        assert(use_object(&healing,&identified) && identified);
+        assert(tutorial_lesson_status("status.diseased.remedy")==TUTORIAL_COMPLETED);
+        p_ptr->diseased=0;
+    }
+
+    {
+        bool identified=false;
         object_type grace={.k_idx=5,.tval=TV_POTION,.sval=SV_POTION_GRA,.number=1};
         object_type restoration={.k_idx=6,.tval=TV_FOOD,.sval=SV_FOOD_RESTORATION,.number=1};
         activate("status.drain.remedy","drain");
@@ -584,6 +615,7 @@ def main():
         ("item.staff.use", "use-item", "staff"),
         ("item.horn.use", "use-item", "horn"),
         ("status.poisoned.remedy", "use-item", "poisoned"),
+        ("status.diseased.remedy", "use-item", "diseased"),
         ("status.drain.remedy", "use-item", "drain"),
         ("move", "move", ""), ("attack", "attack", "monster"),
         ("throw", "throw", ""), ("fire", "fire", ""),

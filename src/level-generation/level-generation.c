@@ -550,6 +550,9 @@ bool cave_gen(void)
     check_quest_vault_integrity("AFTER_DOOR_RANDOMIZATION");
 
     /* place the stairs, traps, rubble, secret doors, and player */
+    place_cave_water();
+    place_cave_lava();
+
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_ENTRY,
         "Placing stairs, rubble, doors, and player start.");
     if (!place_rubble_player())

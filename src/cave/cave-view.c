@@ -882,6 +882,8 @@ void update_view(void)
         }
     }
 
+    lava_light();
+
     // Sil: update the light values with the torch/lantern light
 
     /* Calculate DARKNESS bonus once (items give +1 light power each) */

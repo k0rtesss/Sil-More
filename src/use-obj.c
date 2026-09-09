@@ -531,8 +531,8 @@ static bool eat_food(object_type* o_ptr, bool* ident)
 
     case SV_FOOD_SICKNESS:
     {
-        if (do_dec_stat(A_CON, NULL))
-            *ident = true;
+        (void)infect_disease();
+        *ident = true;
         break;
     }
 
@@ -546,6 +546,8 @@ static bool eat_food(object_type* o_ptr, bool* ident)
     case SV_FOOD_MEAT:
     {
         msg_print("It tastes foul.");
+        if (!p_ptr->diseased && one_in_(DISEASE_MEAT_ONE_IN))
+            (void)infect_disease();
         *ident = true;
         break;
     }
@@ -580,6 +582,7 @@ static bool quaff_potion(object_type* o_ptr, bool* ident)
         (void)set_image(0);
         (void)set_poisoned(0);
         (void)set_blind(0);
+        (void)cure_disease();
         (void)set_cut(p_ptr->cut / 2);
         (void)set_afraid(0);
         (void)hp_player(consumable_healing_points(o_ptr), false, true);
@@ -649,6 +652,7 @@ static bool quaff_potion(object_type* o_ptr, bool* ident)
     {
         msg_print("It has the bitter taste of medicine.");
         *ident = true;
+        (void)cure_disease();
         set_cut(p_ptr->cut / 2);
         hp_player(consumable_healing_points(o_ptr), false, true);
         break;

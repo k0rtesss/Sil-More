@@ -1513,7 +1513,8 @@ static u16b score_runs_collect_stat_entries(score_run_stat_v1* entries,
         slot->stat_index = (byte)stat;
         slot->reserved = 0;
         slot->base = p_ptr->stat_base[stat];
-        slot->drain = p_ptr->stat_drain[stat];
+        slot->drain = MAX(-32768,
+            p_ptr->stat_drain[stat] + p_ptr->stat_disease[stat]);
         slot->current = p_ptr->stat_use[stat];
     }
     return count;

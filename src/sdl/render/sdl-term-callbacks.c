@@ -1837,7 +1837,8 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
             if (m_idx < 0) {
                 byte feat = cave_feat[dy][dx];
 
-                if ((feat == FEAT_FLOOR) || (feat == FEAT_SUNLIGHT)) {
+                if ((feat == FEAT_FLOOR) || (feat == FEAT_SUNLIGHT)
+                    || (feat == FEAT_WATER) || (feat == FEAT_LAVA)) {
                     object_type* o_ptr;
 
                     for (o_ptr = get_first_object(dy, dx); o_ptr;

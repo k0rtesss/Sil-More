@@ -457,6 +457,22 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         name = "down shaft";
     else if (feat == FEAT_SUNLIGHT)
         name = "patch of sunlight";
+    else if (feat == FEAT_WATER)
+        name = "shallow water: movement 150%; splash -3 Stealth; no scent trail";
+    else if (feat == FEAT_LAVA)
+    {
+        static char lava_name[180];
+        int damage = player_lava_damage_at(y, x, false);
+        if (damage < 0)
+            strnfmt(lava_name, sizeof(lava_name),
+                "molten lava: instant death; jumping heat %d damage; emits light",
+                player_lava_damage_at(y, x, true));
+        else
+            strnfmt(lava_name, sizeof(lava_name),
+                "molten lava: %d damage on entry/turn; jumping heat %d; emits light",
+                damage, player_lava_damage_at(y, x, true));
+        name = lava_name;
+    }
     else
         name = f_name + f_info[feat].name;
 

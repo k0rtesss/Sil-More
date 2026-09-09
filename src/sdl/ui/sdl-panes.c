@@ -922,6 +922,9 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
     if (p_ptr->poisoned > 0)
         sdl_status_pane_add_timed(entries, max_entries, &count, "Poisoned",
             p_ptr->poisoned, TERM_L_GREEN);
+    if (p_ptr->diseased > 0)
+        sdl_status_pane_add(entries, max_entries, &count, "Diseased",
+            "needs cure", TERM_ORANGE);
     if (p_ptr->cut > 100)
         sdl_status_pane_add_timed(entries, max_entries, &count,
             "Mortal wound", p_ptr->cut, TERM_RED);

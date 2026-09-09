@@ -3897,7 +3897,8 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
     if (focused)
         sdl_char_sheet_draw_focus_rect(row_rect, true);
 
-    sdl_char_sheet_copy_trimmed((p_ptr && p_ptr->stat_drain[stat] < 0)
+    sdl_char_sheet_copy_trimmed((p_ptr && (p_ptr->stat_drain[stat] < 0
+            || p_ptr->stat_disease[stat] < 0))
             ? stat_names_reduced[stat] : stat_names[stat],
         label, sizeof(label));
     cnv_stat(p_ptr ? p_ptr->stat_use[stat]
@@ -3907,8 +3908,9 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, 5,
         TERM_WHITE, label, focused);
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 6, 6,
-        (p_ptr && p_ptr->stat_drain[stat] < 0) ? TERM_YELLOW
-                                               : TERM_L_GREEN,
+        (p_ptr && (p_ptr->stat_drain[stat] < 0
+            || p_ptr->stat_disease[stat] < 0)) ? TERM_YELLOW
+                                                : TERM_L_GREEN,
         value, focused);
 
     if (allocation)
@@ -4159,7 +4161,8 @@ int sdl_char_sheet_collect_stats(sdl_char_sheet_line* lines,
         cptr desc;
         const sdl_character_sheet_live_item* item;
 
-        SDL_strlcpy(label, (p_ptr->stat_drain[stat] < 0)
+        SDL_strlcpy(label, (p_ptr->stat_drain[stat] < 0
+                || p_ptr->stat_disease[stat] < 0)
                 ? stat_names_reduced[stat] : stat_names[stat],
             sizeof(label));
         for (size_t len = strlen(label); len > 0 && label[len - 1] == ' ';
@@ -4194,7 +4197,8 @@ int sdl_char_sheet_collect_stats(sdl_char_sheet_line* lines,
 
         strnfmt(text, sizeof(text), "%s\t%s", label, value);
         sdl_char_sheet_add_line(lines, &count, max_count, text,
-            (p_ptr->stat_drain[stat] < 0) ? TERM_YELLOW : TERM_L_GREEN,
+            (p_ptr->stat_drain[stat] < 0 || p_ptr->stat_disease[stat] < 0)
+                ? TERM_YELLOW : TERM_L_GREEN,
             choice, desc);
     }
 

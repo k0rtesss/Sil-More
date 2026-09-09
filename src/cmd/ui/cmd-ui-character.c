@@ -714,10 +714,12 @@ static void character_sheet_format_stat_item(const character_sheet_item* item,
     cnv_stat(p_ptr->stat_use[stat], use_buf);
     cnv_stat(p_ptr->stat_base[stat], base_buf);
     strnfmt(buf, buflen,
-        "%s: %s current = %s base%+d equip%+d misc%+d drain. Affects %s.",
+        "%s: %s current (base %s, equipment %+d, misc %+d, "
+        "Drain %+d, Disease %+d). Affects %s.",
         character_sheet_stat_full_name(stat), use_buf, base_buf,
         p_ptr->stat_equip_mod[stat], p_ptr->stat_misc_mod[stat],
-        p_ptr->stat_drain[stat], character_sheet_stat_description(stat));
+        p_ptr->stat_drain[stat], p_ptr->stat_disease[stat],
+        character_sheet_stat_description(stat));
 }
 
 static void character_sheet_format_value_item(const character_sheet_item* item,

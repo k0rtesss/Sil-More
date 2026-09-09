@@ -3,9 +3,9 @@
 High-signal repo guidance for coding agents (Codex CLI, Copilot, etc.). This is the "what matters / where to look / what not to break" file.
 
 ## Subagent Policy
-- Subagents are allowed when they materially help the task.
+- Use subagents proactively when independent parallel work would materially help the task; the user does not need to request them.
 - Choose the subagent model and reasoning level yourself based on task difficulty.
-- Prefer `gpt-5.6 sol, or luna` for subagents unless a different choice is clearly better for the work.
+- Use `gpt-5.6-luna` with `max` reasoning (Luna Max), or `gpt-6-astra` with `low`, `medium`, `high`, or `xhigh` reasoning (Astra low through very high), depending on the difficulty of the work.
 - When you use a subagent, report which model and reasoning level you chose and why.
 
 ## Project Snapshot

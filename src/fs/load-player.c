@@ -81,6 +81,29 @@ errr rd_extra(void)
     for (i = 0; i < A_MAX; i++)
         rd_s16b(&p_ptr->stat_drain[i]);
 
+    p_ptr->diseased = 0;
+    memset(p_ptr->stat_disease, 0, sizeof(p_ptr->stat_disease));
+    if (savefile_version_at_least(0, 9, 8, 3))
+    {
+        rd_s16b(&p_ptr->diseased);
+        for (i = 0; i < A_MAX; i++)
+            rd_s16b(&p_ptr->stat_disease[i]);
+        if (p_ptr->diseased < 0 || p_ptr->diseased > DISEASE_INTERVAL)
+        {
+            note("Invalid disease countdown in savefile.");
+            return -1;
+        }
+        for (i = 0; i < A_MAX; i++)
+        {
+            if (p_ptr->stat_disease[i] > 0
+                || (!p_ptr->diseased && p_ptr->stat_disease[i] != 0))
+            {
+                note("Invalid disease attribute penalty in savefile.");
+                return -1;
+            }
+        }
+    }
+
     /* Read the skill info - all skills including S_SPC (Special) present in 0.9.0 */
     for (i = 0; i < S_MAX; i++)
         rd_s16b(&p_ptr->skill_base[i]);

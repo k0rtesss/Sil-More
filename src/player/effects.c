@@ -232,10 +232,66 @@ bool set_confused(int v)
     return (true);
 }
 
-/*
- * Set "p_ptr->poisoned", notice observable changes
- *
- */
+/* Disease is independent of ordinary stat drain, sustain and regeneration.
+ * Its countdown never expires: reaching zero applies another penalty. */
+static void disease_changed(void)
+{
+    p_ptr->update |= PU_BONUS;
+    p_ptr->redraw |= PR_STATS | PR_EXTRA;
+    p_ptr->window |= PW_PLAYER_0;
+    disturb(0, 0);
+    handle_stuff();
+}
+
+bool infect_disease(void)
+{
+    if (p_ptr->diseased)
+        return false;
+
+    p_ptr->diseased = DISEASE_INTERVAL;
+    p_ptr->stat_disease[A_CON] = -1;
+    msg_print("You contract a disease. Your Constitution decreases.");
+    disease_changed();
+    return true;
+}
+
+bool cure_disease(void)
+{
+    if (!p_ptr->diseased)
+        return false;
+
+    p_ptr->diseased = 0;
+    for (int stat = 0; stat < A_MAX; stat++)
+        p_ptr->stat_disease[stat] = 0;
+    msg_print("Your disease is cured. The attributes it weakened are restored.");
+    disease_changed();
+    return true;
+}
+
+void process_disease(void)
+{
+    static const char* names[A_MAX] = {
+        "Strength", "Dexterity", "Constitution", "Grace"
+    };
+
+    if (!p_ptr->diseased)
+        return;
+    if (--p_ptr->diseased > 0)
+        return;
+
+    p_ptr->diseased = DISEASE_INTERVAL;
+    int stat = rand_int(A_MAX);
+    /* Saturate storage during arbitrarily long games; calc_stats applies the
+     * normal attribute floor independently of the accumulated penalties. */
+    if (p_ptr->stat_disease[stat] > -32767)
+    {
+        p_ptr->stat_disease[stat]--;
+        msg_format("Your disease worsens. Your %s decreases.", names[stat]);
+        disease_changed();
+    }
+}
+
+/* Set "p_ptr->poisoned", noticing observable changes. */
 bool set_poisoned(int v)
 {
     int new;

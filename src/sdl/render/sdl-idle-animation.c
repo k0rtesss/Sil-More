@@ -2,8 +2,9 @@
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-fixtures.h"
 
-/* Six source images become one 48x32 GPU texture. No I/O, texture creation,
- * timers, threads, or heap allocation occurs in the animation update. */
+/* Fixtures share one 48x32 atlas; each liquid shares one 64x16 atlas.
+ * No I/O, texture creation, timers, threads, or heap allocation occurs in
+ * the animation update. */
 /* A shared 25 Hz ceiling coalesces independent fixture deadlines. Each flame
  * advances only every 4-6 steps (160-240 ms), without a timer per fixture. */
 #define IDLE_STEP_NS 40000000ULL
@@ -15,6 +16,7 @@ typedef struct idle_cell {
     byte a, ta;
     char c, tc;
     byte frame_steps, phase_steps, drawn_frame;
+    byte liquid_feat;
 } idle_cell;
 
 static SDL_Texture* fixture_texture;
@@ -22,6 +24,84 @@ static bool fixture_load_attempted;
 static idle_cell* cells;
 static int cell_count, cell_capacity;
 static Uint64 frame_tick;
+static SDL_Texture* water_texture;
+static bool water_load_attempted;
+static SDL_Texture* lava_texture;
+static bool lava_load_attempted;
+
+static byte visible_liquid(int y, int x)
+{
+    u16b info;
+    if (!p_ptr || !in_bounds(y, x)
+        || (cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_LAVA))
+        return 0;
+    info = cave_info[y][x];
+    if (!(info & (CAVE_MARK | CAVE_SEEN))
+        || ((p_ptr->rage || g_labyrinth_view_active) && !(info & CAVE_SEEN)))
+        return 0;
+    return cave_feat[y][x];
+}
+
+static bool load_liquid_texture(byte feat)
+{
+    SDL_Surface* atlas;
+    SDL_Texture** texture = feat == FEAT_LAVA ? &lava_texture : &water_texture;
+    bool* attempted = feat == FEAT_LAVA ? &lava_load_attempted : &water_load_attempted;
+    const char* name = feat == FEAT_LAVA ? "lava_flow" : "water_surface";
+    if (*texture || *attempted)
+        return *texture != NULL;
+    *attempted = true;
+    atlas = SDL_CreateSurface(4 * TILE_SIZE, TILE_SIZE, SDL_PIXELFORMAT_RGBA32);
+    if (!atlas) return false;
+    for (int frame = 0; frame < 4; frame++)
+    {
+        char path[256];
+        SDL_Rect dst = { frame * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE };
+        strnfmt(path, sizeof(path), "lib/xtra/graf/anim_%s_f%d.png", name, frame);
+        SDL_Surface* source = IMG_Load(path);
+        if (!source || source->w != TILE_SIZE || source->h != TILE_SIZE)
+        {
+            log_warn("Liquid animation unavailable: %s (%s)", path, SDL_GetError());
+            SDL_DestroySurface(source);
+            SDL_DestroySurface(atlas);
+            return false;
+        }
+        SDL_SetSurfaceBlendMode(source, SDL_BLENDMODE_NONE);
+        SDL_BlitSurface(source, NULL, atlas, &dst);
+        SDL_DestroySurface(source);
+    }
+    *texture = SDL_CreateTextureFromSurface(g_state.renderer, atlas);
+    SDL_DestroySurface(atlas);
+    if (!*texture) return false;
+    SDL_SetTextureScaleMode(*texture, SDL_SCALEMODE_NEAREST);
+    SDL_SetTextureBlendMode(*texture, SDL_BLENDMODE_BLEND);
+    frame_tick = SDL_GetTicksNS() / IDLE_STEP_NS;
+    return true;
+}
+
+static bool draw_liquid(int y, int x, const SDL_FRect* dst)
+{
+    byte feat = cave_feat[y][x];
+    bool live = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
+    if (!load_liquid_texture(feat))
+    {
+        /* Keep lethal terrain recognizable even if an asset is missing. */
+        if (feat == FEAT_LAVA)
+            SDL_SetRenderDrawColor(g_state.renderer, live ? 240 : 90,
+                live ? 74 : 28, live ? 16 : 6, 255);
+        else
+            SDL_SetRenderDrawColor(g_state.renderer, 24, 78, 108, 255);
+        SDL_RenderFillRect(g_state.renderer, dst);
+        return true;
+    }
+    SDL_Texture* texture = feat == FEAT_LAVA ? lava_texture : water_texture;
+    int frame = live ? (int)((frame_tick / 8) % 4) : 0;
+    SDL_FRect src = { frame * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE };
+    SDL_SetTextureColorMod(texture, live ? 255 : 96,
+        live ? 255 : 96, live ? 255 : 96);
+    SDL_RenderTexture(g_state.renderer, texture, &src, dst);
+    return true;
+}
 
 static void fixture_timing(int y, int x, byte* steps, byte* phase)
 {
@@ -98,6 +178,14 @@ void sdl_idle_animation_clear_cells(void)
     cell_count = 0;
 }
 
+bool sdl_idle_animation_tracks_grid(int y, int x)
+{
+    for (int i = 0; i < cell_count; i++)
+        if (cells[i].y == y && cells[i].x == x)
+            return true;
+    return false;
+}
+
 void sdl_idle_animation_redraw_cached_cells(
     void (*redraw_cell)(int col, int row, int width))
 {
@@ -113,6 +201,12 @@ void sdl_idle_animation_redraw_cached_cells(
 
 void sdl_idle_animation_shutdown(void)
 {
+    SDL_DestroyTexture(water_texture);
+    water_texture = NULL;
+    water_load_attempted = false;
+    SDL_DestroyTexture(lava_texture);
+    lava_texture = NULL;
+    lava_load_attempted = false;
     SDL_DestroyTexture(fixture_texture);
     fixture_texture = NULL;
     fixture_load_attempted = false;
@@ -138,6 +232,8 @@ static byte visible_fixture(int y, int x)
 
 bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst)
 {
+    if (g_state.use_tiles && visible_liquid(y, x))
+        return draw_liquid(y, x, dst);
     byte kind = visible_fixture(y, x);
     bool live;
     bool animate;
@@ -180,7 +276,9 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
 {
     idle_cell* cell;
     sdl_idle_animation_invalidate_span(col, row, use_bigtile ? 2 : 1);
-    if (!visible_fixture(y, x) || !(ta & TILE_FLAG) || !((byte)tc & TILE_FLAG))
+    byte liquid = visible_liquid(y, x);
+    if ((!liquid && !visible_fixture(y, x))
+        || !(ta & TILE_FLAG) || !((byte)tc & TILE_FLAG))
         return;
     if (cell_count == cell_capacity)
     {
@@ -194,6 +292,15 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
     cell = &cells[cell_count++];
     *cell = (idle_cell){ .col = col, .row = row, .y = y, .x = x,
         .width = use_bigtile ? 2 : 1, .a = a, .ta = ta, .c = c, .tc = tc };
+    cell->liquid_feat = liquid;
+    if (liquid)
+    {
+        cell->frame_steps = 8;
+        cell->phase_steps = 0;
+        cell->drawn_frame = (!p_ptr->blind && (cave_info[y][x] & CAVE_SEEN))
+            ? (byte)((frame_tick / 8) % 4) : 0;
+        return;
+    }
     fixture_timing(y, x, &cell->frame_steps, &cell->phase_steps);
     cell->drawn_frame = (!p_ptr->blind
         && (op_ptr->opt[OPT_torch_animation_always] || (cave_info[y][x] & CAVE_SEEN)))
@@ -203,7 +310,8 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
 static bool animation_context_active(void)
 {
     SDL_WindowFlags flags;
-    if (!fixture_texture || !cell_count || !g_state.window
+    if ((!fixture_texture && !water_texture && !lava_texture)
+        || !cell_count || !g_state.window
         || !g_state.use_tiles || !sdl_mouse_gameplay_context_active()
         || g_minimap.active || g_main_menu_overlay_active
         || g_description_overlay.active || g_sdl_present_suppressed
@@ -229,7 +337,12 @@ static bool cell_can_animate(const idle_cell* cell)
         || cell->width != (use_bigtile ? 2 : 1)
         || cell->y != p_ptr->wy + row - ROW_MAP
         || cell->x != p_ptr->wx + (col - COL_MAP) / (use_bigtile ? 2 : 1)
-        || !visible_fixture(cell->y, cell->x))
+        || !(cell->liquid_feat ? visible_liquid(cell->y, cell->x) == cell->liquid_feat
+                         : visible_fixture(cell->y, cell->x)))
+        return false;
+    if (cell->liquid_feat
+        && (!(cell->liquid_feat == FEAT_LAVA ? lava_texture : water_texture)
+            || !(cave_info[cell->y][cell->x] & CAVE_SEEN)))
         return false;
     if (op_ptr && !op_ptr->opt[OPT_torch_animation_always]
         && !(cave_info[cell->y][cell->x] & CAVE_SEEN))
@@ -244,9 +357,11 @@ static bool cell_can_animate(const idle_cell* cell)
         && t->old->cy == row && t->old->cx >= col
         && t->old->cx < col + (use_bigtile ? 2 : 1))
         return false;
-    /* A floor item/creature completely covers its brazier; no idle work. */
-    if ((cell->a & TILE_INDEX_MASK) != (cell->ta & TILE_INDEX_MASK)
-        || ((byte)cell->c & TILE_INDEX_MASK) != ((byte)cell->tc & TILE_INDEX_MASK))
+    /* Liquids remain visible around transparent actors/items. A fixture is
+     * hidden beneath an occupant and needs no idle work there. */
+    if (!cell->liquid_feat
+        && ((cell->a & TILE_INDEX_MASK) != (cell->ta & TILE_INDEX_MASK)
+            || ((byte)cell->c & TILE_INDEX_MASK) != ((byte)cell->tc & TILE_INDEX_MASK)))
         return false;
     /* The map may be clipped by the responsive pane layout. */
     return sdl_map_grid_cell_rect(cell->y, cell->x, &window_rect);
@@ -293,7 +408,8 @@ void sdl_idle_animation_update(Uint64 now_ns)
         SDL_FRect dst;
         if (!cell_can_animate(cell))
             continue;
-        frame = fixture_frame(tick, cell->frame_steps, cell->phase_steps);
+        frame = cell->liquid_feat ? (byte)((tick / 8) % 4)
+            : fixture_frame(tick, cell->frame_steps, cell->phase_steps);
         if (frame == cell->drawn_frame)
             continue;
         dst = (SDL_FRect){ cell->col * view->cell_w, cell->row * view->cell_h,

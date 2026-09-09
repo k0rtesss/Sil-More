@@ -648,7 +648,7 @@
         {
           "kind": "info",
           "anchor": "map",
-          "text": "Search a skeleton on the dungeon floor using its contextual action. A skeleton can be searched only once. It may yield food, a light, damaged gear or nothing. Searching can also reveal a note or hint; those hints have their own setting and can be reviewed later. This is a search action, not a request to equip or use the bones."
+          "text": "Search a skeleton on the dungeon floor using its contextual action. A skeleton can be searched only once. It may yield food, a light, damaged gear or nothing. Searching can also reveal a note or hint; those hints have their own setting and can be reviewed later. This is a search action, not a request to equip or use the bones. Searching orc remains has a 5% chance of causing disease."
         }
       ],
       "trigger": {
@@ -906,6 +906,28 @@
       "sources": [
         "src/cmd/item/cmd-identify.c",
         "src/cmd/combat/cmd-combat.c"
+      ]
+    },
+    {
+      "id": "status.diseased",
+      "title": "Diseased",
+      "level": "normal",
+      "priority": 95,
+      "steps": [
+        {
+          "text": "{detail} Disease continues while resting and never clears on its own. A potion of Healing or Miruvor cures it and restores all attribute points lost to disease; unrelated attribute drain remains. Herb of Sickness always causes disease; Dried Meat has a 20% risk, searching orc remains 5%, and each water tile entered on foot 0.5%.",
+          "kind": "info",
+          "anchor": "status"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The disease condition is active and its lesson is unseen or in progress, or disease has just appeared."
+      },
+      "sources": [
+        "src/player/effects.c",
+        "src/dungeon/dungeon-loop.c",
+        "src/use-obj.c"
       ]
     },
     {
@@ -1521,6 +1543,34 @@
       "sources": [
         "src/player/effects.c",
         "src/dungeon/dungeon-loop.c",
+        "src/use-obj.c"
+      ]
+    },
+    {
+      "id": "status.diseased.remedy",
+      "title": "A remedy for disease",
+      "level": "normal",
+      "priority": 90,
+      "steps": [
+        {
+          "text": "A known potion of Healing or Miruvor is available. {detail} It ends disease and restores only the attribute points disease took. Ordinary rest and herbs of Healing or Restoration do not cure disease.",
+          "kind": "info",
+          "anchor": "status"
+        },
+        {
+          "text": "Use a known potion of Healing or Miruvor. Only actually using a relevant potion completes this step; cancelling or choosing another item does not.",
+          "kind": "action",
+          "anchor": "status",
+          "action": "use-item",
+          "subject_type": "diseased"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Disease is active, the player can act, and a carried aware item passes item_is_remedy for diseased."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
         "src/use-obj.c"
       ]
     },
@@ -8820,6 +8870,30 @@
       "terrain_serial": 83
     },
     {
+      "id": "terrain.84",
+      "title": "Shallow water",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "Entering, crossing or leaving shallow water costs 150% movement energy and splashes for -3 Stealth on that action. Each water tile entered on foot has a 0.5% chance of disease. Standing still does not add infection rolls. Disease lowers Constitution by 1 immediately and a random attribute by 1 every 50 player turns; rest cannot cure it. Potions of Healing or Miruvor cure it and restore its attribute penalties. A successful leap over water avoids infection and splashing; click-to-travel wades. Water leaves no scent trail.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Feature 84 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded."
+      },
+      "sources": [
+        "lib/edit/terrain.txt",
+        "src/cave/cave-water.c",
+        "src/player/effects.c",
+        "src/melee/melee-movement-resolution.c"
+      ],
+      "terrain_serial": 84
+    },
+    {
       "id": "effect.191",
       "title": "Imprisonment — known effect",
       "level": "extended",
@@ -9288,7 +9362,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Cures stun, confusion, hallucination, poison, blindness and fear; halves current bleeding; restores 20 + floor(20% of maximum Health) and all Voice. Medicine equipment can increase the healing.",
+          "text": "Cures stun, confusion, hallucination, poison, blindness and fear; halves current bleeding; restores 20 + floor(20% of maximum Health) and all Voice. Medicine equipment can increase the healing. Cures disease and restores all attribute points lost to it, leaving unrelated drain unchanged.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9376,7 +9450,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Halves current bleeding and restores 15 + floor(16% of maximum Health). Medicine equipment can increase healing. Remaining bleeding can still cause later damage.",
+          "text": "Halves current bleeding and restores 15 + floor(16% of maximum Health). Medicine equipment can increase healing. Remaining bleeding can still cause later damage. Cures disease and restores all attribute points lost to it, leaving unrelated drain unchanged.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9798,7 +9872,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment. It also provides ordinary herb nourishment.",
+          "text": "Halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment. It also provides ordinary herb nourishment. It does not cure disease.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9820,7 +9894,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Restores every attribute by up to 3 drained points. It also provides ordinary herb nourishment. It does not remove unrelated equipment penalties.",
+          "text": "Restores every attribute by up to 3 drained points. It also provides ordinary herb nourishment. It does not remove unrelated equipment penalties. It does not cure disease or restore disease penalties.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9930,7 +10004,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Drains Constitution by 1 and provides ordinary herb nourishment. Check maximum Health after attribute changes.",
+          "text": "Always causes disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. Provides ordinary herb nourishment.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9974,7 +10048,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Provides about 2,000 ordinary turns of nourishment.",
+          "text": "Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns. Rest does not cure it; potions of Healing or Miruvor do.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -13871,7 +13945,7 @@
       "priority": 33,
       "steps": [
         {
-          "text": "{detail} Rest repeats game turns until its chosen goal is met or it is interrupted. Poison, bleeding and starvation prevent ordinary Health regeneration; singing prevents Voice regeneration.",
+          "text": "{detail} Rest repeats game turns until its chosen goal is met or it is interrupted. Poison, bleeding and starvation prevent ordinary Health regeneration; singing prevents Voice regeneration. Disease continues to lower an attribute every 50 player turns while you rest; rest cannot cure it.",
           "kind": "info",
           "anchor": "status"
         }

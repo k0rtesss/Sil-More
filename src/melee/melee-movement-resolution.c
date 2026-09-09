@@ -196,8 +196,21 @@ void monster_exchange_places(monster_type* m_ptr)
     /* Message */
     msg_format("%^s exchanges places with you.", m_name1);
 
+    int player_from_feat = p_ptr->leaping ? FEAT_FLOOR
+        : cave_feat[p_ptr->py][p_ptr->px];
+    p_ptr->leaping = false;
     // swap positions with the player
     monster_swap(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
+    if (!m_ptr->r_idx || p_ptr->is_dead)
+        return;
+
+    if (m_ptr->r_idx && (m_ptr->fy != y || m_ptr->fx != x))
+    {
+        m_ptr->energy -= water_movement_energy(100, cave_feat[y][x],
+            cave_feat[m_ptr->fy][m_ptr->fx],
+            (r_info[m_ptr->r_idx].flags2 & RF2_FLYING) != 0) - 100;
+        player_water_displaced(player_from_feat, cave_feat[p_ptr->py][p_ptr->px]);
+    }
 
     // update some things
     update_view();
@@ -354,6 +367,9 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
         /* End move */
         do_move = false;
     }
+
+    if (!m_ptr->r_idx || p_ptr->is_dead)
+        return;
 
     /* Can still move */
     if (do_move)
@@ -682,8 +698,23 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                 l_ptr->flags2 |= (RF2_FLANKING);
         }
 
+        if (!m_ptr->r_idx || p_ptr->is_dead)
+            return;
+
         /* Move the monster */
         monster_swap(oy, ox, ny, nx);
+        if (!m_ptr->r_idx || p_ptr->is_dead)
+            return;
+
+        if (m_ptr->r_idx && (oy != ny || ox != nx)
+            && m_ptr->fy == ny && m_ptr->fx == nx)
+        {
+            int cost = water_movement_energy(100, cave_feat[oy][ox],
+                cave_feat[ny][nx], (r_ptr->flags2 & RF2_FLYING) != 0);
+            m_ptr->energy -= cost - 100;
+            if (cost > 100)
+                m_ptr->noise = MAX(m_ptr->noise, 8);
+        }
 
         /* Cancel target when reached */
         if ((m_ptr->target_y == ny) && (m_ptr->target_x == nx))

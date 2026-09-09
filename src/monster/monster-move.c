@@ -675,6 +675,9 @@ void monster_swap(int y1, int x1, int y2, int x2)
     /* Player 2 */
     else if (m2 < 0)
     {
+        bool bonus_state_changed =
+            player_environment_bonus_state_changed(y2, x2, y1, x1);
+
         /* Move player */
         p_ptr->py = y1;
         p_ptr->px = x1;
@@ -687,6 +690,14 @@ void monster_swap(int y1, int x1, int y2, int x2)
 
         /* Window stuff */
         p_ptr->window |= (PW_OVERHEAD);
+
+        /* Forced exchanges must use the destination's fire-cave resistance
+         * before resolving the terrain beneath the player. */
+        if (bonus_state_changed)
+        {
+            p_ptr->update |= PU_BONUS;
+            update_stuff();
+        }
     }
 
     /* Update grids */
@@ -697,9 +708,19 @@ void monster_swap(int y1, int x1, int y2, int x2)
     lite_spot(y1, x1);
     lite_spot(y2, x2);
 
+    /* Forced movement uses the same entry hazard as normal movement. */
+    if (m1 > 0)
+        monster_lava_exposure(m1);
+    if (m2 > 0)
+        monster_lava_exposure(m2);
+
+    if (monster1)
+        m_ptr = &mon_list[m1];
+
     // deal with set polearm attacks
     if (player_active_weapon_is_melee()
-        && p_ptr->active_ability[S_MEL][MEL_POLEARMS] && monster1 && m_ptr->ml)
+        && p_ptr->active_ability[S_MEL][MEL_POLEARMS] && monster1
+        && m_ptr->r_idx && m_ptr->ml)
     {
         object_type* o_ptr = &inventory[INVEN_WIELD];
         u32b f1, f2, f3;
@@ -741,6 +762,10 @@ void monster_swap(int y1, int x1, int y2, int x2)
         }
     }
 
+    /* Entry clears even an old/save-restored scent on the wet square. */
+    if ((m1 < 0 || m2 < 0) && cave_feat[p_ptr->py][p_ptr->px] == FEAT_WATER)
+        cave_when[p_ptr->py][p_ptr->px] = 0;
+
     // deal with falling down chasms
     if (m1 > 0)
         m_fall_in_chasm(y2, x2);
@@ -756,6 +781,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
     // describe object you are standing on if any
     if ((m1 < 0) || (m2 < 0))
     {
+        player_lava_exposure(p_ptr->leaping);
         describe_floor_object();
     }
 }

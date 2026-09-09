@@ -957,7 +957,14 @@ void rd_monster(monster_type* m_ptr)
     rd_s16b(&m_ptr->alertness);
     rd_byte(&m_ptr->skip_next_turn);
     rd_byte(&m_ptr->mspeed);
-    rd_byte(&m_ptr->energy);
+    if (savefile_version_at_least(0, 9, 8, 2))
+        rd_s16b(&m_ptr->energy);
+    else
+    {
+        byte old_energy;
+        rd_byte(&old_energy);
+        m_ptr->energy = old_energy;
+    }
     rd_byte(&m_ptr->stunned);
     rd_byte(&m_ptr->confused);
     rd_s16b(&m_ptr->hasted);

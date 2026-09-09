@@ -722,7 +722,7 @@ struct monster_type
                             this turn (Song of Mastery) */
 
     byte mspeed; /* Monster "speed" */
-    byte energy; /* Monster "energy" */
+    s16b energy; /* May be negative after a costly movement action. */
 
     byte stunned; /* Monster is stunned */
     byte confused; /* Monster is confused */
@@ -1164,6 +1164,8 @@ struct player_type
 
     s16b stat_base[A_MAX]; /* The base ('internal') stat values */
     s16b stat_drain[A_MAX]; /* The negative modifier from stat drain */
+    s16b stat_disease[A_MAX]; /* Negative penalties restored only by curing disease */
+    s16b diseased; /* 0: healthy; otherwise player turns until the next disease penalty */
 
     s16b skill_base[S_MAX]; /* The base skill values */
 

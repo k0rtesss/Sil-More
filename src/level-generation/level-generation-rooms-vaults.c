@@ -318,6 +318,20 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 break;
             }
 
+            /* Shallow water ('~' is already used for chests). */
+            case '_':
+            {
+                cave_set_feat(y, x, FEAT_WATER);
+                break;
+            }
+
+            /* Molten lava ('~' is already used for chests). */
+            case '`':
+            {
+                cave_set_feat(y, x, FEAT_LAVA);
+                break;
+            }
+
             /* Sunlight */
             case ',':
             {

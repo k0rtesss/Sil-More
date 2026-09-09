@@ -186,7 +186,14 @@ void do_cmd_exchange(void)
     make_alert(m_ptr);
 
     // Swap positions with the monster
-    monster_swap(p_ptr->py, p_ptr->px, y, x);
+    {
+        int from_feat = cave_feat[p_ptr->py][p_ptr->px];
+        p_ptr->leaping = false;
+        monster_swap(p_ptr->py, p_ptr->px, y, x);
+        if (p_ptr->is_dead) return;
+        if (p_ptr->py == y && p_ptr->px == x)
+            player_water_movement(from_feat, cave_feat[y][x]);
+    }
 
     /* Set off traps */
     if (cave_trap_bold(y, x) || (cave_feat[y][x] == FEAT_CHASM))

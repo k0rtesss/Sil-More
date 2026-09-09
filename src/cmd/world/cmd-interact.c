@@ -1507,6 +1507,9 @@ bool grid_interact_available(int y, int x)
         }
     }
 
+    if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA)
+        return true;
+
     /* Empty floor: strike at the square without stepping in */
     if (cave_floorlike_bold(y, x))
         return true;
@@ -1897,6 +1900,36 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "something of use.",
             sizeof(desc));
         GRID_Q_ADD('/', 's', "Search it", TERM_L_BLUE);
+    }
+
+    /* --- Molten lava --- */
+    else if (feat == FEAT_LAVA)
+    {
+        SDL_strlcpy(title, "Molten lava", sizeof(title));
+        SDL_strlcpy(desc,
+            "Ground contact kills immediately without net fire resistance. "
+            "One resistance level takes 40 damage on entry and each turn; "
+            "two take 30, three take 24. Fire caves remove one level. "
+            "With Leaping and a run-up, jump a single lava tile to a known bank: "
+            "the heat deals damage with one extra resistance level. "
+            "Flying monsters take 40 heat damage each turn. Fire-resistant "
+            "monsters are unharmed. Lava casts light two squares away.", sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_RED);
+    }
+
+    /* --- Shallow water --- */
+    else if (feat == FEAT_WATER)
+    {
+        SDL_strlcpy(title, "Shallow water", sizeof(title));
+        SDL_strlcpy(desc,
+            "Entering, crossing, or leaving water costs 150% movement energy. "
+            "Each wading move splashes (-3 Stealth for that action). Standing "
+            "actions cost normally. Water holds no scent, and wading leaves "
+            "no fresh tracks on nearby banks; sight, hearing and old land "
+            "tracks still matter. Flying monsters move normally. With Leaping "
+            "and a run-up, you can jump one water tile to a known dry bank.",
+            sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_BLUE);
     }
 
     /* --- Empty floor --- */

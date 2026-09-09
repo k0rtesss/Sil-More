@@ -60,9 +60,9 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 1  /* Persist corridor torch/brazier decorations. */
+#define VERSION_EXTRA 3  /* Persistent disease countdown and separate stat penalties. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
-#define MIN_VERSION_EXTRA 0  /* Fixtures are version-gated; accept earlier saves. */
+#define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
 /* Marker before the serialized supplies block in 0.9.6+ savefiles. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
@@ -1291,6 +1291,13 @@
 #define FEAT_LESS_SHAFT 0x52
 #define FEAT_MORE_SHAFT 0x53
 
+/* Shallow water is passable terrain; keep all existing feature IDs stable. */
+#define FEAT_WATER 0x54
+#define FEAT_LAVA 0x55
+#define LAVA_RAW_DAMAGE 60
+#define LAVA_FLYING_DAMAGE 40
+#define WATER_STEALTH_PENALTY 3
+
 /* Stair Head/Tail */
 #define FEAT_STAIR_HEAD 0x50
 #define FEAT_STAIR_TAIL 0x53
@@ -1696,6 +1703,12 @@
 
 #define SV_FOOD_BREAD 35
 #define SV_FOOD_MEAT 36
+
+/* Disease exposure odds and progression, measured in completed player turns. */
+#define DISEASE_MEAT_ONE_IN 5
+#define DISEASE_SKELETON_ONE_IN 20
+#define DISEASE_WATER_ONE_IN 200
+#define DISEASE_INTERVAL 50
 #define SV_FOOD_LEMBAS 37
 
 /*
@@ -3594,7 +3607,8 @@
  * Line 2 -- forbid normal objects
  */
 #define cave_clean_bold(Y, X)                                                  \
-    ((cave_feat[Y][X] == FEAT_FLOOR) && (cave_o_idx[Y][X] == 0))
+    (((cave_feat[Y][X] == FEAT_FLOOR) || (cave_feat[Y][X] == FEAT_WATER))        \
+        && (cave_o_idx[Y][X] == 0))
 
 /*
  * Determine if a "legal" grid is an "empty" floor grid
@@ -3605,6 +3619,7 @@
  */
 #define cave_empty_bold(Y, X)                                                  \
     (cave_floor_bold(Y, X) && (cave_feat[Y][X] != FEAT_CHASM)                  \
+        && (cave_feat[Y][X] != FEAT_LAVA)                                     \
         && (cave_feat[Y][X] != FEAT_RUBBLE)                                    \
         && (cave_m_idx[Y][X] == 0))
 

@@ -345,7 +345,13 @@ void lite_spot(int y, int x)
         /* Fixture frames can change with sight/settings while the glyph stays
          * identical (notably a permanently lit wall leaving sight). */
         bool force_visual_redraw = (cave_m_idx[y][x] < 0)
-            || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE;
+            || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
+            || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA;
+#ifdef USE_SDL
+        /* Removing a water surface or brazier can leave the same floor
+         * glyph. Repaint its cached pixels even after the feature changed. */
+        force_visual_redraw |= sdl_idle_animation_tracks_grid(y, x);
+#endif
 
         if (!force_visual_redraw && mirror_monster_tile_facing
             && (cave_m_idx[y][x] > 0))
@@ -438,7 +444,8 @@ void prt_map(void)
 
             if (force_rage_map_filter_refresh
                 || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)
-                    || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE)))
+                    || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
+                    || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA)))
                 force_term_cell_redraw(vx, vy, cell_w);
         }
     }

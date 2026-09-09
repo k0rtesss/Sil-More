@@ -703,6 +703,7 @@ PlayResult play_game(void)
                 p_ptr->csp_frac = 0;
 
                 /* Hack -- Healing */
+                (void)cure_disease();
                 (void)set_blind(0);
                 (void)set_confused(0);
                 (void)set_poisoned(0);

@@ -34,7 +34,8 @@ bool player_grid_is_leapable_obstacle(int y, int x)
 {
     if (!in_bounds(y, x))
         return false;
-    if (cave_feat[y][x] == FEAT_CHASM)
+    if (cave_feat[y][x] == FEAT_CHASM || cave_feat[y][x] == FEAT_WATER
+        || cave_feat[y][x] == FEAT_LAVA)
         return true;
 
     return cave_trap_bold(y, x) && !cave_floorlike_bold(y, x)
@@ -322,9 +323,19 @@ void move_player(int dir)
         {
             // leapable things: chasms, traps (except roosts and webs).
             // A trap the player has rewired is safe for them -- no leap prompt.
-            if (player_grid_is_leapable_obstacle(y, x))
+            if (player_grid_is_leapable_obstacle(y, x)
+                && (cave_feat[y][x] != FEAT_LAVA
+                    || (cave_feat[py][px] != FEAT_LAVA
+                        && in_bounds_fully(y + ddy[dir], x + ddx[dir])
+                        && (cave_info[y + ddy[dir]][x + ddx[dir]] & CAVE_MARK)
+                        && cave_feat[y + ddy[dir]][x + ddx[dir]] != FEAT_LAVA))
+                && (cave_feat[y][x] != FEAT_WATER
+                    || (cave_feat[py][px] != FEAT_WATER
+                        && in_bounds_fully(y + ddy[dir], x + ddx[dir])
+                        && (cave_info[y + ddy[dir]][x + ddx[dir]] & CAVE_MARK)
+                        && cave_feat[y + ddy[dir]][x + ddx[dir]] != FEAT_WATER)))
             {
-                char prompt[80];
+                char prompt[160];
                 int i;
                 int d;
                 bool run_up = false;
@@ -343,7 +354,9 @@ void move_player(int dir)
                         run_up = true;
                 }
 
-                if (p_ptr->active_ability[S_EVN][EVN_LEAPING])
+                if (p_ptr->active_ability[S_EVN][EVN_LEAPING]
+                    && (cave_feat[y][x] != FEAT_WATER
+                        || (run_up && !sdl_mouse_path_is_following())))
                 {
                     int y_mid, x_mid; // the midpoint of the leap
                     int y_end, x_end; // the endpoint of the leap
@@ -431,6 +444,13 @@ void move_player(int dir)
                                 m_name);
                         }
 
+                        else if (cave_feat[y_mid][x_mid] == FEAT_LAVA)
+                        {
+                            strnfmt(prompt, sizeof(prompt),
+                                "Leap over the lava? The heat will deal %d damage. ",
+                                player_lava_damage_at(y_mid, x_mid, true));
+                        }
+
                         // default confirmation
                         else
                         {
@@ -468,12 +488,22 @@ void move_player(int dir)
                                 // store the action type
                                 p_ptr->previous_action[0] = dir;
 
+                                /* Mark flight before the shared movement hook
+                                 * applies terrain contact at the midpoint. */
+                                p_ptr->leaping = true;
+
                                 // move player to the new position
                                 monster_swap(
                                     p_ptr->py, p_ptr->px, y_mid, x_mid);
 
+                                /* Taking off from water still touches it;
+                                 * crossing the airborne midpoint does not. */
+                                if (p_ptr->py == y_mid && p_ptr->px == x_mid)
+                                    player_water_movement(cave_feat[py][px], FEAT_FLOOR);
+
                                 // remember that the player is in the air now
-                                p_ptr->leaping = true;
+                                p_ptr->leaping = p_ptr->py == y_mid
+                                    && p_ptr->px == x_mid && !p_ptr->is_dead;
 
                                 return;
                             }
@@ -501,6 +531,24 @@ void move_player(int dir)
 
                         return;
                     }
+                }
+            }
+
+            if (cave_feat[y][x] == FEAT_LAVA)
+            {
+                char prompt[160];
+                int damage = player_lava_damage_at(y, x, false);
+                disturb(0, 0);
+                flush();
+                if (damage < 0)
+                    SDL_strlcpy(prompt, "Step into molten lava? You will die immediately. ", sizeof(prompt));
+                else
+                    strnfmt(prompt, sizeof(prompt),
+                        "Step into molten lava? You will take %d damage on entry and each turn here. ", damage);
+                if (!get_check_near(y, x, prompt))
+                {
+                    p_ptr->energy_use = 0;
+                    return;
                 }
             }
 
@@ -629,6 +677,9 @@ void move_player(int dir)
 
         /* Move player */
         monster_swap(py, px, y, x);
+        if (p_ptr->is_dead) return;
+        if ((py != y || px != x) && p_ptr->py == y && p_ptr->px == x)
+            player_water_movement(cave_feat[py][px], cave_feat[y][x]);
         tutorial_action_finished("move", "", true);
 
         /* Check for Mandos quest interaction after movement */

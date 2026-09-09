@@ -36,11 +36,20 @@ static bool auto_pickup_okay(const object_type* o_ptr)
  */
 void land(void)
 {
+    bool ended_in_air = p_ptr->leaping;
     // the player has landed
     p_ptr->leaping = false;
+    /* Successful movement already applied ground contact in monster_swap.
+     * Only a blocked leap still occupies its airborne midpoint here. */
+    if (ended_in_air) player_lava_exposure(false);
+    if (p_ptr->is_dead) return;
 
     // make some noise when landing
     stealth_score -= 5;
+
+    /* A blocked leap can end in the stream. Touch the landing square once;
+     * the airborne midpoint of a successful crossing never counts as wading. */
+    player_water_movement(FEAT_FLOOR, cave_feat[p_ptr->py][p_ptr->px]);
 
     /* Set off traps */
     if (cave_trap_bold(p_ptr->py, p_ptr->px)
@@ -121,7 +130,10 @@ void continue_leap(void)
         flanking_or_retreat(y_end, x_end);
 
         // move player to the new position
+        p_ptr->leaping = false;
         monster_swap(p_ptr->py, p_ptr->px, y_end, x_end);
+        if (p_ptr->py != y_end || p_ptr->px != x_end)
+            p_ptr->leaping = true;
     }
 
     // land on the ground
@@ -220,6 +232,8 @@ void process_player(void)
     int amount;
     int regen_multiplier;
     int depth_counter_increment;
+    /* An infection acquired during this action starts a full 50-turn cycle. */
+    bool disease_was_active = p_ptr->diseased != 0;
 
     player_active_weapon_begin_player_turn();
 
@@ -457,6 +471,7 @@ void process_player(void)
             p_ptr->command_see = false;
 
         /* Assume free turn */
+        player_lava_begin_action();
         p_ptr->energy_use = 0;
 
     // Reset number of attacks this turn happens at start of player energy loop
@@ -854,6 +869,8 @@ void process_player(void)
         last_player_x = p_ptr->px;
         morgoth_entry_preconfirmed = false;
 
+        player_lava_end_action();
+
         /* Significant */
         if (p_ptr->energy_use)
         {
@@ -1233,6 +1250,10 @@ void process_player(void)
     {
         (void)set_oppose_pois(p_ptr->oppose_pois - 1);
     }
+
+    /* Disease persists through resting and advances once per completed action. */
+    if (disease_was_active)
+        process_disease();
 
     /*** Poison and Stun and Cut ***/
 

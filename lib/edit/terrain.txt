@@ -552,3 +552,15 @@ T:0:29
 N:83:down shaft
 G:>:D
 T:0:28
+
+# 0x54 --> shallow water (SDL draws the animated surface over this underlay)
+
+N:84:shallow water
+G:~:B
+T:0:1
+
+# 0x55 --> molten lava (SDL draws the animated surface over this underlay)
+
+N:85:molten lava
+G:~:R
+T:0:1

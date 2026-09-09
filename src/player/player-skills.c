@@ -460,13 +460,11 @@ void calc_stats(void)
     for (int i = 0; i < A_MAX; i++)
     {
         /* Extract the new "stat_use" value for the stat */
-        p_ptr->stat_use[i] = p_ptr->stat_base[i] + p_ptr->stat_equip_mod[i]
-            + p_ptr->stat_drain[i] + p_ptr->stat_misc_mod[i];
+        int value = p_ptr->stat_base[i] + p_ptr->stat_equip_mod[i]
+            + p_ptr->stat_drain[i] + p_ptr->stat_disease[i]
+            + p_ptr->stat_misc_mod[i];
 
         /* cap to -9 and 20 */
-        if (p_ptr->stat_use[i] < BASE_STAT_MIN)
-            p_ptr->stat_use[i] = BASE_STAT_MIN;
-        else if (p_ptr->stat_use[i] > BASE_STAT_MAX)
-            p_ptr->stat_use[i] = BASE_STAT_MAX;
+        p_ptr->stat_use[i] = MAX(BASE_STAT_MIN, MIN(BASE_STAT_MAX, value));
     }
 }

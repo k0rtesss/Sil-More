@@ -631,6 +631,13 @@ static void make_confused_move(monster_type* m_ptr, int y, int x)
     /* Get the monster name/poss */
     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
+    /* Confusion can carry a creature into otherwise forbidden lava. */
+    if (feat == FEAT_LAVA && cave_m_idx[y][x] == 0)
+    {
+        monster_swap(m_ptr->fy, m_ptr->fx, y, x);
+        return;
+    }
+
     // Feature is a chasm
     if (cave_feat[y][x] == FEAT_CHASM)
     {
