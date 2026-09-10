@@ -135,6 +135,7 @@ void teleport_away(int m_idx, int dis)
     m_ptr->target_x = 0;
 
     /* Swap the monsters */
+    monster_abilities_forced_movement(m_ptr);
     monster_swap(oy, ox, ny, nx);
 }
 

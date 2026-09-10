@@ -135,8 +135,8 @@ static void regen_monsters(void)
         if (!m_ptr->r_idx)
             continue;
 
-        /* Allow hp regeneration, if needed. */
-        if (m_ptr->hp != m_ptr->maxhp)
+        /* Poison prevents ordinary Health recovery, as it does for players. */
+        if (!m_ptr->poisoned && m_ptr->hp != m_ptr->maxhp)
         {
             int old_hp = m_ptr->hp;
 

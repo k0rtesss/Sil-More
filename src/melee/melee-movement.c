@@ -187,6 +187,12 @@ bool get_move(
         return (false);
     }
 
+    if (get_move_escape_poison(m_ptr, ty, tx))
+    {
+        *fear = false;
+        return true;
+    }
+
     /*
      * Monster is only allowed to use targeting information.
      */

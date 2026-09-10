@@ -615,6 +615,7 @@ bool project_m(
     bool who_vis = (who == -1) ? true : who_ptr->ml;
 
     int dam = damroll(dd, ds);
+    int poison_dose = 0;
 
     // Monster's skill modifier
     int resistance;
@@ -788,6 +789,14 @@ bool project_m(
             if (seen)
                 l_ptr->flags3 |= (RF3_RES_POIS);
         }
+        else if (dam > 0)
+        {
+            poison_dose = dam;
+            monster_poison_add(cave_m_idx[y][x], poison_dose);
+            note = " is poisoned.";
+        }
+        /* Poison projections build the same delayed counter as weapons. */
+        dam = 0;
         break;
     }
 
@@ -1436,7 +1445,7 @@ bool project_m(
     }
 
     // update combat info
-    if ((dam > 0) && m_ptr->ml)
+    if ((dam > 0 || poison_dose > 0) && m_ptr->ml)
     {
         int combat_dd = dd;
         int combat_ds = ds;
@@ -1445,7 +1454,9 @@ bool project_m(
             combat_ds = cave_light[y][x];
 
         update_combat_rolls1b(who_ptr, m_ptr, who_vis);
-        update_combat_rolls2(combat_dd, combat_ds, dam, -1, -1, 0, 0, typ, false);
+        update_combat_rolls2(combat_dd, combat_ds,
+            poison_dose > 0 ? poison_dose : dam,
+            -1, -1, 0, 0, typ, false);
     }
 
     /* If another monster did the damage, hurt the monster by hand */
@@ -1541,7 +1552,7 @@ bool project_m(
             note_dies = "";
 
         /* Check for oath breaking before applying damage */
-        if (who < 0 && dam > 0) // Player-caused damage
+        if (who < 0 && (dam > 0 || poison_dose > 0)) // Player-caused damage
         {
             /* All player-caused attacks break Valor on hit */
             if (m_ptr->ml && cowardly_attack(m_ptr))
@@ -1551,7 +1562,7 @@ bool project_m(
                 p_ptr->oaths_broken |= OATH_VALOROUS_FLAG;
             }
 
-            break_mercy_oath(m_ptr, dam);
+            break_mercy_oath(m_ptr, MAX(dam, poison_dose));
         }
 
         /* Hurt the monster, check for death */

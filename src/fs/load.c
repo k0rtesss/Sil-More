@@ -1085,6 +1085,29 @@ void rd_monster(monster_type* m_ptr)
         m_ptr->thrall_quest_requested = 0;
         m_ptr->thrall_quest_completed = 0;
     }
+    if (savefile_version_at_least(0, 9, 8, 4))
+    {
+        rd_s16b(&m_ptr->poisoned);
+        m_ptr->poisoned = MAX(0, MIN(100, m_ptr->poisoned));
+    }
+    else
+        m_ptr->poisoned = 0;
+    m_ptr->vengeance = 0;
+    m_ptr->smite_recovery = 0;
+    m_ptr->ability_in_action = false;
+    m_ptr->ability_melee = false;
+    m_ptr->ability_displaced = false;
+    if (savefile_version_at_least(0, 9, 8, 5))
+    {
+        rd_byte(&m_ptr->vengeance);
+        rd_byte(&m_ptr->smite_recovery);
+        m_ptr->vengeance = MIN(1, m_ptr->vengeance);
+        m_ptr->smite_recovery = MIN(2, m_ptr->smite_recovery);
+        if (m_ptr->smite_recovery == 1)
+            m_ptr->skip_next_turn = true;
+    }
+    else
+        m_ptr->consecutive_attacks = 0;
 }
 
 /*
@@ -1121,9 +1144,16 @@ static void rd_lore(int r_idx)
     rd_u32b(&l_ptr->flags2);
     rd_u32b(&l_ptr->flags3);
     rd_u32b(&l_ptr->flags4);
+    l_ptr->flags5 = 0;
+    if (savefile_version_at_least(0, 9, 8, 5))
+        rd_u32b(&l_ptr->flags5);
 
     /* Read the "Racial" monster limit per level */
     rd_byte(&r_ptr->max_num);
+    /* Old saves gave then-unused race slots a normal population cap of 100.
+     * Newly added uniques must still allow only one; preserve a dead cap of 0. */
+    if (r_ptr->flags1 & RF1_UNIQUE)
+        r_ptr->max_num = MIN(1, r_ptr->max_num);
 
     /* Song-revealed lore plus spare bytes */
     rd_byte(&l_ptr->song_lore_flags);
@@ -1134,6 +1164,7 @@ static void rd_lore(int r_idx)
     l_ptr->flags2 &= r_ptr->flags2;
     l_ptr->flags3 &= r_ptr->flags3;
     l_ptr->flags4 &= r_ptr->flags4;
+    l_ptr->flags5 &= r_ptr->flags5;
     l_ptr->song_lore_flags
         &= (MONSTER_LORE_SONG_CONTEST | MONSTER_LORE_SONG_LAMENT);
 }

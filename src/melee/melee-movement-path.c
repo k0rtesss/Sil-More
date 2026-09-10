@@ -6,6 +6,100 @@
 #include "melee/melee-process.h"
 #include "melee/melee-util.h"
 
+/* Pain prompts even ordinary and mindless creatures to leave a seep. Keep
+ * a survivable pursuit crossing when it is useful; otherwise find the nearest
+ * dry bank, including when the accumulated poison is already fatal. */
+bool get_move_escape_poison(monster_type* m_ptr, int* ty, int* tx)
+{
+    enum { CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID };
+    static int queue[CELLS];
+    static int first[CELLS];
+    static int depth[CELLS];
+    monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    int my = m_ptr->fy, mx = m_ptr->fx;
+    int start = my * MAX_DUNGEON_WID + mx;
+    int head = 0, tail = 0, best = -1, best_depth = CELLS, best_dist = CELLS;
+
+    if (!monster_poison_step_damage(m_ptr, my, mx, my, mx)
+        || m_ptr->confused || (r_ptr->flags1 & RF1_NEVER_MOVE)
+        || ((r_ptr->flags1 & RF1_HIDDEN_MOVE)
+            && ((cave_info[my][mx] & CAVE_SEEN) || seen_by_keen_senses(my, mx)))
+        || (m_ptr->r_idx == R_IDX_MORGOTH && p_ptr->truce))
+        return false;
+
+    /* A crossing should not reverse at every step merely because its entry
+     * bank is closer. Use the whole survivable route until combat range. */
+    if (m_ptr->alertness >= ALERTNESS_ALERT
+        && m_ptr->stance != STANCE_FLEEING
+        && m_ptr->cdis > MAX(1, m_ptr->best_range))
+    {
+        int idx = cave_m_idx[my][mx];
+        int cheapest = FLOW_MAX_DIST;
+        update_flow(p_ptr->py, p_ptr->px, idx);
+        for (int d = 0; d < 8; d++)
+        {
+            int y = my + ddy_ddd[d], x = mx + ddx_ddd[d];
+            if (!cave_exist_mon(r_ptr, y, x, false, false)
+                || ((r_ptr->flags1 & RF1_HIDDEN_MOVE)
+                    && ((cave_info[y][x] & CAVE_SEEN)
+                        || seen_by_keen_senses(y, x))))
+                continue;
+            int step = monster_step_cost(m_ptr, my, mx, y, x);
+            int remaining = flow_dist(idx, y, x);
+            if (step && remaining < FLOW_MAX_DIST && step + remaining < cheapest)
+            {
+                cheapest = step + remaining;
+                *ty = y; *tx = x;
+            }
+        }
+        if (cheapest < FLOW_MAX_DIST)
+            return true;
+    }
+
+    memset(first, -1, sizeof(first));
+    first[start] = start;
+    depth[start] = 0;
+    queue[tail++] = start;
+    while (head < tail)
+    {
+        int at = queue[head++];
+        int y = at / MAX_DUNGEON_WID, x = at % MAX_DUNGEON_WID;
+        if (depth[at] >= best_depth)
+            continue;
+        for (int d = 0; d < 8; d++)
+        {
+            int yy = y + ddy_ddd[d], xx = x + ddx_ddd[d];
+            bool bash = false;
+            if (!cave_exist_mon(r_ptr, yy, xx, false, false)
+                || cave_passable_mon(m_ptr, yy, xx, &bash) < 100
+                || ((r_ptr->flags1 & RF1_HIDDEN_MOVE)
+                    && ((cave_info[yy][xx] & CAVE_SEEN)
+                        || seen_by_keen_senses(yy, xx))))
+                continue;
+            int next = yy * MAX_DUNGEON_WID + xx;
+            if (first[next] >= 0)
+                continue;
+            first[next] = at == start ? next : first[at];
+            depth[next] = depth[at] + 1;
+            if (cave_feat[yy][xx] == FEAT_POISON)
+                queue[tail++] = next;
+            else if (monster_terrain_penalty(m_ptr, yy, xx) < 6)
+            {
+                int dist = distance(yy, xx, p_ptr->py, p_ptr->px);
+                if (depth[next] < best_depth || dist < best_dist)
+                {
+                    best = first[next]; best_depth = depth[next]; best_dist = dist;
+                }
+            }
+        }
+    }
+    if (best < 0)
+        return false;
+    *ty = best / MAX_DUNGEON_WID;
+    *tx = best % MAX_DUNGEON_WID;
+    return true;
+}
+
 /*
  * Can the monster catch a whiff of the character?
  *
@@ -396,6 +490,7 @@ static bool find_safety(monster_type* m_ptr, int* ty, int* tx)
      * Both axis must be (2 * HIDE_RANGE + 1).
      */
     byte safe_cost[HIDE_RANGE * 2 + 1][HIDE_RANGE * 2 + 1];
+    int poison_damage[HIDE_RANGE * 2 + 1][HIDE_RANGE * 2 + 1] = { { 0 } };
 
     for (i = 0; i < (HIDE_RANGE * 2 + 1); i++)
     {
@@ -494,6 +589,12 @@ static bool find_safety(monster_type* m_ptr, int* ty, int* tx)
                             yy - conv_y, xx - conv_x);
                         if (!cost)
                             continue;
+                        int poison = poison_damage[y][x]
+                            + monster_poison_step_damage(m_ptr,
+                                y - conv_y, x - conv_x,
+                                yy - conv_y, xx - conv_x);
+                        if (poison && m_ptr->poisoned + poison >= m_ptr->hp)
+                            continue;
                         cost += monster_terrain_penalty(
                             m_ptr, yy - conv_y, xx - conv_x);
 
@@ -515,6 +616,7 @@ static bool find_safety(monster_type* m_ptr, int* ty, int* tx)
 
                         /* Mark this grid with a cost value */
                         safe_cost[yy][xx] = MIN(100, parent_cost + cost);
+                        poison_damage[yy][xx] = poison;
 
                         // check whether it is a stair and the monster can use
                         // these

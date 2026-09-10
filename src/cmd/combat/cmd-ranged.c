@@ -255,8 +255,8 @@ void attacks_of_opportunity(int neutralized_y, int neutralized_x)
             if ((m_ptr->alertness >= ALERTNESS_ALERT) && !m_ptr->confused
                 && (m_ptr->stance != STANCE_FLEEING)
                 && !(r_ptr->flags2 & (RF2_MINDLESS))
-                && !(r_ptr->flags1 & (RF1_PEACEFUL)) && !m_ptr->skip_next_turn
-                && !m_ptr->skip_this_turn)
+                && !(r_ptr->flags1 & (RF1_PEACEFUL))
+                && monster_abilities_can_react(m_ptr))
             {
                 int evn = p_ptr->skill_use[S_EVN];
                 opportunity_attacks++;
@@ -268,7 +268,7 @@ void attacks_of_opportunity(int neutralized_y, int neutralized_x)
                 }
 
                 p_ptr->skill_use[S_EVN] = evn / 2;
-                make_attack_normal(m_ptr);
+                make_attack_reaction(m_ptr);
                 p_ptr->skill_use[S_EVN] = evn;
             }
         }
@@ -944,7 +944,8 @@ void do_cmd_fire(int quiver)
                     dam = damroll(total_dd, total_ds);
                     
                     /* Apply armor dice/sides curses/blessings */
-                    int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty;
+                    int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty
+                        + monster_blocking_bonus_dice(m_ptr);
                     if (armor_dice_base < 0)
                         armor_dice_base = 0;
                     int armor_dice = armor_dice_base + curse_flag_delta_cur(CUR_MON_ARM_DICE);
@@ -1103,6 +1104,9 @@ void do_cmd_fire(int quiver)
                     // hit the monster, check for death
                     p_ptr->killed_enemy_with_arrow = mon_take_hit(
                         cave_m_idx[y][x], net_dam, note_dies, -1);
+                    if (!p_ptr->killed_enemy_with_arrow)
+                        monster_poison_brand(cave_m_idx[y][x], i_ptr,
+                            j_ptr, net_dam);
 
                     if (p_ptr->killed_enemy_with_arrow
                         && (f1 & TR1_VAMPIRIC) && !monster_nonliving(r_ptr))
@@ -2549,7 +2553,8 @@ void do_cmd_throw(bool automatic)
                 }
                 
                 /* Apply armor dice/sides curses/blessings */
-                int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty;
+                int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty
+                    + monster_blocking_bonus_dice(m_ptr);
                 if (armor_dice_base < 0)
                     armor_dice_base = 0;
                 int armor_dice = armor_dice_base + curse_flag_delta_cur(CUR_MON_ARM_DICE);
@@ -2704,6 +2709,24 @@ void do_cmd_throw(bool automatic)
                 {
                     fatal_blow = (mon_take_hit(
                         cave_m_idx[y][x], net_dam, note_dies, -1));
+                    if (!fatal_blow)
+                    {
+                        /* Power Throw shares one armor roll. Allocate the
+                         * resulting damage to its branded weapon portions. */
+                        if (power_throw_hit && melee_hit && melee_dam > 0)
+                            monster_receive_melee_damage(m_ptr,
+                                MIN(melee_dam, net_dam));
+                        int poison_damage = 0;
+                        if (thrown_hit && (f1 & TR1_BRAND_POIS))
+                            poison_damage += thrown_dam;
+                        if (melee_hit && (melee_f1 & TR1_BRAND_POIS))
+                            poison_damage += melee_dam;
+                        if (dam > 0 && poison_damage > 0)
+                            monster_poison_brand(cave_m_idx[y][x],
+                                thrown_hit ? i_ptr : NULL,
+                                melee_hit ? melee_o_ptr : NULL,
+                                (net_dam * poison_damage + dam - 1) / dam);
+                    }
                 }
 
                 display_hit(y, x, net_dam, GF_HURT, fatal_blow);

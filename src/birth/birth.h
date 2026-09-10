@@ -9,6 +9,7 @@ NavResult character_creation(void);
 NavResult character_creation_resume_character(void);
 NavResult blitz_character_creation(void);
 void gain_skills_set_initial_skill(int skill);
+void birth_skill_recommendation_text(char* buf, size_t len);
 void player_wipe(void);
 
 #endif /* INCLUDED_BIRTH_H */

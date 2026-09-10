@@ -46,7 +46,11 @@ void land(void)
     }
     /* Successful movement already applied ground contact in monster_swap.
      * Only a blocked leap still occupies its airborne midpoint here. */
-    if (ended_in_air) player_lava_exposure(false);
+    if (ended_in_air)
+    {
+        player_lava_exposure(false);
+        player_poison_terrain_exposure(false);
+    }
     if (p_ptr->is_dead) return;
 
     // make some noise when landing
@@ -161,6 +165,7 @@ void process_player_aux(void)
     static u32b old_flags2 = 0L;
     static u32b old_flags3 = 0L;
     static u32b old_flags4 = 0L;
+    static u32b old_flags5 = 0L;
 
     static byte old_blows[MONSTER_BLOW_MAX];
 
@@ -185,6 +190,7 @@ void process_player_aux(void)
         if (changed || (old_monster_race_idx != p_ptr->monster_race_idx)
             || (old_flags1 != l_ptr->flags1) || (old_flags2 != l_ptr->flags2)
             || (old_flags3 != l_ptr->flags3) || (old_flags4 != l_ptr->flags4)
+            || (old_flags5 != l_ptr->flags5)
             || (old_ranged != l_ptr->ranged))
 
         {
@@ -196,6 +202,7 @@ void process_player_aux(void)
             old_flags2 = l_ptr->flags2;
             old_flags3 = l_ptr->flags3;
             old_flags4 = l_ptr->flags4;
+            old_flags5 = l_ptr->flags5;
 
             /* Memorize blows */
             for (i = 0; i < MONSTER_BLOW_MAX; i++)
@@ -477,6 +484,7 @@ void process_player(void)
 
         /* Assume free turn */
         player_lava_begin_action();
+        player_poison_terrain_begin_action();
         p_ptr->energy_use = 0;
 
     // Reset number of attacks this turn happens at start of player energy loop
@@ -875,6 +883,7 @@ void process_player(void)
         morgoth_entry_preconfirmed = false;
 
         player_lava_end_action();
+        player_poison_terrain_end_action();
 
         /* Significant */
         if (p_ptr->energy_use)

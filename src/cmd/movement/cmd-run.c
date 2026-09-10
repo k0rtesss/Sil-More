@@ -35,7 +35,7 @@ bool player_grid_is_leapable_obstacle(int y, int x)
     if (!in_bounds(y, x))
         return false;
     if (cave_feat[y][x] == FEAT_CHASM || cave_feat[y][x] == FEAT_WATER
-        || cave_feat[y][x] == FEAT_LAVA)
+        || cave_feat[y][x] == FEAT_LAVA || cave_feat[y][x] == FEAT_POISON)
         return true;
 
     return cave_trap_bold(y, x) && !cave_floorlike_bold(y, x)
@@ -324,6 +324,11 @@ void move_player(int dir)
             // leapable things: chasms, traps (except roosts and webs).
             // A trap the player has rewired is safe for them -- no leap prompt.
             if (player_grid_is_leapable_obstacle(y, x)
+                && (cave_feat[y][x] != FEAT_POISON
+                    || (cave_feat[py][px] != FEAT_POISON
+                        && in_bounds_fully(y + ddy[dir], x + ddx[dir])
+                        && (cave_info[y + ddy[dir]][x + ddx[dir]] & CAVE_MARK)
+                        && cave_feat[y + ddy[dir]][x + ddx[dir]] != FEAT_POISON))
                 && (cave_feat[y][x] != FEAT_LAVA
                     || (cave_feat[py][px] != FEAT_LAVA
                         && in_bounds_fully(y + ddy[dir], x + ddx[dir])
@@ -545,6 +550,21 @@ void move_player(int dir)
                 else
                     strnfmt(prompt, sizeof(prompt),
                         "Step into molten lava? You will take %d damage on entry and each turn here. ", damage);
+                if (!get_check_near(y, x, prompt))
+                {
+                    p_ptr->energy_use = 0;
+                    return;
+                }
+            }
+
+            if (cave_feat[y][x] == FEAT_POISON)
+            {
+                char prompt[180];
+                disturb(0, 0);
+                flush();
+                strnfmt(prompt, sizeof(prompt),
+                    "Step into poisonous seep? Each exposure adds up to %d poison stacks after resistance, before poison protection. ",
+                    player_poison_terrain_dose_at(y, x));
                 if (!get_check_near(y, x, prompt))
                 {
                     p_ptr->energy_use = 0;

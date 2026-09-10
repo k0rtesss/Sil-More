@@ -19,20 +19,29 @@ blow, and Bonus_Spider_Netshot_Attack.ogg to its throw_web ability. Another
 monster's web attack needs its own explicit entry. Crebain (63) assigns the
 normal Bat_Attack.ogg to its peck and Bonus_Bat_Sonic_Attack.ogg to its shriek.
 Grimhawk (22), Gorcrow (43), Crebain (63), Twisted bat (104), and Shadow bat (122)
-have the supplied bat recordings explicitly assigned. Eagle of Manwe (306) and
-Thorondor (307) have no suitable supplied recordings and remain silent. A shared
-display glyph is not a sound-family classification.
+have explicit bat recordings assigned. Eagle of Manwë (306) and Thorondor (307)
+remain silent because no bird recordings were assigned to them. A shared display
+glyph is not a sound-family classification.
 
 Spider hatchling (32) has spider bite, damage, death, and idle recordings. Its
 ranged object is empty because the monster has no ranged abilities. Playback
 uses the paths in monster-sounds.json, not folders named after race numbers.
 
-Only supplied OGG files are used, credited to Coucassi (see Terms Of Use.txt).
-A family's single normal attack recording is explicitly assigned to its melee
-blows; these independent assignments can be replaced as more recordings become
-available. Unavailable ranged recordings remain empty. Unmatched monster types
-remain empty. Footsteps and the extra Orc_Attack.ogg in Behemoth are unused.
-Emerge vocalizations are used for idle sounds.
+The original OGG recordings are credited to Coucassi (see Terms Of Use.txt).
+The added Minifantasy and Leohpaz WAV recordings are converted to OGG for the
+project's OGG-only release tree. A family's recordings are explicitly assigned
+to each monster's individual blow slots and event types. Unavailable ranged
+recordings remain empty, and unmatched monster types remain empty.
+Footsteps and the extra Orc_Attack.ogg in Behemoth are unused. Emerge or idle
+vocalizations are used only where the source pack provides a suitable named clip.
+
+The new assignments use the supplied Minifantasy Wolf, Bat, Wargo, Orc, Human,
+Large Humanoid, and Yeti sets; Leohpaz Hellish Creatures Dragon and Demon Lord
+sets; AlesiaDavina's processed Vampire OGG set; Monster Voices - Werewolf; and
+the explicitly named CC0 troll and breath clips. The Elemental, Imp, Diablo,
+Chimera, Krampus, and other generic clips were inventoried but not assigned to
+an unrelated Sil monster. The supplied AlesiaDavina and Werewolf folders had no
+license text, so verify redistribution rights before a public release.
 
 Melee sounds play per executed blow, including misses. Ranged sounds follow the
 executed ability. Damage sounds require positive damage and survival; death uses
@@ -48,144 +57,144 @@ Validation: after building the standard target, run
 `powershell -ExecutionPolicy Bypass -File scripts/check_monster_sounds.ps1`.
 This uses a dummy audio device and does not replace listening in game.
 
-| Race ID | Monster | Supplied recording family |
+| Race ID | Monster | Assigned recording families |
 | --- | --- | --- |
 | 6 | Nienna, Lady of Pity |  |
-| 11 | Wolf |  |
+| 11 | Wolf | Minifantasy/Wolf |
 | 12 | Tanglethorn |  |
-| 13 | Dejected human thrall |  |
-| 14 | Dejected elven thrall |  |
-| 15 | Orc thrallmaster | Orc |
-| 16 | Alert human thrall |  |
-| 17 | Alert elven thrall |  |
+| 13 | Dejected human thrall | Minifantasy/Human |
+| 14 | Dejected elven thrall | Minifantasy/Human |
+| 15 | Orc thrallmaster | Minifantasy/Orc, Orc |
+| 16 | Alert human thrall | Minifantasy/Human |
+| 17 | Alert elven thrall | Minifantasy/Human |
 | 18 | Tulkas Unclad |  |
 | 19 | Aulë the Smith |  |
 | 20 | Mandos the Doomsman |  |
-| 21 | Orc skirmisher | Orc |
-| 22 | Grimhawk | Bat |
+| 21 | Orc skirmisher | Minifantasy/Orc, Orc |
+| 22 | Grimhawk | Bat, Minifantasy/Bat |
 | 23 | Mewlip |  |
-| 31 | Orc scout | Orc |
+| 31 | Orc scout | Minifantasy/Orc, Orc |
 | 32 | Spider hatchling | Spider |
-| 33 | Blue serpent |  |
-| 41 | Orc soldier | Orc |
+| 33 | Blue serpent | CC0 |
+| 41 | Orc soldier | Minifantasy/Orc, Orc |
 | 42 | Madthorn |  |
-| 43 | Gorcrow | Bat |
+| 43 | Gorcrow | Bat, Minifantasy/Bat |
 | 44 | Brood spider | Spider |
-| 51 | Orc archer | Orc |
-| 52 | White wolf |  |
-| 53 | Red serpent |  |
-| 54 | Gorgol, the Butcher | Orc |
-| 61 | Orc warrior | Orc |
+| 51 | Orc archer | Minifantasy/Orc, Orc |
+| 52 | White wolf | Minifantasy/Wolf |
+| 53 | Red serpent | CC0 |
+| 54 | Gorgol, the Butcher | Minifantasy/Orc, Orc |
+| 61 | Orc warrior | Minifantasy/Orc, Orc |
 | 62 | Sword spider | Spider |
-| 63 | Crebain | Bat |
+| 63 | Crebain | Bat, Minifantasy/Bat |
 | 64 | Phantom | Ghost |
 | 71 | Attercop | Spider |
 | 72 | Nightthorn |  |
-| 73 | Green serpent |  |
-| 74 | Mountain troll |  |
+| 73 | Green serpent | CC0 |
+| 74 | Mountain troll | CC0, Minifantasy/Large_Humanoid |
 | 75 | Tattered wight |  |
-| 76 | Boldog, the Merciless | Orc |
-| 81 | Orc champion | Orc |
-| 82 | Easterling warrior |  |
+| 76 | Baugon, the Merciless | Minifantasy/Orc, Orc |
+| 81 | Orc champion | Minifantasy/Orc, Orc |
+| 82 | Easterling warrior | Minifantasy/Human |
 | 83 | Hummerhorn | Hornet |
-| 84 | Balcmeg, the Relentless | Orc |
-| 85 | Lug, the Grotesque | Orc |
-| 91 | Orc captain | Orc |
-| 92 | Warg |  |
+| 84 | Balcmeg, the Relentless | Minifantasy/Orc, Orc |
+| 85 | Lug, the Grotesque | Minifantasy/Orc, Orc |
+| 91 | Orc captain | Minifantasy/Orc, Orc |
+| 92 | Warg | Minifantasy/Wargo, Minifantasy/Wolf |
 | 93 | Grave wight |  |
-| 94 | Dark serpent |  |
-| 95 | Orcobal, Champion of the Orcs | Orc |
+| 94 | Dark serpent | CC0 |
+| 95 | Orcobal, Champion of the Orcs | Minifantasy/Orc, Orc |
 | 101 | Whispering shadow | Ghost |
 | 102 | Distended spider | Spider |
-| 103 | Easterling archer |  |
-| 104 | Twisted bat | Bat |
-| 105 | Othrod, the Orc Lord | Orc |
-| 111 | Snow troll |  |
+| 103 | Easterling archer | Minifantasy/Human |
+| 104 | Twisted bat | Bat, Minifantasy/Bat |
+| 105 | Othrod, the Orc Lord | Minifantasy/Orc, Orc |
+| 111 | Snow troll | CC0, Minifantasy/Yeti |
 | 112 | Barrow wight |  |
 | 113 | Lurking horror |  |
-| 114 | Giant |  |
+| 114 | Giant | Minifantasy/Large_Humanoid |
 | 115 | Uldor, the Accursed |  |
-| 117 | Brodda, the Easterling Lord |  |
-| 121 | Easterling spy |  |
-| 122 | Shadow bat | Bat |
+| 117 | Brodda, the Easterling Lord | Minifantasy/Human |
+| 121 | Easterling spy | Minifantasy/Human |
+| 122 | Shadow bat | Bat, Minifantasy/Bat |
 | 123 | Sulrauko |  |
-| 124 | Fire-drake hatchling | Dragon |
-| 125 | Ulfang the Black |  |
-| 126 | Duruin, Least of the Balrogs |  |
-| 131 | Werewolf |  |
+| 124 | Fire-drake hatchling | CC0, Dragon, LEOHPAZ/Dragon |
+| 125 | Ulfang the Black | Minifantasy/Human |
+| 126 | Duruin, Least of the Balrogs | LEOHPAZ/Demon_Lord |
+| 131 | Werewolf | Werewolf |
 | 132 | Shadow spider | Spider |
 | 133 | Shadow | Ghost |
-| 134 | Sapphire serpent |  |
-| 135 | Gilim, the Giant of Eruman |  |
-| 141 | Ruby serpent |  |
+| 134 | Sapphire serpent | CC0 |
+| 135 | Gilim, the Giant of Eruman | Minifantasy/Large_Humanoid |
+| 141 | Ruby serpent | CC0 |
 | 142 | Creeping horror |  |
-| 143 | Ringrauko |  |
-| 145 | Delthaur, Balrog of Terror |  |
-| 146 | Nan, the Giant |  |
-| 151 | Cave troll |  |
-| 152 | Emerald serpent |  |
+| 143 | Ringrauko | LEOHPAZ/Demon_Lord |
+| 145 | Delthaur, Balrog of Terror | LEOHPAZ/Demon_Lord |
+| 146 | Nan, the Giant | Minifantasy/Large_Humanoid |
+| 151 | Cave troll | CC0, Minifantasy/Large_Humanoid |
+| 152 | Emerald serpent | CC0 |
 | 153 | Oathwraith | Ghost |
 | 154 | Cat warrior |  |
-| 161 | Amethyst serpent |  |
-| 162 | Kemenrauko |  |
+| 161 | Amethyst serpent | CC0 |
+| 162 | Kemenrauko | LEOHPAZ/Demon_Lord |
 | 163 | Grotesque |  |
-| 164 | Young cold-drake | Dragon |
+| 164 | Young cold-drake | Dragon, LEOHPAZ/Dragon |
 | 165 | Umuiyan, the Doorkeeper |  |
-| 166 | Belegwath, Balrog of Shadow |  |
+| 166 | Belegwath, Balrog of Shadow | LEOHPAZ/Demon_Lord |
 | 167 | Spectre | Ghost |
 | 171 | Spider of Gorgoroth | Spider |
-| 172 | Greater werewolf |  |
-| 173 | Adamant serpent |  |
-| 174 | Lesser vampire |  |
+| 172 | Greater werewolf | Werewolf |
+| 173 | Adamant serpent | CC0 |
+| 174 | Lesser vampire | AlesiaDavina/Vampire |
 | 175 | Cat assassin |  |
-| 176 | Scatha the Worm | Dragon |
+| 176 | Scatha the Worm | CC0, Dragon, LEOHPAZ/Dragon |
 | 177 | Oikeroi, Guard of Tevildo |  |
-| 181 | Young fire-drake | Dragon |
+| 181 | Young fire-drake | CC0, Dragon, LEOHPAZ/Dragon |
 | 182 | Darting horror |  |
 | 183 | Wraith | Ghost |
-| 184 | Ururauko |  |
+| 184 | Ururauko | LEOHPAZ/Demon_Lord |
 | 185 | Tevildo, Prince of Cats |  |
-| 186 | Turkano, Balrog of the Hosts |  |
-| 191 | Ancient sapphire serpent |  |
-| 192 | Troll guard |  |
-| 193 | Vampire |  |
+| 186 | Turkano, Balrog of the Hosts | LEOHPAZ/Demon_Lord |
+| 191 | Ancient sapphire serpent | CC0 |
+| 192 | Troll guard | CC0, Minifantasy/Large_Humanoid |
+| 193 | Vampire | AlesiaDavina/Vampire |
 | 194 | Nameless thing |  |
-| 195 | Smaug the Golden | Dragon |
-| 196 | Maeglin, Betrayer of Gondolin |  |
-| 201 | Ancient ruby serpent |  |
-| 202 | Great cold-drake | Dragon |
+| 195 | Smaug the Golden | CC0, Dragon, LEOHPAZ/Dragon |
+| 196 | Maeglin, Betrayer of Gondolin | Minifantasy/Human |
+| 201 | Ancient ruby serpent | CC0 |
+| 202 | Great cold-drake | Dragon, LEOHPAZ/Dragon |
 | 203 | Silent watcher |  |
-| 204 | Gwathrauko |  |
-| 205 | Draugluin, Sire of Werewolves |  |
-| 206 | Vallach, Balrog of Sudden Flame |  |
+| 204 | Gwathrauko | LEOHPAZ/Demon_Lord |
+| 205 | Draugluin, Sire of Werewolves | Werewolf |
+| 206 | Vallach, Balrog of Sudden Flame | LEOHPAZ/Demon_Lord |
 | 211 | Ancient spider | Spider |
-| 212 | Ancient emerald serpent |  |
-| 213 | Vampire lord |  |
+| 212 | Ancient emerald serpent | CC0 |
+| 213 | Vampire lord | AlesiaDavina/Vampire |
 | 214 | Dagorhir, the Elfbane |  |
-| 215 | Gostir, the Dread Glance | Dragon |
-| 221 | Ancient amethyst serpent |  |
-| 222 | Great fire-drake | Dragon |
-| 223 | Hithrauko |  |
+| 215 | Gostir, the Dread Glance | Dragon, LEOHPAZ/Dragon |
+| 221 | Ancient amethyst serpent | CC0 |
+| 222 | Great fire-drake | CC0, Dragon, LEOHPAZ/Dragon |
+| 223 | Hithrauko | LEOHPAZ/Demon_Lord |
 | 224 | Shelob, Spider of Darkness | Spider |
-| 225 | Lungorthin, Lord of Balrogs |  |
-| 231 | Ancient adamant serpent |  |
+| 225 | Lungorthin, Lord of Balrogs | CC0, LEOHPAZ/Demon_Lord |
+| 231 | Ancient adamant serpent | CC0 |
 | 232 | Unrelenting horror |  |
-| 233 | Ancalagon the Black | Dragon |
-| 234 | Thuringwethil, the Vampire Messenger |  |
-| 241 | Gothmog, High Captain of Balrogs |  |
-| 242 | Ungoliant, the Gloomweaver | Spider |
-| 243 | Glaurung, the Deceiver | Dragon |
-| 244 | Gorthaur, Servant of Morgoth |  |
-| 245 | Flying cold-drake | Dragon |
-| 246 | Flying fire-drake | Dragon |
+| 233 | Ancalagon the Black | CC0, Dragon, LEOHPAZ/Dragon |
+| 234 | Thuringwethil, the Vampire Messenger | AlesiaDavina/Vampire |
+| 241 | Gothmog, High Captain of Balrogs | LEOHPAZ/Demon_Lord |
+| 242 | Ungoliant, the Gloomweaver | CC0, Spider |
+| 243 | Glaurung, the Deceiver | CC0, Dragon, LEOHPAZ/Dragon |
+| 244 | Gorthaur, Servant of Morgoth | LEOHPAZ/Demon_Lord |
+| 245 | Flying cold-drake | CC0, Dragon, LEOHPAZ/Dragon |
+| 246 | Flying fire-drake | CC0, Dragon, LEOHPAZ/Dragon |
 | 251 | Morgoth, Lord of Darkness |  |
-| 253 | Carcharoth, the Jaws of Thirst |  |
+| 253 | Carcharoth, the Jaws of Thirst | Minifantasy/Wolf |
 | 260 | Nienna, Lady of Pity |  |
-| 301 | Fëanor, High King of the Noldor |  |
-| 302 | Lúthien Tinúviel |  |
-| 303 | Thingol, the Hidden King |  |
-| 304 | Beren, Son of Barahir |  |
-| 305 | Huan, Hound of Valinor |  |
+| 301 | Fëanor, High King of the Noldor | Minifantasy/Human |
+| 302 | Lúthien Tinúviel | Minifantasy/Human |
+| 303 | Thingol, the Hidden King | Minifantasy/Human |
+| 304 | Beren, Son of Barahir | Minifantasy/Human |
+| 305 | Huan, Hound of Valinor | Minifantasy/Wolf |
 | 306 | Eagle of Manwë |  |
 | 307 | Thorondor, King of Eagles |  |
 | 308 | Ent |  |
@@ -205,4 +214,13 @@ This uses a dummy audio device and does not replace listening in game.
 | 332 | Oromë, Lord of Forests |  |
 | 333 | Vana, the Ever Young |  |
 | 401 | Melkor, Rightful Lord of Arda |  |
-| 402 | Green Great Dragon | Dragon |
+| 402 | Green Great Dragon | Dragon, LEOHPAZ/Dragon |
+| 403 | Ringwion, the Pale Blade | LEOHPAZ/Demon_Lord |
+| 404 | Helcamo, the Hoarfrost | LEOHPAZ/Demon_Lord |
+| 405 | Lhamthanc, the Forked Tongue | LEOHPAZ/Dragon |
+| 406 | Angacirca, Reaper of Thralls | Minifantasy/Orc |
+| 407 | Langon, the Rushing Herald | LEOHPAZ/Demon_Lord |
+| 408 | Dúron, Keeper of the Unlit Ways | LEOHPAZ/Demon_Lord |
+| 409 | Fankil, the Sower of Strife | Minifantasy/Human |
+| 410 | Ondotur, the Buried Lord | Minifantasy/Large_Humanoid |
+| 411 | Nambatur, Custodian of Grond's Forge | Minifantasy/Large_Humanoid |

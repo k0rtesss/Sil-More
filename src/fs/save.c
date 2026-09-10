@@ -736,6 +736,9 @@ void wr_monster(const monster_type* m_ptr)
     wr_byte(m_ptr->thrall_quest_item);
     wr_byte(m_ptr->thrall_quest_requested);
     wr_byte(m_ptr->thrall_quest_completed);
+    wr_s16b(m_ptr->poisoned);
+    wr_byte(m_ptr->vengeance);
+    wr_byte(m_ptr->smite_recovery);
 }
 
 /*
@@ -774,6 +777,7 @@ static void wr_lore(int r_idx)
     wr_u32b(l_ptr->flags2);
     wr_u32b(l_ptr->flags3);
     wr_u32b(l_ptr->flags4);
+    wr_u32b(l_ptr->flags5);
 
     /* Monster limit per level */
     wr_byte(r_ptr->max_num);

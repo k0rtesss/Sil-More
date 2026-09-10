@@ -570,3 +570,9 @@ T:0:1
 N:86:solid ice
 G:=:W
 T:0:1
+
+# 0x57 --> poisonous seep (SDL recolors the lava animation green)
+
+N:87:poisonous seep
+G:~:G
+T:0:1

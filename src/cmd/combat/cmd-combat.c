@@ -561,6 +561,7 @@ int total_monster_evasion(monster_type* m_ptr, bool archery)
 {
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     int evn = r_ptr->evn;
+    evn += monster_dodging_bonus(m_ptr);
     evn -= m_ptr->song_evasion_penalty;
     bool unseen = false;
 
@@ -1452,7 +1453,7 @@ int slay_bonus(
             }
         }
 
-        /* Brand (Poison) */
+        /* Poison adds delayed damage after Protection, rather than a die. */
         if (f1 & (TR1_BRAND_POIS))
         {
             /* Notice immunity */
@@ -1464,11 +1465,9 @@ int slay_bonus(
                 }
             }
 
-            /* Otherwise, take the damage */
+            /* Notice the brand; the successful hit supplies its poison. */
             else
             {
-                brand_bonus_dice += 1;
-
                 *noticed_flag = maybe_notice_slay(o_ptr, TR1_BRAND_POIS);
             }
         }
@@ -2444,6 +2443,7 @@ bool knock_back(int y1, int x1, int y2, int x2)
         if (monster_target)
         {
             m_ptr->skip_next_turn = true;
+            monster_abilities_forced_movement(m_ptr);
 
             // actually move the monster
             monster_swap(y2, x2, y3, x3);
@@ -3106,7 +3106,8 @@ void py_attack_aux(int y, int x, int attack_type)
                 dam = total_dice * mds;
 
             /* Apply armor dice/sides curses/blessings */
-            int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty;
+            int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty
+                + monster_blocking_bonus_dice(m_ptr);
             if (armor_dice_base < 0)
                 armor_dice_base = 0;
             int armor_dice = armor_dice_base + curse_flag_delta_cur(CUR_MON_ARM_DICE);
@@ -3276,6 +3277,11 @@ void py_attack_aux(int y, int x, int attack_type)
             {
                 // damage, check for death
                 fatal_blow = mon_take_hit(m_idx, net_dam, NULL, -1);
+                if (!fatal_blow)
+                {
+                    monster_receive_melee_damage(m_ptr, net_dam);
+                    monster_poison_brand(m_idx, o_ptr, NULL, net_dam);
+                }
                 p_ptr->vengeance = 0;
             }
 
@@ -3417,11 +3423,11 @@ void py_attack_aux(int y, int x, int attack_type)
             // treats attack a weapon weighing 2 pounds per damage die
             if ((r_ptr->flags2 & (RF2_RIPOSTE)) && (monster_ripostes == 0)
                 && !m_ptr->confused && (m_ptr->stance != STANCE_FLEEING)
-                && !m_ptr->skip_this_turn && !m_ptr->skip_next_turn
+                && monster_abilities_can_react(m_ptr)
                 && (hit_result <= -10 - (2 * r_ptr->blow[0].dd)))
             {
                 msg_format("%^s ripostes!", m_name);
-                make_attack_normal(m_ptr);
+                make_attack_reaction(m_ptr);
                 monster_ripostes++;
 
                 if (m_ptr->ml)

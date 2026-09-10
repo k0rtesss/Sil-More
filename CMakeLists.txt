@@ -217,6 +217,8 @@ set(SIL_MORE_SOURCES
     src/cave/cave-fixtures.c
     src/cave/cave-water.c
     src/cave/cave-lava.c
+    src/cave/cave-poison.c
+    src/monster/monster-poison.c
     src/cave/cave-geometry.c
     src/cave/cave-map-ui.c
     src/cave/cave-projection.c
@@ -400,6 +402,7 @@ set(SIL_MORE_SOURCES
     src/monster/monster-recall.c
     src/monster/monster-select.c
     src/monster/monster-spawn.c
+    src/monster/monster-abilities.c
     src/monster/monster-summon.c
     src/monster/monster-update.c
     src/object/object-allocation.c

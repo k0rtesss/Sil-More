@@ -3,6 +3,75 @@
 #include "angband.h"
 #include "birth/birth-internal.h"
 
+/* Character/race affinities and starting abilities describe specialisation;
+ * temporary metarun effects should not redefine the character's role. */
+int birth_skill_specialty_score(int skill)
+{
+    static const u32b affinity[S_MAX] = {
+        [S_MEL] = RHF_MEL_AFFINITY, [S_ARC] = RHF_ARC_AFFINITY,
+        [S_EVN] = RHF_EVN_AFFINITY, [S_PER] = RHF_PER_AFFINITY,
+        [S_STL] = RHF_STL_AFFINITY,
+        [S_WIL] = RHF_WIL_AFFINITY, [S_SMT] = RHF_SMT_AFFINITY,
+        [S_SNG] = RHF_SNG_AFFINITY
+    };
+    static const u32b penalty[S_MAX] = {
+        [S_MEL] = RHF_MEL_PENALTY, [S_ARC] = RHF_ARC_PENALTY,
+        [S_EVN] = RHF_EVN_PENALTY, [S_PER] = RHF_PER_PENALTY,
+        [S_STL] = RHF_STL_PENALTY,
+        [S_WIL] = RHF_WIL_PENALTY, [S_SMT] = RHF_SMT_PENALTY,
+        [S_SNG] = RHF_SNG_PENALTY
+    };
+    int score = 0;
+
+    if (skill < 0 || skill >= S_MAX || !affinity[skill]
+        || !rp_ptr || !current_character_profile)
+        return 0;
+    if (rp_ptr->flags & affinity[skill]) score++;
+    if (rp_ptr->flags & penalty[skill]) score--;
+    if (current_character_profile->flags & affinity[skill]) score++;
+    if (current_character_profile->flags & penalty[skill]) score--;
+    for (int i = 0; i < CHARACTER_ABILITY_MAX; i++)
+    {
+        if (current_character_profile->a_adj[i][0] < 0) break;
+        if (current_character_profile->a_adj[i][0] == skill
+            && current_character_profile->a_adj[i][1] >= 0
+            && current_character_profile->a_adj[i][1] < ABILITIES_MAX)
+            score++;
+    }
+    return score;
+}
+
+/* Compare the strongest specialities rather than counting whole groups:
+ * Grace governs more skills, but that alone should not favour its preset. */
+void birth_recommended_stats(int stats[A_MAX])
+{
+    int combat = -100;
+    int grace = -100;
+    bool prefer_strength;
+
+    for (int skill = 0; skill < S_MAX; skill++)
+    {
+        int score;
+        if (skill == S_STL || skill == S_SPC) continue;
+        score = birth_skill_specialty_score(skill);
+        if (skill == S_MEL || skill == S_ARC || skill == S_EVN)
+            combat = MAX(combat, score);
+        else
+            grace = MAX(grace, score);
+    }
+
+    prefer_strength = combat > grace;
+    if (combat == grace && rp_ptr && current_character_profile)
+        prefer_strength = rp_ptr->r_adj[A_STR]
+                + current_character_profile->h_adj[A_STR]
+            > rp_ptr->r_adj[A_GRA] + current_character_profile->h_adj[A_GRA];
+
+    stats[A_STR] = prefer_strength ? 2 : 1;
+    stats[A_DEX] = 2;
+    stats[A_CON] = 3;
+    stats[A_GRA] = prefer_strength ? 1 : 2;
+}
+
 NavResult player_birth_aux_2(int stats[A_MAX])
 {
     int i;
@@ -124,12 +193,22 @@ NavResult player_birth_aux_2(int stats[A_MAX])
                 } else if (clicked_choice == -3) {
                     ch = 'q';
                     click_generated_command = true;
+                } else if (clicked_choice == -4) {
+                    ch = 'n';
+                    click_generated_command = true;
                 }
             }
         }
 
         if (!click_generated_command)
             ch = (char)steamdeck_menu_key(ch, 0, 0);
+
+        if (ch == 'n' || ch == 'N'
+            || (steamdeck && ch == steamdeck_alt_action_key()))
+        {
+            birth_recommended_stats(stats);
+            continue;
+        }
 
         /* Return to character selection before the game starts */
         if ((ch == 'Q') || (ch == 'q')) {

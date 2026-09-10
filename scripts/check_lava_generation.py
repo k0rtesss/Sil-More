@@ -101,6 +101,36 @@ int main(void) {
     reset();features[20][20]=FEAT_LAVA;
     assert(!player_passable(20,20,false)&&!player_passable(20,20,true));
     puts("Lava generation: 200 seeded maps, pools/rivers, dry connectivity, narrow necks, protected cells, fire-only partitions: PASS");
+    for(unsigned seed=0;seed<100;seed++) {
+        reset();state=seed;current_partition_big_cave_types[0]=BIG_CAVE_POIS;
+        for(int y=4;y<=35;y++)for(int x=22;x<=24;x++)features[y][x]=FEAT_WALL_EXTRA;
+        for(int x=22;x<=24;x++)features[20][x]=FEAT_FLOOR;
+        place_cave_poison();connected();
+        int count=0;
+        for(int y=0;y<40;y++)for(int x=0;x<80;x++)if(features[y][x]==FEAT_POISON) {
+            count++;assert(x<48);assert(info[y][x]&CAVE_ROOM);
+            assert(!(info[y][x]&(CAVE_ICKY|CAVE_G_VAULT)));
+            assert(!objects[y][x]&&!monsters[y][x]&&!cave_fixture_at(y,x));
+            assert(distance(y,x,20,5)>2);
+            bool neighbor=false;
+            for(int d=0;d<4;d++)neighbor|=features[y+lava_dy[d]][x+lava_dx[d]]==FEAT_POISON;
+            assert(neighbor);
+        }
+        assert(count>=12&&count<=30);
+        assert(features[10][10]==FEAT_MORE&&features[30][30]==FEAT_LESS);
+        for(int x=22;x<=24;x++)assert(features[20][x]==FEAT_FLOOR);
+    }
+    for(int excluded=0;excluded<3;excluded++) {
+        reset();current_partition_big_cave_types[0]=BIG_CAVE_POIS;
+        if(excluded==0)current_partition_big_cave_types[0]=BIG_CAVE_FIRE;
+        if(excluded==1)current_partition_modes[0]=QUAD_MODE_CAVEY;
+        if(excluded==2)dun->is_quest[0]=true;
+        place_cave_poison();
+        for(int y=0;y<40;y++)for(int x=0;x<80;x++)assert(features[y][x]!=FEAT_POISON);
+    }
+    reset();features[20][20]=FEAT_POISON;
+    assert(!player_passable(20,20,false)&&!player_passable(20,20,true));
+    puts("Poison generation: 100 seeded maps, small connected seeps, dry connectivity, narrow necks, protected cells, poison-only partitions: PASS");
     return 0;
 }
 '''

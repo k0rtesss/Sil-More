@@ -33,6 +33,7 @@ static errr grab_one_basic_flag(monster_race* ptr, cptr what)
     f[RF1] = &(ptr->flags1);
     f[RF2] = &(ptr->flags2);
     f[RF3] = &(ptr->flags3);
+    f[RF5] = &(ptr->flags5);
     return grab_one_flag(f, "monster", what);
 }
 
@@ -285,6 +286,20 @@ errr parse_r_info(char* buf, header* head)
         r_ptr->evn = evn;
         r_ptr->pd = pd;
         r_ptr->ps = ps;
+    }
+
+    /* Shield dice are already included in P's protection total. */
+    else if (buf[0] == 'H')
+    {
+        char* end;
+        long shield;
+        if (!r_ptr)
+            return PARSE_ERROR_MISSING_RECORD_HEADER;
+        shield = strtol(buf + 2, &end, 10);
+        if (end == buf + 2 || *end || shield < 0 || shield > r_ptr->pd
+            || (shield > 0 && r_ptr->ps == 0))
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        r_ptr->shield_dd = (byte)shield;
     }
 
     /* Process 'B' for "Blows" */

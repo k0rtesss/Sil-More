@@ -1508,7 +1508,7 @@ bool grid_interact_available(int y, int x)
     }
 
     if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA
-        || cave_feat[y][x] == FEAT_ICE)
+        || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON)
         return true;
 
     /* Empty floor: strike at the square without stepping in */
@@ -1916,6 +1916,23 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "Flying monsters take 40 heat damage each turn. Fire-resistant "
             "monsters are unharmed. Lava casts light two squares away.", sizeof(desc));
         GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_RED);
+    }
+
+    /* --- Poisonous seep --- */
+    else if (feat == FEAT_POISON)
+    {
+        SDL_strlcpy(title, "Poisonous seep", sizeof(title));
+        SDL_strlcpy(desc,
+            "Contact adds 6 poison stacks before resistance and poison protection. "
+            "Entering or spending another action here applies a dose; entry is "
+            "not charged twice in the same action. Poison caves remove one "
+            "resistance level. Poison deals one fifth of the remaining stacks "
+            "each action, rounded up, and consumes those stacks. It continues "
+            "after leaving and prevents normal Health recovery. Flying and "
+            "poison-resistant monsters ignore this terrain. A successful leap "
+            "over a single tile avoids contact; a blocked landing does not.",
+            sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_GREEN);
     }
 
     /* --- Solid ice --- */

@@ -2,8 +2,8 @@
 #include "level-generation/level-generation-internal.h"
 #include "cave/cave-fixtures.h"
 
-/* Lava is lethal terrain, so every proposed square must preserve a dry
- * route around it. Shapes are prepared before painting: a rejected river
+/* Each hazardous liquid square must preserve a dry route around it.
+ * Shapes are prepared before painting: a rejected river
  * never leaves disconnected fragments behind. */
 #define LAVA_SHAPE_MAX 96
 static const int lava_dy[4] = { -1, 0, 1, 0 };
@@ -42,6 +42,7 @@ static bool lava_preserves_routes(int y, int x)
             int yy = y + dy, xx = x + dx;
             if ((!dy && !dx) || !in_bounds_fully(yy, xx)
                 || lava_proposed[yy][xx] || cave_feat[yy][xx] == FEAT_LAVA
+                || cave_feat[yy][xx] == FEAT_POISON
                 || !player_passable(yy, xx, false))
                 continue;
             dry[dy + 1][dx + 1] = true;
@@ -69,10 +70,10 @@ static bool lava_preserves_routes(int y, int x)
     return tail == count;
 }
 
-static void lava_paint(const coord* cells, int count)
+static void liquid_paint(const coord* cells, int count, int feature)
 {
     for (int i = 0; i < count; i++)
-        cave_set_feat(cells[i].y, cells[i].x, FEAT_LAVA);
+        cave_set_feat(cells[i].y, cells[i].x, feature);
 }
 
 static bool lava_seed(rectangle b, int partition, coord* seed)
@@ -129,13 +130,14 @@ static int lava_river(rectangle b, int partition)
             c.x += lava_dx[dir];
         }
         if (count < 10 || turns < 2) continue;
-        lava_paint(cells, count);
+        liquid_paint(cells, count, FEAT_LAVA);
         return count;
     }
     return 0;
 }
 
-static int lava_pool(rectangle b, int partition)
+static int liquid_pool(rectangle b, int partition, int feature,
+    int min_size, int max_size)
 {
     for (int attempt = 0; attempt < 16; attempt++)
     {
@@ -145,7 +147,7 @@ static int lava_pool(rectangle b, int partition)
         if (!lava_preserves_routes(seed.y, seed.x)) continue;
         cells[0] = seed;
         lava_proposed[seed.y][seed.x] = 1;
-        int head = 0, count = 1, target = rand_range(8, 22);
+        int head = 0, count = 1, target = rand_range(min_size, max_size);
         while (head < count && count < target)
         {
             coord c = cells[head++];
@@ -161,11 +163,16 @@ static int lava_pool(rectangle b, int partition)
                 cells[count++] = (coord){ y, x };
             }
         }
-        if (count < 5) continue;
-        lava_paint(cells, count);
+        if (count < MIN(5, min_size)) continue;
+        liquid_paint(cells, count, feature);
         return count;
     }
     return 0;
+}
+
+static int lava_pool(rectangle b, int partition)
+{
+    return liquid_pool(b, partition, FEAT_LAVA, 8, 22);
 }
 
 void place_cave_lava(void)
@@ -192,4 +199,27 @@ void place_cave_lava(void)
     }
     log_debug("Cave lava: %d pools, %d meandering rivers, %d tiles; dry routes preserved",
         pools, rivers, tiles);
+}
+
+void place_cave_poison(void)
+{
+    int pools = 0, tiles = 0;
+    for (int i = 0; i < dun->cent_n; i++)
+    {
+        int pi = level_partition_index_for_point(dun->cent[i].y, dun->cent[i].x);
+        if (pi < 0 || current_partition_modes[pi] != QUAD_MODE_BIG_CAVE
+            || current_partition_big_cave_types[pi] != BIG_CAVE_POIS
+            || room_anchor_kind[i] != LAYOUT_ANCHOR_CA_BLOB || dun->is_quest[i])
+            continue;
+        rectangle b = dun->corner[i];
+        /* Small connected seeps leave generous banks and dry escape routes.
+         * Reuse the same protected-cell and connectivity checks as lava. */
+        int pool_count = 2 + ((b.y2 - b.y1) * (b.x2 - b.x1) >= 500);
+        for (int k = 0; k < pool_count; k++)
+        {
+            int n = liquid_pool(b, pi, FEAT_POISON, 4, 10);
+            if (n) { pools++; tiles += n; }
+        }
+    }
+    log_debug("Cave poison: %d seeps, %d tiles; dry routes preserved", pools, tiles);
 }

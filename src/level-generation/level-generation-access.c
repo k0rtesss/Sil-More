@@ -8,8 +8,8 @@ bool player_passable(int y, int x, bool ignore_rubble_and_chasms)
     if (!in_bounds_fully(y, x)) return false;
 
     byte feature = cave_feat[y][x];
-    /* Generation must never count a lethal lava crossing as an exit. */
-    if (feature == FEAT_LAVA) return false;
+    /* Required connections must have a route free of damaging terrain. */
+    if (feature == FEAT_LAVA || feature == FEAT_POISON) return false;
     bool icky_interior = (cave_info[y][x] & (CAVE_ICKY))
         && (cave_info[y][x - 1] & (CAVE_ICKY))
         && (cave_info[y][x + 1] & (CAVE_ICKY))

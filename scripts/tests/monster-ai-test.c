@@ -128,7 +128,7 @@ static void test_terrain(void)
 }
 
 /* Independent repeated relaxation oracle: compare every reachable floor to
- * the heap flow on a small map with asymmetric wet/door edge costs. */
+ * the bucket flow on a small map with asymmetric wet/door edge costs. */
 static void check_flow_oracle(monster_type* m)
 {
     int expected[16][16];
@@ -319,9 +319,12 @@ static void test_full_map(void)
         (double)(clock() - start) / CLOCKS_PER_SEC);
 }
 
+#include "monster-poison-ai-tests.h"
+
 int main(void)
 {
     test_terrain(); test_flows(); test_tactics(); test_advance(); test_full_map();
+    test_poison_ai();
     printf("Monster AI regression checks passed: %d\n", checks);
     return 0;
 }

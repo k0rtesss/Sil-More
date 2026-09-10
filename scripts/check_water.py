@@ -376,19 +376,22 @@ static void rd_u32b(u32b* x) {u16b a,b;rd_u16b(&a);rd_u16b(&b);*x=a|((u32b)b<<16
 static void rd_s32b(s32b* x) {u32b n;rd_u32b(&n);*x=(s32b)n;}
 static void strip_bytes(int n) {while(n--) {byte b;rd_byte(&b);}}
 static bool savefile_version_at_least(byte a,byte b,byte c,byte d) {
-    assert(a==0&&b==9&&c==8&&d==2);return extra_version>=d;
+    assert(a==0&&b==9&&c==8&&(d==2||d==4));return extra_version>=d;
 }
 /* The complete production record writer and reader are inserted below. */
 @FUNCTIONS@
 void monster_save_tests(void) {
-    for(int version=1;version<=2;version++) {
+    for(int version=1;version<=4;version++) {
         monster_type before={0}, after={0};
         before.r_idx=3;before.image_r_idx=7;before.fy=14;before.fx=19;
         before.hp=39;before.maxhp=46;before.alertness=ALERTNESS_ALERT;
-        before.energy=version==2?-50:213;before.mspeed=2;before.stunned=9;
+        before.energy=version>=2?-50:213;before.mspeed=2;before.stunned=9;
+        before.poisoned=17;
         before.confused=6;before.song_will_penalty=11;before.thrall_quest_completed=1;
         before.previous_action[0]=6;before.previous_action[1]=8;
         extra_version=version;write_pos=read_pos=0;wr_monster(&before);
+        /* Poison was appended to the record in 0.9.8.4. */
+        if(version<4)write_pos-=2;
         if(version==1) {
             /* Old byte-energy record: omit its high byte, preserve its tail. */
             assert(bytes[14]==213 && bytes[15]==0);
@@ -400,8 +403,9 @@ void monster_save_tests(void) {
         assert(after.r_idx==3&&after.fx==19&&after.stunned==9&&after.confused==6);
         assert(after.song_will_penalty==11 && after.thrall_quest_completed==1);
         assert(after.previous_action[1]==8);
+        assert(after.poisoned==(version>=4?17:0));
     }
-    puts("Monster save records: signed debt roundtrip, old unsigned energy and complete record alignment: PASS");
+    puts("Monster save records: versions 0.9.8.1-4, signed debt, old unsigned energy, poison defaults and complete record alignment: PASS");
 }
 '''
 

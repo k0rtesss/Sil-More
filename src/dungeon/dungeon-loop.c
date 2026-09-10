@@ -525,6 +525,8 @@ void dungeon(void)
             }
 
             /* Give this monster some energy */
+            if (r_info[m_ptr->r_idx].flags5 & RF5_SPRINTING)
+                calc_monster_speed(m_ptr->fy, m_ptr->fx);
             m_ptr->energy += extract_energy[m_ptr->mspeed];
         }
 

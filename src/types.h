@@ -495,6 +495,7 @@ struct monster_race
     s16b evn; /* Bonus to evasion */
     byte pd; /* Protection dice */
     byte ps; /* Protection sides */
+    byte shield_dd; /* Shield dice included in pd; Blocking doubles this part. */
 
     byte speed; /* Speed (normally 110) */
     s16b light; /* Light/Dark radius (if any) */
@@ -514,6 +515,7 @@ struct monster_race
     u32b flags2; /* Flags 2 (abilities) */
     u32b flags3; /* Flags 3 (race/resist) */
     u32b flags4; /* Flags 4 ('spells') */
+    u32b flags5; /* Stateful combat abilities */
 
     monster_blow blow[MONSTER_BLOW_MAX]; /* Up to four blows per round */
 
@@ -565,6 +567,7 @@ struct monster_lore
     u32b flags2; /* Observed racial flags */
     u32b flags3; /* Observed racial flags */
     u32b flags4; /* Observed racial flags */
+    u32b flags5; /* Observed stateful combat abilities */
 
     byte song_lore_flags; /* Stats revealed by duel songs */
 };
@@ -726,6 +729,7 @@ struct monster_type
 
     byte stunned; /* Monster is stunned */
     byte confused; /* Monster is confused */
+    s16b poisoned; /* Remaining poison damage, capped at 100 like the player. */
     s16b slowed; /* Monster is slowed */
     s16b hasted; /* Monster is hasted */
 
@@ -775,6 +779,12 @@ struct monster_type
                                  row immediately prior to now */
     s16b turns_stationary; /* How many times it has stayed still in a row
                               immediately prior to now */
+
+    byte vengeance; /* One pending bonus damage die after a melee wound. */
+    byte smite_recovery; /* 0 ready, 1 next action owed, 2 recovery action spent. */
+    bool ability_in_action; /* Runtime action bookkeeping, never saved. */
+    bool ability_melee; /* An ordinary melee attack occurred in this action. */
+    bool ability_displaced; /* This action was interrupted by displacement. */
 
     byte blow_dd_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage dice */
     byte blow_ds_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage sides */

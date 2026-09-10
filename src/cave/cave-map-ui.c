@@ -347,7 +347,7 @@ void lite_spot(int y, int x)
         bool force_visual_redraw = (cave_m_idx[y][x] < 0)
             || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
             || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA
-            || cave_feat[y][x] == FEAT_ICE;
+            || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON;
 #ifdef USE_SDL
         /* Removing a water surface or brazier can leave the same floor
          * glyph. Repaint its cached pixels even after the feature changed. */
@@ -447,7 +447,7 @@ void prt_map(void)
                 || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)
                     || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
                     || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA
-                    || cave_feat[y][x] == FEAT_ICE)))
+                    || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON)))
                 force_term_cell_redraw(vx, vy, cell_w);
         }
     }

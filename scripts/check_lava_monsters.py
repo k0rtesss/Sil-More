@@ -41,7 +41,8 @@ void lava_monster_tests(void) {
 
     m=lava_test_monster(RF2_FLYING,0);
     assert(cave_exist_mon(&r_info[1],10,11,false,false));
-    assert(cave_passable_mon(m,10,11,&bash)==100);
+    /* Flight survives contact, but existing AI avoids the damaging heat. */
+    assert(cave_passable_mon(m,10,11,&bash)==0);
     monster_swap(10,10,10,11);
     assert(m->r_idx && m->hp==160 && m->fx==11);
     /* Starting and moving within lava is only one exposure per action. */

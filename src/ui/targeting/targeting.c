@@ -45,6 +45,8 @@ static void look_mon_desc(char* buf, size_t max, int m_idx)
         SDL_strlcat(buf, "confused, ", max);
     if (m_ptr->stunned)
         SDL_strlcat(buf, "stunned, ", max);
+    if (m_ptr->poisoned)
+        SDL_strlcat(buf, format("poisoned (%d), ", m_ptr->poisoned), max);
     if ((m_ptr->slowed) && (!m_ptr->hasted))
         SDL_strlcat(buf, "slowed, ", max);
     if ((!m_ptr->slowed) && (m_ptr->hasted))
@@ -671,7 +673,8 @@ static bool determine_location_is_interesting(int y, int x)
     /* Check for objects first (only shown when on floors, not when in rubble) */
     /* This is checked BEFORE monsters to prevent showing unmarked objects under detected monsters */
     if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT)
-        || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_ICE)
+        || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_ICE
+        || cave_feat[y][x] == FEAT_POISON)
     {
         /* Scan all objects in the grid */
         for (o_ptr = get_first_object(y, x); o_ptr;
@@ -1257,6 +1260,14 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             {
                 s3 = "";
                 name = "solid ice (grounded: -2 attack, -2 Evasion; fire melts it)";
+            }
+            else if (feat == FEAT_POISON)
+            {
+                s3 = "";
+                strnfmt(name_buf, sizeof(name_buf),
+                    "poisonous seep (up to %d stacks/contact before poison protection; leap avoids)",
+                    player_poison_terrain_dose_at(y, x));
+                name = name_buf;
             }
             else if (feat == FEAT_LAVA)
             {

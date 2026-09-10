@@ -102,6 +102,10 @@ vault_monster_spec vault_monster_table[] = {
     {'k', "d2d2f0b7edcf4cf6", 0, false, true, true},  /* Lurking horror */
     {'n', "7783062d13500802", 0, false, true, true},  /* Nightthorn */
     {'E', "90921d863b6a4eaa", 0, false, true, true},  /* Green Great Dragon */
+    {'i', "cbfc75c5e401080b", 0, false, true, true},  /* Lhamthanc */
+    {'l', "e03ee4217593ca39", 0, false, true, true},  /* Fankil */
+    {'m', "0e401610ae33a21f", 0, false, true, false}, /* One Easterling warrior */
+    {'p', "7ed54d5976d25b3e", 0, false, true, false}, /* One Easterling archer */
 };
 
 int current_build_vault_type = 0;

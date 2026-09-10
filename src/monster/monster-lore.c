@@ -353,7 +353,8 @@ static void describe_monster_toughness(
             monster_type* live = (monster_type*)m_ptr;
             evn = total_monster_evasion(live, false);
 
-            int base_dice = r_ptr->pd - m_ptr->song_armor_dice_penalty;
+            int base_dice = r_ptr->pd + monster_blocking_bonus_dice(live)
+                - m_ptr->song_armor_dice_penalty;
             if (base_dice < 0)
                 base_dice = 0;
             prot_dice = base_dice + curse_flag_delta_cur(CUR_MON_ARM_DICE);
@@ -623,6 +624,12 @@ static void describe_monster_movement(
         text_out_c(TERM_L_BLUE, " serpent");
     else if (l_ptr->flags3 & RF3_VAMPIRE)
         text_out_c(TERM_L_BLUE, " vampire");
+    else if ((l_ptr->flags3 & (RF3_RAUKO | RF3_MAN))
+        == (RF3_RAUKO | RF3_MAN))
+        text_out_c(TERM_L_BLUE, " rauko in an assumed human form");
+    else if ((l_ptr->flags3 & (RF3_RAUKO | RF3_ORC))
+        == (RF3_RAUKO | RF3_ORC))
+        text_out_c(TERM_L_BLUE, " rauko in an assumed Orc form");
     else if (l_ptr->flags3 & RF3_RAUKO)
         text_out_c(TERM_L_BLUE, " rauko");
     else if (l_ptr->flags3 & RF3_TROLL)
@@ -827,6 +834,7 @@ static void cheat_monster_lore(int r_idx, monster_lore* l_ptr)
     l_ptr->flags2 = r_ptr->flags2;
     l_ptr->flags3 = r_ptr->flags3;
     l_ptr->flags4 = r_ptr->flags4;
+    l_ptr->flags5 = r_ptr->flags5;
 }
 
 /*

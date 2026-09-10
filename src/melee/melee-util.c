@@ -240,6 +240,16 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
         if (!(r_ptr->flags3 & RF3_RES_FIRE))
             return (0);
     }
+    else if (feat == FEAT_POISON)
+    {
+        /* Poison remains physically enterable. Confusion ignores the risk;
+         * a creature already immersed must also be allowed to escape. */
+        int dose = monster_poison_step_damage(m_ptr, m_ptr->fy, m_ptr->fx, y, x);
+        if (dose && !m_ptr->confused
+            && cave_feat[m_ptr->fy][m_ptr->fx] != FEAT_POISON
+            && m_ptr->poisoned + dose >= m_ptr->hp)
+            return 0;
+    }
     // Light sensitive creatures and undead cannot pass sunlight
     else if (feat == FEAT_SUNLIGHT)
     {
@@ -449,9 +459,26 @@ int monster_terrain_penalty(monster_type* m_ptr, int y, int x)
         return FLOW_MAX_DIST;
     if (cave_feat[y][x] == FEAT_LAVA && !(r_ptr->flags3 & RF3_RES_FIRE))
         return 100;
+    if (monster_poison_step_damage(m_ptr, m_ptr->fy, m_ptr->fx, y, x))
+        return 6;
     if (cave_feat[y][x] == FEAT_ICE && !(r_ptr->flags2 & RF2_FLYING))
         return ICE_ATTACK_PENALTY;
     return 0;
+}
+
+/* Entry from dry land collects a dose immediately and another before the
+ * next action. Consecutive seep steps add only one dose per action. Every
+ * stack eventually removes one HP, even after reaching land. */
+int monster_poison_step_damage(monster_type* m_ptr,
+    int from_y, int from_x, int y, int x)
+{
+    monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    if (!in_bounds(y, x) || cave_feat[y][x] != FEAT_POISON
+        || cave_m_idx[y][x] < 0 || (r_ptr->flags2 & RF2_FLYING)
+        || (r_ptr->flags3 & RF3_RES_POIS))
+        return 0;
+    return POISON_TERRAIN_DOSE
+        * (cave_feat[from_y][from_x] == FEAT_POISON ? 1 : 2);
 }
 
 /* Approximate an edge in whole turns, keeping the byte-sized flow format.
@@ -489,6 +516,10 @@ int monster_step_cost(monster_type* m_ptr,
     if (water_movement_energy(100, cave_feat[from_y][from_x],
             cave_feat[to_y][to_x], (r_ptr->flags2 & RF2_FLYING) != 0) > 100)
         cost++;
+    /* This is a route preference, not extra movement energy. A short poison
+     * crossing is reasonable when the safe detour is considerably longer. */
+    if (monster_poison_step_damage(m_ptr, from_y, from_x, to_y, to_x))
+        cost += 3;
     return cost;
 }
 

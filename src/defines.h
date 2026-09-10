@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 3  /* Persistent disease countdown and separate stat penalties. */
+#define VERSION_EXTRA 5  /* Stateful monster abilities and learned ability flags. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -1146,7 +1146,7 @@
       // -
       // )
 #define GF_POIS                                                                \
-    8 // adds (XdY) to the poison counter, damages monsters directly    ( p m -
+    8 // adds (XdY) to player or monster poison counters               ( p m -
       // -
       // )
 #define GF_DARK                                                                \
@@ -1295,6 +1295,8 @@
 #define FEAT_WATER 0x54
 #define FEAT_LAVA 0x55
 #define FEAT_ICE 0x56
+#define FEAT_POISON 0x57
+#define POISON_TERRAIN_DOSE 6
 #define ICE_ATTACK_PENALTY 2
 #define ICE_EVASION_PENALTY 2
 #define LAVA_RAW_DAMAGE 60
@@ -2648,6 +2650,16 @@
         | RF2_OPPORTUNIST | RF2_ZONE_OF_CONTROL | RF2_CRUEL_BLOW               \
         | RF2_EXCHANGE_PLACES | RF2_RIPOSTE | RF2_FLANKING)
 
+/* Stateful combat abilities have their own set; the original flag sets are full. */
+#define RF5_SMITE         0x00000001
+#define RF5_SPRINTING     0x00000002
+#define RF5_CONCENTRATION 0x00000004
+#define RF5_DODGING       0x00000008
+#define RF5_BLOCKING      0x00000010
+#define RF5_VENGEANCE     0x00000020
+#define RF5_ABILITIES (RF5_SMITE | RF5_SPRINTING | RF5_CONCENTRATION \
+    | RF5_DODGING | RF5_BLOCKING | RF5_VENGEANCE)
+
 /*
  * New monster race bit flags
  */
@@ -3624,6 +3636,7 @@
 #define cave_empty_bold(Y, X)                                                  \
     (cave_floor_bold(Y, X) && (cave_feat[Y][X] != FEAT_CHASM)                  \
         && (cave_feat[Y][X] != FEAT_LAVA)                                     \
+        && (cave_feat[Y][X] != FEAT_POISON)                                   \
         && (cave_feat[Y][X] != FEAT_RUBBLE)                                    \
         && (cave_m_idx[Y][X] == 0))
 

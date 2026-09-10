@@ -53,6 +53,7 @@ static void update_monster_flow(int cy, int cx, int which_flow,
     enum { FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID };
     static int next[FLOW_CELLS];
     static int previous[FLOW_CELLS];
+    static int poison_damage[FLOW_CELLS];
     int heads[FLOW_MAX_DIST];
     int origin = cy * MAX_DUNGEON_WID + cx;
 
@@ -60,6 +61,7 @@ static void update_monster_flow(int cy, int cx, int which_flow,
         heads[i] = -1;
     heads[0] = origin;
     next[origin] = previous[origin] = -1;
+    poison_damage[origin] = 0;
 
     for (int cost = 0; cost < FLOW_MAX_DIST; cost++)
     {
@@ -77,7 +79,7 @@ static void update_monster_flow(int cy, int cx, int which_flow,
             {
                 int yy = y + ddy_ddd[d];
                 int xx = x + ddx_ddd[d];
-                int neighbor, edge, total, old;
+                int neighbor, edge, total, old, poison;
                 if (!in_bounds(yy, xx))
                     continue;
                 neighbor = yy * MAX_DUNGEON_WID + xx;
@@ -93,8 +95,22 @@ static void update_monster_flow(int cy, int cx, int which_flow,
                     : monster_step_cost(m_ptr, yy, xx, y, x);
                 if (!edge)
                     continue;
+                poison = poison_damage[grid]
+                    + monster_poison_step_damage(m_ptr, yy, xx, y, x);
+                /* Reserve the initial contact dose for hypothetical entry
+                 * into this predecessor. The real starting grid is already
+                 * occupied and its accrued stacks are in poisoned. */
+                int entry = (yy == m_ptr->fy && xx == m_ptr->fx) ? 0
+                    : distance(yy, xx, m_ptr->fy, m_ptr->fx) <= 1
+                        ? monster_poison_step_damage(m_ptr,
+                            m_ptr->fy, m_ptr->fx, yy, xx)
+                        : 2 * monster_poison_step_damage(m_ptr, yy, xx, yy, xx);
+                if (poison + entry > 0
+                    && m_ptr->poisoned + poison + entry >= m_ptr->hp)
+                    continue;
                 total = cost + edge;
-                if (total >= old || total >= FLOW_MAX_DIST)
+                if (total > old || total >= FLOW_MAX_DIST
+                    || (total == old && poison >= poison_damage[neighbor]))
                     continue;
 
                 if (old < FLOW_MAX_DIST)
@@ -107,6 +123,7 @@ static void update_monster_flow(int cy, int cx, int which_flow,
                         previous[next[neighbor]] = previous[neighbor];
                 }
                 cave_cost[which_flow][yy][xx] = total;
+                poison_damage[neighbor] = poison;
                 previous[neighbor] = -1;
                 next[neighbor] = heads[total];
                 if (heads[total] >= 0)
@@ -754,6 +771,7 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
         && (cave_feat[y][x] == FEAT_LAVA || feat == FEAT_LAVA);
     bool ice_changed = cave_feat[y][x] != feat
         && (cave_feat[y][x] == FEAT_ICE || feat == FEAT_ICE);
+    bool poison_changed = cave_feat[y][x] != feat && feat == FEAT_POISON;
     if (cave_feat[y][x] != feat)
         cave_fixture_set(y, x, CAVE_FIXTURE_NONE);
     /* Change the feature */
@@ -808,6 +826,13 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
                 player_lava_exposure(p_ptr->leaping);
             if (cave_m_idx[y][x] > 0)
                 monster_lava_exposure(cave_m_idx[y][x]);
+        }
+        if (poison_changed)
+        {
+            if (p_ptr->py == y && p_ptr->px == x)
+                player_poison_terrain_exposure(p_ptr->leaping);
+            if (cave_m_idx[y][x] > 0)
+                monster_poison_terrain_exposure(cave_m_idx[y][x]);
         }
         /* Notice */
         note_spot(y, x);

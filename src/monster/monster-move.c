@@ -542,6 +542,8 @@ void monster_swap(int y1, int x1, int y2, int x2)
         /* Move monster */
         m_ptr->fy = y2;
         m_ptr->fx = x2;
+        if (!m_ptr->ability_in_action)
+            monster_abilities_forced_movement(m_ptr);
         m_ptr->visual_facing_dir = (byte)rough_direction(y1, x1, y2, x2);
 
         if ((r_info[m_ptr->r_idx].flags3 & RF3_SPECIAL_VAULT_ONLY)
@@ -596,7 +598,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
                     if (!singing(SNG_DISGUISE)
                         && (m_ptr->alertness >= ALERTNESS_ALERT)
                         && !m_ptr->confused && (m_ptr->stance != STANCE_FLEEING)
-                        && !m_ptr->skip_next_turn && !m_ptr->skip_this_turn)
+                        && monster_abilities_can_react(m_ptr))
                     {
                         // Opportunist
                         if ((r_ptr->flags2 & (RF2_OPPORTUNIST))
@@ -604,7 +606,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
                         {
                             msg_format(
                                 "%^s attacks you as you step away.", m_name);
-                            make_attack_normal(m_ptr);
+                            make_attack_reaction(m_ptr);
 
                             // remember that the monster can do this
                             if (m_ptr->ml)
@@ -613,11 +615,12 @@ void monster_swap(int y1, int x1, int y2, int x2)
 
                         // Zone of Control
                         if ((r_ptr->flags2 & (RF2_ZONE_OF_CONTROL))
+                            && !monster_moved_last_action(m_ptr)
                             && (distance(m_ptr->fy, m_ptr->fx, y2, x2) == 1))
                         {
                             msg_format("You move through %s's zone of control.",
                                 m_name);
-                            make_attack_normal(m_ptr);
+                            make_attack_reaction(m_ptr);
 
                             // remember that the monster can do this
                             if (m_ptr->ml)
@@ -661,6 +664,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
         /* Move monster */
         m_ptr->fy = y1;
         m_ptr->fx = x1;
+        monster_abilities_forced_movement(m_ptr);
         m_ptr->visual_facing_dir = (byte)rough_direction(y2, x2, y1, x1);
 
         // makes noise when moving
@@ -705,6 +709,10 @@ void monster_swap(int y1, int x1, int y2, int x2)
     /* Update grids */
     cave_m_idx[y1][x1] = m2;
     cave_m_idx[y2][x2] = m1;
+    if (m1 > 0 && mon_list[m1].r_idx)
+        calc_monster_speed(mon_list[m1].fy, mon_list[m1].fx);
+    if (m2 > 0 && mon_list[m2].r_idx)
+        calc_monster_speed(mon_list[m2].fy, mon_list[m2].fx);
 
     /* Redraw */
     lite_spot(y1, x1);
@@ -712,9 +720,15 @@ void monster_swap(int y1, int x1, int y2, int x2)
 
     /* Forced movement uses the same entry hazard as normal movement. */
     if (m1 > 0)
+    {
         monster_lava_exposure(m1);
+        monster_poison_terrain_exposure(m1);
+    }
     if (m2 > 0)
+    {
         monster_lava_exposure(m2);
+        monster_poison_terrain_exposure(m2);
+    }
 
     if (monster1)
         m_ptr = &mon_list[m1];
@@ -784,6 +798,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
     if ((m1 < 0) || (m2 < 0))
     {
         player_lava_exposure(p_ptr->leaping);
+        player_poison_terrain_exposure(p_ptr->leaping);
         describe_floor_object();
     }
 }
@@ -910,9 +925,13 @@ void calc_monster_speed(int y, int x)
         speed += 1;
     if (m_ptr->slowed)
         speed -= 1;
+    if (monster_sprinting(m_ptr) && speed < 4)
+        speed += 1;
 
     if (speed < 1)
         speed = 1;
+    if (speed > 7)
+        speed = 7;
 
     /*set the speed and return*/
     m_ptr->mspeed = speed;

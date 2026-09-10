@@ -1,5 +1,7 @@
 /* File: externs.h */
 
+#include "monster/monster-abilities.h"
+
 /*
  * Copyright (c) 1997 Ben Harrison
  *
@@ -521,6 +523,17 @@ extern bool monster_lava_exposure(int m_idx);
 extern bool monster_lava_begin_action(int m_idx);
 extern void monster_lava_end_action(int m_idx);
 extern void lava_light(void);
+extern int player_poison_terrain_dose_at(int y, int x);
+extern void player_poison_terrain_begin_action(void);
+extern void player_poison_terrain_exposure(bool airborne);
+extern void player_poison_terrain_end_action(void);
+extern void monster_poison_terrain_begin_action(int m_idx);
+extern void monster_poison_terrain_exposure(int m_idx);
+extern void monster_poison_terrain_end_action(int m_idx);
+extern void monster_poison_add(int m_idx, int amount);
+extern bool monster_poison_tick(int m_idx);
+extern void monster_poison_brand(int m_idx, const object_type* first,
+    const object_type* second, int damage);
 extern void map_feature(int y, int x);
 extern void map_area(void);
 extern void map_area_radius(int radius);
@@ -1175,6 +1188,7 @@ extern int get_sides(int attack);
 extern int dodging_bonus(void);
 extern bool blocking_bonus_active(void);
 extern bool make_attack_normal(monster_type* m_ptr);
+extern bool make_attack_reaction(monster_type* m_ptr);
 extern bool make_attack_ranged(monster_type* m_ptr, int attack);
 extern void mon_cloud(int m_idx, int typ, int dd, int ds, int dif, int rad);
 extern void cloud_surround(int r_idx, int* typ, int* dd, int* ds, int* rad);

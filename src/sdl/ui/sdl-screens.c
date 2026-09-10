@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "birth/birth.h"
 #include "sdl/main-sdl-private.h"
 
 enum {
@@ -2820,7 +2821,7 @@ bool sdl_char_sheet_choice_is_valid(int choice)
 bool sdl_char_sheet_prompt_choice_is_valid(int choice)
 {
     return g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_LIVE
-        && choice >= -3 && choice <= -1;
+        && choice >= -4 && choice <= -1;
 }
 
 void sdl_char_sheet_clear_hits(void)
@@ -5764,6 +5765,8 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     int item_count = (int)N_ELEMENTS(birth_items);
     sdl_char_sheet_prompt_item birth_controller_items[2];
     sdl_char_sheet_prompt_item select_controller_items[2];
+    sdl_char_sheet_prompt_item beginner_items[3];
+    char beginner_label[48];
     char controller_back_label[16];
     char controller_confirm_label[16];
     char birth_controller_back_text[32];
@@ -5776,6 +5779,12 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     bool preview_prompt = g_sdl_character_sheet_screen.context
         == SDL_CHARACTER_SHEET_BIRTH_PREVIEW;
     bool controller = steamdeck_controls_active();
+    bool beginner_defaults = !character_generated && turn == 0
+        && !death_spectator_active()
+        && (g_sdl_character_sheet_screen.context
+                == SDL_CHARACTER_SHEET_BIRTH_STATS
+            || g_sdl_character_sheet_screen.context
+                == SDL_CHARACTER_SHEET_BIRTH_SKILLS);
 #if SIL_SDL_MOBILE_BUILD
     float spacing = MAX(8.0f, h * 0.45f);
     bool touch_only = sdl_touch_only_device_active();
@@ -5910,6 +5919,32 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         item_count = (int)N_ELEMENTS(birth_controller_items);
     }
 
+    if (beginner_defaults)
+    {
+        SDL_strlcpy(beginner_label, "N beginner defaults",
+            sizeof(beginner_label));
+        if (controller)
+        {
+            char controller_beginner_label[16];
+
+            sdl_gamepad_ui_prompt_label(steamdeck_alt_action_key(), "X",
+                controller_beginner_label, sizeof(controller_beginner_label));
+            strnfmt(beginner_label, sizeof(beginner_label),
+                "%s beginner defaults", controller_beginner_label);
+        }
+#if SIL_SDL_MOBILE_BUILD
+        if (touch_only)
+            SDL_strlcpy(beginner_label, "Beginner defaults",
+                sizeof(beginner_label));
+#endif
+        beginner_items[0] = items[0];
+        beginner_items[1].label = beginner_label;
+        beginner_items[1].choice = -4;
+        beginner_items[2] = items[1];
+        items = beginner_items;
+        item_count = (int)N_ELEMENTS(beginner_items);
+    }
+
     if (item_count > (int)N_ELEMENTS(text_widths))
         item_count = (int)N_ELEMENTS(text_widths);
 
@@ -5932,6 +5967,22 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     }
     if (total_w > w && item_count > 1)
     {
+        if (beginner_defaults)
+        {
+            float max_gap = (w - (float)item_count)
+                / (float)(item_count - 1);
+            float fitted_width;
+
+            /* Keep all three actions visible on narrow allocation screens. */
+            spacing = MIN(spacing, MAX(0.0f, max_gap));
+            fitted_width = MAX(1.0f,
+                (w - spacing * (float)(item_count - 1)) / (float)item_count);
+            for (int i = 0; i < item_count; i++)
+                item_widths[i] = fitted_width;
+            total_w = fitted_width * (float)item_count
+                + spacing * (float)(item_count - 1);
+        }
+        else
 #if SIL_SDL_MOBILE_BUILD
         if (touch_buttons)
         {
@@ -5990,7 +6041,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         if (disabled)
             focused = false;
 
-        if (!preview_prompt
+        if (!preview_prompt && !beginner_defaults
 #if SIL_SDL_MOBILE_BUILD
             && !touch_buttons
 #endif
@@ -6001,8 +6052,10 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 
         {
             SDL_FRect hit = { cursor_x, y, item_w + 4.0f, h };
+            if (beginner_defaults)
+                hit.w = item_w;
 #if SIL_SDL_MOBILE_BUILD
-            if (!preview_prompt && !touch_buttons)
+            if (!preview_prompt && !touch_buttons && !beginner_defaults)
             {
                 float pad_x = MAX(10.0f, h * 0.32f);
 
@@ -6064,6 +6117,11 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
             {
                 (void)sdl_char_sheet_draw_button_text(font, label,
                     disabled ? TERM_L_DARK : TERM_DARK, &hit);
+            }
+            else if (beginner_defaults)
+            {
+                (void)sdl_char_sheet_draw_button_text(font, label, disabled
+                    ? TERM_DARK : (focused ? TERM_DARK : TERM_L_WHITE), &hit);
             }
             else
             {
@@ -12976,7 +13034,7 @@ static void sdl_character_sheet_screen_render_canvas(
     /*
      * The description is laid out together with the columns by
      * sdl_char_sheet_render_columns (it fills the height left beneath them);
-     * the birth/assign screens pass an empty description to hide it entirely.
+     * initial skill allocation uses this band for beginner guidance.
      */
     history = (p_ptr && p_ptr->history[0]) ? p_ptr->history : "";
     top_y = title_y + title_h + gap;
@@ -13956,9 +14014,10 @@ static void sdl_character_sheet_screen_render_canvas(
         {
             /*
              * Birth/assign: use one fewer column than the live character
-             * sheet. There is no description band here, so the grid has enough
-             * vertical room while each column gets more width.
+             * sheet so each allocation column gets more width. Beginner skill
+             * guidance shares the existing fitted description band.
              */
+            char beginner_guidance[1024] = "";
             int fpx = sdl_char_sheet_clampi((int)((float)canvas.h * 0.030f),
                 18, 40);
             TTF_Font* ffont = sdl_story_font_for_height(fpx);
@@ -13966,9 +14025,17 @@ static void sdl_character_sheet_screen_render_canvas(
             SDL_FRect alloc_col = { content_x, top_y, content_w, top_h };
             int ncols_bias = -1;
 
+            if (g_sdl_character_sheet_screen.context
+                    == SDL_CHARACTER_SHEET_BIRTH_SKILLS
+                && !character_generated && turn == 0
+                && !death_spectator_active())
+            {
+                birth_skill_recommendation_text(beginner_guidance,
+                    sizeof(beginner_guidance));
+            }
             sdl_char_sheet_render_columns(panels, n, content_x, top_y,
-                content_w, top_h - flh - gap, canvas.h, "", NULL, ncols_bias,
-                &alloc_col);
+                content_w, top_h - flh - gap, canvas.h, beginner_guidance,
+                NULL, ncols_bias, &alloc_col);
             sdl_char_sheet_draw_birth_status_row(ffont, alloc_col.x,
                 top_y + top_h - flh, alloc_col.w, flh, flh, 0, "");
         }

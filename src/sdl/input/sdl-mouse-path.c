@@ -4,7 +4,8 @@
 bool sdl_mouse_path_grid_is_open_floor(int y, int x)
 {
     return in_bounds(y, x) && cave_floor_bold(y, x)
-        && cave_feat[y][x] != FEAT_CHASM && cave_feat[y][x] != FEAT_LAVA;
+        && cave_feat[y][x] != FEAT_CHASM && cave_feat[y][x] != FEAT_LAVA
+        && cave_feat[y][x] != FEAT_POISON;
 }
 
 bool sdl_mouse_path_grid_known(int y, int x)
@@ -51,7 +52,8 @@ bool sdl_mouse_path_grid_is_known_danger(int y, int x)
 {
     if (!sdl_mouse_path_grid_known(y, x))
         return false;
-    if (cave_feat[y][x] == FEAT_CHASM || cave_feat[y][x] == FEAT_LAVA)
+    if (cave_feat[y][x] == FEAT_CHASM || cave_feat[y][x] == FEAT_LAVA
+        || cave_feat[y][x] == FEAT_POISON)
         return true;
     return cave_trap_bold(y, x) && !(cave_info[y][x] & (CAVE_HIDDEN));
 }
@@ -238,6 +240,7 @@ bool sdl_mouse_path_grid_is_leapable_obstacle(int y, int x)
         /* Automatic routes wade. Direct movement can use Leaping. */
         && cave_feat[y][x] != FEAT_WATER
         && cave_feat[y][x] != FEAT_LAVA
+        && cave_feat[y][x] != FEAT_POISON
         && player_grid_is_leapable_obstacle(y, x);
 }
 

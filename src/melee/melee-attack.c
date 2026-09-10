@@ -546,7 +546,7 @@ void do_betrayal_helm_crown(void)
 /*
  * Attack the player via physical attacks.
  */
-bool make_attack_normal(monster_type* m_ptr)
+static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
 {
     int m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
 
@@ -559,6 +559,7 @@ bool make_attack_normal(monster_type* m_ptr)
     int b, blows;
 
     bool alive = true;
+    bool smite = false;
 
     object_type* o_ptr;
 
@@ -579,6 +580,8 @@ bool make_attack_normal(monster_type* m_ptr)
     /* Not allowed to attack */
     if (r_ptr->flags1 & (RF1_NEVER_BLOW))
         return (false);
+    if (m_ptr->smite_recovery || (!ordinary && !monster_abilities_can_react(m_ptr)))
+        return false;
 
     /* Starting any real melee attack, including one that misses, interrupts
      * a pending Pack action. */
@@ -605,6 +608,13 @@ bool make_attack_normal(monster_type* m_ptr)
             break;
     }
     blows = b;
+    if (blows == 0)
+        return false;
+
+    monster_abilities_mark_melee(m_ptr, ordinary);
+    smite = monster_try_smite(m_ptr, ordinary);
+    if (smite)
+        msg_format("%^s smites you with all its strength!", m_name);
 
     /* Monsters might notice */
     attacked_player = true;
@@ -677,6 +687,7 @@ bool make_attack_normal(monster_type* m_ptr)
 
         // determine the monster's attack score
         total_attack_mod = total_monster_attack(m_ptr, att);
+        total_attack_mod += monster_concentration_bonus(m_ptr, ordinary);
 
         if (monster_charge(m_ptr))
         {
@@ -854,10 +865,14 @@ bool make_attack_normal(monster_type* m_ptr)
             if (no_crit)
                 crit_bonus_dice = 0;
 
-            total_damage_dice = dd + crit_bonus_dice + elem_bonus_dice;
+            total_damage_dice = dd + crit_bonus_dice + elem_bonus_dice
+                + monster_vengeance_bonus_dice(m_ptr);
+            monster_consume_vengeance(m_ptr);
 
             /* Roll out the damage */
             dam = damroll(total_damage_dice, ds);
+            if (smite)
+                dam = total_damage_dice * ds;
 
             /* Determine the armour based damage-reduction for the player */
             /* Note that some attack types should ignore this             */
@@ -2082,4 +2097,14 @@ bool make_attack_normal(monster_type* m_ptr)
 
     /* Assume we attacked */
     return (true);
+}
+
+bool make_attack_normal(monster_type* m_ptr)
+{
+    return make_attack_melee(m_ptr, true);
+}
+
+bool make_attack_reaction(monster_type* m_ptr)
+{
+    return make_attack_melee(m_ptr, false);
 }

@@ -16,7 +16,8 @@
 #define VLT 9
 #define CUR 10
 #define UNQ 11
-#define MAX_FLAG_SETS 12
+#define RF5 12
+#define MAX_FLAG_SETS 13
 
 errr parse_tile_line(const char* buf, byte* x_attr, char* x_char);
 errr parse_object_storage_line(

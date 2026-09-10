@@ -176,10 +176,11 @@ void do_cmd_exchange(void)
 
     // attack of opportunity
     if ((m_ptr->alertness >= ALERTNESS_ALERT) && !m_ptr->confused
-        && !(r_ptr->flags2 & (RF2_MINDLESS)))
+        && !(r_ptr->flags2 & (RF2_MINDLESS))
+        && monster_abilities_can_react(m_ptr))
     {
         msg_print("It attacks you as you slip past.");
-        make_attack_normal(m_ptr);
+        make_attack_reaction(m_ptr);
     }
 
     // Alert the monster

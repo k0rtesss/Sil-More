@@ -461,6 +461,14 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         name = "shallow water: movement 150%; splash -3 Stealth; no scent trail; cold freezes it";
     else if (feat == FEAT_ICE)
         name = "solid ice: grounded -2 attack and -2 Evasion; normal movement; fire melts it";
+    else if (feat == FEAT_POISON)
+    {
+        static char poison_name[180];
+        strnfmt(poison_name, sizeof(poison_name),
+            "Poisonous seep (up to %d stacks/contact before poison protection; successful leaps avoid contact)",
+            player_poison_terrain_dose_at(y, x));
+        name = poison_name;
+    }
     else if (feat == FEAT_LAVA)
     {
         static char lava_name[180];

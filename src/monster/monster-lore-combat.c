@@ -662,6 +662,18 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
         vp[vn++] = "riposte";
     if (l_ptr->flags2 & (RF2_FLANKING))
         vp[vn++] = "flanking";
+    if (l_ptr->flags5 & RF5_SMITE)
+        vp[vn++] = "smite";
+    if (l_ptr->flags5 & RF5_SPRINTING)
+        vp[vn++] = "sprinting";
+    if (l_ptr->flags5 & RF5_CONCENTRATION)
+        vp[vn++] = "concentration";
+    if (l_ptr->flags5 & RF5_DODGING)
+        vp[vn++] = "dodging";
+    if (l_ptr->flags5 & RF5_BLOCKING)
+        vp[vn++] = "blocking";
+    if (l_ptr->flags5 & RF5_VENGEANCE)
+        vp[vn++] = "vengeance";
     if (l_ptr->flags4 & (RF4_SNG_BINDING))
         vp[vn++] = "song of binding";
     if (l_ptr->flags4 & (RF4_SNG_PIERCING))
@@ -698,6 +710,47 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
 
         /* End */
         text_out(".  ");
+    }
+
+    /* Describe the timing and counterplay of observed stateful abilities. */
+    if (l_ptr->flags5 & RF5_SMITE)
+    {
+        text_out(format("Smite spends %d effort on an immediate melee strike "
+            "with a normal hit roll and maximum damage on every die, including "
+            "critical dice. The next full action is spent recovering, even "
+            "after a miss; reactions are also prevented during recovery.  ",
+            MON_MANA_COST));
+    }
+    if (l_ptr->flags5 & RF5_SPRINTING)
+    {
+        text_out("Sprinting raises Fast speed to Very Fast after four moves "
+            "in a continuing direction. A sharp turn, attack, alarm, wait or "
+            "lost action breaks the run.  ");
+    }
+    if (l_ptr->flags5 & RF5_CONCENTRATION)
+    {
+        text_out(format("Concentration adds +1 accuracy after each ordinary "
+            "melee attack, hit or miss, up to +%d. Moving, waiting, casting or "
+            "losing an action resets it. Reactions neither build the bonus "
+            "nor benefit from it.  ", MAX(0, r_ptr->per / 2)));
+    }
+    if (l_ptr->flags5 & RF5_DODGING)
+    {
+        text_out("Dodging grants +3 evasion after moving, until the next "
+            "action ends.  ");
+    }
+    if (l_ptr->flags5 & RF5_BLOCKING)
+    {
+        text_out("Blocking doubles the shield's protection dice while "
+            "holding position; body armour keeps its ordinary value. Moving "
+            "loses this extra shield protection until a stationary action.  ");
+    }
+    if (l_ptr->flags5 & RF5_VENGEANCE)
+    {
+        text_out("Taking melee damage that gets through protection charges "
+            "Vengeance, adding one damage die to the next melee hit. The "
+            "charge does not stack; a miss preserves it, and a hit spends it "
+            "even if blocked. Ranged damage does not charge Vengeance.  ");
     }
 
     /* Collect special abilities. */

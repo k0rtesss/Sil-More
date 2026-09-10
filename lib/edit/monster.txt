@@ -957,7 +957,7 @@ D: the halls in hollow rage, grasping at the living with fingers
 D: that drain the nimbleness from flesh and bone.
 
 
-N:76:Boldog, the Merciless
+N:76:Baugon, the Merciless
 O:FACING_LEFT
 Q:d41e3b6bfafb596f
 W:7:20
@@ -975,11 +975,10 @@ F:HURT_LITE
 S:SINDARBANE
 S:SPELL_PCT_15 | POW_11
 S:ARROW2
-D:One of the mightiest orc-captains to serve Morgoth, Boldog was sent
-D: with a host to break through the Girdle of Melian and seize Lúthien
-D: Tinuviel for the Dark Lord. Though that errand failed, he has since
-D: led countless raids against the Eldar, earning his name through
-D: merciless slaughter of any who fall into his hands.
+D:An Orc captain hardened by years of raids against the Eldar, Baugon
+D: rules his warband through fear. He takes pride in prisoners brought
+D: alive to Angband, and his followers know what awaits those who fail
+D: him. His cruel strength is an Orc's own, with no spirit behind it.
 
 
 ##### 8 #####
@@ -1017,10 +1016,11 @@ T:9:6
 I:2:10d4:1
 A:15:3:1:7
 P:[+5,3d4]
+H:1
 B:HIT:HURT:(+7,2d8)
 F:MAN | MALE | DROP_33 | OPEN_DOOR | BASH_DOOR | FRIENDS
 F:SMART
-F:FLANKING
+F:BLOCKING
 D:A warrior of the Easterlings, one of those peoples who crossed into
 D: Beleriand and swore oaths to the lords of the Eldar -- only to break
 D: them when Morgoth's promises proved sweeter. He fights with a crude
@@ -3073,10 +3073,10 @@ O:FACING_RIGHT
 I:4:35d4:0
 A:20:20:5:20
 P:[+30,2d4]
-B:BITE:POISON:(+31,2d17)
+B:BITE:POISON:(+31,2d12)
 F:UNIQUE | MALE | FORCE_DEPTH
 F:SMART
-F:WOLF
+F:WOLF | VENGEANCE
 S:SINDARBANE
 #D:The first guard of Angband, Carcharoth, also known as 'The Red Maw',
 #D: is the greatest wolf to ever walk the earth.  He is highly
@@ -3393,3 +3393,182 @@ D: correction. The dragon appears unmoved by the objection. Its claws
 D: have left deep furrows in the stone, yet the fragile scrolls beneath
 D: them remain untouched.
 
+
+
+# New embodied spirits and the abandoned winged strain.
+# Reserved deep-route guardians have rarity zero and no authored token yet.
+# FORCE_DEPTH is only a minimum-depth restriction, never an exact home.
+
+N:403:Ringwion, the Pale Blade
+Q:4bb71145c50a9794
+O:FACING_RIGHT
+W:16:15
+G:R:B
+T:21:13
+I:2:26d4:0
+A:10:6:3:17
+P:[+20,2d4]
+B:HIT:COLD:(+17,2d9)
+F:UNIQUE | MALE | FORCE_DEPTH
+F:RAUKO | SMART | HAS_WEAPON | BASH_DOOR
+F:RES_COLD | HURT_FIRE | RIPOSTE | CONCENTRATION
+F:DROP_1D2 | DROP_GOOD
+D:Frost follows the edge of his narrow blade. He watches your hands
+D: with an ancient patience, and gives no ground until you strike.
+D: Then the pale steel moves.
+
+N:404:Helcamo, the Hoarfrost
+Q:7222d6d7c82f6571
+O:FACING_RIGHT
+W:22:0
+G:R:W
+T:21:14
+I:2:48d4:0
+A:10:8:2:23
+P:[+18,4d4]
+B:HIT:COLD:(+25,3d10)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:RAUKO | SMART | TERRITORIAL | HAS_WEAPON | BASH_DOOR
+F:RES_COLD | HURT_FIRE
+F:DROP_2D2 | DROP_GREAT
+S:SPELL_PCT_20
+S:SLOW
+D:Rime lies thick upon his shoulders. Behind him the broken doors
+D: are sealed with ice, and beneath that ice something still wears
+D: its chains. He lifts his weapon, and your breath hangs motionless
+D: between you.
+
+N:405:Lhamthanc, the Forked Tongue
+Q:cbfc75c5e401080b
+O:FACING_RIGHT
+W:24:0
+G:d:u
+T:21:18
+I:3:60d4:0
+A:40:10:1:23
+P:[+18,3d4]
+B:CLAW:HURT:(+28,3d13)
+B:BITE:WOUND:(+22,2d23)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:DRAGON | SMART | TERRITORIAL | FLYING | BASH_DOOR
+F:DROP_2D2 | DROP_GREAT
+S:SPELL_PCT_15
+S:SCARE
+D:Brown wings unfold above a heap of stolen things. No smoke escapes
+D: his jaws, only a divided tongue and a whisper of malice. The keepers
+D: abandoned this chamber long ago; what they bred here still watches
+D: the door.
+
+N:406:Angacirca, Reaper of Thralls
+Q:9b6ad11d2169260e
+O:FACING_RIGHT
+W:16:15
+G:o:D
+T:21:19
+I:2:32d4:0
+A:10:7:2:17
+P:[+17,3d4]
+B:HIT:WOUND:(+21,3d7)
+B:HIT:DISARM:(+18)
+F:UNIQUE | MALE | FORCE_DEPTH
+F:ORC | RAUKO | SMART | HAS_WEAPON | HAS_ARMOUR
+F:OPEN_DOOR | UNLOCK_DOOR | BASH_DOOR | ZONE_OF_CONTROL
+F:DROP_1D2 | DROP_GOOD
+D:An Orc's face looks out beneath the dark helm, but the malice behind
+D: it is older than the Orcs. His hooked blade is polished along its
+D: inward edge. The guards give way when he passes.
+
+N:407:Langon, the Rushing Herald
+Q:322c93f003d1b00a
+O:FACING_RIGHT
+W:15:15
+G:R:W
+T:21:20
+I:3:16d4:0
+A:10:8:5:15
+P:[+18,1d4]
+B:HIT:HURT:(+17,2d6)
+F:UNIQUE | MALE | FORCE_DEPTH
+F:RAUKO | SMART | HAS_WEAPON | FLYING | PASS_DOOR
+F:EXCHANGE_PLACES | RES_POIS | SPRINTING
+F:DROP_1D2 | DROP_GOOD
+S:SPELL_PCT_15
+S:SHRIEK
+D:His cloak streams behind him though the air is still. Beneath it
+D: you glimpse a drawn sword and a form that will not remain at rest.
+D: He turns towards the deeper halls, already drawing breath to cry
+D: aloud.
+
+N:408:Dúron, Keeper of the Unlit Ways
+Q:a1850b923ec90b6d
+O:FACING_RIGHT
+W:20:15
+G:R:D
+T:21:21
+I:2:24d4:-3
+A:10:8:5:20
+P:[+18,3d4]
+B:HIT:DARK:(+22,2d9)
+F:UNIQUE | MALE | FORCE_DEPTH
+F:RAUKO | SMART | HURT_LITE | PASS_DOOR
+F:FLANKING | DODGING
+F:DROP_1D2 | DROP_GOOD
+D:The figure stands apart from the wall, yet its shadow joins every
+D: shadow about it. No flame is reflected in its face. When it moves,
+D: the doorway behind it seems to change its place.
+
+N:409:Fankil, the Sower of Strife
+Q:e03ee4217593ca39
+O:FACING_RIGHT
+W:14:0
+G:@:r
+T:21:22
+I:2:24d4:0
+A:10:7:3:17
+P:[+15,2d4]
+B:HIT:HURT:(+16,2d7)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:MAN | RAUKO | SMART | HAS_WEAPON | OPEN_DOOR | UNLOCK_DOOR
+F:DROP_1D2 | DROP_GOOD
+S:SPELL_PCT_25 | POW_8
+S:RALLY | SCARE
+D:Red and gold still adorn the envoy's dark raiment. He speaks of
+D: gifts, of lands beyond the mountains, and of the weakness of those
+D: you trusted. At his quiet command the guards turn towards you.
+
+N:410:Ondotur, the Buried Lord
+Q:23eb4b3c8f754c0a
+O:FACING_RIGHT
+W:23:0
+G:R:s
+T:21:23
+I:1:64d4:0
+A:10:8:0:24
+P:[+12,6d4]
+B:HIT:SHATTER:(+24,5d8)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:RAUKO | SMART | TUNNEL_WALL | STONE | BASH_DOOR
+F:RES_CRIT | RES_FIRE | RES_COLD | RES_POIS | NO_FEAR
+F:DROP_2D2 | DROP_GREAT
+D:What seemed a fallen pillar rises from the floor. Dust pours from
+D: hollows where a face might be, and beneath the dust the stone is
+D: unbroken. The roots of the mountain groan as it turns.
+
+N:411:Nambatur, Custodian of Grond's Forge
+Q:f1f38a4b25dfcc33
+O:FACING_RIGHT
+W:23:0
+G:R:W
+T:21:24
+I:2:60d4:0
+A:10:8:1:24
+P:[+20,5d4]
+B:HIT:BATTER:(+27,4d9)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:RAUKO | SMART | HAS_WEAPON | HAS_ARMOUR | OPEN_DOOR | BASH_DOOR
+F:RES_FIRE | SMITE
+F:DROP_2D2 | DROP_GREAT
+D:Pale hands close about the haft of a great hammer. Behind the smith
+D: stands an anvil greater than a king's tomb, scored by work no mortal
+D: arm could have wrought. The master's weapon is gone, but its keeper
+D: has not abandoned the fire.

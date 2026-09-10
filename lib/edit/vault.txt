@@ -91,6 +91,10 @@
 #     e - an orc skeleton
 #     w - a web
 #     ? - a monster +1 level and/or an item +1 level
+#     i - Lhamthanc (exact unique, abandoned breeding chamber)
+#     l - Fankil (exact unique, embassy)
+#     m - Easterling warrior (exactly one, without a generated group)
+#     p - Easterling archer (exactly one, without a generated group)
 #     @ - easterling spy
 #     H - silent watcher
 #     o - orc champion
@@ -4103,3 +4107,47 @@ D:#.............................#
 D:###############s###############
 D:#############.....#############
 D:#############$$$$$#############
+
+
+# A late optional encounter on existing levels; it has no travel destination.
+N:521:The Abandoned Breeding Chamber
+X:8:19:15:20
+M:Old chains hang above an abandoned breeding pit. Broad brown wings stir over the hoard; in finding this forgotten chamber, you gain 500 experience.
+H:An abandoned breeding chamber lies {DIST} {DIR}; the keepers are gone, but their winged experiment remains.
+D:#########################
+D:#.......................#
+D:#...........~...........#
+D:#...!.......!.......!...#
+D:#.......................#
+D:#...____.........____...#
+D:#...____....i....____...#
+D:#...____.........____...#
+D:#...____.........____...#
+D:#.......................#
+D:#.........#####.........#
+D:#.........#####.........#
+D:#.......................#
+D:#.......................#
+D:#.......+.......+.......#
+D:########$#######$########
+
+# Exact tokens place two warriors and two archers, ignoring group flags.
+N:522:The Envoy's Embassy
+X:7:14:15:15
+F:LIGHT
+M:The envoy speaks softly behind his guards. A chest of promised gifts stands against the wall.
+D:#####################
+D:#...................#
+D:#.........~.........#
+D:#.........l.........#
+D:#......p.....p......#
+D:#....#.........#....#
+D:#....#.........#....#
+D:#....#..m...m..#....#
+D:#....#.........#....#
+D:#...................#
+D:#...................#
+D:#...................#
+D:#...................#
+D:#......+.....+......#
+D:#######$#####$#######

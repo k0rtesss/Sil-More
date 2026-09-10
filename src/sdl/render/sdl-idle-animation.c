@@ -29,6 +29,8 @@ static SDL_Texture* water_texture;
 static bool water_load_attempted;
 static SDL_Texture* lava_texture;
 static bool lava_load_attempted;
+static SDL_Texture* poison_texture;
+static bool poison_load_attempted;
 static SDL_Texture* ice_texture;
 static bool ice_load_attempted;
 
@@ -37,7 +39,7 @@ static byte visible_liquid(int y, int x)
     u16b info;
     if (!p_ptr || !in_bounds(y, x)
         || (cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_LAVA
-            && cave_feat[y][x] != FEAT_ICE))
+            && cave_feat[y][x] != FEAT_ICE && cave_feat[y][x] != FEAT_POISON))
         return 0;
     info = cave_info[y][x];
     if (!(info & (CAVE_MARK | CAVE_SEEN))
@@ -68,9 +70,12 @@ static bool load_liquid_texture(byte feat)
         SDL_SetTextureBlendMode(ice_texture, SDL_BLENDMODE_BLEND);
         return true;
     }
-    SDL_Texture** texture = feat == FEAT_LAVA ? &lava_texture : &water_texture;
-    bool* attempted = feat == FEAT_LAVA ? &lava_load_attempted : &water_load_attempted;
-    const char* name = feat == FEAT_LAVA ? "lava_flow" : "water_surface";
+    SDL_Texture** texture = feat == FEAT_POISON ? &poison_texture
+        : feat == FEAT_LAVA ? &lava_texture : &water_texture;
+    bool* attempted = feat == FEAT_POISON ? &poison_load_attempted
+        : feat == FEAT_LAVA ? &lava_load_attempted : &water_load_attempted;
+    const char* name = (feat == FEAT_LAVA || feat == FEAT_POISON)
+        ? "lava_flow" : "water_surface";
     if (*texture || *attempted)
         return *texture != NULL;
     *attempted = true;
@@ -93,6 +98,26 @@ static bool load_liquid_texture(byte feat)
         SDL_BlitSurface(source, NULL, atlas, &dst);
         SDL_DestroySurface(source);
     }
+    if (feat == FEAT_POISON)
+    {
+        /* Exactly the lava pixels and frames, with warm channels turned green.
+         * RGBA32 guarantees byte order; retain alpha and the source geometry.
+         * Recolor once when loading, never in the idle animation update. */
+        if (!SDL_LockSurface(atlas))
+        {
+            SDL_DestroySurface(atlas);
+            return false;
+        }
+        for (int y = 0; y < atlas->h; y++)
+            for (int x = 0; x < atlas->w; x++)
+            {
+                Uint8* pixel = (Uint8*)atlas->pixels + y * atlas->pitch + x * 4;
+                Uint8 red = pixel[0];
+                pixel[0] = pixel[1] / 2;
+                pixel[1] = red;
+            }
+        SDL_UnlockSurface(atlas);
+    }
     *texture = SDL_CreateTextureFromSurface(g_state.renderer, atlas);
     SDL_DestroySurface(atlas);
     if (!*texture) return false;
@@ -112,6 +137,9 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
         if (feat == FEAT_LAVA)
             SDL_SetRenderDrawColor(g_state.renderer, live ? 240 : 90,
                 live ? 74 : 28, live ? 16 : 6, 255);
+        else if (feat == FEAT_POISON)
+            SDL_SetRenderDrawColor(g_state.renderer, live ? 37 : 14,
+                live ? 240 : 90, live ? 16 : 6, 255);
         else if (feat == FEAT_ICE)
             SDL_SetRenderDrawColor(g_state.renderer, live ? 156 : 58,
                 live ? 216 : 81, live ? 232 : 87, 255);
@@ -121,6 +149,7 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
         return true;
     }
     SDL_Texture* texture = feat == FEAT_ICE ? ice_texture
+        : feat == FEAT_POISON ? poison_texture
         : feat == FEAT_LAVA ? lava_texture : water_texture;
     int frame = live && feat != FEAT_ICE ? (int)((frame_tick / 8) % 4) : 0;
     SDL_FRect src = { frame * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE };
@@ -228,6 +257,9 @@ void sdl_idle_animation_redraw_cached_cells(
 
 void sdl_idle_animation_shutdown(void)
 {
+    SDL_DestroyTexture(poison_texture);
+    poison_texture = NULL;
+    poison_load_attempted = false;
     SDL_DestroyTexture(ice_texture);
     ice_texture = NULL;
     ice_load_attempted = false;
@@ -340,7 +372,7 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
 static bool animation_context_active(void)
 {
     SDL_WindowFlags flags;
-    if ((!fixture_texture && !water_texture && !lava_texture)
+    if ((!fixture_texture && !water_texture && !lava_texture && !poison_texture)
         || !cell_count || !g_state.window
         || !g_state.use_tiles || !sdl_mouse_gameplay_context_active()
         || g_minimap.active || g_main_menu_overlay_active
@@ -374,7 +406,8 @@ static bool cell_can_animate(const idle_cell* cell)
                          : visible_fixture(cell->y, cell->x)))
         return false;
     if (cell->liquid_feat
-        && (!(cell->liquid_feat == FEAT_LAVA ? lava_texture : water_texture)
+        && (!(cell->liquid_feat == FEAT_POISON ? poison_texture
+                : cell->liquid_feat == FEAT_LAVA ? lava_texture : water_texture)
             || !(cave_info[cell->y][cell->x] & CAVE_SEEN)))
         return false;
     if (op_ptr && !op_ptr->opt[OPT_torch_animation_always]

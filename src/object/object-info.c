@@ -567,6 +567,11 @@ static bool describe_brand(const object_type* o_ptr, u32b f1)
     }
 
     /* We are done here */
+    if (f1 & TR1_BRAND_POIS)
+        p_text_out("Venom adds poison equal to half the damage dealt after "
+                   "Protection, rounded up. Each turn, one fifth of the "
+                   "remaining poison deals damage, rounded up. "
+                   "Poison-resistant creatures are immune.  ");
     return (cnt ? true : false);
 }
 

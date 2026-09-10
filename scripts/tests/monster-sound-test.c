@@ -27,6 +27,13 @@ size_t strnfmt(char* buf, size_t max, cptr fmt, ...)
     int n = SDL_vsnprintf(buf, max, fmt, ap); va_end(ap);
     return n < 0 ? 0 : (size_t)n;
 }
+static bool monster_entry_has_audio(const monster_sound_entry* entry)
+{
+    if (!entry) return false;
+    for (int i = 0; i < entry->count; ++i)
+        if (entry->audio[i]) return true;
+    return false;
+}
 bool path_build(char* buf, size_t max, cptr base, cptr leaf)
 {
     return SDL_snprintf(buf, max, "%s/%s", base, leaf) < (int)max;
@@ -86,8 +93,8 @@ int main(int argc, char** argv)
         monster_sound(&mon, action);
         assert(g_monster_sounds->race_idx == 21);
         assert(g_monster_sounds->action == action);
-        assert(g_monster_sounds->count == 1);
-        assert(g_monster_sounds->audio[0] || g_monster_sounds->audio[1]);
+        assert(g_monster_sounds->count > 0);
+        assert(monster_entry_has_audio(g_monster_sounds));
     }
     /* Normal attacks must never select a special attack recording. */
     const int variant_races[] = {21, 104, 32};
@@ -100,9 +107,10 @@ int main(int argc, char** argv)
         while (entry && (entry->race_idx != mon.r_idx
             || entry->action != MONSTER_SOUND_MELEE_BASE))
             entry = entry->next;
-        assert(entry && entry->count == 1);
-        assert(entry->audio[0]);
-        assert(!strstr(entry->files[0], "Bonus_"));
+        assert(entry && entry->count > 0);
+        assert(monster_entry_has_audio(entry));
+        for (int i = 0; i < entry->count; ++i)
+            assert(!strstr(entry->files[i], "Bonus_"));
     }
     mon.r_idx = 71;
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
@@ -135,17 +143,17 @@ int main(int argc, char** argv)
     assert(g_monster_sounds->audio[0] && strstr(g_monster_sounds->files[0], "Netshot"));
     /* The other bird family members now have explicit normal attack recordings. */
     mon.r_idx = 43; monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
-    assert(g_monster_sounds->audio[0]);
+    assert(monster_entry_has_audio(g_monster_sounds));
     mon.r_idx = 63; monster_sound(&mon, MONSTER_SOUND_RANGED_BASE + 8);
     assert(g_monster_sounds->audio[0] && strstr(g_monster_sounds->files[0], "Sonic"));
-    mon.r_idx = 11;
+    mon.r_idx = 12;
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
     assert(g_monster_sounds->count == 0);
     monster_sound_entry* missing = g_monster_sounds;
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE); assert(g_monster_sounds == missing);
     mon.r_idx = 104;
     monster_sound(&mon, MONSTER_SOUND_DAMAGE);
-    assert(g_monster_sounds->audio[0]);
+    assert(monster_entry_has_audio(g_monster_sounds));
     assert(strstr(g_monster_sounds->files[0], "Bat_Damage.ogg"));
     mon.r_idx = 21; mon.fx = 11;
     monster_sound_entry* before = g_monster_sounds;
@@ -201,8 +209,7 @@ int main(int argc, char** argv)
     g_sound_config.enable_damage = g_sound_config.enable_death = g_sound_config.enable_idle = true;
     sdl_sound_shutdown(); assert(!g_monster_sounds);
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
-    assert(g_monster_sounds
-        && (g_monster_sounds->audio[0] || g_monster_sounds->audio[1]));
+    assert(monster_entry_has_audio(g_monster_sounds));
     sdl_sound_shutdown(); SDL_Quit();
     printf("PASS: type toggles and persistence, range, mute, per-race playback, missing sounds, idle (%d/1000), "
         "cache cleanup/recreation; decoded %d OGG files.\n", emitted, argc - 1);

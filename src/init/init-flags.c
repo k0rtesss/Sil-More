@@ -24,12 +24,20 @@
 #define VLT 9
 #define CUR 10
 #define UNQ 11
-#define MAX_FLAG_SETS 12
+#define RF5 12
+#define MAX_FLAG_SETS 13
 
 /*
  * Monster race flags for the race_info_flags1 structure
  */
 static flag_name info_flags[] = {
+
+    { "SMITE", RF5, RF5_SMITE },
+    { "SPRINTING", RF5, RF5_SPRINTING },
+    { "CONCENTRATION", RF5, RF5_CONCENTRATION },
+    { "DODGING", RF5, RF5_DODGING },
+    { "BLOCKING", RF5, RF5_BLOCKING },
+    { "VENGEANCE", RF5, RF5_VENGEANCE },
 
     /*
      * Monster race flags 2

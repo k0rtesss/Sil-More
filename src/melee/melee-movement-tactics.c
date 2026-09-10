@@ -30,6 +30,7 @@ static int tactical_hazard(monster_type* m_ptr, int y, int x)
     switch (cave_feat[y][x])
     {
     case FEAT_LAVA: return 100;
+    case FEAT_POISON: return 20;
     case FEAT_CHASM: return 75;
     case FEAT_WATER: return 8;
     case FEAT_ICE: return 6;
@@ -164,6 +165,7 @@ bool get_move_tactical(monster_type* m_ptr, int* ty, int* tx)
     int cost[TACTICAL_CELLS];
     int turns[TACTICAL_CELLS];
     int first[TACTICAL_CELLS];
+    int poison_damage[TACTICAL_CELLS] = { 0 };
     bool done[TACTICAL_CELLS] = { false };
     int py = p_ptr->py;
     int px = p_ptr->px;
@@ -238,14 +240,18 @@ bool get_move_tactical(monster_type* m_ptr, int* ty, int* tx)
             int next = ry * TACTICAL_WIDTH + rx;
             int step = monster_step_cost(m_ptr, y, x, yy, xx);
             int next_turns = turns[at] + step;
+            int poison = poison_damage[at]
+                + monster_poison_step_damage(m_ptr, y, x, yy, xx);
             /* Include hazards along the route, not just at its eventual
              * attack slot: flying through lava still burns the monster. */
             int next_cost = cost[at] + step * 4
                 + monster_terrain_penalty(m_ptr, yy, xx);
             if (step <= 0 || next_turns > TACTICAL_RADIUS
+                || (poison && m_ptr->poisoned + poison >= m_ptr->hp)
                 || next_cost >= cost[next])
                 continue;
             cost[next] = next_cost;
+            poison_damage[next] = poison;
             turns[next] = next_turns;
             first[next] = at == start ? next : first[at];
         }

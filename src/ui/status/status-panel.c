@@ -981,6 +981,8 @@ int monster_health_bar_text(
             buf[i] = 'c';
         else if (m_ptr->stunned)
             buf[i] = 's';
+        else if (m_ptr->poisoned)
+            buf[i] = 'p';
         else
             buf[i] = '*';
     }

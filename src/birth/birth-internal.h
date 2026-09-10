@@ -92,6 +92,9 @@ void finalize_character_creation_selection(void);
 
 int birth_stat_increase_cost(int stat);
 int birth_skill_cost(int base, int points);
+void birth_recommended_stats(int stats[A_MAX]);
+int birth_skill_specialty_score(int skill);
+NavResult gain_skills_birth(void);
 
 void clear_question(void);
 void birth_prompt_label(int binding, const char* fallback, char* buf,

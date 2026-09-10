@@ -200,6 +200,7 @@ void monster_exchange_places(monster_type* m_ptr)
         : cave_feat[p_ptr->py][p_ptr->px];
     p_ptr->leaping = false;
     // swap positions with the player
+    monster_abilities_forced_movement(m_ptr);
     monster_swap(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
     if (!m_ptr->r_idx || p_ptr->is_dead)
         return;
@@ -685,14 +686,14 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
             && (distance(ny, nx, p_ptr->py, p_ptr->px) == 1)
             && (m_ptr->alertness >= ALERTNESS_ALERT)
             && (m_ptr->stance != STANCE_FLEEING) && !m_ptr->confused
-            && !did_swap)
+            && !did_swap && monster_abilities_can_react(m_ptr))
         {
             char m_name[80];
 
             monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
             msg_format("%^s attacks you as it moves by.", m_name);
-            make_attack_normal(m_ptr);
+            make_attack_reaction(m_ptr);
 
             // remember that the monster can do this
             if (m_ptr->ml)

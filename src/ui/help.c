@@ -1865,8 +1865,11 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row++;
         put_role(ROLE_BODY, "- ", row, col);
         put_role(ROLE_ELEM_POISON, "Poison", row, col + 2);
-        put_role(ROLE_BODY, " builds a 0-100 counter that hurts over time and slowly decays.", row, col + 8);
+        put_role(ROLE_BODY, " builds a 0-100 counter for players and monsters.", row, col + 8);
         row++;
+        put_role(ROLE_BODY, "- Each action deals and removes one fifth of the remaining poison, rounded up.", row++, col);
+        put_role(ROLE_BODY, "- Venom adds half a hit's damage after Protection as poison, rounded up, in addition to the hit.", row++, col);
+        put_role(ROLE_BODY, "- Poison-resistant monsters are immune. Poison prevents ordinary Health recovery.", row++, col);
         put_role(ROLE_BODY, "- ", row, col);
         put_role(ROLE_ELEM_DARKNESS, "Darkness", row, col + 2);
         put_role(ROLE_BODY, " resistance equals the ", row, col + 10);
@@ -2319,6 +2322,15 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- A blocked landing puts you into the lava. Click-to-travel avoids lava; direct movement asks before entry.", row++, col);
         put_role(ROLE_BODY, "- Fire-resistant monsters take no damage. Other ground monsters die; flyers take 40 heat damage per turn.", row++, col);
         put_role(ROLE_BODY, "- Lava lights nearby squares within radius 2, with walls blocking the glow.", row++, col);
+        row++;
+        help_emit_heading("POISONOUS SEEP", row++, col);
+        put_role(ROLE_BODY, "- Poison caves contain small green seeps. Movement costs normal energy.", row++, col);
+        put_role(ROLE_WARN, "- Contact adds 6 poison stacks before resistance and poison protection. Poison caves remove one resistance level.", row++, col);
+        put_role(ROLE_BODY, "- Entry and later actions on seep apply a dose, at most once per action. Leaving does not cure poison.", row++, col);
+        put_role(ROLE_BODY, "- Each poisoned creature takes one fifth of its remaining stacks as damage per action, rounded up, consuming those stacks.", row++, col);
+        put_role(ROLE_BODY, "- Poison prevents ordinary Health recovery. Antidotes remove your existing poison.", row++, col);
+        put_role(ROLE_BODY, "- Flying or poison-resistant monsters avoid seep exposure. Susceptible monsters prefer dry routes and positions.", row++, col);
+        put_role(ROLE_BODY, "- Leap over a single seep tile to avoid contact; a blocked landing poisons you. Click-to-travel avoids seep.", row++, col);
         row++;
         help_emit_heading("SOLID ICE", row++, col);
         put_role(ROLE_BODY, "- Ice caves contain frozen pools and rivers. Ice costs normal movement energy.", row++, col);

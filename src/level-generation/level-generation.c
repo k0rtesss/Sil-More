@@ -552,6 +552,7 @@ bool cave_gen(void)
     /* place the stairs, traps, rubble, secret doors, and player */
     place_cave_water();
     place_cave_lava();
+    place_cave_poison();
 
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_ENTRY,
         "Placing stairs, rubble, doors, and player start.");

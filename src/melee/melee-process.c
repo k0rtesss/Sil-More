@@ -679,13 +679,16 @@ static void process_monster(monster_type* m_ptr)
         p_ptr->update |= (PU_UPDATE_VIEW);
     }
 
-    // shuffle along the array of previous actions
-    for (i = ACTION_MAX - 1; i > 0; i--)
+    /* Action history is advanced by the scheduler, including skipped turns. */
+
+    /* Leave harmful seep before choosing to stand and shoot or wander. */
+    if (get_move_escape_poison(m_ptr, &ty, &tx))
     {
-        m_ptr->previous_action[i] = m_ptr->previous_action[i - 1];
+        bool poison_bash = false;
+        if (make_move(m_ptr, &ty, &tx, false, &poison_bash))
+            process_move(m_ptr, ty, tx, poison_bash);
+        return;
     }
-    // put in a default for this turn
-    m_ptr->previous_action[0] = ACTION_MISC;
 
     // unwary but awake monsters can wander around the dungeon
     if (m_ptr->alertness < ALERTNESS_ALERT)
@@ -1726,6 +1729,15 @@ static void recover_monster(monster_type* m_ptr)
  * the processor time in normal situations.  If the character is resting,
  * this may rise substantially.
  */
+static void finish_monster_ability_action(
+    monster_type* m_ptr, int old_y, int old_x, bool skipped)
+{
+    if (!m_ptr->r_idx)
+        return;
+    monster_abilities_end_action(m_ptr, old_y, old_x, skipped);
+    calc_monster_speed(m_ptr->fy, m_ptr->fx);
+}
+
 void process_monsters(s16b minimum_energy)
 {
     int i;
@@ -1738,6 +1750,7 @@ void process_monsters(s16b minimum_energy)
     /* Process the monsters (backwards) */
     for (i = mon_max - 1; i >= 1; i--)
     {
+        int old_y, old_x;
         /* Player is dead or leaving the current level */
         if (p_ptr->leaving)
             break;
@@ -1757,9 +1770,25 @@ void process_monsters(s16b minimum_energy)
         if (m_ptr->energy < 100)
             continue;
 
+        old_y = m_ptr->fy;
+        old_x = m_ptr->fx;
+        monster_abilities_begin_action(m_ptr);
+
         /* Lava also affects sleeping monsters and those missing their turn. */
         if (monster_lava_begin_action(i))
         {
+            finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            monster_lava_end_action(i);
+            continue;
+        }
+
+        /* Poison follows each creature's action cadence, including sleep
+         * and skipped turns. Contact adds stacks before this action's tick. */
+        monster_poison_terrain_begin_action(i);
+        if (monster_poison_tick(i))
+        {
+            finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            monster_poison_terrain_end_action(i);
             monster_lava_end_action(i);
             continue;
         }
@@ -1773,6 +1802,8 @@ void process_monsters(s16b minimum_energy)
         /* Sleeping monsters don't get a move */
         if (m_ptr->alertness < ALERTNESS_UNWARY)
         {
+            finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            monster_poison_terrain_end_action(i);
             monster_lava_end_action(i);
             continue;
         }
@@ -1781,16 +1812,26 @@ void process_monsters(s16b minimum_energy)
         // have been knocked back...)
         if (m_ptr->skip_next_turn)
         {
+            if (m_ptr->smite_recovery == 1 && m_ptr->ml)
+            {
+                char name[80];
+                monster_desc(name, sizeof(name), m_ptr, 0);
+                msg_format("%^s recovers from the smiting blow.", name);
+            }
             // reset its previous movement to stop it charging etc.
             m_ptr->previous_action[0] = ACTION_MISC;
 
             m_ptr->skip_next_turn = false;
+            finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            monster_poison_terrain_end_action(i);
             monster_lava_end_action(i);
             continue;
         }
 
         /* Let the monster take its turn */
         process_monster(m_ptr);
+        finish_monster_ability_action(m_ptr, old_y, old_x, m_ptr->skip_this_turn);
+        monster_poison_terrain_end_action(i);
         monster_lava_end_action(i);
     }
 }
