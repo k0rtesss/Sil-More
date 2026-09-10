@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-projection.c */
 
 #include "angband.h"
+#include "support/geometry.h"
 #include "externs.h"
 #include "spell/spell-projection-internal.h"
 #include "log/log.h"
@@ -612,25 +613,8 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
                 /* Use angle comparison to delineate an arc. */
                 else if (flg & (PROJECT_ARC))
                 {
-                    int n2y, n2x, tmp, diff;
-
-                    /* Reorient current grid for table access. */
-                    n2y = y - y2 + 20;
-                    n2x = x - x2 + 20;
-
-                    /*
-                     * Find the angular difference (/2) between
-                     * the lines to the end of the arc's center-
-                     * line and to the current grid.
-                     */
-                    tmp = ABS(get_angle_to_grid[n2y][n2x] + centerline) % 180;
-                    diff = ABS(90 - tmp);
-
-                    /*
-                     * If difference is not greater then that
-                     * allowed, and the grid is in LOS, accept it.
-                     */
-                    if (diff < (degrees + 6) / 4)
+                    if (projection_arc_contains(centerline,
+                            y - y2, x - x2, degrees))
                     {
                         if (los(y2, x2, y, x))
                         {

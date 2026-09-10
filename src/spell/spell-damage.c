@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-damage.c */
 
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -2492,7 +2493,26 @@ void fire_dam_mixed(int raw_dam, int min_raw, int max_raw, int hp_dam,
 /*
  * Hurt the player with Fire
  */
+static void observe_elemental_outcome(monster_type* observer, int feature,
+    int raw, int resisted, int net)
+{
+    /* Full protection and zero rolls provide no resistance evidence. */
+    if (!observer || raw <= 0 || net <= 0)
+        return;
+    monster_ai_observe(observer, feature, resisted < raw ? 1 : -1);
+    if (feature == MON_AI_POISON)
+        monster_ai_observe(observer, MON_AI_POISON_PRESSURE, 1);
+    else
+        monster_ai_observe(observer, MON_AI_WOUNDED, 1);
+}
+
 void fire_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str)
+{
+    fire_dam_pure_observed(dd, ds, update_rolls, kb_str, NULL);
+}
+
+void fire_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
+    monster_type* observer)
 {
     int dam = damroll(dd, ds);
     int net_dam;
@@ -2509,6 +2529,9 @@ void fire_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str)
 
     log_elemental_damage_context("fire_dam_pure", kb_str, dam, prt,
         resistance, net_dam);
+
+    observe_elemental_outcome(observer, MON_AI_FIRE, dam,
+        elemental_resisted_damage(dam, resistance), net_dam);
 
     /* Abort if no damage to receive */
     if (net_dam <= 0)
@@ -2551,6 +2574,12 @@ void cold_dam_mixed(int raw_dam, int min_raw, int max_raw, int hp_dam,
  */
 void cold_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str)
 {
+    cold_dam_pure_observed(dd, ds, update_rolls, kb_str, NULL);
+}
+
+void cold_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
+    monster_type* observer)
+{
     int dam = damroll(dd, ds);
     int net_dam;
     int prt = protection_roll(GF_COLD, false);
@@ -2566,6 +2595,9 @@ void cold_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str)
 
     log_elemental_damage_context("cold_dam_pure", kb_str, dam, prt,
         resistance, net_dam);
+
+    observe_elemental_outcome(observer, MON_AI_COLD, dam,
+        elemental_resisted_damage(dam, resistance), net_dam);
 
     /* Abort if no damage to receive */
     if (net_dam <= 0)
@@ -2600,6 +2632,12 @@ void dark_dam_mixed(int dam, cptr kb_str)
  */
 void dark_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str)
 {
+    dark_dam_pure_observed(dd, ds, update_rolls, kb_str, NULL);
+}
+
+void dark_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
+    monster_type* observer)
+{
     int dam = damroll(dd, ds);
     int net_dam;
     int prt = protection_roll(GF_DARK, false);
@@ -2607,6 +2645,9 @@ void dark_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str)
 
     net_dam = dam / resistance;
     net_dam = net_dam > prt ? net_dam - prt : 0;
+
+    observe_elemental_outcome(observer, MON_AI_DARK, dam, dam / resistance,
+        net_dam);
 
     if (update_rolls)
     {
@@ -2648,6 +2689,12 @@ void pois_dam_mixed(int dam)
  */
 void pois_dam_pure(int dd, int ds, bool update_rolls)
 {
+    pois_dam_pure_observed(dd, ds, update_rolls, NULL);
+}
+
+void pois_dam_pure_observed(int dd, int ds, bool update_rolls,
+    monster_type* observer)
+{
     int dam = damroll(dd, ds);
     int net_dam;
     int prt = protection_roll(GF_POIS, false);
@@ -2663,6 +2710,9 @@ void pois_dam_pure(int dd, int ds, bool update_rolls)
 
     log_elemental_damage_context("pois_dam_pure", "poison", dam, prt,
         resistance, net_dam);
+
+    observe_elemental_outcome(observer, MON_AI_POISON, dam,
+        elemental_resisted_damage(dam, resistance), net_dam);
 
     /* Abort if no damage to receive */
     if (net_dam <= 0)

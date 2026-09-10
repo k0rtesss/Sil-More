@@ -165,17 +165,32 @@ int main(void)
     e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_SOUTH);
     assert(sdl_gameplay_tutorial_handle_event(&e) && !current.active && key_count==0);
     character_icky=0;
+    /* Both advertised Space and the existing Enter shortcut confirm cards
+     * and dispatch primary tutorial actions. */
+    {
+        const SDL_Keycode confirm_keys[]={SDLK_SPACE,SDLK_RETURN};
+        const SDL_Scancode confirm_scans[]={SDL_SCANCODE_SPACE,SDL_SCANCODE_RETURN};
+        for (int i=0;i<2;++i) {
+            show(true,"","");
+            e=key_event(SDL_EVENT_KEY_DOWN,confirm_keys[i],confirm_scans[i]);
+            assert(sdl_gameplay_tutorial_handle_event(&e) && !current.active);
+            show(false,"open-menu","inventory");
+            e=key_event(SDL_EVENT_KEY_DOWN,confirm_keys[i],confirm_scans[i]);
+            assert(sdl_gameplay_tutorial_handle_event(&e));
+            assert(key_count==2 && keys[0]=='\\' && keys[1]=='i');
+        }
+    }
     {
         tutorial_controls labels;
         show(false,"examine","");
         tutorial_last_input=TUTORIAL_INPUT_KEYBOARD;
-        tutorial_build_controls(&current,&labels);
+        tutorial_build_controls(&current,&labels,true);
         assert(labels.primary && !labels.native_command && !strcmp(labels.label[0],"Examine item"));
         assert(strstr(labels.action_hint,"Alt+x") && !strstr(labels.action_hint,"(x)"));
         character_icky=1;
         sdl_gameplay_tutorial_set_menu_preview(true,false);
         sdl_gameplay_tutorial_set_menu_preview_control("Y");
-        tutorial_build_controls(&current,&labels);
+        tutorial_build_controls(&current,&labels,true);
         assert(labels.primary && labels.native_command && labels.command=='x');
         assert(!strcmp(labels.label[0],"Preview item") && !strcmp(labels.shortcut[0],"x"));
         assert(!strstr(labels.action_hint,"Alt+x") && strstr(labels.controls_hint,"Ctrl+Tab"));
@@ -209,25 +224,25 @@ int main(void)
         assert(sdl_gameplay_tutorial_handle_event(&e));
         assert(tutorial_input_kind()==TUTORIAL_INPUT_TOUCH); /* Synthetic mouse does not change touch labels. */
         sdl_gameplay_tutorial_set_menu_preview(true,true);
-        tutorial_build_controls(&current,&labels);
+        tutorial_build_controls(&current,&labels,true);
         assert(!labels.primary); key_count=0; tutorial_activate(0,&current); assert(key_count==0);
         sdl_gameplay_tutorial_set_menu_preview(true,false);
         tutorial_last_input=TUTORIAL_INPUT_MOUSE;
-        tutorial_build_controls(&current,&labels);
+        tutorial_build_controls(&current,&labels,true);
         assert(strstr(labels.controls_hint,"Click") && !labels.shortcut[0][0]);
         tutorial_last_input=TUTORIAL_INPUT_TOUCH;
-        tutorial_build_controls(&current,&labels);
+        tutorial_build_controls(&current,&labels,true);
         assert(strstr(labels.controls_hint,"Tap") && strstr(labels.read_hint,"Swipe"));
         assert(!strstr(labels.controls_hint,"Click") && !strstr(labels.controls_hint,"Enter"));
         config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
-        tutorial_build_controls(&current,&labels);
+        tutorial_build_controls(&current,&labels,true);
         assert(!strcmp(labels.shortcut[0],"Y") && !labels.shortcut[1][0]);
         assert(strstr(labels.controls_hint,"Menu") && strstr(labels.controls_hint,"back"));
         e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_BACK);
         assert(!sdl_gameplay_tutorial_handle_event(&e)); /* Native Preview control remains native. */
         e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_START);
         assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_reading);
-        tutorial_build_controls(&current,&labels);
+        tutorial_build_controls(&current,&labels,true);
         assert(!strcmp(labels.shortcut[1],"B"));
         e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
         assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_focus==1);
@@ -247,7 +262,7 @@ int main(void)
         tutorial_activate(2,&current);
         assert(current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_NORMAL);
         assert(tutorial_focus==2 && tutorial_scroll==3);
-        tutorial_build_controls(&current,&labels);
+        tutorial_build_controls(&current,&labels,true);
         assert(!strcmp(labels.label[2],"Normal") && strstr(labels.shortcut[2],"change"));
         tutorial_activate(2,&current);
         assert(current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_EXTENDED);

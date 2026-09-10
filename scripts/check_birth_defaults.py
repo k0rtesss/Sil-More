@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Exercise production birth presets and refundable skill allocation with mocked UI.
 
-Build first with build-incremental.ps1. Does not launch the game or
-read/write saves, player config, or runtime templates.
+Requires a configured build-standard with its SDL dependencies. Compiles the
+relevant production sources directly; does not need unrelated gameplay objects,
+launch the game, or read/write saves, player config, or runtime templates.
 """
 from pathlib import Path
 import os
-import shlex
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,19 +23,19 @@ def main():
          str(BUILD / "_deps/SDL_image"), str(BUILD / "_deps/SDL_mixer"),
          env["PATH"]]
     )
-    cmake_dir = BUILD / "CMakeFiles/sil-more.dir"
-    objects = shlex.split((cmake_dir / "objects1.rsp").read_text())
-    excluded = ("/src/main.c.obj", "/src/birth/birth-skills.c.obj")
-    objects = [obj for obj in objects if not obj.endswith(excluded)]
-    response = OUT / "objects.rsp"
-    response.write_text("\n".join('"' + obj + '"' for obj in objects), encoding="utf-8")
     exe = OUT / "check.exe"
     subprocess.run(
         [
             "C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0",
+            "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
+            # MinGW unwind tables otherwise retain unused production functions.
+            "-fno-asynchronous-unwind-tables", "-fno-unwind-tables",
             "@CMakeFiles/sil-more.dir/includes_C.rsp",
             str(ROOT / "scripts/tests/birth-defaults-test.c"),
-            "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
+            str(ROOT / "src/birth/birth-allocation.c"),
+            str(ROOT / "src/birth/birth-setup.c"),
+            str(ROOT / "src/variable.c"),
+            "@CMakeFiles/sil-more.dir/linkLibs.rsp",
             "-o", str(exe),
         ],
         cwd=BUILD, env=env, check=True,

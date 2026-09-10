@@ -1,8 +1,111 @@
 /* File: level-generation.c */
 
 #include "angband.h"
+#include "cave/cave.h"
 #include "cave/cave-fixtures.h"
 #include "level-generation/level-generation-internal.h"
+#include "blitz.h"
+#include "sdl-config.h"
+#include "tutorial/tutorial.h"
+#include "tutorial/tutorial-game.h"
+#include "player/player-upkeep-internal.h"
+
+/* Generation precedes tutorial_game_start(), so read the selected Tale and
+ * saved preference directly instead of relying on the last character's state. */
+static bool tutorial_start_needs_clear_area(void)
+{
+    tutorial_status status;
+
+    if (playerturn != 0 || p_ptr->tutorial_deferred || run_mode_is_blitz()
+        || get_sdl_gameplay_tutorial_mode() == TUTORIAL_MODE_DISABLED)
+        return false;
+
+    tutorial_sync_tale();
+    status = tutorial_lesson_status("combat.first_monster");
+    return status == TUTORIAL_UNSEEN || status == TUTORIAL_IN_PROGRESS;
+}
+
+static bool tutorial_start_triggers_monster(void)
+{
+    /* Use the real visibility calculation on scratch state: rejected maps
+     * must not reveal terrain, award encounters, or change the character. */
+    typedef struct start_preview {
+        player_type player;
+        monster_type monsters[MAX_MONSTERS];
+        u16b info[MAX_DUNGEON_HGT][256];
+        s16b light[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+        u16b view[VIEW_MAX];
+        u16b temp[TEMP_MAX];
+        byte noise_cost[2][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+        byte noise_centers[2][4];
+    } start_preview;
+    start_preview *preview = mem_alloc(start_preview);
+    player_type *saved_player = p_ptr;
+    monster_type *saved_monsters = mon_list;
+    u16b (*saved_info)[256] = cave_info;
+    s16b (*saved_light)[MAX_DUNGEON_WID] = cave_light;
+    u16b *saved_view = view_g, *saved_temp = temp_g;
+    int saved_view_n = view_n;
+    bool saved_character_dungeon = character_dungeon;
+    const int noise_flows[2] = { FLOW_PLAYER_NOISE, FLOW_MONSTER_NOISE };
+    u64b saved_rng = Rand_state_export();
+    bool triggered;
+
+    if (!preview) quit("Out of memory checking the tutorial start");
+    preview->player = *p_ptr;
+    memcpy(preview->monsters, mon_list, mon_max * sizeof(*mon_list));
+    memcpy(preview->info, cave_info, sizeof(preview->info));
+    /* Glow checks overwrite monster noise; Listen needs current player noise.
+     * These fixed global arrays cannot be redirected to the scratch state. */
+    for (int i = 0; i < 2; ++i) {
+        int flow = noise_flows[i];
+        memcpy(preview->noise_cost[i], cave_cost[flow], sizeof(preview->noise_cost[i]));
+        preview->noise_centers[i][0] = flow_center_y[flow];
+        preview->noise_centers[i][1] = flow_center_x[flow];
+        preview->noise_centers[i][2] = update_center_y[flow];
+        preview->noise_centers[i][3] = update_center_x[flow];
+    }
+    p_ptr = &preview->player;
+    mon_list = preview->monsters;
+    cave_info = preview->info;
+    cave_light = preview->light;
+    view_g = preview->view;
+    temp_g = preview->temp;
+    view_n = 0;
+    character_dungeon = true;
+
+    calc_bonuses_for_preview();
+    calc_torch();
+    update_view_for_generation();
+    /* Equipped and floor weapon glow depends on the field of view. Settle
+     * light again now that the first pass has established that field. */
+    calc_torch();
+    update_view_for_generation();
+    update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
+    for (int i = 1; i < mon_max; ++i)
+        if (mon_list[i].r_idx) update_mon_for_generation(i);
+    triggered = tutorial_game_first_monster_triggered();
+
+    p_ptr = saved_player;
+    mon_list = saved_monsters;
+    cave_info = saved_info;
+    cave_light = saved_light;
+    view_g = saved_view;
+    temp_g = saved_temp;
+    view_n = saved_view_n;
+    character_dungeon = saved_character_dungeon;
+    for (int i = 0; i < 2; ++i) {
+        int flow = noise_flows[i];
+        memcpy(cave_cost[flow], preview->noise_cost[i], sizeof(preview->noise_cost[i]));
+        flow_center_y[flow] = preview->noise_centers[i][0];
+        flow_center_x[flow] = preview->noise_centers[i][1];
+        update_center_y[flow] = preview->noise_centers[i][2];
+        update_center_x[flow] = preview->noise_centers[i][3];
+    }
+    Rand_state_import(saved_rng);
+    mem_free(preview);
+    return triggered;
+}
 
 bool cave_gen(void)
 {
@@ -1501,6 +1604,7 @@ void generate_cave(void)
 {
     int y, x, i;
     bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
+    const bool protect_tutorial_start = tutorial_start_needs_clear_area();
 
     log_info("generate_cave: Function entry - about to start");
     log_debug("generate_cave: Starting cave generation");
@@ -1718,10 +1822,24 @@ if (playerturn == 0) {
             }
         }
 
+        /* Check the final population, including vaults and special monsters,
+         * before accepting the map or committing its pending quest state. */
+        if (okay && protect_tutorial_start)
+        {
+            /* Match the lighting that will be used after acceptance. */
+            apply_chasm_partition_tags();
+            apply_partition_and_room_glow_rules();
+            if (tutorial_start_triggers_monster())
+            {
+                okay = false;
+                why = "monster tutorial triggered at start";
+            }
+        }
+
         /*message*/
         if (!okay)
         {
-            if (cheat_room || cheat_hear || cheat_peek || cheat_xtra)
+            if (!why && (cheat_room || cheat_hear || cheat_peek || cheat_xtra))
                 why = "defective level";
 
             // Must reset all the artefacts that were generated on the defective
@@ -1842,6 +1960,11 @@ if (playerturn == 0) {
 
     /* The dungeon is ready */
     character_dungeon = true;
+
+    /* Reach the first input/tutorial checkpoint on the accepted map before
+     * newly spawned monsters (initial energy 0..9) can take a turn. */
+    if (protect_tutorial_start)
+        p_ptr->energy = MAX(p_ptr->energy, 100);
 
     /* Reset the number of traps on the level. */
     num_trap_on_level = 0;

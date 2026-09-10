@@ -255,7 +255,8 @@ static const char *tutorial_command_label(int command)
     return "Choose an action";
 }
 
-static void tutorial_build_controls(const tutorial_view *view, tutorial_controls *out)
+static void tutorial_build_controls(const tutorial_view *view, tutorial_controls *out,
+    bool scrollable)
 {
     enum tutorial_input_kind input=tutorial_input_kind();
     bool native=tutorial_menu_owns_input() && !view->can_continue && !tutorial_reading;
@@ -311,11 +312,11 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
     if (input==TUTORIAL_INPUT_KEYBOARD) {
         if (out->native_command) SDL_strlcpy(out->shortcut[0],"x",sizeof(out->shortcut[0]));
         else if (!native && tutorial_focus>=0 && tutorial_focus<3)
-            SDL_strlcpy(out->shortcut[tutorial_focus],"Enter",sizeof(out->shortcut[0]));
+            SDL_strlcpy(out->shortcut[tutorial_focus],"Space",sizeof(out->shortcut[0]));
         if (!native) SDL_strlcpy(out->shortcut[1],"Esc",sizeof(out->shortcut[1]));
         SDL_strlcpy(out->controls_hint,view->can_continue||tutorial_reading
-            ?"Tab: buttons | PgUp/PgDn: scroll"
-            :"Ctrl+Tab: tutorial | PgUp/PgDn: read",sizeof(out->controls_hint));
+            ?(scrollable?"Tab: buttons | PgUp/PgDn: scroll":"Tab: buttons")
+            :(scrollable?"Ctrl+Tab: tutorial | PgUp/PgDn: read":"Ctrl+Tab: tutorial"),sizeof(out->controls_hint));
         SDL_strlcpy(out->read_hint,"PgUp/Dn: read",sizeof(out->read_hint));
     } else if (input==TUTORIAL_INPUT_CONTROLLER) {
         if (out->native_command) SDL_strlcpy(out->shortcut[0],binding,sizeof(out->shortcut[0]));
@@ -326,16 +327,19 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
         }
         if (native) strnfmt(out->controls_hint,sizeof(out->controls_hint),"%s: tutorial buttons | %s: back",menu,back);
         else if (view->can_continue || tutorial_reading)
-            strnfmt(out->controls_hint,sizeof(out->controls_hint),"D-pad: scroll/buttons | %s: choose | %s: skip",confirm,back);
-        else strnfmt(out->controls_hint,sizeof(out->controls_hint),"%s: read card | %s: skip",read,back);
+            strnfmt(out->controls_hint,sizeof(out->controls_hint),"D-pad: %s | %s: choose | %s: skip",
+                scrollable?"scroll/buttons":"buttons",confirm,back);
+        else if (scrollable) strnfmt(out->controls_hint,sizeof(out->controls_hint),"%s: read card | %s: skip",read,back);
+        else strnfmt(out->controls_hint,sizeof(out->controls_hint),"%s: skip",back);
         strnfmt(out->read_hint,sizeof(out->read_hint),"%s: read",native?menu:read);
     } else if (input==TUTORIAL_INPUT_TOUCH) {
-        SDL_strlcpy(out->controls_hint,"Tap a button | Swipe this card to read",sizeof(out->controls_hint));
+        SDL_strlcpy(out->controls_hint,scrollable?"Tap a button | Swipe this card to read":"Tap a button",sizeof(out->controls_hint));
         SDL_strlcpy(out->read_hint,"Swipe: read",sizeof(out->read_hint));
     } else {
-        SDL_strlcpy(out->controls_hint,"Click a button | Wheel or drag to read",sizeof(out->controls_hint));
+        SDL_strlcpy(out->controls_hint,scrollable?"Click a button | Wheel or drag to read":"Click a button",sizeof(out->controls_hint));
         SDL_strlcpy(out->read_hint,"Wheel: read",sizeof(out->read_hint));
     }
+    if (!scrollable) out->read_hint[0]='\0';
     if (out->shortcut[2][0]) SDL_strlcat(out->shortcut[2],": change",sizeof(out->shortcut[2]));
     else SDL_strlcpy(out->shortcut[2],input==TUTORIAL_INPUT_TOUCH?"Tap to change"
         :input==TUTORIAL_INPUT_MOUSE?"Click to change":"Change mode",sizeof(out->shortcut[2]));
@@ -489,7 +493,7 @@ static void tutorial_activate(int button, const tutorial_view *view)
     else if (view->can_continue) tutorial_continue();
     else {
         tutorial_controls controls;
-        tutorial_build_controls(view,&controls);
+        tutorial_build_controls(view,&controls,false);
         if (controls.primary && controls.command) {
             /* The button names a semantic command, not a physical keymap
              * trigger. The legacy backslash prefix bypasses user keymaps. */
@@ -502,6 +506,17 @@ static void tutorial_activate(int button, const tutorial_view *view)
     sdl_gameplay_tutorial_sync();
 }
 
+/* Match the text renderer's width fitting before reserving vertical space. */
+static float tutorial_text_height(const char *text, int font_px, float width)
+{
+    TTF_Font *font;
+    int w=0,h=0;
+    if (!text[0]) return 0;
+    font=sdl_story_font_for_height_slot(font_px,SDL_STORY_FONT_SLOT_TUTORIAL);
+    if (!font || !TTF_GetStringSize(font,text,0,&w,&h)) return font_px;
+    return h*(w>width && width>0?width/w:1.0f);
+}
+
 void sdl_gameplay_tutorial_render(void)
 {
     tutorial_view view;
@@ -511,6 +526,9 @@ void sdl_gameplay_tutorial_render(void)
     bool has_anchor;
     bool compact_action;
     float margin, width, height, pad, line_h, body_y, body_h;
+    float button_h=44, button_pad, gap, footer_h, footer_y, hint_h[2];
+    float label_h[3]={0}, shortcut_h[3]={0};
+    int label_px, shortcut_px, hint_px[2], first_button, button_count;
     int font_px, line_count, visible_lines;
     char text[3072], heading[256], lines[48][SDL_TOUCH_TUTORIAL_LINE_LEN];
     TTF_Font *font;
@@ -518,20 +536,54 @@ void sdl_gameplay_tutorial_render(void)
     const SDL_Color muted = {182,191,204,255};
     sdl_gameplay_tutorial_sync();
     if (!tutorial_get_view(&view) || screen.w <= 0 || screen.h <= 0) return;
-    tutorial_build_controls(&view,&controls);
+    tutorial_build_controls(&view,&controls,false);
     compact_action=!view.can_continue && !tutorial_reading
         && !tutorial_menu_owns_input() && screen.h<360;
     margin = MAX(8.0f, MIN(screen.w, screen.h)*0.018f);
     pad = margin;
     font_px = sdl_main_menu_pane_font_px();
+    /* Keep a readable body row beside the footer on very short displays. */
+    font_px = MIN(font_px,MAX(8,(int)((screen.h-2*margin)/10)));
     if (compact_action) pad=4;
     font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
     if (!font) return;
-    line_h = font_px*1.35f;
-    width = MIN(screen.w-2*margin, 690.0f);
-    height = MIN(screen.h-2*margin, MAX(210.0f, screen.h*(tutorial_menu_owns_input()?0.32f:0.43f)));
-    if (compact_action)
-        height=MIN(MAX(100.0f,2*pad+line_h*2.5f+44),screen.h-2*margin);
+    line_h = MAX(font_px*1.35f,tutorial_text_height("Ag",font_px,0)+1);
+    width = MIN(screen.w-2*margin, MAX(690.0f,font_px*24.0f));
+    first_button=controls.primary?0:1;
+    button_count=3-first_button;
+    label_px=MAX(13,(int)(font_px*0.85f));
+    shortcut_px=MAX(11,(int)(font_px*0.65f));
+    hint_px[0]=MAX(12,font_px-3);
+    hint_px[1]=MAX(11,font_px-4);
+    button_pad=MAX(4.0f,font_px*0.15f);
+    gap=MAX(4.0f,font_px*0.15f);
+    for (int i=first_button;i<3;++i) {
+        float text_w=(width-2*pad)/button_count-18;
+        label_h[i]=tutorial_text_height(controls.label[i],label_px,text_w);
+        shortcut_h[i]=tutorial_text_height(controls.shortcut[i],shortcut_px,text_w);
+        button_h=MAX(button_h,2*button_pad+label_h[i]
+            +(shortcut_h[i]>0?gap+shortcut_h[i]:0));
+    }
+    /* Reserve full hint lines, including the scroll counter appended below. */
+    hint_h[0]=controls.action_hint[0]?tutorial_text_height("Ag",hint_px[0],width):0;
+    hint_h[1]=tutorial_text_height("Ag",hint_px[1],width);
+    footer_h=button_h+gap;
+    if (!compact_action) footer_h+=hint_h[0]+hint_h[1]+gap*(hint_h[0]>0?2:1);
+    if (view.context.text[0] && !strstr(view.body,view.context.text))
+        strnfmt(text,sizeof(text),"%s\n%s",view.body,view.context.text);
+    else SDL_strlcpy(text,view.body,sizeof(text));
+    font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
+    if (!font) return;
+    line_count = sdl_touch_tutorial_wrap_lines(text,font,width-2*pad,lines,48);
+    /* Fit the complete lesson before resorting to scrolling. Only the small
+     * live-action strip deliberately limits how much body text is shown. */
+    height=2*pad+line_h*(1.5f+(compact_action?1:MAX(1,line_count)))+footer_h+1;
+    height=MIN(screen.h-2*margin,MAX(compact_action?100.0f:210.0f,height));
+    body_h = height-2*pad-line_h*1.5f-footer_h;
+    visible_lines = MAX(0,(int)(body_h/line_h));
+    tutorial_max_scroll = MAX(0,line_count-visible_lines);
+    tutorial_scroll = MIN(tutorial_scroll,tutorial_max_scroll);
+    tutorial_build_controls(&view,&controls,tutorial_max_scroll>0);
     has_anchor = tutorial_anchor_rect(&view, &anchor);
     tutorial_card = (SDL_FRect){screen.x+(screen.w-width)/2,screen.y+screen.h-height-margin,width,height};
     if (has_anchor && anchor.y+anchor.h/2 > screen.y+screen.h/2)
@@ -564,19 +616,11 @@ void sdl_gameplay_tutorial_render(void)
     SDL_RenderRect(g_state.renderer,&tutorial_card);
     strnfmt(heading,sizeof(heading),"%s  %d/%d",view.title,view.step,view.step_count);
     sdl_touch_tutorial_draw_text_line(heading,tutorial_card.x+pad,tutorial_card.y+pad,
-        width-2*pad-(compact_action?100:0),font_px+2,gold,false);
-    if (compact_action)
+        width-2*pad-(compact_action && tutorial_max_scroll?100:0),font_px+2,gold,false);
+    if (compact_action && tutorial_max_scroll)
         sdl_touch_tutorial_draw_text_line(controls.read_hint,
             tutorial_card.x+width-pad-94,tutorial_card.y+pad+2,94,12,muted,false);
-    if (view.context.text[0] && !strstr(view.body,view.context.text))
-        strnfmt(text,sizeof(text),"%s\n%s",view.body,view.context.text);
-    else SDL_strlcpy(text,view.body,sizeof(text));
-    line_count = sdl_touch_tutorial_wrap_lines(text,font,width-2*pad,lines,48);
     body_y = tutorial_card.y+pad+line_h*1.5f;
-    body_h = height-2*pad-line_h*1.5f-(compact_action?44:96);
-    visible_lines = MAX(1,(int)(body_h/line_h));
-    tutorial_max_scroll = MAX(0,line_count-visible_lines);
-    tutorial_scroll = MIN(tutorial_scroll,tutorial_max_scroll);
     for (int i=0;i<visible_lines && i+tutorial_scroll<line_count;++i)
         sdl_touch_tutorial_draw_text_line(lines[i+tutorial_scroll],tutorial_card.x+pad,
             body_y+i*line_h,width-2*pad,font_px,white,false);
@@ -587,27 +631,28 @@ void sdl_gameplay_tutorial_render(void)
         SDL_strlcat(controls.controls_hint,progress,sizeof(controls.controls_hint));
     }
     if (!compact_action) {
+        footer_y=tutorial_card.y+height-pad-footer_h+gap;
         sdl_touch_tutorial_draw_text_line(controls.action_hint,tutorial_card.x+pad,
-            tutorial_card.y+height-pad-88,width-2*pad,MAX(12,font_px-3),muted,false);
+            footer_y,width-2*pad,hint_px[0],muted,false);
+        if (hint_h[0]>0) footer_y+=hint_h[0]+gap;
         sdl_touch_tutorial_draw_text_line(controls.controls_hint,tutorial_card.x+pad,
-            tutorial_card.y+height-pad-68,width-2*pad,MAX(11,font_px-4),muted,false);
+            footer_y,width-2*pad,hint_px[1],muted,false);
     }
-    int first_button=controls.primary?0:1;
-    int button_count=3-first_button;
     tutorial_buttons[0]=(SDL_FRect){0};
     for (int i=first_button;i<3;++i) {
         tutorial_buttons[i] = (SDL_FRect){tutorial_card.x+pad+(i-first_button)*(width-2*pad)/button_count,
-            tutorial_card.y+height-pad-44,(width-2*pad)/button_count-6,44};
+            tutorial_card.y+height-pad-button_h,(width-2*pad)/button_count-6,button_h};
         SDL_SetRenderDrawColor(g_state.renderer,i==tutorial_focus?66:34,i==tutorial_focus?58:43,47,255);
         SDL_RenderFillRect(g_state.renderer,&tutorial_buttons[i]);
         SDL_SetRenderDrawColor(g_state.renderer,i==tutorial_focus?244:90,i==tutorial_focus?202:103,111,255);
         SDL_RenderRect(g_state.renderer,&tutorial_buttons[i]);
+        float text_y=tutorial_buttons[i].y+(button_h-label_h[i]
+            -(shortcut_h[i]>0?gap+shortcut_h[i]:0))/2;
         sdl_touch_tutorial_draw_text_line(controls.label[i],tutorial_buttons[i].x+tutorial_buttons[i].w/2,
-            tutorial_buttons[i].y+(controls.shortcut[i][0]?3:10),tutorial_buttons[i].w-12,
-            controls.shortcut[i][0]?MIN(17,MAX(13,font_px-2)):MAX(13,font_px-2),white,true);
+            text_y,tutorial_buttons[i].w-12,label_px,white,true);
         if (controls.shortcut[i][0]) sdl_touch_tutorial_draw_text_line(controls.shortcut[i],
-            tutorial_buttons[i].x+tutorial_buttons[i].w/2,tutorial_buttons[i].y+25,
-            tutorial_buttons[i].w-12,12,gold,true);
+            tutorial_buttons[i].x+tutorial_buttons[i].w/2,text_y+label_h[i]+gap,
+            tutorial_buttons[i].w-12,shortcut_px,gold,true);
     }
 }
 
@@ -665,7 +710,7 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
         }
         if (!tutorial_menu_owns_input()) {
             if (sdl_key_is_escape_or_back(ev->key.key)) { tutorial_activate(1,&view); break; }
-            if (ev->key.key==SDLK_RETURN || ev->key.key==SDLK_KP_ENTER) { tutorial_activate(tutorial_focus,&view); break; }
+            if (ev->key.key==SDLK_RETURN || ev->key.key==SDLK_KP_ENTER || ev->key.key==SDLK_SPACE) { tutorial_activate(tutorial_focus,&view); break; }
         }
         return false; /* Existing keyboard translation -> semantic engine gate. */
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {

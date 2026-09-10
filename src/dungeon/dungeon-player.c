@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-player.c */
 
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
 
@@ -1349,6 +1350,7 @@ void process_player(void)
         }
     }
 
+    monster_ai_player_action();
     playerturn++;
 
     /* Count down active narrative banners by full player turns.

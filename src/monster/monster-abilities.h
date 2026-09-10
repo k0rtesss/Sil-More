@@ -17,6 +17,15 @@ bool monster_moved_last_action(const monster_type* m_ptr);
 bool monster_sprinting(const monster_type* m_ptr);
 bool monster_abilities_can_react(const monster_type* m_ptr);
 
+/* Pure counterparts for candidate evaluation: no lore or combat mutations. */
+bool monster_sprinting_preview(const monster_type* m_ptr);
+int monster_concentration_bonus_preview(const monster_type* m_ptr, bool ordinary);
+int monster_dodging_bonus_preview(const monster_type* m_ptr);
+int monster_blocking_bonus_dice_preview(const monster_type* m_ptr);
+int monster_vengeance_bonus_dice_preview(const monster_type* m_ptr);
+bool monster_can_smite(const monster_type* m_ptr, bool ordinary);
+bool monster_commit_smite(monster_type* m_ptr, bool ordinary, bool selected);
+
 int monster_concentration_bonus(const monster_type* m_ptr, bool ordinary);
 int monster_dodging_bonus(const monster_type* m_ptr);
 /* Extra dice only: ordinary protection already includes shield_dd once. */

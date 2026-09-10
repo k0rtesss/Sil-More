@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
@@ -2442,6 +2443,8 @@ bool knock_back(int y1, int x1, int y2, int x2)
     {
         if (monster_target)
         {
+            if (y1 == p_ptr->py && x1 == p_ptr->px)
+                monster_ai_witness(MON_AI_KNOCKBACK, 3, y2, x2);
             m_ptr->skip_next_turn = true;
             monster_abilities_forced_movement(m_ptr);
 
@@ -3025,6 +3028,8 @@ void py_attack_aux(int y, int x, int attack_type)
                 charge = true;
                 attack_mod += 3;
 
+                monster_ai_witness(MON_AI_CHARGE, 3, y, x);
+
                 // undo strength adjustment to the attack (if any)
                 mds = total_mds(o_ptr, str_adjustment);
 
@@ -3055,6 +3060,8 @@ void py_attack_aux(int y, int x, int attack_type)
         total_evasion_mod = total_monster_evasion(m_ptr, false);
 
         song_disguise_note_player_attack(cave_m_idx[m_ptr->fy][m_ptr->fx]);
+
+        monster_ai_player_attack(m_ptr, attack_type);
 
         hit_result = hit_roll(
             total_attack_mod, total_evasion_mod, PLAYER, m_ptr, true);

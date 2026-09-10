@@ -952,11 +952,12 @@ extern void create_smithing_item(void);
 #define MAIN_MENU_BLITZ 11
 #define MAIN_MENU_OPTIONS 12
 #define MAIN_MENU_HELP 13
-#define MAIN_MENU_ABOUT 14
-#define MAIN_MENU_SAVE 15
-#define MAIN_MENU_SAVE_QUIT 16
-#define MAIN_MENU_RETURN_GAME 17
-#define MAIN_MENU_MAX 17
+#define MAIN_MENU_TUTORIAL_CARDS 14
+#define MAIN_MENU_ABOUT 15
+#define MAIN_MENU_SAVE 16
+#define MAIN_MENU_SAVE_QUIT 17
+#define MAIN_MENU_RETURN_GAME 18
+#define MAIN_MENU_MAX 18
 extern cptr main_menu_title(int choice);
 extern int main_menu_keyboard_key(int choice);
 extern void main_menu_shortcut_label(int choice, char* buf, size_t buflen);
@@ -1258,6 +1259,7 @@ extern void lore_treasure(int m_idx, int num_item);
 extern int monster_skill(monster_type* m_ptr, int skill_type);
 extern int monster_stat(monster_type* m_ptr, int stat_type);
 extern void update_mon(int m_idx, bool full);
+extern void update_mon_for_generation(int m_idx);
 extern void update_monsters(bool full);
 extern bool detect_monster_noise(monster_type* m_ptr, int skill);
 extern s16b monster_carry(int m_idx, object_type* j_ptr);

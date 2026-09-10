@@ -1,5 +1,4 @@
 #include "angband.h"
-#include "birth/birth.h"
 #include "sdl/main-sdl-private.h"
 
 enum {
@@ -5955,12 +5954,16 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 
     for (int i = 0; i < item_count; i++)
     {
+        float button_pad_x = (beginner_defaults && items[i].choice == -4)
+            ? MAX(12.0f, h * 0.58f) : 0.0f;
+
         text_widths[i] = sdl_char_sheet_text_width(font, items[i].label);
         item_widths[i] = (float)text_widths[i];
 #if SIL_SDL_MOBILE_BUILD
         if (touch_buttons)
-            item_widths[i] += touch_button_pad_x * 2.0f;
+            button_pad_x = touch_button_pad_x;
 #endif
+        item_widths[i] += button_pad_x * 2.0f;
         total_w += item_widths[i];
         if (i + 1 < item_count)
             total_w += spacing;
@@ -6032,12 +6035,16 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         int text_w = text_widths[i];
         float item_w = item_widths[i];
         int choice = items[i].choice;
+        bool button_style = beginner_defaults && choice == -4;
         bool disabled = (choice == -2
             && !sdl_char_sheet_selected_choice_confirmable());
         bool focused = (choice >= 0)
             ? sdl_char_sheet_choice_focused(choice)
             : sdl_char_sheet_prompt_focused(choice);
 
+#if SIL_SDL_MOBILE_BUILD
+        button_style |= touch_buttons;
+#endif
         if (disabled)
             focused = false;
 
@@ -6062,7 +6069,8 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
                 hit.x = MAX(x, cursor_x - pad_x * 0.5f);
                 hit.w = MIN(x + w - hit.x, (float)text_w + 4.0f + pad_x);
             }
-            if (touch_buttons)
+#endif
+            if (button_style)
             {
                 SDL_Color fill = disabled
                     ? (SDL_Color){ 76, 76, 76, 220 }
@@ -6083,7 +6091,6 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
                     border.b, border.a);
                 SDL_RenderRect(g_state.renderer, &hit);
             }
-#endif
             if (preview_prompt)
             {
                 SDL_Color fill = focused ? (SDL_Color){ 245, 245, 245, 255 }
@@ -6103,17 +6110,9 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
                     border.b, border.a);
                 SDL_RenderRect(g_state.renderer, &hit);
             }
-            if (focused && !preview_prompt
-#if SIL_SDL_MOBILE_BUILD
-                && !touch_buttons
-#endif
-                )
+            if (focused && !preview_prompt && !button_style)
                 sdl_char_sheet_draw_focus_rect(hit, true);
-            if (preview_prompt
-#if SIL_SDL_MOBILE_BUILD
-                || touch_buttons
-#endif
-                )
+            if (preview_prompt || button_style)
             {
                 (void)sdl_char_sheet_draw_button_text(font, label,
                     disabled ? TERM_L_DARK : TERM_DARK, &hit);
@@ -13034,7 +13033,7 @@ static void sdl_character_sheet_screen_render_canvas(
     /*
      * The description is laid out together with the columns by
      * sdl_char_sheet_render_columns (it fills the height left beneath them);
-     * initial skill allocation uses this band for beginner guidance.
+     * the birth/assign screens pass an empty description to hide it entirely.
      */
     history = (p_ptr && p_ptr->history[0]) ? p_ptr->history : "";
     top_y = title_y + title_h + gap;
@@ -14014,10 +14013,9 @@ static void sdl_character_sheet_screen_render_canvas(
         {
             /*
              * Birth/assign: use one fewer column than the live character
-             * sheet so each allocation column gets more width. Beginner skill
-             * guidance shares the existing fitted description band.
+             * sheet. There is no description band here, so the grid has enough
+             * vertical room while each column gets more width.
              */
-            char beginner_guidance[1024] = "";
             int fpx = sdl_char_sheet_clampi((int)((float)canvas.h * 0.030f),
                 18, 40);
             TTF_Font* ffont = sdl_story_font_for_height(fpx);
@@ -14025,17 +14023,9 @@ static void sdl_character_sheet_screen_render_canvas(
             SDL_FRect alloc_col = { content_x, top_y, content_w, top_h };
             int ncols_bias = -1;
 
-            if (g_sdl_character_sheet_screen.context
-                    == SDL_CHARACTER_SHEET_BIRTH_SKILLS
-                && !character_generated && turn == 0
-                && !death_spectator_active())
-            {
-                birth_skill_recommendation_text(beginner_guidance,
-                    sizeof(beginner_guidance));
-            }
             sdl_char_sheet_render_columns(panels, n, content_x, top_y,
-                content_w, top_h - flh - gap, canvas.h, beginner_guidance,
-                NULL, ncols_bias, &alloc_col);
+                content_w, top_h - flh - gap, canvas.h, "", NULL, ncols_bias,
+                &alloc_col);
             sdl_char_sheet_draw_birth_status_row(ffont, alloc_col.x,
                 top_y + top_h - flh, alloc_col.w, flh, flh, 0, "");
         }

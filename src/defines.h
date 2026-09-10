@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 5  /* Stateful monster abilities and learned ability flags. */
+#define VERSION_EXTRA 6  /* Monster observations, sensory pursuit, and scent. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -455,6 +455,7 @@
  * Character turns it takes for smell to totally dissipate
  */
 #define SMELL_STRENGTH 80
+#define MON_AI_FEATURE_COUNT 29
 
 /*
  * Number of combat rolls stored in memory per round

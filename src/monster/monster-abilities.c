@@ -123,7 +123,7 @@ bool monster_moved_last_action(const monster_type* m_ptr)
         m_ptr->previous_action[m_ptr->ability_in_action ? 1 : 0]);
 }
 
-bool monster_sprinting(const monster_type* m_ptr)
+bool monster_sprinting_preview(const monster_type* m_ptr)
 {
     int first, i;
 
@@ -141,8 +141,15 @@ bool monster_sprinting(const monster_type* m_ptr)
                 m_ptr->previous_action[i]))
             return false;
     }
-    observe_ability(m_ptr, RF5_SPRINTING);
     return true;
+}
+
+bool monster_sprinting(const monster_type* m_ptr)
+{
+    bool value = monster_sprinting_preview(m_ptr);
+    if (value)
+        observe_ability(m_ptr, RF5_SPRINTING);
+    return value;
 }
 
 bool monster_abilities_can_react(const monster_type* m_ptr)
@@ -152,7 +159,7 @@ bool monster_abilities_can_react(const monster_type* m_ptr)
         && !m_ptr->confused && m_ptr->alertness >= ALERTNESS_ALERT;
 }
 
-int monster_concentration_bonus(const monster_type* m_ptr, bool ordinary)
+int monster_concentration_bonus_preview(const monster_type* m_ptr, bool ordinary)
 {
     int bonus;
 
@@ -161,20 +168,33 @@ int monster_concentration_bonus(const monster_type* m_ptr, bool ordinary)
         return 0;
     bonus = MIN(MAX(0, m_ptr->consecutive_attacks),
         MAX(0, r_info[m_ptr->r_idx].per / 2));
-    if (bonus)
-        observe_ability(m_ptr, RF5_CONCENTRATION);
     return bonus;
+}
+
+int monster_concentration_bonus(const monster_type* m_ptr, bool ordinary)
+{
+    int value = monster_concentration_bonus_preview(m_ptr, ordinary);
+    if (value)
+        observe_ability(m_ptr, RF5_CONCENTRATION);
+    return value;
+}
+
+int monster_dodging_bonus_preview(const monster_type* m_ptr)
+{
+    if (!has_ability(m_ptr, RF5_DODGING) || !monster_moved_last_action(m_ptr))
+        return 0;
+    return 3;
 }
 
 int monster_dodging_bonus(const monster_type* m_ptr)
 {
-    if (!has_ability(m_ptr, RF5_DODGING) || !monster_moved_last_action(m_ptr))
-        return 0;
-    observe_ability(m_ptr, RF5_DODGING);
-    return 3;
+    int value = monster_dodging_bonus_preview(m_ptr);
+    if (value)
+        observe_ability(m_ptr, RF5_DODGING);
+    return value;
 }
 
-int monster_blocking_bonus_dice(const monster_type* m_ptr)
+int monster_blocking_bonus_dice_preview(const monster_type* m_ptr)
 {
     int dice;
 
@@ -184,17 +204,30 @@ int monster_blocking_bonus_dice(const monster_type* m_ptr)
      * shield cannot reappear just because its owner stands still. */
     dice = MIN(r_info[m_ptr->r_idx].shield_dd,
         MAX(0, r_info[m_ptr->r_idx].pd - m_ptr->song_armor_dice_penalty));
-    if (dice)
-        observe_ability(m_ptr, RF5_BLOCKING);
     return dice;
+}
+
+int monster_blocking_bonus_dice(const monster_type* m_ptr)
+{
+    int value = monster_blocking_bonus_dice_preview(m_ptr);
+    if (value)
+        observe_ability(m_ptr, RF5_BLOCKING);
+    return value;
+}
+
+int monster_vengeance_bonus_dice_preview(const monster_type* m_ptr)
+{
+    if (!has_ability(m_ptr, RF5_VENGEANCE) || !m_ptr->vengeance)
+        return 0;
+    return 1;
 }
 
 int monster_vengeance_bonus_dice(const monster_type* m_ptr)
 {
-    if (!has_ability(m_ptr, RF5_VENGEANCE) || !m_ptr->vengeance)
-        return 0;
-    observe_ability(m_ptr, RF5_VENGEANCE);
-    return 1;
+    int value = monster_vengeance_bonus_dice_preview(m_ptr);
+    if (value)
+        observe_ability(m_ptr, RF5_VENGEANCE);
+    return value;
 }
 
 void monster_receive_melee_damage(monster_type* m_ptr, int damage)
@@ -212,16 +245,28 @@ void monster_consume_vengeance(monster_type* m_ptr)
         m_ptr->vengeance = 0;
 }
 
-bool monster_try_smite(monster_type* m_ptr, bool ordinary)
+bool monster_can_smite(const monster_type* m_ptr, bool ordinary)
 {
-    if (!ordinary || !has_ability(m_ptr, RF5_SMITE)
-        || !m_ptr->ability_in_action || m_ptr->ability_displaced
-        || !monster_abilities_can_react(m_ptr)
-        || m_ptr->mana < MON_MANA_COST)
+    return ordinary && has_ability(m_ptr, RF5_SMITE)
+        && m_ptr->ability_in_action && !m_ptr->ability_displaced
+        && monster_abilities_can_react(m_ptr)
+        && m_ptr->mana >= MON_MANA_COST;
+}
+
+bool monster_commit_smite(monster_type* m_ptr, bool ordinary, bool selected)
+{
+    if (!selected || !monster_can_smite(m_ptr, ordinary))
         return false;
     m_ptr->mana -= MON_MANA_COST;
     m_ptr->smite_recovery = 1;
     m_ptr->skip_next_turn = true;
     observe_ability(m_ptr, RF5_SMITE);
     return true;
+}
+
+/* Compatibility entry point for an already selected commitment. AI previews
+ * must use monster_can_smite(); the attack route passes its explicit choice. */
+bool monster_try_smite(monster_type* m_ptr, bool ordinary)
+{
+    return monster_commit_smite(m_ptr, ordinary, true);
 }

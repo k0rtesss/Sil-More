@@ -1,14 +1,242 @@
 #include "angband.h"
+#include "monster/monster-ai.h"
+#include "monster/monster-tactics.h"
+#include "support/geometry.h"
 #include "externs.h"
 #include "melee/melee-attack.h"
 
-static bool ranged_attack_targets_player(int attack)
+bool monster_ranged_is_song(int attack)
 {
-    if (attack < 96 || attack > 96 + 23)
-        return false;
+    return attack == 96 + 18 || attack == 96 + 19 || attack == 96 + 20;
+}
 
-    /* The hatch-spider action creates allies, but does not attack the player. */
-    return attack != 96 + 16;
+bool monster_ranged_targets_player(int attack)
+{
+    return attack >= 96 && attack <= 96 + 24 && attack != 96 + 8
+        && attack != 96 + 16 && !monster_ranged_is_song(attack)
+        && attack != 96 + 24;
+}
+
+bool monster_breath_hits_grid(const monster_type* m_ptr, int attack, int y, int x)
+{
+    const monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    int rad = r_ptr->spell_power / 2;
+    int centerline, n1y, n1x;
+    if (attack < 96 + 3 || attack > 96 + 6 || !in_bounds(y, x))
+        return false;
+    if (!rad) rad = MAX_SIGHT;
+    rad = MIN(20, rad);
+    if (distance(m_ptr->fy, m_ptr->fx, y, x) > rad) return false;
+    n1y = MIN(40, MAX(0, p_ptr->py - m_ptr->fy + 20));
+    n1x = MIN(40, MAX(0, p_ptr->px - m_ptr->fx + 20));
+    centerline = 90 - get_angle_to_grid[n1y][n1x];
+    return projection_arc_contains(centerline, y - m_ptr->fy, x - m_ptr->fx,
+               attack == 96 + 5 ? 90 : 60)
+        && los(m_ptr->fy, m_ptr->fx, y, x);
+}
+
+bool monster_ranged_attack_legal(const monster_type* m_ptr, int attack)
+{
+    const monster_race* r_ptr;
+    int bit = attack - 96, dist, path, song;
+    if (!m_ptr || !m_ptr->r_idx || bit < 0 || bit > 24 || bit == 21 || bit == 22)
+        return false;
+    r_ptr = &r_info[m_ptr->r_idx];
+    if (!(r_ptr->flags4 & (1UL << bit)) || m_ptr->confused || p_ptr->truce
+        || m_ptr->smite_recovery || m_ptr->skip_this_turn || m_ptr->skip_next_turn
+        || spell_info_RF4[bit][COL_SPELL_MANA_COST] > m_ptr->mana)
+        return false;
+    if (monster_ranged_is_song(attack))
+    {
+        song = bit == 18 ? SNG_BINDING : bit == 19 ? SNG_PIERCING : SNG_OATHS;
+        if (m_ptr->song_lockout_timer > 0 && m_ptr->song != song)
+            return false;
+        if (m_ptr->r_idx == R_IDX_MORGOTH)
+        {
+            if (!p_ptr->on_the_run && a_info[ART_MORGOTH_3].cur_num == 0)
+                return false;
+            if (song == SNG_BINDING && p_ptr->depth == MORGOTH_DEPTH
+                && p_ptr->morgoth_hall_entered && !p_ptr->on_the_run)
+                return false;
+        }
+    }
+    /* Support acts on self/allies and is independent of a player firing line. */
+    if (!monster_ranged_targets_player(attack))
+        return true;
+    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_ai_can_see_player(m_ptr))
+        return false;
+    dist = distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
+    path = projectable(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px, PROJECT_CHCK);
+    if (path == PROJECT_NO) return false;
+    if ((bit <= 2 || bit == 23) && path != PROJECT_CLEAR) return false;
+    if (bit <= 2 || bit == 7)
+    {
+        if (dist == 1 || m_ptr->stance == STANCE_FLEEING) return false;
+        if ((bit == 0 && dist > 10) || (bit == 1 && dist > 16)
+            || (bit == 2 && dist > 5)) return false;
+    }
+    if (bit >= 3 && bit <= 6)
+        return m_ptr->stance != STANCE_FLEEING
+            && monster_breath_hits_grid(m_ptr, attack, p_ptr->py, p_ptr->px);
+    if (bit == 7)
+    {
+        int dy = p_ptr->py > m_ptr->fy ? 1 : p_ptr->py < m_ptr->fy ? -1 : 0;
+        int dx = p_ptr->px > m_ptr->fx ? 1 : p_ptr->px < m_ptr->fx ? -1 : 0;
+        return dist <= 3 && in_bounds(m_ptr->fy + dy, m_ptr->fx + dx)
+            && cave_m_idx[m_ptr->fy + dy][m_ptr->fx + dx] <= 0;
+    }
+    return bit != 9 || dist <= 2;
+}
+
+bool monster_ranged_commit(monster_type* m_ptr, int attack)
+{
+    if (!monster_ranged_attack_legal(m_ptr, attack)) return false;
+    if (!monster_ranged_is_song(attack))
+        m_ptr->mana -= spell_info_RF4[attack - 96][COL_SPELL_MANA_COST];
+    return true;
+}
+
+static int nearby_support_utility(const monster_type* m_ptr, bool rally)
+{
+    int i, utility = 0;
+    for (i = 1; i < mon_max; ++i)
+    {
+        const monster_type* ally = &mon_list[i];
+        const monster_race* race;
+        int d;
+        if (!ally->r_idx || ally == m_ptr) continue;
+        d = distance(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx);
+        if (d > MAX_SIGHT || !los(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx))
+            continue;
+        race = &r_info[ally->r_idx];
+        if (rally)
+        {
+            if (!(race->flags3 & (RF3_ORC | RF3_MAN | RF3_RAUKO))) continue;
+            if (ally->stance == STANCE_FLEEING || ally->morale < 0)
+                utility += 22;
+            else if ((ally->mflag & MFLAG_ACTV) && ally->tmp_morale < 100)
+                utility += 10;
+        }
+        else
+        {
+            if (race->d_char != r_info[m_ptr->r_idx].d_char) continue;
+            if (ally->alertness < ALERTNESS_ALERT) utility += 18;
+            else if (ally->mflag & MFLAG_ACTV) utility += 4;
+        }
+    }
+    if (singing(SNG_SILENCE)) utility /= 2;
+    return MIN(90, utility);
+}
+
+static int ranged_resistance_feature(int attack)
+{
+    switch (attack - 96)
+    {
+    case 3: return MON_AI_FIRE;
+    case 4: return MON_AI_COLD;
+    case 5: return MON_AI_POISON;
+    case 6: return MON_AI_DARK;
+    case 12: return MON_AI_FEAR;
+    case 13: return MON_AI_CONFUSION;
+    case 14: return MON_AI_HOLD;
+    case 15: return MON_AI_SLOW;
+    case 23: return MON_AI_WEB;
+    default: return -1;
+    }
+}
+
+/* Perceived collateral uses the same arc angle, radius and LOS as execution.
+ * A serpent's policy ignores allies, but legality and self-preservation remain. */
+static int breath_collateral_cost(const monster_type* m_ptr, int attack)
+{
+    int i, cost = 0;
+    const monster_race* race = &r_info[m_ptr->r_idx];
+    if ((race->flags3 & RF3_SERPENT) || (race->flags2 & RF2_MINDLESS)) return 0;
+    for (i = 1; i < mon_max; ++i)
+    {
+        const monster_type* ally = &mon_list[i];
+        u32b immunity = attack == 99 ? RF3_RES_FIRE : attack == 100 ? RF3_RES_COLD
+            : attack == 101 ? RF3_RES_POIS : 0;
+        int harm;
+        if (!ally->r_idx || ally == m_ptr
+            || !monster_breath_hits_grid(m_ptr, attack, ally->fy, ally->fx)) continue;
+        if (r_info[ally->r_idx].flags3 & immunity) continue;
+        if (attack == 102 && ((r_info[ally->r_idx].flags4 & RF4_BRTH_DARK)
+                || (r_info[ally->r_idx].flags3 & RF3_UNDEAD)
+                || r_info[ally->r_idx].light < 0)) continue;
+        harm = (race->spell_power + 2) * (get_sides(attack) + 1) / 2;
+        harm /= MAX(1, distance(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx));
+        /* Poison adds a delayed commitment even when immediate HP is safe. */
+        if (attack == 101) harm = MAX(1, harm / 2);
+        cost += harm * 2;
+    }
+    return cost;
+}
+
+int monster_ranged_utility(const monster_type* m_ptr, int attack)
+{
+    const monster_race* race = &r_info[m_ptr->r_idx];
+    int bit = attack - 96, utility = 0, feature, evidence = 0, allies = 0, i;
+    if (!monster_ranged_attack_legal(m_ptr, attack)) return 0;
+    feature = ranged_resistance_feature(attack);
+    if (feature >= 0) evidence = monster_ai_confidence(m_ptr, feature);
+    switch (bit)
+    {
+    case 0: case 1: utility = (bit + 1 + MAX(1, race->spell_power)) * 8; break;
+    case 2: utility = (MAX(1, race->spell_power) + 2) * 6; break;
+    case 3: case 4: case 5: case 6:
+        utility = (race->spell_power + 2) * (get_sides(attack) + 1) * 3 / 2;
+        utility /= MAX(1, distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px) / 2);
+        utility = utility * MAX(25, 100 - evidence * 20) / 100;
+        if (bit == 5)
+            utility = utility * MAX(35, 100 - 20 * MAX(0,
+                monster_ai_confidence(m_ptr, MON_AI_POISON_PRESSURE))) / 100;
+        utility -= breath_collateral_cost(m_ptr, attack);
+        break;
+    case 7: utility = 30; break;
+    case 8: utility = nearby_support_utility(m_ptr, false); break;
+    case 9: utility = 28; break;
+    case 10:
+        utility = (cave_info[p_ptr->py][p_ptr->px] & CAVE_GLOW) ? 25 : 0;
+        break;
+    case 11: utility = 12; break;
+    case 12: case 13: case 14: case 15: case 23:
+        /* Control matters when someone can follow it up. Existing status
+         * counters are never consulted: repeated outcome evidence discounts it. */
+        for (i = 1; i < mon_max; ++i)
+        {
+            const monster_type* ally = &mon_list[i];
+            if (ally != m_ptr && ally->r_idx && (ally->mflag & MFLAG_ACTV)
+                && distance(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx) <= 4
+                && los(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx)) ++allies;
+        }
+        utility = MAX(0, 28 + MIN(18, allies * 6) - evidence * 9);
+        if (bit == 12 && m_ptr->stance == STANCE_FLEEING) utility += 10;
+        if (bit == 23)
+        {
+            if (cave_feat[p_ptr->py][p_ptr->px] == FEAT_TRAP_WEB)
+                utility /= 3;
+            else if (cave_feat[p_ptr->py][p_ptr->px] != FEAT_FLOOR)
+                utility = 0;
+        }
+        break;
+    case 16: utility = mon_cnt < MAX_MONSTERS - 50 ? 25 : 0; break;
+    case 17: utility = 14; break;
+    case 18: utility = 24 + (m_ptr->song == SNG_BINDING ? 8 : 0); break;
+    case 19: utility = monster_ai_can_see_player(m_ptr) ? 0 : 20; break;
+    case 20: utility = mon_cnt < MAX_MONSTERS - 50 ? 35 : 12; break;
+    case 24: utility = nearby_support_utility(m_ptr, true); break;
+    default: break;
+    }
+    utility -= monster_ai_poison_damage(m_ptr, m_ptr->fy, m_ptr->fx, 1) * 2;
+    if (!monster_ai_poison_safe(m_ptr, m_ptr->fy, m_ptr->fx, 1)) return 0;
+    return MAX(0, utility);
+}
+
+static bool observe_status(monster_type* m_ptr, int feature, bool allowed)
+{
+    monster_ai_observe(m_ptr, feature, allowed ? -1 : 1);
+    return allowed;
 }
 
 /*********************************************************************/
@@ -185,6 +413,8 @@ void shriek(monster_type* m_ptr)
     update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
     monster_perception(false, false, -10);
 
+    monster_ai_share_warning(m_ptr);
+
     // makes monster noise too
     m_ptr->noise += 10;
 }
@@ -202,7 +432,7 @@ void shriek(monster_type* m_ptr)
  */
 bool make_attack_ranged(monster_type* m_ptr, int attack)
 {
-    int spower, manacost;
+    int spower;
 
     int m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
 
@@ -220,23 +450,16 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
     /* Can the player see the monster casting the spell? */
     bool seen = (!blind && m_ptr->ml);
 
-    /* Determine mana cost */
-    if (attack >= 128)
-        return (false);
-    else if (attack >= 96)
-        manacost = spell_info_RF4[attack - 96][COL_SPELL_MANA_COST];
-    else
-        return (false);
+    /* Recheck legality and pay declared non-song costs before any effect. */
+    if (!monster_ranged_commit(m_ptr, attack)) return false;
+    /* Casting is a completed nonmovement action, never a deliberate wait. */
+    m_ptr->previous_action[0] = ACTION_ARCHERY;
 
-    if (ranged_attack_targets_player(attack))
+    if (monster_ranged_targets_player(attack))
         player_pack_action_interrupt();
 
-    /* Spend mana (for non-songs) */
-    if (attack < 96 + RF4_SNG_HEAD)
-        m_ptr->mana -= manacost; // Sil-x: this is a hack to only have you pay
-                                 // mana for things other than songs
-
-    monster_set_visual_facing_target_immediate(m_ptr, p_ptr->py, p_ptr->px);
+    if (monster_ranged_targets_player(attack))
+        monster_set_visual_facing_target_immediate(m_ptr, p_ptr->py, p_ptr->px);
 
     /*** Get some info. ***/
 
@@ -445,7 +668,7 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
             }
         }
 
-        if (allow_player_fear(m_ptr))
+        if (observe_status(m_ptr, MON_AI_FEAR, allow_player_fear(m_ptr)))
         {
             (void)set_afraid(p_ptr->afraid + damroll(2, 4));
         }
@@ -506,7 +729,7 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         {
             msg_format("%^s looks into your eyes.", m_name);
         }
-        if (!allow_player_fear(m_ptr) && !(p_ptr->afraid))
+        if (!observe_status(m_ptr, MON_AI_FEAR, allow_player_fear(m_ptr)) && !(p_ptr->afraid))
         {
             msg_print("You are unafraid.");
         }
@@ -525,7 +748,7 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
             msg_format("%^s mutters.", m_name);
         else
             msg_format("%^s glares at you.", m_name);
-        if (allow_player_confusion(m_ptr))
+        if (observe_status(m_ptr, MON_AI_CONFUSION, allow_player_confusion(m_ptr)))
         {
             (void)set_confused(p_ptr->confused + damroll(2, 4));
         }
@@ -541,7 +764,7 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         else
             msg_format("%^s stares deep into your eyes.", m_name);
 
-        if (!allow_player_entrancement(m_ptr))
+        if (!observe_status(m_ptr, MON_AI_HOLD, allow_player_entrancement(m_ptr)))
         {
             if (!p_ptr->entranced)
                 msg_print("You stare back unafraid!");
@@ -561,7 +784,7 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         disturb(1, 0);
         msg_format("%^s whispers of fading and decay.", m_name);
 
-        if (!allow_player_slow(m_ptr))
+        if (!observe_status(m_ptr, MON_AI_SLOW, allow_player_slow(m_ptr)))
         {
             msg_print("You resist.");
         }
@@ -634,8 +857,6 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         break;
     }
 
-        // Sil-x: only songs after this point as 96+RF4_SNG_HEAD is used in the
-        // spell code to distinguish songs from non-songs
 
         /* RF4_SNG_BINDING */
     case 96 + 18:
@@ -698,6 +919,7 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
             int d = distance(m_ptr->fx, m_ptr->fy, target->fx, target->fy);
             target->tmp_morale += ((spower * 10 / (d + 4)) * 10);
         }
+        monster_ai_share_warning(m_ptr);
 
         break;
     }

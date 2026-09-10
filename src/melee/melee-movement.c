@@ -5,6 +5,8 @@
 #include "melee/melee-movement-internal.h"
 #include "melee/melee-process.h"
 #include "melee/melee-util.h"
+#include "monster/monster-ai.h"
+#include "monster/monster-tactics.h"
 
 /*
  * Given a central direction at position [dir #][0], return a series
@@ -159,7 +161,8 @@ bool get_move(
         }
 
         /* Is character in range? */
-        if (m_ptr->cdis <= 1)
+        if (m_ptr->cdis <= 1 && (m_ptr->r_idx == R_IDX_MORGOTH
+                || monster_ai_can_see_player(m_ptr)))
         {
             /* Monster can't melee either (pathetic little creature) */
             if (r_ptr->flags1 & (RF1_NEVER_BLOW))
@@ -203,6 +206,24 @@ bool get_move(
         return (true);
     }
 
+    /* Perception gates all subsequent use of the player's current square.
+     * Scripted/lair targets above and Morgoth's existing pursuit are retained. */
+    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_ai_can_see_player(m_ptr))
+    {
+        *fear = m_ptr->stance == STANCE_FLEEING || m_ptr->min_range >= FLEE_RANGE;
+        if (*fear)
+        {
+            get_move_retreat(m_ptr, ty, tx);
+            return *ty != m_ptr->fy || *tx != m_ptr->fx;
+        }
+        /* A shadow emitter may cover locally visible allies using an old
+         * confirmed anchor. This never selects an occupied attack square. */
+        if (get_move_tactical(m_ptr, ty, tx))
+            return true;
+        get_move_advance(m_ptr, ty, tx);
+        return *ty != m_ptr->fy || *tx != m_ptr->fx;
+    }
+
     /*** Handle monster fear -- only for monsters that can move ***/
 
     /* Is the monster scared? */
@@ -216,7 +237,9 @@ bool get_move(
     {
         /* The character is too close to avoid, and faster than we are */
         if ((m_ptr->stance != STANCE_FLEEING) && (m_ptr->cdis < TURN_RANGE)
-            && (p_ptr->pspeed > m_ptr->mspeed))
+            && ((m_ptr->r_idx == R_IDX_MORGOTH)
+                    ? p_ptr->pspeed > m_ptr->mspeed
+                    : monster_ai_confidence(m_ptr, MON_AI_KITING) > 0))
         {
             /* Recalculate range */
             find_range(m_ptr);
@@ -298,6 +321,21 @@ bool get_move(
             *tx = px;
             return (true);
         }
+    }
+
+    /* A witnessed retreat attack can make one or two paid pauses useful.
+     * Prefer a real positional improvement, then resume pursuit after the
+     * short pause. Waiting does not build our Concentration or reset theirs. */
+    if (monster_ai_enabled(m_ptr) && m_ptr->cdis == 2 && m_ptr->ai.waits < 2
+        && monster_ai_confidence(m_ptr, MON_AI_CONTROLLED_RETREAT) > 0
+        && m_ptr->ai.player_action >= 1 && m_ptr->ai.player_action <= 9
+        && m_ptr->ai.player_action != 5
+        && playerturn - m_ptr->ai.player_action_turn <= 1
+        && !monster_terrain_penalty(m_ptr, m_ptr->fy, m_ptr->fx)
+        && monster_ai_poison_safe(m_ptr, m_ptr->fy, m_ptr->fx, 2))
+    {
+        if (get_move_tactical(m_ptr, ty, tx)) return true;
+        return false;
     }
 
     // Smart monsters try to lure the character into the open.

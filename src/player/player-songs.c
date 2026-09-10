@@ -1,6 +1,7 @@
 ﻿/* File: player/player-songs.c */
 
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "player/player-song-internal.h"
@@ -453,6 +454,7 @@ void change_song(int song)
     {
         /* Take time */
         p_ptr->energy_use = 100;
+        monster_ai_witness(MON_AI_SONG, 1, p_ptr->py, p_ptr->px);
 
         // store the action type
         p_ptr->previous_action[0] = ACTION_MISC;

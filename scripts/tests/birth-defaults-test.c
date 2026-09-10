@@ -19,6 +19,7 @@
 #define bell test_bell
 #define msg_print test_msg_print
 #define log_log test_log_log
+#define ui_question_ask_overlay test_ui_question_ask_overlay
 #include "angband.h"
 #include "birth/birth-internal.h"
 #include "tutorial/tutorial-game.h"
@@ -31,7 +32,7 @@ static player_type player;
 static player_race race;
 static character_profile profile;
 static const char* keys;
-static int key_index, frames, bells;
+static int key_index, frames, bells, advice_popups, popup_frame;
 static bool spectator, controller, pending_defaults_click;
 static void (*inspect_input)(void);
 
@@ -54,6 +55,25 @@ bool ui_menu_click_take_action(int* choice, int* action)
 }
 void birth_coach_show_once(int stage) {}
 void sdl_character_sheet_screen_hide(void) {}
+int ui_question_ask_overlay(cptr title, cptr desc,
+    const ui_question_option* options, int count, int anchor_y, int anchor_x,
+    int default_index)
+{
+    char expected[1024];
+    birth_skill_recommendation_text(expected, sizeof(expected));
+    assert(strcmp(title, "Starting skill advice") == 0);
+    assert(strcmp(desc, expected) == 0);
+    assert(strstr(desc, "Lower any purchased rank here to recover its XP."));
+    assert(count == 1 && default_index == 0);
+    assert(strcmp(options[0].label, "Continue") == 0);
+    assert(!options[0].disabled);
+    assert(anchor_y == UI_QUESTION_GLOBAL && anchor_x == UI_QUESTION_GLOBAL);
+    assert(frames > 0 && skill_gain_in_progress);
+    assert(!spectator && !character_generated);
+    advice_popups++;
+    popup_frame = frames;
+    return 0;
+}
 void sdl_character_sheet_screen_show_birth_skills(const int* old_base,
     const int* gains, const int* costs, int selected, int points_left)
 {
@@ -72,6 +92,7 @@ void sdl_character_sheet_screen_show_birth_skills(const int* old_base,
 char inkey(void)
 {
     assert(skill_gain_in_progress);
+    assert(frames > popup_frame); /* Rebuild allocation after dismissing advice. */
     assert(keys[key_index]); /* An unexpected extra prompt must fail, not hang. */
     if (inspect_input) inspect_input();
     char key = keys[key_index++];
@@ -98,7 +119,7 @@ static void setup(const char* input)
     player.new_exp = 5000;
     player.skill_base[S_SPC] = 7; /* Special abilities never enter purchases. */
     keys = input;
-    key_index = frames = bells = 0;
+    key_index = frames = bells = advice_popups = popup_frame = 0;
     spectator = controller = pending_defaults_click = false;
     inspect_input = NULL;
     gain_skills_set_initial_skill(-1);
@@ -139,11 +160,13 @@ static void skills(void)
     assert(gain_skills_birth() == NAV_OK);
     expect_defaults();
     assert(!skill_gain_in_progress && !hide_cursor);
+    assert(advice_popups == 1);
 
     setup("4\r");
     inspect_input = inspect_refund;
     assert(gain_skills_birth() == NAV_OK);
     assert(player.new_exp == 1300 && player.skill_base[S_MEL] == 4);
+    assert(advice_popups == 1);
 
     /* Every proposed rank can be refunded, including the last rank to zero. */
     char refund_keys[128];
@@ -161,6 +184,7 @@ static void skills(void)
     setup(refund_keys);
     assert(gain_skills_birth() == NAV_OK);
     expect_zero();
+    assert(advice_popups == 1); /* Adjusting ranks must not reopen the advice. */
 
     setup("4\033");
     assert(gain_skills_birth() == NAV_BACK);
@@ -174,21 +198,26 @@ static void skills(void)
     setup("44n\r");
     assert(gain_skills_birth() == NAV_OK);
     expect_defaults();
+    assert(advice_popups == 2);
     setup("44N\r");
     assert(gain_skills_birth() == NAV_OK);
     expect_defaults();
+    assert(advice_popups == 2);
     setup("44@\r"); /* Synthetic primary click on Beginner defaults. */
     assert(gain_skills_birth() == NAV_OK);
     expect_defaults();
+    assert(advice_popups == 2);
     setup("44x\r");
     controller = true;
     assert(gain_skills_birth() == NAV_OK);
     expect_defaults();
+    assert(advice_popups == 2);
 
     setup("\r");
     inspect_input = expect_zero;
     assert(gain_skills() == NAV_OK);
     expect_zero();
+    assert(advice_popups == 0);
     setup("nN@x\r");
     character_generated = true;
     turn = 100;
@@ -196,25 +225,30 @@ static void skills(void)
     inspect_input = expect_zero;
     assert(gain_skills() == NAV_OK);
     expect_zero();
+    assert(advice_popups == 0);
     setup("n\r"); /* The birth-only shortcut must not buy ranks in-game. */
     assert(gain_skills() == NAV_OK);
     expect_zero();
+    assert(advice_popups == 0);
 
     setup("\r");
     spectator = true;
     assert(gain_skills_birth() == NAV_OK);
     expect_zero();
+    assert(advice_popups == 0);
     setup("n\r");
     player.new_exp = 4199;
     assert(gain_skills_birth() == NAV_OK);
     assert(player.new_exp == 4199 && player.skill_base[S_MEL] == 0);
     assert(bells == 1);
+    assert(advice_popups == 1); /* Failed reset does not reopen advice. */
 
     setup("4\033");
     player.skill_base[S_MEL] = 2;
     assert(gain_skills_birth() == NAV_BACK);
     assert(player.new_exp == 5000 && player.skill_base[S_MEL] == 2);
     puts("Birth skills: defaults cost 4200; refunds, reset, cancel and in-game isolation PASS");
+    puts("Birth advice popup: entry/reset, Continue, allocation rebuild and in-game/spectator exclusion PASS");
 }
 
 static void reset_traits(void)

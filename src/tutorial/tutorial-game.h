@@ -5,6 +5,8 @@
 
 /* Integration boundary: callers pass already-known information only. */
 void tutorial_game_start(void);
+/* Uses already-computed monster visibility; never queues or displays a card. */
+bool tutorial_game_first_monster_triggered(void);
 void tutorial_game_checkpoint(void);
 void tutorial_game_wait(void);
 void tutorial_game_menu(const char *id, const char *description);

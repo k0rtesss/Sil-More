@@ -10,11 +10,12 @@
 
 static byte features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte rewired[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte scents[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static u16b info[MAX_DUNGEON_HGT][256];
 static s16b occupants[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static monster_type monsters[8];
-static monster_race races[8];
-static monster_lore lore[8];
+static monster_race races[R_IDX_MORGOTH + 1];
+static monster_lore lore[R_IDX_MORGOTH + 1];
 static character_profile profiles[1];
 static int checks;
 
@@ -29,6 +30,10 @@ int success_chance(int sides, int skill, int difficulty)
 { (void)sides; (void)skill; (void)difficulty; return 50; }
 int monster_stat(monster_type* m, int stat)
 { (void)m; (void)stat; return 10; }
+bool monster_race_is_vala(int r_idx)
+{ return r_idx == R_IDX_MORGOTH; }
+bool singing(int song)
+{ (void)song; return false; }
 
 /* These effects belong to retreat/territorial behavior. Advancing along a
  * reachable flow must never call them in the fixtures below. */
@@ -38,7 +43,7 @@ void shriek(monster_type* m) { (void)m; CHECK(false); }
 void calc_morale(monster_type* m) { (void)m; CHECK(false); }
 void calc_stance(monster_type* m) { (void)m; CHECK(false); }
 byte projectable(int y1, int x1, int y2, int x2, u32b flags)
-{ (void)y1; (void)x1; (void)y2; (void)x2; (void)flags; CHECK(false); return 0; }
+{ (void)flags; return los(y1, x1, y2, x2); }
 void monster_desc(char* out, size_t len, const monster_type* m, int mode)
 { (void)out; (void)len; (void)m; (void)mode; CHECK(false); }
 void msg_format(cptr fmt, ...) { (void)fmt; CHECK(false); }
@@ -59,6 +64,8 @@ static monster_type* reset_map(int h, int w, int my, int mx, int py, int px)
     memset(races, 0, sizeof(races));
     memset(occupants, 0, sizeof(occupants));
     memset(rewired, 0, sizeof(rewired));
+    memset(scents, 0, sizeof(scents));
+    visual_recognition = false;
     p_ptr->cur_map_hgt = h; p_ptr->cur_map_wid = w;
     p_ptr->py = py; p_ptr->px = px;
     for (int y = 0; y < h; y++)
@@ -67,6 +74,7 @@ static monster_type* reset_map(int h, int w, int my, int mx, int py, int px)
                 ? FEAT_WALL_PERM : FEAT_FLOOR);
     cave_feat = features; cave_info = info; cave_m_idx = occupants;
     cave_rewired = rewired;
+    cave_when = scents;
     mon_list = monsters; r_info = races; l_list = lore; c_info = profiles;
     mon_max = 3;
     monsters[1].r_idx = 1; monsters[1].fy = my; monsters[1].fx = mx;
@@ -259,7 +267,10 @@ static void test_tactics(void)
     m->confused = 1; CHECK(!get_move_tactical(m, &y, &x)); m->confused = 0;
     m->stance = STANCE_FLEEING; CHECK(!get_move_tactical(m, &y, &x));
     m->stance = STANCE_AGGRESSIVE;
-    m->min_range = 4; CHECK(!get_move_tactical(m, &y, &x)); m->min_range = 1;
+    /* Ranged profiles now share the local terrain/lane evaluator. */
+    m->min_range = m->best_range = 4;
+    if (get_move_tactical(m, &y, &x)) CHECK(distance(y, x, 5, 5) > 1);
+    m->min_range = m->best_range = 1;
     races[1].flags2 |= RF2_MINDLESS; CHECK(!get_move_tactical(m, &y, &x));
 
     m = reset_map(11, 11, 4, 5, 5, 5);
@@ -320,11 +331,13 @@ static void test_full_map(void)
 }
 
 #include "monster-poison-ai-tests.h"
+#include "monster-tactics-ai-tests.h"
 
 int main(void)
 {
     test_terrain(); test_flows(); test_tactics(); test_advance(); test_full_map();
     test_poison_ai();
+    test_tactical_extension();
     printf("Monster AI regression checks passed: %d\n", checks);
     return 0;
 }

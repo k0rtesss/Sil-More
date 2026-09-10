@@ -5878,7 +5878,7 @@ Trigger: The player enters and publicly discovers partition kind 1.
 
 Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/level-generation/level-generation-internal.h`, `src/tutorial/tutorial-game.c`.
 
-## Caverns
+## Caves
 
 `world.partition.2`
 
@@ -5886,7 +5886,7 @@ Level: **Extended**.
 
 **1. Info**
 
-{detail} Natural caverns can offer irregular sight lines and routes. Inspect the visible terrain before moving. A cave theme does not identify hidden creatures or items.
+{detail} Natural caves can offer irregular sight lines and routes. Inspect the visible terrain before moving. A cave theme does not identify hidden creatures or items.
 
 Trigger: The player enters and publicly discovers partition kind 2.
 
@@ -5934,7 +5934,7 @@ Trigger: The player enters and publicly discovers partition kind 5.
 
 Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/level-generation/level-generation-internal.h`, `src/tutorial/tutorial-game.c`.
 
-## Great cavern
+## Great Cave
 
 `world.partition.6`
 
@@ -5942,13 +5942,13 @@ Level: **Extended**.
 
 **1. Info**
 
-{detail} A great cavern opens broad lines of sight and movement. Distant visible threats and available cover matter; inspect what is actually revealed before crossing open ground.
+{detail} A great cave opens broad lines of sight and movement. Distant visible threats and available cover matter; inspect what is actually revealed before crossing open ground.
 
 Trigger: The player enters and publicly discovers partition kind 6.
 
 Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/level-generation/level-generation-internal.h`, `src/tutorial/tutorial-game.c`.
 
-## Fire cavern
+## Fire Cave
 
 `world.partition.fire`
 
@@ -5956,13 +5956,13 @@ Level: **Extended**.
 
 **1. Info**
 
-{detail} This cavern's revealed theme suggests fire dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.
+{detail} This cave's revealed theme suggests fire dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.
 
-Trigger: A discovered great cavern has the corresponding public elemental cave type.
+Trigger: A discovered great cave has the corresponding public elemental cave type.
 
 Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/tutorial/tutorial-game.c`.
 
-## Cold cavern
+## Cold Cave
 
 `world.partition.cold`
 
@@ -5970,13 +5970,13 @@ Level: **Extended**.
 
 **1. Info**
 
-{detail} This cavern's revealed theme suggests cold dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.
+{detail} This cave's revealed theme suggests cold dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.
 
-Trigger: A discovered great cavern has the corresponding public elemental cave type.
+Trigger: A discovered great cave has the corresponding public elemental cave type.
 
 Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/tutorial/tutorial-game.c`.
 
-## Poison cavern
+## Poison Cave
 
 `world.partition.poison`
 
@@ -5984,9 +5984,9 @@ Level: **Extended**.
 
 **1. Info**
 
-{detail} This cavern's revealed theme suggests poison dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.
+{detail} This cave's revealed theme suggests poison dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.
 
-Trigger: A discovered great cavern has the corresponding public elemental cave type.
+Trigger: A discovered great cave has the corresponding public elemental cave type.
 
 Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/tutorial/tutorial-game.c`.
 

@@ -3,6 +3,7 @@
 #include "cave-internal.h"
 #include "cave/cave-fixtures.h"
 #include "melee/melee-util.h"
+#include "monster/monster-senses.h"
 
 /*
  * Determines how far a grid is from the source using the given flow.
@@ -43,49 +44,48 @@ int flow_dist(int which_flow, int y, int x)
  *
  */
 
-/* Positive whole-turn costs are bounded by FLOW_MAX_DIST. Cost buckets
- * provide Dijkstra relaxation without sorting a heap for every monster turn.
- * Each map square has at most one pending entry; decrease-key unlinks it from
- * the previous bucket. Noise propagation below keeps its separate rules. */
+/* Keep a bounded Pareto frontier of cost/exposure at each merge. A cheap but
+ * poisonous route must not erase the longer dry route needed by a predecessor.
+ * Eight labels retain both extremes and useful intermediate alternatives. */
 static void update_monster_flow(int cy, int cx, int which_flow,
     monster_type* m_ptr)
 {
-    enum { FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID };
-    static int next[FLOW_CELLS];
-    static int previous[FLOW_CELLS];
-    static int poison_damage[FLOW_CELLS];
+    enum { LABELS = 8, FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID,
+        FLOW_LABELS = FLOW_CELLS * LABELS };
+    static int next[FLOW_LABELS], previous[FLOW_LABELS];
+    static int poison_damage[FLOW_LABELS], costs[FLOW_LABELS];
     int heads[FLOW_MAX_DIST];
     int origin = cy * MAX_DUNGEON_WID + cx;
 
     for (int i = 0; i < FLOW_MAX_DIST; i++)
         heads[i] = -1;
-    heads[0] = origin;
-    next[origin] = previous[origin] = -1;
-    poison_damage[origin] = 0;
+    for (int i = 0; i < FLOW_LABELS; i++)
+        costs[i] = FLOW_MAX_DIST;
+    heads[0] = origin * LABELS;
+    next[origin * LABELS] = previous[origin * LABELS] = -1;
+    poison_damage[origin * LABELS] = costs[origin * LABELS] = 0;
 
     for (int cost = 0; cost < FLOW_MAX_DIST; cost++)
     {
         while (heads[cost] >= 0)
         {
-            int grid = heads[cost];
+            int label = heads[cost];
+            int grid = label / LABELS;
             int y = grid / MAX_DUNGEON_WID;
             int x = grid % MAX_DUNGEON_WID;
-            heads[cost] = next[grid];
-            if (next[grid] >= 0)
-                previous[next[grid]] = -1;
-            previous[grid] = -2; /* Settled. All edge costs are positive. */
+            heads[cost] = next[label];
+            if (next[label] >= 0)
+                previous[next[label]] = -1;
+            previous[label] = -2;
 
             for (int d = 0; d < 8; d++)
             {
                 int yy = y + ddy_ddd[d];
                 int xx = x + ddx_ddd[d];
-                int neighbor, edge, total, old, poison;
+                int neighbor, edge, total, poison;
                 if (!in_bounds(yy, xx))
                     continue;
                 neighbor = yy * MAX_DUNGEON_WID + xx;
-                old = cave_cost[which_flow][yy][xx];
-                if (old < FLOW_MAX_DIST && previous[neighbor] == -2)
-                    continue;
                 /* Expand backwards: a predecessor moves INTO this square.
                  * Forbidden predecessors receive an escape distance but do
                  * not carry the flow through themselves. The actual player
@@ -95,7 +95,7 @@ static void update_monster_flow(int cy, int cx, int which_flow,
                     : monster_step_cost(m_ptr, yy, xx, y, x);
                 if (!edge)
                     continue;
-                poison = poison_damage[grid]
+                poison = poison_damage[label]
                     + monster_poison_step_damage(m_ptr, yy, xx, y, x);
                 /* Reserve the initial contact dose for hypothetical entry
                  * into this predecessor. The real starting grid is already
@@ -109,33 +109,64 @@ static void update_monster_flow(int cy, int cx, int which_flow,
                     && m_ptr->poisoned + poison + entry >= m_ptr->hp)
                     continue;
                 total = cost + edge;
-                if (total > old || total >= FLOW_MAX_DIST
-                    || (total == old && poison >= poison_damage[neighbor]))
+                if (total >= FLOW_MAX_DIST)
                     continue;
-
-                if (old < FLOW_MAX_DIST)
+                int slot = -1, cheapest = -1, safest = -1;
+                bool dominated = false;
+                for (int k = neighbor * LABELS; k < (neighbor + 1) * LABELS; k++)
                 {
-                    if (previous[neighbor] >= 0)
-                        next[previous[neighbor]] = next[neighbor];
-                    else
-                        heads[old] = next[neighbor];
-                    if (next[neighbor] >= 0)
-                        previous[next[neighbor]] = previous[neighbor];
+                    if (costs[k] == FLOW_MAX_DIST)
+                    {
+                        slot = k;
+                        continue;
+                    }
+                    if (costs[k] <= total && poison_damage[k] <= poison)
+                        dominated = true;
+                    if (cheapest < 0 || costs[k] < costs[cheapest]) cheapest = k;
+                    if (safest < 0 || poison_damage[k] < poison_damage[safest]) safest = k;
                 }
-                cave_cost[which_flow][yy][xx] = total;
-                poison_damage[neighbor] = poison;
-                previous[neighbor] = -1;
-                next[neighbor] = heads[total];
+                if (dominated)
+                    continue;
+                /* Remove dominated queued labels before reusing their slot. */
+                for (int k = neighbor * LABELS; k < (neighbor + 1) * LABELS; k++)
+                {
+                    if (costs[k] == FLOW_MAX_DIST || costs[k] < total
+                        || poison_damage[k] < poison)
+                        continue;
+                    if (previous[k] != -2)
+                    {
+                        if (previous[k] >= 0) next[previous[k]] = next[k];
+                        else heads[costs[k]] = next[k];
+                        if (next[k] >= 0) previous[next[k]] = previous[k];
+                    }
+                    costs[k] = FLOW_MAX_DIST;
+                    slot = k;
+                }
+                if (slot < 0)
+                {
+                    /* Preserve both the cheapest and least exposed routes.
+                     * Replace the most expensive interior route. */
+                    for (int k = neighbor * LABELS; k < (neighbor + 1) * LABELS; k++)
+                        if (k != cheapest && k != safest
+                            && (slot < 0 || costs[k] > costs[slot])) slot = k;
+                    if (slot < 0 || (total >= costs[slot]
+                            && poison >= poison_damage[safest]))
+                        continue;
+                    if (previous[slot] != -2)
+                    {
+                        if (previous[slot] >= 0) next[previous[slot]] = next[slot];
+                        else heads[costs[slot]] = next[slot];
+                        if (next[slot] >= 0) previous[next[slot]] = previous[slot];
+                    }
+                }
+                cave_cost[which_flow][yy][xx] = MIN(cave_cost[which_flow][yy][xx], total);
+                costs[slot] = total;
+                poison_damage[slot] = poison;
+                previous[slot] = -1;
+                next[slot] = heads[total];
                 if (heads[total] >= 0)
-                    previous[heads[total]] = neighbor;
-                heads[total] = neighbor;
-
-                if (cave_m_idx[yy][xx] > 0)
-                {
-                    monster_type* n_ptr = &mon_list[cave_m_idx[yy][xx]];
-                    n_ptr->target_x = 0;
-                    n_ptr->target_y = 0;
-                }
+                    previous[heads[total]] = slot;
+                heads[total] = slot;
             }
         }
     }
@@ -298,17 +329,6 @@ void update_flow(int cy, int cx, int which_flow)
                         }
                     }
 
-                    /* Monsters at this site need to re-consider their targets
-                     */
-
-                    if (cave_m_idx[y2][x2] > 0)
-                    {
-                        monster_type* n_ptr = &mon_list[cave_m_idx[y2][x2]];
-
-                        n_ptr->target_x = 0;
-                        n_ptr->target_y = 0;
-                    }
-
                     /* Store cost at this location */
                     cave_cost[which_flow][y2][x2] = cost + extra_cost;
 
@@ -376,6 +396,28 @@ static bool scent_crosses_water(int y0, int x0, int y1, int x1)
             return true;
     }
     return false;
+}
+
+byte scent_export_cell(int y, int x)
+{
+    int age = get_scent(y, x);
+    return age >= 0 && age <= SMELL_STRENGTH ? (byte)(age + 1) : 0;
+}
+
+void scent_restore_begin(void)
+{
+    scent_when = 250 - SMELL_STRENGTH;
+    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+        memset(cave_when[y], 0, p_ptr->cur_map_wid * sizeof(cave_when[y][0]));
+}
+
+void scent_restore_cell(int y, int x, byte normalized)
+{
+    if (!in_bounds(y, x))
+        return;
+    cave_when[y][x] = normalized >= 1 && normalized <= SMELL_STRENGTH + 1
+            && cave_feat[y][x] != FEAT_WATER && !(cave_info[y][x] & CAVE_WALL)
+        ? scent_when + normalized - 1 : 0;
 }
 
 void update_smell(void)

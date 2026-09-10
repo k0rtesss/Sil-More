@@ -25,9 +25,17 @@ int resist_dark(void);
 void fire_dam_mixed(int raw_dam, int min_raw, int max_raw, int hp_dam,
     cptr kb_str);
 void fire_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str);
+void fire_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
+    monster_type* observer);
 void cold_dam_mixed(int raw_dam, int min_raw, int max_raw, int hp_dam,
     cptr kb_str);
 void cold_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str);
+void cold_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
+    monster_type* observer);
+void dark_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
+    monster_type* observer);
+void pois_dam_pure_observed(int dd, int ds, bool update_rolls,
+    monster_type* observer);
 void dark_dam_mixed(int dam, cptr kb_str);
 void dark_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str);
 void pois_dam_mixed(int dam);

@@ -52,6 +52,7 @@ cptr main_menu_title(int choice)
     case MAIN_MENU_BLITZ: return "Blitz";
     case MAIN_MENU_OPTIONS: return "Options";
     case MAIN_MENU_HELP: return "Help";
+    case MAIN_MENU_TUTORIAL_CARDS: return "Tutorial cards";
     case MAIN_MENU_ABOUT: return "About";
     case MAIN_MENU_SAVE: return "Save";
     case MAIN_MENU_SAVE_QUIT:
@@ -78,6 +79,7 @@ int main_menu_keyboard_key(int choice)
     case MAIN_MENU_BLITZ: return 'z';
     case MAIN_MENU_OPTIONS: return 'o';
     case MAIN_MENU_HELP: return 'h';
+    case MAIN_MENU_TUTORIAL_CARDS: return 'u';
     case MAIN_MENU_ABOUT: return 'b';
     case MAIN_MENU_SAVE: return 's';
     case MAIN_MENU_SAVE_QUIT: return 'q';
@@ -274,6 +276,7 @@ int main_menu_choice_from_key(int key)
     case 'z': return MAIN_MENU_BLITZ;
     case 'o': return MAIN_MENU_OPTIONS;
     case 'h': return MAIN_MENU_HELP;
+    case 'u': return MAIN_MENU_TUTORIAL_CARDS;
     case 'b': return MAIN_MENU_ABOUT;
     case 's':
         if (death_spectator_active())
@@ -1596,6 +1599,11 @@ static bool do_cmd_main_menu_execute_choice_impl(int actiontype,
     case MAIN_MENU_HELP: // Help (h)
     {
         do_cmd_help_menu();
+        return true;
+    }
+    case MAIN_MENU_TUTORIAL_CARDS: // Tutorial cards (u)
+    {
+        tutorial_game_archive();
         return true;
     }
     case MAIN_MENU_ABOUT: // About (b)

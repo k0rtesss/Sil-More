@@ -1,6 +1,7 @@
 /* File: fs/save-dungeon.c -- carved from save.c (shares state via fs/save-internal.h) */
 
 #include "angband.h"
+#include "monster/monster-senses.h"
 #include "cave/cave-fixtures.h"
 #include "blitz.h"
 #include "externs.h"
@@ -389,6 +390,12 @@ void wr_dungeon(void)
         wr_s16b(wandering_pause[i]);
     }
     log_trace("[save:%06u] === END WANDERING MONSTERS ===", (unsigned)save_byte_offset);
+
+    /* Fixed-size normalized ages avoid depending on the wrapping scent clock. */
+    wr_u16b(0x5CE6);
+    for (y = 0; y < p_ptr->cur_map_hgt; ++y)
+        for (x = 0; x < p_ptr->cur_map_wid; ++x)
+            wr_byte(scent_export_cell(y, x));
 
     log_debug("Dungeon data write completed - %d objects, %d monsters", o_max - 1, mon_max - 1);
     log_trace("[save:%06u] === END DUNGEON ===", (unsigned)save_byte_offset);

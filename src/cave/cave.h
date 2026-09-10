@@ -28,6 +28,8 @@ void do_cmd_view_map(void);
 errr vinfo_init(void);
 void forget_view(void);
 void update_view(void);
+/* Computes only view/light buffers, without revealing terrain or encounters. */
+void update_view_for_generation(void);
 
 int flow_dist(int which_flow, int y, int x);
 void update_flow(int cy, int cx, int which_flow);

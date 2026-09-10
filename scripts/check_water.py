@@ -358,10 +358,12 @@ void vault_water_tests(void) {
 
 SAVE_TEST = r'''
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include <assert.h>
 #include <stdio.h>
 static byte bytes[2048];
 static int write_pos, read_pos, extra_version;
+static int poison_offset, abilities_offset, ai_offset;
 static const bool savefile_has_song_duels=true, savefile_has_monster_shatter=true;
 static const bool savefile_has_thrall_quest=true, savefile_has_thrall_quest_requested=true;
 static void wr_byte(byte x) { assert(write_pos < 2048); bytes[write_pos++]=x; }
@@ -376,22 +378,29 @@ static void rd_u32b(u32b* x) {u16b a,b;rd_u16b(&a);rd_u16b(&b);*x=a|((u32b)b<<16
 static void rd_s32b(s32b* x) {u32b n;rd_u32b(&n);*x=(s32b)n;}
 static void strip_bytes(int n) {while(n--) {byte b;rd_byte(&b);}}
 static bool savefile_version_at_least(byte a,byte b,byte c,byte d) {
-    assert(a==0&&b==9&&c==8&&(d==2||d==4));return extra_version>=d;
+    assert(a==0&&b==9&&c==8&&d>=2&&d<=6);return extra_version>=d;
 }
 /* The complete production record writer and reader are inserted below. */
 @FUNCTIONS@
 void monster_save_tests(void) {
-    for(int version=1;version<=4;version++) {
+    for(int version=1;version<=6;version++) {
         monster_type before={0}, after={0};
         before.r_idx=3;before.image_r_idx=7;before.fy=14;before.fx=19;
         before.hp=39;before.maxhp=46;before.alertness=ALERTNESS_ALERT;
         before.energy=version>=2?-50:213;before.mspeed=2;before.stunned=9;
         before.poisoned=17;
+        before.vengeance=1;before.smite_recovery=2;
+        before.ai.cast_reserve=2;
+        before.ai.observations[MON_AI_FIRE].value=2;
+        before.ai.observations[MON_AI_FIRE].ttl=40;
         before.confused=6;before.song_will_penalty=11;before.thrall_quest_completed=1;
         before.previous_action[0]=6;before.previous_action[1]=8;
         extra_version=version;write_pos=read_pos=0;wr_monster(&before);
-        /* Poison was appended to the record in 0.9.8.4. */
-        if(version<4)write_pos-=2;
+        /* Construct each historical tail explicitly, independent of the
+         * size of subsequently appended ability and observation records. */
+        if(version<4)write_pos=poison_offset;
+        else if(version<5)write_pos=abilities_offset;
+        else if(version<6)write_pos=ai_offset;
         if(version==1) {
             /* Old byte-energy record: omit its high byte, preserve its tail. */
             assert(bytes[14]==213 && bytes[15]==0);
@@ -404,8 +413,11 @@ void monster_save_tests(void) {
         assert(after.song_will_penalty==11 && after.thrall_quest_completed==1);
         assert(after.previous_action[1]==8);
         assert(after.poisoned==(version>=4?17:0));
+        assert(after.vengeance==(version>=5?1:0));
+        assert(after.smite_recovery==(version>=5?2:0));
+        assert(after.ai.cast_reserve==(version>=6?2:0));
     }
-    puts("Monster save records: versions 0.9.8.1-4, signed debt, old unsigned energy, poison defaults and complete record alignment: PASS");
+    puts("Monster save records: versions 0.9.8.1-6, signed debt, old unsigned energy, poison/ability/AI defaults and record alignment: PASS");
 }
 '''
 
@@ -464,8 +476,12 @@ def main():
     writer_source = (ROOT / "src/fs/save.c").read_text(encoding="utf-8")
     saved_flags = writer_source[writer_source.index("#define SAVE_MON_FLAGS"):]
     saved_flags = saved_flags[:saved_flags.index("\n\n")]
+    writer = c_function(ROOT / "src/fs/save.c", "wr_monster")
+    writer = writer.replace("wr_s16b(m_ptr->poisoned);", "poison_offset=write_pos;wr_s16b(m_ptr->poisoned);")
+    writer = writer.replace("wr_byte(m_ptr->vengeance);", "abilities_offset=write_pos;wr_byte(m_ptr->vengeance);")
+    writer = writer.replace("/* 0.9.8.6:", "ai_offset=write_pos;/* 0.9.8.6:")
     save_check.write_text(SAVE_TEST.replace("@FUNCTIONS@", saved_flags + "\n" +
-        c_function(ROOT / "src/fs/save.c", "wr_monster") + "\n" +
+        writer + "\n" +
         c_function(ROOT / "src/fs/load.c", "rd_monster")), encoding="utf-8")
     wrappers = [str(gen), str(save_check)]
     for operation, internal in (("write", "wr"), ("read", "rd")):

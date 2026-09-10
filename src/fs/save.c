@@ -739,6 +739,36 @@ void wr_monster(const monster_type* m_ptr)
     wr_s16b(m_ptr->poisoned);
     wr_byte(m_ptr->vengeance);
     wr_byte(m_ptr->smite_recovery);
+
+    /* 0.9.8.6: individual evidence and bounded pursuit, never runtime flags. */
+    for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)
+    {
+        wr_s16b(m_ptr->ai.observations[f].value);
+        wr_byte(m_ptr->ai.observations[f].ttl);
+        wr_s32b(m_ptr->ai.observations[f].turn);
+    }
+    const monster_sense_state* sense = &m_ptr->ai.sense;
+    wr_byte(sense->kind);
+    wr_byte(sense->y); wr_byte(sense->x);
+    wr_byte(sense->anchor_y); wr_byte(sense->anchor_x);
+    wr_byte(sense->scent_age);
+    wr_byte(sense->stale_decisions); wr_byte(sense->search_decisions);
+    wr_byte(sense->recent_count); wr_byte(sense->recent_next);
+    for (int n = 0; n < 4; ++n)
+    {
+        wr_byte(sense->recent_y[n]); wr_byte(sense->recent_x[n]);
+    }
+    wr_u32b(sense->observed_turn);
+    wr_byte(m_ptr->ai.cast_reserve);
+    wr_byte(m_ptr->ai.goal_y); wr_byte(m_ptr->ai.goal_x);
+    wr_byte(m_ptr->ai.goal_age);
+    wr_byte(m_ptr->ai.previous_y); wr_byte(m_ptr->ai.previous_x);
+    wr_byte(m_ptr->ai.waits);
+    wr_byte(m_ptr->ai.player_y); wr_byte(m_ptr->ai.player_x);
+    wr_byte(m_ptr->ai.player_action);
+    wr_byte(m_ptr->ai.attack_y); wr_byte(m_ptr->ai.attack_x);
+    wr_byte(m_ptr->ai.attack_chain);
+    wr_s32b(m_ptr->ai.player_action_turn); wr_s32b(m_ptr->ai.attack_turn);
 }
 
 /*

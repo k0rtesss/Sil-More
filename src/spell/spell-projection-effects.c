@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-projection-effects.c */
 
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "externs.h"
 #include "spell/spell-projection-internal.h"
 #include "log/log.h"
@@ -1751,7 +1752,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by fire!");
-        fire_dam_pure(dd, ds, true, killer);
+        fire_dam_pure_observed(dd, ds, true, killer, who > 0 ? m_ptr : NULL);
         break;
     }
 
@@ -1760,7 +1761,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by cold!");
-        cold_dam_pure(dd, ds, true, killer);
+        cold_dam_pure_observed(dd, ds, true, killer, who > 0 ? m_ptr : NULL);
         break;
     }
 
@@ -1769,7 +1770,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by something!");
-        dark_dam_pure(dd, ds, true, killer);
+        dark_dam_pure_observed(dd, ds, true, killer, who > 0 ? m_ptr : NULL);
         break;
     }
 
@@ -1786,7 +1787,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by poison!");
-        (void)pois_dam_pure(dd, ds, true);
+        pois_dam_pure_observed(dd, ds, true, who > 0 ? m_ptr : NULL);
         break;
     }
 
@@ -1978,6 +1979,8 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
         hit_result = hit_roll(
             total_attack_mod, total_evasion_mod, m_ptr, PLAYER, true);
 
+        monster_ai_observe(m_ptr, MON_AI_ACCURACY, hit_result > 0 ? -1 : 1);
+
         if (hit_result > 0)
         {
             int feat = cave_feat[p_ptr->py][p_ptr->px];
@@ -1985,6 +1988,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
 
             if (can_web)
             {
+                monster_ai_observe(m_ptr, MON_AI_WEB, -1);
                 if (blind)
                 {
                     msg_print("Something sticky falls over you.");

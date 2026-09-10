@@ -28,6 +28,11 @@ void update_stuff(void)
         p_ptr->update &= ~(PU_BONUS);
         // log_trace("update_stuff: calculating bonuses");
         calc_bonuses();
+
+        /* Match generation's initial visibility before any encounter or
+         * tutorial observation; process_player() has not run calc_torch yet. */
+        if (playerturn == 0 && !p_ptr->restoring)
+            calc_torch();
     }
 
     if (p_ptr->update & (PU_HP))

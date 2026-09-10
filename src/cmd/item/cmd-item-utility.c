@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
@@ -173,6 +174,7 @@ void do_cmd_exchange(void)
 
     /* Message */
     msg_format("You exchange places with %s.", m_name);
+    monster_ai_witness(MON_AI_EXCHANGE, 3, y, x);
 
     // attack of opportunity
     if ((m_ptr->alertness >= ALERTNESS_ALERT) && !m_ptr->confused

@@ -1,5 +1,7 @@
 #include "angband.h"
 #include "monster/monster-abilities.h"
+#include "monster/monster-ai.h"
+#include "monster/monster-senses.h"
 #include <stdio.h>
 
 #if defined(ABILITY_SAVE_WRITER)
@@ -101,6 +103,8 @@ static monster_type* reset_monster(u32b abilities)
     mon_list = monsters;
     r_info = races;
     l_list = lore;
+    p_ptr->cur_map_hgt = p_ptr->cur_map_wid = 60;
+    playerturn = 100;
     monsters[1].r_idx = 1;
     monsters[1].fy = monsters[1].fx = 20;
     monsters[1].hp = monsters[1].maxhp = 100;
@@ -396,10 +400,24 @@ static void test_save_records(void)
         m->thrall_quest_completed = 1;
         /* Transient flags must not survive even from a dirty destination. */
         m->ability_in_action = m->ability_melee = m->ability_displaced = true;
+        m->ai.observations[MON_AI_FIRE].value = 2;
+        m->ai.observations[MON_AI_FIRE].ttl = 40;
+        m->ai.observations[MON_AI_FIRE].turn = 98;
+        m->ai.cast_reserve = 2;
+        m->ai.cast_checked = m->ai.cast_available = true;
+        m->ai.sense.kind = MON_SENSE_SCENT;
+        m->ai.sense.y = 21; m->ai.sense.x = 22;
+        m->ai.sense.anchor_y = 21; m->ai.sense.anchor_x = 22;
+        m->ai.sense.scent_age = 3;
+        m->ai.sense.observed_turn = 99;
+        m->ai.player_y = 25; m->ai.player_x = 26;
+        m->ai.player_action = 6; m->ai.player_action_turn = 97;
+        m->ai.attack_y = 27; m->ai.attack_x = 28;
+        m->ai.attack_chain = 3; m->ai.attack_turn = 96;
         size_t size = ability_save_record(encoded, sizeof(encoded), m);
         CHECK(size > 4);
         memset(&restored, 0xff, sizeof(restored));
-        CHECK(ability_load_record(encoded, size, 5, &restored, &sentinel) == size);
+        CHECK(ability_load_record(encoded, size, 6, &restored, &sentinel) == size);
         CHECK(sentinel == 0xa53c);
         CHECK(restored.r_idx == m->r_idx && restored.hp == m->hp);
         CHECK(restored.energy == -120 && restored.poisoned == 37);
@@ -412,47 +430,67 @@ static void test_save_records(void)
         CHECK(!memcmp(restored.previous_action, m->previous_action, ACTION_MAX));
         CHECK(restored.thrall_quest_item == 2 && restored.thrall_quest_requested == 1
             && restored.thrall_quest_completed == 1);
+        CHECK(restored.ai.cast_reserve == 2);
+        CHECK(!restored.ai.cast_checked && !restored.ai.cast_available);
+        CHECK(restored.ai.observations[MON_AI_FIRE].value == 2);
+        CHECK(restored.ai.observations[MON_AI_FIRE].ttl == 40);
+        CHECK(restored.ai.observations[MON_AI_FIRE].turn == 98);
+        CHECK(restored.ai.sense.kind == MON_SENSE_SCENT);
+        CHECK(restored.ai.sense.y == 21 && restored.ai.sense.x == 22);
+        CHECK(restored.ai.sense.scent_age == 3 && restored.ai.sense.observed_turn == 99);
+        CHECK(restored.ai.player_y == 25 && restored.ai.player_x == 26);
+        CHECK(restored.ai.player_action == 6 && restored.ai.player_action_turn == 97);
+        CHECK(restored.ai.attack_y == 27 && restored.ai.attack_x == 28);
+        CHECK(restored.ai.attack_chain == 3 && restored.ai.attack_turn == 96);
         if (recovery) CHECK(!monster_abilities_can_react(&restored));
 
-        /* 0.9.8.4 ends the monster record after poison. Remove the new two
-         * trailing fields from decoded bytes, retain the following record's
-         * sentinel, then re-encode. This checks the legacy read boundary. */
+        /* Construct the real .4 and .5 layouts separately. The .6 appended
+         * record is 29 (s16,byte,s32) observations, 22 sensory bytes, 13
+         * objective/history bytes and two s32 history timestamps. No native
+         * struct sizeof/padding and no assumption that abilities are last. */
+        const size_t ai_bytes = 7 * MON_AI_FEATURE_COUNT + 22 + 13 + 8;
         byte previous = 0;
         for (size_t i = 0; i < size; i++) {
             plain[i] = encoded[i] ^ previous;
             previous = encoded[i];
         }
-        plain[size - 4] = plain[size - 2];
-        plain[size - 3] = plain[size - 1];
-        previous = 0;
-        for (size_t i = 0; i < size - 2; i++) {
-            previous ^= plain[i];
-            legacy[i] = previous;
+        for (int extra = 4; extra <= 5; ++extra) {
+            size_t payload = size - 2 - ai_bytes - (extra < 5 ? 2 : 0);
+            previous = 0;
+            for (size_t i = 0; i < payload + 2; ++i) {
+                byte value = i < payload ? plain[i]
+                    : i == payload ? 0x3c : 0xa5;
+                previous ^= value;
+                legacy[i] = previous;
+            }
+            memset(&restored, 0xff, sizeof(restored));
+            CHECK(ability_load_record(legacy, payload + 2, extra,
+                &restored, &sentinel) == payload + 2);
+            CHECK(sentinel == 0xa53c);
+            CHECK(restored.energy == -120 && restored.poisoned == 37);
+            CHECK(restored.vengeance == (extra >= 5 ? 1 : 0));
+            CHECK(restored.smite_recovery == (extra >= 5 ? recovery : 0));
+            CHECK(restored.consecutive_attacks == (extra >= 5 ? 3 : 0));
+            CHECK(!restored.ability_in_action && !restored.ability_melee);
+            CHECK(!restored.ability_displaced);
+            CHECK(restored.skip_next_turn == (recovery == 1));
+            CHECK(!memcmp(restored.previous_action, m->previous_action, ACTION_MAX));
+            monster_ai_state empty_ai = {0};
+            CHECK(!memcmp(&restored.ai, &empty_ai, sizeof(empty_ai)));
         }
-        memset(&restored, 0xff, sizeof(restored));
-        CHECK(ability_load_record(legacy, size - 2, 4, &restored, &sentinel)
-            == size - 2);
-        CHECK(sentinel == 0xa53c);
-        CHECK(restored.energy == -120 && restored.poisoned == 37);
-        CHECK(restored.vengeance == 0 && restored.smite_recovery == 0);
-        CHECK(restored.consecutive_attacks == 0);
-        CHECK(!restored.ability_in_action && !restored.ability_melee);
-        CHECK(!restored.ability_displaced);
-        CHECK(restored.skip_next_turn == (recovery == 1));
-        CHECK(!memcmp(restored.previous_action, m->previous_action, ACTION_MAX));
     }
     monster_type* m = reset_monster(RF5_SMITE | RF5_VENGEANCE);
     m->smite_recovery = 1;
     m->skip_next_turn = false; /* Reader repairs pending recovery's skip bit. */
     size_t size = ability_save_record(encoded, sizeof(encoded), m);
     memset(&restored, 0, sizeof(restored));
-    CHECK(ability_load_record(encoded, size, 5, &restored, &sentinel) == size);
+    CHECK(ability_load_record(encoded, size, 6, &restored, &sentinel) == size);
     CHECK(restored.smite_recovery == 1 && restored.skip_next_turn);
     CHECK(!monster_abilities_can_react(&restored));
     m->smite_recovery = 255;
     m->vengeance = 255;
     size = ability_save_record(encoded, sizeof(encoded), m);
-    CHECK(ability_load_record(encoded, size, 5, &restored, &sentinel) == size);
+    CHECK(ability_load_record(encoded, size, 6, &restored, &sentinel) == size);
     CHECK(sentinel == 0xa53c);
     CHECK(restored.smite_recovery == 2 && restored.vengeance == 1);
 }

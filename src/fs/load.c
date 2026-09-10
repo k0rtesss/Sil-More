@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -1108,6 +1109,40 @@ void rd_monster(monster_type* m_ptr)
     }
     else
         m_ptr->consecutive_attacks = 0;
+
+    memset(&m_ptr->ai, 0, sizeof(m_ptr->ai));
+    if (savefile_version_at_least(0, 9, 8, 6))
+    {
+        for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)
+        {
+            rd_s16b(&m_ptr->ai.observations[f].value);
+            rd_byte(&m_ptr->ai.observations[f].ttl);
+            rd_s32b(&m_ptr->ai.observations[f].turn);
+        }
+        monster_sense_state* sense = &m_ptr->ai.sense;
+        rd_byte(&sense->kind);
+        rd_byte(&sense->y); rd_byte(&sense->x);
+        rd_byte(&sense->anchor_y); rd_byte(&sense->anchor_x);
+        rd_byte(&sense->scent_age);
+        rd_byte(&sense->stale_decisions); rd_byte(&sense->search_decisions);
+        rd_byte(&sense->recent_count); rd_byte(&sense->recent_next);
+        for (int n = 0; n < 4; ++n)
+        {
+            rd_byte(&sense->recent_y[n]); rd_byte(&sense->recent_x[n]);
+        }
+        rd_u32b(&sense->observed_turn);
+        rd_byte(&m_ptr->ai.cast_reserve);
+        rd_byte(&m_ptr->ai.goal_y); rd_byte(&m_ptr->ai.goal_x);
+        rd_byte(&m_ptr->ai.goal_age);
+        rd_byte(&m_ptr->ai.previous_y); rd_byte(&m_ptr->ai.previous_x);
+        rd_byte(&m_ptr->ai.waits);
+        rd_byte(&m_ptr->ai.player_y); rd_byte(&m_ptr->ai.player_x);
+        rd_byte(&m_ptr->ai.player_action);
+        rd_byte(&m_ptr->ai.attack_y); rd_byte(&m_ptr->ai.attack_x);
+        rd_byte(&m_ptr->ai.attack_chain);
+        rd_s32b(&m_ptr->ai.player_action_turn); rd_s32b(&m_ptr->ai.attack_turn);
+        monster_ai_sanitize(m_ptr);
+    }
 }
 
 /*

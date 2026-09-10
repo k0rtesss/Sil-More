@@ -1,6 +1,7 @@
 /* File: fs/load-dungeon.c -- carved from load.c (shares state via fs/load-internal.h) */
 
 #include "angband.h"
+#include "monster/monster-senses.h"
 #include "cave/cave-fixtures.h"
 #include "blitz.h"
 #include "externs.h"
@@ -909,6 +910,33 @@ errr rd_dungeon(void)
         update_flow(flow_center_y[i], flow_center_x[i], i);
     }
     log_trace("[load:%06u] === END WANDERING MONSTERS ===", (unsigned)load_byte_offset);
+
+    scent_restore_begin();
+    if (savefile_version_at_least(0, 9, 8, 6))
+    {
+        u16b magic = 0;
+        u32b start_offset = load_byte_offset;
+        rd_u16b(&magic);
+        if (magic != 0x5CE6 || load_byte_offset - start_offset != 2)
+        {
+            note("Invalid monster scent header.");
+            return -1;
+        }
+        for (y = 0; y < p_ptr->cur_map_hgt; ++y)
+            for (x = 0; x < p_ptr->cur_map_wid; ++x)
+            {
+                byte age = 0;
+                start_offset = load_byte_offset;
+                rd_byte(&age);
+                if (age > SMELL_STRENGTH + 1
+                    || load_byte_offset - start_offset != 1)
+                {
+                    note("Invalid monster scent age.");
+                    return -1;
+                }
+                scent_restore_cell(y, x, age);
+            }
+    }
 
     /*** Success ***/
 

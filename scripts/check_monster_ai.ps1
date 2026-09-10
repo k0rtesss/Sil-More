@@ -12,6 +12,8 @@ try {
         -I src -I external/SDL/include `
         scripts/tests/monster-ai-test.c src/variable.c src/tables.c src/rng.c `
         src/melee/melee-util.c src/melee/melee-movement-path.c `
+        src/monster/monster-senses.c src/monster/monster-ai.c `
+        src/monster/monster-abilities.c src/monster/monster-tactics.c src/cave/cave-light.c `
         src/cave/cave-flow.c src/cave/cave-water.c `
         src/cave/cave-geometry.c src/ui/targeting/direction.c src/cmd/movement/cmd-run.c `
         build-standard/_deps/SDL/libSDL3.dll.a -o "$aiTestDir/test.exe"

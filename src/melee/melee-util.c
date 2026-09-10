@@ -25,7 +25,7 @@ int get_scent(int y, int x)
     /* Get age of scent */
     age = scent - scent_when;
 
-    if (age > SMELL_STRENGTH)
+    if (age < 0 || age > SMELL_STRENGTH)
         return (-1);
 
     /* Return the age of the scent */

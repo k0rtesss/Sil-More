@@ -82,8 +82,10 @@ static void test_poison_ai(void)
 
     m = reset_map(11, 11, 5, 3, 5, 5);
     tile(5, 4, FEAT_POISON);
-    CHECK(tactical_position_score(m, 5, 4)
-        < tactical_position_score(m, 4, 4));
+    tactical_context context = { .actor = m, .py = p_ptr->py,
+        .px = p_ptr->px, .original_distance = m->cdis };
+    CHECK(tactical_position_score(&context, 5, 4)
+        < tactical_position_score(&context, 4, 4));
     CHECK(get_move_tactical(m, &y, &x));
     CHECK(features[y][x] != FEAT_POISON);
 }

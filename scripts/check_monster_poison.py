@@ -15,13 +15,15 @@ OUT = ROOT / "scripts/output/monster-poison-check"
 
 def function(path, name):
     source = (ROOT / path).read_text(encoding="utf-8-sig")
-    match = re.search(r"^void " + name + r"\([^;{]*\)\s*\{", source, re.M)
+    match = re.search(r"^(?:static )?(?:void|int) " + name + r"\([^;{]*\)\s*\{", source, re.M)
     assert match, name
     return source[match.start():source.index("\n}", match.end()) + 2]
 
 
 PRELUDE = r'''
 #include "angband.h"
+#include "monster/monster-ai.h"
+#include "monster/monster-senses.h"
 #include <assert.h>
 #include <stdio.h>
 static player_type player;
@@ -48,6 +50,7 @@ void object_flags(const object_type *o,u32b *a,u32b *b,u32b *c) {
 }
 static byte bytes[1024];
 static int wp,rp,extra_version;
+static int poison_offset, abilities_offset, ai_offset;
 static bool savefile_has_song_duels=true,savefile_has_monster_shatter=true;
 static bool savefile_has_thrall_quest=true,savefile_has_thrall_quest_requested=true;
 static void wr_byte(byte n){assert(wp<1024);bytes[wp++]=n;}
@@ -95,16 +98,33 @@ int main(void){
         reset();monster_poison_brand(1,&venom,&venom,damage);assert(monsters[1].poisoned==(damage+1)/2);
     }
     puts("Brands: positive post-armor damage adds ceil(half), zero blocked hit, bow/ammo either or both apply once: PASS");
-    for(int version=2;version<=4;version++)for(int poison=0;poison<=100;poison++){
+    for(int version=2;version<=6;version++)for(int poison=0;poison<=100;poison++){
         monster_type src={0},dst;src.r_idx=2;src.hp=123;src.energy=-50;src.poisoned=poison;src.thrall_quest_requested=1;
         src.song_will_penalty=7;src.blow_ds_reduction[0]=3;
-        wp=rp=0;extra_version=version;wr_monster(&src);if(version<4)wp-=2;
+        src.vengeance=1;src.smite_recovery=2;
+        src.ai.observations[MON_AI_FIRE].value=2;
+        src.ai.observations[MON_AI_FIRE].ttl=40;
+        src.ai.observations[MON_AI_FIRE].turn=1234;
+        src.ai.sense.kind=MON_SENSE_SHARED_TRACE;
+        src.ai.sense.y=7;src.ai.sense.x=9;src.ai.sense.observed_turn=1234;
+        src.ai.cast_reserve=2;src.ai.goal_age=3;
+        wp=rp=0;extra_version=version;wr_monster(&src);
+        if(version<4)wp=poison_offset;
+        else if(version<5)wp=abilities_offset;
+        else if(version<6)wp=ai_offset;
         wr_byte(0xA5);memset(&dst,0x55,sizeof(dst));rd_monster(&dst);
         assert(dst.poisoned==(version<4?0:poison));assert(dst.r_idx==2&&dst.hp==123&&dst.energy==-50);
         assert(dst.thrall_quest_requested==1&&dst.song_will_penalty==7&&dst.blow_ds_reduction[0]==3);
+        assert(dst.vengeance==(version<5?0:1));
+        assert(dst.smite_recovery==(version<5?0:2));
+        assert(dst.ai.observations[MON_AI_FIRE].value==(version<6?0:2));
+        assert(dst.ai.cast_reserve==(version<6?0:2));
+        assert(dst.ai.goal_age==(version<6?0:3));
+        assert(dst.ai.sense.kind==(version<6?0:MON_SENSE_SHARED_TRACE));
+        assert(!dst.ai.cast_checked&&!dst.ai.cast_available);
         byte sentinel;rd_byte(&sentinel);assert(sentinel==0xA5&&rp==wp);
     }
-    puts("Complete monster record: 101 poison values roundtrip; 0.9.8.2/3 default zero; following record alignment: PASS");
+    puts("Complete monster record: versions 0.9.8.2-6, poison/ability/AI defaults and roundtrip; following record alignment: PASS");
     return 0;
 }
 '''
@@ -116,7 +136,13 @@ def main():
     start = save_source.index("#define SAVE_MON_FLAGS")
     flags = save_source[start:save_source.index("\n\n", start)]
     source = PRELUDE + (ROOT / "src/monster/monster-poison.c").read_text()
-    source += flags + "\n" + function("src/fs/save.c", "wr_monster")
+    writer = function("src/fs/save.c", "wr_monster")
+    writer = writer.replace("wr_s16b(m_ptr->poisoned);", "poison_offset=wp;wr_s16b(m_ptr->poisoned);")
+    writer = writer.replace("wr_byte(m_ptr->vengeance);", "abilities_offset=wp;wr_byte(m_ptr->vengeance);")
+    writer = writer.replace("/* 0.9.8.6:", "ai_offset=wp;/* 0.9.8.6:")
+    source += function("src/monster/monster-ai.c", "observation_lifetime")
+    source += "\n" + function("src/monster/monster-ai.c", "monster_ai_sanitize")
+    source += "\n" + flags + "\n" + writer
     source += "\n" + function("src/fs/load.c", "rd_monster") + TESTS
     fixture = OUT / "check.c"
     fixture.write_text(source, encoding="utf-8")

@@ -3,6 +3,7 @@
 #include "angband.h"
 #include "tutorial/tutorial-game.h"
 #include "birth/birth-internal.h"
+#include "ui/question.h"
 
 /*
  * Skill point costs.
@@ -103,6 +104,7 @@ static NavResult gain_skills_aux(bool birth)
     NavResult result = NAV_OK;
 
     bool death_view = death_spectator_active();
+    bool advice_pending = birth && !death_view;
 
     log_debug("Starting skills allocation with %d experience points", p_ptr->new_exp);
     gain_skills_initial_skill = -1;
@@ -170,6 +172,22 @@ static NavResult gain_skills_aux(bool birth)
         /* First-time players: guided callouts over the real skills screen. */
         birth_coach_show_once(BIRTH_COACH_SKILLS);
 
+        if (advice_pending)
+        {
+            char advice[1024];
+            const ui_question_option close[] = {
+                { 0, "Continue", TERM_L_WHITE, false }
+            };
+
+            birth_skill_recommendation_text(advice, sizeof(advice));
+            (void)ui_question_ask_overlay("Starting skill advice", advice,
+                close, N_ELEMENTS(close), UI_QUESTION_GLOBAL,
+                UI_QUESTION_GLOBAL, 0);
+            advice_pending = false;
+            /* Rebuild allocation hit targets after the popup consumed input. */
+            continue;
+        }
+
         /* Get key */
         hide_cursor = true;
         ch = inkey();
@@ -221,6 +239,8 @@ static NavResult gain_skills_aux(bool birth)
         {
             if (!birth_recommend_skills(old_base, skill_gain, old_new_exp))
                 bell("Not enough experience for the beginner defaults.");
+            else
+                advice_pending = true;
             continue;
         }
 

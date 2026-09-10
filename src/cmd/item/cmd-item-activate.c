@@ -302,6 +302,7 @@ static void msg_print_object_identified(const object_type* o_ptr)
     char o_name[80];
     object_desc(o_name, sizeof(o_name), o_ptr, true, 0);
     msg_format("You identify %s.", o_name);
+    tutorial_game_identified(o_ptr, "identification.item");
 }
 
 static const object_type* sanctity_target_excluded = NULL;

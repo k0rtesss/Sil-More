@@ -294,3 +294,15 @@ void get_grid_using_angle(int angle, int y0, int x0, int* ty, int* tx)
         *tx = x0 - 20 + best_x;
     }
 }
+
+/* centerline is 90 minus the angle-table value for the intended target. */
+bool projection_arc_contains(int centerline, int dy, int dx, int degrees)
+{
+    int tmp;
+    if (dy < -20 || dy > 20 || dx < -20 || dx > 20)
+        return false;
+    if (!dy && !dx)
+        return true;
+    tmp = ABS(get_angle_to_grid[dy + 20][dx + 20] + centerline) % 180;
+    return ABS(90 - tmp) < (degrees + 6) / 4;
+}

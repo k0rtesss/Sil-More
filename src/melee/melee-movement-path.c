@@ -5,6 +5,8 @@
 #include "melee/melee-movement-internal.h"
 #include "melee/melee-process.h"
 #include "melee/melee-util.h"
+#include "monster/monster-senses.h"
+#include "monster/monster-ai.h"
 
 /* Pain prompts even ordinary and mindless creatures to leave a seep. Keep
  * a survivable pursuit crossing when it is useful; otherwise find the nearest
@@ -19,6 +21,12 @@ bool get_move_escape_poison(monster_type* m_ptr, int* ty, int* tx)
     int my = m_ptr->fy, mx = m_ptr->fx;
     int start = my * MAX_DUNGEON_WID + mx;
     int head = 0, tail = 0, best = -1, best_depth = CELLS, best_dist = CELLS;
+    int known_y = my, known_x = mx;
+    bool known = monster_senses_target(m_ptr, &known_y, &known_x);
+    if (m_ptr->r_idx == R_IDX_MORGOTH || monster_has_sight(m_ptr))
+    {
+        known_y = p_ptr->py; known_x = p_ptr->px; known = true;
+    }
 
     if (!monster_poison_step_damage(m_ptr, my, mx, my, mx)
         || m_ptr->confused || (r_ptr->flags1 & RF1_NEVER_MOVE)
@@ -29,13 +37,13 @@ bool get_move_escape_poison(monster_type* m_ptr, int* ty, int* tx)
 
     /* A crossing should not reverse at every step merely because its entry
      * bank is closer. Use the whole survivable route until combat range. */
-    if (m_ptr->alertness >= ALERTNESS_ALERT
+    if (known && m_ptr->alertness >= ALERTNESS_ALERT
         && m_ptr->stance != STANCE_FLEEING
-        && m_ptr->cdis > MAX(1, m_ptr->best_range))
+        && distance(my, mx, known_y, known_x) > MAX(1, m_ptr->best_range))
     {
         int idx = cave_m_idx[my][mx];
         int cheapest = FLOW_MAX_DIST;
-        update_flow(p_ptr->py, p_ptr->px, idx);
+        update_flow(known_y, known_x, idx);
         for (int d = 0; d < 8; d++)
         {
             int y = my + ddy_ddd[d], x = mx + ddx_ddd[d];
@@ -85,7 +93,7 @@ bool get_move_escape_poison(monster_type* m_ptr, int* ty, int* tx)
                 queue[tail++] = next;
             else if (monster_terrain_penalty(m_ptr, yy, xx) < 6)
             {
-                int dist = distance(yy, xx, p_ptr->py, p_ptr->px);
+                int dist = distance(yy, xx, known_y, known_x);
                 if (depth[next] < best_depth || dist < best_dist)
                 {
                     best = first[next]; best_depth = depth[next]; best_dist = dist;
@@ -108,36 +116,9 @@ bool get_move_escape_poison(monster_type* m_ptr, int* ty, int* tx)
  */
 bool monster_can_smell(monster_type* m_ptr)
 {
-    monster_race* r_ptr = &r_info[m_ptr->r_idx];
-
-    int age;
-
-    /* Get the age of the scent here */
-    age = get_scent(m_ptr->fy, m_ptr->fx);
-
-    /* No scent */
-    if (age == -1)
-        return (false);
-
-    /* Wolves are amazing trackers */
-    if (strchr("C", r_ptr->d_char))
-    {
-        /* I smell a character! */
-        return (true);
-    }
-
-    /* Felines are also quite good */
-    else if (strchr("f", r_ptr->d_char))
-    {
-        if (age <= SMELL_STRENGTH / 2)
-        {
-            /* Something's in the air... */
-            return (true);
-        }
-    }
-
-    /* You're imagining things. */
-    return (false);
+    int limit = monster_scent_limit(&r_info[m_ptr->r_idx]);
+    int age = get_scent(m_ptr->fy, m_ptr->fx);
+    return limit > 0 && age >= 0 && age <= limit;
 }
 
 /*
@@ -761,6 +742,39 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     int m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
 
+    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_has_sight(m_ptr))
+    {
+        /* Fear does not confer knowledge of an unseen player's new position.
+         * Retain a retreat order, otherwise withdraw from remembered evidence. */
+        *ty = m_ptr->fy; *tx = m_ptr->fx;
+        if (m_ptr->target_y && m_ptr->target_x)
+        {
+            *ty = m_ptr->target_y; *tx = m_ptr->target_x;
+            return true;
+        }
+        int known_y, known_x;
+        if (!monster_senses_target(m_ptr, &known_y, &known_x))
+            return false;
+        int best = distance(m_ptr->fy, m_ptr->fx, known_y, known_x)
+            - 4 * monster_terrain_penalty(m_ptr, m_ptr->fy, m_ptr->fx);
+        for (int d = 0; d < 8; d++)
+        {
+            int yy = m_ptr->fy + ddy_ddd[d], xx = m_ptr->fx + ddx_ddd[d];
+            if (!in_bounds(yy, xx) || cave_m_idx[yy][xx] < 0)
+                continue;
+            int step = monster_step_cost(m_ptr, m_ptr->fy, m_ptr->fx, yy, xx);
+            if (!step)
+                continue;
+            int score = distance(yy, xx, known_y, known_x)
+                - 4 * monster_terrain_penalty(m_ptr, yy, xx) - (step - 1);
+            if (score > best)
+            {
+                best = score; *ty = yy; *tx = xx;
+            }
+        }
+        return *ty != m_ptr->fy || *tx != m_ptr->fx;
+    }
+
     int i;
     int y, x;
 
@@ -768,7 +782,8 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
     bool dummy;
 
     // if it can call for help, then it might
-    if ((r_ptr->flags4 & (RF4_SHRIEK)) && percent_chance(r_ptr->freq_ranged))
+    if (m_ptr->r_idx == R_IDX_MORGOTH && (r_ptr->flags4 & RF4_SHRIEK)
+        && percent_chance(r_ptr->freq_ranged))
     {
         shriek(m_ptr);
         return (false);
@@ -1067,7 +1082,10 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
          * it will turn to fight.
          */
         if ((player_has_los_bold(m_ptr->fy, m_ptr->fx))
-            && ((m_ptr->cdis < TURN_RANGE) || (m_ptr->mspeed < p_ptr->pspeed))
+            && ((m_ptr->cdis < TURN_RANGE)
+                || (m_ptr->r_idx == R_IDX_MORGOTH
+                    ? m_ptr->mspeed < p_ptr->pspeed
+                    : monster_ai_confidence(m_ptr, MON_AI_KITING) > 0))
             && !p_ptr->truce && (r_ptr->freq_ranged < 50))
         {
             /* Message if visible */
@@ -1122,7 +1140,7 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
  * candidate too: choosing only the lowest neighbor flow would ignore the
  * water, door or obstacle immediately in front of the monster.
  */
-void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
+static void get_move_advance_morgoth(monster_type* m_ptr, int* ty, int* tx)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;
@@ -1252,6 +1270,61 @@ void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
     }
 }
 
+/* Ordinary pursuit never uses a flow as proof of hearing. Its source is an
+ * actual observation, an occupied scent trace, or remembered evidence. */
+void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
+{
+    if (m_ptr->r_idx == R_IDX_MORGOTH)
+    {
+        get_move_advance_morgoth(m_ptr, ty, tx);
+        return;
+    }
+    *ty = m_ptr->fy; *tx = m_ptr->fx;
+    /* Lair, retreat and authored movement orders are not sensory evidence. */
+    if (m_ptr->target_y && m_ptr->target_x)
+    {
+        *ty = m_ptr->target_y; *tx = m_ptr->target_x;
+        return;
+    }
+    monster_senses_refresh(m_ptr);
+    bool sight = monster_has_sight(m_ptr);
+    if ((r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL) && !sight)
+        return;
+    if (!monster_senses_advance(m_ptr, ty, tx))
+        return;
+    /* Scent and bounded search already selected a legal adjacent move. */
+    if (m_ptr->ai.sense.kind == MON_SENSE_SCENT
+        || m_ptr->ai.sense.kind == MON_SENSE_SEARCH)
+        return;
+
+    int idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
+    if (idx <= 0)
+    {
+        *ty = m_ptr->fy; *tx = m_ptr->fx;
+        return;
+    }
+    update_flow(*ty, *tx, idx);
+    int closest = FLOW_MAX_DIST;
+    *ty = m_ptr->fy; *tx = m_ptr->fx;
+    for (int i = 7; i >= 0; i--)
+    {
+        int y = m_ptr->fy + ddy_ddd[i], x = m_ptr->fx + ddx_ddd[i];
+        if (!in_bounds(y, x) || (!sight && cave_m_idx[y][x] < 0))
+            continue;
+        int step = monster_step_cost(m_ptr, m_ptr->fy, m_ptr->fx, y, x);
+        int remaining = flow_dist(idx, y, x);
+        if (!step || remaining >= FLOW_MAX_DIST || step + remaining > closest)
+            continue;
+        closest = step + remaining; *ty = y; *tx = x;
+    }
+    /* A remembered but unreachable location must not pin the actor forever. */
+    if (!sight && closest == FLOW_MAX_DIST)
+    {
+        if (++m_ptr->ai.sense.stale_decisions >= 8)
+            m_ptr->ai.sense.kind = MON_SENSE_NONE;
+    }
+}
+
 // This determines how vulnerable the player is to monster attacks
 // It combines elements for available spaces to attack from and for
 // the player's condition and other monsters attacking
@@ -1267,6 +1340,8 @@ static bool vulnerability_attack_grid(monster_type* m_ptr, int y, int x)
 
 int calc_vulnerability(monster_type* m_ptr)
 {
+    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_has_sight(m_ptr))
+        return 0;
     int fy = m_ptr->fy;
     int fx = m_ptr->fx;
     int py = p_ptr->py;
@@ -1359,6 +1434,12 @@ int calc_vulnerability(monster_type* m_ptr)
             vulnerability += 2; // direction 7
         if (attacker_at(py - dy, px - dx))
             vulnerability += 2; // direction 8
+    }
+
+    if (m_ptr->r_idx != R_IDX_MORGOTH)
+    {
+        vulnerability += MAX(0, monster_ai_confidence(m_ptr, MON_AI_WOUNDED));
+        return vulnerability;
     }
 
     if (!p_ptr->active_ability[S_WIL][WIL_FORMIDABLE])

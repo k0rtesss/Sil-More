@@ -10817,12 +10817,12 @@
     },
     {
       "id": "world.partition.2",
-      "title": "Caverns",
+      "title": "Caves",
       "level": "extended",
       "priority": 38,
       "steps": [
         {
-          "text": "{detail} Natural caverns can offer irregular sight lines and routes. Inspect the visible terrain before moving. A cave theme does not identify hidden creatures or items.",
+          "text": "{detail} Natural caves can offer irregular sight lines and routes. Inspect the visible terrain before moving. A cave theme does not identify hidden creatures or items.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10909,12 +10909,12 @@
     },
     {
       "id": "world.partition.6",
-      "title": "Great cavern",
+      "title": "Great Cave",
       "level": "extended",
       "priority": 38,
       "steps": [
         {
-          "text": "{detail} A great cavern opens broad lines of sight and movement. Distant visible threats and available cover matter; inspect what is actually revealed before crossing open ground.",
+          "text": "{detail} A great cave opens broad lines of sight and movement. Distant visible threats and available cover matter; inspect what is actually revealed before crossing open ground.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10932,19 +10932,19 @@
     },
     {
       "id": "world.partition.fire",
-      "title": "Fire cavern",
+      "title": "Fire Cave",
       "level": "extended",
       "priority": 48,
       "steps": [
         {
-          "text": "{detail} This cavern's revealed theme suggests fire dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.",
+          "text": "{detail} This cave's revealed theme suggests fire dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.",
           "kind": "info",
           "anchor": "map"
         }
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-world.c",
-        "predicate": "A discovered great cavern has the corresponding public elemental cave type."
+        "predicate": "A discovered great cave has the corresponding public elemental cave type."
       },
       "sources": [
         "src/tutorial/tutorial-world.c",
@@ -10954,19 +10954,19 @@
     },
     {
       "id": "world.partition.cold",
-      "title": "Cold cavern",
+      "title": "Cold Cave",
       "level": "extended",
       "priority": 48,
       "steps": [
         {
-          "text": "{detail} This cavern's revealed theme suggests cold dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.",
+          "text": "{detail} This cave's revealed theme suggests cold dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.",
           "kind": "info",
           "anchor": "map"
         }
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-world.c",
-        "predicate": "A discovered great cavern has the corresponding public elemental cave type."
+        "predicate": "A discovered great cave has the corresponding public elemental cave type."
       },
       "sources": [
         "src/tutorial/tutorial-world.c",
@@ -10976,19 +10976,19 @@
     },
     {
       "id": "world.partition.poison",
-      "title": "Poison cavern",
+      "title": "Poison Cave",
       "level": "extended",
       "priority": 48,
       "steps": [
         {
-          "text": "{detail} This cavern's revealed theme suggests poison dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.",
+          "text": "{detail} This cave's revealed theme suggests poison dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.",
           "kind": "info",
           "anchor": "map"
         }
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-world.c",
-        "predicate": "A discovered great cavern has the corresponding public elemental cave type."
+        "predicate": "A discovered great cave has the corresponding public elemental cave type."
       },
       "sources": [
         "src/tutorial/tutorial-world.c",

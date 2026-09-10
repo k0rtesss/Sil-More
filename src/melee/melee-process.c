@@ -1,9 +1,12 @@
 #include "angband.h"
+#include "monster/monster-tactics.h"
+#include "monster/monster-ai.h"
 #include "externs.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-process.h"
 #include "melee/melee-util.h"
+#include "monster/monster-senses.h"
 
 int challenge_check(monster_type* m_ptr)
 {
@@ -73,7 +76,10 @@ void find_range(monster_type* m_ptr)
         m_ptr->min_range = FLEE_RANGE;
 
     /* Nearby monsters that cannot run away will stand and fight */
-    if ((m_ptr->cdis < TURN_RANGE) && (m_ptr->mspeed < p_ptr->pspeed))
+    if ((m_ptr->cdis < TURN_RANGE)
+        && ((m_ptr->r_idx == R_IDX_MORGOTH && m_ptr->mspeed < p_ptr->pspeed)
+            || (m_ptr->r_idx != R_IDX_MORGOTH
+                && monster_ai_confidence(m_ptr, MON_AI_KITING) > 0)))
         m_ptr->min_range = 1;
 
     /* Now find preferred range */
@@ -118,299 +124,93 @@ void find_range(monster_type* m_ptr)
     }
 }
 
-static void remove_expensive_spells(int m_idx, u32b* f4p)
-{
-    monster_type* m_ptr = &mon_list[m_idx];
-
-    int i;
-
-    u32b f4 = (*f4p);
-
-    /* check innate spells for mana available */
-    for (i = 0; i < 32; i++)
-    {
-        if (spell_info_RF4[i][COL_SPELL_MANA_COST] > m_ptr->mana)
-            f4 &= ~(0x00000001 << i);
-    }
-
-    /* Modify the spell list. */
-    (*f4p) = f4;
-}
-
-/*
- * Intelligent monsters use this function to filter away spells
- * which have no benefit.
- */
-static void remove_invalid_spells(int m_idx, u32b* f4p)
-{
-    monster_type* m_ptr = &mon_list[m_idx];
-
-    u32b f4 = (*f4p);
-
-    int dy, dx;
-    int dist = distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
-
-    // Screech only works at very close range
-    if (m_ptr->cdis > 2)
-    {
-        f4 &= ~(RF4_SCREECH);
-    }
-
-    // make sure that missile attacks are never done at melee range or when
-    // afraid
-    if ((dist == 1) || (m_ptr->stance == STANCE_FLEEING) || p_ptr->truce)
-    {
-        f4 &= ~(RF4_ARROW1);
-        f4 &= ~(RF4_ARROW2);
-        f4 &= ~(RF4_BOULDER);
-        f4 &= ~(RF4_EARTHQUAKE);
-    }
-
-    // make sure that breath attacks are never used when the monster is fleeing
-    if (m_ptr->stance == STANCE_FLEEING)
-    {
-        f4 &= ~(RF4_BREATH_MASK);
-    }
-
-    // no songs during the truce
-    if (p_ptr->truce)
-    {
-        f4 &= ~(RF4_SNG_MASK);
-    }
-
-    // no songs by Morgoth until uncrowned
-    if ((m_ptr->r_idx == R_IDX_MORGOTH)
-        && !p_ptr->on_the_run
-        && ((&a_info[ART_MORGOTH_3])->cur_num == 0))
-    {
-        f4 &= ~(RF4_SNG_MASK);
-    }
-
-    // In his throne hall, Morgoth should not waste turns on the door-closing
-    // part of Song of Binding before the pursuit begins.
-    if ((m_ptr->r_idx == R_IDX_MORGOTH)
-        && (p_ptr->depth == MORGOTH_DEPTH)
-        && p_ptr->morgoth_hall_entered
-        && !p_ptr->on_the_run)
-    {
-        f4 &= ~(RF4_SNG_BINDING);
-    }
-
-    // projectiles have limited range
-    if (dist > 5)
-        f4 &= ~(RF4_BOULDER);
-    if (dist > 10)
-        f4 &= ~(RF4_ARROW1);
-    if (dist > 16)
-        f4 &= ~(RF4_ARROW2);
-
-    // Earthquake is only useful at close range and if there is no monster in
-    // the smashed square
-    dy = (m_ptr->fy > p_ptr->py) ? -1 : ((m_ptr->fy < p_ptr->py) ? 1 : 0);
-    dx = (m_ptr->fx > p_ptr->px) ? -1 : ((m_ptr->fx < p_ptr->px) ? 1 : 0);
-    if ((m_ptr->cdis > 3) || (cave_m_idx[m_ptr->fy + dy][m_ptr->fx + dx] > 0))
-    {
-        f4 &= ~(RF4_EARTHQUAKE);
-    }
-
-    /* Darkness is only useful if the player's square is lit */
-    if (!(cave_info[p_ptr->py][p_ptr->px] & (CAVE_GLOW)))
-        f4 &= ~(RF4_DARKNESS);
-
-    /* Modify the spell list. */
-    (*f4p) = f4;
-}
-
-/*
- * Count the number of castable spells.
- *
- * If exactly 1 spell is available cast it.  If more than more is
- * available, and the random bit is set, pick one.
- *
- * Used as a short cut in 'choose_attack_spell' to circumvent AI
- * when there is only 1 choice. (random=false)
- *
- * Also used in 'choose_attack_spell' to circumvent AI when
- * casting randomly (random=true), as with dumb monsters.
- */
-static int choose_attack_spell_fast(u32b* f4p, bool do_random)
-{
-    int i, num = 0;
-    byte spells[128];
-
-    u32b f4 = (*f4p);
-
-    /* Extract the 'spells' */
-    for (i = 0; i < 32; i++)
-    {
-        if (f4 & (1L << i))
-            spells[num++] = i + 32 * 3;
-    }
-
-    /* Paranoia */
-    if (num == 0)
-        return (0);
-
-    /* Go quick if possible */
-    if (num == 1)
-    {
-        /* Cast the one spell */
-        return (spells[0]);
-    }
-
-    /*
-     * If we aren't allowed to choose at random
-     * and we have multiple spells left, give up on quick
-     * selection
-     */
-    if (!(do_random))
-        return (0);
-
-    /* Pick at random */
-    return (spells[rand_int(num)]);
-}
-
-/*
- * Have a monster choose a spell.
- *
- * Monster at m_idx uses this function to select a legal attack spell.
- * Spell casting AI is based here.
- *
- * First the code will try to save time by seeing if
- * choose_attack_spell_fast is helpful.  Otherwise, various AI
- * parameters are used to calculate a 'desirability' for each spell.
- * There is some randomness.  The most desirable spell is cast.
- *
- * Returns the spell number, of '0' if no spell is selected.
- *
- *-BR-
- */
+/* Filter before any random or single-candidate shortcut. */
 static int choose_ranged_attack(int m_idx)
 {
     monster_type* m_ptr = &mon_list[m_idx];
-    monster_race* r_ptr = &r_info[m_ptr->r_idx];
-
-    u32b f4;
-
-    byte spell_range;
-
-    bool do_random = false;
-
-    int i;
-    int path;
-
-    int cur_range = 0;
-
-    int best_spell = 0, best_spell_rating = 0;
-    int cur_spell_rating;
-
-    /* Extract the racial spell flags */
-    f4 = r_ptr->flags4;
-
-    /* Check what kinds of spells can hit player */
-    path
-        = projectable(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px, PROJECT_CHCK);
-
-    /* do we have the player in sight at all? */
-    if (path == PROJECT_NO)
+    const monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    int i, count = 0, best = 0, choices[32], scores[32];
+    bool simple = (r_ptr->flags2 & RF2_MINDLESS) != 0;
+    /* Morgoth's ordinary chooser retains its original firing-line gate.
+     * Scripted pursuit can still start Piercing through its separate route. */
+    if (m_ptr->r_idx == R_IDX_MORGOTH
+        && projectable(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px,
+               PROJECT_CHCK) == PROJECT_NO)
+        return 0;
+    for (i = 0; i < 32; ++i)
     {
-        return (0);
-    }
-
-    /* remove boulders and archery */
-    else if (path == PROJECT_NOT_CLEAR)
-    {
-        f4 &= ~(RF4_ARCHERY_MASK);
-    }
-
-    /* No spells left */
-    if (!f4)
-        return (0);
-
-    /* Spells we can not afford */
-    remove_expensive_spells(m_idx, &f4);
-
-    /* No spells left */
-    if (!f4)
-        return (0);
-
-    /* Mindless monsters choose at random. */
-    if (r_ptr->flags2 & (RF2_MINDLESS))
-        return (choose_attack_spell_fast(&f4, true));
-
-    /* Remove spells that have unfulfilled conditions */
-    remove_invalid_spells(m_idx, &f4);
-
-    /* No spells left */
-    if (!f4)
-        return (0);
-
-    /* Sometimes non-dumb monsters cast randomly (though from the
-     * restricted list)
-     */
-    if ((!(r_ptr->flags2 & (RF2_SMART))) && (one_in_(5)))
-        do_random = true;
-
-    /* Try 'fast' selection first.
-     * If there is only one spell, choose that spell.
-     * If there are multiple spells, choose one randomly if the 'random' flag is
-     * set. Otherwise fail, and let the AI choose.
-     */
-    best_spell = choose_attack_spell_fast(&f4, do_random);
-    if (best_spell)
-        return (best_spell);
-
-    /* Check if no spells left */
-    if (!f4)
-        return (0);
-
-    /* The conditionals are written for speed rather than readability
-     * They should probably stay that way. */
-    for (i = 0; i < 32; i++)
-    {
-        /* Do we even have this spell? */
-        if (!(f4 & (1L << i)))
-            continue;
-        spell_range = spell_info_RF4[i][COL_SPELL_BEST_RANGE];
-
-        /* Base Desirability*/
-        cur_spell_rating = spell_desire_RF4[i][D_BASE];
-
-        /* Penalty for range if attack drops off in power */
-        if (spell_range)
+        scores[i] = -1;
+        if (!(r_ptr->flags4 & (1UL << i))
+            || !monster_ranged_attack_legal(m_ptr, i + 96)) continue;
+        if (simple) scores[i] = 1;
+        else if (m_ptr->r_idx == R_IDX_MORGOTH)
         {
-            cur_range = m_ptr->cdis;
-            while (cur_range-- > spell_range)
-                cur_spell_rating
-                    = (cur_spell_rating * spell_desire_RF4[i][D_RANGE]) / 100;
+            /* Preserve Morgoth's existing desirability and random spread. */
+            int range = m_ptr->cdis;
+            scores[i] = spell_desire_RF4[i][D_BASE];
+            if (spell_info_RF4[i][COL_SPELL_BEST_RANGE])
+                while (range-- > spell_info_RF4[i][COL_SPELL_BEST_RANGE])
+                    scores[i] = scores[i] * spell_desire_RF4[i][D_RANGE] / 100;
         }
-
-        /* Random factor; less random for smart monsters */
-        if (r_ptr->flags2 & (RF2_SMART))
-            cur_spell_rating += rand_int(10);
-        else
-            cur_spell_rating += rand_int(50);
-
-        /* Is this the best spell yet?, or alternate between equal spells*/
-        if ((cur_spell_rating > best_spell_rating)
-            || ((cur_spell_rating == best_spell_rating) && one_in_(2)))
-        {
-            best_spell_rating = cur_spell_rating;
-            best_spell = i + 96;
-        }
+        else scores[i] = monster_ranged_utility(m_ptr, i + 96);
+        best = MAX(best, scores[i]);
     }
-
-    if (p_ptr->wizard)
+    if (m_ptr->r_idx == R_IDX_MORGOTH)
     {
-        msg_format("Spell rating: %i.", best_spell_rating);
+        int result = 0, rating = 0;
+        for (i = 0; i < 32; ++i)
+            if (scores[i] >= 0) choices[count++] = i + 96;
+        if (count == 1) return choices[0];
+        for (i = 0; i < 32; ++i)
+        {
+            if (scores[i] < 0) continue;
+            scores[i] += rand_int((r_ptr->flags2 & RF2_SMART) ? 10 : 50);
+            if (scores[i] > rating || (scores[i] == rating && one_in_(2)))
+            { rating = scores[i]; result = i + 96; }
+        }
+        return result;
     }
+    if (best <= 0) return 0;
+    for (i = 0; i < 32; ++i)
+        if (scores[i] > 0 && scores[i] * 10 >= best * 9)
+            choices[count++] = i + 96;
+    return count ? choices[rand_int(count)] : 0;
+}
 
-    // Abort if there are no good spells
-    if (best_spell_rating == 0)
-        return (0);
+bool monster_ai_casting_opportunity(monster_type* m_ptr, int chance)
+{
+    bool success, retained;
+    if (chance <= 0 || m_ptr->confused || p_ptr->truce
+        || (singing(SNG_CHALLENGE) && m_ptr->stance == STANCE_AGGRESSIVE))
+    {
+        m_ptr->ai.cast_checked = true;
+        m_ptr->ai.cast_available = false;
+        m_ptr->ai.cast_reserve = 0;
+        return false;
+    }
+    if (m_ptr->ai.cast_checked) return m_ptr->ai.cast_available;
+    m_ptr->ai.cast_checked = true;
+    success = percent_chance(chance); /* Exactly one ordinary roll per action. */
+    /* The scheduler ages reserves even when escape or another action wins. */
+    retained = m_ptr->ai.cast_reserve > 0;
+    if (!monster_ai_enabled(m_ptr))
+    {
+        m_ptr->ai.cast_reserve = 0;
+        m_ptr->ai.cast_available = success;
+    }
+    else
+    {
+        /* New successes never renew or stack on a live older opportunity. */
+        if (success && !retained) m_ptr->ai.cast_reserve = 3;
+        m_ptr->ai.cast_available = m_ptr->ai.cast_reserve > 0;
+    }
+    return m_ptr->ai.cast_available;
+}
 
-    /* Return Best Spell */
-    return (best_spell);
+void monster_ai_spend_casting_opportunity(monster_type* m_ptr)
+{
+    m_ptr->ai.cast_available = false;
+    m_ptr->ai.cast_reserve = 0;
 }
 
 static bool has_sleeping_kin(monster_type* m_ptr)
@@ -690,8 +490,11 @@ static void process_monster(monster_type* m_ptr)
         return;
     }
 
-    // unwary but awake monsters can wander around the dungeon
-    if (m_ptr->alertness < ALERTNESS_ALERT)
+    monster_senses_refresh(m_ptr);
+
+    // Awake trackers can investigate scent without identifying its owner.
+    if (m_ptr->alertness < ALERTNESS_ALERT
+        && !monster_senses_target(m_ptr, &ty, &tx))
     {
         wander(m_ptr);
         return;
@@ -700,12 +503,22 @@ static void process_monster(monster_type* m_ptr)
     if (song_disguise_monster_is_fooled(m_ptr))
         return;
 
-    // Update monster flow information
-    update_flow(p_ptr->py, p_ptr->px, m_idx);
+    // Only confirmed sensory evidence may create a player pursuit flow.
+    if (m_ptr->r_idx == R_IDX_MORGOTH)
+        update_flow(p_ptr->py, p_ptr->px, m_idx);
+    else if (monster_senses_target(m_ptr, &ty, &tx))
+        update_flow(ty, tx, m_idx);
+    else
+        update_flow(m_ptr->fy, m_ptr->fx, m_idx);
 
     /* Calculate the monster's preferred combat range when needed */
     if (m_ptr->min_range == 0)
-        find_range(m_ptr);
+    {
+        if (m_ptr->r_idx == R_IDX_MORGOTH || monster_ai_can_see_player(m_ptr))
+            find_range(m_ptr);
+        else
+            m_ptr->min_range = m_ptr->best_range = 1;
+    }
 
     // determine if the monster should be active:
 
@@ -725,6 +538,20 @@ static void process_monster(monster_type* m_ptr)
     if ((r_ptr->level > 17) && (p_ptr->depth == 0))
         m_ptr->mflag |= (MFLAG_ACTV);
 
+    if (m_ptr->r_idx != R_IDX_MORGOTH)
+    {
+        if (monster_senses_target(m_ptr, &ty, &tx))
+            m_ptr->mflag |= MFLAG_ACTV;
+        /* An awake supporter can help visible allies without seeing player. */
+        if (m_ptr->alertness >= ALERTNESS_ALERT
+            && (((r_ptr->flags4 & RF4_RALLY)
+                    && monster_ranged_utility(m_ptr, 120) > 0)
+                || ((r_ptr->flags4 & RF4_SHRIEK)
+                    && monster_ranged_utility(m_ptr, 104) > 0)))
+            m_ptr->mflag |= MFLAG_ACTV;
+    }
+    else
+    {
     // 'short sighted' monsters are active when the player is *very* close
     if (r_ptr->flags2 & (RF2_SHORT_SIGHTED))
     {
@@ -753,6 +580,8 @@ static void process_monster(monster_type* m_ptr)
             m_ptr->mflag |= (MFLAG_ACTV);
     }
 
+    }
+
     /*
      * Special handling if the first turn a monster has after
      * being attacked by the player, but the player is out of sight
@@ -763,7 +592,7 @@ static void process_monster(monster_type* m_ptr)
         // or if it is in a corridor and can't fire back
         if (((m_ptr->best_range == 1)
                 && !(cave_info[m_ptr->fy][m_ptr->fx] & (CAVE_ROOM)))
-            || !player_has_los_bold(m_ptr->fy, m_ptr->fx))
+            || !monster_ai_can_see_player(m_ptr))
         {
             m_ptr->mflag |= (MFLAG_AGGRESSIVE);
 
@@ -798,7 +627,8 @@ static void process_monster(monster_type* m_ptr)
          * (1) if it isn't next to the player on its turn (pillar dance,
          * hack-n-back, etc)
          */
-        if (((m_ptr->cdis > 1) && !(m_ptr->mflag & (MFLAG_PUSHED))))
+        if ((!monster_ai_can_see_player(m_ptr) || m_ptr->cdis > 1)
+            && !(m_ptr->mflag & MFLAG_PUSHED))
         {
             m_ptr->mflag |= (MFLAG_AGGRESSIVE);
 
@@ -834,7 +664,7 @@ static void process_monster(monster_type* m_ptr)
     // If a smart monster has sleeping friends and sees player, sometimes shout
     // a warning
     if (one_in_(2) && (r_ptr->flags2 & (RF2_SMART))
-        && player_has_los_bold(m_ptr->fy, m_ptr->fx) && has_sleeping_kin(m_ptr))
+        && monster_ai_can_see_player(m_ptr) && has_sleeping_kin(m_ptr))
     {
         /*if part of a pack, let them know*/
         if ((r_ptr->flags1 & (RF1_FRIENDS)) || (r_ptr->flags1 & (RF1_FRIEND))
@@ -900,27 +730,25 @@ static void process_monster(monster_type* m_ptr)
         }
     }
 
-    /*** Ranged attacks ***/
-
-    /* Monster can cast spells */
+    /*** One shared decision: ranged/support versus paid melee/movement. ***/
     if (r_ptr->freq_ranged)
     {
         chance = get_chance_of_ranged_attack(m_ptr);
-
-        if ((chance) && percent_chance(chance))
+        if (monster_ai_casting_opportunity(m_ptr, chance))
+            choice = choose_ranged_attack(m_idx);
+        if (choice)
         {
-            /* Pick a ranged attack */
-            choice = choose_ranged_attack(cave_m_idx[m_ptr->fy][m_ptr->fx]);
-        }
-
-        /* Selected a ranged attack? */
-        if (choice != 0)
-        {
-            /* Execute said attack */
-            make_attack_ranged(m_ptr, choice);
-
-            /* End turn */
-            return;
+            int alternative = MAX(monster_best_melee_utility(m_ptr),
+                monster_tactical_move_utility(m_ptr));
+            if (!monster_ai_enabled(m_ptr)
+                || monster_ranged_utility(m_ptr, choice) * 10 >= alternative * 9)
+            {
+                if (make_attack_ranged(m_ptr, choice))
+                {
+                    monster_ai_spend_casting_opportunity(m_ptr);
+                    return;
+                }
+            }
         }
     }
 
@@ -952,7 +780,8 @@ static void process_monster(monster_type* m_ptr)
                 l_ptr->flags1 |= (RF1_RAND_50);
         }
 
-        if (m_ptr->cdis > 1)
+        if ((m_ptr->r_idx == R_IDX_MORGOTH || monster_ai_can_see_player(m_ptr))
+            && m_ptr->cdis > 1)
         {
             chance /= 2;
         }
@@ -980,7 +809,7 @@ static void process_monster(monster_type* m_ptr)
             }
 
             /* Player can see the monster, and it is not afraid */
-            if (player_has_los_bold(m_ptr->fy, m_ptr->fx))
+            if (monster_ai_can_see_player(m_ptr))
             {
                 m_ptr->target_y = 0;
                 m_ptr->target_x = 0;
@@ -1125,24 +954,10 @@ static void process_monster(monster_type* m_ptr)
             }
         }
 
-        // if the square is non-adjacent to the player, then allow a ranged
-        // attack instead of a move
-        if ((m_ptr->cdis > 1) && r_ptr->freq_ranged)
-        {
-            chance = get_chance_of_ranged_attack(m_ptr);
-
-            if ((chance) && percent_chance(chance))
-            {
-                choice = choose_ranged_attack(cave_m_idx[m_ptr->fy][m_ptr->fx]);
-            }
-
-            /* Selected a ranged attack? */
-            if (choice != 0)
-            {
-                /* Execute said attack */
-                make_attack_ranged(m_ptr, choice);
-            }
-        }
+        /* Reuse the action's opportunity and candidate; never roll twice. */
+        if (choice && m_ptr->ai.cast_available
+            && make_attack_ranged(m_ptr, choice))
+            monster_ai_spend_casting_opportunity(m_ptr);
 
         return;
     }
@@ -1734,6 +1549,7 @@ static void finish_monster_ability_action(
 {
     if (!m_ptr->r_idx)
         return;
+    monster_ai_end_turn(m_ptr, old_y, old_x, skipped);
     monster_abilities_end_action(m_ptr, old_y, old_x, skipped);
     calc_monster_speed(m_ptr->fy, m_ptr->fx);
 }
@@ -1772,6 +1588,7 @@ void process_monsters(s16b minimum_energy)
 
         old_y = m_ptr->fy;
         old_x = m_ptr->fx;
+        monster_ai_begin_turn(m_ptr);
         monster_abilities_begin_action(m_ptr);
 
         /* Lava also affects sleeping monsters and those missing their turn. */
@@ -1972,26 +1789,9 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
             }
 
             // awake creatures who have line of sight on player get a bonus
-            if (los(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px)
-                && (m_ptr->alertness >= ALERTNESS_UNWARY))
+            if (monster_has_sight(m_ptr))
             {
-                bool monster_sees_player = true;
-
-                // Visual recognition check for intelligent monsters
-                if (!monster_race_is_vala(m_ptr->r_idx)
-                    && visual_recognition && (r_ptr->flags2 & (RF2_SMART)))
-                {
-                    // Disguise ability reduces monster's effective perception
-                    int per_divisor = p_ptr->active_ability[S_STL][STL_DISGUISE] ? 4 : 2;
-
-                    int vision_score = monster_skill(m_ptr, S_PER) / per_divisor
-                                     + p_ptr->cur_light
-                                     + ((cave_info[p_ptr->py][p_ptr->px] & (CAVE_GLOW)) ? 2 : 0);
-
-                    monster_sees_player = (vision_score >= m_ptr->cdis);
-                }
-
-                if (monster_sees_player)
+                monster_senses_see(m_ptr, p_ptr->py, p_ptr->px);
                 {
                     int d, dir, y, x, open_squares = 0;
 
@@ -2036,6 +1836,13 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
 
             if (result > 0)
             {
+                /* A successful player-origin hearing roll remembers the
+                 * sound's recorded epicenter. Monster noise changes alertness
+                 * but supplies no information about the player's position. */
+                if (player_centered && noise_dist < FLOW_MAX_DIST)
+                    monster_senses_hear(m_ptr,
+                        flow_center_y[FLOW_PLAYER_NOISE],
+                        flow_center_x[FLOW_PLAYER_NOISE]);
                 // Partly alert monster
                 set_alertness(m_ptr, m_ptr->alertness + result);
 

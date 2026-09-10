@@ -1,6 +1,12 @@
 # Monster AI implementation plan
 
-Updated 2026-09-11 against branch `0.9.8`, commit `9a814c31`, including the current uncommitted monster, ability, and poison changes. This document is a plan; its proposed behavior has not been implemented or playtested as part of this review.
+Updated 2026-09-11. Implemented against branch `0.9.8`, including the monster, ability, and poison baseline now committed as `d67d8ded`.
+
+Implementation is in `src/monster/monster-ai.c`, `monster-senses.c`, `monster-tactics.c`, the existing melee decision/movement modules, shared light/projection helpers, and the real player action and damage routes. Save version is now **0.9.8.6**. Morgoth keeps a separate copy of his previous tactical movement and his ordinary song-selection gate.
+
+Automated validation covers learning, bounded sensory pursuit, movement and shadow tactics, casting/melee decisions, poison action order, real new-monster encounters, and versioned saves. The parallel Windows build passes with eight workers; the unrestricted default exhausted compiler memory during the full rebuild. Interactive encounter balance has not been playtested. The sections below retain the agreed design and validation requirements.
+
+Completed checks: `check_monster_ai.ps1` (574), `check_monster_ai_combat.ps1` (74), `check_monster_abilities.ps1` (310), `check_monster_senses.ps1` (76), `check_monster_learning.ps1`, `check_monster_poison.py`, `check_monster_ai_integration.py`, `check_monster_scent_save.py`, `check_poison_terrain.py`, `check_ice_combat.py`, `check_lava.py`, template version validation, and scoped whitespace checks. The integration tests use isolated temporary data, not player saves.
 
 ## 1. Scope and retained decisions
 
@@ -38,7 +44,7 @@ Monster `RES_POIS` prevents new poison completely. Flight prevents pool contact,
 
 The implementation already tracks completed actions, movement history, consecutive melee attacks, Vengeance, and Smite recovery. Extend these records and their scheduler boundaries; do not introduce competing history updates.
 
-Save version is currently **0.9.8.5**: monster poison arrived in `.4`, and stateful abilities/lore in `.5`. A subsequent persistent AI/scent extension should use **0.9.8.6**, provided no intervening format change consumes that version.
+The baseline save version was **0.9.8.5**: monster poison arrived in `.4`, and stateful abilities/lore in `.5`. The implemented persistent AI/scent extension uses **0.9.8.6**, with version-gated older reads.
 
 The nine new uniques are defined. Ringwion, Angacirca, Langon, and Dúron use normal allocation. Lhamthanc and Fankil have authored encounters. Helcamo, Ondotur, and Nambatur remain reserved without their future encounters. Their AI can be exercised through development fixtures without enabling new locations.
 

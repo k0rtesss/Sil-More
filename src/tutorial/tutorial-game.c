@@ -282,13 +282,20 @@ void tutorial_game_item_description_closed(void)
 
 void tutorial_game_identified(const object_type *item, const char *reason)
 {
-    char name[160];
+    char name[160], id[80];
     if (!gameplay_available() || !item || !item->k_idx || p_ptr->image) return;
     if (item->tval == TV_SKELETON || item->tval == TV_CHEST) return;
     reached_kinds[(u16b)item->k_idx] = true;
     object_desc(name, sizeof(name), item, true, 3);
     observe(reason ? reason : "identification.item", item_type(item), name,
         "The game has revealed new information about this item. Open its updated description to see what you learned.");
+    /* Capture the revealed effect before the last consumable disappears.
+     * Queue information only; the next safe checkpoint displays the card. */
+    if (object_aware_p(item) && (item->tval == TV_POTION || item->tval == TV_FOOD
+        || item->tval == TV_GEM || item->tval == TV_STAFF || item->tval == TV_HORN)) {
+        strnfmt(id, sizeof(id), "effect.%d", item->k_idx);
+        observe(id, item_type(item), name, "This item's effect has been revealed.");
+    }
 }
 
 void tutorial_game_explain(const char *id, const char *subject, const char *detail)
@@ -381,6 +388,27 @@ static bool target_can_be_attacked(const monster_type *monster)
     if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE) return false;
     if (merciless_attack((monster_type *)monster) || cowardly_attack((monster_type *)monster)) return false;
     return true;
+}
+
+static bool tutorial_monster_observable(const monster_type *monster)
+{
+    return monster && monster->r_idx && monster->ml
+        && player_has_los_bold(monster->fy, monster->fx)
+        && !(r_info[monster->r_idx].flags1 & RF1_PEACEFUL) && !p_ptr->image;
+}
+
+/* Shared by the live observation and the first-map generation check. */
+static bool tutorial_first_monster_target(const monster_type *monster)
+{
+    return !p_ptr->rage && !p_ptr->entranced && p_ptr->stun <= 100
+        && tutorial_monster_observable(monster) && target_can_be_attacked(monster);
+}
+
+bool tutorial_game_first_monster_triggered(void)
+{
+    for (int i = 1; i < mon_max; ++i)
+        if (tutorial_first_monster_target(&mon_list[i])) return true;
+    return false;
 }
 
 bool tutorial_game_target_allowed(int y, int x)
@@ -796,12 +824,11 @@ void tutorial_game_checkpoint(void)
     bool legal_hostile = false, legal_adjacent = false;
     for (int i = 1; i < mon_max; ++i) {
         monster_type *monster = &mon_list[i];
-        if (!monster->r_idx || !monster->ml || !player_has_los_bold(monster->fy, monster->fx)
-            || (r_info[monster->r_idx].flags1 & RF1_PEACEFUL) || p_ptr->image) continue;
+        if (!tutorial_monster_observable(monster)) continue;
         char name[160];
         monster_desc(name, sizeof(name), monster, 0);
         if (target_can_be_attacked(monster)) legal_hostile = true;
-        if (!p_ptr->rage && !p_ptr->entranced && p_ptr->stun <= 100)
+        if (tutorial_first_monster_target(monster))
             observe("combat.first_monster", "monster", name,
                 "Awareness and morale are different. Stealth helps avoid notice but slows movement; it does not guarantee that an alert enemy loses you.");
         if (abs(monster->fy - p_ptr->py) <= 1 && abs(monster->fx - p_ptr->px) <= 1) {
@@ -883,35 +910,151 @@ void tutorial_game_checkpoint(void)
     tutorial_game_wait();
 }
 
+#define TUTORIAL_ARCHIVE_PAGE_SIZE 10
+
+/* Stable semantic ID families keep new catalogue cards in their topic without
+ * changing saved lesson IDs. Unknown families remain readable under Other. */
+static const struct {
+    const char *label;
+    const char *prefixes[4];
+} tutorial_archive_topics[] = {
+    {"Getting started & menus", {"opening.", "menu.", NULL}},
+    {"Combat", {"combat.", NULL}},
+    {"Items & equipment", {"item.", "identification.", NULL}},
+    {"Carrying & storage", {"storage.", NULL}},
+    {"Skills & abilities", {"ability.", "advancement.", NULL}},
+    {"Exploration", {"world.", NULL}},
+    {"Terrain & traps", {"terrain.", NULL}},
+    {"Monsters", {"monster.", NULL}},
+    {"Conditions", {"status.", NULL}},
+    {"Item effects", {"effect.", NULL}},
+    {"Quests & Tales", {"quest.", "tale.", NULL}},
+    {"Other", {NULL}}
+};
+
+typedef struct tutorial_archive_card {
+    char id[80];
+    char title[160];
+    tutorial_status status;
+    int topic;
+} tutorial_archive_card;
+
+static int tutorial_archive_topic_for_id(const char *id)
+{
+    for (int i = 0; i < (int)N_ELEMENTS(tutorial_archive_topics); ++i)
+        for (int j = 0; tutorial_archive_topics[i].prefixes[j]; ++j) {
+            const char *prefix = tutorial_archive_topics[i].prefixes[j];
+            if (!strncmp(id, prefix, strlen(prefix))) return i;
+        }
+    return (int)N_ELEMENTS(tutorial_archive_topics) - 1;
+}
+
+static int tutorial_archive_compare(const void *left, const void *right)
+{
+    const tutorial_archive_card *a = left, *b = right;
+    int order = SDL_strcasecmp(a->title, b->title);
+    return order ? order : strcmp(a->id, b->id);
+}
+
 void tutorial_game_archive(void)
 {
-    int offset = 0;
+    int offset = 0, topic = -1, card_count = 0, topic_selection = 0;
+    int card_selection = 0;
+    int topic_counts[N_ELEMENTS(tutorial_archive_topics)] = {0};
     bool old_managing = managing;
     managing = true;
     tutorial_archive_begin();
+    int capacity = tutorial_archive_count();
+    tutorial_archive_card *cards = capacity > 0
+        ? calloc((size_t)capacity, sizeof(*cards)) : NULL;
+    if (capacity > 0 && !cards) {
+        msg_print("Unable to open tutorial cards.");
+        goto cleanup;
+    }
+    for (int i = 0; i < capacity; ++i) {
+        tutorial_view view;
+        tutorial_status status;
+        if (!tutorial_archive_entry(i, &view, &status)
+            || status == TUTORIAL_UNSEEN) continue;
+        tutorial_archive_card *card = &cards[card_count++];
+        SDL_strlcpy(card->id, view.id, sizeof(card->id));
+        SDL_strlcpy(card->title, view.title, sizeof(card->title));
+        card->status = status;
+        card->topic = tutorial_archive_topic_for_id(view.id);
+        ++topic_counts[card->topic];
+    }
+    if (card_count > 1)
+        qsort(cards, (size_t)card_count, sizeof(*cards), tutorial_archive_compare);
     while (true) {
-        ui_question_option options[12];
-        char labels[10][200];
-        char ids[10][80];
+        if (topic < 0) {
+            ui_question_option options[N_ELEMENTS(tutorial_archive_topics) + 1];
+            char labels[N_ELEMENTS(tutorial_archive_topics)][96];
+            int topics[N_ELEMENTS(tutorial_archive_topics)];
+            int count = 0;
+            char description[192];
+            for (int i = 0; i < (int)N_ELEMENTS(tutorial_archive_topics); ++i) {
+                if (!topic_counts[i]) continue;
+                strnfmt(labels[count], sizeof(labels[count]), "%s (%d)",
+                    tutorial_archive_topics[i].label, topic_counts[i]);
+                topics[count] = i;
+                options[count] = (ui_question_option){(char)('a' + count),
+                    labels[count], TERM_WHITE, false};
+                ++count;
+            }
+            strnfmt(description, sizeof(description), card_count
+                ? "%d revealed tutorial cards in this Tale. Choose a topic to read them again. Reading is free."
+                : "No tutorial cards have been revealed in this Tale yet. Cards appear here when you encounter their lessons.",
+                card_count);
+            options[count] = (ui_question_option){'x', "Back", TERM_WHITE, false};
+            int choice = ui_question_ask_overlay("Tutorial cards", description,
+                options, count + 1, -1, -1, topic_selection);
+            if (choice < 0 || choice >= count) break;
+            topic_selection = choice;
+            topic = topics[choice];
+            offset = 0;
+            card_selection = 0;
+        }
+        ui_question_option options[TUTORIAL_ARCHIVE_PAGE_SIZE + 3];
+        char labels[TUTORIAL_ARCHIVE_PAGE_SIZE][200];
+        int indices[TUTORIAL_ARCHIVE_PAGE_SIZE];
+        char title[128], description[160];
         int count = 0, seen = 0;
-        for (int i = 0; i < tutorial_archive_count(); ++i) {
-            tutorial_view view; tutorial_status status;
-            if (!tutorial_archive_entry(i, &view, &status) || status == TUTORIAL_UNSEEN) continue;
+        for (int i = 0; i < card_count; ++i) {
+            const tutorial_archive_card *card = &cards[i];
+            if (card->topic != topic) continue;
             if (seen++ < offset) continue;
-            if (count >= 10) break;
-            strnfmt(labels[count], sizeof(labels[count]), "%s%s", view.title,
-                status == TUTORIAL_SKIPPED ? " (skipped)" : "");
-            SDL_strlcpy(ids[count], view.id, sizeof(ids[count]));
+            if (count >= TUTORIAL_ARCHIVE_PAGE_SIZE) break;
+            strnfmt(labels[count], sizeof(labels[count]), "%s%s", card->title,
+                card->status == TUTORIAL_SKIPPED ? " (skipped)"
+                : card->status == TUTORIAL_IN_PROGRESS ? " (in progress)" : "");
+            indices[count] = i;
             options[count] = (ui_question_option){(char)('a' + count), labels[count], TERM_WHITE, false};
             ++count;
         }
-        options[count] = (ui_question_option){'n', "Next page", TERM_L_BLUE, count < 10};
+        options[count] = (ui_question_option){'n', "Next page", TERM_L_BLUE,
+            offset + count >= topic_counts[topic]};
         options[count + 1] = (ui_question_option){'p', "Previous page", TERM_L_BLUE, offset == 0};
-        int choice = ui_question_ask_overlay("Learned tutorials", "Read encountered and skipped lessons. Escape returns.", options, count + 2, -1, -1, 0);
-        if (choice < 0) break;
-        if (choice == count) { offset += 10; continue; }
-        if (choice == count + 1) { offset = MAX(0, offset - 10); continue; }
-        if (tutorial_replay(ids[choice])) {
+        options[count + 2] = (ui_question_option){'x', "Back to topics", TERM_WHITE, false};
+        strnfmt(title, sizeof(title), "Tutorial cards: %s", tutorial_archive_topics[topic].label);
+        strnfmt(description, sizeof(description),
+            "Page %d of %d. Select a card to read it again. Escape returns to topics.",
+            offset / TUTORIAL_ARCHIVE_PAGE_SIZE + 1,
+            (topic_counts[topic] + TUTORIAL_ARCHIVE_PAGE_SIZE - 1) / TUTORIAL_ARCHIVE_PAGE_SIZE);
+        int choice = ui_question_ask_overlay(title, description, options,
+            count + 3, -1, -1, card_selection);
+        if (choice < 0 || choice >= count + 2) { topic = -1; continue; }
+        if (choice == count) {
+            if (offset + count < topic_counts[topic]) offset += TUTORIAL_ARCHIVE_PAGE_SIZE;
+            card_selection = 0;
+            continue;
+        }
+        if (choice == count + 1) {
+            offset = MAX(0, offset - TUTORIAL_ARCHIVE_PAGE_SIZE);
+            card_selection = 0;
+            continue;
+        }
+        card_selection = choice;
+        if (tutorial_replay(cards[indices[choice]].id)) {
             tutorial_checkpoint(true);
             tutorial_view view;
             waiting = true;
@@ -922,6 +1065,8 @@ void tutorial_game_archive(void)
             waiting = false;
         }
     }
+cleanup:
+    free(cards);
     managing = old_managing;
     tutorial_archive_end();
     if (managing) tutorial_checkpoint(false);
@@ -963,12 +1108,12 @@ void tutorial_game_settings(void)
         ui_question_option options[] = {
             {'e', mode_label, TERM_L_BLUE, false},
             {'r', "Reset tutorials for this Tale", TERM_ORANGE, run_mode_is_blitz()},
-            {'l', "Learned tutorials", TERM_WHITE, false},
+            {'l', "Tutorial cards", TERM_WHITE, false},
             {'b', "Back", TERM_WHITE, false}
         };
         int choice = ui_question_ask_overlay("Gameplay tutorials",
             p_ptr && p_ptr->tutorial_deferred
-            ? "Tutorials are deferred for this older character. Mode changes and reset apply to your next new character. Cycle Disabled, Normal and Extended; Extended includes all lessons. Learned tutorials remain available to read."
+            ? "Tutorials are deferred for this older character. Mode changes and reset apply to your next new character. Cycle Disabled, Normal and Extended; Extended includes all lessons. Revealed tutorial cards remain available to read."
             : "Cycle Disabled, Normal and Extended. Normal teaches core controls and survival; Extended adds detailed mechanics. Lessons are remembered across heroes in this Tale. Reading is free; guided actions keep their normal costs.", options, N_ELEMENTS(options), -1, -1, 0);
         if (choice < 0 || choice == 3) break;
         if (choice == 0) cycle_sdl_gameplay_tutorial_mode();

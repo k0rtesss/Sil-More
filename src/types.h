@@ -705,6 +705,36 @@ struct object_type
  * The "hold_o_idx" field points to the first object of a stack
  * of objects (if any) being carried by the monster (see above).
  */
+typedef struct monster_ai_observation
+{
+    s16b value;
+    byte ttl;
+    s32b turn;
+} monster_ai_observation;
+
+typedef struct monster_sense_state
+{
+    byte kind, y, x;
+    byte anchor_y, anchor_x;
+    byte scent_age, stale_decisions, search_decisions;
+    byte recent_count, recent_next;
+    byte recent_y[4], recent_x[4];
+    u32b observed_turn;
+} monster_sense_state;
+
+typedef struct monster_ai_state
+{
+    monster_ai_observation observations[MON_AI_FEATURE_COUNT];
+    monster_sense_state sense;
+    byte cast_reserve;
+    byte goal_y, goal_x, goal_age;
+    byte previous_y, previous_x, waits;
+    byte player_y, player_x, player_action;
+    byte attack_y, attack_x, attack_chain;
+    s32b player_action_turn, attack_turn;
+    bool cast_checked, cast_available; /* Current action only; never saved. */
+} monster_ai_state;
+
 struct monster_type
 {
     s16b r_idx; /* Monster race index */
@@ -785,6 +815,8 @@ struct monster_type
     bool ability_in_action; /* Runtime action bookkeeping, never saved. */
     bool ability_melee; /* An ordinary melee attack occurred in this action. */
     bool ability_displaced; /* This action was interrupted by displacement. */
+
+    monster_ai_state ai; /* Bounded, individually witnessed tactical knowledge. */
 
     byte blow_dd_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage dice */
     byte blow_ds_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage sides */

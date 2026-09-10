@@ -1,6 +1,7 @@
 /* File: cave-view.c */
 
 #include "cave-internal.h"
+#include "cave-light.h"
 
 vinfo_type vinfo[VINFO_MAX_GRIDS];
 
@@ -556,7 +557,19 @@ bool same_side_of_wall_as_player(int y, int x, int fy, int fx)
  * special grids.  Because the actual number of required grids is bizarre,
  * we simply allocate twice as many as we would normally need.  XXX XXX XXX
  */
-void update_view(void)
+static void darken_view_grids(int count, bool remember)
+{
+    int dark_delta = curse_flag_delta_cur(CUR_LIGHTP);
+    if (!dark_delta) return;
+    for (int i = 0; i < count; ++i)
+    {
+        int y = GRID_Y(view_g[i]), x = GRID_X(view_g[i]);
+        if (remember) cave_light_remember_darkening(y, x, dark_delta);
+        cave_light[y][x] = MAX(-5, cave_light[y][x] - dark_delta);
+    }
+}
+
+static void update_view_aux(bool generation_preview)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;
@@ -976,8 +989,11 @@ void update_view(void)
 
                     int dist = distance(0, 0, i, j);
 
+                    /* Bounds precede packed-grid access, including emitters
+                     * standing next to the map edge. */
+                    if (!in_bounds(y, x))
+                        continue;
                     g = GRID(y, x);
-
                     info = fast_cave_info[g];
 
                     // Don't darken/brighten the centre square too much
@@ -995,11 +1011,11 @@ void update_view(void)
                                         y, x, fy, fx))
                                 || !(cave_info[y][x] & (CAVE_WALL)))
                             {
-                                // Glowing monsters lighten their own square
-                                if ((i == 0) && (j == 0) && glow)
+                                int contribution = cave_light_contribution(
+                                    mon_light, glow, fy, fx, y, x);
+                                cave_light[y][x] += contribution;
+                                if (contribution > 0)
                                 {
-                                    cave_light[y][x] += 1;
-
                                     /* Mark as seen */
                                     info |= (CAVE_SEEN);
 
@@ -1008,26 +1024,6 @@ void update_view(void)
 
                                     /* Save in array */
                                     fast_view_g[fast_view_n++] = g;
-                                }
-
-                                // Brighten the square
-                                else if (mon_light > 0)
-                                {
-                                    cave_light[y][x] += mon_rad + 1 - dist;
-
-                                    /* Mark as seen */
-                                    info |= (CAVE_SEEN);
-
-                                    /* Save cave info */
-                                    fast_cave_info[g] = info;
-
-                                    /* Save in array */
-                                    fast_view_g[fast_view_n++] = g;
-                                }
-                                // Darken the square
-                                else
-                                {
-                                    cave_light[y][x] -= mon_rad + 1 - dist;
                                 }
                             }
                         }
@@ -1085,8 +1081,9 @@ void update_view(void)
 
                     int dist = distance(0, 0, i, j);
 
+                    if (!in_bounds(y, x))
+                        continue;
                     g = GRID(y, x);
-
                     info = fast_cave_info[g];
 
                     // Don't darken/brighten the centre square too much
@@ -1163,6 +1160,17 @@ void update_view(void)
             /* Grid cannot be "CAVE_SEEN" */
             fast_cave_info[g] &= ~(CAVE_SEEN);
         }
+    }
+
+    /* Generation needs the actual FOV and lighting, without map knowledge,
+     * encounter rewards, monster updates, redraws, or disturbances. */
+    if (generation_preview)
+    {
+        /* Match the settled starting view used at the tutorial checkpoint,
+         * including the final darkness adjustment used by Keen Senses. */
+        darken_view_grids(fast_view_n, false);
+        view_n = fast_view_n;
+        return;
     }
 
     /* Process "new" grids */
@@ -1321,6 +1329,7 @@ void update_view(void)
             if (cave_info[i][j] & (CAVE_VIEW))
             {
                 cave_info[i][j] |= (CAVE_OLD_VIEW);
+                cave_light_remember_raw(i, j, cave_light[i][j], 0);
             }
             else
             {
@@ -1355,24 +1364,7 @@ void update_view(void)
      *   every lit square is dimmed once per stack, down to a floor
      *   of -5 (same as full darkness elsewhere in the engine).
      * ------------------------------------------------------------ */
-    {
-        int dark_delta = curse_flag_delta_cur(CUR_LIGHTP);
-        if (dark_delta)
-        {
-            int i, g, y, x;
-
-            /* Iterate over the grids we just updated */
-            for (i = 0; i < view_n; i++)
-            {
-                g = view_g[i];            /* packed grid index      */
-                y = GRID_Y(g);            /* unpack coordinates     */
-                x = GRID_X(g);
-
-                cave_light[y][x] -= dark_delta;
-                if (cave_light[y][x] < -5) cave_light[y][x] = -5;
-            }
-        }
-    }
+    darken_view_grids(view_n, true);
 
     /* Passing through a grid gives the player persistent terrain knowledge.
      * For ordinary floors, CAVE_MARK enables navigation while the existing
@@ -1381,4 +1373,14 @@ void update_view(void)
 
     /* Save 'view_n' */
     view_n = fast_view_n;
+}
+
+void update_view(void)
+{
+    update_view_aux(false);
+}
+
+void update_view_for_generation(void)
+{
+    update_view_aux(true);
 }
