@@ -2,6 +2,7 @@
 
 #include "cave-internal.h"
 #include "cave-light.h"
+#include "log/perf.h"
 
 vinfo_type vinfo[VINFO_MAX_GRIDS];
 
@@ -1377,10 +1378,10 @@ static void update_view_aux(bool generation_preview)
 
 void update_view(void)
 {
-    update_view_aux(false);
+    SIL_PERF_PHASE("view.update", update_view_aux(false));
 }
 
 void update_view_for_generation(void)
 {
-    update_view_aux(true);
+    SIL_PERF_PHASE("view.generation", update_view_aux(true));
 }

@@ -5,6 +5,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "log/perf.h"
 #include "sound-config.h"
 #include "cJSON.h"
 #include <SDL3/SDL.h>
@@ -126,7 +127,7 @@ static MIX_Track* sdl_sound_acquire_sfx_track(bool quiet);
 static bool sdl_sound_play_track_audio(MIX_Track* track, MIX_Audio* audio, float gain,
     int loops, bool quiet);
 static bool sdl_sound_play_sample_locked(int sound_idx, int sample_idx,
-    bool quiet);
+    bool quiet, bool profile);
 static void sdl_sound_preload_event(int sound_idx);
 static void sdl_music_stop_track(MIX_Track* track);
 static void sdl_music_stop_title_track(void);
@@ -1314,7 +1315,7 @@ bool sdl_music_consume_welcome_main_once(void)
 }
 
 static bool sdl_sound_play_sample_locked(int sound_idx, int sample_idx,
-    bool quiet)
+    bool quiet, bool profile)
 {
     if (sound_idx < 0 || sound_idx >= MSG_MAX || !g_sound_config.enabled) {
         return false;
@@ -1337,16 +1338,28 @@ static bool sdl_sound_play_sample_locked(int sound_idx, int sample_idx,
         return false;
     }
 
+    /* Timer playback shares this helper but must not touch the main-thread
+     * profiler. The scheduling thread preloads its sample before starting it. */
+    sil_perf_stamp phase = profile ? sil_perf_begin() : (sil_perf_stamp){ 0 };
     MIX_Audio* audio = sdl_sound_get_sample_audio(sound_idx, sample_idx);
+    if (profile) {
+        sil_perf_end("audio.sfx.decode", phase);
+        phase = sil_perf_begin();
+    }
     MIX_Track* track = sdl_sound_acquire_sfx_track(quiet);
     if (!audio || !track) {
+        if (profile)
+            sil_perf_end("audio.sfx.play", phase);
         return false;
     }
 
     if (!quiet)
         log_trace("sdl_sound_handle: idx=%d path='%s'", sound_idx, sample_path);
-    return sdl_sound_play_track_audio(track, audio, get_sound_volume(sound_idx),
+    bool played = sdl_sound_play_track_audio(track, audio, get_sound_volume(sound_idx),
         0, quiet);
+    if (profile)
+        sil_perf_end("audio.sfx.play", phase);
+    return played;
 }
 
 void sdl_sound_handle(int sound_idx)
@@ -1359,13 +1372,16 @@ void sdl_sound_handle(int sound_idx)
     if (!sdl_sound_ensure_mutex())
         return;
 
+    sil_perf_stamp perf = sil_perf_begin();
     SDL_LockMutex(g_sound_mutex);
+    sil_perf_end("audio.sfx.lock", perf);
     sample_count = sound_state.bank.sound_counts[sound_idx];
     if (sample_count > 0) {
         sample_idx = (sample_count > 1) ? Rand_div(sample_count) : 0;
-        (void)sdl_sound_play_sample_locked(sound_idx, sample_idx, false);
+        (void)sdl_sound_play_sample_locked(sound_idx, sample_idx, false, true);
     }
     SDL_UnlockMutex(g_sound_mutex);
+    sil_perf_end("audio.sfx.total", perf);
 }
 
 /* Each race explicitly assigns recordings to its individual blow slots and
@@ -1434,25 +1450,29 @@ void sdl_sound_monster(int race_idx, int action)
     if (!type_enabled)
         return;
 
+    sil_perf_stamp perf = sil_perf_begin();
     SDL_LockMutex(g_sound_mutex);
+    sil_perf_end("audio.monster.lock", perf);
     /* Cosmetic randomness must not consume the dungeon/combat RNG. */
     if (action == MONSTER_SOUND_IDLE
         && SDL_rand(100) >= MONSTER_IDLE_SOUND_CHANCE_PERCENT) {
-        SDL_UnlockMutex(g_sound_mutex);
-        return;
+        goto finished;
     }
-    if (!sdl_sound_ensure_mixer()) {
-        SDL_UnlockMutex(g_sound_mutex);
-        return;
+    sil_perf_stamp phase = sil_perf_begin();
+    bool mixer_ready = sdl_sound_ensure_mixer();
+    sil_perf_end("audio.monster.mixer", phase);
+    if (!mixer_ready) {
+        goto finished;
     }
+    phase = sil_perf_begin();
     monster_sound_entry* entry = g_monster_sounds;
     while (entry && (entry->race_idx != race_idx || entry->action != action))
         entry = entry->next;
     if (!entry) {
         entry = SDL_calloc(1, sizeof(*entry));
         if (!entry) {
-            SDL_UnlockMutex(g_sound_mutex);
-            return;
+            sil_perf_end("audio.monster.lookup", phase);
+            goto finished;
         }
         entry->race_idx = race_idx;
         entry->action = action;
@@ -1475,24 +1495,31 @@ void sdl_sound_monster(int race_idx, int action)
         }
 
     }
+    sil_perf_end("audio.monster.lookup", phase);
     if (entry->count > 0) {
         int sample = SDL_rand(entry->count);
         if (!entry->attempted[sample]) {
+            phase = sil_perf_begin();
             entry->attempted[sample] = true;
             entry->audio[sample] = MIX_LoadAudio(sound_state.mixer,
                 entry->files[sample], true);
+            sil_perf_end("audio.monster.decode", phase);
             if (!entry->audio[sample])
                 log_warn("Cannot load monster sound '%s': %s",
                     entry->files[sample], SDL_GetError());
         }
         if (entry->audio[sample]) {
+            phase = sil_perf_begin();
             MIX_Track* track = sdl_sound_acquire_sfx_track(true);
             if (track)
                 sdl_sound_play_track_audio(track, entry->audio[sample],
                     sound_state.volume_monster_hits, 0, true);
+            sil_perf_end("audio.monster.play", phase);
         }
     }
+finished:
     SDL_UnlockMutex(g_sound_mutex);
+    sil_perf_end("audio.monster.total", perf);
 }
 
 static Uint32 SDLCALL sdl_sound_deferred_timer_cb(void* userdata,
@@ -1513,7 +1540,7 @@ static Uint32 SDLCALL sdl_sound_deferred_timer_cb(void* userdata,
         SDL_LockMutex(g_sound_mutex);
         if (request->generation == g_sound_generation) {
             played = sdl_sound_play_sample_locked(request->sound_idx,
-                request->sample_idx, true);
+                request->sample_idx, true, false);
         }
         SDL_UnlockMutex(g_sound_mutex);
     }

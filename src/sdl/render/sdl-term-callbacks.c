@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
+#include "log/perf.h"
 
 errr callback_sdl_xtra(int n, int v)
 {
@@ -167,9 +168,12 @@ errr callback_sdl_xtra(int n, int v)
             }
             g_sdl_blocking_key_wait = true;
             {
+                sil_perf_flush();
+                sil_perf_stamp input_wait = sil_perf_begin();
                 bool got_event = (timeout_ms >= 0)
                     ? SDL_WaitEventTimeout(&ev, timeout_ms)
                     : SDL_WaitEvent(&ev);
+                sil_perf_wait_end(input_wait);
                 if (got_event) {
                     unsigned int tutorial_before_event = tutorial_revision();
                     unsigned int tutorial_before_input = sdl_gameplay_tutorial_input_epoch();

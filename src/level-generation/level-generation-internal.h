@@ -612,8 +612,8 @@ extern int place_vault_template_fixtures(int y0, int x0, const vault_type* v_ptr
 extern int place_generation_fixtures(void);
 extern void apply_v_tunnel_treatment( int r1, int r2, int y_lo, int y_hi, int x, bool widen_west, bool widen_east, const tunnel_profile* profile, bool mark_escape);
 extern void apply_h_tunnel_treatment( int r1, int r2, int x_lo, int x_hi, int y, bool widen_north, bool widen_south, const tunnel_profile* profile, bool mark_escape);
-extern void build_v_tunnel( int r1, int r2, int y1, int y2, int x, const tunnel_profile* profile);
-extern void build_h_tunnel( int r1, int r2, int x1, int x2, int y, const tunnel_profile* profile);
+extern void build_v_tunnel( int r1, int r2, int y1, int y2, int x, const tunnel_profile* profile, byte fixture_kind);
+extern void build_h_tunnel( int r1, int r2, int x1, int x2, int y, const tunnel_profile* profile, byte fixture_kind);
 extern bool build_tunnel( int r1, int r2, int y1, int x1, int y2, int x2, bool tentative);
 extern bool connect_two_rooms(int r1, int r2, bool tentative, bool desperate);
 extern bool connect_room_to_corridor(int r);

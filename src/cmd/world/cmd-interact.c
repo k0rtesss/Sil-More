@@ -1970,9 +1970,11 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         SDL_strlcpy(title, "Empty square", sizeof(title));
         SDL_strlcpy(desc,
             "Nothing lies there that you can see. You could strike at the "
-            "square without stepping in - an unseen enemy might lurk there.",
+            "square without stepping in - an unseen enemy might lurk there - "
+            "or run in this direction.",
             sizeof(desc));
         GRID_Q_ADD('/', 's', "Strike at it", TERM_L_RED);
+        GRID_Q_ADD('.', '.', "Run this way", TERM_L_GREEN);
     }
 
 #undef GRID_Q_ADD

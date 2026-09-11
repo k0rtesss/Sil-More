@@ -529,7 +529,7 @@ PlayResult play_game(void)
         log_info("Generating initial dungeon level");
         reset_level_entry_tracking();
         /* About to call generate_cave() function */
-        generate_cave();
+        TIME_PHASE("level.generate", generate_cave());
         log_debug("Initial dungeon level generated successfully");
     }
 
@@ -764,7 +764,7 @@ PlayResult play_game(void)
         /* Make a new level */
         log_info("Generating new dungeon level at depth %d", p_ptr->depth);
         reset_level_entry_tracking();
-        generate_cave();
+        TIME_PHASE("level.generate", generate_cave());
         log_debug("New dungeon level generated successfully");
     }
 

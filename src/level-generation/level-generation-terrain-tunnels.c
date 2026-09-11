@@ -373,6 +373,15 @@ static byte tunnel_fixture_kind(int r1, int r2, int width)
         ? CAVE_FIXTURE_WALL_TORCH_2 : CAVE_FIXTURE_WALL_TORCH;
 }
 
+static byte tunnel_fixture_kind_for_profile(
+    int r1, int r2, const tunnel_profile* profile)
+{
+    int width = profile ? MAX(1, MIN(profile->width, 3)) : 1;
+    if (profile && profile->treatment == TUNNEL_TREAT_NICHES)
+        return CAVE_FIXTURE_BRAZIER;
+    return tunnel_fixture_kind(r1, r2, width);
+}
+
 static bool corridor_fixture_source_ok(int y, int x, int r1, int r2)
 {
     return in_bounds_fully(y, x) && cave_floor_bold(y, x)
@@ -393,7 +402,7 @@ static bool corridor_fixture_wall_ok(
  * The source scan stays on this corridor's own carved floor, while the wall
  * check prevents fixtures from leaking into rooms or vaults. */
 static void maybe_place_corridor_fixture(
-    int y1, int x1, int y2, int x2, int r1, int r2, int width)
+    int y1, int x1, int y2, int x2, int r1, int r2, byte kind)
 {
     static const int dy[4] = { -1, 1, 0, 0 };
     static const int dx[4] = { 0, 0, -1, 1 };
@@ -454,8 +463,7 @@ static void maybe_place_corridor_fixture(
     if (!seen)
         return;
 
-    cave_fixture_set(best_wall.y, best_wall.x,
-        tunnel_fixture_kind(r1, r2, width));
+    cave_fixture_set(best_wall.y, best_wall.x, kind);
     apply_cave_fixture_glow(best_wall.y, best_wall.x,
         best_source.y, best_source.x, false);
 }
@@ -610,7 +618,8 @@ void apply_h_tunnel_treatment(
 }
 
 void build_v_tunnel(
-    int r1, int r2, int y1, int y2, int x, const tunnel_profile* profile)
+    int r1, int r2, int y1, int y2, int x, const tunnel_profile* profile,
+    byte fixture_kind)
 {
     int y, y_lo, y_hi;
     tunnel_profile local = profile ? *profile : TUNNEL_PROFILE_NORMAL;
@@ -680,14 +689,16 @@ void build_v_tunnel(
     }
 
     if (local.treatment != TUNNEL_TREAT_NICHES)
-        maybe_place_corridor_fixture(y_lo, x, y_hi, x, r1, r2, width);
+        maybe_place_corridor_fixture(
+            y_lo, x, y_hi, x, r1, r2, fixture_kind);
 
     apply_v_tunnel_treatment(r1, r2, y_lo, y_hi, x, widen_west, widen_east,
         &local, mark_escape);
 }
 
 void build_h_tunnel(
-    int r1, int r2, int x1, int x2, int y, const tunnel_profile* profile)
+    int r1, int r2, int x1, int x2, int y, const tunnel_profile* profile,
+    byte fixture_kind)
 {
     int x, x_lo, x_hi;
     tunnel_profile local = profile ? *profile : TUNNEL_PROFILE_NORMAL;
@@ -757,7 +768,8 @@ void build_h_tunnel(
     }
 
     if (local.treatment != TUNNEL_TREAT_NICHES)
-        maybe_place_corridor_fixture(y, x_lo, y, x_hi, r1, r2, width);
+        maybe_place_corridor_fixture(
+            y, x_lo, y, x_hi, r1, r2, fixture_kind);
 
     apply_h_tunnel_treatment(r1, r2, x_lo, x_hi, y, widen_north, widen_south,
         &local, mark_escape);
@@ -767,6 +779,7 @@ bool build_tunnel(
     int r1, int r2, int y1, int x1, int y2, int x2, bool tentative)
 {
     tunnel_profile profile = choose_tunnel_profile(tentative);
+    byte fixture_kind = tunnel_fixture_kind_for_profile(r1, r2, &profile);
 
     /* build a vertical tunnel */
     if (x1 == x2)
@@ -775,7 +788,7 @@ bool build_tunnel(
         {
             return (false);
         }
-        build_v_tunnel(r1, r2, y1, y2, x1, &profile);
+        build_v_tunnel(r1, r2, y1, y2, x1, &profile, fixture_kind);
     }
 
     /* build a horizontal tunnel */
@@ -785,7 +798,7 @@ bool build_tunnel(
         {
             return (false);
         }
-        build_h_tunnel(r1, r2, x1, x2, y1, &profile);
+        build_h_tunnel(r1, r2, x1, x2, y1, &profile, fixture_kind);
     }
 
     /* build an L-shaped tunnel */
@@ -799,8 +812,8 @@ bool build_tunnel(
             {
                 return (false);
             }
-            build_h_tunnel(r1, r2, x1, x2, y1, &profile);
-            build_v_tunnel(r1, r2, y1, y2, x2, &profile);
+            build_h_tunnel(r1, r2, x1, x2, y1, &profile, fixture_kind);
+            build_v_tunnel(r1, r2, y1, y2, x2, &profile, fixture_kind);
         }
 
         /* build a v-h tunnel */
@@ -811,8 +824,8 @@ bool build_tunnel(
             {
                 return (false);
             }
-            build_v_tunnel(r1, r2, y1, y2, x1, &profile);
-            build_h_tunnel(r1, r2, x1, x2, y2, &profile);
+            build_v_tunnel(r1, r2, y1, y2, x1, &profile, fixture_kind);
+            build_h_tunnel(r1, r2, x1, x2, y2, &profile, fixture_kind);
         }
     }
 
@@ -1004,7 +1017,9 @@ bool connect_room_to_corridor(int r)
                 {
                     if (v_tunnel_ok(ry, y - (delta * 2), x, true, 1))
                     {
-                        build_v_tunnel(r, r1, ry, y, x, &TUNNEL_PROFILE_NORMAL);
+                        build_v_tunnel(r, r1, ry, y, x, &TUNNEL_PROFILE_NORMAL,
+                            tunnel_fixture_kind_for_profile(
+                                r, r1, &TUNNEL_PROFILE_NORMAL));
 
                         // mark the new room connections
                         dun->connection[r][r1] = true;
@@ -1054,7 +1069,9 @@ bool connect_room_to_corridor(int r)
                 {
                     if (h_tunnel_ok(rx, x - (delta * 2), y, true, 1))
                     {
-                        build_h_tunnel(r, r1, rx, x, y, &TUNNEL_PROFILE_NORMAL);
+                        build_h_tunnel(r, r1, rx, x, y, &TUNNEL_PROFILE_NORMAL,
+                            tunnel_fixture_kind_for_profile(
+                                r, r1, &TUNNEL_PROFILE_NORMAL));
 
                         // mark the new room connections
                         dun->connection[r][r1] = true;

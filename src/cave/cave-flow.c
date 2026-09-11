@@ -4,6 +4,7 @@
 #include "cave/cave-fixtures.h"
 #include "melee/melee-util.h"
 #include "monster/monster-senses.h"
+#include "log/perf.h"
 
 /*
  * Determines how far a grid is from the source using the given flow.
@@ -247,6 +248,7 @@ static void update_monster_flow(int cy, int cx, int which_flow,
 
 void update_flow(int cy, int cx, int which_flow)
 {
+    sil_perf_stamp perf_start = sil_perf_begin();
     int cost;
 
     int i, d;
@@ -341,6 +343,8 @@ void update_flow(int cy, int cx, int which_flow)
             update_monster_flow(cy, cx, which_flow, m_ptr);
         else
             update_monster_flow_without_poison(cy, cx, which_flow, m_ptr);
+        sil_perf_end(poison_present ? "flow.monster.poison" : "flow.monster.simple",
+            perf_start);
         return;
     }
 
@@ -443,6 +447,7 @@ void update_flow(int cy, int cx, int which_flow)
             next_cycle = 1;
         }
     }
+    sil_perf_end("flow.noise", perf_start);
 }
 
 /*

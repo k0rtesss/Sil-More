@@ -254,7 +254,15 @@ static int sample_wall_fixture_candidates(
     return sampled;
 }
 
-static byte random_room_fixture_kind(int brazier_percent)
+static byte fixture_kind_from_hash(u32b hash, int brazier_percent)
+{
+    if (hash % 100 < (u32b)brazier_percent)
+        return CAVE_FIXTURE_BRAZIER;
+    return (hash >> 8) & 1 ? CAVE_FIXTURE_WALL_TORCH_2
+        : CAVE_FIXTURE_WALL_TORCH;
+}
+
+static byte random_fixture_kind(int brazier_percent)
 {
     if (rand_int(100) < brazier_percent)
         return CAVE_FIXTURE_BRAZIER;
@@ -277,20 +285,14 @@ static int count_fixtures(rectangle bounds)
     return count;
 }
 
-static byte deterministic_room_fixture_kind(
-    coord wall, u32b salt, int brazier_percent)
+static byte deterministic_fixture_kind(u32b salt, int brazier_percent)
 {
-    u32b hash = fixture_hash(wall.y, wall.x, salt);
-    if (hash % 100 < (u32b)brazier_percent)
-        return CAVE_FIXTURE_BRAZIER;
-    return (hash >> 8) & 1
-        ? CAVE_FIXTURE_WALL_TORCH_2 : CAVE_FIXTURE_WALL_TORCH;
+    return fixture_kind_from_hash(fixture_hash(0, 0, salt), brazier_percent);
 }
 
 static int place_sampled_fixtures(
     const coord* walls, const coord* sources, int candidate_count,
-    int target, bool allow_room_tiles, bool rear_only, u32b salt,
-    int brazier_percent, bool deterministic)
+    int target, bool allow_room_tiles, byte kind)
 {
     int placed = 0;
     target = MIN(target, candidate_count);
@@ -299,11 +301,6 @@ static int place_sampled_fixtures(
     {
         int y = walls[i].y;
         int x = walls[i].x;
-        byte kind = rear_only ? CAVE_FIXTURE_WALL_TORCH_2
-            : (deterministic
-                ? deterministic_room_fixture_kind(
-                    walls[i], salt, brazier_percent)
-                : random_room_fixture_kind(brazier_percent));
         cave_fixture_set(y, x, kind);
         apply_cave_fixture_glow(y, x, sources[i].y, sources[i].x,
             allow_room_tiles);
@@ -333,7 +330,7 @@ static int place_cave_fixtures(rectangle bounds)
     int candidates = sample_wall_fixture_candidates(
         bounds, false, true, false, walls, sources);
     return place_sampled_fixtures(walls, sources, candidates, target, true,
-        true, 0, 0, false);
+        CAVE_FIXTURE_WALL_TORCH_2);
 }
 
 static int room_brazier_percent(rectangle bounds)
@@ -371,8 +368,14 @@ static int place_room_fixtures(rectangle bounds)
     int target = 1 + one_in_(4);
     int candidates = sample_wall_fixture_candidates(
         bounds, false, false, false, walls, sources);
+    if (!candidates)
+        return 0;
+
+    /* Choose the room's visual fixture style once, then use only that style
+     * for every wall selected in this room. */
+    byte kind = random_fixture_kind(room_brazier_percent(bounds));
     return place_sampled_fixtures(walls, sources, candidates, target, true,
-        false, 0, room_brazier_percent(bounds), false);
+        kind);
 }
 
 /* Invert build_vault's mirrors and optional transpose. Looking up the actual
@@ -475,8 +478,10 @@ int place_vault_template_fixtures(int y0, int x0, const vault_type* v_ptr,
         sources[candidates++] = best_source;
     }
 
+    byte kind = deterministic_fixture_kind(
+        salt, vault_brazier_percent(v_ptr->typ));
     int placed = place_sampled_fixtures(walls, sources, candidates, target,
-        true, false, salt, vault_brazier_percent(v_ptr->typ), true);
+        true, kind);
     if (placed)
     {
         log_debug("Vault '%s': placed %d decorative fixture(s)",

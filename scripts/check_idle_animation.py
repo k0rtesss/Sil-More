@@ -222,9 +222,13 @@ static int vault_test_place(const vault_type* v, int flips) {
 static void vault_test_verify(int expected) {
     static const int dy[] = {-1,1,0,0}, dx[] = {0,0,-1,1};
     int source_y[6], source_x[6], count = 0;
+    byte fixture_kind = CAVE_FIXTURE_NONE;
     for (int y=1; y<31; y++) for (int x=1; x<31; x++) {
-        if (!cave_fixture_at(y,x)) continue;
+        byte kind = cave_fixture_at(y,x);
+        if (!kind) continue;
         assert(count < 6);
+        if (!fixture_kind) fixture_kind = kind;
+        else assert(kind == fixture_kind);
         assert(vault_test_tokens[y][x] == '#');
         assert(cave_feat[y][x] == FEAT_WALL_INNER);
         assert(cave_info[y][x] & CAVE_GLOW);
@@ -377,7 +381,7 @@ static void vault_fixture_tests(void) {
     }
     v_text = saved_text; v_name = saved_names;
     vault_test_reset(); Rand_state_import(saved_rng);
-    puts("Vault fixtures: all density targets including six, eight transforms, spacing, RNG independence, authored masonry/floor ownership and exclusions: PASS");
+    puts("Vault fixtures: density targets, transforms, spacing, one style per vault, RNG independence, authored ownership and exclusions: PASS");
 }
 static void fixture_save_tests(void) {
     stream_size = stream_pos = load_byte_offset = 0;

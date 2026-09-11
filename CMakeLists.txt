@@ -483,6 +483,7 @@ set(SIL_MORE_SOURCES
     src/ui/targeting/direction.c
     src/ui/targeting/targeting.c
     src/log/bootstrap.c
+    src/log/perf.c
     src/log/fatal.c
     src/player/player-song-disguise.c
     src/player/player-song-duels.c
@@ -638,7 +639,7 @@ if(MINGW)
 endif()
 
 # Link SDL3 libraries (required for this build)
-target_compile_definitions(sil-more PRIVATE USE_SDL)
+target_compile_definitions(sil-more PRIVATE USE_SDL SIL_PERF_DIAGNOSTICS)
 
 if(SIL_IOS)
   target_link_libraries(sil-more PRIVATE SDL3::SDL3-static SDL3_ttf::SDL3_ttf-static SDL3_image::SDL3_image-static SDL3_mixer::SDL3_mixer-static log m "-framework UIKit")

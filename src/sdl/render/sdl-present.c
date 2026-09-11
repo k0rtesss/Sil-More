@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 #include "supplies.h"
+#include "log/perf.h"
 
 typedef struct {
     bool valid;
@@ -1999,13 +2000,15 @@ void sdl_present_if_needed(sdl_view* d)
      * current request before rendering so that request is not cleared after
      * the page-curl/notification render has re-armed it. */
     g_state.need_present = false;
+    sil_perf_stamp compose = sil_perf_begin();
     if (!sdl_render_current_window_frame()) {
+        sil_perf_end("render.compose", compose);
         g_state.need_present = true;
         return;
     }
-
-    SDL_RenderPresent(g_state.renderer);
-    sdl_restore_render_target(d);
+    sil_perf_end("render.compose", compose);
+    SIL_PERF_PHASE("render.present", SDL_RenderPresent(g_state.renderer));
+    SIL_PERF_PHASE("render.restore", sdl_restore_render_target(d));
 }
 
 
