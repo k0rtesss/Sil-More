@@ -526,6 +526,10 @@
  */
 #define CMD_CONTEXT_FLOOR_ACTION KTRL('U')
 
+/* Internal command queued by the desktop context shortcut popup for putting
+ * a floor arrow directly into the Quiver. */
+#define CMD_CONTEXT_FLOOR_QUIVER KTRL('O')
+
 /*
  * Internal command queued by the minus button on the desktop context popup.
  * It temporarily suppresses further square-action popups without consuming a
@@ -1300,6 +1304,7 @@
 #define POISON_TERRAIN_DOSE 6
 #define ICE_ATTACK_PENALTY 2
 #define ICE_EVASION_PENALTY 2
+#define ICE_KNOCK_BACK_DISTANCE 2
 #define LAVA_RAW_DAMAGE 60
 #define LAVA_FLYING_DAMAGE 40
 #define WATER_STEALTH_PENALTY 3
@@ -2418,7 +2423,7 @@
 #define VLT_LIGHT 0x00000010L /* Vault is always generated with light */
 #define VLT_SURFACE 0x00000020L
 #define VLT_QUEST   0x00000040L /* Quest vault - only once per game, max one per level */
-#define VLT_VLTXXXX8 0x00000080L
+#define VLT_TORCHES 0x00000080L /* Vault gets decorative wall fixtures */
 #define VLT_VLTXXXX9 0x00000100L
 #define VLT_VLTXXX10 0x00000200L
 #define VLT_VLTXXX11 0x00000400L

@@ -278,6 +278,7 @@ set(SIL_MORE_SOURCES
     src/level-generation/level-generation.c
     src/level-generation/level-generation-access.c
     src/level-generation/level-generation-finalize.c
+    src/level-generation/level-generation-fixtures.c
     src/level-generation/level-generation-layout-anchors.c
     src/level-generation/level-generation-layout-big-cave.c
     src/level-generation/level-generation-layout-caves.c

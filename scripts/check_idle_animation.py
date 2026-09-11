@@ -71,6 +71,7 @@ errr test_read_fixtures(void);
 bool test_pick_torch_option(bool* handled);
 void test_reset_torch_option(bool* app_dirty);
 void apply_tunnel_niche_torch_glow(int, int, int, int);
+int place_vault_template_fixtures(int, int, const vault_type*, bool, bool, bool);
 static byte stream[200000];
 static unsigned stream_size, stream_pos;
 static bool new_save = true;
@@ -154,17 +155,16 @@ static void niche(int y, int x) {
 static void placement_tests(void) {
     const int directions[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
     u64b rng = Rand_state_export();
-    for (int variant=0;variant<2;variant++) for (int dir=0;dir<4;dir++) {
-        for (int y=17;y<25;y++) for (int x=17;x<25;x++) {
+    for (int dir=0;dir<4;dir++) {
+        for (int y=17;y<25;y++) for (int x=17;x<27;x++) {
             cave_feat[y][x] = FEAT_WALL_EXTRA; cave_info[y][x] = CAVE_WALL;
         }
         cave_fixtures_clear();
-        int y=22, x=22+variant;
+        int y=22, x=22;
         int dy=directions[dir][0], dx=directions[dir][1];
         floor_at(y,x); floor_at(y+dy,x+dx);
         apply_tunnel_niche_torch_glow(y,x,dy,dx);
-        assert(cave_fixture_at(y-dy,x-dx) == (variant
-            ? CAVE_FIXTURE_WALL_TORCH : CAVE_FIXTURE_BRAZIER));
+        assert(cave_fixture_at(y-dy,x-dx) == CAVE_FIXTURE_BRAZIER);
         assert(!cave_floor_bold(y-dy,x-dx));
         assert(cave_feat[y][x] == FEAT_FLOOR && cave_feat[y+dy][x+dx] == FEAT_FLOOR);
         assert(!cave_fixture_at(y,x) && (cave_info[y][x] & CAVE_GLOW));
@@ -175,7 +175,209 @@ static void placement_tests(void) {
     }
     cave_fixtures_clear();
     assert(Rand_state_export() == rng);
-    puts("Both fixtures stay on walls in all four niche orientations; floors stay open: PASS");
+    puts("Corridor niches always use braziers in all four orientations; floors stay open: PASS");
+}
+
+/* Exercise the linked production vault placer with the same packed text and
+ * mirror-before-transpose coordinates as build_vault, without generating its
+ * monsters or objects. An independent world token map checks ownership. */
+static char vault_test_tokens[32][32];
+static void vault_test_reset(void) {
+    cave_fixtures_clear();
+    memset(vault_test_tokens, 0, sizeof(vault_test_tokens));
+    for (int y=0; y<32; y++) for (int x=0; x<32; x++) {
+        cave_feat[y][x] = FEAT_WALL_EXTRA;
+        cave_info[y][x] = CAVE_WALL;
+    }
+}
+static void vault_test_coord(const vault_type* v, int row, int col,
+    int flips, int* y, int* x) {
+    int r = (flips & 1) ? v->hgt-1-row : row;
+    int c = (flips & 2) ? v->wid-1-col : col;
+    *y = 16 - ((flips & 4) ? v->wid : v->hgt)/2
+        + ((flips & 4) ? c : r);
+    *x = 16 - ((flips & 4) ? v->hgt : v->wid)/2
+        + ((flips & 4) ? r : c);
+}
+static void vault_test_stamp(const vault_type* v, int flips) {
+    vault_test_reset();
+    for (int r=0; r<v->hgt; r++) for (int c=0; c<v->wid; c++) {
+        int y, x;
+        vault_test_coord(v,r,c,flips,&y,&x);
+        char token = v_text[v->text + r*v->wid+c];
+        vault_test_tokens[y][x] = token;
+        if (token == ' ') continue;
+        cave_feat[y][x] = token == '#' ? FEAT_WALL_INNER : FEAT_FLOOR;
+        cave_info[y][x] = CAVE_ROOM | CAVE_ICKY
+            | (token == '#' ? CAVE_WALL : 0);
+    }
+}
+static int vault_test_place(const vault_type* v, int flips) {
+    u64b before = Rand_state_export();
+    int count = place_vault_template_fixtures(16,16,v,
+        (flips & 1) != 0,(flips & 2) != 0,(flips & 4) != 0);
+    assert(Rand_state_export() == before);
+    return count;
+}
+static void vault_test_verify(int expected) {
+    static const int dy[] = {-1,1,0,0}, dx[] = {0,0,-1,1};
+    int source_y[6], source_x[6], count = 0;
+    for (int y=1; y<31; y++) for (int x=1; x<31; x++) {
+        if (!cave_fixture_at(y,x)) continue;
+        assert(count < 6);
+        assert(vault_test_tokens[y][x] == '#');
+        assert(cave_feat[y][x] == FEAT_WALL_INNER);
+        assert(cave_info[y][x] & CAVE_GLOW);
+        int side;
+        for (side=0; side<4; side++)
+            if (cave_floor_bold(y+dy[side],x+dx[side])) break;
+        assert(side < 4);
+        int sy = y+dy[side], sx = x+dx[side];
+        assert(vault_test_tokens[sy][sx] == '.');
+        assert(cave_feat[sy][sx] == FEAT_FLOOR);
+        assert(cave_info[sy][sx] & CAVE_GLOW);
+        for (int i=0; i<count; i++)
+            assert(distance(sy,sx,source_y[i],source_x[i]) >= 4);
+        source_y[count] = sy; source_x[count++] = sx;
+    }
+    assert(count == expected);
+}
+static void vault_test_rectangle(vault_type* v, char* text, int h, int w) {
+    v->hgt = h; v->wid = w;
+    for (int r=0; r<h; r++) for (int c=0; c<w; c++)
+        text[v->text+r*w+c] = (r==0 || r==h-1 || c==0 || c==w-1) ? '#' : '.';
+    text[v->text+h*w] = '\0';
+}
+static void vault_fixture_tests(void) {
+    char text[1024] = "unused";
+    char names[] = "\0Fixture regression";
+    char* saved_text = v_text;
+    char* saved_names = v_name;
+    u64b saved_rng = Rand_state_export();
+    vault_type v = {0};
+    v.text = 7; v.name = 1; v.flags = VLT_TORCHES;
+    v_text = text; v_name = names;
+    /* Explicit expected targets on either side of each area threshold. The
+     * largest case also catches an accidental two-candidate sampling limit. */
+    const int cases[][4] = {
+        {6,5,8,1}, {6,6,7,2}, {6,10,13,2}, {6,11,12,3},
+        {7,10,13,3}, {7,11,12,4}, {7,15,15,4}, {7,14,17,5},
+        {8,21,25,6}
+    };
+    for (unsigned test=0; test<sizeof(cases)/sizeof(cases[0]); test++) {
+        v.typ = cases[test][0];
+        vault_test_rectangle(&v,text,cases[test][1],cases[test][2]);
+        for (int flips=0; flips<8; flips++) {
+            byte first[32][32], terrain[32][32];
+            vault_test_stamp(&v,flips);
+            for (int y=0; y<32; y++) for (int x=0; x<32; x++)
+                terrain[y][x] = cave_feat[y][x];
+            assert(vault_test_place(&v,flips) == cases[test][3]);
+            vault_test_verify(cases[test][3]);
+            for (int y=0; y<32; y++) for (int x=0; x<32; x++) {
+                assert(cave_feat[y][x] == terrain[y][x]);
+                first[y][x] = cave_fixture_at(y,x);
+            }
+            /* Fixture position AND style must not depend on gameplay RNG. */
+            Rand_state_init(987654321);
+            vault_test_stamp(&v,flips);
+            assert(vault_test_place(&v,flips) == cases[test][3]);
+            for (int y=0; y<32; y++) for (int x=0; x<32; x++)
+                assert(cave_fixture_at(y,x) == first[y][x]);
+            Rand_state_import(saved_rng);
+        }
+    }
+    v.typ = 8;
+    vault_test_rectangle(&v,text,21,25);
+    const u32b excluded_flags[] = {0,VLT_TORCHES|VLT_QUEST,
+        VLT_TORCHES|VLT_SURFACE,VLT_TORCHES|VLT_QUEST|VLT_SURFACE};
+    for (unsigned i=0; i<sizeof(excluded_flags)/sizeof(excluded_flags[0]); i++) {
+        v.flags = excluded_flags[i];
+        vault_test_stamp(&v,0);
+        assert(vault_test_place(&v,0) == 0); vault_test_verify(0);
+    }
+    v.flags = VLT_TORCHES;
+    const byte excluded_types[] = {0,1,2,5,9,10};
+    for (unsigned i=0; i<sizeof(excluded_types)/sizeof(excluded_types[0]); i++) {
+        v.typ = excluded_types[i];
+        vault_test_stamp(&v,0);
+        assert(vault_test_place(&v,0) == 0); vault_test_verify(0);
+    }
+    v.typ = 8; v.hgt = 3; v.wid = 5;
+    for (int flips=0; flips<8; flips++) {
+        /* An off-centre single candidate verifies mirrors on asymmetric text
+         * as well as graceful underfilling when six placements cannot fit. */
+        memset(text+v.text,' ',v.hgt*v.wid);
+        text[v.text+6] = '#'; text[v.text+7] = '.';
+        vault_test_stamp(&v,flips);
+        assert(vault_test_place(&v,flips) == 1); vault_test_verify(1);
+        /* The canonical safe neighbour determines the saved light source.
+         * Do not skip an earlier special glyph to find a later plain dot. */
+        memset(text+v.text,' ',v.hgt*v.wid);
+        text[v.text+2] = '^'; text[v.text+7] = '#'; text[v.text+8] = '.';
+        vault_test_stamp(&v,flips);
+        int wy, wx;
+        vault_test_coord(&v,1,2,flips,&wy,&wx);
+        const int dy[] = {-1,1,0,0}, dx[] = {0,0,-1,1};
+        int expected = -1;
+        for (int side=0; side<4; side++) {
+            int y = wy+dy[side], x = wx+dx[side];
+            if (cave_floor_bold(y,x)) {
+                expected = vault_test_tokens[y][x] == '.' ? 1 : 0;
+                break;
+            }
+        }
+        assert(expected >= 0);
+        assert(vault_test_place(&v,flips) == expected);
+        vault_test_verify(expected);
+        /* A single possible wall/source pair makes rejection assertions
+         * decisive: competing valid walls cannot hide false candidates. */
+        const char invalid_tokens[][3] = {"+.","%."," .","# ","#~","#^"};
+        for (unsigned i=0; i<sizeof(invalid_tokens)/sizeof(invalid_tokens[0]); i++) {
+            memset(text+v.text,' ',v.hgt*v.wid);
+            text[v.text+6] = invalid_tokens[i][0];
+            text[v.text+7] = invalid_tokens[i][1];
+            vault_test_stamp(&v,flips);
+            int wy, wx, sy, sx;
+            vault_test_coord(&v,1,1,flips,&wy,&wx);
+            vault_test_coord(&v,1,2,flips,&sy,&sx);
+            /* Simulate terrain from a different room underneath padding,
+             * or changed special glyphs: terrain alone is not ownership. */
+            cave_feat[wy][wx] = FEAT_WALL_INNER;
+            cave_info[wy][wx] = CAVE_WALL | CAVE_ROOM | CAVE_ICKY;
+            floor_at(sy,sx);
+            assert(vault_test_place(&v,flips) == 0); vault_test_verify(0);
+        }
+        const int invalid_walls[] = {FEAT_DOOR_HEAD,FEAT_QUARTZ,
+            FEAT_WALL_EXTRA,FEAT_WALL_OUTER,FEAT_WALL_PERM};
+        memset(text+v.text,' ',v.hgt*v.wid);
+        text[v.text+6] = '#'; text[v.text+7] = '.';
+        for (unsigned i=0; i<sizeof(invalid_walls)/sizeof(invalid_walls[0]); i++) {
+            vault_test_stamp(&v,flips);
+            int y, x; vault_test_coord(&v,1,1,flips,&y,&x);
+            cave_feat[y][x] = invalid_walls[i];
+            assert(vault_test_place(&v,flips) == 0); vault_test_verify(0);
+        }
+        const int hazards[] = {FEAT_CHASM,FEAT_WATER,FEAT_ICE,
+            FEAT_LAVA,FEAT_POISON,FEAT_RUBBLE,FEAT_OPEN};
+        for (unsigned i=0; i<sizeof(hazards)/sizeof(hazards[0]); i++) {
+            vault_test_stamp(&v,flips);
+            int y, x; vault_test_coord(&v,1,2,flips,&y,&x);
+            cave_feat[y][x] = hazards[i];
+            assert(vault_test_place(&v,flips) == 0); vault_test_verify(0);
+        }
+        /* A fully padded template does not acquire nearby masonry fixtures. */
+        memset(text+v.text,' ',v.hgt*v.wid);
+        vault_test_stamp(&v,flips);
+        for (int y=2; y<30; y++) for (int x=2; x<30; x++) {
+            cave_feat[y][x] = y%4 == 0 ? FEAT_WALL_INNER : FEAT_FLOOR;
+            cave_info[y][x] = CAVE_ROOM | (y%4 == 0 ? CAVE_WALL : 0);
+        }
+        assert(vault_test_place(&v,flips) == 0); vault_test_verify(0);
+    }
+    v_text = saved_text; v_name = saved_names;
+    vault_test_reset(); Rand_state_import(saved_rng);
+    puts("Vault fixtures: all density targets including six, eight transforms, spacing, RNG independence, authored masonry/floor ownership and exclusions: PASS");
 }
 static void fixture_save_tests(void) {
     stream_size = stream_pos = load_byte_offset = 0;
@@ -184,7 +386,7 @@ static void fixture_save_tests(void) {
     cave_fixtures_clear();
     assert(test_read_fixtures() == 0 && stream_pos == stream_size);
     assert(cave_fixture_at(9, 11) == CAVE_FIXTURE_WALL_TORCH);
-    assert(cave_fixture_at(9, 18) == CAVE_FIXTURE_BRAZIER);
+    assert(cave_fixture_at(9, 19) == CAVE_FIXTURE_BRAZIER);
     new_save = false; stream_pos = load_byte_offset = 0;
     assert(test_read_fixtures() == 0 && stream_pos == 0);
     assert(!cave_fixture_at(9, 11));
@@ -208,17 +410,27 @@ static void fixture_save_tests(void) {
     assert(test_read_fixtures() == 0);
     /* The old layout saved its second fixture on the niche floor. Loading it
      * must consume the record without creating a wall or changing its light. */
-    assert(stream[7] == 9 && stream[8] == 18 && stream[9] == CAVE_FIXTURE_BRAZIER);
-    u16b floor_info = cave_info[10][18];
+    assert(stream[7] == 9 && stream[8] == 19 && stream[9] == CAVE_FIXTURE_BRAZIER);
+    u16b floor_info = cave_info[10][19];
     stream[7] = 10; stream_pos = load_byte_offset = 0;
     assert(test_read_fixtures() == 0 && stream_pos == stream_size);
-    assert(!cave_fixture_at(10,18) && !cave_fixture_at(9,18));
-    assert(cave_feat[10][18] == FEAT_FLOOR && cave_info[10][18] == floor_info);
+    assert(!cave_fixture_at(10,19) && !cave_fixture_at(9,19));
+    assert(cave_feat[10][19] == FEAT_FLOOR && cave_info[10][19] == floor_info);
     assert(cave_fixture_at(9,11) == CAVE_FIXTURE_WALL_TORCH);
     stream[7] = 9; stream_pos = load_byte_offset = 0;
     assert(test_read_fixtures() == 0);
     puts("Fixture save roundtrip, old-save default, truncation and invalid records: PASS");
     puts("Legacy floor brazier removed without changing the saved route or lighting: PASS");
+}
+static void fixture_variant_save_test(void) {
+    cave_fixture_set(9,15,CAVE_FIXTURE_WALL_TORCH_2);
+    stream_size = stream_pos = load_byte_offset = 0;
+    test_write_fixtures();
+    assert(stream_size == 13); /* Header plus three 3-byte fixtures. */
+    cave_fixtures_clear();
+    assert(test_read_fixtures() == 0 && stream_pos == stream_size);
+    assert(cave_fixture_at(9,15) == CAVE_FIXTURE_WALL_TORCH_2);
+    puts("Second wall torch variant survives save/load: PASS");
 }
 
 static void draw_cell(int y, int x, bool covered) {
@@ -247,7 +459,7 @@ static unsigned differences(SDL_Surface* a, SDL_Surface* b) {
             int col = x / g_views[PANE_MAIN].cell_w;
             int row = y / g_views[PANE_MAIN].cell_h;
             assert((col == COL_MAP + 11 && row == ROW_MAP + 9)
-                || (col == COL_MAP + 18 && row == ROW_MAP + 9));
+                || (col == COL_MAP + 19 && row == ROW_MAP + 9));
             changes++;
         }
     }
@@ -266,10 +478,12 @@ static Uint64 next_animation_time(Uint64 now) {
     return now + (Uint64)ms * 1000000ULL;
 }
 
-static void expect_middle_frame(SDL_Surface* canvas, int y, int x, const char* asset) {
+static void expect_existing_torch_frame(SDL_Surface* canvas, int y, int x, int frame) {
+    char asset[128];
+    strnfmt(asset,sizeof(asset),"lib/xtra/graf/anim_torch_f%d.png",frame);
     SDL_Surface* source = IMG_Load(asset); assert(source);
     /* Build the expected composite from the real underlying wall. Transparent
-     * torch pixels must retain that wall, including after an idle redraw. */
+     * fixture pixels must retain that wall, including after an idle redraw. */
     byte kind = cave_fixture_at(y,x);
     cave_fixture_set(y,x,CAVE_FIXTURE_NONE);
     draw_cell(y,x,false);
@@ -286,32 +500,62 @@ static void expect_middle_frame(SDL_Surface* canvas, int y, int x, const char* a
             (byte*)expected->pixels + row*expected->pitch, 16*4) == 0);
     SDL_DestroySurface(underlay); SDL_DestroySurface(expected); SDL_DestroySurface(source);
 }
+static void expect_fixture_frame(SDL_Surface* canvas, int y, int x, int atlas_tile) {
+    SDL_Surface* source = IMG_Load("lib/xtra/graf/animated.png"); assert(source);
+    SDL_Rect source_rect = {atlas_tile * 16, 0, 16, 16};
+    /* Build the expected composite from the real underlying wall. Transparent
+     * fixture pixels must retain that wall, including after an idle redraw. */
+    byte kind = cave_fixture_at(y,x);
+    cave_fixture_set(y,x,CAVE_FIXTURE_NONE);
+    draw_cell(y,x,false);
+    SDL_Rect rect = {(COL_MAP+x)*16, (ROW_MAP+y)*16, 16, 16};
+    SDL_Surface* underlay = SDL_RenderReadPixels(g_state.renderer,&rect); assert(underlay);
+    SDL_Surface* expected = SDL_ConvertSurface(underlay,canvas->format); assert(expected);
+    SDL_SetSurfaceBlendMode(source,SDL_BLENDMODE_BLEND);
+    assert(SDL_BlitSurface(source,&source_rect,expected,NULL));
+    cave_fixture_set(y,x,kind);
+    draw_cell(y,x,false);
+    for (int row=0; row<16; row++)
+        assert(memcmp((byte*)canvas->pixels + ((ROW_MAP+y)*16+row)*canvas->pitch
+                + (COL_MAP+x)*16*4,
+            (byte*)expected->pixels + row*expected->pitch, 16*4) == 0);
+    SDL_DestroySurface(underlay); SDL_DestroySurface(expected); SDL_DestroySurface(source);
+}
 
 static void torch_frame_tests(void) {
     Uint64 saved_tick = frame_tick;
     byte steps, phase;
-    fixture_timing(9,11,&steps,&phase);
+    fixture_timing(9,11,CAVE_FIXTURE_WALL_TORCH,&steps,&phase);
     for (int frame=0;frame<4;frame++) {
         frame_tick = (frame*steps + 4*steps - phase) % (4*steps);
         draw_cell(9,11,false);
         SDL_Surface* canvas = capture(20+frame);
-        char asset[128];
-        strnfmt(asset,sizeof(asset),"lib/xtra/graf/anim_torch_f%d.png",frame);
-        expect_middle_frame(canvas,9,11,asset);
+        expect_existing_torch_frame(canvas,9,11,frame);
         SDL_DestroySurface(canvas);
     }
+    byte saved_kind = cave_fixture_at(9,11);
+    cave_fixture_set(9,11,CAVE_FIXTURE_WALL_TORCH_2);
+    fixture_timing(9,11,CAVE_FIXTURE_WALL_TORCH_2,&steps,&phase);
+    for (int frame=0;frame<3;frame++) {
+        frame_tick = (frame*steps + 3*steps - phase) % (3*steps);
+        draw_cell(9,11,false);
+        SDL_Surface* canvas = capture(24+frame);
+        expect_fixture_frame(canvas,9,11,frame);
+        SDL_DestroySurface(canvas);
+    }
+    cave_fixture_set(9,11,saved_kind);
     frame_tick = saved_tick;
     draw_cell(9,11,false);
-    puts("All four Verdant torch frames composite over the existing wall: PASS");
+    puts("Existing torch plus all three new torch frames composite over the wall: PASS");
 }
 
 static void freeze_tests(Uint64* now) {
     op_ptr->opt[OPT_torch_animation_always] = false;
-    cave_info[9][11] &= ~CAVE_SEEN; cave_info[9][18] &= ~CAVE_SEEN;
-    draw_cell(9,11,false); draw_cell(9,18,false);
+    cave_info[9][11] &= ~CAVE_SEEN; cave_info[9][19] &= ~CAVE_SEEN;
+    draw_cell(9,11,false); draw_cell(9,19,false);
     SDL_Surface* frozen = capture(6);
-    expect_middle_frame(frozen,9,11,"lib/xtra/graf/anim_torch_f1.png");
-    expect_middle_frame(frozen,9,18,"lib/xtra/graf/anim_brazier_f1.png");
+    expect_existing_torch_frame(frozen,9,11,1);
+    expect_fixture_frame(frozen,9,19,4);
     int loads = image_loads, textures = texture_creations, mallocs = allocations;
     for (int i=0; i<100; i++) { *now += IDLE_STEP_NS; expect_paused(*now); }
     assert(image_loads == loads && texture_creations == textures && allocations == mallocs);
@@ -319,8 +563,8 @@ static void freeze_tests(Uint64* now) {
     assert(differences(frozen,still) == 0);
     SDL_DestroySurface(still); SDL_DestroySurface(frozen);
     /* Seen torches still animate in freeze mode. */
-    cave_info[9][11] |= CAVE_SEEN; cave_info[9][18] |= CAVE_SEEN;
-    draw_cell(9,11,false); draw_cell(9,18,false);
+    cave_info[9][11] |= CAVE_SEEN; cave_info[9][19] |= CAVE_SEEN;
+    draw_cell(9,11,false); draw_cell(9,19,false);
     SDL_Surface* visible = capture(8);
     *now = next_animation_time(frame_tick * IDLE_STEP_NS);
     assert(sdl_idle_animation_timeout_ms(*now) == 0);
@@ -342,15 +586,15 @@ static void freeze_tests(Uint64* now) {
     callback_sdl_pict(col,row,1,&Term->scr->a[row][col],&Term->scr->c[row][col],
         &Term->scr->ta[row][col],&Term->scr->tc[row][col]);
     SDL_Surface* lost_sight = capture(10);
-    expect_middle_frame(lost_sight,9,11,"lib/xtra/graf/anim_torch_f1.png");
+    expect_existing_torch_frame(lost_sight,9,11,1);
     SDL_DestroySurface(lost_sight);
     Term->old->a[row][col] = Term->scr->a[row][col];
     Term->old->c[row][col] = Term->scr->c[row][col];
     prt_map();
     assert(Term->old->a[row][col] == 255 && Term->old->c[row][col] == 0);
     op_ptr->opt[OPT_torch_animation_always] = true;
-    cave_info[9][11] |= CAVE_SEEN; cave_info[9][18] |= CAVE_SEEN;
-    draw_cell(9,11,false); draw_cell(9,18,false);
+    cave_info[9][11] |= CAVE_SEEN; cave_info[9][19] |= CAVE_SEEN;
+    draw_cell(9,11,false); draw_cell(9,19,false);
     *now += IDLE_STEP_NS;
     puts("Freeze mode: exact second frame for both fixtures, no idle wakeups, seen animation and unchanged-glyph redraw: PASS");
 }
@@ -391,8 +635,8 @@ static void animation_tests(void) {
     p_ptr->wy = 1; expect_paused(now); p_ptr->wy = 0;
     /* Leaving sight must neither dim nor freeze explored torches/braziers. */
     SDL_Surface* seen = capture(3);
-    cave_info[9][11] &= ~CAVE_SEEN; cave_info[9][18] &= ~CAVE_SEEN;
-    draw_cell(9, 11, false); draw_cell(9, 18, false);
+    cave_info[9][11] &= ~CAVE_SEEN; cave_info[9][19] &= ~CAVE_SEEN;
+    draw_cell(9, 11, false); draw_cell(9, 19, false);
     SDL_Surface* remembered = capture(4);
     assert(differences(seen, remembered) == 0);
     SDL_DestroySurface(seen);
@@ -406,12 +650,12 @@ static void animation_tests(void) {
     now += IDLE_STEP_NS;
     /* Undiscovered tiles, and terrain suppressed by special visibility modes,
      * must still cause no animation work or direct fixture rendering. */
-    cave_info[9][11] &= ~CAVE_MARK; cave_info[9][18] &= ~CAVE_MARK;
+    cave_info[9][11] &= ~CAVE_MARK; cave_info[9][19] &= ~CAVE_MARK;
     expect_paused(now);
     SDL_FRect hidden_dst = {0,0,16,16};
     assert(!sdl_idle_animation_draw(9, 11, &hidden_dst));
-    assert(!sdl_idle_animation_draw(9, 18, &hidden_dst));
-    cave_info[9][11] |= CAVE_MARK; cave_info[9][18] |= CAVE_MARK;
+    assert(!sdl_idle_animation_draw(9, 19, &hidden_dst));
+    cave_info[9][11] |= CAVE_MARK; cave_info[9][19] |= CAVE_MARK;
     p_ptr->rage = 1; expect_paused(now); p_ptr->rage = 0;
     g_labyrinth_view_active = true; expect_paused(now); g_labyrinth_view_active = false;
     assert(Rand_state_export() == rng && turn == turns && playerturn == player_turns);
@@ -429,7 +673,7 @@ static void animation_tests(void) {
     /* Run the real blocking input callback with no key/mouse input. Only the
      * final window presentation is intercepted; the SDL event wait is real. */
     frame_tick = SDL_GetTicksNS() / IDLE_STEP_NS;
-    draw_cell(9,11,false); draw_cell(9,18,false);
+    draw_cell(9,11,false); draw_cell(9,19,false);
     SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
     presents = 0; g_state.need_present = false;
     Uint64 wait_begin = SDL_GetTicksNS();
@@ -443,20 +687,20 @@ static void animation_tests(void) {
     now = (frame_tick + 1) * IDLE_STEP_NS;
     Term->soft_cursor = true; Term->old->cv = true; Term->old->cu = false;
     Term->old->cx = COL_MAP + 11; Term->old->cy = ROW_MAP + 9;
-    cave_info[9][18] &= ~(CAVE_MARK | CAVE_SEEN);
+    cave_info[9][19] &= ~(CAVE_MARK | CAVE_SEEN);
     expect_paused(now);
-    cave_info[9][18] |= CAVE_MARK | CAVE_SEEN;
+    cave_info[9][19] |= CAVE_MARK | CAVE_SEEN;
     Term->old->cv = false; Term->soft_cursor = false;
-    draw_cell(9, 18, true);
+    draw_cell(9, 19, true);
     cave_info[9][11] &= ~(CAVE_MARK | CAVE_SEEN);
     expect_paused(now + IDLE_STEP_NS);
     cave_info[9][11] |= CAVE_MARK | CAVE_SEEN;
-    draw_cell(9, 18, false);
+    draw_cell(9, 19, false);
     callback_sdl_wipe(COL_MAP + 11, ROW_MAP + 9, 1);
-    callback_sdl_wipe(COL_MAP + 18, ROW_MAP + 9, 1);
+    callback_sdl_wipe(COL_MAP + 19, ROW_MAP + 9, 1);
     expect_paused(now + IDLE_STEP_NS);
     assert(cell_count == 0);
-    draw_cell(9, 11, false); draw_cell(9, 18, false);
+    draw_cell(9, 11, false); draw_cell(9, 19, false);
     callback_sdl_xtra(TERM_XTRA_CLEAR, 0); assert(cell_count == 0);
     /* Rebuilding resources resets both tracked cells and the failed-load latch. */
     sdl_idle_animation_shutdown(); assert(!fixture_texture && !cells);
@@ -612,20 +856,26 @@ int main(void) {
         cave_color[y][x] = COLOR_STYLE_BASE; cave_light[y][x] = 2;
     }
     Rand_state_init(1234); u64b rng = Rand_state_export();
+    vault_fixture_tests();
     placement_tests();
-    niche(10,11); niche(10,18);
+    niche(10,11);
+    niche(10,19);
     assert(Rand_state_export() == rng);
-    assert(cave_fixture_at(9,11) == CAVE_FIXTURE_WALL_TORCH);
-    assert(cave_fixture_at(9,18) == CAVE_FIXTURE_BRAZIER);
+    assert(cave_fixture_at(9,11) == CAVE_FIXTURE_BRAZIER);
+    assert(cave_fixture_at(9,19) == CAVE_FIXTURE_BRAZIER);
     assert(cave_feat[10][11] == FEAT_FLOOR && (cave_info[11][11] & CAVE_GLOW));
+    /* Keep both serialized fixture kinds covered independently of niche
+     * placement, now that niches themselves are always braziers. */
+    cave_fixture_set(9,11,CAVE_FIXTURE_WALL_TORCH);
     fixture_save_tests();
+    fixture_variant_save_test();
     cave_set_feat(9,11,FEAT_FLOOR); assert(!cave_fixture_at(9,11));
     cave_feat[9][11] = FEAT_WALL_EXTRA; cave_fixture_set(9,11,CAVE_FIXTURE_WALL_TORCH);
     character_generated = character_dungeon = true;
     for (int y=0;y<20;y++) for(int x=0;x<30;x++) {
         cave_info[y][x] |= CAVE_MARK | CAVE_SEEN; draw_cell(y,x,false);
     }
-    assert(image_loads == 7 && texture_creations == 1 && cell_count == 2);
+    assert(image_loads == 5 && texture_creations == 1 && cell_count == 2);
     torch_frame_tests();
     animation_tests();
     pan_tests();
@@ -664,9 +914,10 @@ def main():
     rsp = OUT / "objects.rsp"
     rsp.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
-        *[str(BUILD / "_deps" / x) for x in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")], env["PATH"]])
-    env["SDL_VIDEO_DRIVER"] = "dummy"
+    env["PATH"] = os.pathsep.join([
+        *[str(BUILD / "_deps" / x) for x in ("SDL", "SDL_image", "SDL_ttf", "SDL_mixer")],
+        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
+    env["SDL_VIDEODRIVER"] = "dummy"
     env["SDL_RENDER_DRIVER"] = "software"
     symbols = ("save_wr_byte", "save_wr_u16b", "load_rd_byte", "load_rd_u16b",
                "load_savefile_version_at_least", "load_note", "sdl_present_if_needed",

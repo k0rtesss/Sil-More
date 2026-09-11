@@ -353,22 +353,121 @@ tunnel_profile choose_tunnel_profile(bool tentative)
     return profile;
 }
 
-void apply_tunnel_niche_torch_glow(int niche_y, int niche_x, int front_dy, int front_dx)
+static byte tunnel_fixture_kind(int r1, int r2, int width)
+{
+    u32b low = (u32b)MIN(r1, r2);
+    u32b high = (u32b)MAX(r1, r2);
+    u32b hash = low * 0x9e3779b9u ^ high * 0x85ebca6bu
+        ^ (u32b)width * 0xc2b2ae35u;
+
+    /* Narrow corridors favor torches; wider corridors favor braziers. Keep a
+     * corridor's style stable, including both legs of an L-shaped tunnel. */
+    hash ^= hash >> 16;
+    hash *= 0x7feb352du;
+    hash ^= hash >> 15;
+
+    int brazier_percent = (width >= 3) ? 65 : (width == 2) ? 45 : 20;
+    if (hash % 100 < (u32b)brazier_percent)
+        return CAVE_FIXTURE_BRAZIER;
+    return (hash >> 8) & 1
+        ? CAVE_FIXTURE_WALL_TORCH_2 : CAVE_FIXTURE_WALL_TORCH;
+}
+
+static bool corridor_fixture_source_ok(int y, int x, int r1, int r2)
+{
+    return in_bounds_fully(y, x) && cave_floor_bold(y, x)
+        && cave_corridor1[y][x] == r1 && cave_corridor2[y][x] == r2
+        && !(cave_info[y][x] & (CAVE_ROOM | CAVE_ICKY));
+}
+
+static bool corridor_fixture_wall_ok(
+    int y, int x, int source_y, int source_x, int r1, int r2)
+{
+    return in_bounds_fully(y, x) && cave_feat[y][x] == FEAT_WALL_EXTRA
+        && cave_fixture_at(y, x) == CAVE_FIXTURE_NONE
+        && !(cave_info[y][x] & (CAVE_ROOM | CAVE_ICKY | CAVE_G_VAULT))
+        && corridor_fixture_source_ok(source_y, source_x, r1, r2);
+}
+
+/* Add an occasional fixture to a corridor that did not receive side niches.
+ * The source scan stays on this corridor's own carved floor, while the wall
+ * check prevents fixtures from leaking into rooms or vaults. */
+static void maybe_place_corridor_fixture(
+    int y1, int x1, int y2, int x2, int r1, int r2, int width)
+{
+    static const int dy[4] = { -1, 1, 0, 0 };
+    static const int dx[4] = { 0, 0, -1, 1 };
+    coord best_wall = { 0, 0 };
+    coord best_source = { 0, 0 };
+    int y_lo = MIN(y1, y2);
+    int y_hi = MAX(y1, y2);
+    int x_lo = MIN(x1, x2);
+    int x_hi = MAX(x1, x2);
+    int seen = 0;
+
+    if (!one_in_(3))
+        return;
+
+    if (y1 == y2)
+    {
+        y_lo = MAX(1, y_lo - 2);
+        y_hi = MIN(p_ptr->cur_map_hgt - 2, y_hi + 2);
+        x_lo += 2;
+        x_hi -= 2;
+    }
+    else
+    {
+        y_lo += 2;
+        y_hi -= 2;
+        x_lo = MAX(1, x_lo - 2);
+        x_hi = MIN(p_ptr->cur_map_wid - 2, x_hi + 2);
+    }
+
+    if (y_lo > y_hi || x_lo > x_hi)
+        return;
+
+    for (int y = y_lo; y <= y_hi; ++y)
+    {
+        for (int x = x_lo; x <= x_hi; ++x)
+        {
+            if (!corridor_fixture_source_ok(y, x, r1, r2))
+                continue;
+
+            for (int i = 0; i < 4; ++i)
+            {
+                int wy = y + dy[i];
+                int wx = x + dx[i];
+                if (!corridor_fixture_wall_ok(
+                        wy, wx, y, x, r1, r2))
+                    continue;
+
+                ++seen;
+                if (seen == 1 || rand_int(seen) == 0)
+                {
+                    best_wall = (coord){ (byte)wy, (byte)wx };
+                    best_source = (coord){ (byte)y, (byte)x };
+                }
+            }
+        }
+    }
+
+    if (!seen)
+        return;
+
+    cave_fixture_set(best_wall.y, best_wall.x,
+        tunnel_fixture_kind(r1, r2, width));
+    apply_cave_fixture_glow(best_wall.y, best_wall.x,
+        best_source.y, best_source.x, false);
+}
+
+void apply_tunnel_niche_torch_glow(
+    int niche_y, int niche_x, int front_dy, int front_dx)
 {
     if (!in_bounds_fully(niche_y, niche_x))
         return;
 
-    /* "Torch" effect (radius 1) biased into the corridor:
-     * - light the niche floor itself
-     * - light the two wall tiles flanking the niche (along the corridor axis)
-     * - light the 3 corridor floor tiles directly in front of the niche
-     */
-    int axis_dy = (front_dx != 0) ? 1 : 0;
-    int axis_dx = (front_dy != 0) ? 1 : 0;
-
-    /* Retain the walkable niche and its existing light footprint. Both
-     * fixture textures are mounted on the backing wall; the coordinate
-     * variation deliberately does not consume gameplay RNG. */
+    /* A side niche is always a brazier; ordinary corridor walls can use the
+     * narrower torch/brazier mix below. */
     int wall_y = niche_y - front_dy;
     int wall_x = niche_x - front_dx;
     if (cave_feat[niche_y][niche_x] == FEAT_FLOOR
@@ -378,44 +477,19 @@ void apply_tunnel_niche_torch_glow(int niche_y, int niche_x, int front_dy, int f
             && cave_feat[wall_y][wall_x] == FEAT_WALL_EXTRA
             && !(cave_info[wall_y][wall_x] & (CAVE_ROOM | CAVE_ICKY)))
         {
-            byte kind = (((niche_y * 7 + niche_x * 11) % 4) != 0)
-                ? CAVE_FIXTURE_WALL_TORCH : CAVE_FIXTURE_BRAZIER;
-            cave_fixture_set(wall_y, wall_x, kind);
-            cave_info[wall_y][wall_x] |= CAVE_GLOW;
+            cave_fixture_set(wall_y, wall_x, CAVE_FIXTURE_BRAZIER);
+            apply_cave_fixture_glow(wall_y, wall_x, niche_y, niche_x,
+                false);
         }
     }
 
     if (cave_floor_bold(niche_y, niche_x)
         && !(cave_info[niche_y][niche_x] & (CAVE_ROOM | CAVE_ICKY)))
     {
-        cave_info[niche_y][niche_x] |= (CAVE_GLOW);
-    }
-
-    for (int i = -RADIUS_TORCH; i <= RADIUS_TORCH; i += 2 * RADIUS_TORCH)
-    {
-        int wy = niche_y + axis_dy * i;
-        int wx = niche_x + axis_dx * i;
-        if (!in_bounds_fully(wy, wx))
-            continue;
-        if (cave_info[wy][wx] & (CAVE_ROOM | CAVE_ICKY))
-            continue;
-        if (cave_wall_bold(wy, wx))
-            cave_info[wy][wx] |= (CAVE_GLOW);
-    }
-
-    int entry_y = niche_y + front_dy;
-    int entry_x = niche_x + front_dx;
-    for (int i = -RADIUS_TORCH; i <= RADIUS_TORCH; ++i)
-    {
-        int fy = entry_y + axis_dy * i;
-        int fx = entry_x + axis_dx * i;
-        if (!in_bounds_fully(fy, fx))
-            continue;
-        if (!cave_floor_bold(fy, fx))
-            continue;
-        if (cave_info[fy][fx] & (CAVE_ROOM | CAVE_ICKY))
-            continue;
-        cave_info[fy][fx] |= (CAVE_GLOW);
+        /* A niche without a valid backing wall still keeps the corridor's
+         * intended light, but has no decoration to reapply on load. */
+        apply_fixture_light_area(niche_y, niche_x,
+            CAVE_FIXTURE_BRAZIER_LIGHT_RADIUS, false);
     }
 }
 
@@ -605,6 +679,9 @@ void build_v_tunnel(
         }
     }
 
+    if (local.treatment != TUNNEL_TREAT_NICHES)
+        maybe_place_corridor_fixture(y_lo, x, y_hi, x, r1, r2, width);
+
     apply_v_tunnel_treatment(r1, r2, y_lo, y_hi, x, widen_west, widen_east,
         &local, mark_escape);
 }
@@ -678,6 +755,9 @@ void build_h_tunnel(
             }
         }
     }
+
+    if (local.treatment != TUNNEL_TREAT_NICHES)
+        maybe_place_corridor_fixture(y, x_lo, y, x_hi, r1, r2, width);
 
     apply_h_tunnel_treatment(r1, r2, x_lo, x_hi, y, widen_north, widen_south,
         &local, mark_escape);

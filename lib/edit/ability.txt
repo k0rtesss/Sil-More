@@ -61,7 +61,7 @@ T:31:0:99  # Gloves
 N:2:Knock Back
 I:0:2:3
 D:Like the thunderous charges of the Edain lords in the Nirnaeth Arnoediad, where foes were hurled aside in the press of battle. Huor and Húrin drove through the orcish ranks with such force that their enemies stumbled and fell back before them, unable to hold their ground against the fury of the Edain.
-E:Chance to knock enemies back one square in melee (your Strength vs their Constitution).
+E:Chance to knock enemies back one square in melee (two squares from ice for grounded targets), using your Strength vs their Constitution.
 T:21:0:99  # Hafted
 T:22:0:99  # Polearms
 T:23:0:99  # Swords

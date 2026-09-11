@@ -34,6 +34,13 @@ static bool monster_entry_has_audio(const monster_sound_entry* entry)
         if (entry->audio[i]) return true;
     return false;
 }
+static bool monster_entry_has_file(const monster_sound_entry* entry, const char* needle)
+{
+    if (!entry) return false;
+    for (int i = 0; i < entry->count; ++i)
+        if (strstr(entry->files[i], needle)) return true;
+    return false;
+}
 bool path_build(char* buf, size_t max, cptr base, cptr leaf)
 {
     return SDL_snprintf(buf, max, "%s/%s", base, leaf) < (int)max;
@@ -42,6 +49,14 @@ int distance(int y1, int x1, int y2, int x2)
 {
     int dy = abs(y1-y2), dx = abs(x1-x2);
     return MAX(dx,dy) + MIN(dx,dy)/2;
+}
+static int test_player_noise_distance;
+int flow_dist(int which_flow, int y, int x)
+{
+    (void)y;
+    (void)x;
+    assert(which_flow == FLOW_PLAYER_NOISE);
+    return test_player_noise_distance;
 }
 int main(int argc, char** argv)
 {
@@ -114,11 +129,11 @@ int main(int argc, char** argv)
     }
     mon.r_idx = 71;
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
-    assert(g_monster_sounds->count == 1);
-    assert(strstr(g_monster_sounds->files[0], "Spider_Attack.ogg"));
+    assert(g_monster_sounds->count >= 1);
+    assert(monster_entry_has_file(g_monster_sounds, "Spider_Attack.ogg"));
     monster_sound(&mon, (MONSTER_SOUND_RANGED_BASE + 23));
-    assert(g_monster_sounds->count == 1 && g_monster_sounds->audio[0]);
-    assert(strstr(g_monster_sounds->files[0], "Bonus_Spider_Netshot_Attack.ogg"));
+    assert(g_monster_sounds->count >= 1 && monster_entry_has_audio(g_monster_sounds));
+    assert(monster_entry_has_file(g_monster_sounds, "Bonus_Spider_Netshot_Attack.ogg"));
     mon.r_idx = 32;
     monster_sound(&mon, (MONSTER_SOUND_RANGED_BASE + 23));
     assert(g_monster_sounds->count == 0);
@@ -132,34 +147,36 @@ int main(int argc, char** argv)
         "throw_web", cJSON_Duplicate(web, true));
     mon.r_idx = 22;
     monster_sound(&mon, MONSTER_SOUND_RANGED_BASE + 23);
-    assert(g_monster_sounds->count == 1 && g_monster_sounds->audio[0]);
-    assert(strstr(g_monster_sounds->files[0], "Netshot"));
+    assert(g_monster_sounds->count >= 1 && monster_entry_has_audio(g_monster_sounds));
+    assert(monster_entry_has_file(g_monster_sounds, "Netshot"));
     /* Separate slots can select different recordings even on one monster. */
     cJSON_AddItemToArray(cJSON_GetObjectItemCaseSensitive(grimhawk, "melee"),
         cJSON_Duplicate(web, true));
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
-    assert(strstr(g_monster_sounds->files[0], "Bat_Attack.ogg"));
+    assert(monster_entry_has_file(g_monster_sounds, "Bat_Attack.ogg"));
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE + 1);
-    assert(g_monster_sounds->audio[0] && strstr(g_monster_sounds->files[0], "Netshot"));
+    assert(monster_entry_has_audio(g_monster_sounds));
+    assert(monster_entry_has_file(g_monster_sounds, "Netshot"));
     /* The other bird family members now have explicit normal attack recordings. */
     mon.r_idx = 43; monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
     assert(monster_entry_has_audio(g_monster_sounds));
     mon.r_idx = 63; monster_sound(&mon, MONSTER_SOUND_RANGED_BASE + 8);
     assert(g_monster_sounds->audio[0] && strstr(g_monster_sounds->files[0], "Sonic"));
     mon.r_idx = 12;
-    monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
+    monster_sound(&mon, MONSTER_SOUND_RANGED_BASE);
     assert(g_monster_sounds->count == 0);
     monster_sound_entry* missing = g_monster_sounds;
-    monster_sound(&mon, MONSTER_SOUND_MELEE_BASE); assert(g_monster_sounds == missing);
+    monster_sound(&mon, MONSTER_SOUND_RANGED_BASE); assert(g_monster_sounds == missing);
     mon.r_idx = 104;
     monster_sound(&mon, MONSTER_SOUND_DAMAGE);
     assert(monster_entry_has_audio(g_monster_sounds));
     assert(strstr(g_monster_sounds->files[0], "Bat_Damage.ogg"));
-    mon.r_idx = 21; mon.fx = 11;
+    mon.r_idx = 21; mon.fx = 1; test_player_noise_distance = 11;
     monster_sound_entry* before = g_monster_sounds;
     for (int i = 0; i < 1000; ++i) monster_sound(&mon, MONSTER_SOUND_IDLE);
     assert(g_monster_sounds == before);
-    mon.fx = 10; mon.alertness = ALERTNESS_UNWARY - 1;
+    test_player_noise_distance = 10;
+    mon.alertness = ALERTNESS_UNWARY - 1;
     for (int i = 0; i < 1000; ++i) monster_sound(&mon, MONSTER_SOUND_IDLE);
     assert(g_monster_sounds == before);
     mon.alertness = ALERTNESS_UNWARY; SDL_srand(123);
@@ -169,7 +186,7 @@ int main(int argc, char** argv)
         monster_sound(&mon, MONSTER_SOUND_IDLE);
         emitted += old != sound_state.next_sfx_track;
     }
-    assert(emitted > 5 && emitted < 50);
+    assert(emitted > 25 && emitted < 75);
     assert(g_monster_sounds->action == MONSTER_SOUND_IDLE);
     assert(g_monster_sounds->audio[0]);
     for (int i = 1; i < argc; ++i) {

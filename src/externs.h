@@ -863,6 +863,7 @@ extern void do_cmd_queue_floor_context_action(
     floor_context_action_kind kind);
 extern bool do_cmd_context_square_action_popup(void);
 extern void do_cmd_context_floor_item_action(void);
+extern void do_cmd_context_floor_quiver_action(void);
 extern void do_cmd_suppress_context_square_popups(void);
 extern bool touch_shortcut_context_action(int binding, bool description_open,
     int* out_key, char* label, size_t label_len);

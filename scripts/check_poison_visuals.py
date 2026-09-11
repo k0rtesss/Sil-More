@@ -34,7 +34,7 @@ static void poison_frame_pixels(SDL_Surface* canvas, int frame) {
         assert(SDL_ReadSurfacePixel(source,x,y,&r,&g,&b,&a));
         assert(SDL_ReadSurfacePixel(canvas,(COL_MAP+11)*16+x,
             (ROW_MAP+10)*16+y,&pr,&pg,&pb,&pa));
-        assert(pr==g/2&&pg==r&&pb==b&&pa==a);
+        assert(pr==g/2&&pg==r*7/8&&pb==b&&pa==a);
     }
     SDL_DestroySurface(source);
 }

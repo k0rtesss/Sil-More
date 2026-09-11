@@ -53,15 +53,34 @@
         {
           "method": "THORN",
           "effect": "WOUND",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_01.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_02.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_03.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_04.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_05.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_06.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_07.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_08.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_09.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_10.ogg"
+          ]
         }
       ],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_1.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_2.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_1.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_2.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_3.ogg"
+        ]
       },
       "idle": {
         "sounds": []
@@ -114,41 +133,35 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Raider/OrcRaider_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Raider/OrcRaider_Attack_2.ogg"
           ]
         },
         {
           "method": "WHIP",
           "effect": "DISARM",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Blade/OrcBlade_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Blade/OrcBlade_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/LesserOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/LesserOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/LesserOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Raider/OrcRaider_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/LesserOrc_Idle.ogg"
         ]
       }
     },
@@ -241,26 +254,19 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/Orc/Orc_Attack.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/Orc/Orc_Damage.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/Orc/Orc_Death.ogg"
         ]
       },
       "idle": {
@@ -309,22 +315,35 @@
         {
           "method": "CLAW",
           "effect": "WOUND",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
+          ]
         }
       ],
       "ranged": {
         "dim": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Reanimate_Cast.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_3.ogg"
+        ]
       }
     },
     "31": {
@@ -334,35 +353,34 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Blade/OrcBlade_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Blade/OrcBlade_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {
         "shriek": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Scout/OrcScout_Fire.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Scout/OrcScout_Shooting-Complete.ogg"
+          ]
         }
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/LesserOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/LesserOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/LesserOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/Orc_Scout/OrcScout_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Lesser_Orcs/LesserOrc_Idle.ogg"
         ]
       }
     },
@@ -373,24 +391,31 @@
           "method": "BITE",
           "effect": "POISON",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_2.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_1.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_01.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_02.ogg"
         ]
       }
     },
@@ -427,17 +452,16 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
             "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
             "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg",
+            "sound/monsters/recordings/Minifantasy/Orc/06_orc_special_atk.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
           "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
           "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
           "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
@@ -445,13 +469,13 @@
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
           "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_2.ogg"
         ]
       }
     },
@@ -461,15 +485,34 @@
         {
           "method": "THORN",
           "effect": "CONFUSE",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_01.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_02.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_03.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_04.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_05.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_06.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_07.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_08.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_09.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_10.ogg"
+          ]
         }
       ],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_1.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_2.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_1.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_2.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_3.ogg"
+        ]
       },
       "idle": {
         "sounds": []
@@ -516,28 +559,38 @@
           "method": "BITE",
           "effect": "POISON",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_3.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_4.ogg"
           ]
         }
       ],
       "ranged": {
         "hatch_spider": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Movement_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Click_1.ogg"
+          ]
         }
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_2.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_03.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_04.ogg"
         ]
       }
     },
@@ -548,35 +601,36 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Blade/FeralBlade_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Blade/FeralBlade_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {
         "arrow1": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Arbalist/WarbreedArbalist_Fire.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Arbalist/WarbreedArbalist_Load.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Arbalist/WarbreedArbalist_Shooting-Complete.ogg"
+          ]
         }
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Arbalist/WarbreedArbalist_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_2.ogg"
         ]
       }
     },
@@ -646,10 +700,8 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Berserker/FeralBerserker_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Berserker/FeralBerserker_Attack_2.ogg"
           ]
         }
       ],
@@ -660,21 +712,20 @@
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Berserker/FeralBerserker_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_2.ogg"
         ]
       }
     },
@@ -685,31 +736,28 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Berserker/FeralBerserker_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Berserker/FeralBerserker_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Berserker/FeralBerserker_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_2.ogg"
         ]
       }
     },
@@ -720,24 +768,30 @@
           "method": "BITE",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_5.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_6.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_4.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_3.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_05.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_06.ogg"
         ]
       }
     },
@@ -788,7 +842,8 @@
           "method": "TOUCH",
           "effect": "TERRIFY",
           "sounds": [
-            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Attack_2.ogg"
           ]
         }
       ],
@@ -799,17 +854,18 @@
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Damage_2.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Idle_Loop.ogg"
         ]
       }
     },
@@ -820,30 +876,41 @@
           "method": "BITE",
           "effect": "ENTRANCE",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_4.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Mandible_1.ogg"
           ]
         }
       ],
       "ranged": {
         "throw_web": {
           "sounds": [
-            "sound/monsters/recordings/Spider/Bonus_Spider_Netshot_Attack.ogg"
+            "sound/monsters/recordings/Spider/Bonus_Spider_Netshot_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Spit_1.ogg"
           ]
         }
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_2.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_07.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_08.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Click_1.ogg"
         ]
       }
     },
@@ -853,15 +920,34 @@
         {
           "method": "THORN",
           "effect": "HURT",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_01.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_02.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_03.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_04.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_05.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_06.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_07.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_08.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_09.ogg",
+            "sound/monsters/recordings/Plant_Magic_Spells/magic_plant_spell_10.ogg"
+          ]
         }
       ],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_1.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_2.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_1.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_2.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_3.ogg"
+        ]
       },
       "idle": {
         "sounds": []
@@ -936,30 +1022,45 @@
         {
           "method": "HIT",
           "effect": "HURT",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Attack_1.ogg"
+          ]
         },
         {
           "method": "TOUCH",
           "effect": "LOSE_DEX",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Attack_2.ogg"
+          ]
         }
       ],
       "ranged": {
         "darkness": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Reanimate_Cast.ogg"
+          ]
         },
         "slow": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Fly_Loop.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Damage_2.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Death.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Idle_Loop.ogg"
+        ]
       }
     },
     "76": {
@@ -969,35 +1070,35 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Phalanx/FeralPhalanx_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Phalanx/FeralPhalanx_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {
         "arrow2": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Arbalist/FeralArbalist_Fire.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Arbalist/FeralArbalist_Shooting-Complete.ogg"
+          ]
         }
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Phalanx/FeralPhalanx_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/FeralOrc_Idle_2.ogg"
         ]
       }
     },
@@ -1008,31 +1109,28 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Blade/WarbreedBlade_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Blade/WarbreedBlade_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Blade/WarbreedBlade_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_2.ogg"
         ]
       }
     },
@@ -1073,24 +1171,31 @@
           "method": "STING",
           "effect": "CONFUSE",
           "sounds": [
-            "sound/monsters/recordings/Hornet/Hornet_Attack.ogg"
+            "sound/monsters/recordings/Hornet/Hornet_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_5.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_6.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Hornet/Hornet_Damage.ogg"
+          "sound/monsters/recordings/Hornet/Hornet_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_3.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_4.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Hornet/Hornet_Death.ogg"
+          "sound/monsters/recordings/Hornet/Hornet_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_3.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Hornet/Hornet_Emerge.ogg"
+          "sound/monsters/recordings/Hornet/Hornet_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Buzz_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Buzz_2.ogg"
         ]
       }
     },
@@ -1101,31 +1206,28 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Berserker/WarbreedBerserker_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Berserker/WarbreedBerserker_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Berserker/WarbreedBerserker_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_2.ogg"
         ]
       }
     },
@@ -1136,31 +1238,28 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Idle_2.ogg"
         ]
       }
     },
@@ -1171,10 +1270,8 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Phalanx/WarbreedPhalanx_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Phalanx/WarbreedPhalanx_Attack_2.ogg"
           ]
         }
       ],
@@ -1185,21 +1282,20 @@
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Phalanx/WarbreedPhalanx_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_2.ogg"
         ]
       }
     },
@@ -1210,27 +1306,28 @@
           "method": "BITE",
           "effect": "WOUND",
           "sounds": [
-            "sound/monsters/recordings/Minifantasy/Wargo/01_Wargo_Attack_01.ogg",
-            "sound/monsters/recordings/Minifantasy/Wargo/02_Wargo_Attack_02.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/Warg/Warg_Bite_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/Warg/Warg_Bite_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Minifantasy/Wargo/03_Wargo_Damage_01.ogg",
-          "sound/monsters/recordings/Minifantasy/Wargo/04_Wargo_Damage_02.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/Warg/Warg_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/Warg/Warg_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/Warg/Warg_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Minifantasy/Wargo/05_Wargo_Death.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/Warg/Warg_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Minifantasy/Wolf/05_Wolf_growl_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Wolf/06_Wolf_growl_2.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/Warg/Warg_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/Warg/Warg_Idle_2.ogg"
         ]
       }
     },
@@ -1240,30 +1337,46 @@
         {
           "method": "HIT",
           "effect": "HURT",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Skeleton/01_Skeleton_attack.ogg"
+          ]
         },
         {
           "method": "TOUCH",
           "effect": "LOSE_STR",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Skeleton/01_Skeleton_attack.ogg"
+          ]
         }
       ],
       "ranged": {
         "darkness": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Skeletons/Skeleton_Generic_Activate.ogg"
+          ]
         },
         "slow": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Skeletons/Skeleton_Generic_Deactivate.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Skeleton/02_Skeleton_damage.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Skeleton/03_Skeleton_death.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Skeleton/04_Skeleton_idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Skeleton/05_Skeleton_idle_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Skeleton/06_Skeleton_idle_3.ogg"
+        ]
       }
     },
     "94": {
@@ -1299,10 +1412,9 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/PaleChampion/PaleChampion_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/PaleChampion/PaleChampion_Attack_2.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/PaleChampion/PaleChampion_Attack_3.ogg"
           ]
         }
       ],
@@ -1313,21 +1425,19 @@
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/PaleChampion/PaleChampion_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/PaleChampion/PaleChampion_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/PaleChampion/PaleChampion_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/PaleChampion/PaleChampion_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/PaleChampion/PaleChampion_Idle.ogg"
         ]
       }
     },
@@ -1338,24 +1448,24 @@
           "method": "TOUCH",
           "effect": "DARK",
           "sounds": [
-            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_1.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_1.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_1.ogg"
         ]
       }
     },
@@ -1366,24 +1476,32 @@
           "method": "BITE",
           "effect": "POISON",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_2.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_5.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_4.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_3.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_09.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_10.ogg"
         ]
       }
     },
@@ -1462,20 +1580,16 @@
           "method": "HIT",
           "effect": "HURT",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Blade/WarbreedBlade_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Blade/WarbreedBlade_Attack_2.ogg"
           ]
         },
         {
           "method": "WHIP",
           "effect": "DISARM",
           "sounds": [
-            "sound/monsters/recordings/Orc/Orc_Attack.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Berserker/WarbreedBerserker_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Berserker/WarbreedBerserker_Attack_2.ogg"
           ]
         }
       ],
@@ -1486,21 +1600,20 @@
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Damage.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Death.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Blade/WarbreedBlade_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Orc/Orc_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_2.ogg"
         ]
       }
     },
@@ -1557,30 +1670,47 @@
         {
           "method": "HIT",
           "effect": "HURT",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Attack.ogg"
+          ]
         },
         {
           "method": "TOUCH",
           "effect": "LOSE_GRA",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Activate.ogg"
+          ]
         }
       ],
       "ranged": {
         "darkness": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Activate.ogg"
+          ]
         },
         "slow": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Deactivate.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Death_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Idle_Loop.ogg"
+        ]
       }
     },
     "113": {
@@ -1589,22 +1719,32 @@
         {
           "method": "BITE",
           "effect": "ENTRANCE",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw.ogg"
+          ]
         }
       ],
       "ranged": {
         "scare": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_1.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_1.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_1.ogg"
+        ]
       }
     },
     "114": {
@@ -1648,19 +1788,31 @@
         {
           "method": "HIT",
           "effect": "HURT",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Minifantasy/Human/08_human_special_atk_1.ogg",
+            "sound/monsters/recordings/Minifantasy/Human/09_human_special_atk_2.ogg"
+          ]
         }
       ],
       "ranged": {
         "arrow1": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Minifantasy/Human/08_human_special_atk_1.ogg",
+            "sound/monsters/recordings/Minifantasy/Human/09_human_special_atk_2.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Minifantasy/Human/10_human_damage_1.ogg",
+          "sound/monsters/recordings/Minifantasy/Human/11_human_damage_2.ogg",
+          "sound/monsters/recordings/Minifantasy/Human/12_human_damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Minifantasy/Human/23_human_death_spin.ogg"
+        ]
       },
       "idle": {
         "sounds": []
@@ -1989,24 +2141,33 @@
           "method": "BITE",
           "effect": "BLIND",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_3.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_6.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Click_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_4.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_3.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_11.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Buzz_1.ogg"
         ]
       }
     },
@@ -2017,24 +2178,24 @@
           "method": "TOUCH",
           "effect": "DARK",
           "sounds": [
-            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_2.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_2.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_2.ogg"
         ]
       }
     },
@@ -2131,22 +2292,32 @@
         {
           "method": "CLAW",
           "effect": "ACID",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
+          ]
         }
       ],
       "ranged": {
         "scare": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Reanimate_Cast.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_2.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_2.ogg"
+        ]
       }
     },
     "143": {
@@ -2337,29 +2508,32 @@
           "method": "TOUCH",
           "effect": "HUNGER",
           "sounds": [
-            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Icy_Touch.ogg"
           ]
         }
       ],
       "ranged": {
         "hold": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Through_Floor.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
-        ]
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Damage.ogg"
+          ]
       },
       "death": {
-        "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
-        ]
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Death.ogg"
+          ]
       },
       "idle": {
-        "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
-        ]
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Float_Loop.ogg"
+          ]
       }
     },
     "154": {
@@ -2368,18 +2542,28 @@
         {
           "method": "CLAW",
           "effect": "WOUND",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Cat/Cat_Attack_1.ogg",
+            "sound/monsters/recordings/Cat/Cat_Attack_2.ogg"
+          ]
         }
       ],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Damage_1.ogg",
+          "sound/monsters/recordings/Cat/Cat_Damage_2.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Death_1.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Idle_1.ogg"
+        ]
       }
     },
     "161": {
@@ -2444,18 +2628,28 @@
         {
           "method": "CLAW",
           "effect": "WOUND",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
+          ]
         }
       ],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_3.ogg"
+        ]
       }
     },
     "164": {
@@ -2515,22 +2709,34 @@
         {
           "method": "CLAW",
           "effect": "WOUND",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Cat/Cat_Attack_2.ogg",
+            "sound/monsters/recordings/Cat/Cat_Attack_3.ogg"
+          ]
         }
       ],
       "ranged": {
         "arrow2": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Cat/Cat_Hiss.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Damage_2.ogg",
+          "sound/monsters/recordings/Cat/Cat_Damage_4.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Idle_2.ogg"
+        ]
       }
     },
     "166": {
@@ -2578,31 +2784,32 @@
           "method": "TOUCH",
           "effect": "COLD",
           "sounds": [
-            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Attack_1.ogg"
           ]
         },
         {
           "method": "TOUCH",
           "effect": "LOSE_GRA",
           "sounds": [
-            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Damage_2.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Death.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Angel_of_Death/Angel_of_Death_Idle_Loop.ogg"
         ]
       }
     },
@@ -2613,24 +2820,34 @@
           "method": "BITE",
           "effect": "ENTRANCE",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_5.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Mandible_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_3.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_4.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_3.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_01.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_06.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Buzz_2.ogg"
         ]
       }
     },
@@ -2798,22 +3015,34 @@
         {
           "method": "CLAW",
           "effect": "WOUND",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Cat/Cat_Attack_1.ogg",
+            "sound/monsters/recordings/Cat/Cat_Attack_3.ogg"
+          ]
         }
       ],
       "ranged": {
         "arrow1": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Cat/Cat_Hiss.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Damage_3.ogg",
+          "sound/monsters/recordings/Cat/Cat_Damage_4.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Death_1.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Idle_2.ogg"
+        ]
       }
     },
     "176": {
@@ -2878,18 +3107,28 @@
         {
           "method": "CLAW",
           "effect": "WOUND",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Cat/Cat_Attack_1.ogg",
+            "sound/monsters/recordings/Cat/Cat_Attack_3.ogg"
+          ]
         }
       ],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Damage_1.ogg",
+          "sound/monsters/recordings/Cat/Cat_Damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Idle_1.ogg"
+        ]
       }
     },
     "181": {
@@ -2948,22 +3187,35 @@
         {
           "method": "BITE",
           "effect": "HALLU",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw.ogg"
+          ]
         }
       ],
       "ranged": {
         "scare": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_3.ogg"
+        ]
       }
     },
     "183": {
@@ -2973,32 +3225,37 @@
           "method": "TOUCH",
           "effect": "DARK",
           "sounds": [
-            "sound/monsters/recordings/Ghost/Ghost_Attack.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Icy_Touch.ogg"
           ]
         }
       ],
       "ranged": {
         "hold": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Through_Floor.ogg"
+          ]
         },
         "slow": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Icy_Touch.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Damage.ogg"
-        ]
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Damage.ogg"
+          ]
       },
       "death": {
-        "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Death.ogg"
-        ]
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Death.ogg"
+          ]
       },
       "idle": {
-        "sounds": [
-          "sound/monsters/recordings/Ghost/Ghost_Emerge.ogg"
-        ]
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Float_Loop.ogg"
+          ]
       }
     },
     "184": {
@@ -3037,18 +3294,31 @@
         {
           "method": "CLAW",
           "effect": "WOUND",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/Cat/Cat_Attack_1.ogg",
+            "sound/monsters/recordings/Cat/Cat_Attack_2.ogg",
+            "sound/monsters/recordings/Cat/Cat_Attack_3.ogg"
+          ]
         }
       ],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Damage_2.ogg",
+          "sound/monsters/recordings/Cat/Cat_Damage_4.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Death_1.ogg",
+          "sound/monsters/recordings/Cat/Cat_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Cat/Cat_Idle_1.ogg",
+          "sound/monsters/recordings/Cat/Cat_Idle_2.ogg"
+        ]
       }
     },
     "186": {
@@ -3216,18 +3486,28 @@
         {
           "method": "CRUSH",
           "effect": "ACID",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
+          ]
         }
       ],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_1.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_2.ogg"
+        ]
       }
     },
     "195": {
@@ -3395,17 +3675,25 @@
       "melee": [],
       "ranged": {
         "screech": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Reanimate_Cast.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_3.ogg"
+        ]
       }
     },
     "204": {
@@ -3542,24 +3830,34 @@
           "method": "BITE",
           "effect": "POISON",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_2.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_4.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Mandible_3.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_3.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_04.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_08.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Click_3.ogg"
         ]
       }
     },
@@ -3653,18 +3951,30 @@
         {
           "method": "HIT",
           "effect": "BATTER",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Attack_2.ogg"
+          ]
         }
       ],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Death.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Others/CaveTroll/CaveTroll_Idle_2.ogg"
+        ]
       }
     },
     "215": {
@@ -3834,24 +4144,38 @@
           "method": "BITE",
           "effect": "ENTRANCE",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_3.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_5.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_6.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Mandible_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Mandible_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_3.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_4.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_3.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_07.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_09.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_10.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Click_4.ogg"
         ]
       }
     },
@@ -3946,22 +4270,38 @@
         {
           "method": "BITE",
           "effect": "POISON",
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
+          ]
         }
       ],
       "ranged": {
         "scare": {
-          "sounds": []
+          "sounds": [
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Reanimate_Cast.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
+          ]
         }
       },
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Damage_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Death_2.ogg"
+        ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Idle_3.ogg"
+        ]
       }
     },
     "233": {
@@ -4114,30 +4454,47 @@
           "method": "BITE",
           "effect": "POISON",
           "sounds": [
-            "sound/monsters/recordings/Spider/Spider_Attack.ogg"
+            "sound/monsters/recordings/Spider/Spider_Attack.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_4.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Attack_6.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Mandible_2.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Mandible_3.ogg"
           ]
         }
       ],
       "ranged": {
         "breath_dark": {
           "sounds": [
-            "sound/monsters/recordings/CC0/breath.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Spit_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Spit_2.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Spit_3.ogg"
           ]
         }
       },
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Damage.ogg"
+          "sound/monsters/recordings/Spider/Spider_Damage.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Damage_4.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Death.ogg"
+          "sound/monsters/recordings/Spider/Spider_Death.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Death_3.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Spider/Spider_Emerge.ogg"
+          "sound/monsters/recordings/Spider/Spider_Emerge.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_08.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_10.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Idle_11.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Insectoid_Creatures/Insectoid_Creatures/Insectoid_Buzz_2.ogg"
         ]
       }
     },
@@ -4373,29 +4730,26 @@
           "method": "BITE",
           "effect": "POISON",
           "sounds": [
-            "sound/monsters/recordings/Minifantasy/Wolf/01_Wolf_attack_1a.ogg",
-            "sound/monsters/recordings/Minifantasy/Wolf/02_Wolf_attack_1b.ogg",
-            "sound/monsters/recordings/Minifantasy/Wolf/03_Wolf_attack_2a.ogg",
-            "sound/monsters/recordings/Minifantasy/Wolf/04_Wolf_attack_2b.ogg"
+            "sound/monsters/recordings/Ririsaurus/Monsters_Vol_2/Garmr_Growl.ogg",
+            "sound/monsters/recordings/Ririsaurus/Monsters_Vol_2/GreaWarg_Attack.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Minifantasy/Wolf/08_Wolf_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Wolf/09_Wolf_damage_2.ogg"
+          "sound/monsters/recordings/Ririsaurus/Monsters_Vol_2/Monster_Roar.ogg",
+          "sound/monsters/recordings/Ririsaurus/Monsters_Vol_2/Monster_Roaring.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Minifantasy/Wolf/07_Wolf_death.ogg"
+          "sound/monsters/recordings/Ririsaurus/Monsters_Vol_2/Monster_Roaring.ogg"
         ]
       },
       "idle": {
         "sounds": [
-          "sound/monsters/recordings/Minifantasy/Wolf/05_Wolf_growl_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Wolf/06_Wolf_growl_2.ogg"
+          "sound/monsters/recordings/Ririsaurus/Monsters_Vol_2/Garmr_Growl.ogg"
         ]
       }
     },
@@ -4548,10 +4902,18 @@
       "melee": [],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_1.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_2.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_1.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_2.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_3.ogg"
+        ]
       },
       "idle": {
         "sounds": []
@@ -4562,10 +4924,18 @@
       "melee": [],
       "ranged": {},
       "damage": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_1.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_2.ogg",
+          "sound/monsters/recordings/Plant_Hit/Plant_Hit_3.ogg"
+        ]
       },
       "death": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_1.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_2.ogg",
+          "sound/monsters/recordings/Tree_Hit/Tree_Hit_3.ogg"
+        ]
       },
       "idle": {
         "sounds": []
@@ -4940,36 +5310,37 @@
           "method": "HIT",
           "effect": "WOUND",
           "sounds": [
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Phalanx/FeralPhalanx_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Feral_Orcs/Feral_Phalanx/FeralPhalanx_Attack_2.ogg"
           ]
         },
         {
           "method": "HIT",
           "effect": "DISARM",
           "sounds": [
-            "sound/monsters/recordings/Minifantasy/Orc/01_orc_atk_sword_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/02_orc_atk_sword_2.ogg",
-            "sound/monsters/recordings/Minifantasy/Orc/03_orc_atk_sword_3.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Phalanx/WarbreedPhalanx_Attack_1.ogg",
+            "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Phalanx/WarbreedPhalanx_Attack_2.ogg"
           ]
         }
       ],
       "ranged": {},
       "damage": {
         "sounds": [
-          "sound/monsters/recordings/Minifantasy/Orc/07_orc_damage_1.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/08_orc_damage_2.ogg",
-          "sound/monsters/recordings/Minifantasy/Orc/09_orc_damage_3.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_2.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Damage_3.ogg"
         ]
       },
       "death": {
         "sounds": [
-          "sound/monsters/recordings/Minifantasy/Orc/13_orc_death_spin.ogg"
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/Warbreed_Phalanx/WarbreedPhalanx_Death.ogg"
         ]
       },
       "idle": {
-        "sounds": []
+        "sounds": [
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_1.ogg",
+          "sound/monsters/recordings/LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs/WarbreedOrc_Idle_2.ogg"
+        ]
       }
     },
     "407": {

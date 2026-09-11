@@ -2114,7 +2114,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Your melee hits can push an enemy back one square if your Strength wins against its Constitution. Check the space behind the target: displacement can change who can reach you and can send a creature into a hazard.
+Your melee hits can push an enemy back one square if your Strength wins against its Constitution; a grounded enemy on ice slides up to two squares. Check the space behind the target: displacement can change who can reach you and can send a creature into a hazard.
 
 Trigger: Public ability preview or newly available ability; raw serial 2, skill 0, ability slot 2.
 
@@ -7076,11 +7076,11 @@ Priority: **8** (higher appears first).
 
 **1. Info**
 
-This enemy can push you backward. Keep clear of chasms, lava, traps and other hazards behind your square.
+This enemy can push you backward. If you are grounded on ice, the push can carry you up to two squares. Keep clear of chasms, lava, traps and other hazards behind your square.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_KNOCK_BACK.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/cmd/combat/cmd-combat.c`.
 
 ## Enemy Crippling Shot
 
@@ -8506,11 +8506,11 @@ Priority: **55** (higher appears first).
 
 **1. Info**
 
-While standing on ice, you have -2 Melee, -2 Archery and -2 Evasion. Movement takes its usual time. Dry ground gives you better footing in a fight. Fire melts ice into water; cold freezes water into ice.
+While standing on ice, you have -2 Melee, -2 Archery and -2 Evasion. Movement takes its usual time, but a grounded target knocked back on ice slides up to two squares. Dry ground gives you better footing in a fight. Fire melts ice into water; cold freezes water into ice.
 
 Trigger: Known solid ice is on the current square or visibly adjacent; the observation expires when none remains nearby.
 
-Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`.
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`, `src/cmd/combat/cmd-combat.c`.
 
 ## Poisonous seep
 
@@ -8558,7 +8558,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-Grounded heroes on ice receive -2 Melee, -2 Archery and -2 Evasion. Grounded monsters also lose 2 Attack and Evasion. Movement takes its usual time. Airborne creatures avoid the footing penalty.
+Grounded heroes on ice receive -2 Melee, -2 Archery and -2 Evasion. Grounded monsters also lose 2 Attack and Evasion. Movement takes its usual time. A grounded target knocked back from ice slides up to two squares; airborne creatures avoid the footing penalty.
 
 **2. Info**
 
@@ -8566,7 +8566,7 @@ Fire melts ice into shallow water, and cold freezes water into ice. This include
 
 Trigger: The known feature is on the player square or visibly adjacent; hidden terrain is not disclosed.
 
-Sources: `src/tutorial/tutorial-game.c`, `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`, `src/melee/melee-util.c`.
+Sources: `src/tutorial/tutorial-game.c`, `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`, `src/melee/melee-util.c`, `src/cmd/combat/cmd-combat.c`.
 
 ## Poisonous seep
 

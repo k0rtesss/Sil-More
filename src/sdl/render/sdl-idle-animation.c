@@ -2,14 +2,20 @@
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-fixtures.h"
 
-/* Fixtures share one 64x32 atlas; each animated liquid shares one 64x16 atlas.
+/* Fixtures share one 160x16 atlas; each animated liquid shares one 64x16 atlas.
  * Solid ice uses one static 16x16 tile, cached here for map invalidation.
  * No I/O, texture creation, timers, threads, or heap allocation occurs in
  * the animation update. */
 /* A shared 25 Hz ceiling coalesces independent fixture deadlines. Each flame
  * advances only every 4-6 steps (160-240 ms), without a timer per fixture. */
 #define IDLE_STEP_NS 40000000ULL
-#define IDLE_FRAME_COUNT 4
+#define FIXTURE_TORCH_FRAME_COUNT 4
+#define FIXTURE_ATLAS_FRAME_COUNT 3
+#define FIXTURE_ATLAS_TORCH_FRAME_START FIXTURE_TORCH_FRAME_COUNT
+#define FIXTURE_BRAZIER_FRAME_START \
+    (FIXTURE_ATLAS_TORCH_FRAME_START + FIXTURE_ATLAS_FRAME_COUNT)
+#define FIXTURE_TOTAL_FRAME_COUNT \
+    (FIXTURE_BRAZIER_FRAME_START + FIXTURE_ATLAS_FRAME_COUNT)
 
 typedef struct idle_cell {
     int col, row, y, x;
@@ -100,9 +106,10 @@ static bool load_liquid_texture(byte feat)
     }
     if (feat == FEAT_POISON)
     {
-        /* Exactly the lava pixels and frames, with warm channels turned green.
-         * RGBA32 guarantees byte order; retain alpha and the source geometry.
-         * Recolor once when loading, never in the idle animation update. */
+        /* Exactly the lava pixels and frames, with warm channels turned green
+         * and the green channel slightly toned down. RGBA32 guarantees byte
+         * order; retain alpha and the source geometry. Recolor once when
+         * loading, never in the idle animation update. */
         if (!SDL_LockSurface(atlas))
         {
             SDL_DestroySurface(atlas);
@@ -114,7 +121,7 @@ static bool load_liquid_texture(byte feat)
                 Uint8* pixel = (Uint8*)atlas->pixels + y * atlas->pitch + x * 4;
                 Uint8 red = pixel[0];
                 pixel[0] = pixel[1] / 2;
-                pixel[1] = red;
+                pixel[1] = (Uint8)(red * 7 / 8);
             }
         SDL_UnlockSurface(atlas);
     }
@@ -139,7 +146,7 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
                 live ? 74 : 28, live ? 16 : 6, 255);
         else if (feat == FEAT_POISON)
             SDL_SetRenderDrawColor(g_state.renderer, live ? 37 : 14,
-                live ? 240 : 90, live ? 16 : 6, 255);
+                live ? 210 : 79, live ? 16 : 6, 255);
         else if (feat == FEAT_ICE)
             SDL_SetRenderDrawColor(g_state.renderer, live ? 156 : 58,
                 live ? 216 : 81, live ? 232 : 87, 255);
@@ -159,21 +166,36 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
     return true;
 }
 
-static void fixture_timing(int y, int x, byte* steps, byte* phase)
+static byte fixture_frame_count(byte kind)
+{
+    return kind == CAVE_FIXTURE_WALL_TORCH
+        ? FIXTURE_TORCH_FRAME_COUNT : FIXTURE_ATLAS_FRAME_COUNT;
+}
+
+static void fixture_timing(int y, int x, byte kind, byte* steps, byte* phase)
 {
     /* Stable across viewport changes, with no gameplay RNG or saved state. */
     Uint32 hash = (Uint32)x * 0x9e3779b9u ^ (Uint32)y * 0x85ebca6bu;
+    byte frame_count = fixture_frame_count(kind);
     hash ^= (Uint32)(p_ptr ? p_ptr->depth : 0) * 0xc2b2ae35u;
     hash ^= hash >> 16;
     hash *= 0x7feb352du;
     hash ^= hash >> 15;
     *steps = (byte)(4 + hash % 3);
-    *phase = (byte)((hash >> 8) % (*steps * IDLE_FRAME_COUNT));
+    *phase = (byte)((hash >> 8) % (*steps * frame_count));
 }
 
-static byte fixture_frame_count(byte kind)
+static byte fixture_frame_start(byte kind)
 {
-    return kind == CAVE_FIXTURE_WALL_TORCH ? 4 : 3;
+    switch (kind)
+    {
+    case CAVE_FIXTURE_WALL_TORCH_2:
+        return FIXTURE_ATLAS_TORCH_FRAME_START;
+    case CAVE_FIXTURE_BRAZIER:
+        return FIXTURE_BRAZIER_FRAME_START;
+    default:
+        return 0;
+    }
 }
 
 static byte fixture_frame(Uint64 tick, byte steps, byte phase, byte count)
@@ -189,38 +211,49 @@ static Uint64 fixture_next_tick(Uint64 tick, byte steps, byte phase)
 static bool load_fixture_texture(void)
 {
     SDL_Surface* atlas;
-    const char* names[] = { "torch", "brazier" };
+    SDL_Surface* source;
 
     if (fixture_load_attempted)
         return fixture_texture != NULL;
     fixture_load_attempted = true;
-    atlas = SDL_CreateSurface(TILE_SIZE * IDLE_FRAME_COUNT, TILE_SIZE * 2,
+    atlas = SDL_CreateSurface(TILE_SIZE * FIXTURE_TOTAL_FRAME_COUNT, TILE_SIZE,
         SDL_PIXELFORMAT_RGBA32);
     if (!atlas)
         return false;
     SDL_ClearSurface(atlas, 0, 0, 0, 0);
-    for (int kind = 0; kind < 2; kind++)
-        for (int frame = 0; frame < fixture_frame_count(kind + 1); frame++)
+    for (int frame = 0; frame < FIXTURE_TORCH_FRAME_COUNT; frame++)
+    {
+        char path[128];
+        SDL_Rect dst = { frame * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE };
+        strnfmt(path, sizeof(path), "lib/xtra/graf/anim_torch_f%d.png", frame);
+        source = IMG_Load(path);
+        if (!source || source->w != TILE_SIZE || source->h != TILE_SIZE)
         {
-            char path[128];
-            SDL_Surface* source;
-            SDL_Rect dst = { frame * TILE_SIZE, kind * TILE_SIZE,
-                TILE_SIZE, TILE_SIZE };
-            strnfmt(path, sizeof(path), "lib/xtra/graf/anim_%s_f%d.png",
-                names[kind], frame);
-            source = IMG_Load(path);
-            if (!source || source->w != TILE_SIZE || source->h != TILE_SIZE)
-            {
-                log_warn("Idle fixture animation unavailable: %s (%s)",
-                    path, SDL_GetError());
-                SDL_DestroySurface(source);
-                SDL_DestroySurface(atlas);
-                return false;
-            }
-            SDL_SetSurfaceBlendMode(source, SDL_BLENDMODE_NONE);
-            SDL_BlitSurface(source, NULL, atlas, &dst);
+            log_warn("Idle fixture animation unavailable: %s (%s)", path,
+                SDL_GetError());
             SDL_DestroySurface(source);
+            SDL_DestroySurface(atlas);
+            return false;
         }
+        SDL_SetSurfaceBlendMode(source, SDL_BLENDMODE_NONE);
+        SDL_BlitSurface(source, NULL, atlas, &dst);
+        SDL_DestroySurface(source);
+    }
+    source = IMG_Load("lib/xtra/graf/animated.png");
+    if (!source || source->w != TILE_SIZE * FIXTURE_ATLAS_FRAME_COUNT * 2
+        || source->h != TILE_SIZE)
+    {
+        log_warn("Idle fixture animation unavailable: animated.png (%s)",
+            SDL_GetError());
+        SDL_DestroySurface(source);
+        SDL_DestroySurface(atlas);
+        return false;
+    }
+    SDL_SetSurfaceBlendMode(source, SDL_BLENDMODE_NONE);
+    SDL_Rect dst = { FIXTURE_ATLAS_TORCH_FRAME_START * TILE_SIZE, 0,
+        source->w, source->h };
+    SDL_BlitSurface(source, NULL, atlas, &dst);
+    SDL_DestroySurface(source);
     fixture_texture = SDL_CreateTextureFromSurface(g_state.renderer, atlas);
     SDL_DestroySurface(atlas);
     if (!fixture_texture)
@@ -312,11 +345,11 @@ bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst)
     live = !p_ptr->blind;
     animate = live && (!op_ptr || op_ptr->opt[OPT_torch_animation_always]
         || (cave_info[y][x] & CAVE_SEEN));
-    fixture_timing(y, x, &steps, &phase);
+    fixture_timing(y, x, kind, &steps, &phase);
     /* All frozen fixtures use the second frame, without a phase offset. */
     frame = animate
         ? fixture_frame(frame_tick, steps, phase, fixture_frame_count(kind)) : 1;
-    src = (SDL_FRect){ frame * TILE_SIZE, (kind - 1) * TILE_SIZE,
+    src = (SDL_FRect){ (fixture_frame_start(kind) + frame) * TILE_SIZE, 0,
         TILE_SIZE, TILE_SIZE };
     SDL_SetTextureColorMod(fixture_texture, live ? 255 : 96,
         live ? 255 : 96, live ? 255 : 96);
@@ -369,8 +402,9 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
             ? (byte)((frame_tick / 8) % 4) : 0;
         return;
     }
-    fixture_timing(y, x, &cell->frame_steps, &cell->phase_steps);
-    cell->frame_count = fixture_frame_count(visible_fixture(y, x));
+    byte fixture_kind = visible_fixture(y, x);
+    fixture_timing(y, x, fixture_kind, &cell->frame_steps, &cell->phase_steps);
+    cell->frame_count = fixture_frame_count(fixture_kind);
     cell->drawn_frame = (!p_ptr->blind
         && (op_ptr->opt[OPT_torch_animation_always] || (cave_info[y][x] & CAVE_SEEN)))
         ? fixture_frame(frame_tick, cell->frame_steps, cell->phase_steps,

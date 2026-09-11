@@ -2336,6 +2336,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- Ice caves contain frozen pools and rivers. Ice costs normal movement energy.", row++, col);
         put_role(ROLE_WARN, "- Grounded creatures have -2 attack and -2 Evasion on ice, including melee, archery and thrown attacks.", row++, col);
         put_role(ROLE_BODY, "- Flying monsters ignore the footing penalties. Cold resistance does not prevent them.", row++, col);
+        put_role(ROLE_BODY, "- Knock Back sends a grounded target on ice up to two squares; flyers and leaping targets keep normal displacement.", row++, col);
         put_role(ROLE_BODY, "- Fire attacks melt ice into shallow water. Cold attacks freeze shallow water into ice.", row++, col);
         row++;
         help_emit_heading("READ THE GAME", row, col); row++;

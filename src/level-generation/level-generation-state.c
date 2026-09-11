@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "level-generation/level-generation-internal.h"
+#include "cave/cave-fixtures.h"
 
 /*
  * Note that Level generation is *not* an important bottleneck,
@@ -685,6 +686,11 @@ void apply_partition_and_room_glow_rules(void)
             }
         }
     }
+
+    /* Reapply decorative fixture light after the darkness policy. Fixtures
+     * are explicit saved state; their local glow must not be mistaken for a
+     * permanently lit cave or labyrinth room. */
+    reapply_cave_fixture_glow();
 }
 
 bool place_chasm_theme_monster_at(int y, int x, int r_idx);

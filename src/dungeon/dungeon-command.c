@@ -273,6 +273,13 @@ void process_command(void)
         break;
     }
 
+    /* Directly put the floor arrow into the Quiver from the desktop popup. */
+    case CMD_CONTEXT_FLOOR_QUIVER:
+    {
+        do_cmd_context_floor_quiver_action();
+        break;
+    }
+
     /* Temporarily hide desktop square-action shortcut popups */
     case CMD_SUPPRESS_CONTEXT_POPUPS:
     {

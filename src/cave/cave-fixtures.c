@@ -20,10 +20,11 @@ byte cave_fixture_at(int y, int x)
         return CAVE_FIXTURE_NONE;
     kind = fixtures[y][x];
     feat = cave_feat[y][x];
-    /* Both fixture textures are mounted on a wall. Keep this check here as
+    /* All fixture textures are mounted on a wall. Keep this check here as
      * well as in generation/load paths so stale metadata can never turn a
      * walkable floor into a fixture tile. */
-    if ((kind == CAVE_FIXTURE_WALL_TORCH || kind == CAVE_FIXTURE_BRAZIER)
+    if (kind >= CAVE_FIXTURE_WALL_TORCH
+        && kind <= CAVE_FIXTURE_WALL_TORCH_2
         && feat >= FEAT_WALL_EXTRA && feat <= FEAT_WALL_SOLID)
         return kind;
     return CAVE_FIXTURE_NONE;
@@ -33,5 +34,6 @@ void cave_fixture_set(int y, int x, byte kind)
 {
     if (y < 0 || x < 0 || y >= MAX_DUNGEON_HGT || x >= MAX_DUNGEON_WID)
         return;
-    fixtures[y][x] = kind <= CAVE_FIXTURE_BRAZIER ? kind : CAVE_FIXTURE_NONE;
+    fixtures[y][x] = kind <= CAVE_FIXTURE_WALL_TORCH_2
+        ? kind : CAVE_FIXTURE_NONE;
 }

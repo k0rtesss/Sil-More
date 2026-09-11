@@ -96,7 +96,8 @@ static errr rd_fixtures(void)
             rd_byte(&kind);
             if (load_byte_offset - start_offset != 3
                 || fy >= p_ptr->cur_map_hgt || fx >= p_ptr->cur_map_wid
-                || kind < CAVE_FIXTURE_WALL_TORCH || kind > CAVE_FIXTURE_BRAZIER)
+                || kind < CAVE_FIXTURE_WALL_TORCH
+                || kind > CAVE_FIXTURE_WALL_TORCH_2)
             {
                 note("Invalid corridor fixture.");
                 return -1;

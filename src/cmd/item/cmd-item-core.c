@@ -939,6 +939,10 @@ bool do_cmd_context_square_action_popup(void)
                 action_name, TERM_L_WHITE);
         if (!action_only)
         {
+            if (o_ptr->tval == TV_ARROW)
+                sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_QUIVER,
+                    "Quiver", TERM_L_BLUE);
+
             cptr pickup_name = object_can_store_directly_in_pack(o_ptr)
                 ? "Pack" : "Pick Up";
 
@@ -997,6 +1001,15 @@ void do_cmd_context_floor_item_action(void)
             (void)floor_context_perform_action(floor_item,
                 FLOOR_CONTEXT_ACTION_USE);
     }
+}
+
+void do_cmd_context_floor_quiver_action(void)
+{
+    int floor_item = first_floor_item_under_player();
+
+    if (floor_item)
+        (void)floor_context_perform_action(floor_item,
+            FLOOR_CONTEXT_ACTION_QUIVER);
 }
 
 void do_cmd_queue_floor_context_action(floor_context_action_kind kind)

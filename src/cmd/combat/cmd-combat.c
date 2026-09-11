@@ -2374,13 +2374,37 @@ void attack_punctuation(char* punctuation, int net_dam, int crit_bonus_dice)
     }
 }
 
+/* Return the distance available in one knockback direction.  A grounded
+ * target on ice slides up to two squares, but never through a wall or actor.
+ * Returning the furthest reachable square preserves the normal behaviour of
+ * a push against an obstruction. */
+static int knock_back_path(int y, int x, int dy, int dx, int max_distance,
+    int* dest_y, int* dest_x)
+{
+    int distance = 0;
+
+    for (int step = 1; step <= max_distance; step++)
+    {
+        int yy = y + step * dy;
+        int xx = x + step * dx;
+        if (!in_bounds(yy, xx) || !cave_floor_bold(yy, xx)
+            || cave_m_idx[yy][xx] != 0)
+            break;
+        *dest_y = yy;
+        *dest_x = xx;
+        distance = step;
+    }
+
+    return distance;
+}
+
 bool knock_back(int y1, int x1, int y2, int x2)
 {
     bool knocked = false;
 
     bool monster_target = false;
 
-    int mod, d, i;
+    int mod, d, i, knock_distance = 1;
     int y3, x3; // the location to get knocked to
     int dir;
 
@@ -2403,14 +2427,18 @@ bool knock_back(int y1, int x1, int y2, int x2)
         m_ptr = &mon_list[cave_m_idx[y2][x2]];
     }
 
+    /* Ice only changes the displacement of a target that is actually using
+     * the surface.  Flyers and a leaping player are airborne, so they keep
+     * the ordinary one-square knockback. */
+    if (cave_feat[y2][x2] == FEAT_ICE
+        && ((!monster_target && !p_ptr->leaping)
+            || (monster_target
+                && !(r_info[m_ptr->r_idx].flags2 & RF2_FLYING))))
+        knock_distance = ICE_KNOCK_BACK_DISTANCE;
+
     // first try to knock it straight back
-    if (cave_floor_bold(y2 + dy, x2 + dx)
-        && (cave_m_idx[y2 + dy][x2 + dx] == 0))
-    {
-        y3 = y2 + dy;
-        x3 = x2 + dx;
+    if (knock_back_path(y2, x2, dy, dx, knock_distance, &y3, &x3) > 0)
         knocked = true;
-    }
 
     // then try the adjacent directions
     else
@@ -2425,9 +2453,8 @@ bool knock_back(int y1, int x1, int y2, int x2)
         for (i = 0; i < 2; i++)
         {
             d = cycle[chome[dir_from_delta(dy, dx)] + mod];
-            y3 = y2 + ddy[d];
-            x3 = x2 + ddx[d];
-            if (cave_floor_bold(y3, x3) && (cave_m_idx[y3][x3] == 0))
+            if (knock_back_path(y2, x2, ddy[d], ddx[d], knock_distance,
+                    &y3, &x3) > 0)
             {
                 knocked = true;
                 break;

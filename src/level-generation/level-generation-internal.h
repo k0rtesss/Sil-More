@@ -599,7 +599,17 @@ extern void generate_plus(int y1, int x1, int y2, int x2, int feat);
 extern bool h_tunnel_ok( int x1, int x2, int y, bool tentative, int desired_changes);
 extern bool v_tunnel_ok( int y1, int y2, int x, bool tentative, int desired_changes);
 extern tunnel_profile choose_tunnel_profile(bool tentative);
-extern void apply_tunnel_niche_torch_glow(int niche_y, int niche_x, int front_dy, int front_dx);
+extern void apply_tunnel_niche_torch_glow(
+    int niche_y, int niche_x, int front_dy, int front_dx);
+extern void apply_fixture_light_area(
+    int source_y, int source_x, int radius, bool allow_room_tiles);
+extern void apply_cave_fixture_glow(
+    int wall_y, int wall_x, int source_y, int source_x,
+    bool allow_room_tiles);
+extern void reapply_cave_fixture_glow(void);
+extern int place_vault_template_fixtures(int y0, int x0, const vault_type* v_ptr,
+    bool flip_v, bool flip_h, bool flip_d);
+extern int place_generation_fixtures(void);
 extern void apply_v_tunnel_treatment( int r1, int r2, int y_lo, int y_hi, int x, bool widen_west, bool widen_east, const tunnel_profile* profile, bool mark_escape);
 extern void apply_h_tunnel_treatment( int r1, int r2, int x_lo, int x_hi, int y, bool widen_north, bool widen_south, const tunnel_profile* profile, bool mark_escape);
 extern void build_v_tunnel( int r1, int r2, int y1, int y2, int x, const tunnel_profile* profile);

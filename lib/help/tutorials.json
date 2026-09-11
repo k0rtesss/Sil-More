@@ -2752,7 +2752,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Your melee hits can push an enemy back one square if your Strength wins against its Constitution. Check the space behind the target: displacement can change who can reach you and can send a creature into a hazard.",
+          "text": "Your melee hits can push an enemy back one square if your Strength wins against its Constitution; a grounded enemy on ice slides up to two squares. Check the space behind the target: displacement can change who can reach you and can send a creature into a hazard.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -11499,7 +11499,7 @@
       "priority": 8,
       "steps": [
         {
-          "text": "This enemy can push you backward. Keep clear of chasms, lava, traps and other hazards behind your square.",
+          "text": "This enemy can push you backward. If you are grounded on ice, the push can carry you up to two squares. Keep clear of chasms, lava, traps and other hazards behind your square.",
           "kind": "info",
           "anchor": "monster"
         }
@@ -11512,7 +11512,8 @@
         "src/tutorial/tutorial-world.c",
         "src/defines.h",
         "src/monster/monster-recall.c",
-        "src/melee/melee-process.c"
+        "src/melee/melee-process.c",
+        "src/cmd/combat/cmd-combat.c"
       ],
       "monster_flag": "RF2_KNOCK_BACK"
     },
@@ -13620,7 +13621,7 @@
       "priority": 55,
       "steps": [
         {
-          "text": "While standing on ice, you have -2 Melee, -2 Archery and -2 Evasion. Movement takes its usual time. Dry ground gives you better footing in a fight. Fire melts ice into water; cold freezes water into ice.",
+          "text": "While standing on ice, you have -2 Melee, -2 Archery and -2 Evasion. Movement takes its usual time, but a grounded target knocked back on ice slides up to two squares. Dry ground gives you better footing in a fight. Fire melts ice into water; cold freezes water into ice.",
           "kind": "info",
           "anchor": "map"
         }
@@ -13632,7 +13633,8 @@
       "sources": [
         "src/tutorial/tutorial-game.c",
         "src/cave/cave-water.c",
-        "src/player/player-bonuses.c"
+        "src/player/player-bonuses.c",
+        "src/cmd/combat/cmd-combat.c"
       ]
     },
     {
@@ -13692,7 +13694,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "Grounded heroes on ice receive -2 Melee, -2 Archery and -2 Evasion. Grounded monsters also lose 2 Attack and Evasion. Movement takes its usual time. Airborne creatures avoid the footing penalty.",
+          "text": "Grounded heroes on ice receive -2 Melee, -2 Archery and -2 Evasion. Grounded monsters also lose 2 Attack and Evasion. Movement takes its usual time. A grounded target knocked back from ice slides up to two squares; airborne creatures avoid the footing penalty.",
           "kind": "info",
           "anchor": "map"
         },
@@ -13711,7 +13713,8 @@
         "lib/edit/terrain.txt",
         "src/cave/cave-water.c",
         "src/player/player-bonuses.c",
-        "src/melee/melee-util.c"
+        "src/melee/melee-util.c",
+        "src/cmd/combat/cmd-combat.c"
       ]
     },
     {

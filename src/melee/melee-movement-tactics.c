@@ -81,11 +81,27 @@ static bool tactical_empty_after_move(monster_type* m_ptr, int ay, int ax,
     return cave_m_idx[y][x] == 0 || (y == m_ptr->fy && x == m_ptr->fx);
 }
 
+static int tactical_knockback_path(monster_type* m_ptr, int ay, int ax,
+    int y, int x, int dy, int dx, int max_distance, int* dest_y, int* dest_x)
+{
+    int distance = 0;
+    for (int step = 1; step <= max_distance; ++step)
+    {
+        int yy = y + step * dy, xx = x + step * dx;
+        if (!tactical_empty_after_move(m_ptr, ay, ax, yy, xx)) break;
+        *dest_y = yy; *dest_x = xx; distance = step;
+    }
+    return distance;
+}
+
 int monster_tactical_displacement_utility(monster_type* m_ptr, int y, int x,
     bool exchange)
 {
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     int dir, yy, xx, score = 0, count = 0;
+    int knock_distance = (!p_ptr->leaping
+        && cave_feat[p_ptr->py][p_ptr->px] == FEAT_ICE)
+        ? ICE_KNOCK_BACK_DISTANCE : 1;
     if (!monster_ai_can_see_player(m_ptr)
         || distance(y, x, p_ptr->py, p_ptr->px) != 1) return 0;
     if (exchange)
@@ -97,14 +113,16 @@ int monster_tactical_displacement_utility(monster_type* m_ptr, int y, int x,
     }
     if (!(r_ptr->flags2 & RF2_KNOCK_BACK)) return 0;
     dir = rough_direction(y, x, p_ptr->py, p_ptr->px);
-    yy = p_ptr->py + ddy[dir]; xx = p_ptr->px + ddx[dir];
     /* Execution tries the straight destination before randomized sides. */
-    if (tactical_empty_after_move(m_ptr, y, x, yy, xx)) return tactical_hazard(m_ptr, yy, xx);
+    if (tactical_knockback_path(m_ptr, y, x, p_ptr->py, p_ptr->px,
+            ddy[dir], ddx[dir], knock_distance, &yy, &xx) > 0)
+        return tactical_hazard(m_ptr, yy, xx);
     for (int side = -1; side <= 1; side += 2)
     {
         int d = cycle[chome[dir] + side];
-        yy = p_ptr->py + ddy[d]; xx = p_ptr->px + ddx[d];
-        if (!tactical_empty_after_move(m_ptr, y, x, yy, xx)) continue;
+        if (tactical_knockback_path(m_ptr, y, x, p_ptr->py, p_ptr->px,
+                ddy[d], ddx[d], knock_distance, &yy, &xx) == 0)
+            continue;
         score += tactical_hazard(m_ptr, yy, xx);
         count++;
     }

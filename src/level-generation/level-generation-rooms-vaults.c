@@ -430,6 +430,12 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     /* Restore level styles after vault placement */
     styles_end_vault();
 
+    /* Decorative vault fixtures are authored by the vault's TORCHES flag.
+     * Place them after the style halo so no later wall recolor can erase the
+     * mounted fixture. The helper is deterministic and adds no RNG noise. */
+    place_vault_template_fixtures(
+        y0, x0, v_ptr, flip_v, flip_h, flip_d);
+
     /* Place dungeon monsters and objects */
     {
     int previous_build_vault_type = current_build_vault_type;

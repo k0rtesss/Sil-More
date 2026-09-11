@@ -3,6 +3,8 @@
 #include "externs.h"
 #include "sdl-sound.h"
 
+#define MONSTER_IDLE_SOUND_MAX_PATH 10
+
 /*
  * Flush the screen, make a noise
  */
@@ -44,15 +46,26 @@ void sound(int val)
 }
 
 /* Nearby unseen monsters can be heard, but audio does not reveal their grid or
- * alter the gameplay noise/detection system. */
+ * alter the gameplay noise/detection system. Idle sounds use the gameplay
+ * noise flow for walls and doors; other monster sounds keep the broad audio
+ * range used by their existing feedback. */
 void monster_sound(const monster_type* m_ptr, int action)
 {
-    int range = action == MONSTER_SOUND_IDLE ? 10 : MAX_SIGHT;
-    if (!use_sound || !m_ptr || !m_ptr->r_idx
-        || distance(p_ptr->py, p_ptr->px, m_ptr->fy, m_ptr->fx) > range)
+    if (!use_sound || !m_ptr || !m_ptr->r_idx)
         return;
-    if (action == MONSTER_SOUND_IDLE && m_ptr->alertness < ALERTNESS_UNWARY)
+
+    if (action == MONSTER_SOUND_IDLE)
+    {
+        if (m_ptr->alertness < ALERTNESS_UNWARY
+            || flow_dist(FLOW_PLAYER_NOISE, m_ptr->fy, m_ptr->fx)
+                > MONSTER_IDLE_SOUND_MAX_PATH)
+            return;
+    }
+    else if (distance(p_ptr->py, p_ptr->px, m_ptr->fy, m_ptr->fx) > MAX_SIGHT)
+    {
         return;
+    }
+
     sdl_sound_monster(m_ptr->r_idx, action);
 }
 

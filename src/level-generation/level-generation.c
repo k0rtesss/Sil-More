@@ -688,6 +688,10 @@ bool cave_gen(void)
 
     prune_invalid_nonvault_doors();
 
+    /* Place decorative light only after tunnels, doors, hazards, stairs, and
+     * the player start have settled, so later terrain passes cannot erase it. */
+    place_generation_fixtures();
+
     {
         partition_population_plan plans[PARTITION_META_MAX];
         int plan_count = build_partition_population_plans(plans, PARTITION_META_MAX);

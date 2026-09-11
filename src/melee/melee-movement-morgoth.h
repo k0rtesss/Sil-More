@@ -45,24 +45,39 @@ static bool morgoth_tactical_empty_after_move(monster_type* m_ptr, int ay, int a
     return cave_m_idx[y][x] == 0 || (y == m_ptr->fy && x == m_ptr->fx);
 }
 
+static int morgoth_tactical_knockback_path(monster_type* m_ptr, int ay, int ax,
+    int y, int x, int dy, int dx, int max_distance, int* dest_y, int* dest_x)
+{
+    int distance = 0;
+    for (int step = 1; step <= max_distance; ++step)
+    {
+        int yy = y + step * dy, xx = x + step * dx;
+        if (!morgoth_tactical_empty_after_move(m_ptr, ay, ax, yy, xx)) break;
+        *dest_y = yy; *dest_x = xx; distance = step;
+    }
+    return distance;
+}
+
 static int morgoth_tactical_knockback(monster_type* m_ptr, int y, int x)
 {
     int dir = rough_direction(y, x, p_ptr->py, p_ptr->px);
-    int yy = p_ptr->py + ddy[dir];
-    int xx = p_ptr->px + ddx[dir];
+    int knock_distance = (!p_ptr->leaping
+        && cave_feat[p_ptr->py][p_ptr->px] == FEAT_ICE)
+        ? ICE_KNOCK_BACK_DISTANCE : 1;
+    int yy, xx;
     int score = 0;
     int count = 0;
 
     /* Match knock_back(): an open straight destination always wins, even
      * when a side destination would be much more dangerous. */
-    if (morgoth_tactical_empty_after_move(m_ptr, y, x, yy, xx))
+    if (morgoth_tactical_knockback_path(m_ptr, y, x, p_ptr->py, p_ptr->px,
+            ddy[dir], ddx[dir], knock_distance, &yy, &xx) > 0)
         return morgoth_tactical_hazard(m_ptr, yy, xx);
     for (int side = -1; side <= 1; side += 2)
     {
         int d = cycle[chome[dir] + side];
-        yy = p_ptr->py + ddy[d];
-        xx = p_ptr->px + ddx[d];
-        if (!morgoth_tactical_empty_after_move(m_ptr, y, x, yy, xx))
+        if (morgoth_tactical_knockback_path(m_ptr, y, x, p_ptr->py,
+                p_ptr->px, ddy[d], ddx[d], knock_distance, &yy, &xx) == 0)
             continue;
         score += morgoth_tactical_hazard(m_ptr, yy, xx);
         count++;

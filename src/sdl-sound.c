@@ -17,6 +17,7 @@
 #define SDL_SOUND_NAME_LEN 256
 #define SDL_SOUND_MAX_ACTIVE_TRACKS 16
 #define SDL_SOUND_MAX_MUSIC_CACHE 8
+#define MONSTER_IDLE_SOUND_CHANCE_PERCENT 5
 
 typedef struct {
     char path[1024];
@@ -1435,7 +1436,8 @@ void sdl_sound_monster(int race_idx, int action)
 
     SDL_LockMutex(g_sound_mutex);
     /* Cosmetic randomness must not consume the dungeon/combat RNG. */
-    if (action == MONSTER_SOUND_IDLE && SDL_rand(100) >= 2) {
+    if (action == MONSTER_SOUND_IDLE
+        && SDL_rand(100) >= MONSTER_IDLE_SOUND_CHANCE_PERCENT) {
         SDL_UnlockMutex(g_sound_mutex);
         return;
     }

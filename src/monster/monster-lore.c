@@ -1,6 +1,7 @@
 /* File: monster-lore.c */
 
 #include "monster-internal.h"
+#include "monster-ai.h"
 
 /*
  * Pronoun arrays, by gender.
@@ -525,6 +526,80 @@ static void describe_monster_song_duel_progress(
         text_out(".  ");
 }
 
+/* These are this monster's impressions, not the player's actual abilities. */
+static void describe_monster_observations(const monster_type* m_ptr)
+{
+    static const struct
+    {
+        cptr positive;
+        cptr negative;
+    } descriptions[MON_AI_FEATURE_COUNT] = {
+        [MON_AI_FIRE] = { "resisting fire", "susceptibility to fire" },
+        [MON_AI_COLD] = { "resisting cold", "susceptibility to cold" },
+        [MON_AI_POISON] = { "resisting poison", "susceptibility to poison" },
+        [MON_AI_DARK] = { "resisting darkness", "susceptibility to darkness" },
+        [MON_AI_FEAR] = { "resisting fear", "susceptibility to fear" },
+        [MON_AI_SLOW] = { "resisting slowing", "susceptibility to slowing" },
+        [MON_AI_CONFUSION] = { "resisting confusion", "susceptibility to confusion" },
+        [MON_AI_HOLD] = { "resisting entrancement", "susceptibility to entrancement" },
+        [MON_AI_WEB] = { "resisting webs", "being caught in webs" },
+        [MON_AI_DISARM] = { "resisting disarming", "being disarmed" },
+        [MON_AI_FLANKING] = { "Flanking", NULL },
+        [MON_AI_CONTROLLED_RETREAT] = { "Controlled Retreat", NULL },
+        [MON_AI_OPPORTUNIST] = { "Opportunist", NULL },
+        [MON_AI_ZONE] = { "Zone of Control", NULL },
+        [MON_AI_POLEARM] = { "Polearm Mastery", NULL },
+        [MON_AI_RIPOSTE] = { "Riposte", NULL },
+        [MON_AI_CHARGE] = { "Charge", NULL },
+        [MON_AI_KNOCKBACK] = { "Knock Back", NULL },
+        [MON_AI_EXCHANGE] = { "Exchange Places", NULL },
+        [MON_AI_KITING] = { "keeping your distance", NULL },
+        [MON_AI_FOCUS] = { "preparing attacks by waiting", NULL },
+        [MON_AI_CONCENTRATION] = { "repeated attacks on one target", NULL },
+        [MON_AI_MULTI_TARGET] = { "attacks against multiple targets", NULL },
+        [MON_AI_STEALTH] = { "stealthy movement", NULL },
+        [MON_AI_SONG] = { "singing", NULL },
+        [MON_AI_ACCURACY] = { "evading attacks", "being hit by attacks" },
+        [MON_AI_ARMOUR] = { "armour stopping blows", "blows penetrating your armour" },
+        [MON_AI_WOUNDED] = { "taking damage", NULL },
+        [MON_AI_POISON_PRESSURE] = { "poison taking hold", NULL },
+    };
+    bool printed = false;
+
+    text_out("\n");
+    text_out_c(TERM_L_BLUE, "Observations about you: ");
+    for (int feature = 0; feature < MON_AI_FEATURE_COUNT; feature++)
+    {
+        /* Use the AI accessor so forgotten or disabled memories stay hidden. */
+        int confidence = monster_ai_confidence(m_ptr, feature);
+        cptr description = confidence > 0 ? descriptions[feature].positive
+                                         : descriptions[feature].negative;
+        if (!confidence || !description)
+            continue;
+
+        if (printed)
+            text_out("; ");
+        text_out(description);
+        text_out_c(TERM_SLATE, format(" (%s evidence)",
+            ABS(confidence) == 1 ? "weak"
+                : ABS(confidence) == 2 ? "moderate" : "strong"));
+        printed = true;
+    }
+    if (!printed)
+        text_out("none remembered");
+    text_out(".  ");
+}
+
+static void describe_monster_live_state(const monster_type* m_ptr)
+{
+    if (!m_ptr || !m_ptr->r_idx || !m_ptr->ml)
+        return;
+
+    text_out_c(m_ptr->poisoned > 0 ? TERM_GREEN : TERM_SLATE,
+        format("Poison stacks: %d.  ", m_ptr->poisoned));
+    describe_monster_observations(m_ptr);
+}
+
 static void describe_monster_exp(int r_idx, const monster_lore* l_ptr)
 {
     const monster_race* r_ptr = &r_info[r_idx];
@@ -938,6 +1013,10 @@ void describe_monster(int r_idx, bool spoilers, const monster_type* m_ptr)
 
     /* Describe the monster drop */
     describe_monster_drop(r_idx, &lore);
+
+    /* Individual state belongs only in live recall, never race spoilers. */
+    if (!spoilers && m_ptr && m_ptr->r_idx == r_idx)
+        describe_monster_live_state(m_ptr);
 
     /* All done */
     text_out("\n");

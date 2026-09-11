@@ -70,7 +70,28 @@ static void ice_combat_tests(void) {
     assert(total_monster_evasion(m,false)==monster_evasion);
     r_info[1].flags2=0;m->alertness=ALERTNESS_UNWARY-1;
     assert(total_monster_evasion(m,false)==-5);
-    puts("Ice combat: displayed skills, melee/bows/throws, no double penalty, archery halving, flight/leaps/landing, movement refresh/energy, fixed helpless Evasion: PASS");
+    /* A grounded target standing on ice slides two squares.  The slide stops
+     * at the first obstruction, while airborne targets keep normal knockback. */
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,10,FEAT_ICE); p_ptr->leaping=false;
+    assert(knock_back(10,9,10,10)); assert(p_ptr->px==12);
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,10,FEAT_ICE); cave_set_feat(10,12,FEAT_WALL_EXTRA);
+    assert(knock_back(10,9,10,10)); assert(p_ptr->px==11);
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,10,FEAT_ICE); p_ptr->leaping=true;
+    assert(knock_back(10,9,10,10)); assert(p_ptr->px==11);
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    m=&mon_list[1]; memset(m,0,sizeof(*m)); m->r_idx=1; m->fy=10; m->fx=11; m->hp=10; m->maxhp=10;
+    cave_m_idx[10][11]=1; cave_set_feat(10,11,FEAT_ICE); mon_max=2;
+    r_info[1].flags2=0;
+    assert(knock_back(10,10,10,11)); assert(m->fx==13);
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    m=&mon_list[1]; memset(m,0,sizeof(*m)); m->r_idx=1; m->fy=10; m->fx=11; m->hp=10; m->maxhp=10;
+    cave_m_idx[10][11]=1; cave_set_feat(10,11,FEAT_ICE); mon_max=2;
+    r_info[1].flags2=RF2_FLYING;
+    assert(knock_back(10,10,10,11)); assert(m->fx==12);
+    puts("Ice combat: displayed skills, melee/bows/throws, no double penalty, archery halving, flight/leaps/landing, movement refresh/energy, ice knockback, fixed helpless Evasion: PASS");
 }
 '''
 

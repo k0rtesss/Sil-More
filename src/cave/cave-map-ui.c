@@ -349,7 +349,7 @@ void lite_spot(int y, int x)
             || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA
             || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON;
 #ifdef USE_SDL
-        /* Removing a water surface or brazier can leave the same floor
+        /* Removing a water surface or wall fixture can leave the same base
          * glyph. Repaint its cached pixels even after the feature changed. */
         force_visual_redraw |= sdl_idle_animation_tracks_grid(y, x);
 #endif
