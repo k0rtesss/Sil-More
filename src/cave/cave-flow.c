@@ -44,6 +44,75 @@ int flow_dist(int which_flow, int y, int x)
  *
  */
 
+/* With no possible poison exposure, the cheapest route dominates every
+ * alternative. Keep just one label per square and avoid the Pareto scratch
+ * initialization and comparisons on ordinary maps or for immune creatures. */
+static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
+    monster_type* m_ptr)
+{
+    enum { FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID };
+    static int next[FLOW_CELLS], previous[FLOW_CELLS];
+    int heads[FLOW_MAX_DIST];
+    int origin = cy * MAX_DUNGEON_WID + cx;
+
+    for (int i = 0; i < FLOW_MAX_DIST; i++)
+        heads[i] = -1;
+    heads[0] = origin;
+    next[origin] = previous[origin] = -1;
+
+    for (int cost = 0; cost < FLOW_MAX_DIST; cost++)
+    {
+        while (heads[cost] >= 0)
+        {
+            int grid = heads[cost];
+            int y = grid / MAX_DUNGEON_WID;
+            int x = grid % MAX_DUNGEON_WID;
+            heads[cost] = next[grid];
+            if (next[grid] >= 0)
+                previous[next[grid]] = -1;
+            previous[grid] = -2;
+
+            for (int d = 0; d < 8; d++)
+            {
+                int yy = y + ddy_ddd[d], xx = x + ddx_ddd[d];
+                int neighbor, edge, total, old;
+                if (!in_bounds(yy, xx))
+                    continue;
+                neighbor = yy * MAX_DUNGEON_WID + xx;
+                old = cave_cost[which_flow][yy][xx];
+                /* Positive edge costs cannot improve a settled square. */
+                if (old < FLOW_MAX_DIST && previous[neighbor] == -2)
+                    continue;
+                /* Match the Pareto flow's reverse edges and virtual player
+                 * endpoint, including escape from forbidden terrain. */
+                edge = grid == origin && cave_m_idx[y][x] < 0 ? 1
+                    : monster_step_cost(m_ptr, yy, xx, y, x);
+                if (!edge)
+                    continue;
+                total = cost + edge;
+                if (total >= old || total >= FLOW_MAX_DIST)
+                    continue;
+
+                if (old < FLOW_MAX_DIST)
+                {
+                    if (previous[neighbor] >= 0)
+                        next[previous[neighbor]] = next[neighbor];
+                    else
+                        heads[old] = next[neighbor];
+                    if (next[neighbor] >= 0)
+                        previous[next[neighbor]] = previous[neighbor];
+                }
+                cave_cost[which_flow][yy][xx] = total;
+                previous[neighbor] = -1;
+                next[neighbor] = heads[total];
+                if (heads[total] >= 0)
+                    previous[heads[total]] = neighbor;
+                heads[total] = neighbor;
+            }
+        }
+    }
+}
+
 /* Keep a bounded Pareto frontier of cost/exposure at each merge. A cheap but
  * poisonous route must not erase the longer dry route needed by a predecessor.
  * Eight labels retain both extremes and useful intermediate alternatives. */
@@ -59,8 +128,12 @@ static void update_monster_flow(int cy, int cx, int which_flow,
 
     for (int i = 0; i < FLOW_MAX_DIST; i++)
         heads[i] = -1;
-    for (int i = 0; i < FLOW_LABELS; i++)
-        costs[i] = FLOW_MAX_DIST;
+    /* Only current-map cells can enter the queue. Do not clear the maximum
+     * map's eight labels per square when exploring a smaller level. */
+    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (int i = y * MAX_DUNGEON_WID * LABELS;
+             i < (y * MAX_DUNGEON_WID + p_ptr->cur_map_wid) * LABELS; i++)
+            costs[i] = FLOW_MAX_DIST;
     heads[0] = origin * LABELS;
     next[origin * LABELS] = previous[origin * LABELS] = -1;
     poison_damage[origin * LABELS] = costs[origin * LABELS] = 0;
@@ -187,6 +260,8 @@ void update_flow(int cy, int cx, int which_flow)
 
     bool monster_flow = false;
     bool found = false;
+    bool poison_possible = false;
+    bool poison_present = false;
 
     monster_type* m_ptr = NULL; // default to soothe compiler warnings
 
@@ -229,6 +304,15 @@ void update_flow(int cy, int cx, int which_flow)
             return;
     }
 
+    if (monster_flow)
+    {
+        monster_race* r_ptr = &r_info[m_ptr->r_idx];
+        /* These are exactly the immunity checks used by
+         * monster_poison_step_damage(). Existing poison still ticks normally. */
+        poison_possible = !(r_ptr->flags2 & RF2_FLYING)
+            && !(r_ptr->flags3 & RF3_RES_POIS);
+    }
+
     /* Save the new flow epicenter */
     flow_center_y[which_flow] = cy;
     flow_center_x[which_flow] = cx;
@@ -241,6 +325,8 @@ void update_flow(int cy, int cx, int which_flow)
         for (x = 0; x < p_ptr->cur_map_wid; x++)
         {
             cave_cost[which_flow][y][x] = FLOW_MAX_DIST;
+            if (poison_possible && cave_feat[y][x] == FEAT_POISON)
+                poison_present = true;
         }
     }
 
@@ -251,7 +337,10 @@ void update_flow(int cy, int cx, int which_flow)
 
     if (monster_flow)
     {
-        update_monster_flow(cy, cx, which_flow, m_ptr);
+        if (poison_present)
+            update_monster_flow(cy, cx, which_flow, m_ptr);
+        else
+            update_monster_flow_without_poison(cy, cx, which_flow, m_ptr);
         return;
     }
 

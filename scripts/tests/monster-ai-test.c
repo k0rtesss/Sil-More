@@ -330,6 +330,60 @@ static void test_full_map(void)
         (double)(clock() - start) / CLOCKS_PER_SEC);
 }
 
+/* An isolated poison square forces the exposure-aware search for grounded
+ * monsters without changing any reachable route. Compare every distance to
+ * catch fast-path differences, including stale queues after map resizing. */
+static void test_flow_fast_path(void)
+{
+    static byte expected[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    unsigned state = 0x517cc1b7u;
+    const int terrain[] = { FEAT_FLOOR, FEAT_FLOOR, FEAT_WATER,
+        FEAT_ICE, FEAT_LAVA, FEAT_CHASM, FEAT_DOOR_HEAD, FEAT_WALL_EXTRA };
+    for (int trial = 0; trial < 48; trial++)
+    {
+        int h = trial % 3 ? 13 : 47, w = trial % 2 ? 15 : 61;
+        monster_type* m = reset_map(h, w, 3, 3, h - 3, w - 3);
+        races[1].flags2 |= RF2_OPEN_DOOR;
+        if (trial & 1) races[1].flags2 |= RF2_PASS_WALL;
+        if (trial & 2) races[1].flags3 |= RF3_RES_FIRE;
+        if (trial & 4) races[1].flags1 |= RF1_NEVER_BLOW;
+        m->hp = 5 + trial; m->poisoned = trial % 7;
+        for (int y = 1; y < h - 1; y++) for (int x = 1; x < w - 1; x++)
+        {
+            state = state * 1664525u + 1013904223u;
+            tile(y, x, terrain[(state >> 24) % N_ELEMENTS(terrain)]);
+        }
+        tile(1, 1, FEAT_WALL_PERM); /* Seal the poison corner diagonally too. */
+        int cy = trial % 2 ? p_ptr->py : h / 2;
+        int cx = trial % 2 ? p_ptr->px : w / 2;
+        tile(cy, cx, FEAT_FLOOR);
+        update_flow(cy, cx, 1);
+        for (int y = 0; y < h; y++)
+            memcpy(expected[y], cave_cost[1][y], w);
+        tile(0, 0, FEAT_POISON);
+        update_flow(cy, cx, 1);
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
+            CHECK(flow_dist(1, y, x) == expected[y][x]);
+        /* Removing terrain must select the fast path again without a cache. */
+        tile(0, 0, FEAT_WALL_PERM);
+        update_flow(cy, cx, 1);
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
+            CHECK(flow_dist(1, y, x) == expected[y][x]);
+    }
+    /* Independent relaxation oracle also covers immunity on poison maps. */
+    for (int flight = 0; flight < 2; flight++)
+    {
+        monster_type* m = reset_map(11, 13, 3, 3, 8, 10);
+        for (int y = 1; y < 10; y++) tile(y, 6, FEAT_POISON);
+        tile(5, 7, FEAT_WATER); tile(6, 7, FEAT_DOOR_HEAD);
+        races[1].flags2 |= RF2_OPEN_DOOR;
+        if (flight) races[1].flags2 |= RF2_FLYING;
+        else races[1].flags3 |= RF3_RES_POIS;
+        check_flow_oracle(m);
+    }
+    puts("Flow fast path: full-distance equivalence, terrain edits, map resizing, flight and poison immunity PASS.");
+}
+
 #include "monster-poison-ai-tests.h"
 #include "monster-tactics-ai-tests.h"
 
@@ -337,6 +391,7 @@ int main(void)
 {
     test_terrain(); test_flows(); test_tactics(); test_advance(); test_full_map();
     test_poison_ai();
+    test_flow_fast_path();
     test_tactical_extension();
     printf("Monster AI regression checks passed: %d\n", checks);
     return 0;
