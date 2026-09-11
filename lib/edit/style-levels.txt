@@ -13,7 +13,7 @@ L:4: 2:3 3:3 4:2 6:1
 L:5: 2:1 3:2 4:1 6:3 7:2
 L:6: 3:1 6:4 7:3 5:2
 L:7: 6:3 7:2 5:3 8:2 9:1
-L:8: 5:2 8:3 9:2 10:2 11:2 12:2            
+L:8: 5:2 8:3 9:2 10:2 11:2 12:2
 L:9: 9:1 10:1 11:1 12:1
 L:10: 10:1 11:1 12:1 13:1 14:1
 L:11: 13:3 14:1 15:2
@@ -44,12 +44,20 @@ P:BIG_ICE:1:20: 59:1
 P:BIG_POIS:1:20: 55:1
 P:CHASM:1:20: 30:1
 
-# Cavey walls: Grey51/Grey53 always, and the rest only when that depth's
-# room-style pool already includes them.
+# Verdant walls are partition-only: cool flagstone in dark stone labyrinths,
+# moss in the damp green cave band. Masonry (41) is reserved for selected forge
+# vaults in vault.txt; none of these styles belong to the global depth pools.
+# Labyrinths begin at depth 7; use flagstone in the shadow-stone band (400-500 ft).
+P:LAB:8: 5:2 8:3 9:2 10:2 11:2 12:2 40:2
+P:LAB:9: 9:1 10:1 11:1 12:1 40:1
+P:LAB:10: 10:1 11:1 12:1 13:1 14:1 40:1
+
+# Cavey walls: Grey51/Grey53 always, depth-matched old styles, and moss only
+# in the green band (250-350 ft).
 P:CA:1:4: 52:1 54:1
-P:CA:5: 52:1 54:1 7:1
-P:CA:6: 52:1 54:1 5:1 7:1
-P:CA:7: 52:1 54:1 5:1 7:1 9:1
+P:CA:5: 52:1 54:1 7:1 42:1
+P:CA:6: 52:1 54:1 5:1 7:1 42:1
+P:CA:7: 52:1 54:1 5:1 7:1 9:1 42:1
 P:CA:8: 52:1 54:1 5:1 9:1 10:1
 P:CA:9: 52:1 54:1 9:1 10:1
 P:CA:10: 52:1 54:1 10:1 14:1

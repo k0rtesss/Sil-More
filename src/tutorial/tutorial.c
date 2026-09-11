@@ -6,7 +6,9 @@
 
 #define TUTORIAL_MAX_LESSONS 768
 #define TUTORIAL_MAX_STEPS 16
-#define TUTORIAL_MAX_QUEUE 32
+/* Observations are deduplicated by lesson. Keep room for the whole catalogue:
+ * a burst of discoveries must not silently discard an event-only lesson. */
+#define TUTORIAL_MAX_QUEUE TUTORIAL_MAX_LESSONS
 #define TUTORIAL_MAX_JSON (1024 * 1024)
 
 typedef struct tutorial_step {
@@ -117,7 +119,7 @@ static bool copy_field(char *dst, size_t size, const cJSON *object,
     const char *key, bool required)
 {
     const char *value = json_string(object, key);
-    if (!value) return !required;
+    if (!value) return !required && !cJSON_GetObjectItemCaseSensitive(object, key);
     if (strlen(value) >= size || (required && !*value)) return false;
     SDL_strlcpy(dst, value, size);
     return true;
@@ -261,8 +263,9 @@ bool tutorial_load_catalogue(const char *path)
                 else if (!strcmp(kind, "action")) step->kind = TUTORIAL_STEP_ACTION;
                 else if (!strcmp(kind, "decision")) step->kind = TUTORIAL_STEP_DECISION;
                 else valid = false;
-            }
+            } else if (cJSON_GetObjectItemCaseSensitive(entry, "kind")) valid = false;
             if (step->kind == TUTORIAL_STEP_ACTION && !step->action[0]) valid = false;
+            if (step->kind != TUTORIAL_STEP_ACTION && step->action[0]) valid = false;
             if (!step->anchor[0]) SDL_strlcpy(step->anchor, "none", sizeof(step->anchor));
         }
     }
@@ -488,6 +491,14 @@ static void ensure_catalogue(void)
         tutorial_load_catalogue(path);
 }
 
+bool tutorial_lesson_enabled(const char *id)
+{
+    if (!enabled || character_blocked || run_mode_is_blitz()) return false;
+    tutorial_sync_tale();
+    ensure_catalogue();
+    return tale_loaded && lesson_allowed(lesson_index(id));
+}
+
 void tutorial_observe(const char *id, const tutorial_context *context)
 {
     int index;
@@ -524,6 +535,42 @@ void tutorial_observe(const char *id, const tutorial_context *context)
     queue[queue_count].lesson = index;
     copy_context(&queue[queue_count].context, context);
     ++queue_count;
+}
+
+static void activate_observation(int position)
+{
+    active = queue[position].lesson;
+    active_context = queue[position].context;
+    memmove(&queue[position], &queue[position + 1],
+        (size_t)(queue_count - position - 1) * sizeof(queue[0]));
+    --queue_count;
+    cJSON *step = cJSON_GetObjectItemCaseSensitive(lesson_progress(catalogue[active].id), "step");
+    active_step = tutorial_lesson_status(catalogue[active].id) == TUTORIAL_IN_PROGRESS
+        && cJSON_IsNumber(step) && step->valuedouble == step->valueint
+        ? step->valueint : 0;
+    if (active_step < 0 || active_step >= catalogue[active].count) active_step = 0;
+    replaying = false;
+    save_step(catalogue[active].id, active_step, "in-progress");
+}
+
+bool tutorial_focus_observation(const char *id)
+{
+    int index;
+    if (replaying || archive_depth || !tutorial_lesson_enabled(id)) return false;
+    index = lesson_index(id);
+    if (active == index) return true;
+    for (int i = 0; i < queue_count; ++i) {
+        if (queue[i].lesson != index) continue;
+        tutorial_pending previous = {active, active_context};
+        activate_observation(i);
+        /* Removing the requested observation made room for the suspended one. */
+        if (previous.lesson >= 0) queue[queue_count++] = previous;
+        visible = false;
+        awaiting_checkpoint = false;
+        ++revision;
+        return true;
+    }
+    return false;
 }
 
 void tutorial_checkpoint(bool safe_to_present)
@@ -563,16 +610,7 @@ void tutorial_checkpoint(bool safe_to_present)
         for (int i = 1; i < queue_count; ++i)
             if (catalogue[queue[i].lesson].priority > catalogue[queue[best].lesson].priority)
                 best = i;
-        active = queue[best].lesson;
-        active_context = queue[best].context;
-        memmove(&queue[best], &queue[best + 1],
-            (size_t)(queue_count - best - 1) * sizeof(queue[0]));
-        --queue_count;
-        cJSON *step = cJSON_GetObjectItemCaseSensitive(lesson_progress(catalogue[active].id), "step");
-        active_step = cJSON_IsNumber(step) ? step->valueint : 0;
-        if (active_step < 0 || active_step >= catalogue[active].count) active_step = 0;
-        replaying = false;
-        save_step(catalogue[active].id, active_step, "in-progress");
+        activate_observation(best);
     }
     if (active >= 0 && (!visible || awaiting_checkpoint)) {
         visible = true;
@@ -771,12 +809,28 @@ void tutorial_archive_end(void)
     if (resume_visible) tutorial_checkpoint(true);
 }
 
+/* Replays teach the same mechanic without claiming the original encounter is
+ * still present. Keep numeric details empty and use a generic public subject
+ * so context placeholders do not leave broken sentences in the archive. */
+static void archive_context(int index, tutorial_context *context)
+{
+    const char *id = catalogue[index].id;
+    const char *subject = catalogue[index].title;
+    memset(context, 0, sizeof(*context));
+    if (!strncmp(id, "monster.", 8) || !strncmp(id, "combat.", 7))
+        subject = "This creature";
+    else if (!strncmp(id, "item.", 5) || !strncmp(id, "identification.", 15))
+        subject = "This item";
+    SDL_strlcpy(context->subject, subject, sizeof(context->subject));
+}
+
 bool tutorial_archive_entry(int index, tutorial_view *view, tutorial_status *status)
 {
-    tutorial_context empty = {0};
+    tutorial_context context;
     ensure_catalogue();
     if (!view || index < 0 || index >= catalogue_count) return false;
-    fill_view(view, index, 0, &empty);
+    archive_context(index, &context);
+    fill_view(view, index, 0, &context);
     if (status) *status = tutorial_lesson_status(catalogue[index].id);
     return true;
 }
@@ -790,6 +844,7 @@ bool tutorial_replay(const char *id)
     clear_current_context();
     active = index;
     active_step = 0;
+    archive_context(index, &active_context);
     replaying = true;
     awaiting_checkpoint = true;
     return true;
@@ -799,6 +854,7 @@ void tutorial_reset_tale(void)
 {
     cJSON *lessons;
     tutorial_sync_tale();
+    ensure_catalogue();
     if (!tale_loaded || !progress) return;
     tutorial_invalidate_context();
     lessons = cJSON_GetObjectItemCaseSensitive(progress, "lessons");

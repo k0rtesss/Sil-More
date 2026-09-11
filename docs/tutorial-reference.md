@@ -4,7 +4,7 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 513 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 521 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
@@ -12,7 +12,7 @@ The catalogue contains 513 lessons, including 107 ability previews. Every live a
 
 ## Tutorial modes
 
-Default: **Extended**. The catalogue has **148 Normal** lessons and **365 Extended** lessons. The card's single mode button cycles **Disabled → Normal → Extended → Disabled**.
+Default: **Extended**. The catalogue has **153 Normal** lessons and **368 Extended** lessons. The card's single mode button cycles **Disabled → Normal → Extended → Disabled**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
 
@@ -22,29 +22,37 @@ Characters deferred during an upgrade remain exempt from automatic tutorials for
 
 Skeletons and chests use Normal informational feature lessons. Their old generic item IDs remain untouched if present in saved history, and they do not enter examine/equip/use tutorial chains.
 
+## Presentation order
+
+Cards are selected by descending priority at a safe input boundary, not by their position in this document. Equal priorities keep observation order. A higher-priority card can interrupt between steps; the earlier lesson resumes at its saved step when its context is still relevant. Menu and purchase explanations take focus at their owning input boundary so they precede the choice they describe. Reading does not advance game time.
+
+Gameplay observations are checked again against current conditions, reachable items and visible subjects. Expired observations are withdrawn without marking them completed or skipped; a fresh encounter can offer them again. Required actions complete only after the matching real action succeeds or commits.
+
 ## Your first steps
 
 `opening.move`
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-Sil-More is a hardcore roguelike. Move slowly, plan ahead, and treat each new challenge as a puzzle: inspect what is known, find a counter, and choose your next action deliberately. Reading is free. Continue advances explanations; Skip ends this lesson. The mode button cycles Disabled, Normal and Extended tutorials.
+Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully and prepare before a fight. The world waits while you read. Continue advances a card; Skip ends its lesson. The mode button switches between Disabled, Normal and Extended tutorials.
 
 **2. Info**
 
-Find a suitable weapon and armour. If your oath restricts found equipment, prepare gear that follows its rules. Carrying, readying and equipping are different actions. Inspect the item and the proposed action before committing; actual game actions retain their normal costs.
+Before fighting, prepare a weapon and armour that suit your hero and oath. Items in your Pack are stored; items in your Harness are ready to reach. Your active weapon is the one you attack with. Item lessons will guide you through these choices as you find equipment.
 
 **3. Action**
 
-Move one square onto safe open floor. Choose any legal direction. This is a real move: creatures can act and the minimum-depth clock advances normally. Skip if you prefer another action.
+Move one square onto safe open floor. Choose any legal direction. Moving spends time, so nearby creatures can act. Skip lets you leave this practice and choose another action.
 
 Required action: `move`.
 
 Trigger: A new Story hero starts at playerturn <= 1, excluding restored saves.
 
-Sources: `src/tutorial/tutorial-game.c`.
+Sources: `src/tutorial/tutorial-game.c`, `src/quest/quest-status.c`.
 
 ## A creature in sight
 
@@ -52,17 +60,13 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **65** (higher appears first).
+
 **1. Info**
 
-{subject} is visible. Awareness says whether a creature has noticed you; morale describes its willingness to fight. Neither is a guarantee about what it will do next.
+{subject} is in sight. A sleeping or unwary creature has not yet become alert to you; an alert one has noticed a threat. Morale is separate: it determines whether a creature fights or flees. Use Look to read its current state and learned attacks before approaching.
 
-**2. Action**
-
-Enter Stealth mode. Stealth helps avoid notice, but moving stealthily is slower. An already alert foe may still follow you. Skip if remaining fast is more useful.
-
-Required action: `stealth`.
-
-Trigger: A non-peaceful creature is visible in line of sight; the player is not hallucinating or raging.
+Trigger: A non-peaceful creature is visible in line of sight and the player is not hallucinating. Attack legality is not required.
 
 Sources: `src/melee/melee-process.c`, `src/tutorial/tutorial-game.c`.
 
@@ -72,13 +76,15 @@ Sources: `src/melee/melee-process.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **45** (higher appears first).
+
 **1. Info**
 
-{subject} is beside you. Moving toward an adjacent hostile creature attacks instead of moving. Check the active weapon and the target before committing.
+{subject} is beside you. Moving toward an adjacent enemy makes a melee attack. Check your active weapon and remaining Health first.
 
 **2. Action**
 
-Attack an adjacent legal hostile once. A miss still completes this practice. The creature may retaliate; Skip lets you choose a different tactic.
+Attack an adjacent enemy once. A miss also completes this practice. The enemy can retaliate. Skip if you would rather retreat, use an item or choose another tactic.
 
 Required action: `attack`; subject: `monster`.
 
@@ -92,17 +98,19 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **55** (higher appears first).
+
 **1. Info**
 
-{detail} An attack hits only when Attack + d20 exceeds Evasion + d20. A tie misses. With equal scores, the hit chance is 47.5%. Higher attack improves both hit chance and critical margins.
+{detail} Each side rolls a twenty-sided die. Your Attack plus its roll must exceed the target's Evasion plus its roll; a tie misses. With equal scores, you hit slightly less than half the time.
 
 **2. Info**
 
-On a hit, damage dice are rolled, then the target's applicable Protection is rolled and subtracted. A hit can deal zero damage. Check the combat history for the rolls and any revealed effects.
+On a hit, roll your damage, then subtract the target's Protection roll. Armour can block all the damage. For example, 8 damage against 3 Protection removes 5 Health. Combat history shows the rolls.
 
 **3. Info**
 
-Criticals add damage dice. The base interval is about 7 + weapon weight in pounds per die. For a 3 lb melee weapon, margins 10 and 20 add one and two dice. Finesse changes those thresholds to 8 and 16.
+Beating Evasion by a large margin can add critical damage dice. Lighter weapons need smaller margins. For example, a 3 lb melee weapon normally gains one extra die at a margin of 10 and two at 20; Finesse lowers those margins to 8 and 16.
 
 Trigger: After a committed player attack, including a miss.
 
@@ -114,9 +122,11 @@ Sources: `src/cmd/combat/cmd-combat.c`, `src/melee/melee-attack.c`.
 
 Level: **Normal**.
 
+Priority: **75** (higher appears first).
+
 **1. Info**
 
-{detail} Damage and a status effect are separate outcomes. Examine the combat result and current conditions before deciding whether to fight, retreat or use a known remedy.
+{detail} Check your remaining Health and any new conditions. Retreating, using a known remedy, or limiting how many enemies can reach you may help. Healing restores Health; poison and bleeding may need treatment as well.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -128,9 +138,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **50** (higher appears first).
+
 **1. Info**
 
-{subject} is fleeing. This is a morale state, separate from whether it has noticed you. Pursuit spends turns and may expose you to other enemies. Oath of Valour forbids harming fleeing foes.
+{subject} is fleeing. This can give you time to recover or leave. Chasing may lead you into other enemies, and a fleeing creature can regain courage. Oath of Valour forbids harming fleeing foes.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -142,9 +154,11 @@ Sources: `src/melee/melee-process.c`, `src/cmd/combat/cmd-combat.c`, `lib/edit/o
 
 Level: **Normal**.
 
+Priority: **85** (higher appears first).
+
 **1. Info**
 
-Each additional adjacent opponent helps the enemies surround you. Crowd Fighting halves their surrounding bonus. Narrow passages can reduce the number attacking together, but moving remains a real action.
+Several enemies are beside you. They gain an attack bonus for surrounding you. A doorway or narrow passage can limit how many reach you at once. Crowd Fighting halves their surrounding bonus.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -156,9 +170,11 @@ Sources: `src/cmd/combat/cmd-combat.c`.
 
 Level: **Normal**.
 
+Priority: **55** (higher appears first).
+
 **1. Info**
 
-Critical damage comes from extra dice, not a fixed damage multiplier. Weight makes additional critical dice harder to earn. Finesse reduces the base interval by 2; Power increases it by 1. Subtlety subtracts another 2 only under its equipment requirements.
+A critical hit adds damage dice. Lighter weapons need smaller winning margins to earn them. Finesse lowers the melee critical interval by 2; Power raises it by 1. Subtlety lowers it by another 2 when its weapon and free-hand requirements are met.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -170,9 +186,11 @@ Sources: `src/cmd/combat/cmd-combat.c`.
 
 Level: **Normal**.
 
+Priority: **30** (higher appears first).
+
 **1. Info**
 
-{detail} Going through stairs or a shaft creates a new level. Plan around your current minimum depth and any oath restrictions; the map you left is not a route you can count on returning to.
+{detail} Stairs and shafts generate a new map when you change depth. Leaving a level abandons its current layout and remaining items. Check your objective and supplies first; returning to that depth generates another map.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -184,9 +202,11 @@ Sources: `src/cmd/movement/cmd-movement.c`.
 
 Level: **Normal**.
 
+Priority: **60** (higher appears first).
+
 **1. Info**
 
-{detail} The pressure advances with game actions. Reading cards, menus and descriptions does not spend turns. Running, resting, repeated commands and accessing the Pack can still advance game time.
+{detail} Minimum depth is the shallowest depth you can normally reach. It rises as you spend game time. An up staircase may return you at the same depth or deeper if its destination is above that limit. Reading menus and descriptions is free; resting and running count toward the clock.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -198,13 +218,15 @@ Sources: `src/dungeon/dungeon-loop.c`, `src/cmd/movement/cmd-movement.c`.
 
 Level: **Normal**.
 
+Priority: **25** (higher appears first).
+
 **1. Info**
 
-{subject} has a description. It separates known properties from information your hero has not discovered. Do not assume an unfamiliar item is a remedy.
+{subject} is nearby or in your belongings. Its description shows what your hero knows, including useful effects and drawbacks. Inspect unfamiliar equipment or consumables before deciding what to do with them.
 
 **2. Action**
 
-Examine the item. Select its description through Look, Inventory or Equipment. Opening a description is free; actually picking up, equipping or using it keeps its usual rules.
+Examine the item through Look, Inventory or Equipment. Reading its description is free. You can leave without picking up, equipping or using it.
 
 Required action: `examine`.
 
@@ -218,9 +240,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **27** (higher appears first).
+
 **1. Info**
 
-{detail} Damage such as (2d5) means two five-sided dice. Protection such as [1d3] is rolled when it applies. Read attack, evasion, weight, volume, active-hand requirements, known bonuses and drawbacks together.
+{detail} Damage written as 2d5 means roll two five-sided dice, for 2 to 10 damage before Protection. Protection such as 1d3 blocks 1 to 3 damage when it applies. Also compare Attack, Evasion, weight, volume and known bonuses or drawbacks.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -232,9 +256,11 @@ Sources: `src/object/object-info.c`, `src/object/object-desc.c`.
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Compare damage dice, attack, evasion, weight and hand requirements. Strength changes damage sides within the weapon's weight limit; a lighter weapon also earns critical dice at smaller margins. Ready the weapon and make melee active when appropriate.
+Compare damage, Attack, Evasion and weight. Strength can increase damage, within the weapon's weight limit. Lighter weapons earn critical dice more easily. Ready the weapon, then select it in Change Active to use it for melee.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -246,9 +272,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Throwing uses its own range, accuracy and handling rules. A throwable item in the Pack is not automatically available as an active weapon. Read its Harness, quick-throw and hand requirements before aiming.
+Throwing weapons use Melee for accuracy, with penalties for distance. Ready one in your Harness, then select it in Change Active before throwing normally. Some abilities also allow quick throws without changing your active weapon.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -260,9 +288,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-A bow needs compatible arrows and must be active to fire normally. Strength and bow weight affect damage. Firing near alert foes can allow attacks of opportunity; Point Blank Archery protects only against the adjacent target.
+Ready a bow and arrows, then choose the bow in Change Active. Archery determines accuracy; Strength and bow weight affect damage. Firing beside alert enemies can give them free attacks. Point Blank Archery protects you from the adjacent target only.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -274,9 +304,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Arrows can occupy the Quiver or Pack. Quiver capacity and Pack volume are separate limits; a partial stack may fit even when the whole stack does not. Choose the arrow stack used by your bow and read its known bonuses.
+Ready arrows in the Quiver to fire them with a bow. Spare arrows can be stored in the Pack. When you have more than one ready stack, Change Active lets you select which to fire. Changing only the arrow stack is free.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -288,9 +320,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Protection reduces damage after a hit; Evasion helps the hit miss. Read both, plus weight and skill penalties. Some abilities require only light armour. Ordinary physical protection does not automatically apply to elemental damage.
+Evasion helps you avoid hits; Protection reduces damage after a hit. Compare both values, along with weight and skill penalties. Heavy armour can prevent abilities that require light armour. Elemental attacks use different Protection rules.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -302,9 +336,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-A shield contributes only when your active weapon and hand arrangement allow it. A two-handed weapon can prevent the shield from helping. Blocking doubles shield protection if you did not move on the previous turn.
+A shield helps only when your active weapon leaves a hand for it. Two-handed weapons normally prevent shield use. With Blocking, your shield provides double Protection if you did not move on your previous turn.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -316,9 +352,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Known ring bonuses and drawbacks apply only under their equipment rules. Inspect the full description before changing jewelry. A curse can prevent removal; unidentified properties remain unknown.
+Rings can improve attributes, skills or resistances, but may have drawbacks. Read the known properties before equipping one. A cursed ring can resist removal, and an unidentified ring may have properties you have not discovered yet.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -330,9 +368,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Read the known attribute, skill, resistance and drawback lines before equipping. Jewelry sets offer a way to organise combinations; selecting a set is separate from learning an unknown item's properties.
+Amulets can grant bonuses, resistances or special abilities. Read their drawbacks too. The Jewelry menu lets you equip an amulet and organise saved sets of rings and amulets.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -344,9 +384,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-A known potion names an effect; an unfamiliar one may be harmful. Read whether it cures a condition, restores a resource, grants a temporary benefit or merely offsets a penalty. Use a relevant known potion when you choose, not just to identify it.
+A known potion's description explains its effect. Some heal, cure a condition or grant a temporary bonus; others harm you. An unfamiliar potion is a gamble. Keep useful known potions available for the situation they treat.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -358,9 +400,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Ordinary food restores nourishment. Herbs may also heal, restore drained attributes, grant a temporary effect or cause harm. Read the known effect before eating. Hunger, attribute drain and wounds need different remedies.
+Food restores nourishment. Herbs also have special effects, such as healing, restoring drained attributes or causing harm. Read a known herb's effect before eating it. Hunger, wounds and attribute drain are treated differently.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -372,9 +416,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Radius determines how far light reaches; intensity determines its strength. Fuel is another separate limit. Equip an appropriate light and inspect its remaining fuel; blindness and darkness effects require different responses.
+A light's radius is how far it reaches; intensity is how bright it is. Torches and lanterns also need fuel. Check remaining fuel before exploring, and keep a compatible refill or replacement available.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -386,9 +432,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Oil goes into Supplies using an oil slot. A container holds up to 2,500 turns of light. Refuelling and carrying oil have their own rules; an oil flask is not itself a wearable light source.
+Oil is stored in a Supplies oil slot. One container holds up to 2,500 turns of lantern fuel. Use Refuel with a suitable lantern; torches use a different refuelling method.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -400,9 +448,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Gems have known consumable effects such as detection, identification or warding. Read the effect and any target selection before using one. You can inspect a choice without spending the gem; committing its effect is a separate action.
+Gems are single-use items with effects such as mapping, detection, identification or warding. Read the known effect before using one. If a gem asks you to choose an item, cancelling that choice preserves the gem.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -414,9 +464,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-A digging tool helps with terrain interactions. Read the terrain and required tool before tunnelling. Digging can take repeated turns and make noise; a tool does not make every wall or hazard safe.
+A digging tool helps clear rubble and dig through suitable walls. Select the terrain's tunnelling action. Digging can take several turns and make noise, so check for nearby enemies before starting.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -428,9 +480,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Mithril and star iron are crafting materials. A forge, applicable smithing abilities, resources and sufficient difficulty allowance govern what you can make. Inspect the finished proposal and its costs before committing.
+Mithril and star iron are smithing materials. Keep them if you plan to forge or improve equipment. A forge, the relevant abilities and enough Smithing are still needed; the smithing preview lists the materials and other costs.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -442,9 +496,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **35** (higher appears first).
+
 **1. Info**
 
-Use the chest's contextual action on the dungeon floor. Chest inspection, disarming and opening are real actions with their own checks and risks; discovering a trap does not disarm it. This differs from a free item preview. Opening releases loot, while an empty chest provides no extra storage space. The chest menu can be cancelled before committing an action.
+A chest is opened on the dungeon floor. Use its contextual menu to inspect it, disarm a discovered trap, or open it. Those actions spend turns, and failed checks can be dangerous. Opening releases its contents; an empty chest cannot store your items.
 
 Trigger: A chest is actually encountered on the player square or visibly adjacent, including an empty chest.
 
@@ -456,9 +512,11 @@ Sources: `src/cmd/world/cmd-interact-chest.c`, `src/cmd/item/cmd-item-core.c`, `
 
 Level: **Normal**.
 
+Priority: **35** (higher appears first).
+
 **1. Info**
 
-Search a skeleton on the dungeon floor using its contextual action. A skeleton can be searched only once. It may yield food, a light, damaged gear or nothing. Searching can also reveal a note or hint; those hints have their own setting and can be reviewed later. This is a search action, not a request to equip or use the bones. Searching orc remains has a 5% chance of causing disease.
+Use the skeleton's contextual Search action on the dungeon floor. Each skeleton can be searched once and may contain supplies, damaged gear, a note, or nothing. Searching orc remains has a 5% chance of disease. Skeleton hints have their own setting and can be reread later.
 
 Trigger: Skeleton remains are actually encountered on the player square or visibly adjacent, including already-searched remains.
 
@@ -470,9 +528,11 @@ Sources: `src/cmd/world/cmd-interact-chest.c`, `src/cmd/item/cmd-item-core.c`, `
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-Read the item's public description and available actions. Pack, Harness, Quiver, Supplies and worn equipment have different capacities and access rules. The displayed action menu determines what is currently possible.
+Read the item's description and available actions. Pack, Harness, Quiver, Supplies and worn equipment have different purposes and capacities. The item menu shows where this item can go and what you can do with it.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -484,9 +544,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-A staff uses charges and its handling rules may require readying it before use. Read its known effect, remaining charges and requirements. An unfamiliar staff can be unhelpful or dangerous; this lesson does not require using it.
+Staves spend charges to produce their known effect. Ready one in the Harness for prompt access; using one from the Pack takes extra handling time. Read the effect and remaining charges before using it. You can skip practice to save charges.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -498,9 +560,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **24** (higher appears first).
+
 **1. Info**
 
-A horn uses Voice and produces an effect along the chosen direction or area. Read its known effect, Voice cost and handling requirements. A loud horn can alert other creatures. Do not blow an unknown horn just to finish a lesson.
+Horns spend Voice and make a loud noise. Read the known effect, then aim in the desired direction. They normally cost 20 Voice, or 10 with Channeling. Sounding a horn can alert other creatures.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -512,9 +576,11 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **28** (higher appears first).
+
 **1. Action**
 
-This staff is available to ready. Choose its Ready action. This changes your equipment arrangement and keeps the normal game-time cost.
+Open Inventory, select the staff, and choose Ready to move it to your Harness. Reaching into the Pack takes three turns and attacks can interrupt it. Skip if you want to keep your current arrangement.
 
 Required action: `ready`; subject: `staff`.
 
@@ -528,17 +594,19 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **29** (higher appears first).
+
 **1. Info**
 
-The known staff is ready and has a relevant use now. {detail} Check the target and cost. Skip if you want to save it.
+This identified staff is ready and has enough charge for a useful effect. {detail} Skip if you would rather save its charges.
 
 **2. Action**
 
-Use the known staff once, selecting a valid target if needed. Only a committed use completes the step; cancellation does not.
+Use the known staff once, choosing a target if requested. A completed use finishes the practice. You can cancel the choice or Skip to keep its charge.
 
 Required action: `use-item`; subject: `staff`.
 
-Trigger: A known readied staff has resources and a useful, legal current target or effect; unsafe/unknown uses are not offered.
+Trigger: A fully identified readied staff has a known available charge and a useful, legal current target or effect; unsafe or unknown uses are not offered.
 
 Sources: `src/tutorial/tutorial-game.c`.
 
@@ -548,9 +616,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **28** (higher appears first).
+
 **1. Action**
 
-This horn is available to ready. Choose its Ready action. This changes your equipment arrangement and keeps the normal game-time cost.
+Open Inventory, select the horn, and choose Ready to move it to your Harness. Reaching into the Pack takes three turns and attacks can interrupt it. Skip if you want to keep your current arrangement.
 
 Required action: `ready`; subject: `horn`.
 
@@ -564,13 +634,15 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **29** (higher appears first).
+
 **1. Info**
 
-The known horn is ready and has a relevant use now. {detail} Check the target and cost. Skip if you want to save it.
+This known horn is ready and you have enough Voice for it. {detail} Skip if you prefer to save Voice or avoid the noise.
 
 **2. Action**
 
-Use the known horn once, selecting a valid target if needed. Only a committed use completes the step; cancellation does not.
+Sound the known horn once in a useful direction. A completed use finishes the practice. You can cancel the choice or Skip to save your Voice.
 
 Required action: `use-item`; subject: `horn`.
 
@@ -584,9 +656,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **32** (higher appears first).
+
 **1. Info**
 
-{subject} is a unique crafted item. Read all its revealed properties, including drawbacks and granted abilities. An artefact name does not make every equipment arrangement useful or safe.
+{subject} is an artefact with its own combination of properties. Check its abilities, bonuses, drawbacks and equipment requirements. Even a powerful artefact may not suit your hero.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -598,9 +672,11 @@ Sources: `src/object/object-info.c`.
 
 Level: **Normal**.
 
+Priority: **45** (higher appears first).
+
 **1. Info**
 
-{detail} Open the updated description to see the property or identity that was actually revealed. Learning one property does not imply that all other properties are now known.
+{detail} Open the updated item description to see what you learned. Discovering one property can still leave others unknown.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -612,9 +688,11 @@ Sources: `src/cmd/item/cmd-identify.c`, `src/cmd/combat/cmd-combat.c`.
 
 Level: **Normal**.
 
+Priority: **45** (higher appears first).
+
 **1. Info**
 
-An elemental attack revealed new information about equipment or resistance. Read the resulting description and combat result. Resistance, vulnerability and Protection are separate mechanics; the observation does not expose every hidden property.
+An elemental attack taught you something about an item or resistance. Check the updated description. Resistance reduces elemental damage; Protection is a separate defence with rules for each damage type.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -626,9 +704,11 @@ Sources: `src/cmd/item/cmd-identify.c`, `src/cmd/combat/cmd-combat.c`.
 
 Level: **Normal**.
 
+Priority: **45** (higher appears first).
+
 **1. Info**
 
-A committed attack revealed a brand, slay or other weapon property. Read its description for the affected targets and damage rules. A visible combat effect can teach a property without identifying every part of the item.
+Your attack revealed a weapon property. A brand adds an elemental effect; a slay is effective against particular creature types. Read the updated description for the targets it affects.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -640,9 +720,11 @@ Sources: `src/cmd/item/cmd-identify.c`, `src/cmd/combat/cmd-combat.c`.
 
 Level: **Normal**.
 
+Priority: **95** (higher appears first).
+
 **1. Info**
 
-{detail} Disease continues while resting and never clears on its own. A potion of Healing or Miruvor cures it and restores all attribute points lost to disease; unrelated attribute drain remains. Herb of Sickness always causes disease; Dried Meat has a 20% risk, searching orc remains 5%, and each water tile entered on foot 0.5%.
+Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 50 player turns. It continues while resting. A potion of Healing or Miruvor cures it and restores the points disease took. Herbs of Healing and Restoration do not cure disease.
 
 Trigger: The disease condition is active and its lesson is unseen or in progress, or disease has just appeared.
 
@@ -654,9 +736,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **95** (higher appears first).
+
 **1. Info**
 
-{detail} Poison severity determines later damage ticks: the next tick is ceil(severity / 5) Health. Poison prevents ordinary Health regeneration. A known Antidote removes poison; healing Health alone is not an antidote.
+Poison deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current poison severity, rounded up, as Health. Antidote or Miruvor removes the poison; you may still need healing afterward.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -668,9 +752,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **95** (higher appears first).
+
 **1. Info**
 
-{detail} Bleeding severity determines later damage ticks: ceil(severity / 5) Health. Bleeding prevents ordinary Health regeneration. Healing consumables halve current bleeding, so one use may leave it active. Song of Staunching can stop it.
+Bleeding deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current bleeding severity, rounded up, as Health. Healing herbs or potions and Miruvor halve bleeding. Song of Staunching stops it when its effect occurs.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -682,9 +768,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **95** (higher appears first).
+
 **1. Info**
 
-{detail} Stun applies -2 to every skill below 50 severity and -4 at 50 or more. Above 100, you cannot act. A known Clarity or Miruvor can cure stun if you can act to use it.
+Stun lowers every skill by 2, or by 4 at severity 50 or more. Above 100, you are knocked out and cannot act. Clarity or Miruvor removes stun; use it while you can still act.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -696,9 +784,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Fear prevents normal melee attacks and proper ranged aiming. A known fear remedy or waiting for the effect to expire can help, but nearby foes still act when you spend turns. Do not mistake a speed benefit for curing fear.
+Fear prevents normal melee attacks and proper ranged aiming. Retreat or use a known fear remedy if possible. Miruvor and Orcish Liquor remove fear, though Orcish Liquor can also stun you.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -710,9 +800,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Confusion disrupts direction and aiming choices. A known Clarity or Miruvor can cure it. Examine your options before committing movement or a targeted effect.
+Confusion makes movement and aiming unreliable. Clarity or Miruvor cures it. Choose carefully: a direction you enter may lead to a different action while confused.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -724,9 +816,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Ordinary sight is unavailable. Remembered terrain is not a current sighting of enemies or objects. Known true Sight or Miruvor can restore sight; more lamp fuel does not cure blindness.
+You are blind. Remembered map squares do not show where creatures are now. A potion of True Sight or Miruvor cures blindness. Refuelling a lamp will not restore your sight.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -738,9 +832,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Displayed creature and item identities can be unreliable. Known Clarity, true Sight or Miruvor can remove hallucination. The tutorial will not identify a disguised apparent subject for you.
+Hallucination makes the displayed identities of creatures and items unreliable. Clarity, True Sight or Miruvor removes it. Treat apparent names and shapes with caution until it ends.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -752,9 +848,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **95** (higher appears first).
+
 **1. Info**
 
-{detail} You cannot act until the trance ends. Continue closes this explanation and lets the normal scheduler resume; it does not cure you or create a free turn. No required item use is offered while you cannot act.
+You are entranced and cannot act until the trance ends. You cannot choose or drink a remedy during it. Continue closes the explanation so the game can resume.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -766,9 +864,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Slowing changes how often you act relative to other creatures. Quickness may offset the speed penalty while the slow condition remains. An offset is not the same as removing the underlying condition.
+You are slowed and act less often relative to enemies. Quickness can offset the speed loss while it lasts, though the Slow condition remains. Recheck nearby threats before spending a turn.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -780,9 +880,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Increased speed changes how often you act relative to enemies. It does not guarantee that every chosen command is safe or that a foe cannot act afterward. Check when the temporary effect expires.
+You are moving faster and can act more often relative to enemies. The benefit lasts only while Fast is active. Keep enough room to retreat when it expires.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -794,9 +896,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Rage gives +1 Strength and Constitution, -1 Dexterity and Grace, fear resistance and a special melee attack. It restricts awareness and prevents Stealth. Clarity ends rage; do not rely on calm targeting while it lasts.
+Rage gives +1 Strength and Constitution, -1 Dexterity and Grace, fear resistance and a special melee attack. It limits your awareness and prevents Stealth mode. Clarity ends rage.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -808,9 +912,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Darkening reduces your light. Light radius, light intensity and remaining fuel are different quantities. Check the actual condition and equipment before choosing a remedy; dim light is not automatically blindness.
+Your light has been dimmed by an effect. This reduces illumination even if your lamp has fuel. Check the Darkened condition and nearby visibility; refuelling alone does not remove it.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -822,9 +928,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Temporary Strength adds to current Strength and sustains it while active. Inspect the attribute breakdown and weapon damage. A temporary bonus eventually ends; restoring drained Strength is a separate effect.
+Temporary Strength improves melee and ranged damage within weapon weight limits, and protects Strength from ordinary drain while active. Check the attribute breakdown to see the bonus and any existing drain.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -836,9 +944,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Temporary Dexterity improves Dexterity and its associated skills and sustains it while active. Inspect the current skill and attribute breakdowns. The bonus eventually expires.
+Temporary Dexterity improves Dexterity-based skills and protects Dexterity from ordinary drain while active. The bonus ends when the effect expires.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -850,9 +960,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Temporary Constitution changes Constitution and maximum Health and sustains the attribute while active. A larger maximum is different from a healing item; inspect current and maximum Health together.
+Temporary Constitution raises maximum Health and protects Constitution from ordinary drain while active. Check both current and maximum Health, especially before the bonus expires.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -864,9 +976,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Temporary Grace changes Grace-based skills and maximum Voice and sustains Grace while active. Check the current attribute and skill breakdowns, particularly before spending Voice.
+Temporary Grace improves Grace-based skills and maximum Voice. It also protects Grace from ordinary drain while active. The extra Voice capacity ends with the bonus.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -878,9 +992,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Temporary Perception improves the current Perception skill. This can help its associated detection and skill checks; it does not reveal every hidden creature or property automatically.
+Temporary Perception improves your Perception skill by 10. This helps spotting creatures, noticing danger and other Perception checks until the effect expires.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -892,9 +1008,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} True sight helps detect invisible creatures and protects against blindness and hallucination. Seeing an otherwise hidden creature still depends on the actual detection rules; read what the game has revealed.
+True Sight improves detection of invisible creatures and provides resistance to blindness and hallucination. Invisible enemies are still subject to detection checks, range and line of sight.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -906,9 +1024,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Temporary fire resistance adds a resistance layer. Resistance reduces elemental damage, while eligible Protection is a separate roll. It does not automatically protect every carried item from damage.
+Temporary fire resistance adds one layer of fire resistance. It reduces incoming fire damage while active. Check your total resistance: vulnerability and a fire cave can offset a layer.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -920,9 +1040,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Temporary cold resistance adds a resistance layer. Resistance and applicable Protection are separate; inspect the resulting damage and known equipment properties rather than assuming immunity.
+Temporary cold resistance adds one layer of cold resistance. It reduces incoming cold damage while active. Check your total resistance: vulnerability and an ice cave can offset a layer.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -934,9 +1056,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Temporary poison resistance reduces poison damage through the resistance rules. It is distinct from an Antidote removing existing poison. Read your current condition and the known item effect.
+Temporary poison resistance reduces new poison exposure while active. Antidote removes poison already affecting you. A poison cave reduces your resistance, so check the current total.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -947,6 +1071,8 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 `status.song_challenge_effect`
 
 Level: **Extended**.
+
+Priority: **80** (higher appears first).
 
 **1. Info**
 
@@ -962,6 +1088,8 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
 {detail} A song has left a temporary Elbereth effect. Inspect your current skill breakdown and condition. A lingering effect can remain distinct from the currently selected song.
@@ -976,9 +1104,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **95** (higher appears first).
+
 **1. Info**
 
-{detail} Your Health is at or below the configured warning threshold. Read the latest damage and inspect a known healing option or escape route. Health healing, stopping bleeding and curing poison are different effects.
+{detail} Your Health has reached the warning level set in Settings. Consider a known healing item or a retreat before another hit. If you are also poisoned or bleeding, check whether the chosen item treats that condition.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -990,9 +1120,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Voice fuels songs and horns. It does not regenerate while you sing. Stop singing to allow recovery, or choose a known Voice-restoring item when needed. This explanation does not spend or restore Voice.
+{detail} Voice powers songs and horns. It recovers while you are not singing. A potion of Voice or Miruvor restores it fully; Esgalduin restores one quarter of maximum Voice.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -1004,9 +1136,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Your nourishment is below the alert threshold. Check known food before it becomes urgent. Reading a food description is free; eating and accessing the Pack retain their normal costs.
+{detail} You are getting hungry. Check your food supplies before hunger weakens you. Known food restores nourishment; some herbs also have harmful effects.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -1018,9 +1152,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Low nourishment now reduces Strength. Ordinary food or a known nourishing herb addresses hunger. A temporary Strength potion can conceal a symptom without filling your stomach.
+{detail} Hunger now reduces Strength. Eat known nourishing food when you can. A Strength potion may improve the attribute temporarily, but you still need food.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -1032,9 +1168,11 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **95** (higher appears first).
+
 **1. Info**
 
-{detail} Starvation damages you and prevents Health regeneration. A known nourishing food addresses the cause. Healing Health without eating leaves starvation active.
+{detail} Starvation deals damage and prevents Health regeneration. Eat known nourishing food urgently. A healing item alone leaves the cause of the damage in place.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -1046,13 +1184,15 @@ Sources: `src/player/effects.c`, `src/dungeon/dungeon-loop.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known potion of Healing or Miruvor is available. {detail} It ends disease and restores only the attribute points disease took. Ordinary rest and herbs of Healing or Restoration do not cure disease.
+Healing or Miruvor cures disease and restores the attribute points it took. Herbs of Healing and Restoration do not. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Use a known potion of Healing or Miruvor. Only actually using a relevant potion completes this step; cancelling or choosing another item does not.
+Choose and use a known remedy for disease. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `diseased`.
 
@@ -1066,13 +1206,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+Antidote or Miruvor removes poison. It stops future poison damage, though lost Health may still need healing. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for poison. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for poison. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `poisoned`.
 
@@ -1086,13 +1228,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+A herb or potion of Healing, or Miruvor, restores Health and halves current bleeding. Check the remaining bleeding afterward. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for bleeding. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for bleeding. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `cut`.
 
@@ -1106,13 +1250,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+Clarity or Miruvor removes stun. Acting before severity rises above 100 can prevent losing the chance to use a remedy. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for stun. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for stun. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `stun`.
 
@@ -1126,13 +1272,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+Miruvor or Orcish Liquor removes fear. Orcish Liquor can also cause stun, so compare the available choices. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for fear. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for fear. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `afraid`.
 
@@ -1146,13 +1294,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+Clarity or Miruvor removes confusion so that movement and aiming become reliable again. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for confusion. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for confusion. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `confused`.
 
@@ -1166,13 +1316,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+True Sight or Miruvor cures blindness. True Sight also grants temporary sight protections. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for blindness. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for blindness. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `blind`.
 
@@ -1186,13 +1338,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+Clarity, True Sight or Miruvor removes hallucination and makes displayed identities reliable again. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for hallucination. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for hallucination. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `image`.
 
@@ -1206,13 +1360,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+Clarity ends rage. You will lose its attribute bonuses as well as its restrictions. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for rage. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for rage. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `rage`.
 
@@ -1226,13 +1382,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+A known healing item can restore Health. Compare the amount healed and its other effects; bleeding, poison or disease may need treatment too. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for low health. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for low Health. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `health`.
 
@@ -1246,13 +1404,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+Voice or Miruvor restores all Voice. Esgalduin restores one quarter of maximum Voice. Stop singing to allow ordinary Voice recovery. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for low voice. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for low Voice. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `voice`.
 
@@ -1266,13 +1426,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+Known nourishing food can relieve hunger. Check any extra effects: Dried Meat carries a 20% disease risk, while harmful herbs can make your situation worse. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for hunger. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for hunger. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `hunger`.
 
@@ -1286,13 +1448,15 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **90** (higher appears first).
+
 **1. Info**
 
-A known relevant remedy is available. {detail} Read the effect: it may remove a condition, reduce its severity, restore a resource or restore an attribute. Skip if another tactic is better.
+Restoration restores up to 3 drained points in each attribute. Attribute potions have conditional restoration rules; read their description before choosing. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
-Choose and use a known remedy for drained attributes. The step completes only after a relevant item is actually used. A cancellation or unrelated item does not complete it.
+Choose and use a known remedy for attribute drain. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
 
 Required action: `use-item`; subject: `drain`.
 
@@ -1306,9 +1470,11 @@ Sources: `src/tutorial/tutorial-game.c`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **85** (higher appears first).
+
 **1. Info**
 
-{detail} Drain reduces the attribute independently of equipment penalties or expiring temporary bonuses. Restoration restores up to 3 points per attribute. A corresponding attribute potion also restores its attribute; inspect the known effect.
+{detail} Strength has been drained. A herb of Restoration restores up to 3 drained points in each attribute. A Strength potion restores 3 points immediately if that attribute is drained by at least 3; otherwise it grants a temporary bonus and restores up to 3 points when the bonus ends. Disease penalties need a disease cure.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -1320,9 +1486,11 @@ Sources: `src/use-obj.c`, `src/player/effects.c`.
 
 Level: **Normal**.
 
+Priority: **85** (higher appears first).
+
 **1. Info**
 
-{detail} Drain reduces the attribute independently of equipment penalties or expiring temporary bonuses. Restoration restores up to 3 points per attribute. A corresponding attribute potion also restores its attribute; inspect the known effect.
+{detail} Dexterity has been drained. A herb of Restoration restores up to 3 drained points in each attribute. A Dexterity potion restores 3 points immediately if that attribute is drained by at least 3; otherwise it grants a temporary bonus and restores up to 3 points when the bonus ends. Disease penalties need a disease cure.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -1334,9 +1502,11 @@ Sources: `src/use-obj.c`, `src/player/effects.c`.
 
 Level: **Normal**.
 
+Priority: **85** (higher appears first).
+
 **1. Info**
 
-{detail} Drain reduces the attribute independently of equipment penalties or expiring temporary bonuses. Restoration restores up to 3 points per attribute. A corresponding attribute potion also restores its attribute; inspect the known effect.
+{detail} Constitution has been drained. A herb of Restoration restores up to 3 drained points in each attribute. A Constitution potion restores 3 points immediately if that attribute is drained by at least 3; otherwise it grants a temporary bonus and restores up to 3 points when the bonus ends. Disease penalties need a disease cure.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -1348,9 +1518,11 @@ Sources: `src/use-obj.c`, `src/player/effects.c`.
 
 Level: **Normal**.
 
+Priority: **85** (higher appears first).
+
 **1. Info**
 
-{detail} Drain reduces the attribute independently of equipment penalties or expiring temporary bonuses. Restoration restores up to 3 points per attribute. A corresponding attribute potion also restores its attribute; inspect the known effect.
+{detail} Grace has been drained. A herb of Restoration restores up to 3 drained points in each attribute. A Grace potion restores 3 points immediately if that attribute is drained by at least 3; otherwise it grants a temporary bonus and restores up to 3 points when the bonus ends. Disease penalties need a disease cure.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -1362,9 +1534,11 @@ Sources: `src/use-obj.c`, `src/player/effects.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Select an ability to read its effect, skill requirement, prerequisites and current XP cost. Continue on a tutorial returns to the purchase decision; it never buys or enables the ability. Toggleable abilities work only while active and their conditions hold.
+Select an ability to read its effect, required skill points, prerequisites and XP cost. Buying spends XP. Some learned abilities can be toggled; they work only while active and their equipment or situation requirements are met.
 
 Trigger: The named menu is actually opened: abilities.
 
@@ -1376,9 +1550,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Inspect the base skill, attribute contribution and other modifiers separately. Buying skill points spends XP; browsing a proposal does not. A higher displayed skill does not necessarily satisfy a requirement based on invested points.
+Base skill points are the ranks you buy with XP. Attributes, equipment and effects add to the displayed total. Ability requirements can use invested ranks, so a temporary bonus may not qualify you for a purchase.
 
 Trigger: The named menu is actually opened: skills.
 
@@ -1390,9 +1566,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Choose among learned songs and inspect the effect and Voice cost. Singing uses Voice over time and stops Voice regeneration. A song is not automatically beneficial in every situation; oaths can forbid singing.
+Select a learned song to read its effect and Voice cost. Starting a song spends time, and singing uses Voice over time while preventing Voice recovery. You can stop through this menu. Check any oath against singing.
 
 Trigger: The named menu is actually opened: songs.
 
@@ -1404,9 +1582,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Use settings to adjust presentation, input and gameplay preferences. Gameplay tutorials cycle between Disabled, Normal and Extended. Normal covers core controls and survival; Extended adds detailed lessons. Learned lessons and per-Tale reset are available separately. Mouse, touch, controller tutorials and skeleton hints retain their own settings.
+Gameplay tutorials have three modes: Disabled, Normal and Extended. Normal guides basic actions and survival; Extended adds detailed lessons. You can review encountered lessons or reset this Tale's tutorial progress separately. Device-control tutorials and skeleton hints have their own settings.
 
 Trigger: The named menu is actually opened: settings.
 
@@ -1418,9 +1598,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Pack, Harness, Quiver and Supplies are distinct storage routes. Read location, weight, volume and available actions. Opening the list is free; reaching into the Pack or changing equipment can spend turns.
+Your belongings are split into Pack, Harness, Quiver, Supplies and worn equipment. Select an item to read its location, weight, volume and available actions. Browsing is free. A Pack action takes three turns and attacks can interrupt it.
 
 Trigger: The named menu is actually opened: inventory.
 
@@ -1432,9 +1614,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-The Pack holds stored items subject to weight and volume limits. Pack access can cost time before the selected action. For an urgent item, inspect whether it can be readied in the Harness or handled through Supplies beforehand.
+The Pack stores spare gear and supplies within its volume limit. Acting on Pack items takes three turns; an attack can interrupt the process. Move urgent gear to the Harness or Supplies while you have time to prepare.
 
 Trigger: The named menu is actually opened: pack.
 
@@ -1446,9 +1630,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-The Harness makes readied items available under their handling rules and has its own volume capacity. Carrying an item in the Pack does not make it ready. Examine Ready and Unready choices before changing the arrangement.
+The Harness holds ready gear within its own volume limit. Select Ready on a suitable Pack item to move it here, or Unready to store it again. A ready weapon must also be selected in Change Active before you attack with it normally.
 
 Trigger: The named menu is actually opened: harness.
 
@@ -1460,9 +1646,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Worn, readied and active equipment are related but different. The active weapon determines which hand arrangement and shield bonuses apply. Read the actual action and previewed changes before committing.
+Worn armour and jewellery provide their equipped effects. Readied weapons are available to choose, and your active weapon is the one you currently attack with. Check the active shield too: a two-handed weapon normally needs both hands.
 
 Trigger: The named menu is actually opened: equipment.
 
@@ -1474,9 +1662,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Supplies organise consumables and containers. Select an item to inspect its known effect, remaining amount and available action. Choosing an unrelated consumable is not a cure merely because it appears in the same menu.
+Supplies hold consumables and their containers. Select an item to read its known effect, remaining amount and available actions. Keep the remedy for an urgent condition available before a fight.
 
 Trigger: The named menu is actually opened: supplies.
 
@@ -1488,9 +1678,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Choose which readied weapon you are using. Changing active weapons can spend time; particular abilities grant one eligible free change before the next action. Repeated changes are not all free.
+Choose a weapon from your ready gear to attack with. This can change whether a shield is active. Changing active weapons usually spends time; some abilities grant one eligible free change before your next action. Changing only arrows is free.
 
 Trigger: The named menu is actually opened: active-weapon.
 
@@ -1502,9 +1694,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Read only the knowledge shown here. Check attack, damage, evasion, Protection, weight, volume, known effects and handling requirements. Browsing does not pick up, equip, consume or identify the item.
+Compare Attack, damage, Evasion, Protection, weight, volume and known effects. Unknown properties stay hidden until discovered. Reading this page is free; use the item action menu when you decide to equip or use it.
 
 Trigger: The named menu is actually opened: item-description.
 
@@ -1516,9 +1710,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Compare known ring and amulet effects and drawbacks. Read which slots or saved set will change before committing. An unknown item's hidden properties remain hidden in a preview.
+Select rings and an amulet by their known bonuses and drawbacks. Check which equipped items the change will replace. Curses can prevent removal.
 
 Trigger: The named menu is actually opened: jewelry.
 
@@ -1530,9 +1726,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Extended**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Saved sets help manage ring and amulet combinations. Check what is in the chosen set and what can legally be equipped now. A set label does not bypass curses, unavailable items or equipment-change costs.
+Save combinations of rings and amulets for different situations. Before equipping a set, check its items and the proposed changes. Missing items, curses and equipment-change costs still apply.
 
 Trigger: The named menu is actually opened: jewelry-sets.
 
@@ -1544,9 +1742,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Choose a legal target or direction and inspect the line of fire. Confirmation commits the normal action; cancellation does not. Walls, range, awareness, allies and your oath can change whether a shot is useful or allowed.
+Choose a target or direction and check the line of fire. Walls, range and your current condition can affect the shot. Confirm to commit the attack, or cancel to choose another action.
 
 Trigger: The named menu is actually opened: targeting.
 
@@ -1558,9 +1758,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Resting repeatedly spends game turns. Other creatures and the minimum-depth timer continue. Health will not regenerate normally while poisoned, bleeding or starving; Voice will not regenerate while singing.
+Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Poison, bleeding and starvation stop ordinary Health recovery; singing stops Voice recovery. Treat disease before a long rest.
 
 Trigger: The named menu is actually opened: rest.
 
@@ -1572,9 +1774,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-This menu gathers character, knowledge, equipment, settings and game-management actions. Opening or reading a page is free; a selected action may have its normal game-time cost or ask for confirmation.
+This menu opens character, equipment, knowledge, settings and game-management pages. Reading pages is free. Actions such as equipping an item or starting a rest spend their normal game time.
 
 Trigger: The named menu is actually opened: main-menu.
 
@@ -1586,9 +1790,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Read attributes, skills, Health, Voice, active abilities and current effects here. Separate base values, equipment contributions, temporary effects and drain before choosing a remedy or purchase.
+This page shows your attributes, skills, Health, Voice, active abilities and conditions. Use the breakdowns to see how equipment, temporary effects and drain change your totals.
 
 Trigger: The named menu is actually opened: character.
 
@@ -1600,9 +1806,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Extended**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Review known object types and their descriptions. A known kind and an individual fully identified item are different: one piece of equipment can still have unrevealed properties.
+Review item kinds your Tale has discovered. Recognising a kind tells you its basic use; an individual piece of equipment can still have unknown special properties.
 
 Trigger: The named menu is actually opened: objects.
 
@@ -1614,9 +1822,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Extended**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Read the artefacts and properties known to this Tale. An artefact can combine useful bonuses with significant drawbacks. Knowledge does not imply the item is currently carried or available.
+Review artefacts discovered by this Tale and their known properties. Read drawbacks and granted abilities as well as bonuses. A recorded artefact need not be in your current hero's belongings.
 
 Trigger: The named menu is actually opened: artefacts.
 
@@ -1628,9 +1838,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Extended**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Monster memory records revealed creature information. Read known attacks, resistances and other lore, but leave unobserved abilities unknown. A creature's awareness and morale are separate current states.
+Monster memory records attacks, resistances and other traits you have learned. Missing information is still unknown. Look at a current creature to check its awareness, morale and position.
 
 Trigger: The named menu is actually opened: monsters.
 
@@ -1642,9 +1854,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Extended**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Review revealed curses and their current effects. Curse stacks, equipment curses and broken-oath consequences use different rules. This page does not reveal an unknown curse merely because a tutorial exists.
+Review curses that have been revealed, including their effects and current stacks. Tale curses, cursed equipment and broken oaths have different consequences; read the entry that applies to your situation.
 
 Trigger: The named menu is actually opened: curses.
 
@@ -1656,9 +1870,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Inspect the proposed item, difficulty, forge uses, materials, time, attribute and XP costs before committing. Abilities can alter these costs. A preview does not create an item, spend forge uses or make an oath-breaking action harmless.
+Choose an item or improvement, then review its difficulty, forge uses, materials, time and any attribute or XP costs. The preview lets you compare options before committing. Your abilities can change both what you may forge and its costs.
 
 Trigger: The named menu is actually opened: smithing.
 
@@ -1670,9 +1886,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-This list refers to creatures currently known through the game's visibility rules. Select a creature to inspect its public description and position. Hidden creatures and unknown abilities remain undisclosed.
+Select a listed creature to inspect its description and position. Use the list to check threats you currently know about; it does not disclose hidden creatures.
 
 Trigger: The named menu is actually opened: nearby-monsters.
 
@@ -1684,9 +1902,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Inspect marked objects and their current location before selecting an action. The -) floor entry and - shortcut refer to floor items. Selection does not guarantee the full stack fits your storage.
+Select a known nearby item to inspect it and see its location. Floor items use the -) entry and the - shortcut where shown. Check storage space before picking up a stack.
 
 Trigger: The named menu is actually opened: nearby-objects.
 
@@ -1698,9 +1918,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Look inspects known squares, items and creatures without spending a turn. Remembered terrain and current visibility differ. An examine action reads a description; it does not automatically equip or use the subject.
+Look lets you inspect squares, items and creatures without spending a turn. Use it before approaching an unfamiliar feature or enemy. Remembered terrain can remain on the map after you lose sight of it.
 
 Trigger: The named menu is actually opened: look.
 
@@ -1712,9 +1934,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-The map separates explored terrain from what you can currently observe. A remembered square may contain a creature you cannot now see. Plan legal routes; moving or following a path still advances game time.
+Use the map to plan through explored terrain. It remembers places you have seen, but creatures can move outside your sight. Following a route spends turns and may be interrupted by danger.
 
 Trigger: The named menu is actually opened: map.
 
@@ -1726,9 +1950,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Review the messages that explain recent actions and newly revealed information. Reading history costs no game time. A past message describes that event, not necessarily the current condition.
+Review messages to find the outcome of a recent action or something your hero just learned. History is free to read. Check current conditions too, since an old message may describe an effect that has ended.
 
 Trigger: The named menu is actually opened: messages.
 
@@ -1740,9 +1966,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Inspect attack and evasion rolls, damage, applicable Protection and resulting effects. A miss, a blocked hit and a damaging hit are different outcomes. Critical dice and elemental or slay dice are separate contributions.
+Review Attack and Evasion rolls, damage dice, Protection and resulting effects. A miss deals no hit; a successful hit can still be fully blocked by Protection. Critical dice and elemental or slay bonuses are listed separately.
 
 Trigger: The named menu is actually opened: combat-history.
 
@@ -1754,9 +1982,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Read the currently revealed objective, restrictions and progress. Accepting a quest can change which actions are permitted or desirable. Tutorial explanations do not accept a quest or reveal an unseen objective.
+Read each revealed objective, its restrictions and current progress. Check whether completion requires returning for a reward. Accepting a quest can place restrictions on your actions.
 
 Trigger: The named menu is actually opened: quests.
 
@@ -1768,9 +1998,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Hints and learned tutorial lessons serve different purposes. Read a hint for its situation, and inspect the actual current state before acting. The skeleton-hint setting is separate from gameplay tutorials.
+Reread discovered hints here. They offer advice for particular situations; check your current equipment and conditions before acting. Skeleton hints have a separate setting from gameplay tutorials.
 
 Trigger: The named menu is actually opened: hints.
 
@@ -1782,9 +2014,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Inspect the thrall's public state and available actions before making a choice. A tutorial explains the current interaction; it does not promise a hidden result or commit a rescue, sacrifice or reward.
+Select a thrall to read their situation and available choices. Check the terms and consequences before rescuing, sacrificing or accepting a reward.
 
 Trigger: The named menu is actually opened: thralls.
 
@@ -1795,6 +2029,8 @@ Sources: `src/tutorial/tutorial-game.c`.
 `menu.tales`
 
 Level: **Normal**.
+
+Priority: **40** (higher appears first).
 
 **1. Info**
 
@@ -1810,9 +2046,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Extended**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Recorded heroes belong to their Tale history. Read the actual outcome and score details. Viewing a record does not load or revive that character.
+Review the outcomes and scores of recorded heroes. These are past records within their Tales; viewing one does not resume that hero.
 
 Trigger: The named menu is actually opened: halls.
 
@@ -1824,9 +2062,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Help explains the game's mechanics. The learned tutorial archive lets you reread encountered or skipped lessons. Both are free to read, and neither commits the actions described.
+Help explains mechanics and controls. The tutorial archive lets you reread encountered or skipped lessons. Both are free to browse.
 
 Trigger: The named menu is actually opened: help.
 
@@ -1838,13 +2078,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 +1 damage side for melee attacks, but +1 to the critical interval base. With a 3 lb weapon, the unmodified first critical margin rises from 10 to 11. Extra damage sides and extra critical dice are different bonuses.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 0, skill 0, ability slot 0.
 
@@ -1856,13 +2094,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 Reduce the melee critical interval base from 7 to 5. For a 3 lb weapon, one extra die needs margin 8 instead of 10; two need 16 instead of 20. This changes critical thresholds, not your Attack score or the basic hit roll.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 1, skill 0, ability slot 1.
 
@@ -1874,13 +2110,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Chance to knock enemies back one square in melee (your Strength vs their Constitution).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Your melee hits can push an enemy back one square if your Strength wins against its Constitution. Check the space behind the target: displacement can change who can reach you and can send a creature into a hazard.
 
 Trigger: Public ability preview or newly available ability; raw serial 2, skill 0, ability slot 2.
 
@@ -1892,17 +2126,15 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+1 attack with throwing weapons. Distance penalties halved. Thrown criticals easier. Throwing weapons use 20% less Harness volume. Harness daggers can be quick-thrown when the active weapon is a one-handed or one-and-a-half-handed melee weapon, or a bow. Your first active weapon change before your next action is free when changing between throwing weapons.
+Gain +1 Attack with throwing weapons, halve distance penalties, and make thrown criticals easier. Personally learning Throwing reduces throwing weapons' Harness volume by 20%. It also allows quick throws of Harness daggers while a one-handed or hand-and-a-half melee weapon, or a bow, is active.
 
 **2. Decision**
 
-With Warden, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between bow and throwing or between bows. With both Warden and Versatility, it may be any active weapon change.
-
-**3. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Your first active-weapon change before your next action is free between throwing weapons. Warden extends this to melee/throwing and melee/melee; Versatility extends it to bow/throwing and bow/bow. With both Warden and Versatility, the free change can be between any active weapons.
 
 Trigger: Public ability preview or newly available ability; raw serial 3, skill 0, ability slot 3.
 
@@ -1914,13 +2146,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+2 attack with polearms while melee is active. Set polearms to receive free attacks on advancing enemies when waiting, and when switching from ranged to melee.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+While melee is active, polearms gain +2 Attack. Wait or switch from ranged to melee to set your polearm: it can then make a free attack against an enemy that advances into reach.
 
 Trigger: Public ability preview or newly available ability; raw serial 4, skill 0, ability slot 4.
 
@@ -1932,13 +2162,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+3 Strength and Dexterity when attacking immediately after moving towards the target.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Attacking immediately after moving toward your target grants +3 Strength and Dexterity for the charge. Plan the approach square as well as the attack; standing still to attack again does not keep the charge bonus.
 
 Trigger: Public ability preview or newly available ability; raw serial 5, skill 0, ability slot 5.
 
@@ -1950,13 +2178,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Continue attacking the next adjacent enemy after killing one.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+After killing an enemy in melee, you can continue the attack into another adjacent enemy. Consider nearby targets and your oath before triggering a chain of attacks.
 
 Trigger: Public ability preview or newly available ability; raw serial 6, skill 0, ability slot 6.
 
@@ -1968,13 +2194,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Strike through opponents to hit an enemy behind them (polearms and greatswords only).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+With a polearm or greatsword, a melee attack can also strike a second enemy directly behind the first. Position enemies in a line to make use of the reach.
 
 Trigger: Public ability preview or newly available ability; raw serial 7, skill 0, ability slot 7.
 
@@ -1986,13 +2210,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 Reduce the melee critical interval base by 2 while using a qualifying one-handed melee weapon with the off hand empty. A shield prevents this benefit. Combined with Finesse, a 3 lb weapon needs margins 6 and 12 for one and two extra dice. Certain special traits or items extend the qualifying weapon rules.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 8, skill 0, ability slot 8.
 
@@ -2004,13 +2226,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Free attack on all adjacent enemies when you attack one. Requires 5 open adjacent squares. Also works with flanking or retreat attacks.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Attacking one enemy can also attack all other adjacent enemies when at least five adjacent squares are open. It also works with Flanking and Controlled Retreat attacks. More surrounding enemies can remove the open space it needs.
 
 Trigger: Public ability preview or newly available ability; raw serial 9, skill 0, ability slot 9.
 
@@ -2022,13 +2242,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Free attack when an opponent moves between two squares adjacent to you, so long as you did not move on your previous turn.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+If you did not move on your previous turn, you can make a free attack against an enemy moving between two squares beside you. Holding position lets you threaten movement around you.
 
 Trigger: Public ability preview or newly available ability; raw serial 10, skill 0, ability slot 10.
 
@@ -2040,13 +2258,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-First melee attack with a two-handed weapon deals maximum damage. Costs a turn to recover afterward.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+With a two-handed melee weapon, the first blow of a qualifying melee attack rolls maximum damage, including its extra damage dice. You then lose a turn recovering, even if the attack missed. Protection still reduces damage.
 
 Trigger: Public ability preview or newly available ability; raw serial 11, skill 0, ability slot 11.
 
@@ -2058,13 +2274,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Wield a one-handed weapon in off-hand for an extra attack at -3 Strength and Dexterity.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Equip a one-handed weapon in your off hand to gain an extra attack. The off-hand attack uses -3 Strength and Dexterity. Check the resulting weapon and shield arrangement before equipping it.
 
 Trigger: Public ability preview or newly available ability; raw serial 12, skill 0, ability slot 12.
 
@@ -2076,13 +2290,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Extra melee attack at -3 Strength and Dexterity. Your first active weapon change before your next action is free when changing between melee weapons.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain an extra melee attack, with -3 Strength and Dexterity applied to the rapid attacks. Your first active-weapon change before your next action is free when switching between melee weapons.
 
 Trigger: Public ability preview or newly available ability; raw serial 13, skill 0, ability slot 13.
 
@@ -2094,13 +2306,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 +1 Strength.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 14, skill 0, ability slot 14.
 
@@ -2112,13 +2322,15 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Archery bonus of half (Melee - Archery) when Melee exceeds Archery, or one third of your full Melee skill, rounded up, if you also have Versatility. Your first active weapon change before your next action is free from melee to bow. With Throwing, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between melee weapons or between bows.
+Warden adds half the difference between your invested Melee and Archery to Archery when Melee is higher, rounded down. With Versatility also active, it instead adds one third of your invested Melee, rounded up. Equipment and attribute bonuses are excluded from this calculation.
 
 **2. Decision**
 
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Your first active-weapon change before your next action is free from melee to bow. With Throwing, it may also switch between melee and throwing or between melee weapons. With Versatility, it may also switch between melee weapons or between bows.
 
 Trigger: Public ability preview or newly available ability; raw serial 15, skill 0, ability slot 15.
 
@@ -2130,13 +2342,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 After spending a turn readying your melee weapon or waiting, throw a Harness spear or hand axe at an adjacent foe while striking in melee. Roll both attacks separately against Evasion, combine the damage of successful attacks, then roll protection once. Your melee weapon remains active.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 16, skill 0, ability slot 16.
 
@@ -2148,13 +2358,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-combat.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+5 Dexterity when firing at fleeing monsters.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain +5 Dexterity when firing at fleeing enemies. Check your oath first: Oath of Valour forbids harming them.
 
 Trigger: Public ability preview or newly available ability; raw serial 20, skill 1, ability slot 0.
 
@@ -2166,13 +2374,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Use Fletchery to craft arrows to +3 without changing their affixes (one turn each). Carve 3 arrows from torches, 6 from staves. Loose arrows use 20% less Pack volume.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Fletchery can improve arrows to +3, preserving their special properties, at one turn per arrow. You can also carve 3 arrows from a torch or 6 from a staff, consuming the source. Personally learning Fletchery reduces loose arrows' Pack volume by 20%.
 
 Trigger: Public ability preview or newly available ability; raw serial 21, skill 1, ability slot 1.
 
@@ -2184,13 +2390,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 When you shoot an adjacent monster, that target does not make an attack of opportunity. Other adjacent alert enemies still can. Point Blank Archery lets you make a round shield active with a shortbow.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 22, skill 1, ability slot 2.
 
@@ -2202,13 +2406,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Deal 5 flat damage when enemy armour would fully block your archery damage.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+If armour completely blocks an arrow's damage, this ability makes the hit deal 5 damage instead. The arrow still needs to hit.
 
 Trigger: Public ability preview or newly available ability; raw serial 23, skill 1, ability slot 3.
 
@@ -2220,13 +2422,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Extra critical damage die when hitting unwary or sleeping monsters with arrows.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Arrows gain one extra critical damage die against sleeping or unwary enemies. Alert targets do not provide this benefit.
 
 Trigger: Public ability preview or newly available ability; raw serial 24, skill 1, ability slot 4.
 
@@ -2238,13 +2438,15 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Melee bonus of half (Archery - Melee) when Archery exceeds Melee, or one third of your full Archery skill, rounded up, if you also have Warden. Your first active weapon change before your next action is free from bow to melee. With Throwing, it may instead change between bow and throwing or between bows. With Warden, it may instead change between melee weapons or between bows.
+Versatility adds half the difference between your invested Archery and Melee to Melee when Archery is higher, rounded down. With Warden also active, it instead adds one third of your invested Archery, rounded up. Equipment and attribute bonuses are excluded from this calculation.
 
 **2. Decision**
 
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Your first active-weapon change before your next action is free from bow to melee. With Throwing, it may also switch between bow and throwing or between bows. With Warden, it may also switch between melee weapons or between bows.
 
 Trigger: Public ability preview or newly available ability; raw serial 25, skill 1, ability slot 5.
 
@@ -2256,13 +2458,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Critical hits may temporarily slow monsters (critical level vs monster's Will).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Critical arrow hits can slow the target, with the critical level checked against its Will. A critical hit does not guarantee the slowing effect.
 
 Trigger: Public ability preview or newly available ability; raw serial 26, skill 1, ability slot 6.
 
@@ -2274,13 +2474,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Arrows deal double damage the turn after killing an enemy with an arrow.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+After killing an enemy with an arrow, arrows deal double damage on your next turn. The opportunity is brief, so check your next target before spending that turn.
 
 Trigger: Public ability preview or newly available ability; raw serial 27, skill 1, ability slot 7.
 
@@ -2292,13 +2490,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+1 Dexterity.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
++1 Dexterity, improving the skills that depend on Dexterity.
 
 Trigger: Public ability preview or newly available ability; raw serial 28, skill 1, ability slot 8.
 
@@ -2310,13 +2506,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 After moving on your previous turn, firing a bow costs half a turn while wearing only light armour. Your first active weapon change before your next action is free when changing between bows.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 29, skill 1, ability slot 9.
 
@@ -2328,13 +2522,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/combat/cmd-ranged.c`, `src/player/play
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+3 evasion if you moved on your last turn. Only works while wearing only light armour.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain +3 Evasion if you moved on your previous turn and are wearing only light armour. Standing still or wearing heavier armour removes the benefit.
 
 Trigger: Public ability preview or newly available ability; raw serial 40, skill 2, ability slot 0.
 
@@ -2346,13 +2538,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Double shield protection if you did not move on your last turn.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Your active shield provides double Protection if you did not move on your previous turn. Waiting or attacking from the same square can prepare this defence.
 
 Trigger: Public ability preview or newly available ability; raw serial 41, skill 2, ability slot 1.
 
@@ -2364,13 +2554,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Double the evasion bonus from your primary melee weapon.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Double the Evasion bonus of your primary melee weapon. A weapon with a larger Evasion bonus gains more from Parry.
 
 Trigger: Public ability preview or newly available ability; raw serial 42, skill 2, ability slot 2.
 
@@ -2382,13 +2570,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Halves the surrounding bonus opponents get against you.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Halve the bonus enemies receive for surrounding you. A narrow passage can still help by limiting the number that can attack.
 
 Trigger: Public ability preview or newly available ability; raw serial 43, skill 2, ability slot 3.
 
@@ -2400,13 +2586,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Leap over chasms and traps if you moved towards them last turn (not roosts or webs).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+After moving toward a gap or trap on your previous turn, Leaping can carry you over it. Check the landing square first. It can cross water, lava, ice and poisonous seep, but lava still burns you in the air. It cannot bypass roosts or webs.
 
 Trigger: Public ability preview or newly available ability; raw serial 44, skill 2, ability slot 4.
 
@@ -2418,13 +2602,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Increased speed after running in roughly the same direction for 4+ squares while wearing only light armour, or 5+ squares otherwise.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Move in roughly the same direction for at least four squares in light armour, or five otherwise, to gain speed. Turning sharply or breaking the run loses the benefit.
 
 Trigger: Public ability preview or newly available ability; raw serial 45, skill 2, ability slot 5.
 
@@ -2436,13 +2618,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Free attack on an opponent when stepping between two squares adjacent to it. Only works while wearing only light armour.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+While wearing only light armour, moving between two squares beside an enemy grants a free melee attack against it. The move must keep you adjacent to that enemy.
 
 Trigger: Public ability preview or newly available ability; raw serial 46, skill 2, ability slot 6.
 
@@ -2454,13 +2634,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Gain fixed physical Protection equal to the whole number of 15 lb units of worn armour weight; the engine rolls Xd1, not 1dX. This bonus does not apply to elemental damage. Mail Corslets and Hauberks also receive +1 Evasion.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain 1 fixed physical Protection for each complete 15 lb of worn armour. For example, 30 lb gives 2 Protection, represented as Xd1 rather than a random 1dX roll. This bonus does not protect against elemental damage. Mail Corslets and Hauberks also gain +1 Evasion.
 
 Trigger: Public ability preview or newly available ability; raw serial 47, skill 2, ability slot 7.
 
@@ -2472,13 +2650,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/melee/melee
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Free attack when opponent misses by 10+ weapon weight (once per round).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Once per round, you can counterattack when an enemy misses you by at least 10 plus your weapon's weight in pounds. A lighter weapon makes the required margin smaller.
 
 Trigger: Public ability preview or newly available ability; raw serial 48, skill 2, ability slot 8.
 
@@ -2490,13 +2666,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Free attack when stepping away from an opponent, if you did not move last round.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+If you did not move on your previous turn, stepping away from an adjacent enemy grants a free melee attack. Check the retreat square before using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 49, skill 2, ability slot 9.
 
@@ -2508,13 +2682,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 +1 Dexterity.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 50, skill 2, ability slot 10.
 
@@ -2526,13 +2698,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Halves line-of-sight detection bonus awake unwary enemies have against you.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Halve the line-of-sight detection bonus that awake, unwary enemies gain against you. This helps you approach before they become alert.
 
 Trigger: Public ability preview or newly available ability; raw serial 60, skill 3, ability slot 0.
 
@@ -2544,13 +2714,11 @@ Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Melee bonus equal to your Stealth score vs non-alert creatures and monsters fooled by Song of Disguise.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain a melee Attack bonus equal to your Stealth against enemies that are not alert, or enemies currently fooled by Song of Disguise.
 
 Trigger: Public ability preview or newly available ability; raw serial 61, skill 3, ability slot 1.
 
@@ -2562,13 +2730,11 @@ Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Critical hits may confuse monsters (critical level vs monster's Will). If granted by an equipped item, it also speeds the minimum depth timer as much as Deep Call, even when disabled.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Critical melee hits can confuse enemies, checked against their Will. If equipped gear grants Cruel Blow, wearing it also speeds the minimum-depth timer as much as Deep Call, even while the ability is disabled.
 
 Trigger: Public ability preview or newly available ability; raw serial 62, skill 3, ability slot 2.
 
@@ -2580,13 +2746,11 @@ Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Use Exchange Places to swap positions with an adjacent enemy. They get a free attack as you pass.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Use Exchange Places to swap squares with an adjacent enemy. The enemy gets a free attack as you pass. Check the destination and nearby enemies before confirming.
 
 Trigger: Public ability preview or newly available ability; raw serial 63, skill 3, ability slot 3.
 
@@ -2598,13 +2762,11 @@ Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Free attack when an adjacent opponent moves away from you.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Make a free melee attack when an adjacent enemy moves away from you. An enemy retreat can become an opportunity to strike, subject to normal attack restrictions.
 
 Trigger: Public ability preview or newly available ability; raw serial 64, skill 3, ability slot 4.
 
@@ -2616,13 +2778,11 @@ Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+10 stealth towards making enemies unwary when out of their line of sight.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain +10 Stealth toward making enemies unwary again while you are out of their line of sight. Breaking sight is the first step; it does not immediately make them forget you.
 
 Trigger: Public ability preview or newly available ability; raw serial 65, skill 3, ability slot 5.
 
@@ -2634,13 +2794,11 @@ Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 +1 Dexterity.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 66, skill 3, ability slot 6.
 
@@ -2652,13 +2810,11 @@ Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Take advanced abilities without prerequisites. Modest bonus to identifying items.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Learn advanced abilities without their usual ability prerequisites. Their skill and XP requirements still apply. You also gain a modest bonus to identifying items.
 
 Trigger: Public ability preview or newly available ability; raw serial 80, skill 4, ability slot 0.
 
@@ -2670,13 +2826,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+Perception/2 attack bonus if you passed the previous turn.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+After waiting for one turn, gain an Attack bonus equal to half your Perception on the next applicable attack. Use the pause to prepare while the enemy approaches.
 
 Trigger: Public ability preview or newly available ability; raw serial 81, skill 4, ability slot 1.
 
@@ -2688,13 +2842,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-See enemies just beyond light's edge. +5 to spotting invisible creatures.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+See creatures just beyond the edge of your light and gain +5 to spotting invisible creatures. Walls and other visibility rules still apply.
 
 Trigger: Public ability preview or newly available ability; raw serial 82, skill 4, ability slot 2.
 
@@ -2706,13 +2858,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+1 attack per consecutive round attacking the same enemy (max Perception/2).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain +1 Attack for each consecutive round attacking the same enemy, up to half your Perception. Changing targets resets the sequence.
 
 Trigger: Public ability preview or newly available ability; raw serial 83, skill 4, ability slot 3.
 
@@ -2724,13 +2874,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 Auto-identify herbs, potions, staves, and horns. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 84, skill 4, ability slot 4.
 
@@ -2742,13 +2890,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/use-obj.c`,
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Bonus to all skill rolls vs a chosen enemy type. Bonus increases with kills.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Choose a creature type to gain bonuses in skill contests against that type. The bonus grows as you kill more of them. Read the available types before making the choice.
 
 Trigger: Public ability preview or newly available ability; raw serial 85, skill 4, ability slot 5.
 
@@ -2760,13 +2906,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-When hit critically, roll Perception vs attacker's Perception to negate all critical damage.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+When an enemy scores a critical hit, your Perception contests its Perception. A success removes the extra critical damage dice; the ordinary hit can still hurt.
 
 Trigger: Public ability preview or newly available ability; raw serial 86, skill 4, ability slot 6.
 
@@ -2778,13 +2922,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Detect unseen enemies each turn. Double the Perception portion of identification; Grace still counts only once.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Attempt to detect unseen enemies each turn. For item identification, double the Perception contribution while counting Grace once.
 
 Trigger: Public ability preview or newly available ability; raw serial 87, skill 4, ability slot 7.
 
@@ -2796,13 +2938,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+1 attack per previous kill of the same monster type (max Perception/2).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain +1 Attack for each previous kill of the same monster race, up to half your Perception. Different races have separate kill counts.
 
 Trigger: Public ability preview or newly available ability; raw serial 88, skill 4, ability slot 8.
 
@@ -2814,13 +2954,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+1 Grace. +6.0 qt Harness capacity.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
++1 Grace and +6.0 qt of Harness capacity. More Harness space lets you keep additional gear ready.
 
 Trigger: Public ability preview or newly available ability; raw serial 89, skill 4, ability slot 9.
 
@@ -2832,13 +2970,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 When you disarm a suitable trap, you instead re-key its mechanism: it no longer harms you, and monsters that cross it may set off its altered workings. The greater your margin on the attempt, the harder foes find it to notice or undo the change.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 90, skill 4, ability slot 10.
 
@@ -2850,13 +2986,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/cmd/world/c
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Break curses on removal. Significant bonus to identifying items, especially cursed ones. Lets gems of Sanctity break jinxed egos.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Break ordinary item curses when removing the item. Gain a significant identification bonus, especially for cursed items. Gems of Sanctity can also remove qualifying jinxed special properties.
 
 Trigger: Public ability preview or newly available ability; raw serial 100, skill 5, ability slot 0.
 
@@ -2868,13 +3002,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/use-obj.c`,
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Automatically identify staves and horns. Channel charges from a compatible floor staff into a carried staff through the explicit Channel action. Horn Voice cost falls from 20 to 10, and a Gem of Recharging restores twice its usual amount. Inspect the actual charge transfer before committing.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Automatically identify staves and horns. Use Channel to transfer charges from a compatible staff on the floor into a carried staff. Horns cost 10 Voice instead of 20, and Gems of Recharging restore twice the usual charges.
 
 Trigger: Public ability preview or newly available ability; raw serial 101, skill 5, ability slot 1.
 
@@ -2886,13 +3018,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/use-obj.c`,
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+1 Str/Dex/Gra at 50% HP or below. +3 Str/Dex/Gra at 25% HP or below.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+At half Health or less, gain +1 Strength, Dexterity and Grace. At one quarter Health or less, the bonus becomes +3. You remain vulnerable to death at these low Health levels.
 
 Trigger: Public ability preview or newly available ability; raw serial 102, skill 5, ability slot 2.
 
@@ -2904,13 +3034,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Melee kills scare all visible enemies. Enemies ignore your injuries for morale purposes.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Melee kills frighten visible enemies. Enemies also stop gaining confidence from your injuries. This can help break a group's morale during a fight.
 
 Trigger: Public ability preview or newly available ability; raw serial 103, skill 5, ability slot 3.
 
@@ -2922,13 +3050,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+2 light intensity within your light radius (no radius increase).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
++2 light intensity within your existing light radius. Your light becomes brighter without reaching farther.
 
 Trigger: Public ability preview or newly available ability; raw serial 104, skill 5, ability slot 4.
 
@@ -2940,13 +3066,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Resist fear, confusion, stunning, and hallucination. Hunger reduced to 1/3 normal rate.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain resistance to fear, confusion, stun and hallucination. Hunger advances at one third of its normal rate.
 
 Trigger: Public ability preview or newly available ability; raw serial 105, skill 5, ability slot 5.
 
@@ -2958,13 +3082,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Swear a great oath for a reward. Breaking the oath has consequences.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Swear an oath for its benefit and accept its restriction. Read the exact terms before choosing: breaking an oath removes its benefit and has consequences for the Tale.
 
 Trigger: Public ability preview or newly available ability; raw serial 106, skill 5, ability slot 6.
 
@@ -2976,13 +3098,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Grants resistance to poison.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain one layer of poison resistance. It reduces new poison exposure; existing poison still needs time or a remedy to clear.
 
 Trigger: Public ability preview or newly available ability; raw serial 107, skill 5, ability slot 7.
 
@@ -2994,13 +3114,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+1 damage die on your next melee hit after being damaged in melee. Does not stack.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+After taking melee damage, your next melee hit gains one extra damage die. Further hits against you do not add more Vengeance dice.
 
 Trigger: Public ability preview or newly available ability; raw serial 108, skill 5, ability slot 8.
 
@@ -3012,13 +3130,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Reduce enemy morale by half the difference between your Will and theirs.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Lower the morale of enemies whose Will is lower than yours. A larger Will advantage creates more pressure to flee.
 
 Trigger: Public ability preview or newly available ability; raw serial 109, skill 5, ability slot 9.
 
@@ -3030,13 +3146,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 +1 Constitution. +6.0 qt Pack capacity.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 110, skill 5, ability slot 10.
 
@@ -3048,13 +3162,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Create weapons at the forge. Modest bonus to identifying weapons.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Create weapons at a forge. You also gain a modest bonus to identifying weapons.
 
 Trigger: Public ability preview or newly available ability; raw serial 120, skill 6, ability slot 0.
 
@@ -3066,13 +3178,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`, `src/birth/birt
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Create armour at the forge. Modest bonus to identifying armour.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Create armour at a forge. You also gain a modest bonus to identifying armour.
 
 Trigger: Public ability preview or newly available ability; raw serial 121, skill 6, ability slot 1.
 
@@ -3084,13 +3194,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`, `src/birth/birt
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Create rings, amulets, horns, and light sources. Auto-identify them. Modest jewellery ID bonus.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Create rings, amulets, horns and lights at a forge, and automatically recognise their kinds. Individual equipment may still need identification of its special properties.
 
 Trigger: Public ability preview or newly available ability; raw serial 122, skill 6, ability slot 2.
 
@@ -3102,13 +3210,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`, `src/birth/birt
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Create {special} items. Determine enchantments on items. Modest ID bonus.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus.
 
 Trigger: Public ability preview or newly available ability; raw serial 123, skill 6, ability slot 3.
 
@@ -3120,13 +3226,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`, `src/birth/birt
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Halve forging time. Negate all experience and stat costs of smithing.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal.
 
 Trigger: Public ability preview or newly available ability; raw serial 124, skill 6, ability slot 4.
 
@@ -3138,13 +3242,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`, `src/birth/birt
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Create highly customised artifacts. Significant bonus to identifying items.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties.
 
 Trigger: Public ability preview or newly available ability; raw serial 125, skill 6, ability slot 5.
 
@@ -3156,13 +3258,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`, `src/birth/birt
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Create items beyond normal difficulty limit. Drains Smithing skill per excess difficulty point.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Forge an item above your normal difficulty limit by permanently spending base Smithing: one skill point per excess difficulty point. The amount available is limited by your invested Smithing.
 
 Trigger: Public ability preview or newly available ability; raw serial 126, skill 6, ability slot 6.
 
@@ -3174,13 +3274,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`, `src/birth/birt
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 +1 Grace.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 127, skill 6, ability slot 7.
 
@@ -3192,13 +3290,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`, `src/birth/birt
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Alloy weapons and armour with mithril or star iron at no extra cost. Forge mithril/star-iron gear.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Forge mithril or star-iron gear, or alloy suitable weapons and armour with those metals. Alloying adds no extra difficulty cost, but still requires the material.
 
 Trigger: Public ability preview or newly available ability; raw serial 128, skill 6, ability slot 8.
 
@@ -3210,13 +3306,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`, `src/birth/birt
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Repair damaged items at a forge, or add a missing prefix to a found item. Reforging difficulty is 1.5x the difficulty increase.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+At a forge, repair damaged items or add a missing prefix to a found item. Reforging difficulty is 1.5 times the increase in difficulty. Compare the result and costs before committing.
 
 Trigger: Public ability preview or newly available ability; raw serial 129, skill 6, ability slot 9.
 
@@ -3228,13 +3322,11 @@ Sources: `lib/edit/ability.txt`, `src/cmd/ui/cmd-ui-smithing.c`.
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Causes enemies to flee. Reduces enemy Will by Song/5.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Pressure nearby enemies to flee and reduce their Will by one fifth of your effective Song. Targets can resist the fear effect.
 
 Trigger: Public ability preview or newly available ability; raw serial 140, skill 7, ability slot 0.
 
@@ -3246,13 +3338,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Reduces enemy Will and Stealth by Song/5 each. Enrages foes into reckless attacks.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Challenge nearby enemies, reducing their Will and Stealth by one fifth of your effective Song and encouraging reckless attacks. Expect to attract attention.
 
 Trigger: Public ability preview or newly available ability; raw serial 141, skill 7, ability slot 1.
 
@@ -3264,13 +3354,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Gradually reveals surrounding passages and chambers, expanding from explored areas.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gradually reveal nearby passages and rooms, expanding outward from explored terrain. Keep singing while you explore to extend the mapped area.
 
 Trigger: Public ability preview or newly available ability; raw serial 142, skill 7, ability slot 2.
 
@@ -3282,13 +3370,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Reveals hidden doors, disarms traps, clears rubble. Grants freedom from slowing effects.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Reveal hidden doors, disarm traps and clear rubble through song checks. It also helps free you from slowing effects. Check the actual terrain changes before crossing.
 
 Trigger: Public ability preview or newly available ability; raw serial 143, skill 7, ability slot 3.
 
@@ -3300,13 +3386,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Muffles sounds, making it harder for enemies to detect you or call for allies.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Muffle sounds, making it harder for enemies to hear you or call for allies. Enemies may still see you, so cover and distance remain useful.
 
 Trigger: Public ability preview or newly available ability; raw serial 144, skill 7, ability slot 4.
 
@@ -3318,13 +3402,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-On each song effect tick, clear bleeding and restore Health at an average rate of effective Song / 12 per turn. At effective Song 12, this is 1 Health per tick. This direct song healing is separate from ordinary regeneration; singing still consumes Voice.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Each song effect stops bleeding and heals Health at an average rate of effective Song divided by 12 per turn. At Song 12, it heals 1 Health per tick. This direct healing works separately from ordinary Health regeneration and spends Voice.
 
 Trigger: Public ability preview or newly available ability; raw serial 145, skill 7, ability slot 5.
 
@@ -3336,13 +3418,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Closed doors become sealed barriers, resistant to enemies.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Ward closed doors so that enemies have more difficulty passing them. Stronger Song strengthens the barriers; they are not permanent walls.
 
 Trigger: Public ability preview or newly available ability; raw serial 146, skill 7, ability slot 6.
 
@@ -3354,13 +3434,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+1 light radius at 0-5 Song, +2 at 6-11, +3 at 12-18, and so on. Creatures of darkness may be stunned or wounded (vs Will).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Increase light radius by 1 at effective Song 0-5, by 2 at 6-11, by 3 at 12-18, and in wider steps thereafter. The light can stun or wound light-sensitive creatures after a contest against their Will.
 
 Trigger: Public ability preview or newly available ability; raw serial 147, skill 7, ability slot 7.
 
@@ -3372,13 +3450,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Sing a minor theme alongside your major song at half Song score.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Sing a second song as a minor theme at half your Song score. Both themes spend Voice. Choose effects that work well together and watch the remaining Voice.
 
 Trigger: Public ability preview or newly available ability; raw serial 148, skill 7, ability slot 9.
 
@@ -3390,13 +3466,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Melee critical hits slay the foe if their HP is at most 2x your Song score.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+A critical melee hit slays its target if the target's Health is at most twice your effective Song. It must be a critical hit; ordinary hits do not trigger this effect.
 
 Trigger: Public ability preview or newly available ability; raw serial 149, skill 7, ability slot 10.
 
@@ -3408,13 +3482,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Roll Song each turn to reveal nearby monsters and items. Revealed, carried, and equipped items get +1d5 identification.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Make Song checks each turn to reveal nearby creatures and items. Revealed items, including carried and equipped items, gain an extra 1d5 identification roll.
 
 Trigger: Public ability preview or newly available ability; raw serial 150, skill 7, ability slot 8.
 
@@ -3426,13 +3498,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+1 Grace. +1 Evasion at 0-7 Song, +2 at 8-15, +3 at 16-24, and so on.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain +1 Grace and an Evasion bonus: +1 at effective Song 0-7, +2 at 8-15, +3 at 16-24, and in wider steps thereafter.
 
 Trigger: Public ability preview or newly available ability; raw serial 151, skill 7, ability slot 11.
 
@@ -3444,13 +3514,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-+Song/2 to Will. [2d2] protection against all damage.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gain Will equal to half your effective Song and 2d2 Protection against all damage. Special character traits can improve the song further.
 
 Trigger: Public ability preview or newly available ability; raw serial 152, skill 7, ability slot 12.
 
@@ -3462,13 +3530,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 You cannot start Song of Disguise while an alert non-peaceful creature observes you. Your attack ends the disguise. Each round, effective Song + 5 + your Will contests enemy Will + Perception, with penalties for observers, creatures that already saw through you and recent attackers. Distance helps; a success fools that creature for the current round.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 153, skill 7, ability slot 13.
 
@@ -3480,13 +3546,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Gradually puts nearby opponents to sleep.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Gradually make nearby enemies sleepy through opposed song checks. They can resist, and an enemy may still act before falling asleep.
 
 Trigger: Public ability preview or newly available ability; raw serial 154, skill 7, ability slot 14.
 
@@ -3498,13 +3562,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-Shatter enemy weapons and armour, even the stone bodies of stone creatures, weakening their attacks and defenses (resisted by Will).
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Attempt to shatter enemy weapons and armour, weakening their attacks and defence. The effect also works against stone bodies and is resisted by Will.
 
 Trigger: Public ability preview or newly available ability; raw serial 155, skill 7, ability slot 15.
 
@@ -3516,13 +3578,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-May prevent enemy movement or action by overwhelming their minds.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
+Overwhelm nearby enemies in contests of will to prevent movement or actions. A resisted check leaves the enemy able to act.
 
 Trigger: Public ability preview or newly available ability; raw serial 156, skill 7, ability slot 16.
 
@@ -3534,13 +3594,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 +1 Grace.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 157, skill 7, ability slot 17.
 
@@ -3552,13 +3610,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 Contest challenges one eligible foe to repeated opposed rolls. Winning permanently reduces its Will, Stealth, Evasion and armour dice. Losing drains one randomly chosen attribute by 1. A completed duel stops the song and locks singing for 10 turns; you cannot repeat the same completed duel against that foe.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 158, skill 7, ability slot 18.
 
@@ -3570,13 +3626,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
 Lament works toward permanently reducing an eligible target's Will, maximum Health and damage dice. Completing the effect drains your Grace by 1, even on success. The song then stops and singing is locked for 10 turns; you cannot repeat the completed duel against that foe. Read the live target and Voice cost before committing.
-
-**2. Decision**
-
-Its requirements and active state still apply when granted by equipment. Continue returns to the real choice without buying, enabling or using it.
 
 Trigger: Public ability preview or newly available ability; raw serial 159, skill 7, ability slot 19.
 
@@ -3588,13 +3642,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. Immune to fear, hallucination, trance, rage, stun, and confusion. Quest reward.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Mandos' Doom is a quest reward granting immunity to fear, hallucination, trance, rage, stun and confusion.
 
 Trigger: Public ability preview or newly available ability; raw serial 160, skill 8, ability slot 0.
 
@@ -3606,13 +3658,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. Counts as Masterpiece with +2 extra difficulty allowance. Supersedes Masterpiece. Quest reward.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Aulë's Forge improves on Masterpiece. Above your normal smithing limit, spend 1 base Smithing for each 2 excess difficulty points, rounding the cost up. You can reach up to twice your base Smithing beyond the normal limit. This quest reward replaces the less efficient Masterpiece rule.
 
 Trigger: Public ability preview or newly available ability; raw serial 161, skill 8, ability slot 1.
 
@@ -3624,13 +3674,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. Oath of Mercy grants +1 Grace. Its active rule forbids attacking or harming Men or Elves. Breaking it has Tale consequences. This is not a general rule about whether a foe is helpless.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Oath of Mercy grants +1 Grace and forbids attacking or harming Men or Elves. This includes indirect harm. Read the exact oath terms before swearing it.
 
 Trigger: Public ability preview or newly available ability; raw serial 162, skill 8, ability slot 2.
 
@@ -3642,13 +3690,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `lib/edit/oath.t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. Oath of Silence grants +1 Dexterity. Singing breaks the oath. Read the real confirmation before making a forbidden choice; the tutorial never swears or breaks the oath for you.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Oath of Silence grants +1 Dexterity. Singing breaks it. Plan around other ways to use your skills and resources before accepting the oath.
 
 Trigger: Public ability preview or newly available ability; raw serial 163, skill 8, ability slot 3.
 
@@ -3660,13 +3706,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `lib/edit/oath.t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. Oath of Iron grants +1 Constitution. It forbids going upstairs or leaving the depths without possessing a Silmaril. Check the staircase decision and the current oath state.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Oath of Iron grants +1 Constitution. Until you possess a Silmaril, it forbids going upstairs or leaving the depths. Prepare for a journey without retreat to shallower levels.
 
 Trigger: Public ability preview or newly available ability; raw serial 164, skill 8, ability slot 4.
 
@@ -3678,13 +3722,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `lib/edit/oath.t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. Gain Stealth equal to ceil(10 × (non-unique creatures seen − killed) / creatures seen), with no bonus before any are seen. The live character view shows the current count and bonus. Killing more of the observed creatures reduces the benefit.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Nienna's Gift grants up to +10 Stealth according to the share of seen non-unique creatures you have spared. For example, sparing half gives +5. The result rounds up; before seeing any, the bonus is 0. Check the current count and bonus in the character view.
 
 Trigger: Public ability preview or newly available ability; raw serial 165, skill 8, ability slot 5.
 
@@ -3696,13 +3738,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. Oath of the Smith grants +5 Smithing. It forbids picking up, wielding or wearing weapons or armour made by others. Check the actual item action and oath confirmation before handling found equipment.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Oath of the Smith grants +5 Smithing. It forbids picking up, wielding or wearing weapons or armour made by others. Prepare your own equipment and read item actions carefully before accepting it.
 
 Trigger: Public ability preview or newly available ability; raw serial 166, skill 8, ability slot 6.
 
@@ -3714,13 +3754,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `lib/edit/oath.t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. Oath of Valour grants +1 Strength. Attacking or otherwise harming fleeing enemies breaks it. Fleeing is a morale state; it is different from being unaware or asleep.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Oath of Valour grants +1 Strength. Harming fleeing enemies breaks it, including through indirect effects. A fleeing creature has lost courage; it is different from a sleeping or unwary creature.
 
 Trigger: Public ability preview or newly available ability; raw serial 167, skill 8, ability slot 7.
 
@@ -3732,13 +3770,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `lib/edit/oath.t
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. +3 attack and evasion vs unique monsters. Quest reward.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Unique Bane is a quest reward granting +3 Attack and Evasion against unique monsters.
 
 Trigger: Public ability preview or newly available ability; raw serial 168, skill 8, ability slot 8.
 
@@ -3750,13 +3786,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-This is a special ability, oath or quest reward. Read its current source and requirements. Oath of Light grants +1 light radius while valid. Equipping items with Darkness or Unlight breaks it. Radius, intensity and fuel are different quantities; inspect known equipment properties before changing gear.
-
-**2. Decision**
-
-Read your current ability and oath state. Continue acknowledges the explanation; it does not grant the reward or make a binding choice.
+Oath of Light grants +1 light radius while valid. Equipping items with Darkness or Unlight breaks it. Check known item properties before changing equipment.
 
 Trigger: Public ability preview or newly available ability; raw serial 169, skill 8, ability slot 9.
 
@@ -3768,9 +3802,11 @@ Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `lib/edit/oath.t
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A chasm can cause a dangerous fall to a deeper level. Inspect the route. Leaping has a run-up requirement and is different from simply walking onto the chasm; no lesson requires you to jump.
+A chasm can drop you to a deeper level and cause severe damage. Use a route around it when possible. Leaping requires a run-up and a safe landing; walking into a chasm is a fall, not a leap.
 
 Trigger: Feature 2 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3782,9 +3818,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A glyph of warding makes crossing difficult for opponents. It is a defensive feature, not a guarantee that enemies cannot reach you. Inspect the surrounding route before relying on it.
+A glyph of warding makes it harder for enemies to cross its square. It can help defend a doorway, but opponents can break through. Keep a retreat route available.
 
 Trigger: Feature 3 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3796,9 +3834,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-An open door is traversable. Closing a doorway can change movement, sight and how many enemies can engage at once. Door interactions still spend normal turns.
+An open door lets you pass. Closing it can block sight and delay an enemy. Some creatures can open, break or pass through doors, so check their known abilities.
 
 Trigger: Feature 4 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3810,25 +3850,29 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-This door is broken. Do not rely on it as a closed barrier; inspect the passage and nearby threats.
+A broken door cannot be closed normally. Look for another doorway or a narrow passage if you need to limit approaching enemies.
 
 Trigger: Feature 5 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Warded door
+## Warded doors
 
 `terrain.6`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A warded door is a magical barrier. Its strength affects attempts to pass it. Inspect the current door and legal interactions; a ward is not permanent immunity from enemies.
+A warded door is harder for enemies to open or break through. The strength of its ward matters. Check the available interaction before relying on it to hold a passage.
 
-Trigger: Feature 6 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Known nearby terrain in this feature family, after grouping equivalent strengths or positive remaining-use counts; exhausted forges have separate lessons.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -3838,11 +3882,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.6` for this terrain family.
+
 **1. Info**
 
-A warded door is a magical barrier. Its strength affects attempts to pass it. Inspect the current door and legal interactions; a ward is not permanent immunity from enemies.
+A warded door is harder for enemies to open or break through. The strength of its ward matters. Check the available interaction before relying on it to hold a passage.
 
-Trigger: Feature 7 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.6.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -3852,11 +3900,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.6` for this terrain family.
+
 **1. Info**
 
-A warded door is a magical barrier. Its strength affects attempts to pass it. Inspect the current door and legal interactions; a ward is not permanent immunity from enemies.
+A warded door is harder for enemies to open or break through. The strength of its ward matters. Check the available interaction before relying on it to hold a passage.
 
-Trigger: Feature 8 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.6.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -3866,9 +3918,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-Sunlight is a visible environmental feature. Light-sensitive creatures may react differently to bright squares; use only the lore and effects actually revealed to you.
+Sunlight illuminates this square independently of your equipment. Light-sensitive creatures can suffer in bright light. Check their learned traits before using sunlight in a fight.
 
 Trigger: Feature 9 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3880,9 +3934,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A known false floor can drop you. Inspect alternative routes or a legal disarm option; discovering the trap does not remove it.
+A false floor can collapse and drop you to a deeper level. Avoid it or inspect a legal disarm or leap option before crossing.
 
 Trigger: Feature 16 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3894,9 +3950,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A pit can trap or hurt you and changes movement out of the square. Inspect it before stepping in. A valid leap differs from normal movement.
+A pit can hurt you when you fall in. Climbing out takes time and can leave you exposed to enemies. A legal leap crosses it without entering the pit.
 
 Trigger: Feature 17 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3908,9 +3966,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A spiked pit can injure you. Avoidance, disarming and leaping have different requirements and costs. The tutorial will not force you onto it.
+A spiked pit can cause damage and bleeding, then delay you while you climb out. Consider going around it or using a legal disarm or leap option.
 
 Trigger: Feature 18 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3922,9 +3982,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A dart mechanism is a trap, even after you see it. Inspect a legal disarm option or choose another route; failure can still have consequences.
+A dart trap makes an attack that can damage you and drain Strength if it gets through your armour. Avoid the square or inspect Disarm and its failure risk.
 
 Trigger: Feature 19 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3936,9 +3998,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A known gas trap releases its effect when triggered. Its visible identity is not permission to assume every hidden detail. Inspect your resistances and a route around it.
+Gas traps can confuse you or erase remembered map information. Seeing the trap does not disable it. Choose a route around it or inspect the disarm option before crossing.
 
 Trigger: Feature 20 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3950,9 +4014,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A known gas trap can apply a condition. Inspect it before crossing; the matching condition lesson appears only after an effect is actually observed.
+Gas traps can confuse you or erase remembered map information. Seeing the trap does not disable it. Choose a route around it or inspect the disarm option before crossing.
 
 Trigger: Feature 21 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3964,9 +4030,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-An alarm trap can attract attention. Avoid or disarm it if you want to preserve stealth. A visible trap remains active unless the game reports that it was disabled.
+An alarm trap makes noise that can alert nearby enemies. Avoid or disarm it when you want to stay unnoticed.
 
 Trigger: Feature 22 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3978,9 +4046,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A flash trap can interfere with sight. Inspect the trap and your known protections before crossing or disarming.
+A flash trap can blind you. A revealed trap is still active, so avoid it or inspect the disarm option. True Sight or Miruvor can cure blindness if it occurs.
 
 Trigger: Feature 23 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -3992,9 +4062,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-Caltrops make this square hazardous. Consider a route around them or an available interaction. A revealed hazard is still a hazard.
+A caltrop field can injure your feet and slow you if you fail to step carefully. Crossing is noisy even when you avoid injury. Consider another route or the available clearing action.
 
 Trigger: Feature 24 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4006,9 +4078,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A roost is a special trap feature. Leaping does not bypass roosts. Inspect its public description and choose a legal route or interaction.
+Disturbing a roost can summon birds or bats. Leaping does not bypass it. Leave room to deal with new enemies if you choose to cross.
 
 Trigger: Feature 25 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4020,9 +4094,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A web can catch you and affect movement. Leaping does not bypass webs. Read your current state before repeating a movement command.
+A web can trap you and attract a spider. Escaping can take several turns. Leaping does not bypass webs, so consider going around or clearing one before entering.
 
 Trigger: Feature 26 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4034,9 +4110,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A deadfall is a physical trap. Inspect it and consider avoiding or disarming it; a failed disarm can still trigger harm.
+A deadfall drops heavy debris and can change the surrounding terrain. Avoid it or inspect Disarm before crossing; failure can trigger the trap.
 
 Trigger: Feature 27 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4048,9 +4126,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A discoloured spot is a suspicious known feature. Inspect what your hero knows before choosing an interaction. The tutorial does not reveal a hidden trap subtype.
+This discoloured spot marks a suspicious trap square. Inspect the available actions and avoid testing it with your feet. Discovering it has not made it harmless.
 
 Trigger: Feature 28 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4062,9 +4142,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-An imprisonment trap can close routes around you. Inspect the area and available escape paths before crossing.
+An imprisonment trap can raise barriers around you and draw attention. Check nearby exits before approaching, or use a route around it.
 
 Trigger: Feature 29 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4076,25 +4158,29 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-This closed or locked door blocks the passage. Opening and unlocking are actions with their own checks and time costs. Check for nearby enemies before trying repeatedly.
+A closed door blocks passage and sight. Opening or closing it spends time. Doors can help separate a group of enemies, though some creatures can open or break them.
 
 Trigger: Feature 32 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Locked door
+## Locked doors
 
 `terrain.33`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-This closed or locked door blocks the passage. Opening and unlocking are actions with their own checks and time costs. Check for nearby enemies before trying repeatedly.
+A locked door needs a successful unlocking attempt before you can open it. Attempts spend turns. Bashing is another possibility, but it makes noise and can alert enemies.
 
-Trigger: Feature 33 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Known nearby terrain in this feature family, after grouping equivalent strengths or positive remaining-use counts; exhausted forges have separate lessons.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4104,11 +4190,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.33` for this terrain family.
+
 **1. Info**
 
-This closed or locked door blocks the passage. Opening and unlocking are actions with their own checks and time costs. Check for nearby enemies before trying repeatedly.
+A locked door needs a successful unlocking attempt before you can open it. Attempts spend turns. Bashing is another possibility, but it makes noise and can alert enemies.
 
-Trigger: Feature 34 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.33.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4118,11 +4208,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.33` for this terrain family.
+
 **1. Info**
 
-This closed or locked door blocks the passage. Opening and unlocking are actions with their own checks and time costs. Check for nearby enemies before trying repeatedly.
+A locked door needs a successful unlocking attempt before you can open it. Attempts spend turns. Bashing is another possibility, but it makes noise and can alert enemies.
 
-Trigger: Feature 35 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.33.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4132,11 +4226,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.33` for this terrain family.
+
 **1. Info**
 
-This closed or locked door blocks the passage. Opening and unlocking are actions with their own checks and time costs. Check for nearby enemies before trying repeatedly.
+A locked door needs a successful unlocking attempt before you can open it. Attempts spend turns. Bashing is another possibility, but it makes noise and can alert enemies.
 
-Trigger: Feature 36 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.33.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4146,11 +4244,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.33` for this terrain family.
+
 **1. Info**
 
-This closed or locked door blocks the passage. Opening and unlocking are actions with their own checks and time costs. Check for nearby enemies before trying repeatedly.
+A locked door needs a successful unlocking attempt before you can open it. Attempts spend turns. Bashing is another possibility, but it makes noise and can alert enemies.
 
-Trigger: Feature 37 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.33.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4160,11 +4262,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.33` for this terrain family.
+
 **1. Info**
 
-This closed or locked door blocks the passage. Opening and unlocking are actions with their own checks and time costs. Check for nearby enemies before trying repeatedly.
+A locked door needs a successful unlocking attempt before you can open it. Attempts spend turns. Bashing is another possibility, but it makes noise and can alert enemies.
 
-Trigger: Feature 38 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.33.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4174,25 +4280,31 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.33` for this terrain family.
+
 **1. Info**
 
-This closed or locked door blocks the passage. Opening and unlocking are actions with their own checks and time costs. Check for nearby enemies before trying repeatedly.
+A locked door needs a successful unlocking attempt before you can open it. Attempts spend turns. Bashing is another possibility, but it makes noise and can alert enemies.
 
-Trigger: Feature 39 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.33.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Jammed door
+## Jammed doors
 
 `terrain.40`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A jammed door does not open normally. Bashing or another available interaction may clear it, with noise and time costs. Inspect the current options rather than repeatedly issuing Open.
+A jammed door cannot be opened normally. Inspect Bash or another available way through. Breaking a door takes time and makes noise; another route may be safer.
 
-Trigger: Feature 40 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Known nearby terrain in this feature family, after grouping equivalent strengths or positive remaining-use counts; exhausted forges have separate lessons.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4202,11 +4314,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.40` for this terrain family.
+
 **1. Info**
 
-A jammed door does not open normally. Bashing or another available interaction may clear it, with noise and time costs. Inspect the current options rather than repeatedly issuing Open.
+A jammed door cannot be opened normally. Inspect Bash or another available way through. Breaking a door takes time and makes noise; another route may be safer.
 
-Trigger: Feature 41 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.40.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4216,11 +4332,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.40` for this terrain family.
+
 **1. Info**
 
-A jammed door does not open normally. Bashing or another available interaction may clear it, with noise and time costs. Inspect the current options rather than repeatedly issuing Open.
+A jammed door cannot be opened normally. Inspect Bash or another available way through. Breaking a door takes time and makes noise; another route may be safer.
 
-Trigger: Feature 42 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.40.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4230,11 +4350,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.40` for this terrain family.
+
 **1. Info**
 
-A jammed door does not open normally. Bashing or another available interaction may clear it, with noise and time costs. Inspect the current options rather than repeatedly issuing Open.
+A jammed door cannot be opened normally. Inspect Bash or another available way through. Breaking a door takes time and makes noise; another route may be safer.
 
-Trigger: Feature 43 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.40.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4244,11 +4368,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.40` for this terrain family.
+
 **1. Info**
 
-A jammed door does not open normally. Bashing or another available interaction may clear it, with noise and time costs. Inspect the current options rather than repeatedly issuing Open.
+A jammed door cannot be opened normally. Inspect Bash or another available way through. Breaking a door takes time and makes noise; another route may be safer.
 
-Trigger: Feature 44 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.40.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4258,11 +4386,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.40` for this terrain family.
+
 **1. Info**
 
-A jammed door does not open normally. Bashing or another available interaction may clear it, with noise and time costs. Inspect the current options rather than repeatedly issuing Open.
+A jammed door cannot be opened normally. Inspect Bash or another available way through. Breaking a door takes time and makes noise; another route may be safer.
 
-Trigger: Feature 45 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.40.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4272,11 +4404,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.40` for this terrain family.
+
 **1. Info**
 
-A jammed door does not open normally. Bashing or another available interaction may clear it, with noise and time costs. Inspect the current options rather than repeatedly issuing Open.
+A jammed door cannot be opened normally. Inspect Bash or another available way through. Breaking a door takes time and makes noise; another route may be safer.
 
-Trigger: Feature 46 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.40.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4286,11 +4422,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.40` for this terrain family.
+
 **1. Info**
 
-A jammed door does not open normally. Bashing or another available interaction may clear it, with noise and time costs. Inspect the current options rather than repeatedly issuing Open.
+A jammed door cannot be opened normally. Inspect Bash or another available way through. Breaking a door takes time and makes noise; another route may be safer.
 
-Trigger: Feature 47 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.40.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4300,9 +4440,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-Rubble blocks a route until it is cleared. Tunnelling and other effects have their own requirements and time costs. Repeated digging advances enemies and depth pressure.
+Rubble blocks a route until cleared. Tunnelling can take several turns and make noise. Prepare a digging tool and check for enemies before starting.
 
 Trigger: Feature 49 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4314,9 +4456,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A quartz vein is solid terrain. Inspect the tunnelling action and appropriate tool. Clearing terrain can take repeated turns.
+Quartz is solid rock. Digging through it requires a suitable tool and can take repeated noisy turns. Inspect the tunnelling action before committing.
 
 Trigger: Feature 51 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4328,235 +4472,289 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A granite wall blocks ordinary movement. Inspect the available interactions before committing; do not assume that every visible wall can be dug through.
+Granite blocks ordinary movement. Tunnelling may open a route if you have enough digging strength and a suitable tool. Repeated attempts spend time and make noise.
 
 Trigger: Feature 63 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge (exhausted)
+## Exhausted forge
 
 `terrain.64`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge has no uses remaining and cannot make another item. Look for a usable forge if you want to continue smithing.
 
 Trigger: Feature 64 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge (1 use remaining)
+## Forge
 
 `terrain.65`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
 
-Trigger: Feature 65 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Known nearby terrain in this feature family, after grouping equivalent strengths or positive remaining-use counts; exhausted forges have separate lessons.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge (2 uses remaining)
+## Forge
 
 `terrain.66`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.65` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
 
-Trigger: Feature 66 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.65.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge (3 uses remaining)
+## Forge
 
 `terrain.67`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.65` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
 
-Trigger: Feature 67 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.65.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge (4 uses remaining)
+## Forge
 
 `terrain.68`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.65` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
 
-Trigger: Feature 68 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.65.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge (5 uses remaining)
+## Forge
 
 `terrain.69`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.65` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
 
-Trigger: Feature 69 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.65.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Enchanted forge (exhausted)
+## Exhausted enchanted forge
 
 `terrain.70`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This enchanted forge has no uses remaining and cannot make another item. Look for a usable forge if you want to continue smithing.
 
 Trigger: Feature 70 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Enchanted forge (1 use remaining)
+## Enchanted forge
 
 `terrain.71`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
 
-Trigger: Feature 71 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Known nearby terrain in this feature family, after grouping equivalent strengths or positive remaining-use counts; exhausted forges have separate lessons.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Enchanted forge (2 uses remaining)
+## Enchanted forge
 
 `terrain.72`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.71` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
 
-Trigger: Feature 72 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.71.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Enchanted forge (3 uses remaining)
+## Enchanted forge
 
 `terrain.73`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.71` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
 
-Trigger: Feature 73 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.71.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Enchanted forge (4 uses remaining)
+## Enchanted forge
 
 `terrain.74`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.71` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
 
-Trigger: Feature 74 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.71.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Enchanted forge (5 uses remaining)
+## Enchanted forge
 
 `terrain.75`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.71` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
 
-Trigger: Feature 75 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.71.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge 'Orodruth' (exhausted)
+## Exhausted forge Orodruth
 
 `terrain.76`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge Orodruth has no uses remaining and cannot make another item. Look for a usable forge if you want to continue smithing.
 
 Trigger: Feature 76 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge 'Orodruth' (1 use remaining)
+## Forge Orodruth
 
 `terrain.77`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.
 
-Trigger: Feature 77 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Known nearby terrain in this feature family, after grouping equivalent strengths or positive remaining-use counts; exhausted forges have separate lessons.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge 'Orodruth' (2 uses remaining)
+## Forge Orodruth
 
 `terrain.78`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.77` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.
 
-Trigger: Feature 78 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.77.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Forge 'Orodruth' (3 uses remaining)
+## Forge Orodruth
 
 `terrain.79`
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.77` for this terrain family.
+
 **1. Info**
 
-This forge has the uses shown in its description. A smithing proposal shows difficulty and resource costs; committing consumes the applicable forge uses and time. An exhausted forge cannot provide a fresh use.
+This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.
 
-Trigger: Feature 79 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.77.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4566,9 +4764,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-An up staircase leaves this level if the current minimum depth and oath rules permit. Read the actual confirmation. Ascending creates a level; it is not a promise to return to the exact map you left.
+An up staircase normally goes one level shallower. If minimum depth prevents that, it can return you at the same depth or deeper instead. Oaths can forbid using it. Read the confirmation; leaving always generates another map.
 
 Trigger: Feature 80 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4580,9 +4780,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A down staircase takes you deeper and generates a new level. Check Health, light, supplies and any unfinished local objective before committing.
+A down staircase goes one level deeper and generates a new map. Collect anything you want to keep and check unfinished local objectives before descending.
 
 Trigger: Feature 81 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4594,9 +4796,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-An up shaft can change depth by more than a normal staircase. Minimum-depth and oath restrictions still apply. Inspect the destination stated by the actual action.
+An up shaft can ascend farther than an ordinary staircase, but minimum depth can leave you at the same depth or deeper instead. Oath restrictions still apply. Read the destination before leaving; the map is newly generated.
 
 Trigger: Feature 82 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4608,9 +4812,11 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-A down shaft descends farther than a normal staircase. Prepare before committing: the game will generate the destination level and retain the normal action costs.
+A down shaft descends farther than an ordinary staircase. Read the destination before confirming, and prepare for a newly generated level at greater depth.
 
 Trigger: Feature 83 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4622,9 +4828,15 @@ Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/moveme
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-Entering, crossing or leaving shallow water costs 150% movement energy and splashes for -3 Stealth on that action. Each water tile entered on foot has a 0.5% chance of disease. Standing still does not add infection rolls. Disease lowers Constitution by 1 immediately and a random attribute by 1 every 50 player turns; rest cannot cure it. Potions of Healing or Miruvor cure it and restore its attribute penalties. A successful leap over water avoids infection and splashing; click-to-travel wades. Water leaves no scent trail.
+Moving into, through or out of shallow water costs 50% more movement time and gives -3 Stealth from splashing. Standing still has no extra movement cost. Water breaks your scent trail, but enemies can still track you by sight or sound.
+
+**2. Info**
+
+Each water square entered on foot has a 0.5% disease risk. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease needs a potion of Healing or Miruvor; rest does not cure it.
 
 Trigger: Feature 84 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4635,6 +4847,8 @@ Sources: `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/effects.c`
 `effect.191`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4650,9 +4864,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Reveals doors and traps in line of sight and can open or destroy them. Read what actually changed before moving.
+Reveals nearby doors and traps, attempts to open doors and destroy traps, and can close chasms. Check which features actually changed before moving through the area.
 
 Trigger: Item kind 192 is aware and publicly encountered; no forced use.
 
@@ -4663,6 +4879,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.193`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4678,6 +4896,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Cleanses a chosen item from equipment, Pack or floor, removing curses where the rules allow. Curse Breaking also permits breaking qualifying jinxed affixes. Select a real eligible target before committing.
@@ -4691,6 +4911,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.196`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4706,9 +4928,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Reveals surrounding terrain. Knowledge of the map is not the same as currently seeing every creature on it.
+Reveals terrain within a radius of 10 plus your Will. Alchemy increases a Gem of Revelation's range by 50%. Mapped terrain does not reveal every creature occupying it.
 
 Trigger: Item kind 197 is aware and publicly encountered; no forced use.
 
@@ -4720,9 +4944,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Detects items on the level. The result reveals their location under the detection rules; it does not put them in your inventory.
+Detects items within a radius of 10 plus your Will. Alchemy increases a Gem of Treasures' range by 50%. Check their locations on the map; the items remain where they were.
 
 Trigger: Item kind 198 is aware and publicly encountered; no forced use.
 
@@ -4734,9 +4960,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Detects monsters on the level. Detection is different from normal current line of sight and from knowing every ability of a creature.
+Detects creatures within a radius of 10 plus your Will. Alchemy increases a Gem of Foes' range by 50%. Detection reveals presence, not every attack or trait of each creature.
 
 Trigger: Item kind 199 is aware and publicly encountered; no forced use.
 
@@ -4747,6 +4975,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.200`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4762,6 +4992,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Attempts to frighten monsters in line of sight. Fear changes morale; whether it takes effect depends on the target and the effect check.
@@ -4775,6 +5007,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.202`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4790,6 +5024,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Creates a glyph of warding where the placement rules permit. The glyph makes crossing difficult for opponents; it is not an impenetrable wall.
@@ -4803,6 +5039,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.204`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4818,9 +5056,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Partially recharges a staff. Inspect the selected staff and the channeling/recharging rules before committing; restoring charges is separate from using the staff's effect.
+Restores charges to a chosen staff. Channeling doubles the amount restored by a Gem of Recharging. Check the staff and its charges before confirming; cancelling the selection preserves the use.
 
 Trigger: Item kind 206 is aware and publicly encountered; no forced use.
 
@@ -4832,9 +5072,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Summons monsters to the current level's stairs. This can create danger. No tutorial requires using it just to demonstrate the effect.
+Summons 1 to 4 creatures at the level's stairs where placement is possible. This can add dangerous enemies to your escape route. Use only when you want the summons.
 
 Trigger: Item kind 210 is aware and publicly encountered; no forced use.
 
@@ -4845,6 +5087,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.211`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4860,6 +5104,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Attempts to frighten creatures affected by the horn. Choose the direction and check your Voice cost. Its sound may alert other creatures.
@@ -4873,6 +5119,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.241`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4888,9 +5136,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Pushes affected enemies back when the effect succeeds. Check the direction and terrain behind the target; the blast spends Voice.
+Attempts to push enemies back and stun them. A blocked push can still stagger and stun a target. Aim carefully: the blast spends Voice, makes a loud noise and can push enemies into terrain hazards.
 
 Trigger: Item kind 242 is aware and publicly encountered; no forced use.
 
@@ -4901,6 +5151,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.243`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4916,6 +5168,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Raises a loud warning and challenges nearby foes. It draws attention; do not use it merely because another horn would have been helpful.
@@ -4929,6 +5183,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.313`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4944,6 +5200,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Removes fear and heals 6 + floor(8% of maximum Health), but can add 2d4 stun severity, subject to stun protection. Medicine equipment can increase healing. The drawback matters even when healing is useful.
@@ -4957,6 +5215,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.316`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -4972,6 +5232,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Cures stun, confusion and hallucination, and ends rage. It is a condition remedy, not a general Health potion.
@@ -4985,6 +5247,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.318`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5000,9 +5264,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Restores Voice. It does not cure poison, stop bleeding or restore Health.
+Restores all Voice. It does not restore Health or cure conditions.
 
 Trigger: Item kind 319 is aware and publicly encountered; no forced use.
 
@@ -5013,6 +5279,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.320`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5028,6 +5296,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Removes current poison. It does not restore the Health poison has already taken.
@@ -5041,6 +5311,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.322`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5056,6 +5328,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Grants temporary fire and cold resistance for 20d4 turns. It does not grant poison resistance.
@@ -5069,6 +5343,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.327`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5084,6 +5360,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 If Dexterity is drained by at least 3 points, this use restores 3 points instead of granting the temporary buff. Otherwise it grants +3 temporary Dexterity for 20d4 turns; when that buff expires it restores up to 3 drained points. Check the current drain before choosing it.
@@ -5097,6 +5375,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 `effect.329`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5112,6 +5392,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 If Grace is drained by at least 3 points, this use restores 3 points instead of granting the temporary buff. Otherwise it grants +3 temporary Grace for 20d4 turns; when that buff expires it restores up to 3 drained points. Check the current drain before choosing it.
@@ -5126,9 +5408,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Applies -1 speed for 10d4 turns. A known harmful potion is not a required tutorial action.
+Applies -1 speed for 10d4 turns. Avoid drinking it when you need to escape.
 
 Trigger: Item kind 343 is aware and publicly encountered; no forced use.
 
@@ -5139,6 +5423,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.344`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5154,6 +5440,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Can blind you for 10d4 turns, subject to the protection checks. More light does not cure blindness.
@@ -5167,6 +5455,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.346`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5182,6 +5472,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Drains Dexterity by 1. This is attribute drain rather than a short-lived bonus wearing off.
@@ -5195,6 +5487,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.350`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5210,6 +5504,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Grants rage for 10d4 turns: +1 Strength/Constitution, -1 Dexterity/Grace, a special melee attack and fear resistance. Rage restricts awareness and Stealth. It also supplies ordinary herb nourishment.
@@ -5223,6 +5519,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.381`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5238,6 +5536,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 If fear protection does not prevent the effect, causes fear for 10d4 turns and speed for 5d4 turns. Preventing the fear also prevents this speed benefit. It provides ordinary herb nourishment.
@@ -5251,6 +5551,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.383`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5266,6 +5568,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Restores every attribute by up to 3 drained points. It also provides ordinary herb nourishment. It does not remove unrelated equipment penalties. It does not cure disease or restore disease penalties.
@@ -5279,6 +5583,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.385`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5294,6 +5600,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Causes hallucination for 80d4 turns but removes blindness. This tradeoff is different from a clean sight remedy.
@@ -5308,9 +5616,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
-Can entrance you for 10d4 turns. While entranced you cannot choose ordinary actions; this tutorial never requires eating it.
+Can entrance you for 10d4 turns. While entranced you cannot choose ordinary actions. Save it unless you intend to accept that risk.
 
 Trigger: Item kind 387 is aware and publicly encountered; no forced use.
 
@@ -5321,6 +5631,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.388`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5336,6 +5648,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Always causes disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. Provides ordinary herb nourishment.
@@ -5349,6 +5663,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.399`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5364,6 +5680,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Extended**.
 
+Priority: **34** (higher appears first).
+
 **1. Info**
 
 Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns. Rest does not cure it; potions of Healing or Miruvor do.
@@ -5377,6 +5695,8 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 `effect.401`
 
 Level: **Extended**.
+
+Priority: **34** (higher appears first).
 
 **1. Info**
 
@@ -5392,9 +5712,11 @@ Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
 Level: **Normal**.
 
+Priority: **32** (higher appears first).
+
 **1. Action**
 
-Ready the throwing weapon using the available equipment action. Readying and choosing it as the active weapon are separate steps.
+Open Inventory, select the throwing weapon, and choose Ready to move it to your Harness. Reaching into the Pack takes three turns and attacks can interrupt it. Skip if you want to keep your current arrangement.
 
 Required action: `ready`; subject: `throwing`.
 
@@ -5408,9 +5730,11 @@ Sources: `src/tutorial/tutorial-game.c`, `src/player/player-active-weapon.c`, `s
 
 Level: **Normal**.
 
+Priority: **32** (higher appears first).
+
 **1. Action**
 
-Choose the readied throwing weapon as your active weapon. Inspect the resulting hands, shield and ammunition arrangement. Only an actual active-weapon change completes this step.
+Open Change Active and choose the readied throwing weapon. Check which weapon and shield will be active. Confirm the change to finish this practice, or Skip to keep your current setup.
 
 Required action: `change-active`; subject: `throwing`.
 
@@ -5423,6 +5747,8 @@ Sources: `src/tutorial/tutorial-game.c`, `src/player/player-active-weapon.c`, `s
 `item.throwing.use`
 
 Level: **Normal**.
+
+Priority: **32** (higher appears first).
 
 **1. Action**
 
@@ -5440,9 +5766,11 @@ Sources: `src/tutorial/tutorial-game.c`, `src/player/player-active-weapon.c`, `s
 
 Level: **Normal**.
 
+Priority: **32** (higher appears first).
+
 **1. Action**
 
-Ready the bow using the available equipment action. Readying and choosing it as the active weapon are separate steps.
+Open Inventory, select the bow, and choose Ready to move it to your Harness. Reaching into the Pack takes three turns and attacks can interrupt it. Skip if you want to keep your current arrangement.
 
 Required action: `ready`; subject: `bow`.
 
@@ -5456,9 +5784,11 @@ Sources: `src/tutorial/tutorial-game.c`, `src/player/player-active-weapon.c`, `s
 
 Level: **Normal**.
 
+Priority: **32** (higher appears first).
+
 **1. Action**
 
-Choose the readied bow as your active weapon. Inspect the resulting hands, shield and ammunition arrangement. Only an actual active-weapon change completes this step.
+Open Change Active and choose the readied bow. Check which weapon and shield will be active. Confirm the change to finish this practice, or Skip to keep your current setup.
 
 Required action: `change-active`; subject: `bow`.
 
@@ -5471,6 +5801,8 @@ Sources: `src/tutorial/tutorial-game.c`, `src/player/player-active-weapon.c`, `s
 `item.bow.use`
 
 Level: **Normal**.
+
+Priority: **32** (higher appears first).
 
 **1. Action**
 
@@ -5488,6 +5820,8 @@ Sources: `src/tutorial/tutorial-game.c`, `src/player/player-active-weapon.c`, `s
 
 Level: **Normal**.
 
+Priority: **32** (higher appears first).
+
 **1. Action**
 
 Select a different available arrow stack for your active bow. Changing only arrows is free; changing other active equipment follows its own cost rules.
@@ -5504,13 +5838,15 @@ Sources: `src/player/player-active-weapon.c`.
 
 Level: **Normal**.
 
+Priority: **30** (higher appears first).
+
 **1. Action**
 
-Use the selected armour's Equip action. Check the resulting Protection, Evasion, penalties and oath restrictions before confirming. This is a real equipment change.
+Choose Equip on known, uncursed armour that fits an empty slot. Check Protection, Evasion, penalties and your oath before confirming. Skip if you prefer your current arrangement.
 
 Required action: `equip`; subject: `armour`.
 
-Trigger: Known uncursed armour can fill an empty equipment slot and the active oath permits equipping it; the player may perform the real equip action or skip.
+Trigger: Known uncursed armour fits an empty equipment slot and its oath permits equipping. The chosen item is checked again when the real action is committed.
 
 Sources: `src/cmd/item/cmd-item-core.c`, `src/tutorial/tutorial-game.c`.
 
@@ -5519,6 +5855,8 @@ Sources: `src/cmd/item/cmd-item-core.c`, `src/tutorial/tutorial-game.c`.
 `storage.pack`
 
 Level: **Normal**.
+
+Priority: **40** (higher appears first).
 
 **1. Info**
 
@@ -5534,6 +5872,8 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
 The Harness has a separate volume limit from the Pack. Readied gear can be reached under its own action rules. Moving an item between storage locations does not create unlimited total carrying capacity.
@@ -5547,6 +5887,8 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 `storage.quiver`
 
 Level: **Normal**.
+
+Priority: **40** (higher appears first).
 
 **1. Info**
 
@@ -5562,9 +5904,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Carried weight is separate from Pack and Harness volume. Your current load can affect action costs and movement. Check the displayed burden and the actual item weight before taking more.
+Carried weight is separate from storage volume. Heavy loads can slow you, even if there is space for more items. Check the displayed burden and consider leaving spare heavy gear behind.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; storage.weight.
 
@@ -5576,9 +5920,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Accessing the Pack can spend time before the item action. Enemies and the world can act during that cost. Inspect and ready urgent gear before danger when you have the opportunity.
+This Pack action takes three turns to finish. Enemies can act during those turns, and an attack or your cancellation can interrupt it. Ready urgent gear before combat when possible.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; storage.pack_access.
 
@@ -5590,9 +5936,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-The Pack transaction was interrupted. Check which action actually completed before issuing another command. The tutorial does not finish a cancelled equipment change or replay the old selection.
+An attack interrupted the Pack action before it finished. Check the item's current location and the message history. You may need to move away from danger before trying again.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; storage.pack_interrupted.
 
@@ -5604,9 +5952,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-A partial stack was collected because of the applicable storage limit. Check the amount in your inventory and what remains on the floor. A successful partial pickup is different from taking the whole stack.
+Only part of the stack fitted in the available storage. Check the quantity collected and the items still on the floor. Free space or choose another storage location if you want to take more.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; storage.partial_pickup.
 
@@ -5618,9 +5968,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Rest advances game time repeatedly. Other creatures can act and minimum depth can advance. Poison, bleeding and starvation prevent ordinary Health regeneration; singing prevents Voice regeneration.
+Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Poison, bleeding and starvation stop ordinary Health recovery; singing stops Voice recovery. Treat disease before a long rest.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; world.rest.
 
@@ -5632,9 +5984,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-Running issues repeated real moves until interrupted. New threats, terrain and other interruptions can stop it. Reading this lesson pauses input automation; it does not make the route safe or reveal unseen squares.
+Running repeats movement until you stop it or something interrupts it. Enemies and the minimum-depth timer continue between steps. Inspect your route before starting a run.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; world.run.
 
@@ -5646,9 +6000,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-A trap has been revealed or triggered. Read the actual effect and current condition before acting again. Detecting a trap does not remove it. Disarming, avoiding and leaping have different requirements and costs.
+You have found a trap. Seeing it does not disable it. Choose a route around it, inspect Disarm and its risk, or use a legal leap if your hero has Leaping. If it already triggered, check your Health and conditions before acting.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; world.trap.
 
@@ -5660,9 +6016,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-A forge offers a limited number of uses. Inspect the proposed item's difficulty, materials, time and other costs before creating it. Smithing abilities and quest rules can change what is possible.
+A forge has limited uses. Open Smithing while at it to inspect possible items and their costs. The preview shows difficulty, materials, time and forge uses before you commit. An exhausted forge cannot make another item.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; world.forge.
 
@@ -5674,9 +6032,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-Your current light is low on fuel. Check a compatible refuelling or replacement option before it goes out. Low fuel is different from a darkness effect or blindness.
+Your equipped light is running low on fuel. Find a compatible refill or ready a replacement before it burns out. Refuelling or changing equipment spends time, so prepare before meeting enemies.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; world.light_low.
 
@@ -5688,9 +6048,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-The current light has no fuel. Inspect a replacement or refuelling option. Remembered terrain is not current visibility; a light source in storage does not automatically become equipped.
+Your equipped light has run out of fuel. Refuel it or equip a replacement if possible. The remembered map remains visible, but it does not show every threat in the dark.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; world.light_out.
 
@@ -5702,9 +6064,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Decision**
 
-The next base skill rank costs 100 times the new rank in XP. Attributes, equipment and temporary effects contribute separately. Inspect the purchase proposal; Continue returns to the real choice without spending XP.
+The next base skill rank costs 100 XP times the new rank: rank 1 costs 100 XP, rank 2 costs another 200 XP, and so on. Attribute and equipment bonuses are separate. Review the proposed purchase before spending XP.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; advancement.skills.
 
@@ -5716,9 +6080,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Decision**
 
-Read the song's current effect and Voice cost, then choose when it is useful. Singing is a separate action and may violate an oath. No tutorial buys or starts a song automatically.
+You have a song to consider. Read its effect and Voice cost in Songs, then choose when to start singing. Singing spends time and prevents Voice recovery until you stop. Check any oath that forbids it.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; advancement.song.
 
@@ -5730,9 +6096,11 @@ Sources: `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-{detail} Read the current objective and progress in Quests. Progress toward a target is not the same as completing the quest or collecting its reward.
+{detail} Check Quests for the remaining objective and any restrictions. Reaching a target may still leave a return visit to collect the reward.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; quest.progress.
 
@@ -5744,9 +6112,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **40** (higher appears first).
+
 **1. Info**
 
-{detail} Read the actual reward and any newly granted ability or unlocked oath. Completing this quest does not silently accept another oath or quest.
+{detail} Check Quests for the result and reward. If the objective is complete but the reward is unclaimed, follow its return instruction. A newly unlocked oath still needs its own choice.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; quest.completed.
 
@@ -5758,9 +6128,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-{detail} Read the recorded reason and resulting restrictions. This explanation does not undo the action or restore the quest; Tale progress and another hero may have different rules.
+{detail} Check Quests for the reason and consequences. The action that caused failure has already happened. Another hero in this Tale may have different opportunities.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; quest.failed.
 
@@ -5772,9 +6144,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-{detail} Inspect Known Curses for the effect actually revealed and its current stack. A Tale curse is distinct from an equipment curse. Reading the tutorial neither removes it nor reveals other hidden curses.
+{detail} A Tale curse has been revealed. Read its effect and current stack in Known Curses. It can affect more than this hero, unlike an ordinary cursed piece of equipment.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; tale.curse.
 
@@ -5786,9 +6160,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Decision**
 
-{detail} Read the available benefit, cost and any limits before making the real choice. A blessing explanation does not spend blessing points or select a reward.
+{detail} Read the blessing's benefit, cost and limits before choosing it. You can compare options without spending blessing points.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; tale.blessing.
 
@@ -5800,9 +6176,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-{detail} The action has already broken the oath and its normal consequences apply. Read your current oath, lost benefit and revealed curse. Skipping this explanation does not reverse them.
+{detail} Your action broke the oath. Check the lost benefit and any revealed curse, then plan around the new state. Another hero in the Tale may also face the consequences.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; tale.oath_break.
 
@@ -5814,9 +6192,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-{detail} Read the current objective, burden and escape conditions. Obtaining a Silmaril changes the story, but it does not teleport you to safety or automatically complete every Tale requirement.
+{detail} You have obtained a Silmaril. Check the main quest and prepare your route out of Angband. You must still reach the surface with it to complete the escape.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; tale.silmaril.
 
@@ -5828,9 +6208,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-{detail} The exit result belongs to this hero and the current Tale. Read the actual recovered Silmarils, score and remaining Tale objective; escaping once is not necessarily the end of the Tale.
+{detail} You escaped. Review the recovered Silmarils, score and remaining Tale objective. An escape completes this hero's expedition, while the Tale may continue with another hero.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; tale.escape.
 
@@ -5842,9 +6224,11 @@ Sources: `src/game/game-lifecycle.c`, `src/tutorial/tutorial-game.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-{detail} This hero's life has ended. The Tale can retain its progress, consequences and learned tutorials across another hero, subject to its loss condition. This explanation cannot revive the hero.
+{detail} This hero has died. The Tale can continue with another hero unless its loss condition has been reached. Check what progress and consequences carry forward. Encountered tutorials remain in this Tale's archive.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; tale.death.
 
@@ -5856,9 +6240,11 @@ Sources: `src/game/game-lifecycle.c`, `src/tutorial/tutorial-game.c`, `src/tutor
 
 Level: **Normal**.
 
+Priority: **70** (higher appears first).
+
 **1. Info**
 
-{detail} A truce changes which actions are legal or tolerated. Read the current agreement before attacking, stealing or making another irreversible choice. The tutorial does not break the truce for you.
+{detail} A truce is in effect. Read its terms before attacking or disturbing the agreement. Some actions can end the truce and expose you to immediate danger.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; tale.truce.
 
@@ -5870,9 +6256,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/tutorial/tutorial-game.c`.
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-{detail} Rooms and connecting passages create distinct lines of sight and doorways. Observe the actual exits before planning a retreat; the regional description does not reveal unexplored contents.
+{detail} Rooms and connecting passages offer doorways where you can limit approaching enemies. Find a retreat route before crossing an open room.
 
 Trigger: The player enters and publicly discovers partition kind 1.
 
@@ -5884,9 +6272,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/level-generation
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-{detail} Natural caves can offer irregular sight lines and routes. Inspect the visible terrain before moving. A cave theme does not identify hidden creatures or items.
+{detail} Natural caves have irregular routes and sight lines. Check visible exits and nearby cover before approaching enemies.
 
 Trigger: The player enters and publicly discovers partition kind 2.
 
@@ -5898,9 +6288,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/level-generation
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-{detail} Ruined halls contain broken structures and irregular routes. Read the observed terrain and available interactions rather than assuming every doorway works normally.
+{detail} Ruined halls contain broken structures and irregular passages. Check which doorways still close and where the open routes lead.
 
 Trigger: The player enters and publicly discovers partition kind 3.
 
@@ -5912,9 +6304,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/level-generation
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-{detail} A labyrinth creates narrow, winding routes. Keep track of known intersections and a retreat route. Opening the map does not reveal unexplored passages.
+{detail} Labyrinths have narrow, winding passages. Keep track of intersections and a route back to known ground. The map helps you review explored passages.
 
 Trigger: The player enters and publicly discovers partition kind 4.
 
@@ -5926,9 +6320,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/level-generation
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-{detail} Chasms divide the routes in this area. A fall can send you deeper. Inspect each crossing and any leap requirements; the regional lesson never requires stepping into a chasm.
+{detail} Chasms divide this area. A fall can hurt you and send you deeper. Check each crossing and any leap requirements before moving.
 
 Trigger: The player enters and publicly discovers partition kind 5.
 
@@ -5940,9 +6336,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/level-generation
 
 Level: **Extended**.
 
+Priority: **38** (higher appears first).
+
 **1. Info**
 
-{detail} A great cave opens broad lines of sight and movement. Distant visible threats and available cover matter; inspect what is actually revealed before crossing open ground.
+{detail} A great cave offers long sight lines and many approach routes. Distant enemies may see you too; use visible cover and keep room to retreat.
 
 Trigger: The player enters and publicly discovers partition kind 6.
 
@@ -5954,9 +6352,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/level-generation
 
 Level: **Extended**.
 
+Priority: **48** (higher appears first).
+
 **1. Info**
 
-{detail} This cave's revealed theme suggests fire dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.
+{detail} Inside this cave, you lose one layer of fire, fear and stun resistance. Check your current totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present.
 
 Trigger: A discovered great cave has the corresponding public elemental cave type.
 
@@ -5968,9 +6368,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/tutorial/tutoria
 
 Level: **Extended**.
 
+Priority: **48** (higher appears first).
+
 **1. Info**
 
-{detail} This cave's revealed theme suggests cold dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.
+{detail} Inside this cave, you lose one layer of cold, fear and stun resistance. Check your current totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present.
 
 Trigger: A discovered great cave has the corresponding public elemental cave type.
 
@@ -5982,9 +6384,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/tutorial/tutoria
 
 Level: **Extended**.
 
+Priority: **48** (higher appears first).
+
 **1. Info**
 
-{detail} This cave's revealed theme suggests poison dangers. Inspect actual terrain, known resistance and observed creatures. The theme is not proof of a specific unseen enemy or a guarantee that your equipment protects against every hazard.
+{detail} Inside this cave, you lose one layer of poison, fear and stun resistance. Check your current totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present.
 
 Trigger: A discovered great cave has the corresponding public elemental cave type.
 
@@ -5996,9 +6400,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/externs.h`, `src/tutorial/tutoria
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-{detail} Hunt the named creature and return for the actual reward. Read the revealed target in Quests; this lesson does not name a creature before the quest does.
+{detail} Hunt the creature named in Quests, then return to Tulkas for the reward. Check the target's learned attacks before confronting it.
 
 Trigger: Quest 1 is publicly offered or accepted; only its revealed text is supplied in context.
 
@@ -6010,9 +6416,11 @@ Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-{detail} At Aulë's forge, create a work meeting the current quest requirements. Inspect the proposal and costs before committing. A normal forged item does not automatically satisfy the trial.
+{detail} Forge a work that meets Aulë's current requirements, then collect the reward. Read the objective and smithing proposal before spending materials. Leaving this level before the reward is granted abandons the quest.
 
 Trigger: Quest 2 is publicly offered or accepted; only its revealed text is supplied in context.
 
@@ -6024,9 +6432,11 @@ Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-{detail} Follow the revealed objective concerning the bound spirit. Read the target and completion condition in Quests before committing an attack or leaving the area.
+{detail} Follow Mandos' objective concerning the bound spirit, then collect the reward. Check Quests for the exact target. Leaving this level before receiving the reward abandons the quest.
 
 Trigger: Quest 3 is publicly offered or accepted; only its revealed text is supplied in context.
 
@@ -6038,9 +6448,11 @@ Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-{detail} Find the downward stair without taking a life under the current quest rules. Review the restriction before attacking. An automatic follow-up attack can matter as much as the initial target.
+{detail} Find the downward stair without taking a life, then follow the reward instructions before leaving. Avoid effects that can kill, including automatic follow-up attacks. Leaving the level before receiving the reward abandons this trial.
 
 Trigger: Quest 4 is publicly offered or accepted; only its revealed text is supplied in context.
 
@@ -6052,9 +6464,11 @@ Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-{detail} The hunt tracks the revealed creature categories and their required totals. Read the live counters: wolves, spiders, serpents and vampires have different thresholds. Progress in one category is not interchangeable with another.
+{detail} The hunt counts wolves, spiders, serpents and vampires separately. Check each live total in Quests; killing more of one group does not fill another group's requirement.
 
 Trigger: Quest 5 is publicly offered or accepted; only its revealed text is supplied in context.
 
@@ -6066,9 +6480,11 @@ Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest
 
 Level: **Extended**.
 
+Priority: **65** (higher appears first).
+
 **1. Decision**
 
-{detail} Follow the revealed objective and destination in Quests. Read the target and timing requirement before leaving a level; this tutorial does not reveal the hidden location in advance.
+{detail} Check Quests for the revealed destination and time limit. Plan your descent before leaving the current level; unexplored locations remain unknown.
 
 Trigger: Quest 6 is publicly offered or accepted; only its revealed text is supplied in context.
 
@@ -6080,9 +6496,11 @@ Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature sometimes chooses a random move. Its next direction is not guaranteed by its last one; inspect the actual position after each turn.
+This creature sometimes makes a random move. Its next step may differ from the route you expect, so check its position after each turn.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF1_RAND_25.
 
@@ -6094,9 +6512,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature frequently chooses random movement. It can still threaten adjacent squares and use its known abilities; random movement is not harmlessness.
+This creature often makes random moves. It can still attack and use its abilities; leave room for an unexpected step.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF1_RAND_50.
 
@@ -6108,9 +6528,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This known creature is unique. Read its own learned attacks and defenses; uniqueness by itself is not a complete combat description.
+This creature is unique and has its own attacks and defences. Read its learned description before confronting it; ordinary members of a similar group may behave differently.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF1_UNIQUE.
 
@@ -6122,9 +6544,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature is peaceful under the current game rules. Do not treat movement toward it as an ordinary hostile attack.
+This creature is peaceful. Move toward it to use the available interaction instead of treating it as an ordinary enemy.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF1_PEACEFUL.
 
@@ -6136,9 +6560,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: Known lore says this creature does not make ordinary physical blows. That does not rule out its other known abilities or hazards.
+This creature does not make ordinary physical blows. Check its other learned abilities: ranged attacks or surrounding effects can still make it dangerous.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF1_NEVER_BLOW.
 
@@ -6150,9 +6576,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature does not move normally. It may still threaten nearby squares or use other learned attacks. Check range and terrain.
+This creature does not move normally. Check the range of its attacks before approaching; it can still threaten squares within reach.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF1_NEVER_MOVE.
 
@@ -6164,9 +6592,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature moves while outside your view. A momentary sighting does not guarantee its position after you lose sight of it.
+This creature moves while outside your view. Losing sight of it can let it reposition, so do not assume it stayed on its last seen square.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF1_HIDDEN_MOVE.
 
@@ -6178,9 +6608,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has no vulnerable areas for critical hits. Extra accuracy still helps hit, but critical bonus dice do not apply to it.
+This creature has no vulnerable areas for critical hits. Higher Attack still helps you hit, but critical bonus dice do not apply. Compare ordinary damage and other known bonuses.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF1_NO_CRIT.
 
@@ -6192,9 +6624,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature resists critical hits. The game halves the computed critical bonus dice, rounding down. Ordinary damage and other bonus dice follow their own rules.
+This creature halves critical bonus dice, rounding down. For example, one critical die becomes none and two become one. Ordinary damage and other bonus dice are separate.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF1_RES_CRIT.
 
@@ -6206,9 +6640,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: Known lore identifies this creature as mindless. Check the actual applicable effects before relying on fear, confusion or another mind-affecting tactic.
+This creature follows simple, aggressive tactics. Do not rely on ordinary morale pressure to make it retreat. Check its separate resistances before choosing a status effect.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_MINDLESS.
 
@@ -6220,9 +6656,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This foe can choose tactics intelligently. Do not assume it will repeat the same approach every turn. Inspect its observed attacks and available routes.
+This enemy can choose tactical positions and react to the fight. Expect it to use its learned attacks and available terrain rather than always charging straight toward you.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_SMART.
 
@@ -6234,9 +6672,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature is territorial and does not pursue around corners in the usual way. Breaking its line of approach may help, but other threats and its actual current state still matter.
+This creature does not pursue around corners in the usual way. Breaking its line of approach can help you disengage; watch where it actually stops.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_TERRITORIAL.
 
@@ -6248,9 +6688,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has limited sight. Stealth, distance and noise are separate factors; short sight is not a guarantee that it cannot detect you.
+This creature detects you only at close range through its normal perception checks. Keep your distance when you want to pass unnoticed.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_SHORT_SIGHTED.
 
@@ -6262,9 +6704,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature is difficult to see normally. Detection or true sight can help, but a revealed presence and a fully visible target are different states.
+This creature is difficult to see normally. True Sight or detection can help you locate it. Check whether you can actually target it before committing an attack.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_INVISIBLE.
 
@@ -6276,9 +6720,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature lights its own square. Its light can affect visibility, but it does not illuminate every surrounding passage.
+This creature glows on its own square. That can reveal its position, even if its surroundings remain dark. It may have separate effects on nearby light.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_GLOW.
 
@@ -6290,9 +6736,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: A sufficiently strong critical blow from this creature can confuse you. Read the actual attack margin, damage and resulting condition before choosing your next action.
+A strong critical hit from this creature can confuse you. Check your conditions after being hit; Clarity or Miruvor can cure confusion.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_CRUEL_BLOW.
 
@@ -6304,9 +6752,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can exchange places in combat. Do not assume an adjacent blocker will always preserve the same formation or retreat route.
+This creature can exchange places in combat. A blocked route may suddenly open or close, so recheck positions after it moves.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_EXCHANGE_PLACES.
 
@@ -6318,9 +6768,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can reproduce. Time spent nearby can increase the number of threats. Read the actual visible count rather than assuming the first creature is alone.
+This creature can reproduce. More can appear while you spend turns nearby. Consider dealing with the source or leaving before the group grows.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_MULTIPLY.
 
@@ -6332,9 +6784,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature recovers Health especially quickly. Pausing damage may let it recover; check its observed state before resuming an attack.
+This creature recovers Health especially quickly. Long pauses can undo your damage, so watch its condition when re-engaging.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_REGENERATE.
 
@@ -6346,9 +6800,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: A sufficiently poor melee attack can give this foe a counterattack. High Evasion can make careless repeated attacks dangerous.
+A melee attack that misses badly can give this enemy a free counterattack. Improve your accuracy or consider another approach before repeatedly attacking.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_RIPOSTE.
 
@@ -6360,9 +6816,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This foe can attack while moving between squares adjacent to you. An enemy move near you is not necessarily a turn without an attack.
+This enemy can attack while stepping between squares beside you. A movement action near you can therefore include a melee hit.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_FLANKING.
 
@@ -6374,9 +6832,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature creates a hazardous surrounding cloud. Inspect the observed effect, distance and relevant protection before standing next to it.
+This creature produces an effect around itself. Check the learned effect and keep enough distance to avoid standing in it unnecessarily.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_CLOUD_SURROUND.
 
@@ -6388,9 +6848,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This foe can cross chasms. A gap that blocks your own walking route may not separate it from you.
+This creature can fly over chasms and avoid contact with water, ice and poisonous seep. A gap in your walking route may not block it. Lava heat can still harm flyers without fire resistance.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_FLYING.
 
@@ -6402,9 +6864,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can pass under doors. Closing a normal door is not a reliable barrier against it.
+This creature can pass under doors. Closing a door will not keep it out.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_PASS_DOOR.
 
@@ -6416,9 +6880,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can unlock doors. A locked doorway can delay rather than permanently exclude it.
+This creature can unlock doors. A lock may delay it, but you need another plan if it keeps approaching.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_UNLOCK_DOOR.
 
@@ -6430,9 +6896,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can open doors. Closing one changes sight and timing, but does not guarantee that it stays closed.
+This creature can open doors. Closing one can break sight or buy time, but it is not a lasting barrier.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_OPEN_DOOR.
 
@@ -6444,9 +6912,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can bash through doors. Inspect another retreat route instead of relying on the door lasting indefinitely.
+This creature can break through doors. Watch for the barrier to fail and keep another retreat route ready.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_BASH_DOOR.
 
@@ -6458,9 +6928,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can pass through walls. Ordinary solid terrain does not contain it the way it contains walking foes.
+This creature can move through walls. Ordinary rock will not contain it; check nearby squares even when a wall blocks your own route.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_PASS_WALL.
 
@@ -6472,9 +6944,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can destroy walls. Terrain that currently blocks a route may change as it approaches.
+This creature can destroy walls. A blocked route can open as it approaches, changing sight lines and escape paths.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_KILL_WALL.
 
@@ -6486,9 +6960,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This foe can tunnel through walls. A blocked route can become passable; watch the actual terrain and sound.
+This creature can tunnel through walls. Listen for digging and recheck routes as the terrain changes.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_TUNNEL_WALL.
 
@@ -6500,9 +6976,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can kill other monsters in its way. A weaker enemy may not remain a dependable blocker.
+This creature can kill weaker monsters blocking its path. Another enemy may not keep it away from you for long.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_KILL_BODY.
 
@@ -6514,9 +6992,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can pick up items. A visible object may not remain on the floor while you spend turns elsewhere.
+This creature can pick up floor items. Consider collecting something useful before it reaches the item, if doing so is safe.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_TAKE_ITEM.
 
@@ -6528,9 +7008,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can destroy items in its way. Consider the item's current location and the danger before assuming you can collect it later.
+This creature can destroy items in its path. A floor item may be lost if you leave it in the approaching creature's route.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_KILL_ITEM.
 
@@ -6542,9 +7024,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This foe may retreat or teleport when its power runs low. Read its actual behavior rather than assuming a withdrawal means it has been defeated.
+This creature may retreat when it runs low on power. Watch its position: a retreat does not mean it has been defeated.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_LOW_MANA_RUN.
 
@@ -6556,9 +7040,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can gain a stronger attack after moving toward you. Waiting in a straight approach lane can give it that opportunity.
+This creature can make a stronger attack after moving toward you. A straight approach gives it a chance to charge.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_CHARGE.
 
@@ -6570,9 +7056,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has a racial Bane against Elves. Its relevant skill contests can be stronger against a matching hero.
+This creature has a racial Bane against Elves. Its relevant skill contests can be stronger against a matching hero.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_ELFBANE.
 
@@ -6584,9 +7072,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This foe can knock you back. Read the terrain behind your square and any nearby chasm or trap before choosing to hold position.
+This enemy can push you backward. Keep clear of chasms, lava, traps and other hazards behind your square.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_KNOCK_BACK.
 
@@ -6598,9 +7088,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: A critical ranged hit can slow you. The damage and slow condition are separate outcomes; read both after a hit.
+A critical ranged hit from this creature can slow you. Check both damage and the Slow condition after a hit.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_CRIPPLING.
 
@@ -6612,9 +7104,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: Moving away from this adjacent foe can give it a free attack. A retreat still may be right, but it is not automatically free of retaliation.
+Moving away from this adjacent enemy can give it a free attack. A retreat may still be worthwhile; compare the destination with the risk of that hit.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_OPPORTUNIST.
 
@@ -6626,9 +7120,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: Moving between squares adjacent to this foe can provoke its free attack under the ability's conditions. Plan the whole step rather than only the destination.
+Moving from one square beside this enemy to another can give it a free attack. Check the whole step when moving around it.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_ZONE_OF_CONTROL.
 
@@ -6640,9 +7136,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: Bright light can penalize this creature, and some light effects can stun or harm it. Light intensity and radius differ; inspect the actual illuminated squares.
+Bright light penalises this creature. Some light effects can also stun or hurt it. Check the illumination on its actual square, not just your lamp's fuel.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_HURT_LITE.
 
@@ -6654,9 +7152,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has a stone body. Effects that interact with stone may treat it differently; read the relevant known effect before using it.
+This creature has a stone body. Shattering effects can damage or weaken it in ways that ordinary creatures resist.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_STONE.
 
@@ -6668,9 +7168,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature is especially vulnerable to fire. A fire effect's range, target and other consequences still matter.
+This creature is especially vulnerable to fire. Fire attacks deal extra damage, and a fire brand can add more bonus dice against it.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_HURT_FIRE.
 
@@ -6682,9 +7184,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature is especially vulnerable to cold. Choose a legal current target and read the effect before spending a resource.
+This creature is especially vulnerable to cold. Cold attacks deal extra damage, and a cold brand can add more bonus dice against it.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_HURT_COLD.
 
@@ -6696,9 +7200,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature fights with forged weapons. Effects that damage or shatter weapons may interact with it; read its learned attack rather than assuming it is unarmed.
+This creature uses forged weapons. Song of Shattering can weaken its weapon attacks if the effect succeeds.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_HAS_WEAPON.
 
@@ -6710,9 +7216,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature wears substantial armour. A successful hit can still be blocked. Compare your damage, critical opportunities and any known armour-affecting effect.
+This creature wears substantial armour. Strong damage or critical hits may be needed to get through it. Song of Shattering can weaken its armour if the effect succeeds.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_HAS_ARMOUR.
 
@@ -6724,13 +7232,15 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature resists lightning. Do not infer resistance to other elements from this one learned property.
+This creature is immune to lightning damage and the extra dice of a lightning brand. Ordinary weapon damage can still affect it.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_RES_ELEC.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/spell/spell-projection-effects.c`.
 
 ## Fire resistance
 
@@ -6738,13 +7248,15 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature resists fire. A fire effect may be less useful; this says nothing by itself about cold or other damage types.
+This creature is immune to fire damage, lava and the extra dice of a fire brand. Choose another damage type or ordinary weapon damage.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_RES_FIRE.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/spell/spell-projection-effects.c`.
 
 ## Cold resistance
 
@@ -6752,13 +7264,15 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature resists cold. Read a different known effect or ordinary damage option before spending a cold resource.
+This creature is immune to cold damage and the extra dice of a cold brand. Choose another damage type or ordinary weapon damage.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_RES_COLD.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/spell/spell-projection-effects.c`.
 
 ## Poison resistance
 
@@ -6766,41 +7280,47 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature resists poison. Poison effects and ordinary weapon damage follow different rules.
+This creature is immune to poisoning and the extra poison effect of a poison brand. Ordinary weapon damage can still affect it.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_RES_POIS.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/spell/spell-projection-effects.c`.
 
-## Cannot be slowed
+## Resists slowing
 
 `monster.rf3_no_slow`
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature cannot be slowed. A known slowing effect is not a suitable required practice action against it.
+This creature is extremely resistant to slowing: magical slowing checks face an additional 100 resistance. Choose another tactic rather than counting on Slow.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_NO_SLOW.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/spell/spell-projection-effects.c`.
 
-## Cannot be frightened
+## Resists fear
 
 `monster.rf3_no_fear`
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature cannot be frightened. Do not rely on a fear effect to make it retreat.
+This creature resists ordinary morale pressure and gains +100 resistance against magical fear. Frightening it is usually impractical; plan another way to escape or defeat it.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_NO_FEAR.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/spell/spell-projection-effects.c`.
 
 ## Cannot be stunned
 
@@ -6808,41 +7328,47 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature cannot be stunned. A stunning device may still have other effects, but stunning itself is not a viable plan.
+This creature cannot be stunned. A stunning effect may have other uses, but stunning this target will not help.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_NO_STUN.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/spell/spell-projection-effects.c`.
 
-## Cannot be confused
+## Resists confusion
 
 `monster.rf3_no_conf`
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature cannot be confused. Choose another known tactic instead of spending a confusion effect for that purpose.
+This creature is extremely resistant to confusion: magical confusion checks face an additional 100 resistance. Choose another tactic rather than relying on it becoming confused.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_NO_CONF.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/spell/spell-projection-effects.c`.
 
-## Cannot be put to sleep
+## Resists sleep
 
 `monster.rf3_no_sleep`
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature cannot be put to sleep. A slumber effect is not a useful required action against it.
+This creature is extremely resistant to sleep: sleep checks face an additional 100 resistance. Do not rely on a slumber effect to stop it.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_NO_SLEEP.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/spell/spell-projection-effects.c`.
 
 ## Enemy archery
 
@@ -6850,9 +7376,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has a shortbow arrow attack. Lines of fire and nearby cover matter even when it is not adjacent.
+This creature has a shortbow arrow attack. Lines of fire and nearby cover matter even when it is not adjacent.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_ARROW1.
 
@@ -6864,9 +7392,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has a longbow arrow attack. Distance alone does not prevent ranged damage; inspect the line of fire.
+This creature has a longbow arrow attack. Distance alone does not prevent ranged damage; inspect the line of fire.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_ARROW2.
 
@@ -6878,9 +7408,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can throw boulders. Check cover and the actual attack result; being outside melee range does not make you safe.
+This creature can throw boulders. Check cover and the actual attack result; being outside melee range does not make you safe.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_BOULDER.
 
@@ -6892,9 +7424,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can breathe fire. Inspect fire resistance, relevant Protection, cover and the observed area before choosing a route.
+This creature can breathe fire. Inspect fire resistance, relevant Protection, cover and the observed area before choosing a route.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_BRTH_FIRE.
 
@@ -6906,9 +7440,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can breathe cold. Inspect cold resistance, applicable Protection and the line of attack.
+This creature can breathe cold. Inspect cold resistance, applicable Protection and the line of attack.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_BRTH_COLD.
 
@@ -6920,9 +7456,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can breathe poison. Resistance reduces damage differently from an Antidote curing existing poison.
+This creature can breathe poison. Resistance reduces damage differently from an Antidote curing existing poison.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_BRTH_POIS.
 
@@ -6934,9 +7472,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can breathe darkness. Light and dark resistance have their own rules; ordinary physical Protection is not automatically applicable.
+This creature can breathe darkness. Light and dark resistance have their own rules; ordinary physical Protection is not automatically applicable.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_BRTH_DARK.
 
@@ -6948,9 +7488,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can cause an earthquake. The terrain and available routes can change; recheck the map after the actual event.
+This creature can cause an earthquake. The terrain and available routes can change; recheck the map after the actual event.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_EARTHQUAKE.
 
@@ -6962,9 +7504,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can shriek for help. Noise can alert other foes. A creature currently alone in view may soon gain support.
+This creature can shriek for help. Noise can alert other foes. A creature currently alone in view may soon gain support.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_SHRIEK.
 
@@ -6976,9 +7520,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can make a loud screech and stun you. Noise and the resulting condition are separate consequences.
+This creature can make a loud screech and stun you. Noise and the resulting condition are separate consequences.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_SCREECH.
 
@@ -6990,9 +7536,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can darken the area around you. Recheck what is currently visible; remembered terrain is not proof that enemies have stayed in place.
+This creature can darken the area around you. Recheck what is currently visible; remembered terrain is not proof that enemies have stayed in place.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_DARKNESS.
 
@@ -7004,9 +7552,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can make you forget mapped terrain. This affects remembered knowledge, separate from current sight.
+This creature can make you forget mapped terrain. This affects remembered knowledge, separate from current sight.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_FORGET.
 
@@ -7018,9 +7568,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can frighten you. Fear interferes with melee and ranged aiming. Inspect a known remedy after the condition actually appears.
+This creature can frighten you. Fear interferes with melee and ranged aiming. Inspect a known remedy after the condition actually appears.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_SCARE.
 
@@ -7032,9 +7584,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can confuse you. Direction and aiming choices become unreliable while confused; inspect current conditions before committing.
+This creature can confuse you. Direction and aiming choices become unreliable while confused; inspect current conditions before committing.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_CONF.
 
@@ -7046,9 +7600,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can entrance you. A successful trance prevents ordinary actions until it ends. Avoid assuming you can drink a remedy after losing the ability to act.
+This creature can entrance you. A successful trance prevents ordinary actions until it ends. Avoid assuming you can drink a remedy after losing the ability to act.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_HOLD.
 
@@ -7060,9 +7616,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can slow you. Compare your current speed and escape route; a temporary speed bonus may offset the penalty without removing it.
+This creature can slow you. Compare your current speed and escape route; a temporary speed bonus may offset the penalty without removing it.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_SLOW.
 
@@ -7074,9 +7632,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can hatch spiders. Additional enemies can alter surrounding pressure and block routes.
+This creature can hatch spiders. Additional enemies can alter surrounding pressure and block routes.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_HATCH_SPIDER.
 
@@ -7088,9 +7648,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can dim your light. Check the darkening effect separately from fuel and blindness.
+This creature can dim your light. Check the darkening effect separately from fuel and blindness.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_DIM.
 
@@ -7102,13 +7664,15 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature sings a binding song. Read its learned description and the conditions actually applied; an enemy song is not your own selectable Song ability.
+This enemy's Song of Binding can slow you and close or lock doors. Check your escape route and Slow condition. Song of Silence weakens the opposing song.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_SNG_BINDING.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/player/player-song-monster.c`.
 
 ## An enemy piercing song
 
@@ -7116,13 +7680,15 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature sings a song of piercing. Read the learned effect and actual messages before choosing how to break contact.
+This enemy's Song of Piercing can reveal your location to it through an opposed Will check. Distance and Song of Silence help you resist the search.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_SNG_PIERCING.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/player/player-song-monster.c`.
 
 ## An enemy oath song
 
@@ -7130,13 +7696,15 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature sings a song of oaths. Read the learned effect and current situation; the tutorial does not select or break an oath for you.
+This enemy's Song of Oaths can summon Oathwraiths. Leaving it singing can add more pursuers. Song of Silence weakens the summoning song.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_SNG_OATHS.
 
-Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`.
+Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-recall.c`, `src/melee/melee-process.c`, `src/player/player-song-monster.c`.
 
 ## Bane against Dwarves
 
@@ -7144,9 +7712,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has a racial Bane against Dwarves. Relevant contests can be harder for a matching hero.
+This creature has a racial Bane against Dwarves. Relevant contests can be harder for a matching hero.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_DWARFBANE.
 
@@ -7158,9 +7728,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has a racial Bane against Men. Relevant contests can be harder for a matching hero.
+This creature has a racial Bane against Men. Relevant contests can be harder for a matching hero.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_EDAINBANE.
 
@@ -7172,9 +7744,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can throw a web over you. Inspect the resulting terrain and movement restriction before repeating a movement command.
+This creature can throw a web onto your square. Escaping can take time; check your current terrain before repeatedly trying to move.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_THROW_WEB.
 
@@ -7186,9 +7760,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature can rally fleeing allies. A foe that retreated can regain the will to fight; fleeing is not a permanent removal from combat.
+This creature can restore the courage of fleeing allies. Watch for enemies returning to the fight after they retreat.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_RALLY.
 
@@ -7200,9 +7776,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has a Bane against Noldor. Its relevant skill contests can be stronger against a matching hero.
+This creature has a Bane against Noldor. Its relevant skill contests can be stronger against a matching hero.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_NOLDORBANE.
 
@@ -7214,9 +7792,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature has a Bane against Sindar. Its relevant skill contests can be stronger against a matching hero.
+This creature has a Bane against Sindar. Its relevant skill contests can be stronger against a matching hero.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF4_SINDARBANE.
 
@@ -7228,9 +7808,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's orc classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Orc group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_ORC.
 
@@ -7242,9 +7824,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's troll classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Troll group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_TROLL.
 
@@ -7256,9 +7840,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's serpent classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Serpent group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_SERPENT.
 
@@ -7270,9 +7856,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's dragon classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Dragon group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_DRAGON.
 
@@ -7284,9 +7872,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's rauko classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Rauko group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_RAUKO.
 
@@ -7298,9 +7888,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's undead classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Undead group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_UNDEAD.
 
@@ -7312,9 +7904,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's spider classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Spider group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_SPIDER.
 
@@ -7326,9 +7920,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's wolf classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Wolf group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_WOLF.
 
@@ -7340,9 +7936,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's man classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Man group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_MAN.
 
@@ -7354,9 +7952,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's elf classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Elf group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_ELF.
 
@@ -7368,9 +7968,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's giant classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Giant group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_GIANT.
 
@@ -7382,9 +7984,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's cat classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Cat group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_CAT.
 
@@ -7396,9 +8000,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's horror classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Horror group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_HORROR.
 
@@ -7410,9 +8016,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Extended**.
 
+Priority: **8** (higher appears first).
+
 **1. Info**
 
-{subject}: This creature's vampire classification is known. Matching slays, Bane choices, quest counters and oath restrictions can depend on that classification. Do not infer other unknown abilities from its group.
+This creature belongs to the Vampire group. Check the targets named by your weapon slays, Bane ability, quests and oath; those effects may depend on creature type. Its other traits must be learned separately.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF3_VAMPIRE.
 
@@ -7424,9 +8032,11 @@ Sources: `src/tutorial/tutorial-world.c`, `src/defines.h`, `src/monster/monster-
 
 Level: **Normal**.
 
+Priority: **84** (higher appears first).
+
 **1. Info**
 
-{detail} At stun severity 50 or more, every skill receives -4 rather than -2. The heavy-stun label itself appears above 50. You can still act until stun exceeds 100; inspect a known remedy while action is possible.
+Stun severity is at least 50, so every skill is reduced by 4. Above 100, you lose the ability to act. Clarity or Miruvor can remove stun while you can still use an item.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: heavy_stun.
 
@@ -7438,9 +8048,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **96** (higher appears first).
+
 **1. Info**
 
-{detail} Stun above 100 prevents ordinary actions. Continue resumes the normal scheduler, not a free remedy action. You must regain the ability to act before choosing and using an item.
+Stun severity is above 100. You cannot act until it falls enough for you to recover. Continue closes the explanation; remedies become available once you can act again.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: knocked_out.
 
@@ -7452,37 +8064,43 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} Your nourishment is at or above the Full threshold. Full describes food level, not Health or Voice. Eating again is a separate action and may waste a resource you need later.
+You have enough nourishment for now. Save food for later unless you need an herb's other effect. Full describes your food reserve, not your Health or Voice.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: full.
 
 Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
-## Song lockout
+## Singing temporarily blocked
 
 `status.song_lockout_timer`
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} A song duel has temporarily prevented starting another song. Wait for the displayed lockout to expire through normal game time. A Voice potion restores Voice but does not remove this lockout.
+A song duel has temporarily prevented starting another song. Wait for the displayed lockout to expire through normal game time. A Voice potion restores Voice but does not remove this lockout.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: song_lockout_timer.
 
 Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
-## Losing ground in a song contest
+## Losing ground in a song duel
 
 `status.song_contest_player_stacks`
 
 Level: **Extended**.
 
+Priority: **84** (higher appears first).
+
 **1. Info**
 
-{detail} Your opponent has won recent Contest exchanges. These stacks track pressure toward losing the duel. Defeat can drain a random attribute and lock singing; read the actual target and duel state before continuing.
+Your opponent is gaining ground in the song duel. Losing can drain an attribute and briefly prevent singing. Check the current duel state and consider ending the song before the contest is lost.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: song_contest_player_stacks.
 
@@ -7494,9 +8112,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} A climbing action is in progress. Its recovery and movement rules still apply. This card only explains the public state; it does not finish the climb or create an extra action.
+You are climbing. Completing the climb spends time, and enemies can act. Check the destination and nearby threats when you regain control.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: climbing.
 
@@ -7508,9 +8128,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} A leap is in progress. Leaping has approach and landing requirements and is distinct from walking onto a hazard. Let the committed action resolve; this explanation does not change its destination.
+You are in mid-leap. The landing is part of the committed action. An obstructed landing can leave you on the crossed square, so check the terrain and enemies after the leap resolves.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: leaping.
 
@@ -7522,37 +8144,43 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} An effect displaced you. Recheck the current square, nearby enemies and the terrain behind or beside you. Knockback can change a route even when you did not choose a move.
+You have been pushed to another square. Check the terrain underfoot and nearby enemies immediately; displacement can put you in a trap or other hazard.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: knocked_back.
 
 Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
-## A recovery turn is owed
+## A turn to recover
 
 `status.skip_next_turn`
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} The current action or effect requires a skipped turn, such as recovery from Smite. This is part of the real action cost. Reading a card does not erase the recovery or let you act during it.
+Your last action or an effect requires a recovery turn. Smite is one example. You must wait for that recovery before choosing another ordinary action.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: skip_next_turn.
 
 Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
-## Waking from entrancement
+## Recovering from trance
 
 `status.was_entranced`
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} You are in the recovery state after a trance. Follow the normal action schedule; Continue acknowledges the explanation and does not grant a free turn.
+The trance has just ended. You are briefly protected from being entranced again, giving you an opportunity to act. Choose a safe next step before the protection ends.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: was_entranced.
 
@@ -7564,9 +8192,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} With Vengeance active, taking melee damage primes one extra damage die for your next melee hit. It does not stack indefinitely, and a ranged attack is not the required melee hit. Check the actual active ability and target.
+Taking melee damage has prepared Vengeance: your next melee hit gains one extra damage die. Further damage does not add more dice to this bonus.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: vengeance.
 
@@ -7578,9 +8208,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} Focused Attack is active and a prior qualifying pause has prepared its Perception-based attack bonus. The bonus is not a permanent increase to every attack; the next applicable attack consumes the prepared state.
+Waiting has prepared Focused Attack. Your next attack can gain a bonus equal to half your Perception. Moving or taking another action can lose the opportunity.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: focused.
 
@@ -7592,9 +8224,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} Concentration rewards consecutive attacks on the same target, up to half your Perception. Attacking another creature changes the target and resets the accumulated sequence. Inspect the displayed current bonus.
+Repeated attacks against the same enemy build Concentration, adding up to half your Perception to Attack. Switching targets resets the sequence.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: concentration.
 
@@ -7606,9 +8240,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} The current setup has an eligible Harness spear or hand axe and a prepared Power Throw opportunity. Its separate thrown and melee rolls combine successful damage before one Protection roll. Your melee weapon remains active.
+Power Throw is ready. Throw a Harness spear or hand axe at an adjacent enemy while striking in melee. The two attacks roll separately; successful damage is combined before one Protection roll. Your melee weapon stays active.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: power_throw.
 
@@ -7620,9 +8256,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} The displayed major and any minor theme are active. Each theme has its own Voice cost. Voice does not regenerate while singing; stopping or changing a song is a separate real action.
+You are singing the displayed song and, if shown, a minor theme. Songs spend Voice over time, and Voice cannot regenerate while you sing. Stop through the Songs menu when the effect is no longer useful.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: singing.
 
@@ -7634,13 +8272,15 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} Your hero is in pit terrain. Leaving has its own movement or climbing rules. Inspect the actual square and nearby enemies before repeating a command.
+You are in a pit, where your Attack and Evasion are halved. Moving out attempts a climb, which can fail and spend a turn. Check nearby enemies and your Health before trying.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: in_pit.
 
-Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
+Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`, `src/cmd/movement/cmd-run.c`.
 
 ## Caught in a web
 
@@ -7648,13 +8288,15 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **80** (higher appears first).
+
 **1. Info**
 
-{detail} A web occupies your square and can restrict movement. Read the actual escape action and its result; Leaping does not simply bypass an existing web.
+You are caught in a web, where your Attack and Evasion are halved. Attempting to move struggles against the web and may take several turns. Leaping cannot free you from it.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: in_web.
 
-Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
+Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`, `src/cmd/movement/cmd-run.c`.
 
 ## Standing in sunlight
 
@@ -7662,9 +8304,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} Your square is in sunlight. This is an environmental state, separate from the fuel in your lamp or the radius of your own light. Check the effect on known light-sensitive creatures.
+You are standing in sunlight. It illuminates the square independently of your own light and can hinder light-sensitive enemies.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: sunlight.
 
@@ -7676,9 +8320,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **84** (higher appears first).
+
 **1. Info**
 
-{detail} This cursed state makes the hero use the worse of two rolls in affected attack, evasion and skill contests. It is distinct from a cursed piece of equipment preventing removal. Read the actual source and any available remedy.
+This curse makes you use the worse of two rolls in affected Attack, Evasion and skill contests. Check the source and any available remedy. A cursed item that resists removal is a separate kind of curse.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: cursed.
 
@@ -7690,9 +8336,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} Running repeats movement actions until it stops or is interrupted. Every move retains its cost, and enemies can act. The tutorial suspends input automation while the explanation is visible.
+Running repeats movement until interrupted. Every step spends time, and enemies can act between steps. Inspect your route before starting another run.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: running.
 
@@ -7704,9 +8352,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} Smithing is an ongoing action with remaining work. Time, forge uses and resource costs follow the accepted proposal. Interruption does not mean a finished item has already been produced.
+Smithing is underway. Work continues for the time shown by the accepted proposal. If interrupted, check the unfinished work and remaining costs before resuming.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: smithing.
 
@@ -7718,9 +8368,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Extended**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} Arrow crafting or improvement is in progress. Each completed unit keeps its normal time and material rules. Check the actual quantity and quality after an interruption.
+Arrow crafting is underway. Each completed arrow uses its normal time and materials. If interrupted, check how many arrows were finished before starting again.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: fletching.
 
@@ -7732,9 +8384,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} Rest repeats game turns until its chosen goal is met or it is interrupted. Poison, bleeding and starvation prevent ordinary Health regeneration; singing prevents Voice regeneration. Disease continues to lower an attribute every 50 player turns while you rest; rest cannot cure it.
+Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting and must be cured with Healing or Miruvor.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: resting.
 
@@ -7746,9 +8400,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **33** (higher appears first).
+
 **1. Info**
 
-{detail} A command is set to repeat for the displayed remaining count. Each successful repetition is a real action. The repetition can stop when the context changes; the tutorial does not replay a cancelled action.
+Your last command is set to repeat. Each repetition spends its normal time, so enemies can act. Cancel it when the situation changes.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: repeat.
 
@@ -7760,9 +8416,11 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/p
 
 Level: **Normal**.
 
+Priority: **97** (higher appears first).
+
 **1. Info**
 
-{detail} Bleeding severity is above 100. The next damage tick is ceil(severity / 5) Health, and ordinary Health regeneration is blocked. Healing consumables halve bleeding rather than always stopping it. Read the actual current severity and known remedies before acting.
+Bleeding severity is above 100. The next damage tick will cost more than 20 Health, and ordinary Health regeneration is blocked. Healing herbs or potions and Miruvor halve bleeding; one use may leave substantial bleeding. Song of Staunching can stop it.
 
 Trigger: The public status predicate becomes active: cut > 100.
 
@@ -7774,10 +8432,158 @@ Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/dungeon/
 
 Level: **Normal**.
 
+Priority: **55** (higher appears first).
+
 **1. Info**
 
-{detail} Your current expedition is in the escape phase. Read the live main objective, route and any changed pursuit or staircase restrictions. This state is different from automatic running movement; it does not mean your hero is currently following a path.
+You are escaping with a Silmaril. Check the main objective and your route to the surface. This is the escape phase of the expedition; automatic running is a separate movement command.
 
 Trigger: The public status predicate becomes active: on_the_run.
 
 Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/dungeon/dungeon-player.c`.
+
+## Approach quietly
+
+`combat.stealth`
+
+Level: **Normal**.
+
+Priority: **40** (higher appears first).
+
+**1. Info**
+
+{subject} has not become alert to you. Stealth mode makes you harder to notice but slows most actions. Distance and cover also help. Use it before approaching when staying unnoticed matters.
+
+**2. Action**
+
+Enter Stealth mode for this practice. You can turn it off later when speed matters more. Skip if you prefer a different approach.
+
+Required action: `stealth`.
+
+Trigger: After the first-creature introduction, a visible nonadjacent hostile is below alertness; no visible adjacent or alert foe makes the approach unsafe, and Stealth can be enabled.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/player/player-bonuses.c`.
+
+## Shallow water
+
+`world.water`
+
+Level: **Normal**.
+
+Priority: **45** (higher appears first).
+
+**1. Info**
+
+Moving into, through or out of water is slower and makes a splash. Each water square entered on foot has a small disease risk. Plan a dry route when you need speed or stealth. A successful leap avoids water contact, but click-to-travel wades.
+
+Trigger: Known shallow water is on the current square or visibly adjacent; the observation expires when none remains nearby.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-water.c`, `src/player/effects.c`.
+
+## Keep clear of lava
+
+`world.lava`
+
+Level: **Normal**.
+
+Priority: **90** (higher appears first).
+
+**1. Info**
+
+Lava is deadly. Ground contact without enough effective fire resistance kills you immediately; resistance still leaves severe damage on entry and while you remain there. Leaping also causes heat damage. Inspect the square for your current risk before choosing any crossing.
+
+Trigger: Known molten lava is on the current square or visibly adjacent; the observation expires when none remains nearby.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-lava.c`, `src/player/player-bonuses.c`.
+
+## Fighting on ice
+
+`world.ice`
+
+Level: **Normal**.
+
+Priority: **55** (higher appears first).
+
+**1. Info**
+
+While standing on ice, you have -2 Melee, -2 Archery and -2 Evasion. Movement takes its usual time. Dry ground gives you better footing in a fight. Fire melts ice into water; cold freezes water into ice.
+
+Trigger: Known solid ice is on the current square or visibly adjacent; the observation expires when none remains nearby.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`.
+
+## Poisonous seep
+
+`world.poison`
+
+Level: **Normal**.
+
+Priority: **80** (higher appears first).
+
+**1. Info**
+
+Entering poisonous seep on foot, or spending turns on it, adds poison. Leave it before stopping to heal or use an Antidote, or another dose can poison you again. Poison resistance reduces exposure; a successful leap avoids contact.
+
+Trigger: Known poisonous seep is on the current square or visibly adjacent; the observation expires when none remains nearby.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-poison.c`, `src/player/player-bonuses.c`.
+
+## Molten lava
+
+`terrain.85`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+**1. Info**
+
+Ground contact is immediately lethal unless you have positive effective fire resistance on that square. With one, two or three net resistance layers, lava deals 40, 30 or 24 Health per exposure. Armour does not reduce this damage. Fire caves and vulnerability can cancel resistance layers.
+
+**2. Info**
+
+Lava hurts on entry and on later turns spent in it. Leaping counts as one extra resistance layer in the air, so crossing still burns you. Inspect the destination damage preview; an interrupted leap can leave you in the lava.
+
+Trigger: The known feature is on the player square or visibly adjacent; hidden terrain is not disclosed.
+
+Sources: `src/tutorial/tutorial-game.c`, `lib/edit/terrain.txt`, `src/cave/cave-lava.c`, `src/player/player-bonuses.c`.
+
+## Solid ice
+
+`terrain.86`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+**1. Info**
+
+Grounded heroes on ice receive -2 Melee, -2 Archery and -2 Evasion. Grounded monsters also lose 2 Attack and Evasion. Movement takes its usual time. Airborne creatures avoid the footing penalty.
+
+**2. Info**
+
+Fire melts ice into shallow water, and cold freezes water into ice. This includes elemental effects and hits with the corresponding weapon brands. Recheck the terrain after an elemental attack: water has different movement and disease risks.
+
+Trigger: The known feature is on the player square or visibly adjacent; hidden terrain is not disclosed.
+
+Sources: `src/tutorial/tutorial-game.c`, `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`, `src/melee/melee-util.c`.
+
+## Poisonous seep
+
+`terrain.87`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+**1. Info**
+
+Contact with poisonous seep adds 6 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the seep, even while resting or using an item.
+
+**2. Info**
+
+Poison deals damage over time and prevents ordinary Health regeneration. Move to clean ground before using Antidote or Miruvor, or another exposure can poison you again. A successful airborne crossing avoids contact.
+
+Trigger: The known feature is on the player square or visibly adjacent; hidden terrain is not disclosed.
+
+Sources: `src/tutorial/tutorial-game.c`, `lib/edit/terrain.txt`, `src/cave/cave-poison.c`, `src/spell/spell-projection-effects.c`, `src/player/player-bonuses.c`.

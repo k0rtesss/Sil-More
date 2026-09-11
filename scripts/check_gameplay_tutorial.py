@@ -266,10 +266,13 @@ int main(int argc, char **argv)
     test_tale.id=120; SDL_RemovePath("tale-120-tutorials.json"); tutorial_sync_tale();
     tutorial_set_mode(TUTORIAL_MODE_NORMAL);
     tutorial_set_enabled(true); assert(tutorial_get_mode()==TUTORIAL_MODE_NORMAL);
+    assert(tutorial_lesson_enabled("basic") && !tutorial_lesson_enabled("detail"));
+    assert(!tutorial_lesson_enabled("not-in-catalogue"));
     offer("detail"); assert(!tutorial_is_active());
     assert(tutorial_lesson_status("detail")==TUTORIAL_UNSEEN);
     offer("basic"); assert(tutorial_get_view(&view) && view.level==TUTORIAL_MODE_NORMAL);
     tutorial_set_mode(TUTORIAL_MODE_EXTENDED);
+    assert(tutorial_lesson_enabled("detail"));
     assert(tutorial_get_view(&view) && !strcmp(view.id,"basic"));
     tutorial_continue();
     offer("detail"); tutorial_continue(); tutorial_checkpoint(true);
@@ -292,6 +295,7 @@ int main(int argc, char **argv)
     test_tale.id=121; SDL_RemovePath("tale-121-tutorials.json"); tutorial_sync_tale();
     tutorial_set_mode(TUTORIAL_MODE_EXTENDED); offer("detail");
     tutorial_set_character_blocked(true);
+    assert(!tutorial_lesson_enabled("basic"));
     assert(tutorial_character_blocked() && tutorial_get_mode()==TUTORIAL_MODE_EXTENDED);
     offer("basic"); assert(!tutorial_is_active() && queue_count==0);
     assert(tutorial_lesson_status("basic")==TUTORIAL_UNSEEN);
@@ -322,6 +326,78 @@ int main(int argc, char **argv)
     write_text("bad-level.json", "{\"version\":1,\"lessons\":[{\"id\":\"bad\",\"title\":\"Bad level\",\"level\":2,\"steps\":[{\"text\":\"Bad\"}]}]}");
     assert(!tutorial_load_catalogue("bad-level.json"));
     assert(tutorial_archive_count()==4);
+    write_text("bad-kind.json", "{\"version\":1,\"lessons\":[{\"id\":\"bad\",\"title\":\"Bad kind\",\"steps\":[{\"text\":\"Bad\",\"kind\":42}]}]}");
+    assert(!tutorial_load_catalogue("bad-kind.json"));
+    write_text("bad-action.json", "{\"version\":1,\"lessons\":[{\"id\":\"bad\",\"title\":\"Bad action\",\"steps\":[{\"text\":\"Bad\",\"action\":42}]}]}");
+    assert(!tutorial_load_catalogue("bad-action.json"));
+    write_text("unsafe-decision.json", "{\"version\":1,\"lessons\":[{\"id\":\"bad\",\"title\":\"Bad decision\",\"steps\":[{\"text\":\"Read only\",\"kind\":\"decision\",\"action\":\"purchase\"}]}]}");
+    assert(!tutorial_load_catalogue("unsafe-decision.json"));
+    assert(tutorial_archive_count()==4); /* Invalid reloads retain the catalogue. */
+
+    /* A large one-time burst must retain every observation in priority order,
+     * including low-priority discoveries that have no repeating producer. */
+    cJSON *burst = cJSON_CreateObject();
+    cJSON_AddNumberToObject(burst, "version", 1);
+    cJSON *burst_lessons = cJSON_AddArrayToObject(burst, "lessons");
+    for (int i = 0; i < 48; ++i) {
+        char id[80]; SDL_snprintf(id, sizeof(id), "discovery.%d", i);
+        cJSON *lesson = cJSON_CreateObject();
+        cJSON_AddItemToArray(burst_lessons, lesson);
+        cJSON_AddStringToObject(lesson, "id", id);
+        cJSON_AddStringToObject(lesson, "title", "Discovered feature");
+        cJSON_AddNumberToObject(lesson, "priority", i);
+        cJSON *steps = cJSON_AddArrayToObject(lesson, "steps");
+        cJSON *entry = cJSON_CreateObject(); cJSON_AddItemToArray(steps, entry);
+        cJSON_AddStringToObject(entry, "text", "Read this discovery.");
+    }
+    char *burst_text = cJSON_Print(burst);
+    assert(burst_text); write_text("burst.json", burst_text);
+    cJSON_free(burst_text); cJSON_Delete(burst);
+    assert(tutorial_load_catalogue("burst.json"));
+    test_tale.id = 122; SDL_RemovePath("tale-122-tutorials.json");
+    tutorial_sync_tale();
+    for (int i = 0; i < 48; ++i) {
+        char id[80]; SDL_snprintf(id, sizeof(id), "discovery.%d", i);
+        tutorial_observe(id, NULL); tutorial_observe(id, NULL);
+    }
+    assert(queue_count == 48 && !tutorial_is_active());
+    for (int i = 47; i >= 0; --i) {
+        char id[80]; SDL_snprintf(id, sizeof(id), "discovery.%d", i);
+        tutorial_checkpoint(true);
+        assert(tutorial_get_view(&view) && !strcmp(view.id, id));
+        tutorial_continue();
+        assert(tutorial_lesson_status(id) == TUTORIAL_COMPLETED);
+    }
+    assert(queue_count == 0);
+    assert(tutorial_load_catalogue("catalogue.json"));
+    test_tale.id = 123;
+    write_text("tale-123-tutorials.json", "{\"version\":1,\"lessons\":{\"move\":{\"status\":\"unrecognized\",\"step\":2},\"examine\":{\"status\":\"in-progress\",\"step\":0.5}}}");
+    tutorial_sync_tale(); offer("move");
+    assert(tutorial_get_view(&view) && view.step == 1);
+    tutorial_skip(); offer("examine");
+    assert(tutorial_get_view(&view) && view.step == 1);
+    test_tale.id = 125;
+    write_text("tale-125-tutorials.json", "{\"version\":1,\"lessons\":{\"move\":{\"status\":\"in-progress\",\"step\":1.5}}}");
+    tutorial_sync_tale(); offer("move");
+    assert(tutorial_get_view(&view) && view.step == 1);
+    tutorial_continue(); tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && view.step == 2 && tutorial_action_waiting());
+    /* A low-priority purchase explanation belongs before the actual choice,
+     * even while an unrelated high-priority gameplay action is suspended. */
+    tutorial_observe("purchase", NULL);
+    assert(tutorial_focus_observation("purchase"));
+    assert(!tutorial_is_active());
+    tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && !strcmp(view.id, "purchase"));
+    assert(!tutorial_focus_observation("not-queued"));
+    tutorial_continue(); tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && !strcmp(view.id, "move") && view.step == 2);
+    assert(tutorial_lesson_status("move") == TUTORIAL_IN_PROGRESS);
+    tutorial_archive_begin();
+    assert(tutorial_replay("purchase")); tutorial_checkpoint(true);
+    assert(!tutorial_focus_observation("move"));
+    tutorial_skip(); tutorial_archive_end();
+    assert(tutorial_get_view(&view) && !strcmp(view.id, "move") && view.step == 2);
     tutorial_shutdown();
     if (argc > 1) {
         int abilities = 0;
@@ -340,7 +416,16 @@ int main(int argc, char **argv)
         if (!separator || (forward && forward > separator)) separator = forward;
         assert(separator); *separator = '\0';
         ANGBAND_DIR_HELP = help_directory;
+        /* Reset is valid before any card/archive has loaded the catalogue. */
+        test_tale.id = 124;
+        write_text("tale-124-tutorials.json", "{\"version\":1,\"lessons\":{\"opening.move\":{\"status\":\"completed\",\"step\":3},\"future-id\":{\"status\":\"completed\"}}}");
+        tutorial_reset_tale();
+        assert(tutorial_lesson_status("opening.move") == TUTORIAL_UNSEEN);
+        assert(tutorial_lesson_status("future-id") == TUTORIAL_COMPLETED);
         assert(tutorial_archive_count() > 100); /* Real lazy installed-resource route. */
+        assert(tutorial_replay("combat.first_monster")); tutorial_checkpoint(true);
+        assert(tutorial_get_view(&view) && strstr(view.body, "This creature"));
+        assert(!view.context.text[0] && !view.action[0] && view.can_continue);
         tutorial_shutdown();
     }
     SDL_Quit();

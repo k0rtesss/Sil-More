@@ -181,7 +181,7 @@ E:+1 Strength.
 N:15:Warden
 I:0:15:7
 D:As the March-wardens of Doriath, who kept the bounds of the Girdle of Melian and ranged its shadowed eaves with bow and blade alike. Beleg Strongbow, captain of that watchful company, was no less deadly with his sword than with his great bow, for a hand long schooled to the close clash of steel does not waver upon the bowstring, and the warrior's eye, trained to read a foe's every movement, guides the arrow as surely as the sword-stroke.
-E:Archery bonus of half (Melee - Archery) when Melee exceeds Archery, or one third of your full Melee skill, rounded up, if you also have Versatility. Your first active weapon change before your next action is free from melee to bow. With Throwing, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between melee weapons or between bows.
+E:Archery bonus of half (base Melee - base Archery) when base Melee exceeds base Archery, or one third of base Melee, rounded up, if you also have Versatility. Base skill means invested skill points, before attributes and other bonuses. Your first active weapon change before your next action is free from melee to bow. With Throwing, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between melee weapons or between bows.
 T:21:0:99  # Hafted
 T:22:0:99  # Polearms
 T:23:0:99  # Swords
@@ -240,7 +240,7 @@ T:35:0:99  # Cloak
 N:25:Versatility
 I:1:5:7
 D:Versatile in arms as was Túrin Turambar, who bore both the great bow of Beleg and the black sword Gurthang in the forests about Nargothrond. The greatest warriors of the First Age disdained no weapon, and their skill with the bow lent sureness to their sword-arm, for a keen eye serves all forms of combat.
-E:Melee bonus of half (Archery - Melee) when Archery exceeds Melee, or one third of your full Archery skill, rounded up, if you also have Warden. Your first active weapon change before your next action is free from bow to melee. With Throwing, it may instead change between bow and throwing or between bows. With Warden, it may instead change between melee weapons or between bows.
+E:Melee bonus of half (base Archery - base Melee) when base Archery exceeds base Melee, or one third of base Archery, rounded up, if you also have Warden. Base skill means invested skill points, before attributes and other bonuses. Your first active weapon change before your next action is free from bow to melee. With Throwing, it may instead change between bow and throwing or between bows. With Warden, it may instead change between melee weapons or between bows.
 T:19:0:99  # Bows
 T:31:1:1   # Gloves (leather gloves only)
 
@@ -846,7 +846,7 @@ E:Immune to fear, hallucination, trance, rage, stun, and confusion. Quest reward
 N:161:Aulë's Forge
 I:8:1:0
 D:Harnessing the creative fire of Aulë the Smith, mightiest of craftsmen among the Valar, who shaped the substance of Arda itself and fashioned the Dwarves in secret beneath the mountains. His blessing upon a mortal smith grants mastery at the forge that surpasses all ordinary limits of skill.
-E:Counts as Masterpiece with +2 extra difficulty allowance. Supersedes Masterpiece. Quest reward.
+E:Exceed effective Smithing by up to twice your base Smithing. Each 2 points of excess difficulty cost 1 base Smithing, rounding the cost up. Supersedes Masterpiece. Quest reward.
 N:162:Oath of Mercy
 I:8:2:0
 D:Swearing the Oath of Mercy, akin to the compassion shown by Finrod Felagund when he befriended Beren in Nargothrond, honouring the bond between all free peoples. Those who vow to spare the helpless are touched by a gentle grace, but the oath is fragile and shatters if its keeper takes the life of a defenceless foe.

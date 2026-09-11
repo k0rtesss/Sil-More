@@ -76,8 +76,9 @@ __FUNCTIONS__
 
 int main(void)
 {
-    assert(VERSION_MAJOR==0 && VERSION_MINOR==9 && VERSION_PATCH==8 && VERSION_EXTRA==0);
-    assert(!strcmp(VERSION_STRING,"0.9.8"));
+    /* The migration boundary stays at 0.9.8.0 as newer save revisions ship. */
+    assert(VERSION_MAJOR>0 || VERSION_MINOR>9
+        || (VERSION_MINOR==9 && VERSION_PATCH>=8));
     /* Legacy saves consume no new byte and remain deferred across resaves. */
     bytes[0]=0x7e; position=0; current_save=false;
     rd_tutorial_character_state();

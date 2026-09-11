@@ -2093,6 +2093,10 @@ int sdl_touch_tutorial_wait_action(Uint64 accept_after_ns)
         if (ev.type == SDL_EVENT_KEY_DOWN) {
             SDL_Keycode key = ev.key.key;
 
+            /* SDL may repeat a held navigation/confirm key while a page is
+             * being redrawn.  A repeat is not a new tutorial choice. */
+            if (ev.key.repeat)
+                continue;
             if (now_ns < accept_after_ns)
                 continue;
             if (sdl_key_is_escape_or_back(key) || key == 'q' || key == 'Q')
@@ -2209,8 +2213,23 @@ void sdl_touch_tutorial_draw_page(int page, bool full, int page_count,
         return;
     }
 
-    if (full)
-        sdl_touch_tutorial_draw_buttonwheel_page(&screen, page, page_count);
+    if (full) {
+        /* The profile page must describe the layout the player currently has.
+         * First-run setup selects the round wheel before entering this path;
+         * Help replay keeps the selected profile intact. */
+        switch (get_sdl_touch_profile()) {
+        case SDL_TOUCH_PROFILE_TOUCH_PANE:
+            sdl_touch_tutorial_draw_pane_page(&screen, page, page_count);
+            break;
+        case SDL_TOUCH_PROFILE_CORNERS:
+            sdl_touch_tutorial_draw_movement_page(&screen, page, page_count);
+            break;
+        case SDL_TOUCH_PROFILE_ROUND_WHEEL:
+        default:
+            sdl_touch_tutorial_draw_buttonwheel_page(&screen, page, page_count);
+            break;
+        }
+    }
 }
 
 void sdl_touch_tutorial_prepare_snapshot(void)
@@ -3244,6 +3263,8 @@ int sdl_touch_tutorial_choose_profile(void)
         if (ev.type == SDL_EVENT_KEY_DOWN) {
             SDL_Keycode key = ev.key.key;
 
+            if (ev.key.repeat)
+                continue;
             if (now_ns < accept_after_ns)
                 continue;
             if (sdl_key_is_escape_or_back(key) || key == 'q' || key == 'Q')
@@ -3821,7 +3842,10 @@ void sdl_input_tutorial_maybe_show_deferred(void)
 
 void sdl_touch_show_tutorial(void)
 {
-    sdl_touch_tutorial_run_fixed();
+    /* Help replays the guide; it must not silently replace a profile the
+     * player selected in Touch Settings.  The first-run path below retains
+     * the fixed default profile for a new touch-only device. */
+    sdl_touch_tutorial_run(sdl_touch_tutorial_full_mode(), false);
     sdl_touch_mark_tutorial_seen_and_save();
 }
 

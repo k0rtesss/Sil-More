@@ -69,9 +69,9 @@ def extract_function(path, name):
 
 HELPERS = "\n\n".join([
     extract_function(GENERATION, "tutorial_start_needs_clear_area"),
-    extract_function(TUTORIAL_GAME, "static bool target_can_be_attacked"),
     extract_function(TUTORIAL_GAME, "static bool tutorial_monster_observable"),
     extract_function(TUTORIAL_GAME, "static bool tutorial_first_monster_target"),
+    extract_function(TUTORIAL_GAME, "static bool tutorial_stealth_target"),
     extract_function(TUTORIAL_GAME, "bool tutorial_game_first_monster_triggered"),
     extract_function(GENERATION, "static bool tutorial_start_triggers_monster"),
 ])
@@ -287,36 +287,38 @@ static void trigger_tests(void)
     assert(!tutorial_game_first_monster_triggered());
     race_body[1].flags1 &= ~RF1_PEACEFUL;
 
-#define CHECK_BLOCKING_FIELD(field) do { \
+#define CHECK_INFORMATION_FIELD(field) do { \
     p_ptr->field = 1; \
-    assert(!tutorial_game_first_monster_triggered()); \
+    assert(tutorial_game_first_monster_triggered()); \
     p_ptr->field = 0; \
     assert(tutorial_game_first_monster_triggered()); \
 } while (0)
-    CHECK_BLOCKING_FIELD(afraid);
-    CHECK_BLOCKING_FIELD(confused);
-    CHECK_BLOCKING_FIELD(image);
-    CHECK_BLOCKING_FIELD(truce);
-    CHECK_BLOCKING_FIELD(rage);
-    CHECK_BLOCKING_FIELD(entranced);
-#undef CHECK_BLOCKING_FIELD
+    CHECK_INFORMATION_FIELD(afraid);
+    CHECK_INFORMATION_FIELD(confused);
+    CHECK_INFORMATION_FIELD(truce);
+    CHECK_INFORMATION_FIELD(rage);
+    CHECK_INFORMATION_FIELD(entranced);
+#undef CHECK_INFORMATION_FIELD
+    p_ptr->image=1;
+    assert(!tutorial_game_first_monster_triggered());
+    p_ptr->image=0;
 
     p_ptr->niena_quest = NIENA_QUEST_ACTIVE;
-    assert(!tutorial_game_first_monster_triggered());
+    assert(tutorial_game_first_monster_triggered());
     p_ptr->niena_quest = 0;
     assert(tutorial_game_first_monster_triggered());
 
     merciless_blocked_index = 1;
-    assert(!tutorial_game_first_monster_triggered());
+    assert(tutorial_game_first_monster_triggered());
     merciless_blocked_index = 0;
     cowardly_blocked_index = 1;
-    assert(!tutorial_game_first_monster_triggered());
+    assert(tutorial_game_first_monster_triggered());
     cowardly_blocked_index = 0;
 
     p_ptr->stun = 100;
     assert(tutorial_game_first_monster_triggered());
     p_ptr->stun = 101;
-    assert(!tutorial_game_first_monster_triggered());
+    assert(tutorial_game_first_monster_triggered());
     p_ptr->stun = 0;
 
     /* One blocked creature must not hide a later legal visible target. */
@@ -326,7 +328,22 @@ static void trigger_tests(void)
     cave_info[100][102] = CAVE_VIEW;
     assert(tutorial_game_first_monster_triggered());
     monster_body[2].ml = false;
-    assert(!tutorial_game_first_monster_triggered());
+    assert(tutorial_game_first_monster_triggered());
+
+    /* Awareness is useful for every hero; only a distant unaware enemy is a
+     * suitable opportunity to practice stealth. */
+    assert(!tutorial_stealth_target(&monster_body[1]));
+    monster_body[1].fx=102; cave_info[100][102]=CAVE_VIEW;
+    monster_body[1].alertness=ALERTNESS_UNWARY;
+    assert(tutorial_stealth_target(&monster_body[1]));
+    monster_body[1].alertness=ALERTNESS_ALERT;
+    assert(!tutorial_stealth_target(&monster_body[1]));
+    monster_body[1].alertness=ALERTNESS_UNWARY;
+    p_ptr->rage=1; assert(!tutorial_stealth_target(&monster_body[1])); p_ptr->rage=0;
+    p_ptr->entranced=1; assert(!tutorial_stealth_target(&monster_body[1])); p_ptr->entranced=0;
+    p_ptr->stun=101; assert(!tutorial_stealth_target(&monster_body[1])); p_ptr->stun=0;
+    p_ptr->niena_quest=NIENA_QUEST_ACTIVE;
+    assert(tutorial_stealth_target(&monster_body[1]));
 }
 
 static void preview_tests(void)
@@ -396,7 +413,7 @@ int main(void)
     gate_tests();
     trigger_tests();
     preview_tests();
-    puts("Tutorial start safeguard helpers: gate lifecycle, visibility, LOS, legal attacks, oaths, player conditions, and scratch preview isolation: PASS");
+    puts("Tutorial start safeguard helpers: lifecycle, visibility/LOS, awareness under oaths/conditions, useful stealth, and scratch preview isolation: PASS");
     return 0;
 }
 '''

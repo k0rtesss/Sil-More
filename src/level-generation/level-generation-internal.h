@@ -627,6 +627,7 @@ extern void place_monster_by_letter( int y, int x, char c, bool allow_unique, in
 extern int vault_drop_gate_percent(vault_drop_gate_kind kind);
 extern bool vault_drop_passes(vault_drop_gate_kind kind);
 extern bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d);
+extern bool vault_is_valid_for_depth(const vault_type* v_ptr, int depth);
 extern bool solid_rock_reduced_padding(int y1, int x1, int y2, int x2);
 extern void compute_vault_bounds( int y0, int x0, const vault_type* v_ptr, bool flip_d, int* y1, int* x1, int* y2, int* x2);
 extern bool place_room_forced_internal( int y0, int x0, vault_type* v_ptr, bool flip_d, bool log_failures);

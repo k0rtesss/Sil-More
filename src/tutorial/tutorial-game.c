@@ -19,9 +19,16 @@ static bool opening_pending;
 static bool waiting;
 static bool managing;
 static bool ui_checkpoint_requested;
+static char pending_ui_lesson[80];
+static char ui_scoped_lessons[768][80];
+static int ui_scoped_count;
 static char visible_description_type[48];
 static int authorized_action_depth;
 static bool reached_kinds[65536];
+static const char *item_types[] = {"item", "staff", "horn", "bow", "arrows",
+    "ring", "amulet", "potion", "food", "light", "oil", "gem", "digging",
+    "metal", "shield", "armour", "throwing", "weapon"};
+static bool present_item_types[N_ELEMENTS(item_types)];
 static const char *item_action_ids[] = {
     "item.armour.equip", "item.staff.ready", "item.staff.use",
     "item.horn.ready", "item.horn.use", "item.bow.ready", "item.bow.active",
@@ -32,6 +39,7 @@ static bool offered_item_actions[N_ELEMENTS(item_action_ids)];
 static u32b observed_tale;
 static int previous_y, previous_x, previous_depth, previous_hp, previous_voice;
 static int previous_mode, previous_min_depth;
+static bool level_changed;
 static s16b previous_drain[A_MAX];
 static byte previous_abilities[S_MAX][ABILITIES_MAX];
 
@@ -112,6 +120,7 @@ static void observe_extra_states(bool seed)
             SDL_strlcpy(context.subject, ids[i] + 7, sizeof(context.subject));
             tutorial_observe(ids[i], &context);
         }
+        if (!seed && !now[i]) tutorial_forget_observation(ids[i]);
         before[i] = now[i];
     }
 }
@@ -212,6 +221,23 @@ static bool available_remedy(const char *condition)
     return false;
 }
 
+static bool condition_needs_remedy(const char *condition)
+{
+    if (!strcmp(condition, "health")) return p_ptr->chp < p_ptr->mhp
+        && p_ptr->chp <= p_ptr->mhp * op_ptr->hitpoint_warn / 10;
+    if (!strcmp(condition, "voice")) return p_ptr->msp > 0 && p_ptr->csp <= p_ptr->msp / 4;
+    if (!strcmp(condition, "hunger")) return p_ptr->food < PY_FOOD_ALERT;
+    if (!strcmp(condition, "drain")) {
+        for (int stat = 0; stat < A_MAX; ++stat)
+            if (p_ptr->stat_drain[stat] < 0) return true;
+        return false;
+    }
+    for (int i = 0; i < (int)N_ELEMENTS(conditions); ++i)
+        if (!strcmp(condition, conditions[i].id + 7))
+            return *(const s16b *)((const char *)p_ptr + conditions[i].offset) > 0;
+    return false;
+}
+
 static void offer_remedy(const char *condition, const char *name)
 {
     char id[80];
@@ -237,6 +263,8 @@ void tutorial_game_item(const object_type *item)
         return;
     }
     type = item_type(item);
+    for (int i = 0; i < (int)N_ELEMENTS(item_types); ++i)
+        if (!strcmp(type, item_types[i])) present_item_types[i] = true;
     reached_kinds[(u16b)item->k_idx] = true;
     object_desc(name, sizeof(name), item, true, 3);
     strnfmt(detail, sizeof(detail), "Examine %s to read its known properties and handling requirements.", name);
@@ -278,6 +306,11 @@ void tutorial_game_item_described(const object_type *item)
 void tutorial_game_item_description_closed(void)
 {
     visible_description_type[0] = '\0';
+    tutorial_forget_observation("item.description");
+    tutorial_forget_observation("menu.item-description");
+    if (!strcmp(pending_ui_lesson, "item.description")
+        || !strcmp(pending_ui_lesson, "menu.item-description"))
+        pending_ui_lesson[0] = '\0';
 }
 
 void tutorial_game_identified(const object_type *item, const char *reason)
@@ -303,10 +336,30 @@ void tutorial_game_explain(const char *id, const char *subject, const char *deta
     observe(id, "", subject, detail);
 }
 
+static void request_ui_lesson(const char *id)
+{
+    SDL_strlcpy(pending_ui_lesson, id, sizeof(pending_ui_lesson));
+    ui_checkpoint_requested = true;
+    for (int i = 0; i < ui_scoped_count; ++i)
+        if (!strcmp(ui_scoped_lessons[i], id)) return;
+    if (ui_scoped_count < (int)N_ELEMENTS(ui_scoped_lessons))
+        SDL_strlcpy(ui_scoped_lessons[ui_scoped_count++], id, sizeof(ui_scoped_lessons[0]));
+}
+
+static void end_ui_lessons(void)
+{
+    tutorial_menu_closed();
+    for (int i = 0; i < ui_scoped_count; ++i)
+        tutorial_forget_observation(ui_scoped_lessons[i]);
+    ui_scoped_count = 0;
+    pending_ui_lesson[0] = '\0';
+    ui_checkpoint_requested = false;
+}
+
 void tutorial_game_explain_now(const char *id, const char *subject, const char *detail)
 {
     observe(id, "", subject, detail);
-    ui_checkpoint_requested = true;
+    request_ui_lesson(id);
     tutorial_game_wait();
 }
 
@@ -317,7 +370,7 @@ void tutorial_game_menu(const char *id, const char *description)
     tutorial_menu_opened(id);
     strnfmt(lesson, sizeof(lesson), "menu.%s", id);
     observe(lesson, id, id, description);
-    ui_checkpoint_requested = true;
+    request_ui_lesson(lesson);
 }
 
 void tutorial_game_ability(int skill, int ability, bool before_purchase)
@@ -334,7 +387,7 @@ void tutorial_game_ability(int skill, int ability, bool before_purchase)
     observe(id, "ability", b_name + entry->name,
         before_purchase ? "Read the live requirements, effect and XP cost. Continue returns to your purchase decision; it does not buy the ability."
         : "This ability is now available. Read its effect and current activation requirements.");
-    if (before_purchase) ui_checkpoint_requested = true;
+    if (before_purchase) request_ui_lesson(id);
 }
 
 /* Pump the frontend, without entering the actor scheduler or consuming the
@@ -346,6 +399,10 @@ void tutorial_game_wait(void)
     waiting = true;
     if (ui_checkpoint_requested) {
         ui_checkpoint_requested = false;
+        if (pending_ui_lesson[0]) {
+            tutorial_focus_observation(pending_ui_lesson);
+            pending_ui_lesson[0] = '\0';
+        }
         tutorial_checkpoint(true);
     }
     while (tutorial_get_view(&view)) {
@@ -400,8 +457,15 @@ static bool tutorial_monster_observable(const monster_type *monster)
 /* Shared by the live observation and the first-map generation check. */
 static bool tutorial_first_monster_target(const monster_type *monster)
 {
-    return !p_ptr->rage && !p_ptr->entranced && p_ptr->stun <= 100
-        && tutorial_monster_observable(monster) && target_can_be_attacked(monster);
+    return tutorial_monster_observable(monster);
+}
+
+static bool tutorial_stealth_target(const monster_type *monster)
+{
+    return tutorial_monster_observable(monster)
+        && (abs(monster->fy - p_ptr->py) > 1 || abs(monster->fx - p_ptr->px) > 1)
+        && monster->alertness < ALERTNESS_ALERT
+        && !p_ptr->rage && !p_ptr->entranced && p_ptr->stun <= 100;
 }
 
 bool tutorial_game_first_monster_triggered(void)
@@ -430,7 +494,9 @@ static bool useful_instrument(const object_type *item)
         || object_has_broken_prefix(item) || p_ptr->truce
         || p_ptr->entranced || p_ptr->stun > 100 || p_ptr->confused || p_ptr->image) return false;
     if (item->tval == TV_STAFF) {
-        if (item->pval < CHANNELING_CHARGE_MULTIPLIER) return false;
+        /* Kind awareness reveals the effect, but only full identification
+         * reveals the remaining charges in the actual item description. */
+        if (!object_known_p(item) || item->pval < CHANNELING_CHARGE_MULTIPLIER) return false;
         switch (item->sval) {
         case SV_STAFF_SLUMBER: immunity = RF3_NO_SLEEP; break;
         case SV_STAFF_MAJESTY: immunity = RF3_NO_FEAR; break;
@@ -498,12 +564,20 @@ bool tutorial_game_action_allowed(const char *action, const object_type *item)
     tutorial_view view;
     if (managing || authorized_action_depth || !tutorial_get_view(&view)) return true;
     if (!tutorial_action_permitted(action)) return false;
-    if (!strcmp(action, "open-menu") || !strcmp(action, "close-menu")) return true;
+    if (!strcmp(action, "open-menu") || !strcmp(action, "close-menu")
+        || !strcmp(action, "examine")) return true;
     if (item && !strncmp(view.id, "status.", 7) && strstr(view.id, ".remedy"))
-        return item_is_remedy(item, view.context.subject_type);
+        return condition_needs_remedy(view.context.subject_type)
+            && item_is_remedy(item, view.context.subject_type);
     if (item && !strcmp(action, "use-item")
         && (!strcmp(view.id, "item.staff.use") || !strcmp(view.id, "item.horn.use"))
         && !useful_instrument(item)) return false;
+    if (item && !strcmp(view.id, "item.armour.equip") && !strcmp(action, "equip")) {
+        int slot = wield_slot(item);
+        if (!object_known_p(item) || cursed_p(item)
+            || slot < INVEN_WIELD || slot >= INVEN_TOTAL || inventory[slot].k_idx)
+            return false;
+    }
     if (item && !strncmp(view.id, "item.", 5)
         && strcmp(view.id, "item.first_description") && strcmp(view.id, "item.description")
         && view.context.subject_type[0]) {
@@ -634,8 +708,12 @@ bool tutorial_game_command_allowed(int command, int direction)
             if (monster > 0) {
                 if (!target_can_be_attacked(&mon_list[monster])) return false;
                 action = "attack";
-            } else if (command == ';' && cave_floor_bold(y, x)
+            } else if (command == ';' && !p_ptr->confused && !p_ptr->entranced
+                && p_ptr->stun <= 100 && cave_floor_bold(y, x)
+                && (cave_info[y][x] & (CAVE_MARK | CAVE_SEEN))
                 && !cave_pit_bold(y, x) && cave_feat[y][x] != FEAT_CHASM
+                && cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_LAVA
+                && cave_feat[y][x] != FEAT_ICE && cave_feat[y][x] != FEAT_POISON
                 && !(cave_info[y][x] & CAVE_MARK && cave_feat[y][x] >= FEAT_TRAP_HEAD
                     && cave_feat[y][x] <= FEAT_TRAP_TAIL)) action = "move";
         } else return false;
@@ -693,22 +771,100 @@ static void tutorial_game_upgrade_notice(void)
     managing = was_managing;
 }
 
+/* Door difficulty, ward strength and remaining forge uses change within a
+ * feature family. Teach each mechanic once, preserving distinct forge grades. */
+static int terrain_lesson_feature(int feat)
+{
+    if (feat >= FEAT_WARDED && feat <= FEAT_WARDED3) return FEAT_WARDED;
+    if (feat > FEAT_DOOR_HEAD && feat < FEAT_DOOR_HEAD + 8) return FEAT_DOOR_HEAD + 1;
+    if (feat >= FEAT_DOOR_HEAD + 8 && feat <= FEAT_DOOR_TAIL) return FEAT_DOOR_HEAD + 8;
+    if (feat > FEAT_FORGE_NORMAL_HEAD && feat <= FEAT_FORGE_NORMAL_TAIL) return FEAT_FORGE_NORMAL_HEAD + 1;
+    if (feat > FEAT_FORGE_GOOD_HEAD && feat <= FEAT_FORGE_GOOD_TAIL) return FEAT_FORGE_GOOD_HEAD + 1;
+    if (feat > FEAT_FORGE_UNIQUE_HEAD && feat <= FEAT_FORGE_UNIQUE_TAIL) return FEAT_FORGE_UNIQUE_HEAD + 1;
+    return feat;
+}
+
+static void observe_nearby(void)
+{
+    bool features[256] = {false};
+    bool forge = false, trap = false, chest = false, skeleton = false;
+    const int hazards[] = {FEAT_WATER, FEAT_LAVA, FEAT_ICE, FEAT_POISON};
+    const char *hazard_ids[] = {"world.water", "world.lava", "world.ice", "world.poison"};
+    const char *hazard_names[] = {"Shallow water", "Molten lava", "Ice", "Poisonous seep"};
+    char id[80];
+    /* Reached means this square or visibly adjacent, not distant discovery. */
+    for (int y = MAX(0, p_ptr->py - 1); y <= MIN(p_ptr->cur_map_hgt - 1, p_ptr->py + 1); ++y)
+        for (int x = MAX(0, p_ptr->px - 1); x <= MIN(p_ptr->cur_map_wid - 1, p_ptr->px + 1); ++x) {
+            if (!(cave_info[y][x] & CAVE_SEEN) && (y != p_ptr->py || x != p_ptr->px)) continue;
+            for (int index = cave_o_idx[y][x]; index; index = o_list[index].next_o_idx) {
+                object_type *item = &o_list[index];
+                if (!item->marked || p_ptr->image) continue;
+                chest |= item->tval == TV_CHEST;
+                skeleton |= item->tval == TV_SKELETON;
+                tutorial_game_item(item);
+            }
+            int feat = cave_feat[y][x];
+            if (!(cave_info[y][x] & CAVE_MARK) || feat == FEAT_NONE || feat == FEAT_FLOOR
+                || feat == FEAT_SECRET || feat == FEAT_WALL_EXTRA
+                || feat == FEAT_WALL_INNER || feat == FEAT_WALL_OUTER || feat == FEAT_WALL_SOLID) continue;
+            int lesson_feat = terrain_lesson_feature(feat);
+            features[lesson_feat] = true;
+            strnfmt(id, sizeof(id), "terrain.%d", lesson_feat);
+            observe(id, "terrain", "Nearby terrain", "Inspect this known feature before stepping onto it or choosing an interaction.");
+            if (cave_forge_bold(y, x)) {
+                forge = true;
+                observe("world.forge", "terrain", "A forge", "Inspect the forge and its remaining uses. Open Smithing to compare requirements before committing resources.");
+            }
+            if (cave_trap_bold(y, x)) {
+                trap = true;
+                observe("world.trap", "terrain", "A revealed trap", "Inspect the trap before moving. Choose a route around it or check the applicable interaction and its risks.");
+            }
+        }
+    for (int i = 0; i < (int)N_ELEMENTS(features); ++i)
+        if (!features[i]) {
+            strnfmt(id, sizeof(id), "terrain.%d", i);
+            tutorial_forget_observation(id);
+        }
+    for (int i = 0; i < (int)N_ELEMENTS(hazards); ++i) {
+        if (features[hazards[i]]) observe(hazard_ids[i], "terrain", hazard_names[i],
+            "This terrain is within one step. Check its risks before choosing a route.");
+        else tutorial_forget_observation(hazard_ids[i]);
+    }
+    if (!forge) tutorial_forget_observation("world.forge");
+    if (!trap) tutorial_forget_observation("world.trap");
+    if (!chest) tutorial_forget_observation("world.chest");
+    if (!skeleton) tutorial_forget_observation("world.skeleton");
+}
+
 void tutorial_game_start(void)
 {
     const metarun *tale = metarun_current();
     /* dungeon() calls this on every level. Preserve comparison snapshots on
      * ordinary travel, so the next safe checkpoint can observe the transition. */
     if (started && observed_tale == (tale ? tale->id : 0)
-        && !p_ptr->restoring && playerturn > 1) return;
+        && !p_ptr->restoring && playerturn > 1) {
+        /* A newly generated map can be at the same depth as the old map. */
+        tutorial_invalidate_context();
+        tutorial_game_item_description_closed();
+        previous_y = p_ptr->py;
+        previous_x = p_ptr->px;
+        level_changed = true;
+        return;
+    }
     tutorial_game_item_description_closed();
+    end_ui_lessons();
     tutorial_invalidate_context();
     tutorial_set_mode(get_sdl_gameplay_tutorial_mode());
     tutorial_set_character_blocked(p_ptr->tutorial_deferred);
     tutorial_sync_tale();
     tutorial_game_upgrade_notice();
-    if (!started || playerturn <= 1 || observed_tale != (tale ? tale->id : 0))
-        memset(reached_kinds, 0, sizeof(reached_kinds));
+    /* A restored hero may come from an earlier save than the previous session.
+     * Only ordinary level travel (the return above) preserves reached items. */
+    memset(reached_kinds, 0, sizeof(reached_kinds));
     started = true;
+    level_changed = false;
+    authorized_action_depth = 0;
+    ui_checkpoint_requested = false;
     tutorial_world_start();
     observed_tale = tale ? tale->id : 0;
     previous_y = p_ptr->py; previous_x = p_ptr->px;
@@ -733,10 +889,14 @@ void tutorial_game_checkpoint(void)
     const metarun *tale = metarun_current();
     if (!started || (tale && tale->id != observed_tale)) tutorial_game_start();
     if (!gameplay_available()) { tutorial_invalidate_context(); return; }
-    if (p_ptr->depth != previous_depth) {
+    end_ui_lessons();
+    if (level_changed || p_ptr->depth != previous_depth) {
         tutorial_invalidate_context();
         observe("world.depth", "depth", "A new level", "Stairs generate a new level. Your current and minimum depth govern the available routes.");
         previous_depth = p_ptr->depth;
+        previous_y = p_ptr->py;
+        previous_x = p_ptr->px;
+        level_changed = false;
     }
     if (opening_pending) {
         observe("opening.move", "", "Your first steps",
@@ -745,7 +905,8 @@ void tutorial_game_checkpoint(void)
         if (status == TUTORIAL_COMPLETED || status == TUTORIAL_SKIPPED) opening_pending = false;
     }
     if (p_ptr->py != previous_y || p_ptr->px != previous_x) {
-        tutorial_action_finished("move", "", true);
+        /* Deliberate movement is credited by move_player() at commit time.
+         * A teleport, knockback or level entry is not a guided move. */
         previous_y = p_ptr->py; previous_x = p_ptr->px;
     }
     if (p_ptr->stealth_mode) tutorial_action_finished("stealth", "", true);
@@ -772,6 +933,7 @@ void tutorial_game_checkpoint(void)
         }
         if (value) offer_remedy(condition->id + 7, condition->name);
         else {
+            tutorial_forget_observation(condition->id);
             strnfmt(id, sizeof(id), "%s.remedy", condition->id);
             tutorial_forget_observation(id);
         }
@@ -791,6 +953,7 @@ void tutorial_game_checkpoint(void)
             observe(id, "drain", names[stat], detail);
         }
         previous_drain[stat] = p_ptr->stat_drain[stat];
+        if (p_ptr->stat_drain[stat] >= 0) tutorial_forget_observation(id);
     }
     if (drained) offer_remedy("drain", "Drained attributes");
     else tutorial_forget_observation("status.drain.remedy");
@@ -801,15 +964,28 @@ void tutorial_game_checkpoint(void)
     if (p_ptr->chp <= p_ptr->mhp * op_ptr->hitpoint_warn / 10) {
         observe("status.health", "health", "Low Health", "Your Health is at or below your warning threshold. Inspect known healing options and the escape route.");
         offer_remedy("health", "Low Health");
-    } else tutorial_forget_observation("status.health.remedy");
+    } else {
+        tutorial_forget_observation("status.health");
+        tutorial_forget_observation("status.health.remedy");
+    }
     previous_hp = p_ptr->chp;
-    if (p_ptr->csp < previous_voice && p_ptr->csp <= p_ptr->msp / 4)
+    if (p_ptr->msp > 0 && p_ptr->csp <= p_ptr->msp / 4)
         observe("status.voice", "voice", "Low Voice", "Voice fuels songs and horns. It does not regenerate while singing; stop singing to recover it.");
     if (p_ptr->msp > 0 && p_ptr->csp <= p_ptr->msp / 4)
         offer_remedy("voice", "Low Voice");
-    else tutorial_forget_observation("status.voice.remedy");
+    else {
+        tutorial_forget_observation("status.voice");
+        tutorial_forget_observation("status.voice.remedy");
+    }
     previous_voice = p_ptr->csp;
-    if (p_ptr->food < PY_FOOD_ALERT) {
+    const char *hunger_id = p_ptr->food < PY_FOOD_STARVE ? "status.starving"
+        : p_ptr->food < PY_FOOD_WEAK ? "status.weak"
+        : p_ptr->food < PY_FOOD_ALERT ? "status.hungry" : NULL;
+    const char *hunger_ids[] = {"status.starving", "status.weak", "status.hungry"};
+    for (int i = 0; i < (int)N_ELEMENTS(hunger_ids); ++i)
+        if (!hunger_id || strcmp(hunger_ids[i], hunger_id))
+            tutorial_forget_observation(hunger_ids[i]);
+    if (hunger_id) {
         observe(p_ptr->food < PY_FOOD_STARVE ? "status.starving"
             : p_ptr->food < PY_FOOD_WEAK ? "status.weak" : "status.hungry",
             "hunger", "Hunger", "Food is consumed as the game advances. Weakness reduces Strength; starvation damages you and prevents Health regeneration.");
@@ -821,17 +997,29 @@ void tutorial_game_checkpoint(void)
         previous_min_depth = min_depth();
     }
     int adjacent = 0;
-    bool legal_hostile = false, legal_adjacent = false;
+    bool legal_hostile = false, legal_adjacent = false, visible_hostile = false;
+    bool fleeing = false, stealth_useful = false, stealth_unsafe = false;
     for (int i = 1; i < mon_max; ++i) {
         monster_type *monster = &mon_list[i];
         if (!tutorial_monster_observable(monster)) continue;
         char name[160];
         monster_desc(name, sizeof(name), monster, 0);
+        visible_hostile = true;
+        bool beside = abs(monster->fy - p_ptr->py) <= 1
+            && abs(monster->fx - p_ptr->px) <= 1;
+        if (beside || monster->alertness >= ALERTNESS_ALERT) stealth_unsafe = true;
+        else if (tutorial_stealth_target(monster)
+            && (tutorial_lesson_status("combat.first_monster") == TUTORIAL_COMPLETED
+                || tutorial_lesson_status("combat.first_monster") == TUTORIAL_SKIPPED)) {
+            stealth_useful = true;
+            observe("combat.stealth", "monster", name,
+                "This creature has not noticed you. Stealth improves your chance of remaining unnoticed, but slows movement.");
+        }
         if (target_can_be_attacked(monster)) legal_hostile = true;
         if (tutorial_first_monster_target(monster))
             observe("combat.first_monster", "monster", name,
                 "Awareness and morale are different. Stealth helps avoid notice but slows movement; it does not guarantee that an alert enemy loses you.");
-        if (abs(monster->fy - p_ptr->py) <= 1 && abs(monster->fx - p_ptr->px) <= 1) {
+        if (beside) {
             ++adjacent;
             if (target_can_be_attacked(monster) && player_active_weapon_is_melee()
                 && !p_ptr->entranced && p_ptr->stun <= 100) {
@@ -839,31 +1027,20 @@ void tutorial_game_checkpoint(void)
                 observe("combat.first_adjacent", "monster", name, "Moving toward an adjacent hostile attacks it. Attack once, or skip this lesson to choose another tactic.");
             }
         }
-        if (monster->stance == STANCE_FLEEING)
+        if (monster->stance == STANCE_FLEEING) {
+            fleeing = true;
             observe("combat.fleeing", "monster", name, "This creature is fleeing. Morale differs from awareness; check your oath before pursuing or attacking.");
+        }
     }
     if (!legal_adjacent) tutorial_forget_observation("combat.first_adjacent");
-    if (!legal_hostile || p_ptr->rage) tutorial_forget_observation("combat.first_monster");
+    if (!visible_hostile) tutorial_forget_observation("combat.first_monster");
+    if (!stealth_useful || stealth_unsafe) tutorial_forget_observation("combat.stealth");
+    if (!fleeing) tutorial_forget_observation("combat.fleeing");
+    if (adjacent < 2) tutorial_forget_observation("combat.surrounded");
     if (adjacent >= 2) observe("combat.surrounded", "monster", "Surrounded",
         "Adjacent foes improve each other's accuracy. Doors and narrow passages can reduce the number attacking together.");
-    /* Reached means on this square or visibly adjacent, not distant discovery. */
-    for (int y = MAX(0, p_ptr->py - 1); y <= MIN(p_ptr->cur_map_hgt - 1, p_ptr->py + 1); ++y)
-        for (int x = MAX(0, p_ptr->px - 1); x <= MIN(p_ptr->cur_map_wid - 1, p_ptr->px + 1); ++x) {
-            if (!(cave_info[y][x] & CAVE_SEEN) && (y != p_ptr->py || x != p_ptr->px)) continue;
-            for (int object = cave_o_idx[y][x]; object; object = o_list[object].next_o_idx)
-                if (o_list[object].marked) tutorial_game_item(&o_list[object]);
-            int feat = cave_feat[y][x];
-            if ((cave_info[y][x] & CAVE_MARK) && feat != FEAT_FLOOR
-                && feat != FEAT_SECRET && feat != FEAT_WALL_EXTRA
-                && feat != FEAT_WALL_INNER && feat != FEAT_WALL_OUTER && feat != FEAT_WALL_SOLID) {
-                strnfmt(id, sizeof(id), "terrain.%d", feat);
-                observe(id, "terrain", "Nearby terrain", "Inspect this known feature before stepping onto it or choosing an interaction.");
-                if (cave_forge_bold(y, x))
-                    observe("world.forge", "terrain", "A forge", "Inspect the forge and its remaining uses. Open Smithing to compare requirements before committing resources.");
-                if (cave_trap_bold(y, x))
-                    observe("world.trap", "terrain", "A revealed trap", "Inspect the trap before moving. Choose a route around it or check the applicable interaction and its risks.");
-            }
-        }
+    memset(present_item_types, 0, sizeof(present_item_types));
+    observe_nearby();
     memset(offered_item_actions, 0, sizeof(offered_item_actions));
     if (!p_ptr->entranced && p_ptr->stun <= 100 && !p_ptr->confused && !p_ptr->image) {
         for (int i = 0; i < INVEN_TOTAL; ++i) {
@@ -887,6 +1064,15 @@ void tutorial_game_checkpoint(void)
             observe_item_action("item.arrows.active", "arrows", "Active arrows",
                 "Choose a different arrow stack while keeping your current bow and shield. Changing only arrows is free.");
     }
+    bool item_present = false;
+    for (int i = 0; i < (int)N_ELEMENTS(item_types); ++i) {
+        item_present |= present_item_types[i];
+        if (!present_item_types[i]) {
+            strnfmt(id, sizeof(id), "item.%s", item_types[i]);
+            tutorial_forget_observation(id);
+        }
+    }
+    if (!item_present) tutorial_forget_observation("item.first_description");
     /* Context can expire while another lesson is being read, or during normal
      * Pack access. Keep paid transactions alive until their owning callback. */
     if (!player_pack_action_pending())

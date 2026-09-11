@@ -86,9 +86,11 @@ static bool tutorial_menu_owns_input(void)
 {
     return character_icky || inkey_prompt_input_active()
         || g_touch_pane_yes_no_prompt_active
+        || g_touch_pane_reset_confirm_active
         || sdl_question_menu_captures_pointer()
         || sdl_hint_quest_menu_active() || g_main_menu_overlay_active
-        || g_player_action_menu.active || g_player_exchange_target.active;
+        || g_player_action_menu.active || g_player_exchange_target.active
+        || g_minimap.active || g_unified_look_active;
 }
 
 void sdl_gameplay_tutorial_sync(void)
@@ -266,7 +268,7 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
     const char *menu=sdl_gamepad_button_short_label(SDL_GAMEPAD_BUTTON_START);
     char binding[96]="";
     memset(out,0,sizeof(*out));
-    SDL_strlcpy(out->label[1],"Skip lesson",sizeof(out->label[1]));
+    SDL_strlcpy(out->label[1],"Skip tutorial",sizeof(out->label[1]));
     SDL_strlcpy(out->label[2],tutorial_mode_name(get_sdl_gameplay_tutorial_mode()),sizeof(out->label[2]));
     if (view->can_continue || tutorial_reading) {
         out->primary=true;
@@ -336,7 +338,7 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
         SDL_strlcpy(out->controls_hint,scrollable?"Tap a button | Swipe this card to read":"Tap a button",sizeof(out->controls_hint));
         SDL_strlcpy(out->read_hint,"Swipe: read",sizeof(out->read_hint));
     } else {
-        SDL_strlcpy(out->controls_hint,scrollable?"Click a button | Wheel or drag to read":"Click a button",sizeof(out->controls_hint));
+        SDL_strlcpy(out->controls_hint,scrollable?"Wheel or drag to read":"",sizeof(out->controls_hint));
         SDL_strlcpy(out->read_hint,"Wheel: read",sizeof(out->read_hint));
     }
     if (!scrollable) out->read_hint[0]='\0';
@@ -697,7 +699,11 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
             tutorial_move_focus(1,&view); break;
         }
         if (ev->key.key==SDLK_PAGEUP || ev->key.key==SDLK_PAGEDOWN) {
-            if (!view.can_continue && !tutorial_menu_owns_input()) tutorial_set_reading(true);
+            /* A page key is still owned by the card when the body fits, but
+             * it must not turn a short action card into a different mode with
+             * no text to reveal. */
+            if (!view.can_continue && !tutorial_menu_owns_input()
+                && tutorial_max_scroll > 0) tutorial_set_reading(true);
             tutorial_scroll=MAX(0,MIN(tutorial_max_scroll,tutorial_scroll+(ev->key.key==SDLK_PAGEUP?-1:1))); break;
         }
         if (view.can_continue || tutorial_reading) {
@@ -772,7 +778,8 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
         mouse=pointer=true; x=ev->motion.x; y=ev->motion.y; break;
     case SDL_EVENT_MOUSE_WHEEL:
         if (!active) return ev->common.timestamp < tutorial_input_barrier;
-        if (!view.can_continue && !tutorial_menu_owns_input()) tutorial_set_reading(true);
+        if (!view.can_continue && !tutorial_menu_owns_input()
+            && tutorial_max_scroll > 0) tutorial_set_reading(true);
         tutorial_scroll=MAX(0,MIN(tutorial_max_scroll,tutorial_scroll-(int)ev->wheel.y));
         g_state.need_present=true; return true;
     case SDL_EVENT_FINGER_DOWN:
@@ -802,7 +809,8 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
             tutorial_focus=i; tutorial_pressed_button=i; g_state.need_present=true; return true;
         }
         if (tutorial_hit(x,y,&tutorial_card)) {
-            if (!view.can_continue && !tutorial_menu_owns_input()) {
+            if (!view.can_continue && !tutorial_menu_owns_input()
+                && tutorial_max_scroll > 0) {
                 tutorial_set_reading(true);
                 /* This accepted fresh down starts the reading drag itself. */
                 if (mouse) tutorial_blocked_mouse&=~SDL_BUTTON_LMASK;
@@ -818,9 +826,14 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
         }
         if (!view.can_continue && !tutorial_reading && !tutorial_hit(x,y,&tutorial_card)) {
             int map_y,map_x;
-            SDL_FRect menu_rect;
-            tutorial_pointer_gameplay = sdl_main_view_point_to_map(x,y,&map_y,&map_x)
-                || (tutorial_menu_owns_input() && tutorial_pane_rect(PANE_MAIN,&menu_rect) && tutorial_hit(x,y,&menu_rect));
+            if (tutorial_menu_owns_input()) {
+                /* A modal opened behind the card owns every point outside the
+                 * card.  In particular, minimap and look overlays are not
+                 * part of the main map rect. */
+                tutorial_pointer_gameplay = true;
+            } else {
+                tutorial_pointer_gameplay = sdl_main_view_point_to_map(x,y,&map_y,&map_x);
+            }
         }
         return !tutorial_pointer_gameplay;
     }

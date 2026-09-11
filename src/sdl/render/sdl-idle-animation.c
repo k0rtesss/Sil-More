@@ -2,21 +2,21 @@
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-fixtures.h"
 
-/* Fixtures share one 48x32 atlas; each animated liquid shares one 64x16 atlas.
+/* Fixtures share one 64x32 atlas; each animated liquid shares one 64x16 atlas.
  * Solid ice uses one static 16x16 tile, cached here for map invalidation.
  * No I/O, texture creation, timers, threads, or heap allocation occurs in
  * the animation update. */
 /* A shared 25 Hz ceiling coalesces independent fixture deadlines. Each flame
  * advances only every 4-6 steps (160-240 ms), without a timer per fixture. */
 #define IDLE_STEP_NS 40000000ULL
-#define IDLE_FRAME_COUNT 3
+#define IDLE_FRAME_COUNT 4
 
 typedef struct idle_cell {
     int col, row, y, x;
     int width;
     byte a, ta;
     char c, tc;
-    byte frame_steps, phase_steps, drawn_frame;
+    byte frame_steps, phase_steps, drawn_frame, frame_count;
     byte liquid_feat;
 } idle_cell;
 
@@ -171,9 +171,14 @@ static void fixture_timing(int y, int x, byte* steps, byte* phase)
     *phase = (byte)((hash >> 8) % (*steps * IDLE_FRAME_COUNT));
 }
 
-static byte fixture_frame(Uint64 tick, byte steps, byte phase)
+static byte fixture_frame_count(byte kind)
 {
-    return (byte)(((tick + phase) / steps) % IDLE_FRAME_COUNT);
+    return kind == CAVE_FIXTURE_WALL_TORCH ? 4 : 3;
+}
+
+static byte fixture_frame(Uint64 tick, byte steps, byte phase, byte count)
+{
+    return (byte)(((tick + phase) / steps) % count);
 }
 
 static Uint64 fixture_next_tick(Uint64 tick, byte steps, byte phase)
@@ -184,7 +189,7 @@ static Uint64 fixture_next_tick(Uint64 tick, byte steps, byte phase)
 static bool load_fixture_texture(void)
 {
     SDL_Surface* atlas;
-    const char* names[] = { "wall_torch", "brazier" };
+    const char* names[] = { "torch", "brazier" };
 
     if (fixture_load_attempted)
         return fixture_texture != NULL;
@@ -195,7 +200,7 @@ static bool load_fixture_texture(void)
         return false;
     SDL_ClearSurface(atlas, 0, 0, 0, 0);
     for (int kind = 0; kind < 2; kind++)
-        for (int frame = 0; frame < IDLE_FRAME_COUNT; frame++)
+        for (int frame = 0; frame < fixture_frame_count(kind + 1); frame++)
         {
             char path[128];
             SDL_Surface* source;
@@ -308,8 +313,9 @@ bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst)
     animate = live && (!op_ptr || op_ptr->opt[OPT_torch_animation_always]
         || (cave_info[y][x] & CAVE_SEEN));
     fixture_timing(y, x, &steps, &phase);
-    /* All frozen fixtures use frame 2 of 3, without a coordinate phase offset. */
-    frame = animate ? fixture_frame(frame_tick, steps, phase) : 1;
+    /* All frozen fixtures use the second frame, without a phase offset. */
+    frame = animate
+        ? fixture_frame(frame_tick, steps, phase, fixture_frame_count(kind)) : 1;
     src = (SDL_FRect){ frame * TILE_SIZE, (kind - 1) * TILE_SIZE,
         TILE_SIZE, TILE_SIZE };
     SDL_SetTextureColorMod(fixture_texture, live ? 255 : 96,
@@ -364,9 +370,11 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
         return;
     }
     fixture_timing(y, x, &cell->frame_steps, &cell->phase_steps);
+    cell->frame_count = fixture_frame_count(visible_fixture(y, x));
     cell->drawn_frame = (!p_ptr->blind
         && (op_ptr->opt[OPT_torch_animation_always] || (cave_info[y][x] & CAVE_SEEN)))
-        ? fixture_frame(frame_tick, cell->frame_steps, cell->phase_steps) : 1;
+        ? fixture_frame(frame_tick, cell->frame_steps, cell->phase_steps,
+            cell->frame_count) : 1;
 }
 
 static bool animation_context_active(void)
@@ -475,7 +483,8 @@ void sdl_idle_animation_update(Uint64 now_ns)
         if (!cell_can_animate(cell))
             continue;
         frame = cell->liquid_feat ? (byte)((tick / 8) % 4)
-            : fixture_frame(tick, cell->frame_steps, cell->phase_steps);
+            : fixture_frame(tick, cell->frame_steps, cell->phase_steps,
+                cell->frame_count);
         if (frame == cell->drawn_frame)
             continue;
         dst = (SDL_FRect){ cell->col * view->cell_w, cell->row * view->cell_h,

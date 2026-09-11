@@ -20,11 +20,11 @@ byte cave_fixture_at(int y, int x)
         return CAVE_FIXTURE_NONE;
     kind = fixtures[y][x];
     feat = cave_feat[y][x];
-    /* Also protect against generation paths which write cave_feat directly. */
-    if (kind == CAVE_FIXTURE_WALL_TORCH
+    /* Both fixture textures are mounted on a wall. Keep this check here as
+     * well as in generation/load paths so stale metadata can never turn a
+     * walkable floor into a fixture tile. */
+    if ((kind == CAVE_FIXTURE_WALL_TORCH || kind == CAVE_FIXTURE_BRAZIER)
         && feat >= FEAT_WALL_EXTRA && feat <= FEAT_WALL_SOLID)
-        return kind;
-    if (kind == CAVE_FIXTURE_BRAZIER && feat == FEAT_FLOOR)
         return kind;
     return CAVE_FIXTURE_NONE;
 }

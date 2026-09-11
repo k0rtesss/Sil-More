@@ -28,6 +28,8 @@ gamepad_input_state g_gamepad_state;
 player_action_menu_state g_player_action_menu;
 player_exchange_target_state g_player_exchange_target;
 bool g_main_menu_overlay_active, g_touch_pane_yes_no_prompt_active;
+bool g_touch_pane_reset_confirm_active, g_unified_look_active;
+minimap_state g_minimap;
 bool g_screen_back_right_button_pending;
 s16b character_icky;
 term *Term;
@@ -229,7 +231,10 @@ int main(void)
         sdl_gameplay_tutorial_set_menu_preview(true,false);
         tutorial_last_input=TUTORIAL_INPUT_MOUSE;
         tutorial_build_controls(&current,&labels,true);
-        assert(strstr(labels.controls_hint,"Click") && !labels.shortcut[0][0]);
+        assert(!strstr(labels.controls_hint,"Click") && strstr(labels.controls_hint,"Wheel")
+            && !labels.shortcut[0][0] && !strcmp(labels.label[1],"Skip tutorial"));
+        tutorial_build_controls(&current,&labels,false);
+        assert(!labels.controls_hint[0]);
         tutorial_last_input=TUTORIAL_INPUT_TOUCH;
         tutorial_build_controls(&current,&labels,true);
         assert(strstr(labels.controls_hint,"Tap") && strstr(labels.read_hint,"Swipe"));
@@ -292,6 +297,24 @@ int main(void)
     e.key.repeat=true;
     assert(sdl_gameplay_tutorial_handle_event(&e));
     show(false,"move","");
+    /* Page and wheel input are owned by a short action card, but they do not
+     * enter reading mode when the rendered body has no overflow. */
+    tutorial_max_scroll=0; tutorial_reading=false;
+    e=key_event(SDL_EVENT_KEY_DOWN,SDLK_PAGEDOWN,SDL_SCANCODE_PAGEDOWN);
+    assert(sdl_gameplay_tutorial_handle_event(&e) && !tutorial_reading);
+    e=(SDL_Event){0}; e.wheel.type=SDL_EVENT_MOUSE_WHEEL;
+    e.wheel.timestamp=tutorial_input_barrier+1000000; e.wheel.y=-1;
+    assert(sdl_gameplay_tutorial_handle_event(&e) && !tutorial_reading);
+    /* A modal opened behind an action card keeps pointer ownership, including
+     * points outside the main map (for example a minimap overlay). */
+    g_minimap.active=true;
+    e=(SDL_Event){0}; e.button.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    e.button.timestamp=tutorial_input_barrier+1000000; e.button.button=SDL_BUTTON_LEFT;
+    e.button.x=400; e.button.y=400;
+    assert(!sdl_gameplay_tutorial_handle_event(&e));
+    e.button.type=SDL_EVENT_MOUSE_BUTTON_UP;
+    assert(!sdl_gameplay_tutorial_handle_event(&e));
+    g_minimap.active=false;
     e=(SDL_Event){0}; e.gaxis.type=SDL_EVENT_GAMEPAD_AXIS_MOTION;
     e.gaxis.timestamp=tutorial_input_barrier+1000000;
     e.gaxis.axis=SDL_GAMEPAD_AXIS_LEFTX; e.gaxis.value=20000;

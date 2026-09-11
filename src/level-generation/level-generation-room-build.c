@@ -93,6 +93,7 @@ bool place_duruin_bastion(void)
         if (!vault_template_has_duruin(qv_ptr)) continue;
         if (qv_ptr->depth > p_ptr->depth) continue;
         if (qv_ptr->max_depth != 0 && p_ptr->depth > qv_ptr->max_depth) continue;
+        if (!vault_is_valid_for_depth(qv_ptr, p_ptr->depth)) continue;
         if (!quest_vault_surface_roll_allows(qv_ptr, p_ptr->depth)) continue;
 
         /* Found Duruin Bastion - attempt placement and return result */
@@ -199,6 +200,7 @@ bool try_quest_vault_type(int v_type, bool *had_eligible_candidate)
         if (!(qv_ptr->flags & VLT_QUEST)) continue;
         if (qv_ptr->depth > p_ptr->depth) continue;
         if (qv_ptr->max_depth != 0 && p_ptr->depth > qv_ptr->max_depth) continue;
+        if (!vault_is_valid_for_depth(qv_ptr, p_ptr->depth)) continue;
         if (!quest_vault_surface_roll_allows(qv_ptr, p_ptr->depth)) continue;
         if (vault_template_has_duruin(qv_ptr)) {
             log_trace("Quest vault: Skipping Duruin Bastion in generic placement path (quest-only)");

@@ -510,6 +510,33 @@ M2:There is no grey here, no compromise, only the blinding light of dogma and th
 M1:This is the floor of a dead sea, where all that remains are the broken remnants of a million lives.
 M2:It is a monument to a vast and final extinction, the end of all things.
 
+N:40:Flagstone #VerdantFlagstone
+# Dark stone labyrinth partitions at 400-500 ft only (see style-levels.txt).
+W:33:0
+F:23:0
+D:0:10 20:6 20:9 20:12 20:15 20:18
+S:dark grey flagstone walls
+M1:Dark stone slabs line the walls, their worn joints running in uneven courses.
+M2:Dust settles in the cracks between the heavy stones.
+
+N:41:Masonry #VerdantMasonry
+# Selected forge vault palettes only (see their S: records in vault.txt).
+W:33:2
+F:23:0
+D:0:10 20:6 20:9 20:12 20:15 20:18
+S:pale dressed stone masonry
+M1:The passage opens between pale blocks of neatly dressed masonry.
+M2:The regular joints and worn faces speak of patient work carried out in the dark.
+
+N:42:Moss #VerdantMoss
+# Damp green cave partitions only (see style-levels.txt).
+W:33:4
+F:23:0
+D:0:10 20:6 20:9 20:12 20:15 20:18
+S:dark moss-covered stone walls
+M1:Dark moss fills the joints of the stone walls.
+M2:Moisture beads on the stone, feeding the quiet growth far from the sun.
+
 #Vaults
 N:50:Red50 #RedBricks
 W:16:6

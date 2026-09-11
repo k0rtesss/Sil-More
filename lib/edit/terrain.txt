@@ -60,7 +60,7 @@ T:0:1
 
 N:2:chasm
 G:%:D
-T:11:5
+T:34:0
 
 # 0x03 --> glyph of warding
 

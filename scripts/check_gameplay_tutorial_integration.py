@@ -26,6 +26,15 @@ __DESCRIPTION_IMPLEMENTATION__
 
 static player_type test_player;
 player_type *p_ptr=&test_player;
+static player_other test_options;
+player_other *op_ptr=&test_options;
+static maxima test_maxima;
+maxima *z_info=&test_maxima;
+static ability_type test_abilities[1];
+ability_type *b_info=test_abilities;
+char *b_name="Ability";
+static object_type test_floor_objects[4];
+object_type *o_list=test_floor_objects;
 static object_type test_inventory[INVEN_TOTAL], test_extra, test_supply;
 object_type *inventory=test_inventory;
 static object_kind test_kinds[8];
@@ -60,6 +69,7 @@ static u16b test_path[4];
 static int test_path_count;
 static bool effect_commits=true;
 static int effect_calls;
+static bool pack_pending;
 metarun metar;
 metarun *metarun_current_mutable(void) { return &test_tale; }
 errr save_metaruns(void) { return 0; }
@@ -86,6 +96,23 @@ int player_active_weapon_mode(void) { return 0; }
 int player_active_weapon_kind(void) { return active_weapon_kind; }
 int min_depth(void) { return 0; }
 void tutorial_world_start(void) { ++world_start_calls; }
+void tutorial_world_checkpoint(void) {}
+void sdl_mouse_path_cancel(void) {}
+bool player_pack_action_pending(void) { return pack_pending; }
+bool player_active_weapon_is_melee(void) { return active_weapon_kind==PLAYER_ACTIVE_WEAPON_KIND_MELEE; }
+int ability_index(int skill,int ability) { (void)skill;(void)ability;return 0; }
+int player_quiver_arrow_slots(int *slots,int count) { (void)slots;(void)count;return 0; }
+int player_quiver_selected_arrow_slot(void) { return -1; }
+int player_inventory_handle_for_object(const object_type *item)
+{ for(int i=0;i<INVEN_TOTAL;++i) if(item==&inventory[i]) return i;return -1; }
+bool player_inventory_handle_is_equipped(int slot) { return slot>=INVEN_WIELD && slot<INVEN_TOTAL; }
+enum inventory_limit_group inventory_limit_group_for_object(const object_type *item)
+{ return item->storage==OBJECT_STORAGE_HARNESS?INV_LIMIT_HARNESS:INV_LIMIT_PACK; }
+bool object_can_choose_pack_or_harness(const object_type *item) { (void)item;return true; }
+bool inventory_type_slot_available(const object_type *item,bool record) { (void)item;(void)record;return true; }
+s16b wield_slot(const object_type *item) { (void)item;return INVEN_BODY; }
+void monster_desc(char *buf,size_t size,const monster_type *m,int mode)
+{ (void)mode; SDL_snprintf(buf,size,"Monster %d",m->r_idx); }
 void msg_print(cptr message) { (void)message; }
 int project_path(u16b *path,int range,int y,int x,int *ty,int *tx,u32b flags)
 { (void)range;(void)y;(void)x;(void)ty;(void)tx;(void)flags;
@@ -242,10 +269,122 @@ static void check_feature_tips(void)
     tutorial_set_mode(TUTORIAL_MODE_EXTENDED);
 }
 
+static bool pending_lesson(const char *id)
+{
+    int index=lesson_index(id);
+    if(active==index && index>=0) return true;
+    for(int i=0;i<queue_count;++i) if(queue[i].lesson==index) return true;
+    return false;
+}
+
+static void live_checkpoint(void)
+{
+    waiting=true; /* Inspect offers without a simulated frontend reading them. */
+    tutorial_game_checkpoint();
+    waiting=false;
+}
+
+static void check_live_checkpoints(void)
+{
+    tutorial_view view;
+    memset(p_ptr,0,sizeof(*p_ptr));
+    memset(inventory,0,sizeof(test_inventory));
+    memset(mon_list,0,sizeof(test_monsters));
+    memset(cave_m_idx,0,sizeof(test_mon_idx));
+    memset(cave_o_idx,0,sizeof(test_obj_idx));
+    memset(cave_info,0,sizeof(test_info));
+    p_ptr->playing=true; p_ptr->py=p_ptr->px=5;
+    p_ptr->cur_map_hgt=p_ptr->cur_map_wid=12;
+    p_ptr->chp=p_ptr->mhp=20; p_ptr->csp=p_ptr->msp=20;
+    p_ptr->food=PY_FOOD_ALERT; op_ptr->hitpoint_warn=3;
+    playerturn=50; started=false; ++test_tale.id;
+    tutorial_game_start();
+
+    /* A condition queued during another lesson expires when the condition ends. */
+    p_ptr->poisoned=5; live_checkpoint();
+    assert(pending_lesson("status.poisoned"));
+    p_ptr->poisoned=0; live_checkpoint();
+    assert(!pending_lesson("status.poisoned"));
+    p_ptr->stun=55; live_checkpoint();
+    assert(pending_lesson("status.heavy_stun"));
+    p_ptr->stun=0; live_checkpoint();
+    assert(!pending_lesson("status.heavy_stun"));
+    p_ptr->chp=3; live_checkpoint(); assert(pending_lesson("status.health"));
+    p_ptr->chp=20; live_checkpoint(); assert(!pending_lesson("status.health"));
+    p_ptr->csp=0; live_checkpoint(); assert(pending_lesson("status.voice"));
+    p_ptr->csp=20; live_checkpoint(); assert(!pending_lesson("status.voice"));
+    p_ptr->food=PY_FOOD_STARVE-1; live_checkpoint(); assert(pending_lesson("status.starving"));
+    p_ptr->food=PY_FOOD_WEAK+1; live_checkpoint();
+    assert(!pending_lesson("status.starving") && pending_lesson("status.hungry"));
+    p_ptr->food=PY_FOOD_ALERT; live_checkpoint(); assert(!pending_lesson("status.hungry"));
+
+    /* Merely sensed/distant terrain is not a reached hazard. Transformation
+     * removes the old lesson and offers the new physical feature. */
+    cave_feat[5][6]=FEAT_LAVA; cave_info[5][6]=CAVE_MARK;
+    live_checkpoint(); assert(!pending_lesson("world.lava"));
+    cave_info[5][6]|=CAVE_SEEN;
+    live_checkpoint(); assert(pending_lesson("world.lava"));
+    cave_feat[5][6]=FEAT_ICE;
+    live_checkpoint(); assert(!pending_lesson("world.lava") && pending_lesson("world.ice"));
+    cave_feat[5][6]=FEAT_FLOOR;
+    live_checkpoint(); assert(!pending_lesson("world.ice"));
+    test_floor_objects[1]=(object_type){.k_idx=1,.tval=TV_STAFF,.number=1,.marked=true};
+    cave_o_idx[5][6]=1;
+    live_checkpoint(); assert(pending_lesson("item.first_description"));
+    cave_o_idx[5][6]=0;
+    live_checkpoint(); assert(!pending_lesson("item.first_description"));
+    assert(terrain_lesson_feature(7)==6 && terrain_lesson_feature(8)==6);
+    assert(terrain_lesson_feature(32)==32 && terrain_lesson_feature(39)==33);
+    assert(terrain_lesson_feature(47)==40);
+    assert(terrain_lesson_feature(64)==64 && terrain_lesson_feature(69)==65);
+    assert(terrain_lesson_feature(70)==70 && terrain_lesson_feature(75)==71);
+    assert(terrain_lesson_feature(76)==76 && terrain_lesson_feature(79)==77);
+
+    /* Adjacent and alert enemies get awareness before attack, never a stealth
+     * suggestion. A pacifist still learns what a visible enemy means. */
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_MELEE;
+    mon_list[1]=(monster_type){.r_idx=1,.ml=true,.fy=5,.fx=6,.alertness=ALERTNESS_ALERT};
+    cave_m_idx[5][6]=1; cave_info[5][6]|=CAVE_VIEW;
+    live_checkpoint();
+    assert(tutorial_get_view(&view) && !strcmp(view.id,"combat.first_monster"));
+    assert(!pending_lesson("combat.stealth"));
+    tutorial_continue(); live_checkpoint();
+    assert(tutorial_get_view(&view) && !strcmp(view.id,"combat.first_adjacent"));
+    tutorial_skip();
+    cave_m_idx[5][6]=0; mon_list[1].fx=7;
+    cave_m_idx[5][7]=1; cave_info[5][7]=CAVE_VIEW;
+    mon_list[1].alertness=ALERTNESS_UNWARY;
+    p_ptr->niena_quest=NIENA_QUEST_ACTIVE;
+    live_checkpoint(); assert(pending_lesson("combat.stealth"));
+    mon_list[1].alertness=ALERTNESS_ALERT;
+    live_checkpoint(); assert(!pending_lesson("combat.stealth"));
+    mon_list[1].ml=false;
+    live_checkpoint(); assert(!pending_lesson("combat.first_adjacent"));
+
+    /* Returning to gameplay ends menu-only context; forced movement must not
+     * satisfy a practice move and a same-depth regenerated map drops subjects. */
+    tutorial_game_menu("inventory","Inventory fixture");
+    assert(pending_lesson("menu.inventory"));
+    live_checkpoint(); assert(!pending_lesson("menu.inventory"));
+    tutorial_observe("move",NULL); tutorial_checkpoint(true);
+    tutorial_game_menu("inventory","Inventory fixture");
+    mock_description_events=0;
+    tutorial_game_wait();
+    assert(tutorial_lesson_status("menu.inventory")==TUTORIAL_COMPLETED);
+    assert(tutorial_get_view(&view) && !strcmp(view.action,"move"));
+    ++p_ptr->px; live_checkpoint();
+    assert(tutorial_lesson_status("move")==TUTORIAL_IN_PROGRESS);
+    tutorial_game_start();
+    assert(level_changed && !tutorial_is_active());
+    live_checkpoint();
+    assert(!level_changed && tutorial_lesson_status("move")==TUTORIAL_IN_PROGRESS);
+    puts("Live tutorial checkpoints: expiry, hazards, awareness/stealth scenarios, mode-safe actions and same-depth map refresh: PASS");
+}
+
 int main(void)
 {
     tutorial_view view;
-    object_type staff={.k_idx=1,.tval=TV_STAFF,.sval=SV_STAFF_SLUMBER,.number=1,.pval=CHANNELING_CHARGE_MULTIPLIER};
+    object_type staff={.k_idx=1,.tval=TV_STAFF,.sval=SV_STAFF_SLUMBER,.number=1,.pval=CHANNELING_CHARGE_MULTIPLIER,.ident=IDENT_KNOWN};
     object_type horn={.k_idx=4,.tval=TV_HORN,.sval=SV_HORN_TERROR,.number=1};
     object_type potion={.k_idx=2,.tval=TV_POTION,.sval=SV_POTION_ANTIDOTE,.number=1};
     object_type healing={.k_idx=3,.tval=TV_POTION,.sval=SV_POTION_HEALING,.number=1};
@@ -269,6 +408,7 @@ int main(void)
     assert(tutorial_game_action_allowed("open-menu",NULL));
     assert(tutorial_game_action_allowed("examine",&staff));
     k_info[1].aware=false; assert(!tutorial_game_action_allowed("use-item",&staff)); k_info[1].aware=true;
+    staff.ident=0; assert(!tutorial_game_action_allowed("use-item",&staff)); staff.ident=IDENT_KNOWN;
     staff.pval=0; assert(!tutorial_game_action_allowed("use-item",&staff)); staff.pval=CHANNELING_CHARGE_MULTIPLIER;
     l_list[1].flags3=RF3_NO_SLEEP;
     assert(!tutorial_game_action_allowed("use-item",&staff)); l_list[1].flags3=0;
@@ -288,6 +428,13 @@ int main(void)
     activate("change-test","");
     assert(!tutorial_game_action_allowed("change-active",&staff));
     mock_smith_forbidden=false; assert(tutorial_game_action_allowed("change-active",&staff));
+    object_type armour={.k_idx=7,.tval=TV_SOFT_ARMOR,.number=1,.ident=IDENT_KNOWN};
+    activate("item.armour.equip","armour");
+    assert(tutorial_game_action_allowed("equip",&armour));
+    armour.ident=0; assert(!tutorial_game_action_allowed("equip",&armour)); armour.ident=IDENT_KNOWN;
+    armour.ident|=IDENT_CURSED; assert(!tutorial_game_action_allowed("equip",&armour)); armour.ident=IDENT_KNOWN;
+    inventory[INVEN_BODY]=armour;
+    assert(!tutorial_game_action_allowed("equip",&armour)); memset(&inventory[INVEN_BODY],0,sizeof(armour));
 
     activate("item.horn.use","horn");
     k_info[4].aware=true; p_ptr->csp=20;
@@ -309,11 +456,16 @@ int main(void)
     cave_m_idx[5][6]=0;
 
     activate("status.poisoned.remedy","poisoned");
+    p_ptr->poisoned=10;
     assert(!tutorial_game_action_allowed("use-item",&potion));
     k_info[2].aware=true;
     assert(tutorial_game_action_allowed("use-item",&potion));
     k_info[3].aware=true;
     assert(!tutorial_game_action_allowed("use-item",&healing));
+    assert(tutorial_game_action_allowed("examine",&healing));
+    p_ptr->poisoned=0;
+    assert(!tutorial_game_action_allowed("use-item",&potion));
+    p_ptr->poisoned=10;
     assert(!available_remedy("poisoned"));
     test_supply=potion; supply_count=1;
     assert(available_remedy("poisoned"));
@@ -376,6 +528,7 @@ int main(void)
     }
 
     activate("move","");
+    cave_info[5][6]=CAVE_MARK;
     assert(tutorial_game_command_allowed(';',6));
     assert(tutorial_game_command_allowed(';',0)); /* Opening a direction prompt is free. */
     assert(!tutorial_game_command_allowed(';',42));
@@ -387,9 +540,17 @@ int main(void)
     assert(!tutorial_game_command_allowed(';',6));
     cave_feat[5][6]=FEAT_CHASM;
     assert(!tutorial_game_command_allowed(';',6));
+    const int hazard_features[]={FEAT_LAVA,FEAT_POISON,FEAT_WATER,FEAT_ICE};
+    for(int i=0;i<4;++i) {
+        cave_feat[5][6]=hazard_features[i];
+        assert(!tutorial_game_command_allowed(';',6));
+    }
     cave_info[5][6]=CAVE_WALL; cave_feat[5][6]=FEAT_WALL_EXTRA;
     assert(!tutorial_game_command_allowed(';',6));
     cave_info[5][6]=0; cave_feat[5][6]=FEAT_FLOOR;
+    assert(!tutorial_game_command_allowed(';',6)); /* Unexplored is not known-safe floor. */
+    cave_info[5][6]=CAVE_MARK;
+    p_ptr->confused=1; assert(!tutorial_game_command_allowed(';',6)); p_ptr->confused=0;
     assert(p_ptr->energy_use==0);
 
     activate("attack","monster");
@@ -504,6 +665,7 @@ int main(void)
         tutorial_game_start();
         assert(!tutorial_character_blocked());
     }
+    check_live_checkpoints();
     tutorial_shutdown(); SDL_Quit();
     puts("Gameplay tutorial integration: PASS (typed actions, known instruments/remedies, post-cure completion, ranged path safety, movement/oath gates, hidden paid actions, inline/modal description success/failure and visibility, Off replay, level/reload history)");
     return 0;
@@ -622,6 +784,7 @@ def main():
         ("item.bow.use", "fire", "bow"),
         ("equip-test", "equip", ""), ("change-test", "change-active", ""),
         ("item.staff.ready", "ready", "staff"),
+        ("item.armour.equip", "equip", "armour"),
         ("menu-test", "open-menu", "inventory"),
         ("item.first_description", "examine", ""),
     ]:
@@ -636,6 +799,16 @@ def main():
     for id in ('world.skeleton','world.chest','item.description'):
         lessons.append({'id':id,'title':id,'level':'normal',
                         'steps':[{'kind':'info','text':'Feature or description information.'}]})
+    for id in ('status.poisoned','status.heavy_stun','status.health','status.voice',
+               'status.hungry','status.weak','status.starving','world.water','world.lava',
+               'world.ice','world.poison','menu.inventory'):
+        lessons.append({'id':id,'title':id,'level':'normal',
+                        'steps':[{'kind':'info','text':'Current context: {subject}'}]})
+    lessons.extend([
+        {'id':'combat.first_monster','title':'Awareness','priority':65,'steps':[{'text':'Creature awareness.'}]},
+        {'id':'combat.first_adjacent','title':'Attack','priority':45,'steps':[{'text':'Attack.','kind':'action','action':'attack','subject_type':'monster'}]},
+        {'id':'combat.stealth','title':'Stealth','priority':40,'steps':[{'text':'Stealth.','kind':'action','action':'stealth'}]},
+    ])
     (OUT / "catalogue.json").write_text(json.dumps({"version": 1, "lessons": lessons}))
     source = OUT / "check.c"
     # externs.h contains unguarded enum declarations. A unity fixture has

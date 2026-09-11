@@ -101,6 +101,16 @@ static errr rd_fixtures(void)
                 note("Invalid corridor fixture.");
                 return -1;
             }
+            /* Before fixture textures were wall-mounted, braziers could be
+             * recorded on a walkable niche floor. Drop that decoration during
+             * load; leave the serialized floor and CAVE_GLOW untouched so the
+             * saved route and lighting remain unchanged. */
+            if (kind == CAVE_FIXTURE_BRAZIER
+                && cave_feat[fy][fx] == FEAT_FLOOR)
+            {
+                log_debug("Discarding legacy floor brazier at (%d,%d)", fy, fx);
+                continue;
+            }
             cave_fixture_set(fy, fx, kind);
         }
     }

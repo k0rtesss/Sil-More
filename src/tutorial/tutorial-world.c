@@ -58,7 +58,8 @@ static const monster_flag_lesson monster_lessons[] = {
 static bool world_available(void)
 {
     return character_generated && p_ptr && p_ptr->playing
-        && !p_ptr->is_dead && !death_spectator_active() && !run_mode_is_blitz();
+        && !p_ptr->tutorial_deferred && !p_ptr->is_dead
+        && !death_spectator_active() && !run_mode_is_blitz();
 }
 
 static void world_observe(const char *id, const char *type,
@@ -142,29 +143,39 @@ void tutorial_world_start(void)
 
 static void observe_monsters(void)
 {
-    if (p_ptr->image || p_ptr->blind) return;
+    bool present[N_ELEMENTS(monster_lessons)] = {false};
+    const monster_type *subjects[N_ELEMENTS(monster_lessons)] = {NULL};
+    int selected = -1;
     for (int i=1;i<mon_max;++i) {
         const monster_type *monster=&mon_list[i];
-        if (!monster->r_idx || !monster->ml) continue;
+        if (p_ptr->image || p_ptr->blind || !monster->r_idx || !monster->ml
+            || !player_has_los_bold(monster->fy, monster->fx)) continue;
         const monster_lore *lore=&l_list[monster->r_idx];
         const monster_race *race=&r_info[monster->r_idx];
         u32b known[4]={lore->flags1&race->flags1,lore->flags2&race->flags2,
             lore->flags3&race->flags3,lore->flags4&race->flags4};
-        char name[160];
-        monster_desc(name,sizeof(name),monster,0);
         for (size_t j=0;j<N_ELEMENTS(monster_lessons);++j) {
             const monster_flag_lesson *lesson=&monster_lessons[j];
-            char id[80];
             if (!(known[lesson->group-1]&lesson->flag)) continue;
-            SDL_strlcpy(id,lesson->id,sizeof(id));
-            for (char *p=id;*p;++p) *p=(char)tolower((unsigned char)*p);
-            tutorial_status status=tutorial_lesson_status(id);
-            if (status==TUTORIAL_COMPLETED || status==TUTORIAL_SKIPPED) continue;
+            present[j] = true;
+            subjects[j] = monster;
+        }
+    }
+    for (size_t j=0;j<N_ELEMENTS(monster_lessons);++j) {
+        char id[80];
+        SDL_strlcpy(id,monster_lessons[j].id,sizeof(id));
+        for (char *p=id;*p;++p) *p=(char)tolower((unsigned char)*p);
+        if (!present[j]) { tutorial_forget_observation(id); continue; }
+        if (!tutorial_lesson_enabled(id)) continue;
+        tutorial_status status=tutorial_lesson_status(id);
+        if (status==TUTORIAL_COMPLETED || status==TUTORIAL_SKIPPED) continue;
+        if (selected < 0) selected = (int)j;
+        /* Refresh already queued subjects as well as the one new offer. */
+        if ((int)j == selected || status == TUTORIAL_IN_PROGRESS) {
+            char name[160];
+            monster_desc(name,sizeof(name),subjects[j],0);
             world_observe(id,"monster",name,
                 "This trait is already known about the visible creature. Inspect its recall before choosing your next action.");
-            /* One general lore offer per checkpoint, so an experienced race
-             * does not fill the queue with every property at once. */
-            return;
         }
     }
 }
@@ -191,27 +202,41 @@ void tutorial_world_checkpoint(void)
         strnfmt(text,sizeof(text),"Arrows: %d. Current free Quiver space: %d.",now.arrows,player_quiver_arrow_space());
         world_observe("storage.quiver","arrows","Quiver",text);
     }
-    if (now.weight && !previous.weight)
+    if (now.weight)
         world_observe("storage.weight","storage","Encumbrance",
             "Carried weight exceeds your current limit and reduces speed. Excess Pack or Harness volume can also reduce speed.");
-    if (now.light!=previous.light && now.light)
+    else tutorial_forget_observation("storage.weight");
+    if (now.light)
         world_observe(now.light==2?"world.light_out":"world.light_low","light","Light fuel",
             now.light==2?"Your fuelable light is out. Inspect a replacement or a suitable refill."
             :"Your light has reached its current sputtering threshold. Inspect fuel and a replacement before it runs out.");
-    if (now.partition!=previous.partition || now.depth!=previous.depth) {
+    if (now.light != 1) tutorial_forget_observation("world.light_low");
+    if (now.light != 2) tutorial_forget_observation("world.light_out");
+    for (int i = LEVEL_PART_NONE + 1; i < LEVEL_PART_MAX; ++i)
+        if (i != now.partition) {
+            strnfmt(id,sizeof(id),"world.partition.%d",i);
+            tutorial_forget_observation(id);
+        }
+    {
         if (now.partition>LEVEL_PART_NONE && now.partition<LEVEL_PART_MAX) {
             strnfmt(id,sizeof(id),"world.partition.%d",now.partition);
             world_observe(id,"terrain","Your current region",
                 "This is the region you have entered. Read its effects before choosing your route.");
         }
     }
-    if (now.cave_type!=previous.cave_type || now.depth!=previous.depth) {
+    {
         const char *element=now.cave_type==BIG_CAVE_FIRE?"fire":now.cave_type==BIG_CAVE_ICE?"cold":now.cave_type==BIG_CAVE_POIS?"poison":NULL;
         if (element) {
             strnfmt(id,sizeof(id),"world.partition.%s",element);
             world_observe(id,"terrain","Elemental cave",
                 "You have entered this cave's environmental region. Check its terrain and your relevant resistances.");
         }
+        const char *elements[] = {"fire", "cold", "poison"};
+        for (int i = 0; i < (int)N_ELEMENTS(elements); ++i)
+            if (!element || strcmp(element, elements[i])) {
+                strnfmt(id,sizeof(id),"world.partition.%s",elements[i]);
+                tutorial_forget_observation(id);
+            }
     }
     for (int i=0;i<6;++i) {
         if (now.quests[i]==previous.quests[i]) continue;

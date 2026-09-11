@@ -93,6 +93,27 @@ bool vault_drop_passes(vault_drop_gate_kind kind)
     return percent_chance(chance);
 }
 
+/* Content restrictions must be checked before committing to a quest vault.
+ * A different placement or regenerated map cannot make these tokens valid.
+ * Template min/max depths are checked separately by the selection paths. */
+bool vault_is_valid_for_depth(const vault_type* v_ptr, int depth)
+{
+    cptr data = v_text + v_ptr->text;
+
+    for (int i = 0; i < v_ptr->hgt * v_ptr->wid; ++i)
+    {
+        /* Barrow wights cannot occur below 700 ft. */
+        if (data[i] == 'W' && depth > 14)
+            return false;
+
+        /* Chasms cannot occur at 1000 ft. */
+        if (data[i] == '7' && depth >= MORGOTH_DEPTH)
+            return false;
+    }
+
+    return true;
+}
+
 /*
  * Hack -- fill in "vault" rooms
  */
@@ -120,24 +141,11 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
 
     cptr t;
 
-    // Check that the vault doesn't contain invalid things for its depth
-    for (t = data, dy = 0; dy < ymax; dy++)
+    if (!vault_is_valid_for_depth(v_ptr, p_ptr->depth))
     {
-        for (dx = 0; dx < xmax; dx++, t++)
-        {
-            // Barrow wights can't be deeper than level 13
-            if ((*t == 'W') && (p_ptr->depth > 13))
-            {
-                log_debug("Skipped a barrow wight vault.");
-                return (false);
-            }
-
-            // chasms can't occur at 1000 ft
-            if ((*t == '7') && (p_ptr->depth >= MORGOTH_DEPTH))
-            {
-                return (false);
-            }
-        }
+        log_trace("Skipped vault '%s': contents invalid at depth %d",
+            v_name + v_ptr->name, p_ptr->depth);
+        return false;
     }
 
     // reflections

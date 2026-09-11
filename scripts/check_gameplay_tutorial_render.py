@@ -64,6 +64,16 @@ float fixture_draw_text_line(cptr text,float x,float y,float width,int px,SDL_Co
 }
 static tutorial_view fixture;
 static tutorial_mode fixture_mode=TUTORIAL_MODE_EXTENDED;
+static SDL_Event device_events[3];
+static int device_event_count, device_event_index;
+bool __real_SDL_WaitEvent(SDL_Event *event);
+bool __wrap_SDL_WaitEvent(SDL_Event *event)
+{
+    if (!device_event_count) return __real_SDL_WaitEvent(event);
+    assert(device_event_index < device_event_count);
+    *event = device_events[device_event_index++];
+    return true;
+}
 tutorial_mode __wrap_get_sdl_gameplay_tutorial_mode(void) { return fixture_mode; }
 bool __wrap_tutorial_get_view(tutorial_view *out) { *out=fixture; return fixture.active; }
 bool __wrap_tutorial_is_active(void) { return fixture.active; }
@@ -245,6 +255,18 @@ int main(int argc,char **argv)
     p_ptr->playing=true; p_ptr->py=7;p_ptr->px=8;
     p_ptr->cur_map_hgt=32;p_ptr->cur_map_wid=64;
     character_generated=character_dungeon=true;
+    /* Exercise the real device-tutorial event loop too: holding confirm must
+     * not skip a page, but a new confirm must still advance it. */
+    device_events[0].type=SDL_EVENT_KEY_DOWN;
+    device_events[0].key.key=SDLK_SPACE; device_events[0].key.repeat=true;
+    device_events[1].type=SDL_EVENT_KEY_DOWN; device_events[1].key.key=SDLK_ESCAPE;
+    device_event_count=2; device_event_index=0;
+    assert(sdl_touch_tutorial_wait_action(0)==2);
+    assert(device_event_index==2);
+    device_events[0].key.repeat=false;
+    device_event_count=1; device_event_index=0;
+    assert(sdl_touch_tutorial_wait_action(0)==1);
+    assert(device_event_index==1); device_event_count=0;
     data=SDL_LoadFile("fixtures.json",&length); assert(data);
     cJSON *entries=cJSON_Parse(data); assert(entries); SDL_free(data);
     for (int i=0;i<cJSON_GetArraySize(entries);++i) {
@@ -374,7 +396,7 @@ def main():
                     str(ROOT / "src/sdl/ui/sdl-main-menu.c"), str(ROOT / "src/sdl-config.c"),
                     str(ROOT / "src/tutorial/tutorial.c"), "@" + str(response),
                     "@CMakeFiles/sil-more.dir/linkLibs.rsp",
-                    "-Wl,--wrap=tutorial_get_view,--wrap=tutorial_is_active,--wrap=tutorial_revision,--wrap=get_sdl_gameplay_tutorial_mode",
+                    "-Wl,--wrap=tutorial_get_view,--wrap=tutorial_is_active,--wrap=tutorial_revision,--wrap=get_sdl_gameplay_tutorial_mode,--wrap=SDL_WaitEvent",
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf")],
                    cwd=OUT, env=env, check=True, timeout=600 if "--all" in sys.argv[1:] else 60)

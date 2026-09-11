@@ -88,6 +88,17 @@ def source_inventory():
     direct.update('status.' + name for name in re.findall(r'CONDITION\((\w+),', core) if name != 'FIELD')
     direct.update('status.' + name for name in ('hungry', 'weak', 'starving', 'voice', 'health'))
     direct.update('status.drain' + str(i) for i in range(4))
+    # Nearby hazards use parallel public feature/lesson arrays so Normal mode
+    # gets warnings even when detailed terrain cards are filtered out.
+    nearby = re.search(r'static void observe_nearby\(void\)(.*?)(?=\nvoid tutorial_game_start)', core, re.S)
+    if nearby:
+        block = nearby.group(1)
+        hazards = re.search(r'const int hazards\[\]\s*=\s*\{([^}]+)\}', block)
+        ids = re.search(r'const char \*hazard_ids\[\]\s*=\s*\{([^}]+)\}', block)
+        assert hazards and ids and 'observe(hazard_ids[i]' in block, 'Nearby hazard producer is missing'
+        hazard_ids = re.findall(r'"(world\.[a-z]+)"', ids.group(1))
+        assert len(top_level_expressions(hazards.group(1))) == len(hazard_ids), 'Hazard IDs/features are out of alignment'
+        direct.update(hazard_ids)
     direct.update(('identification.item', 'item.artefact', 'item.first_description', 'item.description'))
     menu_ids = set(re.findall(r'\btutorial_game_menu\(\s*"([a-z0-9_-]+)"', '\n'.join(sources.values())))
     for expression in re.findall(r'\btutorial_game_menu\(\s*([^,]+),', combined):
@@ -147,6 +158,7 @@ def validate():
         assert id not in by_id, f'duplicate {id}'
         by_id[id] = lesson
         assert lesson.get('level') in ('normal', 'extended'), f'{id}: assign Normal or Extended explicitly'
+        assert type(lesson.get('priority')) is int, f'{id}: priority must be an integer'
         assert len(id.encode()) < 80 and len(lesson['title'].encode()) < 160, id
         assert 0 < len(lesson['steps']) <= 16, id
         assert lesson.get('sources') and lesson.get('trigger', {}).get('predicate'), id
@@ -161,10 +173,13 @@ def validate():
             if step['kind'] == 'action':
                 assert step.get('action'), id
                 assert not id.startswith(('ability.', 'effect.', 'terrain.')), f'{id}: must not force a purchase, consumable or terrain hazard'
-            if step['kind'] == 'decision':
+            if step['kind'] != 'action':
                 assert not step.get('action'), f'{id}: decision explanation must not perform a purchase'
             placeholders = re.findall(r'\{([a-z_-]+)\}', step['text'])
-            assert set(placeholders) <= {'subject', 'context', 'detail', 'special'}, (id, placeholders)
+            assert set(placeholders) <= {'subject', 'context', 'detail'}, (id, placeholders)
+            expanded = step['text'].replace('{subject}', 'x' * 159)
+            expanded = expanded.replace('{context}', 'x' * 383).replace('{detail}', 'x' * 383)
+            assert len(expanded.encode()) < 2048, f'{id}: live context can truncate this card'
     abilities = records('lib/edit/ability.txt')
     expected_abilities = {f"ability.{a['serial']}.preview" for a in abilities}
     actual_abilities = {id for id in by_id if id.startswith('ability.')}
@@ -184,9 +199,25 @@ def validate():
     expected_terrain = {f"terrain.{entry['serial']}" for entry in records('lib/edit/terrain.txt')
                         if entry['name'] != 'unused' and entry['serial'] not in (0, 1, 10, 11, 48, 56, 57, 58, 59)}
     assert expected_terrain == {id for id in by_id if id.startswith('terrain.')}, 'Terrain coverage differs'
+    for id, lesson in by_id.items():
+        if 'alias_of' not in lesson:
+            continue
+        target = lesson['alias_of']
+        assert id.startswith('terrain.') and target in expected_terrain, f'{id}: invalid terrain representative'
+        assert 'alias_of' not in by_id[target] and target != id, f'{id}: circular/chained terrain alias'
+        assert lesson['level'] == by_id[target]['level'], f'{id}: alias has a different mode'
     opening = by_id['opening.move']['steps']
     assert [step['kind'] for step in opening] == ['info', 'info', 'action']
     assert opening[-1]['action'] == 'move'
+    assert all(step['kind'] == 'info' for step in by_id['combat.first_monster']['steps']), 'Seeing a creature must not force stealth'
+    assert by_id['combat.first_monster']['priority'] > by_id['combat.first_adjacent']['priority'], 'Explain the first creature before attack practice'
+    assert by_id['combat.stealth']['steps'][-1]['action'] == 'stealth'
+    for hazard in ('water', 'lava', 'ice', 'poison'):
+        lesson = by_id['world.' + hazard]
+        assert lesson['level'] == 'normal', f'{hazard}: basic terrain warnings must reach Normal players'
+        assert all(step['kind'] == 'info' for step in lesson['steps']), f'{hazard}: a warning must not require entering the hazard'
+    for hazard in ('lava', 'poison'):
+        assert by_id['world.' + hazard]['priority'] > by_id['opening.move']['priority'], 'Urgent terrain danger must precede basic movement'
     level_rank = {'normal': 1, 'extended': 2}
     for item in ('staff', 'horn', 'bow', 'throwing'):
         chain = ['item.first_description', 'item.' + item, 'item.' + item + '.ready']
@@ -230,7 +261,7 @@ def validate():
     core = sources['src/tutorial/tutorial-game.c']
     dynamic = set(expected_abilities | effects | expected_terrain)
     assert 'ability.%d.preview' in core and 'terrain.%d' in core and 'effect.%d' in core
-    item_types = set(re.findall(r'"([a-z-]+)"', core[core.index('static const char *item_type'):core.index('static bool item_is_remedy')]))
+    item_types = set(re.findall(r'"([a-z-]+)"', core[core.index('static const char *item_type('):core.index('static bool item_is_remedy')]))
     dynamic.update('item.' + type for type in item_types)
     # Remedy availability is explicitly guarded by item_is_remedy; not every
     # named condition has an available remedy or action trigger.
@@ -268,7 +299,8 @@ def write_reference(lessons, counts, unwired):
              'costs and consequences. The archive turns every step into a read-only explanation.', '',
              f"The catalogue contains {len(lessons)} lessons, including {counts['ability']} ability previews. "
              'Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial '
-             'has a checked entry. This checks source/data coverage, not physical-device interaction.', '']
+             'has a checked entry. Equivalent terrain variants share an automatic lesson; their old entries remain for '
+             'saved archive history. This checks source/data coverage, not physical-device interaction.', '']
     lines += ['## Resource route', '',
               '`src/init/init-paths.c` resolves `ANGBAND_DIR_HELP` from the installed data root. '
               '`src/tutorial/tutorial.c` lazily reads `tutorials.json` from that directory. '
@@ -293,12 +325,23 @@ def write_reference(lessons, counts, unwired):
               'belongs to its own native UI and is independent of catalogue filtering.', '',
               'Skeletons and chests use Normal informational feature lessons. Their old generic item IDs remain '
               'untouched if present in saved history, and they do not enter examine/equip/use tutorial chains.', '']
+    lines += ['## Presentation order', '',
+              'Cards are selected by descending priority at a safe input boundary, not by their position in this document. '
+              'Equal priorities keep observation order. A higher-priority card can interrupt between steps; the earlier '
+              'lesson resumes at its saved step when its context is still relevant. Menu and purchase explanations '
+              'take focus at their owning input boundary so they precede the choice they describe. Reading does not advance game time.', '',
+              'Gameplay observations are checked again against current conditions, reachable items and visible subjects. '
+              'Expired observations are withdrawn without marking them completed or skipped; a fresh encounter can offer '
+              'them again. Required actions complete only after the matching real action succeeds or commits.', '']
     if unwired:
         lines += ['## Trigger audit', '', 'These authored entries do not currently have a detected direct or data-backed producer. '
                   'They are coverage gaps, not completed runtime coverage:', '', ', '.join('`'+id+'`' for id in unwired), '']
     for lesson in lessons:
         lines += ['## ' + lesson['title'], '', '`' + lesson['id'] + '`', '']
         lines += ['Level: **' + lesson['level'].capitalize() + '**.', '']
+        lines += [f"Priority: **{lesson['priority']}** (higher appears first).", '']
+        if lesson.get('alias_of'):
+            lines += [f"Archive compatibility entry. New encounters use `{lesson['alias_of']}` for this terrain family.", '']
         for number, step in enumerate(lesson['steps'], 1):
             lines += [f"**{number}. {step['kind'].capitalize()}**", '', step['text'], '']
             if step['kind'] == 'action':

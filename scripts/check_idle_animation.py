@@ -151,6 +151,32 @@ static void niche(int y, int x) {
     for (int i = -1; i <= 1; i++) floor_at(y + 1, x + i);
     apply_tunnel_niche_torch_glow(y, x, 1, 0);
 }
+static void placement_tests(void) {
+    const int directions[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
+    u64b rng = Rand_state_export();
+    for (int variant=0;variant<2;variant++) for (int dir=0;dir<4;dir++) {
+        for (int y=17;y<25;y++) for (int x=17;x<25;x++) {
+            cave_feat[y][x] = FEAT_WALL_EXTRA; cave_info[y][x] = CAVE_WALL;
+        }
+        cave_fixtures_clear();
+        int y=22, x=22+variant;
+        int dy=directions[dir][0], dx=directions[dir][1];
+        floor_at(y,x); floor_at(y+dy,x+dx);
+        apply_tunnel_niche_torch_glow(y,x,dy,dx);
+        assert(cave_fixture_at(y-dy,x-dx) == (variant
+            ? CAVE_FIXTURE_WALL_TORCH : CAVE_FIXTURE_BRAZIER));
+        assert(!cave_floor_bold(y-dy,x-dx));
+        assert(cave_feat[y][x] == FEAT_FLOOR && cave_feat[y+dy][x+dx] == FEAT_FLOOR);
+        assert(!cave_fixture_at(y,x) && (cave_info[y][x] & CAVE_GLOW));
+        /* Without a backing wall, never fall back to a wall image on floor. */
+        cave_fixtures_clear(); floor_at(y-dy,x-dx);
+        apply_tunnel_niche_torch_glow(y,x,dy,dx);
+        assert(!cave_fixture_at(y,x) && !cave_fixture_at(y-dy,x-dx));
+    }
+    cave_fixtures_clear();
+    assert(Rand_state_export() == rng);
+    puts("Both fixtures stay on walls in all four niche orientations; floors stay open: PASS");
+}
 static void fixture_save_tests(void) {
     stream_size = stream_pos = load_byte_offset = 0;
     test_write_fixtures();
@@ -158,7 +184,7 @@ static void fixture_save_tests(void) {
     cave_fixtures_clear();
     assert(test_read_fixtures() == 0 && stream_pos == stream_size);
     assert(cave_fixture_at(9, 11) == CAVE_FIXTURE_WALL_TORCH);
-    assert(cave_fixture_at(10, 18) == CAVE_FIXTURE_BRAZIER);
+    assert(cave_fixture_at(9, 18) == CAVE_FIXTURE_BRAZIER);
     new_save = false; stream_pos = load_byte_offset = 0;
     assert(test_read_fixtures() == 0 && stream_pos == 0);
     assert(!cave_fixture_at(9, 11));
@@ -180,7 +206,19 @@ static void fixture_save_tests(void) {
     stream[6] = saved;
     stream_pos = load_byte_offset = 0;
     assert(test_read_fixtures() == 0);
+    /* The old layout saved its second fixture on the niche floor. Loading it
+     * must consume the record without creating a wall or changing its light. */
+    assert(stream[7] == 9 && stream[8] == 18 && stream[9] == CAVE_FIXTURE_BRAZIER);
+    u16b floor_info = cave_info[10][18];
+    stream[7] = 10; stream_pos = load_byte_offset = 0;
+    assert(test_read_fixtures() == 0 && stream_pos == stream_size);
+    assert(!cave_fixture_at(10,18) && !cave_fixture_at(9,18));
+    assert(cave_feat[10][18] == FEAT_FLOOR && cave_info[10][18] == floor_info);
+    assert(cave_fixture_at(9,11) == CAVE_FIXTURE_WALL_TORCH);
+    stream[7] = 9; stream_pos = load_byte_offset = 0;
+    assert(test_read_fixtures() == 0);
     puts("Fixture save roundtrip, old-save default, truncation and invalid records: PASS");
+    puts("Legacy floor brazier removed without changing the saved route or lighting: PASS");
 }
 
 static void draw_cell(int y, int x, bool covered) {
@@ -209,7 +247,7 @@ static unsigned differences(SDL_Surface* a, SDL_Surface* b) {
             int col = x / g_views[PANE_MAIN].cell_w;
             int row = y / g_views[PANE_MAIN].cell_h;
             assert((col == COL_MAP + 11 && row == ROW_MAP + 9)
-                || (col == COL_MAP + 18 && row == ROW_MAP + 10));
+                || (col == COL_MAP + 18 && row == ROW_MAP + 9));
             changes++;
         }
     }
@@ -230,21 +268,50 @@ static Uint64 next_animation_time(Uint64 now) {
 
 static void expect_middle_frame(SDL_Surface* canvas, int y, int x, const char* asset) {
     SDL_Surface* source = IMG_Load(asset); assert(source);
-    SDL_Surface* expected = SDL_ConvertSurface(source, canvas->format); assert(expected);
+    /* Build the expected composite from the real underlying wall. Transparent
+     * torch pixels must retain that wall, including after an idle redraw. */
+    byte kind = cave_fixture_at(y,x);
+    cave_fixture_set(y,x,CAVE_FIXTURE_NONE);
+    draw_cell(y,x,false);
+    SDL_Rect rect = {(COL_MAP+x)*16, (ROW_MAP+y)*16, 16, 16};
+    SDL_Surface* underlay = SDL_RenderReadPixels(g_state.renderer,&rect); assert(underlay);
+    SDL_Surface* expected = SDL_ConvertSurface(underlay,canvas->format); assert(expected);
+    SDL_SetSurfaceBlendMode(source,SDL_BLENDMODE_BLEND);
+    assert(SDL_BlitSurface(source,NULL,expected,NULL));
+    cave_fixture_set(y,x,kind);
+    draw_cell(y,x,false);
     for (int row=0; row<16; row++)
         assert(memcmp((byte*)canvas->pixels + ((ROW_MAP+y)*16+row)*canvas->pitch
                 + (COL_MAP+x)*16*4,
             (byte*)expected->pixels + row*expected->pitch, 16*4) == 0);
-    SDL_DestroySurface(expected); SDL_DestroySurface(source);
+    SDL_DestroySurface(underlay); SDL_DestroySurface(expected); SDL_DestroySurface(source);
+}
+
+static void torch_frame_tests(void) {
+    Uint64 saved_tick = frame_tick;
+    byte steps, phase;
+    fixture_timing(9,11,&steps,&phase);
+    for (int frame=0;frame<4;frame++) {
+        frame_tick = (frame*steps + 4*steps - phase) % (4*steps);
+        draw_cell(9,11,false);
+        SDL_Surface* canvas = capture(20+frame);
+        char asset[128];
+        strnfmt(asset,sizeof(asset),"lib/xtra/graf/anim_torch_f%d.png",frame);
+        expect_middle_frame(canvas,9,11,asset);
+        SDL_DestroySurface(canvas);
+    }
+    frame_tick = saved_tick;
+    draw_cell(9,11,false);
+    puts("All four Verdant torch frames composite over the existing wall: PASS");
 }
 
 static void freeze_tests(Uint64* now) {
     op_ptr->opt[OPT_torch_animation_always] = false;
-    cave_info[9][11] &= ~CAVE_SEEN; cave_info[10][18] &= ~CAVE_SEEN;
-    draw_cell(9,11,false); draw_cell(10,18,false);
+    cave_info[9][11] &= ~CAVE_SEEN; cave_info[9][18] &= ~CAVE_SEEN;
+    draw_cell(9,11,false); draw_cell(9,18,false);
     SDL_Surface* frozen = capture(6);
-    expect_middle_frame(frozen,9,11,"lib/xtra/graf/anim_wall_torch_f1.png");
-    expect_middle_frame(frozen,10,18,"lib/xtra/graf/anim_brazier_f1.png");
+    expect_middle_frame(frozen,9,11,"lib/xtra/graf/anim_torch_f1.png");
+    expect_middle_frame(frozen,9,18,"lib/xtra/graf/anim_brazier_f1.png");
     int loads = image_loads, textures = texture_creations, mallocs = allocations;
     for (int i=0; i<100; i++) { *now += IDLE_STEP_NS; expect_paused(*now); }
     assert(image_loads == loads && texture_creations == textures && allocations == mallocs);
@@ -252,8 +319,8 @@ static void freeze_tests(Uint64* now) {
     assert(differences(frozen,still) == 0);
     SDL_DestroySurface(still); SDL_DestroySurface(frozen);
     /* Seen torches still animate in freeze mode. */
-    cave_info[9][11] |= CAVE_SEEN; cave_info[10][18] |= CAVE_SEEN;
-    draw_cell(9,11,false); draw_cell(10,18,false);
+    cave_info[9][11] |= CAVE_SEEN; cave_info[9][18] |= CAVE_SEEN;
+    draw_cell(9,11,false); draw_cell(9,18,false);
     SDL_Surface* visible = capture(8);
     *now = next_animation_time(frame_tick * IDLE_STEP_NS);
     assert(sdl_idle_animation_timeout_ms(*now) == 0);
@@ -275,15 +342,15 @@ static void freeze_tests(Uint64* now) {
     callback_sdl_pict(col,row,1,&Term->scr->a[row][col],&Term->scr->c[row][col],
         &Term->scr->ta[row][col],&Term->scr->tc[row][col]);
     SDL_Surface* lost_sight = capture(10);
-    expect_middle_frame(lost_sight,9,11,"lib/xtra/graf/anim_wall_torch_f1.png");
+    expect_middle_frame(lost_sight,9,11,"lib/xtra/graf/anim_torch_f1.png");
     SDL_DestroySurface(lost_sight);
     Term->old->a[row][col] = Term->scr->a[row][col];
     Term->old->c[row][col] = Term->scr->c[row][col];
     prt_map();
     assert(Term->old->a[row][col] == 255 && Term->old->c[row][col] == 0);
     op_ptr->opt[OPT_torch_animation_always] = true;
-    cave_info[9][11] |= CAVE_SEEN; cave_info[10][18] |= CAVE_SEEN;
-    draw_cell(9,11,false); draw_cell(10,18,false);
+    cave_info[9][11] |= CAVE_SEEN; cave_info[9][18] |= CAVE_SEEN;
+    draw_cell(9,11,false); draw_cell(9,18,false);
     *now += IDLE_STEP_NS;
     puts("Freeze mode: exact second frame for both fixtures, no idle wakeups, seen animation and unchanged-glyph redraw: PASS");
 }
@@ -324,8 +391,8 @@ static void animation_tests(void) {
     p_ptr->wy = 1; expect_paused(now); p_ptr->wy = 0;
     /* Leaving sight must neither dim nor freeze explored torches/braziers. */
     SDL_Surface* seen = capture(3);
-    cave_info[9][11] &= ~CAVE_SEEN; cave_info[10][18] &= ~CAVE_SEEN;
-    draw_cell(9, 11, false); draw_cell(10, 18, false);
+    cave_info[9][11] &= ~CAVE_SEEN; cave_info[9][18] &= ~CAVE_SEEN;
+    draw_cell(9, 11, false); draw_cell(9, 18, false);
     SDL_Surface* remembered = capture(4);
     assert(differences(seen, remembered) == 0);
     SDL_DestroySurface(seen);
@@ -339,12 +406,12 @@ static void animation_tests(void) {
     now += IDLE_STEP_NS;
     /* Undiscovered tiles, and terrain suppressed by special visibility modes,
      * must still cause no animation work or direct fixture rendering. */
-    cave_info[9][11] &= ~CAVE_MARK; cave_info[10][18] &= ~CAVE_MARK;
+    cave_info[9][11] &= ~CAVE_MARK; cave_info[9][18] &= ~CAVE_MARK;
     expect_paused(now);
     SDL_FRect hidden_dst = {0,0,16,16};
     assert(!sdl_idle_animation_draw(9, 11, &hidden_dst));
-    assert(!sdl_idle_animation_draw(10, 18, &hidden_dst));
-    cave_info[9][11] |= CAVE_MARK; cave_info[10][18] |= CAVE_MARK;
+    assert(!sdl_idle_animation_draw(9, 18, &hidden_dst));
+    cave_info[9][11] |= CAVE_MARK; cave_info[9][18] |= CAVE_MARK;
     p_ptr->rage = 1; expect_paused(now); p_ptr->rage = 0;
     g_labyrinth_view_active = true; expect_paused(now); g_labyrinth_view_active = false;
     assert(Rand_state_export() == rng && turn == turns && playerturn == player_turns);
@@ -362,7 +429,7 @@ static void animation_tests(void) {
     /* Run the real blocking input callback with no key/mouse input. Only the
      * final window presentation is intercepted; the SDL event wait is real. */
     frame_tick = SDL_GetTicksNS() / IDLE_STEP_NS;
-    draw_cell(9,11,false); draw_cell(10,18,false);
+    draw_cell(9,11,false); draw_cell(9,18,false);
     SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
     presents = 0; g_state.need_present = false;
     Uint64 wait_begin = SDL_GetTicksNS();
@@ -376,20 +443,20 @@ static void animation_tests(void) {
     now = (frame_tick + 1) * IDLE_STEP_NS;
     Term->soft_cursor = true; Term->old->cv = true; Term->old->cu = false;
     Term->old->cx = COL_MAP + 11; Term->old->cy = ROW_MAP + 9;
-    cave_info[10][18] &= ~(CAVE_MARK | CAVE_SEEN);
+    cave_info[9][18] &= ~(CAVE_MARK | CAVE_SEEN);
     expect_paused(now);
-    cave_info[10][18] |= CAVE_MARK | CAVE_SEEN;
+    cave_info[9][18] |= CAVE_MARK | CAVE_SEEN;
     Term->old->cv = false; Term->soft_cursor = false;
-    draw_cell(10, 18, true);
+    draw_cell(9, 18, true);
     cave_info[9][11] &= ~(CAVE_MARK | CAVE_SEEN);
     expect_paused(now + IDLE_STEP_NS);
     cave_info[9][11] |= CAVE_MARK | CAVE_SEEN;
-    draw_cell(10, 18, false);
+    draw_cell(9, 18, false);
     callback_sdl_wipe(COL_MAP + 11, ROW_MAP + 9, 1);
-    callback_sdl_wipe(COL_MAP + 18, ROW_MAP + 10, 1);
+    callback_sdl_wipe(COL_MAP + 18, ROW_MAP + 9, 1);
     expect_paused(now + IDLE_STEP_NS);
     assert(cell_count == 0);
-    draw_cell(9, 11, false); draw_cell(10, 18, false);
+    draw_cell(9, 11, false); draw_cell(9, 18, false);
     callback_sdl_xtra(TERM_XTRA_CLEAR, 0); assert(cell_count == 0);
     /* Rebuilding resources resets both tracked cells and the failed-load latch. */
     sdl_idle_animation_shutdown(); assert(!fixture_texture && !cells);
@@ -545,10 +612,11 @@ int main(void) {
         cave_color[y][x] = COLOR_STYLE_BASE; cave_light[y][x] = 2;
     }
     Rand_state_init(1234); u64b rng = Rand_state_export();
+    placement_tests();
     niche(10,11); niche(10,18);
     assert(Rand_state_export() == rng);
     assert(cave_fixture_at(9,11) == CAVE_FIXTURE_WALL_TORCH);
-    assert(cave_fixture_at(10,18) == CAVE_FIXTURE_BRAZIER);
+    assert(cave_fixture_at(9,18) == CAVE_FIXTURE_BRAZIER);
     assert(cave_feat[10][11] == FEAT_FLOOR && (cave_info[11][11] & CAVE_GLOW));
     fixture_save_tests();
     cave_set_feat(9,11,FEAT_FLOOR); assert(!cave_fixture_at(9,11));
@@ -557,7 +625,8 @@ int main(void) {
     for (int y=0;y<20;y++) for(int x=0;x<30;x++) {
         cave_info[y][x] |= CAVE_MARK | CAVE_SEEN; draw_cell(y,x,false);
     }
-    assert(image_loads == 6 && texture_creations == 1 && cell_count == 2);
+    assert(image_loads == 7 && texture_creations == 1 && cell_count == 2);
+    torch_frame_tests();
     animation_tests();
     pan_tests();
     asynchronous_tests();

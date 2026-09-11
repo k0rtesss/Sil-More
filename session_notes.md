@@ -1,5 +1,13 @@
 # Session notes
 
+## 2026-09-11: Tutorial audit and fixes
+- Reviewed gameplay lessons, triggers, scheduling, persistence, archives, SDL input and device tutorial replay. Revised 460 existing lessons and added eight; 521 lessons now use 550 cards instead of 643. Normal includes water/lava/ice/poison warnings. `docs/tutorial-reference.md` is regenerated with priorities and 25 terrain-family archive aliases.
+- Corrected base-skill Warden/Versatility calculations, Aule's Forge costs (also three `lib/edit/ability.txt` descriptions), Pack access timing, detection ranges, monster resistance vs immunity, terrain exposure and status remedies. Stable IDs, per-Tale progress and legacy-character deferral remain.
+- Separated awareness from useful stealth practice; expire vanished/cured contexts, preserve action progress across menu explanations, prevent hidden-charge disclosure and unsafe equipment/movement practice, and handle same-depth map changes. Teleport/knockback no longer credit deliberate movement. Queue capacity now covers the full catalogue; reset works before catalogue loading.
+- SDL action cards preserve modal pointer ownership and avoid needless reading mode. Touch replay preserves the selected profile and ignores held-key repeat. Archive subjects have readable generic replacements.
+- Passed incremental Windows build; core, integration, world, archive, upgrade, startup, visibility, FOV, SDL input, catalogue/trigger and template-version checks; full software-render sweep and scoped whitespace checks. Render fixture also runs the production device tutorial event loop with scripted repeated/fresh key events. Representative mobile, compact and large-font images were visually inspected.
+- Refreshed and SHA-256 matched standard deployment `sil-more.exe`, `lib/help/tutorials.json`, and `lib/edit/ability.txt`; deployed template versions pass. Manual gameplay and physical touch/controller tests were not performed. Existing unrelated terrain/graphics work was not edited by this audit.
+
 ## 2026-04-27: Touch settings split into panel and control
 - `src/cmd4.c`
   - Split Input Options into `Touch Panel` and `Touch Control`.
@@ -9086,3 +9094,9 @@ The script now fully matches the game's drop generation logic for all item types
 - Added explicit assignments and selected recordings from the Minifantasy Wolf/Bat/Wargo/Orc/Human/Large Humanoid/Yeti sets, Leohpaz Dragon and Demon Lord sets, AlesiaDavina Vampire OGGs, Monster Voices - Werewolf, and named CC0 breath/troll clips. Added current monster IDs 403-411 and corrected the ID 76 name to match monster.txt.
 - New WAV source clips were converted to OGG to preserve the project's OGG-only release tree. The roster table in lib/xtra/sound/monsters/README.md was regenerated for all 165 monsters.
 - Validation: all-core standard and portable builds passed; both deployments contain the same 130 OGG monster files (127 referenced plus 3 retained unassigned special-attack samples); check_monster_sound_assignments.py and check_monster_sounds.ps1 passed. Text session did not audibly audition samples; source-category matching remains a conservative integration check, not listening confirmation.
+
+## 2026-09-11: 750 ft generation retry fix
+- Deployment generation-summary.txt recorded 90 failed depth-15 attempts: the locked quest-vault roll required the Tomb of the King, but its W tokens were permanently rejected by build_vault. Exhaustive placement flooded log.txt with barrow-wight rejections.
+- Shared vault_is_valid_for_depth() now filters quest candidates before marking them eligible, matching construction restrictions. Invalid contents no longer force quest regeneration; valid templates with geometry failures retain retries.
+- Per user request, the barrow-wight limit and Tomb template maximum are both depth 14 (700 ft). Chasm restriction at depth 20 is preserved.
+- Validation: check_vault_depth_eligibility.py passed actual Tomb content and production selector/helper boundaries, invalid-candidate skip, valid fallback and geometry retries; template versions and scoped diff checks passed. All-core standard build passed. Standard executable and vault.txt staged with matching SHA256 hashes. Isolated final-binary startup reached initial_menu with no ERROR/FATAL logs. Player save/750 ft transition was not manually replayed; original deployment failure logs preserved.

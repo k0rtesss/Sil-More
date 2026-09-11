@@ -64,6 +64,9 @@ bool tutorial_character_blocked(void);
  * when currently Disabled; false selects Disabled. */
 void tutorial_set_enabled(bool enabled);
 bool tutorial_enabled(void);
+/* Is this lesson available at the current mode and character eligibility?
+ * Does not observe it or change its learned/skipped status. */
+bool tutorial_lesson_enabled(const char *lesson_id);
 
 /* Call after selecting a Tale, or let checkpoint detect it. This discards
  * transient queued observations when the selected Tale changes. */
@@ -73,6 +76,10 @@ void tutorial_flush(void);
 /* Observation only queues a lesson; it never opens UI or advances gameplay.
  * Priority comes from the catalogue. Reobservations refresh copied context. */
 void tutorial_observe(const char *lesson_id, const tutorial_context *context);
+/* At a safe menu/decision boundary, focus an already queued explanation before
+ * the choice it describes. Suspends the previous lesson at its current step;
+ * presentation still waits for checkpoint(true). Never use during card input. */
+bool tutorial_focus_observation(const char *lesson_id);
 /* false suspends the visible card; true resumes/activates at an input boundary.
  * Continue and committed actions stage a transition until the next true call. */
 void tutorial_checkpoint(bool safe_to_present);
