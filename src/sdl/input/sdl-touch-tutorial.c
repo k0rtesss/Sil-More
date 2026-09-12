@@ -2353,8 +2353,7 @@ static const birth_coach_step birth_coach_sheet_steps[] = {
         "Innate strengths and flaws from your hero and house.\n"
         "<a>++ mastery</a> and <g>+ affinity</g> raise current skill and lower its ability costs.\n"
         "<r>- and --</r> are penalties; <v>UNIQUE</v> marks a special power.\n"
-        "<u>Curses</u> such as Doom of Mandos are shown in umber.\n"
-        "Lean into your affinities and play around your curses." },
+        "Choose abilities that suit the skills you want to train." },
     { "Attributes", 0, 0, "Attributes",
         "<t>Str, Dex, Con, Gra</t> - the roots every skill grows from.\n"
         "<t>Str:</t> weapon damage die sides and carried-weight limit.\n"

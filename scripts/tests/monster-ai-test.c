@@ -387,12 +387,82 @@ static void test_flow_fast_path(void)
 #include "monster-poison-ai-tests.h"
 #include "monster-tactics-ai-tests.h"
 
+static int pursuit_choices(monster_type* m, bool allow_player)
+{
+    int best = FLOW_MAX_DIST, choices = 0;
+    for (int d = 0; d < 8; d++)
+    {
+        int y = m->fy + ddy_ddd[d], x = m->fx + ddx_ddd[d];
+        if (!in_bounds(y, x) || (!allow_player && cave_m_idx[y][x] < 0)) continue;
+        int step = monster_step_cost(m, m->fy, m->fx, y, x);
+        int remaining = flow_dist(1, y, x);
+        if (!step || remaining >= FLOW_MAX_DIST || step + remaining > best) continue;
+        if (step + remaining < best) choices = 0;
+        best = step + remaining;
+        choices |= 1 << d;
+    }
+    return choices;
+}
+
+static void test_pursuit_flow(void)
+{
+    unsigned state = 0x132a7e11u;
+    const int terrain[] = {FEAT_FLOOR, FEAT_FLOOR, FEAT_WATER,
+        FEAT_DOOR_HEAD, FEAT_WALL_EXTRA, FEAT_LAVA, FEAT_CHASM, FEAT_ICE};
+    for (int trial = 0; trial < 160; trial++)
+    {
+        int size = trial % 3 ? 17 : 49;
+        monster_type* m = reset_map(size, size, 4, 4,
+            trial & 1 ? 4 : size - 4, trial & 1 ? 5 : size - 4);
+        races[1].flags2 |= RF2_OPEN_DOOR;
+        if (trial & 2) races[1].flags2 |= RF2_FLYING;
+        if (trial & 4) races[1].flags2 |= RF2_PASS_WALL;
+        if (trial & 8) races[1].flags1 |= RF1_NEVER_BLOW;
+        if (trial & 16) races[1].flags3 |= RF3_RES_FIRE;
+        for (int y = 1; y < size - 1; y++) for (int x = 1; x < size - 1; x++)
+        {
+            state = state * 1664525u + 1013904223u;
+            tile(y, x, terrain[(state >> 24) % N_ELEMENTS(terrain)]);
+        }
+        /* Both blocked and open source squares, poison fallback, and stale
+         * scratch data across repeated searches with changing map sizes. */
+        if (trial % 5 == 0) tile(6, 6, FEAT_POISON);
+        monsters[2] = *m; monsters[2].fy = 5; monsters[2].fx = 4;
+        occupants[5][4] = 2;
+        for (int player = 0; player < 2; player++)
+        {
+            int cy = player ? p_ptr->py : size / 2;
+            int cx = player ? p_ptr->px : size / 2;
+            for (int allow = 0; allow < 2; allow++)
+            {
+                update_flow(cy, cx, 1);
+                int expected = pursuit_choices(m, allow);
+                update_pursuit_flow(cy, cx, 1, allow);
+                CHECK(pursuit_choices(m, allow) == expected);
+            }
+        }
+    }
+    reset_map(198, 198, 95, 93, 99, 99);
+    update_flow(99, 99, 1);
+    int expected = pursuit_choices(&monsters[1], true);
+    clock_t start = clock();
+    for (int i = 0; i < 100; i++) update_flow(99, 99, 1);
+    double full = (double)(clock() - start) / CLOCKS_PER_SEC;
+    start = clock();
+    for (int i = 0; i < 100; i++) update_pursuit_flow(99, 99, 1, true);
+    double limited = (double)(clock() - start) / CLOCKS_PER_SEC;
+    CHECK(pursuit_choices(&monsters[1], true) == expected);
+    printf("100 nearby pursuits on 198x198 open map: full %.3fs, limited %.3fs\n", full, limited);
+    puts("Pursuit choices and all direction ties match full search: PASS.");
+}
+
 int main(void)
 {
     test_terrain(); test_flows(); test_tactics(); test_advance(); test_full_map();
     test_poison_ai();
     test_flow_fast_path();
     test_tactical_extension();
+    test_pursuit_flow();
     printf("Monster AI regression checks passed: %d\n", checks);
     return 0;
 }

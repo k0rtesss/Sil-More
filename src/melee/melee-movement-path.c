@@ -996,6 +996,12 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
         }
     }
 
+    /* The remaining retreat branches compare full flow distances. Earlier
+     * local/stair/target decisions need none. Morgoth retains his prepared
+     * flow; ordinary monsters reaching here can currently see the player. */
+    if (m_ptr->r_idx != R_IDX_MORGOTH)
+        update_flow(p_ptr->py, p_ptr->px, m_idx);
+
     /* The monster is not in LOS, but thinks it's still too close. */
     if (!player_has_los_bold(m_ptr->fy, m_ptr->fx))
     {
@@ -1303,7 +1309,7 @@ void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
         *ty = m_ptr->fy; *tx = m_ptr->fx;
         return;
     }
-    update_flow(*ty, *tx, idx);
+    update_pursuit_flow(*ty, *tx, idx, sight);
     int closest = FLOW_MAX_DIST;
     *ty = m_ptr->fy; *tx = m_ptr->fx;
     for (int i = 7; i >= 0; i--)

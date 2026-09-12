@@ -503,13 +503,11 @@ static void process_monster(monster_type* m_ptr)
     if (song_disguise_monster_is_fooled(m_ptr))
         return;
 
-    // Only confirmed sensory evidence may create a player pursuit flow.
+    /* Ordinary advance/retreat builds a flow only when it consumes one.
+     * Preparing it here also searched for passive, stationary and casting
+     * monsters, and duplicated the search inside get_move_advance(). */
     if (m_ptr->r_idx == R_IDX_MORGOTH)
         update_flow(p_ptr->py, p_ptr->px, m_idx);
-    else if (monster_senses_target(m_ptr, &ty, &tx))
-        update_flow(ty, tx, m_idx);
-    else
-        update_flow(m_ptr->fy, m_ptr->fx, m_idx);
 
     /* Calculate the monster's preferred combat range when needed */
     if (m_ptr->min_range == 0)

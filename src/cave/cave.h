@@ -33,6 +33,8 @@ void update_view_for_generation(void);
 
 int flow_dist(int which_flow, int y, int x);
 void update_flow(int cy, int cx, int which_flow);
+/* Only the best next-step distances are guaranteed by a pursuit flow. */
+void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player);
 void update_smell(void);
 int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
 void player_water_movement(int from_feat, int to_feat);

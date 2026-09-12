@@ -42,7 +42,7 @@ Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Expl
 
 **2. Info**
 
-Before fighting, prepare a weapon and armour that suit your hero and oath. Items in your Pack are stored; items in your Harness are ready to reach. Your active weapon is the one you attack with. Item lessons will guide you through these choices as you find equipment.
+Before fighting, prepare a weapon and armour. Items in your Pack are stored; items in your Harness are ready to reach. Your active weapon is the one you attack with. Item lessons will guide you through these choices as you find equipment.
 
 **3. Action**
 

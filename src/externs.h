@@ -507,6 +507,7 @@ extern void forget_view(void);
 extern void update_view(void);
 extern int flow_dist(int which_flow, int y, int x);
 extern void update_flow(int cy, int cx, int which_flow);
+extern void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player);
 extern void update_smell(void);
 extern int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
 extern bool cave_transform_elemental_terrain(int y, int x, int typ);

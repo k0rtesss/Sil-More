@@ -49,12 +49,24 @@ int flow_dist(int which_flow, int y, int x)
  * alternative. Keep just one label per square and avoid the Pareto scratch
  * initialization and comparisons on ordinary maps or for immune creatures. */
 static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
-    monster_type* m_ptr)
+    monster_type* m_ptr, bool pursuit, bool allow_player)
 {
     enum { FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID };
     static int next[FLOW_CELLS], previous[FLOW_CELLS];
     int heads[FLOW_MAX_DIST];
     int origin = cy * MAX_DUNGEON_WID + cx;
+    int entry_cost[3][3] = {{0}};
+    int best_step = FLOW_MAX_DIST + 1;
+
+    if (pursuit)
+        for (int d = 0; d < 8; d++)
+        {
+            int dy = ddy_ddd[d], dx = ddx_ddd[d];
+            int y = m_ptr->fy + dy, x = m_ptr->fx + dx;
+            if (in_bounds(y, x) && (allow_player || cave_m_idx[y][x] >= 0))
+                entry_cost[dy + 1][dx + 1] = monster_step_cost(
+                    m_ptr, m_ptr->fy, m_ptr->fx, y, x);
+        }
 
     for (int i = 0; i < FLOW_MAX_DIST; i++)
         heads[i] = -1;
@@ -63,6 +75,12 @@ static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
 
     for (int cost = 0; cost < FLOW_MAX_DIST; cost++)
     {
+        /* Every entry costs at least one. Once this frontier reaches the
+         * best complete first step, no remaining square can tie or improve
+         * it. All winning neighbors are settled, preserving direction ties.
+         * Full wandering/retreat flows and poison routes never stop early. */
+        if (pursuit && cost >= best_step)
+            return;
         while (heads[cost] >= 0)
         {
             int grid = heads[cost];
@@ -72,6 +90,13 @@ static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
             if (next[grid] >= 0)
                 previous[next[grid]] = -1;
             previous[grid] = -2;
+
+            if (pursuit)
+            {
+                int dy = y - m_ptr->fy, dx = x - m_ptr->fx;
+                if (ABS(dy) <= 1 && ABS(dx) <= 1 && entry_cost[dy + 1][dx + 1])
+                    best_step = MIN(best_step, cost + entry_cost[dy + 1][dx + 1]);
+            }
 
             for (int d = 0; d < 8; d++)
             {
@@ -246,7 +271,8 @@ static void update_monster_flow(int cy, int cx, int which_flow,
     }
 }
 
-void update_flow(int cy, int cx, int which_flow)
+static void update_flow_aux(int cy, int cx, int which_flow,
+    bool pursuit, bool allow_player)
 {
     sil_perf_stamp perf_start = sil_perf_begin();
     int cost;
@@ -342,8 +368,10 @@ void update_flow(int cy, int cx, int which_flow)
         if (poison_present)
             update_monster_flow(cy, cx, which_flow, m_ptr);
         else
-            update_monster_flow_without_poison(cy, cx, which_flow, m_ptr);
-        sil_perf_end(poison_present ? "flow.monster.poison" : "flow.monster.simple",
+            update_monster_flow_without_poison(cy, cx, which_flow, m_ptr,
+                pursuit, allow_player);
+        sil_perf_end(poison_present ? "flow.monster.poison"
+            : pursuit ? "flow.monster.pursuit" : "flow.monster.simple",
             perf_start);
         return;
     }
@@ -448,6 +476,16 @@ void update_flow(int cy, int cx, int which_flow)
         }
     }
     sil_perf_end("flow.noise", perf_start);
+}
+
+void update_flow(int cy, int cx, int which_flow)
+{
+    update_flow_aux(cy, cx, which_flow, false, true);
+}
+
+void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player)
+{
+    update_flow_aux(cy, cx, m_idx, true, allow_player);
 }
 
 /*

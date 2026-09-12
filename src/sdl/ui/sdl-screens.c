@@ -176,7 +176,7 @@ const sdl_welcome_intro_line g_sdl_welcome_intro_flame[] = {
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "Take up blade and burden. Descend." },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
-        "Oaths, quests, blessings of the Valar" },
+        "Dangers, secrets, and glory" },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "await in the First Age reborn." },
     { 0, 0, NULL }
@@ -203,7 +203,7 @@ const sdl_welcome_intro_line g_sdl_welcome_intro_feanor[] = {
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "Take up blade and burden. Descend." },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
-        "Oaths, quests, blessings of the Valar" },
+        "Dangers, secrets, and glory" },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "await in the First Age reborn." },
     { 0, 0, NULL }
@@ -260,7 +260,7 @@ const sdl_welcome_intro_line g_sdl_welcome_intro_luthien[] = {
     { TERM_WHITE, SDL_WELCOME_LINE_BODY,
         "and seize what Morgoth stole of old." },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
-        "Oaths, quests, blessings of the Valar" },
+        "Dangers, secrets, and glory" },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "await in the First Age reborn." },
     { 0, 0, NULL }
@@ -286,7 +286,7 @@ const sdl_welcome_intro_line g_sdl_welcome_intro_hurin[] = {
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "Take up blade and burden. Descend." },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
-        "Oaths, quests, blessings of the Valar" },
+        "Dangers, secrets, and glory" },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "await in the First Age reborn." },
     { TERM_L_BLUE, SDL_WELCOME_LINE_QUOTE, "\"Aure entuluva!\"" },

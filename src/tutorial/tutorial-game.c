@@ -880,7 +880,7 @@ void tutorial_game_start(void)
         || tutorial_lesson_status("opening.move") == TUTORIAL_IN_PROGRESS;
     if (opening_pending)
         observe("opening.move", "", "Your first steps",
-            "Find a suitable weapon and armour. If your oath restricts found equipment, follow its rules and prepare your own gear.");
+            "Find a suitable weapon and armour. Inspect each item before using or equipping it.");
 }
 
 void tutorial_game_checkpoint(void)
@@ -900,7 +900,7 @@ void tutorial_game_checkpoint(void)
     }
     if (opening_pending) {
         observe("opening.move", "", "Your first steps",
-            "Find a suitable weapon and armour. If your oath restricts found equipment, follow its rules and prepare your own gear.");
+            "Find a suitable weapon and armour. Inspect each item before using or equipping it.");
         tutorial_status status = tutorial_lesson_status("opening.move");
         if (status == TUTORIAL_COMPLETED || status == TUTORIAL_SKIPPED) opening_pending = false;
     }
