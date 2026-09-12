@@ -24,6 +24,9 @@
 #include <errno.h>
 #include <stdbool.h>
 
+_Static_assert(MON_AI_IMPALE == 29 && MON_AI_FEATURE_COUNT == 33,
+    "Monster observation save record counts must remain append-only");
+
 /* #include "init.h"  not required directly here after refactor */
 #include "metarun.h"
 #include "fs/load-internal.h"
@@ -1113,12 +1116,20 @@ void rd_monster(monster_type* m_ptr)
     memset(&m_ptr->ai, 0, sizeof(m_ptr->ai));
     if (savefile_version_at_least(0, 9, 8, 6))
     {
-        for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)
+        /* .6 wrote the original 29 observation records.  .7 appends the
+         * four attack-geometry/weapon-fear records after that prefix. */
+        int observation_count = savefile_version_at_least(0, 9, 8, 7)
+            ? MON_AI_FEATURE_COUNT : MON_AI_IMPALE;
+        for (int f = 0; f < observation_count; ++f)
         {
             rd_s16b(&m_ptr->ai.observations[f].value);
             rd_byte(&m_ptr->ai.observations[f].ttl);
             rd_s32b(&m_ptr->ai.observations[f].turn);
         }
+        /* MULTI_TARGET was a catch-all in .6 and has no meaning in the
+         * split .7 taxonomy.  Clear it for every AI-bearing save. */
+        memset(&m_ptr->ai.observations[MON_AI_MULTI_TARGET], 0,
+            sizeof(m_ptr->ai.observations[MON_AI_MULTI_TARGET]));
         monster_sense_state* sense = &m_ptr->ai.sense;
         rd_byte(&sense->kind);
         rd_byte(&sense->y); rd_byte(&sense->x);

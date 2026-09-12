@@ -526,6 +526,22 @@ static void describe_monster_song_duel_progress(
         text_out(".  ");
 }
 
+static byte monster_observation_color(int feature, int confidence)
+{
+    switch (feature)
+    {
+    case MON_AI_FIRE: case MON_AI_COLD: case MON_AI_POISON:
+    case MON_AI_DARK: case MON_AI_FEAR: case MON_AI_SLOW:
+    case MON_AI_CONFUSION: case MON_AI_HOLD: case MON_AI_WEB:
+    case MON_AI_DISARM: case MON_AI_ACCURACY: case MON_AI_ARMOUR:
+        return confidence > 0 ? TERM_L_GREEN : TERM_L_RED;
+    case MON_AI_WOUNDED: case MON_AI_POISON_PRESSURE:
+        return TERM_L_RED;
+    default:
+        return TERM_YELLOW;
+    }
+}
+
 /* These are this monster's impressions, not the player's actual abilities. */
 static void describe_monster_observations(const monster_type* m_ptr)
 {
@@ -534,35 +550,38 @@ static void describe_monster_observations(const monster_type* m_ptr)
         cptr positive;
         cptr negative;
     } descriptions[MON_AI_FEATURE_COUNT] = {
-        [MON_AI_FIRE] = { "resisting fire", "susceptibility to fire" },
-        [MON_AI_COLD] = { "resisting cold", "susceptibility to cold" },
-        [MON_AI_POISON] = { "resisting poison", "susceptibility to poison" },
-        [MON_AI_DARK] = { "resisting darkness", "susceptibility to darkness" },
-        [MON_AI_FEAR] = { "resisting fear", "susceptibility to fear" },
-        [MON_AI_SLOW] = { "resisting slowing", "susceptibility to slowing" },
-        [MON_AI_CONFUSION] = { "resisting confusion", "susceptibility to confusion" },
-        [MON_AI_HOLD] = { "resisting entrancement", "susceptibility to entrancement" },
-        [MON_AI_WEB] = { "resisting webs", "being caught in webs" },
-        [MON_AI_DISARM] = { "resisting disarming", "being disarmed" },
-        [MON_AI_FLANKING] = { "Flanking", NULL },
-        [MON_AI_CONTROLLED_RETREAT] = { "Controlled Retreat", NULL },
-        [MON_AI_OPPORTUNIST] = { "Opportunist", NULL },
-        [MON_AI_ZONE] = { "Zone of Control", NULL },
-        [MON_AI_POLEARM] = { "Polearm Mastery", NULL },
-        [MON_AI_RIPOSTE] = { "Riposte", NULL },
-        [MON_AI_CHARGE] = { "Charge", NULL },
-        [MON_AI_KNOCKBACK] = { "Knock Back", NULL },
-        [MON_AI_EXCHANGE] = { "Exchange Places", NULL },
-        [MON_AI_KITING] = { "keeping your distance", NULL },
-        [MON_AI_FOCUS] = { "preparing attacks by waiting", NULL },
-        [MON_AI_CONCENTRATION] = { "repeated attacks on one target", NULL },
-        [MON_AI_MULTI_TARGET] = { "attacks against multiple targets", NULL },
-        [MON_AI_STEALTH] = { "stealthy movement", NULL },
+        [MON_AI_FIRE] = { "fire resistance", "fire vulnerability" },
+        [MON_AI_COLD] = { "cold resistance", "cold vulnerability" },
+        [MON_AI_POISON] = { "poison resistance", "poison vulnerability" },
+        [MON_AI_DARK] = { "dark resistance", "dark vulnerability" },
+        [MON_AI_FEAR] = { "fear resistance", "fear vulnerability" },
+        [MON_AI_SLOW] = { "slow resistance", "slow vulnerability" },
+        [MON_AI_CONFUSION] = { "confusion resistance", "confusion vulnerability" },
+        [MON_AI_HOLD] = { "entrancement resistance", "entrancement vulnerability" },
+        [MON_AI_WEB] = { "web resistance", "web vulnerability" },
+        [MON_AI_DISARM] = { "disarm resistance", "disarm vulnerability" },
+        [MON_AI_FLANKING] = { "flanking attack", NULL },
+        [MON_AI_CONTROLLED_RETREAT] = { "controlled retreat", NULL },
+        [MON_AI_OPPORTUNIST] = { "opportunist attack", NULL },
+        [MON_AI_ZONE] = { "zone of control", NULL },
+        [MON_AI_POLEARM] = { "polearm attack", NULL },
+        [MON_AI_RIPOSTE] = { "riposte", NULL },
+        [MON_AI_CHARGE] = { "charge", NULL },
+        [MON_AI_KNOCKBACK] = { "knockback", NULL },
+        [MON_AI_EXCHANGE] = { "exchange places", NULL },
+        [MON_AI_KITING] = { "kiting", NULL },
+        [MON_AI_FOCUS] = { "prepared attack", NULL },
+        [MON_AI_CONCENTRATION] = { "repeated attacks", NULL },
+        [MON_AI_IMPALE] = { "impale", NULL },
+        [MON_AI_WHIRLWIND] = { "sweeping attacks", NULL },
+        [MON_AI_FOLLOW_THROUGH] = { "follow-through", NULL },
+        [MON_AI_SLAY_FEAR] = { "weapon fear", NULL },
+        [MON_AI_STEALTH] = { "stealth", NULL },
         [MON_AI_SONG] = { "singing", NULL },
-        [MON_AI_ACCURACY] = { "evading attacks", "being hit by attacks" },
-        [MON_AI_ARMOUR] = { "armour stopping blows", "blows penetrating your armour" },
-        [MON_AI_WOUNDED] = { "taking damage", NULL },
-        [MON_AI_POISON_PRESSURE] = { "poison taking hold", NULL },
+        [MON_AI_ACCURACY] = { "high evasion", "being hit" },
+        [MON_AI_ARMOUR] = { "armour blocking blows", "blows penetrate armour" },
+        [MON_AI_WOUNDED] = { "wounded", NULL },
+        [MON_AI_POISON_PRESSURE] = { "poisoned", NULL },
     };
     bool printed = false;
 
@@ -573,14 +592,14 @@ static void describe_monster_observations(const monster_type* m_ptr)
         /* Use the AI accessor so forgotten or disabled memories stay hidden. */
         int confidence = monster_ai_confidence(m_ptr, feature);
         cptr description = confidence > 0 ? descriptions[feature].positive
-                                         : descriptions[feature].negative;
+                                          : descriptions[feature].negative;
         if (!confidence || !description)
             continue;
 
         if (printed)
             text_out("; ");
-        text_out(description);
-        text_out_c(TERM_SLATE, format(" (%s evidence)",
+        text_out_c(monster_observation_color(feature, confidence), description);
+        text_out_c(TERM_SLATE, format(" (%s)",
             ABS(confidence) == 1 ? "weak"
                 : ABS(confidence) == 2 ? "moderate" : "strong"));
         printed = true;
@@ -597,6 +616,12 @@ static void describe_monster_live_state(const monster_type* m_ptr)
 
     text_out_c(m_ptr->poisoned > 0 ? TERM_GREEN : TERM_SLATE,
         format("Poison stacks: %d.  ", m_ptr->poisoned));
+    int morale = m_ptr->morale >= 0
+        ? (m_ptr->morale + 9) / 10 : m_ptr->morale / 10;
+    text_out_c(m_ptr->morale < 0 ? TERM_L_RED : TERM_SLATE,
+        format("Morale: %d.  ", morale));
+    if (monster_ai_confidence(m_ptr, MON_AI_SLAY_FEAR) > 0)
+        text_out("It remembers weapon strikes that frightened its kind.  ");
     describe_monster_observations(m_ptr);
 }
 

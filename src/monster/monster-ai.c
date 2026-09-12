@@ -4,7 +4,7 @@
 #include "monster/monster-senses.h"
 #include <string.h>
 
-_Static_assert(MON_AI_POISON_PRESSURE + 1 == MON_AI_FEATURE_COUNT,
+_Static_assert(MON_AI_SLAY_FEAR + 1 == MON_AI_FEATURE_COUNT,
     "Monster observation save record must cover every feature");
 
 static int observation_lifetime(int feature)
@@ -12,7 +12,8 @@ static int observation_lifetime(int feature)
     if (feature == MON_AI_KITING || feature == MON_AI_STEALTH
         || feature == MON_AI_WOUNDED || feature == MON_AI_POISON_PRESSURE)
         return 8;
-    if (feature >= MON_AI_FLANKING && feature <= MON_AI_SONG)
+    if ((feature >= MON_AI_FLANKING && feature <= MON_AI_SONG)
+        || feature >= MON_AI_IMPALE)
         return 20;
     return 40;
 }
@@ -89,10 +90,10 @@ void monster_ai_player_attack(monster_type* target, int attack_type)
         case ATT_OPPORTUNIST: feature = MON_AI_OPPORTUNIST; break;
         case ATT_POLEARM: feature = MON_AI_POLEARM; break;
         case ATT_RIPOSTE: feature = MON_AI_RIPOSTE; break;
-        case ATT_FOLLOW_THROUGH:
+        case ATT_FOLLOW_THROUGH: feature = MON_AI_FOLLOW_THROUGH; break;
         case ATT_WHIRLWIND:
-        case ATT_RAGE:
-        case ATT_IMPALE: feature = MON_AI_MULTI_TARGET; break;
+        case ATT_RAGE: feature = MON_AI_WHIRLWIND; break;
+        case ATT_IMPALE: feature = MON_AI_IMPALE; break;
         default: break;
     }
     if (feature >= 0 && target)
@@ -165,6 +166,9 @@ void monster_ai_share_warning(monster_type* source)
     int priority[2] = { 0, 0 };
     for (int feature = 0; feature < MON_AI_FEATURE_COUNT; ++feature)
     {
+        /* This is personal evidence of a morale loss, not a warning that
+         * the weapon threatens every allied kind. */
+        if (feature == MON_AI_SLAY_FEAR) continue;
         int confidence = monster_ai_confidence(source, feature);
         int remaining = observation_remaining(&source->ai.observations[feature]);
         int strength = ABS(confidence);

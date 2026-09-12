@@ -79,6 +79,22 @@ static void interaction_roll_present_frame(void)
     Term_fresh();
 }
 
+/* The roll cannot fail when the minimum skill throw beats the maximum
+ * difficulty throw.  The player variant also follows the percentage shown in
+ * the interaction menus, including its curse handling and rounding. */
+static bool interaction_roll_is_guaranteed(monster_type* actor, int skill,
+    int difficulty, int skill_sides, int difficulty_sides)
+{
+    if (actor == PLAYER)
+    {
+        return player_skill_check_success_percent(skill, difficulty,
+                   skill_sides, difficulty_sides)
+            >= 100;
+    }
+
+    return skill + 1 > difficulty + difficulty_sides;
+}
+
 static void interaction_roll_render_overlay(cptr title, cptr action, int y,
     int x, const skill_roll_details* roll, int skill_die, int difficulty_die,
     bool final, bool blocking, int timeout_ms)
@@ -268,7 +284,9 @@ static int show_interaction_skill_roll_animation_actor_sided(
     if (difficulty_sides < 1)
         difficulty_sides = 1;
 
-    if (!Term || character_icky)
+    if (!Term || character_icky
+        || interaction_roll_is_guaranteed(actor, skill, difficulty,
+            skill_sides, difficulty_sides))
         return skill_check_details_sided(actor, skill, difficulty, NULL,
             skill_sides, difficulty_sides, roll);
 

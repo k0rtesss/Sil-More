@@ -127,6 +127,24 @@ int main(int argc, char** argv)
         for (int i = 0; i < entry->count; ++i)
             assert(!strstr(entry->files[i], "Bonus_"));
     }
+    /* A stale ranged assignment must not reuse one of the same race's melee
+     * recordings, even before the data audit catches it. */
+    cJSON* test_races = cJSON_GetObjectItemCaseSensitive(
+        g_monster_sound_config, "monsters");
+    cJSON* test_uldor = cJSON_GetObjectItemCaseSensitive(test_races, "115");
+    cJSON* test_melee = cJSON_GetArrayItem(
+        cJSON_GetObjectItemCaseSensitive(test_uldor, "melee"), 0);
+    cJSON* test_melee_sounds = cJSON_GetObjectItemCaseSensitive(
+        test_melee, "sounds");
+    cJSON* test_arrow = cJSON_GetObjectItemCaseSensitive(
+        cJSON_GetObjectItemCaseSensitive(test_uldor, "ranged"), "arrow1");
+    assert(test_melee_sounds && test_melee_sounds->child);
+    cJSON_AddItemToArray(cJSON_GetObjectItemCaseSensitive(test_arrow, "sounds"),
+        cJSON_Duplicate(test_melee_sounds->child, true));
+    mon.r_idx = 115;
+    monster_sound(&mon, MONSTER_SOUND_RANGED_BASE);
+    assert(g_monster_sounds->race_idx == 115);
+    assert(g_monster_sounds->count == 0);
     mon.r_idx = 71;
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
     assert(g_monster_sounds->count >= 1);

@@ -11,11 +11,15 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
+#include "monster/monster-ai.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "fs/save-internal.h"
 #include <stdio.h>
+
+_Static_assert(MON_AI_IMPALE == 29 && MON_AI_FEATURE_COUNT == 33,
+    "Monster observation save record counts must remain append-only");
 
 void updatecharinfoS(void)
 {
@@ -740,12 +744,24 @@ void wr_monster(const monster_type* m_ptr)
     wr_byte(m_ptr->vengeance);
     wr_byte(m_ptr->smite_recovery);
 
-    /* 0.9.8.6: individual evidence and bounded pursuit, never runtime flags. */
+    /* 0.9.8.7: individual evidence and bounded pursuit, never runtime flags.
+     * The retired MULTI_TARGET slot remains in the old layout for .6 saves,
+     * but must stay zero so that its ambiguous evidence cannot be carried
+     * forward as one of the new attack-geometry memories. */
     for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)
     {
-        wr_s16b(m_ptr->ai.observations[f].value);
-        wr_byte(m_ptr->ai.observations[f].ttl);
-        wr_s32b(m_ptr->ai.observations[f].turn);
+        if (f == MON_AI_MULTI_TARGET)
+        {
+            wr_s16b(0);
+            wr_byte(0);
+            wr_s32b(0);
+        }
+        else
+        {
+            wr_s16b(m_ptr->ai.observations[f].value);
+            wr_byte(m_ptr->ai.observations[f].ttl);
+            wr_s32b(m_ptr->ai.observations[f].turn);
+        }
     }
     const monster_sense_state* sense = &m_ptr->ai.sense;
     wr_byte(sense->kind);

@@ -201,13 +201,24 @@ bool sdl_mouse_monster_is_friendly(int m_idx)
     return (r_ptr->flags1 & (RF1_PEACEFUL)) != 0;
 }
 
+/* Keep tooltip object lookup in step with the map renderer: these terrain
+ * types can visibly contain a marked floor object. */
+static bool sdl_mouse_grid_can_show_objects(int y, int x)
+{
+    int feat = cave_feat[y][x];
+
+    return cave_floorlike_bold(y, x) || feat == FEAT_SUNLIGHT
+        || feat == FEAT_WATER || feat == FEAT_LAVA || feat == FEAT_ICE
+        || feat == FEAT_POISON;
+}
+
 bool sdl_mouse_grid_has_marked_object(int y, int x, object_type** out_obj)
 {
     s16b o_idx;
 
     if (!in_bounds(y, x) || !grid_info_is_available(y, x))
         return false;
-    if (!(cave_floorlike_bold(y, x) || cave_feat[y][x] == FEAT_SUNLIGHT))
+    if (!sdl_mouse_grid_can_show_objects(y, x))
         return false;
 
     o_idx = cave_o_idx[y][x];
@@ -586,7 +597,7 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
         }
     }
 
-    if (cave_floorlike_bold(y, x) || cave_feat[y][x] == FEAT_SUNLIGHT) {
+    if (sdl_mouse_grid_can_show_objects(y, x)) {
         object_type* o_ptr;
 
         for (o_ptr = get_first_object(y, x); o_ptr;
@@ -3105,7 +3116,7 @@ bool sdl_mouse_grid_has_marked_searched_skeleton(int y, int x,
 
     if (!in_bounds(y, x) || !grid_info_is_available(y, x))
         return false;
-    if (!(cave_floorlike_bold(y, x) || cave_feat[y][x] == FEAT_SUNLIGHT))
+    if (!sdl_mouse_grid_can_show_objects(y, x))
         return false;
 
     for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))

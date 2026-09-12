@@ -3261,7 +3261,7 @@ static void run_history_show_detail(const run_history_entry* entry)
         if (footer) {
             if (sdl_touch_only_device_active()) {
                 SDL_strlcpy(footer_buf,
-                    "Swipe to scroll, tap a tab to switch, tap away to close",
+                    "Swipe up/down to scroll, left/right to switch tabs, tap away to close",
                     sizeof(footer_buf));
             } else if (steamdeck) {
                 if (panel == RUN_PANEL_GENERAL || panel == RUN_PANEL_STATS ||
@@ -3301,6 +3301,13 @@ static void run_history_show_detail(const run_history_entry* entry)
                 scroll_first_row + scroll_rows - 1,
                 SDL_TOUCH_MENU_CATEGORY_OTHER);
             ui_scroll_area_set_keys('8', '2', '6', '4');
+        }
+        if (ui_scroll_area_add_cols(0, term_wid - 1, 0, 0,
+                SDL_TOUCH_MENU_CATEGORY_OTHER))
+        {
+            ui_scroll_area_set_keys(0, 0, '4', '6');
+            ui_scroll_area_set_horizontal_page_mode(true);
+            ui_scroll_area_enable_horizontal_page_swipe('4', '6');
         }
         (void)Term_set_cursor(false);
         Term_fresh();

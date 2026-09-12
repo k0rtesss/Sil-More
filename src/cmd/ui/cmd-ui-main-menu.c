@@ -668,6 +668,9 @@ enum {
     LOG_HISTORY_CLICK_FILTER_NOTES = -20004
 };
 
+#define LOG_HISTORY_PREV_FILTER_KEY '['
+#define LOG_HISTORY_NEXT_FILTER_KEY ']'
+
 typedef enum log_history_entry_kind
 {
     LOG_HISTORY_ENTRY_MESSAGE,
@@ -770,6 +773,21 @@ static int log_history_next_filter(int filter)
         return LOG_HISTORY_FILTER_NOTES;
     default:
         return LOG_HISTORY_FILTER_ALL;
+    }
+}
+
+static int log_history_previous_filter(int filter)
+{
+    switch (filter)
+    {
+    case LOG_HISTORY_FILTER_ALL:
+        return LOG_HISTORY_FILTER_NOTES;
+    case LOG_HISTORY_FILTER_MESSAGES:
+        return LOG_HISTORY_FILTER_ALL;
+    case LOG_HISTORY_FILTER_COMBAT:
+        return LOG_HISTORY_FILTER_MESSAGES;
+    default:
+        return LOG_HISTORY_FILTER_COMBAT;
     }
 }
 
@@ -3135,6 +3153,15 @@ void do_cmd_messages_with_filter(int initial_filter)
         page_rows = (visible_rows > 1) ? (visible_rows - 1) : 1;
         ui_scroll_area_begin(body_top, body_bottom,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
+        if (ui_scroll_area_add_cols(0, wid - 1, 1, 1,
+                SDL_TOUCH_MENU_CATEGORY_OTHER))
+        {
+            ui_scroll_area_set_keys(0, 0, LOG_HISTORY_PREV_FILTER_KEY,
+                LOG_HISTORY_NEXT_FILTER_KEY);
+            ui_scroll_area_set_horizontal_page_mode(true);
+            ui_scroll_area_enable_horizontal_page_swipe(
+                LOG_HISTORY_PREV_FILTER_KEY, LOG_HISTORY_NEXT_FILTER_KEY);
+        }
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         ui_menu_click_set_touch_exit_button(true);
@@ -3216,8 +3243,8 @@ void do_cmd_messages_with_filter(int initial_filter)
             else if (sdl_touch_only_device_active())
             {
                 const char* variants[] = {
-                    "Tap a tab to filter, drag to scroll",
-                    "Tap a tab, drag to scroll",
+                    "Swipe left/right tabs, drag up/down to scroll",
+                    "Swipe tabs, drag to scroll",
                     "Tap a tab to filter"
                 };
                 terminal_prompt_pick_variant(prompt, sizeof(prompt), wid, false,
@@ -3295,6 +3322,20 @@ void do_cmd_messages_with_filter(int initial_filter)
             }
         }
         ch = (char)steamdeck_menu_key(ch, 'p', 'n');
+
+        if (ch == LOG_HISTORY_PREV_FILTER_KEY)
+        {
+            filter = log_history_previous_filter(filter);
+            i = 0;
+            continue;
+        }
+
+        if (ch == LOG_HISTORY_NEXT_FILTER_KEY)
+        {
+            filter = log_history_next_filter(filter);
+            i = 0;
+            continue;
+        }
 
         if (log_history_filter_key(ch))
         {

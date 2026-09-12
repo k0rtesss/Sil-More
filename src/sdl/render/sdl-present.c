@@ -1988,10 +1988,16 @@ void sdl_present_batch_end(void)
 void sdl_present_if_needed(sdl_view* d)
 {
     if (g_sdl_present_suppressed)
+    {
+        sil_popup_trace_stage("presentation-suppressed");
         return;
+    }
 
     if (g_sdl_present_batch_depth > 0)
+    {
+        sil_popup_trace_stage("presentation-batched");
         return;
+    }
 
     if (!g_state.need_present)
         return;
@@ -2000,14 +2006,24 @@ void sdl_present_if_needed(sdl_view* d)
      * current request before rendering so that request is not cleared after
      * the page-curl/notification render has re-armed it. */
     g_state.need_present = false;
+    sil_popup_trace_frame_begin();
+    Uint64 popup_compose_started = sil_popup_trace_phase_begin();
     sil_perf_stamp compose = sil_perf_begin();
     if (!sdl_render_current_window_frame()) {
         sil_perf_end("render.compose", compose);
         g_state.need_present = true;
+        sil_popup_trace_stage("frame-composition-unavailable");
         return;
     }
     sil_perf_end("render.compose", compose);
-    SIL_PERF_PHASE("render.present", SDL_RenderPresent(g_state.renderer));
+    sil_popup_trace_phase_end("frame-compose", popup_compose_started);
+    sil_popup_trace_stage("frame-compose-complete");
+    bool presented;
+    SIL_PERF_PHASE("render.present", presented = SDL_RenderPresent(g_state.renderer));
+    if (presented)
+        sil_popup_trace_presented();
+    else
+        sil_popup_trace_stage("presentation-failed");
     SIL_PERF_PHASE("render.restore", sdl_restore_render_target(d));
 }
 

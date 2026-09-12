@@ -12,7 +12,9 @@ enum monster_ai_feature
     MON_AI_CHARGE, MON_AI_KNOCKBACK, MON_AI_EXCHANGE, MON_AI_KITING,
     MON_AI_FOCUS, MON_AI_CONCENTRATION, MON_AI_MULTI_TARGET, MON_AI_STEALTH,
     MON_AI_SONG, MON_AI_ACCURACY, MON_AI_ARMOUR, MON_AI_WOUNDED,
-    MON_AI_POISON_PRESSURE
+    MON_AI_POISON_PRESSURE,
+    /* Append only: MULTI_TARGET is a retired, ambiguous .6 save slot. */
+    MON_AI_IMPALE, MON_AI_WHIRLWIND, MON_AI_FOLLOW_THROUGH, MON_AI_SLAY_FEAR
 };
 
 bool monster_ai_enabled(const monster_type* m_ptr);
@@ -20,6 +22,7 @@ bool monster_ai_can_see_player(const monster_type* m_ptr);
 int monster_ai_confidence(const monster_type* m_ptr, int feature);
 void monster_ai_observe(monster_type* m_ptr, int feature, int evidence);
 void monster_ai_witness(int feature, int evidence, int y, int x);
+void scare_onlooking_friends_from_weapon(const monster_type* m_ptr, int amount);
 void monster_ai_player_attack(monster_type* target, int attack_type);
 void monster_ai_player_action(void);
 void monster_ai_share_warning(monster_type* source);

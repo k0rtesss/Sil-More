@@ -14,6 +14,11 @@ folder, or normal-attack fallback. Adding or changing B: lines or S: abilities
 requires updating that monster's assignments here. Restart or reload sound
 settings after changing the file.
 
+Ranged assignments must use recordings that are not assigned to any melee blow
+of the same monster. The assignment check enforces this, and the runtime also
+ignores a duplicated ranged recording if an edited or stale data file contains
+one.
+
 Each non-ghost audio-bearing recording folder in the imported families also
 contains an empty marker file named after that folder. The Ghost source is
 intentionally left unreferenced.

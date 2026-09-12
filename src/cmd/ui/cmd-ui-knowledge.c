@@ -3922,6 +3922,30 @@ static void supply_register_page_tabs(const knowledge_browser_layout* layout)
     }
 }
 
+/*
+ * Register the tab strip as a horizontal-swipe target and make horizontal
+ * swipes work from the content areas too.  The tab strip has no vertical
+ * command of its own, so vertical motion there is consumed without sending a
+ * stray cursor key.
+ */
+static void knowledge_enable_horizontal_page_swipe(
+    const knowledge_browser_layout* layout, int touch_category, int tab_row,
+    int previous_key, int next_key)
+{
+    if (!layout || layout->term_wid <= 0 || layout->term_hgt <= 0)
+        return;
+    if (tab_row < 0 || tab_row >= layout->term_hgt)
+        return;
+
+    if (ui_scroll_area_add_cols(0, layout->term_wid - 1, tab_row, tab_row,
+            touch_category))
+    {
+        ui_scroll_area_set_keys(0, 0, previous_key, next_key);
+        ui_scroll_area_set_horizontal_page_mode(true);
+        ui_scroll_area_enable_horizontal_page_swipe(previous_key, next_key);
+    }
+}
+
 static void knowledge_begin_touch_scroll_area(
     const knowledge_browser_layout* layout, int touch_category)
 {
@@ -8309,8 +8333,8 @@ static void knowledge_draw_prompt(const knowledge_browser_layout* layout)
     else if (sdl_touch_only_device_active())
     {
         const char* variants[] = {
-            "Tap a row to recall",
-            "Tap to recall",
+            "Swipe left/right tabs; tap a row to recall",
+            "Swipe tabs; tap to recall",
             "Tap to recall"
         };
         terminal_prompt_pick_variant(prompt, sizeof(prompt), layout->term_wid,
@@ -8471,6 +8495,8 @@ static void knowledge_begin_clicks(const knowledge_browser_layout* layout)
     ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
     knowledge_begin_touch_scroll_area(layout, SDL_TOUCH_MENU_CATEGORY_OTHER);
     knowledge_register_tabs(layout);
+    knowledge_enable_horizontal_page_swipe(layout,
+        SDL_TOUCH_MENU_CATEGORY_OTHER, layout->tabs_row, '[', ']');
 }
 
 static void knowledge_init_inventory_portrait_layout(
@@ -8491,6 +8517,8 @@ static void knowledge_begin_grouped_clicks(
         MAX(0, group_count - layout->group_rows), entry_top,
         MAX(0, entry_count - layout->entry_rows));
     knowledge_register_tabs(layout);
+    knowledge_enable_horizontal_page_swipe(layout,
+        SDL_TOUCH_MENU_CATEGORY_OTHER, layout->tabs_row, '[', ']');
 }
 
 static bool knowledge_consume_click(int* ch, int* page,
@@ -10636,11 +10664,12 @@ static void supply_touch_row_prompt(char* buf, size_t buflen, int term_wid,
 
     action = supply_touch_row_action_text(desc_overlay_on, drop_click_mode,
         delete_click_mode, normal_action);
-    strnfmt(full, sizeof(full), "Tap a row to %s", action);
-    strnfmt(compact, sizeof(compact), "Tap row: %s", action);
+    strnfmt(full, sizeof(full), "Swipe left/right tabs; tap a row to %s",
+        action);
+    strnfmt(compact, sizeof(compact), "Swipe tabs; tap row: %s", action);
     variants[0] = full;
     variants[1] = compact;
-    variants[2] = "Tap row";
+    variants[2] = "Tap row to act";
     terminal_prompt_pick_variant(buf, buflen, term_wid, false, variants,
         N_ELEMENTS(variants));
 }
@@ -11192,6 +11221,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         TERM_L_DARK, '|');
 
             supply_register_page_tabs(&layout);
+            knowledge_enable_horizontal_page_swipe(&layout,
+                SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
+                layout.title_row, SUPPLY_BROWSER_PREV_PAGE_KEY,
+                SUPPLY_BROWSER_NEXT_PAGE_KEY);
 
             if (!compact_entry_only)
             {
@@ -12220,7 +12253,13 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         TERM_L_DARK, '|');
 
             if (!replacement_mode && !slot_pick_mode && !item_select_mode)
+            {
                 supply_register_page_tabs(&layout);
+                knowledge_enable_horizontal_page_swipe(&layout,
+                    SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
+                    layout.title_row, SUPPLY_BROWSER_PREV_PAGE_KEY,
+                    SUPPLY_BROWSER_NEXT_PAGE_KEY);
+            }
 
             if (!inventory_one_page && !slot_pick_mode && !compact_entry_only)
             {
@@ -13647,6 +13686,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         supply_draw_page_header(&draw_layout, page,
             supply_browser_hover_page(), title_label);
         supply_register_page_tabs(&draw_layout);
+        knowledge_enable_horizontal_page_swipe(&draw_layout,
+            SDL_TOUCH_MENU_CATEGORY_SUPPLY, draw_layout.title_row,
+            SUPPLY_BROWSER_PREV_PAGE_KEY, SUPPLY_BROWSER_NEXT_PAGE_KEY);
 
         if (!single_column || !column)
         {

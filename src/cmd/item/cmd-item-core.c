@@ -3,6 +3,7 @@
 #include "externs.h"
 #include "cmd/world/cmd-interact-chest.h"
 #include "log/log.h"
+#include "log/perf.h"
 #include "metarun.h"
 #include "object/object-ui-select.h"
 #include "sdl-config.h"
@@ -881,9 +882,12 @@ bool do_cmd_context_square_action_popup(void)
     int floor_item = first_floor_item_under_player();
     char title[80];
 
+    sil_popup_trace_stage("popup-build-begin");
+
     if (!get_sdl_show_context_square_popups()
         || context_square_popup_is_suppressed())
     {
+        sil_popup_trace_end("popup-disabled-or-suppressed");
         return false;
     }
 
@@ -891,6 +895,7 @@ bool do_cmd_context_square_action_popup(void)
             context_label, sizeof(context_label))
         || strcmp(context_label, "Confirm") == 0)
     {
+        sil_popup_trace_end("popup-no-context-action");
         return false;
     }
 
@@ -907,14 +912,21 @@ bool do_cmd_context_square_action_popup(void)
         object_type* o_ptr = &o_list[0 - floor_item];
 
         if (!o_ptr->k_idx)
+        {
+            sil_popup_trace_end("popup-invalid-item");
             return false;
+        }
         if (o_ptr->tval == TV_CHEST && o_ptr->pval == 0)
+        {
+            sil_popup_trace_end("popup-empty-chest");
             return false;
+        }
 
         object_desc(title, sizeof(title), o_ptr, true, 3);
     }
     else
     {
+        sil_popup_trace_end("popup-no-floor-item");
         return false;
     }
 
@@ -959,6 +971,10 @@ bool do_cmd_context_square_action_popup(void)
 
     sdl_question_menu_finish();
     sdl_question_menu_set_context_hint();
+    sil_popup_trace_stage("popup-ready");
+    /* Movement may have already presented the player, and the next ordinary
+     * refresh can wait until all monster energy ticks finish. Present the
+     * ready hint now, including when no terminal cells changed. */
     Term_fresh();
     return true;
 }
@@ -4958,11 +4974,122 @@ static bool floor_context_is_pickup_destination(
         || kind == FLOOR_CONTEXT_ACTION_PICKUP;
 }
 
+/* Leave room for both destinations even with unusually large inventories.
+ * Normal inventories fit in full; overflow is explicitly counted. */
+#define PICKUP_PREVIEW_STACKS 60
+#define PICKUP_PREVIEW_ROWS (2 * (PICKUP_PREVIEW_STACKS + 2))
+
+typedef struct pickup_destination_preview {
+    ui_question_option options[PICKUP_PREVIEW_ROWS];
+    const object_type* icons[PICKUP_PREVIEW_ROWS];
+    floor_context_action_kind actions[PICKUP_PREVIEW_ROWS];
+    char labels[PICKUP_PREVIEW_ROWS][256];
+    int count;
+} pickup_destination_preview;
+
+static void floor_context_pickup_preview_item(pickup_destination_preview* preview,
+    const object_type* o_ptr, int* stacks, int* quantity)
+{
+    int row;
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->number <= 0)
+        return;
+    *quantity += o_ptr->number;
+    if ((*stacks)++ >= PICKUP_PREVIEW_STACKS)
+        return;
+
+    row = preview->count++;
+    object_desc(preview->labels[row], sizeof(preview->labels[row]),
+        o_ptr, true, 3);
+    preview->options[row] = (ui_question_option){
+        0, preview->labels[row], TERM_L_WHITE, true
+    };
+    preview->icons[row] = o_ptr;
+}
+
+static int floor_context_pickup_preview_destination(
+    pickup_destination_preview* preview, const floor_context_action* action,
+    const object_type* incoming)
+{
+    int heading = preview->count++;
+    int stacks = 0;
+    int quantity = 0;
+    bool quiver = action->kind == FLOOR_CONTEXT_ACTION_QUIVER;
+    bool arrows_only = incoming->tval == TV_ARROW;
+    enum inventory_limit_group group = action->kind == FLOOR_CONTEXT_ACTION_HARNESS
+        ? INV_LIMIT_HARNESS : INV_LIMIT_PACK;
+
+    preview->actions[heading] = action->kind;
+    preview->options[heading] = (ui_question_option){
+        (char)action->key, preview->labels[heading], action->attr, false
+    };
+
+    if (quiver)
+    {
+        int slots[QUIVER_ARROW_CAPACITY + 1];
+        int count = player_quiver_arrow_slots(slots, (int)N_ELEMENTS(slots));
+
+        for (int i = 0; i < count; i++)
+            floor_context_pickup_preview_item(preview,
+                player_quiver_arrow_object(slots[i]), &stacks, &quantity);
+        strnfmt(preview->labels[heading], sizeof(preview->labels[heading]),
+            "Quiver: %d/%d arrows (%d free)", player_quiver_arrow_count(),
+            QUIVER_ARROW_CAPACITY, player_quiver_arrow_space());
+    }
+    else
+    {
+        int used = inventory_limit_usage_for_group(group);
+        int limit = inventory_limit_limit_for_group(group);
+        int free_space = MAX(0, limit - used);
+        int physical_count = group == INV_LIMIT_HARNESS ? INVEN_TOTAL : INVEN_PACK;
+
+        /* Match capacity accounting: worn Harness items still occupy the
+         * Harness, whereas worn Pack apparel is outside the backpack. */
+        for (int i = 0; i < physical_count + player_carried_extra_entry_count(); i++)
+        {
+            const object_type* held = i < physical_count ? &inventory[i]
+                : player_carried_extra_entry_at(i - physical_count);
+
+            if (!inventory_limit_object_matches_group(group, held)
+                || (arrows_only && held->tval != TV_ARROW))
+                continue;
+            floor_context_pickup_preview_item(preview, held, &stacks, &quantity);
+        }
+        strnfmt(preview->labels[heading], sizeof(preview->labels[heading]),
+            "%s: %d.%d/%d.%d qt used (%d.%d free)", action->label,
+            used / 10, used % 10, limit / 10, limit % 10,
+            free_space / 10, free_space % 10);
+        if (arrows_only)
+        {
+            size_t len = strlen(preview->labels[heading]);
+            strnfmt(preview->labels[heading] + len,
+                sizeof(preview->labels[heading]) - len,
+                "\n%d arrow%s in Pack", quantity, quantity == 1 ? "" : "s");
+        }
+    }
+
+    if (stacks == 0 || stacks > PICKUP_PREVIEW_STACKS)
+    {
+        int row = preview->count++;
+
+        if (stacks == 0)
+            strnfmt(preview->labels[row], sizeof(preview->labels[row]),
+                "%s", arrows_only ? "No arrows" : "Empty");
+        else
+            strnfmt(preview->labels[row], sizeof(preview->labels[row]),
+                "%d more stacks", stacks - PICKUP_PREVIEW_STACKS);
+        preview->options[row] = (ui_question_option){
+            0, preview->labels[row], TERM_SLATE, true
+        };
+    }
+    return heading;
+}
+
 static bool floor_context_pickup(int floor_item)
 {
     floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
     floor_context_action destinations[FLOOR_CONTEXT_MAX_ACTIONS];
-    ui_question_option options[FLOOR_CONTEXT_MAX_ACTIONS];
+    pickup_destination_preview preview = { 0 };
     object_type* o_ptr;
     char o_name[120];
     char desc[180];
@@ -4998,12 +5125,6 @@ static bool floor_context_pickup(int floor_item)
         if (!floor_context_is_pickup_destination(actions[i].kind))
             continue;
         destinations[destination_count] = actions[i];
-        options[destination_count] = (ui_question_option){
-            (char)actions[i].key, destinations[destination_count].label,
-            actions[i].attr, false
-        };
-        if (actions[i].kind == FLOOR_CONTEXT_ACTION_PACK)
-            default_index = destination_count;
         destination_count++;
     }
 
@@ -5015,15 +5136,23 @@ static bool floor_context_pickup(int floor_item)
             destinations[0].kind);
     }
 
-    object_desc_floor(o_name, sizeof(o_name), o_ptr, false, 0);
+    for (int i = 0; i < destination_count; i++)
+    {
+        int heading = floor_context_pickup_preview_destination(&preview,
+            &destinations[i], o_ptr);
+        if (destinations[i].kind == FLOOR_CONTEXT_ACTION_PACK)
+            default_index = heading;
+    }
+
+    object_desc_floor(o_name, sizeof(o_name), o_ptr, true, 0);
     strnfmt(desc, sizeof(desc), "Choose where to put %s.", o_name);
-    choice = ui_question_ask("Pick up where?", desc, options,
-        destination_count, p_ptr->py, p_ptr->px, default_index);
-    if (choice < 0 || choice >= destination_count)
+    choice = ui_question_ask_objects("Pick up where?", desc, preview.options,
+        preview.icons, preview.count, p_ptr->py, p_ptr->px, default_index);
+    if (choice < 0 || choice >= preview.count || preview.options[choice].disabled)
         return false;
 
     return floor_context_perform_action(floor_item,
-        destinations[choice].kind);
+        preview.actions[choice]);
 }
 
 /* Equipping a Belt weapon from the floor is distinct from merely picking it

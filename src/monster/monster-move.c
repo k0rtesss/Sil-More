@@ -1,6 +1,7 @@
 /* File: monster-move.c */
 
 #include "monster-internal.h"
+#include "log/perf.h"
 
 /*
  * Make a monster carry an object
@@ -636,6 +637,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
         /* Move player */
         p_ptr->py = y2;
         p_ptr->px = x2;
+        sil_popup_trace_begin(y1, x1, y2, x2);
 
         /* Update the panel */
         p_ptr->update |= (PU_PANEL);
@@ -687,6 +689,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
         /* Move player */
         p_ptr->py = y1;
         p_ptr->px = x1;
+        sil_popup_trace_begin(y2, x2, y1, x1);
 
         /* Update the panel */
         p_ptr->update |= (PU_PANEL);
@@ -717,6 +720,8 @@ void monster_swap(int y1, int x1, int y2, int x2)
     /* Redraw */
     lite_spot(y1, x1);
     lite_spot(y2, x2);
+    if (m1 < 0 || m2 < 0)
+        sil_popup_trace_stage("player-grid-queued");
 
     /* Forced movement uses the same entry hazard as normal movement. */
     if (m1 > 0)

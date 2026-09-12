@@ -1580,6 +1580,8 @@ void sdl_menu_scroll_cancel(void)
     g_menu_scroll_drag.active = false;
     g_menu_scroll_drag.dragged = false;
     g_menu_scroll_drag.page_fired = false;
+    g_menu_scroll_drag.gesture_axis_decided = false;
+    g_menu_scroll_drag.gesture_horizontal = false;
     g_menu_scroll_drag.finger_id = 0;
     g_menu_scroll_drag.area_index = -1;
     g_menu_scroll_drag.start_x = 0.0f;
@@ -3129,6 +3131,8 @@ bool sdl_menu_scroll_handle_pointer_down(float x, float y,
     g_menu_scroll_drag.active = true;
     g_menu_scroll_drag.dragged = false;
     g_menu_scroll_drag.page_fired = false;
+    g_menu_scroll_drag.gesture_axis_decided = false;
+    g_menu_scroll_drag.gesture_horizontal = false;
     g_menu_scroll_drag.finger_id = finger_id;
     g_menu_scroll_drag.area_index = ui_scroll_area_selected_index();
     g_menu_scroll_drag.start_x = x;
@@ -3145,6 +3149,9 @@ bool sdl_menu_scroll_handle_pointer_motion(float x, float y,
     float dx;
     float dy;
     float total_dy;
+    float sdx;
+    float sdy;
+    float threshold;
     bool sent_key = false;
 
     if (!g_menu_scroll_drag.active
@@ -3161,7 +3168,9 @@ bool sdl_menu_scroll_handle_pointer_motion(float x, float y,
     if (cell_h <= 0)
         cell_h = 1;
 
-    dx = x - g_menu_scroll_drag.start_x;
+    sdx = x - g_menu_scroll_drag.start_x;
+    sdy = y - g_menu_scroll_drag.start_y;
+    dx = sdx;
     if (dx < 0.0f)
         dx = -dx;
     dy = y - g_menu_scroll_drag.last_y;
@@ -3171,17 +3180,38 @@ bool sdl_menu_scroll_handle_pointer_motion(float x, float y,
     if (total_dy < 0.0f)
         total_dy = -total_dy;
 
-    if (dx > sdl_touch_swipe_threshold_px()
-        || total_dy > sdl_touch_swipe_threshold_px())
+    threshold = sdl_touch_swipe_threshold_px();
+    if (!g_menu_scroll_drag.gesture_axis_decided
+        && (dx >= threshold || total_dy >= threshold))
     {
+        g_menu_scroll_drag.gesture_axis_decided = true;
+        g_menu_scroll_drag.gesture_horizontal = dx >= total_dy;
         g_menu_scroll_drag.dragged = true;
+    }
+
+    if (ui_scroll_area_is_horizontal_page_mode()
+        && g_menu_scroll_drag.gesture_axis_decided
+        && g_menu_scroll_drag.gesture_horizontal)
+    {
+        int page_key;
+
+        /* A horizontal tab swipe fires once and never falls through to a
+         * list tap or vertical scrolling. */
+        if (g_menu_scroll_drag.page_fired)
+            return true;
+
+        page_key = (sdx < 0.0f)
+            ? ui_scroll_area_get_horizontal_key(-1)
+            : ui_scroll_area_get_horizontal_key(1);
+        g_menu_scroll_drag.dragged = true;
+        g_menu_scroll_drag.page_fired = true;
+        if (page_key)
+            Term_keypress(page_key);
+        return true;
     }
 
     if (ui_scroll_area_is_page_mode())
     {
-        float threshold = sdl_touch_swipe_threshold_px();
-        float sdx = x - g_menu_scroll_drag.start_x;
-        float sdy = y - g_menu_scroll_drag.start_y;
         int page_key;
 
         /*
@@ -3192,10 +3222,10 @@ bool sdl_menu_scroll_handle_pointer_motion(float x, float y,
          */
         if (g_menu_scroll_drag.page_fired)
             return true;
-        if (dx < threshold && total_dy < threshold)
+        if (!g_menu_scroll_drag.gesture_axis_decided)
             return true;
 
-        if (dx >= total_dy)
+        if (g_menu_scroll_drag.gesture_horizontal)
             page_key = (sdx < 0.0f)
                 ? ui_scroll_area_get_horizontal_key(-1)
                 : ui_scroll_area_get_horizontal_key(1);
@@ -3245,13 +3275,19 @@ bool sdl_menu_scroll_handle_pointer_motion(float x, float y,
 
     while (g_menu_scroll_drag.accum_y >= (float)cell_h)
     {
-        Term_keypress(ui_scroll_area_get_vertical_key(1));
+        int key = ui_scroll_area_get_vertical_key(1);
+
+        if (key)
+            Term_keypress(key);
         g_menu_scroll_drag.accum_y -= (float)cell_h;
         sent_key = true;
     }
     while (g_menu_scroll_drag.accum_y <= -(float)cell_h)
     {
-        Term_keypress(ui_scroll_area_get_vertical_key(-1));
+        int key = ui_scroll_area_get_vertical_key(-1);
+
+        if (key)
+            Term_keypress(key);
         g_menu_scroll_drag.accum_y += (float)cell_h;
         sent_key = true;
     }

@@ -116,6 +116,36 @@ int main(void)
     assert(!sdl_question_menu_activate_context_choice('Q'));
     assert(sdl_question_menu_activate_context_choice(' '));
     expect_command('/', true);
+    popup('g', "Pack");
+    inkey_flag = false;
+    mouse_button(SDL_BUTTON_LEFT);
+    assert(sdl_question_menu_context_hint_active());
+    assert(!sdl_question_menu_activate_context_choice('g'));
+    assert(Term_inkey(&key, false, true) != 0);
+    sdl_question_menu_layout_info preview_layout;
+    assert(sdl_question_menu_layout(&preview_layout));
+    assert(sdl_question_menu_handle_pointer(
+        preview_layout.suppress_rect.x + preview_layout.suppress_rect.w / 2,
+        preview_layout.suppress_rect.y + preview_layout.suppress_rect.h / 2,
+        UI_MENU_CLICK_PRIMARY));
+    assert(Term_inkey(&key, false, true) != 0);
+    assert(sdl_question_menu_context_hint_active());
+    inkey_flag = true;
+    character_icky = 1;
+    assert(!sdl_question_menu_activate_context_choice('g'));
+    character_icky = 0;
+    assert(sdl_question_menu_activate_context_choice('g'));
+    expect_command('g', false);
+    popup('g', "Pack");
+    sdl_question_menu_set_anchor_grid(p_ptr->py, p_ptr->px);
+    p_ptr->px++;
+    inkey_flag = true;
+    assert(!sdl_question_menu_activate_context_choice('g'));
+    assert(!sdl_question_menu_layout(&preview_layout));
+    assert(!sdl_question_menu_context_hint_active());
+    assert(Term_inkey(&key, false, true) != 0);
+    puts("PASS: early hint rejects action/suppression input until command wait;");
+    puts("      modal input and forced movement cannot activate stale hints.");
     puts("PASS: SDL mouse events and command parser, four keysets, remap isolation,");
     puts("      interact-here direction, item actions, secondary click and controller activation.");
     return 0;

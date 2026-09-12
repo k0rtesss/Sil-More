@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -166,7 +167,8 @@ bool similar_monsters(int m1y, int m1x, int m2y, int m2x)
  *  Cause a temporary penalty to morale in monsters of the same type who can see
  * the specified monster. (Used when it dies and for cruel blow).
  */
-void scare_onlooking_friends(const monster_type* m_ptr, int amount)
+static void scare_onlooking_friends_observed(
+    const monster_type* m_ptr, int amount, bool weapon_fear)
 {
     int i;
     int fy, fx, y, x;
@@ -196,10 +198,25 @@ void scare_onlooking_friends(const monster_type* m_ptr, int amount)
         {
             // cause a temporary morale penalty
             n_ptr->tmp_morale += amount;
+
+            /* Remember the witnessed blow only in the creatures it actually
+             * frightened. Learning still requires sight of the player. */
+            if (weapon_fear)
+                monster_ai_observe(n_ptr, MON_AI_SLAY_FEAR, 3);
         }
     }
 
     return;
+}
+
+void scare_onlooking_friends(const monster_type* m_ptr, int amount)
+{
+    scare_onlooking_friends_observed(m_ptr, amount, false);
+}
+
+void scare_onlooking_friends_from_weapon(const monster_type* m_ptr, int amount)
+{
+    scare_onlooking_friends_observed(m_ptr, amount, true);
 }
 
 /*

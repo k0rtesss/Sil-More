@@ -245,8 +245,12 @@ void process_player(void)
     int amount;
     int regen_multiplier;
     int depth_counter_increment;
+    int action_start_y = p_ptr->py;
+    int action_start_x = p_ptr->px;
     /* An infection acquired during this action starts a full 50-turn cycle. */
     bool disease_was_active = p_ptr->diseased != 0;
+
+    sil_popup_trace_stage("next-player-processing");
 
     player_active_weapon_begin_player_turn();
 
@@ -469,6 +473,7 @@ void process_player(void)
             display_light_map();
 
         /* Refresh */
+        sil_popup_trace_stage("player-input-refresh");
         Term_fresh();
 
         /* Hack -- Pack Overflow if needed */
@@ -506,6 +511,7 @@ void process_player(void)
 
         /* Leaping */
         tutorial_game_checkpoint();
+        sil_popup_trace_stage("tutorial-checkpoint-complete");
 
         /* Leaping */
         if (p_ptr->leaping)
@@ -712,6 +718,7 @@ void process_player(void)
                 && (p_ptr->previous_action[1] <= 9)
                 && (p_ptr->previous_action[1] != 5))
             {
+                sil_popup_trace_stage("input-turn-popup-attempt");
                 context_popup_handled =
                     do_cmd_context_square_action_popup();
             }
@@ -751,7 +758,9 @@ void process_player(void)
                 p_ptr->restoring = false;
 
                 /* Get a command (normal) */
+                sil_popup_trace_stage("request-command-begin");
                 TIME_PHASE("request_command", request_command());
+                sil_popup_trace_end("next-command-received-before-popup");
                 sdl_question_menu_clear_context_hint();
                 if (p_ptr->leaving)
                 {
@@ -762,6 +771,7 @@ void process_player(void)
 
                 /* Process the command */
                 TIME_PHASE("process_command", process_command());
+                sil_popup_trace_stage("command-processing-complete");
             }
 
             // check the item under the player
@@ -776,6 +786,7 @@ void process_player(void)
         }
 
         /*** Clean up ***/
+        sil_popup_trace_stage("action-cleanup-begin");
 
         /* Update labyrinth map restriction and partition-entry messages/XP. */
         update_labyrinth_view_state(true);
@@ -999,6 +1010,7 @@ void process_player(void)
         return;
 
     /* Do song effects */
+    sil_popup_trace_stage("action-upkeep-begin");
     sing();
 
     // make less noise if you did nothing at all
@@ -1385,6 +1397,30 @@ void process_player(void)
     // Sil-y: note that these are now being set every single turn, somewhat
     // defeating their purpose
     p_ptr->window |= (PW_INVEN | PW_EQUIP);
+    sil_popup_trace_stage("action-upkeep-complete");
+
+#if !defined(__ANDROID__) && !defined(SIL_IOS)
+    /* Prepare the hint before the post-action map refresh and monster/world
+     * processing.  Waiting for the next request_command() leaves a visible
+     * gap after the move.  The input branch above rebuilds it from the final
+     * square state once the player can act again. */
+    if (!p_ptr->is_dead && !p_ptr->leaving && !p_ptr->running
+        && !p_ptr->leaping && !p_ptr->command_rep && !p_ptr->skip_next_turn
+        && !p_ptr->entranced && p_ptr->stun <= 100
+        && (p_ptr->py != action_start_y || p_ptr->px != action_start_x)
+        && p_ptr->previous_action[0] >= 1
+        && p_ptr->previous_action[0] <= 9
+        && p_ptr->previous_action[0] != 5
+        && !sdl_question_menu_is_active())
+    {
+        sil_popup_trace_stage("end-of-move-popup-attempt");
+        (void)do_cmd_context_square_action_popup();
+    }
+    else
+    {
+        sil_popup_trace_stage("end-of-move-popup-deferred");
+    }
+#endif
     
     /*
      * Do NOT set PW_COMBAT_ROLLS unconditionally here - it should only be

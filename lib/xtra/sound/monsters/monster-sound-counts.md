@@ -51,10 +51,10 @@
 | 104 | Twisted bat | 3 | 0 | 1 | 2 | 4 | 10 |
 | 105 | Othrod, the Orc Lord | 4 | 0 | 3 | 1 | 2 | 10 |
 | 111 | Snow troll | 10 | 0 | 2 | 1 | 4 | 17 |
-| 112 | Barrow wight | 2 | 2 | 3 | 2 | 1 | 10 |
+| 112 | Barrow wight | 2 | 1 | 3 | 2 | 1 | 9 |
 | 113 | Lurking horror | 1 | 1 | 1 | 1 | 1 | 5 |
 | 114 | Giant | 2 | 0 | 2 | 1 | 2 | 7 |
-| 115 | Uldor, the Accursed | 2 | 2 | 3 | 1 | 0 | 8 |
+| 115 | Uldor, the Accursed | 2 | 0 | 3 | 1 | 0 | 6 |
 | 117 | Brodda, the Easterling Lord | 9 | 0 | 3 | 1 | 0 | 13 |
 | 121 | Easterling spy | 3 | 0 | 3 | 1 | 0 | 7 |
 | 122 | Shadow bat | 3 | 0 | 1 | 2 | 4 | 10 |
@@ -91,8 +91,8 @@
 | 176 | Scatha the Worm | 4 | 1 | 3 | 2 | 2 | 12 |
 | 177 | Oikeroi, Guard of Tevildo | 2 | 0 | 2 | 1 | 1 | 6 |
 | 181 | Young fire-drake | 4 | 1 | 3 | 2 | 2 | 12 |
-| 182 | Darting horror | 2 | 1 | 2 | 1 | 2 | 8 |
-| 183 | Wraith | 2 | 2 | 1 | 1 | 1 | 7 |
+| 182 | Darting horror | 2 | 0 | 2 | 1 | 2 | 7 |
+| 183 | Wraith | 2 | 1 | 1 | 1 | 1 | 6 |
 | 184 | Ururauko | 2 | 0 | 2 | 1 | 1 | 6 |
 | 185 | Tevildo, Prince of Cats | 3 | 0 | 2 | 2 | 2 | 9 |
 | 186 | Turkano, Balrog of the Hosts | 4 | 0 | 2 | 1 | 1 | 8 |
@@ -119,7 +119,7 @@
 | 224 | Shelob, Spider of Darkness | 6 | 0 | 4 | 3 | 5 | 18 |
 | 225 | Lungorthin, Lord of Balrogs | 4 | 1 | 2 | 1 | 1 | 9 |
 | 231 | Ancient adamant serpent | 0 | 4 | 0 | 0 | 0 | 4 |
-| 232 | Unrelenting horror | 2 | 2 | 3 | 2 | 2 | 11 |
+| 232 | Unrelenting horror | 2 | 1 | 3 | 2 | 2 | 10 |
 | 233 | Ancalagon the Black | 4 | 1 | 3 | 2 | 2 | 12 |
 | 234 | Thuringwethil, the Vampire Messenger | 16 | 0 | 7 | 2 | 3 | 28 |
 | 241 | Gothmog, High Captain of Balrogs | 4 | 0 | 2 | 1 | 1 | 8 |

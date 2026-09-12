@@ -163,11 +163,65 @@ static void test_tactical_history_and_evidence(void)
     CHECK(!get_move_tactical(m, &y, &x)); /* no immediate reversal to old footing */
 }
 
+static void test_tactical_attack_geometry(void)
+{
+    monster_type* m = reset_map(11, 11, 5, 4, 5, 5);
+    monsters[2] = *m; monsters[2].fy = 5; monsters[2].fx = 3;
+    occupants[5][3] = 2;
+    tactical_context c = { .actor=m, .py=5, .px=5, .original_distance=1,
+        .ally_count=1 };
+    c.allies[0] = &monsters[2];
+    int front = tactical_position_score(&c, 5, 4);
+    int side = tactical_position_score(&c, 4, 4);
+    monster_ai_observe(m, MON_AI_IMPALE, 3);
+    CHECK(tactical_position_score(&c, 5, 4) < front);
+    CHECK(tactical_position_score(&c, 4, 4) == side);
+    int y, x;
+    CHECK(get_move_tactical(m, &y, &x));
+    CHECK(!tactical_impale_pair(5, 5, y, x, 5, 3));
+    CHECK(tactical_impale_pair(5, 5, 3, 3, 4, 4)); /* rear diagonal */
+    CHECK(tactical_impale_pair(5, 5, 5, 3, 5, 4)); /* rear cardinal */
+    CHECK(!tactical_impale_pair(5, 5, 5, 4, 5, 2)); /* out of reach */
+    CHECK(!tactical_impale_pair(5, 5, 4, 3, 3, 1)); /* not an eight-way thrust */
+
+    monster_ai_reset(m);
+    monsters[2].fx = 6; occupants[5][3] = 0; occupants[5][6] = 2;
+    int opposite = tactical_position_score(&c, 5, 4);
+    monster_ai_observe(m, MON_AI_IMPALE, 3);
+    CHECK(tactical_position_score(&c, 5, 4) == opposite);
+    monster_ai_reset(m);
+    monster_ai_observe(m, MON_AI_WHIRLWIND, 3);
+    int swept = tactical_position_score(&c, 5, 4);
+    CHECK(swept < opposite); /* opposite sides are still swept */
+    monster_ai_reset(m);
+    monster_ai_observe(m, MON_AI_FOLLOW_THROUGH, 3);
+    int healthy = tactical_position_score(&c, 5, 4);
+    CHECK(healthy < opposite && healthy > swept);
+    monsters[2].hp = 1;
+    CHECK(tactical_position_score(&c, 5, 4) < healthy);
+    playerturn += 20;
+    CHECK(tactical_position_score(&c, 5, 4) == opposite);
+
+    /* A surrounded group can actually step out of a learned sweep. */
+    monster_ai_reset(m);
+    mon_max = 5;
+    for (int i = 2; i <= 4; ++i)
+    {
+        monsters[i] = *m; monsters[i].fy = 3 + i; monsters[i].fx = 6;
+        occupants[monsters[i].fy][6] = i;
+    }
+    monsters[4].fy = 4; occupants[7][6] = 0; occupants[4][6] = 4;
+    monster_ai_observe(m, MON_AI_WHIRLWIND, 3);
+    CHECK(get_move_tactical(m, &y, &x));
+    CHECK(distance(y, x, 5, 5) == 2);
+}
+
 static void test_tactical_extension(void)
 {
     test_tactical_poison_preview();
     test_tactical_light();
     test_tactical_history_and_evidence();
+    test_tactical_attack_geometry();
     monster_type* morgoth = reset_map(11, 11, 5, 4, 5, 5);
     races[R_IDX_MORGOTH] = races[1];
     morgoth->r_idx = R_IDX_MORGOTH;

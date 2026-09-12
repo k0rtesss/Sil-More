@@ -368,6 +368,7 @@ void dungeon(void)
                 /* Process monster with even more energy first */
             log_trace("[LOOP] process_monsters pre-player: threshold=%d", p_ptr->energy + 1);
             TIME_PHASE("monsters(pre-player)", process_monsters(p_ptr->energy + 1));
+            sil_popup_trace_stage("pre-player-monsters-complete");
             log_trace("[LOOP] after process_monsters pre-player: combat_number=%d old=%d", combat_number, combat_number_old);
 
             /* If still alive */
@@ -386,10 +387,12 @@ void dungeon(void)
                 /* Process the player */
                 log_trace("[LOOP] process_player start");
                 TIME_PHASE("process_player", process_player());
+                sil_popup_trace_stage("process-player-returned");
                 log_trace("[LOOP] process_player end: combat_number=%d old=%d", combat_number, combat_number_old);
                 
                 /* Scan for artifacts near player and mark as seen */
                 scan_artifacts_near_player();
+                sil_popup_trace_stage("artifact-scan-complete");
                 
             }
         }
@@ -433,7 +436,12 @@ void dungeon(void)
 
         /* Process monsters (any that haven't had a chance to move yet) */
     log_trace("[LOOP] process_monsters post-player: threshold=100");
-    TIME_PHASE("monsters(post-player)", process_monsters(100));
+    {
+        Uint64 popup_phase = sil_popup_trace_phase_begin();
+        TIME_PHASE("monsters(post-player)", process_monsters(100));
+        sil_popup_trace_phase_end("monsters-post-player", popup_phase);
+    }
+    sil_popup_trace_stage("post-player-monsters-complete");
     log_trace("[LOOP] after process_monsters post-player: combat_number=%d old=%d", combat_number, combat_number_old);
     
         /* Notice stuff */
@@ -468,7 +476,12 @@ void dungeon(void)
             break;
 
         /* Process the world */
-        TIME_PHASE("process_world", process_world());
+        {
+            Uint64 popup_phase = sil_popup_trace_phase_begin();
+            TIME_PHASE("process_world", process_world());
+            sil_popup_trace_phase_end("world-processing", popup_phase);
+        }
+        sil_popup_trace_stage("world-processing-complete");
 
         /* Notice stuff */
         if (p_ptr->notice)

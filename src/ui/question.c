@@ -33,6 +33,15 @@ static void ui_question_show(cptr title, cptr desc,
     {
         byte attr = options[i].disabled ? TERM_L_DARK : options[i].attr;
 
+        /* Keyless disabled rows describe the choices without becoming mouse
+         * or controller targets. Keep their informational text readable. */
+        if (!options[i].key && options[i].disabled)
+        {
+            sdl_question_menu_add_object_entry(-1, "", options[i].label,
+                options[i].attr, object_icons ? object_icons[i] : NULL);
+            continue;
+        }
+
         if (options[i].key)
         {
             strnfmt(letter, sizeof(letter), "%c)", options[i].key);

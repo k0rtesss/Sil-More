@@ -10,6 +10,7 @@ errr callback_sdl_xtra(int n, int v)
     case TERM_XTRA_EVENT: {
         SDL_Event ev;
 
+        sil_popup_trace_stage("event-pump-enter");
         sdl_gameplay_tutorial_sync();
         sdl_present_if_needed(d);
         if (!tutorial_is_active())
@@ -169,6 +170,7 @@ errr callback_sdl_xtra(int n, int v)
             g_sdl_blocking_key_wait = true;
             {
                 sil_perf_flush();
+                sil_popup_trace_stage("input-wait-begin");
                 sil_perf_stamp input_wait = sil_perf_begin();
                 bool got_event = (timeout_ms >= 0)
                     ? SDL_WaitEventTimeout(&ev, timeout_ms)
@@ -322,6 +324,8 @@ errr callback_sdl_xtra(int n, int v)
         g_state.need_present = true;
         return 0;
     case TERM_XTRA_FRESH:
+        if (Term == term_screen && character_dungeon && graphics_are_ascii())
+            sil_popup_trace_player_drawn(p_ptr->py, p_ptr->px);
         sdl_present_if_needed(d);
         return 0;
     case TERM_XTRA_DELAY: {
@@ -4480,6 +4484,8 @@ errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
             sdl_side_map_pane_invalidate_cell(dy, dx);
         }
         sdl_draw_map_tile_layers_at(dy, dx, a, c, tap[i], tcp[i], &dst);
+        if (dy == p_ptr->py && dx == p_ptr->px)
+            sil_popup_trace_player_drawn(dy, dx);
         if (dy >= 0 && dx >= 0)
             sdl_idle_animation_track(x + i * (use_bigtile + 1), y,
                 dy, dx, a, c, tap[i], tcp[i]);

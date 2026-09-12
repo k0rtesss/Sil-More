@@ -869,6 +869,28 @@ static bool sdl_event_is_narrative_banner_input(const SDL_Event* ev)
     }
 }
 
+static bool sdl_event_is_narrative_banner_back_input(const SDL_Event* ev)
+{
+    if (!ev)
+        return false;
+
+    if (ev->type == SDL_EVENT_KEY_DOWN)
+        return sdl_key_is_escape_or_back(ev->key.key);
+
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
+    {
+        SDL_GamepadButton button =
+            (SDL_GamepadButton)ev->gbutton.button;
+
+        /* East is the controller's semantic Back button.  Start is also a
+         * back/escape alternative in the dungeon controller contract. */
+        return sdl_gamepad_button_is_ui_back(button)
+            || button == SDL_GAMEPAD_BUTTON_START;
+    }
+
+    return false;
+}
+
 static bool sdl_event_targets_touch_top_panel(const SDL_Event* ev)
 {
     float x;
@@ -946,7 +968,12 @@ static bool sdl_event_starts_touch_round_input(const SDL_Event* ev)
 
 static bool sdl_narrative_banner_consume_input_event(const SDL_Event* ev)
 {
-    if (!active_narrative_banner_consumes_input())
+    bool back_input;
+
+    if (!active_narrative_banner_visible())
+        return false;
+    back_input = sdl_event_is_narrative_banner_back_input(ev);
+    if (!active_narrative_banner_consumes_input() && !back_input)
         return false;
     if (!sdl_event_is_narrative_banner_input(ev))
         return false;

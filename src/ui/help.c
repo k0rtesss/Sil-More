@@ -2534,6 +2534,24 @@ static void show_help_screen_legacy(int source_page, int display_page,
             "- Knowledge records learned objects, monsters, abilities, and lore.",
             row++, col);
         put_role(ROLE_BODY,
+            "- A monster's Observations show what it currently believes about you.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "  Names such as fire resistance are its conclusions, not your hidden stats.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "  A weak, moderate, or strong label shows confidence; memories fade.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "  Green marks resistance or defense; red marks vulnerability or harm; yellow marks tactics.",
+            row++, col);
+        put_role(ROLE_BODY,
+            "  Impale threatens a line; sweeps threaten everyone beside you.", row++, col);
+        put_role(ROLE_BODY,
+            "  Follow Through threatens another nearby foe after a kill.", row++, col);
+        put_role(ROLE_BODY,
+            "  Weapon fear records frightening hits that lowered its morale.", row++, col);
+        put_role(ROLE_BODY,
             "- For exact numbers, trust the live description and current-state panel.",
             row, col);
         break;

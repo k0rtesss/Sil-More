@@ -3355,6 +3355,26 @@ static void ability_browser_draw_skill_summary(
     }
 }
 
+static void ability_browser_enable_skill_swipe(
+    const ability_browser_layout* layout, int skill_options)
+{
+    if (!layout || skill_options < 2 || layout->skill_w <= 0
+        || layout->skill_rows <= 0)
+    {
+        return;
+    }
+
+    if (ui_scroll_area_add_cols(layout->skill_col,
+            layout->skill_col + layout->skill_w - 1, layout->skill_row,
+            layout->skill_row + layout->skill_rows - 1,
+            SDL_TOUCH_MENU_CATEGORY_OTHER))
+    {
+        ui_scroll_area_set_keys(0, 0, '[', ']');
+        ui_scroll_area_set_horizontal_page_mode(true);
+        ui_scroll_area_enable_horizontal_page_swipe('[', ']');
+    }
+}
+
 /*
  * For an ability the player has turned on, determine whether it currently does
  * nothing because of the player's loadout (active weapon, off-hand weapon, or
@@ -5987,6 +6007,7 @@ void do_cmd_ability_screen(void)
              * the description belonging to the selected ability. */
             ui_scroll_area_set_offset_target(&desc_top, desc_max_top);
         }
+        ability_browser_enable_skill_swipe(&layout, skill_options);
 
         if (ui_menu_click_get_hover_choice(&hover_choice)
             && hover_choice == ABILITY_MENU_CLICK_TRAIN)

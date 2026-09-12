@@ -32,6 +32,99 @@ static monster_type* adaptive_fixture(int race, int evasion)
     return m;
 }
 
+static void check_weapon_fear(void)
+{
+    int spider = 0, orc = 0;
+    for (int i = 1; i < z_info->r_max; ++i) {
+        const monster_race* race = &r_info[i];
+        if ((race->flags1 & RF1_UNIQUE) || (race->flags2 & RF2_MINDLESS)
+            || (race->flags3 & RF3_NO_FEAR)) continue;
+        if (!spider && (race->flags3 & RF3_SPIDER)) spider = i;
+        if (!orc && (race->flags3 & RF3_ORC)) orc = i;
+    }
+    assert(spider && orc);
+    monster_type* m = adaptive_fixture(spider, 0);
+    assert(place_monster_one(9,10,spider,false,true,NULL));
+    monster_type* friend = &mon_list[cave_m_idx[9][10]];
+    friend->alertness = ALERTNESS_ALERT;
+    friend->tmp_morale = 0;
+    assert(place_monster_one(9,11,orc,false,true,NULL));
+    monster_type* other = &mon_list[cave_m_idx[9][11]];
+    other->alertness = ALERTNESS_ALERT;
+    other->tmp_morale = 0;
+    m->tmp_morale = 0;
+    m->hp = m->maxhp = 20000;
+    object_type* weapon = &inventory[INVEN_WIELD];
+    object_prep(weapon, lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    weapon->name2 = 22; /* Production 'of Doriath' template. */
+    weapon->ident |= IDENT_KNOWN;
+    assert(e_info[22].flags1 & TR1_SLAY_SPIDER);
+    playerturn = 100;
+    p_ptr->mdd = p_ptr->mds = 1;
+    p_ptr->skill_use[S_MEL] = -1000;
+    py_attack_aux(10,10,ATT_MAIN);
+    assert(!monster_ai_confidence(m, MON_AI_SLAY_FEAR));
+    assert(m->tmp_morale == 0 && friend->tmp_morale == 0);
+    playerturn++;
+    p_ptr->skill_use[S_MEL] = 1000;
+    py_attack_aux(10,10,ATT_MAIN);
+    assert(monster_ai_confidence(m, MON_AI_SLAY_FEAR) == 3);
+    assert(monster_ai_confidence(friend, MON_AI_SLAY_FEAR) == 3);
+    assert(m->tmp_morale == -20 && friend->tmp_morale == -20);
+    assert(other->tmp_morale == 0);
+    assert(!monster_ai_confidence(other, MON_AI_SLAY_FEAR));
+    monster_ai_reset(friend);
+    monster_ai_share_warning(m);
+    assert(!monster_ai_confidence(friend, MON_AI_SLAY_FEAR));
+    u32b noticed = 0;
+    playerturn++;
+    weapon->name2 = 0;
+    assert(slay_bonus(weapon,m,&noticed) == 0);
+    assert(m->tmp_morale == -20);
+    assert(monster_ai_confidence(m, MON_AI_SLAY_FEAR) == 3);
+    monster_ai_reset(m);
+    monster_ai_reset(friend);
+    scare_onlooking_friends(m,-20);
+    assert(m->tmp_morale == -40 && friend->tmp_morale == -40);
+    assert(!monster_ai_confidence(m, MON_AI_SLAY_FEAR));
+    assert(!monster_ai_confidence(friend, MON_AI_SLAY_FEAR));
+    weapon->name2 = 22;
+    m->confused = 1;
+    assert(slay_bonus(weapon,m,&noticed) == 1);
+    assert(m->tmp_morale == -60);
+    assert(!monster_ai_confidence(m, MON_AI_SLAY_FEAR));
+    assert(monster_ai_confidence(friend, MON_AI_SLAY_FEAR) == 3);
+    m->confused = 0;
+    monster_ai_reset(friend);
+    u32b flags3 = r_info[spider].flags3;
+    r_info[spider].flags3 |= RF3_NO_FEAR;
+    assert(slay_bonus(weapon,m,&noticed) == 1);
+    assert(m->tmp_morale == -60);
+    assert(!monster_ai_confidence(m, MON_AI_SLAY_FEAR));
+    assert(!monster_ai_confidence(friend, MON_AI_SLAY_FEAR));
+    r_info[spider].flags3 = flags3;
+    p_ptr->py = p_ptr->px = 50; /* The blow's victim is still visible to its kin. */
+    assert(!monster_ai_can_see_player(m));
+    assert(!monster_ai_can_see_player(friend));
+    assert(slay_bonus(weapon,m,&noticed) == 1);
+    assert(m->tmp_morale == -80);
+    assert(!monster_ai_confidence(m, MON_AI_SLAY_FEAR));
+    assert(!monster_ai_confidence(friend, MON_AI_SLAY_FEAR));
+    p_ptr->py = 10; p_ptr->px = 11;
+    m->stance = friend->stance = STANCE_CONFIDENT;
+    calc_morale(m);
+    m->tmp_morale += 10 - m->morale;
+    calc_morale(m);
+    assert(m->morale == 10);
+    assert(slay_bonus(weapon,m,&noticed) == 1);
+    calc_morale(m);
+    assert(m->morale == -10);
+    calc_stance(m);
+    assert(m->stance == STANCE_FLEEING);
+    assert(monster_ai_confidence(m, MON_AI_SLAY_FEAR) == 3);
+    puts("Production Doriath hit: exact -20 fear cohort learns and a shaken target flees; misses, ordinary fear, unrelated kinds, confusion, fear immunity, unseen attackers and warning spread stay distinct PASS.");
+}
+
 static void check_adaptive_integration(void)
 {
     monster_type* m = adaptive_fixture(403, 0);
@@ -122,6 +215,7 @@ static void check_adaptive_integration(void)
     process_player();
     assert(p_ptr->chp == 97 && p_ptr->poisoned == 3);
     puts("Real complete player actions apply pool contact before poison tick and suppress regeneration PASS.");
+    check_weapon_fear();
 }
 '''
 

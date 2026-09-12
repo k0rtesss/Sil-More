@@ -2096,6 +2096,10 @@ extern void ui_scroll_area_set_tap_key(int key);
 extern int ui_scroll_area_get_tap_key(void);
 extern void ui_scroll_area_set_page_mode(bool enabled);
 extern bool ui_scroll_area_is_page_mode(void);
+extern void ui_scroll_area_set_horizontal_page_mode(bool enabled);
+extern bool ui_scroll_area_is_horizontal_page_mode(void);
+extern void ui_scroll_area_enable_horizontal_page_swipe(int previous_key,
+    int next_key);
 extern void ui_scroll_area_set_offset_target(int* offset, int max_offset);
 extern bool ui_scroll_area_has_offset_target(void);
 extern bool ui_scroll_area_offset_scroll(int delta);
@@ -2548,6 +2552,7 @@ extern void sdl_question_menu_set_nonblocking(bool nonblocking);
 extern void sdl_question_menu_set_context_hint(void);
 extern void sdl_question_menu_clear_context_hint(void);
 extern bool sdl_question_menu_context_hint_active(void);
+extern bool sdl_question_menu_is_active(void);
 extern void sdl_question_menu_set_timeout_ms(int ms);
 extern void sdl_hint_quest_menu_begin(hint_quest_page page, cptr title,
     cptr section, bool show_tabs, bool center_body, int selected_choice);

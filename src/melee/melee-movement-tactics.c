@@ -217,6 +217,16 @@ static int tactical_reaction_cost(const tactical_context* c,
     return cost;
 }
 
+/* Impale reaches exactly the first two squares along one of eight directions.
+ * Both the front creature and the one behind it should avoid forming the pair. */
+static bool tactical_impale_pair(int py, int px, int y, int x, int ay, int ax)
+{
+    int dy = y - py, dx = x - px;
+    int ady = ay - py, adx = ax - px;
+    return ((MAX(ABS(dy), ABS(dx)) == 1 && ady == 2 * dy && adx == 2 * dx)
+        || (MAX(ABS(ady), ABS(adx)) == 1 && dy == 2 * ady && dx == 2 * adx));
+}
+
 static int tactical_position_score(const tactical_context* c, int y, int x)
 {
     monster_type* m_ptr = c->actor;
@@ -225,7 +235,9 @@ static int tactical_position_score(const tactical_context* c, int y, int x)
     bool moved = y != m_ptr->fy || x != m_ptr->fx;
     int score = c->ranged ? 42 - ABS(dist - m_ptr->best_range) * 9 : 56 - dist * 8;
     int trailing = 0;
-    int multi = MAX(0, tactical_confidence(m_ptr, MON_AI_MULTI_TARGET));
+    int impale = MAX(0, tactical_confidence(m_ptr, MON_AI_IMPALE));
+    int sweep = MAX(0, tactical_confidence(m_ptr, MON_AI_WHIRLWIND));
+    int follow = MAX(0, tactical_confidence(m_ptr, MON_AI_FOLLOW_THROUGH));
     bool has_shot = !c->ranged || projectable(y, x, c->py, c->px, PROJECT_CHCK);
     if (!c->ranged && dist == 1) score += 8;
     if (c->ranged && !has_shot) score -= 24;
@@ -239,13 +251,17 @@ static int tactical_position_score(const tactical_context* c, int y, int x)
         {
             int dot = (y - c->py) * (ally->fy - c->py) + (x - c->px) * (ally->fx - c->px);
             score += dot < 0 ? 16 : 8;
-            /* React only to witnessed sweeping attacks and orbiting. */
-            if (separation == 1) score -= multi * 5;
+            /* Sweeps reach the entire ring, including opposite sides.
+             * Follow Through needs a kill first; a wounded ally makes that
+             * opening more likely. Neither depends on inter-ally adjacency. */
+            int follow_risk = ally->hp <= ally->maxhp / 2 ? 8 : 3;
+            score -= MAX(sweep * 9, follow * follow_risk);
             if (!dot) score += MAX(0, tactical_confidence(m_ptr, MON_AI_FLANKING)) * 2;
         }
         if (distance(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx) == 1 && ally_dist > 1) trailing++;
         if (separation == 1) score -= 3;
-        if (multi && tactical_on_lane(y, x, c->py, c->px, ally->fy, ally->fx)) score -= multi * 8;
+        if (impale && tactical_impale_pair(c->py, c->px, y, x, ally->fy, ally->fx))
+            score -= impale * 8;
         if (r_info[ally->r_idx].freq_ranged
             && tactical_on_lane(y, x, ally->fy, ally->fx, c->py, c->px)) score -= 18;
         if (ally->stance == STANCE_FLEEING
@@ -385,7 +401,7 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     tactical_label labels[TACTICAL_CELLS][TACTICAL_LABELS] = { 0 };
     int start = TACTICAL_RADIUS * TACTICAL_WIDTH + TACTICAL_RADIUS;
     int baseline, best_score, best_first = -1, best_goal = -1;
-    bool adjacent;
+    bool adjacent, avoid_sweep;
     if (!monster_ai_enabled(m_ptr)
         || m_ptr->confused || m_ptr->alertness < ALERTNESS_ALERT || m_ptr->stance == STANCE_FLEEING
         || (r_ptr->flags1 & (RF1_NEVER_MOVE | RF1_PEACEFUL))) return false;
@@ -399,6 +415,8 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     if (c.original_distance > MAX(6, m_ptr->best_range + 1)) return false;
     c.ranged = m_ptr->min_range > 1 || (r_ptr->flags1 & RF1_NEVER_BLOW);
     adjacent = c.original_distance == 1;
+    avoid_sweep = tactical_confidence(m_ptr, MON_AI_WHIRLWIND) > 0
+        || tactical_confidence(m_ptr, MON_AI_FOLLOW_THROUGH) > 0;
     for (int i = 0; i < TACTICAL_CELLS; ++i)
     {
         int y = c.oy + i / TACTICAL_WIDTH, x = c.ox + i % TACTICAL_WIDTH;
@@ -420,7 +438,8 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
         tactical_label here = labels[at][which];
         int y = c.oy + at / TACTICAL_WIDTH, x = c.ox + at % TACTICAL_WIDTH;
         int dist = distance(y, x, c.py, c.px);
-        if (at != start && (!adjacent || dist == 1 || c.ranged || c.shadow))
+        if (at != start && (!adjacent || dist == 1 || c.ranged || c.shadow
+                || (avoid_sweep && dist == 2)))
         {
             int score = tactical_position_score(&c, y, x) - here.cost - here.damage * 3;
             /* Small deterministic variation does not consume game RNG. */

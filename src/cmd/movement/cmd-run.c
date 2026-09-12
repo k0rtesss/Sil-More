@@ -2,6 +2,7 @@
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
+#include "log/perf.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "ui/question.h"
@@ -697,6 +698,7 @@ void move_player(int dir)
 
         /* Move player */
         monster_swap(py, px, y, x);
+        sil_popup_trace_stage("move-swap-returned");
         if (p_ptr->is_dead) return;
         if ((py != y || px != x) && p_ptr->py == y && p_ptr->px == x)
             player_water_movement(cave_feat[py][px], cave_feat[y][x]);
@@ -728,6 +730,7 @@ void move_player(int dir)
 
         /* Spontaneous Searching */
         perceive();
+        sil_popup_trace_stage("movement-perception-complete");
 
         // remember this direction of movement
         p_ptr->previous_action[0] = dir;

@@ -1684,9 +1684,7 @@
       ],
       "ranged": {
         "darkness": {
-          "sounds": [
-            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/UndeadKnight/UndeadKnight_Activate.ogg"
-          ]
+          "sounds": []
         },
         "slow": {
           "sounds": [
@@ -1796,10 +1794,7 @@
       ],
       "ranged": {
         "arrow1": {
-          "sounds": [
-            "sound/monsters/recordings/Minifantasy/Human/08_human_special_atk_1.ogg",
-            "sound/monsters/recordings/Minifantasy/Human/09_human_special_atk_2.ogg"
-          ]
+          "sounds": []
         }
       },
       "damage": {
@@ -3195,9 +3190,7 @@
       ],
       "ranged": {
         "scare": {
-          "sounds": [
-            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
-          ]
+          "sounds": []
         }
       },
       "damage": {
@@ -3237,9 +3230,7 @@
           ]
         },
         "slow": {
-          "sounds": [
-            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures/Wraith/Wraith_Icy_Touch.ogg"
-          ]
+          "sounds": []
         }
       },
       "damage": {
@@ -4279,8 +4270,7 @@
       "ranged": {
         "scare": {
           "sounds": [
-            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Reanimate_Cast.ogg",
-            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_IceClaw_Cast.ogg"
+            "sound/monsters/recordings/LEOHPAZ/Undead_Creatures_2/Lich/Lich_Reanimate_Cast.ogg"
           ]
         }
       },

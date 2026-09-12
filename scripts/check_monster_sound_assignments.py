@@ -32,6 +32,13 @@ def main():
                                " ".join(re.findall(r"(?m)^S:.*", block))))
         expected = {key for flag, key in RANGED.items() if flag in spells}
         assert set(race["ranged"]) == expected, name
+        melee_sounds = {filename for blow in race["melee"]
+                        for filename in blow["sounds"]}
+        for ability, event in race["ranged"].items():
+            overlap = melee_sounds.intersection(event["sounds"])
+            assert not overlap, (
+                f"{name} {ability}: ranged sounds reuse melee recording(s): "
+                f"{', '.join(sorted(overlap))}")
         attack_count += len(blows) + len(expected)
         events = [*race["melee"], *race["ranged"].values(),
                   race["damage"], race["death"], race["idle"]]

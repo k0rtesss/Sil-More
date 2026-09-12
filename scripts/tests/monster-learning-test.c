@@ -49,6 +49,23 @@ static void reset(void)
 
 int main(void)
 {
+    const int attacks[] = { ATT_IMPALE, ATT_WHIRLWIND, ATT_RAGE, ATT_FOLLOW_THROUGH };
+    const int features[] = { MON_AI_IMPALE, MON_AI_WHIRLWIND,
+        MON_AI_WHIRLWIND, MON_AI_FOLLOW_THROUGH };
+    for (int i = 0; i < 4; ++i)
+    {
+        reset();
+        monster_ai_player_attack(&monsters[1], attacks[i]);
+        for (int f = MON_AI_IMPALE; f <= MON_AI_FOLLOW_THROUGH; ++f)
+            assert(monster_ai_confidence(&monsters[2], f)
+                == (f == features[i] ? 3 : 0));
+        assert(!monster_ai_confidence(&monsters[1], MON_AI_MULTI_TARGET));
+        playerturn += 20;
+        assert(!monster_ai_confidence(&monsters[2], features[i]));
+        reset(); monsters[2].fy = 9;
+        monster_ai_player_attack(&monsters[1], attacks[i]);
+        assert(!monster_ai_confidence(&monsters[2], features[i]));
+    }
     reset();
     monster_type* m = &monsters[1];
     monster_ai_observe(m, MON_AI_FIRE, 1);

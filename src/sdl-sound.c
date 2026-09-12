@@ -1435,6 +1435,36 @@ static const cJSON* monster_sound_assignment(int race_idx, int action)
     return cJSON_GetObjectItemCaseSensitive(assignment, "sounds");
 }
 
+/* Ranged attacks must not fall back to a recording assigned to one of the
+ * same race's melee blows. Keep this guard in the backend as well as in the
+ * data validator so an edited or stale assignment file cannot blur the two
+ * attack types. */
+static bool monster_sound_ranged_reuses_melee(int race_idx, const char* path)
+{
+    char id[16];
+    const cJSON* races;
+    const cJSON* race;
+    const cJSON* blows;
+    const cJSON* blow;
+
+    if (!g_monster_sound_config || !path || !path[0])
+        return false;
+    strnfmt(id, sizeof(id), "%d", race_idx);
+    races = cJSON_GetObjectItemCaseSensitive(g_monster_sound_config, "monsters");
+    race = cJSON_GetObjectItemCaseSensitive(races, id);
+    blows = cJSON_GetObjectItemCaseSensitive(race, "melee");
+    cJSON_ArrayForEach(blow, blows) {
+        const cJSON* sounds = cJSON_GetObjectItemCaseSensitive(blow, "sounds");
+        const cJSON* sample;
+        cJSON_ArrayForEach(sample, sounds) {
+            if (cJSON_IsString(sample) && sample->valuestring
+                && streq(sample->valuestring, path))
+                return true;
+        }
+    }
+    return false;
+}
+
 void sdl_sound_monster(int race_idx, int action)
 {
     if (race_idx <= 0 || !z_info || race_idx >= z_info->r_max
@@ -1482,6 +1512,10 @@ void sdl_sound_monster(int race_idx, int action)
         const cJSON* sample;
         cJSON_ArrayForEach(sample, sounds) {
             if (!cJSON_IsString(sample) || !sample->valuestring[0])
+                continue;
+            if (action >= MONSTER_SOUND_RANGED_BASE
+                && monster_sound_ranged_reuses_melee(race_idx,
+                    sample->valuestring))
                 continue;
             if (entry->count >= SDL_SOUND_MAX_VARIANTS)
                 break;

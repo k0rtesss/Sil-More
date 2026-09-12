@@ -151,7 +151,10 @@ Existing ability getters can reveal monster lore through `observe_ability()`. Sp
 | Charge / knockback / Exchange Places | Evaluate actual direction history, landing squares, terrain, and the corresponding reaction rules. |
 | Kiting, Sprinting, Skirmishing | Intercept at reachable junctions, take cover, maintain useful missile range, and avoid futile chasing. |
 | Focus / Concentration | React to observed preparation or sustained attacks; account for the fact that player waiting does not itself reset player Concentration. |
-| Whirlwind, Rage, Follow Through, Impale | Avoid unnecessary clusters and straight multi-target lanes while still threatening useful squares. |
+| Impale | Avoid the first two occupied squares on the same eight-way ray from the player, from either position; distant or offset lines do not count. |
+| Whirlwind / Rage | Remember sweeping attacks separately and avoid crowding the whole ring beside the player, including opposite sides; allow a useful step out of that ring. |
+| Follow Through | Remember the kill-triggered follow-up separately. Any other enemy beside the player can be next; the positioning penalty grows when an ally is visibly wounded. |
+| Frightening weapon strikes | Record the actual recipients of the existing slay/brand morale penalty as personal weapon-fear evidence. Preserve the morale-driven stance and fleeing rules. |
 | Stealth, Vanish, ambush | Use legitimate last-known position, perceived sound, and eligible scent; never follow hidden current coordinates. |
 | Elemental/status resistance | Shift toward an existing effective attack or support action after credible observations. Keep poison melee and pure poison mechanics distinct. |
 | Player songs | Respond to their actual distance, control, and combat effects; ordinary damage does not automatically interrupt singing. |

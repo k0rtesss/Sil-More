@@ -6,6 +6,8 @@
 /*
  * A selectable answer in a question overlay.  `key` is the letter shortcut
  * (0 for none); `label` is the row text; `attr` its TERM_* colour.
+ * A disabled row with key 0 is informational: it keeps its colour and is
+ * skipped by keyboard, mouse, touch, and controller selection.
  */
 typedef struct ui_question_option {
     char key;

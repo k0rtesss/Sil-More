@@ -378,12 +378,12 @@ static void rd_u32b(u32b* x) {u16b a,b;rd_u16b(&a);rd_u16b(&b);*x=a|((u32b)b<<16
 static void rd_s32b(s32b* x) {u32b n;rd_u32b(&n);*x=(s32b)n;}
 static void strip_bytes(int n) {while(n--) {byte b;rd_byte(&b);}}
 static bool savefile_version_at_least(byte a,byte b,byte c,byte d) {
-    assert(a==0&&b==9&&c==8&&d>=2&&d<=6);return extra_version>=d;
+    assert(a==0&&b==9&&c==8&&d>=2&&d<=7);return extra_version>=d;
 }
 /* The complete production record writer and reader are inserted below. */
 @FUNCTIONS@
 void monster_save_tests(void) {
-    for(int version=1;version<=6;version++) {
+    for(int version=1;version<=7;version++) {
         monster_type before={0}, after={0};
         before.r_idx=3;before.image_r_idx=7;before.fy=14;before.fx=19;
         before.hp=39;before.maxhp=46;before.alertness=ALERTNESS_ALERT;
@@ -393,6 +393,8 @@ void monster_save_tests(void) {
         before.ai.cast_reserve=2;
         before.ai.observations[MON_AI_FIRE].value=2;
         before.ai.observations[MON_AI_FIRE].ttl=40;
+        before.ai.observations[MON_AI_IMPALE].value=3;
+        before.ai.observations[MON_AI_IMPALE].ttl=20;
         before.confused=6;before.song_will_penalty=11;before.thrall_quest_completed=1;
         before.previous_action[0]=6;before.previous_action[1]=8;
         extra_version=version;write_pos=read_pos=0;wr_monster(&before);
@@ -401,6 +403,10 @@ void monster_save_tests(void) {
         if(version<4)write_pos=poison_offset;
         else if(version<5)write_pos=abilities_offset;
         else if(version<6)write_pos=ai_offset;
+        else if(version==6) {
+            int start=ai_offset+29*7, count=(MON_AI_FEATURE_COUNT-29)*7;
+            memmove(bytes+start,bytes+start+count,write_pos-start-count);write_pos-=count;
+        }
         if(version==1) {
             /* Old byte-energy record: omit its high byte, preserve its tail. */
             assert(bytes[14]==213 && bytes[15]==0);
@@ -416,8 +422,9 @@ void monster_save_tests(void) {
         assert(after.vengeance==(version>=5?1:0));
         assert(after.smite_recovery==(version>=5?2:0));
         assert(after.ai.cast_reserve==(version>=6?2:0));
+        assert(after.ai.observations[MON_AI_IMPALE].value==(version>=7?3:0));
     }
-    puts("Monster save records: versions 0.9.8.1-6, signed debt, old unsigned energy, poison/ability/AI defaults and record alignment: PASS");
+    puts("Monster save records: versions 0.9.8.1-7, signed debt, old unsigned energy, poison/ability/AI defaults and record alignment: PASS");
 }
 '''
 
@@ -479,7 +486,8 @@ def main():
     writer = c_function(ROOT / "src/fs/save.c", "wr_monster")
     writer = writer.replace("wr_s16b(m_ptr->poisoned);", "poison_offset=write_pos;wr_s16b(m_ptr->poisoned);")
     writer = writer.replace("wr_byte(m_ptr->vengeance);", "abilities_offset=write_pos;wr_byte(m_ptr->vengeance);")
-    writer = writer.replace("/* 0.9.8.6:", "ai_offset=write_pos;/* 0.9.8.6:")
+    writer = writer.replace("for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)",
+                            "ai_offset=write_pos;for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)", 1)
     save_check.write_text(SAVE_TEST.replace("@FUNCTIONS@", saved_flags + "\n" +
         writer + "\n" +
         c_function(ROOT / "src/fs/load.c", "rd_monster")), encoding="utf-8")

@@ -1580,6 +1580,15 @@ void do_cmd_combat_history_legacy(void)
         page_rows = (visible_rows > 1) ? (visible_rows - 1) : 1;
         ui_scroll_area_begin(body_top, body_bottom,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
+        if (ui_scroll_area_add_cols(0, wid - 1, 1, 1,
+                SDL_TOUCH_MENU_CATEGORY_OTHER))
+        {
+            /* The legacy combat view keeps horizontal body panning, while
+             * the tab strip itself accepts a left/right swipe to return to
+             * the message log. */
+            ui_scroll_area_set_keys(0, 0, 'i', 'i');
+            ui_scroll_area_set_horizontal_page_mode(true);
+        }
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         

@@ -1480,7 +1480,7 @@ int slay_bonus(
     if ((slay_bonus_dice > 0) || (brand_bonus_dice > 1))
     {
         // cause a temporary morale penalty
-        scare_onlooking_friends(m_ptr, -20);
+        scare_onlooking_friends_from_weapon(m_ptr, -20);
     }
 
     return (slay_bonus_dice + brand_bonus_dice);

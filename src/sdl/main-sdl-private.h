@@ -530,6 +530,8 @@ typedef struct menu_scroll_drag_state {
     bool active;
     bool dragged;
     bool page_fired;
+    bool gesture_axis_decided;
+    bool gesture_horizontal;
     SDL_FingerID finger_id;
     int area_index;
     float start_x;
@@ -3847,6 +3849,7 @@ void sdl_question_menu_set_nonblocking(bool nonblocking);
 void sdl_question_menu_set_context_hint(void);
 void sdl_question_menu_clear_context_hint(void);
 bool sdl_question_menu_context_hint_active(void);
+bool sdl_question_menu_is_active(void);
 int sdl_question_menu_collect_controller_focus_targets(
     sdl_controller_focus_target* targets, int max_targets);
 void sdl_question_menu_set_controller_focus(int choice);
