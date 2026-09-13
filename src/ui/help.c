@@ -2300,10 +2300,16 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row += 2;
 
         help_emit_heading("DISEASE", row++, col);
-        put_role(ROLE_BODY, "- Disease causes -1 Constitution on infection, then -1 to a random attribute every 50 player turns.", row++, col);
+        put_role(ROLE_BODY, "- Disease causes -1 Constitution on infection, then -1 to a random attribute every 100 player turns.", row++, col);
         put_role(ROLE_WARN, "- It continues while resting and never clears on its own.", row++, col);
         put_role(ROLE_BODY, "- Potions of Healing or Miruvor cure it and restore all disease penalties, leaving unrelated drain unchanged.", row++, col);
-        put_role(ROLE_BODY, "- Infection risks: Herb of Sickness 100%, Dried Meat 20%, searching orc remains 5%.", row++, col);
+        put_role(ROLE_BODY, "- When healthy, infection risks are Herb of Sickness 100%, Dried Meat 20%, searching orc remains 5%.", row++, col);
+        put_role(ROLE_BODY, "- Each infection gets a random disease name and one random cure herb from all ten herbs.", row++, col);
+        put_role(ROLE_BODY, "- A Gem of Self Knowledge with Alchemy shows the disease name and cure herb.", row++, col);
+        put_role(ROLE_BODY, "- Without Alchemy, each use has a 50% chance to identify the name; once known, a 50% chance identifies the cure herb.", row++, col);
+        put_role(ROLE_BODY, "- Discoveries are remembered for the current infection and saved. A new infection gets a new name and cure and resets them.", row++, col);
+        put_role(ROLE_BODY, "- Eating the correct cure herb cures disease and restores its penalties instead of applying its normal effect or nourishment.", row++, col);
+        put_role(ROLE_BODY, "- Other herbs act normally. Healing potions and Miruvor always cure disease directly.", row++, col);
         row++;
         help_emit_heading("SHALLOW WATER", row++, col);
         put_role(ROLE_BODY, "- Entering, crossing, or leaving water costs 150% movement energy.", row++, col);
@@ -2324,7 +2330,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- Lava lights nearby squares within radius 2, with walls blocking the glow.", row++, col);
         row++;
         help_emit_heading("POISONOUS SEEP", row++, col);
-        put_role(ROLE_BODY, "- Poison caves contain small green seeps. Movement costs normal energy.", row++, col);
+        put_role(ROLE_BODY, "- Green poisonous seep forms pools and rivers. Movement costs normal energy.", row++, col);
         put_role(ROLE_WARN, "- Contact adds 6 poison stacks before resistance and poison protection. Poison caves remove one resistance level.", row++, col);
         put_role(ROLE_BODY, "- Entry and later actions on seep apply a dose, at most once per action. Leaving does not cure poison.", row++, col);
         put_role(ROLE_BODY, "- Each poisoned creature takes one fifth of its remaining stacks as damage per action, rounded up, consuming those stacks.", row++, col);

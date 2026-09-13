@@ -1070,6 +1070,24 @@ void self_knowledge(void)
         identify[j] = false;
     }
 
+    /* One diagnosis attempt per use; the captured menu can reflow without
+     * rerolling or forgetting discoveries from earlier uses. */
+    if (p_ptr->diseased)
+    {
+        disease_identify();
+        strnfmt(s[i], sizeof(s[i]), "Disease: %s",
+            (p_ptr->disease_knowledge & DISEASE_KNOWN_NAME)
+                ? disease_name() : "Unknown");
+        if (p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+            strnfmt(t[i], sizeof(t[i]),
+                "Cure: a herb of %s. It only cures disease; its usual effects do not apply.",
+                disease_cure_name());
+        else
+            strnfmt(t[i], sizeof(t[i]), "Herb cure: Unknown. A potion of Healing or Miruvor also cures disease.");
+        good[i] = false;
+        i++;
+    }
+
     // Get item flags from equipment
     for (k = INVEN_WIELD; k < INVEN_TOTAL; k++) {
         u32b t1, t2, t3, t4;

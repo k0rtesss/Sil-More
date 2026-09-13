@@ -13,6 +13,8 @@ typedef struct player_pack_action_state
     int turns_left;
     bool completing;
     object_type object;
+    int exchange_item;
+    object_type exchange_object;
 } player_pack_action_state;
 
 static player_pack_action_state pack_action;
@@ -41,6 +43,53 @@ static bool pack_action_object_matches(const object_type* o_ptr)
         && o_ptr->name2 == pack_action.object.name2;
 }
 
+static bool pack_action_objects_match(const object_type* expected,
+    const object_type* actual)
+{
+    if (!expected || !expected->k_idx || !actual || !actual->k_idx)
+        return false;
+
+    return actual->k_idx == expected->k_idx
+        && actual->tval == expected->tval
+        && actual->sval == expected->sval
+        && actual->name1 == expected->name1
+        && actual->name2 == expected->name2
+        && actual->storage == expected->storage;
+}
+
+static int pack_action_exchange_item(void)
+{
+    object_type* o_ptr;
+
+    if (pack_action.exchange_item < 0)
+        return -1;
+
+    if (player_inventory_handle_valid(pack_action.exchange_item))
+    {
+        o_ptr = player_inventory_object(pack_action.exchange_item);
+        if (pack_action_objects_match(&pack_action.exchange_object, o_ptr))
+            return pack_action.exchange_item;
+    }
+
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
+    {
+        int item = player_pack_entry_handle_at(ordinal);
+
+        o_ptr = player_inventory_object(item);
+        if (pack_action_objects_match(&pack_action.exchange_object, o_ptr))
+            return item;
+    }
+
+    for (int item = INVEN_WIELD; item < INVEN_TOTAL; item++)
+    {
+        o_ptr = player_inventory_object(item);
+        if (pack_action_objects_match(&pack_action.exchange_object, o_ptr))
+            return item;
+    }
+
+    return -1;
+}
+
 void player_pack_action_reset(void)
 {
     object_wipe(&pack_action.object);
@@ -50,6 +99,8 @@ void player_pack_action_reset(void)
     pack_action.flag = false;
     pack_action.turns_left = 0;
     pack_action.completing = false;
+    pack_action.exchange_item = -1;
+    object_wipe(&pack_action.exchange_object);
 }
 
 bool player_pack_action_pending(void)
@@ -86,7 +137,8 @@ cptr player_pack_item_action_restriction_message(void)
 }
 
 static bool player_pack_action_start_internal(player_pack_action_kind kind,
-    int item, int arg, bool flag, const object_type* o_ptr, bool force_pack)
+    int item, int arg, bool flag, const object_type* o_ptr, bool force_pack,
+    const object_type* pack_object)
 {
     char o_name[80];
 
@@ -107,12 +159,15 @@ static bool player_pack_action_start_internal(player_pack_action_kind kind,
     pack_action.flag = flag;
     pack_action.turns_left = PACK_ACTION_TURN_COST - 1;
     object_copy(&pack_action.object, o_ptr);
+    pack_action.exchange_item = -1;
+    object_wipe(&pack_action.exchange_object);
 
     tutorial_game_explain("storage.pack_access", "Reaching into the Pack",
         "This action takes three player turns. Attacks or your cancellation can interrupt it; tutorial reading does not spend those turns.");
 
-    object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-    if ((kind == PLAYER_PACK_ACTION_PICKUP
+    object_desc(o_name, sizeof(o_name), pack_object ? pack_object : o_ptr,
+        false, 0);
+    if (pack_object || (kind == PLAYER_PACK_ACTION_PICKUP
             && arg == OBJECT_STORAGE_PACK)
         || (kind == PLAYER_PACK_ACTION_MOVE_STORAGE
             && arg == OBJECT_STORAGE_PACK))
@@ -134,14 +189,37 @@ bool player_pack_action_start(player_pack_action_kind kind, int item, int arg,
     bool flag, const object_type* o_ptr)
 {
     return player_pack_action_start_internal(kind, item, arg, flag, o_ptr,
-        false);
+        false, NULL);
 }
 
 bool player_pack_action_start_forced(player_pack_action_kind kind, int item,
     int arg, bool flag, const object_type* o_ptr)
 {
     return player_pack_action_start_internal(kind, item, arg, flag, o_ptr,
-        true);
+        true, NULL);
+}
+
+bool player_pack_action_start_storage_exchange(int item, int arg,
+    const object_type* incoming, int exchange_item,
+    const object_type* exchange_object)
+{
+    if (player_pack_action_pending() || pack_action.completing
+        || !player_inventory_handle_valid(exchange_item)
+        || !exchange_object || !exchange_object->k_idx)
+    {
+        return false;
+    }
+
+    if (!player_pack_action_start_internal(
+            PLAYER_PACK_ACTION_MOVE_STORAGE, item, arg, false, incoming,
+            true, exchange_object))
+    {
+        return false;
+    }
+
+    pack_action.exchange_item = exchange_item;
+    object_copy(&pack_action.exchange_object, exchange_object);
+    return true;
 }
 
 void player_pack_action_cancel(void)
@@ -230,7 +308,26 @@ static void player_pack_action_complete(player_pack_action_kind kind, int item,
         (void)do_cmd_jewelry_preset_apply(arg);
         break;
     case PLAYER_PACK_ACTION_MOVE_STORAGE:
-        (void)do_cmd_move_item_to_storage(item, (byte)arg);
+        if (pack_action.exchange_item >= 0)
+        {
+            int exchange_item = pack_action_exchange_item();
+
+            if (exchange_item >= 0)
+            {
+                if (item < 0)
+                    (void)do_cmd_wield_floor_storage_exchange(item,
+                        (byte)arg, exchange_item);
+                else
+                    (void)do_cmd_move_item_to_storage_exchange(item,
+                        (byte)arg, exchange_item);
+            }
+            else
+                msg_print("You can no longer complete that storage exchange.");
+        }
+        else
+        {
+            (void)do_cmd_move_item_to_storage(item, (byte)arg);
+        }
         break;
     case PLAYER_PACK_ACTION_NONE:
     default:
@@ -296,6 +393,8 @@ void player_pack_action_process(void)
     pack_action.completing = false;
     pack_action.kind = PLAYER_PACK_ACTION_NONE;
     object_wipe(&pack_action.object);
+    pack_action.exchange_item = -1;
+    object_wipe(&pack_action.exchange_object);
 
     /* The third Pack turn is spent even if final validation now fails. */
     p_ptr->energy_use = 100;

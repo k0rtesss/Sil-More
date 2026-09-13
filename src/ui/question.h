@@ -4,8 +4,8 @@
 #include "h-basic.h"
 
 /*
- * A selectable answer in a question overlay.  `key` is the letter shortcut
- * (0 for none); `label` is the row text; `attr` its TERM_* colour.
+ * A selectable answer in a question overlay.  `key` is the direct keyboard
+ * shortcut (0 for none); `label` is the row text; `attr` its TERM_* colour.
  * A disabled row with key 0 is informational: it keeps its colour and is
  * skipped by keyboard, mouse, touch, and controller selection.
  */
@@ -31,8 +31,9 @@ typedef struct ui_question_button {
  * UI_QUESTION_GLOBAL for both to centre it on the map instead.
  *
  * Blocks in an inkey loop: arrows scroll the highlighted answer,
- * Enter/Space/click/tap confirm, letter shortcuts pick directly, Escape
- * cancels.  Disabled choices are drawn in grey, skipped by arrow navigation,
+ * Enter/Space/click/tap confirm, explicit letter/number shortcuts pick
+ * directly, Escape cancels.  Disabled choices are drawn in grey, skipped by
+ * arrow navigation,
  * and cannot be confirmed by any input method.  Returns the chosen option
  * index, or -1 on cancel.
  */

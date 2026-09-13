@@ -21,6 +21,7 @@ static void ice_map(void) {
     p_ptr->py=p_ptr->px=15; p_ptr->wy=p_ptr->wx=0;
     p_ptr->blind=p_ptr->rage=p_ptr->leaping=false;
     p_ptr->update=p_ptr->redraw=p_ptr->window=0;
+    view_n=temp_n=0;
     g_labyrinth_view_active=false;
     for(int y=0;y<32;y++)for(int x=0;x<32;x++) {
         cave_set_feat(y,x,FEAT_FLOOR);
@@ -99,12 +100,29 @@ static void ice_expect_repaint(void) {
     SDL_DestroySurface(incremental);SDL_DestroySurface(full);
 }
 
+static void ice_expect_source_pixels(SDL_Surface* canvas, int y, int x) {
+    /* Ice is a single static 16x16 asset, not a frame in the torch atlas.
+     * Compare the captured production map tile with every source pixel after
+     * format conversion, independently of the production ice draw function. */
+    SDL_Surface* source=IMG_Load("lib/xtra/graf/ice_sheet.png");assert(source);
+    assert(source->w==16&&source->h==16);
+    assert(!use_bigtile&&g_views[PANE_MAIN].cell_w==16&&g_views[PANE_MAIN].cell_h==16);
+    SDL_Surface* expected=SDL_ConvertSurface(source,canvas->format);assert(expected);
+    assert(SDL_BYTESPERPIXEL(canvas->format)==4);
+    int left=(COL_MAP+x-p_ptr->wx)*16,top=(ROW_MAP+y-p_ptr->wy)*16;
+    assert(left>=0&&top>=0&&left+16<=canvas->w&&top+16<=canvas->h);
+    for(int row=0;row<16;row++)
+        assert(memcmp((byte*)canvas->pixels+(top+row)*canvas->pitch+left*4,
+            (byte*)expected->pixels+row*expected->pitch,16*4)==0);
+    SDL_DestroySurface(expected);SDL_DestroySurface(source);
+}
+
 static void ice_render_tests(void) {
     ice_map();
     cave_set_feat(10,11,FEAT_ICE);cave_set_feat(10,12,FEAT_ICE);
     Term_fresh();SDL_Surface* first=capture(82);
     assert(ice_texture&&cell_count==2);
-    expect_middle_frame(first,10,11,"lib/xtra/graf/ice_sheet.png");
+    ice_expect_source_pixels(first,10,11);
     u64b rng=Rand_state_export();s32b turns=turn;
     int loads=image_loads,textures=texture_creations;
     for(int i=0;i<100;i++)expect_paused((1000ULL+i)*IDLE_STEP_NS);
@@ -183,6 +201,11 @@ static void ice_tests(void) {
     c_info=calloc(1,sizeof(*c_info));p_ptr->pcharacter=0;
     cave_when=calloc(MAX_DUNGEON_HGT,sizeof(*cave_when));
     cave_natural=calloc(MAX_DUNGEON_HGT,sizeof(*cave_natural));
+    /* Standing transformations run real update_view(), unlike the shared
+     * fixture-animation tests. Supply its normal initialization buffers. */
+    view_g=calloc(VIEW_MAX,sizeof(*view_g));
+    temp_g=calloc(TEMP_MAX,sizeof(*temp_g));
+    assert(view_g&&temp_g);
     mon_list=calloc(64,sizeof(*mon_list));r_info=calloc(64,sizeof(*r_info));
     o_list=calloc(64,sizeof(*o_list));k_info=calloc(64,sizeof(*k_info));
     inventory=calloc(INVEN_TOTAL,sizeof(*inventory));l_list=calloc(64,sizeof(*l_list));

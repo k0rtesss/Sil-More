@@ -1,7 +1,9 @@
 /* File: level-generation-rooms-vaults.c */
 
 #include "angband.h"
+#include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
+#include "level-generation/level-generation-terrain-vaults.h"
 
 /* Fixed lore objects are placed independently of the random loot setting. */
 static bool place_vault_scroll_token(char symbol, int y, int x)
@@ -119,6 +121,10 @@ bool vault_is_valid_for_depth(const vault_type* v_ptr, int depth)
  */
 bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
 {
+    int planned_h = flip_d ? v_ptr->wid : v_ptr->hgt;
+    int planned_w = flip_d ? v_ptr->hgt : v_ptr->wid;
+    if (!terrain_history_vault_fits(y0 - planned_h / 2, x0 - planned_w / 2,
+            y0 - planned_h / 2 + planned_h - 1, x0 - planned_w / 2 + planned_w - 1)) return false;
     int ymax = v_ptr->hgt;
     int xmax = v_ptr->wid;
     cptr data = v_text + v_ptr->text;
@@ -147,6 +153,8 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             v_name + v_ptr->name, p_ptr->depth);
         return false;
     }
+
+    terrain_vault_begin();
 
     // reflections
     if ((p_ptr->depth > 0) && (p_ptr->depth < MORGOTH_DEPTH))
@@ -221,6 +229,8 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             /* Hack -- skip "non-grids" but still advance bbox only on placed tiles */
             if (*t == ' ')
                 continue;
+
+            terrain_vault_record(y, x, v_ptr, *t);
 
             /* Track bbox of actual vault content */
             if (y < v_min_y) v_min_y = y;
@@ -1150,6 +1160,7 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
  */
 bool solid_rock_reduced_padding(int y1, int x1, int y2, int x2)
 {
+    if (!terrain_history_vault_fits(y1, x1, y2, x2)) return false;
     int y, x;
 
     if (x2 >= MAX_DUNGEON_WID || y2 >= MAX_DUNGEON_HGT)

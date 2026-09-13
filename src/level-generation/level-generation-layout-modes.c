@@ -1,6 +1,7 @@
 /* File: level-generation-layout-modes.c */
 
 #include "angband.h"
+#include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
 
 void reset_partition_population_metadata(void)
@@ -310,6 +311,14 @@ void apply_quadrant_generation_modes(void)
     {
         partition_bridge_styles[i] = -1;
         partition_big_cave_types[i] = BIG_CAVE_NONE;
+
+        /* Preexisting geology constrains later regional construction. Keep
+         * incompatible elemental rules from covering an older river. */
+        int gy1, gy2, gx1, gx2, ancient_material = 0;
+        if (compute_partition_bounds(i, grid_rows, grid_cols, &gy1, &gy2, &gx1, &gx2))
+            ancient_material = terrain_history_material_in_bounds(gy1, gx1, gy2, gx2);
+        if (ancient_material && (modes[i] == QUAD_MODE_CHASM || modes[i] == QUAD_MODE_BIG_CAVE))
+            modes[i] = QUAD_MODE_CAVEY;
 
         switch (modes[i])
         {

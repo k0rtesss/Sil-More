@@ -1199,6 +1199,11 @@ static bool run_test(void)
             {
             /* Floors */
             case FEAT_FLOOR:
+            case FEAT_BRIDGE_WATER_H: case FEAT_BRIDGE_WATER_V:
+            case FEAT_BRIDGE_CHASM_H: case FEAT_BRIDGE_CHASM_V:
+            case FEAT_BRIDGE_LAVA_H: case FEAT_BRIDGE_LAVA_V:
+            case FEAT_BRIDGE_POISON_H: case FEAT_BRIDGE_POISON_V:
+            case FEAT_BRIDGE_ICE_H: case FEAT_BRIDGE_ICE_V:
 
             /* Secret doors */
             case FEAT_SECRET:

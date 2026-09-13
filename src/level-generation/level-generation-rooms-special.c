@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "level-generation/level-generation-internal.h"
+#include "level-generation/level-generation-landmarks.h"
 
 bool vault_template_has_aule(vault_type *v) {
     if (!v || v->text == 0 || v->hgt == 0) return false;
@@ -82,7 +83,13 @@ void check_quest_vault_integrity(const char* checkpoint_name) {
               checkpoint_name, check_icky, check_room);
 
     /* Alert if vault appears to be gone */
-    if (check_walls < 50 && check_floors < 30) {
+    bool terrain_changed = false;
+    for (int cy = qv_stored_y1; cy <= qv_stored_y2; cy++)
+        for (int cx = qv_stored_x1; cx <= qv_stored_x2; cx++)
+            if (terrain_landmark_structure_cell(cy, cx)) terrain_changed = true;
+    if (terrain_changed) {
+        log_trace("VAULT INTEGRITY [%s]: Ordinary quest structure changed by validated terrain; objective cells/access preserved", checkpoint_name);
+    } else if (check_walls < 50 && check_floors < 30) {
         log_trace("VAULT INTEGRITY WARNING [%s]: Vault appears to have been OVERWRITTEN! Very low content.", checkpoint_name);
     }
 }

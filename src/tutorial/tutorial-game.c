@@ -53,7 +53,7 @@ typedef struct condition_lesson {
 #define CONDITION(FIELD, NAME, EFFECT) \
     { "status." #FIELD, NAME, offsetof(player_type, FIELD), EFFECT }
 static const condition_lesson conditions[] = {
-    CONDITION(diseased, "Diseased", "Disease lowers Constitution by 1 on infection and a random attribute by 1 every 50 player turns. Rest does not cure it."),
+    CONDITION(diseased, "Diseased", "Disease lowers Constitution by 1 on infection and a random attribute by 1 every 100 player turns. Rest does not cure it."),
     CONDITION(poisoned, "Poisoned", "Poison prevents ordinary Health regeneration."),
     CONDITION(cut, "Bleeding", "Bleeding prevents ordinary Health regeneration. Healing halves bleeding; it does not always stop it."),
     CONDITION(stun, "Stunned", "Stun penalizes every skill. More than 100 stun prevents acting."),
@@ -199,6 +199,12 @@ static bool item_is_remedy(const object_type *item, const char *condition)
             || item->sval == SV_POTION_true_SIGHT;
     }
     if (item->tval == TV_FOOD) {
+        if (!strcmp(condition, "diseased"))
+            return (p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+                && disease_herb_matches(item);
+        /* Once diagnosed, this herb is known to replace its normal effects. */
+        if ((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+            && disease_herb_matches(item)) return false;
         if (!strcmp(condition, "cut") || !strcmp(condition, "health"))
             return item->sval == SV_FOOD_HEALING;
         if (!strcmp(condition, "drain")) return item->sval == SV_FOOD_RESTORATION
@@ -776,6 +782,7 @@ static void tutorial_game_upgrade_notice(void)
 static int terrain_lesson_feature(int feat)
 {
     if (feat >= FEAT_WARDED && feat <= FEAT_WARDED3) return FEAT_WARDED;
+    if (FEAT_IS_BRIDGE(feat)) return FEAT_BRIDGE_HEAD;
     if (feat > FEAT_DOOR_HEAD && feat < FEAT_DOOR_HEAD + 8) return FEAT_DOOR_HEAD + 1;
     if (feat >= FEAT_DOOR_HEAD + 8 && feat <= FEAT_DOOR_TAIL) return FEAT_DOOR_HEAD + 8;
     if (feat > FEAT_FORGE_NORMAL_HEAD && feat <= FEAT_FORGE_NORMAL_TAIL) return FEAT_FORGE_NORMAL_HEAD + 1;

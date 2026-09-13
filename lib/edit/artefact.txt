@@ -823,7 +823,7 @@ Y:HARNESS:55
 W:8:20:60:25000
 P:1:0d0:1:1d4
 F:CHEAT_DEATH | NOBLE_ITEM
-B:0/4
+B:0/5
 D:The shield of Glorfindel, Lord of the House of the Golden Flower in
 D: Gondolin. When the Hidden City fell, he led the survivors through the
 D: mountains and faced a Balrog in single combat upon a narrow ledge. He

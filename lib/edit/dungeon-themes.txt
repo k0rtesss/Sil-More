@@ -1,0 +1,146 @@
+# Dungeon terrain themes. Read on startup; restart after editing.
+# This file controls terrain material and shape independently of visual style IDs.
+# Ordinary rooms, caves and labyrinths share the depth profile. Elemental big
+# caves retain their own material: fire=lava, ice=ice, poison=poison.
+# V is this file's schema version (independent of the game/save version).
+V:3
+
+# H:depth:ancient:disaster:overflow:second_system_chance
+# Optional V3 history records (omitted depths default to 45:30:25:35).
+# First three values are relative weights, 0..1000, with a positive sum.
+# Ancient: terrain first, construction fits its banks and builds crossings.
+# Disaster: a planned later system cuts the finished dungeon.
+# Overflow: construction around an old system, then selected basins rise.
+# Second-system chance is 0..100%; requires a different enabled D material.
+H:1:45:30:25:35
+H:2:45:30:25:35
+H:3:45:30:25:35
+H:4:45:30:25:35
+H:5:45:30:25:35
+H:6:45:30:25:35
+H:7:45:30:25:35
+H:8:45:30:25:35
+H:9:45:30:25:35
+H:10:45:30:25:35
+H:11:45:30:25:35
+H:12:45:30:25:35
+H:13:45:30:25:35
+H:14:45:30:25:35
+H:15:45:30:25:35
+H:16:45:30:25:35
+H:17:45:30:25:35
+H:18:45:30:25:35
+H:19:45:30:25:35
+H:20:45:30:25:35
+
+# Exactly one D record for every dungeon depth 1..20; depth * 50 = feet.
+# D:depth:name:water:chasm:lava:poison:ice:chance:min_length:max_length:max_width:pool_chance
+# Names: 1..47 letters/digits/spaces/underscores/hyphens. No inline comments.
+# Material weights: 0..1000, relative odds when a feature is attempted.
+# Chance: 0..100 percent per eligible region (0 disables ordinary features).
+# Length: 6..48 centreline cells, min <= max; width: 1..3 terrain cells.
+# Pool chance: 0..100 percent for an accompanying small pool.
+# At least one material needs positive weight when chance is nonzero.
+# Protected cells and walking and one-tile jump routes limit actual shape size.
+# D shapes are local accents; M records below control the underground networks.
+# D material weights apply to both local accents and underground networks.
+
+# 50-100 ft: occasional small watercourses and pools.
+D:1:Upper halls:1:0:0:0:0:20:6:8:1:15
+D:2:Upper halls:1:0:0:0:0:30:6:10:1:15
+# 150-200 ft: occasional small watercourses and cracks.
+D:3:Shallow stone:9:1:0:0:0:12:6:10:1:10
+D:4:Shallow stone:8:2:0:0:0:20:6:12:1:15
+# 250-350 ft: green and damp; water dominates.
+D:5:Green caves:9:1:0:0:0:45:8:18:2:35
+D:6:Green caves:9:1:0:0:0:55:10:22:2:40
+D:7:Green caves:8:2:0:0:0:55:10:24:2:40
+# 400-550 ft: shadowed stone, with water and more chasms.
+D:8:Shadowed stone:5:5:0:0:0:45:8:22:2:25
+D:9:Shadowed stone:4:6:0:0:0:50:10:24:2:25
+D:10:Shadowed stone:4:6:0:0:0:50:10:26:2:25
+D:11:Deep shadow:3:6:0:1:0:50:10:26:2:25
+# 600-700 ft: rusty metallic halls; poison seeps suit this depth band.
+D:12:Rusty metallic halls:2:2:0:6:0:55:10:26:2:40
+D:13:Rusty metallic halls:2:2:1:7:0:60:10:28:2:40
+D:14:Rusty metallic halls:2:2:2:8:0:60:12:28:2:40
+# 750-850 ft: deep forges, hotter terrain with poison and broken ground.
+D:15:Deep forges:2:3:6:4:0:55:10:28:2:30
+D:16:Deep forges:2:3:8:4:0:60:12:30:3:30
+D:17:Deep forges:2:3:9:4:0:60:12:32:3:30
+# 900-1000 ft: fiery depths. Special/final-level generation retains its policy.
+D:18:Fiery depths:2:3:12:4:0:65:12:32:3:35
+D:19:Fiery depths:2:3:14:4:0:65:12:34:3:35
+D:20:Fiery depths:2:3:14:4:0:65:12:34:3:35
+
+# Exactly one M record for every depth 1..20 in schema V:2 or V:3.
+# M:depth:chance:min_span_percent:max_span_percent:min_width:max_width:lake_chance:branch_chance
+# Chance: 0..100 percent per eligible level; spans: 35..95 percent of the level
+# dimension along the network; channel widths: 1..12 terrain cells; min <= max.
+# Compact chamber and pool families do not require the minimum map span.
+# N one_tile_percent rolls literal one-cell ordinary channel runs. Other runs
+# draw from max(2,min_width)..max_width; max_width=1 keeps them all one cell.
+# The rare broad river family's core independently uses widths 2..4.
+# Lake chance: 0..100 percent for a broad river's second basin, within N max.
+# Branch chance: 0..100 percent for an optional feeder in chain/chamber/river.
+# Tributary networks instead require 2..3 distinct confluences.
+# Material uses D weights; N chooses the principal network family.
+# Enabled networks require positive D material weight even if D chance is zero.
+# Networks may cross partitions, corridors and suitable vaults.
+# Essential content and architectural crossings can interrupt the final footprint.
+# V:1 D-only files remain supported and use built-in M and N defaults.
+# V:2 files contain D and M records and use built-in N defaults.
+M:1:100:50:75:1:2:30:20
+M:2:100:50:75:1:2:30:20
+M:3:100:50:80:1:2:35:25
+M:4:100:50:80:1:2:35:25
+M:5:100:50:80:1:2:35:25
+M:6:100:50:80:1:2:35:25
+M:7:100:50:80:1:2:35:25
+M:8:100:55:90:1:2:40:30
+M:9:100:55:90:1:2:40:30
+M:10:100:55:90:1:2:40:30
+M:11:100:55:90:1:2:40:30
+M:12:100:55:90:1:2:40:30
+M:13:100:55:90:1:2:40:30
+M:14:100:55:90:1:2:40:30
+M:15:100:55:90:1:2:40:30
+M:16:100:55:90:1:2:40:30
+M:17:100:55:90:1:2:40:30
+M:18:100:55:90:1:2:40:30
+M:19:100:55:90:1:2:40:30
+M:20:100:55:90:1:2:40:30
+
+# Exactly one N record per depth 1..20 in schema V:3.
+# N:depth:chain:tributaries:chamber:pools:river:min_basins:max_basins:min_radius:max_radius:one_tile_percent
+# Family weights: 0..1000, relative odds for linked basins, branching channels,
+# a flooded chamber, scattered pools, or a rare broad river. At least one
+# family needs positive weight when the matching M chance is nonzero.
+# Basin count bounds: 1..6, min <= max, used by chain and pool families.
+# Chambers always have one basin; tributaries have up to two within max_basins.
+# Broad rivers have one or two within max_basins, using M lake_chance above.
+# Basin radius: 2..12 cells, min <= max; both irregular rx/ry stay in this range.
+# Local floor relief and protected cells vary the final outline and wet area.
+# One-tile percent: 0..100, the literal one-cell roll for ordinary channel runs.
+# Basin overlaps and turns may alter the measured final share of narrow cells.
+# Basin footprints and connections adapt to protected cells and walking routes.
+N:1:40:30:15:5:10:2:4:3:6:70
+N:2:40:30:15:5:10:2:4:3:6:70
+N:3:40:30:15:5:10:2:4:3:6:70
+N:4:40:30:15:5:10:2:4:3:6:70
+N:5:40:30:15:5:10:2:4:3:8:70
+N:6:40:30:15:5:10:2:4:3:8:70
+N:7:40:30:15:5:10:2:4:3:8:70
+N:8:40:30:15:5:10:2:4:3:8:70
+N:9:40:30:15:5:10:2:4:3:8:70
+N:10:40:30:15:5:10:2:4:3:8:70
+N:11:40:30:15:5:10:2:4:3:8:70
+N:12:40:30:15:5:10:2:4:3:8:70
+N:13:40:30:15:5:10:2:4:3:8:70
+N:14:40:30:15:5:10:2:4:3:8:70
+N:15:35:10:25:20:10:2:4:3:8:70
+N:16:35:10:25:20:10:2:4:3:8:70
+N:17:35:10:25:20:10:2:4:3:8:70
+N:18:35:10:25:20:10:2:4:3:8:70
+N:19:35:10:25:20:10:2:4:3:8:70
+N:20:35:10:25:20:10:2:4:3:8:70

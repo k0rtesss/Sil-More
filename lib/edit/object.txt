@@ -2298,7 +2298,13 @@ P:0:0d0:0:0d0
 A:2/70
 D:A gem of inward sight, turning the bearer's perception
 D: upon themselves. It shows all of your status effects and
-D: character traits. Each use also gives a chance
+D: character traits. While diseased, it identifies the disease
+D: name and cure herb if you have Alchemy. Without Alchemy,
+D: each use has a 50% chance to identify the disease name;
+D: once the name is known, each use has a 50% chance to
+D: identify the cure herb. Discoveries last for the current
+D: infection and are saved. A new infection gets a new name
+D: and cure and resets them. Each use also gives a chance
 D: to reveal one active curse.
 
 
@@ -2819,6 +2825,10 @@ D: even as their judgment dims. It sends you into a dark rage
 D: (+1 Str/Con, -1 Dex/Gra, special melee attack, resistance
 D: to fear) for 10d4 turns. Herbs provide nourishment for about
 D: 250 turns under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:381:Sustenance
@@ -2833,6 +2843,10 @@ D: and green even in the deepest dark. The wanderers of
 D: Beleriand long relied upon such plants when other food could
 D: not be found. It provides nourishment for about 2,000 turns
 D: under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 # Do not move Herb of Terror from this location, used by quests.
 
@@ -2849,6 +2863,10 @@ D: limbs find desperate swiftness. It induces fear that lasts
 D: for 10d4 turns and a burst of speed that lasts 5d4 turns.
 D: Herbs provide nourishment for about 250 turns under normal
 D: conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:383:Healing
@@ -2862,8 +2880,12 @@ D:An herb of ancient virtue, long known to the healers of the
 D: Eldar. Its leaves, when eaten, close wounds and ease pain,
 D: mending what battle has broken. It halves any current
 D: bleeding and restores 11 health and 12% of your maximum
-D: health. It does not cure disease. Herbs provide nourishment
-D: for about 250 turns under normal conditions.
+D: health. Herbs provide nourishment for about 250 turns under
+D: normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:384:Restoration
@@ -2876,9 +2898,12 @@ F:EASY_KNOW
 D:A rare herb prized above all others by the healers of the
 D: Elder Days, for it restores what has been diminished and
 D: renews what the Enemy's malice has drained. It restores all
-D: of your statistics by up to 3 drained points each. It does
-D: not cure disease or restore disease penalties. Herbs provide
+D: of your statistics by up to 3 drained points each. Herbs provide
 D: nourishment for about 250 turns under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:385:Emptiness
@@ -2892,6 +2917,10 @@ D:A withered herb, dry and ashen, that grows in blighted soil
 D: where nothing wholesome takes root. It fills the belly with
 D: a gnawing hollowness, making you more hungry (by 1,000 turns
 D: under normal conditions).
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:386:Visions
@@ -2908,6 +2937,10 @@ D: sometimes the veil of blindness is lifted thereby. It causes
 D: you to hallucinate for 80d4 turns, but cures blindness in
 D: the process. Herbs provide nourishment for about 250 turns
 D: under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:387:Entrancement
@@ -2922,6 +2955,10 @@ D: as though the eater were caught in one of the Enemy's lesser
 D: snares. It induces a trance that lasts for 10d4 turns. Herbs
 D: provide nourishment for about 250 turns under normal
 D: conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:388:Weakness
@@ -2935,6 +2972,10 @@ D:A bitter herb that saps the body's vigour, leaving the limbs
 D: heavy and the grip uncertain. It reduces your strength by
 D: one point. Herbs provide nourishment for about 250 turns
 D: under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:389:Sickness
@@ -2945,12 +2986,17 @@ P:0:0d0:0:0d0
 A:8/30
 F:EASY_KNOW
 D:A sickly herb, spotted and foul, that gnaws at the body's
-D: endurance. Eating it always infects you with disease:
+D: endurance. Its normal effect is to infect a healthy eater
+D: with disease:
 D: -1 Constitution immediately, then -1 to a random attribute
-D: every 50 player turns until cured. Rest does not cure it.
-D: Potions of Healing or Miruvor cure it and restore only
+D: every 100 player turns until cured. Rest does not cure it.
+D: Potions of Healing or Miruvor cure disease directly and restore only
 D: the attribute points lost to disease. It provides
 D: nourishment for about 250 turns under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:399:& Piece~ of Dark Bread
@@ -2982,7 +3028,7 @@ D: sour taint beneath the salt. Eating a strip provides
 D: nourishment for about 2,000 turns under normal conditions,
 D: with a 20% chance of causing disease.
 D: Disease causes -1 Constitution immediately, then -1 to a
-D: random attribute every 50 player turns until cured by a
+D: random attribute every 100 player turns until cured by a
 D: potion of Healing or Miruvor. Rest does not cure it.
 
 

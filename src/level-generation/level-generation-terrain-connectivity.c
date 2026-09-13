@@ -10,12 +10,17 @@ bool connectivity_rescue_traversable(int ry, int rx)
 
     if (cave_feat[ry][rx] == FEAT_WALL_PERM)
         return false;
-    if (cave_feat[ry][rx] == FEAT_CHASM)
+    /* These count as floor to the renderer, but are not a dry rescue route.
+     * Searching through lava/poison without replacing them repeatedly finds
+     * the same unusable path and never connects an old riverbank. */
+    if (cave_feat[ry][rx] == FEAT_CHASM || cave_feat[ry][rx] == FEAT_LAVA
+        || cave_feat[ry][rx] == FEAT_POISON)
         return false;
 
     bool is_wall = (cave_feat[ry][rx] >= FEAT_WALL_HEAD)
         && (cave_feat[ry][rx] <= FEAT_WALL_TAIL)
         && (cave_feat[ry][rx] != FEAT_SECRET);
+    if (is_wall && terrain_generation_reserved(ry, rx)) return false;
 
     /* Never carve through Morgoth's vault walls: require using the forced doors. */
     if (morgoth_level_active && (cave_info[ry][rx] & CAVE_G_VAULT) && is_wall)
@@ -431,8 +436,8 @@ bool check_connectivity(void)
         return (true);
     }
 
-    // Make sure player can reach down stairs without going through rubble and
-    // chasms
+    // Reach down stairs without rubble or walking through hazards.  Legal
+    // one-tile leaps count as access, including Leaping routes over chasms.
     flood_access(p_ptr->py, p_ptr->px, cave_access, false);
     for (y = 0; y < p_ptr->cur_map_hgt; y++)
         for (x = 0; x < p_ptr->cur_map_wid; x++)
@@ -445,7 +450,7 @@ bool check_connectivity(void)
             }
         }
 
-    genlog_fail("CONNECTIVITY FAILED: player cannot reach down stairs without rubble/chasms");
+    genlog_fail("CONNECTIVITY FAILED: player cannot reach down stairs by walking or legal one-tile leaps without rubble");
     return (false);
 }
 
@@ -981,17 +986,7 @@ bool connect_rooms_stairs(void)
         }
     }
 
-    /* Do not mix the legacy random-chasm pass with partition chasm rooms. The
-     * two systems use different styling/connectivity rules and produce broken
-     * visuals/access when overlaid. */
-    if (!level_has_chasm_partition())
-    {
-        build_chasms();
-    }
-    else
-    {
-        log_trace("connect_rooms_stairs: skipping legacy build_chasms() because the partition generator already placed chasm terrain");
-    }
+    /* Standalone terrain is planned later, after doors have been placed. */
 
     return (true);
 }

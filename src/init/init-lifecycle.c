@@ -6,6 +6,7 @@
 #include "h-define.h"
 #include "init.h"
 #include "item_set.h"
+#include "level-generation/level-generation-themes.h"
 #include "log/log.h"
 #include "metarun.h"
 #include "score/score_guid.h"
@@ -295,6 +296,7 @@ void init_angband(void)
     style_name = style_head.name_ptr;
     if (init_partition_info())
         quit("Cannot initialize partition rules");
+    (void)terrain_themes_load();
 
     /* Initialize curses info */
     note("[Initializing arrays... (curses)]");

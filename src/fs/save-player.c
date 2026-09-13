@@ -50,6 +50,9 @@ void wr_extra(void)
     wr_s16b(p_ptr->diseased);
     for (i = 0; i < A_MAX; ++i)
         wr_s16b(p_ptr->stat_disease[i]);
+    wr_byte(p_ptr->disease_name);
+    wr_byte(p_ptr->disease_cure);
+    wr_byte(p_ptr->disease_knowledge);
 
     /* Dump the skill bases */
     for (i = 0; i < S_MAX; ++i)

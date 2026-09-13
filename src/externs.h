@@ -124,7 +124,7 @@ typedef enum hint_message_destination_kind {
 typedef struct hint_message_destination {
     byte kind;
     /* The exact target reconstructs the clue's direction and discovery state;
-     * the map exposes only its distance/direction area until it is found. */
+     * moving-target clues may remain text-only instead of exposing an area. */
     s16b y;
     s16b x;
     s16b id;
@@ -786,6 +786,10 @@ extern bool throw_slot_enabled[INVEN_TOTAL];
 /* cmd3.c */
 extern void do_cmd_use_item_by_index(int item);
 extern bool do_cmd_move_item_to_storage(int item, byte target_storage);
+extern bool do_cmd_move_item_to_storage_exchange(int item,
+    byte target_storage, int exchange_item);
+extern bool do_cmd_wield_floor_storage_exchange(int item,
+    byte target_storage, int exchange_item);
 extern void do_cmd_use_item(void);
 extern void do_cmd_use_item_enhanced(void);
 extern void do_cmd_inven(void);
@@ -1628,6 +1632,10 @@ extern int inventory_limit_removal_space_for_object(
     const object_type* o_ptr);
 extern int inventory_limit_usage_after_replacing(const object_type* incoming,
     const object_type* removed, int remove_quantity);
+extern bool inventory_limit_storage_exchange_possible(
+    const object_type* incoming, const object_type* outgoing);
+extern bool inventory_limit_floor_storage_exchange_possible(
+    const object_type* incoming, const object_type* outgoing);
 extern int inventory_limit_max_carryable_quantity(const object_type* o_ptr);
 extern bool inventory_limit_object_matches_group(
     enum inventory_limit_group group, const object_type* o_ptr);
@@ -2148,6 +2156,9 @@ extern bool player_pack_action_start(player_pack_action_kind kind, int item,
     int arg, bool flag, const object_type* o_ptr);
 extern bool player_pack_action_start_forced(player_pack_action_kind kind,
     int item, int arg, bool flag, const object_type* o_ptr);
+extern bool player_pack_action_start_storage_exchange(int item, int arg,
+    const object_type* incoming, int exchange_item,
+    const object_type* exchange_object);
 extern bool player_pack_action_pending(void);
 extern int player_pack_action_turns_left(void);
 extern bool player_pack_action_completing(player_pack_action_kind kind);
@@ -2263,6 +2274,11 @@ extern bool allow_player_confusion(monster_type* m_ptr);
 extern bool set_confused(int v);
 extern bool set_poisoned(int v);
 extern bool infect_disease(void);
+extern void disease_assign_identity(void);
+extern void disease_identify(void);
+extern cptr disease_name(void);
+extern cptr disease_cure_name(void);
+extern bool disease_herb_matches(const object_type* o_ptr);
 extern bool cure_disease(void);
 extern void process_disease(void);
 extern bool allow_player_fear(monster_type* m_ptr);
@@ -2548,6 +2564,8 @@ extern void sdl_question_menu_set_scroll_offset_target(int* offset,
 extern bool sdl_question_menu_take_touch_scrolled(void);
 extern void sdl_question_menu_set_blocking_input(bool blocking);
 extern bool sdl_question_menu_blocks_input(void);
+extern bool sdl_question_menu_queue_navigation(int direction);
+extern int sdl_question_menu_take_navigation(void);
 extern void sdl_question_menu_set_nonblocking(bool nonblocking);
 extern void sdl_question_menu_set_context_hint(void);
 extern void sdl_question_menu_clear_context_hint(void);

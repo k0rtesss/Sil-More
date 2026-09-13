@@ -247,7 +247,7 @@ void process_player(void)
     int depth_counter_increment;
     int action_start_y = p_ptr->py;
     int action_start_x = p_ptr->px;
-    /* An infection acquired during this action starts a full 50-turn cycle. */
+    /* An infection acquired during this action starts a full 100-turn cycle. */
     bool disease_was_active = p_ptr->diseased != 0;
 
     sil_popup_trace_stage("next-player-processing");

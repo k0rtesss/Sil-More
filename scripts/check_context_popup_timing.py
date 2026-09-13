@@ -83,8 +83,44 @@ static void move_once(void)
     assert(!inkey_flag);
 }
 
+static void check_pickup_context_label(void)
+{
+    int kind = 0;
+    int key = 0;
+    char label[32];
+
+    popup_move_fixture(false);
+    p_ptr->px = 12;
+    for (int i = 1; i < z_info->k_max; i++)
+    {
+        if (k_info[i].tval == TV_SWORD && k_info[i].sval == SV_DAGGER)
+        {
+            kind = i;
+            break;
+        }
+    }
+    assert(kind);
+    object_prep(&o_list[1], kind);
+    o_list[1].iy = 10;
+    o_list[1].ix = 12;
+    o_list[1].marked = true;
+    cave_o_idx[10][12] = 1;
+    o_max = 2;
+    o_cnt = 1;
+    assert(object_can_choose_pack_or_harness(&o_list[1]));
+
+    assert(touch_shortcut_context_action(' ', false, &key, label,
+        sizeof(label)));
+    assert(key == ' ' && strcmp(label, "Pick Up") == 0);
+    assert(touch_shortcut_context_action(' ', true, &key, label,
+        sizeof(label)));
+    assert(key == ' ' && strcmp(label, "Pick Up") == 0);
+    puts("PASS: Pack/Harness chooser is labeled Pick Up in both context views.");
+}
+
 static void check_popup_timing(void)
 {
+    check_pickup_context_label();
     puts("Checking real movement popup ordering...");
     popup_move_fixture(true);
     move_once();

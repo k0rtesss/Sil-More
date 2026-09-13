@@ -1638,7 +1638,8 @@ int inven_takeoff(int item, int amt)
     }
 
     bool can_drop_here = (cave_feat[p_ptr->py][p_ptr->px] == FEAT_FLOOR
-        || cave_feat[p_ptr->py][p_ptr->px] == FEAT_SUNLIGHT);
+        || cave_feat[p_ptr->py][p_ptr->px] == FEAT_SUNLIGHT
+        || FEAT_IS_BRIDGE(cave_feat[p_ptr->py][p_ptr->px]));
     s16b o_idx = 0;
 
     if (can_drop_here)
@@ -1661,7 +1662,8 @@ int inven_takeoff(int item, int amt)
             continue;
 
         if (cave_feat[yy][xx] != FEAT_FLOOR
-            && cave_feat[yy][xx] != FEAT_SUNLIGHT)
+            && cave_feat[yy][xx] != FEAT_SUNLIGHT
+            && !FEAT_IS_BRIDGE(cave_feat[yy][xx]))
             continue;
 
         if (cave_o_idx[yy][xx] != 0)

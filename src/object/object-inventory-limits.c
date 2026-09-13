@@ -520,6 +520,76 @@ int inventory_limit_usage_after_replacing(const object_type* incoming,
         incoming);
 }
 
+static bool inventory_limit_storage_exchange_possible_internal(
+    const object_type* incoming, const object_type* outgoing,
+    bool allow_non_stowable)
+{
+    enum inventory_limit_group source_group;
+    enum inventory_limit_group target_group;
+    object_type incoming_target;
+    object_type outgoing_source;
+    int source_limit;
+    int target_limit;
+    int source_usage;
+    int target_usage;
+
+    if (!incoming || !incoming->k_idx || incoming->number <= 0
+        || !outgoing || !outgoing->k_idx || outgoing->number <= 0
+        || (!allow_non_stowable
+            && (!object_can_choose_pack_or_harness(incoming)
+                || !object_can_choose_pack_or_harness(outgoing))))
+    {
+        return false;
+    }
+
+    source_group = volume_group_for_object(incoming);
+    target_group = volume_group_for_object(outgoing);
+    if (!inventory_limit_is_volume_group(source_group)
+        || !inventory_limit_is_volume_group(target_group)
+        || source_group == target_group)
+    {
+        return false;
+    }
+
+    /* Project both pools after the two objects trade storage.  Doing this in
+     * the limit layer keeps carriage reductions and legacy high-water
+     * allowances identical to the ordinary capacity checks. */
+    object_copy(&incoming_target, incoming);
+    incoming_target.storage = target_group == INV_LIMIT_PACK
+        ? OBJECT_STORAGE_PACK : OBJECT_STORAGE_HARNESS;
+    object_copy(&outgoing_source, outgoing);
+    outgoing_source.storage = source_group == INV_LIMIT_PACK
+        ? OBJECT_STORAGE_PACK : OBJECT_STORAGE_HARNESS;
+
+    source_usage = projected_inventory_volume_usage(source_group, incoming,
+        MAX(incoming->number, 1), &outgoing_source);
+    target_usage = projected_inventory_volume_usage(target_group, outgoing,
+        MAX(outgoing->number, 1), &incoming_target);
+    source_limit = MAX(volume_limit_for_group(source_group),
+        grandfathered_volume[source_group]);
+    target_limit = MAX(volume_limit_for_group(target_group),
+        grandfathered_volume[target_group]);
+
+    return source_usage <= source_limit && target_usage <= target_limit;
+}
+
+bool inventory_limit_storage_exchange_possible(
+    const object_type* incoming, const object_type* outgoing)
+{
+    return inventory_limit_storage_exchange_possible_internal(incoming,
+        outgoing, false);
+}
+
+bool inventory_limit_floor_storage_exchange_possible(
+    const object_type* incoming, const object_type* outgoing)
+{
+    /* An explicit floor-equip exchange may stow an otherwise Harness-only
+     * item.  This is a capacity relief operation, not a new ordinary Pack /
+     * Harness destination for the item. */
+    return inventory_limit_storage_exchange_possible_internal(incoming,
+        outgoing, true);
+}
+
 bool inventory_type_slot_available(const object_type* o_ptr,
     bool record_failure)
 {

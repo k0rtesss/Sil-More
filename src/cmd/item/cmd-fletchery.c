@@ -348,7 +348,8 @@ static bool drop_fletchered_arrows_near(object_type* arrows)
     log_fletchery_object_state("drop_attempt", arrows, -1);
 
     if ((cave_feat[p_ptr->py][p_ptr->px] == FEAT_FLOOR)
-        || (cave_feat[p_ptr->py][p_ptr->px] == FEAT_SUNLIGHT))
+        || (cave_feat[p_ptr->py][p_ptr->px] == FEAT_SUNLIGHT)
+        || FEAT_IS_BRIDGE(cave_feat[p_ptr->py][p_ptr->px]))
     {
         object_copy(&drop_obj, arrows);
         o_idx = floor_carry(p_ptr->py, p_ptr->px, &drop_obj);
@@ -370,7 +371,8 @@ static bool drop_fletchered_arrows_near(object_type* arrows)
             continue;
 
         if (cave_feat[yy][xx] != FEAT_FLOOR
-            && cave_feat[yy][xx] != FEAT_SUNLIGHT)
+            && cave_feat[yy][xx] != FEAT_SUNLIGHT
+            && !FEAT_IS_BRIDGE(cave_feat[yy][xx]))
         {
             continue;
         }

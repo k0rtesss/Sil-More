@@ -4535,9 +4535,12 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
                 body_lines[body_count].dist = skeleton_note_distance_phrase(
                     unique_dist, &layout, distance_buf[body_count],
                     sizeof(distance_buf[body_count]));
-                hint_message_meta_add_destination(&hint_meta,
-                    HINT_DESTINATION_UNIQUE_MONSTER, unique_y, unique_x,
-                    unique_r_idx, unique_dist, &layout);
+                /*
+                 * This direction and distance are only a snapshot: the unique
+                 * can move before the player opens the map. Keep the clue in
+                 * the note text, but do not turn its stale position into a map
+                 * destination area.
+                 */
             }
             else
             {

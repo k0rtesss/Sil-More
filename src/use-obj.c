@@ -409,6 +409,14 @@ bool use_sanctity_gem_on(object_type* target_o_ptr, bool* ident)
 
 static bool eat_food(object_type* o_ptr, bool* ident)
 {
+    /* The assigned herb treats this infection instead of applying any of its
+     * usual effects, including nourishment. It works before diagnosis too. */
+    if (disease_herb_matches(o_ptr))
+    {
+        *ident = cure_disease();
+        return true;
+    }
+
     // Easter Eggs
     if ((o_ptr->sval < SV_FOOD_MIN_FOOD) && easter_time())
     {

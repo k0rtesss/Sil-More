@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "player/killer.h"
+#include "cave/cave-bridge.h"
 
 /* These guards last only for the currently executing action, never a save.
  * Entry is immediate; completing the same action must not charge it twice. */
@@ -146,7 +147,7 @@ void lava_light(void)
     for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
         for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
         {
-            if (cave_feat[y][x] != FEAT_LAVA) continue;
+            if (cave_bridge_underlay(cave_feat[y][x]) != FEAT_LAVA) continue;
             for (int dy = -2; dy <= 2; dy++)
                 for (int dx = -2; dx <= 2; dx++)
                 {

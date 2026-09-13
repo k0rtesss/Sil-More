@@ -10,6 +10,8 @@
 #include "ui/question.h"
 
 static void prise_silmaril(void);
+static bool floor_context_is_pickup_destination(
+    floor_context_action_kind kind);
 
 /*
  * Helper function to determine the equip sound based on item type
@@ -619,7 +621,23 @@ static bool floor_context_preferred_pickup_action(int floor_item,
 
 static cptr floor_context_space_pickup_label(int floor_item)
 {
+    floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
     floor_context_action selected;
+    int count = floor_context_collect_item_actions(floor_item, false, false,
+        actions, (int)N_ELEMENTS(actions));
+    int pickup_count = 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (floor_context_is_pickup_destination(actions[i].kind))
+            pickup_count++;
+    }
+
+    /* Space opens the destination chooser whenever more than one storage
+     * pool is available, so its contextual label must describe the action,
+     * not whichever destination currently has priority. */
+    if (pickup_count > 1)
+        return "Pick Up";
 
     if (floor_context_preferred_pickup_action(floor_item, &selected))
     {
@@ -955,13 +973,22 @@ bool do_cmd_context_square_action_popup(void)
                 sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_QUIVER,
                     "Quiver", TERM_L_BLUE);
 
-            cptr pickup_name = object_can_store_directly_in_pack(o_ptr)
-                ? "Pack" : "Pick Up";
-
-            sdl_question_menu_add_button('g', pickup_name,
-                streq(pickup_name, "Pack") ? TERM_L_BLUE : TERM_L_WHITE);
             if (object_can_choose_pack_or_harness(o_ptr))
-                sdl_question_menu_add_button(' ', "Harness", TERM_L_BLUE);
+            {
+                /* Space opens the Pack/Harness destination chooser.  Keep
+                 * this as one Pick Up action so the popup does not offer a
+                 * second storage choice after the player selects Harness. */
+                sdl_question_menu_add_button(' ', "Pick Up", TERM_L_WHITE);
+            }
+            else
+            {
+                cptr pickup_name = object_can_store_directly_in_pack(o_ptr)
+                    ? "Pack" : "Pick Up";
+
+                sdl_question_menu_add_button('g', pickup_name,
+                    streq(pickup_name, "Pack")
+                        ? TERM_L_BLUE : TERM_L_WHITE);
+            }
         }
     }
     else
@@ -1163,7 +1190,7 @@ bool touch_shortcut_context_action(int binding, bool description_open,
                  * Space so multiple destinations can open their chooser
                  * instead of bypassing it through one raw destination key. */
                 key = ' ';
-                name = selected.label;
+                name = floor_context_space_pickup_label(floor_item);
             }
             else
                 name = "Confirm";
@@ -1549,6 +1576,110 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
     return true;
 }
 
+static void format_storage_exchange_reason(const object_type* incoming,
+    byte target_storage, char* buf, size_t buflen)
+{
+    object_type moving;
+    enum inventory_limit_group group;
+    enum inventory_limit_group source_group;
+    int used;
+    int limit;
+    int left;
+    char incoming_name[120];
+
+    if (!buf || buflen == 0)
+        return;
+    buf[0] = '\0';
+
+    if (!incoming || !incoming->k_idx)
+        return;
+
+    object_copy(&moving, incoming);
+    moving.storage = target_storage;
+    group = inventory_limit_group_for_object(&moving);
+    source_group = inventory_limit_group_for_object(incoming);
+    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
+        return;
+
+    object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
+    used = inventory_limit_usage_for_group(group);
+    limit = inventory_limit_limit_for_group(group);
+    left = MAX(limit - used, 0);
+    strnfmt(buf, buflen,
+        "No room in %s: %d.%d/%d.%d qt used (%d.%d qt left). Choose an "
+        "item to move to your %s; %s will move to your %s.",
+        inventory_limit_group_name(group), used / 10, ABS(used % 10),
+        limit / 10, ABS(limit % 10), left / 10, ABS(left % 10),
+        inventory_limit_group_name(source_group), incoming_name,
+        inventory_limit_group_name(group));
+}
+
+static bool open_inventory_storage_exchange_menu(
+    const object_type* incoming, byte target_storage, bool include_equip,
+    bool allow_non_stowable, int* exchange_item)
+{
+    enum inventory_limit_group source_group;
+    enum inventory_limit_group target_group;
+    supply_menu_request request = {0};
+    char reason[280];
+
+    if (exchange_item)
+        *exchange_item = -1;
+    if (!incoming || !incoming->k_idx || !exchange_item
+        || (target_storage != OBJECT_STORAGE_PACK
+            && target_storage != OBJECT_STORAGE_HARNESS))
+    {
+        return false;
+    }
+
+    source_group = inventory_limit_group_for_object(incoming);
+    target_group = target_storage == OBJECT_STORAGE_PACK
+        ? INV_LIMIT_PACK : INV_LIMIT_HARNESS;
+    if ((source_group != INV_LIMIT_PACK
+            && source_group != INV_LIMIT_HARNESS)
+        || source_group == target_group)
+    {
+        return false;
+    }
+
+    format_storage_exchange_reason(incoming, target_storage, reason,
+        sizeof(reason));
+    request.focus_page = true;
+    request.page = SUPPLY_MENU_PAGE_INVENTORY;
+    request.focus_inventory_group = true;
+    request.inventory_group = inventory_menu_group_for_limit_group(
+        target_group);
+    request.preview_inventory_description = true;
+    request.storage_exchange_mode = true;
+    request.storage_exchange_incoming = incoming;
+    request.storage_exchange_target = target_storage;
+    request.storage_exchange_include_equip = include_equip;
+    request.storage_exchange_allow_non_stowable = allow_non_stowable;
+    request.storage_exchange_reason = reason;
+    request.storage_exchange_item_out = exchange_item;
+    return do_cmd_knowledge_supplies(&request);
+}
+
+static bool choose_storage_exchange_item(const object_type* incoming,
+    byte target_storage, bool include_equip, bool allow_non_stowable,
+    int* exchange_item)
+{
+    object_type moving;
+
+    if (exchange_item)
+        *exchange_item = -1;
+    if (!incoming || !incoming->k_idx || !exchange_item)
+        return false;
+
+    object_copy(&moving, incoming);
+    moving.storage = target_storage;
+    if (inventory_type_slot_available(&moving, false))
+        return false;
+
+    return open_inventory_storage_exchange_menu(incoming, target_storage,
+        include_equip, allow_non_stowable, exchange_item);
+}
+
 bool open_inventory_slot_pick_menu(const object_type* incoming,
     const bool* enabled, cptr reason, int* slot_out)
 {
@@ -1875,6 +2006,157 @@ static bool item_storage_destination_available(const object_type* o_ptr,
     return false;
 }
 
+bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
+    int exchange_item)
+{
+    object_type* incoming;
+    object_type* outgoing;
+    byte source_storage;
+    char incoming_name[120];
+    char outgoing_name[120];
+    const char* target_name;
+    const char* source_name;
+
+    if (!player_inventory_handle_is_carried(item)
+        || !player_inventory_handle_is_carried(exchange_item)
+        || item == exchange_item
+        || (target_storage != OBJECT_STORAGE_PACK
+            && target_storage != OBJECT_STORAGE_HARNESS))
+    {
+        return false;
+    }
+
+    incoming = player_inventory_object(item);
+    outgoing = player_inventory_object(exchange_item);
+    if (!incoming || !incoming->k_idx || !outgoing || !outgoing->k_idx
+        || !object_can_choose_pack_or_harness(incoming)
+        || !object_can_choose_pack_or_harness(outgoing))
+    {
+        return false;
+    }
+
+    source_storage = incoming->storage;
+    if ((source_storage != OBJECT_STORAGE_PACK
+            && source_storage != OBJECT_STORAGE_HARNESS)
+        || source_storage == target_storage
+        || outgoing->storage != target_storage
+        || !inventory_limit_storage_exchange_possible(incoming, outgoing))
+    {
+        return false;
+    }
+
+    object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
+    object_desc(outgoing_name, sizeof(outgoing_name), outgoing, true, 3);
+
+    outgoing->storage = source_storage;
+    if (source_storage == OBJECT_STORAGE_HARNESS)
+        player_active_weapon_assign_harness_color(outgoing);
+    else
+    {
+        outgoing->pickup = false;
+        outgoing->pickup_slot = -1;
+    }
+
+    incoming->storage = target_storage;
+    if (target_storage == OBJECT_STORAGE_HARNESS)
+        player_active_weapon_assign_harness_color(incoming);
+    else
+    {
+        incoming->pickup = false;
+        incoming->pickup_slot = -1;
+    }
+
+    tutorial_game_action_done(target_storage == OBJECT_STORAGE_HARNESS
+        ? "ready" : "store", incoming);
+    target_name = target_storage == OBJECT_STORAGE_HARNESS
+        ? "Harness" : "Pack";
+    source_name = source_storage == OBJECT_STORAGE_HARNESS
+        ? "Harness" : "Pack";
+    msg_format("You move %s to your %s and %s to your %s.", incoming_name,
+        target_name, outgoing_name, source_name);
+
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    p_ptr->update |= PU_BONUS;
+    p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+    return true;
+}
+
+bool do_cmd_wield_floor_storage_exchange(int item, byte target_storage,
+    int exchange_item)
+{
+    object_type* incoming;
+    object_type* outgoing;
+    object_type projected_incoming;
+    char outgoing_name[120];
+    int floor_idx;
+    bool outgoing_equipped;
+
+    if (item >= 0 || target_storage != OBJECT_STORAGE_HARNESS)
+        return false;
+
+    floor_idx = 0 - item;
+    if (floor_idx <= 0 || floor_idx >= o_max || !o_list[floor_idx].k_idx
+        || !player_inventory_handle_valid(exchange_item)
+        || (!player_inventory_handle_is_carried(exchange_item)
+            && !player_inventory_handle_is_equipped(exchange_item)))
+    {
+        return false;
+    }
+
+    incoming = &o_list[floor_idx];
+    outgoing = player_inventory_object(exchange_item);
+    outgoing_equipped = player_inventory_handle_is_equipped(exchange_item);
+    if (!outgoing || !outgoing->k_idx
+        || inventory_limit_group_for_object(incoming) != INV_LIMIT_HARNESS
+        || inventory_limit_group_for_object(outgoing) != INV_LIMIT_HARNESS
+        || (outgoing_equipped && cursed_p(outgoing)))
+    {
+        return false;
+    }
+
+    /* The floor object is not in either carried pool yet.  Treat it as a
+     * Pack-side incoming object for the shared projection so the check adds
+     * it to Harness without incorrectly removing it from the real Pack. */
+    object_copy(&projected_incoming, incoming);
+    projected_incoming.storage = OBJECT_STORAGE_PACK;
+    if (!inventory_limit_floor_storage_exchange_possible(
+            &projected_incoming, outgoing))
+    {
+        return false;
+    }
+
+    object_desc(outgoing_name, sizeof(outgoing_name), outgoing, true, 3);
+
+    if (outgoing_equipped)
+    {
+        /* Make the destination explicit before takeoff; otherwise the
+         * ordinary takeoff path would try to return this Harness item to the
+         * already-full Harness. */
+        outgoing->storage = OBJECT_STORAGE_PACK;
+        if (inven_takeoff(exchange_item, 255) < 0)
+            return false;
+    }
+    else
+    {
+        outgoing->storage = OBJECT_STORAGE_PACK;
+        outgoing->pickup = false;
+        outgoing->pickup_slot = -1;
+    }
+
+    msg_format("You move %s to your Pack to make room.", outgoing_name);
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    p_ptr->update |= PU_BONUS;
+    p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+
+    /* Re-enter the normal floor-wield path now that the selected Harness
+     * item has freed enough volume.  The Pack action remains marked as
+     * completing, so this does not start a second delayed action. */
+    do_cmd_wield(incoming, item);
+    return wield_command_succeeded;
+}
+
 bool do_cmd_move_item_to_storage(int item, byte target_storage)
 {
     if (!tutorial_game_action_allowed(target_storage == OBJECT_STORAGE_HARNESS ? "ready" : "store",
@@ -1903,9 +2185,41 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     }
 
     if (!item_storage_destination_available(o_ptr, target_storage,
-            o_ptr->number, true))
+            o_ptr->number, false))
     {
-        return false;
+        int exchange_item = -1;
+        object_type* exchange_object;
+
+        if (!choose_storage_exchange_item(o_ptr, target_storage, false, false,
+                &exchange_item))
+        {
+            (void)item_storage_destination_available(o_ptr, target_storage,
+                o_ptr->number, true);
+            return false;
+        }
+
+        exchange_object = player_inventory_object(exchange_item);
+        if (!exchange_object
+            || !inventory_limit_storage_exchange_possible(o_ptr,
+                exchange_object))
+        {
+            (void)item_storage_destination_available(o_ptr, target_storage,
+                o_ptr->number, true);
+            return false;
+        }
+
+        if (player_pack_action_completing(PLAYER_PACK_ACTION_MOVE_STORAGE))
+        {
+            return do_cmd_move_item_to_storage_exchange(item, target_storage,
+                exchange_item);
+        }
+
+        if (!player_pack_action_start_storage_exchange(item, target_storage,
+                o_ptr, exchange_item, exchange_object))
+        {
+            return false;
+        }
+        return true;
     }
 
     /* Reaching into the Pack, or opening it to store something, follows the
@@ -2562,6 +2876,30 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS
         && !inventory_type_slot_available(o_ptr, true))
     {
+        object_type exchange_incoming;
+        object_type* exchange_object;
+        int exchange_item = -1;
+
+        /* A floor item has not entered either carried pool yet.  Present it
+         * to the exchange picker as a Pack-side incoming object so the
+         * picker can offer Harness items to stow in the Pack. */
+        object_copy(&exchange_incoming, o_ptr);
+        exchange_incoming.storage = OBJECT_STORAGE_PACK;
+        if (choose_storage_exchange_item(&exchange_incoming,
+                OBJECT_STORAGE_HARNESS, true, true, &exchange_item))
+        {
+            exchange_object = player_inventory_object(exchange_item);
+            if (exchange_object
+                && inventory_limit_floor_storage_exchange_possible(
+                    &exchange_incoming, exchange_object)
+                && player_pack_action_start_storage_exchange(item,
+                    OBJECT_STORAGE_HARNESS, &exchange_incoming, exchange_item,
+                    exchange_object))
+            {
+                return;
+            }
+        }
+
         enum inventory_limit_group group = inven_carry_limit_group();
 
         if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
@@ -2769,9 +3107,40 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             ? MIN(o_ptr->number, object_stack_limit(o_ptr)) : 1;
 
         if (!item_storage_destination_available(o_ptr,
-                OBJECT_STORAGE_HARNESS, moving_quantity, true))
+                OBJECT_STORAGE_HARNESS, moving_quantity, false))
         {
-            return;
+            int exchange_item = -1;
+            object_type* exchange_object;
+
+            /* A normal wield can move only one member of a throwing stack.
+             * Storage exchange changes the pool of the whole object entry, so
+             * leave that partial wield on the ordinary failure path. */
+            if (moving_quantity < o_ptr->number)
+            {
+                (void)item_storage_destination_available(o_ptr,
+                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
+                return;
+            }
+
+            if (!choose_storage_exchange_item(o_ptr,
+                    OBJECT_STORAGE_HARNESS, false, false, &exchange_item))
+            {
+                (void)item_storage_destination_available(o_ptr,
+                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
+                return;
+            }
+
+            exchange_object = player_inventory_object(exchange_item);
+            if (!exchange_object
+                || !inventory_limit_storage_exchange_possible(o_ptr,
+                    exchange_object)
+                || !do_cmd_move_item_to_storage_exchange(item,
+                    OBJECT_STORAGE_HARNESS, exchange_item))
+            {
+                (void)item_storage_destination_available(o_ptr,
+                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
+                return;
+            }
         }
     }
     // Check for paired weapons (e.g., Glamdring + Orcrist)

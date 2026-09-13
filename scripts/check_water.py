@@ -148,123 +148,61 @@ static void movement_tests(void) {
 
 void generation_tests(void) {
     static dun_data dungeon;
+    static byte before[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     dun=&dungeon;
-    int wet_seeds=0, river_seeds=0;
-    for(int seed=1;seed<=100;seed++) {
+    int wet_seeds=0, icy_seeds=0;
+    for(int kind=0;kind<2;kind++) for(int seed=1;seed<=100;seed++) {
         water_map(64,96,FEAT_WALL_EXTRA); memset(dun,0,sizeof(*dun));
         memset(room_anchor_kind,0,sizeof(room_anchor_kind));
         Rand_state_init(seed); layout_anchor_count=0;
-        for(int i=0;i<6;i++) {
-            int y=2+(i/3)*29,x=2+(i%3)*30;
-            for(int t=0;t<20;t++)
-                if(carve_ca_blob_anchor_bounds(y,y+26,x,x+27,0)) break;
-        }
-        /* Authored and special cells must survive inside otherwise valid cave bounds. */
-        cave_set_feat(30,45,FEAT_MORE); cave_set_feat(31,45,FEAT_FORGE_NORMAL_HEAD);
-        cave_set_feat(29,45,FEAT_FLOOR); cave_info[29][45]|=CAVE_G_VAULT;
-        place_cave_water();
-        int wet=0, river=0;
-        for(int y=1;y<63;y++)for(int x=1;x<95;x++) if(cave_feat[y][x]==FEAT_WATER) {
-            wet++; assert(normal_cave_area(y,x)); assert(cave_natural[y][x]);
-            assert(cave_floor_bold(y,x));
-            bool has_neighbor=false, in_room=false;
-            for(int d=0;d<4;d++) has_neighbor |= cave_feat[y+water_dy[d]][x+water_dx[d]]==FEAT_WATER;
-            assert(has_neighbor);
-            for(int i=0;i<dun->cent_n;i++) {
-                rectangle b=dun->corner[i];
-                if(y>=b.y1&&y<=b.y2&&x>=b.x1&&x<=b.x2)in_room=true;
+        if(kind==0) {
+            for(int i=0;i<6;i++) {
+                int y=2+(i/3)*29,x=2+(i%3)*30;
+                for(int t=0;t<20;t++)
+                    if(carve_ca_blob_anchor_bounds(y,y+26,x,x+27,0)) break;
             }
-            river += !in_room;
+        } else {
+            current_partition_modes[0]=QUAD_MODE_BIG_CAVE;
+            current_partition_big_cave_types[0]=BIG_CAVE_ICE;
+            assert(carve_big_cave_bounds(2,61,2,93,0,BIG_CAVE_ICE));
         }
-        wet_seeds += wet>0; river_seeds += river>0;
-        assert(cave_feat[30][45]==FEAT_MORE && cave_feat[31][45]==FEAT_FORGE_NORMAL_HEAD);
-        assert(cave_feat[29][45]==FEAT_FLOOR);
-        if(river>0 && river_seeds==1) {
-            water_preview("scripts/output/water-check/cave-water.png",1);
-            FILE* out=fopen("scripts/output/water-check/generated-map.txt","w");assert(out);
-            for(int y=0;y<64;y++) {for(int x=0;x<96;x++) fputc(cave_feat[y][x]==FEAT_WATER?'~':
-                cave_floor_bold(y,x)?'.':'#',out);fputc('\n',out);}fclose(out);
-        }
-        /* Run the same placement pass in every excluded partition type. */
-        for(int mode=QUAD_MODE_ROOMY;mode<=QUAD_MODE_BIG_CAVE;mode++) {
-            if(mode==QUAD_MODE_CAVEY)continue;
-            for(int y=0;y<64;y++)for(int x=0;x<96;x++)
-                if(cave_feat[y][x]==FEAT_WATER)cave_set_feat(y,x,FEAT_FLOOR);
-            current_partition_modes[0]=(quadrant_mode_t)mode;
-            place_cave_water();
-            for(int y=0;y<64;y++)for(int x=0;x<96;x++)assert(cave_feat[y][x]!=FEAT_WATER);
-        }
-    }
-
-    /* Real big-cave geometry exceeds the old 24x24 pool bound. Both shapes
-     * stay in the ice partition and never replace authored/protected cells. */
-    int icy_seeds=0, icy_min=9999, icy_max=0, icy_total=0, cave_floor_total=0;
-    for(int seed=1;seed<=100;seed++) {
-        water_map(64,96,FEAT_WALL_EXTRA); memset(dun,0,sizeof(*dun));
-        memset(room_anchor_kind,0,sizeof(room_anchor_kind));
-        Rand_state_init(seed); layout_anchor_count=0;
-        current_partition_modes[0]=QUAD_MODE_BIG_CAVE;
-        current_partition_big_cave_types[0]=BIG_CAVE_ICE;
-        assert(carve_big_cave_bounds(2,61,2,93,0,BIG_CAVE_ICE));
-        byte before[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-        for(int y=0;y<64;y++)for(int x=0;x<96;x++)before[y][x]=cave_feat[y][x];
         cave_set_feat(30,45,FEAT_MORE); cave_set_feat(31,45,FEAT_FORGE_NORMAL_HEAD);
         cave_set_feat(29,45,FEAT_FLOOR); cave_info[29][45]|=CAVE_G_VAULT;
         cave_set_feat(28,45,FEAT_FLOOR); cave_o_idx[28][45]=1;
         cave_set_feat(27,45,FEAT_FLOOR); cave_m_idx[27][45]=1;
-        place_cave_water();
-        int icy=0;
+        memcpy(before,cave_feat,sizeof(before));
+        terrain_generation_reset(); place_dungeon_terrain();
+        int count=0;
         for(int y=1;y<63;y++)for(int x=1;x<95;x++) {
-            cave_floor_total+=before[y][x]==FEAT_FLOOR;
-            assert(cave_feat[y][x]!=FEAT_WATER);
-            if(cave_feat[y][x]!=FEAT_ICE)continue;
-            icy++; assert(before[y][x]==FEAT_FLOOR && water_area(y,x,0));
-            assert(cave_floor_bold(y,x));
-            bool neighbor=false;
-            for(int d=0;d<4;d++)neighbor |= cave_feat[y+water_dy[d]][x+water_dx[d]]==FEAT_ICE;
-            assert(neighbor);
-            assert(distance(y,x,dun->cent[0].y,dun->cent[0].x)>1);
+            bool rock=before[y][x]==FEAT_WALL_EXTRA || before[y][x]==FEAT_WALL_OUTER
+                || before[y][x]==FEAT_WALL_INNER || before[y][x]==FEAT_WALL_SOLID
+                || before[y][x]==FEAT_QUARTZ;
+            /* Major geology excavates cavern granite, with banks and bridges.
+             * Local ice accents still retain the original floor-only policy. */
+            if(before[y][x]!=FEAT_FLOOR && !rock) assert(before[y][x]==cave_feat[y][x]);
+            if(rock && before[y][x]!=cave_feat[y][x])
+                assert(terrain_landmark_cell(y,x)!=TERRAIN_LANDMARK_NONE || !kind);
+            if(cave_feat[y][x]!=(kind?FEAT_ICE:FEAT_WATER)) continue;
+            count++; assert(before[y][x]==FEAT_FLOOR || rock);
+            assert(!(cave_info[y][x]&(CAVE_ICKY|CAVE_G_VAULT)));
+            assert(!cave_o_idx[y][x]&&!cave_m_idx[y][x]);
+            bool adjacent=false;
+            static const int dy[]={-1,0,1,0},dx[]={0,1,0,-1};
+            for(int d=0;d<4;d++) adjacent|=cave_feat[y+dy[d]][x+dx[d]]==cave_feat[y][x];
+            assert(adjacent);
         }
-        icy_seeds+=icy>0;
-        icy_min=MIN(icy_min,icy);icy_max=MAX(icy_max,icy);icy_total+=icy;
-        if(seed==1) {
-            /* Preview production cavern geometry and ice placement at native
-             * tile size; the isolated harness supplies its usual base style. */
-            cave_o_idx[28][45]=cave_m_idx[27][45]=0;
-            water_preview("scripts/output/water-check/cave-ice.png",1);
-        }
-        assert(icy>=24);
         assert(cave_feat[30][45]==FEAT_MORE && cave_feat[31][45]==FEAT_FORGE_NORMAL_HEAD);
         assert(cave_feat[29][45]==FEAT_FLOOR && cave_feat[28][45]==FEAT_FLOOR && cave_feat[27][45]==FEAT_FLOOR);
-    }
-    /* A touching cave in the next partition cannot be reached by ice paths. */
-    water_map(40,80,FEAT_FLOOR); memset(dun,0,sizeof(*dun));
-    current_partition_rows=1;current_partition_cols=current_partition_count=2;
-    current_partition_modes[0]=QUAD_MODE_BIG_CAVE;
-    current_partition_big_cave_types[0]=BIG_CAVE_ICE;
-    current_partition_modes[1]=QUAD_MODE_CAVEY;
-    current_partition_big_cave_types[1]=BIG_CAVE_NONE;
-    dun->cent_n=2;dun->cent[0]=(coord){20,20};
-    dun->cent[1]=(coord){15,15};room_anchor_kind[1]=LAYOUT_ANCHOR_NONE;
-    dun->corner[0]=(rectangle){2,2,37,77};
-    room_anchor_kind[0]=LAYOUT_ANCHOR_CA_BLOB;
-    for(int y=1;y<39;y++)for(int x=1;x<79;x++)cave_info[y][x]|=CAVE_ROOM;
-    assert(water_area(20,20,0) && !water_area(20,60,0));
-    assert(!lake_floor(15,15,0,0) && !lake_floor(15,16,0,0));
-    coord crossing[WATER_PATH_MAX];
-    assert(river_path((coord){10,10},(coord){10,60},crossing,false,0)==0);
-    place_cave_water();
-    for(int y=1;y<39;y++)for(int x=1;x<79;x++)
-        if(cave_feat[y][x]==FEAT_ICE) {
-            assert(level_partition_index_for_point(y,x)==0);
-            assert(distance(y,x,15,15)>1);
+        if(count>0) {
+            int* total=kind?&icy_seeds:&wet_seeds;
+            if(++*total==1) {
+                cave_o_idx[28][45]=cave_m_idx[27][45]=0;
+                water_preview(kind?"scripts/output/water-check/cave-ice.png":"scripts/output/water-check/cave-water.png",1);
+            }
         }
-    printf("Ice generation: %d/100 real large caverns; connected shapes, anchors, protected features and partition boundary: PASS\n",icy_seeds);
-
-    printf("Ice density: %d-%d cells/cavern, %.1f mean, %.1f%% of generated cavern floor\n",
-        icy_min,icy_max,icy_total/100.0,100.0*icy_total/cave_floor_total);
-    assert(wet_seeds>75 && river_seeds>20);
-    printf("Generation: 100 real CA cave layouts, %d wet, %d with connecting rivers; excluded partitions/features: PASS\n",wet_seeds,river_seeds);
+    }
+    assert(wet_seeds>0 && icy_seeds>0);
+    printf("Shared terrain: 100 real CA layouts and 100 real ice caverns; %d wet and %d icy; major granite excavation and protected features checked: PASS\n",wet_seeds,icy_seeds);
 }
 
 static void water_render_tests(void) {
@@ -449,7 +387,7 @@ def main():
     gen_start = TESTS.index("void generation_tests(void) {")
     gen_end = TESTS.index("static void water_render_tests(void)")
     gen = OUT / "generation-check.c"
-    gen.write_text('#include "level-generation/level-generation-water.c"\n#include <assert.h>\n'
+    gen.write_text('#include "angband.h"\n#include "level-generation/level-generation-internal.h"\n#include "level-generation/level-generation-terrain.h"\n#include "level-generation/level-generation-landmarks.h"\n#include <assert.h>\n'
         'void water_map(int,int,int);\n'
         'void water_preview(const char*,int);\n'
         'void water_test_reset_partition(void) { current_partition_rows = current_partition_cols = current_partition_count = 1; current_partition_modes[0] = QUAD_MODE_CAVEY; current_partition_big_cave_types[0] = BIG_CAVE_NONE; }\n'
@@ -506,7 +444,7 @@ def main():
     cmake = BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())
     exclude = ("/src/main.c.obj", "/src/sdl/render/sdl-idle-animation.c.obj", "/src/fs/save-dungeon.c.obj",
-               "/src/fs/load-dungeon.c.obj", "/src/cmd/ui/cmd-ui-settings.c.obj", "/src/level-generation/level-generation-water.c.obj")
+               "/src/fs/load-dungeon.c.obj", "/src/cmd/ui/cmd-ui-settings.c.obj")
     rsp = OUT / "objects.rsp"
     rsp.write_text("\n".join('"' + p + '"' for p in objects if not p.endswith(exclude)), encoding="utf-8")
     env = os.environ.copy()

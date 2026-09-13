@@ -576,3 +576,63 @@ T:0:1
 N:87:poisonous seep
 G:~:G
 T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:88:wooden bridge over shallow water
+G:=:u
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:89:wooden bridge over shallow water
+G:|:u
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:90:wooden bridge over a chasm
+G:=:U
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:91:wooden bridge over a chasm
+G:|:U
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:92:stone bridge over lava
+G:=:s
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:93:stone bridge over lava
+G:|:s
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:94:stone bridge over poisonous seep
+G:=:s
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:95:stone bridge over poisonous seep
+G:|:s
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:96:stone bridge over ice
+G:=:W
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:97:stone bridge over ice
+G:|:W
+T:0:1

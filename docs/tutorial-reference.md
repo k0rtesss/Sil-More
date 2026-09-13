@@ -4,7 +4,7 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 521 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 531 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
@@ -12,7 +12,7 @@ The catalogue contains 521 lessons, including 107 ability previews. Every live a
 
 ## Tutorial modes
 
-Default: **Extended**. The catalogue has **153 Normal** lessons and **368 Extended** lessons. The card's single mode button cycles **Disabled → Normal → Extended → Disabled**.
+Default: **Extended**. The catalogue has **153 Normal** lessons and **378 Extended** lessons. The card's single mode button cycles **Disabled → Normal → Extended → Disabled**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
 
@@ -724,7 +724,7 @@ Priority: **95** (higher appears first).
 
 **1. Info**
 
-Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 50 player turns. It continues while resting. A potion of Healing or Miruvor cures it and restores the points disease took. Herbs of Healing and Restoration do not cure disease.
+Each infection gets a random disease name and one random cure herb from the ten herbs. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 100 player turns; it continues while resting. A Gem of Self Knowledge with Alchemy shows the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name and, once the name is known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved; a new infection gets a new name and cure and resets them. Eating the correct herb cures disease and restores its penalties instead of applying its normal effect or nourishment; other herbs act normally. Healing or Miruvor always cures it.
 
 Trigger: The disease condition is active and its lesson is unseen or in progress, or disease has just appeared.
 
@@ -1188,7 +1188,7 @@ Priority: **90** (higher appears first).
 
 **1. Info**
 
-Healing or Miruvor cures disease and restores the attribute points it took. Herbs of Healing and Restoration do not. A known remedy is available now. Skip if you prefer another action.
+Healing, Miruvor, or the identified cure herb cures disease and restores the attribute points it took. A cure herb replaces its normal effect and nourishment. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
@@ -2878,7 +2878,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Auto-identify herbs, potions, staves, and horns. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
+Auto-identify herbs, potions, staves, and horns. While diseased, a Gem of Self Knowledge shows the disease name and cure herb. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
 
 Trigger: Public ability preview or newly available ability; raw serial 84, skill 4, ability slot 4.
 
@@ -4836,7 +4836,7 @@ Moving into, through or out of shallow water costs 50% more movement time and gi
 
 **2. Info**
 
-Each water square entered on foot has a 0.5% disease risk. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease needs a potion of Healing or Miruvor; rest does not cure it.
+When healthy, each water square entered on foot has a 0.5% disease risk. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting; its cure herb, Healing, or Miruvor cures it.
 
 Trigger: Feature 84 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -5012,7 +5012,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Shows your current status effects and character traits. Each use can also reveal one active curse. It does not remove that curse.
+Shows your current status effects and character traits. While diseased, Alchemy shows the disease name and cure herb; without Alchemy, each use has a 50% chance to identify the name and, once known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved. Each use can also reveal one active curse. It does not remove that curse.
 
 Trigger: Item kind 202 is aware and publicly encountered; no forced use.
 
@@ -5508,7 +5508,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Grants rage for 10d4 turns: +1 Strength/Constitution, -1 Dexterity/Grace, a special melee attack and fear resistance. Rage restricts awareness and Stealth. It also supplies ordinary herb nourishment.
+Grants rage for 10d4 turns: +1 Strength/Constitution, -1 Dexterity/Grace, a special melee attack and fear resistance. Rage restricts awareness and Stealth. It also supplies ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying rage or nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 380 is aware and publicly encountered; no forced use.
 
@@ -5524,7 +5524,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Provides about 2,000 ordinary turns of nourishment. Actual consumption rate can change with your current modifiers.
+Provides about 2,000 ordinary turns of nourishment. Actual consumption rate can change with your current modifiers. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 381 is aware and publicly encountered; no forced use.
 
@@ -5540,7 +5540,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-If fear protection does not prevent the effect, causes fear for 10d4 turns and speed for 5d4 turns. Preventing the fear also prevents this speed benefit. It provides ordinary herb nourishment.
+If fear protection does not prevent the effect, causes fear for 10d4 turns and speed for 5d4 turns. Preventing the fear also prevents this speed benefit. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 382 is aware and publicly encountered; no forced use.
 
@@ -5556,7 +5556,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment. It also provides ordinary herb nourishment. It does not cure disease.
+Halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment. It also provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 383 is aware and publicly encountered; no forced use.
 
@@ -5572,7 +5572,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Restores every attribute by up to 3 drained points. It also provides ordinary herb nourishment. It does not remove unrelated equipment penalties. It does not cure disease or restore disease penalties.
+Restores every attribute by up to 3 drained points. It also provides ordinary herb nourishment. It does not remove unrelated equipment penalties. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 384 is aware and publicly encountered; no forced use.
 
@@ -5588,7 +5588,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Reduces nourishment by about 1,000 ordinary turns. This can worsen hunger; it is not a remedy.
+Reduces nourishment by about 1,000 ordinary turns, which can worsen hunger when its normal effect applies. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 385 is aware and publicly encountered; no forced use.
 
@@ -5604,7 +5604,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Causes hallucination for 80d4 turns but removes blindness. This tradeoff is different from a clean sight remedy.
+Causes hallucination for 80d4 turns but removes blindness. This tradeoff is different from a clean sight remedy. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 386 is aware and publicly encountered; no forced use.
 
@@ -5620,7 +5620,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Can entrance you for 10d4 turns. While entranced you cannot choose ordinary actions. Save it unless you intend to accept that risk.
+Can entrance you for 10d4 turns. While entranced you cannot choose ordinary actions. Save it unless you intend to accept that risk. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 387 is aware and publicly encountered; no forced use.
 
@@ -5636,7 +5636,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Drains Strength by 1 and provides ordinary herb nourishment. Nourishment does not cancel its attribute drawback.
+Drains Strength by 1 and provides ordinary herb nourishment. Nourishment does not cancel its attribute drawback. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 388 is aware and publicly encountered; no forced use.
 
@@ -5652,7 +5652,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Always causes disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. Provides ordinary herb nourishment.
+Its normal effect is to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 389 is aware and publicly encountered; no forced use.
 
@@ -5684,7 +5684,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns. Rest does not cure it; potions of Healing or Miruvor do.
+Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns. Rest does not cure it; potions of Healing or Miruvor do.
 
 Trigger: Item kind 400 is aware and publicly encountered; no forced use.
 
@@ -8388,7 +8388,7 @@ Priority: **33** (higher appears first).
 
 **1. Info**
 
-Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting and must be cured with Healing or Miruvor.
+Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting; cure it with its cure herb once identified, or with Healing or Miruvor.
 
 Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: resting.
 
@@ -8587,3 +8587,181 @@ Poison deals damage over time and prevents ordinary Health regeneration. Move to
 Trigger: The known feature is on the player square or visibly adjacent; hidden terrain is not disclosed.
 
 Sources: `src/tutorial/tutorial-game.c`, `lib/edit/terrain.txt`, `src/cave/cave-poison.c`, `src/spell/spell-projection-effects.c`, `src/player/player-bonuses.c`.
+
+## Bridges
+
+`terrain.88`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Any known bridge is on the player square or visibly adjacent; all bridge materials and orientations share one lesson.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Water bridge (vertical)
+
+`terrain.89`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Chasm bridge (horizontal)
+
+`terrain.90`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Chasm bridge (vertical)
+
+`terrain.91`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Lava bridge (horizontal)
+
+`terrain.92`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Lava bridge (vertical)
+
+`terrain.93`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Poison bridge (horizontal)
+
+`terrain.94`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Poison bridge (vertical)
+
+`terrain.95`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Ice bridge (horizontal)
+
+`terrain.96`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Ice bridge (vertical)
+
+`terrain.97`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.

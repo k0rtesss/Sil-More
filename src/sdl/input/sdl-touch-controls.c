@@ -6100,9 +6100,10 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
     buf[0] = '\0';
     if (touch_shortcut_context_action(context_binding,
             sdl_touch_thumb_description_open(), NULL, label, sizeof(label))) {
-        if (context_binding == ' ' && streq(label, "Harness"))
+        if (context_binding == ' ' && streq(label, "Pick Up"))
             strnfmt(buf, buflen,
-                "%s: store an eligible floor item in your Harness.", label);
+                "%s: pick up the floor item and choose where to put it.",
+                label);
         else if (context_binding == ' ')
             strnfmt(buf, buflen,
                 "%s: confirm the current prompt or interact with what is on your square.",

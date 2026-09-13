@@ -910,7 +910,7 @@
       "priority": 95,
       "steps": [
         {
-          "text": "Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 50 player turns. It continues while resting. A potion of Healing or Miruvor cures it and restores the points disease took. Herbs of Healing and Restoration do not cure disease.",
+          "text": "Each infection gets a random disease name and one random cure herb from the ten herbs. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 100 player turns; it continues while resting. A Gem of Self Knowledge with Alchemy shows the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name and, once the name is known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved; a new infection gets a new name and cure and resets them. Eating the correct herb cures disease and restores its penalties instead of applying its normal effect or nourishment; other herbs act normally. Healing or Miruvor always cures it.",
           "kind": "info",
           "anchor": "status"
         }
@@ -1548,7 +1548,7 @@
       "priority": 90,
       "steps": [
         {
-          "text": "Healing or Miruvor cures disease and restores the attribute points it took. Herbs of Healing and Restoration do not. A known remedy is available now. Skip if you prefer another action.",
+          "text": "Healing, Miruvor, or the identified cure herb cures disease and restores the attribute points it took. A cure herb replaces its normal effect and nourishment. A known remedy is available now. Skip if you prefer another action.",
           "kind": "info",
           "anchor": "status"
         },
@@ -4577,7 +4577,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Auto-identify herbs, potions, staves, and horns. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.",
+          "text": "Auto-identify herbs, potions, staves, and horns. While diseased, a Gem of Self Knowledge shows the disease name and cure herb. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -8376,7 +8376,7 @@
           "anchor": "map"
         },
         {
-          "text": "Each water square entered on foot has a 0.5% disease risk. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease needs a potion of Healing or Miruvor; rest does not cure it.",
+          "text": "When healthy, each water square entered on foot has a 0.5% disease risk. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting; its cure herb, Healing, or Miruvor cures it.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8620,7 +8620,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Shows your current status effects and character traits. Each use can also reveal one active curse. It does not remove that curse.",
+          "text": "Shows your current status effects and character traits. While diseased, Alchemy shows the disease name and cure herb; without Alchemy, each use has a 50% chance to identify the name and, once known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved. Each use can also reveal one active curse. It does not remove that curse.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9306,7 +9306,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Grants rage for 10d4 turns: +1 Strength/Constitution, -1 Dexterity/Grace, a special melee attack and fear resistance. Rage restricts awareness and Stealth. It also supplies ordinary herb nourishment.",
+          "text": "Grants rage for 10d4 turns: +1 Strength/Constitution, -1 Dexterity/Grace, a special melee attack and fear resistance. Rage restricts awareness and Stealth. It also supplies ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying rage or nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9328,7 +9328,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Provides about 2,000 ordinary turns of nourishment. Actual consumption rate can change with your current modifiers.",
+          "text": "Provides about 2,000 ordinary turns of nourishment. Actual consumption rate can change with your current modifiers. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9350,7 +9350,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "If fear protection does not prevent the effect, causes fear for 10d4 turns and speed for 5d4 turns. Preventing the fear also prevents this speed benefit. It provides ordinary herb nourishment.",
+          "text": "If fear protection does not prevent the effect, causes fear for 10d4 turns and speed for 5d4 turns. Preventing the fear also prevents this speed benefit. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9372,7 +9372,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment. It also provides ordinary herb nourishment. It does not cure disease.",
+          "text": "Halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment. It also provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9394,7 +9394,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Restores every attribute by up to 3 drained points. It also provides ordinary herb nourishment. It does not remove unrelated equipment penalties. It does not cure disease or restore disease penalties.",
+          "text": "Restores every attribute by up to 3 drained points. It also provides ordinary herb nourishment. It does not remove unrelated equipment penalties. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9416,7 +9416,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Reduces nourishment by about 1,000 ordinary turns. This can worsen hunger; it is not a remedy.",
+          "text": "Reduces nourishment by about 1,000 ordinary turns, which can worsen hunger when its normal effect applies. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9438,7 +9438,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Causes hallucination for 80d4 turns but removes blindness. This tradeoff is different from a clean sight remedy.",
+          "text": "Causes hallucination for 80d4 turns but removes blindness. This tradeoff is different from a clean sight remedy. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9460,7 +9460,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Can entrance you for 10d4 turns. While entranced you cannot choose ordinary actions. Save it unless you intend to accept that risk.",
+          "text": "Can entrance you for 10d4 turns. While entranced you cannot choose ordinary actions. Save it unless you intend to accept that risk. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9482,7 +9482,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Drains Strength by 1 and provides ordinary herb nourishment. Nourishment does not cancel its attribute drawback.",
+          "text": "Drains Strength by 1 and provides ordinary herb nourishment. Nourishment does not cancel its attribute drawback. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9504,7 +9504,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Always causes disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. Provides ordinary herb nourishment.",
+          "text": "Its normal effect is to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -9548,7 +9548,7 @@
       "priority": 34,
       "steps": [
         {
-          "text": "Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 50 player turns. Rest does not cure it; potions of Healing or Miruvor do.",
+          "text": "Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns. Rest does not cure it; potions of Healing or Miruvor do.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -13460,7 +13460,7 @@
       "priority": 33,
       "steps": [
         {
-          "text": "Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting and must be cured with Healing or Miruvor.",
+          "text": "Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting; cure it with its cure herb once identified, or with Healing or Miruvor.",
           "kind": "info",
           "anchor": "status"
         }
@@ -13745,6 +13745,244 @@
         "src/spell/spell-projection-effects.c",
         "src/player/player-bonuses.c"
       ]
+    },
+    {
+      "id": "terrain.88",
+      "title": "Bridges",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Any known bridge is on the player square or visibly adjacent; all bridge materials and orientations share one lesson."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ]
+    },
+    {
+      "id": "terrain.89",
+      "title": "Water bridge (vertical)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 89,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.90",
+      "title": "Chasm bridge (horizontal)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 90,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.91",
+      "title": "Chasm bridge (vertical)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 91,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.92",
+      "title": "Lava bridge (horizontal)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 92,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.93",
+      "title": "Lava bridge (vertical)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 93,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.94",
+      "title": "Poison bridge (horizontal)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 94,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.95",
+      "title": "Poison bridge (vertical)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 95,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.96",
+      "title": "Ice bridge (horizontal)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 96,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.97",
+      "title": "Ice bridge (vertical)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 97,
+      "alias_of": "terrain.88"
     }
   ]
 }

@@ -216,6 +216,7 @@ set(SIL_MORE_SOURCES
     src/cave/cave-flow.c
     src/cave/cave-fixtures.c
     src/cave/cave-water.c
+    src/cave/cave-bridge.c
     src/cave/cave-lava.c
     src/cave/cave-poison.c
     src/monster/monster-poison.c
@@ -282,8 +283,13 @@ set(SIL_MORE_SOURCES
     src/level-generation/level-generation-layout-anchors.c
     src/level-generation/level-generation-layout-big-cave.c
     src/level-generation/level-generation-layout-caves.c
-    src/level-generation/level-generation-water.c
-    src/level-generation/level-generation-lava.c
+    src/level-generation/level-generation-themes.c
+    src/level-generation/level-generation-landmarks.c
+    src/level-generation/level-generation-terrain-history.c
+    src/level-generation/level-generation-terrain-vaults.c
+    src/level-generation/level-generation-terrain-structures.c
+    src/level-generation/level-generation-terrain.c
+    src/level-generation/level-generation-terrain-access.c
     src/level-generation/level-generation-layout-connectivity.c
     src/level-generation/level-generation-layout-doors.c
     src/level-generation/level-generation-layout-modes.c
@@ -358,6 +364,7 @@ set(SIL_MORE_SOURCES
     src/sdl/render/sdl-present.c
     src/sdl/render/sdl-term-callbacks.c
     src/sdl/render/sdl-idle-animation.c
+    src/sdl/render/sdl-bridge.c
     src/sdl/render/sdl-text.c
       src/sdl/ui/sdl-main-menu.c
       src/sdl/ui/sdl-halls-screen.c

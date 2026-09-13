@@ -8,6 +8,7 @@ to check a staged build too (repeatable). Unused drafts are deliberately ignored
 configured SDL toolchain. --cmake-check tests the configure guard in an isolated
 V-only fixture project. VERSION_EXTRA is a raw-cache/save revision, not part
 of the three-component text-template version.
+Standalone configuration schemas are checked against their own version instead.
 """
 from pathlib import Path
 import argparse
@@ -22,6 +23,8 @@ DIRECT_PARSERS = {
     "parse_partition_info": "partition",
     "parse_set_info": "set",
 }
+# These files use dedicated loaders, not the game-versioned init_info parser.
+SCHEMA_TEMPLATES = {"dungeon-themes": 3}
 
 
 def uncomment(text):
@@ -106,6 +109,26 @@ def check_template(path, expected):
     return errors
 
 
+def check_schema_template(path, expected):
+    """Check a dedicated schema header; its production harness checks records."""
+    try:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    except (OSError, UnicodeError) as error:
+        return [f"{path}: {error}"]
+    seen = False
+    for line_number, line in enumerate(lines, 1):
+        line = line.lstrip(" \t")
+        if not line or line.startswith("#"):
+            continue
+        if not seen:
+            if line != f"V:{expected}":
+                return [f"{path}:{line_number}: {line!r}; expected schema V:{expected}"]
+            seen = True
+        elif line.startswith("V:"):
+            return [f"{path}:{line_number}: duplicate schema version header"]
+    return [] if seen else [f"{path}: missing schema V:{expected}"]
+
+
 def self_test():
     expected = (2, 14, 31)
     assert game_version('#define VERSION_STRING "2.14.31"\n#define VERSION_MAJOR (2)\n'
@@ -120,7 +143,25 @@ def self_test():
         for content, should_fail in cases:
             path.write_text(content, encoding="utf-8")
             assert bool(check_template(path, expected)) == should_fail, content
+        path = path.with_name("dungeon-themes.txt")
+        # Shipping roots must carry V:3; runtime also accepts V:1 and V:2.
+        # Test all header contracts explicitly; the parser harness validates D/M/N.
+        for schema_version in (1, 2, 3):
+            stale_version = 2 if schema_version == 1 else 1
+            schema_cases = [
+                (f"# comment\nV:{schema_version}\nD:1:example\n", False),
+                (f"\ufeffV:{schema_version}\r\nD:1:example\r\n", False),
+                (f"V:{stale_version}\n", True), ("V:4\n", True),
+                ("V:0.9.8\n", True), ("# missing\n", True),
+                (f"D:1:example\nV:{schema_version}\n", True),
+                (f"V:{schema_version}\nV:{schema_version}\n", True),
+                (f"V:{schema_version}suffix\n", True)]
+            for content, should_fail in schema_cases:
+                path.write_text(content, encoding="utf-8")
+                assert bool(check_schema_template(path, schema_version)) == should_fail, content
+            assert check_schema_template(path.with_name("absent-schema.txt"), schema_version)
     print("Template checker fixtures: PASS (major/minor/patch, stale, missing, malformed, ordering)")
+    print("Independent schema fixtures: PASS (V:1/V:2/V:3 contracts, BOM/CRLF, stale, missing, malformed, ordering)")
 
 
 def runtime_check():
@@ -245,6 +286,8 @@ def main():
         for directory in [ROOT / "lib/edit"] + [p / "lib/edit" for p in args.deployed]:
             for name in names:
                 errors.extend(check_template(directory / f"{name}.txt", expected))
+            for name, schema_version in SCHEMA_TEMPLATES.items():
+                errors.extend(check_schema_template(directory / f"{name}.txt", schema_version))
         if args.self_test:
             self_test()
         if args.runtime_check:
@@ -257,6 +300,8 @@ def main():
         print(f"Template versions: PASS ({len(names)} active templates, "
               f"{1 + len(args.deployed)} asset root(s), V:{version_string(expected)}; "
               "unused drafts ignored)")
+        print(f"Independent schemas: PASS ({len(SCHEMA_TEMPLATES)} configuration file(s) "
+              f"per asset root: {', '.join(f'{name} V:{v}' for name, v in SCHEMA_TEMPLATES.items())})")
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"Template version check failed: {error}")

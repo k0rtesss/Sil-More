@@ -464,7 +464,7 @@ T:40:0:99  # Amulet
 N:84:Alchemy
 I:4:4:5
 D:Understanding the hidden properties of things as did the scholars of the Noldor in Tirion, who studied the nature of every herb and mineral beneath the light of Laurelin. Such knowledge reveals the purpose of elixirs and powders at a glance, and attunes the mind to the resonance of enchanted crystals.
-E:Auto-identify herbs, potions, staves, and horns. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
+E:Auto-identify herbs, potions, staves, and horns. While diseased, a Gem of Self Knowledge shows the disease name and cure herb. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
 T:32:0:99  # Helm
 T:45:0:99  # Ring
 

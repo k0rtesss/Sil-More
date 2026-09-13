@@ -1,6 +1,7 @@
 /* File: level-generation-layout-anchors.c */
 
 #include "angband.h"
+#include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
 
 #if 0
@@ -19,6 +20,7 @@ bool place_prefab_anchor_of_type(int typ, bool require_neighbor)
 
     int y = rand_range(5, p_ptr->cur_map_hgt - 5);
     int x = rand_range(5, p_ptr->cur_map_wid - 5);
+    if (typ < 8) terrain_history_pick_bank_site(&y, &x, 5, 5, p_ptr->cur_map_hgt - 5, p_ptr->cur_map_wid - 5);
     int before = dun->cent_n;
     bool ok = false;
 

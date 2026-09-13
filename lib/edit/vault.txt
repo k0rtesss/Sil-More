@@ -59,6 +59,11 @@
 #     SURFACE     - generated more seldom in deeper dungeons
 #     TORCHES     - add spaced wall fixtures (type 6: 1-3, type 7: 3-5,
 #                   type 8: 6); larger types favor braziers
+#     Ordinary rooms and vault types below 8 may be flooded or breached.
+#     Types 8, 9 and 10 are immutable, regardless of terrain style flags.
+#     TERRAIN_CROSSING - legacy crossing tag (ordinary structures allow it)
+#     TERRAIN_FLOOD - ruined structure; bias toward flooding and broken walls
+#     TERRAIN_REPAIRED - inhabited structure; favor maintained causeways/piers
 #
 # 'D' lines describe the layout of the vault. Lines must be padded
 #     with spaces to fill the dimensions specified. Vaults are described
@@ -462,7 +467,7 @@ D:      $$$$$$
 
 N:46:Collapsed Cross
 X:6:12:12
-F:NO_ROTATION 
+F:NO_ROTATION | TERRAIN_FLOOD
 D:      $$$$$$      
 D:      $....$      
 D:      $..#.$      
@@ -574,7 +579,7 @@ D:$$$$$
 
 N:54:Collapsed corner
 X:6:1:2
-F:SURFACE | LIGHT
+F:SURFACE | LIGHT | TERRAIN_FLOOD
 D:$$$$#####
 D:$....:,,#
 D:$.....S,#
@@ -1210,7 +1215,7 @@ D:$$$$$$$$$$$$$$$$$$$
 
 N:132:Collapsed Keep
 X:6:8:10
-F:NO_ROTATION
+F:NO_ROTATION | TERRAIN_FLOOD
 D:$$$$######::###$$$$
 D:$...#.&..*....#...$
 D:$...#.:.3.3:%##...$
@@ -1567,7 +1572,7 @@ D:   #$$$#
 
 N:210:Cave in
 X:6:12:5
-F:NO_ROTATION
+F:NO_ROTATION | TERRAIN_FLOOD
 D:   #$$##$$$$$$#$$$$
 D:  ##....#..:.....:$
 D:###:..##.2....:.?.$
@@ -2265,6 +2270,7 @@ D:#########
 
 N:324:Collapsed Chamber
 X:7:9:5
+F:TERRAIN_FLOOD
 D:#########      
 D:#&#.....###$$$$
 D:##:.1.*.#:#...$
@@ -2291,7 +2297,7 @@ D:#$$####$$$$$#####
 
 N:331:Fort
 X:7:5:2
-F:TORCHES
+F:TORCHES | TERRAIN_CROSSING | TERRAIN_REPAIRED
 D:#####$$$$$#####
 D:#...#.....#...#
 D:#.2.#..1..#.?.#
@@ -2380,7 +2386,7 @@ D:######$$##############
 
 N:343:Split hall
 X:7:10:3
-F:TORCHES
+F:TORCHES | TERRAIN_CROSSING
 D:  ######$######  
 D:  #.?.##.##.?.#  
 D:  ##+###.###+##  
@@ -3112,7 +3118,7 @@ D:    #$#
 N:461:Duruin Bastion
 X:6:11:3
 S:*:1
-F:QUEST | NO_ROTATION
+F:QUEST | NO_ROTATION | TERRAIN_REPAIRED
 D:##########$##########
 D:#######.......#######
 D:#####...##s##...#####
@@ -3130,7 +3136,7 @@ D:##########$##########
 # Lore: A small weapons cache where orcs store pilfered equipment and arm themselves for raids.
 N:462:Orc Armory
 X:7:2:8:10
-F:SURFACE
+F:SURFACE | TERRAIN_CROSSING | TERRAIN_REPAIRED
 D:$$$$$$$$$$$$$
 D:$....###....$
 D:$..?.%*%..O.$

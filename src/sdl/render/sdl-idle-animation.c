@@ -1,6 +1,8 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-bridge.h"
+#include "sdl/render/sdl-bridge.h"
 
 /* Fixtures share one 160x16 atlas; each animated liquid shares one 64x16 atlas.
  * Solid ice uses one static 16x16 tile, cached here for map invalidation.
@@ -43,15 +45,17 @@ static bool ice_load_attempted;
 static byte visible_liquid(int y, int x)
 {
     u16b info;
-    if (!p_ptr || !in_bounds(y, x)
-        || (cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_LAVA
-            && cave_feat[y][x] != FEAT_ICE && cave_feat[y][x] != FEAT_POISON))
+    if (!p_ptr || !in_bounds(y, x))
+        return 0;
+    byte feat = cave_bridge_underlay(cave_feat[y][x]);
+    if (feat != FEAT_WATER && feat != FEAT_LAVA && feat != FEAT_ICE
+        && feat != FEAT_POISON && !(feat == FEAT_CHASM && FEAT_IS_BRIDGE(cave_feat[y][x])))
         return 0;
     info = cave_info[y][x];
     if (!(info & (CAVE_MARK | CAVE_SEEN))
         || ((p_ptr->rage || g_labyrinth_view_active) && !(info & CAVE_SEEN)))
         return 0;
-    return cave_feat[y][x];
+    return feat;
 }
 
 static bool load_liquid_texture(byte feat)
@@ -136,8 +140,14 @@ static bool load_liquid_texture(byte feat)
 
 static bool draw_liquid(int y, int x, const SDL_FRect* dst)
 {
-    byte feat = cave_feat[y][x];
+    byte feat = cave_bridge_underlay(cave_feat[y][x]);
     bool live = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
+    if (feat == FEAT_CHASM)
+    {
+        sdl_draw_tileset_sprite(f_info[FEAT_CHASM].x_attr,
+            f_info[FEAT_CHASM].x_char, dst, false);
+        return true;
+    }
     if (!load_liquid_texture(feat))
     {
         /* Keep lethal terrain recognizable even if an asset is missing. */
@@ -333,7 +343,11 @@ static byte visible_fixture(int y, int x)
 bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst)
 {
     if (g_state.use_tiles && visible_liquid(y, x))
-        return draw_liquid(y, x, dst);
+    {
+        bool drawn = draw_liquid(y, x, dst);
+        if (FEAT_IS_BRIDGE(cave_feat[y][x])) sdl_draw_bridge_deck(y, x, dst);
+        return drawn;
+    }
     byte kind = visible_fixture(y, x);
     bool live;
     bool animate;
@@ -434,7 +448,7 @@ static bool animation_context_active(void)
 static bool cell_can_animate(const idle_cell* cell)
 {
     /* Track ice for pan/erase invalidation, but its solid surface never moves. */
-    if (cell->liquid_feat == FEAT_ICE)
+    if (cell->liquid_feat == FEAT_ICE || cell->liquid_feat == FEAT_CHASM)
         return false;
     term* t = term_screen;
     term_win* scr = t ? t->scr : NULL;

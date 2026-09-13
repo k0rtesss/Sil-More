@@ -166,6 +166,18 @@ static int ui_question_ask_aux(cptr title, cptr desc,
             scroll_follow_highlight = false;
 
         {
+            int navigation = sdl_question_menu_take_navigation();
+
+            if (navigation)
+            {
+                highlight = ui_question_next_enabled(options, count,
+                    highlight, navigation);
+                scroll_follow_highlight = true;
+                continue;
+            }
+        }
+
+        {
             int clicked_choice = 0;
             int click_action = UI_MENU_CLICK_PRIMARY;
 

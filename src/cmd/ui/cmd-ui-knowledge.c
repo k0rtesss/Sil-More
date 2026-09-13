@@ -6933,6 +6933,260 @@ static bool inventory_replacement_type_matches(const object_type* incoming,
     return false;
 }
 
+static enum inventory_limit_group inventory_storage_exchange_target_group(
+    const supply_menu_request* request)
+{
+    if (!request)
+        return INV_LIMIT_NONE;
+
+    if (request->storage_exchange_target == OBJECT_STORAGE_PACK)
+        return INV_LIMIT_PACK;
+    if (request->storage_exchange_target == OBJECT_STORAGE_HARNESS)
+        return INV_LIMIT_HARNESS;
+    return INV_LIMIT_NONE;
+}
+
+static bool inventory_storage_exchange_possible(
+    const supply_menu_request* request, const object_type* outgoing)
+{
+    if (!request || !request->storage_exchange_incoming || !outgoing)
+        return false;
+
+    if (request->storage_exchange_allow_non_stowable)
+    {
+        return inventory_limit_floor_storage_exchange_possible(
+            request->storage_exchange_incoming, outgoing);
+    }
+
+    return inventory_limit_storage_exchange_possible(
+        request->storage_exchange_incoming, outgoing);
+}
+
+static bool inventory_storage_exchange_object_allowed(
+    const supply_menu_request* request, const object_type* o_ptr)
+{
+    enum inventory_limit_group target_group;
+
+    if (!request || !request->storage_exchange_mode
+        || !request->storage_exchange_incoming
+        || !request->storage_exchange_incoming->k_idx
+        || !o_ptr || !o_ptr->k_idx)
+    {
+        return false;
+    }
+
+    target_group = inventory_storage_exchange_target_group(request);
+    if (target_group == INV_LIMIT_NONE
+        || inventory_limit_group_for_object(o_ptr) != target_group)
+    {
+        return false;
+    }
+
+    if (!request->storage_exchange_allow_non_stowable
+        && !object_can_choose_pack_or_harness(o_ptr))
+    {
+        return false;
+    }
+
+    return inventory_storage_exchange_possible(request, o_ptr);
+}
+
+static bool inventory_storage_exchange_equipment_allowed(
+    const supply_menu_request* request, int slot)
+{
+    if (!request || !request->storage_exchange_include_equip
+        || slot < INVEN_WIELD || slot >= INVEN_TOTAL
+        || !inventory[slot].k_idx || cursed_p(&inventory[slot]))
+    {
+        return false;
+    }
+
+    return inventory_storage_exchange_object_allowed(request,
+        &inventory[slot]);
+}
+
+static int count_inventory_storage_exchange_group_entries(
+    inventory_menu_group group, const supply_menu_request* request)
+{
+    int count = 0;
+
+    if (!request || !request->storage_exchange_mode)
+        return 0;
+
+    if (request->storage_exchange_include_equip)
+    {
+        for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+        {
+            if (group != INVENTORY_MENU_GROUP_ALL
+                && !inventory_browser_equipped_slot_matches_group(group, i))
+            {
+                continue;
+            }
+            if (inventory_storage_exchange_equipment_allowed(request, i))
+                count++;
+        }
+    }
+
+    for (int i = 0; i < player_pack_entry_count(); i++)
+    {
+        object_type* o_ptr = player_pack_entry_at(i);
+
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        if (group != INVENTORY_MENU_GROUP_ALL
+            && !inventory_browser_object_matches_group(group, o_ptr))
+        {
+            continue;
+        }
+        if (inventory_storage_exchange_object_allowed(request, o_ptr))
+            count++;
+    }
+
+    return count;
+}
+
+static void compute_inventory_storage_exchange_group_totals(
+    int totals[INVENTORY_BROWSER_GROUP_COUNT],
+    const supply_menu_request* request)
+{
+    for (int i = 0; i < INVENTORY_BROWSER_GROUP_COUNT; i++)
+        totals[i] = count_inventory_storage_exchange_group_entries(
+            inventory_browser_groups[i], request);
+}
+
+static int collect_inventory_storage_exchange_entries(
+    inventory_menu_group group, equipment_list_entry entries[], int capacity,
+    const supply_menu_request* request)
+{
+    int count = 0;
+
+    if (!entries || capacity <= 0 || !request
+        || !request->storage_exchange_mode)
+    {
+        return 0;
+    }
+
+    for (int i = 0; i < capacity; i++)
+        equipment_entry_clear(&entries[i]);
+
+    if (request->storage_exchange_include_equip)
+    {
+        for (int i = INVEN_WIELD; i < INVEN_TOTAL && count < capacity; i++)
+        {
+            if (group != INVENTORY_MENU_GROUP_ALL
+                && !inventory_browser_equipped_slot_matches_group(group, i))
+            {
+                continue;
+            }
+            if (inventory_storage_exchange_equipment_allowed(request, i))
+            {
+                equipment_add_entry(entries, &count, capacity, -1, -1, i,
+                    equipment_slot_active_for_display(i));
+            }
+        }
+    }
+
+    for (int i = 0; i < player_pack_entry_count() && count < capacity; i++)
+    {
+        int item = player_pack_entry_handle_at(i);
+        object_type* o_ptr = player_inventory_object(item);
+
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        if (group != INVENTORY_MENU_GROUP_ALL
+            && !inventory_browser_object_matches_group(group, o_ptr))
+        {
+            continue;
+        }
+        if (inventory_storage_exchange_object_allowed(request, o_ptr))
+            equipment_add_entry(entries, &count, capacity, item, -1, -1,
+                false);
+    }
+
+    return count;
+}
+
+static bool inventory_storage_exchange_overlay_entry(
+    const supply_menu_request* request, equipment_list_entry* entry)
+{
+    const object_type* objects[2];
+    const char* headings[2];
+    char incoming_heading[40];
+    char outgoing_heading[40];
+    object_type* candidate;
+    enum inventory_limit_group source_group;
+    enum inventory_limit_group target_group;
+
+    if (!request || !request->storage_exchange_mode
+        || !request->storage_exchange_incoming || !entry)
+    {
+        return false;
+    }
+
+    candidate = equipment_entry_object(entry);
+    if (!candidate || !candidate->k_idx)
+        return false;
+
+    source_group = inventory_limit_group_for_object(
+        request->storage_exchange_incoming);
+    target_group = inventory_storage_exchange_target_group(request);
+    if (source_group == INV_LIMIT_NONE || target_group == INV_LIMIT_NONE)
+        return false;
+
+    strnfmt(incoming_heading, sizeof(incoming_heading), "Move to %s",
+        inventory_limit_group_name(target_group));
+    strnfmt(outgoing_heading, sizeof(outgoing_heading), "Move to %s",
+        inventory_limit_group_name(source_group));
+    headings[0] = incoming_heading;
+    headings[1] = outgoing_heading;
+    objects[0] = request->storage_exchange_incoming;
+    objects[1] = candidate;
+
+    return object_info_overlay_show_multi(objects, headings, 2);
+}
+
+static void inventory_storage_exchange_volume_status(
+    const supply_menu_request* request, inventory_menu_group selected_group,
+    const equipment_list_entry* selected_entry, int candidate_count,
+    char* buf, size_t buflen)
+{
+    enum inventory_limit_group source_group;
+    enum inventory_limit_group target_group;
+    object_type* candidate;
+
+    if (!buf || buflen == 0)
+        return;
+    buf[0] = '\0';
+    if (!request || !request->storage_exchange_incoming)
+        return;
+
+    source_group = inventory_limit_group_for_object(
+        request->storage_exchange_incoming);
+    target_group = inventory_storage_exchange_target_group(request);
+    if (source_group == INV_LIMIT_NONE || target_group == INV_LIMIT_NONE)
+        return;
+
+    candidate = equipment_entry_object(selected_entry);
+    if (candidate && candidate->k_idx
+        && inventory_storage_exchange_possible(request, candidate))
+    {
+        strnfmt(buf, buflen,
+            "Move the incoming item to %s; the selected item moves to %s.",
+            inventory_limit_group_name(target_group),
+            inventory_limit_group_name(source_group));
+    }
+    else
+    {
+        strnfmt(buf, buflen,
+            "%s: %d exchange candidate%s. Select an item to move to %s; "
+            "the incoming item moves to %s.",
+            inventory_browser_group_text(selected_group), candidate_count,
+            candidate_count == 1 ? "" : "s",
+            inventory_limit_group_name(source_group),
+            inventory_limit_group_name(target_group));
+    }
+}
+
 static bool inventory_replacement_object_allowed(
     const supply_menu_request* request, const object_type* o_ptr, bool equipped)
 {
@@ -10885,6 +11139,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     char inventory_action_notice[192] = "";
     bool desc_overlay_on = false;
     bool replacement_mode = false;
+    bool storage_exchange_mode = false;
     bool slot_pick_mode = false;
     bool item_select_mode = false;
     int focus_floor_o_idx = -1;
@@ -10984,6 +11239,20 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 SUPPLY_INTERACTION_DESCRIPTION);
             forced_action = SUPPLY_MENU_ACTION_NONE;
             *request->replacement_item_out = -1;
+        }
+        if (request->storage_exchange_mode
+            && request->storage_exchange_incoming
+            && request->storage_exchange_incoming->k_idx
+            && request->storage_exchange_item_out)
+        {
+            storage_exchange_mode = true;
+            page = SUPPLY_MENU_PAGE_INVENTORY;
+            inv_column = 1;
+            supply_set_interaction_mode(&overlay_cache, &desc_overlay_on,
+                &drop_click_mode, &delete_click_mode,
+                SUPPLY_INTERACTION_DESCRIPTION);
+            forced_action = SUPPLY_MENU_ACTION_NONE;
+            *request->storage_exchange_item_out = -1;
         }
         if (request->slot_pick_mode && request->slot_pick_incoming
             && request->slot_pick_incoming->k_idx
@@ -11752,11 +12021,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             bool preserve_touch_view;
             bool show_source;
             bool compact_entry_only;
-            bool inventory_one_page = !replacement_mode && !slot_pick_mode
+            bool inventory_one_page = !replacement_mode
+                && !storage_exchange_mode && !slot_pick_mode
                 && !item_select_mode;
 
             prepare_inventory_browser_group_icons(inventory_icons);
-            if (replacement_mode)
+            if (storage_exchange_mode)
+                compute_inventory_storage_exchange_group_totals(
+                    inventory_totals, request);
+            else if (replacement_mode)
                 compute_inventory_replacement_group_totals(inventory_totals,
                     request);
             else if (slot_pick_mode)
@@ -11767,7 +12040,34 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     request);
             else
                 compute_inventory_browser_group_totals(inventory_totals);
-            if (replacement_mode)
+            if (storage_exchange_mode)
+            {
+                char incoming_name[120];
+                enum inventory_limit_group source_group =
+                    inventory_limit_group_for_object(
+                        request->storage_exchange_incoming);
+                enum inventory_limit_group target_group =
+                    inventory_storage_exchange_target_group(request);
+
+                object_desc(incoming_name, sizeof(incoming_name),
+                    request->storage_exchange_incoming, true, 3);
+                if (request->storage_exchange_reason
+                    && request->storage_exchange_reason[0])
+                {
+                    SDL_strlcpy(picker_heading,
+                        request->storage_exchange_reason,
+                        sizeof(picker_heading));
+                    picker_heading_attr = TERM_YELLOW;
+                }
+                else
+                    SDL_strlcpy(picker_heading, "Exchange storage",
+                        sizeof(picker_heading));
+                strnfmt(picker_detail, sizeof(picker_detail),
+                    "Move to %s: %s - choose an item to move to %s",
+                    inventory_limit_group_name(target_group), incoming_name,
+                    inventory_limit_group_name(source_group));
+            }
+            else if (replacement_mode)
             {
                 char incoming_name[120];
                 cptr reason = request->replacement_reason;
@@ -11882,7 +12182,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 selected_group = inventory_browser_groups[inv_grp_cur];
             }
-            if (replacement_mode)
+            if (storage_exchange_mode)
+                inventory_entry_cnt = collect_inventory_storage_exchange_entries(
+                    selected_group, equip_entries, equip_capacity, request);
+            else if (replacement_mode)
                 inventory_entry_cnt = collect_inventory_replacement_entries(
                     selected_group, equip_entries, equip_capacity, request);
             else if (slot_pick_mode)
@@ -11894,8 +12197,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             else
                 inventory_entry_cnt = collect_inventory_page_entries(
                     selected_group, equip_entries, equip_capacity, request);
-            inventory_choice_cnt = (replacement_mode || slot_pick_mode
-                    || item_select_mode)
+            inventory_choice_cnt = (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                 ? inventory_entry_cnt
                 : inventory_one_page
                 ? inventory_entry_cnt
@@ -11924,7 +12227,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 inv_focus_group_pending = false;
             }
 
-            if (!replacement_mode && !slot_pick_mode && !item_select_mode
+            if (!storage_exchange_mode && !replacement_mode
+                && !slot_pick_mode && !item_select_mode
                 && focus_floor_o_idx > 0)
             {
                 for (i = 0; i < inventory_entry_cnt; i++)
@@ -11955,7 +12259,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (inventory_one_page || slot_pick_mode)
                     inv_column = 1;
             }
-            if (!replacement_mode && !slot_pick_mode && !item_select_mode
+            if (!storage_exchange_mode && !replacement_mode
+                && !slot_pick_mode && !item_select_mode
                 && inventory_entry_cnt > 0)
             {
                 cptr action = inventory_page_use_action_text(
@@ -12211,7 +12516,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 knowledge_draw_stacked_entry_divider(&layout);
                 Term_putstr(0, layout.entry_header_row, layout.term_wid,
                     TERM_SLATE,
-                    replacement_mode ? "Replacement candidates"
+                    storage_exchange_mode ? "Storage exchange"
+                    : replacement_mode ? "Replacement candidates"
                     : item_select_mode ? "Matching items"
                     : inventory_browser_group_text(selected_group));
                 if (entry_cols.show_volume)
@@ -12230,7 +12536,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     "Category");
                 Term_putstr(layout.list_col, layout.header_row, layout.list_w,
                     TERM_SLATE,
-                    replacement_mode ? "Replacement candidates"
+                    storage_exchange_mode ? "Storage exchange"
+                    : replacement_mode ? "Replacement candidates"
                     : slot_pick_mode ? "Destination slots"
                     : item_select_mode ? "Matching items"
                     : inventory_browser_group_text(selected_group));
@@ -12252,7 +12559,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     Term_putch(layout.divider_col, layout.list_row + i,
                         TERM_L_DARK, '|');
 
-            if (!replacement_mode && !slot_pick_mode && !item_select_mode)
+            if (!storage_exchange_mode && !replacement_mode
+                && !slot_pick_mode && !item_select_mode)
             {
                 supply_register_page_tabs(&layout);
                 knowledge_enable_horizontal_page_swipe(&layout,
@@ -12393,7 +12701,19 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     entry_page_rows = 1;
             }
 
-            if (replacement_mode)
+            if (storage_exchange_mode)
+            {
+                equipment_list_entry* selected_entry =
+                    (inv_entry_cur >= 0
+                        && inv_entry_cur < inventory_entry_cnt)
+                    ? &equip_entries[inv_entry_cur]
+                    : NULL;
+
+                inventory_storage_exchange_volume_status(request,
+                    selected_group, selected_entry, inventory_entry_cnt,
+                    status_buf, sizeof(status_buf));
+            }
+            else if (replacement_mode)
             {
                 equipment_list_entry* selected_entry =
                     (inv_entry_cur >= 0
@@ -12448,7 +12768,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             }
 
             Term_erase(0, layout.prompt_row, 255);
-            if (replacement_mode)
+            if (storage_exchange_mode)
+            {
+                char prompt[160];
+                const char* variants[] = {
+                    "Exchange: select an item to move to the other pool",
+                    "Exchange: select an item",
+                    "Select an item"
+                };
+
+                terminal_prompt_pick_variant(prompt, sizeof(prompt),
+                    layout.term_wid, false, variants, N_ELEMENTS(variants));
+                Term_putstr(0, layout.prompt_row, layout.term_wid,
+                    TERM_L_DARK, prompt);
+                supply_register_prompt_clicks(&layout, prompt, NULL, "select",
+                    NULL, NULL, "Esc");
+            }
+            else if (replacement_mode)
             {
                 char prompt[160];
 
@@ -12796,7 +13132,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     : inventory_browser_compare_slot_for_entry(selected_group,
                           &equip_entries[inv_entry_cur]);
 
-                if (replacement_mode || slot_pick_mode)
+                if (storage_exchange_mode || replacement_mode || slot_pick_mode)
                     supply_overlay_avoid_entries(&layout, rendered_entry_rows);
                 else if (inventory_one_page)
                 {
@@ -12830,7 +13166,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         inv_entry_cur, (int)selected_group, layout.term_wid,
                         layout.term_hgt))
                 {
-                    bool shown = replacement_mode
+                    bool shown = storage_exchange_mode
+                        ? inventory_storage_exchange_overlay_entry(request,
+                            &equip_entries[inv_entry_cur])
+                        : replacement_mode
                         ? inventory_replacement_overlay_entry(request,
                             &equip_entries[inv_entry_cur])
                         : slot_pick_mode
@@ -12944,8 +13283,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                                 continue;
                             if (supply_touch_preview_entry_select_only(
                                     desc_overlay_on, click_action,
-                                    replacement_mode || slot_pick_mode
-                                    || item_select_mode,
+                                    storage_exchange_mode || replacement_mode
+                                    || slot_pick_mode || item_select_mode,
                                     drop_click_mode || delete_click_mode))
                                 continue;
                             ch = (click_action == UI_MENU_CLICK_SECONDARY) ? 'x'
@@ -13025,7 +13364,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 ch = supply_controller_menu_key(ch,
                     SUPPLY_BROWSER_PREV_PAGE_KEY,
                     SUPPLY_BROWSER_NEXT_PAGE_KEY,
-                    !replacement_mode && !slot_pick_mode
+                    !storage_exchange_mode && !replacement_mode
+                        && !slot_pick_mode
                         && !item_select_mode, true);
 
             if (!click_generated_command)
@@ -13040,7 +13380,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
             }
 
-            if (ch == '-' && !replacement_mode && !slot_pick_mode
+            if (ch == '-' && !storage_exchange_mode && !replacement_mode
+                && !slot_pick_mode
                 && inventory_entry_cnt)
             {
                 bool found_floor = false;
@@ -13078,7 +13419,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 break;
 
             case SUPPLY_BROWSER_PREV_PAGE_KEY:
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = supply_browser_turn_page(page, -1);
                 if (page != SUPPLY_MENU_PAGE_INVENTORY)
@@ -13087,7 +13429,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 break;
 
             case SUPPLY_BROWSER_NEXT_PAGE_KEY:
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = supply_browser_turn_page(page, 1);
                 if (page != SUPPLY_MENU_PAGE_INVENTORY)
@@ -13096,7 +13439,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 break;
 
             case KTRL('I'):
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = supply_browser_turn_page(page, 1);
                 delete_click_mode = false;
@@ -13105,7 +13449,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'e':
             case 'E':
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = SUPPLY_MENU_PAGE_EQUIPPED;
                 delete_click_mode = false;
@@ -13117,7 +13462,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'j':
             case 'J':
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = SUPPLY_MENU_PAGE_JEWELRY;
                 grp_cur = 0;
@@ -13131,7 +13477,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 bool preview_was_open = desc_overlay_on;
 
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                 {
                     if (inventory_entry_cnt)
                     {
@@ -13174,6 +13521,27 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             case 'u':
             case 'U':
             case ' ':
+                if (storage_exchange_mode)
+                {
+                    if (!inv_column && inventory_entry_cnt)
+                    {
+                        inv_column = 1;
+                    }
+                    else if (inventory_entry_cnt)
+                    {
+                        int exchange_item = inventory_replacement_entry_item(
+                            &equip_entries[inv_entry_cur]);
+
+                        if (exchange_item >= 0 && request
+                            && request->storage_exchange_item_out)
+                        {
+                            *request->storage_exchange_item_out = exchange_item;
+                            acted = true;
+                            flag = true;
+                        }
+                    }
+                    break;
+                }
                 if (replacement_mode)
                 {
                     if (!inv_column && inventory_entry_cnt)
@@ -13271,7 +13639,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'z':
             case 'Z':
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 if (!inv_column && inventory_entry_cnt)
                 {
@@ -13302,7 +13671,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'y':
             case 'Y':
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 if (!inv_column && inventory_entry_cnt)
                 {

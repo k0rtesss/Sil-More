@@ -13,6 +13,7 @@ BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/tutorial-integration-check"
 
 HARNESS = core.HARNESS.split("int main(", 1)[0] + r'''
+__DISEASE_IMPLEMENTATION__
 __GAME_IMPLEMENTATION__
 __RANGED_AIM_IMPLEMENTATION__
 static bool eat_food(object_type *,bool *);
@@ -479,7 +480,7 @@ int main(void)
         object_type miruvor={.k_idx=5,.tval=TV_POTION,.sval=SV_POTION_MIRUVOR,.number=1};
         object_type herb={.k_idx=6,.tval=TV_FOOD,.sval=SV_FOOD_HEALING,.number=1};
         activate("status.diseased.remedy","diseased");
-        p_ptr->diseased=50; k_info[5].aware=true; k_info[6].aware=true;
+        p_ptr->diseased=100; k_info[5].aware=true; k_info[6].aware=true;
         k_info[3].aware=false;
         assert(!tutorial_game_action_allowed("use-item",&healing));
         k_info[3].aware=true;
@@ -489,6 +490,22 @@ int main(void)
         assert(!tutorial_game_action_allowed("use-item",&herb));
         herb.sval=SV_FOOD_RESTORATION;
         assert(!tutorial_game_action_allowed("use-item",&herb));
+        p_ptr->disease_name=1;p_ptr->disease_cure=herb.sval;
+        p_ptr->disease_knowledge=DISEASE_KNOWN_NAME;
+        assert(!tutorial_game_action_allowed("use-item",&herb));
+        test_supply=herb;supply_count=1;assert(!available_remedy("diseased"));
+        p_ptr->disease_knowledge|=DISEASE_KNOWN_CURE;
+        assert(tutorial_game_action_allowed("use-item",&herb)&&available_remedy("diseased"));
+        k_info[6].aware=false;assert(!tutorial_game_action_allowed("use-item",&herb));
+        assert(!available_remedy("diseased"));k_info[6].aware=true;
+        assert(!item_is_remedy(&herb,"drain"));
+        herb.sval=SV_FOOD_HEALING;p_ptr->disease_cure=herb.sval;
+        assert(item_is_remedy(&herb,"diseased")&&!item_is_remedy(&herb,"health")&&!item_is_remedy(&herb,"cut"));
+        herb.sval=SV_FOOD_SUSTENANCE;p_ptr->disease_cure=herb.sval;
+        assert(item_is_remedy(&herb,"diseased")&&!item_is_remedy(&herb,"hunger"));
+        herb.sval=SV_FOOD_HEALING;
+        assert(!item_is_remedy(&herb,"diseased")&&item_is_remedy(&herb,"health"));
+        supply_count=0;p_ptr->disease_knowledge=0;
         assert(!available_remedy("diseased"));
         test_supply=miruvor; supply_count=1;
         assert(available_remedy("diseased"));
@@ -502,7 +519,7 @@ int main(void)
         effect_commits=true;
         assert(use_object(&healing,&identified) && identified);
         assert(tutorial_lesson_status("status.diseased.remedy")==TUTORIAL_COMPLETED);
-        p_ptr->diseased=0;
+        p_ptr->diseased=0;p_ptr->disease_name=0;p_ptr->disease_cure=0;p_ptr->disease_knowledge=0;
     }
 
     {
@@ -814,6 +831,7 @@ def main():
     # externs.h contains unguarded enum declarations. A unity fixture has
     # already read it through tutorial.c; omit only that repeated include.
     game = (ROOT / "src/tutorial/tutorial-game.c").read_text()
+    disease = c_function((ROOT / "src/player/effects.c").read_text(), 'disease_herb_matches')
     game = game.replace('#include "externs.h"', '')
     game = game.replace('#include "tutorial-game.h"', '#include "tutorial/tutorial-game.h"')
     game = game.replace('#include "tutorial-world.h"', '#include "tutorial/tutorial-world.h"')
@@ -834,6 +852,7 @@ def main():
             'object_info_configure_footer', 'object_info_screen_capture_view',
             'object_info_screen_multi_with_actions'))
     source.write_text(HARNESS.replace("__GAME_IMPLEMENTATION__", game)
+                      .replace("__DISEASE_IMPLEMENTATION__", disease)
                       .replace("__RANGED_AIM_IMPLEMENTATION__", aim)
                       .replace("__USE_OBJECT_IMPLEMENTATION__", use_body)
                       .replace("__DESCRIPTION_IMPLEMENTATION__", description), encoding="utf-8")

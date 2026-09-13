@@ -635,7 +635,8 @@ static void drop_object_at_player_feet_or_nearby(object_type* drop)
         return;
 
     can_drop_here = (cave_feat[p_ptr->py][p_ptr->px] == FEAT_FLOOR
-        || cave_feat[p_ptr->py][p_ptr->px] == FEAT_SUNLIGHT);
+        || cave_feat[p_ptr->py][p_ptr->px] == FEAT_SUNLIGHT
+        || FEAT_IS_BRIDGE(cave_feat[p_ptr->py][p_ptr->px]));
 
     if (can_drop_here && floor_carry(p_ptr->py, p_ptr->px, drop) > 0)
         return;

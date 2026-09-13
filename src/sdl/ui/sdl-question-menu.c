@@ -72,6 +72,7 @@ typedef struct sdl_question_menu_touch_state {
 
 static sdl_question_menu_touch_state g_question_menu_touch;
 static bool g_question_menu_touch_scrolled = false;
+static int g_question_menu_pending_navigation = 0;
 
 /* Pixel rect of a map cell on the main view, or false when it is off the
  * current panel.  Shared with the yes/no prompt anchoring. */
@@ -1483,6 +1484,7 @@ void sdl_question_menu_clear(void)
         sdl_object_tooltip_clear();
     sdl_question_menu_cancel_touch();
     g_question_menu_touch_scrolled = false;
+    g_question_menu_pending_navigation = 0;
     memset(&g_question_menu, 0, sizeof(g_question_menu));
     g_question_menu.highlight = -1;
 }
@@ -1579,7 +1581,7 @@ bool sdl_question_menu_activate_context_choice(int choice)
 
     sdl_question_menu_clear();
     /* This is an already selected command, so a keyboard remap must not
-     * reinterpret Description, Pack, or Harness as an unrelated action.
+     * reinterpret Description or a pickup action as an unrelated command.
      * Space is a shortcut for interact-here, not an engine command: its
      * normal /5 keymap must be expanded explicitly when bypassing keymaps.
      * Keep the interaction path so stairs still ask for confirmation. */
@@ -1613,6 +1615,7 @@ void sdl_question_menu_begin(cptr title)
         ? g_question_menu.help_scroll_offset : 0;
 
     memset(&g_question_menu, 0, sizeof(g_question_menu));
+    g_question_menu_pending_navigation = 0;
     g_question_menu.active = true;
     g_question_menu.highlight = -1;
     g_question_menu.close_hover = close_hover;
@@ -1766,6 +1769,30 @@ bool sdl_question_menu_captures_pointer(void)
     return g_question_menu.active
         && !g_question_menu.blocking_input
         && !g_question_menu.nonblocking;
+}
+
+/* Physical directional input is normalized to keypad characters by the SDL
+ * event bridge.  Keep that input separate from actual number-key shortcuts so
+ * a menu entry keyed to "2" cannot turn the Down arrow into a selection. */
+bool sdl_question_menu_queue_navigation(int direction)
+{
+    if (!sdl_question_menu_captures_pointer()
+        || (direction != -1 && direction != 1))
+    {
+        return false;
+    }
+
+    g_question_menu_pending_navigation = direction;
+    Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+    return true;
+}
+
+int sdl_question_menu_take_navigation(void)
+{
+    int direction = g_question_menu_pending_navigation;
+
+    g_question_menu_pending_navigation = 0;
+    return direction;
 }
 
 void sdl_question_menu_set_nonblocking(bool nonblocking)

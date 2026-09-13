@@ -54,6 +54,10 @@ int inventory_limit_max_carryable_quantity(const object_type* o_ptr);
 int inventory_limit_removal_space_for_object(const object_type* o_ptr);
 int inventory_limit_usage_after_replacing(const object_type* incoming,
     const object_type* removed, int remove_quantity);
+bool inventory_limit_storage_exchange_possible(
+    const object_type* incoming, const object_type* outgoing);
+bool inventory_limit_floor_storage_exchange_possible(
+    const object_type* incoming, const object_type* outgoing);
 bool inventory_limit_object_matches_group(enum inventory_limit_group group,
     const object_type* o_ptr);
 cptr inventory_limit_group_name(enum inventory_limit_group group);

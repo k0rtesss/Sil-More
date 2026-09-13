@@ -4,6 +4,8 @@
 #include "cave/cave.h"
 #include "cave/cave-fixtures.h"
 #include "level-generation/level-generation-internal.h"
+#include "level-generation/level-generation-terrain-vaults.h"
+#include "level-generation/level-generation-terrain-history.h"
 #include "blitz.h"
 #include "sdl-config.h"
 #include "tutorial/tutorial.h"
@@ -109,6 +111,7 @@ static bool tutorial_start_triggers_monster(void)
 
 bool cave_gen(void)
 {
+    terrain_history_reset();
     int i;
 
     int l;
@@ -228,6 +231,8 @@ bool cave_gen(void)
     dun->cent_n = 0;
     log_trace("cave_gen: cent_n reset to 0");
     layout_anchor_reset();
+    current_partition_count = 0;
+    terrain_history_begin();
 
     /* Verify dun struct sanity */
     log_trace("cave_gen: sanity check dun ptr=%p cent capacity=%d connection[0][0]=%d piece[0]=%d corner[0]=(y1=%d,x1=%d,y2=%d,x2=%d)",
@@ -592,6 +597,7 @@ bool cave_gen(void)
     /* Sil - This has been changed considerably */
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_LINKING,
         "Connecting rooms and validating access.");
+    terrain_history_start_tunnels();
     if (!connect_rooms_stairs())
     {
         if (cheat_room)
@@ -653,9 +659,13 @@ bool cave_gen(void)
     check_quest_vault_integrity("AFTER_DOOR_RANDOMIZATION");
 
     /* place the stairs, traps, rubble, secret doors, and player */
-    place_cave_water();
-    place_cave_lava();
-    place_cave_poison();
+    if (!terrain_history_finish())
+    {
+        if (p_ptr->force_forge) p_ptr->fixed_forge_count--;
+        genlog_fail("Terrain history could not retain its planned topology");
+        return false;
+    }
+    place_dungeon_terrain();
 
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_ENTRY,
         "Placing stairs, rubble, doors, and player start.");
@@ -1724,6 +1734,8 @@ if (playerturn == 0) {
         feeling = 0;
 
         cave_fixtures_clear();
+        terrain_generation_reset();
+        terrain_vault_reset();
 
         /* Start with a blank cave */
         for (y = 0; y < MAX_DUNGEON_HGT; y++)

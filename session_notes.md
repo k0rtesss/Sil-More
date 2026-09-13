@@ -1,5 +1,10 @@
 # Session notes
 
+## 2026-09-13: Pack/Harness storage exchange on capacity failure
+- `src/cmd/item/cmd-item-core.c`, `src/cmd/ui/cmd-ui-knowledge.c`: Ready/store now opens a directional storage-exchange picker when the destination pool cannot fit the whole movable entry; selecting a fitting item exchanges it into the source pool.
+- `src/object/object-inventory-limits.c`, `src/player/player-pack-action.c`: Both pools are projected before exchange, including carriage reductions and legacy high-water allowances; the choice survives the normal interruptible three-turn Pack action.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -VerboseBuild` passed; scoped `git diff --check` passed. Interactive capacity replay remains unverified.
+
 ## 2026-09-11: Tutorial audit and fixes
 - Reviewed gameplay lessons, triggers, scheduling, persistence, archives, SDL input and device tutorial replay. Revised 460 existing lessons and added eight; 521 lessons now use 550 cards instead of 643. Normal includes water/lava/ice/poison warnings. `docs/tutorial-reference.md` is regenerated with priorities and 25 terrain-family archive aliases.
 - Corrected base-skill Warden/Versatility calculations, Aule's Forge costs (also three `lib/edit/ability.txt` descriptions), Pack access timing, detection ranges, monster resistance vs immunity, terrain exposure and status remedies. Stable IDs, per-Tale progress and legacy-character deferral remain.
@@ -9100,3 +9105,16 @@ The script now fully matches the game's drop generation logic for all item types
 - Shared vault_is_valid_for_depth() now filters quest candidates before marking them eligible, matching construction restrictions. Invalid contents no longer force quest regeneration; valid templates with geometry failures retain retries.
 - Per user request, the barrow-wight limit and Tomb template maximum are both depth 14 (700 ft). Chasm restriction at depth 20 is preserved.
 - Validation: check_vault_depth_eligibility.py passed actual Tomb content and production selector/helper boundaries, invalid-candidate skip, valid fallback and geometry retries; template versions and scoped diff checks passed. All-core standard build passed. Standard executable and vault.txt staged with matching SHA256 hashes. Isolated final-binary startup reached initial_menu with no ERROR/FATAL logs. Player save/750 ft transition was not manually replayed; original deployment failure logs preserved.
+
+## 2026-09-13: Debug menu arrow navigation
+- Physical Up/Down/Left/Right and keypad directional events in the SDL question overlay now queue navigation separately from numeric shortcut keys, so the debug menu's numbered groups remain directly selectable with number-row keys.
+- Vertical controller directions use the same semantic queue; Enter/Space and existing direct shortcuts remain unchanged.
+- Validation: changed SDL/question sources compiled; focused source-routing contract and scoped diff checks passed. Full executable link remains blocked by unrelated dirty terrain work omitting `level-generation-terrain-vaults.c` from the current CMake source list.
+
+## 2026-09-13: Named diseases and herb cures
+- Each infection receives one of eight stable fantasy names and one of all ten herb svals. Disease countdown/exposure odds and separate attribute penalties remain unchanged.
+- Gem Self Knowledge learns both with active Alchemy; otherwise it rolls 50% for an unknown name, then 50% for an unknown cure when the name is known. Discoveries persist for the current infection, including save/load.
+- The matching herb cures before any ordinary effect or nourishment; Healing potions and Miruvor still cure directly. Known cure item text and tutorial remedy eligibility follow the replacement effect without revealing an unknown cure.
+- Save format 0.9.8.9 adds identity/cure/knowledge bytes with validation. Older infected saves receive an identity while retaining their countdown and penalties.
+- Validation: all-core standard build, check_disease.py, check_gameplay_tutorial_integration.py, and check_disease_knowledge.py pass. These exercise production rules, save-record sections, menu row text and remedy gates; no manual gameplay or full-save replay is claimed.
+- Final validation: all 531 tutorial lessons, template versions, and isolated Help overlap/pagination across six widths pass. Standard executable plus object/ability templates and tutorial catalogue refreshed with matching SHA256 hashes. No player save or configuration was opened.

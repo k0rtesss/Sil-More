@@ -112,6 +112,15 @@ static bool describe_consumable_healing(const object_type* o_ptr)
         return false;
     }
 
+    if ((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+        && disease_herb_matches(o_ptr))
+    {
+        p_text_out(format("It cures your %s, restoring the attributes lost to it.  ",
+            disease_name()));
+        p_text_out("Its usual effects and nourishment do not apply while curing this disease.  ");
+        return true;
+    }
+
     potential = consumable_healing_points(o_ptr);
     if (potential <= 0)
         return false;

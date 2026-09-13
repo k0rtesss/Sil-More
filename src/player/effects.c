@@ -243,12 +243,70 @@ static void disease_changed(void)
     handle_stuff();
 }
 
+/* These indices are saved: append names rather than reordering them. */
+cptr disease_name(void)
+{
+    static const char* names[DISEASE_NAME_COUNT] = {
+        "Ashen Ague", "Barrow Fever", "Blackroot Blight", "Cavern Chills",
+        "Ironlung", "Marsh Shivers", "Pale Wasting", "Shadow Pox"
+    };
+    if (!p_ptr->diseased || p_ptr->disease_name == 0
+        || p_ptr->disease_name > DISEASE_NAME_COUNT)
+        return "Unknown disease";
+    return names[p_ptr->disease_name - 1];
+}
+
+cptr disease_cure_name(void)
+{
+    static const char* names[DISEASE_HERB_COUNT] = {
+        "Rage", "Sustenance", "Terror", "Healing", "Restoration",
+        "Hunger", "Visions", "Entrancement", "Weakness", "Sickness"
+    };
+    if (!p_ptr->diseased || p_ptr->disease_cure >= DISEASE_HERB_COUNT)
+        return "Unknown";
+    return names[p_ptr->disease_cure];
+}
+
+/* Also used to give pre-0.9.8.9 infections an identity during migration. */
+void disease_assign_identity(void)
+{
+    p_ptr->disease_name = 1 + rand_int(DISEASE_NAME_COUNT);
+    p_ptr->disease_cure = rand_int(DISEASE_HERB_COUNT);
+    p_ptr->disease_knowledge = 0;
+}
+
+void disease_identify(void)
+{
+    if (!p_ptr->diseased)
+        return;
+
+    if (p_ptr->active_ability[S_PER][PER_ALCHEMY])
+    {
+        p_ptr->disease_knowledge = DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE;
+        return;
+    }
+
+    if (!(p_ptr->disease_knowledge & DISEASE_KNOWN_NAME) && one_in_(2))
+        p_ptr->disease_knowledge |= DISEASE_KNOWN_NAME;
+    if ((p_ptr->disease_knowledge & DISEASE_KNOWN_NAME)
+        && !(p_ptr->disease_knowledge & DISEASE_KNOWN_CURE) && one_in_(2))
+        p_ptr->disease_knowledge |= DISEASE_KNOWN_CURE;
+}
+
+bool disease_herb_matches(const object_type* o_ptr)
+{
+    return p_ptr->diseased && o_ptr && o_ptr->tval == TV_FOOD
+        && p_ptr->disease_cure < DISEASE_HERB_COUNT
+        && o_ptr->sval == p_ptr->disease_cure;
+}
+
 bool infect_disease(void)
 {
     if (p_ptr->diseased)
         return false;
 
     p_ptr->diseased = DISEASE_INTERVAL;
+    disease_assign_identity();
     p_ptr->stat_disease[A_CON] = -1;
     msg_print("You contract a disease. Your Constitution decreases.");
     disease_changed();
@@ -261,6 +319,9 @@ bool cure_disease(void)
         return false;
 
     p_ptr->diseased = 0;
+    p_ptr->disease_name = 0;
+    p_ptr->disease_cure = 0;
+    p_ptr->disease_knowledge = 0;
     for (int stat = 0; stat < A_MAX; stat++)
         p_ptr->stat_disease[stat] = 0;
     msg_print("Your disease is cured. The attributes it weakened are restored.");

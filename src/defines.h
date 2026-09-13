@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 7  /* Distinct attack geometry and weapon-fear memories. */
+#define VERSION_EXTRA 9  /* Disease identity, herb cure and diagnosis knowledge. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -1301,6 +1301,19 @@
 #define FEAT_LAVA 0x55
 #define FEAT_ICE 0x56
 #define FEAT_POISON 0x57
+#define FEAT_BRIDGE_HEAD 0x58
+#define FEAT_BRIDGE_WATER_H 0x58
+#define FEAT_BRIDGE_WATER_V 0x59
+#define FEAT_BRIDGE_CHASM_H 0x5A
+#define FEAT_BRIDGE_CHASM_V 0x5B
+#define FEAT_BRIDGE_LAVA_H 0x5C
+#define FEAT_BRIDGE_LAVA_V 0x5D
+#define FEAT_BRIDGE_POISON_H 0x5E
+#define FEAT_BRIDGE_POISON_V 0x5F
+#define FEAT_BRIDGE_ICE_H 0x60
+#define FEAT_BRIDGE_ICE_V 0x61
+#define FEAT_BRIDGE_TAIL 0x61
+#define FEAT_IS_BRIDGE(F) ((F) >= FEAT_BRIDGE_HEAD && (F) <= FEAT_BRIDGE_TAIL)
 #define POISON_TERRAIN_DOSE 6
 #define ICE_ATTACK_PENALTY 2
 #define ICE_EVASION_PENALTY 2
@@ -1719,7 +1732,11 @@
 #define DISEASE_MEAT_ONE_IN 5
 #define DISEASE_SKELETON_ONE_IN 20
 #define DISEASE_WATER_ONE_IN 200
-#define DISEASE_INTERVAL 50
+#define DISEASE_INTERVAL 100
+#define DISEASE_NAME_COUNT 8
+#define DISEASE_HERB_COUNT 10 /* Contiguous herb svals, Rage through Sickness. */
+#define DISEASE_KNOWN_NAME 0x01
+#define DISEASE_KNOWN_CURE 0x02
 #define SV_FOOD_LEMBAS 37
 
 /*
@@ -2424,9 +2441,9 @@
 #define VLT_SURFACE 0x00000020L
 #define VLT_QUEST   0x00000040L /* Quest vault - only once per game, max one per level */
 #define VLT_TORCHES 0x00000080L /* Vault gets decorative wall fixtures */
-#define VLT_VLTXXXX9 0x00000100L
-#define VLT_VLTXXX10 0x00000200L
-#define VLT_VLTXXX11 0x00000400L
+#define VLT_TERRAIN_CROSSING 0x00000100L /* Channels may cross this structure */
+#define VLT_TERRAIN_FLOOD 0x00000200L /* Ruin may form part of a flooded basin */
+#define VLT_TERRAIN_REPAIRED 0x00000400L /* Inhabitants maintain crossings and piers */
 #define VLT_VLTXXX12 0x00000800L
 #define VLT_VLTXXX13 0x00001000L
 #define VLT_VLTXXX14 0x00002000L
@@ -3629,7 +3646,7 @@
  */
 #define cave_clean_bold(Y, X)                                                  \
     (((cave_feat[Y][X] == FEAT_FLOOR) || (cave_feat[Y][X] == FEAT_WATER)         \
-         || (cave_feat[Y][X] == FEAT_ICE))                                     \
+         || (cave_feat[Y][X] == FEAT_ICE) || FEAT_IS_BRIDGE(cave_feat[Y][X]))   \
         && (cave_o_idx[Y][X] == 0))
 
 /*

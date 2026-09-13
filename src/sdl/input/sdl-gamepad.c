@@ -924,6 +924,17 @@ static bool sdl_gamepad_send_ui_direction(int dir)
 {
     int key = 0;
 
+    /* A question overlay may also expose numbered shortcuts.  Queue vertical
+     * navigation as a semantic action so the D-pad cannot be mistaken for the
+     * matching number key. */
+    if (dir == GAMEPAD_STICK_DIR_UP || dir == GAMEPAD_STICK_DIR_DOWN)
+    {
+        int navigation = (dir == GAMEPAD_STICK_DIR_UP) ? -1 : 1;
+
+        if (sdl_question_menu_queue_navigation(navigation))
+            return true;
+    }
+
     switch (dir)
     {
     case GAMEPAD_STICK_DIR_UP: key = '8'; break;
@@ -2831,8 +2842,7 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
     if (sdl_minimap_handle_gamepad_axis(ev))
         return;
 
-    if (ev->axis >= SDL_GAMEPAD_AXIS_LEFTX
-        && ev->axis <= SDL_GAMEPAD_AXIS_RIGHTY) {
+    if (ev->axis <= SDL_GAMEPAD_AXIS_RIGHTY) {
         int stick = ev->axis >= SDL_GAMEPAD_AXIS_RIGHTX ? 1 : 0;
         Sint16* x = stick ? &g_gamepad_state.right_x : &g_gamepad_state.left_x;
         Sint16* y = stick ? &g_gamepad_state.right_y : &g_gamepad_state.left_y;

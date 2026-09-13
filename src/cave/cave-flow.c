@@ -2,6 +2,8 @@
 
 #include "cave-internal.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-bridge.h"
+#include "level-generation/level-generation-terrain-history.h"
 #include "melee/melee-util.h"
 #include "monster/monster-senses.h"
 #include "log/perf.h"
@@ -941,8 +943,10 @@ byte get_depth_color(int depth)
  */
 void cave_set_feat_with_color(int y, int x, int feat, int color)
 {
+    feat = terrain_history_construction_feature(y, x, feat);
     bool lava_changed = cave_feat[y][x] != feat
-        && (cave_feat[y][x] == FEAT_LAVA || feat == FEAT_LAVA);
+        && (cave_bridge_underlay(cave_feat[y][x]) == FEAT_LAVA
+            || cave_bridge_underlay(feat) == FEAT_LAVA);
     bool ice_changed = cave_feat[y][x] != feat
         && (cave_feat[y][x] == FEAT_ICE || feat == FEAT_ICE);
     bool poison_changed = cave_feat[y][x] != feat && feat == FEAT_POISON;

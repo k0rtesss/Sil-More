@@ -136,7 +136,8 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
     const bool is_silmaril = (j_ptr->tval == TV_LIGHT) && (j_ptr->sval == SV_LIGHT_SILMARIL);
     const bool impact_is_floor =
         (cave_feat[y][x] == FEAT_FLOOR) || (cave_feat[y][x] == FEAT_SUNLIGHT)
-        || (cave_feat[y][x] == FEAT_WATER) || (cave_feat[y][x] == FEAT_ICE);
+        || (cave_feat[y][x] == FEAT_WATER) || (cave_feat[y][x] == FEAT_ICE)
+        || FEAT_IS_BRIDGE(cave_feat[y][x]);
     const bool force_place = artefact_p(j_ptr) || is_silmaril || j_ptr->pickup;
     const bool try_hard_place = force_place || impact_is_floor;
     const bool can_clobber = force_place;
@@ -223,7 +224,8 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
             if (cave_feat[ty][tx] != FEAT_FLOOR
                 && cave_feat[ty][tx] != FEAT_SUNLIGHT
                 && cave_feat[ty][tx] != FEAT_WATER
-                && cave_feat[ty][tx] != FEAT_ICE)
+                && cave_feat[ty][tx] != FEAT_ICE
+                && !FEAT_IS_BRIDGE(cave_feat[ty][tx]))
                 continue;
 
             /* Don't put things under peaceful monsters */
@@ -326,7 +328,8 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
         /* Require floor space */
         if (cave_feat[ty][tx] != FEAT_FLOOR && cave_feat[ty][tx] != FEAT_SUNLIGHT
             && cave_feat[ty][tx] != FEAT_WATER
-            && cave_feat[ty][tx] != FEAT_ICE)
+            && cave_feat[ty][tx] != FEAT_ICE
+                && !FEAT_IS_BRIDGE(cave_feat[ty][tx]))
             continue;
 
         /* Don't put things under peaceful monsters */
@@ -357,7 +360,8 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
         /* Require floor space */
         if (cave_feat[by][bx] != FEAT_FLOOR && cave_feat[by][bx] != FEAT_SUNLIGHT
             && cave_feat[by][bx] != FEAT_WATER
-            && cave_feat[by][bx] != FEAT_ICE)
+            && cave_feat[by][bx] != FEAT_ICE
+                && !FEAT_IS_BRIDGE(cave_feat[by][bx]))
             continue;
 
         /* Okay */
@@ -525,7 +529,9 @@ void place_trap(int y, int x)
         return;
 
     /* Require empty, clean, floor grid */
-    if (!cave_naked_bold(y, x))
+    if (!cave_naked_bold(y, x)
+        && !(FEAT_IS_BRIDGE(cave_feat[y][x]) && cave_clean_bold(y, x)
+            && cave_empty_bold(y, x)))
         return;
 
     bool prefer_web = (p_ptr->depth >= 8)

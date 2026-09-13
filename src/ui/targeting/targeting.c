@@ -674,7 +674,7 @@ static bool determine_location_is_interesting(int y, int x)
     /* This is checked BEFORE monsters to prevent showing unmarked objects under detected monsters */
     if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT)
         || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_ICE
-        || cave_feat[y][x] == FEAT_POISON)
+        || cave_feat[y][x] == FEAT_POISON || FEAT_IS_BRIDGE(cave_feat[y][x]))
     {
         /* Scan all objects in the grid */
         for (o_ptr = get_first_object(y, x); o_ptr;
@@ -1235,7 +1235,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             }
 
             /* Pick a prefix */
-            if (*s2 && (feat >= FEAT_DOOR_HEAD))
+            if (*s2 && (feat >= FEAT_DOOR_HEAD) && !FEAT_IS_BRIDGE(feat))
                 s2 = "in ";
 
             /* Use the definite article for the unique forge */
@@ -1251,7 +1251,12 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                 s3 = (is_a_vowel(name[0])) ? "an " : "a ";
             }
 
-            if (feat == FEAT_WATER)
+            if (FEAT_IS_BRIDGE(feat))
+            {
+                strnfmt(name_buf, sizeof(name_buf), "%s (dry crossing)", name);
+                name = name_buf;
+            }
+            else if (feat == FEAT_WATER)
             {
                 s3 = "";
                 name = "shallow water (move 150%, splash -3 Stealth, no scent)";

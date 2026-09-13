@@ -1208,6 +1208,9 @@ struct player_type
     s16b stat_drain[A_MAX]; /* The negative modifier from stat drain */
     s16b stat_disease[A_MAX]; /* Negative penalties restored only by curing disease */
     s16b diseased; /* 0: healthy; otherwise player turns until the next disease penalty */
+    byte disease_name; /* Stable 1-based name index; 0 when healthy */
+    byte disease_cure; /* Herb sval assigned to this infection */
+    byte disease_knowledge; /* DISEASE_KNOWN_* discoveries for this infection */
 
     s16b skill_base[S_MAX]; /* The base skill values */
 

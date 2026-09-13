@@ -565,7 +565,9 @@ bool partition_population_floor_bold(quadrant_mode_t mode, int y, int x)
         return false;
     if (mode == QUAD_MODE_CHASM)
         return chasm_native_walkable_bold(y, x);
-    return cave_floor_bold(y, x);
+    /* Terrain rivers reduce ordinary spawn space. Match the plain-floor
+     * location picker instead of counting lava, poison or water as capacity. */
+    return cave_feat[y][x] == FEAT_FLOOR;
 }
 
 bool partition_population_naked_bold(quadrant_mode_t mode, int y, int x)

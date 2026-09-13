@@ -1847,7 +1847,8 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
 
                 if ((feat == FEAT_FLOOR) || (feat == FEAT_SUNLIGHT)
                     || (feat == FEAT_WATER) || (feat == FEAT_LAVA)
-                    || (feat == FEAT_ICE) || (feat == FEAT_POISON)) {
+                    || (feat == FEAT_ICE) || (feat == FEAT_POISON)
+                    || FEAT_IS_BRIDGE(feat)) {
                     object_type* o_ptr;
 
                     for (o_ptr = get_first_object(dy, dx); o_ptr;
@@ -1933,8 +1934,7 @@ bool sdl_minimap_hint_source_valid(const hint_message_meta* meta)
 
 typedef enum sdl_hint_destination_display {
     SDL_HINT_DESTINATION_HIDDEN = 0,
-    SDL_HINT_DESTINATION_AREA,
-    SDL_HINT_DESTINATION_EXACT
+    SDL_HINT_DESTINATION_AREA
 } sdl_hint_destination_display;
 
 static bool sdl_minimap_hint_destination_valid(
@@ -2017,62 +2017,38 @@ static bool sdl_minimap_hint_destination_partition_found(int partition_index)
     return false;
 }
 
-static bool sdl_minimap_hint_destination_known_vault_cell(
-    const hint_message_destination* destination, int* out_y, int* out_x)
+static bool sdl_minimap_hint_destination_vault_found(void)
 {
-    int best_y = -1;
-    int best_x = -1;
-    int best_dist = 0;
-
-    if (!p_ptr || !destination)
+    if (!p_ptr)
         return false;
     for (int y = 0; y < p_ptr->cur_map_hgt; ++y) {
         for (int x = 0; x < p_ptr->cur_map_wid; ++x) {
-            int dist;
-
-            if (!(cave_info[y][x] & CAVE_G_VAULT))
-                continue;
-            if (!(cave_info[y][x] & (CAVE_MARK | CAVE_SEEN)))
-                continue;
-            dist = distance(destination->y, destination->x, y, x);
-            if (best_y >= 0 && dist >= best_dist)
-                continue;
-            best_y = y;
-            best_x = x;
-            best_dist = dist;
+            if ((cave_info[y][x] & CAVE_G_VAULT)
+                && (cave_info[y][x] & (CAVE_MARK | CAVE_SEEN)))
+                return true;
         }
     }
-
-    if (best_y < 0)
-        return false;
-    if (out_y) *out_y = best_y;
-    if (out_x) *out_x = best_x;
-    return true;
+    return false;
 }
 
 static sdl_hint_destination_display sdl_minimap_hint_destination_state(
-    const hint_message_meta* meta, const hint_message_destination* destination,
-    int* out_y, int* out_x)
+    const hint_message_meta* meta, const hint_message_destination* destination)
 {
     monster_type* m_ptr;
 
     if (!sdl_minimap_hint_destination_valid(meta, destination))
         return SDL_HINT_DESTINATION_HIDDEN;
-    if (out_y) *out_y = destination->y;
-    if (out_x) *out_x = destination->x;
 
     switch ((hint_message_destination_kind)destination->kind) {
     case HINT_DESTINATION_FIXED_FEATURE:
     case HINT_DESTINATION_FIXED_QUEST_SITE:
         return (cave_info[destination->y][destination->x]
                 & (CAVE_MARK | CAVE_SEEN))
-            ? SDL_HINT_DESTINATION_EXACT
+            ? SDL_HINT_DESTINATION_HIDDEN
             : SDL_HINT_DESTINATION_AREA;
     case HINT_DESTINATION_GREAT_VAULT:
-        if (sdl_minimap_hint_destination_known_vault_cell(destination,
-                out_y, out_x))
-        {
-            return SDL_HINT_DESTINATION_EXACT;
+        if (sdl_minimap_hint_destination_vault_found()) {
+            return SDL_HINT_DESTINATION_HIDDEN;
         }
         return SDL_HINT_DESTINATION_AREA;
     case HINT_DESTINATION_ARTEFACT:
@@ -2088,17 +2064,12 @@ static sdl_hint_destination_display sdl_minimap_hint_destination_state(
         {
             return SDL_HINT_DESTINATION_AREA;
         }
-        if (out_y) *out_y = m_ptr->fy;
-        if (out_x) *out_x = m_ptr->fx;
-        return SDL_HINT_DESTINATION_EXACT;
+        return SDL_HINT_DESTINATION_HIDDEN;
     case HINT_DESTINATION_UNIQUE_MONSTER:
-        m_ptr = sdl_minimap_hint_destination_monster(destination->id);
-        if (!m_ptr)
-            return SDL_HINT_DESTINATION_HIDDEN;
-        return (m_ptr->encountered || m_ptr->ml
-                || (m_ptr->mflag & MFLAG_MARK))
-            ? SDL_HINT_DESTINATION_HIDDEN
-            : SDL_HINT_DESTINATION_AREA;
+        /* The recorded position is only a snapshot of a moving monster.
+         * Keep the note text and source marker, but never expose a stale
+         * destination area or label on the map. */
+        return SDL_HINT_DESTINATION_HIDDEN;
     case HINT_DESTINATION_PARTITION:
         return sdl_minimap_hint_destination_partition_found(destination->id)
             ? SDL_HINT_DESTINATION_HIDDEN
@@ -2143,6 +2114,160 @@ static bool sdl_minimap_grid_in_hint_destination_area(
         && dist <= destination->max_dist;
 }
 
+/* The saved message count is a byte, with at most two clues per message. */
+#define SDL_HINT_AREA_CLUE_MAX (256 * HINT_MESSAGE_DESTINATION_MAX)
+typedef struct sdl_hint_area_clue {
+    s16b source_y;
+    s16b source_x;
+    hint_message_destination destination;
+    int next;
+} sdl_hint_area_clue;
+
+typedef struct sdl_hint_area_group {
+    int first;
+    int last;
+    bool resolved;
+} sdl_hint_area_group;
+
+typedef struct sdl_hint_area_set {
+    sdl_hint_area_clue clues[SDL_HINT_AREA_CLUE_MAX];
+    sdl_hint_area_group groups[SDL_HINT_AREA_CLUE_MAX];
+    int clue_count;
+    int group_count;
+} sdl_hint_area_set;
+
+static bool sdl_minimap_hint_same_target(const hint_message_destination* a,
+    const hint_message_destination* b)
+{
+    bool a_monster = a->kind == HINT_DESTINATION_QUEST_GIVER
+        || a->kind == HINT_DESTINATION_UNIQUE_MONSTER;
+    bool b_monster = b->kind == HINT_DESTINATION_QUEST_GIVER
+        || b->kind == HINT_DESTINATION_UNIQUE_MONSTER;
+    bool a_fixed = a->kind == HINT_DESTINATION_FIXED_FEATURE
+        || a->kind == HINT_DESTINATION_FIXED_QUEST_SITE;
+    bool b_fixed = b->kind == HINT_DESTINATION_FIXED_FEATURE
+        || b->kind == HINT_DESTINATION_FIXED_QUEST_SITE;
+
+    if (a_monster && b_monster)
+        return a->id > 0 && a->id == b->id;
+    if (a_fixed && b_fixed)
+        return a->y == b->y && a->x == b->x;
+    if (a->kind != b->kind)
+        return false;
+    switch ((hint_message_destination_kind)a->kind) {
+    case HINT_DESTINATION_GREAT_VAULT:
+        /* Generation allows only one greater vault on a level. */
+        return true;
+    case HINT_DESTINATION_PARTITION:
+        return a->id >= 0 && a->id == b->id;
+    case HINT_DESTINATION_ARTEFACT:
+        if (a->id > 0 || b->id > 0)
+            return a->id > 0 && a->id == b->id;
+        return a->y == b->y && a->x == b->x;
+    default:
+        return false;
+    }
+}
+
+static void sdl_minimap_collect_hint_areas(sdl_hint_area_set* areas)
+{
+    int count = hint_messages_count_for_save();
+
+    areas->clue_count = 0;
+    areas->group_count = 0;
+    for (int i = 0; i < count; ++i) {
+        hint_message_meta meta;
+
+        hint_messages_message_meta(i, &meta);
+        for (int d = 0; d < MIN(meta.destination_count,
+                 HINT_MESSAGE_DESTINATION_MAX); ++d)
+        {
+            const hint_message_destination* destination = &meta.destinations[d];
+            int group;
+            int clue_index;
+            sdl_hint_area_clue* clue;
+
+            if (!sdl_minimap_hint_destination_valid(&meta, destination))
+                continue;
+            for (group = 0; group < areas->group_count; ++group) {
+                if (sdl_minimap_hint_same_target(destination,
+                        &areas->clues[areas->groups[group].first].destination))
+                    break;
+            }
+            clue_index = areas->clue_count++;
+            clue = &areas->clues[clue_index];
+            clue->source_y = meta.source_y;
+            clue->source_x = meta.source_x;
+            clue->destination = *destination;
+            clue->next = -1;
+            if (group == areas->group_count) {
+                areas->groups[group] = (sdl_hint_area_group){
+                    clue_index, clue_index, false
+                };
+                ++areas->group_count;
+            } else {
+                areas->clues[areas->groups[group].last].next = clue_index;
+                areas->groups[group].last = clue_index;
+            }
+            if (sdl_minimap_hint_destination_state(&meta, destination)
+                == SDL_HINT_DESTINATION_HIDDEN)
+                areas->groups[group].resolved = true;
+        }
+    }
+}
+
+static bool sdl_minimap_hint_group_mask(const sdl_hint_area_set* areas,
+    int group_index, byte mask[MAX_DUNGEON_HGT][MAX_DUNGEON_WID])
+{
+    const sdl_hint_area_group* group = &areas->groups[group_index];
+    bool first = true;
+    bool any = false;
+    int min_y = 0, min_x = 0, max_y, max_x;
+
+    memset(mask, 0, MAX_DUNGEON_HGT * MAX_DUNGEON_WID * sizeof(byte));
+    if (!p_ptr || group->resolved)
+        return false;
+    max_y = MIN(p_ptr->cur_map_hgt, MAX_DUNGEON_HGT) - 1;
+    max_x = MIN(p_ptr->cur_map_wid, MAX_DUNGEON_WID) - 1;
+    for (int c = group->first; c >= 0; c = areas->clues[c].next) {
+        const sdl_hint_area_clue* clue = &areas->clues[c];
+        hint_message_meta meta;
+        bool overlap = false;
+
+        meta.source_y = clue->source_y;
+        meta.source_x = clue->source_x;
+        if (first) {
+            min_y = MAX(0, clue->source_y - clue->destination.max_dist);
+            min_x = MAX(0, clue->source_x - clue->destination.max_dist);
+            max_y = MIN(max_y, clue->source_y + clue->destination.max_dist);
+            max_x = MIN(max_x, clue->source_x + clue->destination.max_dist);
+        }
+        for (int y = min_y; y <= max_y; ++y) {
+            for (int x = min_x; x <= max_x; ++x) {
+                if (!first && !mask[y][x])
+                    continue;
+                bool inside = sdl_minimap_grid_in_hint_destination_area(
+                    &meta, &clue->destination, y, x);
+                /* Bit 1 stages this intersection without losing the old area. */
+                mask[y][x] = (mask[y][x] & 1) | (inside ? 2 : 0);
+                overlap |= inside;
+            }
+        }
+        /* Region clues can refer to different edges, and monsters can move.
+         * An incompatible later clue must not erase an unfound target or
+         * enlarge its previously inferred area. Keep the last nonempty area. */
+        for (int y = min_y; y <= max_y; ++y) {
+            for (int x = min_x; x <= max_x; ++x) {
+                mask[y][x] = overlap ? ((mask[y][x] & 2) != 0)
+                                     : (mask[y][x] & 1);
+            }
+        }
+        any |= overlap;
+        first = false;
+    }
+    return any;
+}
+
 static void sdl_minimap_include_hint_point(int y, int x, int* min_y,
     int* min_x, int* max_y, int* max_x, bool* any)
 {
@@ -2156,51 +2281,28 @@ static void sdl_minimap_include_hint_point(int y, int x, int* min_y,
 void sdl_minimap_expand_bounds_for_hints(int* min_y, int* min_x,
     int* max_y, int* max_x, bool* any)
 {
-    byte count;
+    sdl_hint_area_set areas;
+    byte mask[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    int count = hint_messages_count_for_save();
 
-    if (!min_y || !min_x || !max_y || !max_x || !any)
+    if (!min_y || !min_x || !max_y || !max_x || !any || !p_ptr)
         return;
-
-    count = hint_messages_count_for_save();
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; ++i) {
         hint_message_meta meta;
-
         hint_messages_message_meta(i, &meta);
-        if (!sdl_minimap_hint_source_valid(&meta))
+        if (sdl_minimap_hint_source_valid(&meta))
+            sdl_minimap_include_hint_point(meta.source_y, meta.source_x,
+                min_y, min_x, max_y, max_x, any);
+    }
+    sdl_minimap_collect_hint_areas(&areas);
+    for (int group = 0; group < areas.group_count; ++group) {
+        if (!sdl_minimap_hint_group_mask(&areas, group, mask))
             continue;
-
-        sdl_minimap_include_hint_point(meta.source_y, meta.source_x,
-            min_y, min_x, max_y, max_x, any);
-
-        for (int destination_index = 0;
-            destination_index < meta.destination_count; ++destination_index)
-        {
-            const hint_message_destination* destination =
-                &meta.destinations[destination_index];
-            int display_y = -1;
-            int display_x = -1;
-            sdl_hint_destination_display display =
-                sdl_minimap_hint_destination_state(&meta, destination,
-                    &display_y, &display_x);
-
-            if (display == SDL_HINT_DESTINATION_EXACT) {
-                sdl_minimap_include_hint_point(display_y, display_x,
-                    min_y, min_x, max_y, max_x, any);
-                continue;
-            }
-            if (display != SDL_HINT_DESTINATION_AREA)
-                continue;
-
-            for (int y = 0; y < p_ptr->cur_map_hgt; ++y) {
-                for (int x = 0; x < p_ptr->cur_map_wid; ++x) {
-                    if (!sdl_minimap_grid_in_hint_destination_area(
-                            &meta, destination, y, x))
-                    {
-                        continue;
-                    }
+        for (int y = 0; y < p_ptr->cur_map_hgt; ++y) {
+            for (int x = 0; x < p_ptr->cur_map_wid; ++x) {
+                if (mask[y][x])
                     sdl_minimap_include_hint_point(y, x, min_y, min_x,
                         max_y, max_x, any);
-                }
             }
         }
     }
@@ -2244,18 +2346,6 @@ void sdl_minimap_draw_hint_source_symbol(const object_type* o_ptr,
     }
 
     sdl_draw_ascii_minimap_cell(obj_a, (char)obj_c, obj_a, (char)obj_c, dst);
-}
-
-#define SDL_HINT_AREA_ARC_SEGMENTS 32
-
-static SDL_FColor sdl_minimap_hint_fcolor(SDL_Color color)
-{
-    return (SDL_FColor){
-        (float)color.r / 255.0f,
-        (float)color.g / 255.0f,
-        (float)color.b / 255.0f,
-        (float)color.a / 255.0f
-    };
 }
 
 static SDL_Color sdl_minimap_hint_destination_color(
@@ -2331,157 +2421,77 @@ static SDL_Color sdl_minimap_hint_destination_color(
     return color;
 }
 
-static void sdl_minimap_hint_destination_angles(
-    const hint_message_meta* meta, const hint_message_destination* destination,
-    float outer_dist, float* out_start, float* out_end, float* out_mid)
-{
-    const float pi = 3.1415926536f;
-    int dy = sdl_minimap_hint_direction_sign(
-        destination->y - meta->source_y);
-    int dx = sdl_minimap_hint_direction_sign(
-        destination->x - meta->source_x);
-    float start = 0.0f;
-    float end = 2.0f * pi;
-
-    if (dy == 0 && dx == 0) {
-        start = 0.0f;
-        end = 2.0f * pi;
-    } else if (dy < 0 && dx > 0) {
-        start = 1.5f * pi;
-        end = 2.0f * pi;
-    } else if (dy > 0 && dx > 0) {
-        start = 0.0f;
-        end = 0.5f * pi;
-    } else if (dy > 0 && dx < 0) {
-        start = 0.5f * pi;
-        end = pi;
-    } else if (dy < 0 && dx < 0) {
-        start = pi;
-        end = 1.5f * pi;
-    } else {
-        float mid;
-        float half_angle = SDL_atan2f(0.75f, MAX(outer_dist, 1.0f));
-
-        if (half_angle < 0.035f) half_angle = 0.035f;
-        if (half_angle > 0.22f) half_angle = 0.22f;
-        if (dx > 0) mid = 0.0f;
-        else if (dy > 0) mid = 0.5f * pi;
-        else if (dx < 0) mid = pi;
-        else mid = 1.5f * pi;
-        start = mid - half_angle;
-        end = mid + half_angle;
-    }
-
-    if (out_start) *out_start = start;
-    if (out_end) *out_end = end;
-    if (out_mid) *out_mid = (start + end) * 0.5f;
-}
-
-static void sdl_minimap_draw_hint_destination_area(
-    const hint_message_meta* meta, const hint_message_destination* destination,
+/* Fill row runs and trace only exposed cell edges, so a combined clue has
+ * one outline and no internal seams. Drawing and bounds use the same mask. */
+static bool sdl_minimap_draw_hint_destination_area(
+    const byte mask[MAX_DUNGEON_HGT][MAX_DUNGEON_WID],
     const SDL_FRect* map_dst, int min_y, int min_x, int max_y, int max_x,
     SDL_Color fill, float* out_label_x, float* out_label_y)
 {
-    int map_rows = max_y - min_y + 1;
-    int map_cols = max_x - min_x + 1;
-    SDL_Vertex vertices[(SDL_HINT_AREA_ARC_SEGMENTS + 1) * 2];
-    int indices[SDL_HINT_AREA_ARC_SEGMENTS * 6];
-    SDL_FPoint outer_line[SDL_HINT_AREA_ARC_SEGMENTS + 1];
-    SDL_FPoint inner_line[SDL_HINT_AREA_ARC_SEGMENTS + 1];
-    SDL_FColor fcolor = sdl_minimap_hint_fcolor(fill);
-    SDL_Color outline = fill;
-    float grid_w;
-    float grid_h;
-    float source_x;
-    float source_y;
-    float inner_dist;
-    float outer_dist;
-    float start_angle;
-    float end_angle;
-    float mid_angle;
-    float label_dist;
-    int vcount = 0;
-    int icount = 0;
-
-    if (!meta || !destination || !map_dst || map_rows <= 0 || map_cols <= 0)
-        return;
-
-    grid_w = map_dst->w / (float)map_cols;
-    grid_h = map_dst->h / (float)map_rows;
-    source_x = map_dst->x
-        + ((float)(meta->source_x - min_x) + 0.5f) * grid_w;
-    source_y = map_dst->y
-        + ((float)(meta->source_y - min_y) + 0.5f) * grid_h;
-    inner_dist = MAX(0.0f, (float)destination->min_dist * 0.94f - 0.5f);
-    outer_dist = (float)destination->max_dist + 0.75f;
-
-    if (destination->y == meta->source_y
-        && destination->x == meta->source_x)
-    {
-        inner_dist = 0.0f;
-        outer_dist = 1.15f;
-    }
-
-    sdl_minimap_hint_destination_angles(meta, destination, outer_dist,
-        &start_angle, &end_angle, &mid_angle);
-    for (int i = 0; i <= SDL_HINT_AREA_ARC_SEGMENTS; ++i) {
-        float t = (float)i / (float)SDL_HINT_AREA_ARC_SEGMENTS;
-        float angle = start_angle + (end_angle - start_angle) * t;
-        float ct = SDL_cosf(angle);
-        float st = SDL_sinf(angle);
-        SDL_FPoint inner = {
-            source_x + ct * inner_dist * grid_w,
-            source_y + st * inner_dist * grid_h
-        };
-        SDL_FPoint outer = {
-            source_x + ct * outer_dist * grid_w,
-            source_y + st * outer_dist * grid_h
-        };
-
-        vertices[vcount++] = (SDL_Vertex){ inner, fcolor, { 0.0f, 0.0f } };
-        vertices[vcount++] = (SDL_Vertex){ outer, fcolor, { 0.0f, 0.0f } };
-        inner_line[i] = inner;
-        outer_line[i] = outer;
-    }
-    for (int i = 0; i < SDL_HINT_AREA_ARC_SEGMENTS; ++i) {
-        int inner_a = i * 2;
-        int outer_a = inner_a + 1;
-        int inner_b = inner_a + 2;
-        int outer_b = inner_a + 3;
-
-        indices[icount++] = inner_a;
-        indices[icount++] = outer_a;
-        indices[icount++] = inner_b;
-        indices[icount++] = inner_b;
-        indices[icount++] = outer_a;
-        indices[icount++] = outer_b;
-    }
+    float grid_w = map_dst->w / (float)(max_x - min_x + 1);
+    float grid_h = map_dst->h / (float)(max_y - min_y + 1);
+    int first_y = MAX(0, min_y), first_x = MAX(0, min_x);
+    int last_y = MIN(MAX_DUNGEON_HGT - 1, max_y);
+    int last_x = MIN(MAX_DUNGEON_WID - 1, max_x);
+    float sum_y = 0, sum_x = 0;
+    int cells = 0;
+    int label_y = -1, label_x = -1;
+    float best_distance = 0;
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_RenderGeometry(g_state.renderer, NULL, vertices, vcount, indices,
-        icount);
-    outline.a = 155;
-    SDL_SetRenderDrawColor(g_state.renderer, outline.r, outline.g, outline.b,
-        outline.a);
-    SDL_RenderLines(g_state.renderer, outer_line,
-        SDL_HINT_AREA_ARC_SEGMENTS + 1);
-    if (inner_dist > 0.0f) {
-        SDL_RenderLines(g_state.renderer, inner_line,
-            SDL_HINT_AREA_ARC_SEGMENTS + 1);
+    SDL_SetRenderDrawColor(g_state.renderer, fill.r, fill.g, fill.b, fill.a);
+    for (int y = first_y; y <= last_y; ++y) {
+        for (int x = first_x; x <= last_x; ++x) {
+            if (!mask[y][x])
+                continue;
+            int start = x;
+            while (x <= last_x && mask[y][x]) {
+                sum_y += y;
+                sum_x += x;
+                ++cells;
+                ++x;
+            }
+            SDL_FRect run = {
+                map_dst->x + (start - min_x) * grid_w,
+                map_dst->y + (y - min_y) * grid_h,
+                (x - start) * grid_w, grid_h
+            };
+            SDL_RenderFillRect(g_state.renderer, &run);
+        }
     }
-    SDL_RenderLine(g_state.renderer, inner_line[0].x, inner_line[0].y,
-        outer_line[0].x, outer_line[0].y);
-    SDL_RenderLine(g_state.renderer,
-        inner_line[SDL_HINT_AREA_ARC_SEGMENTS].x,
-        inner_line[SDL_HINT_AREA_ARC_SEGMENTS].y,
-        outer_line[SDL_HINT_AREA_ARC_SEGMENTS].x,
-        outer_line[SDL_HINT_AREA_ARC_SEGMENTS].y);
-
-    label_dist = (inner_dist + outer_dist) * 0.5f;
-    if (out_label_x)
-        *out_label_x = source_x + SDL_cosf(mid_angle) * label_dist * grid_w;
-    if (out_label_y)
-        *out_label_y = source_y + SDL_sinf(mid_angle) * label_dist * grid_h;
+    if (!cells)
+        return false;
+    sum_y /= cells;
+    sum_x /= cells;
+    SDL_SetRenderDrawColor(g_state.renderer, fill.r, fill.g, fill.b, 155);
+    for (int y = first_y; y <= last_y; ++y) {
+        for (int x = first_x; x <= last_x; ++x) {
+            if (!mask[y][x])
+                continue;
+            float left = map_dst->x + (x - min_x) * grid_w;
+            float top = map_dst->y + (y - min_y) * grid_h;
+            float dist = (y - sum_y) * (y - sum_y)
+                + (x - sum_x) * (x - sum_x);
+            if (label_y < 0 || dist < best_distance) {
+                label_y = y;
+                label_x = x;
+                best_distance = dist;
+            }
+            if (y == 0 || !mask[y - 1][x])
+                SDL_RenderLine(g_state.renderer, left, top, left + grid_w, top);
+            if (y == MAX_DUNGEON_HGT - 1 || !mask[y + 1][x])
+                SDL_RenderLine(g_state.renderer, left, top + grid_h,
+                    left + grid_w, top + grid_h);
+            if (x == 0 || !mask[y][x - 1])
+                SDL_RenderLine(g_state.renderer, left, top, left, top + grid_h);
+            if (x == MAX_DUNGEON_WID - 1 || !mask[y][x + 1])
+                SDL_RenderLine(g_state.renderer, left + grid_w, top,
+                    left + grid_w, top + grid_h);
+        }
+    }
+    *out_label_x = map_dst->x + (label_x - min_x + 0.5f) * grid_w;
+    *out_label_y = map_dst->y + (label_y - min_y + 0.5f) * grid_h;
+    return true;
 }
 
 static const char* sdl_minimap_hint_destination_label(
@@ -2624,57 +2634,6 @@ static void sdl_minimap_draw_hint_destination_label(const char* label,
         text_color);
 }
 
-static void sdl_minimap_draw_hint_destination_exact(int y, int x,
-    const SDL_FRect* map_dst, int min_y, int min_x, int max_y, int max_x,
-    SDL_Color accent, float* out_label_x, float* out_label_y)
-{
-    int map_rows = max_y - min_y + 1;
-    int map_cols = max_x - min_x + 1;
-    float grid_w;
-    float grid_h;
-    float center_x;
-    float center_y;
-    const float min_marker = 9.0f;
-    SDL_FRect marker;
-
-    if (!map_dst || map_rows <= 0 || map_cols <= 0
-        || y < min_y || y > max_y || x < min_x || x > max_x)
-    {
-        return;
-    }
-
-    grid_w = map_dst->w / (float)map_cols;
-    grid_h = map_dst->h / (float)map_rows;
-    marker.x = map_dst->x + (float)(x - min_x) * grid_w;
-    marker.y = map_dst->y + (float)(y - min_y) * grid_h;
-    marker.w = grid_w;
-    marker.h = grid_h;
-    center_x = marker.x + marker.w * 0.5f;
-    center_y = marker.y + marker.h * 0.5f;
-    if (marker.w < min_marker) {
-        marker.w = min_marker;
-        marker.x = center_x - marker.w * 0.5f;
-    }
-    if (marker.h < min_marker) {
-        marker.h = min_marker;
-        marker.y = center_y - marker.h * 0.5f;
-    }
-
-    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b,
-        78);
-    SDL_RenderFillRect(g_state.renderer, &marker);
-    SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b,
-        245);
-    SDL_RenderRect(g_state.renderer, &marker);
-    SDL_RenderLine(g_state.renderer, marker.x, marker.y,
-        marker.x + marker.w, marker.y + marker.h);
-    SDL_RenderLine(g_state.renderer, marker.x + marker.w, marker.y,
-        marker.x, marker.y + marker.h);
-    if (out_label_x) *out_label_x = center_x;
-    if (out_label_y) *out_label_y = center_y;
-}
-
 void sdl_minimap_draw_hint_destinations(const SDL_FRect* map_dst, int min_y,
     int min_x, int max_y, int max_x)
 {
@@ -2686,7 +2645,8 @@ void sdl_minimap_draw_hint_destinations(const SDL_FRect* map_dst, int min_y,
         bool exact;
         SDL_Color accent;
     } sdl_hint_destination_pending_label;
-    byte count;
+    sdl_hint_area_set areas;
+    byte mask[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     bool had_clip;
     SDL_Rect old_clip;
     SDL_Rect map_clip;
@@ -2710,51 +2670,25 @@ void sdl_minimap_draw_hint_destinations(const SDL_FRect* map_dst, int min_y,
     }
     SDL_SetRenderClipRect(g_state.renderer, &map_clip);
 
-    count = hint_messages_count_for_save();
-    for (int i = 0; i < count; ++i) {
-        hint_message_meta meta;
+    sdl_minimap_collect_hint_areas(&areas);
+    for (int group = 0; group < areas.group_count; ++group) {
+        const hint_message_destination* destination =
+            &areas.clues[areas.groups[group].first].destination;
+        SDL_Color accent = sdl_minimap_hint_destination_color(destination, 255);
+        SDL_Color fill = accent;
+        float label_x, label_y;
 
-        hint_messages_message_meta(i, &meta);
-        for (int destination_index = 0;
-            destination_index < meta.destination_count; ++destination_index)
+        if (!sdl_minimap_hint_group_mask(&areas, group, mask))
+            continue;
+        fill.a = 58;
+        if (sdl_minimap_draw_hint_destination_area(mask, map_dst,
+                min_y, min_x, max_y, max_x, fill, &label_x, &label_y)
+            && label_count < SDL_HINT_DESTINATION_LABEL_MAX)
         {
-            const hint_message_destination* destination =
-                &meta.destinations[destination_index];
-            int display_y = -1;
-            int display_x = -1;
-            sdl_hint_destination_display display =
-                sdl_minimap_hint_destination_state(&meta, destination,
-                    &display_y, &display_x);
-            SDL_Color accent = sdl_minimap_hint_destination_color(
-                destination, 255);
-            SDL_Color fill = accent;
-            float label_x = 0.0f;
-            float label_y = 0.0f;
-            bool drew = false;
-
-            if (display == SDL_HINT_DESTINATION_AREA) {
-                fill.a = 58;
-                sdl_minimap_draw_hint_destination_area(&meta, destination,
-                    map_dst, min_y, min_x, max_y, max_x, fill, &label_x,
-                    &label_y);
-                drew = true;
-            } else if (display == SDL_HINT_DESTINATION_EXACT) {
-                sdl_minimap_draw_hint_destination_exact(display_y, display_x,
-                    map_dst, min_y, min_x, max_y, max_x, accent, &label_x,
-                    &label_y);
-                drew = true;
-            }
-
-            if (drew && label_count < SDL_HINT_DESTINATION_LABEL_MAX) {
-                labels[label_count++] =
-                    (sdl_hint_destination_pending_label){
-                        sdl_minimap_hint_destination_label(destination),
-                        label_x,
-                        label_y,
-                        display == SDL_HINT_DESTINATION_EXACT,
-                        accent
-                    };
-            }
+            labels[label_count++] = (sdl_hint_destination_pending_label){
+                sdl_minimap_hint_destination_label(destination),
+                label_x, label_y, false, accent
+            };
         }
     }
     for (int i = 0; i < label_count; ++i) {
@@ -3304,11 +3238,8 @@ static Uint64 sdl_side_map_pane_aux_bounds_hash(void)
         {
             const hint_message_destination* destination =
                 &meta.destinations[destination_index];
-            int display_y = -1;
-            int display_x = -1;
             sdl_hint_destination_display display =
-                sdl_minimap_hint_destination_state(&meta, destination,
-                    &display_y, &display_x);
+                sdl_minimap_hint_destination_state(&meta, destination);
 
             hash ^= (Uint64)destination->kind;
             hash *= 1099511628211ULL;
@@ -3324,12 +3255,6 @@ static Uint64 sdl_side_map_pane_aux_bounds_hash(void)
             hash *= 1099511628211ULL;
             hash ^= (Uint64)display;
             hash *= 1099511628211ULL;
-            if (display == SDL_HINT_DESTINATION_EXACT) {
-                hash ^= (Uint64)(u16b)display_y;
-                hash *= 1099511628211ULL;
-                hash ^= (Uint64)(u16b)display_x;
-                hash *= 1099511628211ULL;
-            }
         }
     }
     hash ^= (Uint64)(g_minimap.focus_active ? 1 : 0);

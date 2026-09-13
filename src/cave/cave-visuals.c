@@ -1030,7 +1030,8 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
 
     /* Objects (only shown when on floors, not when in rubble) */
     if (feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT || feat == FEAT_WATER
-        || feat == FEAT_LAVA || feat == FEAT_ICE || feat == FEAT_POISON)
+        || feat == FEAT_LAVA || feat == FEAT_ICE || feat == FEAT_POISON
+        || FEAT_IS_BRIDGE(feat))
     {
         for (o_ptr = get_first_object(y, x); o_ptr;
              o_ptr = get_next_object(o_ptr))

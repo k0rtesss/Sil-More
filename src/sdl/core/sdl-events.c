@@ -2806,6 +2806,39 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         }
 
+        /* The terminal question loop uses 2/8 for vertical navigation, but
+         * numbered menus also use those characters as direct shortcuts. Keep
+         * physical arrows distinct so Down/Up cannot activate a numbered
+         * option before the question overlay sees them. */
+        if (sdl_question_menu_captures_pointer())
+        {
+            int navigation = 0;
+
+            switch (key)
+            {
+            case SDLK_UP:
+            case SDLK_LEFT:
+            case SDLK_KP_8:
+            case SDLK_KP_4:
+                navigation = -1;
+                break;
+            case SDLK_DOWN:
+            case SDLK_RIGHT:
+            case SDLK_KP_2:
+            case SDLK_KP_6:
+                navigation = 1;
+                break;
+            default:
+                break;
+            }
+
+            if (navigation
+                && sdl_question_menu_queue_navigation(navigation))
+            {
+                return;
+            }
+        }
+
         /* For letter-based movement presets, Alt+<movement letter> issues that
          * letter's normal command. Runs before the Alt layout shortcuts so a
          * shadowed letter (e.g. Alt+a = activate staff in WASD) wins; unshadowed

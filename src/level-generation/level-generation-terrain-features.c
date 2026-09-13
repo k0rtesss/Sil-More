@@ -1,6 +1,7 @@
 /* File: level-generation-terrain-features.c */
 
 #include "angband.h"
+#include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
 
 void alloc_object_global(int set, int typ, int num, bool out_of_sight)
@@ -24,6 +25,8 @@ void alloc_object_global(int set, int typ, int num, bool out_of_sight)
 
             /* Require "naked" floor grid */
             if (!cave_naked_bold(y, x))
+                continue;
+            if (typ == ALLOC_TYP_RUBBLE && terrain_generation_reserved(y, x))
                 continue;
 
             /* Check for "room" */
@@ -145,223 +148,12 @@ bool build_streamer(int feat)
 }
 
 /*
- * Places a single chasm
- */
-bool build_chasm(void)
-{
-    int i;
-    int y, x;
-    int main_dir, new_dir;
-    int length;
-    int floor_to_chasm;
-
-    bool chasm_ok = false;
-
-    while (!chasm_ok)
-    {
-        // choose starting point
-        y = rand_range(10, p_ptr->cur_map_hgt - 10);
-        x = rand_range(10, p_ptr->cur_map_wid - 10);
-
-        // choose a random cardinal direction for it to run in
-        main_dir = ddd[rand_int(4)];
-
-        // choose a random length for it
-        length = damroll(4, 8);
-
-        // determine its shape
-        for (i = 0; i < length; i++)
-        {
-            // go in a random direction half the time
-            if (one_in_(2))
-            {
-                // choose the random cardinal direction
-                new_dir = ddd[rand_int(4)];
-                y += ddy[new_dir];
-                x += ddx[new_dir];
-            }
-
-            // go straight ahead the other half
-            else
-            {
-                y += ddy[main_dir];
-                x += ddx[main_dir];
-            }
-
-            // stop near dungeon edge
-            if ((y < 3) || (y > p_ptr->cur_map_hgt - 3) || (x < 3)
-                || (x > p_ptr->cur_map_wid - 3))
-                break;
-
-            // mark that we want to put a chasm here
-            cave_info[y][x] |= (CAVE_TEMP);
-        }
-
-        // start by assuming it will be OK
-        chasm_ok = true;
-
-        // count floor squares that will be turned to chasm
-        floor_to_chasm = 0;
-
-        // check it doesn't wreck the dungeon
-        for (y = 1; y < p_ptr->cur_map_hgt - 1; y++)
-        {
-            for (x = 1; x < p_ptr->cur_map_wid - 1; x++)
-            {
-                // only inspect squares that are currently destined to be chasms
-                if (cave_info[y][x] & (CAVE_TEMP))
-                {
-                    // avoid chasms in interesting rooms / vaults
-                    if (cave_info[y][x] & (CAVE_ICKY))
-                    {
-                        chasm_ok = false;
-                    }
-
-                    // avoid two chasm square in a row in corridors
-                    if ((cave_info[y + 1][x] & (CAVE_TEMP))
-                        && !(cave_info[y][x] & (CAVE_ROOM))
-                        && !(cave_info[y + 1][x] & (CAVE_ROOM))
-                        && cave_floorlike_bold(y, x)
-                        && cave_floorlike_bold(y + 1, x))
-                    {
-                        chasm_ok = false;
-                    }
-                    if ((cave_info[y][x + 1] & (CAVE_TEMP))
-                        && !(cave_info[y][x] & (CAVE_ROOM))
-                        && !(cave_info[y][x + 1] & (CAVE_ROOM))
-                        && cave_floorlike_bold(y, x)
-                        && cave_floorlike_bold(y, x + 1))
-                    {
-                        chasm_ok = false;
-                    }
-
-                    // avoid a chasm taking out the rock next to a door
-                    if (cave_any_closed_door_bold(y + 1, x)
-                        || cave_any_closed_door_bold(y - 1, x)
-                        || cave_any_closed_door_bold(y, x + 1)
-                        || cave_any_closed_door_bold(y, x - 1))
-                    {
-                        chasm_ok = false;
-                    }
-
-                    // avoid a chasm just hitting the wall of a lit room (would
-                    // look odd that the light doesn't hit the wall behind)
-                    if (cave_wall_bold(y, x) && (cave_info[y][x] & (CAVE_GLOW)))
-                    {
-                        if ((cave_wall_bold(y + 1, x)
-                                && !(cave_info[y + 1][x] & (CAVE_GLOW))
-                                && !(cave_info[y + 1][x] & (CAVE_TEMP)))
-                            || (cave_wall_bold(y - 1, x)
-                                && !(cave_info[y - 1][x] & (CAVE_GLOW))
-                                && !(cave_info[y - 1][x] & (CAVE_TEMP)))
-                            || (cave_wall_bold(y, x + 1)
-                                && !(cave_info[y][x + 1] & (CAVE_GLOW))
-                                && !(cave_info[y][x + 1] & (CAVE_TEMP)))
-                            || (cave_wall_bold(y, x - 1)
-                                && !(cave_info[y][x - 1] & (CAVE_GLOW))
-                                && !(cave_info[y][x - 1] & (CAVE_TEMP))))
-                        {
-                            chasm_ok = false;
-                        }
-                    }
-
-                    // avoid a chasm having no squares in a room/corridor
-                    if (cave_floor_bold(y, x))
-                    {
-                        floor_to_chasm++;
-                    }
-                }
-            }
-        }
-
-        // the chasm must affect at least one floor square
-        if (floor_to_chasm < 1)
-            chasm_ok = false;
-
-        // clear the flag for failed chasm placement
-        if (!chasm_ok)
-        {
-            for (y = 0; y < p_ptr->cur_map_hgt; y++)
-            {
-                for (x = 0; x < p_ptr->cur_map_wid; x++)
-                {
-                    if (cave_info[y][x] & (CAVE_TEMP))
-                    {
-                        cave_info[y][x] &= ~(CAVE_TEMP);
-                    }
-                }
-            }
-        }
-    }
-
-    // actually place the chasm
-    for (y = 0; y < p_ptr->cur_map_hgt; y++)
-    {
-        for (x = 0; x < p_ptr->cur_map_wid; x++)
-        {
-            if (cave_info[y][x] & (CAVE_TEMP))
-            {
-                cave_set_feat(y, x, FEAT_CHASM);
-            }
-        }
-    }
-
-    // clear the temporary chasm marker
-    for (y = 0; y < p_ptr->cur_map_hgt; y++)
-    {
-        for (x = 0; x < p_ptr->cur_map_wid; x++)
-        {
-            cave_info[y][x] &= ~(CAVE_TEMP);
-        }
-    }
-
-    return (true);
-}
-
-/*
- * Places chasms through dungeon
- */
-void build_chasms(void)
-{
-    int i;
-    int chasms = 0;
-    int panels = (p_ptr->cur_map_hgt / PANEL_HGT)
-        * (p_ptr->cur_map_wid / PANEL_WID_FIXED);
-
-    // determine whether to add chasms, and how many
-    if ((p_ptr->depth > 2) && (p_ptr->depth < MORGOTH_DEPTH)
-        && percent_chance(p_ptr->depth + 30))
-    {
-        // add some chasms
-        chasms += damroll(1, panels / 3);
-
-        // flip a coin, and if it is heads...
-        while (one_in_(2))
-        {
-            // add some more chasms and flip again...
-            chasms += damroll(1, panels / 3);
-        }
-    }
-
-    if (chasms > 12)
-        chasms = 12;
-
-    // build them
-    for (i = 0; i < chasms; i++)
-    {
-        build_chasm();
-    }
-
-    if (cheat_room && (chasms > 0))
-        msg_format("%d chasms.", chasms);
-}
-
-/*
  * Generate helper -- test a rectangle to see if it is all rock (i.e. not floor
  * and not icky)
  */
 bool solid_rock(int y1, int x1, int y2, int x2)
 {
+    if (!terrain_history_vault_fits(y1, x1, y2, x2)) return false;
     int y, x;
 
     if (x2 >= MAX_DUNGEON_WID || y2 >= MAX_DUNGEON_HGT)

@@ -104,6 +104,32 @@ errr rd_extra(void)
         }
     }
 
+    p_ptr->disease_name = 0;
+    p_ptr->disease_cure = 0;
+    p_ptr->disease_knowledge = 0;
+    if (savefile_version_at_least(0, 9, 8, 9))
+    {
+        rd_byte(&p_ptr->disease_name);
+        rd_byte(&p_ptr->disease_cure);
+        rd_byte(&p_ptr->disease_knowledge);
+        if (p_ptr->disease_name > DISEASE_NAME_COUNT
+            || p_ptr->disease_cure >= DISEASE_HERB_COUNT
+            || (p_ptr->disease_knowledge & ~(DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE))
+            || ((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+                && !(p_ptr->disease_knowledge & DISEASE_KNOWN_NAME))
+            || (p_ptr->diseased && !p_ptr->disease_name)
+            || (!p_ptr->diseased && (p_ptr->disease_name
+                || p_ptr->disease_cure || p_ptr->disease_knowledge)))
+        {
+            note("Invalid disease identity or diagnosis in savefile.");
+            return -1;
+        }
+    }
+    else if (p_ptr->diseased)
+    {
+        disease_assign_identity();
+    }
+
     /* Read the skill info - all skills including S_SPC (Special) present in 0.9.0 */
     for (i = 0; i < S_MAX; i++)
         rd_s16b(&p_ptr->skill_base[i]);
