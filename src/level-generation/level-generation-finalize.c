@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "level-generation/level-generation-internal.h"
+#include "tutorial/tutorial-game.h"
 
 void set_perm_boundry(void)
 {
@@ -106,6 +107,7 @@ void make_patch_of_sunlight(int y, int x)
 void make_patches_of_sunlight()
 {
     int i, x, y;
+    const bool protect_tutorial_start = tutorial_game_start_needs_clear_area();
 
     // bunch near the player
     for (i = 0; i < 40; ++i)
@@ -114,6 +116,10 @@ void make_patches_of_sunlight()
             MIN(p_ptr->py + 5, p_ptr->cur_map_hgt - 2));
         x = rand_range(MAX(p_ptr->px - 5, 1),
             MIN(p_ptr->px + 5, p_ptr->cur_map_wid - 2));
+        /* Each patch can alter a 3x3 area (rubble at its centre and sunlight
+         * around it). Keep the opening's movement neighborhood untouched. */
+        if (protect_tutorial_start && abs(y - p_ptr->py) <= 2
+            && abs(x - p_ptr->px) <= 2) continue;
         make_patch_of_sunlight(y, x);
     }
 
@@ -122,6 +128,8 @@ void make_patches_of_sunlight()
     {
         y = rand_range(10, p_ptr->cur_map_hgt - 10);
         x = rand_range(10, p_ptr->cur_map_wid - 10);
+        if (protect_tutorial_start && abs(y - p_ptr->py) <= 2
+            && abs(x - p_ptr->px) <= 2) continue;
         make_patch_of_sunlight(y, x);
     }
 }

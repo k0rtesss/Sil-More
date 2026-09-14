@@ -131,7 +131,7 @@ For the first version, terrain contact should damage actors without routinely de
 
 ### Recommended first behavior
 
-Name the first tile **poisonous seep** or **poisonous ground**. Treat it as a thin contact surface, not waist-deep sludge and not an airborne cloud. It has ordinary movement speed and adds 4 raw poison per exposure through the player poison-resistance and applicable protection calculation. It does not also deal a separate immediate terrain hit.
+Name the first tile **poisonous acid** or **poisonous ground**. Treat it as a thin contact surface, not waist-deep sludge and not an airborne cloud. It has ordinary movement speed and adds 4 raw poison per exposure through the player poison-resistance and applicable protection calculation. It does not also deal a separate immediate terrain hit.
 
 Use the same entry-versus-staying distinction as lava. Taking a dose now has consequences after leaving because it feeds the existing counter. Do not clear internal poison by moving into clean water. Recovery comes through the existing poison decay and appropriate cures.
 
@@ -139,9 +139,9 @@ For an isolated unmitigated dose of 4, starting at zero and assuming no other ef
 
 ### The decision this creates
 
-Poison makes a good fighting position temporary. A doorway is usually useful because it limits the number of attackers. A poisoned doorway asks whether avoiding surrounding enemies is worth accumulating damage and delaying recovery. A small seep between two routes can be worth crossing to escape, while standing in the middle to trade blows is expensive.
+Poison makes a good fighting position temporary. A doorway is usually useful because it limits the number of attackers. A poisoned doorway asks whether avoiding surrounding enemies is worth accumulating damage and delaying recovery. A small acid pool between two routes can be worth crossing to escape, while standing in the middle to trade blows is expensive.
 
-Poison resistance gives access to more usable positions. It should reduce ordinary seep exposure using the existing rules. Do not make basic green tiles ignore resistance just to keep them threatening. More severe terrain can exist later, but it should announce its exceptional rule as clearly as DCSS's toxic bog does.[^4]
+Poison resistance gives access to more usable positions. It should reduce ordinary acid exposure using the existing rules. Do not make basic green tiles ignore resistance just to keep them threatening. More severe terrain can exist later, but it should announce its exceptional rule as clearly as DCSS's toxic bog does.[^4]
 
 ### Monsters and clouds need explicit decisions
 
@@ -149,7 +149,7 @@ The current monster projection route treats poison differently: poison-resistant
 
 For the first implementation, preserve this existing asymmetry deliberately: susceptible monsters receive direct poison damage per exposure, resistant monsters receive none, and player doses become delayed poison. Monster recall and terrain inspection should explain the immunity. Tune against the fact that enemies pay immediately while the player can use a cure. A shared delayed monster-poison system would be a larger follow-up, with persistent-state and balance implications.
 
-Poison clouds should be a later overlay with finite lifetime and visible spread. Flight should bypass a contact seep but not automatically bypass an airborne cloud. A poisonous dragon leaving a short-lived cloud could force movement; permanently painting every breath footprint green would risk exhausting all usable space. Ordinary poison need not ignite. Reserve explosions for a visibly distinct volatile gas.
+Poison clouds should be a later overlay with finite lifetime and visible spread. Flight should bypass a contact acid tile but not automatically bypass an airborne cloud. A poisonous dragon leaving a short-lived cloud could force movement; permanently painting every breath footprint green would risk exhausting all usable space. Ordinary poison need not ignite. Reserve explosions for a visibly distinct volatile gas.
 
 ## 7. Ice: footing and exposure
 
@@ -183,7 +183,7 @@ Start with four stable terrains, then add the following small set only when acto
 | Explicit fire effect | Ice | Restore shallow water if it covered water; restore floor if it covered dry ground | First transformation experiment; preserve the underlying material |
 | Wading in water | Incoming fire | Optional extra effective fire-resistance stack while grounded there | Add only after water's pursuit role is assessed |
 | Water | Internal poison counter | No cure | Baseline rule |
-| Fire | Ordinary poison seep | No explosion | Baseline rule; reserve combustion for a named volatile material |
+| Fire | Ordinary poisonous acid | No explosion | Baseline rule; reserve combustion for a named volatile material |
 | Strong deliberate cooling | Lava | Potentially a small, visibly stable crust or bridge | Later; requires limits, lifetime rules, and connectivity checks |
 | Poison breath | Dry floor | A small temporary cloud or patch | Later; cap area and duration |
 | Cold effect | Thin ice | Repair visible integrity | Later, alongside the complete thin-ice rules |
@@ -198,7 +198,7 @@ Persistence also needs a clear rule. A prototype can keep transformed shallow wa
 |---|---|---|
 | **The flooded bend** | A shallow stream curves behind a wall; a scent-tracking pursuer follows | Accept slower, louder steps to interrupt tracking after breaking sight; choose where to leave the stream |
 | **The forge channel** | A narrow lava channel has a bridge and dry banks; enemies can approach both ends | Hold the bridge, spend protection on a shortcut, or maneuver for Knock Back |
-| **The poisoned doorway** | A short seep occupies a strong doorway; a second entrance offers worse geometry | Pay poison to limit attackers, retreat before the counter grows, or accept a more open fight |
+| **The poisoned doorway** | A short acid patch occupies a strong doorway; a second entrance offers worse geometry | Pay poison to limit attackers, retreat before the counter grows, or accept a more open fight |
 | **The frozen approach** | An ice lane leads past several dry islands; a melee enemy advances | Preserve a dry defensive square, concede it to escape, or push the foe onto ice |
 | **The divided hunting ground** | Water divides a chamber with both flying and ground enemies | The water slows one pursuer but gives no safety from the other; prioritize accordingly |
 | **The contested cache** | Optional treasure sits beyond a short hazard crossing, with a recoverable return route | Spend a consumable or health now, postpone the attempt, or leave the reward |
@@ -236,7 +236,7 @@ Terrain inspection should state the effective rule for the current actor. Exampl
 
 - **Shallow water:** Movement takes 50% longer. Moving through it gives -3 Stealth for that action. Water does not retain scent.
 - **Molten lava:** 12 raw fire damage on contact and on each further action spent here. Show the current actor's resulting damage range separately.
-- **Poisonous seep:** Exposure adds poison after resistance and protection. Poison continues to harm you after leaving and prevents natural health recovery.
+- **Poisonous acid:** Exposure adds poison after resistance and protection. Poison continues to harm you after leaving and prevents natural health recovery.
 - **Ice:** -2 Evasion while grounded here. Movement speed is unchanged.
 
 Hazards need distinct shapes or textures as well as colors. An actor standing on a hazard must not completely conceal it. Distinguish remembered terrain from visible terrain when a transformation may have occurred. Damage messages and the combat display should attribute the terrain contribution clearly.

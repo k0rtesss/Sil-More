@@ -4,7 +4,7 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 531 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 531 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
@@ -12,7 +12,7 @@ The catalogue contains 531 lessons, including 107 ability previews. Every live a
 
 ## Tutorial modes
 
-Default: **Extended**. The catalogue has **153 Normal** lessons and **378 Extended** lessons. The card's single mode button cycles **Disabled → Normal → Extended → Disabled**.
+Default: **Extended**. The catalogue has **153 Normal** lessons and **378 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
 
@@ -38,7 +38,7 @@ Priority: **70** (higher appears first).
 
 **1. Info**
 
-Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully and prepare before a fight. The world waits while you read. Continue advances a card; Skip ends its lesson. The mode button switches between Disabled, Normal and Extended tutorials.
+Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully and prepare before a fight. The world waits while you read. Continue advances a card; Skip ends its lesson. The mode button opens a selector for Disabled, Normal and Extended tutorials.
 
 **2. Info**
 
@@ -1762,11 +1762,11 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Poison, bleeding and starvation stop ordinary Health recovery; singing stops Voice recovery. Treat disease before a long rest.
+Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Rest can recover Health and Voice, but poison, bleeding and starvation stop ordinary Health recovery and singing stops Voice recovery. Disease continues while resting; cure it with its cure herb once identified, Healing or Miruvor before a long rest.
 
-Trigger: The named menu is actually opened: rest.
+Trigger: The rest menu is opened, the rest command is invoked, or the public Resting status first becomes active.
 
-Sources: `src/tutorial/tutorial-game.c`.
+Sources: `src/tutorial/tutorial-game.c`, `src/sdl/ui/sdl-panes.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
 ## The game menu
 
@@ -2590,7 +2590,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-After moving toward a gap or trap on your previous turn, Leaping can carry you over it. Check the landing square first. It can cross water, lava, ice and poisonous seep, but lava still burns you in the air. It cannot bypass roosts or webs.
+After moving toward a gap or trap on your previous turn, Leaping can carry you over it. Check the landing square first. It can cross water, lava, ice and poisonous acid, but lava still burns you in the air. It cannot bypass roosts or webs.
 
 Trigger: Public ability preview or newly available ability; raw serial 44, skill 2, ability slot 4.
 
@@ -2796,11 +2796,13 @@ Level: **Extended**.
 
 Priority: **65** (higher appears first).
 
+Archive compatibility entry. New encounters use `ability.50.preview`.
+
 **1. Decision**
 
 +1 Dexterity.
 
-Trigger: Public ability preview or newly available ability; raw serial 66, skill 3, ability slot 6.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use ability.50.preview.
 
 Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-traits.c`, `src/player/player-bonuses.c`.
 
@@ -3596,11 +3598,13 @@ Level: **Extended**.
 
 Priority: **65** (higher appears first).
 
+Archive compatibility entry. New encounters use `ability.127.preview`.
+
 **1. Decision**
 
 +1 Grace.
 
-Trigger: Public ability preview or newly available ability; raw serial 157, skill 7, ability slot 17.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use ability.127.preview.
 
 Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/birth-traits.c`, `src/player/player-bonuses.c`, `src/sdl/input/sdl-player-actions.c`, `src/cmd/ui/cmd-ui-abilities.c`.
 
@@ -3912,7 +3916,7 @@ Trigger: Legacy lesson retained for saved progress and archive review. New encou
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Patch of sunlight
+## Sunlight
 
 `terrain.9`
 
@@ -3922,11 +3926,11 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-Sunlight illuminates this square independently of your equipment. Light-sensitive creatures can suffer in bright light. Check their learned traits before using sunlight in a fight.
+Sunlight illuminates this square independently of your own light or equipment. Light-sensitive creatures can suffer in bright light; check their learned traits before using sunlight in a fight.
 
-Trigger: Feature 9 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Known feature 9 is on the player square or visibly adjacent and marked, or the public sunlight status first becomes active; secret/unrevealed terrain is excluded.
 
-Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
+Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`, `src/sdl/ui/sdl-panes.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
 ## False floor
 
@@ -3992,7 +3996,7 @@ Trigger: Feature 19 is on the player square or visibly adjacent and marked; secr
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
-## Gas trap
+## Gas traps
 
 `terrain.20`
 
@@ -4004,7 +4008,7 @@ Priority: **38** (higher appears first).
 
 Gas traps can confuse you or erase remembered map information. Seeing the trap does not disable it. Choose a route around it or inspect the disarm option before crossing.
 
-Trigger: Feature 20 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Known gas trap terrain is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -4016,11 +4020,13 @@ Level: **Extended**.
 
 Priority: **38** (higher appears first).
 
+Archive compatibility entry. New encounters use `terrain.20`.
+
 **1. Info**
 
 Gas traps can confuse you or erase remembered map information. Seeing the trap does not disable it. Choose a route around it or inspect the disarm option before crossing.
 
-Trigger: Feature 21 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.20.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
 
@@ -5970,11 +5976,13 @@ Level: **Normal**.
 
 Priority: **40** (higher appears first).
 
+Archive compatibility entry. New encounters use `menu.rest`.
+
 **1. Info**
 
 Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Poison, bleeding and starvation stop ordinary Health recovery; singing stops Voice recovery. Treat disease before a long rest.
 
-Trigger: The corresponding public state transition or explicit player action has occurred; world.rest.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use menu.rest.
 
 Sources: `src/tutorial/tutorial-game.c`.
 
@@ -5988,11 +5996,11 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-Running repeats movement until you stop it or something interrupts it. Enemies and the minimum-depth timer continue between steps. Inspect your route before starting a run.
+Running repeats movement until you stop it or something interrupts it. Enemies and the minimum-depth timer continue between steps. Every step spends time; inspect your route before starting or continuing a run.
 
-Trigger: The corresponding public state transition or explicit player action has occurred; world.run.
+Trigger: The run command is invoked or the public Running status first becomes active.
 
-Sources: `src/tutorial/tutorial-game.c`.
+Sources: `src/tutorial/tutorial-game.c`, `src/sdl/ui/sdl-panes.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
 ## A known trap
 
@@ -6852,7 +6860,7 @@ Priority: **8** (higher appears first).
 
 **1. Info**
 
-This creature can fly over chasms and avoid contact with water, ice and poisonous seep. A gap in your walking route may not block it. Lava heat can still harm flyers without fire resistance.
+This creature can fly over chasms and avoid contact with water, ice and poisonous acid. A gap in your walking route may not block it. Lava heat can still harm flyers without fire resistance.
 
 Trigger: A visible creature has this flag in learned lore (l_list), not merely its hidden race definition: RF2_FLYING.
 
@@ -8306,11 +8314,13 @@ Level: **Extended**.
 
 Priority: **33** (higher appears first).
 
+Archive compatibility entry. New encounters use `terrain.9`.
+
 **1. Info**
 
 You are standing in sunlight. It illuminates the square independently of your own light and can hinder light-sensitive enemies.
 
-Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: sunlight.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.9.
 
 Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
@@ -8338,11 +8348,13 @@ Level: **Normal**.
 
 Priority: **33** (higher appears first).
 
+Archive compatibility entry. New encounters use `world.run`.
+
 **1. Info**
 
 Running repeats movement until interrupted. Every step spends time, and enemies can act between steps. Inspect your route before starting another run.
 
-Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: running.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use world.run.
 
 Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
@@ -8386,11 +8398,13 @@ Level: **Normal**.
 
 Priority: **33** (higher appears first).
 
+Archive compatibility entry. New encounters use `menu.rest`.
+
 **1. Info**
 
 Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting; cure it with its cure herb once identified, or with Healing or Miruvor.
 
-Trigger: The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: resting.
+Trigger: Legacy lesson retained for saved progress and archive review. New encounters use menu.rest.
 
 Sources: `src/sdl/ui/sdl-panes.c`, `src/tutorial/tutorial-game.c`, `src/player/player-song-duels.c`, `src/cmd/combat/cmd-combat.c`.
 
@@ -8512,7 +8526,7 @@ Trigger: Known solid ice is on the current square or visibly adjacent; the obser
 
 Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`, `src/cmd/combat/cmd-combat.c`.
 
-## Poisonous seep
+## Poisonous acid
 
 `world.poison`
 
@@ -8522,9 +8536,9 @@ Priority: **80** (higher appears first).
 
 **1. Info**
 
-Entering poisonous seep on foot, or spending turns on it, adds poison. Leave it before stopping to heal or use an Antidote, or another dose can poison you again. Poison resistance reduces exposure; a successful leap avoids contact.
+Entering poisonous acid on foot, or spending turns on it, adds poison. Leave it before stopping to heal or use an Antidote, or another dose can poison you again. Poison resistance reduces exposure; a successful leap avoids contact.
 
-Trigger: Known poisonous seep is on the current square or visibly adjacent; the observation expires when none remains nearby.
+Trigger: Known poisonous acid is on the current square or visibly adjacent; the observation expires when none remains nearby.
 
 Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-poison.c`, `src/player/player-bonuses.c`.
 
@@ -8568,7 +8582,7 @@ Trigger: The known feature is on the player square or visibly adjacent; hidden t
 
 Sources: `src/tutorial/tutorial-game.c`, `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`, `src/melee/melee-util.c`, `src/cmd/combat/cmd-combat.c`.
 
-## Poisonous seep
+## Poisonous acid
 
 `terrain.87`
 
@@ -8578,7 +8592,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-Contact with poisonous seep adds 6 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the seep, even while resting or using an item.
+Contact with poisonous acid adds 6 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the acid, even while resting or using an item.
 
 **2. Info**
 

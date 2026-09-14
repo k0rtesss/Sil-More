@@ -76,11 +76,11 @@ def source_inventory():
     extra_states = re.search(r'static void observe_extra_states\(bool seed\)(.*?)(?=\nstatic bool gameplay_available)', core, re.S)
     if extra_states:
         block = extra_states.group(1)
-        assert 'tutorial_observe(ids[i], &context)' in block
+        assert 'tutorial_observe(lesson_id, &context)' in block
         assert re.search(r'bool now\[\]\s*=\s*\{', block)
         array = re.search(r'static const char \*ids\[\]\s*=\s*\{([^}]+)\}', block, re.S)
         assert array, 'Extra status dispatch lacks its ID array'
-        ids = re.findall(r'"(status\.[a-z0-9_-]+)"', array.group(1))
+        ids = re.findall(r'"((?:status|terrain)\.[a-z0-9_-]+)"', array.group(1))
         predicates = re.search(r'bool now\[\]\s*=\s*\{(.*?)\};', block, re.S)
         assert predicates and len(top_level_expressions(predicates.group(1))) == len(ids), 'Extra status IDs/predicates are out of alignment'
         direct.update(ids)
@@ -203,9 +203,11 @@ def validate():
         if 'alias_of' not in lesson:
             continue
         target = lesson['alias_of']
-        assert id.startswith('terrain.') and target in expected_terrain, f'{id}: invalid terrain representative'
-        assert 'alias_of' not in by_id[target] and target != id, f'{id}: circular/chained terrain alias'
+        assert target in by_id and target != id, f'{id}: invalid archive alias target'
+        assert 'alias_of' not in by_id[target], f'{id}: circular/chained archive alias'
         assert lesson['level'] == by_id[target]['level'], f'{id}: alias has a different mode'
+        if id.startswith('terrain.'):
+            assert target in expected_terrain, f'{id}: invalid terrain representative'
     opening = by_id['opening.move']['steps']
     assert [step['kind'] for step in opening] == ['info', 'info', 'action']
     assert opening[-1]['action'] == 'move'
@@ -283,7 +285,8 @@ def validate():
         dynamic.update('world.partition.' + str(i) for i in range(1, 7))
     if 'world.partition.%s' in world:
         dynamic.update('world.partition.' + element for element in ('fire', 'cold', 'poison') if '"' + element + '"' in world)
-    unwired = sorted(set(by_id) - direct - dynamic)
+    unwired = sorted(id for id in set(by_id) - direct - dynamic
+                     if 'alias_of' not in by_id[id])
     counts = collections.Counter(id.split('.')[0] for id in by_id)
     return lessons, counts, unwired, sources
 
@@ -299,7 +302,7 @@ def write_reference(lessons, counts, unwired):
              'costs and consequences. The archive turns every step into a read-only explanation.', '',
              f"The catalogue contains {len(lessons)} lessons, including {counts['ability']} ability previews. "
              'Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial '
-             'has a checked entry. Equivalent terrain variants share an automatic lesson; their old entries remain for '
+             'has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for '
              'saved archive history. This checks source/data coverage, not physical-device interaction.', '']
     lines += ['## Resource route', '',
               '`src/init/init-paths.c` resolves `ANGBAND_DIR_HELP` from the installed data root. '
@@ -310,8 +313,8 @@ def write_reference(lessons, counts, unwired):
               'these source routes; this is not confirmation of a device installation.', '']
     lines += ['## Tutorial modes', '',
               f"Default: **Extended**. The catalogue has **{levels['normal']} Normal** lessons and "
-              f"**{levels['extended']} Extended** lessons. The card's single mode button cycles "
-              '**Disabled → Normal → Extended → Disabled**.', '',
+              f"**{levels['extended']} Extended** lessons. The card's mode button opens a selector "
+              'for **Disabled**, **Normal**, and **Extended**.', '',
               'Normal covers core controls, survival, general item handling and its complete action chains, '
               'storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons '
               'and adds individual abilities and item effects, learned monster traits, terrain and region details, '
@@ -341,7 +344,7 @@ def write_reference(lessons, counts, unwired):
         lines += ['Level: **' + lesson['level'].capitalize() + '**.', '']
         lines += [f"Priority: **{lesson['priority']}** (higher appears first).", '']
         if lesson.get('alias_of'):
-            lines += [f"Archive compatibility entry. New encounters use `{lesson['alias_of']}` for this terrain family.", '']
+            lines += [f"Archive compatibility entry. New encounters use `{lesson['alias_of']}`.", '']
         for number, step in enumerate(lesson['steps'], 1):
             lines += [f"**{number}. {step['kind'].capitalize()}**", '', step['text'], '']
             if step['kind'] == 'action':

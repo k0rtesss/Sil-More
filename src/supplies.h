@@ -84,6 +84,7 @@ typedef struct supply_menu_request
     const struct object_type* replacement_incoming;
     bool replacement_include_equip;
     bool replacement_include_supplies;
+    cptr replacement_operation; /* e.g. "Picking up" or "Equipping" */
     cptr replacement_reason; /* why a replacement is needed; shown atop menu */
     int* replacement_item_out; /* inventory slot or SUPPLIES_INDEX + supply idx */
     bool storage_exchange_mode; /* choose an item for the opposite pool */

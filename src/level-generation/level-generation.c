@@ -13,25 +13,12 @@
 #include "tutorial/tutorial-game.h"
 #include "player/player-upkeep-internal.h"
 
-/* Generation precedes tutorial_game_start(), so read the selected Tale and
- * saved preference directly instead of relying on the last character's state. */
-static bool tutorial_start_needs_clear_area(void)
-{
-    tutorial_status status;
-
-    if (playerturn != 0 || p_ptr->tutorial_deferred || run_mode_is_blitz()
-        || get_sdl_gameplay_tutorial_mode() == TUTORIAL_MODE_DISABLED)
-        return false;
-
-    tutorial_sync_tale();
-    status = tutorial_lesson_status("combat.first_monster");
-    return status == TUTORIAL_UNSEEN || status == TUTORIAL_IN_PROGRESS;
-}
-
-static bool tutorial_start_triggers_monster(void)
+static bool tutorial_start_triggers_tutorial(void)
 {
     /* Use the real visibility calculation on scratch state: rejected maps
-     * must not reveal terrain, award encounters, or change the character. */
+     * must not reveal terrain, award encounters, or change the character.
+     * The tutorial-game helper then checks the same visible monster and
+     * nearby map-subject boundary used by the first checkpoint. */
     typedef struct start_preview {
         player_type player;
         monster_type monsters[MAX_MONSTERS];
@@ -87,7 +74,7 @@ static bool tutorial_start_triggers_monster(void)
     update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
     for (int i = 1; i < mon_max; ++i)
         if (mon_list[i].r_idx) update_mon_for_generation(i);
-    triggered = tutorial_game_first_monster_triggered();
+    triggered = tutorial_game_first_turn_triggered();
 
     p_ptr = saved_player;
     mon_list = saved_monsters;
@@ -1619,7 +1606,7 @@ void generate_cave(void)
 {
     int y, x, i;
     bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
-    const bool protect_tutorial_start = tutorial_start_needs_clear_area();
+    const bool protect_tutorial_start = tutorial_game_start_needs_clear_area();
 
     log_info("generate_cave: Function entry - about to start");
     log_debug("generate_cave: Starting cave generation");
@@ -1847,10 +1834,10 @@ if (playerturn == 0) {
             /* Match the lighting that will be used after acceptance. */
             apply_chasm_partition_tags();
             apply_partition_and_room_glow_rules();
-            if (tutorial_start_triggers_monster())
+            if (tutorial_start_triggers_tutorial())
             {
                 okay = false;
-                why = "monster tutorial triggered at start";
+                why = "tutorial trigger at start";
             }
         }
 

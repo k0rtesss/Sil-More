@@ -120,11 +120,17 @@ static int wait_calls;
 static int fresh_calls;
 static int event_calls;
 static bool replay_seen;
+static int settings_calls;
 
 static void tutorial_game_wait(void)
 {
     assert(!managing && !waiting);
     ++wait_calls;
+}
+
+static void tutorial_game_settings(void)
+{
+    ++settings_calls;
 }
 
 typedef struct ui_call {
@@ -222,16 +228,18 @@ static void assert_rich_topics(void)
         "Item effects (1)", "Quests & Tales (2)", "Other (1)",
     };
     assert(!strcmp(call->title, "Tutorial cards"));
-    assert(call->count == 13 && strstr(call->description, "35 revealed"));
+    assert(call->count == 14 && strstr(call->description, "35 revealed"));
     for (int i = 0; i < 12; ++i) assert(!strcmp(call->labels[i], expected[i]));
-    assert(!strcmp(call->labels[12], "Back"));
+    assert(!strcmp(call->labels[12], "Tutorial settings"));
+    assert(!strcmp(call->labels[13], "Back"));
 }
 
 static void assert_empty_topics(void)
 {
     const ui_call *call = &calls[0];
     assert(!strcmp(call->title, "Tutorial cards"));
-    assert(call->count == 1 && !strcmp(call->labels[0], "Back"));
+    assert(call->count == 2 && !strcmp(call->labels[0], "Tutorial settings"));
+    assert(!strcmp(call->labels[1], "Back"));
     assert(strstr(call->description, "No tutorial cards"));
 }
 
@@ -239,8 +247,9 @@ static void assert_extended_topics(void)
 {
     const ui_call *call = &calls[0];
     assert(!strcmp(call->title, "Tutorial cards"));
-    assert(call->count == 2 && !strcmp(call->labels[0], "Other (1)"));
-    assert(!strcmp(call->labels[1], "Back"));
+    assert(call->count == 3 && !strcmp(call->labels[0], "Other (1)"));
+    assert(!strcmp(call->labels[1], "Tutorial settings"));
+    assert(!strcmp(call->labels[2], "Back"));
     assert(strstr(call->description, "1 revealed"));
 }
 
@@ -248,10 +257,10 @@ __ARCHIVE_SECTION__
 
 int main(void)
 {
-    static const int rich_choices[] = {8, 10, 12, 1, 10, 2, 12, 12};
+    static const int rich_choices[] = {8, 10, 12, 1, 10, 2, 12, 13};
     static const int replay_choices[] = {1, 0, 12, -1};
-    static const int empty_choices[] = {-1};
-    static const int extended_choices[] = {0, 3, 1};
+    static const int settings_choices[] = {0, 1};
+    static const int extended_choices[] = {0, 3, 2};
     tutorial_view view;
 
     assert(SDL_Init(0));
@@ -298,12 +307,15 @@ int main(void)
     assert(tutorial_get_view(&view) && !strcmp(view.id, "combat.02"));
     assert(queue_count == 1);
 
-    /* An empty Tale produces no phantom topic. */
+    /* An empty Tale produces no phantom topic, and its Tutorial settings row
+     * remains inside the cards submenu. */
     select_tale(702, NULL);
-    use_script(empty_choices, (int)N_ELEMENTS(empty_choices));
+    settings_calls = 0;
+    use_script(settings_choices, (int)N_ELEMENTS(settings_choices));
     tutorial_game_archive();
     assert(!managing && !waiting && wait_calls == 3);
-    assert(call_count == 1 && script_position == script_count);
+    assert(call_count == 2 && script_position == script_count);
+    assert(settings_calls == 1);
     assert_empty_topics();
 
     /* Archive cards remain readable when their lesson level is filtered out

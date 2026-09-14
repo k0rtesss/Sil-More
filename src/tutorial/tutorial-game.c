@@ -16,6 +16,7 @@
  * redraw callback. The snapshot is transient and never alters a save format. */
 static bool started;
 static bool opening_pending;
+static bool opening_turn_gate;
 static bool waiting;
 static bool managing;
 static bool ui_checkpoint_requested;
@@ -81,6 +82,34 @@ static const condition_lesson conditions[] = {
 #undef CONDITION
 static int previous_conditions[N_ELEMENTS(conditions)];
 
+bool tutorial_game_start_needs_clear_area(void)
+{
+    tutorial_status opening_status, monster_status;
+
+    /* Generation precedes tutorial_game_start(), so read the selected Tale
+     * and saved preference directly instead of relying on the last
+     * character's state. */
+    if (playerturn != 0 || p_ptr->tutorial_deferred || run_mode_is_blitz()
+        || get_sdl_gameplay_tutorial_mode() == TUTORIAL_MODE_DISABLED)
+        return false;
+
+    tutorial_sync_tale();
+    opening_status = tutorial_lesson_status("opening.move");
+    monster_status = tutorial_lesson_status("combat.first_monster");
+    return (opening_status == TUTORIAL_UNSEEN
+            || opening_status == TUTORIAL_IN_PROGRESS
+            || monster_status == TUTORIAL_UNSEEN
+            || monster_status == TUTORIAL_IN_PROGRESS);
+}
+
+static const char *tutorial_state_lesson_id(const char *state_id)
+{
+    if (!strcmp(state_id, "status.sunlight")) return "terrain.9";
+    if (!strcmp(state_id, "status.running")) return "world.run";
+    if (!strcmp(state_id, "status.resting")) return "menu.rest";
+    return state_id;
+}
+
 static void observe_extra_states(bool seed)
 {
     static const char *ids[] = {
@@ -112,15 +141,20 @@ static void observe_extra_states(bool seed)
         p_ptr->cut > 100, p_ptr->on_the_run
     };
     for (int i = 0; i < (int)N_ELEMENTS(ids); ++i) {
-        tutorial_status status = tutorial_lesson_status(ids[i]);
+        const char *lesson_id = tutorial_state_lesson_id(ids[i]);
+        tutorial_status status = tutorial_lesson_status(lesson_id);
         if (!seed && now[i] && (!before[i] || status == TUTORIAL_UNSEEN
             || status == TUTORIAL_IN_PROGRESS)) {
             tutorial_context context = {0};
-            SDL_strlcpy(context.subject_type, ids[i] + 7, sizeof(context.subject_type));
-            SDL_strlcpy(context.subject, ids[i] + 7, sizeof(context.subject));
-            tutorial_observe(ids[i], &context);
+            const char *name = !strcmp(ids[i], "status.sunlight") ? "sunlight" : ids[i] + 7;
+            SDL_strlcpy(context.subject_type, name, sizeof(context.subject_type));
+            SDL_strlcpy(context.subject, name, sizeof(context.subject));
+            tutorial_observe(lesson_id, &context);
         }
-        if (!seed && !now[i]) tutorial_forget_observation(ids[i]);
+        /* The sunlight card is shared with the map-feature observer. Its
+         * status transition must not withdraw an adjacent sunlight feature. */
+        if (!seed && !now[i] && strcmp(lesson_id, "terrain.9"))
+            tutorial_forget_observation(lesson_id);
         before[i] = now[i];
     }
 }
@@ -379,17 +413,33 @@ void tutorial_game_menu(const char *id, const char *description)
     request_ui_lesson(lesson);
 }
 
+static int tutorial_ability_lesson_index(int index)
+{
+    /* These raw ability serials have the same one-line attribute preview.
+     * Keep their catalogue records for archive compatibility, but observe a
+     * single canonical lesson during play. */
+    switch (index) {
+    case 66:
+        return 50;
+    case 157:
+        return 127;
+    default:
+        return index;
+    }
+}
+
 void tutorial_game_ability(int skill, int ability, bool before_purchase)
 {
     char id[80];
     ability_type *entry;
-    int index;
+    int index, preview_index;
     if (!gameplay_available() || skill < 0 || skill >= S_MAX
         || ability < 0 || ability >= ABILITIES_MAX) return;
     index = ability_index(skill, ability);
     if (index < 0 || index >= z_info->b_max) return;
     entry = &b_info[index];
-    strnfmt(id, sizeof(id), "ability.%d.preview", index);
+    preview_index = tutorial_ability_lesson_index(index);
+    strnfmt(id, sizeof(id), "ability.%d.preview", preview_index);
     observe(id, "ability", b_name + entry->name,
         before_purchase ? "Read the live requirements, effect and XP cost. Continue returns to your purchase decision; it does not buy the ability."
         : "This ability is now available. Read its effect and current activation requirements.");
@@ -474,11 +524,67 @@ static bool tutorial_stealth_target(const monster_type *monster)
         && !p_ptr->rage && !p_ptr->entranced && p_ptr->stun <= 100;
 }
 
+static bool tutorial_nearby_grid_reached(int y, int x)
+{
+    return (y == p_ptr->py && x == p_ptr->px)
+        || (cave_info[y][x] & CAVE_SEEN);
+}
+
+/* Keep this exclusion in step with observe_nearby().  Ordinary granite and
+ * floor geometry are part of navigation, but do not have a nearby terrain
+ * tutorial.  Every other known/visible feature can offer a terrain card (or
+ * one of the forge, trap, or environmental supplements). */
+static bool tutorial_nearby_feature_is_interesting(int feat)
+{
+    return feat != FEAT_NONE && feat != FEAT_FLOOR
+        && feat != FEAT_SECRET && feat != FEAT_WALL_EXTRA
+        && feat != FEAT_WALL_INNER && feat != FEAT_WALL_OUTER
+        && feat != FEAT_WALL_SOLID;
+}
+
+static bool tutorial_nearby_object_present(int y, int x)
+{
+    for (int index = cave_o_idx[y][x]; index;
+         index = o_list[index].next_o_idx)
+        if (o_list[index].k_idx) return true;
+    return false;
+}
+
+static bool tutorial_first_turn_nearby_triggered(void)
+{
+    if (!in_bounds(p_ptr->py, p_ptr->px)) return false;
+    for (int y = MAX(0, p_ptr->py - 1);
+         y <= MIN(p_ptr->cur_map_hgt - 1, p_ptr->py + 1); ++y)
+        for (int x = MAX(0, p_ptr->px - 1);
+             x <= MIN(p_ptr->cur_map_wid - 1, p_ptr->px + 1); ++x) {
+            if (!tutorial_nearby_grid_reached(y, x)) continue;
+            /* The live checkpoint marks visible objects in note_spot() before
+             * observe_nearby() examines them.  The generation preview skips
+             * that mutating step, so inspect the final object links directly. */
+            if (tutorial_nearby_object_present(y, x)) return true;
+            if (tutorial_nearby_feature_is_interesting(cave_feat[y][x]))
+                return true;
+        }
+    return false;
+}
+
 bool tutorial_game_first_monster_triggered(void)
 {
     for (int i = 1; i < mon_max; ++i)
         if (tutorial_first_monster_target(&mon_list[i])) return true;
     return false;
+}
+
+bool tutorial_game_first_turn_triggered(void)
+{
+    /* The combat lesson only excludes peaceful creatures, but the first
+     * world checkpoint can also offer a learned trait for one.  Keep the
+     * initial map free of every visible monster either way. */
+    for (int i = 1; i < mon_max; ++i)
+        if (mon_list[i].r_idx && mon_list[i].ml
+            && player_has_los_bold(mon_list[i].fy, mon_list[i].fx)
+            && !p_ptr->image) return true;
+    return tutorial_first_turn_nearby_triggered();
 }
 
 bool tutorial_game_target_allowed(int y, int x)
@@ -776,11 +882,13 @@ static void tutorial_game_upgrade_notice(void)
     managing = was_managing;
 }
 
-/* Door difficulty, ward strength and remaining forge uses change within a
- * feature family. Teach each mechanic once, preserving distinct forge grades. */
+/* Door difficulty, trap type, ward strength and remaining forge uses change
+ * within a feature family. Teach each mechanic once, preserving distinct
+ * forge grades. */
 static int terrain_lesson_feature(int feat)
 {
     if (feat >= FEAT_WARDED && feat <= FEAT_WARDED3) return FEAT_WARDED;
+    if (feat == FEAT_TRAP_GAS_MEMORY) return FEAT_TRAP_GAS_CONF;
     if (FEAT_IS_BRIDGE(feat)) return FEAT_BRIDGE_HEAD;
     if (feat > FEAT_DOOR_HEAD && feat < FEAT_DOOR_HEAD + 8) return FEAT_DOOR_HEAD + 1;
     if (feat >= FEAT_DOOR_HEAD + 8 && feat <= FEAT_DOOR_TAIL) return FEAT_DOOR_HEAD + 8;
@@ -793,15 +901,18 @@ static int terrain_lesson_feature(int feat)
 static void observe_nearby(void)
 {
     bool features[256] = {false};
-    bool forge = false, trap = false, chest = false, skeleton = false;
+    bool forge = false, detailed_forge = false;
+    bool trap = false, detailed_trap = false;
+    bool chest = false, skeleton = false;
     const int hazards[] = {FEAT_WATER, FEAT_LAVA, FEAT_ICE, FEAT_POISON};
     const char *hazard_ids[] = {"world.water", "world.lava", "world.ice", "world.poison"};
-    const char *hazard_names[] = {"Shallow water", "Molten lava", "Ice", "Poisonous seep"};
+    const char *hazard_detail_ids[] = {"terrain.84", "terrain.85", "terrain.86", "terrain.87"};
+    const char *hazard_names[] = {"Shallow water", "Molten lava", "Ice", "Poisonous acid"};
     char id[80];
     /* Reached means this square or visibly adjacent, not distant discovery. */
     for (int y = MAX(0, p_ptr->py - 1); y <= MIN(p_ptr->cur_map_hgt - 1, p_ptr->py + 1); ++y)
         for (int x = MAX(0, p_ptr->px - 1); x <= MIN(p_ptr->cur_map_wid - 1, p_ptr->px + 1); ++x) {
-            if (!(cave_info[y][x] & CAVE_SEEN) && (y != p_ptr->py || x != p_ptr->px)) continue;
+            if (!tutorial_nearby_grid_reached(y, x)) continue;
             for (int index = cave_o_idx[y][x]; index; index = o_list[index].next_o_idx) {
                 object_type *item = &o_list[index];
                 if (!item->marked || p_ptr->image) continue;
@@ -810,20 +921,21 @@ static void observe_nearby(void)
                 tutorial_game_item(item);
             }
             int feat = cave_feat[y][x];
-            if (!(cave_info[y][x] & CAVE_MARK) || feat == FEAT_NONE || feat == FEAT_FLOOR
-                || feat == FEAT_SECRET || feat == FEAT_WALL_EXTRA
-                || feat == FEAT_WALL_INNER || feat == FEAT_WALL_OUTER || feat == FEAT_WALL_SOLID) continue;
+            if (!(cave_info[y][x] & CAVE_MARK)
+                || !tutorial_nearby_feature_is_interesting(feat)) continue;
             int lesson_feat = terrain_lesson_feature(feat);
             features[lesson_feat] = true;
             strnfmt(id, sizeof(id), "terrain.%d", lesson_feat);
             observe(id, "terrain", "Nearby terrain", "Inspect this known feature before stepping onto it or choosing an interaction.");
             if (cave_forge_bold(y, x)) {
                 forge = true;
-                observe("world.forge", "terrain", "A forge", "Inspect the forge and its remaining uses. Open Smithing to compare requirements before committing resources.");
+                if (tutorial_lesson_enabled(id)) detailed_forge = true;
+                else observe("world.forge", "terrain", "A forge", "Inspect the forge and its remaining uses. Open Smithing to compare requirements before committing resources.");
             }
             if (cave_trap_bold(y, x)) {
                 trap = true;
-                observe("world.trap", "terrain", "A revealed trap", "Inspect the trap before moving. Choose a route around it or check the applicable interaction and its risks.");
+                if (tutorial_lesson_enabled(id)) detailed_trap = true;
+                else observe("world.trap", "terrain", "A revealed trap", "Inspect the trap before moving. Choose a route around it or check the applicable interaction and its risks.");
             }
         }
     for (int i = 0; i < (int)N_ELEMENTS(features); ++i)
@@ -832,12 +944,18 @@ static void observe_nearby(void)
             tutorial_forget_observation(id);
         }
     for (int i = 0; i < (int)N_ELEMENTS(hazards); ++i) {
-        if (features[hazards[i]]) observe(hazard_ids[i], "terrain", hazard_names[i],
-            "This terrain is within one step. Check its risks before choosing a route.");
+        if (features[hazards[i]]) {
+            /* Normal gets the short warning; Extended gets the detailed
+             * terrain card, not both explanations for the same feature. */
+            if (!tutorial_lesson_enabled(hazard_detail_ids[i]))
+                observe(hazard_ids[i], "terrain", hazard_names[i],
+                    "This terrain is within one step. Check its risks before choosing a route.");
+            else tutorial_forget_observation(hazard_ids[i]);
+        }
         else tutorial_forget_observation(hazard_ids[i]);
     }
-    if (!forge) tutorial_forget_observation("world.forge");
-    if (!trap) tutorial_forget_observation("world.trap");
+    if (!forge || detailed_forge) tutorial_forget_observation("world.forge");
+    if (!trap || detailed_trap) tutorial_forget_observation("world.trap");
     if (!chest) tutorial_forget_observation("world.chest");
     if (!skeleton) tutorial_forget_observation("world.skeleton");
 }
@@ -845,6 +963,7 @@ static void observe_nearby(void)
 void tutorial_game_start(void)
 {
     const metarun *tale = metarun_current();
+    tutorial_status opening_status;
     /* dungeon() calls this on every level. Preserve comparison snapshots on
      * ordinary travel, so the next safe checkpoint can observe the transition. */
     if (started && observed_tale == (tale ? tale->id : 0)
@@ -882,8 +1001,12 @@ void tutorial_game_start(void)
     for (int i = 0; i < (int)N_ELEMENTS(conditions); ++i)
         previous_conditions[i] = *(const s16b *)((const char *)p_ptr + conditions[i].offset);
     observe_extra_states(true);
+    opening_status = tutorial_lesson_status("opening.move");
     opening_pending = (!p_ptr->restoring && playerturn <= 1)
-        || tutorial_lesson_status("opening.move") == TUTORIAL_IN_PROGRESS;
+        || opening_status == TUTORIAL_IN_PROGRESS;
+    opening_turn_gate = !p_ptr->restoring && playerturn == 0
+        && (opening_status == TUTORIAL_UNSEEN
+            || opening_status == TUTORIAL_IN_PROGRESS);
     if (opening_pending)
         observe("opening.move", "", "Your first steps",
             "Find a suitable weapon and armour. Inspect each item before using or equipping it.");
@@ -895,6 +1018,7 @@ void tutorial_game_checkpoint(void)
     const metarun *tale = metarun_current();
     if (!started || (tale && tale->id != observed_tale)) tutorial_game_start();
     if (!gameplay_available()) { tutorial_invalidate_context(); return; }
+    if (opening_turn_gate && playerturn > 0) opening_turn_gate = false;
     end_ui_lessons();
     if (level_changed || p_ptr->depth != previous_depth) {
         tutorial_invalidate_context();
@@ -909,6 +1033,20 @@ void tutorial_game_checkpoint(void)
             "Find a suitable weapon and armour. Inspect each item before using or equipping it.");
         tutorial_status status = tutorial_lesson_status("opening.move");
         if (status == TUTORIAL_COMPLETED || status == TUTORIAL_SKIPPED) opening_pending = false;
+    }
+    if (opening_turn_gate && playerturn == 0) {
+        /* On the initial turn, keep the opening movement card alone.  The
+         * first checkpoint must not immediately replace it with a terrain,
+         * object, monster, region, or status lesson.  Explicit menu lessons
+         * still use their own request/focus path; automatic observations begin
+         * after the first time-spending action. */
+        tutorial_checkpoint(true);
+        if (tutorial_is_active()) {
+            p_ptr->running = 0; p_ptr->resting = 0; p_ptr->command_rep = 0;
+            sdl_mouse_path_cancel();
+        }
+        tutorial_game_wait();
+        return;
     }
     if (p_ptr->py != previous_y || p_ptr->px != previous_x) {
         /* Deliberate movement is credited by move_player() at commit time.
@@ -1148,9 +1286,33 @@ static int tutorial_archive_compare(const void *left, const void *right)
     return order ? order : strcmp(a->id, b->id);
 }
 
+static int tutorial_archive_collect_cards(tutorial_archive_card *cards,
+    int capacity, int *topic_counts)
+{
+    int card_count = 0;
+
+    if (!topic_counts)
+        return 0;
+    memset(topic_counts, 0,
+        sizeof(*topic_counts) * N_ELEMENTS(tutorial_archive_topics));
+    for (int i = 0; i < capacity; ++i) {
+        tutorial_view view;
+        tutorial_status status;
+        if (!cards || !tutorial_archive_entry(i, &view, &status)
+            || status == TUTORIAL_UNSEEN) continue;
+        tutorial_archive_card *card = &cards[card_count++];
+        SDL_strlcpy(card->id, view.id, sizeof(card->id));
+        SDL_strlcpy(card->title, view.title, sizeof(card->title));
+        card->status = status;
+        card->topic = tutorial_archive_topic_for_id(view.id);
+        ++topic_counts[card->topic];
+    }
+    return card_count;
+}
+
 void tutorial_game_archive(void)
 {
-    int offset = 0, topic = -1, card_count = 0, topic_selection = 0;
+    int offset = 0, topic = -1, card_count, topic_selection = 0;
     int card_selection = 0;
     int topic_counts[N_ELEMENTS(tutorial_archive_topics)] = {0};
     bool old_managing = managing;
@@ -1163,23 +1325,12 @@ void tutorial_game_archive(void)
         msg_print("Unable to open tutorial cards.");
         goto cleanup;
     }
-    for (int i = 0; i < capacity; ++i) {
-        tutorial_view view;
-        tutorial_status status;
-        if (!tutorial_archive_entry(i, &view, &status)
-            || status == TUTORIAL_UNSEEN) continue;
-        tutorial_archive_card *card = &cards[card_count++];
-        SDL_strlcpy(card->id, view.id, sizeof(card->id));
-        SDL_strlcpy(card->title, view.title, sizeof(card->title));
-        card->status = status;
-        card->topic = tutorial_archive_topic_for_id(view.id);
-        ++topic_counts[card->topic];
-    }
+    card_count = tutorial_archive_collect_cards(cards, capacity, topic_counts);
     if (card_count > 1)
         qsort(cards, (size_t)card_count, sizeof(*cards), tutorial_archive_compare);
     while (true) {
         if (topic < 0) {
-            ui_question_option options[N_ELEMENTS(tutorial_archive_topics) + 1];
+            ui_question_option options[N_ELEMENTS(tutorial_archive_topics) + 2];
             char labels[N_ELEMENTS(tutorial_archive_topics)][96];
             int topics[N_ELEMENTS(tutorial_archive_topics)];
             int count = 0;
@@ -1194,12 +1345,25 @@ void tutorial_game_archive(void)
                 ++count;
             }
             strnfmt(description, sizeof(description), card_count
-                ? "%d revealed tutorial cards in this Tale. Choose a topic to read them again. Reading is free."
-                : "No tutorial cards have been revealed in this Tale yet. Cards appear here when you encounter their lessons.",
+                ? "%d revealed tutorial cards in this Tale. Choose a topic to read them again, or open Tutorial settings. Reading is free."
+                : "No tutorial cards have been revealed in this Tale yet. Open Tutorial settings to choose a mode or reset this Tale.",
                 card_count);
-            options[count] = (ui_question_option){'x', "Back", TERM_WHITE, false};
+            options[count] = (ui_question_option){'s', "Tutorial settings", TERM_L_BLUE, false};
+            options[count + 1] = (ui_question_option){'x', "Back", TERM_WHITE, false};
             int choice = ui_question_ask_overlay("Tutorial cards", description,
-                options, count + 1, -1, -1, topic_selection);
+                options, count + 2, -1, -1, topic_selection);
+            if (choice == count) {
+                tutorial_game_settings();
+                card_count = tutorial_archive_collect_cards(cards, capacity,
+                    topic_counts);
+                if (card_count > 1)
+                    qsort(cards, (size_t)card_count, sizeof(*cards),
+                        tutorial_archive_compare);
+                topic_selection = card_count ? 0 : 1;
+                offset = 0;
+                card_selection = 0;
+                continue;
+            }
             if (choice < 0 || choice >= count) break;
             topic_selection = choice;
             topic = topics[choice];
@@ -1288,6 +1452,29 @@ void tutorial_game_lifecycle(const char *id)
     tutorial_invalidate_context();
 }
 
+bool tutorial_game_select_mode(void)
+{
+    tutorial_mode current = get_sdl_gameplay_tutorial_mode();
+    const char *description = p_ptr && p_ptr->tutorial_deferred
+        ? "Tutorials are deferred for this older character. Choose Disabled, Normal or Extended; mode changes apply to your next new character. Extended includes all lessons. Revealed tutorial cards remain available to read."
+        : "Choose Disabled, Normal or Extended. Normal teaches core controls and survival; Extended adds detailed mechanics. Lessons are remembered across heroes in this Tale. Reading is free; guided actions keep their normal costs.";
+    const ui_question_option options[] = {
+        {'d', "Disabled", TERM_WHITE, false},
+        {'n', "Normal", TERM_WHITE, false},
+        {'e', "Extended", TERM_WHITE, false}
+    };
+    int choice = ui_question_ask_overlay("Gameplay tutorial mode", description,
+        options, N_ELEMENTS(options), UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL,
+        (int)current);
+
+    if (choice < 0 || choice >= (int)N_ELEMENTS(options))
+        return false;
+
+    if ((tutorial_mode)choice != current)
+        set_sdl_gameplay_tutorial_mode((tutorial_mode)choice);
+    return true;
+}
+
 void tutorial_game_settings(void)
 {
     bool old_managing = managing;
@@ -1295,27 +1482,26 @@ void tutorial_game_settings(void)
     tutorial_checkpoint(false);
     while (true) {
         char mode_label[96];
-        strnfmt(mode_label, sizeof(mode_label), "Gameplay tutorials: %s",
+        strnfmt(mode_label, sizeof(mode_label), "Choose tutorial mode: %s",
             tutorial_mode_name(get_sdl_gameplay_tutorial_mode()));
         ui_question_option options[] = {
             {'e', mode_label, TERM_L_BLUE, false},
             {'r', "Reset tutorials for this Tale", TERM_ORANGE, run_mode_is_blitz()},
-            {'l', "Tutorial cards", TERM_WHITE, false},
             {'b', "Back", TERM_WHITE, false}
         };
         int choice = ui_question_ask_overlay("Gameplay tutorials",
             p_ptr && p_ptr->tutorial_deferred
-            ? "Tutorials are deferred for this older character. Mode changes and reset apply to your next new character. Cycle Disabled, Normal and Extended; Extended includes all lessons. Revealed tutorial cards remain available to read."
-            : "Cycle Disabled, Normal and Extended. Normal teaches core controls and survival; Extended adds detailed mechanics. Lessons are remembered across heroes in this Tale. Reading is free; guided actions keep their normal costs.", options, N_ELEMENTS(options), -1, -1, 0);
-        if (choice < 0 || choice == 3) break;
-        if (choice == 0) cycle_sdl_gameplay_tutorial_mode();
+            ? "Tutorials are deferred for this older character. Mode changes and reset apply to your next new character. Choose Disabled, Normal or Extended; Extended includes all lessons. Revealed tutorial cards remain available to read."
+            : "Choose Disabled, Normal or Extended. Normal teaches core controls and survival; Extended adds detailed mechanics. Lessons are remembered across heroes in this Tale. Reading is free; guided actions keep their normal costs.", options, N_ELEMENTS(options), -1, -1, 0);
+        if (choice < 0 || choice == 2) break;
+        if (choice == 0) tutorial_game_select_mode();
         else if (choice == 1) {
             ui_question_option confirm[] = {{'r', "Reset this Tale's lesson history", TERM_ORANGE, false}, {'c', "Cancel", TERM_WHITE, false}};
             if (ui_question_ask_overlay("Reset tutorials", "Only tutorial history for the current Tale will be cleared. The game and device controls do not reset.", confirm, 2, -1, -1, 1) == 0) {
                 tutorial_reset_tale();
                 opening_pending = true;
             }
-        } else if (choice == 2) tutorial_game_archive();
+        }
     }
     managing = old_managing;
     if (!managing) {

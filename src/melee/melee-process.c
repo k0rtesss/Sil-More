@@ -481,7 +481,7 @@ static void process_monster(monster_type* m_ptr)
 
     /* Action history is advanced by the scheduler, including skipped turns. */
 
-    /* Leave harmful seep before choosing to stand and shoot or wander. */
+    /* Leave harmful acid before choosing to stand and shoot or wander. */
     if (get_move_escape_poison(m_ptr, &ty, &tx))
     {
         bool poison_bash = false;

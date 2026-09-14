@@ -564,7 +564,7 @@ void move_player(int dir)
                 disturb(0, 0);
                 flush();
                 strnfmt(prompt, sizeof(prompt),
-                    "Step into poisonous seep? Each exposure adds up to %d poison stacks after resistance, before poison protection. ",
+                    "Step into poisonous acid? Each exposure adds up to %d poison stacks after resistance, before poison protection. ",
                     player_poison_terrain_dose_at(y, x));
                 if (!get_check_near(y, x, prompt))
                 {

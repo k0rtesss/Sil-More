@@ -467,7 +467,7 @@ int monster_terrain_penalty(monster_type* m_ptr, int y, int x)
 }
 
 /* Entry from dry land collects a dose immediately and another before the
- * next action. Consecutive seep steps add only one dose per action. Every
+ * next action. Consecutive acid steps add only one dose per action. Every
  * stack eventually removes one HP, even after reaching land. */
 int monster_poison_step_damage(monster_type* m_ptr,
     int from_y, int from_x, int y, int x)

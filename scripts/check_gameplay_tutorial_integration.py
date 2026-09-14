@@ -285,6 +285,41 @@ static void live_checkpoint(void)
     waiting=false;
 }
 
+static void check_opening_first_turn(void)
+{
+    tutorial_view view;
+    memset(p_ptr,0,sizeof(*p_ptr));
+    memset(inventory,0,sizeof(test_inventory));
+    memset(mon_list,0,sizeof(test_monsters));
+    memset(cave_m_idx,0,sizeof(test_mon_idx));
+    memset(cave_o_idx,0,sizeof(test_obj_idx));
+    memset(cave_info,0,sizeof(test_info));
+    p_ptr->playing=true; p_ptr->restoring=false; p_ptr->depth=1;
+    p_ptr->py=p_ptr->px=5; p_ptr->cur_map_hgt=p_ptr->cur_map_wid=12;
+    p_ptr->chp=p_ptr->mhp=20; p_ptr->csp=p_ptr->msp=20;
+    p_ptr->food=PY_FOOD_FULL-1;
+    for (int y=0;y<12;++y) for (int x=0;x<12;++x) cave_feat[y][x]=FEAT_FLOOR;
+    mon_list[1]=(monster_type){.r_idx=1,.ml=true,.fy=5,.fx=6};
+    cave_info[5][6]=CAVE_VIEW;
+    character_generated=true; playerturn=0; started=false;
+    ++test_tale.id; tutorial_invalidate_context();
+    tutorial_set_mode(TUTORIAL_MODE_EXTENDED); tutorial_sync_tale();
+    mock_description_events=0;
+
+    tutorial_game_start();
+    tutorial_game_checkpoint();
+    assert(tutorial_get_view(&view) && !strcmp(view.id,"opening.move")
+        && view.step==3 && !strcmp(view.action,"move"));
+    assert(queue_count==0 && !pending_lesson("combat.first_monster"));
+
+    /* The first paid action opens automatic observations for the next
+     * checkpoint; the visible monster was deliberately present all along. */
+    tutorial_action_finished("move",NULL,true);
+    playerturn=1;
+    live_checkpoint();
+    assert(tutorial_get_view(&view) && !strcmp(view.id,"combat.first_monster"));
+}
+
 static void check_live_checkpoints(void)
 {
     tutorial_view view;
@@ -322,24 +357,43 @@ static void check_live_checkpoints(void)
     /* Merely sensed/distant terrain is not a reached hazard. Transformation
      * removes the old lesson and offers the new physical feature. */
     cave_feat[5][6]=FEAT_LAVA; cave_info[5][6]=CAVE_MARK;
-    live_checkpoint(); assert(!pending_lesson("world.lava"));
+    live_checkpoint(); assert(!pending_lesson("world.lava") && !pending_lesson("terrain.85"));
     cave_info[5][6]|=CAVE_SEEN;
-    live_checkpoint(); assert(pending_lesson("world.lava"));
+    live_checkpoint(); assert(!pending_lesson("world.lava") && pending_lesson("terrain.85"));
     cave_feat[5][6]=FEAT_ICE;
-    live_checkpoint(); assert(!pending_lesson("world.lava") && pending_lesson("world.ice"));
+    live_checkpoint(); assert(!pending_lesson("world.lava") && !pending_lesson("terrain.85")
+        && !pending_lesson("world.ice") && pending_lesson("terrain.86"));
     cave_feat[5][6]=FEAT_FLOOR;
-    live_checkpoint(); assert(!pending_lesson("world.ice"));
+    live_checkpoint(); assert(!pending_lesson("world.ice") && !pending_lesson("terrain.86"));
+    cave_feat[5][6]=FEAT_SUNLIGHT; cave_info[5][6]=CAVE_MARK|CAVE_SEEN;
+    live_checkpoint(); assert(pending_lesson("terrain.9"));
+    cave_feat[5][6]=FEAT_FLOOR; cave_feat[5][5]=FEAT_SUNLIGHT; cave_info[5][5]=CAVE_MARK;
+    live_checkpoint(); assert(pending_lesson("terrain.9"));
+    cave_feat[5][5]=FEAT_FLOOR; cave_info[5][5]=0;
+    live_checkpoint(); assert(!pending_lesson("terrain.9"));
+    cave_feat[5][6]=FEAT_TRAP_DART; cave_info[5][6]=CAVE_MARK|CAVE_SEEN;
+    live_checkpoint(); assert(!pending_lesson("world.trap") && pending_lesson("terrain.19"));
+    cave_feat[5][6]=FEAT_FORGE_NORMAL_HEAD+1;
+    live_checkpoint(); assert(!pending_lesson("world.trap") && !pending_lesson("terrain.19")
+        && !pending_lesson("world.forge") && pending_lesson("terrain.65"));
+    cave_feat[5][6]=FEAT_FLOOR; cave_info[5][6]=CAVE_MARK|CAVE_SEEN;
+    live_checkpoint(); assert(!pending_lesson("terrain.65") && !pending_lesson("world.forge"));
     test_floor_objects[1]=(object_type){.k_idx=1,.tval=TV_STAFF,.number=1,.marked=true};
     cave_o_idx[5][6]=1;
     live_checkpoint(); assert(pending_lesson("item.first_description"));
     cave_o_idx[5][6]=0;
     live_checkpoint(); assert(!pending_lesson("item.first_description"));
     assert(terrain_lesson_feature(7)==6 && terrain_lesson_feature(8)==6);
+    assert(terrain_lesson_feature(20)==20 && terrain_lesson_feature(21)==20);
     assert(terrain_lesson_feature(32)==32 && terrain_lesson_feature(39)==33);
     assert(terrain_lesson_feature(47)==40);
     assert(terrain_lesson_feature(64)==64 && terrain_lesson_feature(69)==65);
     assert(terrain_lesson_feature(70)==70 && terrain_lesson_feature(75)==71);
     assert(terrain_lesson_feature(76)==76 && terrain_lesson_feature(79)==77);
+    assert(tutorial_ability_lesson_index(50)==50
+        && tutorial_ability_lesson_index(66)==50
+        && tutorial_ability_lesson_index(127)==127
+        && tutorial_ability_lesson_index(157)==127);
 
     /* Adjacent and alert enemies get awareness before attack, never a stealth
      * suggestion. A pacifist still learns what a visible enemy means. */
@@ -682,6 +736,7 @@ int main(void)
         tutorial_game_start();
         assert(!tutorial_character_blocked());
     }
+    check_opening_first_turn();
     check_live_checkpoints();
     tutorial_shutdown(); SDL_Quit();
     puts("Gameplay tutorial integration: PASS (typed actions, known instruments/remedies, post-cure completion, ranged path safety, movement/oath gates, hidden paid actions, inline/modal description success/failure and visibility, Off replay, level/reload history)");
@@ -821,7 +876,14 @@ def main():
                'world.ice','world.poison','menu.inventory'):
         lessons.append({'id':id,'title':id,'level':'normal',
                         'steps':[{'kind':'info','text':'Current context: {subject}'}]})
+    for id in ('terrain.9','terrain.19','terrain.20','terrain.65',
+               'terrain.84','terrain.85','terrain.86','terrain.87'):
+        lessons.append({'id':id,'title':id,'level':'extended',
+                        'steps':[{'kind':'info','text':'Detailed terrain context.'}]})
     lessons.extend([
+        {'id':'opening.move','title':'Opening','priority':70,'steps':[
+            {'text':'Welcome.'}, {'text':'Prepare.'},
+            {'text':'Move once.','kind':'action','action':'move'}]},
         {'id':'combat.first_monster','title':'Awareness','priority':65,'steps':[{'text':'Creature awareness.'}]},
         {'id':'combat.first_adjacent','title':'Attack','priority':45,'steps':[{'text':'Attack.','kind':'action','action':'attack','subject_type':'monster'}]},
         {'id':'combat.stealth','title':'Stealth','priority':40,'steps':[{'text':'Stealth.','kind':'action','action':'stealth'}]},

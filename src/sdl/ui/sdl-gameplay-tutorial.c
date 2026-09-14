@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
+#include "tutorial/tutorial-game.h"
 #include "support/input.h"
 #include "ui/menu-click.h"
 #include "ui/command-reference.h"
@@ -30,6 +31,7 @@ static float tutorial_scroll_y;
 static bool tutorial_reading;
 static bool tutorial_force_sync;
 static unsigned int tutorial_input_epoch;
+static bool tutorial_mode_selector_active;
 static bool tutorial_menu_preview_available;
 static bool tutorial_menu_preview_shown;
 static char tutorial_menu_preview_control[64];
@@ -269,7 +271,8 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
     char binding[96]="";
     memset(out,0,sizeof(*out));
     SDL_strlcpy(out->label[1],"Skip tutorial",sizeof(out->label[1]));
-    SDL_strlcpy(out->label[2],tutorial_mode_name(get_sdl_gameplay_tutorial_mode()),sizeof(out->label[2]));
+    strnfmt(out->label[2],sizeof(out->label[2]),"Mode: %s",
+        tutorial_mode_name(get_sdl_gameplay_tutorial_mode()));
     if (view->can_continue || tutorial_reading) {
         out->primary=true;
         SDL_strlcpy(out->label[0],view->can_continue?"Continue":"Resume action",sizeof(out->label[0]));
@@ -342,9 +345,8 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
         SDL_strlcpy(out->read_hint,"Wheel: read",sizeof(out->read_hint));
     }
     if (!scrollable) out->read_hint[0]='\0';
-    if (out->shortcut[2][0]) SDL_strlcat(out->shortcut[2],": change",sizeof(out->shortcut[2]));
-    else SDL_strlcpy(out->shortcut[2],input==TUTORIAL_INPUT_TOUCH?"Tap to change"
-        :input==TUTORIAL_INPUT_MOUSE?"Click to change":"Change mode",sizeof(out->shortcut[2]));
+    if (out->shortcut[2][0]) SDL_strlcat(out->shortcut[2],": select",sizeof(out->shortcut[2]));
+    else SDL_strlcpy(out->shortcut[2],"Select mode",sizeof(out->shortcut[2]));
 }
 
 static bool tutorial_has_primary(const tutorial_view *view)
@@ -458,6 +460,26 @@ static bool tutorial_anchor_rect(const tutorial_view *view, SDL_FRect *rect)
     return false;
 }
 
+static bool tutorial_movement_neighborhood_rect(SDL_FRect *rect)
+{
+    bool found = false;
+    int top = MAX(0, p_ptr->py - 1);
+    int bottom = MIN(p_ptr->cur_map_hgt - 1, p_ptr->py + 1);
+    int left = MAX(0, p_ptr->px - 1);
+    int right = MIN(p_ptr->cur_map_wid - 1, p_ptr->px + 1);
+
+    for (int y = top; y <= bottom; ++y)
+        for (int x = left; x <= right; ++x) {
+            SDL_FRect cell;
+            if (!sdl_map_grid_cell_rect(y, x, &cell)) continue;
+            if (!found) {
+                *rect = cell;
+                found = true;
+            } else SDL_GetRectUnionFloat(rect, &cell, rect);
+        }
+    return found;
+}
+
 static bool tutorial_hit(float x, float y, const SDL_FRect *r)
 {
     return x >= r->x && y >= r->y && x < r->x+r->w && y < r->y+r->h;
@@ -475,7 +497,16 @@ static void tutorial_activate(int button, const tutorial_view *view)
         tutorial_view next;
         int saved_focus=tutorial_focus, saved_scroll=tutorial_scroll;
         bool saved_reading=tutorial_reading;
-        cycle_sdl_gameplay_tutorial_mode();
+        bool restore_command_wait=inkey_flag;
+        tutorial_mode_selector_active = true;
+        bool selected = tutorial_game_select_mode();
+        tutorial_mode_selector_active = false;
+        if (restore_command_wait && character_icky == 0)
+            inkey_flag = true;
+        if (!selected) {
+            g_state.need_present=true;
+            return;
+        }
         /* Choosing Disabled also closes a manual archive replay. Eligible
          * lessons keep their step, focus and scroll when changing other modes. */
         if (get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_DISABLED)
@@ -537,6 +568,7 @@ void sdl_gameplay_tutorial_render(void)
     const SDL_Color white = {240,239,231,255}, gold = {244,202,111,255};
     const SDL_Color muted = {182,191,204,255};
     sdl_gameplay_tutorial_sync();
+    if (tutorial_mode_selector_active) return;
     if (!tutorial_get_view(&view) || screen.w <= 0 || screen.h <= 0) return;
     tutorial_build_controls(&view,&controls,false);
     compact_action=!view.can_continue && !tutorial_reading
@@ -587,9 +619,24 @@ void sdl_gameplay_tutorial_render(void)
     tutorial_scroll = MIN(tutorial_scroll,tutorial_max_scroll);
     tutorial_build_controls(&view,&controls,tutorial_max_scroll>0);
     has_anchor = tutorial_anchor_rect(&view, &anchor);
-    tutorial_card = (SDL_FRect){screen.x+(screen.w-width)/2,screen.y+screen.h-height-margin,width,height};
+    float card_x = screen.x+(screen.w-width)/2;
+    float card_top = screen.y+margin;
+    float card_bottom = screen.y+screen.h-height-margin;
+    tutorial_card = (SDL_FRect){card_x,card_bottom,width,height};
     if (has_anchor && anchor.y+anchor.h/2 > screen.y+screen.h/2)
-        tutorial_card.y = screen.y+margin;
+        tutorial_card.y = card_top;
+    if (!view.can_continue && strstr(view.action,"move")) {
+        SDL_FRect neighborhood;
+        SDL_FRect top_card = {card_x,card_top,width,height};
+        SDL_FRect bottom_card = {card_x,card_bottom,width,height};
+        if (tutorial_movement_neighborhood_rect(&neighborhood)
+            && SDL_HasRectIntersectionFloat(&tutorial_card,&neighborhood)) {
+            if (!SDL_HasRectIntersectionFloat(&top_card,&neighborhood))
+                tutorial_card.y = card_top;
+            else if (!SDL_HasRectIntersectionFloat(&bottom_card,&neighborhood))
+                tutorial_card.y = card_bottom;
+        }
+    }
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(g_state.renderer, 0,0,0,145);
     if (has_anchor) {
@@ -666,6 +713,7 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
     float x=0,y=0;
     SDL_FingerID finger=0;
     sdl_gameplay_tutorial_sync();
+    if (tutorial_mode_selector_active) return false;
     active = tutorial_get_view(&view);
     tutorial_note_input(ev);
     switch (ev->type) {

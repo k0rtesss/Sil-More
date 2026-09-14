@@ -32,18 +32,28 @@ bool g_touch_pane_reset_confirm_active, g_unified_look_active;
 minimap_state g_minimap;
 bool g_screen_back_right_button_pending;
 s16b character_icky;
+bool inkey_flag;
 term *Term;
 term *angband_term[ANGBAND_TERM_MAX];
 static tutorial_view current;
 static unsigned int revision;
 static int keys[16], key_count, flush_count, pending_choice;
+static int pending_mode_choice = -1, mode_selector_calls;
 static bool touch_only, disabled;
 static tutorial_mode g_app_gameplay_tutorial_mode=TUTORIAL_MODE_EXTENDED;
 static int config_saves;
+void set_sdl_gameplay_tutorial_mode(tutorial_mode mode);
 bool save_pane_config_to_json(void) { ++config_saves; return true; }
 const char *tutorial_mode_name(tutorial_mode mode)
 { return mode==TUTORIAL_MODE_DISABLED?"Disabled":mode==TUTORIAL_MODE_NORMAL?"Normal":"Extended"; }
 void tutorial_set_mode(tutorial_mode mode) { disabled=mode==TUTORIAL_MODE_DISABLED; ++revision; }
+bool tutorial_game_select_mode(void)
+{
+    ++mode_selector_calls;
+    if (pending_mode_choice < 0) return false;
+    set_sdl_gameplay_tutorial_mode((tutorial_mode)pending_mode_choice);
+    return true;
+}
 /* CONFIG_MODE_FUNCTIONS */
 bool sdl_touch_only_device_active(void) { return touch_only; }
 bool steamdeck_controls_active(void) { return config.input_ui_mode==SDL_INPUT_UI_MODE_CONTROLLER; }
@@ -232,7 +242,9 @@ int main(void)
         tutorial_last_input=TUTORIAL_INPUT_MOUSE;
         tutorial_build_controls(&current,&labels,true);
         assert(!strstr(labels.controls_hint,"Click") && strstr(labels.controls_hint,"Wheel")
-            && !labels.shortcut[0][0] && !strcmp(labels.label[1],"Skip tutorial"));
+            && !labels.shortcut[0][0] && !strcmp(labels.label[1],"Skip tutorial")
+            && !strcmp(labels.label[2],"Mode: Extended")
+            && !strcmp(labels.shortcut[2],"Select mode"));
         tutorial_build_controls(&current,&labels,false);
         assert(!labels.controls_hint[0]);
         tutorial_last_input=TUTORIAL_INPUT_TOUCH;
@@ -259,18 +271,25 @@ int main(void)
         e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
         assert(sdl_gameplay_tutorial_handle_event(&e));
         assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_focus==2);
+        pending_mode_choice=TUTORIAL_MODE_NORMAL;
         e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_SOUTH);
-        assert(sdl_gameplay_tutorial_handle_event(&e) && disabled);
-        assert(!current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_DISABLED);
+        assert(sdl_gameplay_tutorial_handle_event(&e) && !disabled);
+        assert(current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_NORMAL);
+        assert(mode_selector_calls > 0 && !tutorial_mode_selector_active);
         show(true,"",""); /* An archive card can also be opened while Disabled. */
         tutorial_focus=2; tutorial_scroll=3;
+        pending_mode_choice=-1;
         tutorial_activate(2,&current);
         assert(current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_NORMAL);
-        assert(tutorial_focus==2 && tutorial_scroll==3);
-        tutorial_build_controls(&current,&labels,true);
-        assert(!strcmp(labels.label[2],"Normal") && strstr(labels.shortcut[2],"change"));
+        assert(!tutorial_mode_selector_active);
+        pending_mode_choice=TUTORIAL_MODE_EXTENDED;
         tutorial_activate(2,&current);
         assert(current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_EXTENDED);
+        assert(tutorial_focus==2 && tutorial_scroll==3);
+        tutorial_build_controls(&current,&labels,true);
+        assert(!strcmp(labels.label[2],"Mode: Extended"));
+        assert(strstr(labels.shortcut[2],"select"));
+        pending_mode_choice=TUTORIAL_MODE_DISABLED;
         tutorial_activate(2,&current);
         assert(!current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_DISABLED);
         sdl_gameplay_tutorial_set_menu_preview(false,false);

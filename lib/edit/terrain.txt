@@ -571,9 +571,9 @@ N:86:solid ice
 G:=:W
 T:0:1
 
-# 0x57 --> poisonous seep (SDL recolors the lava animation green)
+# 0x57 --> poisonous acid (SDL recolors the lava animation green)
 
-N:87:poisonous seep
+N:87:poisonous acid
 G:~:G
 T:0:1
 
@@ -615,13 +615,13 @@ T:0:1
 
 
 # Dry deck; material and direction are encoded in this feature ID.
-N:94:stone bridge over poisonous seep
+N:94:stone bridge over poisonous acid
 G:=:s
 T:0:1
 
 
 # Dry deck; material and direction are encoded in this feature ID.
-N:95:stone bridge over poisonous seep
+N:95:stone bridge over poisonous acid
 G:|:s
 T:0:1
 

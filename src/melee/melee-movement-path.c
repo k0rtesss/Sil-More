@@ -8,7 +8,7 @@
 #include "monster/monster-senses.h"
 #include "monster/monster-ai.h"
 
-/* Pain prompts even ordinary and mindless creatures to leave a seep. Keep
+/* Pain prompts even ordinary and mindless creatures to leave acid. Keep
  * a survivable pursuit crossing when it is useful; otherwise find the nearest
  * dry bank, including when the accumulated poison is already fatal. */
 bool get_move_escape_poison(monster_type* m_ptr, int* ty, int* tx)

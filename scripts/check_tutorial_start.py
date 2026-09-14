@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the first-level tutorial monster safeguard with production code.
+"""Check the first-level tutorial start safeguard with production code.
 
 The C fixture extracts the exact tutorial trigger and its helper bodies
 from their production files, then calls them with only the required globals
@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/tutorial-start-check"
 GENERATION = ROOT / "src/level-generation/level-generation.c"
+SUNLIGHT = ROOT / "src/level-generation/level-generation-finalize.c"
 TUTORIAL_GAME = ROOT / "src/tutorial/tutorial-game.c"
 
 
@@ -68,12 +69,17 @@ def extract_function(path, name):
 
 
 HELPERS = "\n\n".join([
-    extract_function(GENERATION, "tutorial_start_needs_clear_area"),
+    extract_function(TUTORIAL_GAME, "bool tutorial_game_start_needs_clear_area"),
     extract_function(TUTORIAL_GAME, "static bool tutorial_monster_observable"),
     extract_function(TUTORIAL_GAME, "static bool tutorial_first_monster_target"),
     extract_function(TUTORIAL_GAME, "static bool tutorial_stealth_target"),
+    extract_function(TUTORIAL_GAME, "static bool tutorial_nearby_grid_reached"),
+    extract_function(TUTORIAL_GAME, "static bool tutorial_nearby_feature_is_interesting"),
+    extract_function(TUTORIAL_GAME, "static bool tutorial_nearby_object_present"),
+    extract_function(TUTORIAL_GAME, "static bool tutorial_first_turn_nearby_triggered"),
     extract_function(TUTORIAL_GAME, "bool tutorial_game_first_monster_triggered"),
-    extract_function(GENERATION, "static bool tutorial_start_triggers_monster"),
+    extract_function(TUTORIAL_GAME, "bool tutorial_game_first_turn_triggered"),
+    extract_function(GENERATION, "static bool tutorial_start_triggers_tutorial"),
 ])
 
 
@@ -94,6 +100,12 @@ static monster_race race_body[3];
 monster_race *r_info = race_body;
 static u16b cave_body[MAX_DUNGEON_HGT][256];
 u16b (*cave_info)[256] = cave_body;
+static byte feature_body[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+byte (*cave_feat)[MAX_DUNGEON_WID] = feature_body;
+static s16b object_index_body[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+s16b (*cave_o_idx)[MAX_DUNGEON_WID] = object_index_body;
+static object_type object_body[8];
+object_type *o_list = object_body;
 static int merciless_blocked_index;
 static int cowardly_blocked_index;
 
@@ -185,6 +197,7 @@ void update_mon_for_generation(int index)
 
 static bool blitz;
 static tutorial_mode selected_mode;
+static tutorial_status opening_status;
 static tutorial_status first_monster_status;
 static int sync_calls;
 
@@ -193,8 +206,9 @@ tutorial_mode get_sdl_gameplay_tutorial_mode(void) { return selected_mode; }
 void tutorial_sync_tale(void) { ++sync_calls; }
 tutorial_status tutorial_lesson_status(const char *id)
 {
-    assert(id && !strcmp(id, "combat.first_monster"));
-    return first_monster_status;
+    assert(id && (!strcmp(id, "opening.move")
+        || !strcmp(id, "combat.first_monster")));
+    return !strcmp(id, "opening.move") ? opening_status : first_monster_status;
 }
 
 /* Keep the exact production implementations in this fixture. */
@@ -206,12 +220,18 @@ static void reset_state(void)
     memset(monster_body, 0, sizeof(monster_body));
     memset(race_body, 0, sizeof(race_body));
     memset(cave_body, 0, sizeof(cave_body));
+    memset(feature_body, 0, sizeof(feature_body));
+    memset(object_index_body, 0, sizeof(object_index_body));
+    memset(object_body, 0, sizeof(object_body));
     merciless_blocked_index = cowardly_blocked_index = 0;
     p_ptr->py = p_ptr->px = 100;
+    p_ptr->cur_map_hgt = MAX_DUNGEON_HGT;
+    p_ptr->cur_map_wid = MAX_DUNGEON_WID;
     playerturn = 0;
     mon_max = 1;
     blitz = false;
     selected_mode = TUTORIAL_MODE_EXTENDED;
+    opening_status = TUTORIAL_UNSEEN;
     first_monster_status = TUTORIAL_UNSEEN;
     sync_calls = 0;
 }
@@ -219,44 +239,50 @@ static void reset_state(void)
 static void gate_tests(void)
 {
     reset_state();
-    assert(tutorial_start_needs_clear_area());
+    assert(tutorial_game_start_needs_clear_area());
     assert(sync_calls == 1);
 
     first_monster_status = TUTORIAL_IN_PROGRESS;
-    assert(tutorial_start_needs_clear_area());
+    assert(tutorial_game_start_needs_clear_area());
     assert(sync_calls == 2);
 
+    opening_status = TUTORIAL_COMPLETED;
     first_monster_status = TUTORIAL_COMPLETED;
-    assert(!tutorial_start_needs_clear_area());
+    assert(!tutorial_game_start_needs_clear_area());
     assert(sync_calls == 3);
     first_monster_status = TUTORIAL_SKIPPED;
-    assert(!tutorial_start_needs_clear_area());
+    assert(!tutorial_game_start_needs_clear_area());
     assert(sync_calls == 4);
+
+    opening_status = TUTORIAL_IN_PROGRESS;
+    assert(tutorial_game_start_needs_clear_area());
+    assert(sync_calls == 5);
+    opening_status = TUTORIAL_COMPLETED;
 
     /* The generation gate is only for a newly started turn-zero map. */
     first_monster_status = TUTORIAL_UNSEEN;
     playerturn = 1;
-    assert(!tutorial_start_needs_clear_area());
-    assert(sync_calls == 4);
+    assert(!tutorial_game_start_needs_clear_area());
+    assert(sync_calls == 5);
 
     playerturn = 0;
     p_ptr->tutorial_deferred = true;
-    assert(!tutorial_start_needs_clear_area());
-    assert(sync_calls == 4);
+    assert(!tutorial_game_start_needs_clear_area());
+    assert(sync_calls == 5);
     p_ptr->tutorial_deferred = false;
 
     blitz = true;
-    assert(!tutorial_start_needs_clear_area());
-    assert(sync_calls == 4);
+    assert(!tutorial_game_start_needs_clear_area());
+    assert(sync_calls == 5);
     blitz = false;
 
     selected_mode = TUTORIAL_MODE_DISABLED;
-    assert(!tutorial_start_needs_clear_area());
-    assert(sync_calls == 4);
+    assert(!tutorial_game_start_needs_clear_area());
+    assert(sync_calls == 5);
 
     selected_mode = TUTORIAL_MODE_NORMAL;
-    assert(tutorial_start_needs_clear_area());
-    assert(sync_calls == 5);
+    assert(tutorial_game_start_needs_clear_area());
+    assert(sync_calls == 6);
 }
 
 static void trigger_tests(void)
@@ -307,6 +333,39 @@ static void trigger_tests(void)
     assert(tutorial_game_first_monster_triggered());
     p_ptr->niena_quest = 0;
     assert(tutorial_game_first_monster_triggered());
+
+    /* The combined first-turn check also rejects visible peaceful monsters,
+     * because the world collector can offer a known trait lesson for them. */
+    race_body[1].flags1 |= RF1_PEACEFUL;
+    assert(!tutorial_game_first_monster_triggered());
+    assert(tutorial_game_first_turn_triggered());
+    race_body[1].flags1 &= ~RF1_PEACEFUL;
+    monster_body[1].ml = false;
+
+    /* Nearby map subjects are observed by the first checkpoint, including
+     * subjects whose CAVE_MARK/object marked bits are produced by live view
+     * setup after the generation-only preview. */
+    cave_info[100][101] = CAVE_SEEN;
+    cave_feat[100][101] = FEAT_RUBBLE;
+    assert(tutorial_game_first_turn_triggered());
+    cave_feat[100][101] = FEAT_FLOOR;
+    cave_o_idx[100][101] = 1;
+    object_body[1].k_idx = 1;
+    assert(tutorial_game_first_turn_triggered());
+    cave_o_idx[100][101] = 0;
+    object_body[1].k_idx = 0;
+    cave_feat[100][101] = FEAT_WALL_EXTRA;
+    assert(!tutorial_game_first_turn_triggered());
+    cave_feat[100][101] = FEAT_FLOOR;
+    cave_info[100][101] = 0;
+
+    /* A visible adjacent sunlight tile is a terrain tutorial trigger too. */
+    cave_info[100][101] = CAVE_SEEN;
+    cave_feat[100][101] = FEAT_SUNLIGHT;
+    assert(tutorial_game_first_turn_triggered());
+    cave_feat[100][101] = FEAT_FLOOR;
+    cave_info[100][101] = CAVE_VIEW;
+    monster_body[1].ml = true;
 
     merciless_blocked_index = 1;
     assert(tutorial_game_first_monster_triggered());
@@ -383,7 +442,7 @@ static void preview_tests(void)
         character_dungeon = visible; /* Restore either original flag value. */
         preview_visible = visible;
         preview_phase = 0;
-        assert(tutorial_start_triggers_monster() == preview_visible);
+        assert(tutorial_start_triggers_tutorial() == preview_visible);
         assert(preview_phase == 7);
         assert(character_dungeon == visible);
         for (int i = 0; i < 2; ++i) {
@@ -422,14 +481,21 @@ int main(void)
 def source_guards():
     """Check that the retry is made after every population source is done."""
     source = GENERATION.read_text(encoding="utf-8-sig")
-    entry = source.index("const bool protect_tutorial_start = tutorial_start_needs_clear_area();")
+    entry = source.index("const bool protect_tutorial_start = tutorial_game_start_needs_clear_area();")
     generation_loop = source.index("while (true)", entry)
-    final_population = source.index("if (tutorial_start_triggers_monster())", generation_loop)
+    final_population = source.index("if (tutorial_start_triggers_tutorial())", generation_loop)
     cave_done = source.index("if (cave_gen())", generation_loop)
     message = source.index("/*message*/", final_population)
     assert entry < generation_loop < cave_done < final_population < message
     apply_pending = source.index("apply_pending_quest_states();", final_population)
     assert final_population < apply_pending
+
+    sunlight = SUNLIGHT.read_text(encoding="utf-8-sig")
+    patch_loop = sunlight.index("void make_patches_of_sunlight()")
+    protection = sunlight.index("tutorial_game_start_needs_clear_area()", patch_loop)
+    near_player = sunlight.index("abs(y - p_ptr->py) <= 2", protection)
+    near_patch = sunlight.index("make_patch_of_sunlight(y, x);", near_player)
+    assert protection < near_player < near_patch
 
 
 def main():

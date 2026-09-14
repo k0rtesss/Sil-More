@@ -2336,7 +2336,7 @@ void sound_dam(int raw_dam, int min_raw, int max_raw, int hp_dam)
 }
 
 /* Acid contact can harm possessions without an immediate Health hit (for
- * example, poisonous seep). Keep all selection/protection/corrosion rules
+ * example, poisonous acid). Keep all selection/protection/corrosion rules
  * shared with ordinary acid attacks. */
 void acid_damage_items(int raw_dam, int min_raw, int max_raw, int damage)
 {

@@ -945,7 +945,7 @@ void do_cmd_pickup_to_harness(void)
 void do_cmd_rest(void)
 {
     if (!tutorial_game_action_allowed("rest", NULL)) return;
-    tutorial_game_explain_now("world.rest", "Resting", "Rest advances monsters, food, effects and minimum-depth pressure. Select the normal light and song options before resting.");
+    tutorial_game_explain_now("menu.rest", "Resting", "Rest advances monsters, food, effects and minimum-depth pressure. Select the normal light and song options before resting.");
     tutorial_game_menu("rest", "Resting spends game turns. Its light and song options affect fuel and Voice recovery.");
     object_type* light = &inventory[INVEN_LITE];
 

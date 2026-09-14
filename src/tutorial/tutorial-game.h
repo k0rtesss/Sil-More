@@ -5,8 +5,14 @@
 
 /* Integration boundary: callers pass already-known information only. */
 void tutorial_game_start(void);
+/* Generation uses this before tutorial_game_start() to protect a fresh
+ * turn-zero opening; it reads the selected mode and Tale history only. */
+bool tutorial_game_start_needs_clear_area(void);
 /* Uses already-computed monster visibility; never queues or displays a card. */
 bool tutorial_game_first_monster_triggered(void);
+/* Uses already-computed visibility; covers every map subject that the first
+ * gameplay checkpoint can observe, without queuing or displaying a card. */
+bool tutorial_game_first_turn_triggered(void);
 void tutorial_game_checkpoint(void);
 void tutorial_game_wait(void);
 void tutorial_game_menu(const char *id, const char *description);
@@ -29,6 +35,7 @@ bool tutorial_game_target_allowed(int y, int x);
 void tutorial_game_action_done(const char *action, const object_type *item);
 bool tutorial_game_begin_action(const char *action, const object_type *item);
 void tutorial_game_end_action(void);
+bool tutorial_game_select_mode(void);
 void tutorial_game_settings(void);
 void tutorial_game_archive(void);
 

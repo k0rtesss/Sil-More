@@ -478,7 +478,7 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
     {
         static char poison_name[180];
         strnfmt(poison_name, sizeof(poison_name),
-            "Poisonous seep (up to %d stacks/contact before poison protection; successful leaps avoid contact)",
+            "Poisonous acid (up to %d stacks/contact before poison protection; successful leaps avoid contact)",
             player_poison_terrain_dose_at(y, x));
         name = poison_name;
     }

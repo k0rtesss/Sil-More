@@ -1277,7 +1277,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             {
                 s3 = "";
                 strnfmt(name_buf, sizeof(name_buf),
-                    "poisonous seep (up to %d stacks/contact before poison protection; leap avoids)",
+                    "poisonous acid (up to %d stacks/contact before poison protection; leap avoids)",
                     player_poison_terrain_dose_at(y, x));
                 name = name_buf;
             }

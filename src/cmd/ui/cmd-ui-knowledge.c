@@ -12071,6 +12071,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 char incoming_name[120];
                 cptr reason = request->replacement_reason;
+                cptr operation = request->replacement_operation
+                    && request->replacement_operation[0]
+                    ? request->replacement_operation : "Picking up";
 
                 object_desc(incoming_name, sizeof(incoming_name),
                     request->replacement_incoming, true, 3);
@@ -12086,7 +12089,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         sizeof(picker_heading));
                 }
                 strnfmt(picker_detail, sizeof(picker_detail),
-                    "Picking up: %s - choose one to replace", incoming_name);
+                    "%s: %s - choose one to %s", operation, incoming_name,
+                    streq(operation, "Equipping") ? "drop" : "replace");
             }
             else if (slot_pick_mode)
             {

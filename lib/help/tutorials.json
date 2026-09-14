@@ -8,7 +8,7 @@
       "priority": 70,
       "steps": [
         {
-          "text": "Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully and prepare before a fight. The world waits while you read. Continue advances a card; Skip ends its lesson. The mode button switches between Disabled, Normal and Extended tutorials.",
+          "text": "Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully and prepare before a fight. The world waits while you read. Continue advances a card; Skip ends its lesson. The mode button opens a selector for Disabled, Normal and Extended tutorials.",
           "kind": "info",
           "anchor": "none"
         },
@@ -2276,17 +2276,20 @@
       "priority": 40,
       "steps": [
         {
-          "text": "Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Poison, bleeding and starvation stop ordinary Health recovery; singing stops Voice recovery. Treat disease before a long rest.",
+          "text": "Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Rest can recover Health and Voice, but poison, bleeding and starvation stop ordinary Health recovery and singing stops Voice recovery. Disease continues while resting; cure it with its cure herb once identified, Healing or Miruvor before a long rest.",
           "kind": "info",
           "anchor": "menu"
         }
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "The named menu is actually opened: rest."
+        "predicate": "The rest menu is opened, the rest command is invoked, or the public Resting status first becomes active."
       },
       "sources": [
-        "src/tutorial/tutorial-game.c"
+        "src/tutorial/tutorial-game.c",
+        "src/sdl/ui/sdl-panes.c",
+        "src/player/player-song-duels.c",
+        "src/cmd/combat/cmd-combat.c"
       ]
     },
     {
@@ -3891,7 +3894,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "After moving toward a gap or trap on your previous turn, Leaping can carry you over it. Check the landing square first. It can cross water, lava, ice and poisonous seep, but lava still burns you in the air. It cannot bypass roosts or webs.",
+          "text": "After moving toward a gap or trap on your previous turn, Leaping can carry you over it. Check the landing square first. It can cross water, lava, ice and poisonous acid, but lava still burns you in the air. It cannot bypass roosts or webs.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -4392,7 +4395,7 @@
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "Public ability preview or newly available ability; raw serial 66, skill 3, ability slot 6."
+        "predicate": "Legacy lesson retained for saved progress and archive review. New encounters use ability.50.preview."
       },
       "sources": [
         "lib/edit/ability.txt",
@@ -4412,7 +4415,8 @@
           "src/player/player-bonuses.c"
         ]
       },
-      "category": "Stealth"
+      "category": "Stealth",
+      "alias_of": "ability.50.preview"
     },
     {
       "id": "ability.80.preview",
@@ -6400,7 +6404,7 @@
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "Public ability preview or newly available ability; raw serial 157, skill 7, ability slot 17."
+        "predicate": "Legacy lesson retained for saved progress and archive review. New encounters use ability.127.preview."
       },
       "sources": [
         "lib/edit/ability.txt",
@@ -6424,7 +6428,8 @@
           "src/cmd/ui/cmd-ui-abilities.c"
         ]
       },
-      "category": "Song"
+      "category": "Song",
+      "alias_of": "ability.127.preview"
     },
     {
       "id": "ability.158.preview",
@@ -7101,24 +7106,27 @@
     },
     {
       "id": "terrain.9",
-      "title": "Patch of sunlight",
+      "title": "Sunlight",
       "level": "extended",
       "priority": 38,
       "steps": [
         {
-          "text": "Sunlight illuminates this square independently of your equipment. Light-sensitive creatures can suffer in bright light. Check their learned traits before using sunlight in a fight.",
+          "text": "Sunlight illuminates this square independently of your own light or equipment. Light-sensitive creatures can suffer in bright light; check their learned traits before using sunlight in a fight.",
           "kind": "info",
           "anchor": "map"
         }
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "Feature 9 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded."
+        "predicate": "Known feature 9 is on the player square or visibly adjacent and marked, or the public sunlight status first becomes active; secret/unrevealed terrain is excluded."
       },
       "sources": [
         "lib/edit/terrain.txt",
         "src/cmd/world/cmd-interact.c",
-        "src/cmd/movement/cmd-movement.c"
+        "src/cmd/movement/cmd-movement.c",
+        "src/sdl/ui/sdl-panes.c",
+        "src/player/player-song-duels.c",
+        "src/cmd/combat/cmd-combat.c"
       ],
       "terrain_serial": 9
     },
@@ -7216,7 +7224,7 @@
     },
     {
       "id": "terrain.20",
-      "title": "Gas trap",
+      "title": "Gas traps",
       "level": "extended",
       "priority": 38,
       "steps": [
@@ -7228,7 +7236,7 @@
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "Feature 20 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded."
+        "predicate": "Known gas trap terrain is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded."
       },
       "sources": [
         "lib/edit/terrain.txt",
@@ -7251,14 +7259,15 @@
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "Feature 21 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded."
+        "predicate": "Legacy lesson retained for saved progress and archive review. New encounters use terrain.20."
       },
       "sources": [
         "lib/edit/terrain.txt",
         "src/cmd/world/cmd-interact.c",
         "src/cmd/movement/cmd-movement.c"
       ],
-      "terrain_serial": 21
+      "terrain_serial": 21,
+      "alias_of": "terrain.20"
     },
     {
       "id": "terrain.22",
@@ -9932,11 +9941,12 @@
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "The corresponding public state transition or explicit player action has occurred; world.rest."
+        "predicate": "Legacy lesson retained for saved progress and archive review. New encounters use menu.rest."
       },
       "sources": [
         "src/tutorial/tutorial-game.c"
-      ]
+      ],
+      "alias_of": "menu.rest"
     },
     {
       "id": "world.run",
@@ -9945,17 +9955,20 @@
       "priority": 40,
       "steps": [
         {
-          "text": "Running repeats movement until you stop it or something interrupts it. Enemies and the minimum-depth timer continue between steps. Inspect your route before starting a run.",
+          "text": "Running repeats movement until you stop it or something interrupts it. Enemies and the minimum-depth timer continue between steps. Every step spends time; inspect your route before starting or continuing a run.",
           "kind": "info",
           "anchor": "none"
         }
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "The corresponding public state transition or explicit player action has occurred; world.run."
+        "predicate": "The run command is invoked or the public Running status first becomes active."
       },
       "sources": [
-        "src/tutorial/tutorial-game.c"
+        "src/tutorial/tutorial-game.c",
+        "src/sdl/ui/sdl-panes.c",
+        "src/player/player-song-duels.c",
+        "src/cmd/combat/cmd-combat.c"
       ]
     },
     {
@@ -11163,7 +11176,7 @@
       "priority": 8,
       "steps": [
         {
-          "text": "This creature can fly over chasms and avoid contact with water, ice and poisonous seep. A gap in your walking route may not block it. Lava heat can still harm flyers without fire resistance.",
+          "text": "This creature can fly over chasms and avoid contact with water, ice and poisonous acid. A gap in your walking route may not block it. Lava heat can still harm flyers without fire resistance.",
           "kind": "info",
           "anchor": "monster"
         }
@@ -13352,14 +13365,15 @@
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: sunlight."
+        "predicate": "Legacy lesson retained for saved progress and archive review. New encounters use terrain.9."
       },
       "sources": [
         "src/sdl/ui/sdl-panes.c",
         "src/tutorial/tutorial-game.c",
         "src/player/player-song-duels.c",
         "src/cmd/combat/cmd-combat.c"
-      ]
+      ],
+      "alias_of": "terrain.9"
     },
     {
       "id": "status.cursed",
@@ -13398,14 +13412,15 @@
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: running."
+        "predicate": "Legacy lesson retained for saved progress and archive review. New encounters use world.run."
       },
       "sources": [
         "src/sdl/ui/sdl-panes.c",
         "src/tutorial/tutorial-game.c",
         "src/player/player-song-duels.c",
         "src/cmd/combat/cmd-combat.c"
-      ]
+      ],
+      "alias_of": "world.run"
     },
     {
       "id": "status.smithing",
@@ -13467,14 +13482,15 @@
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "The corresponding public status-pane state first becomes active with its owning ability or action requirements satisfied: resting."
+        "predicate": "Legacy lesson retained for saved progress and archive review. New encounters use menu.rest."
       },
       "sources": [
         "src/sdl/ui/sdl-panes.c",
         "src/tutorial/tutorial-game.c",
         "src/player/player-song-duels.c",
         "src/cmd/combat/cmd-combat.c"
-      ]
+      ],
+      "alias_of": "menu.rest"
     },
     {
       "id": "status.repeat",
@@ -13639,19 +13655,19 @@
     },
     {
       "id": "world.poison",
-      "title": "Poisonous seep",
+      "title": "Poisonous acid",
       "level": "normal",
       "priority": 80,
       "steps": [
         {
-          "text": "Entering poisonous seep on foot, or spending turns on it, adds poison. Leave it before stopping to heal or use an Antidote, or another dose can poison you again. Poison resistance reduces exposure; a successful leap avoids contact.",
+          "text": "Entering poisonous acid on foot, or spending turns on it, adds poison. Leave it before stopping to heal or use an Antidote, or another dose can poison you again. Poison resistance reduces exposure; a successful leap avoids contact.",
           "kind": "info",
           "anchor": "map"
         }
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "Known poisonous seep is on the current square or visibly adjacent; the observation expires when none remains nearby."
+        "predicate": "Known poisonous acid is on the current square or visibly adjacent; the observation expires when none remains nearby."
       },
       "sources": [
         "src/tutorial/tutorial-game.c",
@@ -13719,12 +13735,12 @@
     },
     {
       "id": "terrain.87",
-      "title": "Poisonous seep",
+      "title": "Poisonous acid",
       "level": "extended",
       "priority": 38,
       "steps": [
         {
-          "text": "Contact with poisonous seep adds 6 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the seep, even while resting or using an item.",
+          "text": "Contact with poisonous acid adds 6 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the acid, even while resting or using an item.",
           "kind": "info",
           "anchor": "map"
         },

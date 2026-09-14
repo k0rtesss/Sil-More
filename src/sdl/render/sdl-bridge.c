@@ -4,7 +4,7 @@
 #include "cave/cave-bridge.h"
 
 /* A pixel-aligned deck leaves the existing material visible along both sides.
- * Timber planks span water/chasm; stone slabs withstand lava, seep and ice.
+ * Timber planks span water/chasm; stone slabs withstand lava, acid and ice.
  * This is geometry in the map renderer, not a replacement terrain bitmap. */
 static void bridge_rect(const SDL_FRect* dst, bool vertical,
     float along, float across, float length, float width,

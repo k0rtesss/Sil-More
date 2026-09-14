@@ -57,7 +57,7 @@ These numbers are starting design ranges to evaluate visually, not measured prop
 
 For ordinary water networks, begin with roughly 60–75% of **channel length outside basins** one tile wide, most remaining reaches two tiles, and a few three-tile throats or receiving sections. Give basin interiors several times the local connector width. Tune these distributions separately for broad rivers, lava and fractures; do not treat this as a global width clamp. Keep cross-partition networks common. Reserve the current large-river appearance for an occasional family, initially around 10–15% of water-bearing layouts.
 
-Poison uses hydrological shapes with a theme-appropriate source: seep pools, contaminated cisterns, drainage from rusty works. It need not be a geometrically identical recoloring of lava. Keep existing poison exposure, lava damage, water movement and jump mechanics unchanged.
+Poison uses hydrological shapes with a theme-appropriate source: acid pools, contaminated cisterns, drainage from rusty works. It need not be a geometrically identical recoloring of lava. Keep existing poison exposure, lava damage, water movement and jump mechanics unchanged.
 
 ## Generation sequence
 

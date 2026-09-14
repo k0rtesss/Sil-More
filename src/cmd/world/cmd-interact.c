@@ -1942,10 +1942,10 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_RED);
     }
 
-    /* --- Poisonous seep --- */
+    /* --- Poisonous acid --- */
     else if (feat == FEAT_POISON)
     {
-        SDL_strlcpy(title, "Poisonous seep", sizeof(title));
+        SDL_strlcpy(title, "Poisonous acid", sizeof(title));
         SDL_strlcpy(desc,
             "Contact adds 6 poison stacks before resistance and poison protection. "
             "Its acid can damage submerged items using normal acid rules, "

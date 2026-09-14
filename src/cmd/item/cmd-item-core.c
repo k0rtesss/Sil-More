@@ -1433,9 +1433,10 @@ static bool replacement_choice_allowed(const object_type* incoming,
     return replacement_choice_type_matches(incoming, candidate);
 }
 
-bool open_inventory_replacement_menu(inventory_menu_group group,
-    const object_type* incoming, bool include_equip, bool include_supplies,
-    cptr reason, int* replacement_item)
+static bool open_inventory_replacement_menu_with_action(
+    inventory_menu_group group, const object_type* incoming,
+    bool include_equip, bool include_supplies, cptr reason,
+    cptr operation, int* replacement_item)
 {
     object_choice_entry* entries;
     int capacity;
@@ -1468,6 +1469,7 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
         request.replacement_incoming = incoming;
         request.replacement_include_equip = include_equip;
         request.replacement_include_supplies = include_supplies;
+        request.replacement_operation = operation;
         request.replacement_reason = reason;
         request.replacement_item_out = replacement_item;
         return do_cmd_knowledge_supplies(&request);
@@ -1574,6 +1576,23 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
     *replacement_item = entries[selected].item;
     entries = mem_free(entries);
     return true;
+}
+
+bool open_inventory_replacement_menu(inventory_menu_group group,
+    const object_type* incoming, bool include_equip, bool include_supplies,
+    cptr reason, int* replacement_item)
+{
+    return open_inventory_replacement_menu_with_action(group, incoming,
+        include_equip, include_supplies, reason, "Picking up",
+        replacement_item);
+}
+
+static bool open_inventory_equip_replacement_menu(
+    inventory_menu_group group, const object_type* incoming,
+    bool include_equip, cptr reason, int* replacement_item)
+{
+    return open_inventory_replacement_menu_with_action(group, incoming,
+        include_equip, false, reason, "Equipping", replacement_item);
 }
 
 static void format_storage_exchange_reason(const object_type* incoming,
@@ -2253,6 +2272,78 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     return true;
 }
 
+static bool drop_harness_replacement_for_floor_wield(
+    const object_type* incoming)
+{
+    enum inventory_limit_group group = INV_LIMIT_HARNESS;
+    object_type* candidate;
+    int replacement_item = -1;
+    int used;
+    int limit;
+    int needed;
+    int left;
+    int remove_amount;
+    char reason[280];
+
+    if (!incoming || !incoming->k_idx)
+        return false;
+
+    used = inventory_limit_usage_for_group(group);
+    limit = inven_carry_limit_value();
+    if (limit <= 0)
+        limit = inventory_limit_limit_for_group(group);
+    needed = inventory_limit_additional_space_for_object(incoming);
+    left = MAX(limit - used, 0);
+    strnfmt(reason, sizeof(reason),
+        "No room in Harness: %d.%d/%d.%d qt used (%d.%d qt left). "
+        "Incoming needs %d.%d qt; choose an item to drop.",
+        used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
+        left / 10, ABS(left % 10), needed / 10, ABS(needed % 10));
+
+    if (!open_inventory_equip_replacement_menu(
+            INVENTORY_MENU_GROUP_HARNESS, incoming, true, reason,
+            &replacement_item))
+    {
+        return false;
+    }
+
+    if (!player_inventory_handle_valid(replacement_item))
+        return false;
+
+    candidate = player_inventory_object(replacement_item);
+    if (!candidate || !candidate->k_idx
+        || inventory_limit_group_for_object(candidate) != group
+        || (player_inventory_handle_is_equipped(replacement_item)
+            && cursed_p(candidate)))
+    {
+        return false;
+    }
+
+    remove_amount = MAX(candidate->number, 1);
+    for (int amount = 1; amount <= candidate->number; amount++)
+    {
+        int projected = inventory_limit_usage_after_replacing(
+            incoming, candidate, amount);
+
+        if (projected >= 0 && projected <= limit)
+        {
+            remove_amount = amount;
+            break;
+        }
+    }
+
+    if (inventory_limit_usage_after_replacing(incoming, candidate,
+            remove_amount) > limit)
+    {
+        return false;
+    }
+
+    inven_drop(replacement_item, remove_amount);
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    notice_stuff();
+    return true;
+}
+
 void do_cmd_use_item_by_index(int item)
 {
     if (item == SUPPLIES_INDEX)
@@ -2876,46 +2967,34 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS
         && !inventory_type_slot_available(o_ptr, true))
     {
-        object_type exchange_incoming;
-        object_type* exchange_object;
-        int exchange_item = -1;
-
-        /* A floor item has not entered either carried pool yet.  Present it
-         * to the exchange picker as a Pack-side incoming object so the
-         * picker can offer Harness items to stow in the Pack. */
-        object_copy(&exchange_incoming, o_ptr);
-        exchange_incoming.storage = OBJECT_STORAGE_PACK;
-        if (choose_storage_exchange_item(&exchange_incoming,
-                OBJECT_STORAGE_HARNESS, true, true, &exchange_item))
+        /* A floor Equip is a Harness replacement, not a Pack exchange.
+         * Let the player choose which Harness item to drop, then continue
+         * through the ordinary wield path with the incoming item. */
+        if (drop_harness_replacement_for_floor_wield(o_ptr)
+            && inventory_type_slot_available(o_ptr, false))
         {
-            exchange_object = player_inventory_object(exchange_item);
-            if (exchange_object
-                && inventory_limit_floor_storage_exchange_possible(
-                    &exchange_incoming, exchange_object)
-                && player_pack_action_start_storage_exchange(item,
-                    OBJECT_STORAGE_HARNESS, &exchange_incoming, exchange_item,
-                    exchange_object))
+            /* The selected item has been dropped; continue below and equip
+             * the floor object normally. */
+        }
+        else
+        {
+            enum inventory_limit_group group = inven_carry_limit_group();
+
+            if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
             {
-                return;
+                int used = inventory_limit_usage_for_group(group);
+                int limit = inven_carry_limit_value();
+                int needed = inventory_limit_additional_space_for_object(o_ptr);
+                int left = MAX(limit - used, 0);
+
+                msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
+                           "this item needs %d.%d qt.",
+                    inventory_limit_group_name(group), used / 10, used % 10,
+                    limit / 10, limit % 10, left / 10, left % 10,
+                    needed / 10, needed % 10);
             }
+            return;
         }
-
-        enum inventory_limit_group group = inven_carry_limit_group();
-
-        if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
-        {
-            int used = inventory_limit_usage_for_group(group);
-            int limit = inven_carry_limit_value();
-            int needed = inventory_limit_additional_space_for_object(o_ptr);
-            int left = MAX(limit - used, 0);
-
-            msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
-                       "this item needs %d.%d qt.",
-                inventory_limit_group_name(group), used / 10, used % 10,
-                limit / 10, limit % 10, left / 10, left % 10,
-                needed / 10, needed % 10);
-        }
-        return;
     }
 
     if ((item < 0) && player_light_carry_cap(o_ptr) > 0

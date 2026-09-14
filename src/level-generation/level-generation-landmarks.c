@@ -343,7 +343,7 @@ static bool lm_edge_mouth(coord* p, bool horizontal, bool far)
     return false;
 }
 
-/* A seep or vent begins in rock, not as a cut-off stripe on an open floor. */
+/* An acid pool or vent begins in rock, not as a cut-off stripe on an open floor. */
 static bool lm_source_site(coord wanted, int search, coord* site)
 {
     int best = INT_MAX;
