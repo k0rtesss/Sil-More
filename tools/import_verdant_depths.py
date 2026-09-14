@@ -21,12 +21,13 @@ def main():
     tiles = {tile["id"]: tile for tile in metadata["tiles"]}
     atlas_path = ROOT / "lib/xtra/graf/16x16.png"
     old = Image.open(atlas_path).convert("RGBA")
-    # Rows 33 onward were added by this importer. Replace that reserved area,
-    # including the retired chasm edge atlas, while preserving original art.
-    if old.size not in ((512, 528), (512, 560), (512, 608)):
+    # Rows 33..34 belong to this importer. Keep newer floor art in row 35
+    # and beyond when refreshing these walls/chasm.
+    if old.width != 512 or old.height < 33 * 16:
         raise ValueError("Unexpected atlas dimensions; check reserved rows before importing")
-    atlas = Image.new("RGBA", (512, 35 * 16))
-    atlas.paste(old.crop((0, 0, 512, 33 * 16)), (0, 0))
+    atlas = Image.new("RGBA", (512, max(old.height, 35 * 16)))
+    atlas.paste(old, (0, 0))
+    atlas.paste((0, 0, 0, 0), (0, 33 * 16, 512, 35 * 16))
 
     def pair(name, row, col):
         tile = Image.open(args.pack / tiles[name]["file"]).convert("RGBA")

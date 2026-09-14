@@ -146,12 +146,20 @@ static void movement_tests(void) {
     puts("Movement: enter/cross/exit, actual two-turn/blocked leaps, ground/flying monsters: PASS");
 }
 
+int terrain_generation_components(const byte features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID],
+    int labels[MAX_DUNGEON_HGT][MAX_DUNGEON_WID]);
 void generation_tests(void) {
     static dun_data dungeon;
     static byte before[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static int before_components[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static int after_components[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static int component_matches[MAX_DUNGEON_HGT*MAX_DUNGEON_WID+1];
     dun=&dungeon;
-    int wet_seeds=0, icy_seeds=0;
-    for(int kind=0;kind<2;kind++) for(int seed=1;seed<=100;seed++) {
+    int generated[4]={0}, totals[4]={0}, floors[4]={0};
+    const int materials[4]={FEAT_WATER,FEAT_ICE,FEAT_LAVA,FEAT_POISON};
+    const big_cave_type_t subtypes[4]={BIG_CAVE_NONE,BIG_CAVE_ICE,BIG_CAVE_FIRE,BIG_CAVE_POIS};
+    const char* names[4]={"water","ice","lava","poison"};
+    for(int kind=0;kind<4;kind++) for(int seed=1;seed<=100;seed++) {
         water_map(64,96,FEAT_WALL_EXTRA); memset(dun,0,sizeof(*dun));
         memset(room_anchor_kind,0,sizeof(room_anchor_kind));
         Rand_state_init(seed); layout_anchor_count=0;
@@ -163,17 +171,26 @@ void generation_tests(void) {
             }
         } else {
             current_partition_modes[0]=QUAD_MODE_BIG_CAVE;
-            current_partition_big_cave_types[0]=BIG_CAVE_ICE;
-            assert(carve_big_cave_bounds(2,61,2,93,0,BIG_CAVE_ICE));
+            current_partition_big_cave_types[0]=subtypes[kind];
+            assert(carve_big_cave_bounds(2,61,2,93,0,subtypes[kind]));
         }
         cave_set_feat(30,45,FEAT_MORE); cave_set_feat(31,45,FEAT_FORGE_NORMAL_HEAD);
         cave_set_feat(29,45,FEAT_FLOOR); cave_info[29][45]|=CAVE_G_VAULT;
         cave_set_feat(28,45,FEAT_FLOOR); cave_o_idx[28][45]=1;
         cave_set_feat(27,45,FEAT_FLOOR); cave_m_idx[27][45]=1;
         memcpy(before,cave_feat,sizeof(before));
+        terrain_generation_components(before,before_components);
         terrain_generation_reset(); place_dungeon_terrain();
+        terrain_generation_components(cave_feat,after_components);
+        memset(component_matches,0,sizeof(component_matches));
         int count=0;
         for(int y=1;y<63;y++)for(int x=1;x<95;x++) {
+            int old_component=before_components[y][x],new_component=after_components[y][x];
+            if(old_component && new_component) {
+                assert(!component_matches[old_component] || component_matches[old_component]==new_component);
+                component_matches[old_component]=new_component;
+            }
+            if(before[y][x]==FEAT_FLOOR) floors[kind]++;
             bool rock=before[y][x]==FEAT_WALL_EXTRA || before[y][x]==FEAT_WALL_OUTER
                 || before[y][x]==FEAT_WALL_INNER || before[y][x]==FEAT_WALL_SOLID
                 || before[y][x]==FEAT_QUARTZ;
@@ -182,7 +199,7 @@ void generation_tests(void) {
             if(before[y][x]!=FEAT_FLOOR && !rock) assert(before[y][x]==cave_feat[y][x]);
             if(rock && before[y][x]!=cave_feat[y][x])
                 assert(terrain_landmark_cell(y,x)!=TERRAIN_LANDMARK_NONE || !kind);
-            bool wet = kind ? cave_feat[y][x]==FEAT_ICE
+            bool wet = kind ? cave_feat[y][x]==materials[kind]
                 : (cave_feat[y][x]==FEAT_WATER || cave_feat[y][x]==FEAT_DEEP_WATER);
             if(!wet) continue;
             count++; assert(before[y][x]==FEAT_FLOOR || rock);
@@ -192,23 +209,32 @@ void generation_tests(void) {
             static const int dy[]={-1,0,1,0},dx[]={0,1,0,-1};
             for(int d=0;d<4;d++) {
                 int neighbour=cave_feat[y+dy[d]][x+dx[d]];
-                adjacent|=kind ? neighbour==FEAT_ICE
+                adjacent|=kind ? neighbour==materials[kind]
                     : (neighbour==FEAT_WATER || neighbour==FEAT_DEEP_WATER);
             }
             assert(adjacent);
         }
         assert(cave_feat[30][45]==FEAT_MORE && cave_feat[31][45]==FEAT_FORGE_NORMAL_HEAD);
         assert(cave_feat[29][45]==FEAT_FLOOR && cave_feat[28][45]==FEAT_FLOOR && cave_feat[27][45]==FEAT_FLOOR);
+        totals[kind]+=count;
         if(count>0) {
-            int* total=kind?&icy_seeds:&wet_seeds;
+            int* total=&generated[kind];
             if(++*total==1) {
                 cave_o_idx[28][45]=cave_m_idx[27][45]=0;
-                water_preview(kind?"scripts/output/water-check/cave-ice.png":"scripts/output/water-check/cave-water.png",1);
+                char path[128];
+                strnfmt(path,sizeof(path),"scripts/output/water-check/cave-%s.png",names[kind]);
+                water_preview(path,1);
             }
         }
     }
-    assert(wet_seeds>0 && icy_seeds>0);
-    printf("Shared terrain: 100 real CA layouts and 100 real ice caverns; %d wet and %d icy; major granite excavation and protected features checked: PASS\n",wet_seeds,icy_seeds);
+    for(int kind=0;kind<4;kind++) {
+        assert(generated[kind]>0);
+        /* A single depth accent used to cover less than 1% of these caverns.
+         * Require a visible increase while retaining ample ordinary floor. */
+        if(kind) assert(totals[kind]*100>=floors[kind]*5 && totals[kind]*100<floors[kind]*20);
+        printf("Production %s geometry: %d/100 generated, %.1f matching tiles/map (%.1f%% of original floor); protected features and access intact: PASS\n",
+            names[kind],generated[kind],totals[kind]/100.0,100.0*totals[kind]/floors[kind]);
+    }
 }
 
 static void water_render_tests(void) {
@@ -254,8 +280,9 @@ static void water_render_tests(void) {
     cave_info[10][11]&=~CAVE_SEEN; cave_info[10][12]&=~CAVE_SEEN;
     assert(sdl_idle_animation_timeout_ms(40*IDLE_STEP_NS)==-1);
     cave_info[10][11]=0;assert(!visible_liquid(10,11));
+    assert(same_surface(frames[1],frames[3])); /* Native surface loop: 0,1,2,1. */
     for(int i=0;i<4;i++)SDL_DestroySurface(frames[i]);
-    puts("Water pixels: four frames, idle redraw, pan/erase in both tile widths, fog of war, no turn/RNG/I/O activity: PASS");
+    puts("Water pixels: native calm 0,1,2,1 surface sequence, idle redraw, pan/erase in both tile widths, fog of war, no turn/RNG/I/O activity: PASS");
 }
 
 static void water_tests(void) {
@@ -390,7 +417,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     idle.OUT.mkdir(parents=True, exist_ok=True)
     # Keep the original fixture regression suite and its minimal environment.
-    gen_start = TESTS.index("void generation_tests(void) {")
+    gen_start = TESTS.index("int terrain_generation_components(")
     gen_end = TESTS.index("static void water_render_tests(void)")
     gen = OUT / "generation-check.c"
     gen.write_text('#include "angband.h"\n#include "level-generation/level-generation-internal.h"\n#include "level-generation/level-generation-terrain.h"\n#include "level-generation/level-generation-landmarks.h"\n#include <assert.h>\n'

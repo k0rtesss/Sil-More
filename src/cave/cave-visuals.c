@@ -1,6 +1,7 @@
 /* File: cave-visuals.c */
 
 #include "cave-internal.h"
+#include "cave/cave-bridge.h"
 
 /*
  * Multi-hued monsters shimmer according to their base colour.
@@ -317,6 +318,29 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
     if (feat != FEAT_FLOOR && feat != FEAT_RAGE_FLOOR && feat != FEAT_SUNLIGHT)
         return false;
 
+    /* Shores depend only on known neighboring terrain. In restricted views,
+     * remembered hazards outside current sight must not reveal their banks. */
+    for (int radius = 1; radius <= 2; radius++) {
+        for (int dy = -radius; dy <= radius; dy++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                int ny = y + dy, nx = x + dx;
+                byte row, col;
+                /* Search the closest ring globally before any outer-bank rule. */
+                if ((ABS(dy) != radius && ABS(dx) != radius) || !in_bounds(ny, nx)) continue;
+                u16b known = cave_info[ny][nx];
+                if (!(known & (CAVE_MARK | CAVE_SEEN))
+                    || ((p_ptr->rage || g_labyrinth_view_active) && !(known & CAVE_SEEN)))
+                    continue;
+                if (styles_floor_border_at(cave_bridge_underlay(cave_feat[ny][nx]),
+                        radius, y, x, &row, &col)) {
+                    *a = (byte)(row | 0x80);
+                    *c = (char)(col | 0x80);
+                    return true;
+                }
+            }
+        }
+    }
+
     /* Respect per-cell color selection; 0/1/2 are defaults/legacy/vault */
     byte color_value = cave_color[y][x];
 
@@ -329,7 +353,17 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
         /* Halo can force variant 0 via color flag */
         byte choice = 0;
         if (!cave_style_color_force_first_variant(color_value) && s->floor_count > 1) {
-            choice = cave_style_floor_choice(sidx);
+            if (s->floor_tiled) {
+                /* Stable across redraws and save/load, with no gameplay RNG. */
+                u32b hash = (u32b)x * 0x9e3779b9u ^ (u32b)y * 0x85ebca6bu;
+                hash ^= (u32b)p_ptr->depth * 0xc2b2ae35u;
+                hash ^= hash >> 16;
+                hash *= 0x7feb352du;
+                hash ^= hash >> 15;
+                choice = (byte)(hash % s->floor_count);
+            } else {
+                choice = cave_style_floor_choice(sidx);
+            }
         }
         if (s->floor_count > 0 && choice >= s->floor_count)
             choice = 0;

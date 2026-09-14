@@ -2,6 +2,7 @@
 
 #include "cave-internal.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-bridge.h"
 
 static bool hidden_left_panel_mask_span_at(int vy, int* start_col,
     int* width)
@@ -279,6 +280,20 @@ void note_spot(int y, int x)
  *
  * The main screen will always be at least 24x80 in size.
  */
+void cave_floor_border_redraw_neighbors(int y, int x)
+{
+    static bool redrawing;
+    if (redrawing || graphics_are_ascii()) return;
+    redrawing = true;
+    /* Connected edges and both inner and outer bank rings depend on source
+     * discovery/removal, even when their terminal glyph remains unchanged. */
+    for (int dy = -2; dy <= 2; dy++)
+        for (int dx = -2; dx <= 2; dx++)
+            if ((dy || dx) && in_bounds(y + dy, x + dx))
+                lite_spot(y + dy, x + dx);
+    redrawing = false;
+}
+
 void lite_spot(int y, int x)
 {
     byte a;
@@ -289,6 +304,15 @@ void lite_spot(int y, int x)
     int ky, kx;
     int vy, vx;
     int cell_w;
+
+    /* Discovery and view changes alter adjacent banks and connected surfaces,
+     * including cells outside the main viewport in the retained side map. */
+    byte underlay = cave_bridge_underlay(cave_feat[y][x]);
+    if (underlay == FEAT_ICE || underlay == FEAT_LAVA
+        || underlay == FEAT_WATER || underlay == FEAT_DEEP_WATER
+        || underlay == FEAT_POISON
+        || styles_floor_border(underlay, NULL, NULL))
+        cave_floor_border_redraw_neighbors(y, x);
 
 #ifdef USE_SDL
     /* The retained side minimap includes grids outside the main viewport.

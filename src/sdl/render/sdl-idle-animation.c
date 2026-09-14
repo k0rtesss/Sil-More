@@ -5,7 +5,8 @@
 #include "sdl/render/sdl-bridge.h"
 
 /* Fixtures share one 160x16 atlas; each animated liquid shares one 64x16 atlas.
- * Solid ice uses one static 16x16 tile, cached here for map invalidation.
+ * Connected surfaces use 256x256 atlas pages (one page per animation frame).
+ * The original isolated textures remain the fallback if an atlas is absent.
  * No I/O, texture creation, timers, threads, or heap allocation occurs in
  * the animation update. */
 /* A shared 25 Hz ceiling coalesces independent fixture deadlines. Each flame
@@ -41,6 +42,34 @@ static SDL_Texture* poison_texture;
 static bool poison_load_attempted;
 static SDL_Texture* ice_texture;
 static bool ice_load_attempted;
+static SDL_Texture* ice_transition_texture;
+static SDL_Texture* lava_transition_texture;
+static bool ice_transition_load_attempted;
+static bool lava_transition_load_attempted;
+static SDL_Texture* water_transition_texture;
+static SDL_Texture* deep_water_transition_texture;
+static SDL_Texture* poison_transition_texture;
+static bool water_transition_load_attempted;
+static bool deep_water_transition_load_attempted;
+static bool poison_transition_load_attempted;
+static SDL_Texture* water_depth_transition_texture;
+static SDL_Texture* water_bank_overlay_texture;
+static bool water_depth_transition_load_attempted;
+static bool water_bank_overlay_load_attempted;
+
+static bool liquid_is_water(byte feat)
+{
+    return feat == FEAT_WATER || feat == FEAT_DEEP_WATER;
+}
+
+static byte liquid_frame_count(byte feat)
+{
+    if (feat == FEAT_ICE || feat == FEAT_CHASM) return 1;
+    if (feat == FEAT_POISON && poison_transition_texture) return 3;
+    /* Water bakes the native 0,1,2,1 sequence into four atlas pages. Original
+     * fallback strips and the lava transition also contain four frames. */
+    return 4;
+}
 
 static byte visible_liquid(int y, int x)
 {
@@ -56,6 +85,114 @@ static byte visible_liquid(int y, int x)
         || ((p_ptr->rage || g_labyrinth_view_active) && !(info & CAVE_SEEN)))
         return 0;
     return feat;
+}
+
+/* Raw clockwise eight-neighbor masks index the atlas. Unknown terrain always
+ * contributes zero, regardless of its feature, so shore shapes reveal nothing
+ * beyond explored terrain. Bridges connect through their liquid underlay. */
+static byte liquid_transition_mask(int y, int x, byte feat)
+{
+    static const int dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
+    static const int dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
+    byte mask = 0;
+    for (int i = 0; i < 8; i++)
+    {
+        byte neighbor = visible_liquid(y + dy[i], x + dx[i]);
+        if (neighbor == feat || (liquid_is_water(feat) && liquid_is_water(neighbor)))
+            mask |= (byte)(1u << i);
+    }
+    return mask;
+}
+
+/* Treat every non-deep neighbor, including unknown terrain, as connected
+ * shoal. Only known deep water may introduce a depth boundary. */
+static byte water_depth_transition_mask(int y, int x)
+{
+    static const int dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
+    static const int dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
+    byte mask = 255;
+    for (int i = 0; i < 8; i++)
+        if (visible_liquid(y + dy[i], x + dx[i]) == FEAT_DEEP_WATER)
+            mask &= (byte)~(1u << i);
+    return mask;
+}
+
+static SDL_Texture* load_transition_atlas(SDL_Texture** texture,
+    bool* attempted, const char* path, int frame_count)
+{
+    if (*texture || *attempted) return *texture;
+    *attempted = true;
+    SDL_Surface* atlas = IMG_Load(path);
+    if (!atlas || atlas->w != 16 * TILE_SIZE
+        || atlas->h != frame_count * 16 * TILE_SIZE)
+    {
+        log_warn("Terrain transitions unavailable: %s (%s)", path, SDL_GetError());
+        SDL_DestroySurface(atlas);
+        return NULL;
+    }
+    *texture = SDL_CreateTextureFromSurface(g_state.renderer, atlas);
+    SDL_DestroySurface(atlas);
+    if (*texture)
+    {
+        SDL_SetTextureScaleMode(*texture, SDL_SCALEMODE_NEAREST);
+        SDL_SetTextureBlendMode(*texture, SDL_BLENDMODE_BLEND);
+    }
+    return *texture;
+}
+
+static SDL_Texture* load_liquid_transition_texture(byte feat)
+{
+    SDL_Texture** texture;
+    bool* attempted;
+    const char* path;
+    int frame_count;
+    switch (feat)
+    {
+    case FEAT_ICE:
+        texture = &ice_transition_texture;
+        attempted = &ice_transition_load_attempted;
+        path = "lib/xtra/graf/transition_ice_on_snow.png";
+        frame_count = 1;
+        break;
+    case FEAT_LAVA:
+        texture = &lava_transition_texture;
+        attempted = &lava_transition_load_attempted;
+        path = "lib/xtra/graf/transition_lava_on_basalt.png";
+        frame_count = 4;
+        break;
+    case FEAT_WATER:
+        texture = &water_transition_texture;
+        attempted = &water_transition_load_attempted;
+        path = "lib/xtra/graf/transition_shoal_on_silt.png";
+        frame_count = 4;
+        break;
+    case FEAT_DEEP_WATER:
+        texture = &deep_water_transition_texture;
+        attempted = &deep_water_transition_load_attempted;
+        path = "lib/xtra/graf/transition_sea_on_silt.png";
+        frame_count = 4;
+        break;
+    case FEAT_POISON:
+        texture = &poison_transition_texture;
+        attempted = &poison_transition_load_attempted;
+        path = "lib/xtra/graf/transition_acid_on_stone.png";
+        frame_count = 3;
+        break;
+    default:
+        return NULL;
+    }
+    if (feat == FEAT_WATER)
+    {
+        /* Load once on the initial water draw, so new neighbor connectivity
+         * never triggers asset I/O during an idle animation update. */
+        load_transition_atlas(&water_depth_transition_texture,
+            &water_depth_transition_load_attempted,
+            "lib/xtra/graf/transition_shoal_on_sea.png", 4);
+        load_transition_atlas(&water_bank_overlay_texture,
+            &water_bank_overlay_load_attempted,
+            "lib/xtra/graf/transition_water_bank_overlay.png", 4);
+    }
+    return load_transition_atlas(texture, attempted, path, frame_count);
 }
 
 static bool load_liquid_texture(byte feat)
@@ -171,14 +308,43 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
     SDL_Texture* texture = feat == FEAT_ICE ? ice_texture
         : feat == FEAT_POISON ? poison_texture
         : feat == FEAT_LAVA ? lava_texture : water_texture;
-    int frame = live && feat != FEAT_ICE ? (int)((frame_tick / 8) % 4) : 0;
+    SDL_Texture* transition = load_liquid_transition_texture(feat);
+    int frame = live ? (int)((frame_tick / 8) % liquid_frame_count(feat)) : 0;
     SDL_FRect src = { frame * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE };
+    SDL_FRect bank_src = { 0 };
+    bool draw_bank = false;
+    if (transition)
+    {
+        byte mask = liquid_transition_mask(y, x, feat);
+        texture = transition;
+        src.x = (mask % 16) * TILE_SIZE;
+        src.y = (mask / 16 + frame * 16) * TILE_SIZE;
+        if (feat == FEAT_WATER && water_depth_transition_texture
+            && water_bank_overlay_texture)
+        {
+            byte depth_mask = water_depth_transition_mask(y, x);
+            if (depth_mask != 255)
+            {
+                bank_src = src;
+                draw_bank = true;
+                texture = water_depth_transition_texture;
+                src.x = (depth_mask % 16) * TILE_SIZE;
+                src.y = (depth_mask / 16 + frame * 16) * TILE_SIZE;
+            }
+        }
+    }
     int light = live ? 255 : 96;
+    bool tint_deep = feat == FEAT_DEEP_WATER && !transition;
     SDL_SetTextureColorMod(texture,
-        feat == FEAT_DEEP_WATER ? 80 * light / 255 : light,
-        feat == FEAT_DEEP_WATER ? 105 * light / 255 : light,
-        feat == FEAT_DEEP_WATER ? 205 * light / 255 : light);
+        tint_deep ? 80 * light / 255 : light,
+        tint_deep ? 105 * light / 255 : light,
+        tint_deep ? 205 * light / 255 : light);
     SDL_RenderTexture(g_state.renderer, texture, &src, dst);
+    if (draw_bank)
+    {
+        SDL_SetTextureColorMod(water_bank_overlay_texture, light, light, light);
+        SDL_RenderTexture(g_state.renderer, water_bank_overlay_texture, &bank_src, dst);
+    }
     return true;
 }
 
@@ -311,6 +477,27 @@ void sdl_idle_animation_redraw_cached_cells(
 
 void sdl_idle_animation_shutdown(void)
 {
+    SDL_DestroyTexture(water_depth_transition_texture);
+    water_depth_transition_texture = NULL;
+    water_depth_transition_load_attempted = false;
+    SDL_DestroyTexture(water_bank_overlay_texture);
+    water_bank_overlay_texture = NULL;
+    water_bank_overlay_load_attempted = false;
+    SDL_DestroyTexture(water_transition_texture);
+    water_transition_texture = NULL;
+    water_transition_load_attempted = false;
+    SDL_DestroyTexture(deep_water_transition_texture);
+    deep_water_transition_texture = NULL;
+    deep_water_transition_load_attempted = false;
+    SDL_DestroyTexture(poison_transition_texture);
+    poison_transition_texture = NULL;
+    poison_transition_load_attempted = false;
+    SDL_DestroyTexture(ice_transition_texture);
+    ice_transition_texture = NULL;
+    ice_transition_load_attempted = false;
+    SDL_DestroyTexture(lava_transition_texture);
+    lava_transition_texture = NULL;
+    lava_transition_load_attempted = false;
     SDL_DestroyTexture(poison_texture);
     poison_texture = NULL;
     poison_load_attempted = false;
@@ -419,7 +606,7 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
         cell->frame_steps = 8;
         cell->phase_steps = 0;
         cell->drawn_frame = (!p_ptr->blind && (cave_info[y][x] & CAVE_SEEN))
-            ? (byte)((frame_tick / 8) % 4) : 0;
+            ? (byte)((frame_tick / 8) % liquid_frame_count(liquid)) : 0;
         return;
     }
     byte fixture_kind = visible_fixture(y, x);
@@ -536,7 +723,7 @@ void sdl_idle_animation_update(Uint64 now_ns)
         SDL_FRect dst;
         if (!cell_can_animate(cell))
             continue;
-        frame = cell->liquid_feat ? (byte)((tick / 8) % 4)
+        frame = cell->liquid_feat ? (byte)((tick / 8) % liquid_frame_count(cell->liquid_feat))
             : fixture_frame(tick, cell->frame_steps, cell->phase_steps,
                 cell->frame_count);
         if (frame == cell->drawn_frame)

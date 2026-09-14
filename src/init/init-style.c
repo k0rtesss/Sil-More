@@ -110,6 +110,11 @@ errr parse_style_info(char* buf, header* head)
     if (buf[0] == 'F')
     {
         const char* p = buf + 2;
+        /* F:TILE: opts into stable per-cell variation; plain F: is unchanged. */
+        if (strncmp(p, "TILE:", 5) == 0) {
+            stl_ptr->floor_tiled = true;
+            p += 5;
+        }
         int added = 0;
         while (*p) {
             while (*p == ' ' || *p == '\t') p++;
@@ -233,12 +238,37 @@ errr parse_style_levels(char* buf, header* head)
         styles_vault_rules_clear();
         styles_default_vault_clear();
         styles_partition_rules_clear();
+        styles_floor_borders_clear();
         big_cave_type_rules_clear();
     log_debug("parse_style_levels: Version header encountered, cleared existing rules");
         return 0;
     }
     /* Comments or blank lines */
     if (buf[0] == '#' || buf[0] == '\0') return 0;
+
+    /* R/R2:<feature>:<row>:<col> ... - inner/outer bank tile variants. */
+    if (buf[0] == 'R' && (buf[1] == ':' || (buf[1] == '2' && buf[2] == ':'))) {
+        int radius = (buf[1] == '2') ? 2 : 1;
+        const char* tail = buf + ((radius == 2) ? 3 : 2);
+        int feat, used = 0, count = 0;
+        int rows[16], cols[16];
+        if (sscanf(tail, "%d:%n", &feat, &used) != 1 || !used)
+            return PARSE_ERROR_GENERIC;
+        tail += used;
+        while (*tail) {
+            while (*tail == ' ' || *tail == '\t') tail++;
+            if (!*tail || *tail == '#') break;
+            used = 0;
+            if (count >= 16 || sscanf(tail, "%d:%d%n", &rows[count], &cols[count], &used) != 2)
+                return PARSE_ERROR_GENERIC;
+            tail += used;
+            if (*tail && *tail != ' ' && *tail != '\t' && *tail != '#')
+                return PARSE_ERROR_GENERIC;
+            count++;
+        }
+        return styles_set_floor_border_variants(feat, radius, rows, cols, count)
+            ? 0 : PARSE_ERROR_GENERIC;
+    }
 
     /* L:depth: ... (exact)  or  L:min:max: ... (range)  -> level style rules */
     if (buf[0] == 'L')

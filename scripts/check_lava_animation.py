@@ -7,6 +7,21 @@ import check_idle_animation as idle
 
 
 TESTS = r'''
+static void expect_middle_frame(SDL_Surface* canvas, int y, int x, int frame) {
+    /* This fixture has one isolated lava cell: authored mask 0. */
+    SDL_Surface* source=IMG_Load("lib/xtra/graf/transition_lava_on_basalt.png");
+    assert(source && source->w==256 && source->h==1024);
+    SDL_Surface* expected=SDL_CreateSurface(16,16,canvas->format); assert(expected);
+    SDL_Rect tile={0,frame*256,16,16};
+    SDL_BlitSurface(source,&tile,expected,NULL);
+    assert(SDL_BYTESPERPIXEL(canvas->format)==4 && !use_bigtile);
+    int left=(COL_MAP+x-p_ptr->wx)*16, top=(ROW_MAP+y-p_ptr->wy)*16;
+    for(int row=0;row<16;row++)
+        assert(memcmp((byte*)canvas->pixels+(top+row)*canvas->pitch+left*4,
+            (byte*)expected->pixels+row*expected->pitch,16*4)==0);
+    SDL_DestroySurface(expected); SDL_DestroySurface(source);
+}
+
 static bool lava_cell_changed(SDL_Surface* a, SDL_Surface* b) {
     for(int row=0;row<16;row++)
         if(memcmp((byte*)a->pixels+((ROW_MAP+10)*16+row)*a->pitch+(COL_MAP+11)*16*4,
@@ -65,9 +80,7 @@ static void lava_render_tests(void) {
     for(int frame=0;frame<4;frame++) {
         frame_tick=(Uint64)frame*8; force_map_redraw(); Term_fresh();
         frames[frame]=capture(60+frame);
-        char asset[128];
-        strnfmt(asset,sizeof(asset),"lib/xtra/graf/anim_lava_flow_f%d.png",frame);
-        expect_middle_frame(frames[frame],10,11,asset);
+        expect_middle_frame(frames[frame],10,11,frame);
         if(frame) assert(!same_surface(frames[frame-1],frames[frame]));
     }
     assert(sdl_idle_animation_timeout_ms(32*IDLE_STEP_NS)==0);
@@ -75,6 +88,13 @@ static void lava_render_tests(void) {
     assert(image_loads==loads && texture_creations==textures && allocations==mallocs);
     assert(Rand_state_export()==rng && turn==turns && p_ptr->energy==energy);
     /* Transparent actors must preserve the liquid animation beneath them. */
+    /* A tiny isolated puddle's entire molten core can be covered by the actor;
+     * use the interior of a pool to leave moving pixels visibly exposed. */
+    byte saved[3][3];
+    for(int dy=-1;dy<=1;dy++) for(int dx=-1;dx<=1;dx++) {
+        saved[dy+1][dx+1]=cave_feat[10+dy][11+dx];
+        cave_feat[10+dy][11+dx]=FEAT_LAVA;
+    }
     draw_cell(10,11,true);
     const idle_cell* occupied=NULL;
     for(int i=0;i<cell_count;i++) if(cells[i].x==11) occupied=&cells[i];
@@ -84,6 +104,8 @@ static void lava_render_tests(void) {
     SDL_Surface* after=capture(65);
     assert(lava_cell_changed(before,after));
     SDL_DestroySurface(before); SDL_DestroySurface(after);
+    for(int dy=-1;dy<=1;dy++) for(int dx=-1;dx<=1;dx++)
+        cave_feat[10+dy][11+dx]=saved[dy+1][dx+1];
     /* Both tile widths and pans must repaint identically to a fresh map. */
     for(int big=0;big<2;big++) {
         use_bigtile=big; Term->total_erase=true;
@@ -115,7 +137,7 @@ static void lava_render_tests(void) {
     SDL_DestroySurface(before); SDL_DestroySurface(after);
     for(int i=0;i<4;i++) SDL_DestroySurface(frames[i]);
     lava_scene_preview();
-    puts("Lava pixels: four original frames, liquid under actors, water coexistence, pan/erase, fog and blindness, no turns/RNG/idle allocations: PASS");
+    puts("Lava pixels: four connected frames, liquid under actors, water coexistence, pan/erase, fog and blindness, no turns/RNG/idle allocations: PASS");
 }
 '''
 

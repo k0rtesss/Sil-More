@@ -949,6 +949,13 @@ byte get_depth_color(int depth)
 void cave_set_feat_with_color(int y, int x, int feat, int color)
 {
     feat = terrain_history_construction_feature(y, x, feat);
+    bool removed_floor_border = cave_feat[y][x] != feat
+        && (styles_floor_border(cave_bridge_underlay(cave_feat[y][x]), NULL, NULL)
+            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_ICE
+            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_LAVA
+            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_WATER
+            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_DEEP_WATER
+            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_POISON);
     bool lava_changed = cave_feat[y][x] != feat
         && (cave_bridge_underlay(cave_feat[y][x]) == FEAT_LAVA
             || cave_bridge_underlay(feat) == FEAT_LAVA);
@@ -1022,6 +1029,8 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
 
         /* Redraw */
         lite_spot(y, x);
+        if (removed_floor_border)
+            cave_floor_border_redraw_neighbors(y, x);
     }
 }
 

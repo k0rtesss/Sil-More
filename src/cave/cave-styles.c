@@ -2,6 +2,72 @@
 
 #include "cave-internal.h"
 
+/* Visual-only shore tiles, reloaded from style-levels.txt at startup. */
+static struct {
+    byte count;
+    byte row[16], col[16];
+} floor_borders[256][2];
+
+void styles_floor_borders_clear(void)
+{
+    memset(floor_borders, 0, sizeof(floor_borders));
+}
+
+bool styles_set_floor_border(int feat, int row, int col)
+{
+    return styles_set_floor_border_variants(feat, 1, &row, &col, 1);
+}
+
+bool styles_set_floor_border_variants(int feat, int radius,
+    const int* rows, const int* cols, int count)
+{
+    /* Reserve the adjacent atlas column for the dark floor variant. */
+    if (feat <= 0 || feat >= 256 || radius < 1 || radius > 2
+        || !rows || !cols || count < 1 || count > 16)
+        return false;
+    for (int i = 0; i < count; i++)
+        if (rows[i] < 0 || rows[i] >= 128 || cols[i] < 0 || cols[i] >= 127)
+            return false;
+    floor_borders[feat][radius - 1].count = (byte)count;
+    for (int i = 0; i < count; i++) {
+        floor_borders[feat][radius - 1].row[i] = (byte)rows[i];
+        floor_borders[feat][radius - 1].col[i] = (byte)cols[i];
+    }
+    return true;
+}
+
+bool styles_floor_border(int feat, byte* row, byte* col)
+{
+    if (feat <= 0 || feat >= 256) return false;
+    for (int r = 0; r < 2; r++) {
+        if (!floor_borders[feat][r].count) continue;
+        if (row) *row = floor_borders[feat][r].row[0];
+        if (col) *col = floor_borders[feat][r].col[0];
+        return true;
+    }
+    return false;
+}
+
+bool styles_floor_border_at(int feat, int radius, int y, int x,
+    byte* row, byte* col)
+{
+    if (feat <= 0 || feat >= 256 || radius < 1 || radius > 2)
+        return false;
+    int r = radius - 1;
+    int count = floor_borders[feat][r].count;
+    if (!count) return false;
+    /* Stable across redraws and save/load, without consuming gameplay RNG. */
+    u32b hash = (u32b)x * 0x9e3779b9u ^ (u32b)y * 0x85ebca6bu;
+    hash ^= (u32b)p_ptr->depth * 0xc2b2ae35u;
+    hash ^= hash >> 16;
+    hash *= 0x7feb352du;
+    hash ^= hash >> 15;
+    int choice = (int)(hash % (u32b)count);
+    if (row) *row = floor_borders[feat][r].row[choice];
+    if (col) *col = floor_borders[feat][r].col[choice];
+    return true;
+}
+
 /* Encoded color range that indicates an absolute style index per cell.
  * We now store the chosen style for each cell directly in cave_color as
  * COLOR_STYLE_BASE + style_index. This guarantees deterministic visuals

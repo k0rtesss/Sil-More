@@ -13,11 +13,17 @@ TESTS = r'''
 int cave_style_primary_for_grid(int y, int x);
 static void verdant_style_tests(void) {
     header h = {0};
-    z_info->style_max=64;
-    z_info->fake_name_size=z_info->fake_text_size=131072;
-    free(style_info); style_info=calloc(64,sizeof(*style_info));
-    h.info_num=64; h.info_len=sizeof(*style_info); h.info_ptr=style_info;
-    h.name_ptr=calloc(131072,1); h.text_ptr=calloc(131072,1);
+    header limits={0}; limits.info_ptr=z_info;
+    FILE* limits_file=fopen("lib/edit/limits.txt","r"); assert(limits_file);
+    char limit_line[2048];
+    while(fgets(limit_line,sizeof(limit_line),limits_file)) {
+        limit_line[strcspn(limit_line,"\r\n")]=0;
+        if(limit_line[0]=='M') assert(parse_z_info(limit_line,&limits)==0);
+    }
+    fclose(limits_file);
+    free(style_info); style_info=calloc(z_info->style_max,sizeof(*style_info));
+    h.info_num=z_info->style_max; h.info_len=sizeof(*style_info); h.info_ptr=style_info;
+    h.name_ptr=calloc(z_info->fake_name_size,1); h.text_ptr=calloc(z_info->fake_text_size,1);
     FILE* file=fopen("lib/edit/style.txt","r"); assert(file);
     char line[2048]; error_idx=-1;
     while(fgets(line,sizeof(line),file)) {
@@ -61,8 +67,8 @@ static void verdant_style_tests(void) {
                     assert(mode_weight_for_depth(QUAD_MODE_CAVEY,depth,12,NULL,9)>0);
                     found_moss=true;
                 }
-                if(depth<=20 && kind==PART_STYLE_BIG_CAVE_FIRE) assert(style==25);
-                if(depth<=20 && kind==PART_STYLE_BIG_CAVE_ICE) assert(style==59);
+                if(depth<=20 && kind==PART_STYLE_BIG_CAVE_FIRE) assert(style==63);
+                if(depth<=20 && kind==PART_STYLE_BIG_CAVE_ICE) assert(style==62);
                 if(depth<=20 && kind==PART_STYLE_BIG_CAVE_POIS) assert(style==55);
                 if(depth<=20 && kind==PART_STYLE_CHASM_FLOOR) assert(style==30);
             }

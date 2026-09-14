@@ -124,6 +124,8 @@ copy /Y lib\xtra\graf\16x16.png sil-more-windows-sdl3\lib\xtra\graf\
 copy /Y lib\xtra\graf\anim_*.png sil-more-windows-sdl3\lib\xtra\graf\
 copy /Y lib\xtra\graf\animated.png sil-more-windows-sdl3\lib\xtra\graf\
 copy /Y lib\xtra\graf\ice_sheet.png sil-more-windows-sdl3\lib\xtra\graf\
+copy /Y lib\xtra\graf\transition_*.png sil-more-windows-sdl3\lib\xtra\graf\
+copy /Y lib\xtra\graf\LICENSE-verdant-*.txt sil-more-windows-sdl3\lib\xtra\graf\
 
 echo.
 echo Standard version complete: sil-more-windows-sdl3\sil-more.exe
@@ -230,6 +232,8 @@ copy /Y lib\xtra\graf\16x16.png sil-more-windows-sdl3-portable\lib\xtra\graf\
 copy /Y lib\xtra\graf\anim_*.png sil-more-windows-sdl3-portable\lib\xtra\graf\
 copy /Y lib\xtra\graf\animated.png sil-more-windows-sdl3-portable\lib\xtra\graf\
 copy /Y lib\xtra\graf\ice_sheet.png sil-more-windows-sdl3-portable\lib\xtra\graf\
+copy /Y lib\xtra\graf\transition_*.png sil-more-windows-sdl3-portable\lib\xtra\graf\
+copy /Y lib\xtra\graf\LICENSE-verdant-*.txt sil-more-windows-sdl3-portable\lib\xtra\graf\
 
 echo.
 echo Local version complete: sil-more-windows-sdl3-portable\sil-more.exe

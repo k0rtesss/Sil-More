@@ -563,6 +563,14 @@ extern void styles_vault_rules_clear(void);
 extern void styles_set_vault_rule(int depth, const int* sidx, const int* weight, int count);
 extern void styles_apply_vault_default_for_depth(int depth);
 extern void styles_partition_rules_clear(void);
+extern void styles_floor_borders_clear(void);
+extern bool styles_set_floor_border(int feat, int row, int col);
+extern bool styles_set_floor_border_variants(int feat, int radius,
+    const int* rows, const int* cols, int count);
+extern bool styles_floor_border(int feat, byte* row, byte* col);
+extern bool styles_floor_border_at(int feat, int radius, int y, int x,
+    byte* row, byte* col);
+extern void cave_floor_border_redraw_neighbors(int y, int x);
 extern void styles_add_partition_rule(int depth, int kind, const int* sidx, const int* weight, int count);
 extern int styles_pick_partition_style(int depth, int kind);
 extern int styles_get_level_primary_style(void);

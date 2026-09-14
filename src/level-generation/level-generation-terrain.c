@@ -831,6 +831,34 @@ void place_dungeon_terrain(void)
         int material = terrain_material(pi, profile);
         if (material < 0) continue;
         terrain_region(pi, material, profile);
+        if (elemental)
+        {
+            /* A cavern's defining terrain should occupy more than one small
+             * accent. Add broad frozen sheets or hazardous rivers/pools until
+             * roughly a tenth of its natural floor carries that material.
+             * The existing planner still rejects blocked routes, authored
+             * cells and reserved crossing approaches on every attempt. */
+            int floor_area = 0, matching = 0;
+            for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+                for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+                {
+                    if (level_partition_index_for_point(y, x) != pi) continue;
+                    if (roles[y][x] == TERRAIN_NATURAL) floor_area++;
+                    if (cave_feat[y][x] == terrain_features[material]) matching++;
+                }
+            terrain_theme_profile cavern = *profile;
+            cavern.min_length = MAX(cavern.min_length, 18);
+            cavern.max_length = MAX(cavern.max_length, 40);
+            cavern.max_width = 3;
+            cavern.pool_chance = MAX(cavern.pool_chance, 80);
+            int target = floor_area / 10;
+            for (int feature = 0; feature < 5 && matching < target; feature++)
+            {
+                int before_tiles = terrain_stats.material_tiles[material];
+                if (!terrain_region(pi, material, &cavern)) break;
+                matching += terrain_stats.material_tiles[material] - before_tiles;
+            }
+        }
     }
     terrain_deepen_water();
     log_debug("Dungeon terrain theme '%s': %d accepted/%d proposals, %d tiles, %d architectural spans; rejected path=%d access=%d",

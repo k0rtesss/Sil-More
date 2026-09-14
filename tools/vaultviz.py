@@ -388,7 +388,7 @@ def parse_style_txt(path: Path) -> StyleSystem:
             continue
 
         if line.startswith("F:"):
-            tokens = line[2:].replace(",", " ").split()
+            tokens = line[2:].removeprefix("TILE:").replace(",", " ").split()
             for token in tokens:
                 token = token.strip().strip(":").strip(",")
                 if not token or ":" not in token:

@@ -485,6 +485,18 @@ static bool tutorial_hit(float x, float y, const SDL_FRect *r)
     return x >= r->x && y >= r->y && x < r->x+r->w && y < r->y+r->h;
 }
 
+static void tutorial_update_mouse_hover(float x, float y)
+{
+    for (int i=0; i<3; ++i) {
+        if (!tutorial_hit(x,y,&tutorial_buttons[i])) continue;
+        if (tutorial_focus != i) {
+            tutorial_focus=i;
+            g_state.need_present=true;
+        }
+        return;
+    }
+}
+
 static void tutorial_activate(int button, const tutorial_view *view)
 {
     if (button==0 && !view->can_continue && tutorial_reading) {
@@ -849,6 +861,10 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
     if (!pointer) { g_state.need_present=true; return true; }
     if (ev->common.timestamp < tutorial_input_barrier) return true;
     if (!active) return false;
+    if (mouse && ev->type==SDL_EVENT_MOUSE_MOTION) {
+        tutorial_update_mouse_hover(x,y);
+        return true;
+    }
     if (down) {
         tutorial_pointer_mouse=mouse; tutorial_pointer_finger=finger;
         tutorial_pressed_button=-1; tutorial_pointer_gameplay=false;

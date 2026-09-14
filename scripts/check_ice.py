@@ -101,13 +101,14 @@ static void ice_expect_repaint(void) {
 }
 
 static void ice_expect_source_pixels(SDL_Surface* canvas, int y, int x) {
-    /* Ice is a single static 16x16 asset, not a frame in the torch atlas.
-     * Compare the captured production map tile with every source pixel after
-     * format conversion, independently of the production ice draw function. */
-    SDL_Surface* source=IMG_Load("lib/xtra/graf/ice_sheet.png");assert(source);
-    assert(source->w==16&&source->h==16);
+    /* The first ice cell connects east to the second: source mask 4.
+     * Compare every captured pixel with its authored transition tile. */
+    SDL_Surface* source=IMG_Load("lib/xtra/graf/transition_ice_on_snow.png");assert(source);
+    assert(source->w==256&&source->h==256);
     assert(!use_bigtile&&g_views[PANE_MAIN].cell_w==16&&g_views[PANE_MAIN].cell_h==16);
-    SDL_Surface* expected=SDL_ConvertSurface(source,canvas->format);assert(expected);
+    SDL_Surface* expected=SDL_CreateSurface(16,16,canvas->format);assert(expected);
+    SDL_Rect tile={4*16,0,16,16};
+    SDL_BlitSurface(source,&tile,expected,NULL);
     assert(SDL_BYTESPERPIXEL(canvas->format)==4);
     int left=(COL_MAP+x-p_ptr->wx)*16,top=(ROW_MAP+y-p_ptr->wy)*16;
     assert(left>=0&&top>=0&&left+16<=canvas->w&&top+16<=canvas->h);

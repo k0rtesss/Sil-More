@@ -179,6 +179,10 @@ static void bridge_pixels(const char* out) {
     bridge_map();p_ptr->py=p_ptr->px=25;
     uint64_t floor=render_cell(FEAT_FLOOR,NULL),hashes[12];
     for(int i=0;i<6;i++) {
+        /* Keep some liquid exposed around the deck. An isolated puddle's
+         * small connected shape may be completely hidden by the planks. */
+        for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
+            cave_feat[10+dy][10+dx]=materials[i];
         uint64_t underlay=render_cell(materials[i],NULL);
         for(int axis=0;axis<2;axis++) {
             hashes[i*2+axis]=render_cell(cave_bridge_feature(materials[i],axis),NULL);
@@ -187,6 +191,8 @@ static void bridge_pixels(const char* out) {
         assert(hashes[i*2]!=hashes[i*2+1]);
     }
     for(int i=0;i<12;i++)for(int j=i+1;j<12;j++)assert(hashes[i]!=hashes[j]);
+    for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
+        cave_feat[10+dy][10+dx]=FEAT_WATER;
     p_ptr->blind=true;assert(render_cell(FEAT_BRIDGE_WATER_H,NULL)!=hashes[0]);p_ptr->blind=false;
     p_ptr->rage=true;cave_info[10][10]=CAVE_MARK;
     assert(render_cell(FEAT_BRIDGE_WATER_H,NULL)==render_cell(FEAT_NONE,NULL));p_ptr->rage=false;

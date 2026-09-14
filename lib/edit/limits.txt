@@ -85,7 +85,7 @@ M:O:1536
 M:Y:4
 
 # Number of Styles (visual themes)
-M:Z:62
+M:Z:64
 
 # Maximum number of skeleton note templates
 M:X:420

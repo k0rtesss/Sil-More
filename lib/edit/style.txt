@@ -8,6 +8,8 @@ V:0.9.8
 #   - Y: vein tile (row:col). If omitted, a default overlay is used (see E: below).
 #   - F: floor tile(s) (row:col). May include multiple space-separated tokens;
 #        one variant is chosen per level (and per vault) and used consistently.
+#        F:TILE:row:col ... instead varies the floor tiles per map square,
+#        deterministically, for natural materials such as snow.
 #   - D: door tile(s) (row:col). May include multiple space-separated tokens;
 #        one variant is chosen per level (and per vault) and used consistently.
 # - Defaults:
@@ -485,6 +487,7 @@ M1:A feeling of cosmic despair washes over you, the cold emptiness of the void b
 M2:You are small and lost in an infinite, uncaring darkness.
 M1:This is the high sorcery of the Enemy, who can show you the beauty of the firmament while reminding you that you are trapped forever beneath it, alone.
 M2:The greatest horror is not the dead, but the life that should never have been.
+
 N:38:Mor4 #ShinyRed
 W:18:16
 #Y:18:6
@@ -692,3 +695,21 @@ M1:The fortress is no longer stone, but a living, breathing thing.
 M2:This is the heart of the corruption, the body of Angband's most secret and terrible evil.
 M1:A deep, instinctual revulsion rises in you, a rejection of this utter perversion of life.
 M2:The greatest horror is not the dead, but the life that should never have been.
+
+# Verdant 03 floors for the elemental cave partitions. The original wall
+# and door palettes remain available in other styles and authored vaults.
+N:62:SnowCave
+W:17:26
+F:TILE:35:0 35:2 35:4 35:6
+D:20:6 20:9 20:12 20:27
+S:snow-covered glacial stone
+M1:Snow lies across the cavern floor, broken by sheets of pale ice.
+M2:The bitter cold of the North has settled deep within the mountain.
+
+N:63:BasaltCave
+W:16:22
+F:35:8
+D:20:6 20:9 20:21
+S:black basalt beside molten rock
+M1:Dark basalt stretches beneath your feet, broken by the glow of molten rock.
+M2:Heat rises from the mountain's deep fires.

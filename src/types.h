@@ -1047,6 +1047,7 @@ struct style_type {
     /* Floors: support multiple options (first used if no selection) */
     byte floor_row, floor_col;            /* legacy single values */
     byte floor_count;                     /* number of floor variants */
+    bool floor_tiled;                     /* choose variants per grid, without RNG */
     byte floor_rowv[8], floor_colv[8];    /* up to 8 variants */
     /* Doors: support multiple options (first used if no selection) */
     byte door_row,  door_col;             /* legacy base tile; open +1, broken +2 */

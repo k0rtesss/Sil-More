@@ -29,7 +29,7 @@ def parse_styles(style_file):
                 
                 elif line.startswith('F:'):
                     # F:row:col row:col ...
-                    content = line[2:].split('#')[0].strip()
+                    content = line[2:].split('#')[0].strip().removeprefix('TILE:')
                     tokens = content.replace(',', ' ').split()
                     for token in tokens:
                         # Clean token of trailing colons or weird chars
