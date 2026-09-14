@@ -24,7 +24,11 @@ void alloc_object_global(int set, int typ, int num, bool out_of_sight)
             x = rand_int(p_ptr->cur_map_wid);
 
             /* Require "naked" floor grid */
-            if (!cave_naked_bold(y, x))
+            if (!cave_naked_bold(y, x)
+                && !(typ == ALLOC_TYP_OBJECT
+                    && (cave_feat[y][x] == FEAT_WATER
+                        || cave_feat[y][x] == FEAT_DEEP_WATER)
+                    && !cave_o_idx[y][x] && !cave_m_idx[y][x]))
                 continue;
             if (typ == ALLOC_TYP_RUBBLE && terrain_generation_reserved(y, x))
                 continue;

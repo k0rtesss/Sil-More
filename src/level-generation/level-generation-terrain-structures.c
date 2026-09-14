@@ -42,7 +42,7 @@ static bool structure_floor(int feat)
 {
     return feat == FEAT_FLOOR || feat == FEAT_OPEN || feat == FEAT_BROKEN
         || feat == FEAT_SECRET || (feat >= FEAT_DOOR_HEAD && feat <= FEAT_DOOR_TAIL)
-        || (feat >= FEAT_TRAP_HEAD && feat <= FEAT_TRAP_TAIL);
+        || FEAT_IS_TRAP(feat);
 }
 
 static bool structure_editable(int y, int x,

@@ -15,9 +15,11 @@ import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT = ROOT / "scripts/output/dungeon-terrain-pipeline"
-MATERIAL = {2: "chasm", 84: "water", 85: "lava", 86: "ice", 87: "poison"}
+MATERIAL = {2: "chasm", 84: "water", 85: "lava", 86: "ice", 87: "poison",
+            100: "deep water"}
 COLORS = {1: "#b8ad92", 2: "#080b13", 84: "#298bd2", 85: "#fc612c",
-          86: "#a0e6f1", 87: "#6faf42", 80: "#ffffff", 81: "#ffffff",
+          86: "#a0e6f1", 87: "#6faf42", 100: "#091d5e",
+          80: "#ffffff", 81: "#ffffff",
           82: "#ffffff", 83: "#ffffff", 49: "#947e69"}
 FAMILIES = ("Pool chain", "Tributary network", "Flooded chamber", "Perched pools",
             "Major underground river", "Fracture network")
@@ -26,12 +28,24 @@ TERMINALS = {1: "edge mouth", 2: "wall spring", 3: "wall sink",
 SCENARIOS = ("Lake to lake", "Cross-map flow", "Spring and sink", "Volcanic flow",
              "Perched pools", "Flooded works", "Fractures")
 ROCK = {51, 56, 57, 58, 59, 63}
-COLORS.update({feature: "#b79562" if feature<92 else "#a5aa9e" for feature in range(88,98)})
+COLORS.update({feature: "#b79562" if feature<98 else "#8c6941" for feature in range(88,100)})
 EPOCHS = {0: "Built around older geology", 1: "Later terrain disaster", 2: "Older river overflow"}
 
 
 def bridge_underlay(feature):
-    return (84,2,85,87,86)[(feature-88)//2] if 88<=feature<=97 else feature
+    return (84,2,85,87,86,100)[(feature-88)//2] if 88<=feature<=99 else feature
+
+
+def matches_material(feature, material):
+    """Deep water is the stronger form of the ordinary water material."""
+    expected = (84, 2, 85, 87, 86)[material]
+    return feature == expected or (expected == 84 and feature == 100)
+
+
+def matches_underlay(feature, expected):
+    """Treat deep water as a valid realization of an older water cell."""
+    actual = bridge_underlay(feature)
+    return actual == expected or (expected == 84 and actual == 100)
 
 
 def system_views(data):
@@ -192,7 +206,8 @@ def terminal_geometry(data):
             if not 0<y<h-1 or not 0<x<w-1 or not mask[y][x]:
                 errors.append(f"{where} is outside the traversable hydraulic map")
                 continue
-            if data.get("landmark") and features[y][x]!=(84,2,85,87,86)[data["landmark"]["material"]]:
+            if data.get("landmark") and not matches_material(
+                    features[y][x], data["landmark"]["material"]):
                 errors.append(f"{where} was replaced with dry floor or a different material")
             if kind==1:
                 if y not in (1,h-2) and x not in (1,w-2):
@@ -322,7 +337,7 @@ def validate(data, metrics):
     feature=(84,2,85,87,86)[landmark["material"]]
     changed_liquid=[(y,x) for y,row in enumerate(data["landmark_cells"]) for x,v in enumerate(row)
                     if v and not data["landmark_bridges"][y][x]
-                    and data["features"][y][x]!=feature]
+                    and not matches_material(data["features"][y][x], landmark["material"])]
     if changed_liquid:
         failures.append(f"Final map changed {len(changed_liquid)} claimed network terrain cells")
     for name,expected in (("landmark_rubble",49),("landmark_repairs",1)):
@@ -358,9 +373,9 @@ def validate(data, metrics):
         # placement may put a trap on that floor (for example a dart trap);
         # rubble, walls and renewed river/chasm terrain still break the span.
         changed=[(y,x) for group in bridge_groups for y,x in group
-                 if not 88<=data["terrain_after"][y][x]<=97
+                         if not 88<=data["terrain_after"][y][x]<=99
                  or data["features"][y][x]!=data["terrain_after"][y][x]
-                 or bridge_underlay(data["features"][y][x])!=feature]
+                         or not matches_underlay(data["features"][y][x], feature)]
         if changed:
             failures.append(f"Generation broke {len(changed)} typed bridge decks or their material identity")
     # Every critical pre-existing cell must survive the terrain operation.
@@ -374,16 +389,16 @@ def validate(data, metrics):
     if "epoch" in data:
         initial=data["initial_terrain"]
         if data["epoch"]==2:
-            actual_added=sum(bool(v) and bridge_underlay(data["terrain_before"][y][x])!=feature
-                and bridge_underlay(data["features"][y][x])==feature
+            actual_added=sum(bool(v) and not matches_underlay(data["terrain_before"][y][x], feature)
+                and matches_underlay(data["features"][y][x], feature)
                 for y,row in enumerate(data["landmark_cells"]) for x,v in enumerate(row))
             if data["structures"].get("overflow_tiles",0)>actual_added:
                 failures.append("Reported overflow expansion exceeds independently measured added terrain")
         if data["epoch"] in (0,2):
             missing_before=[(y,x) for y,row in enumerate(initial) for x,value in enumerate(row)
-                            if value and bridge_underlay(data["terrain_before"][y][x])!=value]
+                            if value and not matches_underlay(data["terrain_before"][y][x], value)]
             missing_after=[(y,x) for y,row in enumerate(initial) for x,value in enumerate(row)
-                           if value and bridge_underlay(data["features"][y][x])!=value]
+                           if value and not matches_underlay(data["features"][y][x], value)]
             if missing_before:failures.append(f"Construction erased {len(missing_before)} cells of older geology")
             if missing_after:failures.append(f"Later passes erased {len(missing_after)} cells of older geology")
             if data["epoch"]==0:

@@ -90,7 +90,7 @@ static bool get_explored_bounds(int* min_y, int* max_y, int* min_x, int* max_x)
             continue;
 
         /* Only include marked (detected/memorized) objects */
-        if (!o_ptr->marked)
+        if (!object_is_visible(o_ptr))
             continue;
 
         int oy = o_ptr->iy;
@@ -212,7 +212,7 @@ static bool unified_look_can_show_marked_object_at(int y, int x)
 {
     int o_idx = cave_o_idx[y][x];
 
-    return (o_idx > 0) && o_list[o_idx].k_idx && o_list[o_idx].marked
+    return (o_idx > 0) && object_is_visible(&o_list[o_idx])
         && grid_info_is_available(y, x);
 }
 
@@ -261,7 +261,7 @@ static int unified_look_count_visible_entities(unified_look_state* state)
                 continue;
 
             /* Only count marked (memorized) objects (matches sidebar display) */
-            if (!o_ptr->marked)
+            if (!object_is_visible(o_ptr))
                 continue;
             if (!unified_look_sidebar_in_radius(state, temp_y[i], temp_x[i]))
                 continue;
@@ -310,7 +310,7 @@ static int unified_look_count_visible_objects_for_group(unified_look_state* stat
             continue;
 
         /* Only count marked (memorized) objects (matches sidebar display) */
-        if (!o_ptr->marked)
+        if (!object_is_visible(o_ptr))
             continue;
         if (!unified_look_sidebar_in_radius(state, temp_y[i], temp_x[i]))
             continue;

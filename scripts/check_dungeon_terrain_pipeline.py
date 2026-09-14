@@ -514,8 +514,9 @@ def main():
     rsp = OUT / "objects.rsp"
     rsp.write_text("\n".join('"' + p + '"' for p in objects if not p.endswith("/src/main.c.obj")), encoding="utf-8")
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
-        *[str(BUILD / "_deps" / x) for x in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")], env["PATH"]])
+    env["PATH"] = os.pathsep.join([
+        *[str(BUILD / "_deps" / x) for x in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")],
+        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     env["SDL_VIDEO_DRIVER"] = "dummy"
     env["SDL_RENDER_DRIVER"] = "software"
     if args.tiles:

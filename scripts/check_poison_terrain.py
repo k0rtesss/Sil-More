@@ -9,6 +9,11 @@ import re
 TESTS = r'''
 #include "melee/melee-process.h"
 static int poison_hits;
+static int acid_item_contacts;
+void __wrap_acid_damage_items(int raw,int min,int max,int damage) {
+    assert(raw==POISON_TERRAIN_DOSE && min==raw && max==raw && damage==raw);
+    acid_item_contacts++;
+}
 /* This map harness supplies explicit bonuses without character/race tables. */
 void __wrap_handle_stuff(void) {}
 bool __wrap_get_check_near(int y,int x,cptr prompt) {
@@ -30,7 +35,7 @@ static void poison_map(void) {
     memset(p_ptr->previous_action,0,sizeof(p_ptr->previous_action));
     p_ptr->energy_use=0;player_poison_terrain_end_action();
     monster_poison_terrain_end_action(1);
-    mon_max=1;poison_hits=0;
+    mon_max=1;poison_hits=0;acid_item_contacts=0;
     cave_set_feat(10,11,FEAT_POISON);
 }
 static void poison_step(int dir) {
@@ -58,6 +63,7 @@ static void poison_terrain_tests(void) {
         poison_step(6);
         assert(p_ptr->px==11&&p_ptr->poisoned==doses[res+1]);
         assert(p_ptr->chp==100); /* Contact is delayed poison, not a hit. */
+        assert(acid_item_contacts==1); /* Poison resistance does not resist acid. */
     }
     poison_map();p_ptr->oppose_pois=1;poison_step(6);
     assert(p_ptr->poisoned==4);
@@ -69,22 +75,31 @@ static void poison_terrain_tests(void) {
     cave_set_feat(10,12,FEAT_POISON);poison_step(6);
     assert(p_ptr->poisoned==18);poison_step(6);
     assert(p_ptr->px==13&&p_ptr->poisoned==18);
+    assert(acid_item_contacts==3); /* Entry, wait and second tile; no free/exit dose. */
     poison_map();picker_choice=1;poison_step(6);
     assert(p_ptr->px==10&&!p_ptr->energy_use&&!p_ptr->poisoned);
+    assert(!acid_item_contacts);
     assert(!sdl_mouse_path_grid_is_open_floor(10,11));
     assert(sdl_mouse_path_grid_is_known_danger(10,11));
     poison_map();p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
     p_ptr->previous_action[1]=6;poison_step(6);
     assert(p_ptr->leaping&&p_ptr->px==11&&!p_ptr->poisoned);
+    assert(!acid_item_contacts);
     player_poison_terrain_begin_action();continue_leap();
     player_poison_terrain_end_action();
     assert(!p_ptr->leaping&&p_ptr->px==12&&!p_ptr->poisoned);
+    assert(!acid_item_contacts);
     poison_map();p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
     p_ptr->previous_action[1]=6;poison_step(6);
     cave_set_feat(10,12,FEAT_WALL_EXTRA);
     player_poison_terrain_begin_action();continue_leap();
     player_poison_terrain_end_action();
     assert(!p_ptr->leaping&&p_ptr->px==11&&p_ptr->poisoned==6);
+    assert(acid_item_contacts==1);
+    poison_map();cave_set_feat(10,11,FEAT_BRIDGE_POISON_H);poison_step(6);
+    assert(p_ptr->px==11&&!p_ptr->poisoned&&!acid_item_contacts);
+    player_poison_terrain_begin_action();p_ptr->energy_use=100;
+    player_poison_terrain_end_action();assert(!acid_item_contacts);
     poison_map();monster_swap(10,10,10,11);assert(p_ptr->poisoned==6);
     poison_map();character_dungeon=true;cave_set_feat(10,10,FEAT_POISON);
     assert(p_ptr->poisoned==6);character_dungeon=false;
@@ -133,7 +148,7 @@ def main():
     def isolated_run(args, *pos, **kw):
         if args[0].endswith("cc.exe"):
             args = [*args, "-Wl,--wrap=get_check_near", "-Wl,--wrap=mon_take_hit",
-                    "-Wl,--wrap=handle_stuff"]
+                    "-Wl,--wrap=handle_stuff", "-Wl,--wrap=acid_damage_items"]
         return original_run(args, *pos, **kw)
 
     water.subprocess.run = isolated_run

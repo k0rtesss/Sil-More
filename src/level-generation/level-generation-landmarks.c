@@ -121,7 +121,7 @@ static bool lm_passage(int y, int x)
     return feat == FEAT_FLOOR || cave_feat_is_bridge(feat) || feat == FEAT_OPEN || feat == FEAT_BROKEN
         || feat == FEAT_SECRET || feat == FEAT_RUBBLE
         || (feat >= FEAT_DOOR_HEAD && feat <= FEAT_DOOR_TAIL)
-        || (feat >= FEAT_TRAP_HEAD && feat <= FEAT_TRAP_TAIL);
+        || FEAT_IS_TRAP(feat);
 }
 
 static bool lm_critical_object(int y, int x)
@@ -1145,6 +1145,9 @@ static bool lm_relocations(void)
     for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++) for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
     {
         int monster = cave_m_idx[y][x], object = cave_o_idx[y][x];
+        /* Flooding leaves ordinary objects submerged in place. Creatures
+         * still move to safe banks; important objects remain protected. */
+        if (lm_feature == FEAT_WATER && !lm_critical_object(y, x)) object = 0;
         if (lm_work[y][x] != TERRAIN_LANDMARK_TERRAIN || (!monster && !object)) continue;
         if (monster < 0 || lm_move_count >= LM_MOVES || lm_critical_object(y, x)) return false;
         int owner = terrain_vault_instance_at(y, x), pi = level_partition_index_for_point(y, x);

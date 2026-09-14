@@ -12,7 +12,7 @@ int get_scent(int y, int x)
     if (!(in_bounds(y, x)))
         return (-1);
 
-    if (cave_feat[y][x] == FEAT_WATER)
+    if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER)
         return (-1);
 
     /* Sent trace? */
@@ -62,7 +62,7 @@ bool cave_exist_mon(
         return (r_ptr->flags2 & RF2_FLYING) || (r_ptr->flags3 & RF3_RES_FIRE);
 
     // only flying creatures can pass chasms
-    if (cave_feat[y][x] == FEAT_CHASM)
+    if (feat == FEAT_CHASM)
     {
         if (r_ptr->flags2 & (RF2_FLYING))
             return (true);
@@ -511,11 +511,10 @@ int monster_step_cost(monster_type* m_ptr,
         else if (r_ptr->flags2 & RF2_TUNNEL_WALL)
             cost += cave_feat[to_y][to_x] == FEAT_RUBBLE ? 1 : 2;
     }
-    /* Actual water movement costs 150 energy. Round its extra half turn up
-     * because flows store whole turns, including the step back onto a bank. */
-    if (water_movement_energy(100, cave_feat[from_y][from_x],
-            cave_feat[to_y][to_x], (r_ptr->flags2 & RF2_FLYING) != 0) > 100)
-        cost++;
+    /* Flows store whole turns; account for 150% shallow and 400% deep water,
+     * including the step back onto a bank. */
+    cost += (water_movement_energy(100, cave_feat[from_y][from_x],
+        cave_feat[to_y][to_x], (r_ptr->flags2 & RF2_FLYING) != 0) - 100 + 99) / 100;
     /* This is a route preference, not extra movement energy. A short poison
      * crossing is reasonable when the safe detour is considerably longer. */
     if (monster_poison_step_damage(m_ptr, from_y, from_x, to_y, to_x))

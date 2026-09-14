@@ -1,6 +1,7 @@
 /* File: fs/save-dungeon.c -- carved from save.c (shares state via fs/save-internal.h) */
 
 #include "angband.h"
+#include "cave/cave-flood.h"
 #include "monster/monster-senses.h"
 #include "cave/cave-fixtures.h"
 #include "blitz.h"
@@ -18,6 +19,27 @@
     (CAVE_MARK | CAVE_GLOW | CAVE_ICKY | CAVE_ROOM | CAVE_G_VAULT | CAVE_HIDDEN)
 #define IMPORTANT_FLAGS_HI (CAVE_CHASM_AREA)
 #define IMPORTANT_FLAGS_16 (IMPORTANT_FLAGS_LO | IMPORTANT_FLAGS_HI)
+
+static void wr_floods(void)
+{
+    u16b count = 0;
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (cave_flood_stage_at(y, x))
+                count++;
+    wr_u16b(0xF100);
+    wr_u16b(count);
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+        {
+            byte stage = cave_flood_stage_at(y, x);
+            if (!stage)
+                continue;
+            wr_byte((byte)y);
+            wr_byte((byte)x);
+            wr_byte(stage);
+        }
+}
 
 static void wr_fixtures(void)
 {
@@ -397,7 +419,8 @@ void wr_dungeon(void)
         for (x = 0; x < p_ptr->cur_map_wid; ++x)
             wr_byte(scent_export_cell(y, x));
 
+    wr_floods();
+
     log_debug("Dungeon data write completed - %d objects, %d monsters", o_max - 1, mon_max - 1);
     log_trace("[save:%06u] === END DUNGEON ===", (unsigned)save_byte_offset);
 }
-

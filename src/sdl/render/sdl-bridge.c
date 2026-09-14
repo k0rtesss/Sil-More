@@ -26,7 +26,8 @@ void sdl_draw_bridge_deck(int y, int x, const SDL_FRect* dst)
     if (!dst || !p_ptr || !in_bounds(y, x) || !FEAT_IS_BRIDGE(cave_feat[y][x])) return;
     int material = cave_bridge_underlay(cave_feat[y][x]);
     bool vertical = cave_bridge_vertical(cave_feat[y][x]);
-    bool wood = material == FEAT_WATER || material == FEAT_CHASM;
+    bool wood = material == FEAT_WATER || material == FEAT_DEEP_WATER
+        || material == FEAT_CHASM;
     int light = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN) ? 255 : 96;
     SDL_Color body = wood ? (SDL_Color){ 135, 94, 52, 255 }
         : material == FEAT_LAVA ? (SDL_Color){ 143, 130, 111, 255 }

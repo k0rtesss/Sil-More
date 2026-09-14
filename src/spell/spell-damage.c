@@ -2335,6 +2335,15 @@ void sound_dam(int raw_dam, int min_raw, int max_raw, int hp_dam)
         hp_dam);
 }
 
+/* Acid contact can harm possessions without an immediate Health hit (for
+ * example, poisonous seep). Keep all selection/protection/corrosion rules
+ * shared with ordinary acid attacks. */
+void acid_damage_items(int raw_dam, int min_raw, int max_raw, int damage)
+{
+    elemental_attack_affect_multiple_items(GF_ACID, raw_dam, min_raw, max_raw,
+        damage);
+}
+
 /*
  * Hurt the player with Acid
  */
@@ -2348,8 +2357,7 @@ void acid_dam(int raw_dam, int min_raw, int max_raw, int hp_dam, cptr kb_str)
     take_hit(hp_dam, kb_str);
 
     /* Elemental item damage */
-    elemental_attack_affect_multiple_items(GF_ACID, raw_dam, min_raw, max_raw,
-        hp_dam);
+    acid_damage_items(raw_dam, min_raw, max_raw, hp_dam);
 }
 
 /*

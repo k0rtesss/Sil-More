@@ -219,6 +219,7 @@ set(SIL_MORE_SOURCES
     src/cave/cave-bridge.c
     src/cave/cave-lava.c
     src/cave/cave-poison.c
+    src/cave/cave-flood.c
     src/monster/monster-poison.c
     src/cave/cave-geometry.c
     src/cave/cave-map-ui.c

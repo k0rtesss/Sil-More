@@ -6,6 +6,8 @@
 #include "angband.h"
 
 void object_known(object_type* o_ptr);
+bool object_can_see_floor(int y, int x);
+bool object_is_visible(const object_type* o_ptr);
 void object_aware(object_type* o_ptr);
 void object_tried(object_type* o_ptr);
 bool object_has_ego_flag4(const object_type* o_ptr, u32b flag);

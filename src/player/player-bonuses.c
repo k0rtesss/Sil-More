@@ -1220,6 +1220,11 @@ void calc_bonuses(void)
         p_ptr->update |= (PU_MANA);
     }
 
+    /* Perception changes can reveal or conceal items under water. */
+    if (MAX(0, p_ptr->skill_use[S_PER]) / 5
+        != MAX(0, old_skill_use[S_PER]) / 5)
+        p_ptr->update |= PU_UPDATE_VIEW;
+
     /* Hack -- Telepathy Change */
     if (p_ptr->telepathy != old_telepathy)
     {

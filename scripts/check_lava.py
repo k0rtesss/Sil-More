@@ -10,6 +10,14 @@ import check_lava_monsters as monsters
 
 TESTS = r'''
 static int lava_hits, lava_deaths;
+static int lava_item_contacts;
+void __wrap_take_hit(int damage,cptr reason);
+void __wrap_fire_dam_mixed(int raw,int min,int max,int damage,cptr reason) {
+    assert(raw==LAVA_RAW_DAMAGE && min==raw && max==raw);
+    assert(damage==player_lava_damage(false));
+    lava_item_contacts++;
+    __wrap_take_hit(damage,reason);
+}
 void __wrap_msg_format(cptr fmt,...) {(void)fmt;}
 bool __wrap_get_check_near(int y,int x,cptr prompt) {
     (void)y;(void)x;assert(strstr(prompt,"lava"));return picker_choice==0;
@@ -31,7 +39,7 @@ static void lava_player_map(int resistance) {
     p_ptr->active_ability[S_EVN][EVN_LEAPING]=false;
     cave_m_idx[10][10]=-1;
     cave_set_feat(10,11,FEAT_LAVA);
-    mon_max=1;lava_hits=0;picker_choice=0;
+    mon_max=1;lava_hits=0;picker_choice=0;lava_item_contacts=0;
 }
 static void lava_step(int dir) {
     player_lava_begin_action();p_ptr->energy_use=100;
@@ -50,6 +58,7 @@ static void lava_player_tests(void) {
     assert(p_ptr->px==11 && p_ptr->is_dead && lava_hits==1);
     lava_player_map(2);lava_step(6);
     assert(p_ptr->px==11 && p_ptr->chp==460 && lava_hits==1);
+    assert(lava_item_contacts==1);
     player_lava_begin_action();p_ptr->energy_use=100;player_lava_end_action();
     assert(p_ptr->chp==420 && lava_hits==2);
     /* Free UI actions cost no exposure. A second lava tile is one hit. */
@@ -58,15 +67,23 @@ static void lava_player_tests(void) {
     cave_set_feat(10,12,FEAT_LAVA);lava_step(6);
     assert(p_ptr->chp==380 && lava_hits==3);
     lava_step(6);assert(p_ptr->px==13 && p_ptr->chp==380);
+    assert(lava_item_contacts==3);
+
+    lava_player_map(2);cave_set_feat(10,11,FEAT_BRIDGE_LAVA_H);lava_step(6);
+    assert(p_ptr->px==11 && p_ptr->chp==500 && !lava_item_contacts);
+    player_lava_begin_action();p_ptr->energy_use=100;player_lava_end_action();
+    assert(!lava_item_contacts && !lava_hits);
 
     /* Cancel either danger prompt without spending an action. */
     lava_player_map(1);picker_choice=1;lava_step(6);
     assert(p_ptr->px==10 && !p_ptr->energy_use && !lava_hits);
+    assert(!lava_item_contacts);
     lava_player_map(1);p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
     p_ptr->previous_action[1]=6;lava_step(6);
     assert(p_ptr->leaping && p_ptr->px==11 && p_ptr->chp==460 && lava_hits==1);
     player_lava_begin_action();continue_leap();player_lava_end_action();
     assert(!p_ptr->leaping && p_ptr->px==12 && p_ptr->chp==460 && lava_hits==1);
+    assert(!lava_item_contacts);
     /* A newly blocked landing is ground contact, immediately lethal. */
     lava_player_map(1);p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
     p_ptr->previous_action[1]=6;lava_step(6);
@@ -78,6 +95,7 @@ static void lava_player_tests(void) {
     cave_set_feat(10,12,FEAT_WALL_EXTRA);
     player_lava_begin_action();continue_leap();player_lava_end_action();
     assert(!p_ptr->is_dead && p_ptr->chp==446 && lava_hits==2);
+    assert(lava_item_contacts==1); /* Only the grounded, blocked landing. */
     /* Knockback cancels airborne protection before entering the lava. */
     lava_player_map(1);p_ptr->leaping=true;
     assert(knock_back(10,9,10,10));
@@ -130,7 +148,7 @@ def main():
         if args[0].endswith("cc.exe"):
             args = [*args, "-Wl,--wrap=take_hit", "-Wl,--wrap=monster_death",
                     "-Wl,--wrap=get_check_near"]
-            args += ["-Wl,--wrap=msg_format"]
+            args += ["-Wl,--wrap=msg_format", "-Wl,--wrap=fire_dam_mixed"]
         return original_run(args, *pos, **kw)
 
     water.subprocess.run = run_with_isolated_death

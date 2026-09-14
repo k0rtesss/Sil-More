@@ -1183,8 +1183,14 @@ static void update_view_aux(bool generation_preview)
         /* Get grid info */
         info = fast_cave_info[g];
 
-        /* Was not "CAVE_SEEN", is now "CAVE_SEEN" */
-        if ((info & (CAVE_SEEN)) && !(info & (CAVE_TEMP)))
+        /* Notice newly seen grids, and revisit submerged objects as the
+         * player's distance or Perception changes within an already lit area.
+         * Redraw both inside and outside detection range to erase old icons. */
+        if ((info & (CAVE_SEEN))
+            && (!(info & (CAVE_TEMP))
+                || (cave_o_idx[GRID_Y(g)][GRID_X(g)]
+                    && (cave_feat[GRID_Y(g)][GRID_X(g)] == FEAT_WATER
+                        || cave_feat[GRID_Y(g)][GRID_X(g)] == FEAT_DEEP_WATER))))
         {
             int y, x;
 

@@ -38,6 +38,10 @@ void player_poison_terrain_exposure(bool airborne)
     if (player_action_active)
         player_action_exposed = true;
     pois_dam_pure(POISON_TERRAIN_DOSE, 1, false);
+    /* Poison resistance protects the body, not equipment from the acid in
+     * the seep. Item immunity and protection use the ordinary acid rules. */
+    acid_damage_items(POISON_TERRAIN_DOSE, POISON_TERRAIN_DOSE,
+        POISON_TERRAIN_DOSE, POISON_TERRAIN_DOSE);
 }
 
 void player_poison_terrain_end_action(void)

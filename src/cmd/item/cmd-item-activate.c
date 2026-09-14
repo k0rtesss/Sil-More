@@ -4,6 +4,64 @@
 #include "object/object-internal.h"
 #include "object/object-ui-select.h"
 
+/* Utility and restorative items remain usable underwater. Offensive effects
+ * are checked before Pack preparation, targeting, charges, or voice costs. */
+static bool reject_submerged_attack_item(const object_type* o_ptr)
+{
+    bool attack = false;
+    if (!player_submerged_in_deep_water() || !o_ptr)
+        return false;
+    if (o_ptr->tval == TV_HORN)
+        attack = o_ptr->sval != SV_HORN_WARNING;
+    else if (o_ptr->tval == TV_STAFF)
+        attack = o_ptr->sval == SV_STAFF_LIGHT
+            || o_ptr->sval == SV_STAFF_SLUMBER
+            || o_ptr->sval == SV_STAFF_MAJESTY
+            || o_ptr->sval == SV_STAFF_DISMAY;
+    else if (artefact_p(o_ptr))
+    {
+        switch (a_info[o_ptr->name1].activation)
+        {
+        case ACT_ILLUMINATION:
+        case ACT_DISP_EVIL:
+        case ACT_FIRE3:
+        case ACT_FROST5:
+        case ACT_ELEC2:
+        case ACT_BIZZARE:
+        case ACT_STAR_BALL:
+        case ACT_BANISHMENT:
+        case ACT_SLEEP:
+        case ACT_MISSILE:
+        case ACT_FIRE1:
+        case ACT_FROST1:
+        case ACT_LIGHTNING_BOLT:
+        case ACT_ACID1:
+        case ACT_ARROW:
+        case ACT_STINKING_CLOUD:
+        case ACT_FROST2:
+        case ACT_FROST4:
+        case ACT_FROST3:
+        case ACT_FIRE2:
+        case ACT_DRAIN_LIFE2:
+        case ACT_MASS_BANISHMENT:
+        case ACT_TELE_AWAY:
+        case ACT_CONFUSE:
+        case ACT_DRAIN_LIFE1:
+        case ACT_STARLIGHT:
+        case ACT_MANA_BOLT:
+            attack = true;
+            break;
+        default:
+            break;
+        }
+    }
+    if (!attack)
+        return false;
+    msg_print("You cannot attack while submerged in deep water.");
+    p_ptr->energy_use = 0;
+    return true;
+}
+
 static bool reject_broken_item_use(const object_type* o_ptr)
 {
     if (!object_has_broken_prefix(o_ptr))
@@ -865,6 +923,9 @@ void do_cmd_play_instrument(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    if (reject_submerged_attack_item(o_ptr))
+        return;
+
     if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_PLAY,
             carried_inventory_index(o_ptr), 0, false, o_ptr))
@@ -964,6 +1025,9 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
         msg_print("You can only activate a staff.");
         return;
     }
+
+    if (reject_submerged_attack_item(o_ptr))
+        return;
 
     if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE_STAFF, item, 0,
@@ -1253,6 +1317,9 @@ void do_cmd_activate_by_index(int item)
     }
 
     if (!o_ptr->k_idx)
+        return;
+
+    if (reject_submerged_attack_item(o_ptr))
         return;
 
     if (!tutorial_game_action_allowed("use-item", o_ptr)) return;

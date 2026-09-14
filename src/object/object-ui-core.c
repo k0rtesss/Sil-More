@@ -1212,7 +1212,7 @@ int scan_floor(int* items, int size, int y, int x, int mode)
             continue;
 
         /* Marked items only */
-        if ((mode & 0x02) && !o_ptr->marked)
+        if ((mode & 0x02) && !object_is_visible(o_ptr))
             continue;
 
         /* Accept this item */

@@ -21,6 +21,7 @@ def gallery():
         "#": (35, 40, 48), ".": (202, 193, 167), "~": (45, 132, 206),
         "C": (6, 9, 15), "L": (249, 85, 33), "P": (94, 177, 62),
         "I": (147, 224, 241), "r": (235, 194, 71), "!": (237, 237, 237),
+        "D": (9, 29, 94), "B": (140, 105, 65),
     }
     cards = []
     for path in sorted(OUT.glob("map-*.txt")):
@@ -71,6 +72,7 @@ bool test_themes_parse(const char* text,size_t size) {
                     "-ffunction-sections", "-fdata-sections", "@CMakeFiles/sil-more.dir/includes_C.rsp",
                     str(ROOT / "scripts/tests/terrain-generation-test.c"),
                     str(ROOT / "src/level-generation/level-generation-terrain-access.c"),
+                    str(ROOT / "src/cave/cave-bridge.c"),
                     str(themes), str(rubble), str(ROOT / "build-standard/_deps/SDL/libSDL3.dll.a"),
                     "-Wl,--gc-sections", "-o", str(exe)],
                    cwd=ROOT / "build-standard", env=env, check=True)

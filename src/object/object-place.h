@@ -7,6 +7,7 @@
 #include "object-make.h"
 
 s16b floor_carry(int y, int x, object_type* j_ptr);
+bool object_terrain_allows_generation(int feat, int tval);
 s16b drop_near(object_type* j_ptr, int chance, int y, int x);
 void acquirement(int y1, int x1, int num, drop_quality quality);
 void place_object(int y, int x, drop_quality quality, int droptype,

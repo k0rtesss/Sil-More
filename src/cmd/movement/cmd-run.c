@@ -1182,7 +1182,7 @@ static bool run_test(void)
              o_ptr = get_next_object(o_ptr))
         {
             /* Visible object */
-            if (o_ptr->marked && !object_is_searched_skeleton(o_ptr))
+            if (object_is_visible(o_ptr) && !object_is_searched_skeleton(o_ptr))
                 return (true);
         }
 
@@ -1204,6 +1204,7 @@ static bool run_test(void)
             case FEAT_BRIDGE_LAVA_H: case FEAT_BRIDGE_LAVA_V:
             case FEAT_BRIDGE_POISON_H: case FEAT_BRIDGE_POISON_V:
             case FEAT_BRIDGE_ICE_H: case FEAT_BRIDGE_ICE_V:
+            case FEAT_BRIDGE_DEEP_WATER_H: case FEAT_BRIDGE_DEEP_WATER_V:
 
             /* Secret doors */
             case FEAT_SECRET:

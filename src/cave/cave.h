@@ -37,6 +37,7 @@ void update_flow(int cy, int cx, int which_flow);
 void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player);
 void update_smell(void);
 int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
+bool player_submerged_in_deep_water(void);
 void player_water_movement(int from_feat, int to_feat);
 void player_water_displaced(int from_feat, int to_feat);
 int player_lava_damage(bool airborne);

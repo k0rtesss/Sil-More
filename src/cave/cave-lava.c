@@ -66,8 +66,18 @@ void player_lava_exposure(bool airborne)
     {
         msg_format(airborne ? "The heat of the lava burns you for %d damage!"
                             : "The lava burns you for %d damage!", damage);
-        take_hit(damage, "molten lava");
-        ident_resist(TR2_RES_FIRE);
+        if (airborne)
+        {
+            take_hit(damage, "molten lava");
+            ident_resist(TR2_RES_FIRE);
+        }
+        else
+        {
+            /* Submerged possessions receive the same fire damage rules as
+             * an attack. A successful leap only exposes the player to heat. */
+            fire_dam_mixed(LAVA_RAW_DAMAGE, LAVA_RAW_DAMAGE, LAVA_RAW_DAMAGE,
+                damage, "molten lava");
+        }
     }
 }
 

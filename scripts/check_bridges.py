@@ -37,7 +37,7 @@ void __wrap_object_desc(char* buf,size_t size,const object_type* object,int pref
 }
 static errr dummy_xtra(int n,int v) {(void)n;(void)v;return 0;}
 static term test_term;
-static const int materials[]={FEAT_WATER,FEAT_CHASM,FEAT_LAVA,FEAT_POISON,FEAT_ICE};
+static const int materials[]={FEAT_WATER,FEAT_CHASM,FEAT_LAVA,FEAT_POISON,FEAT_ICE,FEAT_DEEP_WATER};
 
 static void bridge_map(void) {
     character_dungeon=false;
@@ -61,7 +61,7 @@ static void bridge_map(void) {
 }
 
 static void bridge_rules(void) {
-    for(int material=0;material<5;material++)for(int axis=0;axis<2;axis++) {
+    for(int material=0;material<6;material++)for(int axis=0;axis<2;axis++) {
         bridge_map();int feat=cave_bridge_feature(materials[material],axis);
         assert(feat==FEAT_BRIDGE_HEAD+material*2+axis);
         assert(cave_bridge_underlay(feat)==materials[material]);
@@ -111,7 +111,7 @@ static void bridge_rules(void) {
     }
     assert(cave_bridge_feature(FEAT_FLOOR,false)==FEAT_NONE);
     assert(!cave_feat_is_bridge(FEAT_POISON)&&!cave_feat_is_bridge(FEAT_BRIDGE_TAIL+1));
-    puts("All10 bridge types: player/monster movement, wait, scent, dry contact, drops and object visibility PASS");
+    puts("All12 bridge types: player/monster movement, wait, scent, dry contact, drops and object visibility PASS");
 }
 
 /* Insert the production feature RLE blocks, including their real reader guards. */
@@ -140,7 +140,7 @@ static void bridge_save(void) {
     fixture_sf_extra=VERSION_EXTRA+1;assert(!bridge_savefile_version_supported());
     bridge_map();p_ptr->cur_map_hgt=32;p_ptr->cur_map_wid=64;
     for(int y=0;y<32;y++)for(int x=0;x<64;x++)
-        cave_set_feat(y,x,y<8?FEAT_BRIDGE_WATER_H:FEAT_BRIDGE_HEAD+(y+x)%10);
+        cave_set_feat(y,x,y<8?FEAT_BRIDGE_WATER_H:FEAT_BRIDGE_HEAD+(y+x)%12);
     static byte original[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     memcpy(original,cave_feat,sizeof(original));written=read_pos=0;
     write_features();assert(written>0);
@@ -177,8 +177,8 @@ static uint64_t render_cell(int feat,const char* path) {
 
 static void bridge_pixels(const char* out) {
     bridge_map();p_ptr->py=p_ptr->px=25;
-    uint64_t floor=render_cell(FEAT_FLOOR,NULL),hashes[10];
-    for(int i=0;i<5;i++) {
+    uint64_t floor=render_cell(FEAT_FLOOR,NULL),hashes[12];
+    for(int i=0;i<6;i++) {
         uint64_t underlay=render_cell(materials[i],NULL);
         for(int axis=0;axis<2;axis++) {
             hashes[i*2+axis]=render_cell(cave_bridge_feature(materials[i],axis),NULL);
@@ -186,7 +186,7 @@ static void bridge_pixels(const char* out) {
         }
         assert(hashes[i*2]!=hashes[i*2+1]);
     }
-    for(int i=0;i<10;i++)for(int j=i+1;j<10;j++)assert(hashes[i]!=hashes[j]);
+    for(int i=0;i<12;i++)for(int j=i+1;j<12;j++)assert(hashes[i]!=hashes[j]);
     p_ptr->blind=true;assert(render_cell(FEAT_BRIDGE_WATER_H,NULL)!=hashes[0]);p_ptr->blind=false;
     p_ptr->rage=true;cave_info[10][10]=CAVE_MARK;
     assert(render_cell(FEAT_BRIDGE_WATER_H,NULL)==render_cell(FEAT_NONE,NULL));p_ptr->rage=false;
@@ -197,8 +197,8 @@ static void bridge_pixels(const char* out) {
         map_info(10,10,&a,&c,&ta,&tc);assert(c==(axis?'|':'='));
     }
     use_graphics=GRAPHICS_MICROCHASM;
-    p_ptr->cur_map_hgt=10;p_ptr->cur_map_wid=35;
-    for(int y=0;y<10;y++)for(int x=0;x<35;x++) {
+    p_ptr->cur_map_hgt=10;p_ptr->cur_map_wid=42;
+    for(int y=0;y<10;y++)for(int x=0;x<42;x++) {
         int column=x/7,local=x%7,feat=FEAT_FLOOR;
         if(local>=1&&local<=5&&((y>=1&&y<=3)||(y>=5&&y<=8)))feat=materials[column];
         if(y==2&&local>=1&&local<=5)feat=cave_bridge_feature(materials[column],false);
@@ -207,8 +207,8 @@ static void bridge_pixels(const char* out) {
         cave_m_idx[y][x]=cave_o_idx[y][x]=0;
     }
     SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
-        SDL_TEXTUREACCESS_TARGET,35*48,10*48);assert(target);SDL_SetRenderTarget(g_state.renderer,target);
-    for(int y=0;y<10;y++)for(int x=0;x<35;x++) {
+        SDL_TEXTUREACCESS_TARGET,42*48,10*48);assert(target);SDL_SetRenderTarget(g_state.renderer,target);
+    for(int y=0;y<10;y++)for(int x=0;x<42;x++) {
         map_info(y,x,&a,&c,&ta,&tc);SDL_FRect dst={x*48,y*48,48,48};
         sdl_draw_map_tile_layers_at(y,x,a,c,ta,tc,&dst);
     }
@@ -216,7 +216,7 @@ static void bridge_pixels(const char* out) {
     char path[1024];snprintf(path,sizeof(path),"%s/bridge-materials.png",out);
     assert(IMG_SavePNG(surface,path));SDL_DestroySurface(surface);
     SDL_SetRenderTarget(g_state.renderer,NULL);SDL_DestroyTexture(target);
-    puts("Production SDL pixels:10 distinct oriented decks, underlay identity, dim/hidden views and ASCII identity PASS");
+    puts("Production SDL pixels:12 distinct oriented decks, underlay identity, dim/hidden views and ASCII identity PASS");
 }
 
 int main(int argc,char** argv) {
@@ -231,7 +231,7 @@ int main(int argc,char** argv) {
     BRIDGE_GRID(cave_feat);BRIDGE_GRID(cave_info);BRIDGE_GRID(cave_m_idx);BRIDGE_GRID(cave_o_idx);BRIDGE_GRID(cave_light);
     BRIDGE_GRID(cave_color);BRIDGE_GRID(cave_rewired);BRIDGE_GRID(cave_when);BRIDGE_GRID(cave_natural);
     #undef BRIDGE_GRID
-    z_info=calloc(1,sizeof(*z_info));z_info->f_max=98;z_info->o_max=64;z_info->style_max=1;
+    z_info=calloc(1,sizeof(*z_info));z_info->f_max=102;z_info->o_max=64;z_info->style_max=1;
     f_info=calloc(256,sizeof(*f_info));style_info=calloc(1,sizeof(*style_info));
     style_info[0].name=1;style_info[0].wall_col=4;style_info[0].floor_col=1;
     mon_list=calloc(64,sizeof(*mon_list));r_info=calloc(64,sizeof(*r_info));l_list=calloc(64,sizeof(*l_list));
@@ -277,14 +277,14 @@ def main():
     for line in (ROOT/"lib/edit/terrain.txt").read_text().splitlines():
         if line.startswith("N:"):
             _,serial,name=line.split(":",2);feature=int(serial)
-            if feature>=88:bridges[feature]=name
+            if 88 <= feature <= 99:bridges[feature]=name
         elif line.startswith("T:"):
             _,row,col=line.split(":")
             feature_init.append(f'f_info[{feature}].x_attr=TILE_FLAG|{row};f_info[{feature}].x_char=TILE_FLAG|{col};')
-        elif line.startswith("G:") and 88<=feature<=97:
+        elif line.startswith("G:") and 88<=feature<=99:
             _,symbol,color=line.split(":");feature_init.append(f"f_info[{feature}].d_char='{symbol}';f_info[{feature}].d_attr=TERM_UMBER;")
-    assert set(bridges)==set(range(88,98))
-    assert "M:F:98" in (ROOT/"lib/edit/limits.txt").read_text()
+    assert set(bridges)==set(range(88,100))
+    assert "M:F:102" in (ROOT/"lib/edit/limits.txt").read_text()
     source=OUT/"check.c"
     source.write_text(HARNESS.replace("@WRITE_RLE@",write_rle).replace("@READ_RLE@",read_rle)
         .replace("@READ_GUARDS@",guards).replace("@VERSION_POLICY@",version_policy)
@@ -292,8 +292,9 @@ def main():
     cmake=BUILD/"CMakeFiles/sil-more.dir"
     objects=shlex.split((cmake/"objects1.rsp").read_text())
     rsp=OUT/"objects.rsp";rsp.write_text("\n".join('"'+p+'"' for p in objects if not p.endswith('/src/main.c.obj')))
-    env=os.environ.copy();env['PATH']=';'.join(['C:/msys64/mingw64/bin','C:/msys64/usr/bin',
-        *[str(BUILD/'_deps'/x) for x in ('SDL','SDL_ttf','SDL_image','SDL_mixer')],env['PATH']])
+    env=os.environ.copy();env['PATH']=';'.join([
+        *[str(BUILD/'_deps'/x) for x in ('SDL','SDL_ttf','SDL_image','SDL_mixer')],
+        'C:/msys64/mingw64/bin','C:/msys64/usr/bin',env['PATH']])
     env['SDL_VIDEO_DRIVER']='dummy';env['SDL_RENDER_DRIVER']='software'
     symbols=['handle_stuff','perceive','check_mandos_quest_interaction','check_niena_quest_completion',
         'trigger_chasm_sanctum_ambush_if_needed','update_mon','msg_print','message_flush','object_desc']

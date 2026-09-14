@@ -2,7 +2,7 @@
 #include "cave/cave-bridge.h"
 
 static const byte bridge_materials[] = {
-    FEAT_WATER, FEAT_CHASM, FEAT_LAVA, FEAT_POISON, FEAT_ICE
+    FEAT_WATER, FEAT_CHASM, FEAT_LAVA, FEAT_POISON, FEAT_ICE, FEAT_DEEP_WATER
 };
 
 bool cave_feat_is_bridge(int feat)
@@ -22,7 +22,7 @@ bool cave_bridge_vertical(int feat)
 
 int cave_bridge_feature(int underlay, bool vertical)
 {
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < (int)N_ELEMENTS(bridge_materials); i++)
         if (bridge_materials[i] == underlay) return FEAT_BRIDGE_HEAD + 2 * i + vertical;
     return FEAT_NONE;
 }

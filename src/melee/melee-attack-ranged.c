@@ -42,6 +42,10 @@ bool monster_ranged_attack_legal(const monster_type* m_ptr, int attack)
     if (!m_ptr || !m_ptr->r_idx || bit < 0 || bit > 24 || bit == 21 || bit == 22)
         return false;
     r_ptr = &r_info[m_ptr->r_idx];
+    if (cave_feat[m_ptr->fy][m_ptr->fx] == FEAT_DEEP_WATER
+        && !(r_ptr->flags2 & RF2_FLYING)
+        && monster_ranged_targets_player(attack))
+        return false;
     if (!(r_ptr->flags4 & (1UL << bit)) || m_ptr->confused || p_ptr->truce
         || m_ptr->smite_recovery || m_ptr->skip_this_turn || m_ptr->skip_next_turn
         || spell_info_RF4[bit][COL_SPELL_MANA_COST] > m_ptr->mana)

@@ -636,3 +636,23 @@ T:0:1
 N:97:stone bridge over ice
 G:|:W
 T:0:1
+
+# Append IDs to preserve the terrain feature byte in existing saves.
+N:98:wooden bridge over deep water
+G:=:u
+T:0:1
+
+N:99:wooden bridge over deep water
+G:|:u
+T:0:1
+
+# Deep blue water slows movement and prevents submerged attacks; SDL tints the surface.
+N:100:deep water
+G:~:b
+T:0:1
+
+
+# A triggered reservoir floods outward over the next two player actions.
+N:101:flooding trap
+G:^:b
+T:3:13

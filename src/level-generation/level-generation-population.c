@@ -1136,7 +1136,13 @@ int alloc_objects_from_plan(
 
             if (!in_bounds_fully(y, x))
                 continue;
-            if (!partition_population_naked_bold(plan->mode, y, x))
+            /* Water participates in the normal loot roll, but only gems can
+             * survive the placement filter. Keep monster spawning on land. */
+            if (!partition_population_naked_bold(plan->mode, y, x)
+                && !((cave_feat[y][x] == FEAT_WATER
+                         || cave_feat[y][x] == FEAT_DEEP_WATER)
+                    && !cave_o_idx[y][x] && !cave_m_idx[y][x]
+                    && !generation_escape_tunnel_bold(y, x)))
                 continue;
             if (level_partition_index_for_point(y, x) != plan->pi)
                 continue;

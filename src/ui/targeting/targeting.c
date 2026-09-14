@@ -673,7 +673,8 @@ static bool determine_location_is_interesting(int y, int x)
     /* Check for objects first (only shown when on floors, not when in rubble) */
     /* This is checked BEFORE monsters to prevent showing unmarked objects under detected monsters */
     if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT)
-        || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_ICE
+        || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER
+        || cave_feat[y][x] == FEAT_ICE
         || cave_feat[y][x] == FEAT_POISON || FEAT_IS_BRIDGE(cave_feat[y][x]))
     {
         /* Scan all objects in the grid */
@@ -681,7 +682,7 @@ static bool determine_location_is_interesting(int y, int x)
              o_ptr = get_next_object(o_ptr))
         {
             /* Memorized object - this makes the location interesting */
-            if (o_ptr->marked && !object_is_searched_skeleton(o_ptr))
+            if (object_is_visible(o_ptr) && !object_is_searched_skeleton(o_ptr))
                 return (true);
         }
     }
@@ -982,7 +983,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                             && (cave_floorlike_bold(y, x)
                                 || (cave_feat[y][x] == FEAT_SUNLIGHT))
                             && cave_o_idx[y][x]
-                            && (&o_list[cave_o_idx[y][x]])->marked)
+                            && object_is_visible(&o_list[cave_o_idx[y][x]]))
                         {
                             show_more = true;
                         }
@@ -1147,10 +1148,12 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                 continue;
 
             /* Objects (only shown when on floors, not when in rubble) */
-            if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT))
+            if (cave_floorlike_bold(y, x) || cave_feat[y][x] == FEAT_SUNLIGHT
+                || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER
+                || cave_feat[y][x] == FEAT_ICE || FEAT_IS_BRIDGE(cave_feat[y][x]))
             {
                 /* Describe it */
-                if (o_ptr->marked && grid_info_is_available(y, x))
+                if (object_is_visible(o_ptr) && grid_info_is_available(y, x))
                 {
                     char o_name[80];
 
@@ -1227,8 +1230,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                 name = "unknown square";
 
             /* Note a trap the player has rewired to catch monsters */
-            else if (cave_rewired[y][x] && (feat >= FEAT_TRAP_HEAD)
-                && (feat <= FEAT_TRAP_TAIL))
+            else if (cave_rewired[y][x] && FEAT_IS_TRAP(feat))
             {
                 strnfmt(name_buf, sizeof(name_buf), "%s (rewired)", name);
                 name = name_buf;
@@ -1260,6 +1262,11 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             {
                 s3 = "";
                 name = "shallow water (move 150%, splash -3 Stealth, no scent)";
+            }
+            else if (feat == FEAT_DEEP_WATER)
+            {
+                s3 = "";
+                name = "deep water (move 400%; cannot attack while submerged)";
             }
             else if (feat == FEAT_ICE)
             {
@@ -1401,7 +1408,7 @@ static int draw_path(
         }
 
         /* Known objects are yellow. */
-        else if (cave_o_idx[y][x] && o_list[cave_o_idx[y][x]].marked)
+        else if (cave_o_idx[y][x] && object_is_visible(&o_list[cave_o_idx[y][x]]))
         {
             colour = TERM_YELLOW;
         }

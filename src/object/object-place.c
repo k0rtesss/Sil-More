@@ -3,11 +3,37 @@
 #include "angband.h"
 #include "externs.h"
 #include "object/object-place.h"
+#include "object/object-knowledge.h"
 #include "log/log.h"
 
+#define FLOOD_TRAP_ACID_CHANCE 20 /* One in twenty on acid-enabled depths. */
+
+/* Existing objects can be flooded, but new liquid spawns are gems in water. */
+bool object_terrain_allows_generation(int feat, int tval)
+{
+    if (feat == FEAT_LAVA || feat == FEAT_POISON)
+        return false;
+    if (feat == FEAT_WATER || feat == FEAT_DEEP_WATER)
+        return tval == TV_GEM;
+    return true;
+}
+
+/* Drops use dry ground, ice or bridges; gems can settle in either water depth. */
+static bool object_drop_grid(int feat, int tval)
+{
+    return feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT || feat == FEAT_ICE
+        || FEAT_IS_BRIDGE(feat)
+        || ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER) && tval == TV_GEM);
+}
 
 s16b floor_carry(int y, int x, object_type* j_ptr)
 {
+    if (!in_bounds(y, x))
+        return 0;
+    if (!character_dungeon
+        && !object_terrain_allows_generation(cave_feat[y][x], j_ptr->tval))
+        return 0;
+
     int n = 0;
     bool under_player = (cave_m_idx[y][x] < 0);
 
@@ -32,7 +58,7 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
             /* Combine the items */
             object_absorb(o_ptr, j_ptr);
 
-            if (under_player)
+            if (under_player && object_can_see_floor(y, x))
             {
                 o_ptr->marked = true;
                 lite_spot(y, x);
@@ -86,7 +112,10 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
         /* Link the floor to the object */
         cave_o_idx[y][x] = o_idx;
 
-        if (under_player)
+        /* A known item can become submerged when it is put down. */
+        if (!object_can_see_floor(y, x))
+            o_ptr->marked = false;
+        if (under_player && object_can_see_floor(y, x))
             o_ptr->marked = true;
 
         /* Notice */
@@ -136,7 +165,9 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
     const bool is_silmaril = (j_ptr->tval == TV_LIGHT) && (j_ptr->sval == SV_LIGHT_SILMARIL);
     const bool impact_is_floor =
         (cave_feat[y][x] == FEAT_FLOOR) || (cave_feat[y][x] == FEAT_SUNLIGHT)
-        || (cave_feat[y][x] == FEAT_WATER) || (cave_feat[y][x] == FEAT_ICE)
+        || (cave_feat[y][x] == FEAT_WATER)
+        || (cave_feat[y][x] == FEAT_DEEP_WATER)
+        || (cave_feat[y][x] == FEAT_ICE)
         || FEAT_IS_BRIDGE(cave_feat[y][x]);
     const bool force_place = artefact_p(j_ptr) || is_silmaril || j_ptr->pickup;
     const bool try_hard_place = force_place || impact_is_floor;
@@ -221,11 +252,7 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
             ////if ((ty != ty2) || (tx != tx2)) continue;
 
             /* Require floor space */
-            if (cave_feat[ty][tx] != FEAT_FLOOR
-                && cave_feat[ty][tx] != FEAT_SUNLIGHT
-                && cave_feat[ty][tx] != FEAT_WATER
-                && cave_feat[ty][tx] != FEAT_ICE
-                && !FEAT_IS_BRIDGE(cave_feat[ty][tx]))
+            if (!object_drop_grid(cave_feat[ty][tx], j_ptr->tval))
                 continue;
 
             /* Don't put things under peaceful monsters */
@@ -326,10 +353,7 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
             continue;
 
         /* Require floor space */
-        if (cave_feat[ty][tx] != FEAT_FLOOR && cave_feat[ty][tx] != FEAT_SUNLIGHT
-            && cave_feat[ty][tx] != FEAT_WATER
-            && cave_feat[ty][tx] != FEAT_ICE
-                && !FEAT_IS_BRIDGE(cave_feat[ty][tx]))
+        if (!object_drop_grid(cave_feat[ty][tx], j_ptr->tval))
             continue;
 
         /* Don't put things under peaceful monsters */
@@ -358,10 +382,7 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
             continue;
 
         /* Require floor space */
-        if (cave_feat[by][bx] != FEAT_FLOOR && cave_feat[by][bx] != FEAT_SUNLIGHT
-            && cave_feat[by][bx] != FEAT_WATER
-            && cave_feat[by][bx] != FEAT_ICE
-                && !FEAT_IS_BRIDGE(cave_feat[by][bx]))
+        if (!object_drop_grid(cave_feat[by][bx], j_ptr->tval))
             continue;
 
         /* Okay */
@@ -494,7 +515,11 @@ void place_object(int y, int x, drop_quality quality, int droptype,
         return;
 
     /* Hack -- clean floor space */
-    if (!cave_clean_bold(y, x))
+    if (!cave_clean_bold(y, x)
+        && !(cave_feat[y][x] == FEAT_DEEP_WATER && !cave_o_idx[y][x]))
+        return;
+
+    if (!object_terrain_allows_generation(cave_feat[y][x], TV_GEM))
         return;
 
     /* Get local object */
@@ -509,7 +534,8 @@ void place_object(int y, int x, drop_quality quality, int droptype,
         continue;
 
     /* Give it to the floor */
-    if (!floor_carry(y, x, i_ptr))
+    if (!object_terrain_allows_generation(cave_feat[y][x], i_ptr->tval)
+        || !floor_carry(y, x, i_ptr))
     {
         /* Hack -- Preserve artefacts */
         a_info[i_ptr->name1].cur_num = 0;
@@ -544,7 +570,11 @@ void place_trap(int y, int x)
         if (prefer_web && (rand_int(100) < 45))
             feat = FEAT_TRAP_WEB;
         else
-            feat = rand_range(FEAT_TRAP_HEAD, FEAT_TRAP_TAIL);
+        {
+            feat = rand_range(FEAT_TRAP_HEAD, FEAT_TRAP_TAIL + 1);
+            if (feat == FEAT_TRAP_TAIL + 1)
+                feat = FEAT_TRAP_FLOOD;
+        }
 
         switch (feat)
         {
@@ -672,6 +702,16 @@ void place_trap(int y, int x)
             // 1-
             if (p_ptr->depth < 1)
                 continue;
+            break;
+        }
+        case FEAT_TRAP_FLOOD:
+        {
+            if (p_ptr->depth < 1 || FEAT_IS_BRIDGE(cave_feat[y][x]))
+                continue;
+            /* Acid traps are available from depth one onward. A few of the
+             * otherwise ordinary flooding traps become acid instead. */
+            if (one_in_(FLOOD_TRAP_ACID_CHANCE))
+                feat = FEAT_TRAP_ACID;
             break;
         }
         case FEAT_TRAP_IMPRISONMENT:

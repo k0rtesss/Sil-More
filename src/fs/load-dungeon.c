@@ -1,6 +1,7 @@
 /* File: fs/load-dungeon.c -- carved from load.c (shares state via fs/load-internal.h) */
 
 #include "angband.h"
+#include "cave/cave-flood.h"
 #include "monster/monster-senses.h"
 #include "cave/cave-fixtures.h"
 #include "blitz.h"
@@ -23,6 +24,40 @@
  * Read one dungeon RLE pair.  The low-level reader returns zero at EOF, so
  * verify that both bytes actually advanced the stream before inspecting them.
  */
+static errr rd_floods(void)
+{
+    u16b magic = 0, count = 0;
+    u32b start_offset;
+    cave_flood_clear();
+    if (!savefile_version_at_least(0, 9, 8, 11))
+        return 0;
+    start_offset = load_byte_offset;
+    rd_u16b(&magic);
+    rd_u16b(&count);
+    if (load_byte_offset - start_offset != 4 || magic != 0xF100
+        || count > (p_ptr->cur_map_hgt - 2) * (p_ptr->cur_map_wid - 2))
+    {
+        note("Invalid flooding trap header.");
+        return -1;
+    }
+    for (int i = 0; i < count; i++)
+    {
+        byte y = 0, x = 0, stage = 0;
+        start_offset = load_byte_offset;
+        rd_byte(&y);
+        rd_byte(&x);
+        rd_byte(&stage);
+        if (load_byte_offset - start_offset != 3
+            || !cave_flood_restore(y, x, stage))
+        {
+            cave_flood_clear();
+            note("Invalid flooding trap event.");
+            return -1;
+        }
+    }
+    return 0;
+}
+
 static bool read_dungeon_rle_pair(byte* count, byte* value, cptr stream_name)
 {
     u32b start_offset = load_byte_offset;
@@ -948,6 +983,9 @@ errr rd_dungeon(void)
                 scent_restore_cell(y, x, age);
             }
     }
+
+    if (rd_floods())
+        return -1;
 
     /*** Success ***/
 

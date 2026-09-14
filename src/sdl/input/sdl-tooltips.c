@@ -208,7 +208,8 @@ static bool sdl_mouse_grid_can_show_objects(int y, int x)
     int feat = cave_feat[y][x];
 
     return cave_floorlike_bold(y, x) || feat == FEAT_SUNLIGHT
-        || feat == FEAT_WATER || feat == FEAT_LAVA || feat == FEAT_ICE
+        || feat == FEAT_WATER || feat == FEAT_DEEP_WATER
+        || feat == FEAT_LAVA || feat == FEAT_ICE
         || feat == FEAT_POISON;
 }
 
@@ -222,7 +223,7 @@ bool sdl_mouse_grid_has_marked_object(int y, int x, object_type** out_obj)
         return false;
 
     o_idx = cave_o_idx[y][x];
-    if (!o_idx || !o_list[o_idx].marked)
+    if (!o_idx || !object_is_visible(&o_list[o_idx]))
         return false;
 
     if (out_obj)
@@ -437,8 +438,7 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         return false;
     if (!sdl_mouse_feature_known_for_action(y, x))
         return false;
-    if ((cave_feat[y][x] >= FEAT_TRAP_HEAD)
-        && (cave_feat[y][x] <= FEAT_TRAP_TAIL)
+    if (FEAT_IS_TRAP(cave_feat[y][x])
         && (cave_info[y][x] & CAVE_HIDDEN))
     {
         return false;
@@ -448,7 +448,7 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
     if (feat == FEAT_NONE || feat == FEAT_FLOOR || feat == FEAT_RAGE_FLOOR)
         return false;
 
-    if ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL)
+    if (FEAT_IS_TRAP(feat)
         && (cave_info[y][x] & CAVE_HIDDEN))
     {
         return false;
@@ -470,6 +470,8 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         name = "patch of sunlight";
     else if (feat == FEAT_WATER)
         name = "shallow water: movement 150%; splash -3 Stealth; no scent trail; cold freezes it";
+    else if (feat == FEAT_DEEP_WATER)
+        name = "deep water: movement 400%; cannot attack while submerged; bridges provide dry footing";
     else if (feat == FEAT_ICE)
         name = "solid ice: grounded -2 attack and -2 Evasion; normal movement; fire melts it";
     else if (feat == FEAT_POISON)
@@ -501,7 +503,7 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         return false;
 
     /* A trap the player has rewired is shown as such. */
-    if ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL)
+    if (FEAT_IS_TRAP(feat)
         && cave_rewired[y][x])
     {
         static char rewired_buf[80];
@@ -605,7 +607,7 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
         {
             char o_name[80];
 
-            if (!o_ptr->k_idx || !o_ptr->marked)
+            if (!o_ptr->k_idx || !object_is_visible(o_ptr))
                 continue;
 
             object_count++;
@@ -3121,7 +3123,7 @@ bool sdl_mouse_grid_has_marked_searched_skeleton(int y, int x,
 
     for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))
     {
-        if (!o_ptr->marked)
+        if (!object_is_visible(o_ptr))
             continue;
         if (!object_is_searched_skeleton(o_ptr))
             continue;

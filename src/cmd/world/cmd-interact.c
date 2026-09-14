@@ -394,7 +394,7 @@ static bool is_trap(int feat)
 {
     bool test_trap = false;
 
-    if ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+    if (FEAT_IS_TRAP(feat))
         test_trap = true;
 
     return (test_trap);
@@ -1317,6 +1317,7 @@ bool trap_disarm_power(int feat, int* power)
     case FEAT_TRAP_ACID:
         p = 1;
         break;
+    case FEAT_TRAP_FLOOD:
     case FEAT_TRAP_IMPRISONMENT:
         p = 4;
         break;
@@ -1406,6 +1407,9 @@ static cptr trap_flavor_text(int feat)
         return "A mass of rock rigged to come crashing down.";
     case FEAT_TRAP_ACID:
         return "A spray of corrosive liquid waits beneath this square.";
+    case FEAT_TRAP_FLOOD:
+        return "A hidden reservoir floods this square, then spreads over your "
+               "next two actions. The centre becomes deep water.";
     case FEAT_TRAP_IMPRISONMENT:
         return "A rune of binding that holds the unwary fast.";
     case FEAT_GLYPH:
@@ -1511,7 +1515,7 @@ bool grid_interact_available(int y, int x)
         object_type* o_ptr = &o_list[cave_o_idx[y][x]];
 
         if ((o_ptr->tval == TV_SKELETON)
-            && !object_is_searched_skeleton(o_ptr) && o_ptr->marked)
+            && !object_is_searched_skeleton(o_ptr) && object_is_visible(o_ptr))
         {
             return true;
         }
@@ -1520,12 +1524,12 @@ bool grid_interact_available(int y, int x)
         for (o_ptr = get_first_object(y, x); o_ptr;
              o_ptr = get_next_object(o_ptr))
         {
-            if (o_ptr->k_idx && o_ptr->marked)
+            if (o_ptr->k_idx && object_is_visible(o_ptr))
                 return false;
         }
     }
 
-    if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA
+    if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
         || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON)
         return true;
 
@@ -1929,6 +1933,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "Ground contact kills immediately without net fire resistance. "
             "One resistance level takes 40 damage on entry and each turn; "
             "two take 30, three take 24. Fire caves remove one level. "
+            "Submerged items can suffer normal fire damage; bridges and "
+            "successful leaps keep items safe. "
             "With Leaping and a run-up, jump a single lava tile to a known bank: "
             "the heat deals damage with one extra resistance level. "
             "Flying monsters take 40 heat damage each turn. Fire-resistant "
@@ -1942,6 +1948,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         SDL_strlcpy(title, "Poisonous seep", sizeof(title));
         SDL_strlcpy(desc,
             "Contact adds 6 poison stacks before resistance and poison protection. "
+            "Its acid can damage submerged items using normal acid rules, "
+            "even with poison resistance. Bridges keep items safe. "
             "Entering or spending another action here applies a dose; entry is "
             "not charged twice in the same action. Poison caves remove one "
             "resistance level. Poison deals one fifth of the remaining stacks "
@@ -1964,6 +1972,18 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "attacks melt ice into shallow water; cold attacks freeze water "
             "back into ice.", sizeof(desc));
         GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_WHITE);
+    }
+
+    /* --- Deep water --- */
+    else if (feat == FEAT_DEEP_WATER)
+    {
+        SDL_strlcpy(title, "Deep water", sizeof(title));
+        SDL_strlcpy(desc,
+            "Swimming through deep water takes four times normal movement "
+            "energy, including entry and exit. You cannot attack while "
+            "submerged. Bridges provide dry footing, and flying creatures "
+            "are unaffected by the water below them.", sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_BLUE);
     }
 
     /* --- Shallow water --- */
@@ -2852,6 +2872,7 @@ bool do_cmd_disarm_aux(int y, int x)
         power = 1;
         break;
     }
+    case FEAT_TRAP_FLOOD:
     case FEAT_TRAP_IMPRISONMENT:
     {
         power = 4;

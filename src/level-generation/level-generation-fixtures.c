@@ -28,7 +28,7 @@ static bool fixture_wall_feature(int feat)
 static bool fixture_source_feature(int feat)
 {
     return feat != FEAT_CHASM && feat != FEAT_RUBBLE
-        && feat != FEAT_WATER && feat != FEAT_ICE
+        && feat != FEAT_WATER && feat != FEAT_DEEP_WATER && feat != FEAT_ICE
         && feat != FEAT_LAVA && feat != FEAT_POISON;
 }
 

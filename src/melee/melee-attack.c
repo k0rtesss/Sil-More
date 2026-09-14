@@ -712,6 +712,10 @@ static bool monster_choose_smite(const monster_type* m_ptr, int blow,
  */
 static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
 {
+    if (cave_feat[m_ptr->fy][m_ptr->fx] == FEAT_DEEP_WATER
+        && !(r_info[m_ptr->r_idx].flags2 & RF2_FLYING))
+        return false;
+
     int m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
 
     monster_race* r_ptr = &r_info[m_ptr->r_idx];

@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 9  /* Disease identity, herb cure and diagnosis knowledge. */
+#define VERSION_EXTRA 11 /* Persist pending flooding traps in dungeon saves. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -1312,7 +1312,10 @@
 #define FEAT_BRIDGE_POISON_V 0x5F
 #define FEAT_BRIDGE_ICE_H 0x60
 #define FEAT_BRIDGE_ICE_V 0x61
-#define FEAT_BRIDGE_TAIL 0x61
+#define FEAT_BRIDGE_DEEP_WATER_H 0x62
+#define FEAT_BRIDGE_DEEP_WATER_V 0x63
+#define FEAT_BRIDGE_TAIL 0x63
+#define FEAT_DEEP_WATER 0x64
 #define FEAT_IS_BRIDGE(F) ((F) >= FEAT_BRIDGE_HEAD && (F) <= FEAT_BRIDGE_TAIL)
 #define POISON_TERRAIN_DOSE 6
 #define ICE_ATTACK_PENALTY 2
@@ -1344,6 +1347,10 @@
 #define FEAT_TRAP_DEADFALL 0x1B
 #define FEAT_TRAP_ACID 0x1C
 #define FEAT_TRAP_IMPRISONMENT 0x1D
+/* Appended feature ID: the original contiguous trap IDs remain stable. */
+#define FEAT_TRAP_FLOOD 0x65
+#define FEAT_IS_TRAP(F) \
+    (((F) >= FEAT_TRAP_HEAD && (F) <= FEAT_TRAP_TAIL) || (F) == FEAT_TRAP_FLOOD)
 
 /* Doors (well, obvious closed doors) */
 #define FEAT_DOOR_HEAD 0x20
@@ -3680,8 +3687,7 @@
  */
 #define cave_floorlike_bold(Y, X)                                              \
     ((cave_feat[Y][X] == FEAT_FLOOR)                                           \
-        || ((cave_feat[Y][X] >= FEAT_TRAP_HEAD)                                \
-            && (cave_feat[Y][X] <= FEAT_TRAP_TAIL)                             \
+        || (FEAT_IS_TRAP(cave_feat[Y][X])                                      \
             && (cave_info[Y][X] & (CAVE_HIDDEN))))
 
 /*
@@ -3704,7 +3710,7 @@
  * Determine if a "legal" grid is a "trap" grid
  */
 #define cave_trap_bold(Y, X)                                                   \
-    ((cave_feat[Y][X] >= FEAT_TRAP_HEAD) && (cave_feat[Y][X] <= FEAT_TRAP_TAIL))
+    FEAT_IS_TRAP(cave_feat[Y][X])
 
 /*
  * Determine if a "legal" grid is a "forge" grid

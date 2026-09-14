@@ -35,6 +35,9 @@ static s16b monsters[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static s16b objects[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 s16b (*cave_m_idx)[MAX_DUNGEON_WID] = monsters;
 s16b (*cave_o_idx)[MAX_DUNGEON_WID] = objects;
+static object_type test_objects[2];
+object_type* o_list = test_objects;
+s16b o_max = 2;
 layout_anchor_kind_t room_anchor_kind[CENT_MAX];
 quadrant_mode_t current_partition_modes[25];
 big_cave_type_t current_partition_big_cave_types[25];
@@ -94,6 +97,7 @@ static void reset_map(int shape) {
     features[10][10]=FEAT_MORE;features[30][70]=FEAT_LESS;
     features[11][10]=FEAT_FORGE_NORMAL_HEAD;features[12][10]=FEAT_DOOR_HEAD;
     objects[11][11]=1;monsters[11][12]=1;
+    test_objects[1].name1=1; /* Authored valuables must never be flooded. */
     info[15][15]|=CAVE_ICKY;info[15][16]|=CAVE_G_VAULT;
     memcpy(original,features,sizeof(original));terrain_generation_reset();
 }
@@ -135,6 +139,8 @@ static void dump_map(const char* name) {
             char c='#';int f=features[y][x];
             if(f==FEAT_FLOOR)c=terrain_generation_reserved(y,x)?'r':'.';
             for(int m=0;m<5;m++)if(f==material_features[m])c="~CLPI"[m];
+            if(f==FEAT_DEEP_WATER)c='D';
+            if(FEAT_IS_BRIDGE(f))c='B';
             if(original[y][x]!=FEAT_FLOOR&&original[y][x]!=FEAT_WALL_EXTRA)c='!';
             if(objects[y][x]||monsters[y][x]||cave_fixture_at(y,x))c='!';
             fputc(c,out);
@@ -150,6 +156,30 @@ static void barrier(terrain_candidate* c,int x,int feature) {
 
 static void candidate_tests(void) {
     terrain_candidate c;
+    /* Deep patches preserve a shallow shoreline and bridge material/axis. */
+    reset_map(0);
+    for(int y=17;y<=23;y++)for(int x=30;x<=40;x++)features[y][x]=FEAT_WATER;
+    for(int x=30;x<=40;x++)features[20][x]=FEAT_BRIDGE_WATER_H;
+    terrain_deepen_water();
+    assert(features[17][35]==FEAT_WATER);
+    int deep_count=0, core_count=0;
+    for(int y=18;y<=22;y++)for(int x=31;x<=39;x++) {
+        core_count++;deep_count+=features[y][x]==FEAT_DEEP_WATER;
+    }
+    assert(deep_count>0&&deep_count<core_count);
+    for(int x=30;x<=40;x++)
+        if(cave_bridge_underlay(features[20][x])==FEAT_DEEP_WATER)
+            assert(features[20][x]==FEAT_BRIDGE_DEEP_WATER_H);
+    assert(terrain_generation_walkable(18,35,NULL));
+    assert(terrain_generation_walkable(20,35,NULL));
+    assert(!terrain_generation_jump(17,35,1,0,NULL));
+    assert(cave_bridge_feature(FEAT_DEEP_WATER,true)==FEAT_BRIDGE_DEEP_WATER_V);
+    /* Narrow channels retain shallow wading access. */
+    reset_map(0);
+    for(int y=18;y<=19;y++)for(int x=30;x<=40;x++)features[y][x]=FEAT_WATER;
+    terrain_deepen_water();
+    assert(features[18][35]==FEAT_WATER&&features[19][35]==FEAT_WATER);
+
     reset_map(0);terrain_context();terrain_components(features,baseline);
     barrier(&c,40,FEAT_CHASM);
     assert(!memcmp(features,original,sizeof(features)));
@@ -251,7 +281,41 @@ static void candidate_tests(void) {
     puts("Whole candidates: jump-only fracture, multiple hazards, atomic rollback, no jump chains, boundary endpoints and connected expansion: PASS");
 }
 
+static void deep_water_tests(void) {
+    reset_map(0);
+    for(int y=14;y<=24;y++)for(int x=14;x<=30;x++)features[y][x]=FEAT_WATER;
+    for(int x=14;x<=30;x++)features[19][x]=FEAT_BRIDGE_WATER_H;
+    terrain_deepen_water();
+    assert(features[14][20]==FEAT_WATER&&features[20][14]==FEAT_WATER);
+    int deep_count=0, core_count=0;
+    for(int y=15;y<=23;y++)for(int x=15;x<=29;x++) {
+        core_count++;deep_count+=features[y][x]==FEAT_DEEP_WATER;
+    }
+    assert(deep_count>0&&deep_count<core_count);
+    for(int x=14;x<=30;x++)
+        if(cave_bridge_underlay(features[19][x])==FEAT_DEEP_WATER)
+            assert(features[19][x]==FEAT_BRIDGE_DEEP_WATER_H);
+    assert(terrain_generation_walkable(17,20,NULL));
+    assert(terrain_generation_walkable(19,20,NULL));
+    assert(!terrain_generation_jump(17,19,0,1,NULL));
+    dump_map("deep-water-bridge");
+    reset_map(0);
+    for(int x=14;x<=30;x++)features[19][x]=FEAT_WATER;
+    terrain_deepen_water();
+    for(int x=14;x<=30;x++)assert(features[19][x]==FEAT_WATER);
+    /* A wide lake ring must not strand a previously reachable central island. */
+    reset_map(0);
+    for(int y=12;y<=28;y++)for(int x=12;x<=32;x++)features[y][x]=FEAT_WATER;
+    for(int y=18;y<=22;y++)for(int x=20;x<=24;x++)features[y][x]=FEAT_FLOOR;
+    terrain_deepen_water();
+    for(int y=18;y<=22;y++)for(int x=20;x<=24;x++)
+        assert(features[y][x]==FEAT_FLOOR);
+    assert(features[12][12]==FEAT_WATER);
+    puts("Deep water: shallow banks, deep interiors, traversable movement, bridge underlay, thin rivers and island access: PASS");
+}
+
 int main(void) {
+    deep_water_tests();
     candidate_tests();
     int maps=0;
     for(int material=0;material<5;material++)for(int shape=0;shape<3;shape++) {

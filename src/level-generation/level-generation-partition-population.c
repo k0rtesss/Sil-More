@@ -1,6 +1,7 @@
 /* File: level-generation-partition-population.c */
 
 #include "angband.h"
+#include "object/object-place.h"
 #include "level-generation/level-generation-internal.h"
 
 
@@ -1054,7 +1055,10 @@ void place_object_with_profile_params(
 {
     if (!in_bounds(y, x))
         return;
-    if (!cave_clean_bold(y, x))
+    if (!cave_clean_bold(y, x)
+        && !(cave_feat[y][x] == FEAT_DEEP_WATER && !cave_o_idx[y][x]))
+        return;
+    if (!object_terrain_allows_generation(cave_feat[y][x], TV_GEM))
         return;
 
     object_type object_type_body;
@@ -1078,7 +1082,10 @@ void place_object_with_profile_params(
     if (extra_ident)
         i_ptr->ident |= extra_ident;
 
-    if (!floor_carry(y, x, i_ptr))
+    /* Keep the normal gem rarity: a water roll for other loot is discarded,
+     * rather than repeatedly rolling until it becomes a gem. */
+    if (!object_terrain_allows_generation(cave_feat[y][x], i_ptr->tval)
+        || !floor_carry(y, x, i_ptr))
     {
         a_info[i_ptr->name1].cur_num = 0;
     }

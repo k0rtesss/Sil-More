@@ -182,13 +182,19 @@ void generation_tests(void) {
             if(before[y][x]!=FEAT_FLOOR && !rock) assert(before[y][x]==cave_feat[y][x]);
             if(rock && before[y][x]!=cave_feat[y][x])
                 assert(terrain_landmark_cell(y,x)!=TERRAIN_LANDMARK_NONE || !kind);
-            if(cave_feat[y][x]!=(kind?FEAT_ICE:FEAT_WATER)) continue;
+            bool wet = kind ? cave_feat[y][x]==FEAT_ICE
+                : (cave_feat[y][x]==FEAT_WATER || cave_feat[y][x]==FEAT_DEEP_WATER);
+            if(!wet) continue;
             count++; assert(before[y][x]==FEAT_FLOOR || rock);
             assert(!(cave_info[y][x]&(CAVE_ICKY|CAVE_G_VAULT)));
             assert(!cave_o_idx[y][x]&&!cave_m_idx[y][x]);
             bool adjacent=false;
             static const int dy[]={-1,0,1,0},dx[]={0,1,0,-1};
-            for(int d=0;d<4;d++) adjacent|=cave_feat[y+dy[d]][x+dx[d]]==cave_feat[y][x];
+            for(int d=0;d<4;d++) {
+                int neighbour=cave_feat[y+dy[d]][x+dx[d]];
+                adjacent|=kind ? neighbour==FEAT_ICE
+                    : (neighbour==FEAT_WATER || neighbour==FEAT_DEEP_WATER);
+            }
             assert(adjacent);
         }
         assert(cave_feat[30][45]==FEAT_MORE && cave_feat[31][45]==FEAT_FORGE_NORMAL_HEAD);
@@ -448,8 +454,9 @@ def main():
     rsp = OUT / "objects.rsp"
     rsp.write_text("\n".join('"' + p + '"' for p in objects if not p.endswith(exclude)), encoding="utf-8")
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
-        *[str(BUILD / "_deps" / x) for x in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")], env["PATH"]])
+    env["PATH"] = os.pathsep.join([
+        *[str(BUILD / "_deps" / x) for x in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")],
+        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     env["SDL_VIDEO_DRIVER"] = "dummy"
     env["SDL_RENDER_DRIVER"] = "software"
     symbols = ("save_wr_byte", "save_wr_u16b", "load_rd_byte", "load_rd_u16b", "load_savefile_version_at_least",

@@ -31,6 +31,8 @@ static int morgoth_tactical_hazard(monster_type* m_ptr, int y, int x)
     case FEAT_POISON: return 20;
     case FEAT_CHASM: return 75;
     case FEAT_WATER: return 8;
+    case FEAT_DEEP_WATER:
+        return (r_info[m_ptr->r_idx].flags2 & RF2_FLYING) ? 0 : 60;
     case FEAT_ICE: return 6;
     default: return 0;
     }

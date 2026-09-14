@@ -3118,7 +3118,7 @@ const char* sdl_touch_round_ctrl_action_for_dir(int dir)
     if (cave_o_idx[y][x]) {
         object_type* o_ptr = &o_list[cave_o_idx[y][x]];
 
-        if (o_ptr->marked && o_ptr->tval == TV_CHEST) {
+        if (object_is_visible(o_ptr) && o_ptr->tval == TV_CHEST) {
             if (chest_trap_minigame && o_ptr->pval != 0)
                 return "Handle chest";
             if ((o_ptr->pval > 0) && object_chest_trap_flags(o_ptr)
@@ -3130,7 +3130,7 @@ const char* sdl_touch_round_ctrl_action_for_dir(int dir)
             return "Open chest";
         }
 
-        if (o_ptr->marked && o_ptr->tval == TV_SKELETON
+        if (object_is_visible(o_ptr) && o_ptr->tval == TV_SKELETON
             && !object_is_searched_skeleton(o_ptr))
         {
             return "Search skeleton";

@@ -107,7 +107,7 @@ bool feat_supports_lighting(int feat)
     if (use_graphics == GRAPHICS_PSEUDO)
         return false;
 
-    if ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+    if FEAT_IS_TRAP(feat)
     {
         return true;
     }
@@ -261,7 +261,7 @@ static void special_lighting_wall(byte* a, char* c, int feat, int info, int ligh
     case GRAPHICS_MICROCHASM:
         if (feat_supports_lighting(feat)
             && (is_dark
-                || (((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+                || (FEAT_IS_TRAP(feat)
                     && !(info & (CAVE_SEEN)))))
         {
             /* use darker tile variant */
@@ -813,7 +813,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             /* Mark a rewired trap distinctly in ASCII view (tiles are tinted
              * by the renderer instead -- see sdl_rewired_trap_tint_active). */
             if (graphics_are_ascii() && cave_rewired[y][x]
-                && (feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+                && FEAT_IS_TRAP(feat))
             {
                 a = TERM_VIOLET;
             }
@@ -1011,7 +1011,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
      * the SDL renderer (floor -> feature -> monster). For transparency to work, use a
      * floor tile as the terrain underlay when one of these features is visible. */
     if ((info & (CAVE_MARK)) &&
-        (((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL)) ||
+        (FEAT_IS_TRAP(feat) ||
          ((feat >= FEAT_STAIR_HEAD) && (feat <= FEAT_STAIR_TAIL)) ||
          ((feat >= FEAT_FORGE_HEAD) && (feat <= FEAT_FORGE_TAIL)) ||
          (feat == FEAT_SUNLIGHT) ||
@@ -1030,6 +1030,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
 
     /* Objects (only shown when on floors, not when in rubble) */
     if (feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT || feat == FEAT_WATER
+        || feat == FEAT_DEEP_WATER
         || feat == FEAT_LAVA || feat == FEAT_ICE || feat == FEAT_POISON
         || FEAT_IS_BRIDGE(feat))
     {
@@ -1037,7 +1038,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
              o_ptr = get_next_object(o_ptr))
         {
             /* Memorized objects */
-            if (o_ptr->marked && !hide_square)
+            if (object_is_visible(o_ptr) && !hide_square)
             {
                 /* Normal attr */
                 a = object_attr(o_ptr);
@@ -1348,7 +1349,7 @@ void map_info_default(int y, int x, byte* ap, char* cp)
     for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))
     {
         /* Memorized objects */
-        if (o_ptr->marked)
+        if (object_is_visible(o_ptr))
         {
             /* Hack -- object hallucination */
             if (image)

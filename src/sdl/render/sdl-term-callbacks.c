@@ -1068,7 +1068,7 @@ bool sdl_rage_floor_tint_active(int y, int x)
         return true;
 
     feat = f_info[cave_feat[y][x]].mimic;
-    return ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+    return FEAT_IS_TRAP(feat)
         || ((feat >= FEAT_STAIR_HEAD) && (feat <= FEAT_STAIR_TAIL))
         || ((feat >= FEAT_FORGE_HEAD) && (feat <= FEAT_FORGE_TAIL))
         || (feat == FEAT_SUNLIGHT)
@@ -1090,7 +1090,7 @@ bool sdl_rage_visible_floor_object(int y, int x)
     for (o_ptr = get_first_object(y, x); o_ptr;
          o_ptr = get_next_object(o_ptr))
     {
-        if (o_ptr->marked)
+        if (object_is_visible(o_ptr))
             return true;
     }
 
@@ -1819,7 +1819,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
                 byte feat = cave_feat[dy][dx];
                 feat = f_info[feat].mimic;
 
-                if (((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+                if (FEAT_IS_TRAP(feat)
                     || ((feat >= FEAT_STAIR_HEAD) && (feat <= FEAT_STAIR_TAIL))
                     || ((feat >= FEAT_FORGE_HEAD) && (feat <= FEAT_FORGE_TAIL))
                     || (feat == FEAT_SUNLIGHT))
@@ -1846,14 +1846,14 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
                 byte feat = cave_feat[dy][dx];
 
                 if ((feat == FEAT_FLOOR) || (feat == FEAT_SUNLIGHT)
-                    || (feat == FEAT_WATER) || (feat == FEAT_LAVA)
+                    || (feat == FEAT_WATER) || (feat == FEAT_DEEP_WATER) || (feat == FEAT_LAVA)
                     || (feat == FEAT_ICE) || (feat == FEAT_POISON)
                     || FEAT_IS_BRIDGE(feat)) {
                     object_type* o_ptr;
 
                     for (o_ptr = get_first_object(dy, dx); o_ptr;
                          o_ptr = get_next_object(o_ptr)) {
-                        if (o_ptr->marked) {
+                        if (object_is_visible(o_ptr)) {
                             byte obj_a = object_attr(o_ptr);
                             byte obj_c = (byte)object_char(o_ptr);
 
@@ -1992,7 +1992,7 @@ static bool sdl_minimap_hint_destination_artefact_found(
         }
 
         present = true;
-        if (o_ptr->marked)
+        if (object_is_visible(o_ptr))
             return true;
     }
 

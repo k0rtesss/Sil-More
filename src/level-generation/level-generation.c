@@ -1,6 +1,7 @@
 /* File: level-generation.c */
 
 #include "angband.h"
+#include "cave/cave-flood.h"
 #include "cave/cave.h"
 #include "cave/cave-fixtures.h"
 #include "level-generation/level-generation-internal.h"
@@ -1734,6 +1735,7 @@ if (playerturn == 0) {
         feeling = 0;
 
         cave_fixtures_clear();
+        cave_flood_clear();
         terrain_generation_reset();
         terrain_vault_reset();
 

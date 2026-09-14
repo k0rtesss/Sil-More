@@ -720,8 +720,7 @@ bool tutorial_game_command_allowed(int command, int direction)
                 && !cave_pit_bold(y, x) && cave_feat[y][x] != FEAT_CHASM
                 && cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_LAVA
                 && cave_feat[y][x] != FEAT_ICE && cave_feat[y][x] != FEAT_POISON
-                && !(cave_info[y][x] & CAVE_MARK && cave_feat[y][x] >= FEAT_TRAP_HEAD
-                    && cave_feat[y][x] <= FEAT_TRAP_TAIL)) action = "move";
+                && !(cave_info[y][x] & CAVE_MARK && FEAT_IS_TRAP(cave_feat[y][x]))) action = "move";
         } else return false;
         break;
     case 'x': action = "examine"; break;

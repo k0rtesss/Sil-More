@@ -520,13 +520,15 @@ static bool scent_crosses_water(int y0, int x0, int y1, int x1)
         if (decision == 0)
         {
             if (cave_feat[y0][x0 + sx] == FEAT_WATER
-                || cave_feat[y0 + sy][x0] == FEAT_WATER)
+                || cave_feat[y0][x0 + sx] == FEAT_DEEP_WATER
+                || cave_feat[y0 + sy][x0] == FEAT_WATER
+                || cave_feat[y0 + sy][x0] == FEAT_DEEP_WATER)
                 return true;
             x0 += sx; y0 += sy; ix++; iy++;
         }
         else if (decision < 0) { x0 += sx; ix++; }
         else { y0 += sy; iy++; }
-        if (cave_feat[y0][x0] == FEAT_WATER)
+        if (cave_feat[y0][x0] == FEAT_WATER || cave_feat[y0][x0] == FEAT_DEEP_WATER)
             return true;
     }
     return false;
@@ -550,7 +552,8 @@ void scent_restore_cell(int y, int x, byte normalized)
     if (!in_bounds(y, x))
         return;
     cave_when[y][x] = normalized >= 1 && normalized <= SMELL_STRENGTH + 1
-            && cave_feat[y][x] != FEAT_WATER && !(cave_info[y][x] & CAVE_WALL)
+            && cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_DEEP_WATER
+            && !(cave_info[y][x] & CAVE_WALL)
         ? scent_when + normalized - 1 : 0;
 }
 
@@ -598,9 +601,10 @@ void update_smell(void)
     }
     /* Wading never stamps the neighboring banks. Existing land tracks age
      * normally. An airborne player also leaves no fresh trail. */
-    if (cave_feat[py][px] == FEAT_WATER || p_ptr->leaping)
+    if (cave_feat[py][px] == FEAT_WATER || cave_feat[py][px] == FEAT_DEEP_WATER
+        || p_ptr->leaping)
     {
-        if (cave_feat[py][px] == FEAT_WATER)
+        if (cave_feat[py][px] == FEAT_WATER || cave_feat[py][px] == FEAT_DEEP_WATER)
             cave_when[py][px] = 0;
         return;
     }
@@ -651,7 +655,8 @@ void map_feature(int y, int x)
     /* All non-walls are "checked", including rubble */
     if ((cave_feat[y][x] < FEAT_WALL_HEAD) || (cave_stair_bold(y, x))
         || (cave_feat[y][x] == FEAT_RUBBLE) || cave_forge_bold(y, x)
-        || (cave_feat[y][x] == FEAT_CHASM) || (cave_feat[y][x] == FEAT_WATER))
+        || (cave_feat[y][x] == FEAT_CHASM) || (cave_feat[y][x] == FEAT_WATER)
+        || (cave_feat[y][x] == FEAT_DEEP_WATER) || FEAT_IS_BRIDGE(cave_feat[y][x]))
     {
         /* Memorize normal features */
         if ((cave_feat[y][x] >= FEAT_DOOR_HEAD) || (cave_stair_bold(y, x))
@@ -954,7 +959,7 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
         cave_fixture_set(y, x, CAVE_FIXTURE_NONE);
     /* Change the feature */
     cave_feat[y][x] = feat;
-    if (feat == FEAT_WATER && cave_when)
+    if ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER) && cave_when)
         cave_when[y][x] = 0;
 
     /* Set the color (0 means use depth default) */

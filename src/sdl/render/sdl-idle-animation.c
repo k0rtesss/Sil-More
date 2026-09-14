@@ -48,7 +48,7 @@ static byte visible_liquid(int y, int x)
     if (!p_ptr || !in_bounds(y, x))
         return 0;
     byte feat = cave_bridge_underlay(cave_feat[y][x]);
-    if (feat != FEAT_WATER && feat != FEAT_LAVA && feat != FEAT_ICE
+    if (feat != FEAT_WATER && feat != FEAT_DEEP_WATER && feat != FEAT_LAVA && feat != FEAT_ICE
         && feat != FEAT_POISON && !(feat == FEAT_CHASM && FEAT_IS_BRIDGE(cave_feat[y][x])))
         return 0;
     info = cave_info[y][x];
@@ -160,6 +160,9 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
         else if (feat == FEAT_ICE)
             SDL_SetRenderDrawColor(g_state.renderer, live ? 156 : 58,
                 live ? 216 : 81, live ? 232 : 87, 255);
+        else if (feat == FEAT_DEEP_WATER)
+            SDL_SetRenderDrawColor(g_state.renderer, live ? 9 : 3,
+                live ? 29 : 11, live ? 94 : 35, 255);
         else
             SDL_SetRenderDrawColor(g_state.renderer, 24, 78, 108, 255);
         SDL_RenderFillRect(g_state.renderer, dst);
@@ -170,8 +173,11 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
         : feat == FEAT_LAVA ? lava_texture : water_texture;
     int frame = live && feat != FEAT_ICE ? (int)((frame_tick / 8) % 4) : 0;
     SDL_FRect src = { frame * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE };
-    SDL_SetTextureColorMod(texture, live ? 255 : 96,
-        live ? 255 : 96, live ? 255 : 96);
+    int light = live ? 255 : 96;
+    SDL_SetTextureColorMod(texture,
+        feat == FEAT_DEEP_WATER ? 80 * light / 255 : light,
+        feat == FEAT_DEEP_WATER ? 105 * light / 255 : light,
+        feat == FEAT_DEEP_WATER ? 205 * light / 255 : light);
     SDL_RenderTexture(g_state.renderer, texture, &src, dst);
     return true;
 }

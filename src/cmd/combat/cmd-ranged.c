@@ -408,6 +408,12 @@ static void restore_target_after_implicit_fire(
 
 void do_cmd_fire(int quiver)
 {
+    if (player_submerged_in_deep_water())
+    {
+        msg_print("You cannot attack while submerged in deep water.");
+        p_ptr->energy_use = 0;
+        return;
+    }
     if (!tutorial_game_action_allowed(player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_THROWING
         ? "throw" : "fire", NULL)) return;
     int dir, item;
@@ -1312,6 +1318,12 @@ void do_cmd_fire(int quiver)
 
 bool do_cmd_fire_at_adjacent(int y, int x)
 {
+    if (player_submerged_in_deep_water())
+    {
+        msg_print("You cannot attack while submerged in deep water.");
+        p_ptr->energy_use = 0;
+        return false;
+    }
     int dir;
     int quiver;
     bool old_target_set;
@@ -1757,6 +1769,13 @@ static bool select_throw_slot(int* item)
  */
 void do_cmd_throw(bool automatic)
 {
+    if (player_submerged_in_deep_water())
+    {
+        throw_pending_slot = THROW_PENDING_NONE;
+        msg_print("You cannot attack while submerged in deep water.");
+        p_ptr->energy_use = 0;
+        return;
+    }
     if (!tutorial_game_action_allowed("throw", NULL)) return;
     int dir, item;
     int i, j, y, x, ty, tx;

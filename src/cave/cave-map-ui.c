@@ -243,7 +243,8 @@ void note_spot(int y, int x)
     for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))
     {
         /* Memorize objects */
-        o_ptr->marked = true;
+        if (object_can_see_floor(y, x))
+            o_ptr->marked = true;
     }
 
     /* Hack -- memorize grids */
@@ -346,7 +347,7 @@ void lite_spot(int y, int x)
          * identical (notably a permanently lit wall leaving sight). */
         bool force_visual_redraw = (cave_m_idx[y][x] < 0)
             || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
-            || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA
+            || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
             || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON
             || FEAT_IS_BRIDGE(cave_feat[y][x]);
 #ifdef USE_SDL
@@ -447,7 +448,7 @@ void prt_map(void)
             if (force_rage_map_filter_refresh
                 || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)
                     || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
-                    || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_LAVA
+                    || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
                     || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON
                     || FEAT_IS_BRIDGE(cave_feat[y][x]))))
                 force_term_cell_redraw(vx, vy, cell_w);

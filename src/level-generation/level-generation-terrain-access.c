@@ -33,7 +33,7 @@ static bool terrain_jump_footing(int y, int x,
     feat = features[y][x];
     if (feat == FEAT_SECRET
         || (feat >= FEAT_DOOR_HEAD && feat <= FEAT_DOOR_TAIL)
-        || (feat >= FEAT_TRAP_HEAD && feat <= FEAT_TRAP_TAIL))
+        || FEAT_IS_TRAP(feat))
         return false;
     return !cave_m_idx || cave_m_idx[y][x] <= 0;
 }

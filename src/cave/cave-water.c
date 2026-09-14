@@ -1,6 +1,12 @@
 #include "angband.h"
 #include "externs.h"
 
+bool player_submerged_in_deep_water(void)
+{
+    return p_ptr && in_bounds(p_ptr->py, p_ptr->px) && !p_ptr->leaping
+        && cave_feat[p_ptr->py][p_ptr->px] == FEAT_DEEP_WATER;
+}
+
 /* Only the impacted surface changes. Resistance and armour belong to the
  * occupant and cannot protect water or ice from an elemental attack. */
 bool cave_transform_elemental_terrain(int y, int x, int typ)
@@ -46,6 +52,8 @@ void cave_apply_elemental_brands(int y, int x,
  * Stationary actions and airborne crossings do not touch the surface. */
 int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne)
 {
+    if (!airborne && (from_feat == FEAT_DEEP_WATER || to_feat == FEAT_DEEP_WATER))
+        return energy * 4;
     if (!airborne && (from_feat == FEAT_WATER || to_feat == FEAT_WATER))
         return energy + (energy + 1) / 2;
     return energy;
@@ -53,12 +61,13 @@ int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne)
 
 void player_water_movement(int from_feat, int to_feat)
 {
-    if (from_feat != FEAT_WATER && to_feat != FEAT_WATER)
+    if (from_feat != FEAT_WATER && to_feat != FEAT_WATER
+        && from_feat != FEAT_DEEP_WATER && to_feat != FEAT_DEEP_WATER)
         return;
     p_ptr->energy_use = water_movement_energy(
         p_ptr->energy_use, from_feat, to_feat, false);
     stealth_score -= WATER_STEALTH_PENALTY;
-    if (to_feat == FEAT_WATER && !p_ptr->diseased
+    if ((to_feat == FEAT_WATER || to_feat == FEAT_DEEP_WATER) && !p_ptr->diseased
         && one_in_(DISEASE_WATER_ONE_IN))
         (void)infect_disease();
 }
@@ -67,10 +76,11 @@ void player_water_movement(int from_feat, int to_feat)
  * Make its splash audible now; the next action resets the Stealth score. */
 void player_water_displaced(int from_feat, int to_feat)
 {
-    if (from_feat != FEAT_WATER && to_feat != FEAT_WATER)
+    if (from_feat != FEAT_WATER && to_feat != FEAT_WATER
+        && from_feat != FEAT_DEEP_WATER && to_feat != FEAT_DEEP_WATER)
         return;
     update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
-    if (to_feat == FEAT_WATER && !p_ptr->diseased
+    if ((to_feat == FEAT_WATER || to_feat == FEAT_DEEP_WATER) && !p_ptr->diseased
         && one_in_(DISEASE_WATER_ONE_IN))
         (void)infect_disease();
     monster_perception(true, false, p_ptr->skill_use[S_STL] - WATER_STEALTH_PENALTY);

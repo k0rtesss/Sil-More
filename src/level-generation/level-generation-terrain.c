@@ -5,6 +5,7 @@
 #include "level-generation/level-generation-terrain-access.h"
 #include "level-generation/level-generation-landmarks.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-bridge.h"
 #include <limits.h>
 
 /* A region gets a complete channel, not a sequence of independent tile edits.
@@ -14,6 +15,11 @@
 #define TERRAIN_SHAPE_MAX 384
 #define TERRAIN_ATTEMPTS 24
 #define TERRAIN_CELLS (MAX_DUNGEON_HGT * MAX_DUNGEON_WID)
+/* Deep water is a patch within a broad water body, rather than a blanket
+ * recolour of every tile away from the shore.  Keep small streams shallow. */
+#define DEEP_WATER_MIN_CORE 6
+#define DEEP_WATER_MIN_PERCENT 45
+#define DEEP_WATER_MAX_PERCENT 65
 
 enum terrain_role { TERRAIN_BLOCKED, TERRAIN_NATURAL, TERRAIN_ROCK, TERRAIN_LAB };
 typedef struct terrain_candidate
@@ -38,6 +44,10 @@ static byte reserved[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 /* 1: terrain, 2: an intentional architectural crossing. */
 static byte proposed[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte deep_water_core[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte deep_water_seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte deep_water_selected[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte deep_water_frontier[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static int baseline[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static int after[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static terrain_generation_stats terrain_stats;
@@ -110,7 +120,7 @@ static void terrain_context(void)
                 || (cave_info[y][x] & (CAVE_ICKY | CAVE_G_VAULT
                     | CAVE_CHASM_AREA | CAVE_MORGOTH_TUNNEL))
                 || coord_in_morgoth_region(y, x, 0)
-                || cave_m_idx[y][x] || cave_o_idx[y][x] || cave_fixture_at(y, x))
+                || cave_m_idx[y][x] || cave_fixture_at(y, x))
                 protected_cells[y][x] = 1;
             if (feat != FEAT_FLOOR && !terrain_is_rock(feat))
             {
@@ -413,6 +423,15 @@ static bool terrain_endpoints(int pi, const terrain_theme_profile* profile,
 static bool terrain_add_cell(terrain_candidate* c, int y, int x, bool excavate)
 {
     if (!terrain_cell(y, x, c->partition, excavate)) return false;
+    /* Water may cover ordinary floor items. Other materials retain the
+     * existing item protection; never bury a note or an artefact. */
+    if (cave_o_idx[y][x])
+    {
+        if (c->feature != FEAT_WATER) return false;
+        for (int i = cave_o_idx[y][x], left = o_max; i > 0; i = o_list[i].next_o_idx)
+            if (i >= o_max || --left <= 0 || o_list[i].name1 || o_list[i].tval == TV_NOTE)
+                return false;
+    }
     if (proposed[y][x]) return true;
     if (c->count >= TERRAIN_SHAPE_MAX) return false;
     proposed[y][x] = 1;
@@ -639,6 +658,147 @@ static int terrain_material(int pi, const terrain_theme_profile* profile)
     return -1;
 }
 
+/* Erode the shoreline mask into a few connected deep-water patches.  A broad
+ * lake still has a dark centre, but its whole interior does not become deep;
+ * the selected patch grows from the middle and leaves shallow pockets around
+ * it. Existing bridges retain their axis and cross the deeper bed when their
+ * deck falls inside the selected patch. Check the final walking graph so an
+ * island or narrow approach is not cut off by deepening a lake/channel. */
+static void terrain_deepen_water(void)
+{
+    static int core_cells[TERRAIN_CELLS];
+    static int frontier_cells[TERRAIN_CELLS];
+    int deep = 0;
+
+    memset(deep_water_core, 0, sizeof(deep_water_core));
+    memset(deep_water_seen, 0, sizeof(deep_water_seen));
+    memset(deep_water_selected, 0, sizeof(deep_water_selected));
+    memset(deep_water_frontier, 0, sizeof(deep_water_frontier));
+    memcpy(shadow, cave_feat, sizeof(shadow));
+    terrain_components((const byte (*)[MAX_DUNGEON_WID])cave_feat, baseline);
+
+    /* First mark cells that have a complete shallow-water neighbourhood.
+     * Narrow rivers have no such core and remain entirely shallow. */
+    for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
+        for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
+        {
+            int feat = cave_feat[y][x];
+            bool interior = true;
+            if (cave_bridge_underlay(feat) != FEAT_WATER
+                || cave_m_idx[y][x] || cave_fixture_at(y, x)) continue;
+            for (int dy = -1; dy <= 1 && interior; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                    if (cave_bridge_underlay(cave_feat[y + dy][x + dx]) != FEAT_WATER)
+                    { interior = false; break; }
+            if (interior) deep_water_core[y][x] = 1;
+        }
+
+    /* Each connected core gets one irregular patch.  Growing from its centre
+     * keeps the outer water readable as shallow while avoiding isolated deep
+     * speckles. */
+    for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
+        for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
+        {
+            int head = 0, tail = 0, count = 0;
+            long sum_y = 0, sum_x = 0;
+            int seed = -1, seed_distance = INT_MAX;
+            int target, selected = 0, frontier_count = 0;
+            if (!deep_water_core[y][x] || deep_water_seen[y][x]) continue;
+
+            deep_water_seen[y][x] = 1;
+            core_cells[tail++] = y * MAX_DUNGEON_WID + x;
+            while (head < tail)
+            {
+                int id = core_cells[head++];
+                int cy = id / MAX_DUNGEON_WID, cx = id % MAX_DUNGEON_WID;
+                core_cells[count++] = id;
+                sum_y += cy;
+                sum_x += cx;
+                for (int d = 0; d < 4; d++)
+                {
+                    int ny = cy + channel_dy[d], nx = cx + channel_dx[d];
+                    if (!deep_water_core[ny][nx] || deep_water_seen[ny][nx]) continue;
+                    deep_water_seen[ny][nx] = 1;
+                    core_cells[tail++] = ny * MAX_DUNGEON_WID + nx;
+                }
+            }
+
+            if (count < DEEP_WATER_MIN_CORE) continue;
+
+            /* Pick the candidate nearest the component's centroid. */
+            for (int i = 0; i < count; i++)
+            {
+                int id = core_cells[i];
+                int cy = id / MAX_DUNGEON_WID, cx = id % MAX_DUNGEON_WID;
+                int distance_from_centre =
+                    ABS(cy - (int)(sum_y / count)) + ABS(cx - (int)(sum_x / count));
+                if (distance_from_centre < seed_distance)
+                {
+                    seed = id;
+                    seed_distance = distance_from_centre;
+                }
+            }
+
+            target = count * rand_range(DEEP_WATER_MIN_PERCENT,
+                DEEP_WATER_MAX_PERCENT) / 100;
+            target = MAX(1, MIN(count - 1, target));
+            deep_water_selected[seed / MAX_DUNGEON_WID][seed % MAX_DUNGEON_WID] = 1;
+            selected = 1;
+
+            /* Maintain a de-duplicated random frontier for a compact,
+             * organic-looking patch without quadratic rescans. */
+            for (int d = 0; d < 4; d++)
+            {
+                int ny = seed / MAX_DUNGEON_WID + channel_dy[d];
+                int nx = seed % MAX_DUNGEON_WID + channel_dx[d];
+                if (!deep_water_core[ny][nx] || deep_water_selected[ny][nx]
+                    || deep_water_frontier[ny][nx]) continue;
+                deep_water_frontier[ny][nx] = 1;
+                frontier_cells[frontier_count++] = ny * MAX_DUNGEON_WID + nx;
+            }
+            while (selected < target && frontier_count > 0)
+            {
+                int pick = rand_int(frontier_count);
+                int id = frontier_cells[pick];
+                int cy = id / MAX_DUNGEON_WID, cx = id % MAX_DUNGEON_WID;
+                frontier_cells[pick] = frontier_cells[--frontier_count];
+                deep_water_frontier[cy][cx] = 0;
+                if (deep_water_selected[cy][cx]) continue;
+                deep_water_selected[cy][cx] = 1;
+                selected++;
+                for (int d = 0; d < 4; d++)
+                {
+                    int ny = cy + channel_dy[d], nx = cx + channel_dx[d];
+                    if (!deep_water_core[ny][nx] || deep_water_selected[ny][nx]
+                        || deep_water_frontier[ny][nx]) continue;
+                    deep_water_frontier[ny][nx] = 1;
+                    frontier_cells[frontier_count++] = ny * MAX_DUNGEON_WID + nx;
+                }
+            }
+        }
+
+    for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
+        for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
+            if (deep_water_selected[y][x])
+            {
+                int feat = cave_feat[y][x];
+                shadow[y][x] = FEAT_IS_BRIDGE(feat)
+                    ? cave_bridge_feature(FEAT_DEEP_WATER, cave_bridge_vertical(feat))
+                    : FEAT_DEEP_WATER;
+                deep++;
+            }
+    if (!deep) return;
+    if (!terrain_preserves_access())
+    {
+        log_debug("Deep water: kept shallow water to preserve bank access");
+        return;
+    }
+    for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
+        for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
+            if (shadow[y][x] != cave_feat[y][x]) cave_set_feat(y, x, shadow[y][x]);
+    log_debug("Deep water: %d tiles in partial interior patches", deep);
+}
+
 void place_dungeon_terrain(void)
 {
     const terrain_theme_profile* profile = terrain_theme_for_depth(p_ptr->depth);
@@ -672,6 +832,7 @@ void place_dungeon_terrain(void)
         if (material < 0) continue;
         terrain_region(pi, material, profile);
     }
+    terrain_deepen_water();
     log_debug("Dungeon terrain theme '%s': %d accepted/%d proposals, %d tiles, %d architectural spans; rejected path=%d access=%d",
         profile->name, terrain_stats.accepted, terrain_stats.proposals, terrain_stats.tiles,
         terrain_stats.bridges, terrain_stats.no_route, terrain_stats.blocked_access);

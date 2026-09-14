@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-flood.h"
 #include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
@@ -1869,6 +1870,12 @@ void hit_trap(int y, int x)
         break;
     }
 
+    case FEAT_TRAP_FLOOD:
+    {
+        cave_flood_trigger(y, x);
+        break;
+    }
+
     case FEAT_TRAP_IMPRISONMENT:
     {
         msg_print("Words of imprisonment echo through the halls!");
@@ -2794,6 +2801,10 @@ static bool handle_peaceful_attack_target(int y, int x, int attack_type)
  */
 void py_attack_aux(int y, int x, int attack_type)
 {
+    /* Reactions must not refund the movement/action that triggered them. */
+    if (player_submerged_in_deep_water())
+        return;
+
     int num = 0;
 
     int attack_mod = 0, total_attack_mod = 0, total_evasion_mod = 0;
@@ -3512,7 +3523,7 @@ int count_open_adjacent_squares(int y, int x)
         /* Check if square is passable (not wall, not rubble, not closed door) */
         if (cave_floor_bold(adj_y, adj_x) || 
             cave_feat[adj_y][adj_x] == FEAT_OPEN ||
-            (cave_feat[adj_y][adj_x] >= FEAT_TRAP_HEAD && cave_feat[adj_y][adj_x] <= FEAT_TRAP_TAIL))
+            FEAT_IS_TRAP(cave_feat[adj_y][adj_x]))
         {
             passable[i] = true;
         }
@@ -3576,6 +3587,15 @@ bool can_impale()
 
 void py_attack(int y, int x, int attack_type)
 {
+    if (player_submerged_in_deep_water())
+    {
+        if (attack_type == ATT_MAIN)
+        {
+            msg_print("You cannot attack while submerged in deep water.");
+            p_ptr->energy_use = 0;
+        }
+        return;
+    }
     if (attack_type == ATT_MAIN && !tutorial_game_action_allowed("attack", NULL)) return;
     int dir, dir0, yy, xx;
 
@@ -3707,6 +3727,9 @@ void py_attack(int y, int x, int attack_type)
  */
 void flanking_or_retreat(int y, int x)
 {
+    if (player_submerged_in_deep_water())
+        return;
+
     int py = p_ptr->py;
     int px = p_ptr->px;
     int d;

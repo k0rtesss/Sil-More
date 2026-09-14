@@ -14,6 +14,7 @@ bool hates_fire(const object_type* o_ptr);
 bool hates_cold(const object_type* o_ptr);
 bool elemental_attack_destroys_object(int attack_type,
     const object_type* o_ptr);
+void acid_damage_items(int raw_dam, int min_raw, int max_raw, int damage);
 void acid_dam(int raw_dam, int min_raw, int max_raw, int hp_dam,
     cptr kb_str);
 void elec_dam(int raw_dam, int min_raw, int max_raw, int hp_dam,

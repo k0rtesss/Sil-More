@@ -2312,6 +2312,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- Other herbs act normally. Healing potions and Miruvor always cure disease directly.", row++, col);
         row++;
         help_emit_heading("SHALLOW WATER", row++, col);
+        put_role(ROLE_BODY, "- Only gems spawn in water. Flooding can cover existing items; new items avoid lava and poisonous seep.", row++, col);
+        put_role(ROLE_BODY, "- Submerged items need clear sight and one tile of detection range per 5 Perception (your own square at 0).", row++, col);
         put_role(ROLE_BODY, "- Entering, crossing, or leaving water costs 150% movement energy.", row++, col);
         put_role(ROLE_WARN, "- Each water tile entered on foot has a 0.5% disease risk. Standing still or leaping over water does not.", row++, col);
         put_role(ROLE_BODY, "- Each wading move splashes: -3 Stealth for that action. Standing actions cost normally.", row++, col);
@@ -2319,11 +2321,13 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- Flying monsters ignore the movement cost. Water does not stop sight or hearing.", row++, col);
         put_role(ROLE_BODY, "- With Leaping and a run-up, direct movement can jump a single water tile to a known dry bank.", row++, col);
         put_role(ROLE_BODY, "- A successful leap avoids wading and splashing; normal landing noise still applies. Click-to-travel wades.", row++, col);
+        put_role(ROLE_BODY, "- Dark blue deep water costs 400% movement energy, including entry and exit. You cannot attack while submerged; bridges stay dry.", row++, col);
         row++;
         help_emit_heading("MOLTEN LAVA", row++, col);
         put_role(ROLE_WARN, "- Without net fire resistance, touching lava on the ground kills immediately.", row++, col);
         put_role(ROLE_BODY, "- Lava deals 60 raw damage: with 1/2/3 net resistance levels, take 40/30/24 damage on entry and each turn here.", row++, col);
         put_role(ROLE_BODY, "- Fire caves remove one resistance level. Equipment and temporary fire resistance both count; armour does not.", row++, col);
+        put_role(ROLE_WARN, "- Submerged items can suffer normal fire damage. Bridges and successful leaps protect your items.", row++, col);
         put_role(ROLE_BODY, "- With Leaping and a run-up, jump one lava tile to a known bank. Heat damage uses one extra resistance level.", row++, col);
         put_role(ROLE_BODY, "- A blocked landing puts you into the lava. Click-to-travel avoids lava; direct movement asks before entry.", row++, col);
         put_role(ROLE_BODY, "- Fire-resistant monsters take no damage. Other ground monsters die; flyers take 40 heat damage per turn.", row++, col);
@@ -2333,6 +2337,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- Green poisonous seep forms pools and rivers. Movement costs normal energy.", row++, col);
         put_role(ROLE_WARN, "- Contact adds 6 poison stacks before resistance and poison protection. Poison caves remove one resistance level.", row++, col);
         put_role(ROLE_BODY, "- Entry and later actions on seep apply a dose, at most once per action. Leaving does not cure poison.", row++, col);
+        put_role(ROLE_WARN, "- Seep acid can damage submerged items, even with poison resistance. Normal acid item protection applies.", row++, col);
         put_role(ROLE_BODY, "- Each poisoned creature takes one fifth of its remaining stacks as damage per action, rounded up, consuming those stacks.", row++, col);
         put_role(ROLE_BODY, "- Poison prevents ordinary Health recovery. Antidotes remove your existing poison.", row++, col);
         put_role(ROLE_BODY, "- Flying or poison-resistant monsters avoid seep exposure. Susceptible monsters prefer dry routes and positions.", row++, col);

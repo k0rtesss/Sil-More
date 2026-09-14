@@ -784,7 +784,8 @@ void monster_swap(int y1, int x1, int y2, int x2)
     }
 
     /* Entry clears even an old/save-restored scent on the wet square. */
-    if ((m1 < 0 || m2 < 0) && cave_feat[p_ptr->py][p_ptr->px] == FEAT_WATER)
+    if ((m1 < 0 || m2 < 0) && (cave_feat[p_ptr->py][p_ptr->px] == FEAT_WATER
+        || cave_feat[p_ptr->py][p_ptr->px] == FEAT_DEEP_WATER))
         cave_when[p_ptr->py][p_ptr->px] = 0;
 
     // deal with falling down chasms

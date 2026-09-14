@@ -510,6 +510,7 @@ extern void update_flow(int cy, int cx, int which_flow);
 extern void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player);
 extern void update_smell(void);
 extern int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
+extern bool player_submerged_in_deep_water(void);
 extern bool cave_transform_elemental_terrain(int y, int x, int typ);
 extern void cave_apply_elemental_brands(int y, int x,
     const object_type* weapon, const object_type* ammunition);
@@ -1397,6 +1398,8 @@ extern void object_known(object_type* o_ptr);
 extern void object_aware(object_type* o_ptr);
 extern void object_tried(object_type* o_ptr);
 extern bool object_has_ego_flag4(const object_type* o_ptr, u32b flag);
+extern bool object_can_see_floor(int y, int x);
+extern bool object_is_visible(const object_type* o_ptr);
 extern s32b object_value(const object_type* o_ptr);
 extern bool object_similar(const object_type* o_ptr, const object_type* j_ptr);
 extern void object_absorb(object_type* o_ptr, object_type* j_ptr);

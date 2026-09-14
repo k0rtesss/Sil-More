@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-player.c */
 
 #include "angband.h"
+#include "cave/cave-flood.h"
 #include "monster/monster-ai.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
@@ -489,6 +490,7 @@ void process_player(void)
             p_ptr->command_see = false;
 
         /* Assume free turn */
+        cave_flood_begin_action();
         player_lava_begin_action();
         player_poison_terrain_begin_action();
         p_ptr->energy_use = 0;
@@ -896,6 +898,7 @@ void process_player(void)
 
         player_lava_end_action();
         player_poison_terrain_end_action();
+        cave_flood_end_action();
 
         /* Significant */
         if (p_ptr->energy_use)
