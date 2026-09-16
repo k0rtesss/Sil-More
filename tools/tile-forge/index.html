@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sil-More · Tile Forge</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="engine.js"></script><script defer src="materials.js"></script><script defer src="export.js"></script><script defer src="app.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="./"><span class="brand-icon">▧</span><span>SIL-MORE <strong>Tile Forge</strong></span></a>
+  <span class="tagline">Hand-drawn pixels. Connected worlds.</span>
+  <div class="top-actions"><span class="local-dot">LOCAL WORKSPACE</span><button id="help-open" class="quiet">Guide</button><button id="save-project">Save project</button><button id="export-pack" class="primary">Export pack <span>↗</span></button></div>
+</header>
+<main class="workspace">
+  <aside class="controls">
+    <section class="intro"><span class="eyebrow">01 / MATERIALS</span><h1>Build the in-between.</h1><p>Cut transitions from your artwork, then see how they connect.</p></section>
+    <section class="control-section">
+      <div class="section-heading"><h2>Source artwork</h2><button id="import-png" class="small">+ PNG</button></div>
+      <input id="png-file" type="file" accept="image/png" hidden multiple>
+      <label class="field">Tile size <select id="tile-size"><option>8</option><option selected>16</option><option>24</option><option>32</option><option>48</option><option>64</option></select><span>px</span></label>
+      <div class="material-stack">
+        <button class="material-card" data-slot="foreground"><canvas id="swatch-foreground" width="16" height="16"></canvas><span><strong id="label-foreground">Upper floor</strong><small id="source-foreground">Choose a tile</small></span><span class="edit-icon">↗</span></button>
+        <button class="material-card" data-slot="background"><canvas id="swatch-background" width="16" height="16"></canvas><span><strong id="label-background">Lower floor</strong><small id="source-background">Choose a tile</small></span><span class="edit-icon">↗</span></button>
+        <button class="material-card" data-slot="face"><canvas id="swatch-face" width="16" height="16"></canvas><span><strong>Cliff / wall face</strong><small id="source-face">Choose a tile</small></span><span class="edit-icon">↗</span></button>
+      </div>
+      <button id="swap" class="quiet full">⇄ Swap upper and lower</button>
+      <label class="check-field"><input id="derive-face" type="checkbox" checked><span>Derive face from upper tile<small>Works with any floor or wall artwork.</small></span></label>
+    </section>
+    <section class="control-section">
+      <span class="eyebrow">02 / TRANSITION</span>
+      <div class="mode-tabs" role="group" aria-label="Transition type"><button data-mode="floor" class="active">Floor</button><button data-mode="wall">Wall</button><button data-mode="chasm">Chasm</button></div>
+      <label class="stack-field">Starting point<select id="preset"><option value="earth">Stone over earth</option><option value="frost">Snow over stone</option><option value="wall">Stone wall</option><option value="chasm">Cavern ledge</option><option value="custom" disabled>Custom / loaded project</option></select></label>
+      <label class="stack-field">Edge treatment<select id="edge-style"><option value="organic">Organic · broken contour</option><option value="cut">Cut · clean contour</option><option value="dither">Dither · palette-preserving</option><option value="soft">Soft · feathered blend</option></select></label>
+      <div class="slider-field"><label for="inset">Edge inset</label><output for="inset"></output><input id="inset" type="range" min="1" max="7" step="1" value="3"></div>
+      <div class="slider-field"><label for="roughness">Roughness</label><output for="roughness"></output><input id="roughness" type="range" min="0" max="3" step="0.25" value="0.75"></div>
+      <div class="slider-field"><label for="blend">Blend width</label><output for="blend"></output><input id="blend" type="range" min="0" max="5" step="0.5" value="1"></div>
+      <div class="slider-field"><label for="rim">Rim light</label><output for="rim"></output><input id="rim" type="range" min="0" max="3" step="1" value="1"></div>
+      <div class="slider-field"><label for="depth">Face depth</label><output for="depth"></output><input id="depth" type="range" min="0" max="7" step="1" value="4"></div>
+      <label class="check-field"><input id="palette-lock" type="checkbox" checked><span>Keep source palette<small>Choose existing colors at the boundary.</small></span></label>
+      <label class="field">Seed <input id="seed" type="number" min="0" max="999999" value="42"><button id="new-seed" class="small" aria-label="New seed">↻</button></label>
+    </section>
+    <div class="sidebar-footer"><button id="load-project" class="quiet">Open project</button><input id="project-file" type="file" accept=".json,application/json" hidden><span>No uploads. No account.</span></div>
+  </aside>
+
+  <div class="main-stage">
+    <div class="stage-heading"><div><span class="eyebrow">LIVE WORKBENCH</span><h2 id="stage-title">Stone meets earth</h2></div><div class="stage-meta"><span class="pill" id="size-badge">16 × 16 PX</span><span class="pill">47 CONNECTED SHAPES</span></div></div>
+    <section class="preview-panel">
+      <div class="panel-toolbar"><div class="segmented" aria-label="Preview view"><button id="view-map" class="active">Painted scene</button><button id="view-mixed">Mixed terrain</button><button id="view-repeat">Seam check</button></div><div class="toolbar-right"><label><input id="show-grid" type="checkbox"> Grid</label><label>Zoom <select id="zoom"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select></label></div></div>
+      <div id="mixed-tools" hidden><p>Every material connects to every other material. Choose a brush, then paint. Right-click paints the first material. Mixed contacts stay within 1–3 pixels; inset applies to the pair atlas.</p><div id="mixed-palette" aria-label="Terrain material brushes"></div><div class="mixed-actions"><label>Brush name <input id="mixed-name" type="text" maxlength="64"></label><label>Material type <select id="mixed-kind"><option value="floor">Floor</option><option value="wall">Wall</option><option value="chasm">Chasm</option></select></label><button id="mixed-add">+ Material from PNG</button><button id="mixed-edit">Change brush tile</button><button id="mixed-export">Save mixed scene PNG</button></div></div>
+      <div class="canvas-stage" id="canvas-stage"><canvas id="map" width="320" height="208" aria-label="Paintable terrain preview; use the upper and lower brushes" tabindex="0"></canvas><div id="empty-state" hidden>Import a PNG to start composing.</div></div>
+      <div class="map-tools"><div class="brushes"><span class="muted">PAINT</span><button id="brush-upper" class="active">■ Upper</button><button id="brush-lower">□ Lower</button><button id="undo" class="quiet" aria-label="Undo last stroke">↶ Undo</button></div><label class="scene-label">Scene <select id="scene"><option value="cavern">Cavern</option><option value="islands">Islands & corners</option><option value="rooms">Rooms & corridors</option></select></label><button id="reset-map" class="quiet">Reset</button></div>
+      <div class="preview-caption"><span><i class="live-dot"></i> Changes render instantly</span><span id="mode-caption">Upper material connects to matching neighbors.</span></div>
+    </section>
+    <section class="atlas-section">
+      <div class="section-heading"><div><span class="eyebrow">THE COMPLETE FAMILY</span><h2>Every edge accounted for.</h2></div><button id="export-atlas" class="small">Save atlas PNG ↗</button></div>
+      <p class="muted atlas-hint">Select a shape to inspect it. All 256 neighbor combinations resolve to these 47 tiles.</p>
+      <div id="tile-gallery" class="tile-gallery" aria-label="47 autotile shapes"></div>
+    </section>
+    <footer class="main-footer"><span id="status" role="status">Loading your artwork…</span><span>Original pixels · Deterministic edges · PNG + JSON</span></footer><div id="download-shelf" hidden aria-label="Recent exports"></div>
+  </div>
+
+  <aside class="inspector">
+    <span class="eyebrow">TILE INSPECTOR</span><div class="inspector-heading"><h2>Neighborhood</h2><span id="mask-number" class="pill">#000</span></div>
+    <div class="inspect-tile"><canvas id="detail" width="16" height="16"></canvas></div>
+    <div id="neighbors" class="neighbors" aria-label="Toggle matching neighbors"></div>
+    <p class="muted inspector-note">Lit cells are the same material. A diagonal connects when both adjoining sides connect.</p>
+    <div class="inspector-readout"><span>Raw mask <strong id="raw-mask">0</strong></span><span>Normalized <strong id="normal-mask">0</strong></span><span>Sheet position <strong id="sheet-position">0, 0</strong></span></div>
+    <button id="export-tile" class="full">Save this tile</button>
+    <div class="override-tools"><button id="import-override" class="quiet full">Import drawn replacement</button><input id="override-file" type="file" accept="image/png" hidden><button id="clear-override" class="quiet full" hidden>Restore generated tile</button><small id="override-status">Fine-tune any shape in your drawing app.</small></div>
+    <div class="tip-card"><span class="eyebrow">ART DIRECTION</span><h3 id="tip-title">Let the drawing lead.</h3><p id="tip-text">Use a narrow transition for detailed stone. Dither is useful when two floors have very different colors.</p></div>
+    <div class="export-note"><strong>Works across tile sets</strong><p>Sil-More connects every floor / wall material pairing and adds edges beside known chasms. Use Mixed terrain to test several imported materials together.</p><span>Custom atlas settings are not applied to the game automatically.</span></div>
+  </aside>
+</main>
+
+<dialog id="picker"><div class="dialog-heading"><div><span class="eyebrow">SOURCE ATLAS</span><h2 id="picker-title">Choose upper floor</h2></div><button id="picker-close" aria-label="Close tile picker">✕</button></div><div class="picker-toolbar"><label>Image <select id="source-select"></select></label><label>Magnification <select id="atlas-zoom"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select></label><label>Column <input id="pick-col" type="number" min="0" value="0"></label><label>Row <input id="pick-row" type="number" min="0" value="0"></label></div><div class="atlas-scroll"><canvas id="source-atlas" aria-label="Source image tile picker" tabindex="0"></canvas></div><div class="picker-footer"><span id="pick-info">Click a tile. Coordinates start at zero.</span><button id="use-tile" class="primary">Use selected tile</button></div></dialog>
+<dialog id="help"><div class="dialog-heading"><h2>A small guide to connected tiles.</h2><button id="help-close" aria-label="Close guide">✕</button></div><ol><li><strong>Choose your pixels.</strong> Load a PNG, set its tile size, then click the material cards to choose cells from the atlas. You can mix cells from different PNGs. Derive face from upper tile works with arbitrary artwork; choose a face tile to override it.</li><li><strong>Choose the boundary.</strong> Floor blends two surfaces. Wall adds a vertical face below a wall top. Chasm keeps the upper floor intact and adds a rim and a falling face over the lower tile. Select a dark lower tile for a void.</li><li><strong>Paint the difficult cases.</strong> Try narrow corridors, islands, and inward corners. Seam check repeats the selected neighborhood tile to expose texture repetition; it is not a promise that arbitrary edge shapes tile against themselves.</li><li><strong>Keep it reproducible.</strong> Save project embeds the source images, parameters, and painted scene. Open project restores them locally.</li><li><strong>Export.</strong> The ZIP includes PNG sheets, individual tiles, metadata, a Tiled atlas descriptor, and the preview. A 16px export matches Sil-More’s existing 256-slot atlas dimensions. The game now draws material-independent floor / wall connections and chasm edges automatically. Custom artwork exports still need an explicit material mapping in the renderer.</li></ol><p>For best results, choose seamless base tiles. This tool preserves the supplied texture; it cannot repair a visible seam already inside the source artwork.</p><p><a href="README.md" target="_blank" rel="noopener">Technical notes and research ↗</a></p></dialog>
+</body>
+</html>

@@ -365,6 +365,7 @@ set(SIL_MORE_SOURCES
     src/sdl/render/sdl-fonts.c
     src/sdl/render/sdl-present.c
     src/sdl/render/sdl-term-callbacks.c
+    src/sdl/render/sdl-material-edge.c
     src/sdl/render/sdl-chasm-edge.c
     src/sdl/render/sdl-idle-animation.c
     src/sdl/render/sdl-bridge.c

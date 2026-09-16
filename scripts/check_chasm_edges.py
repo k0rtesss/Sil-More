@@ -51,6 +51,10 @@ static void edge_mask_tests(void) {
     assert(sdl_chasm_edge_mask(10,11)==0);
     assert(sdl_chasm_edge_mask(-1,-1)==0);
     assert(sdl_chasm_edge_mask(p_ptr->cur_map_hgt,0)==0);
+    edge_reset();cave_feat[10][12]=FEAT_CHASM;
+    cave_info[10][11]=CAVE_MARK;cave_light[10][11]=0;
+    assert(sdl_chasm_edge_mask(10,11)==0);
+    cave_light[10][11]=1;assert(sdl_chasm_edge_mask(10,11)==4);
     assert(Rand_state_export()==rng);
     puts("Chasm adjacency: all directions, knowledge, rage/labyrinth and RNG: PASS");
 }

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-fixtures.h"
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
 #include "log/perf.h"
@@ -1758,7 +1759,9 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     bool tile_mode = g_state.use_tiles && g_state.tileset;
     bool health_bar_visible;
     bool fixture_drawn = false;
+    bool material_edge_drawn = false;
     bool chasm_edge_drawn = false;
+    bool fixture_cell = false;
 
     if (!dst)
         return;
@@ -1796,10 +1799,21 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     /* Terrain underlay */
     if (terrain_tile)
         sdl_draw_tileset_sprite(ta, tc, dst, false);
-    if (terrain_tile)
-        fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
-    if (terrain_tile)
+    if (terrain_tile && dy >= 0 && dx >= 0 && p_ptr
+        && dy < p_ptr->cur_map_hgt && dx < p_ptr->cur_map_wid)
+        fixture_cell = cave_fixture_at(dy, dx) != CAVE_FIXTURE_NONE;
+    if (terrain_tile && fixture_cell) {
+        /* Opaque wall fixtures must remain on top of the transition pixels. */
+        material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst);
         chasm_edge_drawn = sdl_chasm_edge_draw(dy, dx, dst);
+        fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
+    } else if (terrain_tile) {
+        /* Liquids and elemental banks draw first so their edges remain visible
+         * through the generic material transition pass. */
+        fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
+        material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst);
+        chasm_edge_drawn = sdl_chasm_edge_draw(dy, dx, dst);
+    }
     if (sdl_rage_wall_tint_active(dy, dx) && (cave_m_idx[dy][dx] != 0))
         sdl_draw_rage_tile_filter(ta, tc, dy, dx, dst);
     else if (sdl_rage_floor_tint_active(dy, dx))
@@ -1885,7 +1899,8 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     }
 
     /* Base tile */
-    if (base_tile && !((fixture_drawn || chasm_edge_drawn)
+    if (base_tile && !((fixture_drawn || material_edge_drawn
+                || chasm_edge_drawn)
             && (a & TILE_INDEX_MASK) == (ta & TILE_INDEX_MASK)
             && ((byte)c & TILE_INDEX_MASK) == ((byte)tc & TILE_INDEX_MASK))) {
         byte draw_a = a;

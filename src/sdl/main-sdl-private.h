@@ -3210,6 +3210,9 @@ void sdl_idle_animation_invalidate_span(int col, int row, int width);
 void sdl_idle_animation_track(int col, int row, int y, int x,
     byte a, char c, byte ta, char tc);
 bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst);
+bool sdl_material_edge_draw(int y, int x, byte ta, char tc,
+    const SDL_FRect* dst);
+bool sdl_material_edge_at(int y, int x);
 byte sdl_chasm_edge_mask(int y, int x);
 bool sdl_chasm_edge_draw(int y, int x, const SDL_FRect* dst);
 int sdl_idle_animation_timeout_ms(Uint64 now_ns);

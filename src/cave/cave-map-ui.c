@@ -25,6 +25,23 @@ static bool chasm_border_at(int y, int x)
 
 static bool floor_border_redrawing_neighbors;
 
+/* A border can disappear without changing either terminal glyph. Track the
+ * inputs that select the terrain artwork, including discovery and lighting,
+ * so arbitrary material changes invalidate the neighboring cached pixels. */
+static bool terrain_source_changed(int y, int x)
+{
+    static u64b previous[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    u64b current;
+    if (!in_bounds(y, x) || graphics_are_ascii()) return false;
+    current = ((u64b)1 << 63) | (u64b)cave_feat[y][x]
+        | ((u64b)cave_color[y][x] << 8)
+        | ((u64b)cave_info[y][x] << 16)
+        | ((u64b)(byte)cave_light[y][x] << 32);
+    if (previous[y][x] == current) return false;
+    previous[y][x] = current;
+    return true;
+}
+
 static bool floor_material_transition_at(int y, int x)
 {
     int style;
@@ -341,6 +358,7 @@ void lite_spot(int y, int x)
     int ky, kx;
     int vy, vx;
     int cell_w;
+    bool terrain_changed = terrain_source_changed(y, x);
 
     /* Discovery and view changes alter adjacent banks and connected surfaces,
      * including cells outside the main viewport in the retained side map. */
@@ -349,7 +367,7 @@ void lite_spot(int y, int x)
         || underlay == FEAT_WATER || underlay == FEAT_DEEP_WATER
         || underlay == FEAT_POISON
         || underlay == FEAT_CHASM
-        || floor_material_transition_at(y, x)
+        || terrain_changed || floor_material_transition_at(y, x)
         || styles_floor_border(underlay, NULL, NULL))
         cave_floor_border_redraw_neighbors(y, x);
 
@@ -409,7 +427,7 @@ void lite_spot(int y, int x)
         /* Fixture frames can change with sight/settings while the glyph stays
          * identical (notably a permanently lit wall leaving sight). */
         bool force_visual_redraw = (cave_m_idx[y][x] < 0)
-            || floor_border_redrawing_neighbors || chasm_border_at(y, x)
+            || terrain_changed || floor_border_redrawing_neighbors || chasm_border_at(y, x)
             || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
             || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
             || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON
@@ -419,7 +437,8 @@ void lite_spot(int y, int x)
 #ifdef USE_SDL
         /* Removing a water surface or wall fixture can leave the same base
          * glyph. Repaint its cached pixels even after the feature changed. */
-        force_visual_redraw |= sdl_idle_animation_tracks_grid(y, x);
+        force_visual_redraw |= sdl_idle_animation_tracks_grid(y, x)
+            || sdl_material_edge_at(y, x);
 #endif
 
         if (!force_visual_redraw && mirror_monster_tile_facing
@@ -514,7 +533,11 @@ void prt_map(void)
                         ' ');
             }
 
-            if (force_rage_map_filter_refresh || panel_moved
+            bool material_border = false;
+#ifdef USE_SDL
+            material_border = !graphics_are_ascii() && sdl_material_edge_at(y, x);
+#endif
+            if (force_rage_map_filter_refresh || panel_moved || material_border
                 || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)
                     || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
                     || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA

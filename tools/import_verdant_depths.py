@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Import Verdant 05 flagstone, masonry and moss walls plus one plain chasm tile.
+"""Import Verdant 05 cave materials and static chasm fill variants.
 
 Requires Pillow. Existing atlas rows 0..32 and their tile coordinates are kept.
-The source pack is local licensed artwork, not downloaded by this utility.
+Rows 33 and 34 hold the static wall/chasm art. The three chasm fill variants
+are placed together in row 34; the renderer tiles those fills without any
+edge/lip transition art. The source pack is local licensed artwork, not
+downloaded by this utility.
 """
 import argparse
 import json
@@ -23,7 +26,7 @@ def main():
     old = Image.open(atlas_path).convert("RGBA")
     # Rows 33..34 belong to this importer. Keep newer floor art in row 35
     # and beyond when refreshing these walls/chasm.
-    if old.width != 512 or old.height < 33 * 16:
+    if old.width != 512 or old.height < 35 * 16:
         raise ValueError("Unexpected atlas dimensions; check reserved rows before importing")
     atlas = Image.new("RGBA", (512, max(old.height, 35 * 16)))
     atlas.paste(old, (0, 0))
@@ -39,11 +42,17 @@ def main():
                            for c in channels[:3]) + (channels[3],))
         atlas.paste(dark, ((col + 1) * 16, row * 16))
 
-    for index, name in enumerate(("flag_1", "mason_1", "moss_1")):
+    # Keep the four authored wall materials together. The adjacent columns
+    # are their dark variants, matching the atlas convention used by style W:
+    # coordinates. The first three materials are selected by existing styles;
+    # brick is available for the additional cave style below.
+    for index, name in enumerate(("flag_1", "mason_1", "moss_1", "brick_1")):
         pair(name, 33, index * 2)
-    pair("chasm_2", 34, 0)
+    for index, name in enumerate(("chasm_1", "chasm_2", "chasm_3")):
+        pair(name, 34, index * 2)
     atlas.save(atlas_path)
-    print("Imported flagstone, masonry and moss walls, plus the plain chasm_2 tile.")
+    print("Imported flagstone, masonry, moss and brick walls, plus chasm_1/2/3 "
+          "static fill variants without transition/lip art.")
 
 
 if __name__ == "__main__":

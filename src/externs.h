@@ -2645,6 +2645,7 @@ extern void sdl_side_map_pane_invalidate_cell(int y, int x);
 extern void sdl_idle_animation_redraw_cached_cells(
     void (*redraw_cell)(int col, int row, int width));
 extern bool sdl_idle_animation_tracks_grid(int y, int x);
+extern bool sdl_material_edge_at(int y, int x);
 #endif
 extern bool g_suppress_hidden_left_panel_overlay;
 extern byte g_hidden_left_panel_overlay_start_row;
