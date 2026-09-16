@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise plain chasm rendering and Verdant wall styles with existing floors.
+"""Exercise static chasm fills and Verdant cave material styles.
 
 Build first with build-incremental.ps1. Uses the production map/SDL code with
 isolated maps, parses source templates, and never opens player saves.
@@ -32,11 +32,16 @@ static void verdant_style_tests(void) {
         assert(parse_style_info(line,&h)==0);
     }
     fclose(file);
-    for(int i=40;i<=42;i++) {
+    static const int floor_rows[]={33,36,36,36};
+    static const int floor_cols[]={0,16,0,8};
+    static const int floor_counts[]={1,4,4,4};
+    for(int i=40;i<=43;i++) {
         assert(style_info[i].name && style_info[i].wall_row==33);
         assert(style_info[i].wall_col==(i-40)*2);
-        assert(style_info[i].floor_count==1 && style_info[i].floor_row==23
-            && style_info[i].floor_col==0);
+        assert(style_info[i].floor_count==floor_counts[i-40]
+            && style_info[i].floor_tiled==(i!=40)
+            && style_info[i].floor_row==floor_rows[i-40]
+            && style_info[i].floor_col==floor_cols[i-40]);
     }
     file=fopen("lib/edit/style-levels.txt","r"); assert(file);
     while(fgets(line,sizeof(line),file)) {
@@ -44,41 +49,52 @@ static void verdant_style_tests(void) {
         assert(parse_style_levels(line,&h)==0);
     }
     fclose(file);
-    bool found_flag=false, found_moss=false;
+    bool found_flag=false, found_moss=false, found_brick=false;
     /* The configured playable depths use the existing L:/P: rules. */
     for(int depth=1;depth<=MORGOTH_DEPTH;depth++) {
         p_ptr->depth=depth;
         for(int n=0;n<300;n++) {
             styles_init_for_level();
             int style=cave_style_primary_for_grid(10,11);
-            assert(style<40 || style>42);
+            assert(style<40 || style>43);
             style=styles_pick_random_from_level(); /* Also used by unstyled vaults and '$'. */
-            assert(style<40 || style>42);
+            assert(style<40 || style>43);
             for(int kind=0;kind<PART_STYLE_MAX;kind++) {
                 style=styles_pick_partition_style(depth,kind);
                 assert(style!=41);
                 if(style==40) {
-                    assert(kind==PART_STYLE_LABYRINTH && depth>=8 && depth<=10);
-                    assert(mode_weight_for_depth(QUAD_MODE_LABYRINTH,depth,12,NULL,9)>0);
-                    found_flag=true;
+                    if(kind==PART_STYLE_LABYRINTH) {
+                        assert(depth>=8 && depth<=10);
+                        assert(mode_weight_for_depth(QUAD_MODE_LABYRINTH,depth,12,NULL,9)>0);
+                        found_flag=true;
+                    } else {
+                        assert(kind==PART_STYLE_CHASM_FLOOR
+                            || kind==PART_STYLE_CHASM_BRIDGE);
+                    }
                 }
                 if(style==42) {
                     assert(kind==PART_STYLE_CA_BLOB && depth>=5 && depth<=7);
                     assert(mode_weight_for_depth(QUAD_MODE_CAVEY,depth,12,NULL,9)>0);
                     found_moss=true;
                 }
+                if(style==43) {
+                    assert(kind==PART_STYLE_CA_BLOB && depth>=5 && depth<=7);
+                    assert(mode_weight_for_depth(QUAD_MODE_CAVEY,depth,12,NULL,9)>0);
+                    found_brick=true;
+                }
                 if(depth<=20 && kind==PART_STYLE_BIG_CAVE_FIRE) assert(style==63);
                 if(depth<=20 && kind==PART_STYLE_BIG_CAVE_ICE) assert(style==62);
                 if(depth<=20 && kind==PART_STYLE_BIG_CAVE_POIS) assert(style==55);
-                if(depth<=20 && kind==PART_STYLE_CHASM_FLOOR) assert(style==30);
+                if(depth<=20 && (kind==PART_STYLE_CHASM_FLOOR
+                    || kind==PART_STYLE_CHASM_BRIDGE)) assert(style==40);
             }
         }
     }
-    assert(found_flag && found_moss);
+    assert(found_flag && found_moss && found_brick);
     p_ptr->depth=0; styles_init_for_level();
     assert(cave_style_primary_for_grid(10,11)==13);
     p_ptr->depth=5;
-    puts("Biome palettes: flagstone only dark stone labyrinths, moss only green caves; general/elemental/Morgoth pools exclude all three: PASS");
+    puts("Biome palettes: flagstone chasms/labyrinths, moss and brick green caves; general/elemental/Morgoth pools exclude Verdant cave styles: PASS");
 }
 
 static void forge_palette_tests(void) {
@@ -117,6 +133,11 @@ static int chasm_tile_index(int y,int x) {
     assert((ta&TILE_FLAG) && ((byte)tc&TILE_FLAG));
     return ((ta&TILE_INDEX_MASK)-34)*16+((byte)tc&TILE_INDEX_MASK)/2;
 }
+static int floor_tile_index(int y,int x) {
+    byte a,ta; char c,tc; map_info(y,x,&a,&c,&ta,&tc);
+    assert((ta&TILE_FLAG) && ((byte)tc&TILE_FLAG));
+    return ((ta&TILE_INDEX_MASK)<<8)|((byte)tc&TILE_INDEX_MASK);
+}
 static void chasm_tests(void) {
     const int dy[8]={-1,-1,0,1,1,1,0,-1}, dx[8]={0,1,1,1,0,-1,-1,-1};
     chasm_map_reset();
@@ -143,6 +164,10 @@ static void chasm_tests(void) {
     map_info(10,11,&a,&c,&ta,&tc); assert(chasm_tile_index(10,11)==0);
     p_ptr->blind=0;
     map_info(10,11,&a,&c,&ta,&tc); assert(((byte)tc&TILE_INDEX_MASK)%2==0);
+    /* Chasms use only their three authored fill variants; adjacent floors keep
+     * the ordinary material selected by their own style. */
+    cave_feat[10][12]=FEAT_FLOOR; cave_info[10][12]=CAVE_MARK|CAVE_SEEN;
+    assert(floor_tile_index(10,12)==((33<<8)|0));
     use_graphics=GRAPHICS_NONE;
     f_info[FEAT_CHASM].d_char='%'; f_info[FEAT_CHASM].d_attr=TERM_L_DARK;
     map_info(10,11,&a,&c,&ta,&tc); assert(c=='%');
@@ -166,7 +191,7 @@ static void chasm_tests(void) {
         force_map_redraw(); Term_fresh(); full=capture(86); assert(same_surface(changed,full));
         SDL_DestroySurface(changed); SDL_DestroySurface(full);
     }
-    puts("One plain chasm tile for every neighbour layout; visibility, ASCII and map redraws: PASS");
+    puts("Chasm_1/2/3 fills without lip or outer ring; visibility, ASCII and map redraws: PASS");
 }
 
 static void verdant_preview(void) {
@@ -174,12 +199,12 @@ static void verdant_preview(void) {
     chasm_map_reset();
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
     SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
-        SDL_TEXTUREACCESS_TARGET,w*16*scale*3,h*16*scale); assert(target);
+        SDL_TEXTUREACCESS_TARGET,w*16*scale*4,h*16*scale); assert(target);
     SDL_SetRenderTarget(g_state.renderer,target);
-    for(int style=40;style<=42;style++) {
+    for(int style=40;style<=43;style++) {
         for(int y=0;y<h;y++) for(int x=0;x<w;x++) {
             bool wall=y<2||y>=h-2||x<2||x>=w-2;
-            bool pit=y>=4&&y<=9&&x>=5&&x<=12&&!(y==6&&x<10);
+            bool pit=y>=4&&y<=9&&x>=5&&x<=12;
             cave_feat[y][x]=wall?FEAT_WALL_EXTRA:pit?FEAT_CHASM:FEAT_FLOOR;
             cave_info[y][x]=CAVE_MARK|CAVE_SEEN|CAVE_GLOW|(wall?CAVE_WALL:0);
             cave_color[y][x]=COLOR_STYLE_BASE+style; cave_light[y][x]=2;

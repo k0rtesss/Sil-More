@@ -101,6 +101,8 @@ bool terrain_landmark_channel_cell(int y, int x)
 { return in_bounds_fully(y, x) && lm_live_channel[y][x]; }
 int terrain_landmark_terminal_cell(int y, int x)
 { return in_bounds_fully(y, x) ? lm_live_terminal[y][x] : 0; }
+int terrain_landmark_terminal_role(int y, int x)
+{ return in_bounds_fully(y, x) ? lm_terminal_role[y][x] : 0; }
 int terrain_landmark_structure_cell(int y, int x)
 { return in_bounds_fully(y, x) ? lm_live_structure[y][x] : 0; }
 bool terrain_landmark_partition(int pi)

@@ -4,6 +4,7 @@
 #include "cave/cave-flood.h"
 #include "monster/monster-senses.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-water-flow.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -64,6 +65,30 @@ static void wr_fixtures(void)
             wr_byte((byte)x);
             wr_byte(kind);
         }
+}
+
+static void wr_water_flow(void)
+{
+    byte count = 0, previous = 0;
+    wr_u16b(CAVE_WATER_FLOW_SAVE_MAGIC);
+    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (int x = 0; x < p_ptr->cur_map_wid; x++)
+        {
+            byte value = cave_water_flow_encoded_at(y, x);
+            if (value != previous || count == MAX_UCHAR)
+            {
+                wr_byte(count);
+                wr_byte(previous);
+                previous = value;
+                count = 1;
+            }
+            else count++;
+        }
+    if (count)
+    {
+        wr_byte(count);
+        wr_byte(previous);
+    }
 }
 
 /*
@@ -353,6 +378,7 @@ void wr_dungeon(void)
     log_trace("[save:%06u] === END CAVE_NATURAL RLE ===", (unsigned)save_byte_offset);
 
     wr_fixtures();
+    wr_water_flow();
 
     /*** Compact ***/
 

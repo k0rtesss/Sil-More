@@ -516,7 +516,7 @@ M2:It is a monument to a vast and final extinction, the end of all things.
 N:40:Flagstone #VerdantFlagstone
 # Dark stone labyrinth partitions at 400-500 ft only (see style-levels.txt).
 W:33:0
-F:23:0
+F:33:0
 D:0:10 20:6 20:9 20:12 20:15 20:18
 S:dark grey flagstone walls
 M1:Dark stone slabs line the walls, their worn joints running in uneven courses.
@@ -525,7 +525,7 @@ M2:Dust settles in the cracks between the heavy stones.
 N:41:Masonry #VerdantMasonry
 # Selected forge vault palettes only (see their S: records in vault.txt).
 W:33:2
-F:23:0
+F:TILE:36:16 36:18 36:20 36:22
 D:0:10 20:6 20:9 20:12 20:15 20:18
 S:pale dressed stone masonry
 M1:The passage opens between pale blocks of neatly dressed masonry.
@@ -534,11 +534,31 @@ M2:The regular joints and worn faces speak of patient work carried out in the da
 N:42:Moss #VerdantMoss
 # Damp green cave partitions only (see style-levels.txt).
 W:33:4
-F:23:0
+F:TILE:36:0 36:2 36:4 36:6
 D:0:10 20:6 20:9 20:12 20:15 20:18
 S:dark moss-covered stone walls
 M1:Dark moss fills the joints of the stone walls.
 M2:Moisture beads on the stone, feeding the quiet growth far from the sun.
+
+N:43:Brickwork #VerdantBrickwork
+# Weathered brick and packed-earth floors in selected cave partitions.
+W:33:6
+F:TILE:36:8 36:10 36:12 36:14
+D:0:10 20:6 20:9 20:12 20:15 20:18
+S:weathered earthen brickwork
+M1:The cave walls settle into weathered brick, with packed earth showing between the courses.
+M2:This was once a worked passage, softened by damp and time until the mountain reclaimed it.
+M1:Uneven red-brown bricks line the chamber, their old edges rounded by generations of dripping water.
+M2:The builders left no inscription, only a patient pattern of labour beneath the stone.
+
+N:44:DirtCave #VerdantDirtCave
+# Packed dirt patches inside the cold and fire big-cave partitions.
+W:33:6
+F:TILE:36:8 36:10 36:12 36:14
+D:0:10 20:6 20:9 20:12 20:15 20:18
+S:packed earthen cave floor
+M1:The stone gives way to packed earth, worn smooth by the passage of countless feet.
+M2:Dark soil fills the hollows of the cave, carrying a faint memory of the world above.
 
 #Vaults
 N:50:Red50 #RedBricks

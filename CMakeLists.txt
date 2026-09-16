@@ -216,6 +216,7 @@ set(SIL_MORE_SOURCES
     src/cave/cave-flow.c
     src/cave/cave-fixtures.c
     src/cave/cave-water.c
+    src/cave/cave-water-flow.c
     src/cave/cave-bridge.c
     src/cave/cave-lava.c
     src/cave/cave-poison.c
@@ -364,6 +365,7 @@ set(SIL_MORE_SOURCES
     src/sdl/render/sdl-fonts.c
     src/sdl/render/sdl-present.c
     src/sdl/render/sdl-term-callbacks.c
+    src/sdl/render/sdl-chasm-edge.c
     src/sdl/render/sdl-idle-animation.c
     src/sdl/render/sdl-bridge.c
     src/sdl/render/sdl-text.c

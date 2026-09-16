@@ -3,11 +3,125 @@
 #include "angband.h"
 #include "level-generation/level-generation-internal.h"
 
+#define BIG_CAVE_DIRT_STYLE 44
+#define BIG_CAVE_DIRT_SHARE 30
+
+/* Dirt is grown from a few seeds instead of scattered independently. That keeps each
+ * material boundary connected enough for the 47-mask renderer to read as a patch rather
+ * than as a checkerboard of one-cell exceptions. Only finished room floors are eligible,
+ * so the material pass cannot change cave topology or carve through later fixtures. */
+static void add_big_cave_dirt_patches(int y1, int y2, int x1, int x2,
+    int style_idx, big_cave_type_t cave_type)
+{
+    int h, w, floor_count = 0, target, dirt_count = 0;
+    int seed_count;
+    bool* dirt;
+
+    if ((cave_type != BIG_CAVE_ICE && cave_type != BIG_CAVE_FIRE)
+        || (style_idx != 62 && style_idx != 63))
+        return;
+
+    h = y2 - y1 + 1;
+    w = x2 - x1 + 1;
+    if (h < 3 || w < 3)
+        return;
+
+    dirt = mem_alloc_array(h * w, bool);
+    if (!dirt)
+        return;
+    for (int i = 0; i < h * w; i++)
+        dirt[i] = false;
+
+    for (int y = y1; y <= y2; y++)
+        for (int x = x1; x <= x2; x++)
+            if (cave_floor_bold(y, x) && (cave_info[y][x] & CAVE_ROOM))
+                floor_count++;
+
+    target = floor_count * BIG_CAVE_DIRT_SHARE / 100;
+    target = MAX(target, 6);
+    target = MIN(target, floor_count - 1);
+    if (target < 1)
+    {
+        mem_free(dirt);
+        return;
+    }
+
+    seed_count = (floor_count >= 120) ? 3 : 2;
+    for (int seed = 0; seed < seed_count && dirt_count < target; seed++)
+    {
+        bool planted = false;
+        for (int attempt = 0; attempt < 100 && !planted; attempt++)
+        {
+            int y = rand_range(y1 + 1, y2 - 1);
+            int x = rand_range(x1 + 1, x2 - 1);
+            int index = (y - y1) * w + (x - x1);
+            if (!cave_floor_bold(y, x) || !(cave_info[y][x] & CAVE_ROOM)
+                || dirt[index])
+                continue;
+            dirt[index] = true;
+            dirt_count++;
+            planted = true;
+        }
+    }
+
+    /* Add the strongest adjacent candidate each time. Ties are randomized, which
+     * gives organic outlines while guaranteeing that each seed grows contiguously. */
+    while (dirt_count < target)
+    {
+        int best_y = -1, best_x = -1, best_score = 0, ties = 0;
+        for (int y = y1 + 1; y <= y2 - 1; y++)
+        {
+            for (int x = x1 + 1; x <= x2 - 1; x++)
+            {
+                int index = (y - y1) * w + (x - x1);
+                int score = 0;
+                if (!cave_floor_bold(y, x) || !(cave_info[y][x] & CAVE_ROOM)
+                    || dirt[index])
+                    continue;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                        if ((dy || dx) && dirt[(y + dy - y1) * w + (x + dx - x1)])
+                            score++;
+                if (score > best_score)
+                {
+                    best_y = y;
+                    best_x = x;
+                    best_score = score;
+                    ties = 1;
+                }
+                else if (score > 0 && score == best_score)
+                {
+                    ties++;
+                    if (rand_int(ties) == 0)
+                    {
+                        best_y = y;
+                        best_x = x;
+                    }
+                }
+            }
+        }
+        if (best_y < 0)
+            break;
+        dirt[(best_y - y1) * w + (best_x - x1)] = true;
+        dirt_count++;
+    }
+
+    for (int y = y1; y <= y2; y++)
+        for (int x = x1; x <= x2; x++)
+        {
+            int index = (y - y1) * w + (x - x1);
+            if (dirt[index])
+                cave_set_feat_style(y, x, FEAT_FLOOR, BIG_CAVE_DIRT_STYLE);
+        }
+
+    mem_free(dirt);
+    log_trace("Big cave dirt patches: type=%d style=%d floors=%d dirt=%d",
+        cave_type, style_idx, floor_count, dirt_count);
+}
+
 bool carve_big_cave_bounds(int y_min, int y_max, int x_min, int x_max,
     int style_idx, big_cave_type_t cave_type)
 {
-    (void)cave_type;
-
     if (dun->cent_n >= room_capacity_limit())
     {
         genlog_anchor("BIG_CAVE: rejected - room capacity limit reached");
@@ -245,6 +359,8 @@ bool carve_big_cave_bounds(int y_min, int y_max, int x_min, int x_max,
 
     if (floor_count < 40)
         return false;
+
+    add_big_cave_dirt_patches(min_y, max_y, min_x, max_x, style_idx, cave_type);
 
     /* Add some internal pillars for visual interest */
     int pillar_count = floor_count / 60;

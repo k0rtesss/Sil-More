@@ -1758,6 +1758,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     bool tile_mode = g_state.use_tiles && g_state.tileset;
     bool health_bar_visible;
     bool fixture_drawn = false;
+    bool chasm_edge_drawn = false;
 
     if (!dst)
         return;
@@ -1797,6 +1798,8 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
         sdl_draw_tileset_sprite(ta, tc, dst, false);
     if (terrain_tile)
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
+    if (terrain_tile)
+        chasm_edge_drawn = sdl_chasm_edge_draw(dy, dx, dst);
     if (sdl_rage_wall_tint_active(dy, dx) && (cave_m_idx[dy][dx] != 0))
         sdl_draw_rage_tile_filter(ta, tc, dy, dx, dst);
     else if (sdl_rage_floor_tint_active(dy, dx))
@@ -1882,7 +1885,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     }
 
     /* Base tile */
-    if (base_tile && !(fixture_drawn
+    if (base_tile && !((fixture_drawn || chasm_edge_drawn)
             && (a & TILE_INDEX_MASK) == (ta & TILE_INDEX_MASK)
             && ((byte)c & TILE_INDEX_MASK) == ((byte)tc & TILE_INDEX_MASK))) {
         byte draw_a = a;

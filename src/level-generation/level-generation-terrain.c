@@ -6,6 +6,7 @@
 #include "level-generation/level-generation-landmarks.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
+#include "cave/cave-water-flow.h"
 #include <limits.h>
 
 /* A region gets a complete channel, not a sequence of independent tile edits.

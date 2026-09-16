@@ -26,6 +26,7 @@ HARNESS = r'''
 #include "level-generation/level-generation-terrain-history.h"
 #include "cave/cave-bridge.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-water-flow.h"
 #include "log/log.h"
 #include <assert.h>
 #include <stdio.h>
@@ -236,6 +237,70 @@ static void export_landmark_record(FILE* f,const terrain_landmark_stats* lm) {
     fprintf(f,",\"structures\":{\"flooded\":%d,\"breached\":%d,\"repaired\":%d,\"rubble_tiles\":%d,\"repair_tiles\":%d,\"overflow_tiles\":%d}",
         lm->flooded_structures,lm->breached_structures,lm->repaired_structures,lm->rubble_tiles,lm->repair_tiles,lm->overflow_tiles);
 }
+static int flow_visual_feature(int feat) {
+    int underlay=cave_bridge_underlay(feat);
+    if(underlay==FEAT_WATER||underlay==FEAT_DEEP_WATER)return FEAT_WATER;
+    if(underlay==FEAT_POISON)return FEAT_POISON;
+    return FEAT_NONE;
+}
+static bool flow_channel_marker(int y,int x) {
+    if(terrain_landmark_channel_cell(y,x))return true;
+    for(int system=0;system<terrain_history_count();system++)
+        if(terrain_landmark_system_cell(system,y,x,2))return true;
+    return false;
+}
+static bool flow_basin_marker(int y,int x) {
+    if(terrain_landmark_basin_cell(y,x))return true;
+    for(int system=0;system<terrain_history_count();system++)
+        if(terrain_landmark_system_cell(system,y,x,1))return true;
+    return false;
+}
+static void assert_flow_targets_liquid(void) {
+    int checks=0;
+    for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
+        int feature=flow_visual_feature(cave_feat[y][x]);
+        int direction=cave_water_flow_direction(y,x);
+        if(feature==FEAT_NONE||direction<=CAVE_WATER_FLOW_CALM
+            ||direction>CAVE_WATER_FLOW_WEST)continue;
+        int dy=direction==CAVE_WATER_FLOW_NORTH?-1:direction==CAVE_WATER_FLOW_SOUTH?1:0;
+        int dx=direction==CAVE_WATER_FLOW_EAST?1:direction==CAVE_WATER_FLOW_WEST?-1:0;
+        int ny=y+dy,nx=x+dx;
+        assert(ny>=0&&nx>=0&&ny<p_ptr->cur_map_hgt&&nx<p_ptr->cur_map_wid
+            &&flow_visual_feature(cave_feat[ny][nx])==feature);
+        checks++;
+    }
+    printf("Liquid directions always reach same-material neighbors: %d checks PASS\n",checks);
+}
+static void assert_wide_flow_lanes(void) {
+    int checks=0;
+    for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
+        if(!flow_channel_marker(y,x)||flow_basin_marker(y,x))continue;
+        int direction=cave_water_flow_direction(y,x);
+        if(direction<=CAVE_WATER_FLOW_CALM||direction>CAVE_WATER_FLOW_WEST)continue;
+        int dy=direction==CAVE_WATER_FLOW_NORTH?-1:direction==CAVE_WATER_FLOW_SOUTH?1:0;
+        int dx=direction==CAVE_WATER_FLOW_EAST?1:direction==CAVE_WATER_FLOW_WEST?-1:0;
+        int py=y-dy,px=x-dx,ny=y+dy,nx=x+dx;
+        if(py<1||px<1||ny>=p_ptr->cur_map_hgt-1||nx>=p_ptr->cur_map_wid-1
+            ||!flow_channel_marker(py,px)||!flow_channel_marker(ny,nx))continue;
+        int feature=flow_visual_feature(cave_feat[y][x]);
+        if(feature==FEAT_NONE||flow_visual_feature(cave_feat[py][px])!=feature
+            ||flow_visual_feature(cave_feat[ny][nx])!=feature)continue;
+        for(int side=-1;side<=1;side+=2) {
+            int sy=y+(dx?side:0),sx=x+(dy?side:0);
+            if(sy<1||sx<1||sy>=p_ptr->cur_map_hgt-1||sx>=p_ptr->cur_map_wid-1
+                ||flow_visual_feature(cave_feat[sy][sx])!=feature
+                ||flow_basin_marker(sy,sx)||flow_channel_marker(sy,sx))continue;
+            int spy=sy-dy,spx=sx-dx,sny=sy+dy,snx=sx+dx;
+            if(spy<1||spx<1||sny>=p_ptr->cur_map_hgt-1||snx>=p_ptr->cur_map_wid-1
+                ||flow_visual_feature(cave_feat[spy][spx])!=feature
+                ||flow_visual_feature(cave_feat[sny][snx])!=feature
+                ||flow_channel_marker(spy,spx)||flow_channel_marker(sny,snx))continue;
+            assert(cave_water_flow_direction(sy,sx)==direction);
+            checks++;
+        }
+    }
+    printf("Wide liquid lanes inherit straight channel directions: %d checks PASS\n",checks);
+}
 static void export_landmark_grids(FILE* f,int system) {
     const char* keys[]={"features","partition_ids","new_terrain","reserved","info","natural",
         "terrain_before","terrain_after","critical_before","landmark_cells","landmark_bridges",
@@ -324,6 +389,8 @@ int main(int argc, char** argv) {
     assert(character_dungeon && in_bounds_fully(p_ptr->py,p_ptr->px));
     assert(cave_m_idx[p_ptr->py][p_ptr->px]==-1);
     assert(mon_max>1 && o_max>1);
+    assert_flow_targets_liquid();
+    assert_wide_flow_lanes();
     const terrain_generation_stats* stats=terrain_generation_last_stats();
     int stairs=0, terrain=0;
     for(int y=1;y<p_ptr->cur_map_hgt-1;y++) for(int x=1;x<p_ptr->cur_map_wid-1;x++) {

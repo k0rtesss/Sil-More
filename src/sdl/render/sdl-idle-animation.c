@@ -2,10 +2,13 @@
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
+#include "cave/cave-water-flow.h"
 #include "sdl/render/sdl-bridge.h"
 
 /* Fixtures share one 160x16 atlas; each animated liquid shares one 64x16 atlas.
- * Connected surfaces use 256x256 atlas pages (one page per animation frame).
+ * Connected surfaces use 256x256 atlas pages. Calm freshwater and acid have
+ * four Verdant 03 frames; directional currents retain their three native
+ * frames.
  * The original isolated textures remain the fallback if an atlas is absent.
  * No I/O, texture creation, timers, threads, or heap allocation occurs in
  * the animation update. */
@@ -19,6 +22,15 @@
     (FIXTURE_ATLAS_TORCH_FRAME_START + FIXTURE_ATLAS_FRAME_COUNT)
 #define FIXTURE_TOTAL_FRAME_COUNT \
     (FIXTURE_BRAZIER_FRAME_START + FIXTURE_ATLAS_FRAME_COUNT)
+#define WATER_STILL_FRAME_COUNT 4
+#define WATER_CURRENT_FRAME_COUNT 3
+#define WATER_DIRECTION_COUNT 5
+#define WATER_PAGE_COUNT \
+    (WATER_STILL_FRAME_COUNT \
+        + (WATER_DIRECTION_COUNT - 1) * WATER_CURRENT_FRAME_COUNT)
+#define CAVE_STYLE_DIRT 44
+#define CAVE_STYLE_SNOW 62
+#define CAVE_STYLE_BASALT 63
 
 typedef struct idle_cell {
     int col, row, y, x;
@@ -56,19 +68,46 @@ static SDL_Texture* water_depth_transition_texture;
 static SDL_Texture* water_bank_overlay_texture;
 static bool water_depth_transition_load_attempted;
 static bool water_bank_overlay_load_attempted;
+static SDL_Texture* snow_dirt_transition_texture;
+static SDL_Texture* basalt_dirt_transition_texture;
+static bool snow_dirt_transition_load_attempted;
+static bool basalt_dirt_transition_load_attempted;
 
 static bool liquid_is_water(byte feat)
 {
     return feat == FEAT_WATER || feat == FEAT_DEEP_WATER;
 }
 
+static bool liquid_has_current(byte feat)
+{
+    return liquid_is_water(feat) || feat == FEAT_POISON;
+}
+
 static byte liquid_frame_count(byte feat)
 {
     if (feat == FEAT_ICE || feat == FEAT_CHASM) return 1;
-    if (feat == FEAT_POISON && poison_transition_texture) return 3;
-    /* Water bakes the native 0,1,2,1 sequence into four atlas pages. Original
-     * fallback strips and the lava transition also contain four frames. */
+    if ((feat == FEAT_POISON && poison_transition_texture)
+        || (feat == FEAT_WATER && water_transition_texture)
+        || (feat == FEAT_DEEP_WATER && deep_water_transition_texture))
+        return feat == FEAT_POISON ? 3 : WATER_CURRENT_FRAME_COUNT;
+    /* The original fallback strips and Verdant 03 calm water contain four
+     * frames. */
     return 4;
+}
+
+static byte liquid_frame_count_at(int y, int x, byte feat)
+{
+    if (liquid_has_current(feat) && !cave_water_flow_direction(y, x))
+        return WATER_STILL_FRAME_COUNT;
+    return liquid_frame_count(feat);
+}
+
+static int water_page_index(int direction, int frame)
+{
+    if (direction <= 0)
+        return frame;
+    return WATER_STILL_FRAME_COUNT
+        + (direction - 1) * WATER_CURRENT_FRAME_COUNT + frame;
 }
 
 static byte visible_liquid(int y, int x)
@@ -78,7 +117,7 @@ static byte visible_liquid(int y, int x)
         return 0;
     byte feat = cave_bridge_underlay(cave_feat[y][x]);
     if (feat != FEAT_WATER && feat != FEAT_DEEP_WATER && feat != FEAT_LAVA && feat != FEAT_ICE
-        && feat != FEAT_POISON && !(feat == FEAT_CHASM && FEAT_IS_BRIDGE(cave_feat[y][x])))
+        && feat != FEAT_POISON && feat != FEAT_CHASM)
         return 0;
     info = cave_info[y][x];
     if (!(info & (CAVE_MARK | CAVE_SEEN))
@@ -102,6 +141,23 @@ static byte liquid_transition_mask(int y, int x, byte feat)
             mask |= (byte)(1u << i);
     }
     return mask;
+}
+
+/* The three Verdant chasm fills are static tiling variants, not transition
+ * pieces. Choose them from world coordinates so the pattern remains stable
+ * while the map pans or repaints, without consuming gameplay RNG. */
+static int chasm_fill_variant(int y, int x)
+{
+    u32b hash = (u32b)y * 0x9E3779B9U ^ (u32b)x * 0x85EBCA6BU;
+    hash ^= hash >> 16;
+    return (int)(hash % 3U);
+}
+
+static void draw_chasm_fill(int y, int x, const SDL_FRect* dst, bool live)
+{
+    char tile = (char)(TILE_FLAG | chasm_fill_variant(y, x) * 2
+        | (live ? 0 : 1));
+    sdl_draw_tileset_sprite(f_info[FEAT_CHASM].x_attr, tile, dst, false);
 }
 
 /* Treat every non-deep neighbor, including unknown terrain, as connected
@@ -140,6 +196,127 @@ static SDL_Texture* load_transition_atlas(SDL_Texture** texture,
     return *texture;
 }
 
+/* The elemental big-cave floor styles are encoded in cave_color rather than
+ * in the feature itself. Dirt is style 44, so it remains the outside material
+ * and the renderer only needs to draw the upper-material edge for styles 62/63. */
+static bool visible_material_floor_style(int y, int x, int* style_out)
+{
+    u16b info;
+    byte feat;
+    int style;
+    if (!p_ptr || !in_bounds(y, x))
+        return false;
+    feat = cave_bridge_underlay(cave_feat[y][x]);
+    if (feat != FEAT_FLOOR && feat != FEAT_RAGE_FLOOR
+        && feat != FEAT_SUNLIGHT)
+        return false;
+    info = cave_info[y][x];
+    if (!(info & (CAVE_MARK | CAVE_SEEN))
+        || ((p_ptr->rage || g_labyrinth_view_active) && !(info & CAVE_SEEN)))
+        return false;
+    style = styles_decode_color_style(cave_color[y][x]);
+    if (style_out)
+        *style_out = style;
+    return true;
+}
+
+static bool visible_known_terrain(int y, int x)
+{
+    u16b info;
+    if (!p_ptr || !in_bounds(y, x))
+        return false;
+    info = cave_info[y][x];
+    return (info & (CAVE_MARK | CAVE_SEEN))
+        && !((p_ptr->rage || g_labyrinth_view_active) && !(info & CAVE_SEEN));
+}
+
+static int visible_elemental_floor_style(int y, int x)
+{
+    int style;
+    if (!visible_material_floor_style(y, x, &style))
+        return -1;
+    return (style == CAVE_STYLE_SNOW || style == CAVE_STYLE_BASALT)
+        ? style : -1;
+}
+
+static bool elemental_transition_has_dirt_neighbor(int y, int x)
+{
+    static const int dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
+    static const int dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
+    for (int i = 0; i < 8; i++)
+    {
+        int style;
+        if (visible_material_floor_style(y + dy[i], x + dx[i], &style)
+            && style == CAVE_STYLE_DIRT)
+            return true;
+    }
+    return false;
+}
+
+static byte elemental_transition_mask(int y, int x)
+{
+    static const int dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
+    static const int dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
+    byte mask = 0;
+    for (int i = 0; i < 8; i++)
+    {
+        int neighbor_style;
+        if (visible_material_floor_style(y + dy[i], x + dx[i], &neighbor_style))
+        {
+            /* Only DirtCave is outside material. Other known floor styles
+             * are kept connected so a cave edge cannot paint dirt over them. */
+            if (neighbor_style != CAVE_STYLE_DIRT)
+                mask |= (byte)(1u << i);
+        }
+        else if (visible_known_terrain(y + dy[i], x + dx[i]))
+        {
+            /* Walls, hazards and other known non-floor features are not dirt. */
+            mask |= (byte)(1u << i);
+        }
+    }
+    return mask;
+}
+
+static SDL_Texture* load_elemental_transition_texture(int style)
+{
+    if (style == CAVE_STYLE_SNOW)
+        return load_transition_atlas(&snow_dirt_transition_texture,
+            &snow_dirt_transition_load_attempted,
+            "lib/xtra/graf/transition_snow_on_dirt.png", 1);
+    if (style == CAVE_STYLE_BASALT)
+        return load_transition_atlas(&basalt_dirt_transition_texture,
+            &basalt_dirt_transition_load_attempted,
+            "lib/xtra/graf/transition_basalt_on_dirt.png", 1);
+    return NULL;
+}
+
+static bool draw_elemental_transition(int y, int x, const SDL_FRect* dst)
+{
+    int style = visible_elemental_floor_style(y, x);
+    if (style < 0)
+        return false;
+    if (!elemental_transition_has_dirt_neighbor(y, x))
+        return false;
+
+    /* A fully connected cell already has the correct variant from F:TILE;
+     * skipping it preserves the four snow floor variants and avoids replacing
+     * a solid basalt tile with a single atlas sample. */
+    byte mask = elemental_transition_mask(y, x);
+    if (mask == 255)
+        return false;
+
+    SDL_Texture* transition = load_elemental_transition_texture(style);
+    if (!transition)
+        return false;
+    SDL_FRect src = { (mask % 16) * TILE_SIZE,
+        (mask / 16) * TILE_SIZE, TILE_SIZE, TILE_SIZE };
+    bool live = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
+    int light = live ? 255 : 96;
+    SDL_SetTextureColorMod(transition, light, light, light);
+    SDL_RenderTexture(g_state.renderer, transition, &src, dst);
+    return true;
+}
+
 static SDL_Texture* load_liquid_transition_texture(byte feat)
 {
     SDL_Texture** texture;
@@ -163,34 +340,40 @@ static SDL_Texture* load_liquid_transition_texture(byte feat)
     case FEAT_WATER:
         texture = &water_transition_texture;
         attempted = &water_transition_load_attempted;
-        path = "lib/xtra/graf/transition_shoal_on_silt.png";
-        frame_count = 4;
+        path = "lib/xtra/graf/transition_freshwater.png";
+        frame_count = WATER_PAGE_COUNT;
         break;
     case FEAT_DEEP_WATER:
         texture = &deep_water_transition_texture;
         attempted = &deep_water_transition_load_attempted;
-        path = "lib/xtra/graf/transition_sea_on_silt.png";
-        frame_count = 4;
+        path = "lib/xtra/graf/transition_freshwater_deep.png";
+        frame_count = WATER_PAGE_COUNT;
         break;
     case FEAT_POISON:
         texture = &poison_transition_texture;
         attempted = &poison_transition_load_attempted;
         path = "lib/xtra/graf/transition_acid_on_stone.png";
-        frame_count = 3;
+        frame_count = WATER_PAGE_COUNT;
         break;
     default:
         return NULL;
     }
-    if (feat == FEAT_WATER)
+    if (liquid_is_water(feat))
     {
         /* Load once on the initial water draw, so new neighbor connectivity
          * never triggers asset I/O during an idle animation update. */
+        load_transition_atlas(&water_transition_texture,
+            &water_transition_load_attempted,
+            "lib/xtra/graf/transition_freshwater.png", WATER_PAGE_COUNT);
+        load_transition_atlas(&deep_water_transition_texture,
+            &deep_water_transition_load_attempted,
+            "lib/xtra/graf/transition_freshwater_deep.png", WATER_PAGE_COUNT);
         load_transition_atlas(&water_depth_transition_texture,
             &water_depth_transition_load_attempted,
-            "lib/xtra/graf/transition_shoal_on_sea.png", 4);
+            "lib/xtra/graf/transition_freshwater_depth.png", WATER_PAGE_COUNT);
         load_transition_atlas(&water_bank_overlay_texture,
             &water_bank_overlay_load_attempted,
-            "lib/xtra/graf/transition_water_bank_overlay.png", 4);
+            "lib/xtra/graf/transition_freshwater_bank.png", WATER_PAGE_COUNT);
     }
     return load_transition_atlas(texture, attempted, path, frame_count);
 }
@@ -281,8 +464,7 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
     bool live = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
     if (feat == FEAT_CHASM)
     {
-        sdl_draw_tileset_sprite(f_info[FEAT_CHASM].x_attr,
-            f_info[FEAT_CHASM].x_char, dst, false);
+        draw_chasm_fill(y, x, dst, live);
         return true;
     }
     if (!load_liquid_texture(feat))
@@ -309,7 +491,8 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
         : feat == FEAT_POISON ? poison_texture
         : feat == FEAT_LAVA ? lava_texture : water_texture;
     SDL_Texture* transition = load_liquid_transition_texture(feat);
-    int frame = live ? (int)((frame_tick / 8) % liquid_frame_count(feat)) : 0;
+    int frame = live ? (int)((frame_tick / 8)
+        % liquid_frame_count_at(y, x, feat)) : 0;
     SDL_FRect src = { frame * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE };
     SDL_FRect bank_src = { 0 };
     bool draw_bank = false;
@@ -318,7 +501,11 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
         byte mask = liquid_transition_mask(y, x, feat);
         texture = transition;
         src.x = (mask % 16) * TILE_SIZE;
-        src.y = (mask / 16 + frame * 16) * TILE_SIZE;
+        /* Select surface direction independently of the fixed shoreline mask.
+         * Rotating an entire tile would rotate its bank into the channel. */
+        int page = liquid_has_current(feat)
+            ? water_page_index(cave_water_flow_direction(y, x), frame) : frame;
+        src.y = (mask / 16 + page * 16) * TILE_SIZE;
         if (feat == FEAT_WATER && water_depth_transition_texture
             && water_bank_overlay_texture)
         {
@@ -329,7 +516,7 @@ static bool draw_liquid(int y, int x, const SDL_FRect* dst)
                 draw_bank = true;
                 texture = water_depth_transition_texture;
                 src.x = (depth_mask % 16) * TILE_SIZE;
-                src.y = (depth_mask / 16 + frame * 16) * TILE_SIZE;
+                src.y = (depth_mask / 16 + page * 16) * TILE_SIZE;
             }
         }
     }
@@ -477,6 +664,7 @@ void sdl_idle_animation_redraw_cached_cells(
 
 void sdl_idle_animation_shutdown(void)
 {
+    sdl_chasm_edge_shutdown();
     SDL_DestroyTexture(water_depth_transition_texture);
     water_depth_transition_texture = NULL;
     water_depth_transition_load_attempted = false;
@@ -498,6 +686,12 @@ void sdl_idle_animation_shutdown(void)
     SDL_DestroyTexture(lava_transition_texture);
     lava_transition_texture = NULL;
     lava_transition_load_attempted = false;
+    SDL_DestroyTexture(snow_dirt_transition_texture);
+    snow_dirt_transition_texture = NULL;
+    snow_dirt_transition_load_attempted = false;
+    SDL_DestroyTexture(basalt_dirt_transition_texture);
+    basalt_dirt_transition_texture = NULL;
+    basalt_dirt_transition_load_attempted = false;
     SDL_DestroyTexture(poison_texture);
     poison_texture = NULL;
     poison_load_attempted = false;
@@ -541,6 +735,8 @@ bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst)
         if (FEAT_IS_BRIDGE(cave_feat[y][x])) sdl_draw_bridge_deck(y, x, dst);
         return drawn;
     }
+    if (g_state.use_tiles && draw_elemental_transition(y, x, dst))
+        return true;
     byte kind = visible_fixture(y, x);
     bool live;
     bool animate;
@@ -606,7 +802,7 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
         cell->frame_steps = 8;
         cell->phase_steps = 0;
         cell->drawn_frame = (!p_ptr->blind && (cave_info[y][x] & CAVE_SEEN))
-            ? (byte)((frame_tick / 8) % liquid_frame_count(liquid)) : 0;
+            ? (byte)((frame_tick / 8) % liquid_frame_count_at(y, x, liquid)) : 0;
         return;
     }
     byte fixture_kind = visible_fixture(y, x);
@@ -640,7 +836,8 @@ static bool animation_context_active(void)
 
 static bool cell_can_animate(const idle_cell* cell)
 {
-    /* Track ice for pan/erase invalidation, but its solid surface never moves. */
+    /* Chasm and ice are static; calm freshwater still has a real four-frame
+     * surface animation and must remain in the idle scheduler. */
     if (cell->liquid_feat == FEAT_ICE || cell->liquid_feat == FEAT_CHASM)
         return false;
     term* t = term_screen;
@@ -723,7 +920,8 @@ void sdl_idle_animation_update(Uint64 now_ns)
         SDL_FRect dst;
         if (!cell_can_animate(cell))
             continue;
-        frame = cell->liquid_feat ? (byte)((tick / 8) % liquid_frame_count(cell->liquid_feat))
+        frame = cell->liquid_feat ? (byte)((tick / 8)
+            % liquid_frame_count_at(cell->y, cell->x, cell->liquid_feat))
             : fixture_frame(tick, cell->frame_steps, cell->phase_steps,
                 cell->frame_count);
         if (frame == cell->drawn_frame)

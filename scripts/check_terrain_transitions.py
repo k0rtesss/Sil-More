@@ -154,6 +154,58 @@ static void shore_fallback_tests(void) {
     missing_transition=false; sdl_idle_animation_shutdown();
     puts("Missing transition atlases retain original terrain pixels, with failed-load caching: PASS");
 }
+static void material_transition_tests(void) {
+    SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET,16,16); assert(target);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    SDL_FRect dst={0,0,16,16};
+
+    floor_reset(62);
+    SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255); SDL_RenderClear(g_state.renderer);
+    assert(!draw_elemental_transition(10,11,&dst));
+    cave_color[10][12]=COLOR_STYLE_BASE+44;
+    SDL_RenderClear(g_state.renderer);
+    assert(draw_elemental_transition(10,11,&dst));
+    assert(snow_dirt_transition_texture);
+    SDL_Surface* snow=SDL_RenderReadPixels(g_state.renderer,NULL); assert(snow);
+
+    /* A hidden dirt cell must not reveal a transition edge. */
+    cave_info[10][12]=0;
+    SDL_RenderClear(g_state.renderer);
+    assert(!draw_elemental_transition(10,11,&dst));
+
+    floor_reset(63);
+    cave_color[10][12]=COLOR_STYLE_BASE+44;
+    SDL_RenderClear(g_state.renderer);
+    assert(draw_elemental_transition(10,11,&dst));
+    assert(basalt_dirt_transition_texture);
+    SDL_Surface* basalt=SDL_RenderReadPixels(g_state.renderer,NULL); assert(basalt);
+    assert(!same_surface(snow,basalt));
+
+    SDL_DestroySurface(snow); SDL_DestroySurface(basalt);
+    SDL_SetRenderTarget(g_state.renderer,previous); SDL_DestroyTexture(target);
+
+    /* Revealing a dirt neighbor must repaint the adjacent material even when
+     * its terminal glyph remains the same. Otherwise the first visible frame
+     * can retain a solid snow/basalt tile until a later full map repaint. */
+    floor_reset(62);
+    cave_color[10][12]=COLOR_STYLE_BASE+44;
+    cave_info[10][12]=0;
+    Term->total_erase=true; prt_map(); Term_fresh();
+    SDL_Surface* before=capture(97); assert(before);
+    cave_info[10][12]=CAVE_MARK|CAVE_SEEN;
+    lite_spot(10,12); Term_fresh();
+    SDL_Surface* incremental=capture(98); assert(incremental);
+    force_map_redraw(); Term_fresh();
+    SDL_Surface* full=capture(99); assert(full);
+    assert(!same_surface(before,incremental));
+    assert(same_surface(incremental,full));
+    SDL_DestroySurface(before); SDL_DestroySurface(incremental);
+    SDL_DestroySurface(full);
+
+    puts("Snow-on-dirt and basalt-on-dirt use authored raw pixels; hidden dirt stays hidden: PASS");
+}
 static void shore_preview(void) {
     const int w=24,h=18,scale=2;
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
@@ -199,7 +251,7 @@ def main():
     idle.HARNESS = idle.HARNESS.replace("int main(void) {", floors.TESTS + TESTS + "\nint main(void) {")
     idle.HARNESS = idle.HARNESS.replace("    asynchronous_tests();",
         "    asynchronous_tests();\n    floor_templates();\n    shore_atlas_tests();\n"
-        "    shore_knowledge_tests();\n    shore_redraw_tests();\n    shore_fallback_tests();\n    shore_preview();")
+        "    shore_knowledge_tests();\n    shore_redraw_tests();\n    shore_fallback_tests();\n    material_transition_tests();\n    shore_preview();")
     idle.main()
 
 

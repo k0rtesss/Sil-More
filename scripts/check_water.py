@@ -243,6 +243,8 @@ static void water_render_tests(void) {
     Term->total_erase=true;prt_map();Term_fresh();
     cave_set_feat(10,11,FEAT_WATER); cave_set_feat(10,12,FEAT_WATER);
     f_info[FEAT_WATER].x_attr=TILE_FLAG; f_info[FEAT_WATER].x_char=(char)(TILE_FLAG|1);
+    cave_water_flow_set(10,11,CAVE_WATER_FLOW_EAST);
+    cave_water_flow_set(10,12,CAVE_WATER_FLOW_EAST);
     Term->soft_cursor=false;
     frame_tick=0; draw_cell(10,11,false); draw_cell(10,12,false);
     assert(water_texture && cell_count==2);
@@ -280,9 +282,34 @@ static void water_render_tests(void) {
     cave_info[10][11]&=~CAVE_SEEN; cave_info[10][12]&=~CAVE_SEEN;
     assert(sdl_idle_animation_timeout_ms(40*IDLE_STEP_NS)==-1);
     cave_info[10][11]=0;assert(!visible_liquid(10,11));
-    assert(same_surface(frames[1],frames[3])); /* Native surface loop: 0,1,2,1. */
+    assert(same_surface(frames[0],frames[3])); /* Native forward river loop: 0,1,2. */
     for(int i=0;i<4;i++)SDL_DestroySurface(frames[i]);
-    puts("Water pixels: native calm 0,1,2,1 surface sequence, idle redraw, pan/erase in both tile widths, fog of war, no turn/RNG/I/O activity: PASS");
+
+    /* A lake has no flow direction, but it still uses Verdant 03's four
+     * authored surface frames and must remain in the idle scheduler. */
+    water_map(32,32,FEAT_FLOOR); character_dungeon=character_generated=true;
+    cave_water_flow_reset();
+    p_ptr->py=p_ptr->px=15; use_bigtile=false;
+    Term->total_erase=true; prt_map(); Term_fresh();
+    cave_set_feat(10,11,FEAT_WATER);
+    cave_info[10][11] |= CAVE_MARK | CAVE_SEEN;
+    f_info[FEAT_WATER].x_attr=TILE_FLAG; f_info[FEAT_WATER].x_char=(char)(TILE_FLAG|1);
+    frame_tick=0; draw_cell(10,11,false);
+    assert(cell_count==1 && cell_can_animate(&cells[0]));
+    SDL_Surface* still_frames[4];
+    for(int i=0;i<4;i++) {
+        frame_tick=(Uint64)i*8; draw_cell(10,11,false);
+        still_frames[i]=capture(60+i);
+        if(i) assert(!same_surface(still_frames[i-1],still_frames[i]));
+    }
+    frame_tick=0; draw_cell(10,11,false);
+    g_state.need_present=false;
+    assert(sdl_idle_animation_timeout_ms(8*IDLE_STEP_NS)==0);
+    sdl_idle_animation_update(8*IDLE_STEP_NS);
+    assert(g_state.need_present);
+    assert(!same_surface(still_frames[0],still_frames[3]));
+    for(int i=0;i<4;i++)SDL_DestroySurface(still_frames[i]);
+    puts("Water pixels: calm four-frame animation, native current loop, idle redraw, pan/erase in both tile widths, fog of war, no turn/RNG/I/O activity: PASS");
 }
 
 static void water_tests(void) {

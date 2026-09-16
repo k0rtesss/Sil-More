@@ -4,6 +4,7 @@
 #include "cave/cave-flood.h"
 #include "cave/cave.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-water-flow.h"
 #include "level-generation/level-generation-internal.h"
 #include "level-generation/level-generation-terrain-vaults.h"
 #include "level-generation/level-generation-terrain-history.h"
@@ -1347,6 +1348,10 @@ bool cave_gen(void)
         }
     }
     p_ptr->force_forge = false;
+
+    /* All liquid geometry is final after population and quest placement.  The
+     * source-to-outlet graph is kept as level metadata for the renderer. */
+    cave_water_flow_build();
 
     /* Level generation successful - log completion */
     genlog_summary("Level %d generation COMPLETE: %d rooms, quest_lottery=%d",

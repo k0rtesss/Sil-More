@@ -1216,6 +1216,19 @@ bool sdl_main_screen_set_main_view_scale_target(int scale)
 {
     Uint64 start_ns = SDL_GetTicksNS();
     int old_scale = get_sdl_effective_main_view_scale();
+    int old_wy = 0;
+    int old_wx = 0;
+    int old_screen_hgt = 0;
+    int old_screen_wid = 0;
+    bool preserve_view = character_dungeon && p_ptr;
+
+    if (preserve_view)
+    {
+        old_wy = p_ptr->wy;
+        old_wx = p_ptr->wx;
+        old_screen_hgt = SCREEN_HGT;
+        old_screen_wid = SCREEN_WID;
+    }
 
     scale = sdl_main_screen_clamp_main_view_scale(scale);
     if (scale == old_scale)
@@ -1226,9 +1239,13 @@ bool sdl_main_screen_set_main_view_scale_target(int scale)
         return true;
 
     sdl_apply_runtime_zoom();
-    if (character_dungeon && p_ptr) {
-        (void)modify_panel(p_ptr->py - SCREEN_HGT / 2,
-            p_ptr->px - SCREEN_WID / 2);
+    if (preserve_view) {
+        /* Resizing changes the number of visible map cells. Keep the old
+         * viewport centre in world space; centring on the player here would
+         * undo a deliberate drag before the zoom is shown. */
+        (void)modify_panel(
+            old_wy + old_screen_hgt / 2 - SCREEN_HGT / 2,
+            old_wx + old_screen_wid / 2 - SCREEN_WID / 2);
         Term_keypress(KTRL('R'));
     }
 

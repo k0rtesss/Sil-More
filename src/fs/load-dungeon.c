@@ -4,6 +4,7 @@
 #include "cave/cave-flood.h"
 #include "monster/monster-senses.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-water-flow.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -151,6 +152,53 @@ static errr rd_fixtures(void)
         }
     }
 
+    return 0;
+}
+
+static errr rd_water_flow(void)
+{
+    cave_water_flow_restore_begin();
+    if (!savefile_has_cave_water_flow)
+        return 0; /* Pre-flow saves deliberately fall back to calm water. */
+
+    u16b magic = 0;
+    u32b start_offset = load_byte_offset;
+    rd_u16b(&magic);
+    if (load_byte_offset - start_offset != 2
+        || magic != CAVE_WATER_FLOW_SAVE_MAGIC)
+    {
+        note("Invalid water-flow header.");
+        return -1;
+    }
+
+    int total = p_ptr->cur_map_hgt * p_ptr->cur_map_wid;
+    int cells = 0;
+    bool first_pair = true;
+    while (cells < total)
+    {
+        byte count = 0, value = 0;
+        if (!read_dungeon_rle_pair(&count, &value, "water_flow")) return -1;
+        int pair_status = dungeon_rle_pair_status(count, &first_pair, "water_flow");
+        if (pair_status < 0) return -1;
+        if (pair_status == 0) continue;
+        if (cells + count > total)
+        {
+            note("Water-flow RLE exceeds dungeon size.");
+            return -1;
+        }
+        for (int i = 0; i < count; i++)
+        {
+            int y = (cells + i) / p_ptr->cur_map_wid;
+            int x = (cells + i) % p_ptr->cur_map_wid;
+            if (!cave_water_flow_restore_cell(y, x, value))
+            {
+                note("Invalid water-flow cell.");
+                return -1;
+            }
+        }
+        cells += count;
+    }
+    cave_water_flow_restore_finish();
     return 0;
 }
 
@@ -588,6 +636,9 @@ errr rd_dungeon(void)
     }
 
     if (rd_fixtures() != 0)
+        return -1;
+
+    if (rd_water_flow() != 0)
         return -1;
 
     /*** Player ***/

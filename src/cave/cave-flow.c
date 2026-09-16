@@ -3,6 +3,7 @@
 #include "cave-internal.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
+#include "cave/cave-water-flow.h"
 #include "level-generation/level-generation-terrain-history.h"
 #include "melee/melee-util.h"
 #include "monster/monster-senses.h"
@@ -928,6 +929,16 @@ void gates_illuminate(bool daytime)
 
 /* Legacy floor/wall color codes and group identifiers removed; using styles only */
 
+static int cave_flow_feature(int feat)
+{
+    int underlay = cave_bridge_underlay(feat);
+    if (underlay == FEAT_WATER || underlay == FEAT_DEEP_WATER)
+        return FEAT_WATER;
+    if (underlay == FEAT_POISON)
+        return FEAT_POISON;
+    return FEAT_NONE;
+}
+
 /* Get default encoded color for current depth. Now returns
  * COLOR_STYLE_BASE + <chosen level style> for consistency. */
 byte get_depth_color(int depth)
@@ -949,6 +960,9 @@ byte get_depth_color(int depth)
 void cave_set_feat_with_color(int y, int x, int feat, int color)
 {
     feat = terrain_history_construction_feature(y, x, feat);
+    int old_feat = cave_feat[y][x];
+    int old_flow_feature = cave_flow_feature(old_feat);
+    int new_flow_feature = cave_flow_feature(feat);
     bool removed_floor_border = cave_feat[y][x] != feat
         && (styles_floor_border(cave_bridge_underlay(cave_feat[y][x]), NULL, NULL)
             || cave_bridge_underlay(cave_feat[y][x]) == FEAT_ICE
@@ -956,6 +970,9 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
             || cave_bridge_underlay(cave_feat[y][x]) == FEAT_WATER
             || cave_bridge_underlay(cave_feat[y][x]) == FEAT_DEEP_WATER
             || cave_bridge_underlay(cave_feat[y][x]) == FEAT_POISON);
+    bool chasm_changed = cave_feat[y][x] != feat
+        && (cave_bridge_underlay(cave_feat[y][x]) == FEAT_CHASM
+            || cave_bridge_underlay(feat) == FEAT_CHASM);
     bool lava_changed = cave_feat[y][x] != feat
         && (cave_bridge_underlay(cave_feat[y][x]) == FEAT_LAVA
             || cave_bridge_underlay(feat) == FEAT_LAVA);
@@ -966,6 +983,8 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
         cave_fixture_set(y, x, CAVE_FIXTURE_NONE);
     /* Change the feature */
     cave_feat[y][x] = feat;
+    if (old_feat != feat && old_flow_feature != new_flow_feature)
+        cave_water_flow_invalidate_at(y, x);
     if ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER) && cave_when)
         cave_when[y][x] = 0;
 
@@ -1029,7 +1048,7 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
 
         /* Redraw */
         lite_spot(y, x);
-        if (removed_floor_border)
+        if (removed_floor_border || chasm_changed)
             cave_floor_border_redraw_neighbors(y, x);
     }
 }

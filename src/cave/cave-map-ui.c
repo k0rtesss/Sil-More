@@ -4,6 +4,44 @@
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
 
+/* These floor styles are visual materials whose edge pixels depend on
+ * neighboring material visibility. Keep the IDs stable with the renderer's
+ * raw transition atlases. */
+#define FLOOR_MATERIAL_STYLE_DIRT 44
+#define FLOOR_MATERIAL_STYLE_SNOW 62
+#define FLOOR_MATERIAL_STYLE_BASALT 63
+
+/* Dirtiness only: the SDL edge renderer applies the knowledge/visibility
+ * filter. Looking at actual features here must never decide visible pixels. */
+static bool chasm_border_at(int y, int x)
+{
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++)
+            if ((dy || dx) && in_bounds(y + dy, x + dx)
+                && cave_feat[y + dy][x + dx] == FEAT_CHASM)
+                return true;
+    return false;
+}
+
+static bool floor_border_redrawing_neighbors;
+
+static bool floor_material_transition_at(int y, int x)
+{
+    int style;
+    byte underlay;
+
+    if (!in_bounds(y, x))
+        return false;
+    underlay = cave_bridge_underlay(cave_feat[y][x]);
+    if (underlay != FEAT_FLOOR && underlay != FEAT_RAGE_FLOOR
+        && underlay != FEAT_SUNLIGHT)
+        return false;
+    style = styles_decode_color_style(cave_color[y][x]);
+    return style == FLOOR_MATERIAL_STYLE_DIRT
+        || style == FLOOR_MATERIAL_STYLE_SNOW
+        || style == FLOOR_MATERIAL_STYLE_BASALT;
+}
+
 static bool hidden_left_panel_mask_span_at(int vy, int* start_col,
     int* width)
 {
@@ -282,16 +320,15 @@ void note_spot(int y, int x)
  */
 void cave_floor_border_redraw_neighbors(int y, int x)
 {
-    static bool redrawing;
-    if (redrawing || graphics_are_ascii()) return;
-    redrawing = true;
+    if (floor_border_redrawing_neighbors || graphics_are_ascii()) return;
+    floor_border_redrawing_neighbors = true;
     /* Connected edges and both inner and outer bank rings depend on source
      * discovery/removal, even when their terminal glyph remains unchanged. */
     for (int dy = -2; dy <= 2; dy++)
         for (int dx = -2; dx <= 2; dx++)
             if ((dy || dx) && in_bounds(y + dy, x + dx))
                 lite_spot(y + dy, x + dx);
-    redrawing = false;
+    floor_border_redrawing_neighbors = false;
 }
 
 void lite_spot(int y, int x)
@@ -311,6 +348,8 @@ void lite_spot(int y, int x)
     if (underlay == FEAT_ICE || underlay == FEAT_LAVA
         || underlay == FEAT_WATER || underlay == FEAT_DEEP_WATER
         || underlay == FEAT_POISON
+        || underlay == FEAT_CHASM
+        || floor_material_transition_at(y, x)
         || styles_floor_border(underlay, NULL, NULL))
         cave_floor_border_redraw_neighbors(y, x);
 
@@ -370,9 +409,12 @@ void lite_spot(int y, int x)
         /* Fixture frames can change with sight/settings while the glyph stays
          * identical (notably a permanently lit wall leaving sight). */
         bool force_visual_redraw = (cave_m_idx[y][x] < 0)
+            || floor_border_redrawing_neighbors || chasm_border_at(y, x)
             || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
             || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
             || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON
+            || cave_feat[y][x] == FEAT_CHASM
+            || floor_material_transition_at(y, x)
             || FEAT_IS_BRIDGE(cave_feat[y][x]);
 #ifdef USE_SDL
         /* Removing a water surface or wall fixture can leave the same base
@@ -416,6 +458,9 @@ void prt_map(void)
     bool rage_map_filter_active = (!graphics_are_ascii() && p_ptr
         && !p_ptr->is_dead && p_ptr->rage);
     static bool last_rage_map_filter_active = false;
+    static int last_panel_y = -1, last_panel_x = -1, last_cell_w;
+    bool panel_moved = last_panel_y != p_ptr->wy
+        || last_panel_x != p_ptr->wx || last_cell_w != cell_w;
     bool force_rage_map_filter_refresh =
         (rage_map_filter_active != last_rage_map_filter_active);
 
@@ -469,17 +514,22 @@ void prt_map(void)
                         ' ');
             }
 
-            if (force_rage_map_filter_refresh
+            if (force_rage_map_filter_refresh || panel_moved
                 || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)
                     || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
                     || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
                     || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON
+                    || floor_material_transition_at(y, x)
+                    || chasm_border_at(y, x)
                     || FEAT_IS_BRIDGE(cave_feat[y][x]))))
                 force_term_cell_redraw(vx, vy, cell_w);
         }
     }
 
     last_rage_map_filter_active = rage_map_filter_active;
+    last_panel_y = p_ptr->wy;
+    last_panel_x = p_ptr->wx;
+    last_cell_w = cell_w;
 }
 
 /*

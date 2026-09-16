@@ -37,6 +37,8 @@ int terrain_landmark_cell(int y, int x);
 int terrain_landmark_basin_cell(int y, int x);
 bool terrain_landmark_channel_cell(int y, int x);
 int terrain_landmark_terminal_cell(int y, int x);
+/* Terminal role bits: bit 0 is a source, bit 1 is a receiving outlet. */
+int terrain_landmark_terminal_role(int y, int x);
 int terrain_landmark_structure_cell(int y, int x);
 bool terrain_landmark_partition(int partition);
 

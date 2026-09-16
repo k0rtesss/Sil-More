@@ -28,14 +28,18 @@ void poison_generation_tests(void) {
 PIXELS = r'''
 static void poison_frame_pixels(SDL_Surface* canvas, int frame) {
     char path[160];
-    strnfmt(path,sizeof(path),"lib/xtra/graf/anim_lava_flow_f%d.png",frame);
+    strnfmt(path,sizeof(path),"lib/xtra/graf/transition_acid_on_stone.png");
     SDL_Surface* source=IMG_Load(path);assert(source);
+    byte mask=liquid_transition_mask(10,11,FEAT_POISON);
+    int page=water_page_index(CAVE_WATER_FLOW_EAST,
+        frame % WATER_CURRENT_FRAME_COUNT);
     for(int y=0;y<16;y++)for(int x=0;x<16;x++) {
         Uint8 r,g,b,a,pr,pg,pb,pa;
-        assert(SDL_ReadSurfacePixel(source,x,y,&r,&g,&b,&a));
+        assert(SDL_ReadSurfacePixel(source,(mask%16)*16+x,
+            ((mask/16)+page*16)*16+y,&r,&g,&b,&a));
         assert(SDL_ReadSurfacePixel(canvas,(COL_MAP+11)*16+x,
             (ROW_MAP+10)*16+y,&pr,&pg,&pb,&pa));
-        assert(pr==g/2&&pg==r*7/8&&pb==b&&pa==a);
+        assert(pr==r&&pg==g&&pb==b&&pa==a);
     }
     SDL_DestroySurface(source);
 }
@@ -50,7 +54,7 @@ def main():
     render = render.replace("FEAT_WATER", "FEAT_POISON").replace("water_texture", "poison_texture")
     render = render.replace("frames[i]=capture(40+i);",
                             "frames[i]=capture(40+i);poison_frame_pixels(frames[i],i);")
-    render = render.replace("Water pixels:", "Poison exact recolored lava pixels:")
+    render = render.replace("Water pixels:", "Poison transition-atlas pixels:")
     render = render.replace("    for(int i=0;i<4;i++)SDL_DestroySurface(frames[i]);", r'''
     cave_info[10][12]=CAVE_MARK;
     assert(visible_liquid(10,12)==FEAT_POISON);

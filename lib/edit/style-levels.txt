@@ -42,7 +42,8 @@ L:20: 38:1 39:1
 P:BIG_FIRE:1:20: 63:1
 P:BIG_ICE:1:20: 62:1
 P:BIG_POIS:1:20: 55:1
-P:CHASM:1:20: 30:1
+P:CHASM:1:20: 40:1
+P:CHASM_BRIDGE:1:20: 40:1
 
 # Floor beside known terrain (eight neighbours): R:<feature>:<row>:<col>.
 # Basalt banks border lava pools and rivers in every style; 85 is FEAT_LAVA.
@@ -50,7 +51,6 @@ P:CHASM:1:20: 30:1
 R:85:35:8
 # Snow around ice matches the ice-on-snow transition artwork (86 is FEAT_ICE).
 R:86:35:0
-
 # Water has one adjacent silt bank only. Multiple tiles vary within that ring.
 # Shallow (84) and deep water (100) share the bank material.
 R:84:36:0 36:2 36:4 36:6
@@ -58,20 +58,21 @@ R:100:36:0 36:2 36:4 36:6
 # Acid/poison (87) likewise has one adjacent stone bank only.
 R:87:36:16 36:18 36:20 36:22
 
-# Verdant walls are partition-only: cool flagstone in dark stone labyrinths,
-# moss in the damp green cave band. Masonry (41) is reserved for selected forge
-# vaults in vault.txt; none of these styles belong to the global depth pools.
+# Verdant materials are partition-only: cool flagstone in dark stone labyrinths,
+# moss and weathered brick in the damp green cave band. Masonry (41) remains
+# reserved for selected forge vaults in vault.txt; none of these styles belong
+# to the global depth pools.
 # Labyrinths begin at depth 7; use flagstone in the shadow-stone band (400-500 ft).
 P:LAB:8: 5:2 8:3 9:2 10:2 11:2 12:2 40:2
 P:LAB:9: 9:1 10:1 11:1 12:1 40:1
 P:LAB:10: 10:1 11:1 12:1 13:1 14:1 40:1
 
-# Cavey walls: Grey51/Grey53 always, depth-matched old styles, and moss only
-# in the green band (250-350 ft).
+# Cavey walls: Grey51/Grey53 always, depth-matched old styles, and Verdant
+# moss/brick only in the green band (250-350 ft).
 P:CA:1:4: 52:1 54:1
-P:CA:5: 52:1 54:1 7:1 42:1
-P:CA:6: 52:1 54:1 5:1 7:1 42:1
-P:CA:7: 52:1 54:1 5:1 7:1 9:1 42:1
+P:CA:5: 52:1 54:1 7:1 42:2 43:1
+P:CA:6: 52:1 54:1 5:1 7:1 42:2 43:1
+P:CA:7: 52:1 54:1 5:1 7:1 9:1 42:2 43:1
 P:CA:8: 52:1 54:1 5:1 9:1 10:1
 P:CA:9: 52:1 54:1 9:1 10:1
 P:CA:10: 52:1 54:1 10:1 14:1

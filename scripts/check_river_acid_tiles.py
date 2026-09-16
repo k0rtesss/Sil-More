@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production SDL calm shoal/sea/acid transitions and single-bank checks.
+"""Production SDL freshwater currents, depth transitions and acid checks.
 
 Build first; isolated maps and source template parsing never open player saves.
 """
@@ -9,6 +9,49 @@ import check_terrain_transitions as shores
 
 TESTS = r'''
 static const int wet_features[3]={FEAT_WATER,FEAT_DEEP_WATER,FEAT_POISON};
+static SDL_Surface* chasm_fill_surface(int y,int x) {
+    SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET,16,16);assert(target);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);SDL_RenderClear(g_state.renderer);
+    SDL_FRect dst={0,0,16,16};
+    draw_chasm_fill(y,x,&dst,true);
+    SDL_Surface* result=SDL_RenderReadPixels(g_state.renderer,NULL);assert(result);
+    SDL_SetRenderTarget(g_state.renderer,previous);SDL_DestroyTexture(target);return result;
+}
+static void chasm_surface_tests(void) {
+    f_info[FEAT_CHASM].x_attr=(byte)(TILE_FLAG|34);
+    f_info[FEAT_CHASM].x_char=(char)(TILE_FLAG|0);
+    assert(!load_liquid_transition_texture(FEAT_CHASM));
+    for(int mask=0;mask<256;mask++) {
+        shore_map(FEAT_CHASM,mask);assert(visible_liquid(10,11)==FEAT_CHASM);
+        assert(liquid_transition_mask(10,11,FEAT_CHASM)==mask);
+        SDL_Surface* actual=shore_surface(NULL,mask,0,true);
+        SDL_Surface* expected=chasm_fill_surface(10,11);
+        assert(same_surface(actual,expected));SDL_DestroySurface(actual);SDL_DestroySurface(expected);
+    }
+    int coords[3][2]={{-1,-1},{-1,-1},{-1,-1}};
+    for(int y=0;y<32;y++)for(int x=0;x<32;x++) {
+        int variant=chasm_fill_variant(y,x);
+        if(coords[variant][0]<0) { coords[variant][0]=y;coords[variant][1]=x; }
+    }
+    SDL_Surface* variants[3];
+    for(int variant=0;variant<3;variant++) {
+        assert(coords[variant][0]>=0);
+        variants[variant]=chasm_fill_surface(coords[variant][0],coords[variant][1]);
+    }
+    assert(!same_surface(variants[0],variants[1])
+        && !same_surface(variants[1],variants[2])
+        && !same_surface(variants[0],variants[2]));
+    for(int variant=0;variant<3;variant++)SDL_DestroySurface(variants[variant]);
+    shore_map(FEAT_CHASM,0);cave_feat[9][11]=FEAT_BRIDGE_CHASM_H;
+    assert(liquid_transition_mask(10,11,FEAT_CHASM)==1);
+    cave_info[9][11]=0;assert(liquid_transition_mask(10,11,FEAT_CHASM)==0);
+    cave_info[10][11]=0;assert(!visible_liquid(10,11));
+    idle_cell cell={.liquid_feat=FEAT_CHASM};assert(!cell_can_animate(&cell));
+    puts("Chasms: only chasm_1/2/3 static fills, no lip/ring/transition, bridge underlay and knowledge gating: PASS");
+}
 static SDL_Surface* wet_expected(SDL_Texture* texture,int mask,int frame,int light,bool deep_fallback) {
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
     SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
@@ -26,10 +69,11 @@ static SDL_Surface* wet_expected(SDL_Texture* texture,int mask,int frame,int lig
 static void wet_atlas_tests(void) {
     u64b rng=Rand_state_export();s32b turns=turn;
     for(int kind=0;kind<3;kind++) {
-        int feat=wet_features[kind];assert(load_liquid_texture(feat));
+        int feat=wet_features[kind];cave_water_flow_reset();
+        assert(load_liquid_texture(feat));
         SDL_Texture* atlas=load_liquid_transition_texture(feat);assert(atlas);
-        int count=feat==FEAT_POISON?3:4;
-        assert(liquid_frame_count(feat)==count);
+        int count=4; /* calm pools use the four authored surface frames */
+        assert(liquid_frame_count_at(10,11,feat)==count);
         for(int mask=0;mask<256;mask++) {
             shore_map(feat,mask);assert(liquid_transition_mask(10,11,feat)==mask);
             for(int frame=0;frame<count;frame++) {
@@ -41,20 +85,8 @@ static void wet_atlas_tests(void) {
         shore_map(feat,255);
         SDL_Surface* frames[4];
         for(int frame=0;frame<count;frame++) frames[frame]=shore_surface(NULL,255,frame,true);
-        if(feat!=FEAT_POISON)for(int frame=0;frame<4;frame++) {
-            char source[256];int stages[4]={0,1,2,1};
-            strnfmt(source,sizeof(source),"C:/Assets/verdant-04-tidewater-tileset/tiles/16x16/anim_%s_f%d.png",
-                feat==FEAT_WATER?"shoal":"sea",stages[frame]);
-            SDL_Surface* native=IMG_Load(source);
-            if(!native) {puts("Native purchased pack absent; source comparison skipped (atlas/render checks still run)");break;}
-            assert(native->w==16&&native->h==16);
-            SDL_Texture* original=SDL_CreateTextureFromSurface(g_state.renderer,native);assert(original);
-            SDL_Surface* expected=wet_expected(original,-1,0,255,false);
-            assert(same_surface(frames[frame],expected));SDL_DestroySurface(expected);
-            SDL_DestroyTexture(original);SDL_DestroySurface(native);
-        }
         assert(!same_surface(frames[0],frames[1])&&!same_surface(frames[1],frames[2]));
-        if(count==4)assert(same_surface(frames[1],frames[3]));
+        assert(!same_surface(frames[2],frames[3]));
         SDL_Surface* wrapped=shore_surface(NULL,255,count,true);assert(same_surface(frames[0],wrapped));
         SDL_DestroySurface(wrapped);for(int frame=0;frame<count;frame++)SDL_DestroySurface(frames[frame]);
         cave_info[10][11]=CAVE_MARK;
@@ -63,7 +95,7 @@ static void wet_atlas_tests(void) {
         assert(same_surface(dark,expected));SDL_DestroySurface(dark);SDL_DestroySurface(expected);
     }
     assert(Rand_state_export()==rng&&turn==turns);
-    puts("Shoal/sea/acid: all256 masks, calm 0-1-2-1 water and three-frame acid, wraparound and dark pixels without extra deep tint: PASS");
+    puts("Freshwater/acid: all 256 shore masks, wraparound and remembered lighting without extra deep tint: PASS");
 }
 static SDL_Surface* wet_mixed_expected(SDL_Texture* depth,SDL_Texture* bank,int depthmask,int bankmask,int frame) {
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
@@ -78,6 +110,48 @@ static SDL_Surface* wet_mixed_expected(SDL_Texture* depth,SDL_Texture* bank,int 
     SDL_SetTextureColorMod(bank,255,255,255);assert(SDL_RenderTexture(g_state.renderer,bank,&src,&dst));
     SDL_Surface* result=SDL_RenderReadPixels(g_state.renderer,NULL);assert(result);
     SDL_SetRenderTarget(g_state.renderer,previous);SDL_DestroyTexture(target);return result;
+}
+static void wet_direction_tests(void) {
+    u64b rng=Rand_state_export();s32b turns=turn;
+    for(int direction=0;direction<5;direction++)for(int kind=0;kind<3;kind++) {
+        int feat=wet_features[kind];SDL_Texture* atlas=load_liquid_transition_texture(feat);
+        int count=direction ? 3 : 4;
+        for(int mask=0;mask<256;mask++) {
+            shore_map(feat,mask);cave_water_flow_set(10,11,direction);
+            for(int frame=0;frame<count;frame++) {
+                SDL_Surface* actual=shore_surface(NULL,mask,frame,true);
+                SDL_Surface* expected=wet_expected(atlas,mask,water_page_index(direction,frame),255,false);
+                assert(same_surface(actual,expected));SDL_DestroySurface(actual);SDL_DestroySurface(expected);
+            }
+        }
+        shore_map(feat,255);cave_water_flow_set(10,11,direction);
+        SDL_Surface* frames[4];
+        for(int frame=0;frame<count;frame++)frames[frame]=shore_surface(NULL,255,frame,true);
+        assert(!same_surface(frames[0],frames[1])&&!same_surface(frames[1],frames[2]));
+        if(direction) {
+            SDL_Surface* wrapped=shore_surface(NULL,255,count,true);
+            assert(same_surface(frames[0],wrapped));SDL_DestroySurface(wrapped);
+        } else assert(!same_surface(frames[2],frames[3]));
+        for(int frame=0;frame<count;frame++)SDL_DestroySurface(frames[frame]);
+        cave_info[10][11]=CAVE_MARK;
+        SDL_Surface* dark=shore_surface(NULL,255,2,true);
+        SDL_Surface* expected=wet_expected(atlas,255,water_page_index(direction,0),96,false);
+        assert(same_surface(dark,expected));SDL_DestroySurface(dark);SDL_DestroySurface(expected);
+    }
+    for(int direction=1;direction<5;direction++) {
+        shore_map(FEAT_WATER,0x7D);cave_water_flow_set(10,11,direction);
+        cave_feat[11][11]=FEAT_DEEP_WATER;
+        int depth=water_depth_transition_mask(10,11);
+        for(int frame=0;frame<3;frame++) {
+            SDL_Surface* actual=shore_surface(NULL,0,frame,true);
+            SDL_Surface* expected=wet_mixed_expected(water_depth_transition_texture,
+                water_bank_overlay_texture,depth,0x7D,water_page_index(direction,frame));
+            assert(same_surface(actual,expected));SDL_DestroySurface(actual);SDL_DestroySurface(expected);
+        }
+    }
+    cave_water_flow_reset();
+    assert(Rand_state_export()==rng&&turn==turns);
+    puts("Freshwater: calm four-frame animation, four current directions, masks, depth/shore composition and remembered lighting: PASS");
 }
 static void wet_depth_tests(void) {
     shore_map(FEAT_WATER,255);cave_feat[9][11]=FEAT_DEEP_WATER;
@@ -124,7 +198,7 @@ static void wet_depth_tests(void) {
     cave_set_feat(9,11,FEAT_WATER);Term_fresh();changed=capture(132);
     force_map_redraw();Term_fresh();full=capture(133);assert(same_surface(changed,full));
     SDL_DestroySurface(changed);SDL_DestroySurface(full);
-    puts("Native shoal-to-sea composition: all depth masks and mixed land masks, diagonals/bridges, hidden-depth gating and discovery/removal repaint: PASS");
+    puts("Freshwater depth composition: all depth masks and mixed land masks, diagonals/bridges, hidden-depth gating and discovery/removal repaint: PASS");
 }
 static void wet_knowledge_tests(void) {
     for(int kind=0;kind<3;kind++) {
@@ -209,7 +283,9 @@ static void wet_layer_tests(void) {
     free(r_info);r_info=calloc(8,sizeof(*r_info));mon_list=calloc(8,sizeof(*mon_list));
     o_list=calloc(8,sizeof(*o_list));k_info=calloc(8,sizeof(*k_info));mon_max=1;
     for(int kind=0;kind<3;kind++) {
-        shore_map(wet_features[kind],255);frame_tick=0;Term->total_erase=true;prt_map();Term_fresh();
+        shore_map(wet_features[kind],255);
+        if(kind<3)cave_water_flow_set(10,11,CAVE_WATER_FLOW_SOUTH);
+        frame_tick=0;Term->total_erase=true;prt_map();Term_fresh();
         SDL_Surface* bare=capture(120);
         k_info[3].x_attr=TILE_FLAG;k_info[3].x_char=(char)(TILE_FLAG|2);
         o_list[1].k_idx=3;o_list[1].marked=true;cave_o_idx[10][11]=1;
@@ -232,10 +308,10 @@ static void wet_layer_tests(void) {
         for(int step=0;step<32;step++) {
             animated_now+=IDLE_STEP_NS;sdl_idle_animation_update(animated_now);
             for(int i=0;i<cell_count;i++)if(cells[i].y==10&&cells[i].x==11) {
-                assert(cells[i].drawn_frame<(kind==2?3:4));seen_frames|=1<<cells[i].drawn_frame;
+                assert(cells[i].drawn_frame<3);seen_frames|=1<<cells[i].drawn_frame;
             }
         }
-        assert(seen_frames==(kind==2?7:15));
+        assert(seen_frames==7);
     }
     int loads=image_loads,textures=texture_creations,mallocs=allocations;
     u64b rng=Rand_state_export();s32b turns=turn;Uint64 now=frame_tick*IDLE_STEP_NS;
@@ -268,13 +344,15 @@ static void wet_preview(void) {
         floor_reset(13);
         for(int y=0;y<h;y++)for(int x=0;x<w;x++) {
             bool wall=y==0||y==h-1||x==0||x==w-1;
-            bool pool=y>=3&&y<=15&&x>=3&&x<=21&&!(y<=4&&x<=5)&&!(y>=13&&x>=18);
-            bool river=false;
-            bool shoal=y<=5||y>=14||x<=5||x>=20||(x>=9&&x<=11&&y>=8&&y<=10)
-                ||(x==15&&y>=6&&y<=8)||(x==7&&y==12);
+            bool pool=y>=8&&y<=15&&x>=7&&x<=21&&!(y<=9&&x<=8)&&!(y>=14&&x>=19);
+            bool river=(y>=1&&y<=5&&x>=3&&x<=4)
+                ||(y>=4&&y<=5&&x>=4&&x<=12)
+                ||(y>=5&&y<=10&&x>=11&&x<=12);
+            bool shoal=y<=10||y>=14||x<=9||x>=20||(x>=13&&x<=15&&y<=12);
             int wet=panel?FEAT_POISON:shoal?FEAT_WATER:FEAT_DEEP_WATER;
             cave_feat[y][x]=wall?FEAT_WALL_EXTRA:(pool||river)?wet:FEAT_FLOOR;
             cave_info[y][x]=CAVE_MARK|CAVE_SEEN|CAVE_GLOW|(wall?CAVE_WALL:0);
+            cave_water_flow_set(y,x,!panel&&river&&!pool?(y>=4&&x<11?2:3):0);
         }
         for(int y=0;y<h;y++)for(int x=0;x<w;x++) {
             byte a,ta;char c,tc;map_info(y,x,&a,&c,&ta,&tc);
@@ -286,6 +364,7 @@ static void wet_preview(void) {
     SDL_Surface* surface=SDL_RenderReadPixels(g_state.renderer,NULL);assert(surface);
     assert(IMG_SavePNG(surface,"scripts/output/river-acid-tiles-check/preview.png"));
     SDL_DestroySurface(surface);SDL_SetRenderTarget(g_state.renderer,previous);SDL_DestroyTexture(target);
+    cave_water_flow_reset();
 }
 '''
 
@@ -300,8 +379,8 @@ def main():
     idle.HARNESS = idle.HARNESS.replace("    asynchronous_tests();",
         "    asynchronous_tests();\n    floor_templates();\n"
         "    f_info[FEAT_WATER].x_char=f_info[FEAT_DEEP_WATER].x_char=f_info[FEAT_POISON].x_char=(char)(TILE_FLAG|1);\n"
-        "    wet_atlas_tests();\n    wet_depth_tests();\n    wet_knowledge_tests();\n    wet_bank_tests();\n    wet_redraw_tests();\n"
-        "    wet_layer_tests();\n    wet_fallback_tests();\n    wet_preview();")
+        "    chasm_surface_tests();\n    wet_atlas_tests();\n    wet_depth_tests();\n    wet_knowledge_tests();\n    wet_bank_tests();\n    wet_redraw_tests();\n"
+        "    wet_direction_tests();\n    wet_layer_tests();\n    wet_fallback_tests();\n    wet_preview();")
     idle.main()
 
 
