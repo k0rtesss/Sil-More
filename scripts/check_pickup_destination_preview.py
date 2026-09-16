@@ -13,7 +13,20 @@ HARNESS = r'''
 #include "angband.h"
 #include <assert.h>
 #include "sdl/ui/sdl-question-menu.c"
+static object_type test_dropped;
+
+static s16b test_drop_near(object_type* object, int chance, int y, int x)
+{
+    (void)chance;
+    (void)y;
+    (void)x;
+    object_copy(&test_dropped, object);
+    return 1;
+}
+
+#define drop_near test_drop_near
 #include "cmd/item/cmd-item-core.c"
+#undef drop_near
 #include "ui/question.c"
 
 static object_type held[INVEN_TOTAL];
@@ -215,6 +228,19 @@ int main(void)
     floor_context_pickup_preview_destination(&preview, &pack_action, &dagger);
     assert(preview.count <= PICKUP_PREVIEW_ROWS);
     puts("PASS: Empty arrow destinations and explicit bounded overflow rows.");
+
+    clear_items();
+    memset(&test_dropped, 0, sizeof(test_dropped));
+    held[INVEN_ARM] = item(3, 1, OBJECT_STORAGE_HARNESS, 70);
+    held[0] = item(3, 1, OBJECT_STORAGE_HARNESS, 70);
+    p_ptr->equip_cnt = 1;
+    p_ptr->inven_cnt = 1;
+    assert(drop_equipped_harness_replacement_item(INVEN_ARM, 1));
+    assert(!held[INVEN_ARM].k_idx);
+    assert(held[0].k_idx && held[0].number == 1);
+    assert(test_dropped.k_idx && test_dropped.number == 1);
+    assert(test_dropped.storage == OBJECT_STORAGE_HARNESS);
+    puts("PASS: Equipped Harness replacement drops one copy without merging it back into Harness.");
     return 0;
 }
 '''

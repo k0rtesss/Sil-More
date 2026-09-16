@@ -9123,3 +9123,8 @@ The script now fully matches the game's drop generation logic for all item types
 - The gameplay tutorial card's mode button now opens a Disabled/Normal/Extended selector instead of cycling from Extended to Disabled and silently removing the active card. Cancel leaves the current mode and card state unchanged; selecting Disabled still intentionally closes the card. The same picker is used by gameplay tutorial settings.
 - The settings entry now lives with the cards: Main Menu > Tutorial cards > Tutorial settings. Other Options remains reserved for palette, notes, privacy and suicide actions. The card button is self-describing (`Mode: Extended`) and keeps `Select mode` visible for mouse movement as well as other inputs.
 - Updated the canonical welcome copy and generated tutorial reference to describe selection rather than cycling. Focused SDL, integration, archive and software-render checks pass; the all-core incremental build passes. The catalogue validator still has the known pre-existing terrain-coverage mismatch. Live Windows UI replay was unavailable because the Computer Use trusted RPC backend was not configured.
+
+## 2026-09-16: Floor Harness replacement duplicate
+- Floor-equipping now preflights one item from a floor stack and can repeat replacement selection when one dropped stack is insufficient.
+- Equipped Harness replacements are copied directly to the floor before equipment removal, avoiding `inven_takeoff()` merging the selected item into an identical carried Harness stack.
+- Validation: `build-incremental.ps1`, scoped `git diff --check`, and the pickup-destination preview harness pass. Interactive gameplay replay remains unverified.

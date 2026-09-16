@@ -2272,10 +2272,56 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     return true;
 }
 
+static bool drop_equipped_harness_replacement_item(int item, int amount)
+{
+    object_type* source;
+    object_type dropped;
+    char o_name[120];
+
+    if (!player_inventory_handle_is_equipped(item) || amount <= 0)
+        return false;
+
+    source = player_inventory_object(item);
+    if (!source || !source->k_idx || cursed_p(source))
+        return false;
+
+    amount = MIN(amount, source->number);
+    if (amount <= 0)
+        return false;
+
+    /* Do not route an equipped Harness object through inven_takeoff().  That
+     * would first carry it back into the Harness, where it can merge with an
+     * identical carried item and leave the selected object apparently behind.
+     * Copy and remove the equipment directly, then place exactly that copy on
+     * the floor. */
+    object_copy(&dropped, source);
+    dropped.number = amount;
+    dropped.next_o_idx = 0;
+    dropped.held_m_idx = 0;
+    dropped.iy = dropped.ix = 0;
+    dropped.marked = false;
+    dropped.pickup = false;
+    dropped.pickup_slot = -1;
+    if (object_can_choose_pack_or_harness(&dropped))
+        dropped.storage = OBJECT_STORAGE_HARNESS;
+
+    object_desc(o_name, sizeof(o_name), &dropped, true, 3);
+    msg_format("You drop %s (%c).", o_name, player_inventory_label(item));
+
+    drop_near(&dropped, 0, p_ptr->py, p_ptr->px);
+    inven_item_increase(item, -amount);
+    inven_item_describe(item);
+    inven_item_optimize(item);
+    p_ptr->redraw |= PR_MAP | PR_QUIVER | PR_EQUIPPY | PR_RESIST;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+    return true;
+}
+
 static bool drop_harness_replacement_for_floor_wield(
     const object_type* incoming)
 {
     enum inventory_limit_group group = INV_LIMIT_HARNESS;
+    object_type incoming_unit;
     object_type* candidate;
     int replacement_item = -1;
     int used;
@@ -2288,59 +2334,79 @@ static bool drop_harness_replacement_for_floor_wield(
     if (!incoming || !incoming->k_idx)
         return false;
 
-    used = inventory_limit_usage_for_group(group);
-    limit = inven_carry_limit_value();
-    if (limit <= 0)
-        limit = inventory_limit_limit_for_group(group);
-    needed = inventory_limit_additional_space_for_object(incoming);
-    left = MAX(limit - used, 0);
-    strnfmt(reason, sizeof(reason),
-        "No room in Harness: %d.%d/%d.%d qt used (%d.%d qt left). "
-        "Incoming needs %d.%d qt; choose an item to drop.",
-        used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
-        left / 10, ABS(left % 10), needed / 10, ABS(needed % 10));
+    /* Equipping consumes one member of a floor stack.  Keep capacity
+     * accounting about that one item even if dropping the selected old item
+     * later combines it with the floor stack. */
+    object_copy(&incoming_unit, incoming);
+    incoming_unit.number = 1;
 
-    if (!open_inventory_equip_replacement_menu(
-            INVENTORY_MENU_GROUP_HARNESS, incoming, true, reason,
-            &replacement_item))
+    /* Recheck after every selected drop so the replacement menu can enumerate
+     * the remaining Harness choices until the one incoming item fits. */
+    while (!inventory_type_slot_available(&incoming_unit, true))
     {
-        return false;
-    }
+        replacement_item = -1;
+        used = inventory_limit_usage_for_group(group);
+        limit = inven_carry_limit_value();
+        if (limit <= 0)
+            limit = inventory_limit_limit_for_group(group);
+        needed = inventory_limit_additional_space_for_object(&incoming_unit);
+        left = MAX(limit - used, 0);
+        strnfmt(reason, sizeof(reason),
+            "No room in Harness: %d.%d/%d.%d qt used (%d.%d qt left). "
+            "Incoming needs %d.%d qt; choose an item to drop.",
+            used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
+            left / 10, ABS(left % 10), needed / 10, ABS(needed % 10));
 
-    if (!player_inventory_handle_valid(replacement_item))
-        return false;
-
-    candidate = player_inventory_object(replacement_item);
-    if (!candidate || !candidate->k_idx
-        || inventory_limit_group_for_object(candidate) != group
-        || (player_inventory_handle_is_equipped(replacement_item)
-            && cursed_p(candidate)))
-    {
-        return false;
-    }
-
-    remove_amount = MAX(candidate->number, 1);
-    for (int amount = 1; amount <= candidate->number; amount++)
-    {
-        int projected = inventory_limit_usage_after_replacing(
-            incoming, candidate, amount);
-
-        if (projected >= 0 && projected <= limit)
+        if (!open_inventory_equip_replacement_menu(
+                INVENTORY_MENU_GROUP_HARNESS, &incoming_unit, true, reason,
+                &replacement_item))
         {
-            remove_amount = amount;
-            break;
+            return false;
         }
+
+        if (!player_inventory_handle_valid(replacement_item))
+            return false;
+
+        candidate = player_inventory_object(replacement_item);
+        if (!candidate || !candidate->k_idx
+            || inventory_limit_group_for_object(candidate) != group
+            || (player_inventory_handle_is_equipped(replacement_item)
+                && cursed_p(candidate)))
+        {
+            msg_print("That item cannot be dropped.");
+            continue;
+        }
+
+        /* Drop only as much of a stack as needed when one choice is enough;
+         * otherwise drop the whole selected stack and let the next menu
+         * choose another Harness item. */
+        remove_amount = MAX(candidate->number, 1);
+        for (int amount = 1; amount <= candidate->number; amount++)
+        {
+            int projected = inventory_limit_usage_after_replacing(
+                &incoming_unit, candidate, amount);
+
+            if (projected >= 0 && projected <= limit)
+            {
+                remove_amount = amount;
+                break;
+            }
+        }
+
+        if (player_inventory_handle_is_equipped(replacement_item))
+        {
+            if (!drop_equipped_harness_replacement_item(replacement_item,
+                    remove_amount))
+            {
+                return false;
+            }
+        }
+        else
+            inven_drop(replacement_item, remove_amount);
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        notice_stuff();
     }
 
-    if (inventory_limit_usage_after_replacing(incoming, candidate,
-            remove_amount) > limit)
-    {
-        return false;
-    }
-
-    inven_drop(replacement_item, remove_amount);
-    p_ptr->notice |= PN_COMBINE | PN_REORDER;
-    notice_stuff();
     return true;
 }
 
@@ -2962,38 +3028,53 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
     /* Equipping directly from the floor is still an acquisition.  Harness
      * items continue to consume Harness volume after being equipped, so this
-     * path must not bypass the same limit enforced by normal pickup. */
+     * path must not bypass the same limit enforced by normal pickup.  Wielding
+     * takes one item from a floor stack, so preflight one item rather than the
+     * entire stack. */
     if (item < 0
-        && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS
-        && !inventory_type_slot_available(o_ptr, true))
+        && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS)
     {
-        /* A floor Equip is a Harness replacement, not a Pack exchange.
-         * Let the player choose which Harness item to drop, then continue
-         * through the ordinary wield path with the incoming item. */
-        if (drop_harness_replacement_for_floor_wield(o_ptr)
-            && inventory_type_slot_available(o_ptr, false))
+        object_type capacity_item;
+
+        object_copy(&capacity_item, o_ptr);
+        capacity_item.number = 1;
+
+        if (inventory_type_slot_available(&capacity_item, true))
         {
-            /* The selected item has been dropped; continue below and equip
-             * the floor object normally. */
+            /* There is already room; continue below and equip the floor
+             * object normally. */
         }
         else
         {
-            enum inventory_limit_group group = inven_carry_limit_group();
-
-            if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
+            /* A floor Equip is a Harness replacement, not a Pack exchange.
+             * Let the player choose which Harness item to drop, then continue
+             * through the ordinary wield path with the incoming item. */
+            if (drop_harness_replacement_for_floor_wield(o_ptr)
+                && inventory_type_slot_available(&capacity_item, false))
             {
-                int used = inventory_limit_usage_for_group(group);
-                int limit = inven_carry_limit_value();
-                int needed = inventory_limit_additional_space_for_object(o_ptr);
-                int left = MAX(limit - used, 0);
-
-                msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
-                           "this item needs %d.%d qt.",
-                    inventory_limit_group_name(group), used / 10, used % 10,
-                    limit / 10, limit % 10, left / 10, left % 10,
-                    needed / 10, needed % 10);
+                /* The selected item has been dropped; continue below and
+                 * equip the floor object normally. */
             }
-            return;
+            else
+            {
+                enum inventory_limit_group group = inven_carry_limit_group();
+
+                if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
+                {
+                    int used = inventory_limit_usage_for_group(group);
+                    int limit = inven_carry_limit_value();
+                    int needed = inventory_limit_additional_space_for_object(
+                        &capacity_item);
+                    int left = MAX(limit - used, 0);
+
+                    msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
+                               "this item needs %d.%d qt.",
+                        inventory_limit_group_name(group), used / 10,
+                        used % 10, limit / 10, limit % 10, left / 10,
+                        left % 10, needed / 10, needed % 10);
+                }
+                return;
+            }
         }
     }
 
