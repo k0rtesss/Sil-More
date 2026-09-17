@@ -79,7 +79,7 @@ static bool material_edge_excluded_feature(byte feat)
         || feat == FEAT_WATER
         || feat == FEAT_DEEP_WATER
         || feat == FEAT_LAVA
-        || feat == FEAT_ICE
+        || FEAT_IS_ICE(feat)
         || feat == FEAT_POISON;
 }
 

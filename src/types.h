@@ -1033,6 +1033,15 @@ typedef struct runtype_type {
     u32b heroes[FLAG_WORDS];       /* applicable heroes (max 64)            */
 } runtype_type;
 
+/* Startup configuration only; never serialized with style or save records. */
+typedef struct cave_floor_palette {
+    int coverage;
+    int patches;
+    int count;
+    int styles[8];
+    int weights[8];
+} cave_floor_palette;
+
 /*
  * Depth-based visual style definition (data-driven from lib/edit/style.txt)
  * Each style belongs to a group (GREY/GREEN/BLUE/RED/PURPLE/BLACK) and

@@ -1599,10 +1599,12 @@ void process_monsters(s16b minimum_energy)
 
         /* Poison follows each creature's action cadence, including sleep
          * and skipped turns. Contact adds stacks before this action's tick. */
+        monster_melting_ice_begin_action(i);
         monster_poison_terrain_begin_action(i);
         if (monster_poison_tick(i))
         {
             finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            monster_melting_ice_end_action(i);
             monster_poison_terrain_end_action(i);
             monster_lava_end_action(i);
             continue;
@@ -1618,6 +1620,7 @@ void process_monsters(s16b minimum_energy)
         if (m_ptr->alertness < ALERTNESS_UNWARY)
         {
             finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            monster_melting_ice_end_action(i);
             monster_poison_terrain_end_action(i);
             monster_lava_end_action(i);
             continue;
@@ -1638,6 +1641,7 @@ void process_monsters(s16b minimum_energy)
 
             m_ptr->skip_next_turn = false;
             finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            monster_melting_ice_end_action(i);
             monster_poison_terrain_end_action(i);
             monster_lava_end_action(i);
             continue;
@@ -1646,6 +1650,7 @@ void process_monsters(s16b minimum_energy)
         /* Let the monster take its turn */
         process_monster(m_ptr);
         finish_monster_ability_action(m_ptr, old_y, old_x, m_ptr->skip_this_turn);
+        monster_melting_ice_end_action(i);
         monster_poison_terrain_end_action(i);
         monster_lava_end_action(i);
     }

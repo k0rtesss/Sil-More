@@ -321,6 +321,8 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
     /* Shores depend only on known neighboring terrain. In restricted views,
      * remembered hazards outside current sight must not reveal their banks. */
     for (int radius = 1; radius <= 2; radius++) {
+        bool have_border = false;
+        byte border_row = 0, border_col = 0;
         for (int dy = -radius; dy <= radius; dy++) {
             for (int dx = -radius; dx <= radius; dx++) {
                 int ny = y + dy, nx = x + dx;
@@ -331,13 +333,29 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
                 if (!(known & (CAVE_MARK | CAVE_SEEN))
                     || ((p_ptr->rage || g_labyrinth_view_active) && !(known & CAVE_SEEN)))
                     continue;
-                if (styles_floor_border_at(cave_bridge_underlay(cave_feat[ny][nx]),
+                int border_feat = cave_bridge_underlay(cave_feat[ny][nx]);
+                if (cave_water_has_icy_shore(ny, nx)) border_feat = FEAT_ICE;
+                if (styles_floor_border_at(border_feat,
                         radius, y, x, &row, &col)) {
-                    *a = (byte)(row | 0x80);
-                    *c = (char)(col | 0x80);
-                    return true;
+                    /* Prefer snow over ordinary banks throughout this ring,
+                     * so water cannot repaint an ice shore by scan order. */
+                    if (FEAT_IS_ICE(border_feat)) {
+                        *a = (byte)(row | 0x80);
+                        *c = (char)(col | 0x80);
+                        return true;
+                    }
+                    if (!have_border) {
+                        have_border = true;
+                        border_row = row;
+                        border_col = col;
+                    }
                 }
             }
+        }
+        if (have_border) {
+            *a = (byte)(border_row | 0x80);
+            *c = (char)(border_col | 0x80);
+            return true;
         }
     }
 
@@ -1073,7 +1091,7 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
     /* Objects (only shown when on floors, not when in rubble) */
     if (feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT || feat == FEAT_WATER
         || feat == FEAT_DEEP_WATER
-        || feat == FEAT_LAVA || feat == FEAT_ICE || feat == FEAT_POISON
+        || feat == FEAT_LAVA || FEAT_IS_ICE(feat) || feat == FEAT_POISON
         || FEAT_IS_BRIDGE(feat))
     {
         for (o_ptr = get_first_object(y, x); o_ptr;
@@ -1259,6 +1277,16 @@ void map_info_terrain(int y, int x, byte* tap, char* tcp)
         return;
 
     map_info_aux(y, x, &a, &c, tap, tcp, true);
+}
+
+/* Terrain sampling for a feature whose foreground sprite must not be copied
+ * into a neighboring surface. Callers first apply map visibility gates. */
+void map_info_floor_terrain(int y, int x, byte* tap, char* tcp)
+{
+    if (!tap || !tcp || !in_bounds(y, x)) return;
+    cave_feature_visual(&f_info[FEAT_FLOOR], tap, tcp);
+    (void)apply_style_floor_graphics(y, x, FEAT_FLOOR, cave_info[y][x], tap, tcp);
+    special_lighting_floor(tap, tcp, cave_info[y][x], cave_light[y][x]);
 }
 
 /*

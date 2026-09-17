@@ -63,14 +63,9 @@ static void verdant_style_tests(void) {
                 style=styles_pick_partition_style(depth,kind);
                 assert(style!=41);
                 if(style==40) {
-                    if(kind==PART_STYLE_LABYRINTH) {
-                        assert(depth>=8 && depth<=10);
-                        assert(mode_weight_for_depth(QUAD_MODE_LABYRINTH,depth,12,NULL,9)>0);
-                        found_flag=true;
-                    } else {
-                        assert(kind==PART_STYLE_CHASM_FLOOR
-                            || kind==PART_STYLE_CHASM_BRIDGE);
-                    }
+                    assert(kind==PART_STYLE_LABYRINTH && depth>=8 && depth<=10);
+                    assert(mode_weight_for_depth(QUAD_MODE_LABYRINTH,depth,12,NULL,9)>0);
+                    found_flag=true;
                 }
                 if(style==42) {
                     assert(kind==PART_STYLE_CA_BLOB && depth>=5 && depth<=7);
@@ -85,8 +80,14 @@ static void verdant_style_tests(void) {
                 if(depth<=20 && kind==PART_STYLE_BIG_CAVE_FIRE) assert(style==63);
                 if(depth<=20 && kind==PART_STYLE_BIG_CAVE_ICE) assert(style==62);
                 if(depth<=20 && kind==PART_STYLE_BIG_CAVE_POIS) assert(style==55);
-                if(depth<=20 && (kind==PART_STYLE_CHASM_FLOOR
-                    || kind==PART_STYLE_CHASM_BRIDGE)) assert(style==40);
+                if(depth<=20 && kind==PART_STYLE_CHASM_FLOOR) assert(style==30);
+                if(kind==PART_STYLE_CHASM_BRIDGE) {
+                    /* No bridge override: use exactly the ordinary depth pool. */
+                    u64b rng=Rand_state_export();
+                    int bridge=styles_pick_partition_style(depth,kind);
+                    Rand_state_import(rng);
+                    assert(bridge==styles_pick_random_from_level());
+                }
             }
         }
     }
@@ -94,7 +95,7 @@ static void verdant_style_tests(void) {
     p_ptr->depth=0; styles_init_for_level();
     assert(cave_style_primary_for_grid(10,11)==13);
     p_ptr->depth=5;
-    puts("Biome palettes: flagstone chasms/labyrinths, moss and brick green caves; general/elemental/Morgoth pools exclude Verdant cave styles: PASS");
+    puts("Biome palettes: crystal chasm partitions, depth-palette bridges, flagstone labyrinths, moss and brick green caves: PASS");
 }
 
 static void forge_palette_tests(void) {

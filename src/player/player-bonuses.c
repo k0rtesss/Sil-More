@@ -560,7 +560,7 @@ void calc_bonuses(void)
 
     /* Slippery footing affects melee, bows and thrown attacks once through
      * the displayed skills. Airborne players do not touch the ice. */
-    if (!p_ptr->leaping && cave_feat[p_ptr->py][p_ptr->px] == FEAT_ICE)
+    if (!p_ptr->leaping && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px]))
     {
         p_ptr->skill_misc_mod[S_MEL] -= ICE_ATTACK_PENALTY;
         p_ptr->skill_misc_mod[S_ARC] -= ICE_ATTACK_PENALTY;

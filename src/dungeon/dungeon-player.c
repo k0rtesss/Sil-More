@@ -41,7 +41,7 @@ void land(void)
     bool ended_in_air = p_ptr->leaping;
     // the player has landed
     p_ptr->leaping = false;
-    if (ended_in_air && cave_feat[p_ptr->py][p_ptr->px] == FEAT_ICE)
+    if (ended_in_air && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px]))
     {
         p_ptr->update |= PU_BONUS;
         update_stuff();
@@ -50,6 +50,7 @@ void land(void)
      * Only a blocked leap still occupies its airborne midpoint here. */
     if (ended_in_air)
     {
+        (void)player_melting_ice_exposure();
         player_lava_exposure(false);
         player_poison_terrain_exposure(false);
     }
@@ -493,6 +494,7 @@ void process_player(void)
         cave_flood_begin_action();
         player_lava_begin_action();
         player_poison_terrain_begin_action();
+        player_melting_ice_begin_action();
         p_ptr->energy_use = 0;
 
     // Reset number of attacks this turn happens at start of player energy loop
@@ -898,6 +900,7 @@ void process_player(void)
 
         player_lava_end_action();
         player_poison_terrain_end_action();
+        player_melting_ice_end_action();
         cave_flood_end_action();
 
         /* Significant */

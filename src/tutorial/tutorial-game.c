@@ -826,7 +826,7 @@ bool tutorial_game_command_allowed(int command, int direction)
                 && !cave_pit_bold(y, x) && cave_feat[y][x] != FEAT_CHASM
                 && cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_LAVA
                 && cave_feat[y][x] != FEAT_DEEP_WATER
-                && cave_feat[y][x] != FEAT_ICE && cave_feat[y][x] != FEAT_POISON
+                && !FEAT_IS_ICE(cave_feat[y][x]) && cave_feat[y][x] != FEAT_POISON
                 && !(cave_info[y][x] & CAVE_MARK && FEAT_IS_TRAP(cave_feat[y][x]))) action = "move";
         } else return false;
         break;
@@ -905,10 +905,10 @@ static void observe_nearby(void)
     bool forge = false, detailed_forge = false;
     bool trap = false, detailed_trap = false;
     bool chest = false, skeleton = false;
-    const int hazards[] = {FEAT_WATER, FEAT_LAVA, FEAT_ICE, FEAT_POISON, FEAT_DEEP_WATER};
-    const char *hazard_ids[] = {"world.water", "world.lava", "world.ice", "world.poison", "world.deepwater"};
-    const char *hazard_detail_ids[] = {"terrain.84", "terrain.85", "terrain.86", "terrain.87", "terrain.100"};
-    const char *hazard_names[] = {"Shallow water", "Molten lava", "Ice", "Poisonous acid", "Deep water"};
+    const int hazards[] = {FEAT_WATER, FEAT_LAVA, FEAT_ICE, FEAT_POISON, FEAT_DEEP_WATER, FEAT_MELTING_ICE};
+    const char *hazard_ids[] = {"world.water", "world.lava", "world.ice", "world.poison", "world.deepwater", "world.meltingice"};
+    const char *hazard_detail_ids[] = {"terrain.84", "terrain.85", "terrain.86", "terrain.87", "terrain.100", "terrain.102"};
+    const char *hazard_names[] = {"Shallow water", "Molten lava", "Ice", "Poisonous acid", "Deep water", "Melting ice"};
     char id[80];
     /* Reached means this square or visibly adjacent, not distant discovery. */
     for (int y = MAX(0, p_ptr->py - 1); y <= MIN(p_ptr->cur_map_hgt - 1, p_ptr->py + 1); ++y)

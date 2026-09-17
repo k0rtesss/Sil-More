@@ -1316,6 +1316,9 @@
 #define FEAT_BRIDGE_DEEP_WATER_V 0x63
 #define FEAT_BRIDGE_TAIL 0x63
 #define FEAT_DEEP_WATER 0x64
+#define FEAT_MELTING_ICE 0x66
+#define FEAT_IS_ICE(F) ((F) == FEAT_ICE || (F) == FEAT_MELTING_ICE)
+#define MELTING_ICE_BREAK_ONE_IN 5
 #define FEAT_IS_BRIDGE(F) ((F) >= FEAT_BRIDGE_HEAD && (F) <= FEAT_BRIDGE_TAIL)
 #define POISON_TERRAIN_DOSE 6
 #define ICE_ATTACK_PENALTY 2
@@ -3653,7 +3656,7 @@
  */
 #define cave_clean_bold(Y, X)                                                  \
     (((cave_feat[Y][X] == FEAT_FLOOR) || (cave_feat[Y][X] == FEAT_WATER)         \
-         || (cave_feat[Y][X] == FEAT_ICE) || FEAT_IS_BRIDGE(cave_feat[Y][X]))   \
+         || FEAT_IS_ICE(cave_feat[Y][X]) || FEAT_IS_BRIDGE(cave_feat[Y][X]))   \
         && (cave_o_idx[Y][X] == 0))
 
 /*

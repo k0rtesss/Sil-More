@@ -1,6 +1,102 @@
 #include "angband.h"
 #include "externs.h"
 
+/* Action guards prevent entering ice and finishing that same action from
+ * rolling twice. Forced displacement outside an action still makes contact. */
+static bool ice_player_active, ice_player_checked;
+static int ice_monster_active;
+static bool ice_monster_checked;
+
+bool cave_deep_water_allowed(int y, int x)
+{
+    if (!in_bounds_fully(y, x)) return false;
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            if (!dy && !dx) continue;
+            int feat = cave_feat[y + dy][x + dx];
+            /* Bridges are dry ground even when their underlay is water. */
+            if (feat != FEAT_WATER && feat != FEAT_DEEP_WATER
+                && !FEAT_IS_ICE(feat))
+                return false;
+        }
+    return true;
+}
+
+static int melted_ice_feature(int y, int x)
+{
+    return cave_deep_water_allowed(y, x) && one_in_(2)
+        ? FEAT_DEEP_WATER : FEAT_WATER;
+}
+
+bool player_melting_ice_exposure(void)
+{
+    if (!p_ptr || p_ptr->is_dead || p_ptr->leaving || p_ptr->leaping
+        || !in_bounds(p_ptr->py, p_ptr->px)
+        || cave_feat[p_ptr->py][p_ptr->px] != FEAT_MELTING_ICE
+        || (ice_player_active && ice_player_checked))
+        return false;
+    if (ice_player_active) ice_player_checked = true;
+    if (!one_in_(MELTING_ICE_BREAK_ONE_IN)) return false;
+    int feat = melted_ice_feature(p_ptr->py, p_ptr->px);
+    cave_set_feat(p_ptr->py, p_ptr->px, feat);
+    disturb(0, 0);
+    msg_print(feat == FEAT_DEEP_WATER
+        ? "The ice breaks beneath you! You plunge into deep water!"
+        : "The ice breaks beneath you! You splash into shallow water.");
+    return true;
+}
+
+void player_melting_ice_begin_action(void)
+{
+    ice_player_active = true;
+    ice_player_checked = false;
+}
+
+void player_melting_ice_end_action(void)
+{
+    if (p_ptr->energy_use && player_melting_ice_exposure())
+        player_water_displaced(FEAT_MELTING_ICE, cave_feat[p_ptr->py][p_ptr->px]);
+    ice_player_active = false;
+}
+
+void monster_melting_ice_exposure(int m_idx)
+{
+    if (m_idx <= 0 || m_idx >= mon_max) return;
+    monster_type* m_ptr = &mon_list[m_idx];
+    if (!m_ptr->r_idx || !in_bounds(m_ptr->fy, m_ptr->fx)
+        || cave_feat[m_ptr->fy][m_ptr->fx] != FEAT_MELTING_ICE
+        || (r_info[m_ptr->r_idx].flags2 & RF2_FLYING)
+        || (ice_monster_active == m_idx && ice_monster_checked))
+        return;
+    if (ice_monster_active == m_idx) ice_monster_checked = true;
+    if (!one_in_(MELTING_ICE_BREAK_ONE_IN)) return;
+    int feat = melted_ice_feature(m_ptr->fy, m_ptr->fx);
+    cave_set_feat(m_ptr->fy, m_ptr->fx, feat);
+    if (m_ptr->ml)
+    {
+        char name[80];
+        monster_desc(name, sizeof(name), m_ptr, 0);
+        msg_format("The ice breaks beneath %s!", name);
+    }
+}
+
+void monster_melting_ice_begin_action(int m_idx)
+{
+    ice_monster_active = m_idx;
+    ice_monster_checked = false;
+    monster_melting_ice_exposure(m_idx);
+}
+
+void monster_melting_ice_end_action(int m_idx)
+{
+    if (ice_monster_active == m_idx)
+    {
+        ice_monster_active = 0;
+        ice_monster_checked = false;
+    }
+}
+
 bool player_submerged_in_deep_water(void)
 {
     return p_ptr && in_bounds(p_ptr->py, p_ptr->px) && !p_ptr->leaping
@@ -15,8 +111,11 @@ bool cave_transform_elemental_terrain(int y, int x, int typ)
     if (!in_bounds(y, x))
         return false;
     feat = cave_feat[y][x];
-    if (typ == GF_FIRE && feat == FEAT_ICE)
-        cave_set_feat(y, x, FEAT_WATER);
+    if (typ == GF_FIRE && FEAT_IS_ICE(feat))
+        cave_set_feat(y, x, feat == FEAT_MELTING_ICE
+            ? melted_ice_feature(y, x) : FEAT_WATER);
+    else if (typ == GF_COLD && feat == FEAT_MELTING_ICE)
+        cave_set_feat(y, x, FEAT_ICE);
     else if (typ == GF_COLD && feat == FEAT_WATER)
         cave_set_feat(y, x, FEAT_ICE);
     else
@@ -42,9 +141,10 @@ void cave_apply_elemental_brands(int y, int x,
         object_flags(ammunition, &f1, &f2, &f3);
         brands |= f1;
     }
-    if (cave_feat[y][x] == FEAT_ICE && (brands & TR1_BRAND_FIRE))
+    if (FEAT_IS_ICE(cave_feat[y][x]) && (brands & TR1_BRAND_FIRE))
         (void)cave_transform_elemental_terrain(y, x, GF_FIRE);
-    else if (cave_feat[y][x] == FEAT_WATER && (brands & TR1_BRAND_COLD))
+    else if ((cave_feat[y][x] == FEAT_WATER
+        || cave_feat[y][x] == FEAT_MELTING_ICE) && (brands & TR1_BRAND_COLD))
         (void)cave_transform_elemental_terrain(y, x, GF_COLD);
 }
 

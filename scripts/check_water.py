@@ -199,7 +199,8 @@ void generation_tests(void) {
             if(before[y][x]!=FEAT_FLOOR && !rock) assert(before[y][x]==cave_feat[y][x]);
             if(rock && before[y][x]!=cave_feat[y][x])
                 assert(terrain_landmark_cell(y,x)!=TERRAIN_LANDMARK_NONE || !kind);
-            bool wet = kind ? cave_feat[y][x]==materials[kind]
+            bool wet = kind==1 ? FEAT_IS_ICE(cave_feat[y][x])
+                : kind ? cave_feat[y][x]==materials[kind]
                 : (cave_feat[y][x]==FEAT_WATER || cave_feat[y][x]==FEAT_DEEP_WATER);
             if(!wet) continue;
             count++; assert(before[y][x]==FEAT_FLOOR || rock);
@@ -209,10 +210,17 @@ void generation_tests(void) {
             static const int dy[]={-1,0,1,0},dx[]={0,1,0,-1};
             for(int d=0;d<4;d++) {
                 int neighbour=cave_feat[y+dy[d]][x+dx[d]];
-                adjacent|=kind ? neighbour==materials[kind]
+                adjacent|=kind==1 ? FEAT_IS_ICE(neighbour)
+                    : kind ? neighbour==materials[kind]
                     : (neighbour==FEAT_WATER || neighbour==FEAT_DEEP_WATER);
             }
             assert(adjacent);
+            if(cave_feat[y][x]==FEAT_DEEP_WATER)
+                for(int oy=-1;oy<=1;oy++)for(int ox=-1;ox<=1;ox++) {
+                    int neighbour=cave_feat[y+oy][x+ox];
+                    assert(neighbour==FEAT_WATER || neighbour==FEAT_DEEP_WATER
+                        || FEAT_IS_ICE(neighbour));
+                }
         }
         assert(cave_feat[30][45]==FEAT_MORE && cave_feat[31][45]==FEAT_FORGE_NORMAL_HEAD);
         assert(cave_feat[29][45]==FEAT_FLOOR && cave_feat[28][45]==FEAT_FLOOR && cave_feat[27][45]==FEAT_FLOOR);

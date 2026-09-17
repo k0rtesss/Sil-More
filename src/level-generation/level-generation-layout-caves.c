@@ -570,6 +570,7 @@ bool carve_ca_blob_anchor_bounds(int y_min, int y_max, int x_min, int x_max, int
     scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x, 0);
 
     log_trace("CA blob (bounded) anchor: bounds=(%d,%d)-(%d,%d) center=(%d,%d) floors=%d", min_y, min_x, max_y, max_x, cy, cx, floor_count);
+    cave_apply_floor_palette(min_y, max_y, min_x, max_x, style_idx);
     return true;
 }
 

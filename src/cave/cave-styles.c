@@ -1,6 +1,7 @@
 /* File: cave-styles.c */
 
 #include "cave-internal.h"
+#include "cave-bridge.h"
 
 /* Visual-only shore tiles, reloaded from style-levels.txt at startup. */
 static struct {
@@ -68,6 +69,56 @@ bool styles_floor_border_at(int feat, int radius, int y, int x,
     return true;
 }
 
+/* Match the stored material to the authored ice bank rather than a style ID.
+ * Do not use map_info here: floor rendering itself consults this predicate. */
+static bool cave_stored_style_has_ice_bank(int y, int x)
+{
+    int sidx = cave_style_index_for_color(cave_color[y][x]);
+    if (sidx < 0) return false;
+    const style_type* style = &style_info[sidx];
+    int count = MAX(1, MIN(8, style->floor_count));
+    for (int i = 0; i < count; i++)
+    {
+        byte row = style->floor_count ? style->floor_rowv[i] : style->floor_row;
+        byte col = style->floor_count ? style->floor_colv[i] : style->floor_col;
+        for (int radius = 0; radius < 2; radius++)
+            for (int variant = 0; variant < floor_borders[FEAT_ICE][radius].count; variant++)
+                if (row == floor_borders[FEAT_ICE][radius].row[variant]
+                    && col == floor_borders[FEAT_ICE][radius].col[variant])
+                    return true;
+    }
+    return false;
+}
+
+static bool cave_shore_grid_known(int y, int x)
+{
+    if (!p_ptr || !in_bounds(y, x)) return false;
+    u16b info = cave_info[y][x];
+    return (info & (CAVE_MARK | CAVE_SEEN))
+        && (!(p_ptr->rage || g_labyrinth_view_active) || (info & CAVE_SEEN));
+}
+
+bool cave_water_has_icy_shore(int y, int x)
+{
+    if (!cave_shore_grid_known(y, x)) return false;
+    int feat = cave_bridge_underlay(cave_feat[y][x]);
+    if (feat != FEAT_WATER && feat != FEAT_DEEP_WATER) return false;
+    if (cave_stored_style_has_ice_bank(y, x)) return true;
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            int ny = y + dy, nx = x + dx;
+            if ((!dy && !dx) || !cave_shore_grid_known(ny, nx)) continue;
+            feat = cave_bridge_underlay(cave_feat[ny][nx]);
+            if (FEAT_IS_ICE(feat)) return true;
+            if ((feat == FEAT_FLOOR || feat == FEAT_RAGE_FLOOR
+                    || feat == FEAT_SUNLIGHT)
+                && cave_stored_style_has_ice_bank(ny, nx))
+                return true;
+        }
+    return false;
+}
+
 /* Encoded color range that indicates an absolute style index per cell.
  * We now store the chosen style for each cell directly in cave_color as
  * COLOR_STYLE_BASE + style_index. This guarantees deterministic visuals
@@ -125,6 +176,45 @@ bool cave_style_index_is_valid(int sidx)
 {
     return z_info && style_info && sidx >= 0 && sidx < z_info->style_max
         && style_info[sidx].name;
+}
+
+/* Authored ordinary-cave material patches, independent of style load order. */
+static cave_floor_palette g_cave_floor_palettes[64];
+
+void styles_cave_floor_palettes_clear(void)
+{
+    memset(g_cave_floor_palettes, 0, sizeof(g_cave_floor_palettes));
+}
+
+bool styles_set_cave_floor_palette(int base_style,
+    const cave_floor_palette* palette)
+{
+    if (base_style < 0 || base_style >= 64 || !palette
+        || palette->coverage < 1 || palette->coverage > 40
+        || palette->patches < 1 || palette->patches > 4
+        || palette->count < 1 || palette->count > 8)
+        return false;
+    for (int i = 0; i < palette->count; i++) {
+        if (palette->styles[i] < 0 || palette->styles[i] >= 64
+            || palette->weights[i] < 1 || palette->weights[i] > 1000)
+            return false;
+    }
+    /* Commit only after the complete rule passes validation. */
+    g_cave_floor_palettes[base_style] = *palette;
+    return true;
+}
+
+bool styles_cave_floor_palette(int base_style, cave_floor_palette* out)
+{
+    if (!out || base_style < 0 || base_style >= 64
+        || !cave_style_index_is_valid(base_style))
+        return false;
+    const cave_floor_palette* palette = &g_cave_floor_palettes[base_style];
+    if (!palette->count) return false;
+    for (int i = 0; i < palette->count; i++)
+        if (!cave_style_index_is_valid(palette->styles[i])) return false;
+    *out = *palette;
+    return true;
 }
 
 /* Level rules table (indexed by exact depth 0..31) */

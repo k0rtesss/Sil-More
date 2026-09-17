@@ -160,7 +160,7 @@ static void lm_context(void)
                 || (terrain_vault_id_at(y, x) >= 0 && !policy)) lm_hard[y][x] = 1;
             /* Mixing requires an authored boundary, not last-writer-wins paint. */
             if (lm_feature != FEAT_CHASM && f != lm_feature
-                && (f == FEAT_WATER || f == FEAT_ICE || f == FEAT_LAVA || f == FEAT_POISON))
+                && (f == FEAT_WATER || FEAT_IS_ICE(f) || f == FEAT_LAVA || f == FEAT_POISON))
                 lm_hard[y][x] = 1;
             /* Independently planned systems retain their own cores. A later
              * catastrophe cannot silently repaint an earlier river. */
@@ -181,7 +181,7 @@ static void lm_context(void)
             {
                 big_cave_type_t type = current_partition_big_cave_types[pi];
                 if ((type == BIG_CAVE_FIRE && lm_feature != FEAT_LAVA)
-                    || (type == BIG_CAVE_ICE && lm_feature != FEAT_ICE)
+                    || (type == BIG_CAVE_ICE && !FEAT_IS_ICE(lm_feature))
                     || (type == BIG_CAVE_POIS && lm_feature != FEAT_POISON)) lm_hard[y][x] = 1;
             }
             /* Actual constructed corridors remain candidate bridge axes. */

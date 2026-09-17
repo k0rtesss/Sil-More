@@ -69,7 +69,8 @@ void cave_flood_end_action(void)
                         cave_set_feat(yy, xx, FEAT_WATER);
             if (radius == 2)
             {
-                if (floodable_ground(cave_feat[y][x]))
+                if (floodable_ground(cave_feat[y][x])
+                    && cave_deep_water_allowed(y, x))
                     cave_set_feat(y, x, FEAT_DEEP_WATER);
                 flood_stage[y][x] = 0;
             }

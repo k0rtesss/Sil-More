@@ -1530,7 +1530,7 @@ bool grid_interact_available(int y, int x)
     }
 
     if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
-        || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON)
+        || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON)
         return true;
 
     /* Empty floor: strike at the square without stepping in */
@@ -1961,8 +1961,24 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_GREEN);
     }
 
+    /* --- Melting ice --- */
+    else if (feat == FEAT_MELTING_ICE)
+    {
+        SDL_strlcpy(title, "Melting ice", sizeof(title));
+        SDL_strlcpy(desc,
+            "Slippery footing gives grounded creatures -2 attack and -2 Evasion. "
+            "Movement costs normally. Each grounded entry or later turn on "
+            "this ice has a 20% chance to break it into water. Flying monsters "
+            "and successful leaps avoid breaking it. Near dry ground it becomes "
+            "shallow water; deep water is possible only with water or ice on "
+            "all eight neighboring squares, at least two tiles from ground. "
+            "Deep water prevents attacks and costs four times normal movement "
+            "energy. Fire also melts this ice; cold reinforces it into solid ice.", sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_WHITE);
+    }
+
     /* --- Solid ice --- */
-    else if (feat == FEAT_ICE)
+    else if (FEAT_IS_ICE(feat))
     {
         SDL_strlcpy(title, "Solid ice", sizeof(title));
         SDL_strlcpy(desc,

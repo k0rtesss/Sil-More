@@ -656,3 +656,8 @@ T:0:1
 N:101:flooding trap
 G:^:b
 T:3:13
+
+# Verdant 03 animated ice; may collapse under a grounded creature.
+N:102:melting ice
+G:=:B
+T:0:1

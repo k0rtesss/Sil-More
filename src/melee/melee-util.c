@@ -461,7 +461,7 @@ int monster_terrain_penalty(monster_type* m_ptr, int y, int x)
         return 100;
     if (monster_poison_step_damage(m_ptr, m_ptr->fy, m_ptr->fx, y, x))
         return 6;
-    if (cave_feat[y][x] == FEAT_ICE && !(r_ptr->flags2 & RF2_FLYING))
+    if (FEAT_IS_ICE(cave_feat[y][x]) && !(r_ptr->flags2 & RF2_FLYING))
         return ICE_ATTACK_PENALTY;
     return 0;
 }

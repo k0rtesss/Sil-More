@@ -3205,16 +3205,16 @@ void sdl_draw_tileset_sprite_ex(byte a, char c, const SDL_FRect* dst, bool icon,
 void sdl_draw_tileset_sprite(byte a, char c, const SDL_FRect* dst, bool icon);
 void sdl_idle_animation_clear_cells(void);
 void sdl_idle_animation_shutdown(void);
-void sdl_chasm_edge_shutdown(void);
 void sdl_idle_animation_invalidate_span(int col, int row, int width);
 void sdl_idle_animation_track(int col, int row, int y, int x,
     byte a, char c, byte ta, char tc);
 bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst);
+bool sdl_idle_animation_draw_liquid_piece(int y, int x,
+    const SDL_FRect* pixels, const SDL_FRect* dst);
+void sdl_chasm_transition_draw(int y, int x, const SDL_FRect* dst);
 bool sdl_material_edge_draw(int y, int x, byte ta, char tc,
     const SDL_FRect* dst, bool preserve_floor_contour);
 bool sdl_material_edge_at(int y, int x);
-byte sdl_chasm_edge_mask(int y, int x);
-bool sdl_chasm_edge_draw(int y, int x, const SDL_FRect* dst);
 int sdl_idle_animation_timeout_ms(Uint64 now_ns);
 void sdl_idle_animation_update(Uint64 now_ns);
 bool sdl_map_grid_is_player(int y, int x);

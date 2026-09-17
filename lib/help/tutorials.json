@@ -13631,6 +13631,56 @@
       ]
     },
     {
+      "id": "world.meltingice",
+      "title": "Melting ice",
+      "level": "normal",
+      "priority": 65,
+      "steps": [
+        {
+          "text": "Melting ice has the usual ice footing penalties. Each grounded entry or later turn on it has a 20% chance to break it into water. Near the bank it becomes shallow water; farther out it may become deep water, where you cannot attack. Flying creatures and successful leaps do not break the ice.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Known melting ice is on the current square or visibly adjacent; the observation expires when none remains nearby."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-water.c",
+        "src/player/player-bonuses.c"
+      ]
+    },
+    {
+      "id": "terrain.102",
+      "title": "Melting ice",
+      "level": "extended",
+      "priority": 45,
+      "steps": [
+        {
+          "text": "Melting ice gives grounded creatures -2 attack and -2 Evasion, while movement costs normally. Each grounded entry or later turn on it has a 20% chance to break it into water. Flying creatures and successful leaps avoid breaking the ice.",
+          "kind": "info",
+          "anchor": "map"
+        },
+        {
+          "text": "Broken melting ice becomes shallow water near dry ground. Deep water is possible only if all eight adjacent squares, including diagonals, are water or ice, keeping it at least two tiles from ground. Deep water costs four times normal movement energy and prevents attacks while submerged. Fire also melts this ice; cold reinforces it into solid ice.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The known feature is on the player square or visibly adjacent; hidden terrain is not disclosed."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "lib/edit/terrain.txt",
+        "src/cave/cave-water.c",
+        "src/player/player-bonuses.c"
+      ]
+    },
+    {
       "id": "world.ice",
       "title": "Fighting on ice",
       "level": "normal",

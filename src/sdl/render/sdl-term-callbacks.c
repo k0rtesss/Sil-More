@@ -1760,7 +1760,6 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     bool health_bar_visible;
     bool fixture_drawn = false;
     bool material_edge_drawn = false;
-    bool chasm_edge_drawn = false;
     bool fixture_cell = false;
 
     if (!dst)
@@ -1805,7 +1804,6 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     if (terrain_tile && fixture_cell) {
         /* Opaque wall fixtures must remain on top of the transition pixels. */
         material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, false);
-        chasm_edge_drawn = sdl_chasm_edge_draw(dy, dx, dst);
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
     } else if (terrain_tile) {
         /* Authored terrain contours own their floor pixels. Generic contacts
@@ -1813,7 +1811,6 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
          * atlas load leaves the generic material fallback available. */
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
         material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, fixture_drawn);
-        chasm_edge_drawn = sdl_chasm_edge_draw(dy, dx, dst);
     }
     if (sdl_rage_wall_tint_active(dy, dx) && (cave_m_idx[dy][dx] != 0))
         sdl_draw_rage_tile_filter(ta, tc, dy, dx, dst);
@@ -1865,7 +1862,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
 
                 if ((feat == FEAT_FLOOR) || (feat == FEAT_SUNLIGHT)
                     || (feat == FEAT_WATER) || (feat == FEAT_DEEP_WATER) || (feat == FEAT_LAVA)
-                    || (feat == FEAT_ICE) || (feat == FEAT_POISON)
+                    || (FEAT_IS_ICE(feat)) || (feat == FEAT_POISON)
                     || FEAT_IS_BRIDGE(feat)) {
                     object_type* o_ptr;
 
@@ -1900,8 +1897,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     }
 
     /* Base tile */
-    if (base_tile && !((fixture_drawn || material_edge_drawn
-                || chasm_edge_drawn)
+    if (base_tile && !((fixture_drawn || material_edge_drawn)
             && (a & TILE_INDEX_MASK) == (ta & TILE_INDEX_MASK)
             && ((byte)c & TILE_INDEX_MASK) == ((byte)tc & TILE_INDEX_MASK))) {
         byte draw_a = a;

@@ -512,7 +512,7 @@ int total_monster_attack(monster_type* m_ptr, int base)
     bool unseen = false;
 
     /* Flying creatures do not need footing on the surface below them. */
-    if (cave_feat[m_ptr->fy][m_ptr->fx] == FEAT_ICE
+    if (FEAT_IS_ICE(cave_feat[m_ptr->fy][m_ptr->fx])
         && !(r_ptr->flags2 & RF2_FLYING))
         att -= ICE_ATTACK_PENALTY;
 
@@ -567,7 +567,7 @@ int total_monster_evasion(monster_type* m_ptr, bool archery)
     evn -= m_ptr->song_evasion_penalty;
     bool unseen = false;
 
-    if (cave_feat[m_ptr->fy][m_ptr->fx] == FEAT_ICE
+    if (FEAT_IS_ICE(cave_feat[m_ptr->fy][m_ptr->fx])
         && !(r_ptr->flags2 & RF2_FLYING))
         evn -= ICE_EVASION_PENALTY;
 
@@ -2437,7 +2437,7 @@ bool knock_back(int y1, int x1, int y2, int x2)
     /* Ice only changes the displacement of a target that is actually using
      * the surface.  Flyers and a leaping player are airborne, so they keep
      * the ordinary one-square knockback. */
-    if (cave_feat[y2][x2] == FEAT_ICE
+    if (FEAT_IS_ICE(cave_feat[y2][x2])
         && ((!monster_target && !p_ptr->leaping)
             || (monster_target
                 && !(r_info[m_ptr->r_idx].flags2 & RF2_FLYING))))

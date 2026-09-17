@@ -42,8 +42,7 @@ L:20: 38:1 39:1
 P:BIG_FIRE:1:20: 63:1
 P:BIG_ICE:1:20: 62:1
 P:BIG_POIS:1:20: 55:1
-P:CHASM:1:20: 40:1
-P:CHASM_BRIDGE:1:20: 40:1
+P:CHASM:1:20: 30:1
 
 # Floor beside known terrain (eight neighbours): R:<feature>:<row>:<col>.
 # Basalt banks border lava pools and rivers in every style; 85 is FEAT_LAVA.
@@ -51,6 +50,7 @@ P:CHASM_BRIDGE:1:20: 40:1
 R:85:35:8
 # Snow around ice matches the ice-on-snow transition artwork (86 is FEAT_ICE).
 R:86:35:0
+R:102:35:0
 # Water has one adjacent silt bank only. Multiple tiles vary within that ring.
 # Shallow (84) and deep water (100) share the bank material.
 R:84:36:0 36:2 36:4 36:6
@@ -82,6 +82,25 @@ P:CA:15: 52:1 54:1 27:1
 P:CA:16:17: 52:1 54:1
 P:CA:18:19: 52:1 54:1 37:1
 P:CA:20: 52:1 54:1
+
+# Ordinary cave floor accents. Main cave and wall styles still come from P:CA.
+# M:<base style>:<max floor percent>:<patch count>: <accent style>:<weight> ...
+# Cosmetic, cardinally connected patches; only the original natural cave floor
+# is eligible. At most two distinct accent artworks are chosen per cave.
+# Styles 5/7/9/10/13/14/27/37/52/54 are original hand-drawn artwork.
+# Styles 42/43/44 use imported Verdant floors. Every Verdant base below selects
+# hand-drawn accents; the original bases retain their dominant hand-drawn floor.
+M:52:24:3: 44:4 54:3 13:2
+M:54:24:3: 44:4 52:3 13:2
+M:5:22:2: 44:3 7:3 54:2
+M:7:22:2: 44:3 5:3 54:2
+M:9:20:2: 44:3 54:3 13:2
+M:10:20:2: 44:3 9:3 54:2
+M:14:24:3: 44:4 52:3 13:2
+M:27:22:2: 44:3 54:3 13:2
+M:37:20:2: 44:3 9:3 54:2
+M:42:24:3: 52:4 54:3 13:2
+M:43:24:3: 52:4 54:3 13:2
 
 # Big cave type weights (per-depth). Defaults to equal odds if omitted.
 # B:<depth>: ICE:<weight> FIRE:<weight> POIS:<weight>

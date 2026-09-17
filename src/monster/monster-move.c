@@ -447,8 +447,8 @@ static bool player_environment_bonus_state_changed(int old_y, int old_x,
 {
     return level_partition_big_cave_type_for_point(old_y, old_x)
         != level_partition_big_cave_type_for_point(new_y, new_x)
-        || cave_feat[old_y][old_x] == FEAT_ICE
-        || cave_feat[new_y][new_x] == FEAT_ICE;
+        || FEAT_IS_ICE(cave_feat[old_y][old_x])
+        || FEAT_IS_ICE(cave_feat[new_y][new_x]);
 }
 
 void monster_swap(int y1, int x1, int y2, int x2)
@@ -723,14 +723,19 @@ void monster_swap(int y1, int x1, int y2, int x2)
     if (m1 < 0 || m2 < 0)
         sil_popup_trace_stage("player-grid-queued");
 
+    if (m1 < 0 || m2 < 0)
+        (void)player_melting_ice_exposure();
+
     /* Forced movement uses the same entry hazard as normal movement. */
     if (m1 > 0)
     {
+        monster_melting_ice_exposure(m1);
         monster_lava_exposure(m1);
         monster_poison_terrain_exposure(m1);
     }
     if (m2 > 0)
     {
+        monster_melting_ice_exposure(m2);
         monster_lava_exposure(m2);
         monster_poison_terrain_exposure(m2);
     }

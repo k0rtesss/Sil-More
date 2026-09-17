@@ -285,6 +285,7 @@ set(SIL_MORE_SOURCES
     src/level-generation/level-generation-layout-anchors.c
     src/level-generation/level-generation-layout-big-cave.c
     src/level-generation/level-generation-layout-caves.c
+    src/level-generation/level-generation-cave-floor.c
     src/level-generation/level-generation-themes.c
     src/level-generation/level-generation-landmarks.c
     src/level-generation/level-generation-terrain-history.c
@@ -366,7 +367,7 @@ set(SIL_MORE_SOURCES
     src/sdl/render/sdl-present.c
     src/sdl/render/sdl-term-callbacks.c
     src/sdl/render/sdl-material-edge.c
-    src/sdl/render/sdl-chasm-edge.c
+    src/sdl/render/sdl-chasm-transition.c
     src/sdl/render/sdl-idle-animation.c
     src/sdl/render/sdl-bridge.c
     src/sdl/render/sdl-text.c

@@ -69,7 +69,8 @@ static int tactical_hazard(monster_type* m_ptr, int y, int x)
     case FEAT_CHASM: return 75;
     case FEAT_WATER: return 8;
     case FEAT_DEEP_WATER: return (r_info[m_ptr->r_idx].flags2 & RF2_FLYING) ? 0 : 60;
-    case FEAT_ICE: return 6; /* Cold resistance is not sure footing. */
+    case FEAT_ICE:
+    case FEAT_MELTING_ICE: return 6; /* Cold resistance is not sure footing. */
     default: return 0;
     }
     return score * (4 - MAX(0, defense)) / 4;
@@ -101,7 +102,7 @@ int monster_tactical_displacement_utility(monster_type* m_ptr, int y, int x,
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     int dir, yy, xx, score = 0, count = 0;
     int knock_distance = (!p_ptr->leaping
-        && cave_feat[p_ptr->py][p_ptr->px] == FEAT_ICE)
+        && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px]))
         ? ICE_KNOCK_BACK_DISTANCE : 1;
     if (!monster_ai_can_see_player(m_ptr)
         || distance(y, x, p_ptr->py, p_ptr->px) != 1) return 0;

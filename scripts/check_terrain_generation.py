@@ -22,6 +22,7 @@ def gallery():
         "C": (6, 9, 15), "L": (249, 85, 33), "P": (94, 177, 62),
         "I": (147, 224, 241), "r": (235, 194, 71), "!": (237, 237, 237),
         "D": (9, 29, 94), "B": (140, 105, 65),
+        "i": (94, 180, 204),
     }
     cards = []
     for path in sorted(OUT.glob("map-*.txt")):
@@ -67,12 +68,21 @@ bool test_themes_parse(const char* text,size_t size) {
     rubble = OUT / "rubble.c"
     rubble.write_text('#include "angband.h"\n#include "externs.h"\n#include "level-generation/level-generation-terrain.h"\n'
                       + access[start:end], encoding="utf-8")
+    # Reuse the exact shoreline predicate shared with runtime ice collapse.
+    # The full water module also owns player/monster action side effects.
+    water = (ROOT / "src/cave/cave-water.c").read_text(encoding="utf-8")
+    start = water.index("bool cave_deep_water_allowed(")
+    end = water.index("\n}", start) + 2
+    shoreline = OUT / "shoreline.c"
+    shoreline.write_text('#include "angband.h"\n#include "externs.h"\n'
+                         + water[start:end], encoding="utf-8")
     env["PATH"] = str(ROOT / "build-standard/_deps/SDL") + os.pathsep + env["PATH"]
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-std=c17", "-O1", "-g",
                     "-ffunction-sections", "-fdata-sections", "@CMakeFiles/sil-more.dir/includes_C.rsp",
                     str(ROOT / "scripts/tests/terrain-generation-test.c"),
                     str(ROOT / "src/level-generation/level-generation-terrain-access.c"),
                     str(ROOT / "src/cave/cave-bridge.c"),
+                    str(shoreline),
                     str(themes), str(rubble), str(ROOT / "build-standard/_deps/SDL/libSDL3.dll.a"),
                     "-Wl,--gc-sections", "-o", str(exe)],
                    cwd=ROOT / "build-standard", env=env, check=True)

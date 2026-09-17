@@ -493,6 +493,7 @@ extern bool cave_valid_bold(int y, int x);
 extern bool feat_supports_lighting(int feat);
 extern void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp);
 extern void map_info_terrain(int y, int x, byte* tap, char* tcp);
+extern void map_info_floor_terrain(int y, int x, byte* tap, char* tcp);
 extern void map_info_default(int y, int x, byte* ap, char* cp);
 extern int player_tile_offset(void);
 extern void move_cursor_relative(int y, int x);
@@ -512,6 +513,14 @@ extern void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player);
 extern void update_smell(void);
 extern int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
 extern bool player_submerged_in_deep_water(void);
+extern bool cave_deep_water_allowed(int y, int x);
+extern bool player_melting_ice_exposure(void);
+extern void player_melting_ice_begin_action(void);
+extern void player_melting_ice_end_action(void);
+extern void monster_melting_ice_exposure(int m_idx);
+extern void monster_melting_ice_begin_action(int m_idx);
+extern void monster_melting_ice_end_action(int m_idx);
+
 extern bool cave_transform_elemental_terrain(int y, int x, int typ);
 extern void cave_apply_elemental_brands(int y, int x,
     const object_type* weapon, const object_type* ammunition);
@@ -564,6 +573,11 @@ extern void styles_vault_rules_clear(void);
 extern void styles_set_vault_rule(int depth, const int* sidx, const int* weight, int count);
 extern void styles_apply_vault_default_for_depth(int depth);
 extern void styles_partition_rules_clear(void);
+extern void styles_cave_floor_palettes_clear(void);
+extern byte cave_style_floor_choice(int sidx);
+extern bool styles_set_cave_floor_palette(int base_style,
+    const cave_floor_palette* palette);
+extern bool styles_cave_floor_palette(int base_style, cave_floor_palette* out);
 extern void styles_floor_borders_clear(void);
 extern bool styles_set_floor_border(int feat, int row, int col);
 extern bool styles_set_floor_border_variants(int feat, int radius,
@@ -571,6 +585,7 @@ extern bool styles_set_floor_border_variants(int feat, int radius,
 extern bool styles_floor_border(int feat, byte* row, byte* col);
 extern bool styles_floor_border_at(int feat, int radius, int y, int x,
     byte* row, byte* col);
+extern bool cave_water_has_icy_shore(int y, int x);
 extern void cave_floor_border_redraw_neighbors(int y, int x);
 extern void styles_add_partition_rule(int depth, int kind, const int* sidx, const int* weight, int count);
 extern int styles_pick_partition_style(int depth, int kind);

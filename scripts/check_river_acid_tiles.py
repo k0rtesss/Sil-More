@@ -50,7 +50,7 @@ static void chasm_surface_tests(void) {
     cave_info[9][11]=0;assert(liquid_transition_mask(10,11,FEAT_CHASM)==0);
     cave_info[10][11]=0;assert(!visible_liquid(10,11));
     idle_cell cell={.liquid_feat=FEAT_CHASM};assert(!cell_can_animate(&cell));
-    puts("Chasms: only chasm_1/2/3 static fills, no lip/ring/transition, bridge underlay and knowledge gating: PASS");
+    puts("Chasms: chasm_1/2/3 fill variants, connected rendering, bridge underlay and knowledge gating: PASS");
 }
 static SDL_Surface* wet_expected(SDL_Texture* texture,int mask,int frame,int light,bool deep_fallback) {
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);

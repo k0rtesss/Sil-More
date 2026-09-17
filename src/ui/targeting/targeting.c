@@ -674,7 +674,7 @@ static bool determine_location_is_interesting(int y, int x)
     /* This is checked BEFORE monsters to prevent showing unmarked objects under detected monsters */
     if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT)
         || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER
-        || cave_feat[y][x] == FEAT_ICE
+        || FEAT_IS_ICE(cave_feat[y][x])
         || cave_feat[y][x] == FEAT_POISON || FEAT_IS_BRIDGE(cave_feat[y][x]))
     {
         /* Scan all objects in the grid */
@@ -1150,7 +1150,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             /* Objects (only shown when on floors, not when in rubble) */
             if (cave_floorlike_bold(y, x) || cave_feat[y][x] == FEAT_SUNLIGHT
                 || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER
-                || cave_feat[y][x] == FEAT_ICE || FEAT_IS_BRIDGE(cave_feat[y][x]))
+                || FEAT_IS_ICE(cave_feat[y][x]) || FEAT_IS_BRIDGE(cave_feat[y][x]))
             {
                 /* Describe it */
                 if (object_is_visible(o_ptr) && grid_info_is_available(y, x))
@@ -1268,7 +1268,12 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                 s3 = "";
                 name = "deep water (move 400%; cannot attack while submerged)";
             }
-            else if (feat == FEAT_ICE)
+            else if (feat == FEAT_MELTING_ICE)
+            {
+                s3 = "";
+                name = "melting ice (grounded: -2 attack, -2 Evasion; 20% break chance)";
+            }
+            else if (FEAT_IS_ICE(feat))
             {
                 s3 = "";
                 name = "solid ice (grounded: -2 attack, -2 Evasion; fire melts it)";

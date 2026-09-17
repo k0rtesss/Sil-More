@@ -38,6 +38,15 @@ void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player);
 void update_smell(void);
 int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
 bool player_submerged_in_deep_water(void);
+bool cave_deep_water_allowed(int y, int x);
+bool cave_water_has_icy_shore(int y, int x);
+bool player_melting_ice_exposure(void);
+void player_melting_ice_begin_action(void);
+void player_melting_ice_end_action(void);
+void monster_melting_ice_exposure(int m_idx);
+void monster_melting_ice_begin_action(int m_idx);
+void monster_melting_ice_end_action(int m_idx);
+
 void player_water_movement(int from_feat, int to_feat);
 void player_water_displaced(int from_feat, int to_feat);
 int player_lava_damage(bool airborne);

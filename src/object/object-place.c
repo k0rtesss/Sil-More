@@ -21,7 +21,7 @@ bool object_terrain_allows_generation(int feat, int tval)
 /* Drops use dry ground, ice or bridges; gems can settle in either water depth. */
 static bool object_drop_grid(int feat, int tval)
 {
-    return feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT || feat == FEAT_ICE
+    return feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT || FEAT_IS_ICE(feat)
         || FEAT_IS_BRIDGE(feat)
         || ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER) && tval == TV_GEM);
 }
@@ -167,7 +167,7 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
         (cave_feat[y][x] == FEAT_FLOOR) || (cave_feat[y][x] == FEAT_SUNLIGHT)
         || (cave_feat[y][x] == FEAT_WATER)
         || (cave_feat[y][x] == FEAT_DEEP_WATER)
-        || (cave_feat[y][x] == FEAT_ICE)
+        || (FEAT_IS_ICE(cave_feat[y][x]))
         || FEAT_IS_BRIDGE(cave_feat[y][x]);
     const bool force_place = artefact_p(j_ptr) || is_silmaril || j_ptr->pickup;
     const bool try_hard_place = force_place || impact_is_floor;

@@ -657,7 +657,8 @@ void map_feature(int y, int x)
     if ((cave_feat[y][x] < FEAT_WALL_HEAD) || (cave_stair_bold(y, x))
         || (cave_feat[y][x] == FEAT_RUBBLE) || cave_forge_bold(y, x)
         || (cave_feat[y][x] == FEAT_CHASM) || (cave_feat[y][x] == FEAT_WATER)
-        || (cave_feat[y][x] == FEAT_DEEP_WATER) || FEAT_IS_BRIDGE(cave_feat[y][x]))
+        || (cave_feat[y][x] == FEAT_DEEP_WATER) || FEAT_IS_ICE(cave_feat[y][x])
+        || FEAT_IS_BRIDGE(cave_feat[y][x]))
     {
         /* Memorize normal features */
         if ((cave_feat[y][x] >= FEAT_DOOR_HEAD) || (cave_stair_bold(y, x))
@@ -965,7 +966,7 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     int new_flow_feature = cave_flow_feature(feat);
     bool removed_floor_border = cave_feat[y][x] != feat
         && (styles_floor_border(cave_bridge_underlay(cave_feat[y][x]), NULL, NULL)
-            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_ICE
+            || FEAT_IS_ICE(cave_bridge_underlay(cave_feat[y][x]))
             || cave_bridge_underlay(cave_feat[y][x]) == FEAT_LAVA
             || cave_bridge_underlay(cave_feat[y][x]) == FEAT_WATER
             || cave_bridge_underlay(cave_feat[y][x]) == FEAT_DEEP_WATER
@@ -977,7 +978,7 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
         && (cave_bridge_underlay(cave_feat[y][x]) == FEAT_LAVA
             || cave_bridge_underlay(feat) == FEAT_LAVA);
     bool ice_changed = cave_feat[y][x] != feat
-        && (cave_feat[y][x] == FEAT_ICE || feat == FEAT_ICE);
+        && (FEAT_IS_ICE(cave_feat[y][x]) || FEAT_IS_ICE(feat));
     bool poison_changed = cave_feat[y][x] != feat && feat == FEAT_POISON;
     if (cave_feat[y][x] != feat)
         cave_fixture_set(y, x, CAVE_FIXTURE_NONE);

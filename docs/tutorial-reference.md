@@ -4,7 +4,7 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 536 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 538 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
@@ -12,7 +12,7 @@ The catalogue contains 536 lessons, including 107 ability previews. Every live a
 
 ## Tutorial modes
 
-Default: **Extended**. The catalogue has **154 Normal** lessons and **382 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
+Default: **Extended**. The catalogue has **155 Normal** lessons and **383 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
 
@@ -8509,6 +8509,42 @@ Lava is deadly. Ground contact without enough effective fire resistance kills yo
 Trigger: Known molten lava is on the current square or visibly adjacent; the observation expires when none remains nearby.
 
 Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-lava.c`, `src/player/player-bonuses.c`.
+
+## Melting ice
+
+`world.meltingice`
+
+Level: **Normal**.
+
+Priority: **65** (higher appears first).
+
+**1. Info**
+
+Melting ice has the usual ice footing penalties. Each grounded entry or later turn on it has a 20% chance to break it into water. Near the bank it becomes shallow water; farther out it may become deep water, where you cannot attack. Flying creatures and successful leaps do not break the ice.
+
+Trigger: Known melting ice is on the current square or visibly adjacent; the observation expires when none remains nearby.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`.
+
+## Melting ice
+
+`terrain.102`
+
+Level: **Extended**.
+
+Priority: **45** (higher appears first).
+
+**1. Info**
+
+Melting ice gives grounded creatures -2 attack and -2 Evasion, while movement costs normally. Each grounded entry or later turn on it has a 20% chance to break it into water. Flying creatures and successful leaps avoid breaking the ice.
+
+**2. Info**
+
+Broken melting ice becomes shallow water near dry ground. Deep water is possible only if all eight adjacent squares, including diagonals, are water or ice, keeping it at least two tiles from ground. Deep water costs four times normal movement energy and prevents attacks while submerged. Fire also melts this ice; cold reinforces it into solid ice.
+
+Trigger: The known feature is on the player square or visibly adjacent; hidden terrain is not disclosed.
+
+Sources: `src/tutorial/tutorial-game.c`, `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`.
 
 ## Fighting on ice
 

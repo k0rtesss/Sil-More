@@ -209,7 +209,7 @@ static bool sdl_mouse_grid_can_show_objects(int y, int x)
 
     return cave_floorlike_bold(y, x) || feat == FEAT_SUNLIGHT
         || feat == FEAT_WATER || feat == FEAT_DEEP_WATER
-        || feat == FEAT_LAVA || feat == FEAT_ICE
+        || feat == FEAT_LAVA || FEAT_IS_ICE(feat)
         || feat == FEAT_POISON;
 }
 
@@ -472,7 +472,9 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         name = "shallow water: movement 150%; splash -3 Stealth; no scent trail; cold freezes it";
     else if (feat == FEAT_DEEP_WATER)
         name = "deep water: movement 400%; cannot attack while submerged; bridges provide dry footing";
-    else if (feat == FEAT_ICE)
+    else if (feat == FEAT_MELTING_ICE)
+        name = "melting ice: grounded -2 attack and -2 Evasion; 20% break chance; may become deep water away from ground; cold reinforces it";
+    else if (FEAT_IS_ICE(feat))
         name = "solid ice: grounded -2 attack and -2 Evasion; normal movement; fire melts it";
     else if (feat == FEAT_POISON)
     {

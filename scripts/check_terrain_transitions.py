@@ -206,6 +206,152 @@ static void material_transition_tests(void) {
 
     puts("Snow-on-dirt and basalt-on-dirt use authored raw pixels; hidden dirt stays hidden: PASS");
 }
+static void material_bank_transition_tests(void) {
+    SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET,16,16); assert(target);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    SDL_FRect dst={0,0,16,16};
+    u64b rng=Rand_state_export(); s32b turns=turn;
+    for(int kind=0;kind<2;kind++) {
+        int style=kind?63:62, hazard=kind?FEAT_LAVA:FEAT_ICE;
+        /* Stored dirt beside a hazard is visibly snow/basalt. It must not
+         * carve a dirt stripe into the adjacent material floor. */
+        floor_reset(style);
+        cave_color[10][12]=COLOR_STYLE_BASE+44;
+        cave_feat[10][13]=hazard;
+        assert((floor_tile(10,12)>>8)==35);
+        assert((floor_tile(10,12)&255)==(kind?8:0));
+        assert(elemental_transition_mask(10,11)==255);
+        assert(!draw_elemental_transition(10,11,&dst));
+
+        /* The converse: a bank with stored dirt needs a real transition
+         * where the next floor is outside the hazard's bank radius. */
+        floor_reset(style);
+        cave_color[10][11]=cave_color[10][12]=COLOR_STYLE_BASE+44;
+        cave_feat[10][10]=hazard;
+        assert((floor_tile(10,11)>>8)==35);
+        assert((floor_tile(10,11)&255)==(kind?8:0));
+        assert((floor_tile(10,12)>>8)!=35);
+        assert(elemental_transition_mask(10,11)==(255^4));
+        assert(draw_elemental_transition(10,11,&dst));
+
+        /* An actual dirt edge must not also carve edges toward unknown or
+         * unlit remembered floors elsewhere around the same cell. */
+        floor_reset(style);
+        cave_color[10][12]=COLOR_STYLE_BASE+44;
+        cave_info[9][11]=0;
+        assert(elemental_transition_mask(10,11)==(255^4));
+        cave_info[9][11]=CAVE_MARK; cave_light[9][11]=0;
+        assert(elemental_transition_mask(10,11)==(255^4));
+        cave_info[10][12]=CAVE_MARK; cave_light[10][12]=0;
+        assert(elemental_transition_mask(10,11)==255);
+        assert(!draw_elemental_transition(10,11,&dst));
+        cave_light[10][12]=2;
+        assert(elemental_transition_mask(10,11)==(255^4));
+        assert(draw_elemental_transition(10,11,&dst));
+        p_ptr->rage=1;
+        assert(elemental_transition_mask(10,11)==255);
+        assert(!draw_elemental_transition(10,11,&dst));
+        p_ptr->rage=0; g_labyrinth_view_active=true;
+        assert(elemental_transition_mask(10,11)==255);
+        assert(!draw_elemental_transition(10,11,&dst));
+        g_labyrinth_view_active=false;
+        cave_info[10][12]=CAVE_MARK|CAVE_SEEN;
+        cave_info[10][11]=CAVE_MARK; cave_light[10][11]=0;
+        assert(!draw_elemental_transition(10,11,&dst));
+        cave_light[10][11]=2;
+        assert(draw_elemental_transition(10,11,&dst));
+
+        /* A lone diagonal dirt cell creates a corner only across two visible
+         * floor sides, never across a wall, hazard, or unknown side. Exercise
+         * every rotation and either intervening side. */
+        for(int diagonal=1;diagonal<8;diagonal+=2) {
+            floor_reset(style);
+            cave_color[10+shore_dy[diagonal]][11+shore_dx[diagonal]]=COLOR_STYLE_BASE+44;
+            assert(elemental_transition_mask(10,11)==(255^(1<<diagonal)));
+            assert(draw_elemental_transition(10,11,&dst));
+            for(int side=0;side<2;side++) for(int blocker=0;blocker<4;blocker++) {
+                floor_reset(style);
+                cave_color[10+shore_dy[diagonal]][11+shore_dx[diagonal]]=COLOR_STYLE_BASE+44;
+                int cardinal=(diagonal+(side?1:7))%8;
+                int y=10+shore_dy[cardinal],x=11+shore_dx[cardinal];
+                if(blocker==0) cave_feat[y][x]=FEAT_WALL_EXTRA;
+                else if(blocker==1) cave_feat[y][x]=hazard;
+                else if(blocker==2) cave_info[y][x]=0;
+                else { cave_info[y][x]=CAVE_MARK; cave_light[y][x]=0; }
+                assert(elemental_transition_mask(10,11)==255);
+                assert(!draw_elemental_transition(10,11,&dst));
+            }
+        }
+    }
+    assert(Rand_state_export()==rng && turn==turns);
+    SDL_SetRenderTarget(g_state.renderer,previous); SDL_DestroyTexture(target);
+    puts("Rendered snow/basalt banks override stored dirt; genuine edges, dark donors and supported diagonal corners: PASS");
+}
+static void material_bank_preview(void) {
+    const int w=18,h=14,scale=3;
+    SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET,w*16*scale*2,h*16*scale); assert(target);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    for(int panel=0;panel<2;panel++) {
+        floor_reset(44);
+        for(int y=0;y<h;y++) for(int x=0;x<w;x++) {
+            if(x<7) cave_color[y][x]=COLOR_STYLE_BASE+(panel?63:62);
+            if((x==7&&y>=2&&y<=10)||(y==7&&x>=7&&x<=12))
+                cave_feat[y][x]=panel?FEAT_LAVA:FEAT_ICE;
+            if(y==0||y==h-1||x==0||x==w-1||(y==4&&x>=11&&x<=14)) {
+                cave_feat[y][x]=FEAT_WALL_EXTRA;
+                cave_info[y][x]|=CAVE_WALL;
+            }
+        }
+        for(int y=0;y<h;y++) for(int x=0;x<w;x++) {
+            byte a,ta; char c,tc; map_info(y,x,&a,&c,&ta,&tc);
+            SDL_FRect dst={(panel*w+x)*16*scale,y*16*scale,16*scale,16*scale};
+            sdl_draw_map_tile_layers_at(y,x,a,c,ta,tc,&dst);
+        }
+    }
+    SDL_Surface* surface=SDL_RenderReadPixels(g_state.renderer,NULL); assert(surface);
+    assert(IMG_SavePNG(surface,"scripts/output/terrain-transitions-check/material-banks.png"));
+    SDL_DestroySurface(surface); SDL_SetRenderTarget(g_state.renderer,previous);
+    SDL_DestroyTexture(target);
+}
+static void material_bank_redraw_tests(void) {
+    for(int kind=0;kind<2;kind++) {
+        floor_reset(kind?63:62);
+        cave_color[10][12]=COLOR_STYLE_BASE+44;
+        cave_feat[10][13]=kind?FEAT_LAVA:FEAT_ICE;
+        cave_info[10][13]=0;
+        assert(elemental_transition_mask(10,11)==(255^4));
+        Term->total_erase=true; prt_map(); Term_fresh();
+        byte a,ta; char c,tc; map_info(10,11,&a,&c,&ta,&tc);
+        SDL_Surface* before=capture(100+kind*3); assert(before);
+
+        /* Revealing a hazard two cells away changes the intervening floor's
+         * bank, hence this transition, although this cell's glyph is stable. */
+        cave_info[10][13]=CAVE_MARK|CAVE_SEEN;
+        lite_spot(10,13); Term_fresh();
+        byte a2,ta2; char c2,tc2; map_info(10,11,&a2,&c2,&ta2,&tc2);
+        assert(a==a2 && c==c2 && ta==ta2 && tc==tc2);
+        assert(elemental_transition_mask(10,11)==255);
+        SDL_Surface* changed=capture(101+kind*3); assert(changed);
+        force_map_redraw(); Term_fresh();
+        SDL_Surface* full=capture(102+kind*3); assert(full);
+        assert(!same_surface(before,changed));
+        assert(same_surface(changed,full));
+        SDL_DestroySurface(before); SDL_DestroySurface(changed); SDL_DestroySurface(full);
+
+        cave_set_feat(10,13,FEAT_FLOOR); Term_fresh();
+        assert(elemental_transition_mask(10,11)==(255^4));
+        changed=capture(106+kind*2); assert(changed);
+        force_map_redraw(); Term_fresh();
+        full=capture(107+kind*2); assert(full);
+        assert(same_surface(changed,full));
+        SDL_DestroySurface(changed); SDL_DestroySurface(full);
+    }
+    puts("Two-cell ice/lava bank reveal and removal repaint stable-glyph material transitions exactly like full redraw: PASS");
+}
 static void shore_preview(void) {
     const int w=24,h=18,scale=2;
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
@@ -251,7 +397,7 @@ def main():
     idle.HARNESS = idle.HARNESS.replace("int main(void) {", floors.TESTS + TESTS + "\nint main(void) {")
     idle.HARNESS = idle.HARNESS.replace("    asynchronous_tests();",
         "    asynchronous_tests();\n    floor_templates();\n    shore_atlas_tests();\n"
-        "    shore_knowledge_tests();\n    shore_redraw_tests();\n    shore_fallback_tests();\n    material_transition_tests();\n    shore_preview();")
+        "    shore_knowledge_tests();\n    shore_redraw_tests();\n    shore_fallback_tests();\n    material_transition_tests();\n    material_bank_transition_tests();\n    material_bank_redraw_tests();\n    shore_preview();\n    material_bank_preview();")
     idle.main()
 
 

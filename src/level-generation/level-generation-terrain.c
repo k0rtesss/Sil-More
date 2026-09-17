@@ -41,6 +41,7 @@ static const int terrain_features[TERRAIN_THEME_MATERIAL_MAX] = {
 };
 static byte roles[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte protected_cells[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte melting_ice_candidates[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte reserved[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 /* 1: terrain, 2: an intentional architectural crossing. */
 static byte proposed[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
@@ -58,6 +59,7 @@ void terrain_generation_reset(void)
     memset(reserved, 0, sizeof(reserved));
     memset(roles, 0, sizeof(roles));
     memset(protected_cells, 0, sizeof(protected_cells));
+    memset(melting_ice_candidates, 0, sizeof(melting_ice_candidates));
     memset(proposed, 0, sizeof(proposed));
     memset(&terrain_stats, 0, sizeof(terrain_stats));
     terrain_landmark_reset();
@@ -123,6 +125,11 @@ static void terrain_context(void)
                 || coord_in_morgoth_region(y, x, 0)
                 || cave_m_idx[y][x] || cave_fixture_at(y, x))
                 protected_cells[y][x] = 1;
+            /* Existing natural ice (including landmark lakes) may thaw, but
+             * authored room envelopes and their occupied cells stay intact. */
+            if (feat == FEAT_ICE && !protected_cells[y][x]
+                && !cave_o_idx[y][x] && !generation_escape_tunnel_bold(y, x))
+                melting_ice_candidates[y][x] = 1;
             if (feat != FEAT_FLOOR && !terrain_is_rock(feat))
             {
                 protected_cells[y][x] = 1;
@@ -138,7 +145,10 @@ static void terrain_context(void)
     /* Keep actual room/tunnel attachment anchors, not a broad dry circle. */
     for (int i = 0; i < dun->cent_n; i++)
         if (in_bounds_fully(dun->cent[i].y, dun->cent[i].x))
+        {
             protected_cells[dun->cent[i].y][dun->cent[i].x] = 1;
+            melting_ice_candidates[dun->cent[i].y][dun->cent[i].x] = 0;
+        }
 
     for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
         for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
@@ -570,6 +580,7 @@ static void terrain_commit(terrain_candidate* c, int material)
         if (proposed[p.y][p.x] == 2) continue;
         bool excavated = terrain_is_rock(cave_feat[p.y][p.x]);
         cave_set_feat(p.y, p.x, c->feature); /* preserve this region's style */
+        if (c->feature == FEAT_ICE) melting_ice_candidates[p.y][p.x] = 1;
         if (excavated)
         {
             cave_natural[p.y][p.x] = 1;
@@ -662,9 +673,9 @@ static int terrain_material(int pi, const terrain_theme_profile* profile)
 /* Erode the shoreline mask into a few connected deep-water patches.  A broad
  * lake still has a dark centre, but its whole interior does not become deep;
  * the selected patch grows from the middle and leaves shallow pockets around
- * it. Existing bridges retain their axis and cross the deeper bed when their
- * deck falls inside the selected patch. Check the final walking graph so an
- * island or narrow approach is not cut off by deepening a lake/channel. */
+ * it. Bridge decks are dry ground and keep the adjacent water shallow. Check
+ * the final walking graph so an island or narrow approach is not cut off by
+ * deepening a lake/channel. */
 static void terrain_deepen_water(void)
 {
     static int core_cells[TERRAIN_CELLS];
@@ -678,20 +689,15 @@ static void terrain_deepen_water(void)
     memcpy(shadow, cave_feat, sizeof(shadow));
     terrain_components((const byte (*)[MAX_DUNGEON_WID])cave_feat, baseline);
 
-    /* First mark cells that have a complete shallow-water neighbourhood.
-     * Narrow rivers have no such core and remain entirely shallow. */
+    /* A complete water/ice ring puts deep water at least two tiles from dry
+     * ground, including bridge decks, even along a diagonal shoreline. */
     for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
         for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
         {
             int feat = cave_feat[y][x];
-            bool interior = true;
-            if (cave_bridge_underlay(feat) != FEAT_WATER
+            if (feat != FEAT_WATER
                 || cave_m_idx[y][x] || cave_fixture_at(y, x)) continue;
-            for (int dy = -1; dy <= 1 && interior; dy++)
-                for (int dx = -1; dx <= 1; dx++)
-                    if (cave_bridge_underlay(cave_feat[y + dy][x + dx]) != FEAT_WATER)
-                    { interior = false; break; }
-            if (interior) deep_water_core[y][x] = 1;
+            if (cave_deep_water_allowed(y, x)) deep_water_core[y][x] = 1;
         }
 
     /* Each connected core gets one irregular patch.  Growing from its centre
@@ -782,10 +788,7 @@ static void terrain_deepen_water(void)
         for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
             if (deep_water_selected[y][x])
             {
-                int feat = cave_feat[y][x];
-                shadow[y][x] = FEAT_IS_BRIDGE(feat)
-                    ? cave_bridge_feature(FEAT_DEEP_WATER, cave_bridge_vertical(feat))
-                    : FEAT_DEEP_WATER;
+                shadow[y][x] = FEAT_DEEP_WATER;
                 deep++;
             }
     if (!deep) return;
@@ -798,6 +801,18 @@ static void terrain_deepen_water(void)
         for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
             if (shadow[y][x] != cave_feat[y][x]) cave_set_feat(y, x, shadow[y][x]);
     log_debug("Deep water: %d tiles in partial interior patches", deep);
+}
+
+/* Finish the ice after planning all regions, so its animated, fragile variant
+ * does not change the material counts or split a candidate's frozen sheet. */
+static void terrain_melt_ice(void)
+{
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (melting_ice_candidates[y][x] && cave_feat[y][x] == FEAT_ICE
+                && !reserved[y][x] && !cave_m_idx[y][x] && !cave_o_idx[y][x]
+                && !cave_fixture_at(y, x) && one_in_(4))
+                cave_set_feat(y, x, FEAT_MELTING_ICE);
 }
 
 void place_dungeon_terrain(void)
@@ -862,6 +877,7 @@ void place_dungeon_terrain(void)
         }
     }
     terrain_deepen_water();
+    terrain_melt_ice();
     log_debug("Dungeon terrain theme '%s': %d accepted/%d proposals, %d tiles, %d architectural spans; rejected path=%d access=%d",
         profile->name, terrain_stats.accepted, terrain_stats.proposals, terrain_stats.tiles,
         terrain_stats.bridges, terrain_stats.no_route, terrain_stats.blocked_access);

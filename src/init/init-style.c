@@ -229,6 +229,49 @@ static int parse_big_cave_weight_token(const char* tok)
     return BIG_CAVE_NONE;
 }
 
+/* Parse unsigned bounded fields without accepting signs, junk or overflow. */
+static bool parse_cave_palette_number(const char** cursor, int maximum, int* out)
+{
+    const char* p = *cursor;
+    int value = 0;
+    if (*p < '0' || *p > '9') return false;
+    do {
+        int digit = *p - '0';
+        if (value > maximum / 10
+            || (value == maximum / 10 && digit > maximum % 10))
+            return false;
+        value = value * 10 + digit;
+        p++;
+    } while (*p >= '0' && *p <= '9');
+    *cursor = p;
+    *out = value;
+    return true;
+}
+
+static errr parse_cave_floor_palette(const char* p)
+{
+    cave_floor_palette palette = {0};
+    int base_style;
+    if (!parse_cave_palette_number(&p, 63, &base_style) || *p++ != ':'
+        || !parse_cave_palette_number(&p, 40, &palette.coverage) || *p++ != ':'
+        || !parse_cave_palette_number(&p, 4, &palette.patches) || *p++ != ':')
+        return PARSE_ERROR_GENERIC;
+    while (*p) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p || *p == '#') break;
+        int i = palette.count;
+        if (i >= 8 || !parse_cave_palette_number(&p, 63, &palette.styles[i])
+            || *p++ != ':'
+            || !parse_cave_palette_number(&p, 1000, &palette.weights[i]))
+            return PARSE_ERROR_GENERIC;
+        if (*p && *p != ' ' && *p != '\t' && *p != '#')
+            return PARSE_ERROR_GENERIC;
+        palette.count++;
+    }
+    return styles_set_cave_floor_palette(base_style, &palette)
+        ? 0 : PARSE_ERROR_GENERIC;
+}
+
 errr parse_style_levels(char* buf, header* head)
 {
     (void)head; /* unused */
@@ -238,6 +281,7 @@ errr parse_style_levels(char* buf, header* head)
         styles_vault_rules_clear();
         styles_default_vault_clear();
         styles_partition_rules_clear();
+        styles_cave_floor_palettes_clear();
         styles_floor_borders_clear();
         big_cave_type_rules_clear();
     log_debug("parse_style_levels: Version header encountered, cleared existing rules");
@@ -245,6 +289,10 @@ errr parse_style_levels(char* buf, header* head)
     }
     /* Comments or blank lines */
     if (buf[0] == '#' || buf[0] == '\0') return 0;
+
+    /* M:<base>:<coverage percent>:<patch count>: <accent>:<weight> ... */
+    if (buf[0] == 'M' && buf[1] == ':')
+        return parse_cave_floor_palette(buf + 2);
 
     /* R/R2:<feature>:<row>:<col> ... - inner/outer bank tile variants. */
     if (buf[0] == 'R' && (buf[1] == ':' || (buf[1] == '2' && buf[2] == ':'))) {

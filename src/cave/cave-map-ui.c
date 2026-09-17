@@ -11,18 +11,6 @@
 #define FLOOR_MATERIAL_STYLE_SNOW 62
 #define FLOOR_MATERIAL_STYLE_BASALT 63
 
-/* Dirtiness only: the SDL edge renderer applies the knowledge/visibility
- * filter. Looking at actual features here must never decide visible pixels. */
-static bool chasm_border_at(int y, int x)
-{
-    for (int dy = -1; dy <= 1; dy++)
-        for (int dx = -1; dx <= 1; dx++)
-            if ((dy || dx) && in_bounds(y + dy, x + dx)
-                && cave_feat[y + dy][x + dx] == FEAT_CHASM)
-                return true;
-    return false;
-}
-
 static bool floor_border_redrawing_neighbors;
 
 /* A border can disappear without changing either terminal glyph. Track the
@@ -363,7 +351,7 @@ void lite_spot(int y, int x)
     /* Discovery and view changes alter adjacent banks and connected surfaces,
      * including cells outside the main viewport in the retained side map. */
     byte underlay = cave_bridge_underlay(cave_feat[y][x]);
-    if (underlay == FEAT_ICE || underlay == FEAT_LAVA
+    if (FEAT_IS_ICE(underlay) || underlay == FEAT_LAVA
         || underlay == FEAT_WATER || underlay == FEAT_DEEP_WATER
         || underlay == FEAT_POISON
         || underlay == FEAT_CHASM
@@ -427,10 +415,10 @@ void lite_spot(int y, int x)
         /* Fixture frames can change with sight/settings while the glyph stays
          * identical (notably a permanently lit wall leaving sight). */
         bool force_visual_redraw = (cave_m_idx[y][x] < 0)
-            || terrain_changed || floor_border_redrawing_neighbors || chasm_border_at(y, x)
+            || terrain_changed || floor_border_redrawing_neighbors
             || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
             || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
-            || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON
+            || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON
             || cave_feat[y][x] == FEAT_CHASM
             || floor_material_transition_at(y, x)
             || FEAT_IS_BRIDGE(cave_feat[y][x]);
@@ -541,9 +529,8 @@ void prt_map(void)
                 || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)
                     || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
                     || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
-                    || cave_feat[y][x] == FEAT_ICE || cave_feat[y][x] == FEAT_POISON
+                    || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON
                     || floor_material_transition_at(y, x)
-                    || chasm_border_at(y, x)
                     || FEAT_IS_BRIDGE(cave_feat[y][x]))))
                 force_term_cell_redraw(vx, vy, cell_w);
         }

@@ -63,6 +63,10 @@ void log_log(int level,const char* file,int line,const char* fmt,...) {
 static const int material_features[]={FEAT_WATER,FEAT_CHASM,FEAT_LAVA,FEAT_POISON,FEAT_ICE};
 static const char* material_names[]={"water","chasm","lava","poison","ice"};
 
+static bool matching_material(int actual, int expected) {
+    return actual == expected || (expected == FEAT_ICE && FEAT_IS_ICE(actual));
+}
+
 static void select_material(int material, int pool_chance) {
     /* Use the production parser and a complete, valid single-material file. */
     char text[4096];int length=snprintf(text,sizeof(text),"V:1\n");
@@ -114,13 +118,15 @@ static int check_map(int feature) {
             ||(info[y][x]&(CAVE_ICKY|CAVE_G_VAULT|CAVE_MORGOTH_TUNNEL)))
             assert(features[y][x]==original[y][x]);
         if(terrain_generation_walkable(y,x,NULL)) assert(reached[y][x]);
-        if(features[y][x]!=feature) continue;
+        if(!matching_material(features[y][x],feature)) continue;
         count++;
         assert(original[y][x]==FEAT_FLOOR || (original[y][x]==FEAT_WALL_EXTRA
             && current_partition_modes[level_partition_index_for_point(y,x)]==QUAD_MODE_CAVEY));
         /* Every generated cell belongs to a real four-connected shape. */
-        bool adjacent=features[y-1][x]==feature||features[y+1][x]==feature
-            ||features[y][x-1]==feature||features[y][x+1]==feature;
+        bool adjacent=matching_material(features[y-1][x],feature)
+            ||matching_material(features[y+1][x],feature)
+            ||matching_material(features[y][x-1],feature)
+            ||matching_material(features[y][x+1],feature);
         if(!adjacent) {
             fprintf(stderr,"Singleton seed=%u feature=%d mode=%d y=%d x=%d\n",running_seed,feature,current_partition_modes[0],y,x);
             dump_map("failure-singleton");
@@ -140,6 +146,7 @@ static void dump_map(const char* name) {
             if(f==FEAT_FLOOR)c=terrain_generation_reserved(y,x)?'r':'.';
             for(int m=0;m<5;m++)if(f==material_features[m])c="~CLPI"[m];
             if(f==FEAT_DEEP_WATER)c='D';
+            if(f==FEAT_MELTING_ICE)c='i';
             if(FEAT_IS_BRIDGE(f))c='B';
             if(original[y][x]!=FEAT_FLOOR&&original[y][x]!=FEAT_WALL_EXTRA)c='!';
             if(objects[y][x]||monsters[y][x]||cave_fixture_at(y,x))c='!';
@@ -156,7 +163,7 @@ static void barrier(terrain_candidate* c,int x,int feature) {
 
 static void candidate_tests(void) {
     terrain_candidate c;
-    /* Deep patches preserve a shallow shoreline and bridge material/axis. */
+    /* Deep patches preserve a shallow shoreline and dry bridge approaches. */
     reset_map(0);
     for(int y=17;y<=23;y++)for(int x=30;x<=40;x++)features[y][x]=FEAT_WATER;
     for(int x=30;x<=40;x++)features[20][x]=FEAT_BRIDGE_WATER_H;
@@ -167,9 +174,10 @@ static void candidate_tests(void) {
         core_count++;deep_count+=features[y][x]==FEAT_DEEP_WATER;
     }
     assert(deep_count>0&&deep_count<core_count);
-    for(int x=30;x<=40;x++)
-        if(cave_bridge_underlay(features[20][x])==FEAT_DEEP_WATER)
-            assert(features[20][x]==FEAT_BRIDGE_DEEP_WATER_H);
+    for(int x=30;x<=40;x++) {
+        assert(features[20][x]==FEAT_BRIDGE_WATER_H);
+        assert(features[19][x]==FEAT_WATER&&features[21][x]==FEAT_WATER);
+    }
     assert(terrain_generation_walkable(18,35,NULL));
     assert(terrain_generation_walkable(20,35,NULL));
     assert(!terrain_generation_jump(17,35,1,0,NULL));
@@ -292,9 +300,12 @@ static void deep_water_tests(void) {
         core_count++;deep_count+=features[y][x]==FEAT_DEEP_WATER;
     }
     assert(deep_count>0&&deep_count<core_count);
-    for(int x=14;x<=30;x++)
-        if(cave_bridge_underlay(features[19][x])==FEAT_DEEP_WATER)
-            assert(features[19][x]==FEAT_BRIDGE_DEEP_WATER_H);
+    for(int x=14;x<=30;x++) {
+        assert(features[19][x]==FEAT_BRIDGE_WATER_H);
+        assert(features[18][x]==FEAT_WATER&&features[20][x]==FEAT_WATER);
+    }
+    for(int y=14;y<=24;y++)for(int x=14;x<=30;x++)
+        if(features[y][x]==FEAT_DEEP_WATER) assert(cave_deep_water_allowed(y,x));
     assert(terrain_generation_walkable(17,20,NULL));
     assert(terrain_generation_walkable(19,20,NULL));
     assert(!terrain_generation_jump(17,19,0,1,NULL));
@@ -311,10 +322,40 @@ static void deep_water_tests(void) {
     for(int y=18;y<=22;y++)for(int x=20;x<=24;x++)
         assert(features[y][x]==FEAT_FLOOR);
     assert(features[12][12]==FEAT_WATER);
-    puts("Deep water: shallow banks, deep interiors, traversable movement, bridge underlay, thin rivers and island access: PASS");
+    puts("Deep water: shallow banks, deep interiors, dry bridge clearance, thin rivers and island access: PASS");
+}
+
+static void melting_ice_tests(void) {
+    /* Existing natural lake ice participates, while authored or occupied ice
+     * and required crossing approaches retain their original terrain. */
+    reset_map(0);state=123;
+    for(int y=17;y<=23;y++)for(int x=30;x<=45;x++)features[y][x]=FEAT_ICE;
+    features[15][15]=FEAT_ICE; /* Vault marker from reset_map. */
+    features[12][13]=FEAT_ICE; /* Fixture from cave_fixture_at. */
+    features[11][11]=FEAT_ICE; /* Authored object. */
+    features[11][12]=FEAT_ICE; /* Monster. */
+    features[20][8]=FEAT_ICE; /* Room anchor. */
+    terrain_generation_reserve(19,35);
+    terrain_context();terrain_melt_ice();
+    int solid=0,melting=0;
+    for(int y=17;y<=23;y++)for(int x=30;x<=45;x++) {
+        solid+=features[y][x]==FEAT_ICE;
+        melting+=features[y][x]==FEAT_MELTING_ICE;
+    }
+    assert(solid>0&&melting>0&&solid+melting==112);
+    assert(features[15][15]==FEAT_ICE&&features[12][13]==FEAT_ICE);
+    assert(features[11][11]==FEAT_ICE&&features[11][12]==FEAT_ICE);
+    assert(features[20][8]==FEAT_ICE&&features[19][35]==FEAT_ICE);
+    /* Authored room envelopes override old natural floor tags. */
+    reset_map(0);room_anchor_kind[0]=LAYOUT_ANCHOR_NONE;
+    for(int y=17;y<=23;y++)for(int x=20;x<=30;x++)features[y][x]=FEAT_ICE;
+    terrain_context();terrain_melt_ice();
+    for(int y=17;y<=23;y++)for(int x=20;x<=30;x++)assert(features[y][x]==FEAT_ICE);
+    puts("Melting ice: natural ice mixture, authored cells, occupants, fixtures and crossing protection: PASS");
 }
 
 int main(void) {
+    melting_ice_tests();
     deep_water_tests();
     candidate_tests();
     int maps=0;
@@ -351,7 +392,7 @@ int main(void) {
             place_dungeon_terrain();check_map(FEAT_LAVA);check_map(FEAT_ICE);
             for(int y=0;y<40;y++)for(int x=0;x<80;x++) {
                 if(features[y][x]==FEAT_LAVA){assert(x<40);left++;}
-                if(features[y][x]==FEAT_ICE){assert(x>=40);right++;}
+                if(FEAT_IS_ICE(features[y][x])){assert(x>=40);right++;}
                 assert(features[y][x]!=FEAT_WATER);
             }
         }assert(left&&right);
