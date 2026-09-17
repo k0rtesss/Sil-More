@@ -1633,6 +1633,13 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_false_FLOOR:
     {
+        if (p_ptr->depth == UTUMNO_DEPTH || p_ptr->depth == UTUMNO_FORGE_DEPTH)
+        {
+            msg_print("The crumbling floor rests on the unbroken foundations of Utumno.");
+            cave_set_feat(y, x, FEAT_FLOOR);
+            break;
+        }
+
         // give several messages so the player has a chance to see it happen
         msg_print("The floor crumbles beneath you!");
         message_flush();

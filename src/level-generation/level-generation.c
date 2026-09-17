@@ -100,6 +100,9 @@ static bool tutorial_start_triggers_tutorial(void)
 
 bool cave_gen(void)
 {
+    if (p_ptr->depth == UTUMNO_FORGE_DEPTH)
+        return utumno_gen();
+
     terrain_history_reset();
     int i;
 
@@ -112,6 +115,7 @@ bool cave_gen(void)
     int is_guaranteed_forge_level = false;
     bool duruin_bastion_forced = false;
     bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
+    bool is_utumno_level = (p_ptr->depth == UTUMNO_DEPTH);
 
     reset_morgoth_layout_state(is_morgoth_level);
 
@@ -123,7 +127,7 @@ bool cave_gen(void)
     qv_stored_y1 = qv_stored_x1 = qv_stored_y2 = qv_stored_x2 = -1;
 
     /* Run quest lottery once per level to determine which quest (if any) gets this level */
-    if (is_morgoth_level) {
+    if (is_morgoth_level || is_utumno_level) {
         quest_lottery_winner = 0;
     } else {
         run_quest_lottery();
@@ -139,7 +143,7 @@ bool cave_gen(void)
               p_ptr->varda_quest, quest_lottery_winner);
 
     /* Varda quest: flag forced bastion placement on first level deeper than 500ft */
-    if (!is_morgoth_level && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
+    if (!is_morgoth_level && !is_utumno_level && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
         if (!p_ptr->varda_vault_ready) {
             log_trace("Varda quest: Crossing 500ft, setting bastion_ready at depth %d", p_ptr->depth);
         }
@@ -171,6 +175,10 @@ bool cave_gen(void)
         l -= 3;
         if (l < 6) l = 6; /* Allow 6x6 and 7x7 block maps */
     }
+
+    /* Six branch shafts need six distinct regions outside the throne room. */
+    if (utumno_corridors && is_morgoth_level && l < 11)
+        l = 11;
 
     // Square levels: same dimension for both height and width
     p_ptr->cur_map_hgt = l * (PANEL_HGT);
@@ -221,7 +229,8 @@ bool cave_gen(void)
     log_trace("cave_gen: cent_n reset to 0");
     layout_anchor_reset();
     current_partition_count = 0;
-    terrain_history_begin();
+    /* Utumno reserves its entrance before planning the ordinary geology. */
+    if (!is_utumno_level) terrain_history_begin();
 
     /* Verify dun struct sanity */
     log_trace("cave_gen: sanity check dun ptr=%p cent capacity=%d connection[0][0]=%d piece[0]=%d corner[0]=(y1=%d,x1=%d,y2=%d,x2=%d)",
@@ -273,7 +282,7 @@ bool cave_gen(void)
     log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
     log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
 
-    if (!is_morgoth_level)
+    if (!is_morgoth_level && !is_utumno_level)
     {
         /* Quest vault determination - Allow re-placement during level regeneration */
         log_trace("Quest vault: ENTERING quest vault logic check (quest_vault_used=%d, force_forge=%s, qv_placed_this_level=%s)",
@@ -440,9 +449,12 @@ bool cave_gen(void)
     /* Seed a handful of prefab anchors up front to diversify layout */
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_SHAPING,
         "Generating partitions, rooms, and special areas.");
-    seed_prefab_anchors();
+    if (!is_utumno_level) seed_prefab_anchors();
     /* Apply quadrant generation modes - this is now the primary room generation */
     apply_quadrant_generation_modes();
+    if (is_utumno_level && (g_vault_name[0] == '\0'
+        || terrain_history_count() != 3))
+        return false;
     /* DISABLED: ensure_partition_connectivity() was creating dead-end corridors.
      * The corridor system and rescue tunnels handle connectivity instead. */
     /* Repair all outer walls - critical fix for tunnel connectivity after overlapping generation */
@@ -1349,6 +1361,12 @@ bool cave_gen(void)
     }
     p_ptr->force_forge = false;
 
+    if (is_utumno_level && !utumno_finalize_corridors()) return false;
+
+    if ((utumno_corridors || p_ptr->utumno_forge_visited) && is_morgoth_level
+        && !utumno_place_morgoth_route())
+        return false;
+
     /* All liquid geometry is final after population and quest placement.  The
      * source-to-outlet graph is kept as level metadata for the renderer. */
     cave_water_flow_build();
@@ -1930,6 +1948,10 @@ if (playerturn == 0) {
         /* Accept */
         if (okay)
         {
+            if (p_ptr->depth == UTUMNO_FORGE_DEPTH)
+                p_ptr->utumno_forge_visited = true;
+            if (is_morgoth_level)
+                p_ptr->utumno_return_to_throne = false;
             /* QUEST VAULT REGENERATION FIX: Apply pending quest state changes when level generation is COMPLETELY successful */
             apply_pending_quest_states();
 

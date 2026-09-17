@@ -414,6 +414,12 @@ void teleport_player_level()
     bool go_up = false;
     bool go_down = false;
 
+    if (p_ptr->depth == UTUMNO_DEPTH || p_ptr->depth == UTUMNO_FORGE_DEPTH)
+    {
+        msg_print("The ancient foundations of Utumno bar your passage.");
+        return;
+    }
+
     if (birth_ironman)
     {
         msg_print("Nothing happens.");

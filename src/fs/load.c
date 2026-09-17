@@ -1514,6 +1514,10 @@ static void rd_options(void)
     if (!savefile_version_at_least(0, 9, 7, 0))
         clear_obsolete_interface_options_097();
 
+    /* This used to be a reserved slot; older characters do not opt in. */
+    if (!savefile_version_at_least(0, 9, 8, 13))
+        op_ptr->opt[OPT_utumno_corridors] = false;
+
     /*** Window Options ***/
 
     /* Read the window flags */

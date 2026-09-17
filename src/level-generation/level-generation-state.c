@@ -762,6 +762,19 @@ int mode_weight_for_depth(quadrant_mode_t mode, int depth, int blocks,
 
     (void)blocks; /* No longer used for scaling */
 
+    if (depth == UTUMNO_DEPTH)
+    {
+        /* The ordinary partition sampler and depth caps still apply. */
+        switch (mode)
+        {
+        case QUAD_MODE_ROOMY: return 8;
+        case QUAD_MODE_CAVEY: return 32;
+        case QUAD_MODE_RUINED: return 30;
+        case QUAD_MODE_BIG_CAVE: return 30;
+        default: return 0;
+        }
+    }
+
     switch (mode)
     {
     case QUAD_MODE_ROOMY:

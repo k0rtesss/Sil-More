@@ -437,6 +437,15 @@ errr rd_extra(void)
     // p_ptr->is_dead = tmp8u;
     rd_bool(&p_ptr->unique_forge_made);
     rd_bool(&p_ptr->unique_forge_seen);
+    p_ptr->utumno_forge_visited = false;
+    p_ptr->utumno_return_to_throne = false;
+    if (savefile_version_at_least(0, 9, 8, 13))
+    {
+        rd_bool(&p_ptr->utumno_forge_visited);
+        rd_bool(&p_ptr->utumno_return_to_throne);
+        if (!p_ptr->utumno_forge_visited)
+            p_ptr->utumno_return_to_throne = false;
+    }
     rd_bool(&p_ptr->is_dead);
 
     /* Read "feeling" */

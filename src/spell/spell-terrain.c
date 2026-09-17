@@ -598,7 +598,15 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                 && !((y == pit_y) && (x == pit_x)))
             {
                 /* Destroy location (if valid) */
-                if (cave_valid_bold(y, x))
+                if (cave_valid_bold(y, x)
+                    /* Utumno has a single forward route. Shattering its dry
+                     * crossings or openable doors must not require the player
+                     * to have brought a mattock. Damage still applies above,
+                     * and existing walls can still collapse. */
+                    && !(((p_ptr->depth == UTUMNO_DEPTH)
+                             || (p_ptr->depth == UTUMNO_FORGE_DEPTH))
+                        && (cave_floor_bold(y, x)
+                            || cave_known_closed_door_bold(y, x))))
                 {
                     int adj_chasms = 0;
 

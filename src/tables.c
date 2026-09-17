@@ -274,7 +274,7 @@ cptr option_text[OPT_MAX] = {
     "lockpick_minigame", /* OPT_lockpick_minigame */
     "chest_trap_minigame", /* OPT_chest_trap_minigame */
     "torch_animation_always", /* OPT_torch_animation_always */
-    NULL, /* reserved legacy slot */
+    "utumno_corridors", /* OPT_utumno_corridors */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -519,7 +519,7 @@ cptr option_desc[OPT_MAX] = {
     "Use guided automatic checks for picking or bashing locked doors", /* OPT_lockpick_minigame */
     "Use guided automatic checks for inspecting, disarming, and opening chests", /* OPT_chest_trap_minigame */
     "Torch and brazier animation", /* OPT_torch_animation_always */
-    NULL, /* reserved legacy slot */
+    "Explore the lost corridors of Utumno below Morgoth's throne", /* OPT_utumno_corridors */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -780,7 +780,7 @@ const bool option_norm[OPT_MAX] = {
     true, /* OPT_lockpick_minigame */
     true, /* OPT_chest_trap_minigame */
     true, /* OPT_torch_animation_always */
-    false, /* reserved legacy slot */
+    false, /* OPT_utumno_corridors */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
@@ -949,9 +949,10 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_lockpick_minigame, OPT_chest_trap_minigame,
         OPT_stop_singing_on_rest, OPT_visual_recognition, OPT_know_monster_info,
         OPT_disable_skeleton_note_tutorial, OPT_smaller_level_size, OPT_more_stairs,
+        OPT_utumno_corridors,
         OPT_vault_drop_frequency, OPT_noble_item_spawn_mode,
         OPT_min_depth_timer_mode, OPT_load_blitz_by_default,
-        OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Display ***/

@@ -350,6 +350,8 @@ void player_wipe(void)
     // reset some unique flags
     p_ptr->unique_forge_made = false;
     p_ptr->unique_forge_seen = false;
+    p_ptr->utumno_forge_visited = false;
+    p_ptr->utumno_return_to_throne = false;
     for (i = 0; i < MAX_GREATER_VAULTS; i++)
     {
         p_ptr->greater_vaults[i] = 0;

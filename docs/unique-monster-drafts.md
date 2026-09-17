@@ -1,6 +1,6 @@
 # Unique monsters for tiles 21,13–21,24
 
-Implementation and design record, updated 2026-09-11. The nine monsters and selected abilities are implemented in the working tree on branch `0.9.8`; the save format is `0.9.8.5`, with version-gated reads of earlier saves. The level-21 and forge-route sections below remain future design, as requested. Combat values are starting values, not playtested balance.
+Implementation and design record, updated 2026-09-18. The nine monsters, selected abilities, and optional Utumno expedition are implemented on branch `0.9.8`; the save format is `0.9.8.13`, with version-gated reads of earlier saves. Combat values remain starting values, not playtested balance.
 
 Implemented abilities: Angacirca's stationary Zone of Control; Nambatur's immediate, resource-costed Smite and following recovery; Langon's Fast-to-Very-Fast Sprinting; Ringwion's breakable Concentration; Dúron's Dodging; the existing Easterling warrior's shield-only Blocking in place of Flanking; and Carcharoth's Vengeance with his ordinary bite reduced to `2d12`. The other abilities reviewed below remain future candidates. Monster blows remain alternatives, not a consecutive attack sequence.
 
@@ -9,8 +9,8 @@ Implemented abilities: Angacirca's stationary Zone of Control; Nambatur's immedi
 - New stable monster IDs are **403–411**, in tile order: Ringwion, Helcamo, Lhamthanc, Angacirca, Langon, Dúron, Fankil, Ondotur, Nambatur. Existing IDs/GUIDs are preserved. Old Boldog (76) is now **Baugon, the Merciless**, an ordinary Orc captain with the same combat stats.
 - Ringwion, Angacirca, Langon and Dúron enter normal allocation at their stated minimum tiers. Their earlier preferred depth ranges are design targets, not hard upper limits; `FORCE_DEPTH` prevents earlier allocation.
 - **Lhamthanc's hoard (vault 521)** is authored for levels 19–20. It has shallow-water flying shortcuts and connected dry routes; chasms would prevent generation at the current throne depth. **Fankil's embassy (vault 522)** is authored for levels 14–15 with exactly two Easterling warriors and two archers. Those warriors now have Blocking.
-- **Helcamo, Ondotur and Nambatur are defined but reserved.** Rarity zero and `SPECIAL_GEN | SPECIAL_VAULT_ONLY`, without authored spawns, keep them out of normal allocation, summons and quest selection until their future locations exist. They remain available for explicit development/test placement.
-- The playable depth limit, stairs, throne transitions and forge travel are unchanged by this work. No physical level 21 or new forge destination has been implemented.
+- **Helcamo, Ondotur and Nambatur belong to Utumno.** Rarity zero and `SPECIAL_GEN | SPECIAL_VAULT_ONLY` keep them out of ordinary allocation, summons and quests. Helcamo inhabits level 22; Ondotur guards its central forge entrance; Nambatur guards the handcrafted forge on level 23.
+- **Gameplay > World Generation > Utumno corridors** enables the expedition; default is off. Its physical depths are 22 (1,100 feet) and 23 (1,150 feet). The incoming shaft skips physical level 21.
 
 The new module is `src/monster/monster-abilities.c`. Six new `RF5` flags are parsed from `F:` lines; `H:<dice>` identifies the shield component already included in a monster's ordinary `P:` protection. Ability history, charge/recovery state and learned abilities survive saving; older records receive safe defaults, and formerly unused race slots cannot give new uniques a population cap above one.
 
@@ -25,44 +25,40 @@ The new module is `src/monster/monster-abilities.c`. Six new `RF5` flags are par
 - Fankil uses both `MAN` and `RAUKO`: an assumed human form and a spirit's nature. He appears at levels 14–15 with an escort of ordinary Easterlings.
 - Tile `(21,24)` is Nambatur, a pale smith with a hammer. Hammer is the working interpretation of the ambiguous weapon.
 - Keep `(21,15)` for the existing Green Great Dragon, and `(21,16–17)` for the existing flying cold-drake and flying fire-drake. They are outside these nine new unique drafts.
-- Add a real **level 21, 1,050 feet**, below Morgoth's level 20. It consists of frozen lost Utumno corridors cut by rivers of lava.
-- A shaft on level 21 leads into a **unique forge vault where Morgoth made Grond**. The forge's sole departure leads **directly to Morgoth's throne on level 20**.
-- Ordinary Orcs and humans remain low-level enemies. They do not supply the fighting population, escorts, or encounter budget of level 21 or the forge. Angacirca is the deliberate exception in appearance: a deep-level Maia in Orc form.
-- Introduce Fankil, Langon, Ringwion and Angacirca earlier. Dúron belongs to outer level 20; Lhamthanc remains an exceptional late vault encounter. Helcamo occupies the frozen galleries; Ondotur guards the forge entrance on level 21, and Nambatur guards the forge itself. Each unique has one encounter identity per run, with no scaled second incarnation below.
+- Add a real **level 22, 1,100 feet**, below Morgoth's level 20. It consists of frozen lost Utumno corridors cut by rivers of lava.
+- A central ladder on level 22 leads to **level 23, the unique forge where Morgoth made Grond with Sauron's help**. The forge's sole departure leads **directly to Morgoth's throne on level 20**.
+- Ordinary Orcs and humans remain low-level enemies. They do not supply the fighting population, escorts, or encounter budget of level 22 or the forge. Angacirca is the deliberate exception in appearance: a deep-level Maia in Orc form.
+- Introduce Fankil, Langon, Ringwion and Angacirca earlier. Dúron belongs to outer level 20; Lhamthanc remains an exceptional late vault encounter. Helcamo occupies the frozen galleries; Ondotur guards the forge entrance on level 22, and Nambatur guards the forge itself. Each unique has one encounter identity per run, with no scaled second incarnation below.
 
-## The new route — future level work
+## The optional Utumno route
 
-The user's fixed requirements are level 21, its frozen/lava environment, the shaft into Grond's forge, and the forge's exclusive throne destination. The recommended access and encounter structure below develops those requirements; it is not existing travel behaviour.
+Enable **Utumno corridors** under **Gameplay > World Generation** before generating level 20. The setting is saved with the character and defaults to off, including when loading older characters. Turning it off during the expedition does not remove its forward route or private return.
 
 ```mermaid
 flowchart TD
-    A["Level 20 — outer Angband, 1,000 ft"] <--> B["Level 21 — Lost Corridors of Utumno, 1,050 ft"]
-    B --> E["Ondotur — guardian of the forge entrance"]
-    E -->|"One-way shaft: point of commitment"| C["Forge of Grond — guarded by Nambatur"]
-    C -->|"Sole departure: the King's Passage"| D["Level 20 — Morgoth's existing throne"]
+    A["Level 20 — outer Angband, 1,000 ft"] -->|"Six shafts, separate partitions; minimum depth below 20"| B["Level 22 — Utumno corridors, 1,100 ft"]
+    B --> E["Central greater vault — Ondotur guards the door"]
+    E -->|"Central ladder"| C["Level 23 — Forge of Grond, Nambatur"]
+    C -->|"Sole departure: Morgoth's private stair"| D["Level 20 — landing behind Morgoth"]
 ```
 
-**Recommended access.** Place a discoverable descent in outer level 20, reachable before entering the throne encounter. Keep an ordinary return from level 21 to outer level 20 until the player chooses the forge shaft. This makes exploring Utumno an optional risk with a recoverable early decision. Reaching level 21 must not itself start the Silmaril escape phase.
+**Access.** Six down shafts occupy different partitions outside the throne room. Each skips level 21. Stepping onto one describes the cold, ruined Utumno and its tunnels. If minimum depth has reached 20, the player cannot resist going straight to the Silmaril and cannot descend.
 
-**The shaft commits the player.** Show an explicit description before descent: the shaft cannot be climbed back, and the forge's remaining passage leads into the throne hall. This is an actual area transition, not a generic two-floor shaft or a chasm damage roll. Its landing is solid ground outside the first enemy's immediate attack range.
+**Corridors.** Level 22 uses the shared procedural generator: map sizing, partition grids, density rolls, rooms, corridors, terrain planning and population use the same gameplay settings as ordinary levels. All formulas receive actual depth 22. The Smaller level size and loot settings continue to apply. Utumno changes the partition probabilities and terrain: ruins, caves, fire/ice big caves and a small number of rooms surround the guaranteed central greater vault. No labyrinth, chasm or poisonous-acid partition is allowed. Procedural water, frozen and lava networks mix with fire and ice styles. Both fire and cold resistance are reduced by one everywhere on level 22, including the vault; this replaces the matching big-cave elemental penalty rather than stacking it again. Existing big-cave fear/stun penalties still apply.
 
-**Forge destination.** Treat the forge as a named, separately identified destination. The user has not requested a whole ordinary level 22; the implementation must choose a region/sublevel representation without confusing it with physical level 21 or monster tier 22. Its one-way route is represented physically by a ruined descent and Morgoth's private rising passage, rather than unexplained teleportation.
+**Forge.** The entrance belongs to Ondotur. Its central ladder leads to a handcrafted level 23 containing Nambatur, chests and Orodruth, the mighty forge with three uses and its existing +7 Smithing bonus. With Utumno enabled, ordinary forge allocation cannot create Orodruth. The forge records Morgoth and Sauron's work on Grond; it does not award a second Grond.
 
-**Only one departure.** There is no usable stair back to level 21, random stair to another depth, recall shortcut, or accidental chasm/level-teleport escape from the forge. Any applicable travel mechanics must preserve this contract. On arrival at the throne, the forge passage closes behind the player. Forward progress does not depend on a random key drop or necessarily on killing Nambatur: the anvil/reward chamber can be contested while the passage remains reachable by fighting, stealth, or diversion.
-
-**Same throne, same history.** Return at a designated solid landing directly within the throne hall, outside immediate surrounding melee positions. Preserve Morgoth, his Crown and Silmarils, unique deaths, the truce/hostility history, and whether the escape is already underway. The transition must not create a second Morgoth, refill a defeated encounter, grant another truce, or start escape merely because physical depth decreased from 21 to 20. A departure from the forge must not require traversing the outer floor again.
-
-**Once per run.** The unique forge, its rewards, and its custodian are initialized once. Revisiting the route or saving/loading cannot renew forge uses, treasure, guardians, or throne state. How inactive areas are retained is implementation work, not implied by an ordinary depth change.
+**Return and persistence.** The only way forward from the forge is Morgoth's private stair, which lands behind him. Its throne-room endpoint appears only after the character has visited level 23 and is sealed against reentry. The expedition is one-way so normal floor regeneration cannot replenish its forge or chests. No up stair bypasses the route from level 22, and level teleportation and false-floor descent cannot leave either Utumno floor. Ironman and the Iron oath do not block the intended private return. Save/load preserves the forge visit and pending return alongside the current map; older saves default both flags to false.
 
 ## Why Utumno can be frozen and fiery
 
 Tolkien directly associates Melkor with cold and fire, including furnaces beneath the mountains, in *The Silmarillion*, "Of the Beginning of Days," printed p. 27. Utumno's deep fires and hidden surviving chambers also provide a foundation for the ancient inhabitants. Frozen halls beside subterranean lava are a fitting elaboration of these themes. [Primary text sample](https://media.public.gr/Books-PDF/9780261102736-0000886.pdf), [Utumno and chapter references](https://tolkiengateway.net/wiki/Utumno)
 
-Tolkien describes Grond as Morgoth's great hammer in the combat with Fingolfin; I did not find a reliable attribution of its exact maker or forging location. **In Sil-More's history, this is where Morgoth made Grond**, as specified by the user. The traversable Angband–Utumno connection and the direct throne passage are also game geography, rather than a recovered Tolkien map. [Grond](https://tolkiengateway.net/wiki/Grond_%28Hammer_of_the_Underworld%29), [Angband](https://tolkiengateway.net/wiki/Angband)
+Tolkien describes Grond as Morgoth's great hammer in the combat with Fingolfin; I did not find a reliable attribution of its exact maker or forging location. **In Sil-More's history, this is where Morgoth made Grond with Sauron's help**, as specified by the user. The traversable Angband–Utumno connection and the direct throne passage are also game geography, rather than a recovered Tolkien map. [Grond](https://tolkiengateway.net/wiki/Grond_%28Hammer_of_the_Underworld%29), [Angband](https://tolkiengateway.net/wiki/Angband)
 
-Nambatur is the forge's surviving custodian and former attendant, not the maker of Grond. Morgoth has already taken the finished weapon away: the player finds its anvil, great working spaces and tools, not another Grond available as loot. The old commented-out "Ultimate Forge" idea in `lib/edit/vault.txt` is inspiration only, not an implemented vault or travel route.
+Nambatur is the forge's surviving custodian and former attendant, not the maker of Grond. Morgoth has already taken the finished weapon away: the player finds its anvil, great working spaces and tools, not another Grond available as loot. The old commented-out "Ultimate Forge" idea in `lib/edit/vault.txt` remains historical inspiration; vaults 523 and 524 define the new entrance and forge.
 
-## Level 21: landscape and inhabitants — future level work
+## Level 22: landscape and inhabitants
 
 The level should feel largely abandoned. A few powerful, ancient inhabitants make crossing it dangerous; a dense conventional garrison would weaken that identity.
 
@@ -80,9 +76,9 @@ The level should feel largely abandoned. A few powerful, ancient inhabitants mak
 
 **Light and darkness.** Lava is a source of light. Shadow inhabitants belong in darker lateral passages; their darkness should not extinguish an entire lava river. Illumination is a visibility advantage, not automatic light damage. Helcamo stays on frozen ground rather than casually patrolling fire to which he is vulnerable.
 
-**Fewer encounters, greater consequence.** The deep route contains **Helcamo** at the frozen gate, **Ondotur at the forge entrance**, and **Nambatur inside the forge**. Ondotur occupies the broad approach on the level-21 side of the shaft; Nambatur cannot join that fight from the other destination. These are guardians of spaces, not mandatory kill counters. Reaching the shaft requires dealing with Ondotur's presence by combat, stealth or drawing him aside. Earlier uniques are not reassigned here or resurrected after an earlier defeat.
+**Fewer encounters, greater consequence.** The deep route contains **Helcamo** at the frozen gate, **Ondotur at the forge entrance**, and **Nambatur inside the forge**. Ondotur occupies the broad approach on the level-22 side of the shaft; Nambatur cannot join that fight from the other destination. These are guardians of spaces, not mandatory kill counters. Reaching the shaft requires dealing with Ondotur's presence by combat, stealth or drawing him aside. Earlier uniques are not reassigned here or resurrected after an earlier defeat.
 
-**Ordinary population.** Use sparse raukar, ancient serpents and drakes appropriate to their terrain. Hithraukar and Unrelenting horrors are rare optional threats and should not be added beside another controller by default. Great cold/fire-drakes can occupy optional side chambers. The existing tier-24 flying drakes are exceptional encounters, not filler newly justified by a physical floor numbered 21. The ancient spirits have their own domains; only authored servants should behave as a coordinated command group.
+**Ordinary population.** Use sparse raukar, ancient serpents and drakes appropriate to their terrain. Hithraukar and Unrelenting horrors are rare optional threats and should not be added beside another controller by default. Great cold/fire-drakes can occupy optional side chambers. The existing tier-24 flying drakes are exceptional encounters, not filler newly justified by a physical floor numbered 22. The ancient spirits have their own domains; only authored servants should behave as a coordinated command group.
 
 **No low-level escort inflation.** Remove ordinary Orc archers, Orc champions and Easterling warriors from the deep encounters. Do not compensate by giving them implausibly inflated stats. Fankil now appears in the earlier embassy with ordinary human attendants at their existing strength. Preserve Baugon's ordinary early-game Orc role separately.
 
@@ -117,9 +113,9 @@ The language labels describe our intended formations, not attestation of these c
 
 ## Depth and balance conventions
 
-**Current runtime:** `MORGOTH_DEPTH = 20`, or 1,000 feet, still identifies the throne depth and participates in several deepest-level assumptions. **Requested design:** Morgoth stays on level 20 and the playable route extends to physical level 21, or 1,050 feet. Monster tiers 21–24 remain separate difficulty/allocation values; the new physical level 21 does not move every tier-21 monster into this area or move Morgoth down a floor.
+**Current runtime:** `MORGOTH_DEPTH = 20`, or 1,000 feet, still identifies the throne depth and participates in several deepest-level assumptions. **Requested design:** Morgoth stays on level 20 and the playable route extends to physical level 22, or 1,050 feet. Monster tiers 21–24 remain separate difficulty/allocation values; the new physical level 22 does not move every tier-21 monster into this area or move Morgoth down a floor.
 
-Placements below are authored region targets. A `W:` level alone cannot express "Utumno only," "forge only," or a particular shaft destination. Generic generation, Danger, and escape rules must not override the regional roster. The current `FORCE_DEPTH` predicate compares monster tier with physical depth; it is not an appropriate substitute for region checks, particularly for tier-22/23 monsters assigned to level 21 or the forge.
+Placements below are authored region targets. A `W:` level alone cannot express "Utumno only," "forge only," or a particular shaft destination. Generic generation, Danger, and escape rules must not override the regional roster. The current `FORCE_DEPTH` predicate compares monster tier with physical depth; it is not an appropriate substitute for region checks, particularly for tier-22/23 monsters assigned to level 22 or the forge.
 
 Starting values assume no curses, blessings, or other difficulty modifiers. Unique HP is the average of its HP dice in the current engine. Damage dice are raw attack dice before hit results, criticals, protection, and elemental handling. They are not guaranteed damage to the player.
 
@@ -132,14 +128,14 @@ Danger assessments assume a reasonably prepared character at the preferred depth
 | Tile | Unique | Tier | Preferred physical depth | Base HP | Speed | Evasion / protection | Will | Principal danger |
 | --- | --- | ---: | --- | ---: | --- | --- | ---: | --- |
 | 21,13 | Ringwion, the Pale Blade | 16 | Levels 16–17, frozen barracks | 65 (`26d4`) | Normal | +20 / 2d4 | 17 | Riposte punishes misses; Concentration rewards an uninterrupted duel |
-| 21,14 | Helcamo, the Hoarfrost | 22 | Level 21, frozen gate | 120 (`48d4`) | Normal | +18 / 4d4 | 23 | Slowing makes retreat and prolonged melee dangerous |
+| 21,14 | Helcamo, the Hoarfrost | 22 | Level 22, frozen gate | 120 (`48d4`) | Normal | +18 / 4d4 | 23 | Slowing makes retreat and prolonged melee dangerous |
 | 21,18 | Lhamthanc, the Forked Tongue | 24 | Special vault at levels 19–20; authored only | 150 (`60d4`) | Fast | +18 / 3d4 | 23 | A powerful flying unique: speed, durability, physical melee and fear |
 | 21,19 | Angacirca, Reaper of Thralls | 16 | Levels 16–17, prison galleries | 80 (`32d4`) | Normal | +17 / 3d4 | 17 | Disarm and Zone of Control punish circling |
 | 21,20 | Langon, the Rushing Herald | 15 | Levels 15–16, messenger roads | 40 (`16d4`) | Fast; Very Fast while Sprinting | +18 / 1d4 | 15 | Alerts existing inhabitants and accelerates along corridors |
 | 21,21 | Dúron, Keeper of the Unlit Ways | 20 | Level 20, dark side passages | 60 (`24d4`) | Normal | +18, +21 after movement / 3d4 | 20 | Darkness, flanking and Dodging undermine safe positioning |
 | 21,22 | Fankil, the Sower of Strife | 14 | Levels 14–15, embassy | 60 (`24d4`) | Normal | +15 / 2d4 | 17 | Fear and Rally support a human escort; MAN and RAUKO |
-| 21,23 | Ondotur, the Buried Lord | 23 | Level 21, forge entrance before the shaft | 160 (`64d4`) | Slow | +12 / 6d4 | 24 | The guardian can pursue through the approach's walls |
-| 21,24 | Nambatur, Custodian of Grond's Forge | 23 | Unique forge reached by the level-21 shaft | 150 (`60d4`) | Normal | +20 / 5d4 | 24 | Immediate Smite, then a full recovery turn; finite reserve |
+| 21,23 | Ondotur, the Buried Lord | 23 | Level 22, forge entrance before the shaft | 160 (`64d4`) | Slow | +12 / 6d4 | 24 | The guardian can pursue through the approach's walls |
+| 21,24 | Nambatur, Custodian of Grond's Forge | 23 | Unique forge reached by the level-22 shaft | 150 (`60d4`) | Normal | +20 / 5d4 | 24 | Immediate Smite, then a full recovery turn; finite reserve |
 
 The same-kind non-unique comparisons below determine the starting points. Being unique does not mean maximizing every stat, but a proposed elite should have an identifiable advantage over its actual kind, with compensating weaknesses and appropriate placement. Fankil has no exact same-kind non-unique: his embodied messenger role is a separate design, not an ordinary human upgraded into a Maia. All values remain estimates requiring encounter tests, particularly across the forge-to-throne resource sequence. The ability review proposes replacements for selected baseline strengths, not bonuses to stack on top of this table.
 
@@ -209,7 +205,7 @@ Lhamthanc's proposed 150 HP, +18 evasion and 3d4 protection exceed the regular f
 
 **Counterplay.** Break line of sight before becoming surrounded, use fire, and protect against both cold and slowing. Clear other enemies before committing to melee.
 
-**Placement and reward.** The main ice guardian on level 21, distinct from the earlier Ringwion encounter. An accessible corner and solid return route permit withdrawal before the forge commitment. Preserve an old treasury behind the gate; opening it is a choice, not a mandatory stair-unlock kill.
+**Placement and reward.** The main ice guardian on level 22, distinct from the earlier Ringwion encounter. An accessible corner and solid return route permit withdrawal before the forge commitment. Preserve an old treasury behind the gate; opening it is a choice, not a mandatory stair-unlock kill.
 
 ## 21,18 — Lhamthanc, the Forked Tongue
 
@@ -354,7 +350,7 @@ Lhamthanc's proposed 150 HP, +18 evasion and 3d4 protection exceed the regular f
 
 **Counterplay.** Scout escape routes, withdraw early, choose open ground, and use attacks that can overcome high protection. Low evasion rewards accurate, powerful attacks. Cold and fire are poor default plans against it. Do not rely on the same bottleneck surviving the fight.
 
-**Placement and reward.** **The forge-entrance guardian**, on the level-21 side of the one-way shaft. His broad approach hall contains two solid loops so the player can lure the slow guardian aside and reach the entrance, or fight him before committing. Protect the shaft, its approach and critical bridges from collapse. He cannot follow a level transition into Nambatur's forge. Start him alone; this is already a major fight immediately before another guardian. Treasure remains recoverable after the fight.
+**Placement and reward.** **The forge-entrance guardian**, on the level-22 side of the one-way shaft. His broad approach hall contains two solid loops so the player can lure the slow guardian aside and reach the entrance, or fight him before committing. Protect the shaft, its approach and critical bridges from collapse. He cannot follow a level transition into Nambatur's forge. Start him alone; this is already a major fight immediately before another guardian. Treasure remains recoverable after the fight.
 
 ## 21,24 — Nambatur, Custodian of Grond's Forge
 
@@ -379,7 +375,7 @@ Lhamthanc's proposed 150 HP, +18 evasion and 3d4 protection exceed the regular f
 
 **Counterplay.** Prepare to survive an immediate Smite before entering melee; it has no wind-up turn to dodge. Use physical protection, evasion, stun resistance or recovery tools, and exploit his guaranteed following recovery action. Clear the optional furnace attendant first and fight on the broad platform. Exhausting his reserve creates a longer window of ordinary attacks, but a long disengagement lets it refill. Fire resistance belongs to Nambatur; no extra cold vulnerability is assumed.
 
-**Placement and reward.** The unique Grond-forge destination reached only by the level-21 shaft. Nambatur is its single principal guardian. Proposed rewards are access to a usable high-quality forge through the existing smithing system, one great-quality equipment reward, and a small fixed healing/voice-recovery cache useful to non-smiths. Exact forge uses and cache quantities remain balancing choices. They are initialized once, never renewed by revisiting. Grond itself remains with Morgoth. The workshop has an unoccupied staging alcove, not a magical full-heal: the player still pays ordinary recovery time and resources before taking its sole exit directly into the throne hall.
+**Placement and reward.** The unique Grond-forge destination reached only by the level-22 shaft. Nambatur is its single principal guardian. Proposed rewards are access to a usable high-quality forge through the existing smithing system, one great-quality equipment reward, and a small fixed healing/voice-recovery cache useful to non-smiths. Exact forge uses and cache quantities remain balancing choices. They are initialized once, never renewed by revisiting. Grond itself remains with Morgoth. The workshop has an unoccupied staging alcove, not a magical full-heal: the player still pays ordinary recovery time and resources before taking its sole exit directly into the throne hall.
 
 ## Group encounters and limits
 
@@ -393,11 +389,11 @@ These are authored encounter choices across the descent, not automatic spawn rul
 | The Pale Blade | Ringwion alone, levels 16–17 | Accurate melee and restraint answer Riposte | Any regular sapphire serpent is separated into another room; no Helcamo pairing. |
 | The Unlit Ways | Dúron alone, outer level 20 | Darkness and movement challenge positioning | A lit retreat and no Ondotur pairing. |
 | The Prison Threshold | Angacirca alone, levels 16–17 | Disarm and Zone of Control affect recovery choices | Safe floor for dropped weapons and direct withdrawal; no deep attendant required. |
-| The Frozen Watch | Helcamo, level 21; an ancient sapphire serpent in a separated side position | Slowing makes a second approach dangerous | Broad dry exits, an accessible corner, no second controller. |
-| The Forge Entrance | Ondotur alone on level 21, before the shaft | Changing walls and slow pursuit control the approach | Two solid loops, protected shaft and critical crossings; no second unique beside him. |
+| The Frozen Watch | Helcamo, level 22; an ancient sapphire serpent in a separated side position | Slowing makes a second approach dangerous | Broad dry exits, an accessible corner, no second controller. |
+| The Forge Entrance | Ondotur alone on level 22, before the shaft | Changing walls and slow pursuit control the approach | Two solid loops, protected shaft and critical crossings; no second unique beside him. |
 | The Forge of Grond | Nambatur; optional Ururauko in a separate furnace alcove | Immediate Smite and following recovery create an uneven melee rhythm | Finite effort reserve, solid landing/platform, one principal unique; sole departure is the King's Passage. |
 
-Avoid adding every thematically plausible power. The new uniques contain no Hold user, no blanket immunity to all status effects, no repeated summoning, and no new permanent equipment damage. Some existing optional monsters do have additional control; their placement must not recreate those combinations around the new bosses. Balance the full level-21 → forge → throne journey, including players who evade guards and players who fight, rather than balancing each boss as if the player arrived fully recovered.
+Avoid adding every thematically plausible power. The new uniques contain no Hold user, no blanket immunity to all status effects, no repeated summoning, and no new permanent equipment damage. Some existing optional monsters do have additional control; their placement must not recreate those combinations around the new bosses. Balance the full level-22 → forge → throne journey, including players who evade guards and players who fight, rather than balancing each boss as if the player arrived fully recovered.
 
 ## Implementation boundary and source checks
 
@@ -405,29 +401,21 @@ The nine definitions are implemented at IDs 403–411 with stable GUIDs in `lib/
 
 **Existing Boldog:** renamed **Baugon, the Merciless**, a Neo-Sindarin name using older *baug*, "cruel, tyrannous, oppressive." His ID, GUID, tile, tier and combat profile are preserved; the biography is now that of an ordinary Orc captain. Tolkien's expedition to seize Lúthien has not been transferred to this unrelated invented captain. Angacirca supplies the Orc-shaped Maia encounter. [Baug and its source history](https://www.elfdict.com/w/baug)
 
-### New level and travel requirements found in current code
+### Utumno implementation boundaries
 
-These are later implementation requirements exposed by the research. They have not been fixed by this documentation edit.
+- `MORGOTH_DEPTH` remains 20. `UTUMNO_DEPTH` and `UTUMNO_FORGE_DEPTH` select physical depths 22 and 23 without changing ordinary stair arithmetic or monster generation tiers.
+- `level-generation.c` builds level 22 through the common procedural pipeline. `level-generation-utumno.c` supplies its central setpiece and route rules, builds the handcrafted level 23, and places the six outer shafts and unlocked throne endpoint. `cmd-movement.c` implements the directed transitions; entry remains available only before minimum depth reaches 20.
+- `fs/save-player.c` and `fs/load-player.c` persist the forge visit and pending return in version .13. `fs/load-dungeon.c` accepts only the two named extra depths, including if the setting was disabled after entering.
+- Maps still use the existing regenerate-on-travel model. Reentry is sealed, and ordinary eligibility prevents entering Utumno after entering Morgoth's hall. The route does not introduce inactive-floor snapshots or reset dead unique counters.
+- Level teleportation and false-floor descent are blocked inside the branch. Normal elemental terrain, combat and resource costs remain active. Encounter balance and live playthroughs require separate validation from source/build and automated checks.
+- Artifact catalog entries now extend to level 23; the drop-cache revision changes with this ceiling. Scores display the actual deepest floor while retaining the existing 20-floor descent-points cap.
 
-| Area | Current behaviour / source | Required design outcome |
-| --- | --- | --- |
-| Physical depth | `MORGOTH_DEPTH = 20` in `src/defines.h`; stair generation treats depth 20+ as final in `src/level-generation/level-generation-terrain-connectivity.c` and `level-generation-access.c` | Separate the throne location from deepest playable depth; add the specific level-20 descent to level 21 |
-| Shaft travel | `src/cmd/movement/cmd-movement.c` uses ordinary depth-based shaft rules and blocks some returns to depth 20 during escape | Give the forge shaft and King's Passage explicit source/destination identities; do not use ordinary +/-2 depth arithmetic or remove return restrictions globally |
-| Save/load | `src/fs/load-dungeon.c` currently rejects dungeon maps deeper than 20; player and dungeon data are split across `save/load-player` and `save/load-dungeon` | Accept physical level 21 and persist the forge/route identity with version-gated defaults for older saves |
-| Inactive maps | `src/dungeon/dungeon-startup.c` wipes the departing level's objects and monsters and generates a fresh map; `src/fs/save-dungeon.c` writes the current map | Retain the needed throne/Utumno/forge instances, or design an equivalent explicit stateful transition mechanism. A normal depth change cannot promise the same throne on return |
-| Throne and truce | `src/level-generation/level-generation.c` resets truce during generation and sets it for the throne; `level-generation-rooms-special.c:build_type9()` selects a throne layout; entry/no-flee logic uses depth 20 in `src/dungeon/dungeon-loop.c` and `dungeon-player.c` | Scope throne rules to the actual throne encounter, preserve its history, and keep them from leaking into level 21 or being refreshed on return |
-| Quest/scoring depth | `src/quest/quest-core.c` caps some target selection at 20; max-depth feedback and descent reporting also assume the old progression | Audit physical depth, monster tier, quest eligibility and recorded progress separately. Entering 21 is deeper progress, not a new throne visit |
-| Ice/lava generation | `lib/edit/style-levels.txt` stops current style ranges at 20; lava uses fire-cave partitions and ice uses ice-cave partitions | Provide an explicit level-21 generation recipe that deliberately joins frozen galleries, lava rifts and protected ordinary-floor routes |
-| Lava traversal | `src/melee/melee-util.c:cave_exist_mon()` and `cave_passable_mon()` differ for flying non-resistant monsters; `src/cave/cave-lava.c` resolves actual exposure | Verify voluntary movement, placement, forced movement and flight separately. Reserve fire-resistant inhabitants for active lava channels |
-| Ice footing | `src/melee/melee-util.c` applies grounded monster footing penalties; `src/player/player-bonuses.c` applies the player penalties | Show the real -2 attack/evasion effect and keep base draft stats distinct from terrain-adjusted values |
-| Knockback and terrain | Generic knockback in `src/cmd/combat/cmd-combat.c:knock_back()` can select lava as floor | Nambatur's revised Smite profile removes Knock Back. Preserve broad platforms and protected arrivals; any later knockback-enabled inhabitant still needs the terrain interaction checked |
-
-Validation must cover the complete route, not just generation: enter 21 from outer 20, return before commitment, enter the forge shaft, save/load in each region, leave only into the designated throne position, and preserve both an untouched and a previously disturbed throne state. Check unique deaths, Crown/Silmarils, forge uses and loot for duplication; check every permitted travel effect for bypasses; and check terrain changes for stranded characters. Keep escape rules intact if a state permits revisiting the route after taking a Silmaril.
+The environmental and encounter notes above remain design guidance where they describe optional supporting encounters or later balance changes. Tests should cover the directed route, six distinct outer partitions, permitted biome types, dry connectivity, guardian identity, forge exclusivity, persistence and return placement.
 
 ### Existing monster mechanics retained by the draft
 
 - `lib/edit/monster.txt`: reference monsters, format, tiers, flags and attacks. The header's `I:` synopsis mentions mana, but the actual parser reads **speed, HP dice, light**. Do not draft an extra mana field from that synopsis.
-- `src/defines.h:240`, `src/monster/monster-select.c`, `src/externs.h`: the current throne-depth constant also participates in deepest-level and generation assumptions. Keep Morgoth at 20 and introduce distinct lowest-playable-depth/region semantics for the requested level 21. Do not implement the route by blindly changing `MORGOTH_DEPTH` to 21. Regional allocation and transitions require explicit handling.
+- `src/defines.h:240`, `src/monster/monster-select.c`, `src/externs.h`: the current throne-depth constant also participates in deepest-level and generation assumptions. Keep Morgoth at 20 and introduce distinct lowest-playable-depth/region semantics for the requested level 22. Do not implement the route by blindly changing `MORGOTH_DEPTH` to 21. Regional allocation and transitions require explicit handling.
 - `src/monster/monster-spawn.c`: average unique HP; generic escorts select by ASCII monster letter and have 4–7 or 8–16 targets. They do not express arbitrary mixed groups. `UNIQUE_FRIEND` also scans broadly by letter; do not use it to make the frost pair inseparable.
 - `src/tables.c:47`: speed/action-energy ratios. Ranged frequency is an input to the existing chooser and mana economy, not a promise of a fixed spell every N player actions.
 - `src/melee/melee-process.c:62`: `SMART + SHRIEK` activates the spy's large preferred separation distance. This supports the evasive Langon draft; it would conflict with a design that expected him to charge continually.

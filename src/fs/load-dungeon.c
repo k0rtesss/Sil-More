@@ -255,7 +255,9 @@ errr rd_dungeon(void)
     header_px = px;
 
     /* Ignore illegal dungeons */
-    if ((depth < 0) || (depth > MORGOTH_DEPTH))
+    if ((depth < 0) || ((depth > MORGOTH_DEPTH)
+        && !(savefile_version_at_least(0, 9, 8, 13)
+            && ((depth == UTUMNO_DEPTH) || (depth == UTUMNO_FORGE_DEPTH)))))
     {
         note(format("Ignoring illegal dungeon depth (%d)", depth));
         return (0);

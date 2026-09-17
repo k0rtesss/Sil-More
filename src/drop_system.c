@@ -99,7 +99,7 @@ static bool drop_object_is_damaged(const object_type* o_ptr)
 
 static const char* DROP_RAW_FILE = "drops";
 static const u32b DROP_RAW_MAGIC = 0x44525053; /* 'DRPS' */
-static const u32b DROP_RAW_VERSION = 23;
+static const u32b DROP_RAW_VERSION = 24;
 static const int DROP_MIN_DIFFICULTY = -15;
 
 typedef struct
@@ -2311,7 +2311,7 @@ static void build_artifact_variants(int a_idx)
     int level = (a_ptr->level > 0) ? a_ptr->level : 1;
     byte depth_arr[1] = {(byte)level};
     byte rarity_arr[1] = {(byte)rarity};
-    add_drop_entry(&v, cat, DROP_GROUP_ARTIFACT, a_idx, level, MORGOTH_DEPTH,
+    add_drop_entry(&v, cat, DROP_GROUP_ARTIFACT, a_idx, level, UTUMNO_FORGE_DEPTH,
         depth_arr, rarity_arr, 1);
 }
 

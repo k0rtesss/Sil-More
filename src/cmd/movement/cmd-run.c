@@ -740,6 +740,12 @@ void move_player(int dir)
         {
             cave_info[y][x] |= (CAVE_MARK);
             lite_spot(y, x);
+            if (utumno_corridors && p_ptr->depth == MORGOTH_DEPTH
+                && cave_feat[y][x] == FEAT_MORE_SHAFT)
+            {
+                msg_print("An ancient cold rises from the shaft. Below lie the "
+                          "remains of Utumno, and tunnels long forgotten.");
+            }
         }
 
         /* Remark on Forge and discover it if blind */

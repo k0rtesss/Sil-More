@@ -245,6 +245,8 @@ void wr_extra(void)
     wr_u16b(p_ptr->smithing_leftover);
     wr_byte(p_ptr->unique_forge_made ? 1 : 0);
     wr_byte(p_ptr->unique_forge_seen ? 1 : 0);
+    wr_byte(p_ptr->utumno_forge_visited ? 1 : 0);
+    wr_byte(p_ptr->utumno_return_to_throne ? 1 : 0);
 
     /* Write death */
     wr_byte(p_ptr->is_dead ? 1 : 0);

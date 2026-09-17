@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 12 /* Persist pending flooding traps and water flow in dungeon saves. */
+#define VERSION_EXTRA 13 /* Persist the optional Utumno forge expedition. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -238,6 +238,8 @@
  */
 #define MAX_DEPTH 128
 #define MORGOTH_DEPTH 20
+#define UTUMNO_DEPTH 22
+#define UTUMNO_FORGE_DEPTH 23
 
 /*
  * Minimum-depth timer item bonus units.  Two units equal one dungeon depth, so
@@ -3051,6 +3053,7 @@
 #define OPT_lockpick_minigame 124
 #define OPT_chest_trap_minigame 125
 #define OPT_torch_animation_always 126
+#define OPT_utumno_corridors 127
 
 #define MONSTER_TILE_HEALTH_BARS_SHOW 0
 #define MONSTER_TILE_HEALTH_BARS_DAMAGED_ONLY 1
@@ -3173,6 +3176,7 @@
 #define active_weapon_switch_confirm op_ptr->opt[OPT_active_weapon_switch_confirm]
 #define lockpick_minigame op_ptr->opt[OPT_lockpick_minigame]
 #define chest_trap_minigame op_ptr->opt[OPT_chest_trap_minigame]
+#define utumno_corridors op_ptr->opt[OPT_utumno_corridors]
 #define load_blitz_by_default op_ptr->opt[OPT_load_blitz_by_default]
 #define depth_in_feet op_ptr->opt[OPT_depth_in_feet]
 // reserved legacy slot: stack_force_notes

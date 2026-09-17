@@ -688,6 +688,13 @@ void calc_bonuses(void)
         if (shift) p_ptr->resist_cold -= shift;
     }
 
+    /* Utumno's mingled frost and fire erode both elemental defences. */
+    if (p_ptr->depth == UTUMNO_DEPTH)
+    {
+        p_ptr->resist_fire -= 1;
+        p_ptr->resist_cold -= 1;
+    }
+
     /* CUR_HUNGER curse/blessing: curse increases hunger, blessing decreases it */
     {
         int h = curse_flag_delta_cur(CUR_HUNGER);
@@ -778,9 +785,9 @@ void calc_bonuses(void)
         {
             p_ptr->resist_fear -= 1;
             p_ptr->resist_stun -= 1;
-            if (cave_type == BIG_CAVE_FIRE)
+            if (cave_type == BIG_CAVE_FIRE && p_ptr->depth != UTUMNO_DEPTH)
                 p_ptr->resist_fire -= 1;
-            else if (cave_type == BIG_CAVE_ICE)
+            else if (cave_type == BIG_CAVE_ICE && p_ptr->depth != UTUMNO_DEPTH)
                 p_ptr->resist_cold -= 1;
             else if (cave_type == BIG_CAVE_POIS)
                 p_ptr->resist_pois -= 1;

@@ -139,8 +139,8 @@ score_breakdown score_calculate_breakdown(const high_score* score)
     result.base_score = base;
     result.mult_bp = mult_bp;
     result.silmarils = silmarils;
-    result.max_depth = depth_down;
-    result.cur_depth = clampi(raw_cur_depth, 0, MORGOTH_DEPTH);
+    result.max_depth = clampi(raw_max_depth, 0, UTUMNO_FORGE_DEPTH);
+    result.cur_depth = clampi(raw_cur_depth, 0, UTUMNO_FORGE_DEPTH);
     result.depth_up = depth_up;
     result.curses = curses;
     result.character_power = character_power;

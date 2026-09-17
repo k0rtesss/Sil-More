@@ -34,10 +34,13 @@ int player_lava_damage_at(int y, int x, bool airborne)
     int resistance = p_ptr->resist_fire + (p_ptr->oppose_fire ? 1 : 0);
     /* Bonuses currently describe the occupied square; previews must use
      * the fire-cave penalty at the destination instead. */
-    if (level_partition_big_cave_type_for_point(p_ptr->py, p_ptr->px) == BIG_CAVE_FIRE)
-        resistance++;
-    if (level_partition_big_cave_type_for_point(y, x) == BIG_CAVE_FIRE)
-        resistance--;
+    if (p_ptr->depth != UTUMNO_DEPTH)
+    {
+        if (level_partition_big_cave_type_for_point(p_ptr->py, p_ptr->px) == BIG_CAVE_FIRE)
+            resistance++;
+        if (level_partition_big_cave_type_for_point(y, x) == BIG_CAVE_FIRE)
+            resistance--;
+    }
     return lava_damage_at_resistance(resistance, airborne);
 }
 

@@ -1324,6 +1324,8 @@ struct player_type
     s16b smithing_leftover; /* Turns needed to finish making the current item */
     bool unique_forge_made; /* Has the unique forge been generated */
     bool unique_forge_seen; /* Has the unique forge been encountered */
+    bool utumno_forge_visited; /* Unlocks Morgoth's private return passage */
+    bool utumno_return_to_throne; /* Pending arrival behind Morgoth */
 
     s16b greater_vaults[MAX_GREATER_VAULTS]; // Which greater vaults have been
                                              // generated?

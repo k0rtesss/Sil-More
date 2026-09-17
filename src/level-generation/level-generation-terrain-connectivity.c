@@ -811,6 +811,9 @@ bool connect_rooms_stairs(void)
 
     // label_rooms();
 
+    /* The single authored Utumno ladder replaces the ordinary stair network. */
+    if (p_ptr->depth == UTUMNO_DEPTH) goto place_streamers;
+
     /* Calculate number of stairs based on map size: 2 for 66x66, 8 for 165x165 */
     /* Linear interpolation: stairs = 2 + (size - 66) * (8 - 2) / (165 - 66) */
     int map_size = (p_ptr->cur_map_hgt + p_ptr->cur_map_wid) / 2;  /* Average dimension */
@@ -975,6 +978,7 @@ bool connect_rooms_stairs(void)
 
     log_trace("Total stairs placed: %d down, %d up", down_placed + down_stairs, up_placed + up_stairs);
 
+place_streamers:
     /* Hack -- Add some quartz streamers */
     for (i = 0; i < DUN_STR_QUA; i++)
     {

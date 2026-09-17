@@ -26,6 +26,40 @@ bool trapped_stairs(void)
         return (false);
 }
 
+/* The lost halls form a directed detour, not ordinary depth arithmetic.
+ * Return zero for an ordinary stair, or -1 when the passage cannot be used. */
+static int utumno_stair_destination(bool ascending)
+{
+    int feat = cave_feat[p_ptr->py][p_ptr->px];
+
+    if (p_ptr->depth == UTUMNO_FORGE_DEPTH && ascending)
+        return MORGOTH_DEPTH;
+    if (p_ptr->depth == UTUMNO_DEPTH && !ascending && feat == FEAT_MORE)
+        return UTUMNO_FORGE_DEPTH;
+
+    if (p_ptr->depth >= MORGOTH_DEPTH && !ascending)
+    {
+        if (utumno_corridors && p_ptr->depth == MORGOTH_DEPTH
+            && feat == FEAT_MORE_SHAFT && !p_ptr->utumno_forge_visited)
+        {
+            if (min_depth() < MORGOTH_DEPTH && !p_ptr->on_the_run)
+                return UTUMNO_DEPTH;
+            msg_print("You cannot resist the call to go straight to the Silmaril.");
+        }
+        else
+        {
+            msg_print("The passage into the lost halls is sealed.");
+        }
+        return -1;
+    }
+    if (p_ptr->depth == UTUMNO_DEPTH && ascending)
+    {
+        msg_print("There is no way back up the shafts. You must find another exit.");
+        return -1;
+    }
+    return 0;
+}
+
 /*
  * Go up a staircase
  */
@@ -34,6 +68,7 @@ void do_cmd_go_up(void)
     if (!tutorial_game_action_allowed("stairs", NULL)) return;
     int min;
     int new;
+    int utumno_destination;
 
     /* Verify stairs */
     if (!cave_up_stairs_bold(p_ptr->py, p_ptr->px))
@@ -42,14 +77,19 @@ void do_cmd_go_up(void)
         return;
     }
 
-    /* Ironman */
-    if (birth_ironman && (silmarils_possessed() == 0))
+    utumno_destination = utumno_stair_destination(true);
+    if (utumno_destination < 0)
+        return;
+
+    /* The private stair completes the detour towards Morgoth, even for an
+     * Ironman or an Oath of Iron character; it is not a retreat. */
+    if (!utumno_destination && birth_ironman && (silmarils_possessed() == 0))
     {
         msg_print("You have vowed not to return until you hold a Silmaril.");
         return;
     }
 
-    if (chosen_oath(OATH_IRON) && !oath_invalid(OATH_IRON) &&
+    if (!utumno_destination && chosen_oath(OATH_IRON) && !oath_invalid(OATH_IRON) &&
        (silmarils_possessed() == 0))
     {
         /* Use oath-specific confirmation prompt */
@@ -118,6 +158,18 @@ void do_cmd_go_up(void)
 
     /* Calculate the shallowest a player is allowed to go */
     min = min_depth();
+
+    if (utumno_destination)
+    {
+        new = utumno_destination;
+        p_ptr->create_stair = false;
+        p_ptr->utumno_return_to_throne = true;
+        combat_roll_special_char = f_info[cave_feat[p_ptr->py][p_ptr->px]].d_char;
+        combat_roll_special_attr = f_info[cave_feat[p_ptr->py][p_ptr->px]].d_attr;
+        message(MSG_STAIRS, 0,
+            "You climb Morgoth's private stair towards his throne.");
+        goto finish_ascent;
+    }
 
     /* At 1000ft, once locked in (by time or by entering Morgoth's hall),
      * you cannot retreat without a Silmaril. */
@@ -325,6 +377,7 @@ void do_cmd_go_up(void)
         }
     }
 
+finish_ascent:
     varda_quest_fail_if_bastion_missed();
 
     // make a note if the player loses a greater vault
@@ -396,6 +449,7 @@ void do_cmd_go_down(void)
     if (!tutorial_game_action_allowed("stairs", NULL)) return;
     int min;
     int new;
+    int utumno_destination;
 
     /* Verify stairs */
     if (!cave_down_stairs_bold(p_ptr->py, p_ptr->px))
@@ -403,6 +457,10 @@ void do_cmd_go_down(void)
         msg_print("You see no down staircase here.");
         return;
     }
+
+    utumno_destination = utumno_stair_destination(false);
+    if (utumno_destination < 0)
+        return;
 
     // warn player if they have an active Nienna quest and are trying to leave
     if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE)
@@ -460,7 +518,13 @@ void do_cmd_go_down(void)
         = (&f_info[cave_feat[p_ptr->py][p_ptr->px]])->d_attr;
 
     min = min_depth();
-    if ((cave_feat[p_ptr->py][p_ptr->px] == FEAT_MORE_SHAFT)
+    if (utumno_destination)
+    {
+        new = utumno_destination;
+        /* Both arrivals are fixed; neither has a return staircase. */
+        p_ptr->create_stair = false;
+    }
+    else if ((cave_feat[p_ptr->py][p_ptr->px] == FEAT_MORE_SHAFT)
         && (p_ptr->depth < MORGOTH_DEPTH - 1))
     {
         /* Create a way back (usually) */
@@ -481,6 +545,14 @@ void do_cmd_go_down(void)
 
     // store the action type
     p_ptr->previous_action[0] = ACTION_MISC;
+
+    if (utumno_destination)
+    {
+        message(MSG_STAIRS, 0, new == UTUMNO_DEPTH
+            ? "You descend into the freezing remnants of Utumno."
+            : "You climb down the ladder into the lost forge.");
+        goto finish_descent;
+    }
 
     message(MSG_STAIRS, 0, "You enter a maze of down staircases.");
 
@@ -521,6 +593,7 @@ void do_cmd_go_down(void)
         new = min;
     }
 
+finish_descent:
     varda_quest_fail_if_bastion_missed();
 
     // make a note if the player loses a greater vault

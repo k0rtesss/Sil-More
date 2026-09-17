@@ -905,7 +905,7 @@ void place_forge(int y, int x)
     }
 
     // unique forge
-    if ((power >= 1000) && !p_ptr->unique_forge_made)
+    if ((power >= 1000) && !p_ptr->unique_forge_made && !utumno_corridors)
     {
         uses = 3;
         cave_set_feat(y, x, FEAT_FORGE_UNIQUE_HEAD + uses);

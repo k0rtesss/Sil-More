@@ -1222,6 +1222,14 @@ void self_knowledge(void)
         char vuln_buf[200];
         int res;
 
+        if (p_ptr->depth == UTUMNO_DEPTH)
+        {
+            strnfmt(s[i], 80, "Utumno weakens your resistance to fire and cold");
+            strnfmt(t[i], 80, "(-1 to each throughout this level)");
+            good[i] = false;
+            i++;
+        }
+
         resist_buf[0] = '\0';
         no_resist_buf[0] = '\0';
         vuln_buf[0] = '\0';
@@ -1652,4 +1660,3 @@ void identify_revealed_items(bool identify[])
         }
     }
 }
-
