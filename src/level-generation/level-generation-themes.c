@@ -4,7 +4,7 @@
 #include "log/log.h"
 #include "level-generation-themes.h"
 
-#define TERRAIN_THEME_DEPTHS 20
+#define TERRAIN_THEME_DEPTHS 22
 #define TERRAIN_THEME_LINE_MAX 512
 #define TERRAIN_THEME_FILE_MAX 65536
 
@@ -30,7 +30,9 @@ static const terrain_theme_profile terrain_theme_defaults[TERRAIN_THEME_DEPTHS] 
     { "Deep forges",          {2,3,9,4,0}, 60,12,32,3,30 },
     { "Fiery depths",         {2,3,12,4,0},65,12,32,3,35 },
     { "Fiery depths",         {2,3,14,4,0},65,12,34,3,35 },
-    { "Fiery depths",         {2,3,14,4,0},65,12,34,3,35 }
+    { "Fiery depths",         {2,3,14,4,0},65,12,34,3,35 },
+    { "Unused depth",         {0,0,0,0,0},0,6,6,1,0 },
+    { "Utumno corridors",     {1,0,1,0,1},75,12,34,3,35 }
 };
 static const terrain_theme_profile terrain_theme_disabled = {
     "Outside dungeon", {0,0,0,0,0}, 0,6,6,1,0
@@ -46,7 +48,8 @@ static const terrain_landmark_profile terrain_landmark_defaults[TERRAIN_THEME_DE
     {100,55,90,1,2,40,30}, {100,55,90,1,2,40,30},
     {100,55,90,1,2,40,30}, {100,55,90,1,2,40,30},
     {100,55,90,1,2,40,30}, {100,55,90,1,2,40,30},
-    {100,55,90,1,2,40,30}
+    {100,55,90,1,2,40,30},
+    {0,50,50,1,1,0,0}, {100,40,70,1,2,40,30}
 };
 static const terrain_landmark_profile terrain_landmark_disabled = {
     0,50,50,1,1,0,0
@@ -61,7 +64,8 @@ static const terrain_network_profile terrain_network_defaults[TERRAIN_THEME_DEPT
     {{40,30,15,5,10},2,4,3,8,70}, {{40,30,15,5,10},2,4,3,8,70},
     {{35,10,25,20,10},2,4,3,8,70}, {{35,10,25,20,10},2,4,3,8,70},
     {{35,10,25,20,10},2,4,3,8,70}, {{35,10,25,20,10},2,4,3,8,70},
-    {{35,10,25,20,10},2,4,3,8,70}, {{35,10,25,20,10},2,4,3,8,70}
+    {{35,10,25,20,10},2,4,3,8,70}, {{35,10,25,20,10},2,4,3,8,70},
+    {{0,0,0,0,0},1,1,2,2,0}, {{25,25,0,0,50},2,4,3,8,70}
 };
 static const terrain_network_profile terrain_network_disabled = {
     {0,0,0,0,0},1,1,2,2,0
@@ -72,6 +76,7 @@ static terrain_network_profile terrain_network_profiles[TERRAIN_THEME_DEPTHS];
 static bool terrain_themes_attempted;
 static bool terrain_themes_loaded;
 static const terrain_history_profile terrain_history_default = {45, 30, 25, 35};
+static const terrain_history_profile terrain_history_utumno = {100, 0, 0, 100};
 static const terrain_history_profile terrain_history_disabled = {0, 0, 0, 0};
 static terrain_history_profile terrain_history_profiles[TERRAIN_THEME_DEPTHS];
 
@@ -103,6 +108,7 @@ static bool terrain_theme_error(const char* path, int line, const char* reason)
 static bool terrain_themes_parse(const char* text, size_t size, const char* path)
 {
     terrain_theme_profile pending[TERRAIN_THEME_DEPTHS] = {0};
+    memcpy(pending, terrain_theme_defaults, sizeof(pending));
     terrain_landmark_profile landmarks[TERRAIN_THEME_DEPTHS];
     memcpy(landmarks, terrain_landmark_defaults, sizeof(landmarks));
     terrain_network_profile networks[TERRAIN_THEME_DEPTHS];
@@ -113,6 +119,7 @@ static bool terrain_themes_parse(const char* text, size_t size, const char* path
     bool history_seen[TERRAIN_THEME_DEPTHS] = {false};
     terrain_history_profile histories[TERRAIN_THEME_DEPTHS];
     for (int d = 0; d < TERRAIN_THEME_DEPTHS; d++) histories[d] = terrain_history_default;
+    histories[UTUMNO_DEPTH - 1] = terrain_history_utumno;
     int version = 0;
     size_t offset = 0;
     int line_number = 0;
@@ -173,7 +180,7 @@ static bool terrain_themes_parse(const char* text, size_t size, const char* path
                 "expected D with 12 values, M with 8 values in V:2/V:3, or N with 11 values in V:3");
         int depth;
         if (!terrain_theme_number(fields[1], 1, TERRAIN_THEME_DEPTHS, &depth))
-            return terrain_theme_error(path, line_number, "depth must be 1..20");
+            return terrain_theme_error(path, line_number, "depth must be 1..22");
         if (history_record)
         {
             terrain_history_profile* history = &histories[depth - 1];
@@ -270,11 +277,11 @@ static bool terrain_themes_parse(const char* text, size_t size, const char* path
         return terrain_theme_error(path, line_number + 1, "missing schema header V:1, V:2 or V:3");
     for (int depth = 0; depth < TERRAIN_THEME_DEPTHS; depth++)
     {
-        if (!seen[depth])
+        if (depth < MORGOTH_DEPTH && !seen[depth])
             return terrain_theme_error(path, line_number + 1, "missing depth record (all 1..20 required)");
-        if (version >= 2 && !landmark_seen[depth])
+        if (depth < MORGOTH_DEPTH && version >= 2 && !landmark_seen[depth])
             return terrain_theme_error(path, line_number + 1, "missing landmark record (all 1..20 required)");
-        if (version == 3 && !network_seen[depth])
+        if (depth < MORGOTH_DEPTH && version == 3 && !network_seen[depth])
             return terrain_theme_error(path, line_number + 1, "missing network record (all 1..20 required)");
         int total = 0;
         for (int material = 0; material < TERRAIN_THEME_MATERIAL_MAX; material++)
@@ -286,6 +293,20 @@ static bool terrain_themes_parse(const char* text, size_t size, const char* path
             total += networks[depth].weights[family];
         if (landmarks[depth].chance && !total)
             return terrain_theme_error(path, line_number + 1, "enabled network has no family weight");
+    }
+    /* This route requires all three networks before accepting its map. Reject
+     * an impossible configured recipe here instead of retrying generation
+     * forever; the loader will retain the complete built-in defaults. */
+    const terrain_theme_profile* utumno = &pending[UTUMNO_DEPTH - 1];
+    if (utumno->weights[TERRAIN_THEME_WATER] <= 0
+        || utumno->weights[TERRAIN_THEME_ICE] <= 0
+        || utumno->weights[TERRAIN_THEME_LAVA] <= 0
+        || utumno->weights[TERRAIN_THEME_CHASM] != 0
+        || utumno->weights[TERRAIN_THEME_POISON] != 0
+        || landmarks[UTUMNO_DEPTH - 1].chance <= 0)
+    {
+        return terrain_theme_error(path, line_number + 1,
+            "Utumno depth 22 requires enabled water, ice and lava networks, with no chasm or poison weight");
     }
     memcpy(terrain_theme_profiles, pending, sizeof(pending));
     memcpy(terrain_landmark_profiles, landmarks, sizeof(landmarks));
@@ -337,5 +358,6 @@ const terrain_network_profile* terrain_network_for_depth(int depth)
 const terrain_history_profile* terrain_history_for_depth(int depth)
 {
     if (depth < 1 || depth > TERRAIN_THEME_DEPTHS) return &terrain_history_disabled;
+    if (depth == UTUMNO_DEPTH && !terrain_themes_loaded) return &terrain_history_utumno;
     return terrain_themes_loaded ? &terrain_history_profiles[depth - 1] : &terrain_history_default;
 }

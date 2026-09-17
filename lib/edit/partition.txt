@@ -36,10 +36,10 @@
 #     Extra monsters from floor area that also scale with depth.
 #     Formula:
 #       floor_count / depth_bonus_divisor, clamped to min..max,
-#       then scaled up with depth until depth 20,
+#       then scaled up with depth using depth 20 as the calibration point,
 #       then capped by floor_count / hard_cap_divisor.
 #     scale_pct_at_depth_20:
-#       Final percentage reached by depth 20.
+#       Percentage at depth 20; the same ramp continues below it.
 #       100 = no extra depth scaling.
 #     Use depth_bonus_divisor 0 to disable this bonus.
 #

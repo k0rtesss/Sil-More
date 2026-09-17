@@ -66,7 +66,7 @@ const terrain_history_profile* terrain_history_for_depth(int depth);
 /* Called once during normal initialization. Invalid/missing files use defaults. */
 bool terrain_themes_load(void);
 
-/* Depth is the dungeon level (50 ft per level); outside 1..20 is disabled. */
+/* Depth is the dungeon level (50 ft per level); 21 is unused, 22 is Utumno. */
 const terrain_theme_profile* terrain_theme_for_depth(int depth);
 const terrain_landmark_profile* terrain_landmark_for_depth(int depth);
 const terrain_network_profile* terrain_network_for_depth(int depth);

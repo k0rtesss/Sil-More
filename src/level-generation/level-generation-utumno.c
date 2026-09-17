@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "level-generation/level-generation-internal.h"
+#include "level-generation/level-generation-terrain-access.h"
 #include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-terrain-vaults.h"
 #include "cave/cave-water-flow.h"
@@ -128,6 +129,34 @@ bool utumno_gen(void)
     return utumno_forge_gen();
 }
 
+/* The mandatory ladder must be reachable on foot. The general room flood can
+ * cross vault interiors abstractly and permits jumps over elemental gaps;
+ * neither proves that a character can actually enter these guarded doors. */
+static bool utumno_ladder_reachable(int ladder_y, int ladder_x)
+{
+    static byte reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static coord queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    int head = 0, tail = 0;
+    memset(reached, 0, sizeof(reached));
+    reached[p_ptr->py][p_ptr->px] = 1;
+    queue[tail++] = (coord){p_ptr->py, p_ptr->px};
+    while (head < tail)
+    {
+        coord cell = queue[head++];
+        if (cell.y == ladder_y && cell.x == ladder_x) return true;
+        for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx)
+            {
+                int y = cell.y + dy, x = cell.x + dx;
+                if (!terrain_generation_walkable(y, x, NULL) || reached[y][x])
+                    continue;
+                reached[y][x] = 1;
+                queue[tail++] = (coord){y, x};
+            }
+    }
+    return false;
+}
+
 bool utumno_finalize_corridors(void)
 {
     int styles[PARTITION_META_MAX];
@@ -168,10 +197,7 @@ bool utumno_finalize_corridors(void)
         log_debug("Utumno: central entrance ladder missing");
         return false;
     }
-    static int access[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    memset(access, 0, sizeof(access));
-    flood_access(p_ptr->py, p_ptr->px, access, false);
-    if (!access[ladder_y][ladder_x])
+    if (!utumno_ladder_reachable(ladder_y, ladder_x))
     {
         log_debug("Utumno: arrival (%d,%d) cannot reach ladder (%d,%d)",
             p_ptr->py, p_ptr->px, ladder_y, ladder_x);

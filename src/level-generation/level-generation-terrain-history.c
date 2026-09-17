@@ -29,23 +29,28 @@ int terrain_history_epoch(int system)
 
 void terrain_history_begin(void)
 {
-    if (morgoth_level_active || p_ptr->depth < 1 || p_ptr->depth > 20) return;
+    bool utumno = (p_ptr->depth == UTUMNO_DEPTH);
+    if (morgoth_level_active || p_ptr->depth < 1
+        || (p_ptr->depth > MORGOTH_DEPTH && !utumno)) return;
     history_started = true;
     const terrain_theme_profile* theme = terrain_theme_for_depth(p_ptr->depth);
     const terrain_history_profile* profile = terrain_history_for_depth(p_ptr->depth);
     if (!percent_chance(terrain_landmark_for_depth(p_ptr->depth)->chance)) return;
-    int target = 1 + percent_chance(profile->second_system_chance), previous = -1;
+    int target = utumno ? 3 : 1 + percent_chance(profile->second_system_chance);
+    int previous = -1;
+    unsigned used = 0;
     for (int s = 0; s < target; s++)
     {
         int total = 0;
-        for (int m = 0; m < 5; m++) if (m != previous) total += theme->weights[m];
+        for (int m = 0; m < 5; m++)
+            if (m != previous && (!utumno || !(used & (1u << m)))) total += theme->weights[m];
         /* Two separate histories need distinct materials; a one-material
          * profile already supports multiple pools within its one network. */
         if (!total) break;
         int roll = rand_int(total), material = 0;
         for (; material < 5; material++)
         {
-            if (material == previous) continue;
+            if (material == previous || (utumno && (used & (1u << material)))) continue;
             if (roll < theme->weights[material]) break;
             roll -= theme->weights[material];
         }
@@ -56,6 +61,7 @@ void terrain_history_begin(void)
             : roll < profile->ancient + profile->disaster ? TERRAIN_HISTORY_DISASTER : TERRAIN_HISTORY_OVERFLOW;
         if (!terrain_landmark_plan_system(history_count, material)) continue;
         history_epochs[history_count++] = epoch; previous = material;
+        used |= 1u << material;
     }
     /* Both systems have their routes before the first constructed room. */
     for (int s = 0; s < history_count; s++)

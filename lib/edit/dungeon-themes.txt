@@ -32,6 +32,7 @@ H:17:45:30:25:35
 H:18:45:30:25:35
 H:19:45:30:25:35
 H:20:45:30:25:35
+H:22:100:0:0:100
 
 # Exactly one D record for every dungeon depth 1..20; depth * 50 = feet.
 # D:depth:name:water:chasm:lava:poison:ice:chance:min_length:max_length:max_width:pool_chance
@@ -72,6 +73,8 @@ D:17:Deep forges:2:3:9:4:0:60:12:32:3:30
 D:18:Fiery depths:2:3:12:4:0:65:12:32:3:35
 D:19:Fiery depths:2:3:14:4:0:65:12:34:3:35
 D:20:Fiery depths:2:3:14:4:0:65:12:34:3:35
+# Optional level 22 uses the same procedural geology with three material systems.
+D:22:Utumno corridors:1:0:1:0:1:75:12:34:3:35
 
 # Exactly one M record for every depth 1..20 in schema V:2 or V:3.
 # M:depth:chance:min_span_percent:max_span_percent:min_width:max_width:lake_chance:branch_chance
@@ -110,6 +113,7 @@ M:17:100:55:90:1:2:40:30
 M:18:100:55:90:1:2:40:30
 M:19:100:55:90:1:2:40:30
 M:20:100:55:90:1:2:40:30
+M:22:100:40:70:1:2:40:30
 
 # Exactly one N record per depth 1..20 in schema V:3.
 # N:depth:chain:tributaries:chamber:pools:river:min_basins:max_basins:min_radius:max_radius:one_tile_percent
@@ -144,3 +148,4 @@ N:17:35:10:25:20:10:2:4:3:8:70
 N:18:35:10:25:20:10:2:4:3:8:70
 N:19:35:10:25:20:10:2:4:3:8:70
 N:20:35:10:25:20:10:2:4:3:8:70
+N:22:25:25:0:0:50:2:4:3:8:70

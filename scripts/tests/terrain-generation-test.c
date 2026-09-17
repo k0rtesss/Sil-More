@@ -67,6 +67,39 @@ static bool matching_material(int actual, int expected) {
     return actual == expected || (expected == FEAT_ICE && FEAT_IS_ICE(actual));
 }
 
+static void check_utumno_profiles(void) {
+    char text[8192];
+    int length=snprintf(text,sizeof(text),"V:2\n");
+    for(int depth=1;depth<=20;depth++) {
+        length+=snprintf(text+length,sizeof(text)-length,
+            "D:%d:Test:1:0:0:0:0:75:12:34:3:35\n"
+            "M:%d:100:40:70:1:2:40:30\n",depth,depth);
+    }
+    /* Existing theme files need no new records to support the optional route. */
+    assert(test_themes_parse(text,length));
+    assert(terrain_landmark_for_depth(22)->chance>0);
+    const char* invalid[]={
+        "M:22:0:40:70:1:2:40:30\n",
+        "D:22:Utumno:1:0:0:0:1:75:12:34:3:35\n",
+        "D:22:Utumno:1:0:1:1:1:75:12:34:3:35\n",
+        "D:22:Utumno:1:1:1:0:1:75:12:34:3:35\n"
+    };
+    for(unsigned i=0;i<N_ELEMENTS(invalid);i++) {
+        int suffix=snprintf(text+length,sizeof(text)-length,"%s",invalid[i]);
+        assert(!test_themes_parse(text,length+suffix));
+        const terrain_theme_profile *fallback=terrain_theme_for_depth(22);
+        assert(fallback->weights[TERRAIN_THEME_WATER]>0
+            &&fallback->weights[TERRAIN_THEME_LAVA]>0
+            &&fallback->weights[TERRAIN_THEME_ICE]>0);
+        assert(terrain_landmark_for_depth(22)->chance>0);
+    }
+    length+=snprintf(text+length,sizeof(text)-length,
+        "D:22:Utumno:1:0:1:0:1:75:12:34:3:35\n"
+        "M:22:100:40:70:1:2:40:30\n");
+    assert(test_themes_parse(text,length));
+    puts("Utumno profiles: legacy defaults, valid22, disabled/missing/forbidden material fallback PASS");
+}
+
 static void select_material(int material, int pool_chance) {
     /* Use the production parser and a complete, valid single-material file. */
     char text[4096];int length=snprintf(text,sizeof(text),"V:1\n");
@@ -355,6 +388,7 @@ static void melting_ice_tests(void) {
 }
 
 int main(void) {
+    check_utumno_profiles();
     melting_ice_tests();
     deep_water_tests();
     candidate_tests();

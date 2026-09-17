@@ -3,7 +3,7 @@
 #include "h-basic.h"
 
 enum { TERRAIN_HISTORY_ANCIENT, TERRAIN_HISTORY_DISASTER, TERRAIN_HISTORY_OVERFLOW };
-#define TERRAIN_HISTORY_SYSTEMS 2
+#define TERRAIN_HISTORY_SYSTEMS 3
 void terrain_history_reset(void);
 void terrain_history_begin(void);
 void terrain_history_start_tunnels(void);

@@ -117,6 +117,57 @@ static void walking_flood(void) {
         }
     }
 }
+static bool dry_vault_tile(int y,int x,int vault) {
+    if(!safe_tile(y,x)||terrain_vault_id_at(y,x)!=vault)return false;
+    int f=cave_feat[y][x];
+    return f!=FEAT_WATER&&f!=FEAT_DEEP_WATER&&!FEAT_IS_ICE(f)&&f!=FEAT_SECRET;
+}
+static void check_workshop_access(int depth) {
+    if(depth!=22&&depth!=23)return;
+    int vault=depth==22?523:524,sy=-1,sx=-1;
+    if(depth==23){sy=p_ptr->py;sx=p_ptr->px;}
+    else for(int y=1;y<p_ptr->cur_map_hgt-1&&sy<0;y++)
+        for(int x=1;x<p_ptr->cur_map_wid-1;x++)
+            if(dry_vault_tile(y,x,vault)&&terrain_vault_symbol_at(y,x)=='.')
+                {sy=y;sx=x;break;}
+    assert(sy>=0&&dry_vault_tile(sy,sx,vault));
+    static byte reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static int queue[MAX_DUNGEON_HGT*MAX_DUNGEON_WID];
+    const int dy[4]={-1,1,0,0},dx[4]={0,0,-1,1};
+    int head=0,tail=0,rewards=0,stairs=0;
+    memset(reached,0,sizeof(reached));reached[sy][sx]=1;
+    queue[tail++]=sy*MAX_DUNGEON_WID+sx;
+    while(head<tail) {
+        int at=queue[head++],y=at/MAX_DUNGEON_WID,x=at%MAX_DUNGEON_WID;
+        for(int dir=0;dir<4;dir++) {
+            int ny=y+dy[dir],nx=x+dx[dir];
+            if(!dry_vault_tile(ny,nx,vault)||reached[ny][nx])continue;
+            reached[ny][nx]=1;queue[tail++]=ny*MAX_DUNGEON_WID+nx;
+        }
+    }
+    for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
+        if(terrain_vault_id_at(y,x)!=vault)continue;
+        char token=terrain_vault_symbol_at(y,x);
+        /* Ordinary level generation may scatter rubble onto empty floors.
+         * All fixed destinations must retain a dry route without digging,
+         * secret-door discovery or even a diagonal squeeze. */
+        bool needs_access=strchr("~0uQ<>",token)!=NULL;
+        if(needs_access&&!reached[y][x]) {
+            printf("Unreachable vault%d token%c at%d,%d feature%d from%d,%d\n",
+                vault,token,y,x,cave_feat[y][x],sy,sx);
+            assert(reached[y][x]);
+        }
+        if(token=='~'){assert(cave_o_idx[y][x]);rewards++;}
+        if(token=='<'||token=='>')stairs++;
+        int mi=cave_m_idx[y][x];
+        if(depth==23&&mi>0&&mon_list[mi].r_idx==411)
+            assert(!los(p_ptr->py,p_ptr->px,y,x));
+    }
+    assert(rewards==(depth==22?2:3)&&stairs==1);
+    if(depth==23)assert(cave_feat[p_ptr->py][p_ptr->px]==FEAT_FLOOR);
+    printf("PASS depth%d dry cardinal routes to guardian, rewards and stair%s\n",
+        depth,depth==23?"; sheltered forge arrival":"");
+}
 static void export_map(const char *out,int depth) {
     char path[1024];snprintf(path,sizeof(path),"%s/level-%d.txt",out,depth);
     FILE *f=fopen(path,"w");assert(f);
@@ -150,12 +201,19 @@ static int check(int depth,int seed,bool visited,bool enabled,const char *out) {
     playerturn=1;character_generated=true;Rand_state_init(seed);attempts=0;
     partition_passes=tunnel_passes=terrain_passes=population_passes=first_size=0;
     printf("Generate depth%d seed%d visited%d enabled%d small%d extra-stairs%d\n",depth,seed,visited,enabled,small_maps,extra_stairs);
-    generate_cave();walking_flood();
+    generate_cave();walking_flood();check_workshop_access(depth);
     int down=0,up=0,shafts=0,forges=0,mighty=0,water=0,ice=0,lava=0,ondotur=0,nambatur=0,helcamo=0,chests=0;
     bool partitions[PARTITION_META_MAX]={0};
     for(int y=0;y<p_ptr->cur_map_hgt;y++)for(int x=0;x<p_ptr->cur_map_wid;x++) {
         int f=cave_feat[y][x];
-        if(f==FEAT_MORE){down++;assert(accessible[y][x]);}
+        if(f==FEAT_MORE){
+            down++;
+            if(!accessible[y][x]) {
+                export_map(out,depth);
+                printf("Unreachable stair%d,%d from arrival%d,%d\n",y,x,p_ptr->py,p_ptr->px);
+            }
+            assert(accessible[y][x]);
+        }
         if(f==FEAT_LESS||f==FEAT_LESS_SHAFT)up++;
         if(f==FEAT_MORE_SHAFT) {
             shafts++;int pi=level_partition_index_for_point(y,x);
@@ -308,7 +366,39 @@ int main(int argc,char **argv) {
 }
 '''
 
+def check_workshop_templates():
+    """The authored plans must connect before procedural rubble is scattered."""
+    from collections import deque
+
+    records = {}
+    for line in (ROOT / "lib/edit/vault.txt").read_text(encoding="utf-8").splitlines():
+        if line.startswith("N:"):
+            serial = int(line.split(":")[1])
+            records[serial] = []
+        elif line.startswith("D:"):
+            records[serial].append(line[2:])
+    for serial in (523, 524):
+        rows = records[serial]
+        assert rows and all(len(row) == len(rows[0]) for row in rows)
+        dry = {(y, x) for y, row in enumerate(rows) for x, token in enumerate(row)
+               if token in ".+~0uQ<>"}
+        start = (2, len(rows[0]) // 2) if serial == 524 else min(dry)
+        assert start in dry
+        reached = {start}
+        queue = deque([start])
+        while queue:
+            y, x = queue.popleft()
+            for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                cell = (y + dy, x + dx)
+                if cell in dry and cell not in reached:
+                    reached.add(cell)
+                    queue.append(cell)
+        assert reached == dry, (serial, sorted(dry - reached))
+        print(f"PASS vault{serial} all authored work areas connect by dry cardinal paths", flush=True)
+
+
 def main():
+    check_workshop_templates()
     OUT.mkdir(parents=True, exist_ok=True)
     source = OUT / "check.c"
     source.write_text(HARNESS, encoding="utf-8")
