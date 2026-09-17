@@ -22,47 +22,102 @@
  */
 bool rd_notes(void)
 {
-    int alive = (!p_ptr->is_dead || arg_wizard);
-    char tmpstr[100];
-    int i;
+    bool alive = (!p_ptr->is_dead || arg_wizard);
+    size_t used = 0;
 
-    // reset the notes buffer
-    for (i = 0; i < NOTES_LENGTH; i++)
-    {
-        notes_buffer[i] = '\0';
-    }
+    memset(notes_buffer, 0, sizeof(notes_buffer));
 
-    if (alive)
+    while (true)
     {
-        /* Append the notes in the savefile to the buffer */
+        size_t start = used;
+        size_t length = 0;
+        bool is_marker = true;
+
+        /* Notes are NUL-terminated records.  Read directly into the bounded
+         * buffer so a long record cannot overflow or silently lose its tail. */
         while (true)
         {
-            rd_string(tmpstr, sizeof(tmpstr));
-            /* Found the end? */
-            if (strstr(tmpstr, NOTES_MARK))
-                break;
-            SDL_strlcat(
-                notes_buffer, format("%s\n", tmpstr), sizeof(notes_buffer));
-        }
-    }
-    /* Ignore the notes */
-    else
-    {
-        while (true)
-        {
-            rd_string(tmpstr, sizeof(tmpstr));
-
-            /* Found the end? */
-            if (strstr(tmpstr, NOTES_MARK))
+            byte ch;
+            u32b before = load_byte_offset;
+            rd_byte(&ch);
+            if (load_byte_offset == before)
             {
+                note("Unexpected end of savefile while reading notes");
+                return true;
+            }
+            if (!ch)
                 break;
+
+            if (length >= sizeof(NOTES_MARK) - 1 || ch != NOTES_MARK[length])
+                is_marker = false;
+            length++;
+            if (alive && used < sizeof(notes_buffer) - 1)
+                notes_buffer[used++] = (char)ch;
+        }
+
+        /* A player's note may contain the marker as part of its text. */
+        if (is_marker && length == sizeof(NOTES_MARK) - 1)
+        {
+            notes_buffer[start] = '\0';
+            return false;
+        }
+        if (alive && used < sizeof(notes_buffer) - 1)
+            notes_buffer[used++] = '\n';
+        notes_buffer[used] = '\0';
+    }
+}
+
+
+/* Preserve every arrow when importing the pre-0.9.7.9 Quiver representation.
+ * Old stacks may exceed the current mixed Quiver's capacity. */
+static errr migrate_legacy_quiver(void)
+{
+    if (inventory[INVEN_QUIVER1].k_idx
+        && inventory[INVEN_QUIVER1].tval == TV_ARROW)
+    {
+        object_type arrow;
+        object_copy(&arrow, &inventory[INVEN_QUIVER1]);
+        /* Remove the old slot before computing space: it is included in the
+         * Quiver count while a legacy save is being migrated. */
+        object_wipe(&inventory[INVEN_QUIVER1]);
+        if (p_ptr->equip_cnt > 0)
+            p_ptr->equip_cnt--;
+        (void)player_quiver_absorb_arrow(&arrow);
+        if (arrow.number > 0)
+        {
+            arrow.storage = OBJECT_STORAGE_PACK;
+            if (!player_carried_extra_load(&arrow))
+            {
+                note("Unable to preserve excess legacy Quiver arrows");
+                return -1;
             }
         }
     }
 
+    for (int i = 0; i < INVEN_PACK; i++)
+    {
+        if (!inventory[i].k_idx || inventory[i].tval != TV_ARROW
+            || inventory[i].pickup_slot != INVEN_QUIVER1)
+        {
+            continue;
+        }
+
+        object_type arrow;
+        object_copy(&arrow, &inventory[i]);
+        int placed = player_quiver_absorb_arrow(&arrow);
+        inventory[i].storage = OBJECT_STORAGE_PACK;
+        inventory[i].pickup = false;
+        inventory[i].pickup_slot = -1;
+        if (placed > 0)
+        {
+            inven_item_increase(i, -placed);
+            inven_item_optimize(i);
+            if (!arrow.number)
+                i--;
+        }
+    }
     return 0;
 }
-
 
 /*
  * Read the player inventory (and the smithing object)
@@ -279,37 +334,10 @@ errr rd_inventory(void)
     }
     else
     {
-        /* Older saves kept one arrow stack in slot 37.  Development saves may
-         * also contain marked Pack entries from the short-lived transitional
-         * representation; migrate both without charging Pack space. */
-        if (inventory[INVEN_QUIVER1].k_idx
-            && inventory[INVEN_QUIVER1].tval == TV_ARROW)
-        {
-            object_type arrow;
-            object_copy(&arrow, &inventory[INVEN_QUIVER1]);
-            arrow.pickup_slot = INVEN_QUIVER1;
-            (void)player_quiver_absorb_arrow(&arrow);
-            object_wipe(&inventory[INVEN_QUIVER1]);
-            if (p_ptr->equip_cnt > 0)
-                p_ptr->equip_cnt--;
-        }
-
-        for (int i = 0; i < INVEN_PACK; i++)
-        {
-            if (!inventory[i].k_idx || inventory[i].tval != TV_ARROW
-                || inventory[i].pickup_slot != INVEN_QUIVER1)
-            {
-                continue;
-            }
-
-            object_type arrow;
-            int amount = inventory[i].number;
-            object_copy(&arrow, &inventory[i]);
-            (void)player_quiver_absorb_arrow(&arrow);
-            inven_item_increase(i, 0 - amount);
-            inven_item_optimize(i);
-            i--;
-        }
+        /* Development saves also used marked Pack entries.  Keep any arrows
+         * that do not fit in the new Quiver as ordinary carried arrows. */
+        if (migrate_legacy_quiver())
+            return -1;
     }
 
     log_trace("[load:%06u] === BEGIN SUPPLIES ===", (unsigned)load_byte_offset);

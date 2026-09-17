@@ -10,6 +10,8 @@
 # Y: Quest type (0=vault-based, 1=roulette-based)
 # R: Variable name for quest state (e.g., "tulkas_quest", "aule_quest")
 # M: Metarun quest ID (e.g., METARUN_QUEST_TULKAS, METARUN_QUEST_AULE)
+# E: Eligibility; DEPTH_RANGE also supplies the P: formula interpolation bounds
+# P: Probability formula and parameters; preserves E: bounds in either line order
 # S: Stat bonuses (str:dex:con:gra)
 # K: Skill bonuses (skill:bonus pairs)
 # A: Special abilities granted

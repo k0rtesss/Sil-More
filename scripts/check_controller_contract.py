@@ -95,7 +95,7 @@ def main() -> int:
     require_order(
         runtime_button,
         [
-            ("modal D-pad ownership", "if (sdl_movement_input_is_modal())"),
+            ("unbound modal D-pad ownership", "if (!config.gamepad_use_dpad && sdl_movement_input_is_modal())"),
             ("gameplay D-pad setting", "if (!config.gamepad_use_dpad)"),
         ],
     )

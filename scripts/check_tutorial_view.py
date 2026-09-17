@@ -30,6 +30,7 @@ HARNESS = r'''
 
 static u16b info[MAX_DUNGEON_HGT][256];
 static byte features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static s16b object_indices[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static s16b light[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static u16b views[65536], temps[65536];
 static monster_type monsters[4];
@@ -81,6 +82,7 @@ static void reset(int scenario) {
     memset(races, 0, sizeof(races)); memset(objects, 0, sizeof(objects));
     memset(gear, 0, sizeof(gear));
     cave_info = info; cave_feat = features; cave_light = light;
+    cave_o_idx = object_indices;
     view_g = views; temp_g = temps; view_n = temp_n = 0;
     mon_list = monsters; r_info = races; o_list = objects; inventory = gear;
     mon_max = 2; o_max = 1;

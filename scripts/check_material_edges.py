@@ -19,6 +19,7 @@ static const int MATERIAL_NEIGHBOUR_X = 12;
 static const int MATERIAL_STYLE_OLD = 13;
 static const int MATERIAL_STYLE_IMPORTED = 44;
 static const int MATERIAL_STYLE_ACCENT = 45;
+static style_type material_production_styles[COLOR_STYLE_SLOT_MAX];
 
 static void material_set_cell(int y, int x, byte feat, int style, u16b info)
 {
@@ -58,6 +59,8 @@ static void material_styles(void)
     style_type* accent = &style_info[MATERIAL_STYLE_ACCENT];
 
     assert(z_info && style_info && z_info->style_max > MATERIAL_STYLE_ACCENT);
+    assert(z_info->style_max <= COLOR_STYLE_SLOT_MAX);
+    memcpy(material_production_styles,style_info,z_info->style_max*sizeof(*style_info));
 
     /* Rows 15/23 represent the older atlas artwork; rows 33/36 are the
      * imported hand-drawn cells.  Each style has two deterministic floor
@@ -183,6 +186,11 @@ static void material_pair_setup(byte current_feat, int current_style,
     byte neighbour_feat, int neighbour_style)
 {
     material_reset(current_style);
+    if (current_feat >= FEAT_WALL_HEAD && current_feat <= FEAT_WALL_TAIL)
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 32; x++)
+                material_set_cell(y, x, current_feat, current_style,
+                    CAVE_MARK | CAVE_SEEN | CAVE_GLOW | CAVE_WALL);
     material_set_cell(MATERIAL_TEST_Y, MATERIAL_TEST_X, current_feat,
         current_style, CAVE_MARK | CAVE_SEEN | CAVE_GLOW
             | ((current_feat >= FEAT_DOOR_HEAD
@@ -206,7 +214,7 @@ static void material_pair_test(const char* label, byte current_feat,
     int current_tile;
     int neighbour_tile;
 
-    material_pair_setup(current_feat, current_style, neighbour_feat,
+    material_pair_setup(current_feat, current_style, current_feat,
         current_style);
     current_tile = material_tile(MATERIAL_TEST_Y, MATERIAL_TEST_X);
     neighbour_tile = material_tile(MATERIAL_TEST_Y, MATERIAL_NEIGHBOUR_X);
@@ -295,9 +303,9 @@ static void material_pair_tests(void)
             door_features[i], MATERIAL_STYLE_IMPORTED);
         cave_info[MATERIAL_TEST_Y][MATERIAL_NEIGHBOUR_X]
             = CAVE_MARK | CAVE_SEEN | CAVE_GLOW | CAVE_WALL;
-        assert(sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
+        assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
     }
-    puts("Open/broken/warded doors participate in the wall material family: PASS");
+    puts("Open/broken/warded doors keep their authored silhouette: PASS");
 }
 
 static void material_visibility_tests(void)
@@ -305,6 +313,42 @@ static void material_visibility_tests(void)
     u64b rng;
     s32b saved_turn;
     s32b saved_player_turn;
+
+    /* Hidden special features must not restore a floor underlay after the
+     * rage/labyrinth visibility gate has selected unexplored space. */
+    const byte hidden_features[] = {FEAT_TRAP_PIT, FEAT_STAIR_HEAD,
+        FEAT_FORGE_HEAD, FEAT_RUBBLE, FEAT_SUNLIGHT};
+    byte dark_a = f_info[FEAT_NONE].x_attr;
+    char dark_c = f_info[FEAT_NONE].x_char;
+    for (int mode = 0; mode < 2; mode++)
+        for (unsigned i = 0; i < N_ELEMENTS(hidden_features); i++)
+        {
+            byte a, ta;
+            char c, tc;
+            material_reset(MATERIAL_STYLE_OLD);
+            material_set_cell(MATERIAL_TEST_Y, MATERIAL_TEST_X,
+                hidden_features[i], MATERIAL_STYLE_OLD, CAVE_MARK | CAVE_GLOW);
+            p_ptr->rage = mode == 0;
+            g_labyrinth_view_active = mode == 1;
+            map_info(MATERIAL_TEST_Y, MATERIAL_TEST_X, &a, &c, &ta, &tc);
+            assert(a == dark_a && c == dark_c);
+            assert(ta == dark_a && tc == dark_c);
+            map_info_terrain(MATERIAL_TEST_Y, MATERIAL_TEST_X, &ta, &tc);
+            assert(ta == dark_a && tc == dark_c);
+        }
+    material_reset(MATERIAL_STYLE_OLD);
+    const int outside[][2] = {{-1, 0}, {0, -1}, {MAX_DUNGEON_HGT, 0},
+        {0, MAX_DUNGEON_WID}, {32, 0}, {0, 32}};
+    for (unsigned i = 0; i < N_ELEMENTS(outside); i++)
+    {
+        byte a, ta;
+        char c, tc;
+        map_info(outside[i][0], outside[i][1], &a, &c, &ta, &tc);
+        assert(a == dark_a && c == dark_c && ta == dark_a && tc == dark_c);
+        map_info_terrain(outside[i][0], outside[i][1], &ta, &tc);
+        assert(ta == dark_a && tc == dark_c);
+    }
+    puts("Hidden feature underlays and out-of-map lookups remain dark: PASS");
 
     material_pair_setup(FEAT_FLOOR, MATERIAL_STYLE_OLD,
         FEAT_FLOOR, MATERIAL_STYLE_IMPORTED);
@@ -397,6 +441,404 @@ static void material_actor_tests(void)
     g_state.tileset_cols = saved_cols;
     SDL_DestroyTexture(test_tileset);
     puts("Opaque actor tile remains above every borrowed material edge: PASS");
+}
+
+static void material_alias_tests(void)
+{
+    const int alias = 42;
+    style_type saved = style_info[alias];
+    style_info[alias] = style_info[MATERIAL_STYLE_OLD];
+    /* A reordered set is still the same artwork family. */
+    style_info[alias].floor_colv[0] = 2;
+    style_info[alias].floor_colv[1] = 0;
+    material_pair_setup(FEAT_FLOOR, MATERIAL_STYLE_OLD, FEAT_FLOOR, alias);
+    assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
+    assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_NEIGHBOUR_X));
+    material_pair_setup(FEAT_WALL_EXTRA, MATERIAL_STYLE_OLD,
+        FEAT_WALL_EXTRA, alias);
+    assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
+    assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_NEIGHBOUR_X));
+    style_info[alias] = saved;
+
+    /* The lava bank overrides style 13 with the actual basalt floor sprite.
+     * Compare that sprite with real basalt, not the encoded style number. */
+    material_reset(63);
+    material_set_cell(MATERIAL_TEST_Y, MATERIAL_TEST_X, FEAT_FLOOR,
+        MATERIAL_STYLE_OLD, CAVE_MARK | CAVE_SEEN | CAVE_GLOW);
+    material_set_cell(MATERIAL_TEST_Y - 1, MATERIAL_TEST_X, FEAT_LAVA, 63,
+        CAVE_MARK | CAVE_SEEN | CAVE_GLOW);
+    assert(material_tile(MATERIAL_TEST_Y, MATERIAL_TEST_X) == ((35 << 8) | 8));
+    assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
+
+    material_reset(MATERIAL_STYLE_OLD);
+    material_set_cell(MATERIAL_TEST_Y - 1, MATERIAL_TEST_X, FEAT_LAVA,
+        MATERIAL_STYLE_OLD, CAVE_MARK | CAVE_SEEN | CAVE_GLOW);
+    assert(material_tile(MATERIAL_TEST_Y, MATERIAL_TEST_X) == ((35 << 8) | 8));
+    assert(material_tile(MATERIAL_TEST_Y + 1, MATERIAL_TEST_X) >> 8 == 23);
+    assert(sdl_material_edge_at(MATERIAL_TEST_Y + 1, MATERIAL_TEST_X));
+    puts("Artwork aliases, reordered variant families and actual bank overrides: PASS");
+}
+
+static void material_diagnostic_color(int tile, Uint8* r, Uint8* g, Uint8* b)
+{
+    int row = tile >> 8, col = tile & 255;
+    *r = (Uint8)(24 + (row * 5) % 180);
+    *g = (Uint8)(32 + (col * 7) % 180);
+    *b = (Uint8)(48 + ((row + col) * 9) % 180);
+}
+
+static void material_mask_tests(void)
+{
+    const int dy[8] = {-1,-1,0,1,1,1,0,-1};
+    const int dx[8] = {0,1,1,1,0,-1,-1,-1};
+    SDL_Texture* saved_tileset = g_state.tileset;
+    SDL_Texture* diagnostic = material_test_atlas();
+    int saved_cols = g_state.tileset_cols;
+    unsigned changed_masks = 0;
+    g_state.tileset = diagnostic;
+    g_state.tileset_cols = 32;
+
+    /* Exhaust the independent raw eight-neighbour masks for both classes.
+     * Every changed pixel must come from exactly one visible source color;
+     * an overlapping alpha blend cannot satisfy this assertion. Alternating
+     * donors exercise three-material corners as well as binary boundaries. */
+    for (int wall = 0; wall < 2; wall++)
+        for (int mask = 0; mask < 256; mask++)
+        {
+            byte feat = wall ? FEAT_WALL_EXTRA : FEAT_FLOOR;
+            u16b info = CAVE_MARK | CAVE_SEEN | CAVE_GLOW
+                | (wall ? CAVE_WALL : 0);
+            Uint8 palette[9][3];
+            material_pair_setup(feat, MATERIAL_STYLE_OLD, feat,
+                MATERIAL_STYLE_OLD);
+            for (int i = 0; i < 8; i++)
+            {
+                int style = mask & (1 << i)
+                    ? ((i & 1) ? MATERIAL_STYLE_ACCENT : MATERIAL_STYLE_IMPORTED)
+                    : MATERIAL_STYLE_OLD;
+                material_set_cell(MATERIAL_TEST_Y + dy[i],
+                    MATERIAL_TEST_X + dx[i], feat, style, info);
+                material_diagnostic_color(material_tile(MATERIAL_TEST_Y + dy[i],
+                    MATERIAL_TEST_X + dx[i]), &palette[i][0],
+                    &palette[i][1], &palette[i][2]);
+            }
+            material_diagnostic_color(material_tile(MATERIAL_TEST_Y,
+                MATERIAL_TEST_X), &palette[8][0], &palette[8][1], &palette[8][2]);
+            SDL_Surface* result = material_render_cell(MATERIAL_TEST_Y,
+                MATERIAL_TEST_X, 0, 0, false);
+            unsigned changed = 0;
+            for (int y = 0; y < TILE_SIZE; y++)
+                for (int x = 0; x < TILE_SIZE; x++)
+                {
+                    Uint8 r,g,b,a;
+                    bool found = false;
+                    assert(SDL_ReadSurfacePixel(result,x,y,&r,&g,&b,&a));
+                    assert(a == 255);
+                    for (int i = 0; i < 9; i++)
+                        if (r == palette[i][0] && g == palette[i][1]
+                            && b == palette[i][2]) found = true;
+                    assert(found);
+                    if (r != palette[8][0] || g != palette[8][1]
+                        || b != palette[8][2])
+                    {
+                        changed++;
+                        assert(x < 3 || x >= TILE_SIZE - 3
+                            || y < 3 || y >= TILE_SIZE - 3);
+                    }
+                }
+            if (!mask) assert(!changed);
+            if (changed) changed_masks++;
+            SDL_DestroySurface(result);
+        }
+    assert(changed_masks >= 400);
+    g_state.tileset = saved_tileset;
+    g_state.tileset_cols = saved_cols;
+    SDL_DestroyTexture(diagnostic);
+    puts("All 256 floor and 256 wall masks preserve source palette and 3px contours: PASS");
+}
+
+static void material_topology_tests(void)
+{
+    SDL_Texture* saved_tileset = g_state.tileset;
+    SDL_Texture* diagnostic = material_test_atlas();
+    int saved_cols = g_state.tileset_cols;
+    g_state.tileset = diagnostic;
+    g_state.tileset_cols = 32;
+
+    const byte blockers[] = {FEAT_WALL_EXTRA, FEAT_WATER, FEAT_OPEN, FEAT_FLOOR};
+    for (unsigned blocker = 0; blocker < sizeof(blockers); blocker++)
+    {
+        material_reset(MATERIAL_STYLE_OLD);
+        for (int i = 0; i < 2; i++)
+            material_set_cell(MATERIAL_TEST_Y - (i == 0),
+                MATERIAL_TEST_X + (i == 1), blockers[blocker], MATERIAL_STYLE_OLD,
+                blocker == 3 ? 0 : CAVE_MARK | CAVE_SEEN | CAVE_GLOW
+                    | (blocker == 0 ? CAVE_WALL : 0));
+        SDL_Surface* plain = material_render_cell(MATERIAL_TEST_Y,
+            MATERIAL_TEST_X, 0, 0, false);
+        material_set_cell(MATERIAL_TEST_Y - 1, MATERIAL_TEST_X + 1,
+            FEAT_FLOOR, MATERIAL_STYLE_IMPORTED,
+            CAVE_MARK | CAVE_SEEN | CAVE_GLOW);
+        SDL_Surface* diagonal = material_render_cell(MATERIAL_TEST_Y,
+            MATERIAL_TEST_X, 0, 0, false);
+        assert(same_surface(plain, diagonal));
+        SDL_DestroySurface(plain); SDL_DestroySurface(diagonal);
+    }
+
+    /* The lower material retains its complete tile; the higher material
+     * recedes into it. This prevents two opposing transitions on one seam. */
+    material_pair_setup(FEAT_FLOOR, MATERIAL_STYLE_IMPORTED,
+        FEAT_FLOOR, MATERIAL_STYLE_IMPORTED);
+    SDL_Surface* plain = material_render_cell(MATERIAL_TEST_Y,
+        MATERIAL_TEST_X, 0, 0, false);
+    material_set_cell(MATERIAL_TEST_Y, MATERIAL_NEIGHBOUR_X, FEAT_FLOOR,
+        MATERIAL_STYLE_OLD, CAVE_MARK | CAVE_SEEN | CAVE_GLOW);
+    SDL_Surface* lower = material_render_cell(MATERIAL_TEST_Y,
+        MATERIAL_TEST_X, 0, 0, false);
+    assert(same_surface(plain, lower));
+    SDL_DestroySurface(plain); SDL_DestroySurface(lower);
+
+    /* Wall faces may shade their own pixels, but cannot contain floor color. */
+    material_pair_setup(FEAT_WALL_EXTRA, MATERIAL_STYLE_IMPORTED,
+        FEAT_FLOOR, MATERIAL_STYLE_OLD);
+    SDL_Surface* wall = material_render_cell(MATERIAL_TEST_Y,
+        MATERIAL_TEST_X, 0, 0, false);
+    Uint8 wr,wg,wb;
+    material_diagnostic_color(material_tile(MATERIAL_TEST_Y,MATERIAL_TEST_X),
+        &wr,&wg,&wb);
+    for (int y = 0; y < TILE_SIZE; y++)
+        for (int x = 0; x < TILE_SIZE; x++)
+        {
+            Uint8 r,g,b,a;
+            assert(SDL_ReadSurfacePixel(wall,x,y,&r,&g,&b,&a));
+            assert(a == 255 && r <= wr && g <= wg && b <= wb);
+            /* Neutral modulation permits at most one 8-bit rounding step. */
+            assert(abs((int)r * wg - (int)g * wr) <= wr + wg);
+            assert(abs((int)r * wb - (int)b * wr) <= wr + wb);
+        }
+    SDL_DestroySurface(wall);
+    g_state.tileset = saved_tileset;
+    g_state.tileset_cols = saved_cols;
+    SDL_DestroyTexture(diagnostic);
+    puts("Occluded diagonal donors, one-sided seams and wall artwork preservation: PASS");
+}
+
+static void material_source_sampling_tests(void)
+{
+    SDL_Texture* saved_tileset = g_state.tileset;
+    int saved_cols = g_state.tileset_cols;
+    SDL_Surface* atlas = SDL_CreateSurface(32 * TILE_SIZE, 37 * TILE_SIZE,
+        SDL_PIXELFORMAT_RGBA32);
+    assert(atlas);
+    const int rows[] = {23,35,36};
+    for (unsigned i = 0; i < sizeof(rows)/sizeof(rows[0]); i++)
+        for (int col = 0; col < 32; col++)
+            for (int y = 0; y < TILE_SIZE; y++)
+                for (int x = 0; x < TILE_SIZE; x++)
+                {
+                    SDL_Rect pixel = {col*TILE_SIZE+x,rows[i]*TILE_SIZE+y,1,1};
+                    SDL_FillSurfaceRect(atlas,&pixel,SDL_MapSurfaceRGBA(atlas,
+                        (Uint8)(rows[i]*5), (Uint8)(16+x*11),
+                        (Uint8)(16+y*11), 255));
+                }
+    SDL_Texture* pattern = SDL_CreateTextureFromSurface(g_state.renderer,atlas);
+    assert(pattern);
+    SDL_DestroySurface(atlas);
+    SDL_SetTextureScaleMode(pattern,SDL_SCALEMODE_NEAREST);
+    SDL_SetTextureBlendMode(pattern,SDL_BLENDMODE_BLEND);
+    g_state.tileset = pattern; g_state.tileset_cols = 32;
+    material_pair_setup(FEAT_FLOOR,MATERIAL_STYLE_OLD,
+        FEAT_FLOOR,MATERIAL_STYLE_IMPORTED);
+    material_set_cell(MATERIAL_TEST_Y-1,MATERIAL_TEST_X,FEAT_FLOOR,
+        MATERIAL_STYLE_ACCENT,CAVE_MARK|CAVE_SEEN|CAVE_GLOW);
+    material_set_cell(MATERIAL_TEST_Y-1,MATERIAL_TEST_X+1,FEAT_FLOOR,
+        MATERIAL_STYLE_IMPORTED,CAVE_MARK|CAVE_SEEN|CAVE_GLOW);
+    SDL_Surface* rendered = material_render_cell(MATERIAL_TEST_Y,
+        MATERIAL_TEST_X,0,0,false);
+    unsigned donor_pixels = 0;
+    for (int y = 0; y < TILE_SIZE; y++)
+        for (int x = 0; x < TILE_SIZE; x++)
+        {
+            Uint8 r,g,b,a;
+            assert(SDL_ReadSurfacePixel(rendered,x,y,&r,&g,&b,&a));
+            assert(a == 255 && g == 16+x*11 && b == 16+y*11);
+            assert(r == 23*5 || r == 35*5 || r == 36*5);
+            if (r != 23*5) donor_pixels++;
+        }
+    assert(donor_pixels > 0);
+    SDL_DestroySurface(rendered);
+    g_state.tileset = saved_tileset; g_state.tileset_cols = saved_cols;
+    SDL_DestroyTexture(pattern);
+    puts("Donor texels keep their local coordinates across three-material contours: PASS");
+}
+
+static SDL_Surface* material_native_reference(bool expect_native)
+{
+    SDL_Texture* previous = SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target = SDL_CreateTexture(g_state.renderer,
+        SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_TARGET,TILE_SIZE,TILE_SIZE);
+    assert(target);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);
+    SDL_RenderClear(g_state.renderer);
+    byte a,ta; char c,tc;
+    SDL_FRect dst = {0,0,TILE_SIZE,TILE_SIZE};
+    map_info(MATERIAL_TEST_Y,MATERIAL_TEST_X,&a,&c,&ta,&tc);
+    sdl_draw_tileset_sprite(ta,tc,&dst,false);
+    assert(draw_elemental_transition(MATERIAL_TEST_Y,MATERIAL_TEST_X,&dst)
+        == expect_native);
+    SDL_Surface* result = SDL_RenderReadPixels(g_state.renderer,NULL);
+    assert(result);
+    SDL_SetRenderTarget(g_state.renderer,previous);
+    SDL_DestroyTexture(target);
+    return result;
+}
+
+static void material_native_contour_tests(void)
+{
+    for (int style = 62; style <= 63; style++)
+    {
+        material_pair_setup(FEAT_FLOOR,style,FEAT_FLOOR,MATERIAL_STYLE_IMPORTED);
+        SDL_Surface* expected = material_native_reference(true);
+        SDL_Surface* actual = material_render_cell(MATERIAL_TEST_Y,
+            MATERIAL_TEST_X,0,0,false);
+        assert(same_surface(expected,actual));
+        SDL_DestroySurface(expected); SDL_DestroySurface(actual);
+    }
+
+    /* A missing optional native atlas must still get a generic contour. */
+    material_pair_setup(FEAT_FLOOR,62,FEAT_FLOOR,MATERIAL_STYLE_IMPORTED);
+    SDL_Texture* saved = snow_dirt_transition_texture;
+    bool saved_attempted = snow_dirt_transition_load_attempted;
+    snow_dirt_transition_texture = NULL;
+    snow_dirt_transition_load_attempted = true;
+    SDL_Surface* plain = material_native_reference(false);
+    SDL_Surface* fallback = material_render_cell(MATERIAL_TEST_Y,
+        MATERIAL_TEST_X,0,0,false);
+    assert(!same_surface(plain,fallback));
+    SDL_DestroySurface(plain); SDL_DestroySurface(fallback);
+    snow_dirt_transition_texture = saved;
+    snow_dirt_transition_load_attempted = saved_attempted;
+    puts("Native snow/basalt contours stay exact; unavailable atlas gets generic fallback: PASS");
+}
+
+static void material_stress_tests(void)
+{
+    SDL_Texture* previous = SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target = SDL_CreateTexture(g_state.renderer,
+        SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_TARGET,TILE_SIZE,TILE_SIZE);
+    assert(target);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    SDL_FRect dst = {0,0,TILE_SIZE,TILE_SIZE};
+    double seconds[2];
+    for (int edge = 0; edge < 2; edge++)
+    {
+        material_pair_setup(FEAT_FLOOR,MATERIAL_STYLE_OLD,FEAT_FLOOR,
+            edge ? MATERIAL_STYLE_IMPORTED : MATERIAL_STYLE_OLD);
+        if (edge)
+            material_set_cell(MATERIAL_TEST_Y-1,MATERIAL_TEST_X,FEAT_FLOOR,
+                MATERIAL_STYLE_ACCENT,CAVE_MARK|CAVE_SEEN|CAVE_GLOW);
+        byte a,ta; char c,tc;
+        map_info(MATERIAL_TEST_Y,MATERIAL_TEST_X,&a,&c,&ta,&tc);
+        sdl_draw_map_tile_layers_at(MATERIAL_TEST_Y,MATERIAL_TEST_X,a,c,ta,tc,&dst);
+        SDL_Surface* first = SDL_RenderReadPixels(g_state.renderer,NULL);
+        assert(first);
+        int loads = image_loads, textures = texture_creations, mallocs = allocations;
+        u64b rng = Rand_state_export();
+        s32b saved_turn = turn, saved_player_turn = playerturn;
+        clock_t start = clock();
+        for (int i = 0; i < 10000; i++)
+        {
+            sdl_draw_map_tile_layers_at(MATERIAL_TEST_Y,MATERIAL_TEST_X,a,c,ta,tc,&dst);
+            SDL_FlushRenderer(g_state.renderer);
+        }
+        seconds[edge] = (double)(clock()-start)/CLOCKS_PER_SEC;
+        SDL_Surface* last = SDL_RenderReadPixels(g_state.renderer,NULL);
+        assert(last && same_surface(first,last));
+        assert(Rand_state_export() == rng && turn == saved_turn
+            && playerturn == saved_player_turn);
+        /* These existing harness counters intercept the optional animation
+         * loaders and allocations reached by the layered renderer. SDL's
+         * internal renderer allocations are outside this assertion. */
+        assert(image_loads == loads && texture_creations == textures
+            && allocations == mallocs);
+        SDL_DestroySurface(first); SDL_DestroySurface(last);
+    }
+    SDL_SetRenderTarget(g_state.renderer,previous);
+    SDL_DestroyTexture(target);
+    printf("10,000 unchanged floor draws %.3fs; three-material draws %.3fs; stable pixels/RNG, no optional asset loads or animation allocations: PASS\n",
+        seconds[0],seconds[1]);
+}
+
+static void material_transparency_state_tests(void)
+{
+    SDL_Texture* saved_tileset = g_state.tileset;
+    int saved_cols = g_state.tileset_cols;
+    SDL_Texture* previous = SDL_GetRenderTarget(g_state.renderer);
+    SDL_Surface* atlas = SDL_CreateSurface(32*TILE_SIZE,37*TILE_SIZE,
+        SDL_PIXELFORMAT_RGBA32);
+    assert(atlas);
+    SDL_FillSurfaceRect(atlas,NULL,SDL_MapSurfaceRGBA(atlas,150,20,10,255));
+    for (int col = 8; col <= 10; col += 2)
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++)
+            {
+                SDL_Rect pixel = {col*TILE_SIZE+x,36*TILE_SIZE+y,1,1};
+                SDL_FillSurfaceRect(atlas,&pixel,SDL_MapSurfaceRGBA(atlas,
+                    40,180,70,(x&1) ? 0 : 255));
+            }
+    SDL_Texture* pattern = SDL_CreateTextureFromSurface(g_state.renderer,atlas);
+    SDL_DestroySurface(atlas);
+    SDL_Texture* target = SDL_CreateTexture(g_state.renderer,
+        SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_TARGET,TILE_SIZE,TILE_SIZE);
+    assert(pattern && target);
+    SDL_SetTextureScaleMode(pattern,SDL_SCALEMODE_NEAREST);
+    SDL_SetTextureBlendMode(pattern,SDL_BLENDMODE_BLEND);
+    g_state.tileset = pattern; g_state.tileset_cols = 32;
+    material_pair_setup(FEAT_FLOOR,MATERIAL_STYLE_OLD,
+        FEAT_FLOOR,MATERIAL_STYLE_IMPORTED);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    SDL_SetRenderDrawBlendMode(g_state.renderer,SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);
+    SDL_RenderClear(g_state.renderer);
+    byte a,ta; char c,tc;
+    SDL_FRect dst = {0,0,TILE_SIZE,TILE_SIZE};
+    map_info(MATERIAL_TEST_Y,MATERIAL_TEST_X,&a,&c,&ta,&tc);
+    sdl_draw_tileset_sprite(ta,tc,&dst,false);
+
+    /* Deliberately non-default state proves the overlay both ignores it for
+     * donor ownership and restores it for the caller. */
+    SDL_SetTextureBlendMode(pattern,SDL_BLENDMODE_ADD);
+    SDL_SetTextureColorMod(pattern,11,22,33);
+    SDL_SetTextureAlphaMod(pattern,93);
+    SDL_SetRenderDrawBlendMode(g_state.renderer,SDL_BLENDMODE_ADD);
+    SDL_SetRenderDrawColor(g_state.renderer,17,18,19,20);
+    assert(sdl_material_edge_draw(MATERIAL_TEST_Y,MATERIAL_TEST_X,ta,tc,&dst,false));
+    SDL_BlendMode blend;
+    Uint8 r,g,b,alpha;
+    assert(SDL_GetTextureBlendMode(pattern,&blend) && blend == SDL_BLENDMODE_ADD);
+    assert(SDL_GetTextureColorMod(pattern,&r,&g,&b) && r == 11 && g == 22 && b == 33);
+    assert(SDL_GetTextureAlphaMod(pattern,&alpha) && alpha == 93);
+    assert(SDL_GetRenderDrawBlendMode(g_state.renderer,&blend) && blend == SDL_BLENDMODE_ADD);
+    assert(SDL_GetRenderDrawColor(g_state.renderer,&r,&g,&b,&alpha)
+        && r == 17 && g == 18 && b == 19 && alpha == 20);
+    SDL_Surface* rendered = SDL_RenderReadPixels(g_state.renderer,NULL);
+    assert(rendered);
+    for (int y = 0; y < TILE_SIZE; y++)
+        for (int x = TILE_SIZE-2; x < TILE_SIZE; x++)
+        {
+            assert(SDL_ReadSurfacePixel(rendered,x,y,&r,&g,&b,&alpha));
+            assert(alpha == 255);
+            if (x&1) assert(r == 0 && g == 0 && b == 0);
+            else assert(r == 40 && g == 180 && b == 70);
+        }
+    SDL_DestroySurface(rendered);
+    SDL_SetRenderDrawBlendMode(g_state.renderer,SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);
+    SDL_SetRenderTarget(g_state.renderer,previous);
+    g_state.tileset = saved_tileset; g_state.tileset_cols = saved_cols;
+    SDL_DestroyTexture(target); SDL_DestroyTexture(pattern);
+    puts("Transparent donor texels replace old ownership; texture/render state restored: PASS");
 }
 
 static void material_redraw_tests(void)
@@ -581,6 +1023,71 @@ static void material_preview(void)
     SDL_DestroyTexture(target);
     puts("Rendered labeled floor/wall/chasm material contact sheet: PASS");
 }
+
+static void material_winding_preview(void)
+{
+    const int width = 28, height = 22, scale = 2, heading = 40;
+    style_type test_styles[COLOR_STYLE_SLOT_MAX];
+    memcpy(test_styles,style_info,z_info->style_max*sizeof(*style_info));
+    memcpy(style_info,material_production_styles,z_info->style_max*sizeof(*style_info));
+    material_reset(41);
+    const int path_y[28] = {9,9,9,9,9,10,10,10,11,11,10,10,9,9,
+        9,10,11,12,12,12,13,13,12,12,12,12,12,12};
+    for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            bool floor = (x >= 2 && x <= 9 && y >= 3 && y <= 12)
+                || (x >= 11 && x <= 21 && y >= 3 && y <= 7
+                    && x + y > 15 && x - y < 17)
+                || (x >= 18 && x <= 25 && y >= 11 && y <= 18)
+                || (x >= 3 && x <= 13 && y >= 16 && y <= 19)
+                || (x >= 5 && x <= 23 && abs(y-path_y[x]) <= 1)
+                || (x >= 11 && x <= 13 && y >= 6 && y <= 17)
+                || (x >= 10 && x <= 21 && y >= 17 && y <= 18);
+            bool pillar = (x >= 5 && x <= 6 && y >= 5 && y <= 6)
+                || (x == 8 && y == 10)
+                || (x >= 21 && x <= 22 && y >= 13 && y <= 14)
+                || (x == 24 && y == 17)
+                || (x == 7 && y == 18);
+            if (pillar) floor = false;
+            int style = x < 9 ? 41 : (x < 16 ? 42 : (x < 24 ? 44 : 40));
+            if (y >= 16 && x < 10) style = 13;
+            if (x >= 16 && x < 24 && y < 10) style = 43;
+            byte feat = floor ? FEAT_FLOOR : FEAT_WALL_EXTRA;
+            if (x >= 18 && x <= 20 && y >= 4 && y <= 5) feat = FEAT_CHASM;
+            material_set_cell(y+2,x+2,feat,style,
+                CAVE_MARK|CAVE_SEEN|CAVE_GLOW|(floor ? 0 : CAVE_WALL));
+        }
+    SDL_Texture* previous = SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target = SDL_CreateTexture(g_state.renderer,
+        SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_TARGET,
+        width*TILE_SIZE*scale,heading+height*TILE_SIZE*scale);
+    TTF_Font* font = TTF_OpenFont("lib/xtra/font/VictorMono-Medium.ttf",14);
+    assert(target && font);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    SDL_SetRenderDrawColor(g_state.renderer,7,9,12,255);
+    SDL_RenderClear(g_state.renderer);
+    material_label(font,target,6,2,"Stock artwork: winding corridors, room corners, pillars and chasm");
+    material_label(font,target,6,21,"Masonry / Moss / Brickwork + DirtCave / Flagstone / original stone");
+    for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            byte a,ta; char c,tc;
+            SDL_FRect dst = {(float)(x*TILE_SIZE*scale),
+                (float)(heading+y*TILE_SIZE*scale),TILE_SIZE*scale,TILE_SIZE*scale};
+            map_info(y+2,x+2,&a,&c,&ta,&tc);
+            sdl_draw_map_tile_layers_at(y+2,x+2,a,c,ta,tc,&dst);
+        }
+    SDL_Surface* image = SDL_RenderReadPixels(g_state.renderer,NULL);
+    assert(image && IMG_SavePNG(image,
+        "scripts/output/material-edges-check/winding-stock-materials.png"));
+    SDL_DestroySurface(image);
+    TTF_CloseFont(font);
+    SDL_SetRenderTarget(g_state.renderer,previous);
+    SDL_DestroyTexture(target);
+    memcpy(style_info,test_styles,z_info->style_max*sizeof(*style_info));
+    puts("Production stock artwork winding-corridor and pillar preview: PASS");
+}
 '''
 
 
@@ -598,8 +1105,16 @@ def main():
         "    material_pair_tests();\n"
         "    material_visibility_tests();\n"
         "    material_actor_tests();\n"
+        "    material_alias_tests();\n"
+        "    material_mask_tests();\n"
+        "    material_topology_tests();\n"
+        "    material_source_sampling_tests();\n"
+        "    material_native_contour_tests();\n"
+        "    material_transparency_state_tests();\n"
+        "    material_stress_tests();\n"
         "    material_redraw_tests();\n"
-        "    material_preview();")
+        "    material_preview();\n"
+        "    material_winding_preview();")
     idle.main()
 
 

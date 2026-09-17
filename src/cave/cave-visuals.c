@@ -744,7 +744,8 @@ static bool monster_alert_icon_visible(const monster_type* m_ptr)
     return m_ptr->alertness >= ALERTNESS_ALERT && !rewarded_thrall;
 }
 
-void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
+static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
+    char* tcp, bool terrain_only)
 {
     byte a = TERM_DARK; // these are defaults to soothe compilation warnings
     char c = ' '; //
@@ -758,6 +759,16 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
     s16b m_idx;
 
     s16b image = p_ptr->image;
+
+    /* Reject off-map cells before indexing any cave arrays. Both callers
+     * need a complete darkness result, including the terrain underlay. */
+    if (!in_bounds(y, x) || y >= p_ptr->cur_map_hgt || x >= p_ptr->cur_map_wid)
+    {
+        cave_feature_visual(&f_info[FEAT_NONE], &a, &c);
+        *ap = *tap = a;
+        *cp = *tcp = c;
+        return;
+    }
 
     /* Monster/Player */
     m_idx = cave_m_idx[y][x];
@@ -779,18 +790,8 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
     if ((!p_ptr->is_dead) && p_ptr->rage)
         rage_active = true;
 
-    /* make sure not to display things off screen */
-    if ((y < 0) || (x < 0) || (y >= p_ptr->cur_map_hgt)
-        || (x >= p_ptr->cur_map_wid))
-    {
-        /* Get the darkness feature */
-        f_ptr = &f_info[FEAT_NONE];
-
-        cave_feature_visual(f_ptr, &a, &c);
-    }
-
     // hiding squares out of line of sight during rage
-    else if (hide_square)
+    if (hide_square)
     {
         /* Get the darkness feature */
         f_ptr = &f_info[FEAT_NONE];
@@ -893,8 +894,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                                     c += 1;
                                 }
                             }
-                            
+
                             /* Check for visible monster on this vein before returning */
+                            if (terrain_only)
+                                return;
                             if ((m_idx > 0) && !hide_square) {
                                 monster_type* m_ptr = &mon_list[m_idx];
                                 if (m_ptr->ml) {
@@ -939,8 +942,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                             }
                             *tap = wall_a; *tcp = wall_c; /* base wall */
                             log_warn("VEIN fallback: unencoded cave_color=%d at (%d,%d); using primary style %d wall(row=%d,col=%d)", color_value, y, x, fb, sfb->wall_row, sfb->wall_col);
-                            
+
                             /* Check for visible monster on this vein before returning */
+                            if (terrain_only)
+                                return;
                             if ((m_idx > 0) && !hide_square) {
                                 monster_type* m_ptr = &mon_list[m_idx];
                                 if (m_ptr->ml) {
@@ -1044,7 +1049,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
     /* Traps, stairs, shafts, forges, sunlight, and rubble are drawn as a middle layer in
      * the SDL renderer (floor -> feature -> monster). For transparency to work, use a
      * floor tile as the terrain underlay when one of these features is visible. */
-    if ((info & (CAVE_MARK)) &&
+    if (!hide_square && (info & (CAVE_MARK)) &&
         (FEAT_IS_TRAP(feat) ||
          ((feat >= FEAT_STAIR_HEAD) && (feat <= FEAT_STAIR_TAIL)) ||
          ((feat >= FEAT_FORGE_HEAD) && (feat <= FEAT_FORGE_TAIL)) ||
@@ -1061,6 +1066,9 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
 
     (*tap) = terrain_a;
     (*tcp) = terrain_c;
+
+    if (terrain_only)
+        return;
 
     /* Objects (only shown when on floors, not when in rubble) */
     if (feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT || feat == FEAT_WATER
@@ -1228,6 +1236,29 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
     /* Result */
     (*ap) = a;
     (*cp) = c;
+}
+
+void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
+{
+    map_info_aux(y, x, ap, cp, tap, tcp, false);
+}
+
+/*
+ * Return only the terrain layer selected by map_info().  This keeps terrain
+ * overlays from asking the full map renderer to inspect objects or actors
+ * (which can consume hallucination/multi-hued display randomness).  The
+ * terrain selection itself remains the map_info() path above, including
+ * style, lighting, visibility, and feature-underlay handling.
+ */
+void map_info_terrain(int y, int x, byte* tap, char* tcp)
+{
+    byte a = TERM_DARK;
+    char c = ' ';
+
+    if (!tap || !tcp)
+        return;
+
+    map_info_aux(y, x, &a, &c, tap, tcp, true);
 }
 
 /*

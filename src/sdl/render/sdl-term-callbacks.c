@@ -1804,14 +1804,15 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
         fixture_cell = cave_fixture_at(dy, dx) != CAVE_FIXTURE_NONE;
     if (terrain_tile && fixture_cell) {
         /* Opaque wall fixtures must remain on top of the transition pixels. */
-        material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst);
+        material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, false);
         chasm_edge_drawn = sdl_chasm_edge_draw(dy, dx, dst);
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
     } else if (terrain_tile) {
-        /* Liquids and elemental banks draw first so their edges remain visible
-         * through the generic material transition pass. */
+        /* Authored terrain contours own their floor pixels. Generic contacts
+         * may add wall shading, but must not repaint these contours. A failed
+         * atlas load leaves the generic material fallback available. */
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
-        material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst);
+        material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, fixture_drawn);
         chasm_edge_drawn = sdl_chasm_edge_draw(dy, dx, dst);
     }
     if (sdl_rage_wall_tint_active(dy, dx) && (cave_m_idx[dy][dx] != 0))

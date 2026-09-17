@@ -4,15 +4,15 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 531 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 536 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
-`src/init/init-paths.c` resolves `ANGBAND_DIR_HELP` from the installed data root. `src/tutorial/tutorial.c` lazily reads `tutorials.json` from that directory. `build-cmake.bat` stages Help for both Windows deployments; `CMakeLists.txt` includes Help JSON in iOS resources; `android/app/build.gradle` synchronizes the game library into Android assets before building. The validator checks these source routes; this is not confirmation of a device installation.
+`src/init/init-paths.c` resolves `ANGBAND_DIR_HELP` from the installed data root. `src/tutorial/tutorial.c` lazily reads `tutorials.json` from that directory. `build-cmake.bat` stages Help for both Windows deployments, and both release packaging scripts include it in clean packages; `CMakeLists.txt` includes Help JSON in iOS resources; `android/app/build.gradle` synchronizes the game library into Android assets before building. The validator checks these source routes; this is not confirmation of a device installation.
 
 ## Tutorial modes
 
-Default: **Extended**. The catalogue has **153 Normal** lessons and **378 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
+Default: **Extended**. The catalogue has **154 Normal** lessons and **382 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
 
@@ -4020,7 +4020,7 @@ Level: **Extended**.
 
 Priority: **38** (higher appears first).
 
-Archive compatibility entry. New encounters use `terrain.20`.
+Archive compatibility entry. New encounters use `terrain.20` for this terrain family.
 
 **1. Info**
 
@@ -8779,3 +8779,95 @@ A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow
 Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
 
 Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Deep-water bridge (horizontal)
+
+`terrain.98`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Deep-water bridge (vertical)
+
+`terrain.99`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+Archive compatibility entry. New encounters use `terrain.88` for this terrain family.
+
+**1. Info**
+
+A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.
+
+Trigger: Uses the shared bridge lesson for known bridges on the current square or visibly adjacent.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-bridge.c`, `lib/edit/terrain.txt`.
+
+## Deep water
+
+`terrain.100`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+**1. Info**
+
+Moving into, through or out of deep water takes four times normal movement energy. You cannot attack while submerged. Plan a route to dry ground before entering; a bridge provides dry footing above the water.
+
+**2. Info**
+
+Swimming splashes for -3 Stealth. Each water square entered while healthy has a 0.5% disease risk. Standing still adds no movement penalty or infection roll, but leaves you unable to attack until you reach safe footing.
+
+Trigger: Feature 100 is on the player square or visibly adjacent and marked; the observation expires when no known deep water remains nearby.
+
+Sources: `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/cmd/combat/cmd-combat.c`, `src/cmd/combat/cmd-ranged.c`, `src/cmd/item/cmd-item-activate.c`.
+
+## Flooding trap
+
+`terrain.101`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+**1. Info**
+
+This trap releases shallow water beneath you. After each of your next two completed actions, the flood spreads farther across nearby floor and shallow water. On the second action its center becomes deep water, where movement takes four times normal energy and you cannot attack.
+
+**2. Info**
+
+Inspect a revealed trap before stepping onto it. Go around it or check the Disarm interaction and its risks. If the flood has already begun, head for dry ground; reading menus does not advance it, but waiting or another action does.
+
+Trigger: Feature 101 is on the player square or visibly adjacent and marked; hidden traps are not introduced before discovery.
+
+Sources: `lib/edit/terrain.txt`, `src/cave/cave-flood.c`, `src/cave/cave-water.c`, `src/cmd/world/cmd-interact.c`, `src/cmd/combat/cmd-combat.c`.
+
+## Deep water
+
+`world.deepwater`
+
+Level: **Normal**.
+
+Priority: **45** (higher appears first).
+
+**1. Info**
+
+Swimming into, through or out of deep water takes four times normal movement energy, and you cannot attack while submerged. Prefer dry ground or a bridge, and plan your exit before entering. Swimming also splashes and carries a small disease risk.
+
+Trigger: Known deep water is on the current square or visibly adjacent; the observation expires when none remains nearby.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cave/cave-water.c`, `src/cmd/combat/cmd-combat.c`, `src/cmd/combat/cmd-ranged.c`.

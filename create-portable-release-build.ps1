@@ -65,7 +65,7 @@ if ($IncludeCoverArt) {
 Write-Host "========================================" -ForegroundColor Cyan
 
 # Define game data folders to copy (content only)
-$libFoldersToCopy = @('edit', 'pref', 'xtra', 'docs')
+$libFoldersToCopy = @('edit', 'pref', 'xtra', 'docs', 'help')
 
 # Folders to create but leave empty (for runtime use)
 $emptyLibFolders = @('data', 'apex', 'save', 'user')

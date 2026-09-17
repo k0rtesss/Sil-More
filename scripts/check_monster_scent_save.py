@@ -68,6 +68,7 @@ int fixture_read_dungeon(const byte* buffer, size_t length, int extra,
     savefile_has_song_duels = savefile_has_thrall_quest = true;
     savefile_has_thrall_quest_requested = savefile_has_cave_info_hi = true;
     savefile_has_cave_rewired = savefile_has_cave_natural = true;
+    savefile_has_cave_water_flow = savefile_version_at_least(0, 9, 8, 12);
     savefile_has_item_bonuses = true;
     objects_count_prefetch = 0xFFFF; color_rle_pair_prefetched = false;
     int result = load_read_dungeon();
@@ -138,6 +139,8 @@ static void fresh_map(void)
             cave_color[y][x] = 0;
         }
     cave_fixtures_clear();
+    cave_flood_clear();
+    cave_water_flow_reset();
     for (int i = FLOW_WANDERING_HEAD; i <= FLOW_WANDERING_TAIL; i++)
     { flow_center_y[i] = flow_center_x[i] = 0; wandering_pause[i] = 0; }
     scent_when = 100;
@@ -211,12 +214,15 @@ static void test_current_roundtrip(void)
             expected[y][x] = scent_export_cell(y, x);
     size_t dungeon_size, length = fixture_write_dungeon(encoded, sizeof(encoded), &dungeon_size);
     decode(encoded, plain, length);
-    size_t scent_start = dungeon_size - 2 - 20 * 24;
+    /* The current format follows scent with an empty flooding-trap block. */
+    assert(plain[dungeon_size-4] == 0 && plain[dungeon_size-3] == 0xF1
+        && plain[dungeon_size-2] == 0 && plain[dungeon_size-1] == 0);
+    size_t scent_start = dungeon_size - 4 - 2 - 20 * 24;
     assert(plain[scent_start] == 0xE6 && plain[scent_start+1] == 0x5C);
 
     fresh_map(); scent_when = 17; cave_when[7][7] = 18;
     u32b sentinel; size_t consumed;
-    assert(fixture_read_dungeon(encoded, length, 7, &sentinel, &consumed) == 0);
+    assert(fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed) == 0);
     assert(sentinel == 0xA1B2C3D4U && consumed == length);
     assert(p_ptr->cur_map_hgt == 20 && p_ptr->cur_map_wid == 24);
     for (int y = 0; y < 20; y++) for (int x = 0; x < 24; x++)
@@ -235,27 +241,27 @@ static void test_current_roundtrip(void)
     assert(monster_ai_confidence(m, MON_AI_FOLLOW_THROUGH) == 1);
     assert(monster_ai_confidence(m, MON_AI_SLAY_FEAR) == -3);
     assert(!monster_ai_confidence(m, MON_AI_MULTI_TARGET));
-    puts("Real .7 dungeon roundtrip: normalized ages, ice/poison/lava/water, split monster AI/history/recovery, following sentinel PASS.");
+    puts("Current dungeon roundtrip: normalized ages, ice/poison/lava/water, split monster AI/history/recovery, following sentinel PASS.");
 
     /* Keep genuine bytes up to each tested truncation boundary. */
     const size_t truncations[] = { scent_start, scent_start+1,
-        scent_start+2, scent_start+2+20*12, dungeon_size-1 };
+        scent_start+2, scent_start+2+20*12, scent_start+2+20*24-1 };
     for (size_t n = 0; n < sizeof(truncations)/sizeof(truncations[0]); n++)
     {
         fresh_map();
-        assert(fixture_read_dungeon(encoded, truncations[n], 7, &sentinel, &consumed) != 0);
+        assert(fixture_read_dungeon(encoded, truncations[n], VERSION_EXTRA, &sentinel, &consumed) != 0);
     }
     /* Re-encode the changed decoded byte, preserving the rest of the stream. */
     plain[scent_start] = 0;
     encode(plain, modified, length); fresh_map();
-    assert(fixture_read_dungeon(modified, length, 7, &sentinel, &consumed) != 0);
+    assert(fixture_read_dungeon(modified, length, VERSION_EXTRA, &sentinel, &consumed) != 0);
     plain[scent_start] = 0xE6;
     byte original_age = plain[scent_start + 2 + 8*24 + 8];
     plain[scent_start + 2 + 8*24 + 8] = 82;
     encode(plain, modified, length); fresh_map();
-    assert(fixture_read_dungeon(modified, length, 7, &sentinel, &consumed) != 0);
+    assert(fixture_read_dungeon(modified, length, VERSION_EXTRA, &sentinel, &consumed) != 0);
     plain[scent_start + 2 + 8*24 + 8] = original_age;
-    puts("Real .7 reader: five scent header/grid truncations, malformed magic and out-of-range age rejected PASS.");
+    puts("Current reader: five scent header/grid truncations, malformed magic and out-of-range age rejected PASS.");
 }
 
 static void test_monster_record_legacy_compatibility(void)
@@ -300,7 +306,7 @@ static void test_monster_record_legacy_compatibility(void)
     size_t modern_length = fixture_write_monster(&source, encoded, sizeof(encoded));
     u32b sentinel; size_t consumed;
     memset(&restored, 0x55, sizeof(restored));
-    assert(fixture_read_monster(encoded, modern_length, 7, &restored,
+    assert(fixture_read_monster(encoded, modern_length, VERSION_EXTRA, &restored,
         &sentinel, &consumed) == 0);
     assert(sentinel == 0xB4C3D2E1U && consumed == modern_length);
     assert(restored.ai.observations[MON_AI_FIRE].value == 2);
@@ -324,7 +330,7 @@ static void test_monster_record_legacy_compatibility(void)
     size_t appended = (MON_AI_FEATURE_COUNT - MON_AI_IMPALE) * 7;
     size_t removed_start = ai_start + MON_AI_IMPALE * 7;
     memmove(plain + removed_start, plain + removed_start + appended,
-        modern_length - removed_start);
+        modern_length - removed_start - appended);
     size_t old_slot = ai_start + MON_AI_MULTI_TARGET * 7;
     plain[old_slot] = 3; plain[old_slot + 1] = 0; plain[old_slot + 2] = 20;
     size_t legacy_length = modern_length - appended;
@@ -352,14 +358,28 @@ static void test_monster_record_legacy_compatibility(void)
 
 static void test_legacy_absence(void)
 {
-    /* No monster records: .5 and .6 dungeon lanes differ only in the scent
-     * suffix. Legacy monster records are separately checked by the poison suite. */
+    /* Remove all later dungeon blocks to produce a genuine .5 layout.
+     * Legacy monster records are separately checked by the poison suite. */
     fresh_map();
     size_t dungeon_size, length = fixture_write_dungeon(encoded, sizeof(encoded), &dungeon_size);
     decode(encoded, plain, length);
-    size_t old_dungeon_size = dungeon_size - 2 - 20*24;
+    size_t old_dungeon_size = dungeon_size - 4 - 2 - 20*24;
+    assert(plain[old_dungeon_size] == 0xE6
+        && plain[old_dungeon_size+1] == 0x5C);
     memmove(plain + old_dungeon_size, plain + dungeon_size, 4);
     length = old_dungeon_size + 4;
+    /* A reset 20x24 water-flow map has two calm RLE runs (255 + 225).
+     * Locate and verify its unique block before removing the .12 addition. */
+    const byte water_block[] = {0xF0, 0xC4, 255, 0, 225, 0};
+    size_t water_offset = 0;
+    int water_matches = 0;
+    for (size_t i = 0; i + sizeof(water_block) <= length; ++i)
+        if (!memcmp(plain + i, water_block, sizeof(water_block)))
+        { water_offset = i; water_matches++; }
+    assert(water_matches == 1);
+    memmove(plain + water_offset, plain + water_offset + sizeof(water_block),
+        length - water_offset - sizeof(water_block));
+    length -= sizeof(water_block);
     encode(plain, modified, length);
     fresh_map(); cave_when[7][7] = scent_when;
     u32b sentinel; size_t consumed;
@@ -377,6 +397,7 @@ def main():
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index("static const char* guids[]")]
     prefix += '\n#include "monster/monster-ai.h"\n#include "monster/monster-senses.h"\n'
     prefix += '#include "cave/cave-fixtures.h"\n'
+    prefix += '#include "cave/cave-flood.h"\n#include "cave/cave-water-flow.h"\n'
     init = ENGINE_FIXTURE[ENGINE_FIXTURE.index("int main(int argc,char** argv)"):]
     init = init[:init.index("    check_templates();")]
     harness = prefix + fixture_function("terminal_extra") + "\n"

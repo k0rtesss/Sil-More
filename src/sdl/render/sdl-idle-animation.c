@@ -313,8 +313,7 @@ static bool draw_elemental_transition(int y, int x, const SDL_FRect* dst)
     bool live = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
     int light = live ? 255 : 96;
     SDL_SetTextureColorMod(transition, light, light, light);
-    SDL_RenderTexture(g_state.renderer, transition, &src, dst);
-    return true;
+    return SDL_RenderTexture(g_state.renderer, transition, &src, dst);
 }
 
 static SDL_Texture* load_liquid_transition_texture(byte feat)

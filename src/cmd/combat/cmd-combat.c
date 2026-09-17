@@ -2785,7 +2785,7 @@ static bool handle_peaceful_attack_target(int y, int x, int attack_type)
             msg_format("You stop before you bump into %s.", m_name);
     }
 
-    if (!player_attacked)
+    if (attack_type == ATT_MAIN && !player_attacked)
     {
         p_ptr->previous_action[0] = ACTION_NOTHING;
         p_ptr->energy_use = 0;
@@ -2946,7 +2946,7 @@ void py_attack_aux(int y, int x, int attack_type)
     // Cancel the attack if needed
     if (abort_attack)
     {
-        if (!player_attacked)
+        if (attack_type == ATT_MAIN && !player_attacked)
         {
             // reset the action type
             p_ptr->previous_action[0] = ACTION_NOTHING;
@@ -3718,6 +3718,15 @@ void py_attack(int y, int x, int attack_type)
     else
     {
         py_attack_aux(y, x, attack_type);
+    }
+
+    /* Only the requested attack owns the action cost. Automatic attacks
+     * cannot refund movement, and an early skipped target in Rage, Whirlwind
+     * or Impale must not make a later attack free. */
+    if (attack_type == ATT_MAIN && !player_attacked)
+    {
+        p_ptr->previous_action[0] = ACTION_NOTHING;
+        p_ptr->energy_use = 0;
     }
 }
 

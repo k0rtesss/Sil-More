@@ -13999,6 +13999,137 @@
       ],
       "terrain_serial": 97,
       "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.98",
+      "title": "Deep-water bridge (horizontal)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 98,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.99",
+      "title": "Deep-water bridge (vertical)",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "A bridge provides dry footing across water, a chasm, lava, poison or ice. Follow the visible deck to the other bank. Moving along the deck does not apply the terrain's contact effects; stepping off it puts you onto the terrain shown beneath and beside it.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Uses the shared bridge lesson for known bridges on the current square or visibly adjacent."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-bridge.c",
+        "lib/edit/terrain.txt"
+      ],
+      "terrain_serial": 99,
+      "alias_of": "terrain.88"
+    },
+    {
+      "id": "terrain.100",
+      "title": "Deep water",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "Moving into, through or out of deep water takes four times normal movement energy. You cannot attack while submerged. Plan a route to dry ground before entering; a bridge provides dry footing above the water.",
+          "kind": "info",
+          "anchor": "map"
+        },
+        {
+          "text": "Swimming splashes for -3 Stealth. Each water square entered while healthy has a 0.5% disease risk. Standing still adds no movement penalty or infection roll, but leaves you unable to attack until you reach safe footing.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Feature 100 is on the player square or visibly adjacent and marked; the observation expires when no known deep water remains nearby."
+      },
+      "sources": [
+        "lib/edit/terrain.txt",
+        "src/cave/cave-water.c",
+        "src/cmd/combat/cmd-combat.c",
+        "src/cmd/combat/cmd-ranged.c",
+        "src/cmd/item/cmd-item-activate.c"
+      ],
+      "terrain_serial": 100
+    },
+    {
+      "id": "terrain.101",
+      "title": "Flooding trap",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "This trap releases shallow water beneath you. After each of your next two completed actions, the flood spreads farther across nearby floor and shallow water. On the second action its center becomes deep water, where movement takes four times normal energy and you cannot attack.",
+          "kind": "info",
+          "anchor": "map"
+        },
+        {
+          "text": "Inspect a revealed trap before stepping onto it. Go around it or check the Disarm interaction and its risks. If the flood has already begun, head for dry ground; reading menus does not advance it, but waiting or another action does.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Feature 101 is on the player square or visibly adjacent and marked; hidden traps are not introduced before discovery."
+      },
+      "sources": [
+        "lib/edit/terrain.txt",
+        "src/cave/cave-flood.c",
+        "src/cave/cave-water.c",
+        "src/cmd/world/cmd-interact.c",
+        "src/cmd/combat/cmd-combat.c"
+      ],
+      "terrain_serial": 101
+    },
+    {
+      "id": "world.deepwater",
+      "title": "Deep water",
+      "level": "normal",
+      "priority": 45,
+      "steps": [
+        {
+          "text": "Swimming into, through or out of deep water takes four times normal movement energy, and you cannot attack while submerged. Prefer dry ground or a bridge, and plan your exit before entering. Swimming also splashes and carries a small disease risk.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Known deep water is on the current square or visibly adjacent; the observation expires when none remains nearby."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cave/cave-water.c",
+        "src/cmd/combat/cmd-combat.c",
+        "src/cmd/combat/cmd-ranged.c"
+      ]
     }
   ]
 }

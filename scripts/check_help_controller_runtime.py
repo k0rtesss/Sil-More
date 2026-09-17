@@ -84,8 +84,8 @@ static void check_dpad_diagonals(void)
     sdl_gamepad_reset_modifiers();
     movement_input_clear_commands();
 
-    /* Cover all diagonals, both press orders and both driver release orders.
-     * Age the pending press directly so tests need no real-time sleeps. */
+    /* Overlapping presses form a diagonal; two released taps remain separate
+     * cardinal moves. Age the pending press so tests need no real-time sleeps. */
     for (unsigned d = 0; d < N_ELEMENTS(delays); d++) {
         config.gamepad_dpad_diagonal_delay_ms = delays[d];
         for (unsigned p = 0; p < N_ELEMENTS(pairs); p++) {
@@ -99,10 +99,21 @@ static void check_dpad_diagonals(void)
                 g_gamepad_state.dpad_pending_time = SDL_GetTicksNS()
                     - (delays[d] / 2) * 1000000ULL;
                 dpad_event(pairs[p].second, true);
-                expect_move(pairs[p].diagonal);
+                if (release_first) {
+                    int first = pairs[p].first == SDL_GAMEPAD_BUTTON_DPAD_UP ? 8
+                        : pairs[p].first == SDL_GAMEPAD_BUTTON_DPAD_DOWN ? 2
+                        : pairs[p].first == SDL_GAMEPAD_BUTTON_DPAD_LEFT ? 4 : 6;
+                    expect_move(first);
+                } else expect_move(pairs[p].diagonal);
                 if (!release_first) dpad_event(pairs[p].first, false);
                 dpad_event(pairs[p].second, false);
-                assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true));
+                if (release_first) {
+                    int second = pairs[p].second == SDL_GAMEPAD_BUTTON_DPAD_UP ? 8
+                        : pairs[p].second == SDL_GAMEPAD_BUTTON_DPAD_DOWN ? 2
+                        : pairs[p].second == SDL_GAMEPAD_BUTTON_DPAD_LEFT ? 4 : 6;
+                    assert(sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true));
+                    expect_move(second);
+                } else assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true));
                 expect_key(0);
             }
         }

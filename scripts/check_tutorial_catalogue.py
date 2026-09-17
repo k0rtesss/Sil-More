@@ -120,6 +120,10 @@ def validate_resource_routes():
     batch = (ROOT / 'build-cmake.bat').read_text(encoding='utf-8-sig')
     for folder in ('sil-more-windows-sdl3', 'sil-more-windows-sdl3-portable'):
         assert re.search(r'^xcopy\s+[^\r\n]*\blib\\help\s+' + re.escape(folder) + r'\\lib\\help\s*$', batch, re.M | re.I), 'Windows help staging missing: ' + folder
+    for script in ('create-release-build.ps1', 'create-portable-release-build.ps1'):
+        release = (ROOT / script).read_text(encoding='utf-8-sig')
+        copied = re.search(r'\$libFoldersToCopy\s*=\s*@\(([^)]+)\)', release)
+        assert copied and 'help' in re.findall(r"'([^']+)'", copied.group(1)), 'Release omits Help/tutorial resources: ' + script
     cmake = (ROOT / 'CMakeLists.txt').read_text(encoding='utf-8-sig')
     assert re.search(r'file\(GLOB\s+SIL_RES_HELP\b[^)]*"lib/help/\*\.json"', cmake), 'iOS help resources exclude the JSON catalogue'
     assert re.search(r'foreach\(_file\s+\$\{SIL_RES_HELP\}\)[\s\S]*?MACOSX_PACKAGE_LOCATION\s+"Resources/lib/help"', cmake), 'iOS help resources have no bundle destination'
@@ -307,7 +311,8 @@ def write_reference(lessons, counts, unwired):
     lines += ['## Resource route', '',
               '`src/init/init-paths.c` resolves `ANGBAND_DIR_HELP` from the installed data root. '
               '`src/tutorial/tutorial.c` lazily reads `tutorials.json` from that directory. '
-              '`build-cmake.bat` stages Help for both Windows deployments; `CMakeLists.txt` '
+              '`build-cmake.bat` stages Help for both Windows deployments, and both release '
+              'packaging scripts include it in clean packages; `CMakeLists.txt` '
               'includes Help JSON in iOS resources; `android/app/build.gradle` synchronizes '
               'the game library into Android assets before building. The validator checks '
               'these source routes; this is not confirmation of a device installation.', '']
@@ -344,7 +349,8 @@ def write_reference(lessons, counts, unwired):
         lines += ['Level: **' + lesson['level'].capitalize() + '**.', '']
         lines += [f"Priority: **{lesson['priority']}** (higher appears first).", '']
         if lesson.get('alias_of'):
-            lines += [f"Archive compatibility entry. New encounters use `{lesson['alias_of']}`.", '']
+            suffix = ' for this terrain family' if lesson['id'].startswith('terrain.') else ''
+            lines += [f"Archive compatibility entry. New encounters use `{lesson['alias_of']}`{suffix}.", '']
         for number, step in enumerate(lesson['steps'], 1):
             lines += [f"**{number}. {step['kind'].capitalize()}**", '', step['text'], '']
             if step['kind'] == 'action':

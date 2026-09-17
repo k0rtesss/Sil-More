@@ -365,6 +365,27 @@ static void check_live_checkpoints(void)
         && !pending_lesson("world.ice") && pending_lesson("terrain.86"));
     cave_feat[5][6]=FEAT_FLOOR;
     live_checkpoint(); assert(!pending_lesson("world.ice") && !pending_lesson("terrain.86"));
+    cave_feat[5][6]=FEAT_DEEP_WATER;
+    live_checkpoint(); assert(pending_lesson("terrain.100") && !pending_lesson("world.deepwater"));
+    tutorial_set_mode(TUTORIAL_MODE_NORMAL);
+    live_checkpoint(); assert(!pending_lesson("terrain.100") && pending_lesson("world.deepwater"));
+    cave_info[5][6]=CAVE_MARK;
+    live_checkpoint(); assert(!pending_lesson("world.deepwater"));
+    cave_info[5][6]=CAVE_MARK|CAVE_SEEN;
+    live_checkpoint(); assert(pending_lesson("world.deepwater"));
+    cave_feat[5][6]=FEAT_FLOOR;
+    live_checkpoint(); assert(!pending_lesson("world.deepwater"));
+    tutorial_set_mode(TUTORIAL_MODE_EXTENDED);
+    cave_feat[5][6]=FEAT_TRAP_FLOOD;
+    live_checkpoint(); assert(pending_lesson("terrain.101") && !pending_lesson("world.trap"));
+    cave_feat[5][6]=FEAT_WATER;
+    live_checkpoint(); assert(!pending_lesson("terrain.101") && pending_lesson("terrain.84"));
+    cave_feat[5][6]=FEAT_BRIDGE_DEEP_WATER_H;
+    live_checkpoint(); assert(!pending_lesson("terrain.84") && pending_lesson("terrain.88"));
+    cave_feat[5][6]=FEAT_BRIDGE_DEEP_WATER_V;
+    live_checkpoint(); assert(pending_lesson("terrain.88") && !pending_lesson("terrain.100"));
+    cave_feat[5][6]=FEAT_FLOOR;
+    live_checkpoint(); assert(!pending_lesson("terrain.88"));
     cave_feat[5][6]=FEAT_SUNLIGHT; cave_info[5][6]=CAVE_MARK|CAVE_SEEN;
     live_checkpoint(); assert(pending_lesson("terrain.9"));
     cave_feat[5][6]=FEAT_FLOOR; cave_feat[5][5]=FEAT_SUNLIGHT; cave_info[5][5]=CAVE_MARK;
@@ -611,8 +632,8 @@ int main(void)
     assert(!tutorial_game_command_allowed(';',6));
     cave_feat[5][6]=FEAT_CHASM;
     assert(!tutorial_game_command_allowed(';',6));
-    const int hazard_features[]={FEAT_LAVA,FEAT_POISON,FEAT_WATER,FEAT_ICE};
-    for(int i=0;i<4;++i) {
+    const int hazard_features[]={FEAT_LAVA,FEAT_POISON,FEAT_WATER,FEAT_ICE,FEAT_DEEP_WATER,FEAT_TRAP_FLOOD};
+    for(int i=0;i<(int)N_ELEMENTS(hazard_features);++i) {
         cave_feat[5][6]=hazard_features[i];
         assert(!tutorial_game_command_allowed(';',6));
     }
@@ -873,11 +894,12 @@ def main():
                         'steps':[{'kind':'info','text':'Feature or description information.'}]})
     for id in ('status.poisoned','status.heavy_stun','status.health','status.voice',
                'status.hungry','status.weak','status.starving','world.water','world.lava',
-               'world.ice','world.poison','menu.inventory'):
+               'world.ice','world.poison','world.deepwater','menu.inventory'):
         lessons.append({'id':id,'title':id,'level':'normal',
                         'steps':[{'kind':'info','text':'Current context: {subject}'}]})
     for id in ('terrain.9','terrain.19','terrain.20','terrain.65',
-               'terrain.84','terrain.85','terrain.86','terrain.87'):
+               'terrain.84','terrain.85','terrain.86','terrain.87','terrain.88',
+               'terrain.100','terrain.101'):
         lessons.append({'id':id,'title':id,'level':'extended',
                         'steps':[{'kind':'info','text':'Detailed terrain context.'}]})
     lessons.extend([

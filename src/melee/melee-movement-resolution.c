@@ -728,6 +728,12 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
         if (!m_ptr->r_idx || p_ptr->is_dead)
             return;
 
+        /* A reaction can knock the mover away and abort monster_swap.
+         * It never reached the intended grid: do not collect its items,
+         * advertise its scent or record a completed step there. */
+        if (m_ptr->fy != ny || m_ptr->fx != nx)
+            goto movement_done;
+
         if (m_ptr->r_idx && (oy != ny || ox != nx)
             && m_ptr->fy == ny && m_ptr->fx == nx)
         {
@@ -992,6 +998,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
         }
     } /* End of monster's move */
 
+movement_done:
     /* Notice changes in view */
     if (do_view)
     {

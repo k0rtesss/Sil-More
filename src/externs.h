@@ -492,6 +492,7 @@ extern bool seen_by_keen_senses(int y, int x);
 extern bool cave_valid_bold(int y, int x);
 extern bool feat_supports_lighting(int feat);
 extern void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp);
+extern void map_info_terrain(int y, int x, byte* tap, char* tcp);
 extern void map_info_default(int y, int x, byte* ap, char* cp);
 extern int player_tile_offset(void);
 extern void move_cursor_relative(int y, int x);

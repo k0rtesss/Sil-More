@@ -417,7 +417,7 @@ static void test_save_records(void)
         size_t size = ability_save_record(encoded, sizeof(encoded), m);
         CHECK(size > 4);
         memset(&restored, 0xff, sizeof(restored));
-        CHECK(ability_load_record(encoded, size, 6, &restored, &sentinel) == size);
+        CHECK(ability_load_record(encoded, size, VERSION_EXTRA, &restored, &sentinel) == size);
         CHECK(sentinel == 0xa53c);
         CHECK(restored.r_idx == m->r_idx && restored.hp == m->hp);
         CHECK(restored.energy == -120 && restored.poisoned == 37);
@@ -444,8 +444,8 @@ static void test_save_records(void)
         CHECK(restored.ai.attack_chain == 3 && restored.ai.attack_turn == 96);
         if (recovery) CHECK(!monster_abilities_can_react(&restored));
 
-        /* Construct the real .4 and .5 layouts separately. The .6 appended
-         * record is 29 (s16,byte,s32) observations, 22 sensory bytes, 13
+        /* Construct the real .4 and .5 layouts separately. The current appended
+         * record has MON_AI_FEATURE_COUNT (s16,byte,s32) observations, 22 sensory bytes, 13
          * objective/history bytes and two s32 history timestamps. No native
          * struct sizeof/padding and no assumption that abilities are last. */
         const size_t ai_bytes = 7 * MON_AI_FEATURE_COUNT + 22 + 13 + 8;
@@ -484,13 +484,13 @@ static void test_save_records(void)
     m->skip_next_turn = false; /* Reader repairs pending recovery's skip bit. */
     size_t size = ability_save_record(encoded, sizeof(encoded), m);
     memset(&restored, 0, sizeof(restored));
-    CHECK(ability_load_record(encoded, size, 6, &restored, &sentinel) == size);
+    CHECK(ability_load_record(encoded, size, VERSION_EXTRA, &restored, &sentinel) == size);
     CHECK(restored.smite_recovery == 1 && restored.skip_next_turn);
     CHECK(!monster_abilities_can_react(&restored));
     m->smite_recovery = 255;
     m->vengeance = 255;
     size = ability_save_record(encoded, sizeof(encoded), m);
-    CHECK(ability_load_record(encoded, size, 6, &restored, &sentinel) == size);
+    CHECK(ability_load_record(encoded, size, VERSION_EXTRA, &restored, &sentinel) == size);
     CHECK(sentinel == 0xa53c);
     CHECK(restored.smite_recovery == 2 && restored.vengeance == 1);
 }

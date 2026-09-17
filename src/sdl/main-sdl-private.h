@@ -3211,7 +3211,7 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
     byte a, char c, byte ta, char tc);
 bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst);
 bool sdl_material_edge_draw(int y, int x, byte ta, char tc,
-    const SDL_FRect* dst);
+    const SDL_FRect* dst, bool preserve_floor_contour);
 bool sdl_material_edge_at(int y, int x);
 byte sdl_chasm_edge_mask(int y, int x);
 bool sdl_chasm_edge_draw(int y, int x, const SDL_FRect* dst);

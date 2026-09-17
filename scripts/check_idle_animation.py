@@ -637,13 +637,22 @@ static void animation_tests(void) {
     test_flags = SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_HIDDEN; expect_paused(now);
     test_flags = SDL_WINDOW_INPUT_FOCUS;
     p_ptr->wy = 1; expect_paused(now); p_ptr->wy = 0;
-    /* Leaving sight must neither dim nor freeze explored torches/braziers. */
-    SDL_Surface* seen = capture(3);
+    /* Leaving sight must neither dim nor freeze the fixture artwork. The
+     * transparent surrounding wall can legitimately change its material
+     * contact treatment on loss of sight, so compare the fixture composited
+     * over its current underlay instead of assuming the whole canvas matches. */
     cave_info[9][11] &= ~CAVE_SEEN; cave_info[9][19] &= ~CAVE_SEEN;
     draw_cell(9, 11, false); draw_cell(9, 19, false);
     SDL_Surface* remembered = capture(4);
-    assert(differences(seen, remembered) == 0);
-    SDL_DestroySurface(seen);
+    byte steps, phase;
+    fixture_timing(9,11,CAVE_FIXTURE_WALL_TORCH,&steps,&phase);
+    expect_existing_torch_frame(remembered,9,11,
+        fixture_frame(frame_tick,steps,phase,4));
+    fixture_timing(9,19,CAVE_FIXTURE_BRAZIER,&steps,&phase);
+    expect_fixture_frame(remembered,9,19,
+        fixture_frame_start(CAVE_FIXTURE_BRAZIER) - FIXTURE_TORCH_FRAME_COUNT
+            + fixture_frame(frame_tick,steps,phase,
+                fixture_frame_count(CAVE_FIXTURE_BRAZIER)));
     now = next_animation_time(frame_tick * IDLE_STEP_NS);
     assert(sdl_idle_animation_timeout_ms(now) == 0);
     sdl_idle_animation_update(now);

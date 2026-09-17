@@ -70,8 +70,8 @@ $legacyCoverArtPath = Resolve-ScriptRelativePath "sil-more_beta 0.9/CoverArt"
 $archiveScriptPath = Resolve-ScriptRelativePath "create-distribution-archive.ps1"
 $releaseApkPath = Resolve-ScriptRelativePath "android/app/build/outputs/apk/sideload/release/app-sideload-release.apk"
 
-# Define game data folders to copy (content only) - edit, pref, xtra, docs
-$libFoldersToCopy = @('edit', 'pref', 'xtra', 'docs')
+# Define game data folders to copy, including the Help/tutorial catalogue.
+$libFoldersToCopy = @('edit', 'pref', 'xtra', 'docs', 'help')
 
 # Folders to create but leave empty (for runtime use, no content copied)
 $emptyLibFolders = @('data', 'apex', 'save', 'user')
