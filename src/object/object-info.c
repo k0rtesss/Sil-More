@@ -2754,6 +2754,11 @@ bool object_info_overlay_show_multi(const object_type** objects,
     if (object_info_blocked_by_hallucination())
         return false;
 
+    /* The description owns the foreground.  Retire transient context and
+     * interaction-result popups so they cannot render over it or capture its
+     * input. */
+    sdl_question_menu_clear_nonblocking();
+
     SDL_memset(&capture, 0, sizeof(capture));
     use_story_font = story_object_desc_enabled();
     overlay_width = object_info_screen_preferred_capture_width(use_story_font);
@@ -2974,6 +2979,11 @@ char object_info_screen_multi_with_actions(const object_type** objects,
 
     if (object_info_blocked_by_hallucination())
         return 0;
+
+    /* The description owns the foreground.  Retire transient context and
+     * interaction-result popups so they cannot render over it or capture its
+     * input. */
+    sdl_question_menu_clear_nonblocking();
 
     SDL_memset(&capture, 0, sizeof(capture));
     use_story_font = story_object_desc_enabled();

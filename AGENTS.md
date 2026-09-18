@@ -3,10 +3,11 @@
 High-signal repo guidance for coding agents (Codex CLI, Copilot, etc.). This is the "what matters / where to look / what not to break" file.
 
 ## Subagent Policy
-- Use subagents proactively when independent parallel work would materially help the task; the user does not need to request them.
-- Choose the subagent model and reasoning level yourself based on task difficulty.
-- Use `gpt-5.6-luna` with `max` reasoning (Luna Max), or `gpt-6-astra` with `low`, `medium`, `high`, or `xhigh` reasoning (Astra low through very high), depending on the difficulty of the work.
-- When you use a subagent, report which model and reasoning level you chose and why.
+- Subagents are optional, not a default. Use one proactively only when there is a concrete expected net benefit: it should visibly improve the result (for example, through an independent review, genuinely separate investigation, or additional validation path) or reduce total token cost by parallelizing work or keeping large context out of the main task.
+- Do not delegate routine, narrow, or tightly coupled work when duplicated context, coordination, synthesis, or review would cancel the benefit. A single focused delegation is preferable to several overlapping ones. An explicit user request not to use subagents always wins.
+- Before dispatching, define a bounded, independent subtask and the quality or token-cost benefit it is expected to provide. The main agent remains responsible for combining the result, checking it against the repository, and making the final decision.
+- Choose the least expensive available model and reasoning level that can complete the subtask reliably. The supported choices are `gpt-5.6-luna` with `max` reasoning (Luna Max), or `gpt-6-astra` with `low`, `medium`, `high`, or `xhigh` reasoning (Astra low through very high), selected according to difficulty and the expected benefit.
+- When you use a subagent, report the model, reasoning level, delegated subtask, and concrete reason delegation was worth its cost.
 
 ## Project Snapshot
 - Language: C17 (see `CMakeLists.txt`).

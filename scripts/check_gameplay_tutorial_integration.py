@@ -155,6 +155,7 @@ static void activate_description(const char *id)
     mock_description_present=true;
     mock_description_events=0;
     mock_description_keys=0;
+    mock_description_popup_clears=0;
     activate(id, "staff");
     assert(tutorial_get_view(&view));
     if (view.can_continue) { tutorial_continue(); tutorial_checkpoint(true); }
@@ -180,6 +181,7 @@ static void check_description_routes(const object_type *item)
     assert(tutorial_lesson_status("item.first_description")==TUTORIAL_IN_PROGRESS);
     mock_description_present=true;
     assert(object_info_overlay_show_multi(objects,NULL,1));
+    assert(mock_description_popup_clears > 0);
     assert(tutorial_lesson_status("item.first_description")==TUTORIAL_COMPLETED);
 
     activate_description("item.first_description");
@@ -802,6 +804,7 @@ static bool object_info_overlay_capture_active;
 static bool new_paragraph;
 static bool mock_description_capture=true, mock_description_present=true;
 static int mock_description_events, mock_description_keys;
+static int mock_description_popup_clears;
 s16b character_icky;
 void (*text_out_hook)(byte,cptr);
 int text_out_wrap, text_out_indent;
@@ -831,6 +834,7 @@ bool sdl_description_overlay_present(const byte *a,const char *c,const byte *ta,
     return mock_description_present;
 }
 void sdl_description_overlay_clear(void) {}
+void sdl_question_menu_clear_nonblocking(void) { ++mock_description_popup_clears; }
 void sdl_description_overlay_set_footer(cptr t,bool always) { (void)t;(void)always; }
 void sdl_description_overlay_clear_footer_actions(void) {}
 void sdl_description_overlay_add_footer_action(int key,cptr token) { (void)key;(void)token; }
