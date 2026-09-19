@@ -812,12 +812,17 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
 {
     int count = 0;
     char detail[64];
+    int movement_energy;
+    int movement_speed;
 
     if (!entries || max_entries <= 0 || !p_ptr || !character_generated
         || character_icky)
     {
         return 0;
     }
+
+    movement_energy = player_current_movement_energy();
+    movement_speed = player_current_movement_speed();
 
     if (p_ptr->running > 0)
         sdl_status_pane_add_timed(entries, max_entries, &count, "Running",
@@ -957,10 +962,19 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
     if (p_ptr->slow > 0)
         sdl_status_pane_add_timed(entries, max_entries, &count, "Slow",
             p_ptr->slow, TERM_ORANGE);
-    if (!p_ptr->fast && !p_ptr->slow && p_ptr->pspeed > 2)
+    if (movement_energy > 100)
+    {
+        if (movement_speed < 1)
+            sdl_status_pane_add(entries, max_entries, &count, "Very slow",
+                "", TERM_ORANGE);
+        else if (movement_speed < 2)
+            sdl_status_pane_add(entries, max_entries, &count, "Slow",
+                "", TERM_ORANGE);
+    }
+    else if (!p_ptr->fast && !p_ptr->slow && movement_speed > 2)
         sdl_status_pane_add(entries, max_entries, &count, "Fast",
             "", TERM_L_GREEN);
-    else if (!p_ptr->fast && !p_ptr->slow && p_ptr->pspeed < 2)
+    else if (!p_ptr->fast && !p_ptr->slow && movement_speed < 2)
         sdl_status_pane_add(entries, max_entries, &count, "Slow",
             "", TERM_ORANGE);
     if (p_ptr->tmp_str > 0)

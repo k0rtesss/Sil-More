@@ -3,6 +3,7 @@
 #include "cave-internal.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
+#include "cave/cave-flood.h"
 #include "cave/cave-water-flow.h"
 #include "level-generation/level-generation-terrain-history.h"
 #include "melee/melee-util.h"
@@ -964,6 +965,8 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     int old_feat = cave_feat[y][x];
     int old_flow_feature = cave_flow_feature(old_feat);
     int new_flow_feature = cave_flow_feature(feat);
+    if (old_feat != feat)
+        cave_flood_surface_changed(y, x, feat);
     bool removed_floor_border = cave_feat[y][x] != feat
         && (styles_floor_border(cave_bridge_underlay(cave_feat[y][x]), NULL, NULL)
             || FEAT_IS_ICE(cave_bridge_underlay(cave_feat[y][x]))
@@ -1023,6 +1026,12 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     /* Notice/Redraw */
     if (character_dungeon)
     {
+        if (old_feat != feat && p_ptr->py == y && p_ptr->px == x
+            && water_movement_energy(100, old_feat, old_feat,
+                p_ptr->leaping)
+                != water_movement_energy(100, feat, feat,
+                    p_ptr->leaping))
+            p_ptr->redraw |= PR_SPEED;
         if (ice_changed && p_ptr->py == y && p_ptr->px == x)
         {
             p_ptr->update |= PU_BONUS;

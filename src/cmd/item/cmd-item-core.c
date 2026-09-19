@@ -1355,8 +1355,9 @@ bool open_inventory_menu_page(supply_menu_page page)
 bool open_inventory_menu_category(inventory_menu_group group)
 {
     tutorial_game_menu(group == INVENTORY_MENU_GROUP_PACK ? "pack"
-        : group == INVENTORY_MENU_GROUP_HARNESS ? "harness" : "jewelry",
-        "Pack and Harness are separate storage pools. Read the footer for Ready, Store, Use and Examine; carrying jewelry differs from wearing it.");
+        : group == INVENTORY_MENU_GROUP_HARNESS ? "harness"
+        : group == INVENTORY_MENU_GROUP_QUIVER ? "quiver" : "jewelry",
+        "Pack, Harness, Quiver and Jewelry have different storage and readiness rules. Read the footer for Ready, Store, Use and Examine.");
     supply_menu_request request = {0};
 
     request.focus_page = true;
@@ -1914,9 +1915,9 @@ static bool replace_pack_item_for_arrow_move(const object_type* incoming)
     return true;
 }
 
-static void do_cmd_unquiver_pack_arrow(int item)
+static bool do_cmd_unquiver_pack_arrow(int item)
 {
-    if (!tutorial_game_action_allowed("store", NULL)) return;
+    if (!tutorial_game_action_allowed("store", NULL)) return false;
     object_type packed;
     object_type* o_ptr;
     int max_quantity;
@@ -1926,7 +1927,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
     o_ptr = player_quiver_arrow_object(item);
     if (!o_ptr || !o_ptr->k_idx)
     {
-        return;
+        return false;
     }
 
     object_copy(&packed, o_ptr);
@@ -1937,7 +1938,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
     packed.storage = OBJECT_STORAGE_NONE;
     if (player_pack_action_start(PLAYER_PACK_ACTION_MOVE_STORAGE, item,
             OBJECT_STORAGE_PACK, false, &packed))
-        return;
+        return true;
 
     max_quantity = inventory_limit_max_carryable_quantity(&packed);
     if (max_quantity > 0)
@@ -1953,7 +1954,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
             o_ptr->number, false);
     }
     if (packed.number <= 0)
-        return;
+        return false;
 
     while (!inventory_type_slot_available(&packed, true))
     {
@@ -1961,7 +1962,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
             || inven_carry_limit_group() != INV_LIMIT_PACK
             || !replace_pack_item_for_arrow_move(&packed))
         {
-            return;
+            return false;
         }
     }
 
@@ -1971,7 +1972,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
     if (placed <= 0)
     {
         msg_print("There is not enough room in your Pack for those arrows.");
-        return;
+        return false;
     }
     player_quiver_remove_arrows(item, placed);
     p_ptr->energy_use = 100;
@@ -1982,6 +1983,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
     p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
     msg_format("You move %d arrow%s from your quiver to your Pack.", placed,
         placed == 1 ? "" : "s");
+    return true;
 }
 
 static bool item_storage_destination_available(const object_type* o_ptr,
@@ -2416,8 +2418,7 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
         && ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
             || (item >= 0 && inventory_slot_is_quivered_arrow(item))))
     {
-        do_cmd_unquiver_pack_arrow(item);
-        return true;
+        return do_cmd_unquiver_pack_arrow(item);
     }
 
     if (!player_inventory_handle_is_carried(item))
@@ -2662,7 +2663,9 @@ void do_cmd_use_item_by_index(int item)
 
     object_type* o_ptr;
 
-    if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+    if ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item)))
     {
         do_cmd_unquiver_pack_arrow(item);
         return;
@@ -3069,7 +3072,7 @@ void do_cmd_use_item_enhanced(void)
  */
 void do_cmd_inven_direct(void)
 {
-    tutorial_game_menu("inventory", "Inspect and manage carried items. Pack, Harness and Jewelry have different readiness and capacity rules.");
+    tutorial_game_menu("inventory", "Inspect and manage carried items. Pack, Harness, Quiver and Jewelry have different readiness and capacity rules.");
     log_debug("do_cmd_inven_direct: Opening inventory browser page");
     (void)open_inventory_menu_page(SUPPLY_MENU_PAGE_INVENTORY);
 }
@@ -4887,7 +4890,9 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
     char o_name[80];
     char quantity_prompt[160];
 
-    if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+    if ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item)))
     {
         object_type dropped;
 
@@ -5505,6 +5510,41 @@ bool do_cmd_delete_item_by_index(int item)
     char quantity_name[80];
     char quantity_prompt[160];
     char prompt[160];
+
+    if ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item)))
+    {
+        o_ptr = player_quiver_arrow_object(item);
+        if (!o_ptr || !o_ptr->k_idx)
+            return false;
+
+        object_desc(quantity_name, sizeof(quantity_name), o_ptr, false, 0);
+        strnfmt(quantity_prompt, sizeof(quantity_prompt),
+            "Delete how many %s? ", quantity_name);
+        amt = get_quantity_action(quantity_prompt, "Delete", o_ptr->number);
+        if (amt <= 0)
+            return false;
+
+        old_number = o_ptr->number;
+        o_ptr->number = amt;
+        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+        object_desc(prompt_name, sizeof(prompt_name), o_ptr, false, 0);
+        o_ptr->number = old_number;
+
+        strnfmt(prompt, sizeof(prompt), "Do you really want to DELETE %s? ",
+            prompt_name);
+        if (!get_check(prompt))
+            return false;
+
+        p_ptr->energy_use = 100;
+        p_ptr->previous_action[0] = ACTION_MISC;
+        msg_format("You delete %s.", o_name);
+        player_quiver_remove_arrows(item, amt);
+        p_ptr->redraw |= PR_QUIVER;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+        return true;
+    }
 
     /* Get the item (in the pack) */
     if (player_inventory_handle_valid(item))

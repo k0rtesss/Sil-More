@@ -582,7 +582,7 @@ void prt_speed(void)
         return;
     }
 
-    int i = p_ptr->pspeed;
+    int i = player_current_movement_speed();
 
     byte attr = TERM_WHITE;
     char buf[32] = "";
@@ -594,22 +594,29 @@ void prt_speed(void)
         sprintf(buf, "Fast");
     }
 
+    /* Very slow */
+    else if (i < 1)
+    {
+        attr = TERM_ORANGE;
+        SDL_strlcpy(buf, "VSlow", sizeof(buf));
+    }
+
     /* Slow */
     else if (i < 2)
     {
         attr = TERM_ORANGE;
-        sprintf(buf, "Slow");
+        SDL_strlcpy(buf, "Slow", sizeof(buf));
     }
 
     /* Clear the area first (story font has variable widths) */
-    Term_erase(COL_SPEED, ROW_SPEED, 4);
+    Term_erase(COL_SPEED, ROW_SPEED, 5);
 
     /* Display the speed if not normal */
     if (buf[0])
     {
         sdl_story_font_enable();
         c_put_str(status_touch_zone_attr(SDL_STATUS_CLICK_MAIN_MENU,
-            COL_SPEED, 4, attr), buf, ROW_SPEED, COL_SPEED);
+            COL_SPEED, 5, attr), buf, ROW_SPEED, COL_SPEED);
         sdl_story_font_disable();
     }
 }
@@ -1238,14 +1245,19 @@ void prt_status_line_compact(void)
         }
     }
 
-    char speed_long[8] = "";
-    char speed_short[4] = "";
+    char speed_long[16] = "";
+    char speed_short[8] = "";
     byte speed_attr = TERM_WHITE;
-    if (p_ptr->pspeed > 2) {
+    int movement_speed = player_current_movement_speed();
+    if (movement_speed > 2) {
         SDL_strlcpy(speed_long, "Fast", sizeof(speed_long));
         SDL_strlcpy(speed_short, "Fa", sizeof(speed_short));
         speed_attr = TERM_L_GREEN;
-    } else if (p_ptr->pspeed < 2) {
+    } else if (movement_speed < 1) {
+        SDL_strlcpy(speed_long, "Very slow", sizeof(speed_long));
+        SDL_strlcpy(speed_short, "VS", sizeof(speed_short));
+        speed_attr = TERM_ORANGE;
+    } else if (movement_speed < 2) {
         SDL_strlcpy(speed_long, "Slow", sizeof(speed_long));
         SDL_strlcpy(speed_short, "Sl", sizeof(speed_short));
         speed_attr = TERM_ORANGE;

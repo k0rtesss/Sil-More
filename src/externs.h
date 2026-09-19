@@ -512,6 +512,8 @@ extern void update_flow(int cy, int cx, int which_flow);
 extern void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player);
 extern void update_smell(void);
 extern int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
+extern int player_current_movement_energy(void);
+extern int player_current_movement_speed(void);
 extern bool player_submerged_in_deep_water(void);
 extern bool cave_deep_water_allowed(int y, int x);
 extern bool player_melting_ice_exposure(void);

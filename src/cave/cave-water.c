@@ -159,6 +159,37 @@ int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne)
     return energy;
 }
 
+/* Return the movement energy for a grounded step while standing on the
+ * player's current terrain. Keep the status display tied to the same
+ * movement-cost function used by actual player movement. */
+int player_current_movement_energy(void)
+{
+    int feat;
+
+    if (!p_ptr || !in_bounds(p_ptr->py, p_ptr->px))
+        return 100;
+
+    feat = cave_feat[p_ptr->py][p_ptr->px];
+    return water_movement_energy(100, feat, feat, p_ptr->leaping);
+}
+
+/* Convert the current movement cost into the speed scale used by the player
+ * and monster energy tables. Shallow water removes one speed step; deep
+ * water removes two. This is presentation only: p_ptr->pspeed itself is
+ * unchanged, so terrain never slows stationary actions or attacks. */
+int player_current_movement_speed(void)
+{
+    int speed = p_ptr ? p_ptr->pspeed : 2;
+    int energy = player_current_movement_energy();
+
+    if (energy >= 400)
+        speed -= 2;
+    else if (energy > 100)
+        speed -= 1;
+
+    return speed;
+}
+
 void player_water_movement(int from_feat, int to_feat)
 {
     if (from_feat != FEAT_WATER && to_feat != FEAT_WATER
@@ -166,6 +197,7 @@ void player_water_movement(int from_feat, int to_feat)
         return;
     p_ptr->energy_use = water_movement_energy(
         p_ptr->energy_use, from_feat, to_feat, false);
+    p_ptr->redraw |= PR_SPEED;
     stealth_score -= WATER_STEALTH_PENALTY;
     if ((to_feat == FEAT_WATER || to_feat == FEAT_DEEP_WATER) && !p_ptr->diseased
         && one_in_(DISEASE_WATER_ONE_IN))
@@ -179,6 +211,7 @@ void player_water_displaced(int from_feat, int to_feat)
     if (from_feat != FEAT_WATER && to_feat != FEAT_WATER
         && from_feat != FEAT_DEEP_WATER && to_feat != FEAT_DEEP_WATER)
         return;
+    p_ptr->redraw |= PR_SPEED;
     update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
     if ((to_feat == FEAT_WATER || to_feat == FEAT_DEEP_WATER) && !p_ptr->diseased
         && one_in_(DISEASE_WATER_ONE_IN))

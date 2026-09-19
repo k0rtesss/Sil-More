@@ -32,6 +32,7 @@ extern bool savefile_has_cave_info_hi;
 extern bool savefile_has_cave_rewired;
 extern bool savefile_has_cave_natural;
 extern bool savefile_has_cave_water_flow;
+extern bool savefile_has_cave_flood_trap_kinds;
 extern bool savefile_has_hint_messages;
 extern bool savefile_has_hint_message_meta;
 extern bool savefile_has_hint_message_destinations;

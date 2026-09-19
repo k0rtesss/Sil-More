@@ -1010,7 +1010,7 @@ P:-5:5d2:0:0d0
 R:ATT:-4
 R:DS:3
 A:10/50
-F:TUNNEL | TWO_HANDED | LESS_SPECIAL
+F:TUNNEL | TWO_HANDED | LESS_SPECIAL | HARNESS_STOWABLE
 D:[neutral]A heavy mattock, half tool and half weapon, built to bite
 D: stone, root, and stubborn earth. Delvers and sappers prize such an
 D: implement, for it breaks what the shovel can only shift and may, in a

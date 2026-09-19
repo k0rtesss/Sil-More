@@ -635,6 +635,9 @@ object_type* inventory_item_to_object_ptr(int item)
 bool inventory_item_uses_inven_channel(int item)
 {
     return player_inventory_handle_is_carried(item)
+        || (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item))
         || (item >= SUPPLIES_INDEX);
 }
 

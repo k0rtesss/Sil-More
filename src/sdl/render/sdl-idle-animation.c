@@ -606,7 +606,9 @@ static bool draw_liquid_region(int y, int x, const SDL_FRect* dst,
         : feat == FEAT_LAVA ? lava_texture : water_texture;
     SDL_Texture* transition = load_liquid_transition_texture(feat);
     SDL_Texture* bank_overlay = water_bank_overlay_texture;
-    if (liquid_is_water(feat) && (ice_feat || cave_water_has_icy_shore(y, x)))
+    bool floor_shore = liquid_is_water(feat)
+        && !ice_feat && !cave_water_has_icy_shore(y, x);
+    if (liquid_is_water(feat) && !floor_shore)
     {
         SDL_Texture* icy_transition = load_ice_water_texture(feat);
         if (icy_transition)
@@ -622,7 +624,7 @@ static bool draw_liquid_region(int y, int x, const SDL_FRect* dst,
     bool draw_bank = false;
     if (transition)
     {
-        byte mask = liquid_transition_mask(y, x, feat);
+        byte mask = floor_shore ? 255 : liquid_transition_mask(y, x, feat);
         texture = transition;
         src.x = (mask % 16) * TILE_SIZE;
         /* Select surface direction independently of the fixed shoreline mask.
@@ -637,7 +639,7 @@ static bool draw_liquid_region(int y, int x, const SDL_FRect* dst,
             if (depth_mask != 255)
             {
                 bank_src = src;
-                draw_bank = true;
+                draw_bank = !floor_shore;
                 texture = water_depth_transition_texture;
                 src.x = (depth_mask % 16) * TILE_SIZE;
                 src.y = (depth_mask / 16 + page * 16) * TILE_SIZE;
@@ -663,6 +665,8 @@ static bool draw_liquid_region(int y, int x, const SDL_FRect* dst,
         SDL_SetTextureColorMod(bank_overlay, light, light, light);
         SDL_RenderTexture(g_state.renderer, bank_overlay, &bank_src, dst);
     }
+    if (floor_shore)
+        sdl_water_floor_transition_draw(y, x, dst, pixels);
     if (ice_feat)
     {
         byte mask = ice_only_transition_mask(y, x);

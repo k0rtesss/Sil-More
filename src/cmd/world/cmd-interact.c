@@ -1408,8 +1408,9 @@ static cptr trap_flavor_text(int feat)
     case FEAT_TRAP_ACID:
         return "A spray of corrosive liquid waits beneath this square.";
     case FEAT_TRAP_FLOOD:
-        return "A hidden reservoir floods this square, then spreads over your "
-               "next two actions. The centre becomes deep water.";
+        return "A hidden reservoir fills the next reachable paths over your "
+               "next two actions. Walls hold it; doors are swept away. The "
+               "centre becomes deep water.";
     case FEAT_TRAP_IMPRISONMENT:
         return "A rune of binding that holds the unwary fast.";
     case FEAT_GLYPH:

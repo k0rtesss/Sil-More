@@ -634,7 +634,8 @@ int main(void)
     assert(!tutorial_game_command_allowed(';',6));
     cave_feat[5][6]=FEAT_CHASM;
     assert(!tutorial_game_command_allowed(';',6));
-    const int hazard_features[]={FEAT_LAVA,FEAT_POISON,FEAT_WATER,FEAT_ICE,FEAT_DEEP_WATER,FEAT_TRAP_FLOOD};
+    const int hazard_features[]={FEAT_LAVA,FEAT_POISON,FEAT_WATER,FEAT_ICE,FEAT_DEEP_WATER,
+        FEAT_TRAP_FLOOD};
     for(int i=0;i<(int)N_ELEMENTS(hazard_features);++i) {
         cave_feat[5][6]=hazard_features[i];
         assert(!tutorial_game_command_allowed(';',6));

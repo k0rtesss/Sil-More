@@ -655,7 +655,7 @@ T:0:1
 # A triggered reservoir floods outward over the next two player actions.
 N:101:flooding trap
 G:^:b
-T:3:13
+T:37:0
 
 # Verdant 03 animated ice; may collapse under a grounded creature.
 N:102:melting ice

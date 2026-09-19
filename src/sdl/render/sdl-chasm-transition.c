@@ -62,11 +62,12 @@ static int chasm_owner(int y, int x, int px, int py, const chasm_donor n[8])
     return owner;
 }
 
-void sdl_chasm_transition_draw(int y, int x, const SDL_FRect* dst)
+static void terrain_transition_draw(int y, int x, const SDL_FRect* dst,
+    const SDL_FRect* pixels, bool water)
 {
     if (!dst || !g_state.use_tiles || !g_state.renderer || !g_state.tileset
         || !p_ptr || p_ptr->image || !chasm_known(y, x)
-        || cave_bridge_underlay(cave_feat[y][x]) != FEAT_CHASM) return;
+        || (!water && cave_bridge_underlay(cave_feat[y][x]) != FEAT_CHASM)) return;
     chasm_donor n[8] = {0};
     bool any = false;
     for (int i = 0; i < 8; i++)
@@ -75,14 +76,27 @@ void sdl_chasm_transition_draw(int y, int x, const SDL_FRect* dst)
         if (!chasm_known(ny, nx)) continue;
         n[i].y = ny; n[i].x = nx;
         byte feat = cave_bridge_underlay(cave_feat[ny][nx]);
-        if (feat == FEAT_CHASM) { n[i].state = 1; continue; }
-        /* Do not repeat doors into the void. Other foreground features and
-         * actors already use their floor/wall underlay in map_info_terrain. */
-        if (feat == FEAT_OPEN || feat == FEAT_BROKEN
-            || (feat >= FEAT_DOOR_HEAD && feat <= FEAT_DOOR_TAIL)
-            || feat == FEAT_WARDED || feat == FEAT_WARDED2 || feat == FEAT_WARDED3)
+        if (water)
+        {
+            if (feat == FEAT_WATER || feat == FEAT_DEEP_WATER || FEAT_IS_ICE(feat))
+            { n[i].state = 1; continue; }
+            /* Walls keep their own silhouette: never grow masonry into the
+             * water. Only exposed dry floor supplies a receding shoreline. */
+            if (!cave_floorlike_bold(ny, nx) || FEAT_IS_BRIDGE(cave_feat[ny][nx]))
+                continue;
             map_info_floor_terrain(ny, nx, &n[i].a, &n[i].c);
-        else map_info_terrain(ny, nx, &n[i].a, &n[i].c);
+        }
+        else
+        {
+            if (feat == FEAT_CHASM) { n[i].state = 1; continue; }
+            /* Do not repeat doors into the void. Other foreground features
+             * and actors already use their terrain underlay. */
+            if (feat == FEAT_OPEN || feat == FEAT_BROKEN
+                || (feat >= FEAT_DOOR_HEAD && feat <= FEAT_DOOR_TAIL)
+                || feat == FEAT_WARDED || feat == FEAT_WARDED2 || feat == FEAT_WARDED3)
+                map_info_floor_terrain(ny, nx, &n[i].a, &n[i].c);
+            else map_info_terrain(ny, nx, &n[i].a, &n[i].c);
+        }
         if (!(n[i].a & TILE_FLAG) || !((byte)n[i].c & TILE_FLAG)) continue;
         n[i].state = 2;
         any = true;
@@ -90,9 +104,15 @@ void sdl_chasm_transition_draw(int y, int x, const SDL_FRect* dst)
     if (!any) return;
 
     byte coverage[TILE_SIZE][TILE_SIZE];
+    int left = pixels ? (int)pixels->x : 0;
+    int top = pixels ? (int)pixels->y : 0;
+    int width = pixels ? (int)pixels->w : TILE_SIZE;
+    int height = pixels ? (int)pixels->h : TILE_SIZE;
     for (int py = 0; py < TILE_SIZE; py++)
         for (int px = 0; px < TILE_SIZE; px++)
-            coverage[py][px] = 1 + chasm_owner(y, x, px, py, n);
+            coverage[py][px] = px >= left && px < left + width
+                && py >= top && py < top + height
+                ? 1 + chasm_owner(y, x, px, py, n) : 0;
 
     SDL_BlendMode blend, draw_blend;
     Uint8 r, g, b, a, tr, tg, tb, ta;
@@ -123,13 +143,13 @@ void sdl_chasm_transition_draw(int y, int x, const SDL_FRect* dst)
             }
             for (int yy = py; yy < bottom; yy++)
                 for (int xx = px; xx < right; xx++) coverage[yy][xx] = 0;
-            SDL_FRect rect = {dst->x + dst->w * px / TILE_SIZE,
-                dst->y + dst->h * py / TILE_SIZE,
-                dst->w * (right - px) / TILE_SIZE,
-                dst->h * (bottom - py) / TILE_SIZE};
-            SDL_FRect pixels = {px, py, right - px, bottom - py};
+            SDL_FRect rect = {dst->x + dst->w * (px - left) / width,
+                dst->y + dst->h * (py - top) / height,
+                dst->w * (right - px) / width,
+                dst->h * (bottom - py) / height};
+            SDL_FRect piece = {px, py, right - px, bottom - py};
             const chasm_donor* donor = &n[label - 1];
-            if (sdl_idle_animation_draw_liquid_piece(donor->y, donor->x, &pixels, &rect)) continue;
+            if (!water && sdl_idle_animation_draw_liquid_piece(donor->y, donor->x, &piece, &rect)) continue;
             SDL_FRect src = {((byte)donor->c & TILE_INDEX_MASK) * TILE_SIZE + px,
                 (donor->a & TILE_INDEX_MASK) * TILE_SIZE + py, right - px, bottom - py};
             SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
@@ -141,4 +161,15 @@ void sdl_chasm_transition_draw(int y, int x, const SDL_FRect* dst)
     SDL_SetTextureAlphaMod(g_state.tileset, ta);
     SDL_SetRenderDrawBlendMode(g_state.renderer, draw_blend);
     SDL_SetRenderDrawColor(g_state.renderer, r, g, b, a);
+}
+
+void sdl_chasm_transition_draw(int y, int x, const SDL_FRect* dst)
+{
+    terrain_transition_draw(y, x, dst, NULL, false);
+}
+
+void sdl_water_floor_transition_draw(int y, int x, const SDL_FRect* dst,
+    const SDL_FRect* pixels)
+{
+    terrain_transition_draw(y, x, dst, pixels, true);
 }

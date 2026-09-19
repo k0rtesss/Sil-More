@@ -3212,6 +3212,8 @@ bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst);
 bool sdl_idle_animation_draw_liquid_piece(int y, int x,
     const SDL_FRect* pixels, const SDL_FRect* dst);
 void sdl_chasm_transition_draw(int y, int x, const SDL_FRect* dst);
+void sdl_water_floor_transition_draw(int y, int x, const SDL_FRect* dst,
+    const SDL_FRect* pixels);
 bool sdl_material_edge_draw(int y, int x, byte ta, char tc,
     const SDL_FRect* dst, bool preserve_floor_contour);
 bool sdl_material_edge_at(int y, int x);

@@ -1,6 +1,7 @@
 /* File: object/object-place.c */
 
 #include "angband.h"
+#include "cave/cave-flood.h"
 #include "externs.h"
 #include "object/object-place.h"
 #include "object/object-knowledge.h"
@@ -708,10 +709,6 @@ void place_trap(int y, int x)
         {
             if (p_ptr->depth < 1 || FEAT_IS_BRIDGE(cave_feat[y][x]))
                 continue;
-            /* Acid traps are available from depth one onward. A few of the
-             * otherwise ordinary flooding traps become acid instead. */
-            if (one_in_(FLOOD_TRAP_ACID_CHANCE))
-                feat = FEAT_TRAP_ACID;
             break;
         }
         case FEAT_TRAP_IMPRISONMENT:
@@ -734,6 +731,10 @@ void place_trap(int y, int x)
 
     /* Activate the trap */
     cave_set_feat(y, x, feat);
+    if (feat == FEAT_TRAP_FLOOD)
+        cave_flood_set_trap_kind(y, x,
+            one_in_(FLOOD_TRAP_ACID_CHANCE)
+                ? CAVE_FLOOD_KIND_ACID : CAVE_FLOOD_KIND_WATER);
 
     // Hide the trap
     cave_info[y][x] |= (CAVE_HIDDEN);

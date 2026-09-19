@@ -2,6 +2,7 @@
 
 #include "cave-internal.h"
 #include "cave/cave-bridge.h"
+#include "cave/cave-flood.h"
 
 /*
  * Multi-hued monsters shimmer according to their base colour.
@@ -292,6 +293,27 @@ static void special_lighting_wall(byte* a, char* c, int feat, int info, int ligh
     }
 }
 
+static void apply_flood_trap_variant_visual(int y, int x, byte* a, char* c)
+{
+    if (!in_bounds(y, x) || cave_feat[y][x] != FEAT_TRAP_FLOOD)
+        return;
+
+    /* The two plate variants occupy adjacent atlas columns.  Reapply the
+     * intended column after generic trap lighting, whose dark-tile +1 would
+     * otherwise turn blue water into the green acid plate when remembered. */
+    if (graphics_are_ascii())
+    {
+        if (cave_flood_trap_is_acid_at(y, x))
+            *a = TERM_L_GREEN;
+        return;
+    }
+
+    *a = (byte)(CAVE_FLOOD_TRAP_TILE_ROW | 0x80);
+    *c = (char)((cave_flood_trap_is_acid_at(y, x)
+            ? CAVE_FLOOD_TRAP_ACID_TILE_COL
+            : CAVE_FLOOD_TRAP_WATER_TILE_COL) | 0x80);
+}
+
 /*
  * Group-aware floor and door graphics (extensible)
  * These helpers allow selecting alternative tiles for floors and doors
@@ -335,6 +357,15 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
                     continue;
                 int border_feat = cave_bridge_underlay(cave_feat[ny][nx]);
                 if (cave_water_has_icy_shore(ny, nx)) border_feat = FEAT_ICE;
+                /* Ordinary water meets the existing floor. Its SDL edge
+                 * samples that floor instead of manufacturing a sand bank. */
+                if (border_feat == FEAT_WATER || border_feat == FEAT_DEEP_WATER)
+                    continue;
+                if (cave_flood_surface_at(ny, nx)
+                    && (border_feat == FEAT_WATER
+                        || border_feat == FEAT_DEEP_WATER
+                        || border_feat == FEAT_POISON))
+                    continue;
                 if (styles_floor_border_at(border_feat,
                         radius, y, x, &row, &col)) {
                     /* Prefer snow over ordinary banks throughout this ring,
@@ -1048,6 +1079,8 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
             /* Depth-based walls disabled, use standard lighting only */
             special_lighting_wall(&a, &c, feat, info, cave_light[y][x]);
 #endif /* DEPTH_BASED_WALLS */
+
+            apply_flood_trap_variant_visual(y, x, &a, &c);
         }
 
         /* Unknown */

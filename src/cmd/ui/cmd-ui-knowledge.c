@@ -4347,6 +4347,12 @@ static object_type* equipment_entry_object(const equipment_list_entry* entry)
     if (entry->item_idx >= QUIVER_INDEX && entry->item_idx < QUIVER_INDEX_END)
         return player_quiver_arrow_object(entry->item_idx);
 
+    if (entry->item_idx >= 0 && entry->item_idx < INVEN_TOTAL
+        && inventory_slot_is_quivered_arrow(entry->item_idx))
+    {
+        return &inventory[entry->item_idx];
+    }
+
     if (player_inventory_handle_is_carried(entry->item_idx))
         return player_inventory_object(entry->item_idx);
 
@@ -4357,6 +4363,20 @@ static object_type* equipment_entry_object(const equipment_list_entry* entry)
         return &o_list[entry->floor_idx];
 
     return NULL;
+}
+
+static bool equipment_entry_is_quiver_arrow(
+    const equipment_list_entry* entry)
+{
+    object_type* o_ptr = equipment_entry_object(entry);
+
+    if (!entry || !o_ptr || !o_ptr->k_idx || o_ptr->tval != TV_ARROW)
+        return false;
+
+    return (entry->item_idx >= QUIVER_INDEX
+            && entry->item_idx < QUIVER_INDEX_END)
+        || (entry->item_idx >= 0 && entry->item_idx < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(entry->item_idx));
 }
 
 static bool equipment_add_entry(equipment_list_entry entries[], int* count,
@@ -5168,6 +5188,9 @@ static bool equipment_entry_volume_text(const object_type* o_ptr, char* buf,
         return false;
     buf[0] = '\0';
     if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    if (object_is_quivered_arrow(o_ptr))
         return false;
 
     group = inventory_limit_group_for_object(o_ptr);
@@ -5995,6 +6018,7 @@ static bool equipment_menu_drop_entry(equipment_list_entry* entry)
 static const inventory_menu_group inventory_browser_groups[] = {
     INVENTORY_MENU_GROUP_PACK,
     INVENTORY_MENU_GROUP_HARNESS,
+    INVENTORY_MENU_GROUP_QUIVER,
     INVENTORY_MENU_GROUP_JEWELRY
 };
 
@@ -6010,6 +6034,8 @@ static cptr inventory_browser_group_text(inventory_menu_group group)
         return "Pack";
     case INVENTORY_MENU_GROUP_HARNESS:
         return "Harness";
+    case INVENTORY_MENU_GROUP_QUIVER:
+        return "Quiver";
     case INVENTORY_MENU_GROUP_JEWELRY:
         return "Jewelry Pouch";
     default:
@@ -6037,6 +6063,8 @@ static bool inventory_browser_object_matches_group(
     if (!o_ptr || !o_ptr->k_idx)
         return false;
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+        return object_is_quivered_arrow(o_ptr);
     if (group == INVENTORY_MENU_GROUP_PACK)
         return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK;
     if (group == INVENTORY_MENU_GROUP_HARNESS)
@@ -6053,6 +6081,9 @@ static bool inventory_browser_equipped_slot_matches_group(
     if (slot < INVEN_WIELD || slot >= INVEN_TOTAL || !inventory[slot].k_idx)
         return false;
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+        return object_is_quivered_arrow(&inventory[slot]);
+
     return inventory_browser_object_matches_group(group, &inventory[slot]);
 }
 
@@ -6063,6 +6094,13 @@ static bool inventory_browser_group_includes_supplies(
 {
     (void)group;
     return false;
+}
+
+static int inventory_browser_quiver_entry_count(void)
+{
+    int slots[QUIVER_ARROW_CAPACITY + 1];
+
+    return player_quiver_arrow_slots(slots, (int)N_ELEMENTS(slots));
 }
 
 #define INVENTORY_SELECT_INVALID (-1000000)
@@ -6083,6 +6121,14 @@ static int inventory_select_entry_item(const equipment_list_entry* entry)
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
         return entry->equip_idx;
 
+    if ((entry->item_idx >= QUIVER_INDEX
+            && entry->item_idx < QUIVER_INDEX_END)
+        || (entry->item_idx >= 0 && entry->item_idx < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(entry->item_idx)))
+    {
+        return entry->item_idx;
+    }
+
     if (player_inventory_handle_is_carried(entry->item_idx))
         return entry->item_idx;
 
@@ -6102,6 +6148,13 @@ static bool inventory_select_item_allowed(
     if (item < 0)
     {
         if (!(flags & USE_FLOOR))
+            return false;
+    }
+    else if ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item)))
+    {
+        if (!(flags & USE_INVEN))
             return false;
     }
     else if (item >= INVEN_WIELD && item < INVEN_TOTAL)
@@ -6174,6 +6227,14 @@ static void inventory_browser_group_limit_status(inventory_menu_group group,
         return;
 
     buf[0] = '\0';
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+    {
+        strnfmt(buf, buflen, "%d/%d arrows (%d free)",
+            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY,
+            player_quiver_arrow_space());
+        return;
+    }
+
     if (group == INVENTORY_MENU_GROUP_PACK)
         limit_group = INV_LIMIT_PACK;
     else if (group == INVENTORY_MENU_GROUP_HARNESS)
@@ -6286,6 +6347,9 @@ static byte inventory_browser_section_attr(inventory_menu_group group)
     enum inventory_limit_group limit_group;
     int limit;
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+        return TERM_L_GREEN;
+
     if (group == INVENTORY_MENU_GROUP_JEWELRY)
         return TERM_VIOLET;
 
@@ -6312,6 +6376,15 @@ static void inventory_browser_section_header(inventory_menu_group group,
 
     if (!buf || buflen == 0)
         return;
+
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+    {
+        strnfmt(buf, buflen, "%s (%d): %d/%d arrows; %d free",
+            inventory_browser_group_text(group), entry_cnt,
+            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY,
+            player_quiver_arrow_space());
+        return;
+    }
 
     if (group == INVENTORY_MENU_GROUP_JEWELRY)
     {
@@ -6388,6 +6461,16 @@ static void inventory_browser_group_status(inventory_menu_group group,
         return;
     }
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+    {
+        strnfmt(buf, buflen,
+            "%s: %d choice%s. Arrows %d/%d (%d free). Weight %s.",
+            inventory_browser_group_text(group), entry_cnt,
+            (entry_cnt == 1) ? "" : "s", player_quiver_arrow_count(),
+            QUIVER_ARROW_CAPACITY, player_quiver_arrow_space(), weight);
+        return;
+    }
+
     inventory_browser_group_limit_status(group, limits, sizeof(limits));
     if (limits[0])
     {
@@ -6407,6 +6490,9 @@ static int count_inventory_browser_group_entries(inventory_menu_group group)
 {
     int count = 0;
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+        return inventory_browser_quiver_entry_count();
+
     if (group == INVENTORY_MENU_GROUP_ALL)
     {
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
@@ -6420,6 +6506,7 @@ static int count_inventory_browser_group_entries(inventory_menu_group group)
         }
 
         count += player_pack_entry_count();
+        count += inventory_browser_quiver_entry_count();
     }
     else
     {
@@ -6520,6 +6607,20 @@ static int count_inventory_select_group_entries(inventory_menu_group group,
             if (inventory_select_item_allowed(request, item))
                 count++;
         }
+
+        if (group == INVENTORY_MENU_GROUP_ALL
+            || group == INVENTORY_MENU_GROUP_QUIVER)
+        {
+            int slots[QUIVER_ARROW_CAPACITY + 1];
+            int slot_count = player_quiver_arrow_slots(slots,
+                (int)N_ELEMENTS(slots));
+
+            for (int i = 0; i < slot_count; i++)
+            {
+                if (inventory_select_item_allowed(request, slots[i]))
+                    count++;
+            }
+        }
     }
 
     if (request->item_select_flags & USE_FLOOR)
@@ -6590,6 +6691,22 @@ static void prepare_inventory_browser_group_icons(
             object_copy(icon_obj, &inventory[i]);
             icons[group_idx].has_icon = true;
             break;
+        }
+
+        if (icons[group_idx].has_icon)
+            continue;
+
+        if (group == INVENTORY_MENU_GROUP_ALL
+            || group == INVENTORY_MENU_GROUP_QUIVER)
+        {
+            int handle = player_quiver_first_arrow_slot();
+            object_type* o_ptr = player_quiver_arrow_object(handle);
+
+            if (o_ptr && o_ptr->k_idx)
+            {
+                object_copy(icon_obj, o_ptr);
+                icons[group_idx].has_icon = true;
+            }
         }
 
         if (icons[group_idx].has_icon)
@@ -6783,6 +6900,25 @@ static int collect_inventory_page_entries(inventory_menu_group group,
         }
     }
 
+    if ((group == INVENTORY_MENU_GROUP_ALL
+            || group == INVENTORY_MENU_GROUP_QUIVER)
+        && (!select_mode || (request->item_select_flags & USE_INVEN)))
+    {
+        int slots[QUIVER_ARROW_CAPACITY + 1];
+        int slot_count = player_quiver_arrow_slots(slots,
+            (int)N_ELEMENTS(slots));
+
+        for (int i = 0; i < slot_count && count < capacity; i++)
+        {
+            if (!inventory_select_item_allowed(request, slots[i]))
+                continue;
+
+            equipment_add_entry(entries, &count, capacity, slots[i], -1, -1,
+                player_quiver_counts_as_equipped()
+                    && slots[i] == player_quiver_selected_arrow_slot());
+        }
+    }
+
     for (int i = 0; i < player_pack_entry_count() && count < capacity; i++)
     {
         int item = player_pack_entry_handle_at(i);
@@ -6881,6 +7017,8 @@ static int collect_inventory_page_all_entries(equipment_list_entry entries[],
             limit_group = INV_LIMIT_PACK;
         else if (group == INVENTORY_MENU_GROUP_HARNESS)
             limit_group = INV_LIMIT_HARNESS;
+        else if (group == INVENTORY_MENU_GROUP_QUIVER)
+            limit_group = INV_LIMIT_NONE;
         else
             limit_group = INV_LIMIT_JEWELRY;
         int added = collect_inventory_page_entries(group, entries + count,
@@ -7645,6 +7783,9 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
         return floor_touch_action_text(floor_action,
             &o_list[entry->floor_idx], entry->floor_idx);
 
+    if (equipment_entry_is_quiver_arrow(entry))
+        return "Pack";
+
     if (player_inventory_handle_is_carried(entry->item_idx))
     {
         o_ptr = player_inventory_object(entry->item_idx);
@@ -7730,6 +7871,15 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
         return true;
     }
 
+    if (equipment_entry_is_quiver_arrow(entry))
+    {
+        if (!confirm_equipment_entry_action("Pack", entry))
+            return false;
+
+        return do_cmd_move_item_to_storage(entry->item_idx,
+            OBJECT_STORAGE_PACK);
+    }
+
     if (player_inventory_handle_is_carried(entry->item_idx))
     {
         object_type* o_ptr = player_inventory_object(entry->item_idx);
@@ -7786,6 +7936,9 @@ static bool inventory_page_drop_entry(equipment_list_entry* entry)
 
     if (equipment_entry_carried_pack_action_blocked(entry))
         return false;
+
+    if (equipment_entry_is_quiver_arrow(entry))
+        return do_cmd_drop_item_by_index_confirm(entry->item_idx, true);
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
         return do_cmd_drop_item_by_index_confirm(entry->equip_idx, true);
@@ -10796,39 +10949,52 @@ static void knowledge_init_inventory_portrait_layout(
 }
 
 static void inventory_one_page_allocate_rows(int available_rows,
-    int pack_needed, int harness_needed, int jewelry_needed, int* pack_rows,
-    int* harness_rows, int* jewelry_rows)
+    int pack_needed, int harness_needed, int quiver_needed,
+    int jewelry_needed, int* pack_rows, int* harness_rows, int* quiver_rows,
+    int* jewelry_rows)
 {
     int body_rows;
-    int needed[3];
-    int rows[3] = { 0, 0, 0 };
+    int needed[4];
+    int rows[4] = { 0, 0, 0, 0 };
     int allocated = 0;
 
-    if (!pack_rows || !harness_rows || !jewelry_rows)
+    if (!pack_rows || !harness_rows || !quiver_rows || !jewelry_rows)
         return;
 
     *pack_rows = 0;
     *harness_rows = 0;
+    *quiver_rows = 0;
     *jewelry_rows = 0;
-    /* Harness and Jewelry each add a blank row, header, and divider.  Give
-     * Pack and Harness their complete lists first; Jewelry gets the remaining
-     * rows and can scroll within that section. */
-    body_rows = available_rows - 6;
+    /* Harness, Quiver, and Jewelry each add a blank row, header, and divider.
+     * Give Pack, Harness, and Quiver their complete lists first; Jewelry gets
+     * the remaining rows and can scroll within that section. */
+    body_rows = available_rows - 9;
     if (body_rows <= 0)
         return;
 
     needed[0] = MAX(pack_needed, 0);
     needed[1] = MAX(harness_needed, 0);
+    needed[2] = MAX(quiver_needed, 0);
+    needed[3] = MAX(jewelry_needed, 0);
 
-    /* Spend the body rows on Pack and Harness before giving any to Jewelry.
-     * This makes both volume-pool lists complete whenever they fit. */
+    /* A visible Quiver section must retain at least one row whenever it has
+     * arrows, even if a large Pack/Harness list consumes the remaining space. */
+    if (needed[2] > 0)
+    {
+        rows[2] = 1;
+        allocated = 1;
+    }
+
+    /* Spend the body rows on Pack, Harness, and Quiver before giving any to
+     * Jewelry.  This makes the storage lists complete whenever they fit. */
     while (allocated < body_rows
-        && (rows[0] < needed[0] || rows[1] < needed[1]))
+        && (rows[0] < needed[0] || rows[1] < needed[1]
+            || rows[2] < needed[2]))
     {
         int best = -1;
         int best_deficit = 0;
 
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < 3; i++)
         {
             int deficit = needed[i] - rows[i];
 
@@ -10847,11 +11013,12 @@ static void inventory_one_page_allocate_rows(int available_rows,
     /* All unused body rows belong to Jewelry, even when that section has more
      * entries than fit; its own top/max-top state provides scrolling. */
     if (jewelry_needed > 0)
-        rows[2] = body_rows - allocated;
+        rows[3] = body_rows - allocated;
 
     *pack_rows = rows[0];
     *harness_rows = rows[1];
-    *jewelry_rows = rows[2];
+    *quiver_rows = rows[2];
+    *jewelry_rows = rows[3];
 }
 
 static void knowledge_draw_stacked_entry_divider(
@@ -11121,6 +11288,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     int inv_entry_top = 0;
     int inv_pack_top = 0;
     int inv_harness_top = 0;
+    int inv_quiver_top = 0;
     int inv_jewelry_top = 0;
     int inv_column = 0;
     inventory_menu_group inv_focus_group = INVENTORY_MENU_GROUP_ALL;
@@ -11196,7 +11364,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 inv_focus_group = request->inventory_group;
                 inv_focus_group_pending =
                     request->inventory_group == INVENTORY_MENU_GROUP_PACK
-                    || request->inventory_group == INVENTORY_MENU_GROUP_HARNESS;
+                    || request->inventory_group == INVENTORY_MENU_GROUP_HARNESS
+                    || request->inventory_group == INVENTORY_MENU_GROUP_QUIVER;
             }
         }
         if (request->preview_inventory_description)
@@ -11986,10 +12155,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             knowledge_browser_layout page_summary_layout;
             knowledge_browser_layout pack_layout;
             knowledge_browser_layout harness_layout;
+            knowledge_browser_layout quiver_layout;
             knowledge_browser_layout jewelry_layout;
             equipment_entry_columns entry_cols;
             equipment_entry_columns pack_cols;
             equipment_entry_columns harness_cols;
+            equipment_entry_columns quiver_cols;
             equipment_entry_columns jewelry_cols;
             inventory_menu_group selected_group;
             int entry_page_rows;
@@ -11997,20 +12168,25 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             int max_entry_top;
             int pack_entry_cnt = 0;
             int harness_entry_cnt = 0;
+            int quiver_entry_cnt = 0;
             int jewelry_entry_cnt = 0;
             int pack_rows = 0;
             int harness_rows = 0;
+            int quiver_rows = 0;
             int jewelry_rows = 0;
             int pack_rendered_rows = 0;
             int harness_rendered_rows = 0;
+            int quiver_rendered_rows = 0;
             int jewelry_rendered_rows = 0;
             int max_pack_top = 0;
             int max_harness_top = 0;
+            int max_quiver_top = 0;
             int max_jewelry_top = 0;
             int picker_header_rows = 0;
             char status_buf[384] = "";
             char pack_header[192] = "";
             char harness_header[192] = "";
+            char quiver_header[192] = "";
             char jewelry_header[192] = "";
             char picker_heading[180] = "";
             char picker_detail[180] = "";
@@ -12213,20 +12389,35 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             if (inventory_one_page && inv_focus_group_pending)
             {
-                enum inventory_limit_group focus_limit =
-                    (inv_focus_group == INVENTORY_MENU_GROUP_HARNESS)
-                    ? INV_LIMIT_HARNESS
-                    : (inv_focus_group == INVENTORY_MENU_GROUP_JEWELRY)
-                        ? INV_LIMIT_JEWELRY
-                        : INV_LIMIT_PACK;
-
-                for (i = 0; i < inventory_entry_cnt; i++)
+                if (inv_focus_group == INVENTORY_MENU_GROUP_QUIVER)
                 {
-                    if (equip_entries[i].limit_group != focus_limit)
-                        continue;
+                    for (i = 0; i < inventory_entry_cnt; i++)
+                    {
+                        if (!equipment_entry_is_quiver_arrow(
+                                &equip_entries[i]))
+                            continue;
 
-                    inv_entry_cur = i;
-                    break;
+                        inv_entry_cur = i;
+                        break;
+                    }
+                }
+                else
+                {
+                    enum inventory_limit_group focus_limit =
+                        (inv_focus_group == INVENTORY_MENU_GROUP_HARNESS)
+                        ? INV_LIMIT_HARNESS
+                        : (inv_focus_group == INVENTORY_MENU_GROUP_JEWELRY)
+                            ? INV_LIMIT_JEWELRY
+                            : INV_LIMIT_PACK;
+
+                    for (i = 0; i < inventory_entry_cnt; i++)
+                    {
+                        if (equip_entries[i].limit_group != focus_limit)
+                            continue;
+
+                        inv_entry_cur = i;
+                        break;
+                    }
                 }
                 inv_focus_group_pending = false;
             }
@@ -12303,33 +12494,58 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 int pack_needed;
                 int harness_needed;
+                int quiver_needed;
                 int jewelry_needed;
                 bool pack_selected;
                 bool harness_selected;
+                bool quiver_selected;
                 bool jewelry_selected;
 
-                pack_entry_cnt = MIN(inventory_totals[0], inventory_entry_cnt);
-                harness_entry_cnt = MIN(inventory_totals[1],
-                    inventory_entry_cnt - pack_entry_cnt);
-                jewelry_entry_cnt = inventory_entry_cnt - pack_entry_cnt
-                    - harness_entry_cnt;
+                int pack_group_idx = inventory_browser_group_index(
+                    INVENTORY_MENU_GROUP_PACK);
+                int harness_group_idx = inventory_browser_group_index(
+                    INVENTORY_MENU_GROUP_HARNESS);
+                int quiver_group_idx = inventory_browser_group_index(
+                    INVENTORY_MENU_GROUP_QUIVER);
+                int jewelry_group_idx = inventory_browser_group_index(
+                    INVENTORY_MENU_GROUP_JEWELRY);
+                int remaining_entries = inventory_entry_cnt;
+
+                pack_entry_cnt = MIN(inventory_totals[pack_group_idx],
+                    remaining_entries);
+                remaining_entries -= pack_entry_cnt;
+                harness_entry_cnt = MIN(inventory_totals[harness_group_idx],
+                    remaining_entries);
+                remaining_entries -= harness_entry_cnt;
+                quiver_entry_cnt = MIN(inventory_totals[quiver_group_idx],
+                    remaining_entries);
+                remaining_entries -= quiver_entry_cnt;
+                jewelry_entry_cnt = MIN(inventory_totals[jewelry_group_idx],
+                    remaining_entries);
                 pack_cols = entry_cols;
                 harness_cols = entry_cols;
+                quiver_cols = entry_cols;
                 jewelry_cols = entry_cols;
                 harness_cols.entry_index_base = pack_entry_cnt;
-                jewelry_cols.entry_index_base = pack_entry_cnt
+                quiver_cols.entry_index_base = pack_entry_cnt
                     + harness_entry_cnt;
+                jewelry_cols.entry_index_base = pack_entry_cnt
+                    + harness_entry_cnt + quiver_entry_cnt;
                 pack_needed = equipment_entry_total_rows(equip_entries,
                     pack_entry_cnt, &pack_cols);
                 harness_needed = equipment_entry_total_rows(
                     equip_entries + pack_entry_cnt, harness_entry_cnt,
                     &harness_cols);
-                jewelry_needed = equipment_entry_total_rows(
+                quiver_needed = equipment_entry_total_rows(
                     equip_entries + pack_entry_cnt + harness_entry_cnt,
+                    quiver_entry_cnt, &quiver_cols);
+                jewelry_needed = equipment_entry_total_rows(
+                    equip_entries + pack_entry_cnt + harness_entry_cnt
+                        + quiver_entry_cnt,
                     jewelry_entry_cnt, &jewelry_cols);
                 inventory_one_page_allocate_rows(layout.entry_rows,
-                    pack_needed, harness_needed, jewelry_needed, &pack_rows,
-                    &harness_rows, &jewelry_rows);
+                    pack_needed, harness_needed, quiver_needed, jewelry_needed,
+                    &pack_rows, &harness_rows, &quiver_rows, &jewelry_rows);
 
                 pack_layout = layout;
                 pack_layout.entry_row = layout.entry_row;
@@ -12337,14 +12553,22 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 harness_layout = layout;
                 harness_layout.entry_row = layout.entry_row + pack_rows + 3;
                 harness_layout.entry_rows = harness_rows;
-                jewelry_layout = layout;
-                jewelry_layout.entry_row = harness_layout.entry_row
+                quiver_layout = layout;
+                quiver_layout.entry_row = harness_layout.entry_row
                     + harness_rows + 3;
+                quiver_layout.entry_rows = quiver_rows;
+                jewelry_layout = layout;
+                jewelry_layout.entry_row = quiver_layout.entry_row
+                    + quiver_rows + 3;
                 jewelry_layout.entry_rows = jewelry_rows;
                 pack_selected = inv_entry_cur < pack_entry_cnt;
                 harness_selected = !pack_selected
                     && inv_entry_cur < pack_entry_cnt + harness_entry_cnt;
-                jewelry_selected = !pack_selected && !harness_selected;
+                quiver_selected = !pack_selected && !harness_selected
+                    && inv_entry_cur < pack_entry_cnt + harness_entry_cnt
+                        + quiver_entry_cnt;
+                jewelry_selected = !pack_selected && !harness_selected
+                    && !quiver_selected;
 
                 if (pack_entry_cnt > 0 && pack_rows > 0)
                 {
@@ -12381,19 +12605,43 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     inv_harness_top = 0;
                 }
 
+                if (quiver_entry_cnt > 0 && quiver_rows > 0)
+                {
+                    int quiver_cur = pack_selected || harness_selected
+                        ? 0
+                        : inv_entry_cur - pack_entry_cnt - harness_entry_cnt;
+
+                    equipment_entry_adjust_top(
+                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        quiver_entry_cnt, quiver_selected ? quiver_cur : 0,
+                        quiver_rows, &quiver_cols,
+                        preserve_touch_view || !quiver_selected,
+                        &inv_quiver_top);
+                    max_quiver_top = equipment_entry_last_page_top(
+                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        quiver_entry_cnt, quiver_rows, &quiver_cols);
+                }
+                else
+                {
+                    inv_quiver_top = 0;
+                }
+
                 if (jewelry_entry_cnt > 0 && jewelry_rows > 0)
                 {
                     int jewelry_cur = jewelry_selected
                         ? inv_entry_cur - pack_entry_cnt - harness_entry_cnt
+                            - quiver_entry_cnt
                         : 0;
 
                     equipment_entry_adjust_top(
-                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        equip_entries + pack_entry_cnt + harness_entry_cnt
+                            + quiver_entry_cnt,
                         jewelry_entry_cnt, jewelry_cur, jewelry_rows,
                         &jewelry_cols, preserve_touch_view || !jewelry_selected,
                         &inv_jewelry_top);
                     max_jewelry_top = equipment_entry_last_page_top(
-                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        equip_entries + pack_entry_cnt + harness_entry_cnt
+                            + quiver_entry_cnt,
                         jewelry_entry_cnt, jewelry_rows, &jewelry_cols);
                 }
                 else
@@ -12403,7 +12651,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                 max_entry_top = 0;
                 entry_page_rows = pack_selected ? pack_rows
-                    : harness_selected ? harness_rows : jewelry_rows;
+                    : harness_selected ? harness_rows
+                    : quiver_selected ? quiver_rows : jewelry_rows;
                 if (entry_page_rows < 1)
                     entry_page_rows = 1;
                 inventory_browser_section_header(INVENTORY_MENU_GROUP_PACK,
@@ -12412,7 +12661,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     INVENTORY_MENU_GROUP_HARNESS, harness_entry_cnt,
                     harness_header, sizeof(harness_header));
                 inventory_browser_section_header(
-                    INVENTORY_MENU_GROUP_JEWELRY, inventory_totals[2],
+                    INVENTORY_MENU_GROUP_QUIVER, quiver_entry_cnt,
+                    quiver_header, sizeof(quiver_header));
+                inventory_browser_section_header(
+                    INVENTORY_MENU_GROUP_JEWELRY, jewelry_entry_cnt,
                     jewelry_header, sizeof(jewelry_header));
             }
             else if (inventory_entry_cnt > 0)
@@ -12450,6 +12702,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     harness_layout.entry_row + harness_layout.entry_rows - 1,
                     SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
                     &inv_harness_top, max_harness_top, false);
+                knowledge_touch_scroll_region(&layout, layout.list_col,
+                    list_right, quiver_layout.entry_row,
+                    quiver_layout.entry_row + quiver_layout.entry_rows - 1,
+                    SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
+                    &inv_quiver_top, max_quiver_top, false);
                 knowledge_touch_scroll_region(&layout, layout.list_col,
                     list_right, jewelry_layout.entry_row,
                     jewelry_layout.entry_row + jewelry_layout.entry_rows - 1,
@@ -12503,7 +12760,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         ? &page_summary_layout
                         : &layout,
                     TERM_SLATE,
-                    "Pack, Harness, and Jewelry Pouch items, equipment, and floor finds");
+                    "Pack, Harness, Quiver, and Jewelry Pouch items, equipment, and floor finds");
             }
             Term_erase(0, layout.header_row, 255);
             if (inventory_one_page)
@@ -12604,14 +12861,25 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 bool pack_selected = inv_entry_cur < pack_entry_cnt;
                 bool harness_selected = !pack_selected
                     && inv_entry_cur < pack_entry_cnt + harness_entry_cnt;
-                bool jewelry_selected = !pack_selected && !harness_selected;
+                bool quiver_selected = !pack_selected && !harness_selected
+                    && inv_entry_cur < pack_entry_cnt + harness_entry_cnt
+                        + quiver_entry_cnt;
+                bool jewelry_selected = !pack_selected && !harness_selected
+                    && !quiver_selected;
                 int harness_cur = harness_selected
                     ? inv_entry_cur - pack_entry_cnt : 0;
-                int jewelry_cur = jewelry_selected
+                int quiver_cur = quiver_selected
                     ? inv_entry_cur - pack_entry_cnt - harness_entry_cnt : 0;
+                int jewelry_cur = jewelry_selected
+                    ? inv_entry_cur - pack_entry_cnt - harness_entry_cnt
+                        - quiver_entry_cnt
+                    : 0;
                 int harness_gap_row = harness_layout.entry_row - 3;
                 int harness_header_row = harness_layout.entry_row - 2;
                 int harness_divider_row = harness_layout.entry_row - 1;
+                int quiver_gap_row = quiver_layout.entry_row - 3;
+                int quiver_header_row = quiver_layout.entry_row - 2;
+                int quiver_divider_row = quiver_layout.entry_row - 1;
                 int jewelry_gap_row = jewelry_layout.entry_row - 3;
                 int jewelry_header_row = jewelry_layout.entry_row - 2;
                 int jewelry_divider_row = jewelry_layout.entry_row - 1;
@@ -12658,6 +12926,40 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         &harness_rendered_rows);
                 }
 
+                if (quiver_gap_row >= layout.list_row
+                    && quiver_gap_row < layout.status_row)
+                {
+                    Term_erase(layout.list_col, quiver_gap_row,
+                        layout.list_w);
+                }
+                if (quiver_header_row >= layout.list_row
+                    && quiver_header_row < layout.status_row)
+                {
+                    Term_erase(layout.list_col, quiver_header_row,
+                        layout.list_w);
+                    supply_put_fitted(layout.list_col, quiver_header_row,
+                        layout.list_w,
+                        inventory_browser_section_attr(
+                            INVENTORY_MENU_GROUP_QUIVER),
+                        quiver_header);
+                }
+                if (quiver_divider_row >= layout.list_row
+                    && quiver_divider_row < layout.status_row)
+                {
+                    for (i = 0; i < layout.term_wid; i++)
+                        Term_putch(i, quiver_divider_row, TERM_L_DARK, '=');
+                }
+                if (quiver_layout.entry_rows > 0)
+                {
+                    (void)display_equipment_slot_entries_wrapped(
+                        &quiver_layout, quiver_layout.entry_row,
+                        quiver_layout.entry_rows,
+                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        quiver_entry_cnt, quiver_cur, inv_quiver_top,
+                        quiver_selected ? inv_column : 0, &quiver_cols,
+                        &quiver_rendered_rows);
+                }
+
                 if (jewelry_gap_row >= layout.list_row
                     && jewelry_gap_row < layout.status_row)
                 {
@@ -12686,13 +12988,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     (void)display_equipment_slot_entries_wrapped(
                         &jewelry_layout, jewelry_layout.entry_row,
                         jewelry_layout.entry_rows,
-                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        equip_entries + pack_entry_cnt + harness_entry_cnt
+                            + quiver_entry_cnt,
                         jewelry_entry_cnt, jewelry_cur, inv_jewelry_top,
                         jewelry_selected ? inv_column : 0, &jewelry_cols,
                         &jewelry_rendered_rows);
                 }
                 rendered_entry_rows = pack_rendered_rows
-                    + harness_rendered_rows + jewelry_rendered_rows + 6;
+                    + harness_rendered_rows + quiver_rendered_rows
+                    + jewelry_rendered_rows + 9;
             }
             else
             {
@@ -13143,18 +13447,26 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     bool pack_selected = inv_entry_cur < pack_entry_cnt;
                     bool harness_selected = !pack_selected
                         && inv_entry_cur < pack_entry_cnt + harness_entry_cnt;
+                    bool quiver_selected = !pack_selected && !harness_selected
+                        && inv_entry_cur < pack_entry_cnt + harness_entry_cnt
+                            + quiver_entry_cnt;
                     const knowledge_browser_layout* selected_layout =
                         pack_selected ? &pack_layout
                         : harness_selected ? &harness_layout
+                        : quiver_selected ? &quiver_layout
                         : &jewelry_layout;
                     int selected_cur = pack_selected
                         ? inv_entry_cur
                         : harness_selected
                             ? inv_entry_cur - pack_entry_cnt
-                            : inv_entry_cur - pack_entry_cnt
-                                - harness_entry_cnt;
+                            : quiver_selected
+                                ? inv_entry_cur - pack_entry_cnt
+                                    - harness_entry_cnt
+                                : inv_entry_cur - pack_entry_cnt
+                                    - harness_entry_cnt - quiver_entry_cnt;
                     int selected_top = pack_selected ? inv_pack_top
                         : harness_selected ? inv_harness_top
+                        : quiver_selected ? inv_quiver_top
                         : inv_jewelry_top;
 
                     supply_overlay_avoid_selection(
@@ -13203,15 +13515,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 bool pack_selected = inv_entry_cur < pack_entry_cnt;
                 bool harness_selected = !pack_selected
                     && inv_entry_cur < pack_entry_cnt + harness_entry_cnt;
+                bool quiver_selected = !pack_selected && !harness_selected
+                    && inv_entry_cur < pack_entry_cnt + harness_entry_cnt
+                        + quiver_entry_cnt;
                 int selected_row = pack_selected
                     ? pack_layout.entry_row + (inv_entry_cur - inv_pack_top)
                     : harness_selected
                         ? harness_layout.entry_row
                             + (inv_entry_cur - pack_entry_cnt
                                 - inv_harness_top)
-                        : jewelry_layout.entry_row
-                            + (inv_entry_cur - pack_entry_cnt
-                                - harness_entry_cnt - inv_jewelry_top);
+                        : quiver_selected
+                            ? quiver_layout.entry_row
+                                + (inv_entry_cur - pack_entry_cnt
+                                    - harness_entry_cnt - inv_quiver_top)
+                            : jewelry_layout.entry_row
+                                + (inv_entry_cur - pack_entry_cnt
+                                    - harness_entry_cnt - quiver_entry_cnt
+                                    - inv_jewelry_top);
 
                 Term_gotoxy(layout.list_col, selected_row);
             }

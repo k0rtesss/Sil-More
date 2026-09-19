@@ -14135,7 +14135,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This trap releases shallow water beneath you. After each of your next two completed actions, the flood spreads farther across nearby floor and shallow water. On the second action its center becomes deep water, where movement takes four times normal energy and you cannot attack.",
+          "text": "This trap releases one shallow water cell beneath you. After each of your next two completed actions, it fills the next path-reachable ring (up to eight cells, then up to sixteen) without crossing walls; doors in the path are destroyed and replaced by water. Acid variants use acid instead. On the second action a water flood's center becomes deep water, where movement takes four times normal energy and you cannot attack.",
           "kind": "info",
           "anchor": "map"
         },

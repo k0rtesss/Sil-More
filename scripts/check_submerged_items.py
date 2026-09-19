@@ -124,11 +124,130 @@ static void flood_trap_tests(void) {
     /* One completed action floods radius one. */
     cave_flood_begin_action();cave_flood_end_action();
     assert(cave_feat[9][9]==FEAT_WATER&&cave_feat[8][10]==FEAT_FLOOR);
+    int wet=0;
+    for(int y=7;y<=13;y++)for(int x=7;x<=13;x++)
+        if(cave_feat[y][x]==FEAT_WATER||cave_feat[y][x]==FEAT_DEEP_WATER)wet++;
+    assert(wet==9);
     /* The following action floods radius two and deepens the origin. */
     cave_flood_begin_action();cave_flood_end_action();
     assert(cave_feat[8][10]==FEAT_WATER&&cave_feat[10][10]==FEAT_DEEP_WATER);
-    assert(cave_flood_stage_at(10,10)==0);
-    puts("Flood trap: trigger, delayed radius-one spread, radius-two spread and deepened center: PASS");
+    wet=0;
+    for(int y=7;y<=13;y++)for(int x=7;x<=13;x++)
+        if(cave_feat[y][x]==FEAT_WATER||cave_feat[y][x]==FEAT_DEEP_WATER)wet++;
+    assert(wet==25);
+    assert(cave_flood_stage_at(10,10)==CAVE_FLOOD_STAGE_COMPLETE);
+
+    /* A blocked direct neighbour uses an available route instead of losing
+     * that action's eight/sixteen-cell quota. */
+    submerged_map();cave_flood_clear();
+    cave_set_feat(10,10,FEAT_TRAP_FLOOD);
+    cave_set_feat(10,11,FEAT_WALL_EXTRA);
+    cave_flood_trigger(10,10);p_ptr->energy_use=100;cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    wet=0;
+    for(int y=1;y<31;y++)for(int x=1;x<31;x++)
+        if(cave_feat[y][x]==FEAT_WATER||cave_feat[y][x]==FEAT_DEEP_WATER)wet++;
+    assert(wet==25);
+
+    /* The trap origin deepens even when walls prevent a natural deep-water
+     * neighbourhood. */
+    submerged_map();cave_flood_clear();
+    cave_set_feat(10,10,FEAT_TRAP_FLOOD);
+    for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
+        if(dy||dx)cave_set_feat(10+dy,10+dx,FEAT_WALL_EXTRA);
+    cave_flood_trigger(10,10);p_ptr->energy_use=100;cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[10][10]==FEAT_DEEP_WATER);
+
+    /* A wall blocks the wave rather than merely being skipped after a
+     * geometric radius test. */
+    submerged_map();cave_flood_clear();
+    cave_set_feat(10,10,FEAT_TRAP_FLOOD);
+    for(int y=8;y<=12;y++)cave_set_feat(y,11,FEAT_WALL_EXTRA);
+    cave_flood_trigger(10,10);p_ptr->energy_use=100;cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[10][12]==FEAT_FLOOR);
+
+    /* Doors are traversable flood targets and are replaced by the liquid. */
+    submerged_map();cave_flood_clear();
+    cave_set_feat(10,10,FEAT_TRAP_FLOOD);
+    for(int x=10;x<=12;x++) {
+        cave_set_feat(9,x,FEAT_WALL_EXTRA);
+        cave_set_feat(11,x,FEAT_WALL_EXTRA);
+    }
+    cave_set_feat(10,11,FEAT_DOOR_HEAD);
+    cave_flood_trigger(10,10);p_ptr->energy_use=100;cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[10][11]==FEAT_WATER);
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[10][12]==FEAT_WATER);
+
+    /* Rubble and bridges are also destroyed, while the surrounding walls keep
+     * the path constrained. */
+    submerged_map();cave_flood_clear();
+    cave_set_feat(10,10,FEAT_TRAP_FLOOD);
+    for(int x=10;x<=12;x++) {
+        cave_set_feat(9,x,FEAT_WALL_EXTRA);
+        cave_set_feat(11,x,FEAT_WALL_EXTRA);
+    }
+    cave_set_feat(10,11,FEAT_RUBBLE);
+    cave_set_feat(10,12,FEAT_BRIDGE_WATER_H);
+    cave_flood_trigger(10,10);p_ptr->energy_use=100;cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[10][11]==FEAT_WATER);
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[10][12]==FEAT_WATER);
+    puts("Flood trap: 1+8+16 reachable cells, walls block, doors/rubble/bridges are replaced: PASS");
+}
+static void acid_flood_trap_tests(void) {
+    submerged_map();cave_flood_clear();
+    cave_set_feat(10,10,FEAT_TRAP_FLOOD);
+    cave_flood_set_trap_kind(10,10,CAVE_FLOOD_KIND_ACID);
+    assert(cave_flood_trap_is_acid_at(10,10));
+    cave_flood_trigger(10,10);
+    assert(cave_feat[10][10]==FEAT_POISON&&cave_flood_stage_at(10,10)==1);
+    p_ptr->energy_use=100;cave_flood_end_action();
+    assert(cave_feat[9][9]==FEAT_FLOOR&&cave_flood_stage_at(10,10)==1);
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[9][9]==FEAT_POISON&&cave_feat[8][10]==FEAT_FLOOR);
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[8][10]==FEAT_POISON&&cave_feat[10][10]==FEAT_POISON);
+    assert(cave_flood_stage_at(10,10)==CAVE_FLOOD_STAGE_COMPLETE);
+
+    submerged_map();cave_flood_clear();
+    cave_set_feat(10,10,FEAT_TRAP_FLOOD);
+    for(int x=10;x<=12;x++) {
+        cave_set_feat(9,x,FEAT_WALL_EXTRA);
+        cave_set_feat(11,x,FEAT_WALL_EXTRA);
+    }
+    cave_set_feat(10,11,FEAT_DOOR_HEAD);
+    cave_flood_set_trap_kind(10,10,CAVE_FLOOD_KIND_ACID);
+    cave_flood_trigger(10,10);p_ptr->energy_use=100;cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[10][11]==FEAT_POISON);
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_feat[10][12]==FEAT_POISON);
+    puts("Acid flood trap: shared feature, stored variant, delayed poison spread and completed source: PASS");
+}
+static void flood_trap_visual_tests(void) {
+    submerged_map();cave_flood_clear();
+    cave_set_feat(10,10,FEAT_TRAP_FLOOD);
+    cave_flood_set_trap_kind(10,10,CAVE_FLOOD_KIND_WATER);
+    for(int seen=0;seen<2;seen++) {
+        cave_info[10][10]=CAVE_MARK|(seen?CAVE_SEEN:0);
+        byte a,ta;char c,tc;map_info(10,10,&a,&c,&ta,&tc);
+        assert(((byte)c&TILE_INDEX_MASK)==CAVE_FLOOD_TRAP_WATER_TILE_COL);
+    }
+    cave_flood_set_trap_kind(10,10,CAVE_FLOOD_KIND_ACID);
+    for(int seen=0;seen<2;seen++) {
+        cave_info[10][10]=CAVE_MARK|(seen?CAVE_SEEN:0);
+        byte a,ta;char c,tc;map_info(10,10,&a,&c,&ta,&tc);
+        assert(((byte)c&TILE_INDEX_MASK)==CAVE_FLOOD_TRAP_ACID_TILE_COL);
+    }
+    puts("Flood trap visuals: blue water and green acid plates stay stable when seen or remembered: PASS");
 }
 '''
 
@@ -138,7 +257,7 @@ def main():
     water.TESTS = water.TESTS.replace("static void water_tests(void)",
                                     SUBMERGED_TESTS + "static void water_tests(void)")
     water.TESTS = water.TESTS.replace("vault_water_tests(); water_render_tests();",
-                                    "vault_water_tests(); water_render_tests(); submerged_items_tests(); flood_trap_tests();")
+                                    "vault_water_tests(); water_render_tests(); submerged_items_tests(); flood_trap_tests(); acid_flood_trap_tests(); flood_trap_visual_tests();")
     water.main()
 
 

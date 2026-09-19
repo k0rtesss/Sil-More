@@ -47,16 +47,16 @@
 | 95 | Orcobal, Champion of the Orcs | 3 | 0 | 3 | 1 | 1 | 8 |
 | 101 | Whispering shadow | 1 | 0 | 1 | 1 | 1 | 4 |
 | 102 | Distended spider | 3 | 0 | 3 | 3 | 3 | 12 |
-| 103 | Easterling archer | 3 | 0 | 3 | 1 | 0 | 7 |
+| 103 | Easterling archer | 3 | 2 | 3 | 1 | 0 | 9 |
 | 104 | Twisted bat | 3 | 0 | 1 | 2 | 4 | 10 |
 | 105 | Othrod, the Orc Lord | 4 | 0 | 3 | 1 | 2 | 10 |
 | 111 | Snow troll | 10 | 0 | 2 | 1 | 4 | 17 |
 | 112 | Barrow wight | 2 | 1 | 3 | 2 | 1 | 9 |
 | 113 | Lurking horror | 1 | 1 | 1 | 1 | 1 | 5 |
 | 114 | Giant | 2 | 0 | 2 | 1 | 2 | 7 |
-| 115 | Uldor, the Accursed | 2 | 0 | 3 | 1 | 0 | 6 |
+| 115 | Uldor, the Accursed | 2 | 2 | 3 | 1 | 0 | 8 |
 | 117 | Brodda, the Easterling Lord | 9 | 0 | 3 | 1 | 0 | 13 |
-| 121 | Easterling spy | 3 | 0 | 3 | 1 | 0 | 7 |
+| 121 | Easterling spy | 3 | 2 | 3 | 1 | 0 | 9 |
 | 122 | Shadow bat | 3 | 0 | 1 | 2 | 4 | 10 |
 | 123 | Sulrauko | 0 | 0 | 0 | 0 | 0 | 0 |
 | 124 | Fire-drake hatchling | 2 | 1 | 3 | 2 | 2 | 10 |
@@ -87,7 +87,7 @@
 | 172 | Greater werewolf | 22 | 0 | 3 | 0 | 5 | 30 |
 | 173 | Adamant serpent | 0 | 4 | 0 | 0 | 0 | 4 |
 | 174 | Lesser vampire | 16 | 0 | 7 | 2 | 3 | 28 |
-| 175 | Cat assassin | 2 | 1 | 2 | 1 | 1 | 7 |
+| 175 | Cat assassin | 2 | 2 | 2 | 1 | 1 | 8 |
 | 176 | Scatha the Worm | 4 | 1 | 3 | 2 | 2 | 12 |
 | 177 | Oikeroi, Guard of Tevildo | 2 | 0 | 2 | 1 | 1 | 6 |
 | 181 | Young fire-drake | 4 | 1 | 3 | 2 | 2 | 12 |

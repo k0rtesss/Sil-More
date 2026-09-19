@@ -133,16 +133,16 @@ are listed in `monster-sounds-uncovered.md`.
 | 95 | Orcobal, Champion of the Orcs | LEOHPAZ/Dark_Orc_Army/Others/PaleChampion |
 | 101 | Whispering shadow | LEOHPAZ/Undead_Creatures_2/Lich |
 | 102 | Distended spider | Spider, LEOHPAZ/Insectoid_Creatures |
-| 103 | Easterling archer | Minifantasy/Human |
+| 103 | Easterling archer | Minifantasy/Human, shoot |
 | 104 | Twisted bat | Bat, Minifantasy/Bat |
 | 105 | Othrod, the Orc Lord | LEOHPAZ/Dark_Orc_Army/Warbreed_Orcs |
 | 111 | Snow troll | CC0, Minifantasy/Yeti |
 | 112 | Barrow wight | LEOHPAZ/Undead_Creatures_2/UndeadKnight |
 | 113 | Lurking horror | LEOHPAZ/Undead_Creatures_2/Lich |
 | 114 | Giant | Minifantasy/Large_Humanoid |
-| 115 | Uldor, the Accursed | Minifantasy/Human |
+| 115 | Uldor, the Accursed | Minifantasy/Human, shoot |
 | 117 | Brodda, the Easterling Lord | Minifantasy/Human |
-| 121 | Easterling spy | Minifantasy/Human |
+| 121 | Easterling spy | Minifantasy/Human, shoot |
 | 122 | Shadow bat | Bat, Minifantasy/Bat |
 | 123 | Sulrauko |  |
 | 124 | Fire-drake hatchling | CC0, Dragon, LEOHPAZ/Dragon |
@@ -173,7 +173,7 @@ are listed in `monster-sounds-uncovered.md`.
 | 172 | Greater werewolf | Werewolf |
 | 173 | Adamant serpent | CC0 |
 | 174 | Lesser vampire | AlesiaDavina/Vampire |
-| 175 | Cat assassin | Cat |
+| 175 | Cat assassin | Cat, shoot |
 | 176 | Scatha the Worm | CC0, Dragon, LEOHPAZ/Dragon |
 | 177 | Oikeroi, Guard of Tevildo | Cat |
 | 181 | Young fire-drake | CC0, Dragon, LEOHPAZ/Dragon |

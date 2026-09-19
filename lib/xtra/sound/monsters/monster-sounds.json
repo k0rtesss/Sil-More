@@ -1520,7 +1520,10 @@
       ],
       "ranged": {
         "arrow2": {
-          "sounds": []
+          "sounds": [
+            "sound/shoot/Bow_Attack_1.ogg",
+            "sound/shoot/Bow_Attack_2.ogg"
+          ]
         }
       },
       "damage": {
@@ -1794,7 +1797,10 @@
       ],
       "ranged": {
         "arrow1": {
-          "sounds": []
+          "sounds": [
+            "sound/shoot/Bow_Attack_1.ogg",
+            "sound/shoot/Bow_Attack_2.ogg"
+          ]
         }
       },
       "damage": {
@@ -1883,7 +1889,10 @@
       ],
       "ranged": {
         "arrow1": {
-          "sounds": []
+          "sounds": [
+            "sound/shoot/Bow_Attack_1.ogg",
+            "sound/shoot/Bow_Attack_2.ogg"
+          ]
         },
         "shriek": {
           "sounds": []
@@ -3019,7 +3028,8 @@
       "ranged": {
         "arrow1": {
           "sounds": [
-            "sound/monsters/recordings/Cat/Cat_Hiss.ogg"
+            "sound/shoot/Bow_Attack_1.ogg",
+            "sound/shoot/Bow_Attack_2.ogg"
           ]
         }
       },

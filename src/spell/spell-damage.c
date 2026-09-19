@@ -1173,22 +1173,13 @@ static void elemental_message_amount(const elemental_item_candidate* candidate,
     int original_number, int amount, cptr o_name, cptr singular_action,
     cptr plural_action)
 {
-    cptr owner;
+    char owner[40];
     cptr action = (amount > 1) ? plural_action : singular_action;
 
     if (original_number > 1)
-    {
-        if (amount >= original_number)
-            owner = "All of your";
-        else if (amount > 1)
-            owner = "Some of your";
-        else
-            owner = "One of your";
-    }
+        strnfmt(owner, sizeof(owner), "%d of your", amount);
     else
-    {
-        owner = "Your";
-    }
+        SDL_strlcpy(owner, "Your", sizeof(owner));
 
     if (candidate->location == ELEMENTAL_CANDIDATE_SUPPLY)
     {
@@ -1978,7 +1969,12 @@ static bool elemental_select_candidate(int attack_type,
 static void elemental_message(const elemental_item_candidate* candidate,
     int original_number, cptr o_name, cptr action)
 {
-    cptr owner = (original_number > 1) ? "One of your" : "Your";
+    char owner[40];
+
+    if (original_number > 1)
+        SDL_strlcpy(owner, "1 of your", sizeof(owner));
+    else
+        SDL_strlcpy(owner, "Your", sizeof(owner));
 
     if (candidate->location == ELEMENTAL_CANDIDATE_SUPPLY)
     {

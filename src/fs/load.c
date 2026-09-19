@@ -97,6 +97,7 @@ bool savefile_has_cave_info_hi = false;
 bool savefile_has_cave_rewired = false;
 bool savefile_has_cave_natural = false;
 bool savefile_has_cave_water_flow = false;
+bool savefile_has_cave_flood_trap_kinds = false;
 bool savefile_has_hint_messages = false;
 bool savefile_has_hint_message_meta = false;
 bool savefile_has_hint_message_destinations = false;
@@ -864,6 +865,14 @@ errr rd_item(object_type* o_ptr)
         /* Get the artefact's explicit storage metadata. */
         o_ptr->storage = a_ptr->storage;
         o_ptr->volume = a_ptr->volume;
+
+        /* Artefacts may also opt into deliberate Pack/Harness storage. */
+        if (has_saved_storage && object_can_choose_pack_or_harness(o_ptr)
+            && (saved_storage == OBJECT_STORAGE_PACK
+                || saved_storage == OBJECT_STORAGE_HARNESS))
+        {
+            o_ptr->storage = saved_storage;
+        }
 
         /* Ensure artefact-granted abilities are present (some generators may omit them). */
         for (int ai = 0; ai < a_ptr->abilities && o_ptr->abilities < (int)N_ELEMENTS(o_ptr->skilltype); ai++)
@@ -2802,6 +2811,7 @@ static errr rd_savefile_new_aux(void)
     savefile_has_cave_rewired = savefile_version_at_least(0, 9, 7, 2);
     savefile_has_cave_natural = savefile_version_at_least(0, 9, 7, 4);
     savefile_has_cave_water_flow = savefile_version_at_least(0, 9, 8, 12);
+    savefile_has_cave_flood_trap_kinds = savefile_version_at_least(0, 9, 8, 15);
     savefile_has_hint_messages = savefile_version_at_least(0, 9, 1, 10);
     savefile_has_hint_message_meta = savefile_version_at_least(0, 9, 5, 7);
     savefile_has_hint_message_destinations =
@@ -3296,6 +3306,7 @@ bool load_player(void)
             savefile_has_cave_rewired = savefile_version_at_least(0, 9, 7, 2);
             savefile_has_cave_natural = savefile_version_at_least(0, 9, 7, 4);
             savefile_has_cave_water_flow = savefile_version_at_least(0, 9, 8, 12);
+            savefile_has_cave_flood_trap_kinds = savefile_version_at_least(0, 9, 8, 15);
             savefile_has_hint_messages = savefile_version_at_least(0, 9, 1, 10);
             savefile_has_hint_message_meta = savefile_version_at_least(0, 9, 5, 7);
             savefile_has_hint_message_destinations =

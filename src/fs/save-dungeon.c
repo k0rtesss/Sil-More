@@ -91,6 +91,29 @@ static void wr_water_flow(void)
     }
 }
 
+static void wr_flood_trap_kinds(void)
+{
+    u16b count = 0;
+
+    /* Acid is a variant of FEAT_TRAP_FLOOD, not another terrain feature.
+     * Water is the implicit default, so only acid trap cells need storage. */
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (cave_flood_trap_is_acid_at(y, x))
+                count++;
+
+    wr_u16b(CAVE_FLOOD_TRAP_KIND_SAVE_MAGIC);
+    wr_u16b(count);
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (cave_flood_trap_is_acid_at(y, x))
+            {
+                wr_byte((byte)y);
+                wr_byte((byte)x);
+                wr_byte(CAVE_FLOOD_KIND_ACID);
+            }
+}
+
 /*
  * Write the current dungeon
  */
@@ -446,6 +469,7 @@ void wr_dungeon(void)
             wr_byte(scent_export_cell(y, x));
 
     wr_floods();
+    wr_flood_trap_kinds();
 
     log_debug("Dungeon data write completed - %d objects, %d monsters", o_max - 1, mon_max - 1);
     log_trace("[save:%06u] === END DUNGEON ===", (unsigned)save_byte_offset);

@@ -2028,7 +2028,7 @@ I:20:3:3
 Y:PACK:45
 W:35:15:110:30000
 P:-4:6d2:0:0d0
-F:TUNNEL | NOBLE_ITEM
+F:TUNNEL | NOBLE_ITEM | HARNESS_STOWABLE
 D:A mighty Dwarven mattock forged by Gamil Zirak, master smith of Nogrod and
 D: teacher of Telchar. Its name in Khuzdul means 'Axe-lord', for it was made
 D: for a king of Nogrod in the early days. Enchanted for both battle and

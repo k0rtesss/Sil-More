@@ -48,11 +48,50 @@ static errr rd_floods(void)
         rd_byte(&y);
         rd_byte(&x);
         rd_byte(&stage);
+        bool valid_stage = stage >= 1 && stage <= 2;
+        if (stage == CAVE_FLOOD_STAGE_COMPLETE
+            && savefile_version_at_least(0, 9, 8, 14))
+            valid_stage = true;
         if (load_byte_offset - start_offset != 3
-            || !cave_flood_restore(y, x, stage))
+            || !valid_stage || !cave_flood_restore(y, x, stage))
         {
             cave_flood_clear();
             note("Invalid flooding trap event.");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static errr rd_flood_trap_kinds(void)
+{
+    u16b magic = 0, count = 0;
+    u32b start_offset = load_byte_offset;
+
+    if (!savefile_has_cave_flood_trap_kinds)
+        return 0;
+
+    rd_u16b(&magic);
+    rd_u16b(&count);
+    if (load_byte_offset - start_offset != 4
+        || magic != CAVE_FLOOD_TRAP_KIND_SAVE_MAGIC
+        || count > (p_ptr->cur_map_hgt - 2) * (p_ptr->cur_map_wid - 2))
+    {
+        note("Invalid flooding trap kind header.");
+        return -1;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        byte y = 0, x = 0, kind = 0;
+        start_offset = load_byte_offset;
+        rd_byte(&y);
+        rd_byte(&x);
+        rd_byte(&kind);
+        if (load_byte_offset - start_offset != 3
+            || !cave_flood_restore_trap_kind(y, x, kind))
+        {
+            note("Invalid flooding trap kind.");
             return -1;
         }
     }
@@ -1038,6 +1077,8 @@ errr rd_dungeon(void)
     }
 
     if (rd_floods())
+        return -1;
+    if (rd_flood_trap_kinds())
         return -1;
 
     /*** Success ***/

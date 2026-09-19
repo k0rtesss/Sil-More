@@ -19,6 +19,7 @@ OUT = ROOT / "scripts/output/water-check"
 TESTS = r'''
 #include "melee/melee-movement.h"
 #include "melee/melee-util.h"
+#include "sdl/main-sdl-private.h"
 
 void continue_leap(void);
 void generation_tests(void);
@@ -49,6 +50,13 @@ static int artefact_y, artefact_x, artefact_count;
 void __wrap_create_chosen_artefact(byte id,int y,int x,bool identify) {
     assert(id==ART_DURIN);(void)identify;
     artefact_y=y;artefact_x=x;artefact_count++;
+}
+
+static bool status_has_label(const status_pane_entry* entries, int count,
+    const char* label) {
+    for (int i=0; i<count; i++)
+        if (!strcmp(entries[i].label,label)) return true;
+    return false;
 }
 
 void water_preview(const char* path,int scale) {
@@ -111,6 +119,28 @@ static void scent_tests(void) {
 
 static void movement_tests(void) {
     water_map(32,32,FEAT_FLOOR);
+    p_ptr->pspeed=2; p_ptr->leaping=false;
+    assert(player_current_movement_energy()==100
+        && player_current_movement_speed()==2);
+    status_pane_entry entries[SDL_STATUS_PANE_MAX_ENTRIES];
+    character_generated=true; character_icky=false;
+    cave_set_feat(10,10,FEAT_WATER);
+    assert(player_current_movement_energy()==150
+        && player_current_movement_speed()==1);
+    int status_count=sdl_status_pane_collect(entries,SDL_STATUS_PANE_MAX_ENTRIES);
+    assert(status_has_label(entries,status_count,"Slow"));
+    assert(!status_has_label(entries,status_count,"Very slow"));
+    cave_set_feat(10,10,FEAT_DEEP_WATER);
+    assert(player_current_movement_energy()==400
+        && player_current_movement_speed()==0);
+    status_count=sdl_status_pane_collect(entries,SDL_STATUS_PANE_MAX_ENTRIES);
+    assert(status_has_label(entries,status_count,"Very slow"));
+    character_generated=false;
+    puts("Terrain speed status: shallow Slow, deep Very slow, airborne normal: PASS");
+    p_ptr->leaping=true;
+    assert(player_current_movement_energy()==100
+        && player_current_movement_speed()==2);
+    p_ptr->leaping=false; cave_set_feat(10,10,FEAT_FLOOR);
     cave_m_idx[10][10] = -1;
     cave_set_feat(10,11,FEAT_WATER); cave_set_feat(10,12,FEAT_WATER);
     p_ptr->active_ability[S_EVN][EVN_LEAPING] = false;
