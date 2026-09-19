@@ -1663,6 +1663,8 @@ extern int inventory_limit_usage_after_replacing(const object_type* incoming,
     const object_type* removed, int remove_quantity);
 extern bool inventory_limit_storage_exchange_possible(
     const object_type* incoming, const object_type* outgoing);
+extern bool inventory_limit_storage_exchange_quantity_possible(
+    const object_type* incoming, const object_type* outgoing, int quantity);
 extern bool inventory_limit_floor_storage_exchange_possible(
     const object_type* incoming, const object_type* outgoing);
 extern int inventory_limit_max_carryable_quantity(const object_type* o_ptr);

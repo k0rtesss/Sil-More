@@ -111,7 +111,33 @@ static void wr_flood_trap_kinds(void)
                 wr_byte((byte)y);
                 wr_byte((byte)x);
                 wr_byte(CAVE_FLOOD_KIND_ACID);
-            }
+    }
+}
+
+static void wr_flood_surface_markers(void)
+{
+    u16b count = 0;
+
+    /* Surface markers distinguish flood-created acid from natural poison.
+     * Store the exact set so a long, narrow flood does not regain banks after
+     * loading from its source and stage alone. */
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (cave_flood_surface_kind_at(y, x))
+                count++;
+
+    wr_u16b(CAVE_FLOOD_SURFACE_SAVE_MAGIC);
+    wr_u16b(count);
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+        {
+            byte kind = cave_flood_surface_kind_at(y, x);
+            if (!kind)
+                continue;
+            wr_byte((byte)y);
+            wr_byte((byte)x);
+            wr_byte(kind);
+        }
 }
 
 /*
@@ -470,6 +496,7 @@ void wr_dungeon(void)
 
     wr_floods();
     wr_flood_trap_kinds();
+    wr_flood_surface_markers();
 
     log_debug("Dungeon data write completed - %d objects, %d monsters", o_max - 1, mon_max - 1);
     log_trace("[save:%06u] === END DUNGEON ===", (unsigned)save_byte_offset);

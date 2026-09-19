@@ -522,7 +522,7 @@ int inventory_limit_usage_after_replacing(const object_type* incoming,
 
 static bool inventory_limit_storage_exchange_possible_internal(
     const object_type* incoming, const object_type* outgoing,
-    bool allow_non_stowable)
+    int incoming_quantity, bool allow_non_stowable)
 {
     enum inventory_limit_group source_group;
     enum inventory_limit_group target_group;
@@ -534,6 +534,7 @@ static bool inventory_limit_storage_exchange_possible_internal(
     int target_usage;
 
     if (!incoming || !incoming->k_idx || incoming->number <= 0
+        || incoming_quantity <= 0 || incoming_quantity > incoming->number
         || !outgoing || !outgoing->k_idx || outgoing->number <= 0
         || (!allow_non_stowable
             && (!object_can_choose_pack_or_harness(incoming)
@@ -555,6 +556,7 @@ static bool inventory_limit_storage_exchange_possible_internal(
      * the limit layer keeps carriage reductions and legacy high-water
      * allowances identical to the ordinary capacity checks. */
     object_copy(&incoming_target, incoming);
+    incoming_target.number = incoming_quantity;
     incoming_target.storage = target_group == INV_LIMIT_PACK
         ? OBJECT_STORAGE_PACK : OBJECT_STORAGE_HARNESS;
     object_copy(&outgoing_source, outgoing);
@@ -562,7 +564,7 @@ static bool inventory_limit_storage_exchange_possible_internal(
         ? OBJECT_STORAGE_PACK : OBJECT_STORAGE_HARNESS;
 
     source_usage = projected_inventory_volume_usage(source_group, incoming,
-        MAX(incoming->number, 1), &outgoing_source);
+        incoming_quantity, &outgoing_source);
     target_usage = projected_inventory_volume_usage(target_group, outgoing,
         MAX(outgoing->number, 1), &incoming_target);
     source_limit = MAX(volume_limit_for_group(source_group),
@@ -577,7 +579,16 @@ bool inventory_limit_storage_exchange_possible(
     const object_type* incoming, const object_type* outgoing)
 {
     return inventory_limit_storage_exchange_possible_internal(incoming,
-        outgoing, false);
+        outgoing, incoming ? incoming->number : 0, false);
+}
+
+/* Keep the original carried object's identity while projecting a partial
+ * stack move: the volume walker removes items by pointer, not by value. */
+bool inventory_limit_storage_exchange_quantity_possible(
+    const object_type* incoming, const object_type* outgoing, int quantity)
+{
+    return inventory_limit_storage_exchange_possible_internal(incoming,
+        outgoing, quantity, false);
 }
 
 bool inventory_limit_floor_storage_exchange_possible(
@@ -587,7 +598,7 @@ bool inventory_limit_floor_storage_exchange_possible(
      * item.  This is a capacity relief operation, not a new ordinary Pack /
      * Harness destination for the item. */
     return inventory_limit_storage_exchange_possible_internal(incoming,
-        outgoing, true);
+        outgoing, incoming ? incoming->number : 0, true);
 }
 
 bool inventory_type_slot_available(const object_type* o_ptr,

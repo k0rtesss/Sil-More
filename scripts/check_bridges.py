@@ -290,7 +290,10 @@ def main():
         elif line.startswith("G:") and 88<=feature<=99:
             _,symbol,color=line.split(":");feature_init.append(f"f_info[{feature}].d_char='{symbol}';f_info[{feature}].d_attr=TERM_UMBER;")
     assert set(bridges)==set(range(88,100))
-    assert "M:F:102" in (ROOT/"lib/edit/limits.txt").read_text()
+    feature_limit = next(int(line.split(":")[2]) for line in
+                         (ROOT/"lib/edit/limits.txt").read_text().splitlines()
+                         if line.startswith("M:F:"))
+    assert feature_limit > max(bridges)
     source=OUT/"check.c"
     source.write_text(HARNESS.replace("@WRITE_RLE@",write_rle).replace("@READ_RLE@",read_rle)
         .replace("@READ_GUARDS@",guards).replace("@VERSION_POLICY@",version_policy)

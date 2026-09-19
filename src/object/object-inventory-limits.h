@@ -56,6 +56,8 @@ int inventory_limit_usage_after_replacing(const object_type* incoming,
     const object_type* removed, int remove_quantity);
 bool inventory_limit_storage_exchange_possible(
     const object_type* incoming, const object_type* outgoing);
+bool inventory_limit_storage_exchange_quantity_possible(
+    const object_type* incoming, const object_type* outgoing, int quantity);
 bool inventory_limit_floor_storage_exchange_possible(
     const object_type* incoming, const object_type* outgoing);
 bool inventory_limit_object_matches_group(enum inventory_limit_group group,

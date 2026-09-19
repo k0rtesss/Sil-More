@@ -14,6 +14,7 @@ enum {
 #define CAVE_FLOOD_TRAP_WATER_TILE_COL 0
 #define CAVE_FLOOD_TRAP_ACID_TILE_COL 1
 #define CAVE_FLOOD_TRAP_KIND_SAVE_MAGIC 0xF101
+#define CAVE_FLOOD_SURFACE_SAVE_MAGIC 0xF102
 
 /* Pending floods belong to the current level, with fixed trigger origins. */
 void cave_flood_clear(void);
@@ -29,6 +30,9 @@ bool cave_flood_restore(int y, int x, byte stage);
 
 /* Flood-created liquids do not expose the ordinary one-cell floor bank. */
 bool cave_flood_surface_at(int y, int x);
+byte cave_flood_surface_kind_at(int y, int x);
+void cave_flood_clear_surface_markers(void);
+bool cave_flood_restore_surface(int y, int x, byte kind);
 void cave_flood_surface_changed(int y, int x, int new_feat);
 
 #endif

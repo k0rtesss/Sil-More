@@ -103,7 +103,7 @@
 #     l - Fankil (exact unique, embassy)
 #     m - Easterling warrior (exactly one, without a generated group)
 #     p - Easterling archer (exactly one, without a generated group)
-#     u - Ondotur, the Buried Lord (exact unique)
+#     x - Ondotur, the Buried Lord (exact unique)
 #     Q - Nambatur, Custodian of Grond's Forge (exact unique)
 #     @ - easterling spy
 #     H - silent watcher
@@ -4225,7 +4225,7 @@ D:##`#####..........................____###
 D:##````##...########+++########....____###
 D:##````.....#.................#...#____###
 D:##````.....#..##.........##..#...#____###
-D:##````.....#..##....u....##..#.....___###
+D:##````.....#..##....x....##..#.....___###
 D:##````.....+.................#...#____###
 D:##````:#...+.................+...#____###
 D:##````:#...#.....#.....#.....+...########

@@ -92,6 +92,7 @@ typedef struct supply_menu_request
     const struct object_type* storage_exchange_incoming;
     byte storage_exchange_target; /* OBJECT_STORAGE_* destination */
     bool storage_exchange_include_equip;
+    bool storage_exchange_partial; /* allow a subset of the incoming stack */
     bool storage_exchange_allow_non_stowable;
     cptr storage_exchange_reason; /* why the exchange is needed */
     int* storage_exchange_item_out; /* item to move to the source pool */

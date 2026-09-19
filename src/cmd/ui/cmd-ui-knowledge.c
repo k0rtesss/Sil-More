@@ -7096,6 +7096,16 @@ static bool inventory_storage_exchange_possible(
             request->storage_exchange_incoming, outgoing);
     }
 
+    if (request->storage_exchange_partial)
+    {
+        for (int quantity = 1;
+             quantity <= request->storage_exchange_incoming->number; ++quantity)
+            if (inventory_limit_storage_exchange_quantity_possible(
+                    request->storage_exchange_incoming, outgoing, quantity))
+                return true;
+        return false;
+    }
+
     return inventory_limit_storage_exchange_possible(
         request->storage_exchange_incoming, outgoing);
 }

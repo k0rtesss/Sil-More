@@ -24,7 +24,9 @@ static void ice_map(void) {
     view_n=temp_n=0;
     g_labyrinth_view_active=false;
     for(int y=0;y<32;y++)for(int x=0;x<32;x++) {
-        cave_set_feat(y,x,FEAT_FLOOR);
+        /* update_view relies on the impassable perimeter used by real maps. */
+        cave_set_feat(y,x,(y==0||x==0||y==31||x==31)
+            ?FEAT_WALL_PERM:FEAT_FLOOR);
         cave_info[y][x]=CAVE_MARK|CAVE_SEEN;
         cave_color[y][x]=COLOR_STYLE_BASE;cave_light[y][x]=2;
         cave_m_idx[y][x]=cave_o_idx[y][x]=cave_when[y][x]=0;

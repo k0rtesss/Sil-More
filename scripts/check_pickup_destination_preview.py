@@ -96,6 +96,8 @@ static void render_preview(pickup_destination_preview* preview, int width,
     SDL_DestroySurface(surface);
 }
 
+@EXCHANGE_FILTER@
+
 int main(void)
 {
     pickup_destination_preview preview = {0};
@@ -105,6 +107,8 @@ int main(void)
     int scroll = 0;
     setbuf(stdout, NULL);
     log_set_level(LOG_WARN);
+    assert(messages_init() == 0);
+    assert(quarks_init() == 0);
     inventory = held;
     k_info = kinds;
     z_info = &limits;
@@ -241,6 +245,91 @@ int main(void)
     assert(test_dropped.k_idx && test_dropped.number == 1);
     assert(test_dropped.storage == OBJECT_STORAGE_HARNESS);
     puts("PASS: Equipped Harness replacement drops one copy without merging it back into Harness.");
+
+    /* Both pools are full: moving one 0.4 qt dagger out of the Pack
+     * must free space for the outgoing 0.3 qt dagger. */
+    clear_items();
+    kinds[2].flags4 |= TR4_HARNESS_STOWABLE;
+    held[0] = item(2, 4, OBJECT_STORAGE_PACK, 4);
+    held[1] = item(3, 1, OBJECT_STORAGE_PACK, 244);
+    held[2] = item(2, 1, OBJECT_STORAGE_HARNESS, 3);
+    held[3] = item(3, 1, OBJECT_STORAGE_HARNESS, 206);
+    p_ptr->inven_cnt = 4;
+    p_ptr->equip_cnt = 0;
+    assert(inventory_limit_storage_exchange_possible(&held[0], &held[2]) == false);
+    assert(storage_exchange_max_incoming_quantity(&held[0], &held[2]) == 1);
+    assert(do_cmd_move_item_to_storage_exchange(0, OBJECT_STORAGE_HARNESS, 2, 1));
+    int pack_daggers = 0, harness_daggers = 0;
+    for (int i = 0; i < player_pack_entry_count(); ++i) {
+        object_type* obj = player_pack_entry_at(i);
+        if (obj->tval != TV_SWORD) continue;
+        if (obj->storage == OBJECT_STORAGE_PACK) pack_daggers += obj->number;
+        if (obj->storage == OBJECT_STORAGE_HARNESS) harness_daggers += obj->number;
+    }
+    assert(pack_daggers == 4 && harness_daggers == 1);
+    puts("PASS: Partial exchange between full pools preserves all five daggers.");
+
+    clear_items();
+    held[0] = item(2, 1, OBJECT_STORAGE_PACK, 4);
+    held[1] = item(3, 1, OBJECT_STORAGE_PACK, 256);
+    held[2] = item(3, 1, OBJECT_STORAGE_HARNESS, 206);
+    held[INVEN_WIELD] = item(2, 1, OBJECT_STORAGE_HARNESS, 3);
+    p_ptr->inven_cnt = 3;
+    p_ptr->equip_cnt = 1;
+    assert(do_cmd_move_item_to_storage_exchange(0, OBJECT_STORAGE_HARNESS,
+        INVEN_WIELD, 1));
+    assert(!held[INVEN_WIELD].k_idx);
+    pack_daggers = harness_daggers = 0;
+    for (int i = 0; i < player_pack_entry_count(); ++i) {
+        object_type* obj = player_pack_entry_at(i);
+        if (obj->tval != TV_SWORD) continue;
+        if (obj->storage == OBJECT_STORAGE_PACK) pack_daggers += obj->number;
+        if (obj->storage == OBJECT_STORAGE_HARNESS) harness_daggers += obj->number;
+    }
+    assert(pack_daggers == 1 && harness_daggers == 1);
+    puts("PASS: Whole exchange stows the equipped outgoing weapon in the Pack.");
+
+    /* A one-item preview is insufficient when the return item needs the
+     * room freed by two incoming items. */
+    clear_items();
+    held[0] = item(2, 4, OBJECT_STORAGE_PACK, 4);
+    held[1] = item(3, 1, OBJECT_STORAGE_PACK, 244);
+    held[2] = item(2, 1, OBJECT_STORAGE_HARNESS, 7);
+    held[3] = item(3, 1, OBJECT_STORAGE_HARNESS, 202);
+    p_ptr->inven_cnt = 4;
+    p_ptr->equip_cnt = 0;
+    assert(!inventory_limit_storage_exchange_quantity_possible(&held[0], &held[2], 1));
+    assert(inventory_limit_storage_exchange_quantity_possible(&held[0], &held[2], 2));
+    assert(storage_exchange_max_incoming_quantity(&held[0], &held[2]) == 2);
+    supply_menu_request exchange_request = {0};
+    exchange_request.storage_exchange_incoming = &held[0];
+    exchange_request.storage_exchange_partial = true;
+    assert(inventory_storage_exchange_possible(&exchange_request, &held[2]));
+    exchange_request.storage_exchange_partial = false;
+    assert(!inventory_storage_exchange_possible(&exchange_request, &held[2]));
+    assert(do_cmd_move_item_to_storage_exchange(0, OBJECT_STORAGE_HARNESS, 2, 2));
+    puts("PASS: Exchange can require moving two items to free enough source space.");
+
+    clear_items();
+    held[0] = item(2, 4, OBJECT_STORAGE_PACK, 4);
+    held[1] = item(3, 1, OBJECT_STORAGE_PACK, 244);
+    held[2] = item(3, 1, OBJECT_STORAGE_HARNESS, 206);
+    held[INVEN_WIELD] = item(2, 1, OBJECT_STORAGE_HARNESS, 3);
+    held[INVEN_WIELD].att = 1; /* Keep the returned weapon distinguishable. */
+    p_ptr->inven_cnt = 3;
+    p_ptr->equip_cnt = 1;
+    assert(do_cmd_move_item_to_storage_exchange(0, OBJECT_STORAGE_HARNESS,
+        INVEN_WIELD, 1));
+    assert(!held[INVEN_WIELD].k_idx);
+    pack_daggers = harness_daggers = 0;
+    for (int i = 0; i < player_pack_entry_count(); ++i) {
+        object_type* obj = player_pack_entry_at(i);
+        if (obj->tval != TV_SWORD) continue;
+        if (obj->storage == OBJECT_STORAGE_PACK) pack_daggers += obj->number;
+        if (obj->storage == OBJECT_STORAGE_HARNESS) harness_daggers += obj->number;
+    }
+    assert(pack_daggers == 4 && harness_daggers == 1);
+    puts("PASS: Partial equipped exchange between full pools preserves every weapon.");
     return 0;
 }
 '''
@@ -251,6 +340,10 @@ def main():
     source = OUT / "check.c"
     # externs.h has no include guard; the SDL private header already loads it.
     harness = HARNESS
+    knowledge = (ROOT / "src/cmd/ui/cmd-ui-knowledge.c").read_text(encoding="utf-8")
+    start = knowledge.index("static bool inventory_storage_exchange_possible(")
+    end = knowledge.index("static bool inventory_storage_exchange_object_allowed(", start)
+    harness = harness.replace("@EXCHANGE_FILTER@", knowledge[start:end])
     for path in ("cmd/item/cmd-item-core.c", "ui/question.c"):
         code = (ROOT / "src" / path).read_text(encoding="utf-8")
         code = code.replace('#include "externs.h"', '')
@@ -265,9 +358,9 @@ def main():
                                   if not p.endswith(exclude)), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
-        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
         *[str(BUILD / "_deps" / name) for name in
-          ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")], env["PATH"]])
+          ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")],
+        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     env["SDL_VIDEO_DRIVER"] = "dummy"
     env["SDL_RENDER_DRIVER"] = "software"
     exe = OUT / "check.exe"

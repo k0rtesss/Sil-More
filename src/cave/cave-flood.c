@@ -38,9 +38,14 @@ void cave_flood_clear(void)
 {
     memset(flood_stage, 0, sizeof(flood_stage));
     memset(flood_new, 0, sizeof(flood_new));
+    cave_flood_clear_surface_markers();
+    memset(flood_trap_kind, 0, sizeof(flood_trap_kind));
+}
+
+void cave_flood_clear_surface_markers(void)
+{
     memset(flood_surface, 0, sizeof(flood_surface));
     memset(flood_surface_kind, 0, sizeof(flood_surface_kind));
-    memset(flood_trap_kind, 0, sizeof(flood_trap_kind));
 }
 
 void cave_flood_begin_action(void)
@@ -105,6 +110,23 @@ bool cave_flood_surface_at(int y, int x)
     return in_bounds(y, x) && flood_surface[y][x]
         && cave_feat
         && flood_surface_feature(flood_surface_kind[y][x], cave_feat[y][x]);
+}
+
+byte cave_flood_surface_kind_at(int y, int x)
+{
+    if (!cave_flood_surface_at(y, x))
+        return 0;
+    return flood_surface_kind[y][x];
+}
+
+bool cave_flood_restore_surface(int y, int x, byte kind)
+{
+    if (!in_bounds_fully(y, x) || !flood_surface_feature(kind, cave_feat[y][x])
+        || flood_surface[y][x])
+        return false;
+    flood_surface[y][x] = true;
+    flood_surface_kind[y][x] = kind;
+    return true;
 }
 
 void cave_flood_surface_changed(int y, int x, int new_feat)

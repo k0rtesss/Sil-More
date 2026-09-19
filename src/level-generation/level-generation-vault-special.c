@@ -106,7 +106,7 @@ vault_monster_spec vault_monster_table[] = {
     {'l', "e03ee4217593ca39", 0, false, true, true},  /* Fankil */
     {'m', "0e401610ae33a21f", 0, false, true, false}, /* One Easterling warrior */
     {'p', "7ed54d5976d25b3e", 0, false, true, false}, /* One Easterling archer */
-    {'u', "23eb4b3c8f754c0a", 0, false, true, true},  /* Ondotur */
+    {'x', "23eb4b3c8f754c0a", 0, false, true, true},  /* Ondotur; 'u' is Durin's mail */
     {'Q', "f1f38a4b25dfcc33", 0, false, true, true},  /* Nambatur */
 };
 

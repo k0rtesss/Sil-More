@@ -113,6 +113,27 @@ static void flood_structure_tests(void) {
     assert(flood_wet_count()==1&&cave_feat[11][11]==FEAT_FLOOR);
     puts("All door/rubble/bridge variants, exact 1/9/25 totals, zero-energy actions, corridor quotas, sealed walls/corners and completion: PASS");
 }
+static void flood_restore_corridor_test(void) {
+    /* Saving after the first expansion must preserve the eight already-wet
+     * corridor cells, even though the event record stores only its source
+     * and stage. */
+    submerged_map();cave_flood_clear();
+    for(int y=1;y<31;y++)for(int x=1;x<31;x++)
+        cave_set_feat(y,x,y==10?FEAT_FLOOR:FEAT_WALL_EXTRA);
+    cave_set_feat(10,15,FEAT_TRAP_FLOOD);
+    cave_flood_begin_action();cave_flood_trigger(10,15);
+    p_ptr->energy_use=100;cave_flood_end_action();
+    cave_flood_begin_action();cave_flood_end_action();
+    assert(cave_flood_stage_at(10,15)==2&&flood_wet_count()==9);
+    cave_flood_clear();
+    assert(cave_flood_restore(10,15,2));
+    cave_flood_begin_action();p_ptr->energy_use=100;cave_flood_end_action();
+    printf("restore corridor wet=%d range:",flood_wet_count());
+    for(int x=1;x<31;x++)if(cave_feat[10][x]==FEAT_WATER||cave_feat[10][x]==FEAT_DEEP_WATER)printf(" %d",x);
+    puts("");
+    assert(flood_wet_count()==25);
+    puts("Flood save restore: corridor stage two keeps its eight wet cells and reaches 25 total: PASS");
+}
 '''
 
 
@@ -123,7 +144,7 @@ def main():
     water.TESTS = water.TESTS.replace(
         "    scent_tests(); movement_tests(); generation_tests(); monster_save_tests();\n"
         "    vault_water_tests(); water_render_tests();",
-        "    flood_screenshot_tests(); flood_trap_target_tests(); flood_trap_tests(); acid_flood_trap_tests(); flood_structure_tests();")
+        "    flood_screenshot_tests(); flood_trap_target_tests(); flood_trap_tests(); acid_flood_trap_tests(); flood_structure_tests(); flood_restore_corridor_test();")
     water.main()
 
 

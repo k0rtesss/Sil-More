@@ -1636,7 +1636,7 @@ static void format_storage_exchange_reason(const object_type* incoming,
 
 static bool open_inventory_storage_exchange_menu(
     const object_type* incoming, byte target_storage, bool include_equip,
-    bool allow_non_stowable, int* exchange_item)
+    bool allow_non_stowable, bool allow_partial, int* exchange_item)
 {
     enum inventory_limit_group source_group;
     enum inventory_limit_group target_group;
@@ -1674,6 +1674,7 @@ static bool open_inventory_storage_exchange_menu(
     request.storage_exchange_incoming = incoming;
     request.storage_exchange_target = target_storage;
     request.storage_exchange_include_equip = include_equip;
+    request.storage_exchange_partial = allow_partial;
     request.storage_exchange_allow_non_stowable = allow_non_stowable;
     request.storage_exchange_reason = reason;
     request.storage_exchange_item_out = exchange_item;
@@ -1682,7 +1683,7 @@ static bool open_inventory_storage_exchange_menu(
 
 static bool choose_storage_exchange_item(const object_type* incoming,
     byte target_storage, bool include_equip, bool allow_non_stowable,
-    int* exchange_item)
+    bool allow_partial, int* exchange_item)
 {
     object_type moving;
 
@@ -1697,7 +1698,7 @@ static bool choose_storage_exchange_item(const object_type* incoming,
         return false;
 
     return open_inventory_storage_exchange_menu(incoming, target_storage,
-        include_equip, allow_non_stowable, exchange_item);
+        include_equip, allow_non_stowable, allow_partial, exchange_item);
 }
 
 bool open_inventory_slot_pick_menu(const object_type* incoming,
@@ -2031,7 +2032,6 @@ static int storage_exchange_max_incoming_quantity(
     const object_type* incoming, const object_type* outgoing)
 {
     int maximum = 0;
-    object_type moving;
 
     if (!incoming || !incoming->k_idx || incoming->number <= 0
         || !outgoing || !outgoing->k_idx)
@@ -2039,11 +2039,10 @@ static int storage_exchange_max_incoming_quantity(
         return 0;
     }
 
-    object_copy(&moving, incoming);
     for (int quantity = 1; quantity <= incoming->number; quantity++)
     {
-        moving.number = quantity;
-        if (inventory_limit_storage_exchange_possible(&moving, outgoing))
+        if (inventory_limit_storage_exchange_quantity_possible(
+                incoming, outgoing, quantity))
             maximum = quantity;
     }
     return maximum;
@@ -2147,7 +2146,8 @@ bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
 
     object_copy(&incoming_move, incoming);
     incoming_move.number = incoming_quantity;
-    if (!inventory_limit_storage_exchange_possible(&incoming_move, outgoing))
+    if (!inventory_limit_storage_exchange_quantity_possible(
+            incoming, outgoing, incoming_quantity))
         return false;
 
     incoming_move.storage = target_storage;
@@ -2266,11 +2266,13 @@ bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
     if (outgoing_equipped)
     {
         object_type incoming_copy;
+        object_type incoming_original;
         object_type outgoing_copy;
 
         if (target_storage != OBJECT_STORAGE_HARNESS)
             return false;
 
+        object_copy(&incoming_original, incoming);
         object_copy(&incoming_copy, incoming);
         incoming_copy.storage = target_storage;
         object_copy(&outgoing_copy, outgoing);
@@ -2280,12 +2282,17 @@ bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
         incoming->storage = target_storage;
         player_active_weapon_assign_harness_color(incoming);
 
-        if (!inventory_type_slot_available(&outgoing_copy, false)
-            || inven_takeoff(exchange_item, outgoing_copy.number) < 0)
+        if (!inventory_type_slot_available(&outgoing_copy, false))
         {
-            incoming->storage = source_storage;
+            object_copy(incoming, &incoming_original);
             return false;
         }
+
+        /* Takeoff copies the equipped object itself. Apply the destination
+         * there as well, or it goes back into the already full Harness. */
+        object_copy(outgoing, &outgoing_copy);
+        if (inven_takeoff(exchange_item, outgoing_copy.number) < 0)
+            return false;
 
         tutorial_game_action_done("ready", &incoming_copy);
         msg_format("You move %s to your %s and %s to your %s.",
@@ -2438,16 +2445,12 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     {
         int exchange_item = -1;
         int exchange_quantity;
-        object_type exchange_preview;
         object_type* exchange_object;
 
-        /* The exchange menu must test a transferable unit, not the whole
-         * source stack.  Otherwise a four-dagger Pack stack (1.6 qt) hides
-         * 0.3 qt Harness daggers even though one dagger would fit. */
-        object_copy(&exchange_preview, o_ptr);
-        exchange_preview.number = 1;
-        if (!choose_storage_exchange_item(&exchange_preview, target_storage,
-                true, false,
+        /* Preserve the carried stack's identity and allow any transferable
+         * quantity when finding exchange candidates. */
+        if (!choose_storage_exchange_item(o_ptr, target_storage,
+                true, false, true,
                 &exchange_item))
         {
             (void)item_storage_destination_available(o_ptr, target_storage,
@@ -3528,7 +3531,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             }
 
             if (!choose_storage_exchange_item(o_ptr,
-                    OBJECT_STORAGE_HARNESS, false, false, &exchange_item))
+                    OBJECT_STORAGE_HARNESS, false, false, false, &exchange_item))
             {
                 (void)item_storage_destination_available(o_ptr,
                     OBJECT_STORAGE_HARNESS, moving_quantity, true);

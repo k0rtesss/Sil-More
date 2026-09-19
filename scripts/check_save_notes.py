@@ -8,6 +8,7 @@ from pathlib import Path
 import os
 import re
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "scripts/output/save-notes"
@@ -40,6 +41,7 @@ typedef uint8_t byte;
 typedef uint32_t u32b;
 typedef const char* cptr;
 static FILE* fff;
+static const char* stream_path;
 static byte xor_byte;
 static u32b v_check, x_check, v_stamp, x_stamp, load_byte_offset, save_byte_offset;
 static bool write_error, arg_wizard;
@@ -61,7 +63,7 @@ static size_t save_notes(const char* text)
 {
     assert(strlen(text) < sizeof(notes_buffer));
     memcpy(notes_buffer, text, strlen(text) + 1);
-    fff = tmpfile(); assert(fff);
+    fff = fopen(stream_path, "w+b"); assert(fff);
     xor_byte = 0; v_stamp = x_stamp = save_byte_offset = 0; write_error = false;
     wr_notes();
     size_t length = save_byte_offset;
@@ -73,7 +75,7 @@ static size_t save_notes(const char* text)
 }
 static bool load_notes(size_t length, bool dead)
 {
-    fff = tmpfile(); assert(fff);
+    fff = fopen(stream_path, "w+b"); assert(fff);
     assert(fwrite(saved, 1, length, fff) == length);
     rewind(fff);
     xor_byte = 0; v_check = x_check = load_byte_offset = 0;
@@ -83,8 +85,10 @@ static bool load_notes(size_t length, bool dead)
     fclose(fff);
     return failed;
 }
-int main(void)
+int main(int argc, char** argv)
 {
+    assert(argc == 2);
+    stream_path = argv[1];
     const char old_records[] = "First\0\0Last\0" NOTES_MARK;
     size_t length = save_notes("First\n\nLast\n");
     assert(length == sizeof(old_records));
@@ -155,7 +159,9 @@ def main():
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-std=c17", "-Wall", "-Wextra",
                     "-Werror", "-O0", str(fixture), "-o", str(exe)], env=env, check=True)
-    subprocess.run([str(exe)], env=env, check=True, timeout=15)
+    with tempfile.TemporaryDirectory(dir=OUT) as directory:
+        subprocess.run([str(exe), str(Path(directory) / "notes.bin")],
+                       env=env, check=True, timeout=15)
 
 
 if __name__ == "__main__":
