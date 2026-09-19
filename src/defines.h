@@ -1319,6 +1319,8 @@
 #define FEAT_BRIDGE_TAIL 0x63
 #define FEAT_DEEP_WATER 0x64
 #define FEAT_MELTING_ICE 0x66
+/* All built-in terrain records must be present in the installed data. */
+#define FEAT_COUNT (FEAT_MELTING_ICE + 1)
 #define FEAT_IS_ICE(F) ((F) == FEAT_ICE || (F) == FEAT_MELTING_ICE)
 #define MELTING_ICE_BREAK_ONE_IN 5
 #define FEAT_IS_BRIDGE(F) ((F) >= FEAT_BRIDGE_HEAD && (F) <= FEAT_BRIDGE_TAIL)

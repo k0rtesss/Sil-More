@@ -444,7 +444,12 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         return false;
     }
 
-    feat = f_info[cave_feat[y][x]].mimic;
+    feat = cave_feat[y][x];
+    if (!z_info || !f_info || feat >= z_info->f_max)
+        return false;
+    feat = f_info[feat].mimic;
+    if (feat >= z_info->f_max)
+        return false;
     if (feat == FEAT_NONE || feat == FEAT_FLOOR || feat == FEAT_RAGE_FLOOR)
         return false;
 

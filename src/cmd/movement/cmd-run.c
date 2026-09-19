@@ -44,6 +44,58 @@ bool player_grid_is_leapable_obstacle(int y, int x)
         && cave_feat[y][x] != FEAT_TRAP_WEB;
 }
 
+static bool player_has_leap_run_up(int dir)
+{
+    int i;
+    int d;
+    int y = p_ptr->py + ddy[dir];
+    int x = p_ptr->px + ddx[dir];
+
+    for (i = -1; i <= 1; i++)
+    {
+        d = cycle[chome[dir_from_delta(y - p_ptr->py, x - p_ptr->px)] + i];
+        if (p_ptr->previous_action[1] == d)
+            return true;
+    }
+
+    return false;
+}
+
+/* Ask before choosing between entering a hazardous tile and using Leaping. */
+static int player_terrain_movement_choice(int y, int x)
+{
+    ui_question_option options[2] = {
+        { 'j', "Jump over", TERM_L_GREEN, false },
+        { 'g', "Go in", TERM_L_RED, false }
+    };
+    char desc[480];
+    int choice;
+
+    if (cave_feat[y][x] == FEAT_WATER)
+    {
+        SDL_strlcpy(desc,
+            "You can go into the shallow water, or use Leaping to cross "
+            "this one-tile stretch without touching it.", sizeof(desc));
+    }
+    else if (cave_feat[y][x] == FEAT_POISON)
+    {
+        SDL_strlcpy(desc,
+            "You can go into the poisonous acid, or use Leaping to cross "
+            "this one-tile stretch without touching it.", sizeof(desc));
+    }
+    else
+    {
+        int damage = player_lava_damage_at(y, x, true);
+        strnfmt(desc, sizeof(desc),
+            "You can go into the molten lava, or jump over it. The leap "
+            "will still deal %d heat damage.", damage);
+    }
+
+    choice = ui_question_ask("Choose how to cross", desc, options, 2,
+        y, x, 0);
+    return choice;
+}
+
 static bool move_target_exits_gates(int y, int x)
 {
     if (!p_ptr || (p_ptr->depth != 0))
@@ -319,50 +371,79 @@ void move_player(int dir)
             return;
         }
 
-        /* Check before walking on known traps/chasms on movement */
+        /* Check before walking onto known leapable hazards */
         if ((!p_ptr->confused) && (cave_info[y][x] & (CAVE_MARK)))
         {
+            bool terrain_entry_chosen = false;
+            bool terrain_jump_chosen = false;
+            bool run_up = player_has_leap_run_up(dir);
+
             // leapable things: chasms, traps (except roosts and webs).
             // A trap the player has rewired is safe for them -- no leap prompt.
             if (player_grid_is_leapable_obstacle(y, x)
                 && (cave_feat[y][x] != FEAT_POISON
                     || (cave_feat[py][px] != FEAT_POISON
                         && in_bounds_fully(y + ddy[dir], x + ddx[dir])
-                        && (cave_info[y + ddy[dir]][x + ddx[dir]] & CAVE_MARK)
+                        && (cave_info[y + ddy[dir]][x + ddx[dir]]
+                            & (CAVE_MARK | CAVE_SEEN))
                         && cave_feat[y + ddy[dir]][x + ddx[dir]] != FEAT_POISON))
                 && (cave_feat[y][x] != FEAT_LAVA
                     || (cave_feat[py][px] != FEAT_LAVA
                         && in_bounds_fully(y + ddy[dir], x + ddx[dir])
-                        && (cave_info[y + ddy[dir]][x + ddx[dir]] & CAVE_MARK)
+                        && (cave_info[y + ddy[dir]][x + ddx[dir]]
+                            & (CAVE_MARK | CAVE_SEEN))
                         && cave_feat[y + ddy[dir]][x + ddx[dir]] != FEAT_LAVA))
                 && (cave_feat[y][x] != FEAT_WATER
                     || (cave_feat[py][px] != FEAT_WATER
                         && in_bounds_fully(y + ddy[dir], x + ddx[dir])
-                        && (cave_info[y + ddy[dir]][x + ddx[dir]] & CAVE_MARK)
+                        && (cave_info[y + ddy[dir]][x + ddx[dir]]
+                            & (CAVE_MARK | CAVE_SEEN))
                         && cave_feat[y + ddy[dir]][x + ddx[dir]] != FEAT_WATER)))
             {
                 char prompt[160];
-                int i;
-                int d;
-                bool run_up = false;
                 bool confirm = true;
 
-                // test all three directions roughly towards the chasm/pit
-                for (i = -1; i <= 1; i++)
+                /* A one-tile water, acid, or lava crossing can be handled in
+                 * two ways. Ask only when the same conditions below make a
+                 * real leap available; traps and chasms retain their old
+                 * automatic leap behavior. */
+                if (p_ptr->active_ability[S_EVN][EVN_LEAPING]
+                    && run_up
+                    && (cave_feat[y][x] == FEAT_WATER
+                        || cave_feat[y][x] == FEAT_POISON
+                        || cave_feat[y][x] == FEAT_LAVA)
+                    && (cave_feat[y][x] != FEAT_WATER
+                        || !sdl_mouse_path_is_following()))
                 {
-                    d = cycle[chome[dir_from_delta(
-                                  y - p_ptr->py, x - p_ptr->px)]
-                        + i];
+                    int y_end = y + ddy[dir];
+                    int x_end = x + ddx[dir];
+                    bool landing_blocked = !in_bounds_fully(y_end, x_end)
+                        || ((cave_info[y_end][x_end]
+                                & (CAVE_MARK | CAVE_SEEN))
+                            && (cave_wall_bold(y_end, x_end)
+                                || cave_any_closed_door_bold(y_end, x_end)));
 
-                    // if the last action was a move in this direction, we have
-                    // a valid run_up
-                    if (p_ptr->previous_action[1] == d)
-                        run_up = true;
+                    if (!landing_blocked)
+                    {
+                        int choice;
+
+                        disturb(0, 0);
+                        flush();
+                        choice = player_terrain_movement_choice(y, x);
+                        if (choice < 0)
+                        {
+                            p_ptr->energy_use = 0;
+                            return;
+                        }
+                        terrain_jump_chosen = (choice == 0);
+                        terrain_entry_chosen = (choice == 1);
+                    }
                 }
 
                 if (p_ptr->active_ability[S_EVN][EVN_LEAPING]
                     && (cave_feat[y][x] != FEAT_WATER
-                        || (run_up && !sdl_mouse_path_is_following())))
+                        || (run_up && !sdl_mouse_path_is_following()))
+                    && !terrain_entry_chosen)
                 {
                     int y_mid, x_mid; // the midpoint of the leap
                     int y_end, x_end; // the endpoint of the leap
@@ -450,7 +531,8 @@ void move_player(int dir)
                                 m_name);
                         }
 
-                        else if (cave_feat[y_mid][x_mid] == FEAT_LAVA)
+                        else if (cave_feat[y_mid][x_mid] == FEAT_LAVA
+                            && !terrain_jump_chosen)
                         {
                             strnfmt(prompt, sizeof(prompt),
                                 "Leap over the lava? The heat will deal %d damage. ",

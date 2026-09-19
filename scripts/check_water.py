@@ -34,6 +34,17 @@ void __wrap_update_mon(int m, bool full) {(void)m;(void)full;}
 void __wrap_msg_print(cptr msg) {(void)msg;}
 void __wrap_message_flush(void) {}
 void __wrap_place_forge(int y,int x) {cave_set_feat(y,x,FEAT_FORGE_NORMAL_HEAD+3);}
+static int movement_choice;
+int __wrap_ui_question_ask(cptr title, cptr desc,
+    const ui_question_option* options, int count, int y, int x,
+    int default_index) {
+    (void)title; (void)desc; (void)y; (void)x;
+    assert(count == 2);
+    assert(strcmp(options[0].label, "Jump over") == 0);
+    assert(strcmp(options[1].label, "Go in") == 0);
+    assert(default_index == 0);
+    return movement_choice;
+}
 static int artefact_y, artefact_x, artefact_count;
 void __wrap_create_chosen_artefact(byte id,int y,int x,bool identify) {
     assert(id==ART_DURIN);(void)identify;
@@ -118,14 +129,35 @@ static void movement_tests(void) {
     water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
     cave_set_feat(10,11,FEAT_WATER);
     p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
-    p_ptr->previous_action[1]=6; p_ptr->energy_use=100; stealth_score=20;
+    movement_choice=0; p_ptr->previous_action[1]=6;
+    p_ptr->energy_use=100; stealth_score=20;
     move_player(6);
     assert(p_ptr->px==11 && p_ptr->leaping && p_ptr->energy_use==100 && stealth_score==20);
     continue_leap();
     assert(p_ptr->px==12 && !p_ptr->leaping && p_ptr->energy_use==100 && stealth_score==15);
+    /* A visible but not yet memorized dry bank is still a valid landing. */
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,11,FEAT_WATER);
+    cave_info[10][12] &= ~CAVE_MARK;
+    p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    movement_choice=0; p_ptr->previous_action[1]=6; p_ptr->energy_use=100;
+    move_player(6);
+    assert(p_ptr->px==11 && p_ptr->leaping);
+    continue_leap();
+    assert(p_ptr->px==12 && !p_ptr->leaping);
+    /* Choosing to go in keeps the ordinary wading movement. */
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,11,FEAT_WATER);
+    p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    movement_choice=1; p_ptr->previous_action[1]=6; p_ptr->energy_use=100;
+    move_player(6);
+    assert(p_ptr->px==11 && !p_ptr->leaping && p_ptr->energy_use==150);
     /* Landing blocked after takeoff: exactly one wet landing charge. */
-    cave_m_idx[10][12]=0; cave_m_idx[10][10]=-1; p_ptr->px=10;
-    p_ptr->energy_use=100; stealth_score=20; move_player(6);
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,11,FEAT_WATER);
+    p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    p_ptr->previous_action[1]=6;
+    movement_choice=0; p_ptr->energy_use=100; stealth_score=20; move_player(6);
     cave_set_feat(10,12,FEAT_WALL_EXTRA); continue_leap();
     assert(p_ptr->px==11 && !p_ptr->leaping && p_ptr->energy_use==150 && stealth_score==12);
     p_ptr->active_ability[S_EVN][EVN_LEAPING]=false;
@@ -522,7 +554,7 @@ def main():
     env["SDL_VIDEO_DRIVER"] = "dummy"
     env["SDL_RENDER_DRIVER"] = "software"
     symbols = ("save_wr_byte", "save_wr_u16b", "load_rd_byte", "load_rd_u16b", "load_savefile_version_at_least",
-        "load_note", "sdl_present_if_needed", "ui_question_ask_overlay_buttons", "perceive",
+        "load_note", "sdl_present_if_needed", "ui_question_ask", "ui_question_ask_overlay_buttons", "perceive",
         "check_mandos_quest_interaction", "check_niena_quest_completion", "trigger_chasm_sanctum_ambush_if_needed",
         "update_mon", "msg_print", "message_flush", "place_forge", "create_chosen_artefact")
     exe = OUT / "check.exe"

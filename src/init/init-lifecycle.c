@@ -212,7 +212,9 @@ void init_angband(void)
     /* Initialize feature info */
     note("[Initializing arrays... (features)]");
     if (init_f_info())
-        quit("Cannot initialize features");
+        quit("Cannot initialize terrain: game data is incomplete or incompatible.\n"
+            "Update the game's lib/edit folder along with the executable.\n"
+            "See log.txt for details.");
 
     /* Initialize object info */
     note("[Initializing arrays... (objects)]");

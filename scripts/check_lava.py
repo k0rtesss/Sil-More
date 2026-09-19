@@ -39,7 +39,7 @@ static void lava_player_map(int resistance) {
     p_ptr->active_ability[S_EVN][EVN_LEAPING]=false;
     cave_m_idx[10][10]=-1;
     cave_set_feat(10,11,FEAT_LAVA);
-    mon_max=1;lava_hits=0;picker_choice=0;lava_item_contacts=0;
+    mon_max=1;lava_hits=0;picker_choice=0;movement_choice=0;lava_item_contacts=0;
 }
 static void lava_step(int dir) {
     player_lava_begin_action();p_ptr->energy_use=100;
@@ -84,8 +84,14 @@ static void lava_player_tests(void) {
     player_lava_begin_action();continue_leap();player_lava_end_action();
     assert(!p_ptr->leaping && p_ptr->px==12 && p_ptr->chp==460 && lava_hits==1);
     assert(!lava_item_contacts);
+    /* Choosing to go in keeps the ordinary lava-entry path. */
+    lava_player_map(2);p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    movement_choice=1;picker_choice=0;p_ptr->previous_action[1]=6;lava_step(6);
+    assert(p_ptr->px==11&&!p_ptr->leaping&&p_ptr->chp==460&&lava_hits==1);
+    assert(lava_item_contacts==1);
     /* A newly blocked landing is ground contact, immediately lethal. */
     lava_player_map(1);p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    movement_choice=0;
     p_ptr->previous_action[1]=6;lava_step(6);
     cave_set_feat(10,12,FEAT_WALL_EXTRA);
     player_lava_begin_action();continue_leap();player_lava_end_action();

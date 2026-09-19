@@ -15,6 +15,7 @@ typedef struct player_pack_action_state
     object_type object;
     int exchange_item;
     object_type exchange_object;
+    int exchange_quantity;
 } player_pack_action_state;
 
 static player_pack_action_state pack_action;
@@ -100,6 +101,7 @@ void player_pack_action_reset(void)
     pack_action.turns_left = 0;
     pack_action.completing = false;
     pack_action.exchange_item = -1;
+    pack_action.exchange_quantity = 0;
     object_wipe(&pack_action.exchange_object);
 }
 
@@ -160,6 +162,7 @@ static bool player_pack_action_start_internal(player_pack_action_kind kind,
     pack_action.turns_left = PACK_ACTION_TURN_COST - 1;
     object_copy(&pack_action.object, o_ptr);
     pack_action.exchange_item = -1;
+    pack_action.exchange_quantity = 0;
     object_wipe(&pack_action.exchange_object);
 
     tutorial_game_explain("storage.pack_access", "Reaching into the Pack",
@@ -201,10 +204,12 @@ bool player_pack_action_start_forced(player_pack_action_kind kind, int item,
 
 bool player_pack_action_start_storage_exchange(int item, int arg,
     const object_type* incoming, int exchange_item,
-    const object_type* exchange_object)
+    const object_type* exchange_object, int incoming_quantity)
 {
     if (player_pack_action_pending() || pack_action.completing
         || !player_inventory_handle_valid(exchange_item)
+        || !incoming || !incoming->k_idx || incoming_quantity <= 0
+        || incoming_quantity > incoming->number
         || !exchange_object || !exchange_object->k_idx)
     {
         return false;
@@ -218,6 +223,7 @@ bool player_pack_action_start_storage_exchange(int item, int arg,
     }
 
     pack_action.exchange_item = exchange_item;
+    pack_action.exchange_quantity = incoming_quantity;
     object_copy(&pack_action.exchange_object, exchange_object);
     return true;
 }
@@ -319,7 +325,8 @@ static void player_pack_action_complete(player_pack_action_kind kind, int item,
                         (byte)arg, exchange_item);
                 else
                     (void)do_cmd_move_item_to_storage_exchange(item,
-                        (byte)arg, exchange_item);
+                        (byte)arg, exchange_item,
+                        pack_action.exchange_quantity);
             }
             else
                 msg_print("You can no longer complete that storage exchange.");
@@ -394,6 +401,7 @@ void player_pack_action_process(void)
     pack_action.kind = PLAYER_PACK_ACTION_NONE;
     object_wipe(&pack_action.object);
     pack_action.exchange_item = -1;
+    pack_action.exchange_quantity = 0;
     object_wipe(&pack_action.exchange_object);
 
     /* The third Pack turn is spent even if final validation now fails. */

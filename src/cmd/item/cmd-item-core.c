@@ -2025,11 +2025,87 @@ static bool item_storage_destination_available(const object_type* o_ptr,
     return false;
 }
 
+static int storage_exchange_max_incoming_quantity(
+    const object_type* incoming, const object_type* outgoing)
+{
+    int maximum = 0;
+    object_type moving;
+
+    if (!incoming || !incoming->k_idx || incoming->number <= 0
+        || !outgoing || !outgoing->k_idx)
+    {
+        return 0;
+    }
+
+    object_copy(&moving, incoming);
+    for (int quantity = 1; quantity <= incoming->number; quantity++)
+    {
+        moving.number = quantity;
+        if (inventory_limit_storage_exchange_possible(&moving, outgoing))
+            maximum = quantity;
+    }
+    return maximum;
+}
+
+static int choose_storage_exchange_quantity(const object_type* incoming,
+    int maximum)
+{
+    char incoming_name[120];
+    char prompt[240];
+
+    if (!incoming || !incoming->k_idx || maximum <= 0)
+        return 0;
+    if (maximum == 1)
+        return 1;
+
+    object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
+    strnfmt(prompt, sizeof(prompt),
+        "Only %d of %s fit after the exchange. Move how many? (0-%d): ",
+        maximum, incoming_name, maximum);
+    return get_quantity_touch_category_force_prompt_action(prompt, "Move",
+        maximum, SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
+}
+
+static int storage_exchange_find_source_item(int preferred_item,
+    const object_type* expected)
+{
+    object_type* candidate;
+
+    if (!expected || !expected->k_idx)
+        return -1;
+
+    if (player_inventory_handle_is_carried(preferred_item))
+    {
+        candidate = player_inventory_object(preferred_item);
+        if (candidate && candidate->number == expected->number
+            && object_similar(candidate, expected))
+        {
+            return preferred_item;
+        }
+    }
+
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
+    {
+        int item = player_pack_entry_handle_at(ordinal);
+
+        candidate = player_inventory_object(item);
+        if (candidate && candidate->number == expected->number
+            && object_similar(candidate, expected))
+        {
+            return item;
+        }
+    }
+
+    return -1;
+}
+
 bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
-    int exchange_item)
+    int exchange_item, int incoming_quantity)
 {
     object_type* incoming;
     object_type* outgoing;
+    object_type incoming_move;
+    bool outgoing_equipped;
     byte source_storage;
     char incoming_name[120];
     char outgoing_name[120];
@@ -2037,7 +2113,8 @@ bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
     const char* source_name;
 
     if (!player_inventory_handle_is_carried(item)
-        || !player_inventory_handle_is_carried(exchange_item)
+        || (!player_inventory_handle_is_carried(exchange_item)
+            && !player_inventory_handle_is_equipped(exchange_item))
         || item == exchange_item
         || (target_storage != OBJECT_STORAGE_PACK
             && target_storage != OBJECT_STORAGE_HARNESS))
@@ -2047,9 +2124,12 @@ bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
 
     incoming = player_inventory_object(item);
     outgoing = player_inventory_object(exchange_item);
+    outgoing_equipped = player_inventory_handle_is_equipped(exchange_item);
     if (!incoming || !incoming->k_idx || !outgoing || !outgoing->k_idx
+        || incoming_quantity <= 0 || incoming_quantity > incoming->number
         || !object_can_choose_pack_or_harness(incoming)
-        || !object_can_choose_pack_or_harness(outgoing))
+        || !object_can_choose_pack_or_harness(outgoing)
+        || (outgoing_equipped && cursed_p(outgoing)))
     {
         return false;
     }
@@ -2058,14 +2138,163 @@ bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
     if ((source_storage != OBJECT_STORAGE_PACK
             && source_storage != OBJECT_STORAGE_HARNESS)
         || source_storage == target_storage
-        || outgoing->storage != target_storage
-        || !inventory_limit_storage_exchange_possible(incoming, outgoing))
+        || outgoing->storage != target_storage)
     {
         return false;
     }
 
-    object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
+    object_copy(&incoming_move, incoming);
+    incoming_move.number = incoming_quantity;
+    if (!inventory_limit_storage_exchange_possible(&incoming_move, outgoing))
+        return false;
+
+    incoming_move.storage = target_storage;
+    if (target_storage == OBJECT_STORAGE_HARNESS)
+        player_active_weapon_assign_harness_color(&incoming_move);
+    else
+    {
+        incoming_move.pickup = false;
+        incoming_move.pickup_slot = -1;
+    }
+
+    object_desc(incoming_name, sizeof(incoming_name), &incoming_move, true, 3);
     object_desc(outgoing_name, sizeof(outgoing_name), outgoing, true, 3);
+
+    /* A storage exchange can move part of an incoming stack.  The old
+     * whole-entry swap was unable to use a 0.3 qt Harness dagger to make room
+     * for one 0.4 qt Pack dagger when the incoming entry contained four
+     * daggers.  Carry the selected quantity as a separate destination entry,
+     * then reduce the original source stack. */
+    if (incoming_quantity < incoming->number)
+    {
+        object_type outgoing_copy;
+        object_type outgoing_original;
+        object_type source_snapshot;
+        object_type moved_incoming;
+        int carry_slot;
+        int placed;
+        int source_item;
+
+        object_copy(&outgoing_copy, outgoing);
+        outgoing_copy.storage = source_storage;
+        outgoing_copy.pickup = false;
+        outgoing_copy.pickup_slot = -1;
+        object_copy(&outgoing_original, outgoing);
+        object_copy(&source_snapshot, incoming);
+        object_copy(&moved_incoming, &incoming_move);
+
+        if (outgoing_equipped && target_storage != OBJECT_STORAGE_HARNESS)
+            return false;
+
+        /* Move the selected outgoing entry across logically first so the
+         * target pool's capacity check sees the space it is about to free.
+         * For an equipped item, also preflight its eventual Pack carry after
+         * the selected source quantity is removed. */
+        outgoing->storage = source_storage;
+        if (source_storage == OBJECT_STORAGE_HARNESS)
+            player_active_weapon_assign_harness_color(outgoing);
+        else
+        {
+            outgoing->pickup = false;
+            outgoing->pickup_slot = -1;
+        }
+        if (!inventory_type_slot_available(&incoming_move, false)
+            || (outgoing_equipped
+                && !inven_carry_okay_after_removing(&outgoing_copy, item,
+                    incoming_quantity)))
+        {
+            object_copy(outgoing, &outgoing_original);
+            return false;
+        }
+
+        carry_slot = inven_carry(&incoming_move, false);
+        placed = incoming_quantity - incoming_move.number;
+        if (carry_slot < 0 || incoming_move.number > 0)
+        {
+            if (placed > 0 && player_inventory_handle_valid(carry_slot))
+            {
+                inven_item_increase(carry_slot, -placed);
+                inven_item_optimize(carry_slot);
+            }
+            object_copy(outgoing, &outgoing_original);
+            return false;
+        }
+
+        source_item = storage_exchange_find_source_item(item,
+            &source_snapshot);
+        if (source_item < 0)
+        {
+            if (placed > 0 && player_inventory_handle_valid(carry_slot))
+            {
+                inven_item_increase(carry_slot, -placed);
+                inven_item_optimize(carry_slot);
+            }
+            object_copy(outgoing, &outgoing_original);
+            return false;
+        }
+        inven_item_increase(source_item, -incoming_quantity);
+
+        if (outgoing_equipped
+            && inven_takeoff(exchange_item, outgoing_copy.number) < 0)
+        {
+            return false;
+        }
+
+        tutorial_game_action_done(target_storage == OBJECT_STORAGE_HARNESS
+            ? "ready" : "store", &moved_incoming);
+        target_name = target_storage == OBJECT_STORAGE_HARNESS
+            ? "Harness" : "Pack";
+        source_name = source_storage == OBJECT_STORAGE_HARNESS
+            ? "Harness" : "Pack";
+        msg_format("You move %s to your %s and %s to your %s.",
+            incoming_name, target_name, outgoing_name, source_name);
+
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        p_ptr->update |= PU_BONUS;
+        p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+        return true;
+    }
+
+    /* An equipped Harness object has to become a real Pack object, not merely
+     * acquire a Pack storage marker while remaining in an equipment slot.
+     * Move the incoming object to its destination first so the outgoing item
+     * can be carried without merging back into the incoming stack.  The
+     * exchange projection above guarantees that this carry fits. */
+    if (outgoing_equipped)
+    {
+        object_type incoming_copy;
+        object_type outgoing_copy;
+
+        if (target_storage != OBJECT_STORAGE_HARNESS)
+            return false;
+
+        object_copy(&incoming_copy, incoming);
+        incoming_copy.storage = target_storage;
+        object_copy(&outgoing_copy, outgoing);
+        outgoing_copy.storage = source_storage;
+        outgoing_copy.pickup = false;
+        outgoing_copy.pickup_slot = -1;
+        incoming->storage = target_storage;
+        player_active_weapon_assign_harness_color(incoming);
+
+        if (!inventory_type_slot_available(&outgoing_copy, false)
+            || inven_takeoff(exchange_item, outgoing_copy.number) < 0)
+        {
+            incoming->storage = source_storage;
+            return false;
+        }
+
+        tutorial_game_action_done("ready", &incoming_copy);
+        msg_format("You move %s to your %s and %s to your %s.",
+            incoming_name, "Harness", outgoing_name, "Pack");
+
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        p_ptr->update |= PU_BONUS;
+        p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+        return true;
+    }
 
     outgoing->storage = source_storage;
     if (source_storage == OBJECT_STORAGE_HARNESS)
@@ -2207,9 +2436,17 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
             o_ptr->number, false))
     {
         int exchange_item = -1;
+        int exchange_quantity;
+        object_type exchange_preview;
         object_type* exchange_object;
 
-        if (!choose_storage_exchange_item(o_ptr, target_storage, false, false,
+        /* The exchange menu must test a transferable unit, not the whole
+         * source stack.  Otherwise a four-dagger Pack stack (1.6 qt) hides
+         * 0.3 qt Harness daggers even though one dagger would fit. */
+        object_copy(&exchange_preview, o_ptr);
+        exchange_preview.number = 1;
+        if (!choose_storage_exchange_item(&exchange_preview, target_storage,
+                true, false,
                 &exchange_item))
         {
             (void)item_storage_destination_available(o_ptr, target_storage,
@@ -2218,23 +2455,28 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
         }
 
         exchange_object = player_inventory_object(exchange_item);
-        if (!exchange_object
-            || !inventory_limit_storage_exchange_possible(o_ptr,
-                exchange_object))
+        exchange_quantity = storage_exchange_max_incoming_quantity(o_ptr,
+            exchange_object);
+        if (!exchange_object || exchange_quantity <= 0)
         {
             (void)item_storage_destination_available(o_ptr, target_storage,
                 o_ptr->number, true);
             return false;
         }
 
+        exchange_quantity = choose_storage_exchange_quantity(o_ptr,
+            exchange_quantity);
+        if (exchange_quantity <= 0)
+            return false;
+
         if (player_pack_action_completing(PLAYER_PACK_ACTION_MOVE_STORAGE))
         {
             return do_cmd_move_item_to_storage_exchange(item, target_storage,
-                exchange_item);
+                exchange_item, exchange_quantity);
         }
 
         if (!player_pack_action_start_storage_exchange(item, target_storage,
-                o_ptr, exchange_item, exchange_object))
+                o_ptr, exchange_item, exchange_object, exchange_quantity))
         {
             return false;
         }
@@ -3295,7 +3537,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
                 || !inventory_limit_storage_exchange_possible(o_ptr,
                     exchange_object)
                 || !do_cmd_move_item_to_storage_exchange(item,
-                    OBJECT_STORAGE_HARNESS, exchange_item))
+                    OBJECT_STORAGE_HARNESS, exchange_item, moving_quantity))
             {
                 (void)item_storage_destination_available(o_ptr,
                     OBJECT_STORAGE_HARNESS, moving_quantity, true);

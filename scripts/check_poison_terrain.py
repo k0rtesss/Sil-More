@@ -30,6 +30,7 @@ static void poison_map(void) {
     if(!c_info)c_info=calloc(1,sizeof(*c_info));
     p_ptr->pcharacter=0;p_ptr->poisoned=0;p_ptr->resist_pois=1;
     p_ptr->oppose_pois=0;p_ptr->leaving=false;picker_choice=0;
+    movement_choice=0;
     p_ptr->confused=0;p_ptr->playing=true;cave_m_idx[10][10]=-1;
     p_ptr->active_ability[S_EVN][EVN_LEAPING]=false;
     memset(p_ptr->previous_action,0,sizeof(p_ptr->previous_action));
@@ -89,7 +90,23 @@ static void poison_terrain_tests(void) {
     player_poison_terrain_end_action();
     assert(!p_ptr->leaping&&p_ptr->px==12&&!p_ptr->poisoned);
     assert(!acid_item_contacts);
+    /* A visible but not yet memorized dry bank is still a valid landing. */
     poison_map();p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    cave_info[10][12] &= ~CAVE_MARK;
+    movement_choice=0;p_ptr->previous_action[1]=6;
+    poison_step(6);
+    assert(p_ptr->leaping&&p_ptr->px==11&&!p_ptr->poisoned);
+    player_poison_terrain_begin_action();continue_leap();
+    player_poison_terrain_end_action();
+    assert(!p_ptr->leaping&&p_ptr->px==12&&!p_ptr->poisoned);
+    /* Choosing to go in keeps the ordinary acid-entry path. */
+    poison_map();p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    movement_choice=1;picker_choice=0;p_ptr->previous_action[1]=6;
+    poison_step(6);
+    assert(p_ptr->px==11&&!p_ptr->leaping&&p_ptr->poisoned==6);
+    assert(acid_item_contacts==1);
+    poison_map();p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    movement_choice=0;
     p_ptr->previous_action[1]=6;poison_step(6);
     cave_set_feat(10,12,FEAT_WALL_EXTRA);
     player_poison_terrain_begin_action();continue_leap();

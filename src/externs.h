@@ -812,7 +812,7 @@ extern bool throw_slot_enabled[INVEN_TOTAL];
 extern void do_cmd_use_item_by_index(int item);
 extern bool do_cmd_move_item_to_storage(int item, byte target_storage);
 extern bool do_cmd_move_item_to_storage_exchange(int item,
-    byte target_storage, int exchange_item);
+    byte target_storage, int exchange_item, int incoming_quantity);
 extern bool do_cmd_wield_floor_storage_exchange(int item,
     byte target_storage, int exchange_item);
 extern void do_cmd_use_item(void);
@@ -2185,7 +2185,7 @@ extern bool player_pack_action_start_forced(player_pack_action_kind kind,
     int item, int arg, bool flag, const object_type* o_ptr);
 extern bool player_pack_action_start_storage_exchange(int item, int arg,
     const object_type* incoming, int exchange_item,
-    const object_type* exchange_object);
+    const object_type* exchange_object, int incoming_quantity);
 extern bool player_pack_action_pending(void);
 extern int player_pack_action_turns_left(void);
 extern bool player_pack_action_completing(player_pack_action_kind kind);
