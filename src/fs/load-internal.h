@@ -63,6 +63,7 @@ void load_rd_u32b(u32b* ip);
 void load_rd_s32b(s32b* ip);
 void load_rd_string(char* str, int max);
 void load_strip_bytes(int n);
+bool load_only_checksums_remain(void);
 errr load_rd_item(object_type* o_ptr);
 void load_rd_monster(monster_type* m_ptr);
 bool load_savefile_version_at_least(byte major, byte minor, byte patch, byte extra);

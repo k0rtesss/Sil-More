@@ -61,6 +61,15 @@ _Static_assert(MON_AI_IMPALE == 29 && MON_AI_FEATURE_COUNT == 33,
  */
 static SDL_IOStream* fff;
 
+/* Validate the final block's length without changing decoder/checksum state.
+ * The two trailing checksums must occupy exactly eight bytes. */
+bool load_only_checksums_remain(void)
+{
+    Sint64 position = SDL_TellIO(fff);
+    Sint64 size = SDL_GetIOSize(fff);
+    return position >= 0 && size >= position && size - position == 8;
+}
+
 /*
  * Hack -- old "encryption" byte
  */

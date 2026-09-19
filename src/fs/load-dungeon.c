@@ -98,6 +98,55 @@ static errr rd_flood_trap_kinds(void)
     return 0;
 }
 
+static errr rd_flood_surface_markers(void)
+{
+    u16b magic = 0, count = 0;
+    u32b start_offset;
+
+    /* Older saves reconstruct surfaces from source/stage records. */
+    if (!savefile_version_at_least(0, 9, 8, 16))
+        return 0;
+
+    start_offset = load_byte_offset;
+    rd_u16b(&magic);
+    rd_u16b(&count);
+    if (load_byte_offset - start_offset != 4
+        || magic != CAVE_FLOOD_SURFACE_SAVE_MAGIC
+        || count > (p_ptr->cur_map_hgt - 2) * (p_ptr->cur_map_wid - 2))
+    {
+        note("Invalid flood surface header.");
+        return -1;
+    }
+
+    /* Replace the approximate reconstruction with the exact saved set,
+     * including an empty set. The restore helper rejects duplicates,
+     * out-of-bounds coordinates, and kinds that do not match the terrain. */
+    cave_flood_clear_surface_markers();
+    for (int i = 0; i < count; i++)
+    {
+        byte y = 0, x = 0, kind = 0;
+        start_offset = load_byte_offset;
+        rd_byte(&y);
+        rd_byte(&x);
+        rd_byte(&kind);
+        if (load_byte_offset - start_offset != 3
+            || !cave_flood_restore_surface(y, x, kind))
+        {
+            cave_flood_clear_surface_markers();
+            note("Invalid flood surface marker.");
+            return -1;
+        }
+    }
+    if (!load_only_checksums_remain())
+    {
+        cave_flood_clear_surface_markers();
+        note("Invalid flood surface block length.");
+        return -1;
+    }
+    log_debug("Loaded %u exact flood surface markers", (unsigned)count);
+    return 0;
+}
+
 static bool read_dungeon_rle_pair(byte* count, byte* value, cptr stream_name)
 {
     u32b start_offset = load_byte_offset;
@@ -1079,6 +1128,8 @@ errr rd_dungeon(void)
     if (rd_floods())
         return -1;
     if (rd_flood_trap_kinds())
+        return -1;
+    if (rd_flood_surface_markers())
         return -1;
 
     /*** Success ***/
