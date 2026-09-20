@@ -481,6 +481,9 @@ static void process_monster(monster_type* m_ptr)
 
     /* Action history is advanced by the scheduler, including skipped turns. */
 
+    if (monster_thrall_turn(m_ptr))
+        return;
+
     /* Leave harmful acid before choosing to stand and shoot or wander. */
     if (get_move_escape_poison(m_ptr, &ty, &tx))
     {

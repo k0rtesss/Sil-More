@@ -477,6 +477,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
         // (skip_next_turn is there to stop you getting opportunist attacks afer
         // knocking someone back)
         if (player_active_weapon_is_melee()
+            && !(r_info[m_ptr->r_idx].flags1 & RF1_PEACEFUL)
             && !singing(SNG_DISGUISE) && m_ptr->ml && !m_ptr->skip_next_turn
             && !p_ptr->truce
             && !p_ptr->confused && !p_ptr->afraid && !p_ptr->entranced

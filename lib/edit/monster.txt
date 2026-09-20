@@ -400,12 +400,13 @@ Q:cbb819a9cb63bbba
 W:1:0
 G:@:g
 T:8:1
-I:2:8d4:0
-A:60:1:0:1
+I:1:8d4:0
+A:0:1:0:1
 P:[+0]
-F:MALE | MAN | NEVER_MOVE | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
+F:MALE | MAN | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
 D:A scarred and dirty man clad only in a loincloth. A metal collar
-D: is about his neck, and a long chain leads from it to the wall.
+D: is about his neck. He shuffles slowly through the mine, chipping
+D: quartz into rubble under the eyes of his overseers.
 
 # Can't move from idx 14 for dungeon generation reasons
 N:14:Dejected elven thrall
@@ -414,12 +415,13 @@ Q:9829bd03cfda98e7
 W:1:0
 G:@:g
 T:8:2
-I:2:10d4:0
-A:60:1:0:2
+I:1:10d4:0
+A:0:1:0:2
 P:[+0]
-F:MALE | ELF | NEVER_MOVE | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
-D:A chained elf slumps here, filthy hair hanging to his shoulders
-D: and eyes vacant. His back and arms bear the marks of a whip.
+F:MALE | ELF | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
+D:A shackled elf labours slowly at the quartz, filthy hair hanging
+D: to his shoulders and eyes vacant. His back and arms bear the
+D: marks of a whip.
 
 # Can't move from idx 15 for dungeon generation reasons
 N:15:Orc thrallmaster

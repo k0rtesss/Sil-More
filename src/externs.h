@@ -546,6 +546,7 @@ extern void monster_poison_terrain_exposure(int m_idx);
 extern void monster_poison_terrain_end_action(int m_idx);
 extern void monster_poison_add(int m_idx, int amount);
 extern bool monster_poison_tick(int m_idx);
+extern bool monster_thrall_turn(monster_type* m_ptr);
 extern void monster_poison_brand(int m_idx, const object_type* first,
     const object_type* second, int damage);
 extern void map_feature(int y, int x);

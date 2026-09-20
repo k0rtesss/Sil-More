@@ -168,6 +168,10 @@ bool place_monster_one(
             n_ptr->alertness = ALERTNESS_ALERT;
     }
 
+    /* Miners begin working, without becoming hostile or noticing the player. */
+    if (r_idx == R_IDX_HUMAN_THRALL || r_idx == R_IDX_ELF_THRALL)
+        n_ptr->alertness = ALERTNESS_UNWARY;
+
     /* Assign average hitpoints */
     if (r_ptr->flags1 & (RF1_UNIQUE))
     {

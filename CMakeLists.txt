@@ -420,6 +420,7 @@ set(SIL_MORE_SOURCES
     src/monster/monster-ai.c
     src/monster/monster-senses.c
     src/monster/monster-tactics.c
+    src/monster/monster-thrall.c
     src/cave/cave-light.c
     src/monster/monster-summon.c
     src/monster/monster-update.c
