@@ -126,6 +126,16 @@ static void encode(const byte* source, byte* target, size_t size)
     for (size_t i = 0; i < size; ++i)
     { previous ^= source[i]; target[i] = previous; }
 }
+/* Find the end of the unchanged v16 lanes; v17 appends ecology here. */
+static size_t fixture_v16_dungeon_end(size_t dungeon_size)
+{
+    if (VERSION_EXTRA < 17) return dungeon_size;
+    const byte boundary[] = {0,0xF1,0,0,1,0xF1,0,0,2,0xF1,0,0,0x17,0xEC};
+    size_t found=0; int matches=0;
+    for(size_t i=0;i+sizeof(boundary)<=dungeon_size;i++)
+        if(!memcmp(plain+i,boundary,sizeof(boundary))) { found=i+12; matches++; }
+    assert(matches==1); return found;
+}
 static void fresh_map(void)
 {
     character_dungeon = false;
@@ -146,6 +156,7 @@ static void fresh_map(void)
             cave_when[y][x] = cave_rewired[y][x] = cave_natural[y][x] = 0;
             cave_color[y][x] = 0;
         }
+    cave_environment_reset();
     cave_fixtures_clear();
     cave_flood_clear();
     cave_water_flow_reset();
@@ -224,8 +235,8 @@ static void test_current_roundtrip(void)
     decode(encoded, plain, length);
     /* Empty flood sources, trap kinds and exact surface markers. */
     const byte flood_tail[] = {0, 0xF1, 0, 0, 1, 0xF1, 0, 0, 2, 0xF1, 0, 0};
-    assert(!memcmp(plain + dungeon_size - sizeof(flood_tail), flood_tail, sizeof(flood_tail)));
-    size_t scent_start = dungeon_size - sizeof(flood_tail) - 2 - 20 * 24;
+    assert(!memcmp(plain + fixture_v16_dungeon_end(dungeon_size) - sizeof(flood_tail), flood_tail, sizeof(flood_tail)));
+    size_t scent_start = fixture_v16_dungeon_end(dungeon_size) - sizeof(flood_tail) - 2 - 20 * 24;
     assert(plain[scent_start] == 0xE6 && plain[scent_start+1] == 0x5C);
 
     fresh_map(); scent_when = 17; cave_when[7][7] = 18;
@@ -371,7 +382,7 @@ static void test_legacy_absence(void)
     fresh_map();
     size_t dungeon_size, length = fixture_write_dungeon(encoded, sizeof(encoded), &dungeon_size);
     decode(encoded, plain, length);
-    size_t old_dungeon_size = dungeon_size - 12 - 2 - 20*24;
+    size_t old_dungeon_size = fixture_v16_dungeon_end(dungeon_size) - 12 - 2 - 20*24;
     assert(plain[old_dungeon_size] == 0xE6
         && plain[old_dungeon_size+1] == 0x5C);
     memmove(plain + old_dungeon_size, plain + dungeon_size, 4);
@@ -404,7 +415,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index("static const char* guids[]")]
     prefix += '\n#include "monster/monster-ai.h"\n#include "monster/monster-senses.h"\n'
-    prefix += '#include "cave/cave-fixtures.h"\n'
+    prefix += '#include "cave/cave-fixtures.h"\n#include "cave/cave-environment.h"\n'
     prefix += '#include "cave/cave-flood.h"\n#include "cave/cave-water-flow.h"\n'
     init = ENGINE_FIXTURE[ENGINE_FIXTURE.index("int main(int argc,char** argv)"):]
     init = init[:init.index("    check_templates();")]

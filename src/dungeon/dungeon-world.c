@@ -1,6 +1,8 @@
 /* File: dungeon/dungeon-world.c */
 
 #include "angband.h"
+#include "cave/cave-environment.h"
+#include "cave/cave-events.h"
 #include "dungeon-internal.h"
 
 /*
@@ -285,6 +287,9 @@ void process_world(void)
     /* Stop now unless the turn count is divisible by 10 */
     if (turn % 10)
         return;
+
+    cave_environment_process();
+    cave_events_process();
 
     /*** Check the Time and Load ***/
     if (!(turn % 1000))

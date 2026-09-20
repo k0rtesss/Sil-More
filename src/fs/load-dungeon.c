@@ -137,7 +137,7 @@ static errr rd_flood_surface_markers(void)
             return -1;
         }
     }
-    if (!load_only_checksums_remain())
+    if (!savefile_version_at_least(0, 9, 8, 17) && !load_only_checksums_remain())
     {
         cave_flood_clear_surface_markers();
         note("Invalid flood surface block length.");
@@ -1130,6 +1130,8 @@ errr rd_dungeon(void)
     if (rd_flood_trap_kinds())
         return -1;
     if (rd_flood_surface_markers())
+        return -1;
+    if (load_read_environment())
         return -1;
 
     /*** Success ***/

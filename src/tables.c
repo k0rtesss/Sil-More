@@ -218,7 +218,7 @@ cptr option_text[OPT_MAX] = {
     "center_player", /* OPT_center_player */
     "run_avoid_center", /* OPT_run_avoid_center */
     NULL, /* reserved legacy slot: scroll_target */
-    NULL, /* obsolete 0.9.7: auto_more */
+    "show_dungeon_events", /* OPT_show_dungeon_events */
     "know_monster_info", /* OPT_know_monster_info */
     NULL, /* reserved legacy slot: auto_display_lists */
     "artifact_unique_color", /* OPT_artifact_unique_color */
@@ -236,7 +236,7 @@ cptr option_text[OPT_MAX] = {
     "smaller_level_size", /* OPT_smaller_level_size */
     "more_stairs", /* OPT_more_stairs */
     "unidentified_items_slate", /* OPT_unidentified_items_slate */
-    NULL, /* obsolete 0.9.7: space_acts_as_comma */
+    "environment_speed", /* OPT_environment_speed */
     "level_entry_narrative_mode", /* OPT_show_level_entry_banner */
     NULL, /* reserved legacy slot: ability_desc_mode */
     "vault_drop_frequency", /* OPT_vault_drop_frequency */
@@ -463,7 +463,7 @@ cptr option_desc[OPT_MAX] = {
     "Center map continuously", /* OPT_center_player */
     "Avoid centering while running", /* OPT_run_avoid_center */
     NULL, /* reserved legacy slot: scroll_target */
-    NULL, /* obsolete 0.9.7: auto_more */
+    "Log all dungeon events, including inaudible events, in messages {debug}", /* OPT_show_dungeon_events */
     "Know all monster info", /* OPT_know_monster_info */
     NULL, /* reserved legacy slot: auto_display_lists */
     "Display artifacts in unique yellow color", /* OPT_artifact_unique_color */
@@ -481,7 +481,7 @@ cptr option_desc[OPT_MAX] = {
     "Smaller level size (3 blocks smaller, min 6)", /* OPT_smaller_level_size */
     "More stairs (50% more; double max)", /* OPT_more_stairs */
     "Show unidentified items in slate color", /* OPT_unidentified_items_slate */
-    NULL, /* obsolete 0.9.7: space_acts_as_comma */
+    "Environmental effects speed (Slow, Normal, Fast)", /* OPT_environment_speed */
     "Level entry narrative (banner with animation/banner without animation/message/off)", /* OPT_show_level_entry_banner */
     NULL, /* reserved legacy slot: ability_desc_mode */
     "Vault drop frequency (0=Normal, 1=Modest, 2=Scarce, 3=Meager, 4=Plentiful)", /* OPT_vault_drop_frequency */
@@ -724,7 +724,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_center_player */
     false, /* OPT_run_avoid_center */
     false, /* reserved legacy slot: scroll_target */
-    false, /* obsolete 0.9.7: auto_more */
+    false, /* OPT_show_dungeon_events */
     false, /* OPT_know_monster_info */
     false, /* reserved legacy slot: auto_display_lists */
     true, /* OPT_artifact_unique_color */
@@ -742,7 +742,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_smaller_level_size */
     false, /* OPT_more_stairs */
     true, /* OPT_unidentified_items_slate */
-    false, /* obsolete 0.9.7: space_acts_as_comma */
+    false, /* OPT_environment_speed; default Normal in byte field */
     true, /* OPT_show_level_entry_banner */
     false, /* reserved legacy slot: ability_desc_mode */
     false, /* OPT_vault_drop_frequency (default 0 via byte field) */
@@ -927,7 +927,7 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_supply_menu_hide_flavor_compact,
         OPT_hide_secondary_action_ring,
         OPT_show_level_generation_debug, OPT_show_elemental_item_rolls,
-        OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_show_dungeon_events, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE },
 
@@ -951,8 +951,8 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_disable_skeleton_note_tutorial, OPT_smaller_level_size, OPT_more_stairs,
         OPT_utumno_corridors,
         OPT_vault_drop_frequency, OPT_noble_item_spawn_mode,
-        OPT_min_depth_timer_mode, OPT_load_blitz_by_default,
-        OPT_NONE, OPT_NONE,
+        OPT_min_depth_timer_mode, OPT_environment_speed, OPT_load_blitz_by_default,
+        OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Display ***/

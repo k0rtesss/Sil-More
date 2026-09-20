@@ -1,6 +1,7 @@
 /* File: level-generation.c */
 
 #include "angband.h"
+#include "cave/cave-environment.h"
 #include "cave/cave-flood.h"
 #include "cave/cave.h"
 #include "cave/cave-fixtures.h"
@@ -1639,6 +1640,7 @@ void generate_cave(void)
 
     /* The dungeon is not ready */
     character_dungeon = false;
+    cave_environment_reset();
 
     /* Don't know feeling yet */
     do_feeling = 0;
@@ -2023,6 +2025,7 @@ if (playerturn == 0) {
         }
     }
 
+    cave_environment_seed();
     level_gen_screen_finish(true);
 
     // Valar quest doesn't provide map rewards like the old thrall quest

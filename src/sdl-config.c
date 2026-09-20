@@ -1742,6 +1742,7 @@ static const byte app_interface_options[] = {
     OPT_song_list_sort_by_recent, OPT_styled_player_health_bar,
     OPT_styled_monster_health_bars, OPT_styled_monster_tile_health_bars,
     OPT_show_level_generation_debug, OPT_show_elemental_item_rolls,
+    OPT_show_dungeon_events,
     OPT_supply_menu_random_icons,
     OPT_supply_menu_hide_flavor_compact, OPT_hide_secondary_action_ring,
     OPT_hide_supporting_panes_fullscreen,
@@ -1804,12 +1805,12 @@ static bool option_is_retired_app_text_option(int opt)
 
 bool option_is_app_persistent(int opt)
 {
-    /* Multi-value non-bool options saved explicitly in the visual JSON block */
+    /* Multi-value options saved explicitly in their named JSON groups. */
     if (opt == OPT_delay_factor || opt == OPT_running_delay
         || opt == OPT_hitpoint_warning
         || opt == OPT_intro_style || opt == OPT_show_level_entry_banner
         || opt == OPT_show_partition_narrative
-        || opt == OPT_narrative_banner_turns)
+        || opt == OPT_narrative_banner_turns || opt == OPT_environment_speed)
         return true;
     if (option_is_retired_app_text_option(opt))
         return true;
@@ -1870,6 +1871,7 @@ static void sdl_config_apply_app_option_defaults(void)
     op_ptr->partition_narrative_mode = PARTITION_NARRATIVE_BANNER_DELAY;
     op_ptr->narrative_banner_turns = DEFAULT_NARRATIVE_BANNER_TURNS;
     op_ptr->monster_tile_health_bar_mode = MONSTER_TILE_HEALTH_BARS_SHOW;
+    op_ptr->environment_speed = ENVIRONMENT_SPEED_NORMAL;
     op_ptr->opt[OPT_styled_monster_tile_health_bars] = true;
 }
 
@@ -2160,6 +2162,13 @@ void sdl_config_load_app_options(const char* filename)
     item = cJSON_GetObjectItemCaseSensitive(app_options, "interface");
     sdl_config_load_byte_value(item, "hitpointWarning", &op_ptr->hitpoint_warn,
         9, 3);
+
+    item = cJSON_GetObjectItemCaseSensitive(app_options, "gameplay");
+    cJSON* speed = cJSON_GetObjectItemCaseSensitive(item, "environmentSpeed");
+    if (cJSON_IsNumber(speed) && speed->valuedouble == speed->valueint
+        && speed->valueint >= ENVIRONMENT_SPEED_SLOW
+        && speed->valueint <= ENVIRONMENT_SPEED_MAX)
+        op_ptr->environment_speed = (byte)speed->valueint;
 
     item = cJSON_GetObjectItemCaseSensitive(app_options, "visual");
     op_ptr->delay_factor = 5;
@@ -5639,6 +5648,7 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         cJSON* app_options = cJSON_CreateObject();
         cJSON* interface = NULL;
         cJSON* visual = NULL;
+        cJSON* gameplay = NULL;
 
         if (app_options && op_ptr) {
             cJSON_AddBoolToObject(app_options, "introSeen", g_app_intro_seen);
@@ -5658,6 +5668,12 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             sdl_config_save_app_option_group(app_options, "text", app_text_options);
             sdl_config_save_app_option_group(app_options, "gameplay", app_gameplay_options);
             sdl_config_save_app_option_group(app_options, "visual", app_visual_options);
+
+            gameplay = cJSON_GetObjectItemCaseSensitive(app_options, "gameplay");
+            if (cJSON_IsObject(gameplay))
+                cJSON_AddNumberToObject(gameplay, "environmentSpeed",
+                    op_ptr->environment_speed <= ENVIRONMENT_SPEED_MAX
+                        ? op_ptr->environment_speed : ENVIRONMENT_SPEED_NORMAL);
 
             interface = cJSON_GetObjectItemCaseSensitive(app_options, "interface");
             if (cJSON_IsObject(interface)) {

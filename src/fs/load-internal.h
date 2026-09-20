@@ -12,6 +12,8 @@
 #ifndef INCLUDED_FS_LOAD_INTERNAL_H
 #define INCLUDED_FS_LOAD_INTERNAL_H
 
+errr load_read_environment(void);
+
 /* Debug cursor: count of bytes consumed from the save stream (post-decode). */
 extern u32b load_byte_offset;
 

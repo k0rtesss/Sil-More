@@ -735,6 +735,15 @@ typedef struct monster_ai_state
     bool cast_checked, cast_available; /* Current action only; never saved. */
 } monster_ai_state;
 
+/* Physical observations and work orders are separate from player tracking. */
+typedef struct monster_world_state
+{
+    u32b last_event;
+    byte initialized, observation_kind, observation_y, observation_x, observation_age;
+    byte task, target_y, target_x, task_age, retries, cooldown;
+    byte home_y, home_x, supplies;
+} monster_world_state;
+
 struct monster_type
 {
     s16b r_idx; /* Monster race index */
@@ -817,6 +826,7 @@ struct monster_type
     bool ability_displaced; /* This action was interrupted by displacement. */
 
     monster_ai_state ai; /* Bounded, individually witnessed tactical knowledge. */
+    monster_world_state world; /* Environmental memory survives list compaction. */
 
     byte blow_dd_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage dice */
     byte blow_ds_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage sides */
@@ -1164,6 +1174,7 @@ struct player_other
     byte noble_item_spawn_mode; /* Noble item sources (NOBLE_ITEM_SPAWN_*) */
     byte min_depth_timer_mode; /* Minimum-depth timer pace (MIN_DEPTH_TIMER_MODE_*) */
     byte monster_tile_health_bar_mode; /* Map tile monster health bars (MONSTER_TILE_HEALTH_BARS_*) */
+    byte environment_speed; /* App preference (ENVIRONMENT_SPEED_*), saved in SDL JSON. */
 };
 
 /*

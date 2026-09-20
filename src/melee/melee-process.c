@@ -7,6 +7,8 @@
 #include "melee/melee-process.h"
 #include "melee/melee-util.h"
 #include "monster/monster-senses.h"
+#include "monster/monster-world.h"
+#include "cave/cave-events.h"
 
 int challenge_check(monster_type* m_ptr)
 {
@@ -494,6 +496,9 @@ static void process_monster(monster_type* m_ptr)
     }
 
     monster_senses_refresh(m_ptr);
+
+    if (monster_world_turn(m_ptr))
+        return;
 
     // Awake trackers can investigate scent without identifying its owner.
     if (m_ptr->alertness < ALERTNESS_ALERT
@@ -1620,6 +1625,7 @@ void process_monsters(s16b minimum_energy)
         m_ptr->energy -= 100;
 
         /* Sleeping monsters don't get a move */
+        monster_world_observe(m_ptr);
         if (m_ptr->alertness < ALERTNESS_UNWARY)
         {
             finish_monster_ability_action(m_ptr, old_y, old_x, true);
@@ -1736,6 +1742,9 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
     /* Process the monsters (backwards) */
     for (i = mon_max - 1; i >= 1; i--)
     {
+        int movement_mask = 0;
+        bool sees_player;
+
         /* Access the monster */
         m_ptr = &mon_list[i];
 
@@ -1794,8 +1803,15 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
                 m_perception += p_ptr->aggravate * 10;
             }
 
+            sees_player = monster_has_sight(m_ptr);
+            if (player_centered && main_roll && !combat_noise_bonus
+                && cave_events_player_is_moving())
+                movement_mask = cave_sound_mask_at(m_ptr->fy, m_ptr->fx);
+            /* Hearing is masked; visual recognition retains its quiet baseline. */
+            if (!sees_player) m_perception -= movement_mask;
+
             // awake creatures who have line of sight on player get a bonus
-            if (monster_has_sight(m_ptr))
+            if (sees_player)
             {
                 monster_senses_see(m_ptr, p_ptr->py, p_ptr->px);
                 {
@@ -1845,7 +1861,8 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
                 /* A successful player-origin hearing roll remembers the
                  * sound's recorded epicenter. Monster noise changes alertness
                  * but supplies no information about the player's position. */
-                if (player_centered && noise_dist < FLOW_MAX_DIST)
+                if (player_centered && noise_dist < FLOW_MAX_DIST
+                    && (!sees_player || result > movement_mask))
                     monster_senses_hear(m_ptr,
                         flow_center_y[FLOW_PLAYER_NOISE],
                         flow_center_x[FLOW_PLAYER_NOISE]);

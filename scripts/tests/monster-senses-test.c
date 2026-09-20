@@ -1,5 +1,7 @@
 #include "angband.h"
 #include "externs.h"
+#include "cave/cave-events.h"
+#include "cave/cave-water-flow.h"
 #include "monster/monster-senses.h"
 #include "melee/melee-process.h"
 #include "melee/melee-movement.h"
@@ -70,6 +72,7 @@ static monster_type* reset_map(void)
     cave_m_idx = occupants; cave_rewired = rewired;
     mon_list = monsters; r_info = races; l_list = lore; c_info = profiles;
     mon_max = 3; playerturn = 100; scent_when = 150;
+    cave_events_reset(); cave_water_flow_reset();
     visual_recognition = false; cheat_timestop = false; cheat_skill_rolls = false;
     for (int y = 0; y < 15; y++) for (int x = 0; x < 22; x++)
         tile(y, x, !y || !x || y == 14 || x == 21 || x == 11
@@ -278,8 +281,42 @@ static void test_flow_targets_and_poison_merge(void)
     CHECK(flow_dist(1, 10, 2) == FLOW_MAX_DIST);
 }
 
+static int masked_roll(int seed, bool masking, bool visible, bool moving,
+    bool combat)
+{
+    monster_type* m = reset_map();
+    m->alertness = ALERTNESS_UNWARY;
+    if (visible) for (int y=1; y<14; y++) tile(y,11,FEAT_FLOOR);
+    update_flow(5,6,FLOW_PLAYER_NOISE);
+    if (masking) cave_event_emit(CAVE_EVENT_COLLAPSE,m->fy,m->fx,30);
+    cave_events_player_moved(moving);
+    player_attacked = combat; attacked_player = false;
+    Rand_state_init(seed);
+    monster_perception(true,true,5);
+    if (masking && !visible && m->alertness == ALERTNESS_UNWARY)
+        CHECK(m->ai.sense.kind == MON_SENSE_NONE);
+    return m->alertness;
+}
+static void test_world_sound_masking(void)
+{
+    int quiet=0, masked=0;
+    for(int seed=1; seed<=100; seed++)
+    {
+        quiet += masked_roll(seed,false,false,true,false);
+        masked += masked_roll(seed,true,false,true,false);
+        CHECK(masked_roll(seed,false,true,true,false)
+            == masked_roll(seed,true,true,true,false));
+        CHECK(masked_roll(seed,false,false,false,false)
+            == masked_roll(seed,true,false,false,false));
+        CHECK(masked_roll(seed,false,false,true,true)
+            == masked_roll(seed,true,false,true,true));
+    }
+    CHECK(masked < quiet);
+}
+
 int main(void)
 {
+    test_world_sound_masking();
     test_capabilities_and_acquisition(); test_local_trails();
     test_hearing_and_recognition(); test_deposition_and_roundtrip();
     test_known_target_pursuit();

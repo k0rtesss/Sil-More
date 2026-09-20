@@ -38,6 +38,7 @@ static flag_name info_flags[] = {
     { "DODGING", RF5, RF5_DODGING },
     { "BLOCKING", RF5, RF5_BLOCKING },
     { "VENGEANCE", RF5, RF5_VENGEANCE },
+    { "BRIDGE_BUILDER", RF5, RF5_BRIDGE_BUILDER },
 
     /*
      * Monster race flags 2

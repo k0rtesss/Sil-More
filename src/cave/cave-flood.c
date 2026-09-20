@@ -1,4 +1,6 @@
 #include "angband.h"
+#include "cave/cave-environment.h"
+#include "cave/cave-events.h"
 #include "externs.h"
 #include "cave/cave-flood.h"
 
@@ -254,6 +256,14 @@ static void flood_fill_reachable_quota(int y, int x, int quota, byte kind)
                 flood_path_queue[tail++] = ny * MAX_DUNGEON_WID + nx;
                 if (!flood_surface_feature(kind, cave_feat[ny][nx]))
                 {
+                    const environment_cell* environment = cave_environment_cell_at(ny, nx);
+                    if (environment && (environment->flags & ENV_BRIDGE)
+                        && environment->integrity)
+                    {
+                        cave_environment_flood_bridge(ny, nx, surface_feat, 16);
+                        filled++;
+                        continue;
+                    }
                     /* Wash the trap away without triggering it, including
                      * another flood plate. Do not leave hidden-trap state
                      * attached to the replacement liquid. */
@@ -282,6 +292,7 @@ static void cave_flood_trigger_kind(int y, int x, byte kind, cptr message)
     flood_surface[y][x] = true;
     flood_surface_kind[y][x] = kind;
     msg_print(message);
+    cave_event_emit(CAVE_EVENT_FLOOD, y, x, 20);
 }
 
 void cave_flood_trigger(int y, int x)
@@ -315,6 +326,7 @@ void cave_flood_end_action(void)
                 continue;
             }
             flood_fill_reachable_quota(y, x, radius == 1 ? 8 : 16, kind);
+            cave_event_emit(CAVE_EVENT_FLOOD, y, x, 18);
             if (radius == 2)
             {
                 if (kind == CAVE_FLOOD_KIND_WATER

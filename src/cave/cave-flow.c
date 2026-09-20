@@ -1,6 +1,7 @@
 /* File: cave-flow.c */
 
 #include "cave-internal.h"
+#include "cave/cave-environment.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
 #include "cave/cave-flood.h"
@@ -987,6 +988,7 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
         cave_fixture_set(y, x, CAVE_FIXTURE_NONE);
     /* Change the feature */
     cave_feat[y][x] = feat;
+    cave_environment_changed(y, x, old_feat, feat);
     if (old_feat != feat && old_flow_feature != new_flow_feature)
         cave_water_flow_invalidate_at(y, x);
     if ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER) && cave_when)

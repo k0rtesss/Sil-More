@@ -14,6 +14,7 @@ try {
         src/melee/melee-util.c src/melee/melee-process.c src/melee/melee-movement-path.c `
         src/ui/targeting/direction.c `
         src/cave/cave-flow.c src/cave/cave-water.c src/cave/cave-geometry.c `
+        src/cave/cave-events.c src/cave/cave-water-flow.c `
         build-standard/_deps/SDL/libSDL3.dll.a -o "$senseTestDir/test.exe"
     if ($LASTEXITCODE -ne 0) { throw 'Monster senses test compilation failed.' }
     & "$senseTestDir/test.exe"

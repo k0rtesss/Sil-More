@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 16 /* Require the exact flood surface marker block. */
+#define VERSION_EXTRA 17 /* Living terrain, physical events and monster world jobs. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -2694,6 +2694,7 @@
 #define RF5_DODGING       0x00000008
 #define RF5_BLOCKING      0x00000010
 #define RF5_VENGEANCE     0x00000020
+#define RF5_BRIDGE_BUILDER 0x00000040 /* Carries tools and finite crossing supplies. */
 #define RF5_ABILITIES (RF5_SMITE | RF5_SPRINTING | RF5_CONCENTRATION \
     | RF5_DODGING | RF5_BLOCKING | RF5_VENGEANCE)
 
@@ -2999,7 +3000,8 @@
 #define OPT_center_player 68
 #define OPT_run_avoid_center 69
 // reserved legacy slot: scroll_target
-#define OPT_auto_more 71 /* obsolete 0.9.7: reusable setting slot */
+#define OPT_show_dungeon_events 71 /* Reuses the retired auto_more slot. */
+#define OPT_auto_more 71 /* Legacy migration only; never a live setting. */
 #define OPT_know_monster_info 72
 // reserved legacy slot: auto_display_lists
 #define OPT_artifact_unique_color 74
@@ -3017,7 +3019,8 @@
 #define OPT_smaller_level_size 86
 #define OPT_more_stairs 87
 #define OPT_unidentified_items_slate 88
-#define OPT_space_acts_as_comma 89 /* obsolete 0.9.7: reusable setting slot */
+#define OPT_environment_speed 89 /* Reuses the retired space_acts_as_comma slot. */
+#define OPT_space_acts_as_comma 89 /* Legacy migration only. */
 #define OPT_show_level_entry_banner 90
 // reserved legacy slot: ability_desc_mode
 #define OPT_vault_drop_frequency 92
@@ -3100,6 +3103,11 @@
 #define MIN_DEPTH_TIMER_MODE_RELAXED  1
 #define MIN_DEPTH_TIMER_MODE_HARSH    2
 #define MIN_DEPTH_TIMER_MODE_MAX      MIN_DEPTH_TIMER_MODE_HARSH
+
+#define ENVIRONMENT_SPEED_SLOW   0
+#define ENVIRONMENT_SPEED_NORMAL 1
+#define ENVIRONMENT_SPEED_FAST   2
+#define ENVIRONMENT_SPEED_MAX    ENVIRONMENT_SPEED_FAST
 
 // reserved legacy slot: birth_point_based
 // reserved legacy slot: birth_auto_roller

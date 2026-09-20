@@ -1,6 +1,7 @@
 /* File: cave-visuals.c */
 
 #include "cave-internal.h"
+#include "cave/cave-environment.h"
 #include "cave/cave-bridge.h"
 #include "cave/cave-flood.h"
 
@@ -355,7 +356,7 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
                 if (!(known & (CAVE_MARK | CAVE_SEEN))
                     || ((p_ptr->rage || g_labyrinth_view_active) && !(known & CAVE_SEEN)))
                     continue;
-                int border_feat = cave_bridge_underlay(cave_feat[ny][nx]);
+                int border_feat = cave_environment_display_underlay(ny, nx);
                 if (cave_water_has_icy_shore(ny, nx)) border_feat = FEAT_ICE;
                 /* Ordinary water meets the existing floor. Its SDL edge
                  * samples that floor instead of manufacturing a sand bank. */
@@ -823,7 +824,7 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
     m_idx = cave_m_idx[y][x];
 
     /* Feature */
-    feat = cave_feat[y][x];
+    feat = cave_environment_known_feature(y, x);
 
     /* Cave flags */
     info = cave_info[y][x];
@@ -849,7 +850,7 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
     }
 
     /* Boring grids (floors, etc) */
-    else if (cave_floorlike_bold(y, x))
+    else if (feat == FEAT_FLOOR || (FEAT_IS_TRAP(feat) && (info & CAVE_HIDDEN)))
     {
         /* Seen floors are normal; marked, illuminated floors outside LOS use
          * the dark floor appearance selected by special_lighting_floor(). */
@@ -1348,7 +1349,7 @@ void map_info_default(int y, int x, byte* ap, char* cp)
     m_idx = cave_m_idx[y][x];
 
     /* Feature */
-    feat = cave_feat[y][x];
+    feat = cave_environment_known_feature(y, x);
 
     /* Cave flags */
     info = cave_info[y][x];
@@ -1363,7 +1364,7 @@ void map_info_default(int y, int x, byte* ap, char* cp)
     }
 
     /* Boring grids (floors, etc) */
-    else if (cave_floorlike_bold(y, x))
+    else if (feat == FEAT_FLOOR || (FEAT_IS_TRAP(feat) && (info & CAVE_HIDDEN)))
     {
         /* Seen floors are normal; marked and illuminated floors remain mapped
          * outside LOS and are darkened by the logic below. */

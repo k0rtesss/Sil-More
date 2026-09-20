@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-terrain.c */
 
 #include "angband.h"
+#include "cave/cave-events.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -319,8 +320,9 @@ void destroy_area(int y1, int x1, int r, bool full)
         }
     }
 
-    /* Make a lot of noise */
-    monster_perception(true, false, -30);
+    /* The collapse is a physical clue at the epicentre, not evidence that
+     * the player made a sound at their current location. */
+    cave_event_emit(CAVE_EVENT_COLLAPSE, y1, x1, 30);
 
     /* Fully update the visuals */
     p_ptr->update |= (PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_MONSTERS);
@@ -724,8 +726,8 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
         take_hit(damage, "falling into a pit");
     }
 
-    /* Make a lot of noise */
-    monster_perception(true, false, -30);
+    /* Earthquakes are heard at their origin, independently of the player. */
+    cave_event_emit(CAVE_EVENT_COLLAPSE, cy, cx, 30);
 
     /* Fully update the visuals */
     p_ptr->update |= (PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_MONSTERS);

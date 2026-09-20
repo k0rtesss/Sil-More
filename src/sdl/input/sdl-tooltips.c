@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-environment.h"
 #include "sdl/main-sdl-private.h"
 
 typedef struct description_overlay_touch_scroll_state
@@ -444,7 +445,7 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         return false;
     }
 
-    feat = cave_feat[y][x];
+    feat = cave_environment_known_feature(y, x);
     if (!z_info || !f_info || feat >= z_info->f_max)
         return false;
     feat = f_info[feat].mimic;
@@ -638,6 +639,11 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
     if (sdl_object_tooltip_feature_name(y, x, &feature_name))
         sdl_object_tooltip_append_part(buf, buflen, attrs, feature_name,
             TERM_WHITE);
+
+    char environment[120];
+    if (cave_environment_describe(y, x, environment, sizeof(environment)))
+        sdl_object_tooltip_append_part(buf, buflen, attrs, environment,
+            TERM_YELLOW);
 
     return buf[0] != '\0';
 }

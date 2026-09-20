@@ -10,6 +10,8 @@
 
 #include "angband.h"
 #include "blitz.h"
+#include "cave/cave-environment.h"
+#include "cave/cave-events.h"
 #include "externs.h"
 #include "log/log.h"
 #include "mem/alloc.h"
@@ -854,6 +856,52 @@ static void do_cmd_wiz_bamf(void)
 
     teleport_player_to(y, x);
     target_set_monster(0);
+}
+
+static void do_cmd_wiz_last_event(void)
+{
+    cave_world_event event;
+    int best_y = -1, best_x = -1, best_distance = INT_MAX;
+
+    if (!character_dungeon || !cave_event_latest(&event))
+    {
+        msg_print("No dungeon event has occurred on this level yet.");
+        return;
+    }
+    if (p_ptr->py == event.y && p_ptr->px == event.x)
+    {
+        msg_print("You are already at the last dungeon event's location.");
+        return;
+    }
+
+    /* Pick an exact legal teleport landing first. Floods, collapses and
+     * occupied construction sites may leave the event grid unusable.
+     * A bounded search also avoids teleport_player_to's unbounded fallback
+     * when there is no naked floor anywhere on the level. */
+    for (int y = MAX(1, event.y - MAX_SIGHT);
+         y < MIN(p_ptr->cur_map_hgt - 1, event.y + MAX_SIGHT + 1); y++)
+        for (int x = MAX(1, event.x - MAX_SIGHT);
+             x < MIN(p_ptr->cur_map_wid - 1, event.x + MAX_SIGHT + 1); x++)
+        {
+            int dy = y - event.y, dx = x - event.x;
+            int d = dy * dy + dx * dx;
+            if (d >= best_distance || distance(y, x, event.y, event.x) > MAX_SIGHT
+                || !cave_naked_bold(y, x) || cave_environment_pending_hazard(y, x))
+                continue;
+            best_y = y; best_x = x; best_distance = d;
+        }
+    if (best_y < 0)
+    {
+        msg_format("No safe landing near the last dungeon event at (y=%d, x=%d).",
+            event.y, event.x);
+        return;
+    }
+
+    teleport_player_to(best_y, best_x);
+    target_set_monster(0);
+    msg_format("You teleport %s dungeon event %lu at (y=%d, x=%d).",
+        best_distance ? "near" : "to", (unsigned long)event.serial,
+        event.y, event.x);
 }
 
 /*
@@ -3088,6 +3136,7 @@ static const debug_menu_entry debug_menu_character[] = {
 
 static const debug_menu_entry debug_menu_map[] = {
     { 'b', 'b', "Teleport to target (b)", TERM_L_BLUE },
+    { 'h', 'h', "Teleport to last dungeon event (h)", TERM_L_BLUE },
     { 'p', 'p', "Phase door (p)", TERM_L_BLUE },
     { 't', 't', "Teleport (t)", TERM_L_BLUE },
     { 'j', 'j', "Go up or down in the dungeon (j)", TERM_YELLOW },
@@ -3398,6 +3447,13 @@ static void do_cmd_debug_execute(char cmd)
     case 'R':
     {
         do_cmd_debug_run_results();
+        break;
+    }
+
+    /* Visit the most recent physical event, whether heard or not. */
+    case 'h':
+    {
+        do_cmd_wiz_last_event();
         break;
     }
 

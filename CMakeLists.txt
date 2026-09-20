@@ -217,6 +217,8 @@ set(SIL_MORE_SOURCES
     src/cave/cave-fixtures.c
     src/cave/cave-water.c
     src/cave/cave-water-flow.c
+    src/cave/cave-events.c
+    src/cave/cave-environment.c
     src/cave/cave-bridge.c
     src/cave/cave-lava.c
     src/cave/cave-poison.c
@@ -419,6 +421,7 @@ set(SIL_MORE_SOURCES
     src/monster/monster-abilities.c
     src/monster/monster-ai.c
     src/monster/monster-senses.c
+    src/monster/monster-world.c
     src/monster/monster-tactics.c
     src/monster/monster-thrall.c
     src/cave/cave-light.c
@@ -470,6 +473,8 @@ set(SIL_MORE_SOURCES
     src/fs/save-player.c
     src/fs/save-notes-inventory.c
     src/fs/save-dungeon.c
+    src/fs/save-environment.c
+    src/fs/load-environment.c
     src/score/score_io.c
     src/score/score_logic.c
     src/score/score_guid.c

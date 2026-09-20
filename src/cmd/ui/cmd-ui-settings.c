@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-environment.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -163,6 +164,7 @@ static const struct option_group_marker interface_option_groups[] = {
     { OPT_hide_secondary_action_ring, "Quick Access" },
     { OPT_show_level_generation_debug, "Debug" },
     { OPT_show_elemental_item_rolls, "Debug" },
+    { OPT_show_dungeon_events, "Debug" },
     { -1, NULL }
 };
 
@@ -193,6 +195,7 @@ static const struct option_group_marker gameplay_option_groups[] = {
     { OPT_vault_drop_frequency, "World Generation" },
     { OPT_noble_item_spawn_mode, "World Generation" },
     { OPT_min_depth_timer_mode, "World Generation" },
+    { OPT_environment_speed, "Living Dungeon" },
     { OPT_load_blitz_by_default, "Blitz" },
     { -1, NULL }
 };
@@ -696,6 +699,8 @@ static cptr option_menu_label(int opt)
     case OPT_min_depth_timer_mode:
         return compact ? (narrow ? "Depth pace" : "Min depth pace")
                        : "Minimum depth pace";
+    case OPT_environment_speed:
+        return compact ? "Environment speed" : "Environmental effects speed";
     case OPT_noble_item_spawn_mode:
         return compact ? (narrow ? "Noble items" : "Noble item sources")
                        : "Noble item spawns";
@@ -731,6 +736,9 @@ static cptr option_menu_label(int opt)
     case OPT_show_elemental_item_rolls:
         return compact ? (narrow ? "Dbg elem items" : "Debug elemental items")
                        : "Show elemental item break rolls and target probabilities";
+    case OPT_show_dungeon_events:
+        return compact ? (narrow ? "Events {debug}" : "Dungeon events {debug}")
+                       : "Log all dungeon events in messages {debug}";
     case OPT_show_smithing_difficulty:
         return compact ? (narrow ? "Smith dbg items" : "Debug smithing in items")
                        : "Show {sd,wr} in item descriptions";
@@ -1184,6 +1192,11 @@ static bool option_pick_value(int opt, bool* handled)
         { MIN_DEPTH_TIMER_MODE_RELAXED, "Relaxed (+30000)" },
         { MIN_DEPTH_TIMER_MODE_HARSH, "Harsh (-30000)" }
     };
+    static const struct settings_value_choice environment_speed_choices[] = {
+        { ENVIRONMENT_SPEED_SLOW, "Slow" },
+        { ENVIRONMENT_SPEED_NORMAL, "Normal (default)" },
+        { ENVIRONMENT_SPEED_FAST, "Fast" }
+    };
     static const struct settings_value_choice noble_spawn_choices[] = {
         { NOBLE_ITEM_SPAWN_RESTRICTED,
             "0 (good+/chests/human+elf skeletons)" },
@@ -1310,6 +1323,20 @@ static bool option_pick_value(int opt, bool* handled)
             && value != op_ptr->min_depth_timer_mode)
         {
             op_ptr->min_depth_timer_mode = value;
+            return true;
+        }
+        return false;
+
+    case OPT_environment_speed:
+        value = op_ptr->environment_speed;
+        if (value > ENVIRONMENT_SPEED_MAX) value = ENVIRONMENT_SPEED_NORMAL;
+        if (handled) *handled = true;
+        if (settings_pick_value(option_menu_label(opt),
+                "Slow keeps the original pace. Normal is twice as fast; Fast is four times as fast. Hazard warning time stays the same.",
+                environment_speed_choices, (int)N_ELEMENTS(environment_speed_choices),
+                value, &value) && value != op_ptr->environment_speed)
+        {
+            cave_environment_set_speed((byte)value);
             return true;
         }
         return false;
@@ -1668,6 +1695,9 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
         break;
     case OPT_min_depth_timer_mode:
         op_ptr->min_depth_timer_mode = MIN_DEPTH_TIMER_MODE_NORMAL;
+        break;
+    case OPT_environment_speed:
+        cave_environment_set_speed(ENVIRONMENT_SPEED_NORMAL);
         break;
     case OPT_narrative_banner_turns:
         op_ptr->narrative_banner_turns = DEFAULT_NARRATIVE_BANNER_TURNS;
@@ -2032,6 +2062,13 @@ extern void do_cmd_options_aux(int page, cptr info)
 
                 option_menu_format_line(buf, sizeof(buf), option_menu_label(opt[i]),
                     mode_str);
+            }
+            else if (opt[i] == OPT_environment_speed)
+            {
+                const char* speed = op_ptr->environment_speed == ENVIRONMENT_SPEED_SLOW
+                    ? "Slow" : op_ptr->environment_speed == ENVIRONMENT_SPEED_FAST
+                    ? "Fast" : "Normal";
+                option_menu_format_line(buf, sizeof(buf), option_menu_label(opt[i]), speed);
             }
             else if (opt[i] == OPT_noble_item_spawn_mode)
             {
@@ -2543,6 +2580,11 @@ extern void do_cmd_options_aux(int page, cptr info)
                         ? op_ptr->min_depth_timer_mode + 1
                         : MIN_DEPTH_TIMER_MODE_MAX;
                 }
+                else if (opt[k] == OPT_environment_speed)
+                {
+                    cave_environment_set_speed((byte)MIN(ENVIRONMENT_SPEED_MAX,
+                        op_ptr->environment_speed + 1));
+                }
                 else if (opt[k] == OPT_noble_item_spawn_mode)
                 {
                     op_ptr->noble_item_spawn_mode
@@ -2743,6 +2785,11 @@ extern void do_cmd_options_aux(int page, cptr info)
                         = (op_ptr->min_depth_timer_mode > MIN_DEPTH_TIMER_MODE_NORMAL)
                         ? op_ptr->min_depth_timer_mode - 1
                         : MIN_DEPTH_TIMER_MODE_NORMAL;
+                }
+                else if (opt[k] == OPT_environment_speed)
+                {
+                    cave_environment_set_speed((byte)MAX(ENVIRONMENT_SPEED_SLOW,
+                        op_ptr->environment_speed - 1));
                 }
                 else if (opt[k] == OPT_noble_item_spawn_mode)
                 {

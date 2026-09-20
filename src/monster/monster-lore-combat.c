@@ -674,6 +674,8 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
         vp[vn++] = "blocking";
     if (l_ptr->flags5 & RF5_VENGEANCE)
         vp[vn++] = "vengeance";
+    if (l_ptr->flags5 & RF5_BRIDGE_BUILDER)
+        vp[vn++] = "bridge building";
     if (l_ptr->flags4 & (RF4_SNG_BINDING))
         vp[vn++] = "song of binding";
     if (l_ptr->flags4 & (RF4_SNG_PIERCING))
@@ -713,6 +715,9 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     }
 
     /* Describe the timing and counterplay of observed stateful abilities. */
+    if (l_ptr->flags5 & RF5_BRIDGE_BUILDER)
+        text_out("It can repair damaged crossings and build short bridges, "
+            "using limited supplies and several actions of noisy work.  ");
     if (l_ptr->flags5 & RF5_SMITE)
     {
         text_out(format("Smite spends %d effort on an immediate melee strike "
@@ -1023,4 +1028,3 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
         text_out(format("%^s usually appears in groups.  ", wd_he[msex]));
     }
 }
-

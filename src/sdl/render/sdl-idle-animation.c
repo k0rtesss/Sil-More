@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-environment.h"
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
@@ -136,7 +137,7 @@ static byte visible_liquid(int y, int x)
     u16b info;
     if (!p_ptr || !in_bounds(y, x))
         return 0;
-    byte feat = cave_bridge_underlay(cave_feat[y][x]);
+    byte feat = cave_environment_display_underlay(y, x);
     if (feat != FEAT_WATER && feat != FEAT_DEEP_WATER && feat != FEAT_LAVA && feat != FEAT_ICE
         && feat != FEAT_MELTING_ICE && feat != FEAT_POISON && feat != FEAT_CHASM)
         return 0;
@@ -271,7 +272,7 @@ static bool visible_material_floor_style(int y, int x, int* style_out)
         || (unsigned)y >= (unsigned)p_ptr->cur_map_hgt
         || (unsigned)x >= (unsigned)p_ptr->cur_map_wid)
         return false;
-    feat = cave_bridge_underlay(cave_feat[y][x]);
+    feat = cave_environment_display_underlay(y, x);
     if (feat != FEAT_FLOOR && feat != FEAT_RAGE_FLOOR
         && feat != FEAT_SUNLIGHT)
         return false;
@@ -556,7 +557,7 @@ static SDL_Texture* load_ice_water_overlay(byte feat)
 static bool draw_liquid_region(int y, int x, const SDL_FRect* dst,
     const SDL_FRect* pixels)
 {
-    byte feat = cave_bridge_underlay(cave_feat[y][x]);
+    byte feat = cave_environment_display_underlay(y, x);
     bool live = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
     if (feat == FEAT_CHASM)
     {
@@ -917,7 +918,7 @@ bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst)
     if (g_state.use_tiles && visible_liquid(y, x))
     {
         bool drawn = draw_liquid(y, x, dst);
-        if (FEAT_IS_BRIDGE(cave_feat[y][x])) sdl_draw_bridge_deck(y, x, dst);
+        if (FEAT_IS_BRIDGE(cave_environment_known_feature(y, x))) sdl_draw_bridge_deck(y, x, dst);
         return drawn;
     }
     if (g_state.use_tiles && draw_elemental_transition(y, x, dst))

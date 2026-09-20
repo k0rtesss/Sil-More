@@ -497,6 +497,7 @@ void wr_dungeon(void)
     wr_floods();
     wr_flood_trap_kinds();
     wr_flood_surface_markers();
+    save_write_environment();
 
     log_debug("Dungeon data write completed - %d objects, %d monsters", o_max - 1, mon_max - 1);
     log_trace("[save:%06u] === END DUNGEON ===", (unsigned)save_byte_offset);

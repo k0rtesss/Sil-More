@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-environment.h"
 #include "sdl/main-sdl-private.h"
 #include "sdl/render/sdl-bridge.h"
 #include "cave/cave-bridge.h"
@@ -23,11 +24,19 @@ static void bridge_rect(const SDL_FRect* dst, bool vertical,
 
 void sdl_draw_bridge_deck(int y, int x, const SDL_FRect* dst)
 {
-    if (!dst || !p_ptr || !in_bounds(y, x) || !FEAT_IS_BRIDGE(cave_feat[y][x])) return;
-    int material = cave_bridge_underlay(cave_feat[y][x]);
-    bool vertical = cave_bridge_vertical(cave_feat[y][x]);
+    if (!dst || !p_ptr || !in_bounds(y, x)) return;
+    int feature = cave_environment_known_feature(y,x);
+    if (!FEAT_IS_BRIDGE(feature)) return;
+    int material = cave_environment_display_underlay(y,x);
+    bool vertical = cave_bridge_vertical(feature);
     bool wood = material == FEAT_WATER || material == FEAT_DEEP_WATER
         || material == FEAT_CHASM;
+    const environment_cell* environment = cave_environment_cell_at(y,x);
+    bool observed = (cave_info[y][x] & CAVE_SEEN) != 0;
+    if (environment && (environment->flags & ENV_BRIDGE)) {
+        int deck = observed ? environment->material : environment->known_material;
+        if (deck) wood = deck == ENV_BRIDGE_WOOD;
+    }
     int light = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN) ? 255 : 96;
     SDL_Color body = wood ? (SDL_Color){ 135, 94, 52, 255 }
         : material == FEAT_LAVA ? (SDL_Color){ 143, 130, 111, 255 }
@@ -52,4 +61,10 @@ void sdl_draw_bridge_deck(int y, int x, const SDL_FRect* dst)
             bridge_rect(dst, vertical, along, 3, 1, 1, shadow, light);
             bridge_rect(dst, vertical, along, 12, 1, 1, shadow, light);
         }
+    if (observed && environment && (environment->flags & ENV_BRIDGE)
+        && environment->integrity < 100) {
+        bridge_rect(dst, vertical, 7, 5, 1, 7, shadow, light);
+        if (environment->integrity <= 25)
+            bridge_rect(dst, vertical, 10, 3, 2, 6, shadow, light);
+    }
 }

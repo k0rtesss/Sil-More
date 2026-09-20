@@ -17,6 +17,7 @@ HARNESS = r'''
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-bridge.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-environment.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-util.h"
 #include "level-generation/level-generation-terrain-access.h"
@@ -175,6 +176,32 @@ static uint64_t render_cell(int feat,const char* path) {
     SDL_SetRenderTarget(g_state.renderer,NULL);SDL_DestroyTexture(target);return hash;
 }
 
+static void bridge_environment_pixels(const char* out) {
+    bridge_map();p_ptr->py=p_ptr->px=25;
+    for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
+        cave_feat[10+dy][10+dx]=FEAT_WATER;
+    cave_feat[10][10]=FEAT_BRIDGE_WATER_H;
+    cave_environment_seed();
+    char path[1024];
+    snprintf(path,sizeof(path),"%s/bridge-sound.png",out);
+    uint64_t sound=render_cell(FEAT_BRIDGE_WATER_H,path);
+    cave_environment_flood_bridge(10,10,FEAT_WATER,10);
+    snprintf(path,sizeof(path),"%s/bridge-damaged.png",out);
+    uint64_t damaged=render_cell(FEAT_BRIDGE_WATER_H,path);
+    assert(sound!=damaged);
+    cave_environment_flood_bridge(10,10,FEAT_LAVA,1);
+    snprintf(path,sizeof(path),"%s/bridge-lava-flood.png",out);
+    assert(render_cell(FEAT_BRIDGE_WATER_H,path)!=damaged);
+    assert(cave_environment_cell_at(10,10)->material==ENV_BRIDGE_WOOD);
+    assert(cave_environment_display_underlay(10,10)==FEAT_LAVA);
+    cave_environment_observe(10,10);cave_info[10][10]&=~CAVE_SEEN;
+    cave_environment_flood_bridge(10,10,FEAT_POISON,1);
+    assert(cave_environment_display_underlay(10,10)==FEAT_LAVA);
+    assert(cave_environment_cell_at(10,10)->known_material==ENV_BRIDGE_WOOD);
+    cave_environment_reset();
+    puts("Living bridge SDL pixels: damaged deck differs, wood remains wood over lava, hidden replacement retains observed underlay PASS");
+}
+
 static void bridge_pixels(const char* out) {
     bridge_map();p_ptr->py=p_ptr->px=25;
     uint64_t floor=render_cell(FEAT_FLOOR,NULL),hashes[12];
@@ -246,7 +273,7 @@ int main(int argc,char** argv) {
     k_info[1].x_attr=TILE_FLAG|1;k_info[1].x_char=TILE_FLAG|1;
     for(int i=0;i<256;i++){f_info[i].mimic=i;f_info[i].x_attr=TILE_FLAG;f_info[i].x_char=TILE_FLAG|1;}
     @FEATURE_INIT@
-    Rand_state_init(1234);bridge_rules();bridge_save();bridge_pixels(argv[1]);
+    Rand_state_init(1234);bridge_rules();bridge_save();bridge_pixels(argv[1]);bridge_environment_pixels(argv[1]);
     sdl_idle_animation_shutdown();SDL_Quit();puts("Bridge checks PASS");return 0;
 }
 '''

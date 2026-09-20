@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "cave/cave-flood.h"
+#include "cave/cave-events.h"
 #include "monster/monster-ai.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
@@ -1403,6 +1404,11 @@ void process_player(void)
     // Sil-y: note that these are now being set every single turn, somewhat
     // defeating their purpose
     p_ptr->window |= (PW_INVEN | PW_EQUIP);
+    cave_events_player_moved(
+        (p_ptr->py != action_start_y || p_ptr->px != action_start_x)
+        && p_ptr->previous_action[0] >= 1
+        && p_ptr->previous_action[0] <= 9
+        && p_ptr->previous_action[0] != 5);
     sil_popup_trace_stage("action-upkeep-complete");
 
 #if !defined(__ANDROID__) && !defined(SIL_IOS)

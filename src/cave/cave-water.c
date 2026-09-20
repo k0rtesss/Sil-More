@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-environment.h"
 #include "externs.h"
 
 /* Action guards prevent entering ice and finishing that same action from
@@ -112,8 +113,8 @@ bool cave_transform_elemental_terrain(int y, int x, int typ)
         return false;
     feat = cave_feat[y][x];
     if (typ == GF_FIRE && FEAT_IS_ICE(feat))
-        cave_set_feat(y, x, feat == FEAT_MELTING_ICE
-            ? melted_ice_feature(y, x) : FEAT_WATER);
+        cave_set_feat(y, x, cave_environment_thaw_feature(y, x,
+            feat == FEAT_MELTING_ICE ? melted_ice_feature(y, x) : FEAT_WATER));
     else if (typ == GF_COLD && feat == FEAT_MELTING_ICE)
         cave_set_feat(y, x, FEAT_ICE);
     else if (typ == GF_COLD && feat == FEAT_WATER)

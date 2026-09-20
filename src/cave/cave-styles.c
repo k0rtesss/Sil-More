@@ -1,6 +1,7 @@
 /* File: cave-styles.c */
 
 #include "cave-internal.h"
+#include "cave/cave-environment.h"
 #include "cave-bridge.h"
 
 /* Visual-only shore tiles, reloaded from style-levels.txt at startup. */
@@ -101,7 +102,7 @@ static bool cave_shore_grid_known(int y, int x)
 bool cave_water_has_icy_shore(int y, int x)
 {
     if (!cave_shore_grid_known(y, x)) return false;
-    int feat = cave_bridge_underlay(cave_feat[y][x]);
+    int feat = cave_environment_display_underlay(y, x);
     if (feat != FEAT_WATER && feat != FEAT_DEEP_WATER) return false;
     if (cave_stored_style_has_ice_bank(y, x)) return true;
     for (int dy = -1; dy <= 1; dy++)
@@ -109,7 +110,7 @@ bool cave_water_has_icy_shore(int y, int x)
         {
             int ny = y + dy, nx = x + dx;
             if ((!dy && !dx) || !cave_shore_grid_known(ny, nx)) continue;
-            feat = cave_bridge_underlay(cave_feat[ny][nx]);
+            feat = cave_environment_display_underlay(ny, nx);
             if (FEAT_IS_ICE(feat)) return true;
             if ((feat == FEAT_FLOOR || feat == FEAT_RAGE_FLOOR
                     || feat == FEAT_SUNLIGHT)
