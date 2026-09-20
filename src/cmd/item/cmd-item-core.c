@@ -4689,7 +4689,7 @@ bool do_cmd_jewelry_preset_clear(int preset)
 void do_cmd_jewelry_preset_shortcut(void)
 {
     tutorial_game_menu("jewelry-sets", "Record or apply a combination of rings and an amulet. Applying a set uses the normal equipment rules and requires the items to be available.");
-    ui_question_option options[JEWELRY_PRESET_MAX];
+    ui_question_option options[JEWELRY_PRESET_MAX + 1];
     char labels[JEWELRY_PRESET_MAX][JEWELRY_PRESET_NAME_MAX + 24];
     int choice;
 
@@ -4709,11 +4709,21 @@ void do_cmd_jewelry_preset_shortcut(void)
         options[i].disabled = !available;
     }
 
+    options[JEWELRY_PRESET_MAX] = (ui_question_option){
+        'j', "Open Jewelry tab", TERM_L_WHITE, false
+    };
+
     choice = ui_question_ask("Wear which jewelry set?",
         "Grey choices cannot be worn right now.", options,
-        JEWELRY_PRESET_MAX, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
+        JEWELRY_PRESET_MAX + 1, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
     if (choice < 0)
         return;
+
+    if (choice == JEWELRY_PRESET_MAX)
+    {
+        (void)open_inventory_menu_category(INVENTORY_MENU_GROUP_JEWELRY);
+        return;
+    }
 
     (void)do_cmd_jewelry_preset_apply(choice);
 }
