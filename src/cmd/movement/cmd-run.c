@@ -5,6 +5,7 @@
 #include "log/perf.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "cave/cave-environment.h"
 #include "ui/question.h"
 #include <math.h>
 
@@ -372,6 +373,46 @@ void move_player(int dir)
         }
 
         /* Check before walking onto known leapable hazards */
+        if (!p_ptr->confused
+            && p_ptr->active_ability[S_SMT][SMT_REPAIR]
+            && (cave_info[y][x] & (CAVE_MARK | CAVE_SEEN)))
+        {
+            environment_bridge_job bridge_job;
+
+            if (cave_environment_bridge_job_at(y, x, &bridge_job)
+                && bridge_job.repair)
+            {
+                int command = 0;
+
+                /* A broken crossing is still a walkable liquid tile, so give
+                 * Reforge a chance before water/leap handling takes over. */
+                disturb(0, 0);
+                flush();
+                if (!grid_interact_question(y, x, &command, NULL))
+                {
+                    p_ptr->energy_use = 0;
+                    return;
+                }
+
+                if (command == '/')
+                {
+                    /* The selected repair is a different command from the
+                     * movement command that opened this prompt. Preserve it
+                     * for the automatic remaining-work repetitions. */
+                    p_ptr->command_cmd = '/';
+                    p_ptr->command_dir = dir;
+                    do_cmd_alter();
+                    return;
+                }
+
+                if (command != ';')
+                {
+                    p_ptr->energy_use = 0;
+                    return;
+                }
+            }
+        }
+
         if ((!p_ptr->confused) && (cave_info[y][x] & (CAVE_MARK)))
         {
             bool terrain_entry_chosen = false;

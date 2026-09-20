@@ -6,12 +6,21 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
+#include "cave/cave-environment.h"
 #include "cmd/world/cmd-interact-chest.h"
 #include "ui/question.h"
 #include <SDL3/SDL_timer.h>
 
 #define INTERACTION_ROLL_ANIM_FRAME_MS 250
 #define INTERACTION_ROLL_BASH_REDUCTION_MS 1000
+
+static int bridge_repair_work_required(const environment_bridge_job* job)
+{
+    if (!job)
+        return 0;
+    return job->integrity ? 4
+        : job->material == ENV_BRIDGE_WOOD ? 8 : 16;
+}
 
 static bool is_open(int feat) { return (feat == FEAT_OPEN); }
 
@@ -1474,6 +1483,7 @@ static void grid_question_append(char* buf, size_t buflen, cptr text)
 bool grid_interact_available(int y, int x)
 {
     int dir;
+    environment_bridge_job bridge_job;
 
     if (!p_ptr || !character_dungeon || !in_bounds(y, x))
         return false;
@@ -1533,6 +1543,11 @@ bool grid_interact_available(int y, int x)
     if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
         || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON)
         return true;
+    if (cave_environment_bridge_job_at(y, x, &bridge_job)
+        && bridge_job.repair)
+        return true;
+    if (FEAT_IS_BRIDGE(cave_feat[y][x]))
+        return true;
 
     /* Empty floor: strike at the square without stepping in */
     if (cave_floorlike_bold(y, x))
@@ -1560,6 +1575,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
     char desc[480];
     char line[160];
     char disarm_label[64];
+    environment_bridge_job bridge_job;
+    bool bridge_repairable;
 
     if (out_command)
         *out_command = 0;
@@ -1571,6 +1588,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
 
     dir = coords_to_dir(y, x);
     feat = cave_feat[y][x];
+    bridge_repairable = cave_environment_bridge_job_at(y, x, &bridge_job)
+        && bridge_job.repair;
     title[0] = '\0';
     desc[0] = '\0';
     memset(step_choice, 0, sizeof(step_choice));
@@ -1924,6 +1943,31 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "something of use.",
             sizeof(desc));
         GRID_Q_ADD('/', 's', "Search it", TERM_L_BLUE);
+    }
+
+    /* --- Bridges and damaged crossings --- */
+    else if (FEAT_IS_BRIDGE(feat) || bridge_repairable)
+    {
+        bool can_repair = bridge_repairable
+            && p_ptr->active_ability[S_SMT][SMT_REPAIR];
+
+        SDL_strlcpy(title, bridge_repairable ? "Damaged bridge" : "Bridge",
+            sizeof(title));
+        if (!cave_environment_describe(y, x, desc, sizeof(desc)))
+        {
+            SDL_strlcpy(desc,
+                "A constructed crossing over dangerous terrain.",
+                sizeof(desc));
+        }
+        if (bridge_repairable)
+        {
+            grid_question_append(desc, sizeof(desc), can_repair
+                ? "Your Reforge ability lets you restore it over several actions."
+                : "Repairing it requires the Reforge ability.");
+            GRID_Q_ADD_EX('/', 'r', "Repair bridge", TERM_L_GREEN,
+                !can_repair);
+        }
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_BLUE);
     }
 
     /* --- Molten lava --- */
@@ -3416,6 +3460,8 @@ void do_cmd_alter(void)
     bool skeleton_present = false;
 
     bool more = false;
+    environment_bridge_job bridge_job;
+    bool bridge_repairable;
 
     /* Get a direction */
     if (!get_rep_dir(&dir))
@@ -3491,11 +3537,47 @@ void do_cmd_alter(void)
 
     bool is_marked = (cave_info[y][x] & CAVE_MARK) > 0;
     bool is_visible = (cave_info[y][x] & CAVE_SEEN) > 0;
+    bridge_repairable = p_ptr->active_ability[S_SMT][SMT_REPAIR]
+        && (is_marked || is_visible)
+        && cave_environment_bridge_job_at(y, x, &bridge_job)
+        && bridge_job.repair;
 
     /*Is there a monster on the space?*/
     if (cave_m_idx[y][x] > 0)
     {
         py_attack(y, x, ATT_MAIN);
+    }
+    /* Reforge can restore an existing damaged or destroyed bridge.  Use the
+     * same work counter and route checks as bridge-building monsters. */
+    else if (bridge_repairable)
+    {
+        int before = cave_environment_bridge_progress(y, x);
+        bool done = cave_environment_bridge_work(y, x, bridge_job.material);
+        int after = cave_environment_bridge_progress(y, x);
+        int required = bridge_repair_work_required(&bridge_job);
+
+        if (done)
+        {
+            msg_print("You repair the bridge.");
+            more = false;
+        }
+        else if (after > before)
+        {
+            msg_format("You work on the damaged bridge (%d/%d).",
+                after, required);
+            /* Continue the selected repair across the remaining turns. An
+             * explicit player input still interrupts command repetition via
+             * disturb(), just as it does for other long actions. */
+            if (after < required)
+                p_ptr->command_rep = MAX(p_ptr->command_rep,
+                    required - after);
+            more = true;
+        }
+        else
+        {
+            msg_print("You cannot repair that bridge now.");
+            more = false;
+        }
     }
     // deal with players who can't see the square
     else if ((dir != 5) && !(is_marked || is_visible))

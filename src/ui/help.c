@@ -105,6 +105,9 @@ void binding_action_label(int binding, char* buf, size_t buflen)
     case TOUCH_BIND_MAIN_MENU_HINTS_QUESTS:
         SDL_strlcpy(buf, "Hints & Quests", buflen);
         return;
+    case TOUCH_BIND_OPEN_JEWELRY:
+        SDL_strlcpy(buf, "Open Jewelry", buflen);
+        return;
     case TOUCH_BIND_TOGGLE_TILES:
         SDL_strlcpy(buf, "Change ASCII / tiles", buflen);
         return;
@@ -341,6 +344,9 @@ void binding_action_short(int binding, char* buf, size_t buflen)
         return;
     case TOUCH_BIND_MAIN_MENU_HINTS_QUESTS:
         SDL_strlcpy(buf, "Hints", buflen);
+        return;
+    case TOUCH_BIND_OPEN_JEWELRY:
+        SDL_strlcpy(buf, "Jewelry", buflen);
         return;
     case TOUCH_BIND_TOGGLE_TILES:
         SDL_strlcpy(buf, "Change ASCII/Tiles", buflen);
@@ -2359,7 +2365,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_WARN, "- Cracks and rising floods warn of terrain changes. Inspect crossings for damage or ongoing repairs.", row++, col);
         put_role(ROLE_BODY, "- Flowing water and nearby collapses or construction muffle movement noise. They do not hide you from sight.", row++, col);
         put_role(ROLE_BODY, "- Audible changes appear in the message log. Monsters investigate physical sounds and flee unsafe ground.", row++, col);
-        put_role(ROLE_BODY, "- Some orcs and men can repair or build short bridges. Their work takes time and limited supplies.", row++, col);
+        put_role(ROLE_BODY, "- Reforging lets characters repair damaged bridges; some orcs, men, and cats can repair or build short bridges. Their work takes time and limited supplies.", row++, col);
         row++;
         help_emit_heading("READ THE GAME", row, col); row++;
         x = col;

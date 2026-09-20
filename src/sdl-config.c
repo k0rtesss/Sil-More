@@ -2366,16 +2366,83 @@ static void sdl_config_migrate_touch_pane_binding(struct sdl_config* config,
         log_info("%s", message);
 }
 
+static bool sdl_config_top_panel_legacy_defaults_match(
+    const int* bindings, const int* long_bindings, int count)
+{
+    static const int legacy_defaults[8] = {
+        'j', 'i', 'y', 'h',
+        TOUCH_BIND_TOGGLE_TILES, 'S', 'l', 'M',
+    };
+
+    if (!bindings || !long_bindings || count < 8)
+        return false;
+
+    for (int i = 0; i < 8; i++) {
+        if (bindings[i] != legacy_defaults[i]
+            || long_bindings[i] != GAMEPAD_BIND_NONE)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static void sdl_config_migrate_top_panel_jewelry_button(
+    int* cell_count, int* bindings, int* long_bindings)
+{
+    int count;
+
+    if (!cell_count || !bindings || !long_bindings)
+        return;
+
+    count = normalize_touch_top_panel_cell_count(*cell_count);
+    for (int i = 0; i < count; i++) {
+        if (bindings[i] == TOUCH_BIND_OPEN_JEWELRY
+            || long_bindings[i] == TOUCH_BIND_OPEN_JEWELRY)
+        {
+            return;
+        }
+    }
+
+    if (!sdl_config_top_panel_legacy_defaults_match(bindings, long_bindings,
+            count))
+    {
+        return;
+    }
+
+    if (count == 8) {
+        bindings[count] = TOUCH_BIND_OPEN_JEWELRY;
+        long_bindings[count] = GAMEPAD_BIND_NONE;
+        *cell_count = count + 1;
+        log_info("Migrated Quick Access defaults with a Jewelry button");
+        return;
+    }
+
+    /* Portrait profiles from older configs may already have appended Main
+     * Menu at the first new slot.  Keep it after the new Jewelry button. */
+    if (count == 9 && bindings[8] == 'm'
+        && long_bindings[8] == GAMEPAD_BIND_NONE)
+    {
+        bindings[9] = bindings[8];
+        long_bindings[9] = long_bindings[8];
+        bindings[8] = TOUCH_BIND_OPEN_JEWELRY;
+        long_bindings[8] = GAMEPAD_BIND_NONE;
+        *cell_count = count + 1;
+        log_info("Migrated portrait Quick Access defaults with a Jewelry button");
+    }
+}
+
 static void sdl_config_set_default_top_panel_bindings(struct sdl_config* config)
 {
-    /* Left to right: Supplies, Inventory, Abilities, Character sheet,
+    /* Left to right: Supplies, Jewelry, Inventory, Abilities, Character sheet,
      * ASCII/Tiles toggle, Stealth, Look, Map.  Portrait profiles append Main
      * Menu so the separate fixed button is unnecessary there. */
     static const int top_panel_defaults[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
-        'j', 'i', 'y', 'h',
+        'j', TOUCH_BIND_OPEN_JEWELRY, 'i', 'y', 'h',
         TOUCH_BIND_TOGGLE_TILES, 'S', 'l', 'M',
         GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
-        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
         GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
     };
     static const int top_panel_long_defaults[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
@@ -5081,6 +5148,21 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             normalize_touch_top_panel_rows(config->touch_top_panel_rows);
         config->touch_profile =
             normalize_touch_profile(config->touch_profile);
+    }
+
+    sdl_config_migrate_top_panel_jewelry_button(
+        &config->touch_top_panel_cell_count,
+        config->touch_top_panel_bindings,
+        config->touch_top_panel_long_bindings);
+    if (pane_profiles) {
+        int count = MIN(profile_count, SDL_PANE_PROFILE_COUNT);
+
+        for (int i = 0; i < count; i++) {
+            sdl_config_migrate_top_panel_jewelry_button(
+                &pane_profiles[i].touch_top_panel_cell_count,
+                pane_profiles[i].touch_top_panel_bindings,
+                pane_profiles[i].touch_top_panel_long_bindings);
+        }
     }
 
     {

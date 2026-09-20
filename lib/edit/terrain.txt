@@ -591,13 +591,13 @@ T:0:1
 
 
 # Dry deck; material and direction are encoded in this feature ID.
-N:90:wooden bridge over a chasm
+N:90:stone bridge over a chasm
 G:=:U
 T:0:1
 
 
 # Dry deck; material and direction are encoded in this feature ID.
-N:91:wooden bridge over a chasm
+N:91:stone bridge over a chasm
 G:|:U
 T:0:1
 

@@ -1845,7 +1845,7 @@ P:[+15,1d4]
 B:CLAW:WOUND:(+18,1d9)
 F:FRIENDS | OPEN_DOOR | UNLOCK_DOOR | BASH_DOOR | SMART
 F:DROP_33
-F:EXCHANGE_PLACES | CAT
+F:EXCHANGE_PLACES | CAT | BRIDGE_BUILDER
 D:One of the warriors of Tevildo's court, this great cat walks
 D: upright like a man, though no man could match its speed. Its
 D: long scything claws are weapons of terrible precision, and it
@@ -1952,7 +1952,7 @@ A:20:13:10:8
 P:[+20,1d4]
 B:CLAW:WOUND:(+25,1d11)
 F:ESCORT | UNIQUE | MALE | OPEN_DOOR | BASH_DOOR | SMART
-F:DROP_100 | UNLOCK_DOOR | DROP_GOOD | CAT
+F:DROP_100 | UNLOCK_DOOR | DROP_GOOD | CAT | BRIDGE_BUILDER
 S:SPELL_PCT_60 | POW_21
 S:ARROW2
 D:Grizzled and cunning, Umuiyan has kept watch at the gates of Tevildo's
@@ -2100,7 +2100,7 @@ A:5:12:15:5
 P:[+19,1d4]
 B:CLAW:WOUND:(+20,1d11)
 F:INVISIBLE | OPEN_DOOR | UNLOCK_DOOR | BASH_DOOR | SMART
-F:DROP_100 | FRIEND | CAT
+F:DROP_100 | FRIEND | CAT | BRIDGE_BUILDER
 S:SPELL_PCT_50 | POW_23
 S:ARROW1
 D:One of the silent hunters of Tevildo's court, this jet-black cat
@@ -2145,7 +2145,7 @@ A:15:13:10:9
 P:[+21,1d4]
 B:CLAW:WOUND:(+30,1d11)
 F:UNIQUE | MALE | OPEN_DOOR | BASH_DOOR | SMART
-F:UNLOCK_DOOR | UNIQUE_FRIEND | DROP_1D2 | DROP_GOOD | CAT
+F:UNLOCK_DOOR | UNIQUE_FRIEND | DROP_1D2 | DROP_GOOD | CAT | BRIDGE_BUILDER
 D:Chief among the thanes of Tevildo, Oikeroi is sworn to guard his
 D: master with fang and claw. He is cunning in the ways of ambush
 D: and has slain many who sought to challenge the Prince of Cats.
@@ -2256,7 +2256,7 @@ P:[+24,1d4]
 B:CLAW:WOUND:(+26,1d13)
 F:UNIQUE | MALE | OPEN_DOOR | BASH_DOOR | SMART
 F:UNLOCK_DOOR | UNIQUE_FRIEND | DROP_1D2 | DROP_GREAT
-F:CRUEL_BLOW | EXCHANGE_PLACES | CAT
+F:CRUEL_BLOW | EXCHANGE_PLACES | CAT | BRIDGE_BUILDER
 S:SINDARBANE
 D:Tevildo is a mighty fay in the service of Melko, lord and master of
 D: all the cats. In his fortress he keeps many thralls in torment, and

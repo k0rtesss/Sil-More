@@ -5,7 +5,7 @@
 #include "cave/cave-bridge.h"
 
 /* A pixel-aligned deck leaves the existing material visible along both sides.
- * Timber planks span water/chasm; stone slabs withstand lava, acid and ice.
+ * Timber planks span water; stone slabs span chasms, lava, acid and ice.
  * This is geometry in the map renderer, not a replacement terrain bitmap. */
 static void bridge_rect(const SDL_FRect* dst, bool vertical,
     float along, float across, float length, float width,
@@ -29,8 +29,7 @@ void sdl_draw_bridge_deck(int y, int x, const SDL_FRect* dst)
     if (!FEAT_IS_BRIDGE(feature)) return;
     int material = cave_environment_display_underlay(y,x);
     bool vertical = cave_bridge_vertical(feature);
-    bool wood = material == FEAT_WATER || material == FEAT_DEEP_WATER
-        || material == FEAT_CHASM;
+    bool wood = material == FEAT_WATER || material == FEAT_DEEP_WATER;
     const environment_cell* environment = cave_environment_cell_at(y,x);
     bool observed = (cave_info[y][x] & CAVE_SEEN) != 0;
     if (environment && (environment->flags & ENV_BRIDGE)) {

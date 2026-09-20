@@ -93,7 +93,8 @@ static SDL_IOStream* artefact_db_open(const char* path,
         memcmp(header->magic, SCORE_ARTEFACT_DB_MAGIC, sizeof(header->magic)) != 0 ||
         header->version != SCORE_ARTEFACT_DB_VERSION ||
         size != (Sint64)sizeof(*header)
-            + (Sint64)header->record_count * sizeof(artefact_db_record_v1)) {
+            + (Sint64)header->record_count
+                * (Sint64)sizeof(artefact_db_record_v1)) {
         log_warn("score_artefact: preserving invalid or incompatible database %s", path);
         SDL_CloseIO(file);
         return NULL;

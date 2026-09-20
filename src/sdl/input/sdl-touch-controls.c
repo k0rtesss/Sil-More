@@ -40,6 +40,15 @@ static void sdl_touch_run_main_menu_choice(int choice)
         inkey_flag = true;
 }
 
+static void sdl_touch_run_jewelry_menu(void)
+{
+    bool restore_command_wait = inkey_flag;
+
+    (void)open_inventory_menu_category(INVENTORY_MENU_GROUP_JEWELRY);
+    if (restore_command_wait && character_icky == 0)
+        inkey_flag = true;
+}
+
 static void sdl_touch_run_quick_access_picker(int slot)
 {
     bool restore_command_wait = inkey_flag;
@@ -81,6 +90,11 @@ void sdl_touch_pane_send_binding(int binding, bool second_panel, bool long_press
 
     if (binding == TOUCH_BIND_MAIN_MENU_HINTS_QUESTS) {
         sdl_touch_run_main_menu_choice(MAIN_MENU_HINTS_QUESTS);
+        return;
+    }
+
+    if (binding == TOUCH_BIND_OPEN_JEWELRY) {
+        sdl_touch_run_jewelry_menu();
         return;
     }
 
@@ -5759,6 +5773,10 @@ void sdl_touch_top_panel_label_for_slot(int slot, bool long_press,
         SDL_strlcpy(buf, "Hints", buflen);
         return;
     }
+    if (binding == TOUCH_BIND_OPEN_JEWELRY) {
+        SDL_strlcpy(buf, "Jewelry", buflen);
+        return;
+    }
 
     sdl_touch_context_label_for_binding(binding, buf, buflen);
 }
@@ -5871,6 +5889,10 @@ static bool sdl_touch_top_panel_tile_for_binding(int binding, byte* out_attr,
     case TOUCH_BIND_MAIN_MENU_HINTS_QUESTS:
         row = 12; col = 10; fallback = "?";    /* question-mark tile */
         break;
+    case TOUCH_BIND_OPEN_JEWELRY:
+        has_tile = false;
+        fallback = "Jw";
+        break;
     case 'y':
         row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_ABILITIES; fallback = "Ab";
         break;
@@ -5951,6 +5973,12 @@ static bool sdl_touch_top_panel_render_vector_icon(int binding,
             x + w * 0.68f, y + h * 0.36f);
         SDL_RenderLine(g_state.renderer, cx, box.y,
             cx, box.y + box.h);
+        return true;
+    case TOUCH_BIND_OPEN_JEWELRY:
+        sdl_touch_round_draw_circle(cx, cy, w * 0.27f, color);
+        sdl_touch_round_draw_circle(cx, cy, w * 0.12f, color);
+        SDL_RenderLine(g_state.renderer, cx - w * 0.10f,
+            cy - h * 0.27f, cx + w * 0.10f, cy - h * 0.27f);
         return true;
     case '0':
         box = (SDL_FRect){ x + w * 0.52f, y + h * 0.24f,
@@ -6136,6 +6164,10 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
         SDL_strlcpy(buf,
             "Hints & Quests: open saved hints, quest notes, and thrall requests.",
             buflen);
+        return;
+    case TOUCH_BIND_OPEN_JEWELRY:
+        SDL_strlcpy(buf,
+            "Jewelry: open rings, amulets, and saved jewelry sets.", buflen);
         return;
     case TOUCH_BIND_TOGGLE_TILES:
         strnfmt(buf, buflen, "%s: change how the dungeon map is displayed.",

@@ -138,7 +138,8 @@ static SDL_IOStream *metarun_artefact_memory_open(
             sizeof(header->magic)) == 0 &&
         header->version == METARUN_ARTEFACT_MEMORY_VERSION &&
         size == (Sint64)sizeof(*header)
-            + (Sint64)header->record_count * sizeof(metarun_artefact_memory_record))
+            + (Sint64)header->record_count
+                * (Sint64)sizeof(metarun_artefact_memory_record))
     {
         if (SDL_SeekIO(file, 0, SDL_IO_SEEK_END) < 0) {
             SDL_CloseIO(file);

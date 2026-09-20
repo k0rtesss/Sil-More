@@ -5,6 +5,7 @@
 #include "log/log.h"
 #include "log/perf.h"
 #include "metarun.h"
+#include "cave/cave-environment.h"
 #include "object/object-ui-select.h"
 #include "sdl-config.h"
 #include "ui/question.h"
@@ -899,6 +900,11 @@ bool do_cmd_context_square_action_popup(void)
     char context_label[32];
     int floor_item = first_floor_item_under_player();
     char title[80];
+    environment_bridge_job bridge_job;
+    bool bridge_repairable = p_ptr->active_ability[S_SMT][SMT_REPAIR]
+        && cave_environment_bridge_job_at(p_ptr->py, p_ptr->px,
+            &bridge_job)
+        && bridge_job.repair;
 
     sil_popup_trace_stage("popup-build-begin");
 
@@ -924,6 +930,10 @@ bool do_cmd_context_square_action_popup(void)
             cave_feat[p_ptr->py][p_ptr->px]].name;
 
         strnfmt(title, sizeof(title), "%^s", feature_name);
+    }
+    else if (bridge_repairable)
+    {
+        SDL_strlcpy(title, "Damaged bridge", sizeof(title));
     }
     else if (floor_item)
     {
@@ -1171,6 +1181,7 @@ bool touch_shortcut_context_action(int binding, bool description_open,
     int floor_interaction = 0;
     const char* name = NULL;
     char context_name[32];
+    environment_bridge_job bridge_job;
 
     if (!character_dungeon || !p_ptr || !p_ptr->playing || p_ptr->is_dead)
         return false;
@@ -1194,6 +1205,15 @@ bool touch_shortcut_context_action(int binding, bool description_open,
             }
             else
                 name = "Confirm";
+        } else if (p_ptr->active_ability[S_SMT][SMT_REPAIR]
+            && cave_environment_bridge_job_at(p_ptr->py, p_ptr->px,
+                &bridge_job)
+            && bridge_job.repair) {
+            /* Space is expanded to the normal interact-here (/5) command by
+             * the context popup, so this reaches do_cmd_alter() on the
+             * crossing beneath the player. */
+            key = ' ';
+            name = "Repair bridge";
         } else if (cave_down_stairs_bold(p_ptr->py, p_ptr->px)) {
             /* Space runs interact-here, which asks before changing levels. */
             key = ' ';

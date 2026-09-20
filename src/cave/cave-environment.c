@@ -179,8 +179,9 @@ void cave_environment_seed(void)
             c->flags |= ENV_BRIDGE;
             c->bridge_feat = f;
             c->underlay = FEAT_IS_BRIDGE(f) ? cave_bridge_underlay(f) : FEAT_CHASM;
-            c->material = (f == FEAT_FLOOR || c->underlay == FEAT_LAVA
-                || c->underlay == FEAT_POISON || FEAT_IS_ICE(c->underlay)) ? ENV_BRIDGE_STONE : ENV_BRIDGE_WOOD;
+            c->material = (f == FEAT_FLOOR || c->underlay == FEAT_CHASM
+                || c->underlay == FEAT_LAVA || c->underlay == FEAT_POISON
+                || FEAT_IS_ICE(c->underlay)) ? ENV_BRIDGE_STONE : ENV_BRIDGE_WOOD;
         }
         c->heat = origin_heat(y, x);
         c->known_underlay = c->flags & ENV_BRIDGE ? c->underlay : cave_bridge_underlay(f);
@@ -597,9 +598,13 @@ bool cave_environment_bridge_job_at(int y,int x,environment_bridge_job* job)
             axis=1-axis;
         }
         int material = c->material;
-        if (c->underlay == FEAT_LAVA || c->underlay == FEAT_POISON) material=ENV_BRIDGE_STONE;
-        int feature = c->bridge_feat == FEAT_FLOOR && c->underlay == FEAT_CHASM
-            ? FEAT_FLOOR : cave_bridge_feature(c->underlay,axis != 0);
+        if (c->underlay == FEAT_CHASM || c->underlay == FEAT_LAVA
+            || c->underlay == FEAT_POISON)
+            material=ENV_BRIDGE_STONE;
+        /* Restore even historical floor-over-chasm crossings as encoded
+         * bridge features. The renderer needs that identity to draw the
+         * repaired deck instead of leaving a plain floor tile. */
+        int feature = cave_bridge_feature(c->underlay,axis != 0);
         if (!feature) return false;
         *job=(environment_bridge_job){y,x,feature,material,c->integrity,true};return true;
     }
@@ -612,7 +617,8 @@ bool cave_environment_bridge_job_at(int y,int x,environment_bridge_job* job)
             &&cave_feat[y+dy*length][x+dx*length]==f
             &&cave_environment_job_safe(y+dy*length,x+dx*length))length++;
         if(length>2||!bank(y+dy*length,x+dx*length))continue;
-        int material=(f==FEAT_LAVA||f==FEAT_POISON)?ENV_BRIDGE_STONE:ENV_BRIDGE_WOOD;
+        int material=(f==FEAT_CHASM||f==FEAT_LAVA||f==FEAT_POISON)
+            ? ENV_BRIDGE_STONE : ENV_BRIDGE_WOOD;
         *job=(environment_bridge_job){y,x,cave_bridge_feature(f,axis!=0),material,0,false};return true;
     }
     return false;
