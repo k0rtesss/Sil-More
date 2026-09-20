@@ -2,11 +2,9 @@
 #include "externs.h"
 #include "monster/monster-senses.h"
 
-/* Slow speed plus one working action in eight: about 16 normal player turns.
- * Search only the local mine, and recompute routes as miners change it. */
+/* Slow speed plus one wandering/inspection action in eight: about 16 normal
+ * player turns. Miners discover quartz only by checking adjacent walls. */
 #define THRALL_WORK_ONE_IN 8
-#define THRALL_SEARCH_RADIUS 12
-#define THRALL_SEARCH_WIDTH (2 * THRALL_SEARCH_RADIUS + 1)
 #define THRALLMASTER_KILL_ONE_IN 250
 
 static bool is_mining_thrall(const monster_type* m_ptr)
@@ -22,72 +20,52 @@ static bool thrall_can_walk(int y, int x)
         && cave_feat[y][x] != FEAT_DEEP_WATER;
 }
 
-static void thrall_mine(monster_type* m_ptr)
+static void thrall_wander(monster_type* m_ptr)
 {
-    /* Breadth-first search finds a reachable working face, even round corners.
-     * Each entry remembers its first step; no persistent target is needed. */
-    struct thrall_step { int y, x, first, distance; };
-    struct thrall_step queue[THRALL_SEARCH_WIDTH * THRALL_SEARCH_WIDTH];
-    bool visited[THRALL_SEARCH_WIDTH][THRALL_SEARCH_WIDTH] = { { false } };
-    int head = 0, tail = 1;
+    int choices[8], count = 0;
     int oy = m_ptr->fy, ox = m_ptr->fx;
-    int start = rand_int(8);
 
-    queue[0] = (struct thrall_step){ oy, ox, -1, 0 };
-    visited[THRALL_SEARCH_RADIUS][THRALL_SEARCH_RADIUS] = true;
-
-    while (head < tail)
+    /* Choose a nearby step or wall to inspect without favouring quartz.
+     * Ordinary stone costs an inspection too, then the miner wanders on. */
+    for (int i = 0; i < 8; i++)
     {
-        struct thrall_step step = queue[head++];
-        for (int i = 0; i < 8; i++)
+        int y = oy + ddy_ddd[i], x = ox + ddx_ddd[i];
+        if (!in_bounds_fully(y, x) || cave_m_idx[y][x])
+            continue;
+        int feat = cave_feat[y][x];
+        if (thrall_can_walk(y, x)
+            || (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL))
+            choices[count++] = i;
+    }
+    if (!count)
+        return;
+
+    int dir = choices[rand_int(count)];
+    int y = oy + ddy_ddd[dir], x = ox + ddx_ddd[dir];
+    if (thrall_can_walk(y, x))
+    {
+        monster_swap(oy, ox, y, x);
+        if (m_ptr->r_idx && m_ptr->fy == y && m_ptr->fx == x)
         {
-            int dir = (start + i) % 8;
-            int y = step.y + ddy_ddd[dir];
-            int x = step.x + ddx_ddd[dir];
-            int vy = y - oy + THRALL_SEARCH_RADIUS;
-            int vx = x - ox + THRALL_SEARCH_RADIUS;
+            m_ptr->previous_action[0] = rough_direction(oy, ox, y, x);
+            m_ptr->energy -= water_movement_energy(100,
+                cave_feat[oy][ox], cave_feat[y][x], false) - 100;
+        }
+        return;
+    }
 
-            if (!in_bounds_fully(y, x))
-                continue;
-
-            if (cave_feat[y][x] == FEAT_QUARTZ && !cave_m_idx[y][x])
-            {
-                if (step.first < 0)
-                {
-                    m_ptr->visual_facing_dir = (byte)rough_direction(oy, ox, y, x);
-                    cave_set_feat(y, x, FEAT_RUBBLE);
-                    p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
-                    if (m_ptr->ml && player_can_see_bold(y, x))
-                    {
-                        char name[80];
-                        monster_desc(name, sizeof(name), m_ptr, 0);
-                        msg_format("%^s chips the quartz into rubble.", name);
-                    }
-                }
-                else
-                {
-                    int ny = oy + ddy_ddd[step.first];
-                    int nx = ox + ddx_ddd[step.first];
-                    monster_swap(oy, ox, ny, nx);
-                    if (m_ptr->r_idx && m_ptr->fy == ny && m_ptr->fx == nx)
-                    {
-                        m_ptr->previous_action[0] = rough_direction(oy, ox, ny, nx);
-                        m_ptr->energy -= water_movement_energy(100,
-                            cave_feat[oy][ox], cave_feat[ny][nx], false) - 100;
-                    }
-                }
-                return;
-            }
-
-            if (step.distance >= THRALL_SEARCH_RADIUS
-                || vy < 0 || vy >= THRALL_SEARCH_WIDTH
-                || vx < 0 || vx >= THRALL_SEARCH_WIDTH
-                || visited[vy][vx] || !thrall_can_walk(y, x))
-                continue;
-
-            visited[vy][vx] = true;
-            queue[tail++] = (struct thrall_step){ y, x,
-                step.first < 0 ? dir : step.first, step.distance + 1 };
+    m_ptr->visual_facing_dir = (byte)rough_direction(oy, ox, y, x);
+    if (m_ptr->ml)
+        lite_spot(oy, ox);
+    if (cave_feat[y][x] == FEAT_QUARTZ)
+    {
+        cave_set_feat(y, x, FEAT_RUBBLE);
+        p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+        if (m_ptr->ml && player_can_see_bold(y, x))
+        {
+            char name[80];
+            monster_desc(name, sizeof(name), m_ptr, 0);
+            msg_format("%^s chips the quartz into rubble.", name);
         }
     }
 }
@@ -171,6 +149,6 @@ bool monster_thrall_turn(monster_type* m_ptr)
         return thrallmaster_attack(m_ptr);
 
     if (one_in_(THRALL_WORK_ONE_IN))
-        thrall_mine(m_ptr);
+        thrall_wander(m_ptr);
     return true;
 }

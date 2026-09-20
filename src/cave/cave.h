@@ -69,6 +69,12 @@ void gates_illuminate(bool daytime);
 byte get_depth_color(int depth);
 void cave_set_feat_with_color(int y, int x, int feat, int color);
 void cave_set_feat(int y, int x, int feat);
+int cave_illusion_opacity(int y, int x);
+bool cave_illusion_debug_enabled(void);
+bool cave_illusion_debug_marked(int y, int x);
+void cave_illusion_debug_set(bool enabled);
+void cave_dissolve_illusion(int y, int x);
+void place_illusory_passages(void);
 
 void reset_depth_color_cache(void);
 void styles_init_for_level(void);

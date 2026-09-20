@@ -1536,6 +1536,9 @@ static void rd_options(void)
     if (!savefile_version_at_least(0, 9, 8, 13))
         op_ptr->opt[OPT_utumno_corridors] = false;
 
+    if (!savefile_version_at_least(0, 9, 8, 18))
+        op_ptr->opt[OPT_illusory_walls] = true;
+
     /*** Window Options ***/
 
     /* Read the window flags */

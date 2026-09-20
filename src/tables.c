@@ -258,7 +258,7 @@ cptr option_text[OPT_MAX] = {
     "narrative_banner_turns", /* OPT_narrative_banner_turns */
     "min_depth_timer_mode", /* OPT_min_depth_timer_mode */
     "song_list_sort_by_recent", /* OPT_song_list_sort_by_recent */
-    NULL, /* reserved legacy slot: inventory_selection_square */
+    "illusory_walls", /* OPT_illusory_walls */
     "supply_menu_random_icons", /* OPT_supply_menu_random_icons */
     "supply_menu_hide_flavor_compact", /* OPT_supply_menu_hide_flavor_compact */
     "load_blitz_by_default", /* OPT_load_blitz_by_default */
@@ -503,7 +503,7 @@ cptr option_desc[OPT_MAX] = {
     "Narrative banner turns (0=dismiss banner on next input, 1-3=keep it visible for player turns)", /* OPT_narrative_banner_turns */
     "Minimum depth pace (0=normal, 1=relaxed [+30000], 2=harsh [-30000])", /* OPT_min_depth_timer_mode */
     "Sort the song menu by the songs most recently used this session", /* OPT_song_list_sort_by_recent */
-    NULL, /* reserved legacy slot: inventory_selection_square */
+    "Generate illusory passages: light reveals them and entering dissolves them", /* OPT_illusory_walls */
     "Use random representative icons for supply groups", /* OPT_supply_menu_random_icons */
     "Hide flavor words in the compact supply list", /* OPT_supply_menu_hide_flavor_compact */
     "Load a living Blitz character by default when one exists", /* OPT_load_blitz_by_default */
@@ -764,7 +764,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_narrative_banner_turns (default via byte field) */
     false, /* OPT_min_depth_timer_mode (default 0 via byte field) */
     true, /* OPT_song_list_sort_by_recent */
-    false, /* reserved legacy slot: inventory_selection_square */
+    true, /* OPT_illusory_walls */
     false, /* OPT_supply_menu_random_icons */
     true, /* OPT_supply_menu_hide_flavor_compact */
     false, /* OPT_load_blitz_by_default */
@@ -949,10 +949,9 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_lockpick_minigame, OPT_chest_trap_minigame,
         OPT_stop_singing_on_rest, OPT_visual_recognition, OPT_know_monster_info,
         OPT_disable_skeleton_note_tutorial, OPT_smaller_level_size, OPT_more_stairs,
-        OPT_utumno_corridors,
+        OPT_utumno_corridors, OPT_illusory_walls,
         OPT_vault_drop_frequency, OPT_noble_item_spawn_mode,
         OPT_min_depth_timer_mode, OPT_environment_speed, OPT_load_blitz_by_default,
-        OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Display ***/

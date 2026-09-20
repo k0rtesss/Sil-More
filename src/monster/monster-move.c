@@ -2,6 +2,7 @@
 
 #include "monster-internal.h"
 #include "log/perf.h"
+#include "cave/cave.h"
 
 /*
  * Make a monster carry an object
@@ -713,6 +714,9 @@ void monster_swap(int y1, int x1, int y2, int x2)
     /* Update grids */
     cave_m_idx[y1][x1] = m2;
     cave_m_idx[y2][x2] = m1;
+    /* Contact dispels the disguise for normal steps and forced exchanges. */
+    if (m1) cave_dissolve_illusion(y2, x2);
+    if (m2) cave_dissolve_illusion(y1, x1);
     if (m1 > 0 && mon_list[m1].r_idx)
         calc_monster_speed(mon_list[m1].fy, mon_list[m1].fx);
     if (m2 > 0 && mon_list[m2].r_idx)

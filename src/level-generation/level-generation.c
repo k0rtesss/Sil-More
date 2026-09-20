@@ -702,6 +702,7 @@ bool cave_gen(void)
 
     /* Place decorative light only after tunnels, doors, hazards, stairs, and
      * the player start have settled, so later terrain passes cannot erase it. */
+    place_illusory_passages();
     place_generation_fixtures();
 
     {

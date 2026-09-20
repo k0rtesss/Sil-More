@@ -9,6 +9,7 @@ static s16b occupants[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static monster_type monsters[8];
 static int checks, moves, mined, deaths, drops, skeleton_sval;
 static bool has_target;
+static unsigned inspected_directions;
 
 #define CHECK(test) do { checks++; if (!(test)) { \
     fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #test); exit(1); } } while (0)
@@ -34,6 +35,12 @@ int water_movement_energy(int base, int from, int to, bool flying)
 void monster_desc(char* out, size_t len, const monster_type* m, int mode)
 { (void)m; (void)mode; snprintf(out, len, "a thrall"); }
 void msg_format(cptr fmt, ...) { (void)fmt; }
+void lite_spot(int y, int x)
+{
+    int idx = occupants[y][x];
+    CHECK(idx > 0);
+    inspected_directions |= 1u << monsters[idx].visual_facing_dir;
+}
 void monster_senses_refresh(monster_type* m) { (void)m; }
 bool monster_senses_target(const monster_type* m, int* y, int* x)
 { (void)m; (void)y; (void)x; return has_target; }
@@ -89,6 +96,7 @@ static monster_type* reset(int race)
     cave_feat = features; cave_info = info; cave_m_idx = occupants;
     mon_list = monsters; mon_max = 8;
     moves = mined = deaths = drops = 0; has_target = false;
+    inspected_directions = 0;
     Rand_state_init(12345);
     return place(1, race, 15, 15);
 }
@@ -105,26 +113,34 @@ static void test_miners(void)
     for (int r = 0; r < 2; r++)
     {
         monster_type* m = reset(races[r]);
+        /* A miner checks different kinds of adjacent wall, eventually finding
+         * the quartz. Only quartz changes; other inspections cost an action. */
+        for (int i = 0; i < 8; i++)
+            tile(15 + ddy_ddd[i], 15 + ddx_ddd[i], FEAT_WALL_EXTRA);
         tile(15, 16, FEAT_QUARTZ);
-        turns(m, 100);
+        m->ml = true;
+        turns(m, 3000);
         CHECK(mined == 1 && moves == 0 && features[15][16] == FEAT_RUBBLE);
+        for (int i = 0; i < 8; i++)
+        {
+            CHECK(inspected_directions & (1u << ddd[i]));
+            if (ddd[i] != 6)
+                CHECK(features[15 + ddy_ddd[i]][15 + ddx_ddd[i]] == FEAT_WALL_EXTRA);
+        }
         CHECK((p_ptr->update & (PU_UPDATE_VIEW | PU_MONSTERS))
             == (PU_UPDATE_VIEW | PU_MONSTERS));
 
         m = reset(races[r]);
-        /* Nearest quartz is sealed off. Walk round a wall to the usable vein. */
+        /* Enclosed quartz cannot be mined from a distance while wandering. */
         for (int y = 12; y <= 14; y++)
             for (int x = 14; x <= 16; x++) tile(y, x, FEAT_WALL_EXTRA);
         tile(13, 15, FEAT_QUARTZ);
-        for (int y = 14; y <= 17; y++) tile(y, 17, FEAT_WALL_EXTRA);
-        tile(15, 19, FEAT_QUARTZ);
         turns(m, 200);
-        CHECK(mined == 1 && moves > 0);
-        CHECK(features[13][15] == FEAT_QUARTZ && features[15][19] == FEAT_RUBBLE);
+        CHECK(mined == 0 && moves > 0 && features[13][15] == FEAT_QUARTZ);
 
         m = reset(races[r]);
         turns(m, 200);
-        CHECK(moves == 0 && mined == 0);
+        CHECK(moves > 0 && mined == 0);
 
         m = reset(races[r]);
         tile(15, 16, FEAT_QUARTZ);
@@ -150,19 +166,54 @@ static void test_miners(void)
         CHECK(mined == 0 && moves == 0);
     }
 
-    monster_type* m = reset(R_IDX_HUMAN_THRALL);
-    tile(15, 29, FEAT_QUARTZ); /* Beyond the local search. */
-    turns(m, 100);
-    CHECK(moves == 0 && mined == 0);
+    /* Distant quartz must not influence the first step. Across seeds, miners
+     * can head in every direction, including directly away from the vein. */
+    unsigned moved_directions = 0;
+    for (int seed = 1; seed <= 128; seed++)
+    {
+        monster_type* m = reset(R_IDX_HUMAN_THRALL);
+        Rand_state_init(seed);
+        for (int i = 0; i < 200 && !moves; i++) monster_thrall_turn(m);
+        CHECK(moves == 1);
+        int y = m->fy, x = m->fx;
+        moved_directions |= 1u << rough_direction(15, 15, y, x);
 
-    /* About 375 work actions in 3000 slow turns (6000 normal player turns). */
-    m = reset(R_IDX_HUMAN_THRALL);
+        m = reset(R_IDX_HUMAN_THRALL);
+        tile(15, 20, FEAT_QUARTZ);
+        Rand_state_init(seed);
+        for (int i = 0; i < 200 && !moves; i++) monster_thrall_turn(m);
+        CHECK(moves == 1 && m->fy == y && m->fx == x && mined == 0);
+    }
+    for (int i = 0; i < 8; i++) CHECK(moved_directions & (1u << ddd[i]));
+
+    /* Nearby quartz has no priority over inspecting ordinary stone. */
+    int ordinary_checks = 0;
+    for (int seed = 1; seed <= 128; seed++)
+    {
+        monster_type* m = reset(R_IDX_HUMAN_THRALL);
+        for (int i = 0; i < 8; i++)
+            tile(15 + ddy_ddd[i], 15 + ddx_ddd[i], FEAT_WALL_EXTRA);
+        tile(15, 16, FEAT_QUARTZ);
+        m->ml = true;
+        Rand_state_init(seed);
+        for (int i = 0; i < 200 && !inspected_directions; i++)
+            monster_thrall_turn(m);
+        CHECK(inspected_directions != 0);
+        if (!mined) ordinary_checks++;
+    }
+    CHECK(ordinary_checks > 80 && ordinary_checks < 128);
+
+    /* About 375 wandering actions in 3000 slow turns. Re-centre after each
+     * move so no wall inspections obscure the existing action cadence. */
+    monster_type* m = reset(R_IDX_HUMAN_THRALL);
     for (int i = 0; i < 3000; i++)
     {
-        tile(15, 16, FEAT_QUARTZ);
         monster_thrall_turn(m);
+        occupants[m->fy][m->fx] = 0;
+        m->fy = m->fx = 15;
+        occupants[15][15] = 1;
     }
-    CHECK(mined > 290 && mined < 460);
+    CHECK(moves > 290 && moves < 460 && mined == 0);
 }
 
 static void test_overseers(void)

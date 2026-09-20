@@ -1082,6 +1082,14 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
 #endif /* DEPTH_BASED_WALLS */
 
             apply_flood_trap_variant_visual(y, x, &a, &c);
+
+            /* Text mode conveys the same light clue without tile blending. */
+            if (graphics_are_ascii() && cave_feat[y][x] == FEAT_ILLUSORY_WALL
+                && cave_illusion_opacity(y, x) < 255)
+            {
+                a = cave_light[y][x] >= 3 ? TERM_L_DARK : TERM_SLATE;
+                if (cave_light[y][x] >= 5) c = ':';
+            }
         }
 
         /* Unknown */
@@ -1283,6 +1291,13 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
             cave_monster_visual(r_ptr, &a, &c);
             c += player_tile_offset();
         }
+    }
+
+    /* Debug inspection deliberately marks even unexplored illusions. */
+    if (graphics_are_ascii() && cave_illusion_debug_marked(y, x))
+    {
+        a = TERM_YELLOW;
+        c = '.';
     }
 
     /* Result */

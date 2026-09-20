@@ -1761,6 +1761,7 @@ static const byte app_gameplay_options[] = {
     OPT_load_blitz_by_default,
     OPT_lockpick_minigame,
     OPT_chest_trap_minigame,
+    OPT_illusory_walls,
     OPT_NONE
 };
 

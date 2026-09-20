@@ -661,3 +661,9 @@ T:37:0
 N:102:melting ice
 G:=:B
 T:0:1
+
+# Walkable floor disguised as a wall; light weakens the illusion.
+N:103:illusory wall
+G:#:s
+T:15:14
+M:56

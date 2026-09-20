@@ -192,6 +192,7 @@ static const struct option_group_marker gameplay_option_groups[] = {
     { OPT_smaller_level_size, "World Generation" },
     { OPT_more_stairs, "World Generation" },
     { OPT_utumno_corridors, "World Generation" },
+    { OPT_illusory_walls, "World Generation" },
     { OPT_vault_drop_frequency, "World Generation" },
     { OPT_noble_item_spawn_mode, "World Generation" },
     { OPT_min_depth_timer_mode, "World Generation" },
@@ -778,6 +779,7 @@ static cptr option_menu_label(int opt)
         case OPT_smaller_level_size: return narrow ? "Smaller levels" : "Smaller level size";
         case OPT_more_stairs: return narrow ? "More stairs" : "Extra stairs";
         case OPT_utumno_corridors: return "Utumno corridors";
+        case OPT_illusory_walls: return "Illusory walls";
         case OPT_running_delay: return narrow ? "Run delay" : "Running delay";
         case OPT_center_player: return narrow ? "Center map" : "Center map";
         case OPT_run_avoid_center: return narrow ? "No center on run" : "Avoid centering on run";

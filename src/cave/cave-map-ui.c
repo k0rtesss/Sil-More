@@ -423,6 +423,7 @@ void lite_spot(int y, int x)
             || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
             || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON
             || cave_feat[y][x] == FEAT_CHASM
+            || cave_feat[y][x] == FEAT_ILLUSORY_WALL
             || floor_material_transition_at(y, x)
             || FEAT_IS_BRIDGE(cave_feat[y][x]);
 #ifdef USE_SDL

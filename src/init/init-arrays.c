@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "blitz.h"
+#include "cave/cave.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
@@ -57,6 +58,7 @@ extern void re_init_some_things(void)
     character_dungeon = false;
     character_loaded = false;
     character_loaded_dead = false;
+    cave_illusion_debug_set(false);
 
     // wipe the whole player structure
     memset(p_ptr, 0, sizeof(player_type));

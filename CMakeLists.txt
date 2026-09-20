@@ -216,6 +216,7 @@ set(SIL_MORE_SOURCES
     src/cave/cave-flow.c
     src/cave/cave-fixtures.c
     src/cave/cave-water.c
+    src/cave/cave-illusion.c
     src/cave/cave-water-flow.c
     src/cave/cave-events.c
     src/cave/cave-environment.c

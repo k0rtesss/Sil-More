@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 17 /* Living terrain, physical events and monster world jobs. */
+#define VERSION_EXTRA 18 /* Illusory walls, following the living-dungeon format. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -1320,7 +1320,8 @@
 #define FEAT_DEEP_WATER 0x64
 #define FEAT_MELTING_ICE 0x66
 /* All built-in terrain records must be present in the installed data. */
-#define FEAT_COUNT (FEAT_MELTING_ICE + 1)
+#define FEAT_ILLUSORY_WALL 0x67
+#define FEAT_COUNT (FEAT_ILLUSORY_WALL + 1)
 #define FEAT_IS_ICE(F) ((F) == FEAT_ICE || (F) == FEAT_MELTING_ICE)
 #define MELTING_ICE_BREAK_ONE_IN 5
 #define FEAT_IS_BRIDGE(F) ((F) >= FEAT_BRIDGE_HEAD && (F) <= FEAT_BRIDGE_TAIL)
@@ -3042,7 +3043,7 @@
 #define OPT_narrative_banner_turns 108
 #define OPT_min_depth_timer_mode 109
 #define OPT_song_list_sort_by_recent 110
-// reserved legacy slot: inventory_selection_square
+#define OPT_illusory_walls 111
 #define OPT_supply_menu_random_icons 112
 #define OPT_supply_menu_hide_flavor_compact 113
 #define OPT_load_blitz_by_default 114
@@ -3187,6 +3188,7 @@
 #define lockpick_minigame op_ptr->opt[OPT_lockpick_minigame]
 #define chest_trap_minigame op_ptr->opt[OPT_chest_trap_minigame]
 #define utumno_corridors op_ptr->opt[OPT_utumno_corridors]
+#define illusory_walls op_ptr->opt[OPT_illusory_walls]
 #define load_blitz_by_default op_ptr->opt[OPT_load_blitz_by_default]
 #define depth_in_feet op_ptr->opt[OPT_depth_in_feet]
 // reserved legacy slot: stack_force_notes

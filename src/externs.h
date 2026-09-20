@@ -2662,6 +2662,7 @@ extern bool g_hide_left_panel;
 #ifdef USE_SDL
 extern bool g_sdl_left_panel_pane_source_active;
 extern void sdl_side_map_pane_forget_level(void);
+extern void sdl_minimap_map_texture_cache_clear(void);
 extern void sdl_side_map_pane_invalidate_cell(int y, int x);
 extern void sdl_idle_animation_redraw_cached_cells(
     void (*redraw_cell)(int col, int row, int width));

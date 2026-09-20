@@ -1373,6 +1373,16 @@ static void update_view_aux(bool generation_preview)
      * ------------------------------------------------------------ */
     darken_view_grids(view_n, true);
 
+    /* Light strength can change while sight and the wall glyph stay the same.
+     * Use the final light buffer, including any darkness curse. */
+    for (i = 0; i < fast_view_n; i++)
+    {
+        int y = GRID_Y(fast_view_g[i]), x = GRID_X(fast_view_g[i]);
+        if (cave_feat[y][x] == FEAT_ILLUSORY_WALL
+            && (cave_info[y][x] & CAVE_SEEN))
+            lite_spot(y, x);
+    }
+
     /* Passing through a grid gives the player persistent terrain knowledge.
      * For ordinary floors, CAVE_MARK enables navigation while the existing
      * lighting code still chooses the normal or dark floor visual. */

@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave.h"
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
 #include "log/perf.h"
@@ -858,6 +859,39 @@ void sdl_draw_tileset_sprite(byte a, char c, const SDL_FRect* dst,
     bool icon)
 {
     sdl_draw_tileset_sprite_ex(a, c, dst, icon, SDL_FLIP_NONE);
+}
+
+/* Illusory walls retain their styled wall artwork as the foreground, but the
+ * floor beneath them must show through as light exposes the disguise.  The
+ * tileset is shared by every map pass (and by a few overlays), so scope the
+ * alpha modulation to this one sprite and restore the complete prior state.
+ * Multiplying the existing alpha keeps callers' atlas modulation intact. */
+static void sdl_draw_illusory_wall_sprite(byte a, char c,
+    const SDL_FRect* dst, SDL_FlipMode flip, int opacity)
+{
+    SDL_BlendMode old_blend;
+    Uint8 old_r, old_g, old_b, old_a;
+    Uint8 draw_a;
+
+    if (!g_state.tileset || !dst)
+        return;
+
+    SDL_GetTextureBlendMode(g_state.tileset, &old_blend);
+    SDL_GetTextureColorMod(g_state.tileset, &old_r, &old_g, &old_b);
+    SDL_GetTextureAlphaMod(g_state.tileset, &old_a);
+
+    opacity = MAX(0, MIN(255, opacity));
+    draw_a = (Uint8)(((unsigned)old_a * (unsigned)opacity + 127) / 255);
+
+    /* Alpha only reveals the already-rendered floor; retain the atlas colour
+     * modulation set by the surrounding render pass. */
+    SDL_SetTextureBlendMode(g_state.tileset, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(g_state.tileset, draw_a);
+    sdl_draw_tileset_sprite_ex(a, c, dst, false, flip);
+
+    SDL_SetTextureBlendMode(g_state.tileset, old_blend);
+    SDL_SetTextureColorMod(g_state.tileset, old_r, old_g, old_b);
+    SDL_SetTextureAlphaMod(g_state.tileset, old_a);
 }
 
 bool sdl_map_grid_is_player(int y, int x)
@@ -1745,6 +1779,25 @@ static void sdl_draw_map_monster_status_icons(bool sleep, bool seen,
     }
 }
 
+static void sdl_draw_illusion_debug_dot(int y, int x, const SDL_FRect* dst)
+{
+    if (!cave_illusion_debug_marked(y, x)) return;
+    Uint8 r, g, b, a;
+    SDL_GetRenderDrawColor(g_state.renderer, &r, &g, &b, &a);
+    float size = MIN(MIN(dst->w, dst->h),
+        MAX(1.0f, SDL_floorf(MIN(dst->w, dst->h) * 0.20f)));
+    float rim = MIN(MIN(dst->w, dst->h), size + 2.0f);
+    SDL_FRect border = {dst->x + (dst->w - rim) / 2,
+        dst->y + (dst->h - rim) / 2, rim, rim};
+    SDL_FRect dot = {dst->x + (dst->w - size) / 2,
+        dst->y + (dst->h - size) / 2, size, size};
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+    SDL_RenderFillRect(g_state.renderer, &border);
+    SDL_SetRenderDrawColor(g_state.renderer, 255, 230, 40, 255);
+    SDL_RenderFillRect(g_state.renderer, &dot);
+    SDL_SetRenderDrawColor(g_state.renderer, r, g, b, a);
+}
+
 static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     char c, byte ta, char tc, const SDL_FRect* dst, float status_icon_scale)
 {
@@ -1761,6 +1814,12 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     bool fixture_drawn = false;
     bool material_edge_drawn = false;
     bool fixture_cell = false;
+    bool illusion_wall = dy >= 0 && dx >= 0 && p_ptr
+        && dy < p_ptr->cur_map_hgt && dx < p_ptr->cur_map_wid
+        && cave_feat[dy][dx] == FEAT_ILLUSORY_WALL
+        && (cave_info[dy][dx] & CAVE_MARK)
+        && (p_ptr->is_dead || !(p_ptr->rage || g_labyrinth_view_active)
+            || (cave_info[dy][dx] & CAVE_SEEN));
 
     if (!dst)
         return;
@@ -1793,19 +1852,36 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     }
 
     if (!terrain_tile && !base_tile)
+    {
+        sdl_draw_illusion_debug_dot(dy, dx, dst);
         return;
+    }
 
-    /* Terrain underlay */
-    if (terrain_tile)
-        sdl_draw_tileset_sprite(ta, tc, dst, false);
+    /* Terrain underlay. An illusory wall is authored as a wall tile so its
+     * styled masonry remains the foreground, but its real surface is the
+     * current cell's styled floor. Draw the wall exactly once over that floor. */
+    if (terrain_tile) {
+        if (illusion_wall) {
+            byte floor_a = 0;
+            char floor_c = 0;
+
+            map_info_floor_terrain(dy, dx, &floor_a, &floor_c);
+            if ((floor_a & TILE_FLAG) && (((byte)floor_c) & TILE_FLAG))
+                sdl_draw_tileset_sprite(floor_a, floor_c, dst, false);
+            sdl_draw_illusory_wall_sprite(ta, tc, dst, SDL_FLIP_NONE,
+                cave_illusion_opacity(dy, dx));
+        } else {
+            sdl_draw_tileset_sprite(ta, tc, dst, false);
+        }
+    }
     if (terrain_tile && dy >= 0 && dx >= 0 && p_ptr
         && dy < p_ptr->cur_map_hgt && dx < p_ptr->cur_map_wid)
         fixture_cell = cave_fixture_at(dy, dx) != CAVE_FIXTURE_NONE;
-    if (terrain_tile && fixture_cell) {
+    if (terrain_tile && !illusion_wall && fixture_cell) {
         /* Opaque wall fixtures must remain on top of the transition pixels. */
         material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, false);
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
-    } else if (terrain_tile) {
+    } else if (terrain_tile && !illusion_wall) {
         /* Authored terrain contours own their floor pixels. Generic contacts
          * may add wall shading, but must not repaint these contours. A failed
          * atlas load leaves the generic material fallback available. */
@@ -1897,7 +1973,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     }
 
     /* Base tile */
-    if (base_tile && !((fixture_drawn || material_edge_drawn)
+    if (base_tile && !((fixture_drawn || material_edge_drawn || illusion_wall)
             && (a & TILE_INDEX_MASK) == (ta & TILE_INDEX_MASK)
             && ((byte)c & TILE_INDEX_MASK) == ((byte)tc & TILE_INDEX_MASK))) {
         byte draw_a = a;
@@ -1933,6 +2009,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
         sdl_draw_map_monster_health_bar(dy, dx, dst);
     sdl_draw_map_monster_status_icons(sleep, seen, alert, alert_fleeing,
         health_bar_visible, dst, status_icon_scale);
+    sdl_draw_illusion_debug_dot(dy, dx, dst);
 }
 
 void sdl_draw_map_tile_layers_at(int dy, int dx, byte a, char c, byte ta,
@@ -2979,7 +3056,8 @@ bool sdl_minimap_known_bounds(int* min_y, int* min_x, int* max_y,
 
     for (int y = 0; y < p_ptr->cur_map_hgt; y++) {
         for (int x = 0; x < p_ptr->cur_map_wid; x++) {
-            if (!(cave_info[y][x] & (CAVE_MARK | CAVE_SEEN)))
+            if (!(cave_info[y][x] & (CAVE_MARK | CAVE_SEEN))
+                && !cave_illusion_debug_marked(y, x))
                 continue;
 
             if (y < *min_y) *min_y = y;

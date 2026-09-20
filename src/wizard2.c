@@ -12,6 +12,7 @@
 #include "blitz.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
+#include "cave/cave.h"
 #include "externs.h"
 #include "log/log.h"
 #include "mem/alloc.h"
@@ -3134,7 +3135,7 @@ static const debug_menu_entry debug_menu_character[] = {
     { 'U', 'U', "Unlock all tale oaths (U)", TERM_YELLOW },
 };
 
-static const debug_menu_entry debug_menu_map[] = {
+static debug_menu_entry debug_menu_map[] = {
     { 'b', 'b', "Teleport to target (b)", TERM_L_BLUE },
     { 'h', 'h', "Teleport to last dungeon event (h)", TERM_L_BLUE },
     { 'p', 'p', "Phase door (p)", TERM_L_BLUE },
@@ -3144,6 +3145,7 @@ static const debug_menu_entry debug_menu_map[] = {
     { 'f', 'f', "Forget items, map, and monster memory (f)", TERM_ORANGE },
     { 'm', 'm', "Magic mapping (m)", TERM_L_GREEN },
     { 'w', 'w', "Light the level (w)", TERM_L_GREEN },
+    { 'i', '~', "Toggle illusory wall dots (i)", TERM_YELLOW },
     { 'l', 'l', "Wizard look (l)", TERM_L_WHITE },
     { 'q', 'q', "Query the dungeon (q)", TERM_L_WHITE },
 };
@@ -3197,6 +3199,12 @@ static char do_cmd_debug_choose_from_page(const debug_menu_page* page)
 
     if (!page)
         return 0;
+
+    for (int i = 0; i < (int)N_ELEMENTS(debug_menu_map); i++)
+        if (debug_menu_map[i].command == '~')
+            debug_menu_map[i].label = cave_illusion_debug_enabled()
+                ? "Hide illusory wall dots (i) [ON]"
+                : "Show illusory wall dots (i) [OFF]";
 
     choice = debug_overlay_choose_index(page->label, page->desc, page->entries,
         page->count);
@@ -3542,6 +3550,24 @@ static void do_cmd_debug_execute(char cmd)
         }
 
         acquirement(py, px, amount, DROP_QUALITY_GREAT);
+        break;
+    }
+
+    /* Inspect illusions without changing terrain, light, or map knowledge. */
+    case '~':
+    {
+        int count = 0;
+        bool enabled = !cave_illusion_debug_enabled();
+        cave_illusion_debug_set(enabled);
+        for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+            for (int x = 0; x < p_ptr->cur_map_wid; x++)
+                if (cave_feat[y][x] == FEAT_ILLUSORY_WALL) count++;
+        msg_format("Illusory wall dots %s: %d wall%s on this level.",
+            enabled ? "on" : "off", count, count == 1 ? "" : "s");
+        if (enabled && count) msg_print("Press M to see the dots on the whole map.");
+        if (enabled && !count) msg_print("There are no remaining illusory walls to mark on this level.");
+        log_debug("Illusory wall dots %s: count=%d depth=%d viewport=(%d,%d)",
+            enabled ? "on" : "off", count, p_ptr->depth, p_ptr->wy, p_ptr->wx);
         break;
     }
 
