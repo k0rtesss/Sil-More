@@ -52,7 +52,8 @@ extern void break_truce(bool obvious)
 {
     int i;
 
-    monster_type* m_ptr = NULL; // default to soothe compiler warnings
+    monster_type* m_ptr;
+    monster_type* witness = NULL;
 
     char m_name[80];
 
@@ -79,6 +80,7 @@ extern void break_truce(bool obvious)
             /* Get the monster name (using 'something' for hidden creatures) */
             monster_desc(m_name, sizeof(m_name), m_ptr, 0x04);
 
+            witness = m_ptr;
             p_ptr->truce = false;
         }
 
@@ -93,7 +95,7 @@ extern void break_truce(bool obvious)
                     "%^s lets out a cry! The tension is broken.", m_name);
 
                 /* Make a lot of noise */
-                update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
+                update_flow(witness->fy, witness->fx, FLOW_MONSTER_NOISE);
                 monster_perception(false, false, -10);
             }
             else

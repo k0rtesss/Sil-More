@@ -96,9 +96,11 @@ static int parse_score_id(const char field[3])
 {
     if (!field)
         return -1;
-    if (!isdigit((unsigned char)field[0]) || !isdigit((unsigned char)field[1]))
+    /* Live scores use space padding; synthetic entries use zero padding. */
+    if ((field[0] != ' ' && !isdigit((unsigned char)field[0]))
+        || !isdigit((unsigned char)field[1]))
         return -1;
-    return (field[0] - '0') * 10 + (field[1] - '0');
+    return (field[0] == ' ' ? 0 : field[0] - '0') * 10 + (field[1] - '0');
 }
 
 /* ------------------------------------------------------------------ */
@@ -654,8 +656,8 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
     bool *hero_ineligible = calloc(z_info->c_max, sizeof(*hero_ineligible));
     if (!hero_ineligible) {
         safe_setuid_grab();
-        if (SDL_CloseIO(highscore_fd) != 0)
-            log_warn("fclose(highscore_fd) failed, errno=%d", errno);
+        if (!SDL_CloseIO(highscore_fd))
+            log_warn("SDL_CloseIO(highscore_fd) failed: %s", SDL_GetError());
         safe_setuid_drop();
         highscore_fd = NULL;
         quit("Out of memory in kinslayer_try_kill()");
@@ -706,8 +708,8 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
         log_debug("No eligible races found - no kill performed");
         free(hero_ineligible);
         safe_setuid_grab();
-        if (SDL_CloseIO(highscore_fd) != 0)
-            log_warn("fclose(highscore_fd) failed, errno=%d", errno);
+        if (!SDL_CloseIO(highscore_fd))
+            log_warn("SDL_CloseIO(highscore_fd) failed: %s", SDL_GetError());
         safe_setuid_drop();
         highscore_fd = NULL;
         return NULL;
@@ -762,8 +764,8 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
         free(pool);
         free(hero_ineligible);
         safe_setuid_grab();
-        if (SDL_CloseIO(highscore_fd) != 0)
-            log_warn("fclose(highscore_fd) failed, errno=%d", errno);
+        if (!SDL_CloseIO(highscore_fd))
+            log_warn("SDL_CloseIO(highscore_fd) failed: %s", SDL_GetError());
         safe_setuid_drop();
         highscore_fd = NULL;
         return NULL;
@@ -784,16 +786,15 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
     for (int r = 0; r < n_recs; ++r) {
         if (highscore_seek(r)) break;
         if (highscore_read(&entry)) break;
-        if (entry.p_r[0] == '0' + (race/10) &&
-            entry.p_r[1] == '0' + (race%10) &&
-            entry.p_h[0] == '0' + (character_sel/10) &&
-            entry.p_h[1] == '0' + (character_sel%10)) {
+        if (parse_score_id(entry.p_r) == race &&
+            parse_score_id(entry.p_h) == character_sel) {
             hit = r;
             break;
         }
     }
     log_trace("scan: entry_offset=%d", hit);
 
+    bool killed = false;
     if (hit >= 0) {
         /* 5.f) Found - check alive AND not escaped */
             if (highscore_dead(entry.who)) {
@@ -801,8 +802,8 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
                 if (pool) free(pool);
                 if (hero_ineligible) free(hero_ineligible);
                 safe_setuid_grab();
-                if (SDL_CloseIO(highscore_fd) != 0) {
-                    log_warn("fclose(highscore_fd) failed, errno=%d", errno);
+                if (!SDL_CloseIO(highscore_fd)) {
+                    log_warn("SDL_CloseIO(highscore_fd) failed: %s", SDL_GetError());
                 }
                 safe_setuid_drop();
                 highscore_fd = NULL;
@@ -814,8 +815,8 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
                 if (pool) free(pool);
                 if (hero_ineligible) free(hero_ineligible);
                 safe_setuid_grab();
-                if (SDL_CloseIO(highscore_fd) != 0) {
-                    log_warn("fclose(highscore_fd) failed, errno=%d", errno);
+                if (!SDL_CloseIO(highscore_fd)) {
+                    log_warn("SDL_CloseIO(highscore_fd) failed: %s", SDL_GetError());
                 }
                 safe_setuid_drop();
                 highscore_fd = NULL;
@@ -824,9 +825,11 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
             /* kill existing */
             if (highscore_seek(hit) == 0 && highscore_read(&entry) == 0) {
                 strnfmt(entry.how, sizeof entry.how, "%s", op_ptr->base_name);
-                highscore_seek(hit);
-                highscore_write(&entry);
-                log_info("Kinslayer killed existing hero: \"%s\"", entry.who);
+                killed = highscore_seek(hit) == 0 && highscore_write(&entry) == 0;
+                if (killed)
+                    log_info("Kinslayer killed existing hero: \"%s\"", entry.who);
+                else
+                    log_warn("Failed to update existing entry at slot %d", hit);
             } else {
                 log_warn("Failed to re-read existing entry at slot %d", hit);
             }
@@ -842,9 +845,11 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
             int slot = highscore_add(&dummy);
             if (slot < 0)
                 log_error("highscore_add() failed");
-            else
+            else {
+                killed = true;
                 log_info("Kinslayer inserted dummy entry \"%s\" at slot %d",
                         dummy.who, slot);
+            }
         }
 
         /* 6) UI is now handled by metarun_update_on_exit() */
@@ -854,12 +859,12 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
         /* 7) Close the descriptor and reset before returning */
         if (hero_ineligible) free(hero_ineligible);
         safe_setuid_grab();
-        if (SDL_CloseIO(highscore_fd) != 0) {
-            log_warn("fclose(highscore_fd) failed, errno=%d", errno);
+        if (!SDL_CloseIO(highscore_fd)) {
+            log_warn("SDL_CloseIO(highscore_fd) failed: %s", SDL_GetError());
         }
         safe_setuid_drop();
         highscore_fd = NULL;
-        return killed_character;
+        return killed ? killed_character : NULL;
 }
 
 /*

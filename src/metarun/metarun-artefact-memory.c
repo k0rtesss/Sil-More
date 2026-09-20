@@ -111,8 +111,10 @@ static SDL_IOStream *metarun_artefact_memory_open(
     }
 
     safe_setuid_grab();
+    SDL_PathInfo info;
+    bool exists = SDL_GetPathInfo(path, &info);
     file = SDL_IOFromFile(path, create ? "r+b" : "rb");
-    if (!file && create) {
+    if (!file && create && !exists) {
         file = SDL_IOFromFile(path, "w+b");
         created = file ? true : false;
     }
@@ -130,36 +132,24 @@ static SDL_IOStream *metarun_artefact_memory_open(
         return file;
     }
 
+    Sint64 size = SDL_GetIOSize(file);
     if (SDL_ReadIO(file, header, sizeof(*header)) == sizeof(*header) &&
         memcmp(header->magic, METARUN_ARTEFACT_MEMORY_MAGIC,
             sizeof(header->magic)) == 0 &&
-        header->version == METARUN_ARTEFACT_MEMORY_VERSION)
+        header->version == METARUN_ARTEFACT_MEMORY_VERSION &&
+        size == (Sint64)sizeof(*header)
+            + (Sint64)header->record_count * sizeof(metarun_artefact_memory_record))
     {
-        SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+        if (SDL_SeekIO(file, 0, SDL_IO_SEEK_END) < 0) {
+            SDL_CloseIO(file);
+            return NULL;
+        }
         return file;
     }
 
-    if (!create) {
-        SDL_CloseIO(file);
-        return NULL;
-    }
-
     SDL_CloseIO(file);
-    log_warn("metarun artefact memory: resetting invalid database %s", path);
-
-    safe_setuid_grab();
-    file = SDL_IOFromFile(path, "w+b");
-    safe_setuid_drop();
-    if (!file)
-        return NULL;
-
-    metarun_artefact_memory_init_header(header);
-    if (!metarun_artefact_memory_write_header(file, header)) {
-        SDL_CloseIO(file);
-        return NULL;
-    }
-
-    return file;
+    log_warn("metarun artefact memory: preserving invalid or incompatible database %s", path);
+    return NULL;
 }
 
 static bool metarun_artefact_memory_record_matches(
@@ -277,8 +267,8 @@ static bool metarun_record_artefact_memory(int a_idx, byte flags)
         }
     }
 
-    SDL_CloseIO(file);
-    return ok;
+    bool closed = SDL_CloseIO(file);
+    return ok && closed;
 }
 
 void metarun_apply_artefact_memory(void)

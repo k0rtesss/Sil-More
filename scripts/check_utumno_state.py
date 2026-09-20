@@ -176,7 +176,7 @@ static void check_dungeon_depths(void)
         size_t length = fixture_write_dungeon(encoded, sizeof(encoded), &dungeon_size);
         fresh_map();
         u32b sentinel; size_t consumed;
-        assert(fixture_read_dungeon(encoded, length, 13, &sentinel, &consumed) == 0);
+        assert(fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed) == 0);
         assert(sentinel == 0xA1B2C3D4U && consumed == length);
         assert(p_ptr->depth == depths[i] && p_ptr->py == 6 && p_ptr->px == 7);
         assert(cave_feat[7][7] == FEAT_LAVA && cave_feat[8][7] == FEAT_ICE);

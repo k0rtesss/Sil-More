@@ -56,33 +56,52 @@ static SDL_IOStream* artefact_db_open(const char* path,
                                       artefact_db_header* header,
                                       bool* created)
 {
+    bool is_new = false;
+    SDL_PathInfo info;
+    bool exists = SDL_GetPathInfo(path, &info);
+
     if (created)
         *created = false;
+    if (exists && info.type != SDL_PATHTYPE_FILE)
+        return NULL;
 
     SDL_IOStream* file = SDL_IOFromFile(path, "r+b");
     if (!file) {
+        /* A failed update open is not permission to truncate an existing DB. */
+        if (exists)
+            return NULL;
         file = SDL_IOFromFile(path, "w+b");
         if (!file)
             return NULL;
-        if (created)
-            *created = true;
+        is_new = true;
     }
 
-    if (created && *created) {
+    if (is_new) {
         artefact_db_init_header(header);
-        SDL_WriteIO(file, header, sizeof(*header));
-        SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+        if (SDL_WriteIO(file, header, sizeof(*header)) != sizeof(*header)
+            || !SDL_FlushIO(file)) {
+            SDL_CloseIO(file);
+            return NULL;
+        }
+        if (created)
+            *created = true;
         return file;
     }
 
-    SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
+    Sint64 size = SDL_GetIOSize(file);
     if (SDL_ReadIO(file, header, sizeof(*header)) != sizeof(*header) ||
-        memcmp(header->magic, SCORE_ARTEFACT_DB_MAGIC, sizeof(header->magic)) != 0) {
-        artefact_db_init_header(header);
-        SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
-        SDL_WriteIO(file, header, sizeof(*header));
+        memcmp(header->magic, SCORE_ARTEFACT_DB_MAGIC, sizeof(header->magic)) != 0 ||
+        header->version != SCORE_ARTEFACT_DB_VERSION ||
+        size != (Sint64)sizeof(*header)
+            + (Sint64)header->record_count * sizeof(artefact_db_record_v1)) {
+        log_warn("score_artefact: preserving invalid or incompatible database %s", path);
+        SDL_CloseIO(file);
+        return NULL;
     }
-    SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+    if (SDL_SeekIO(file, 0, SDL_IO_SEEK_END) < 0) {
+        SDL_CloseIO(file);
+        return NULL;
+    }
     return file;
 }
 
@@ -181,12 +200,11 @@ bool score_artefact_register(const artefact_type* art)
     } else {
         if (SDL_WriteIO(file, &snapshot, sizeof(snapshot)) == sizeof(snapshot)) {
             header.record_count++;
-            SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
-            SDL_WriteIO(file, &header, sizeof(header));
-            ok = true;
+            ok = SDL_SeekIO(file, 0, SDL_IO_SEEK_SET) >= 0
+                && SDL_WriteIO(file, &header, sizeof(header)) == sizeof(header);
         }
     }
 
-    SDL_CloseIO(file);
-    return ok;
+    bool closed = SDL_CloseIO(file);
+    return ok && closed;
 }

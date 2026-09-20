@@ -35,8 +35,10 @@ size_t fixture_write_dungeon(byte* buffer, size_t capacity, size_t* dungeon_size
     save_write_dungeon();
     *dungeon_size = (size_t)SDL_TellIO(fff);
     save_wr_u32b(0xA1B2C3D4U);
+    /* The v16 dungeon reader requires the two-word checksum tail. */
+    save_wr_u32b(0x10203040U);
     size_t length = (size_t)SDL_TellIO(fff);
-    assert(!write_error && length == *dungeon_size + 4);
+    assert(!write_error && length == *dungeon_size + 8);
     SDL_CloseIO(fff); fff = NULL;
     return length;
 }
@@ -69,11 +71,17 @@ int fixture_read_dungeon(const byte* buffer, size_t length, int extra,
     savefile_has_thrall_quest_requested = savefile_has_cave_info_hi = true;
     savefile_has_cave_rewired = savefile_has_cave_natural = true;
     savefile_has_cave_water_flow = savefile_version_at_least(0, 9, 8, 12);
+    savefile_has_cave_flood_trap_kinds = savefile_version_at_least(0, 9, 8, 15);
     savefile_has_item_bonuses = true;
     objects_count_prefetch = 0xFFFF; color_rle_pair_prefetched = false;
     int result = load_read_dungeon();
     *sentinel = 0;
     if (!result) load_rd_u32b(sentinel);
+    if (!result && savefile_version_at_least(0, 9, 8, 16)) {
+        u32b tail;
+        load_rd_u32b(&tail);
+        assert(tail == 0x10203040U);
+    }
     *consumed = (size_t)SDL_TellIO(fff);
     SDL_CloseIO(fff); fff = NULL;
     return result;
@@ -214,10 +222,10 @@ static void test_current_roundtrip(void)
             expected[y][x] = scent_export_cell(y, x);
     size_t dungeon_size, length = fixture_write_dungeon(encoded, sizeof(encoded), &dungeon_size);
     decode(encoded, plain, length);
-    /* The current format follows scent with an empty flooding-trap block. */
-    assert(plain[dungeon_size-4] == 0 && plain[dungeon_size-3] == 0xF1
-        && plain[dungeon_size-2] == 0 && plain[dungeon_size-1] == 0);
-    size_t scent_start = dungeon_size - 4 - 2 - 20 * 24;
+    /* Empty flood sources, trap kinds and exact surface markers. */
+    const byte flood_tail[] = {0, 0xF1, 0, 0, 1, 0xF1, 0, 0, 2, 0xF1, 0, 0};
+    assert(!memcmp(plain + dungeon_size - sizeof(flood_tail), flood_tail, sizeof(flood_tail)));
+    size_t scent_start = dungeon_size - sizeof(flood_tail) - 2 - 20 * 24;
     assert(plain[scent_start] == 0xE6 && plain[scent_start+1] == 0x5C);
 
     fresh_map(); scent_when = 17; cave_when[7][7] = 18;
@@ -363,7 +371,7 @@ static void test_legacy_absence(void)
     fresh_map();
     size_t dungeon_size, length = fixture_write_dungeon(encoded, sizeof(encoded), &dungeon_size);
     decode(encoded, plain, length);
-    size_t old_dungeon_size = dungeon_size - 4 - 2 - 20*24;
+    size_t old_dungeon_size = dungeon_size - 12 - 2 - 20*24;
     assert(plain[old_dungeon_size] == 0xE6
         && plain[old_dungeon_size+1] == 0x5C);
     memmove(plain + old_dungeon_size, plain + dungeon_size, 4);
@@ -417,8 +425,8 @@ def main():
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
-        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
         *(str(BUILD / "_deps" / name) for name in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
+        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
         env["PATH"]])
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
