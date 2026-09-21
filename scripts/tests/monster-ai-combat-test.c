@@ -35,6 +35,8 @@ static int checks, random_calls;
 static unsigned random_value;
 static bool visible;
 static byte firing_line;
+static int displacement_calls, displacement_y, displacement_x;
+static int displacement_utility;
 
 #define CHECK(test) do { ++checks; if (!(test)) { \
     fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #test); exit(1); } } while (0)
@@ -44,10 +46,15 @@ bool monster_has_sight(const monster_type* m) { (void)m; return visible; }
 bool singing(int song) { (void)song; return false; }
 byte projectable(int y1, int x1, int y2, int x2, u32b flags)
 { (void)y1; (void)x1; (void)y2; (void)x2; (void)flags; return firing_line; }
-/* Displacement terrain is covered by the tactical fixture; these combat
- * fixtures do not assign Knockback to their races. */
+/* Displacement terrain is covered by the tactical fixture; this stub records
+ * the coordinates passed by melee utility for its focused integration check. */
 int monster_tactical_displacement_utility(monster_type* m, int y, int x, bool exchange)
-{ (void)m; (void)y; (void)x; (void)exchange; CHECK(false); return 0; }
+{
+    (void)m; (void)exchange;
+    ++displacement_calls;
+    displacement_y = y; displacement_x = x;
+    return displacement_utility;
+}
 int flow_dist(int flow, int y, int x)
 { (void)flow; (void)y; (void)x; return 40; }
 int ability_bonus(int skill, int ability) { (void)skill; (void)ability; return 0; }
@@ -87,6 +94,8 @@ static monster_type* setup(void)
     races[1].spell_power = 8;
     visible = true; firing_line = PROJECT_CLEAR;
     random_value = 0; random_calls = 0;
+    displacement_calls = 0; displacement_y = displacement_x = 0;
+    displacement_utility = 0;
     return &monsters[1];
 }
 
@@ -276,6 +285,19 @@ static void test_observed_choices_and_pure_previews(void)
     CHECK(calls == random_calls);
 }
 
+static void test_displacement_coordinates(void)
+{
+    monster_type* m = setup();
+    races[1].flags2 |= RF2_KNOCK_BACK;
+    races[1].blow[0] = (monster_blow){ RBM_HIT, RBE_HURT, 20, 2, 6 };
+    displacement_utility = 37;
+    p_ptr->px = 11; /* Keep the player adjacent to exercise the real precondition. */
+
+    (void)monster_melee_utility(m, 0, true, false);
+    CHECK(displacement_calls == 1);
+    CHECK(displacement_y == m->fy && displacement_x == m->fx);
+}
+
 static void test_cooperation_gates(void)
 {
     monster_type* m = setup();
@@ -326,6 +348,7 @@ int main(void)
     test_opportunities();
     test_legality_and_payment();
     test_blow_choice_and_smite();
+    test_displacement_coordinates();
     test_observed_choices_and_pure_previews();
     test_cooperation_gates();
     test_offscreen_piercing();

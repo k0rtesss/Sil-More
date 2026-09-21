@@ -217,6 +217,8 @@ void monster_ai_share_warning(monster_type* source)
 
 void monster_ai_begin_turn(monster_type* m_ptr)
 {
+    m_ptr->ai.feedback_reason = MON_TACTIC_NONE;
+    if (m_ptr->ai.feedback_cooldown) --m_ptr->ai.feedback_cooldown;
     m_ptr->ai.cast_checked = false;
     m_ptr->ai.cast_available = false;
     if (m_ptr->confused || m_ptr->skip_this_turn || m_ptr->skip_next_turn
@@ -229,8 +231,60 @@ void monster_ai_begin_turn(monster_type* m_ptr)
     if (m_ptr->ai.goal_age) --m_ptr->ai.goal_age;
 }
 
+void monster_ai_plan_feedback(monster_type* m_ptr, int reason, int y, int x)
+{
+    if (!m_ptr) return;
+    m_ptr->ai.feedback_reason = MON_TACTIC_NONE;
+    if (!monster_ai_enabled(m_ptr) || !m_ptr->ml
+        || reason <= MON_TACTIC_NONE || reason >= MON_TACTIC_MAX)
+        return;
+    m_ptr->ai.feedback_reason = reason;
+    m_ptr->ai.feedback_y = y;
+    m_ptr->ai.feedback_x = x;
+}
+
+static void monster_ai_report_action(monster_type* m_ptr, int old_y, int old_x,
+    bool skipped)
+{
+    static s32b last_message_turn = -1;
+    static const char* messages[MON_TACTIC_MAX] = {
+        NULL,
+        "moves out of line with its ally.",
+        "spreads out from its allies.",
+        "sidesteps your repeated attacks.",
+        "changes its approach to your retreat.",
+        "moves to guard its ranged ally.",
+        "moves to cover its ally's withdrawal.",
+        "draws back from your song.",
+        "moves to press the attack against your singing.",
+        "takes advantage of the hazardous ground.",
+        "holds back, wary of your retreating strike."
+    };
+    int reason = m_ptr->ai.feedback_reason;
+    bool moved = old_y != m_ptr->fy || old_x != m_ptr->fx;
+    m_ptr->ai.feedback_reason = MON_TACTIC_NONE;
+    if (!monster_ai_enabled(m_ptr) || skipped || m_ptr->ability_displaced
+        || !m_ptr->ml || p_ptr->image || p_ptr->is_dead
+        || m_ptr->ai.feedback_cooldown || last_message_turn == playerturn
+        || reason <= MON_TACTIC_NONE || reason >= MON_TACTIC_MAX
+        || m_ptr->fy != m_ptr->ai.feedback_y || m_ptr->fx != m_ptr->ai.feedback_x)
+        return;
+    if (reason == MON_TACTIC_RETREAT_WAIT)
+    {
+        if (moved || m_ptr->ability_melee
+            || m_ptr->previous_action[0] == ACTION_ARCHERY) return;
+    }
+    else if (!moved) return;
+    char name[80];
+    monster_desc(name, sizeof(name), m_ptr, 0);
+    msg_format("%^s %s", name, messages[reason]);
+    m_ptr->ai.feedback_cooldown = 8;
+    last_message_turn = playerturn;
+}
+
 void monster_ai_end_turn(monster_type* m_ptr, int old_y, int old_x, bool skipped)
 {
+    monster_ai_report_action(m_ptr, old_y, old_x, skipped);
     m_ptr->ai.previous_y = old_y;
     m_ptr->ai.previous_x = old_x;
     if (skipped || m_ptr->fy != old_y || m_ptr->fx != old_x
@@ -256,6 +310,7 @@ void monster_ai_sanitize(monster_type* m_ptr)
     }
     m_ptr->ai.cast_reserve = MIN(3, m_ptr->ai.cast_reserve);
     m_ptr->ai.cast_checked = m_ptr->ai.cast_available = false;
+    m_ptr->ai.feedback_reason = m_ptr->ai.feedback_cooldown = 0;
     m_ptr->ai.goal_age = MIN(3, m_ptr->ai.goal_age);
     m_ptr->ai.waits = MIN(2, m_ptr->ai.waits);
     monster_sense_state* sense = &m_ptr->ai.sense;

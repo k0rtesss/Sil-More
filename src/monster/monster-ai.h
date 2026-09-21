@@ -17,6 +17,16 @@ enum monster_ai_feature
     MON_AI_IMPALE, MON_AI_WHIRLWIND, MON_AI_FOLLOW_THROUGH, MON_AI_SLAY_FEAR
 };
 
+/* Runtime decision feedback, emitted only after the selected action succeeds. */
+enum monster_tactic_reason
+{
+    MON_TACTIC_NONE, MON_TACTIC_IMPALE, MON_TACTIC_SWEEP,
+    MON_TACTIC_CONCENTRATION, MON_TACTIC_INTERCEPT, MON_TACTIC_GUARD,
+    MON_TACTIC_WITHDRAWAL, MON_TACTIC_SONG_DISTANCE, MON_TACTIC_SONG_PRESSURE,
+    MON_TACTIC_TERRAIN, MON_TACTIC_RETREAT_WAIT, MON_TACTIC_MAX
+};
+
+void monster_ai_plan_feedback(monster_type* m_ptr, int reason, int y, int x);
 bool monster_ai_enabled(const monster_type* m_ptr);
 bool monster_ai_can_see_player(const monster_type* m_ptr);
 int monster_ai_confidence(const monster_type* m_ptr, int feature);

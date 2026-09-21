@@ -335,6 +335,7 @@ bool get_move(
         && monster_ai_poison_safe(m_ptr, m_ptr->fy, m_ptr->fx, 2))
     {
         if (get_move_tactical(m_ptr, ty, tx)) return true;
+        monster_ai_plan_feedback(m_ptr, MON_TACTIC_RETREAT_WAIT, m_ptr->fy, m_ptr->fx);
         return false;
     }
 

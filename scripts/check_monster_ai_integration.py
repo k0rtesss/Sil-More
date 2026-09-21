@@ -11,12 +11,14 @@ CHECKS = r'''
 #include "monster/monster-senses.h"
 #include "monster/monster-tactics.h"
 #include "melee/melee-attack.h"
+#include "melee/melee-movement.h"
 #include "spell/spell-projection-internal.h"
 void process_player(void); /* Internal production scheduler entry point. */
 
 static monster_type* adaptive_fixture(int race, int evasion)
 {
     monster_type* m = combat_fixture(race, evasion);
+    p_ptr->song1 = p_ptr->song2 = SNG_NOTHING;
     cave_m_idx[p_ptr->py][p_ptr->px] = -1;
     p_ptr->cur_light = 4;
     /* The fixture is open floor; establish its field of fire, which the
@@ -125,6 +127,89 @@ static void check_weapon_fear(void)
     puts("Production Doriath hit: exact -20 fear cohort learns and a shaken target flees; misses, ordinary fear, unrelated kinds, confusion, fear immunity, unseen attackers and warning spread stay distinct PASS.");
 }
 
+static void check_protected_terrain_movement(void)
+{
+    monster_type* m = adaptive_fixture(403, 0);
+    monster_race saved = r_info[403];
+    r_info[403].flags2 = RF2_SMART | RF2_KNOCK_BACK;
+    int ordinary = monster_melee_utility(m, 0, true, false);
+    cave_set_feat(10, 12, FEAT_LAVA);
+    assert(monster_melee_utility(m, 0, true, false) > ordinary);
+    cave_set_feat(10, 12, FEAT_FLOOR);
+    r_info[403].flags2 = RF2_SMART;
+    r_info[403].flags3 = RF3_RES_FIRE;
+    m->stance = STANCE_AGGRESSIVE;
+    m->min_range = m->best_range = 1;
+    cave_set_feat(9, 10, FEAT_LAVA);
+    int y, x;
+    bool fear = false;
+    assert(get_move(m, &y, &x, &fear, false));
+    assert(y == 9 && x == 10 && !fear);
+    bool bash = false;
+    assert(make_move(m, &y, &x, fear, &bash));
+    process_move(m, y, x, bash);
+    assert(m->fy == 9 && m->fx == 10);
+    assert(get_move(m, &y, &x, &fear, false));
+    assert(y == p_ptr->py && x == p_ptr->px); /* attack from the useful footing */
+    r_info[403] = saved;
+    puts("Production melee values knockback into lava; movement enters protected lava footing, then resumes attacking PASS.");
+}
+
+static void check_cooperative_movement(void)
+{
+    monster_type* m = adaptive_fixture(403, 0);
+    monster_race saved = r_info[403];
+    r_info[403].flags2 = RF2_SMART;
+    r_info[403].flags3 = RF3_ORC;
+    int archer = 0;
+    for (int i = 1; i < z_info->r_max; ++i)
+        if ((r_info[i].flags3 & RF3_ORC) && (r_info[i].flags4 & RF4_ARROW1))
+        { archer = i; break; }
+    assert(archer && place_monster_one(10, 8, archer, false, true, NULL));
+    monster_type* ally = &mon_list[cave_m_idx[10][8]];
+    ally->alertness = ALERTNESS_ALERT; ally->ml = true;
+    ally->stance = STANCE_AGGRESSIVE;
+    ally->min_range = 2; ally->best_range = 3;
+    m->stance = STANCE_AGGRESSIVE;
+    m->min_range = m->best_range = 1;
+    playerturn = 600;
+    monster_ai_begin_turn(m);
+    int y, x;
+    bool fear = false, bash = false;
+    assert(get_move(m, &y, &x, &fear, false));
+    assert(m->ai.feedback_reason == MON_TACTIC_GUARD);
+    cave_info[y][x] |= CAVE_SEEN; /* Fixture lighting for production update_mon(). */
+    assert(make_move(m, &y, &x, fear, &bash));
+    process_move(m, y, x, bash);
+    monster_ai_end_turn(m, 10, 10, false);
+    assert(m->ai.feedback_cooldown == 8 && !m->ai.feedback_reason);
+    assert(projectable(ally->fy, ally->fx, p_ptr->py, p_ptr->px, PROJECT_CHCK)
+        == PROJECT_CLEAR);
+    assert(distance(m->fy, m->fx, p_ptr->py, p_ptr->px) == 1);
+    r_info[403] = saved;
+    puts("Production guard movement clears an orc archer's firing lane and reports only the completed move PASS.");
+
+    m = adaptive_fixture(archer, 0);
+    cave_m_idx[10][11] = 0;
+    p_ptr->px = 13; cave_m_idx[10][13] = -1;
+    m->cdis = 3; m->min_range = 2; m->best_range = 3;
+    m->stance = STANCE_AGGRESSIVE;
+    p_ptr->song1 = SNG_LORIEN;
+    update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
+    ++playerturn;
+    monster_ai_begin_turn(m);
+    assert(get_move(m, &y, &x, &fear, false));
+    assert(m->ai.feedback_reason == MON_TACTIC_SONG_DISTANCE);
+    cave_info[y][x] |= CAVE_SEEN;
+    assert(make_move(m, &y, &x, fear, &bash));
+    process_move(m, y, x, bash);
+    monster_ai_end_turn(m, 10, 10, false);
+    assert(m->ai.feedback_cooldown == 8);
+    assert(flow_dist(FLOW_PLAYER_NOISE, m->fy, m->fx) > 3);
+    assert(projectable(m->fy, m->fx, p_ptr->py, p_ptr->px, PROJECT_CHCK));
+    puts("Production archer buys sound distance from Lorien while retaining a shot PASS.");
+}
+
 static void check_adaptive_integration(void)
 {
     monster_type* m = adaptive_fixture(403, 0);
@@ -182,7 +267,9 @@ static void check_adaptive_integration(void)
     m->smite_recovery = 1; m->skip_next_turn = true;
     m->energy = 100;
     process_monsters(100);
-    assert(m->hp == 97 && m->poisoned == 9);
+    int recovery_tick = (6 + POISON_TERRAIN_DOSE + 4) / 5;
+    assert(m->hp == 100 - recovery_tick);
+    assert(m->poisoned == 6 + POISON_TERRAIN_DOSE - recovery_tick);
     assert(m->smite_recovery == 2 && m->fy == 10 && m->fx == 10);
     assert(!make_attack_reaction(m));
     m->energy = 100;
@@ -209,13 +296,19 @@ static void check_adaptive_integration(void)
     playerturn = 200;
     process_player();
     assert(playerturn == 201 && p_ptr->energy == 0);
-    assert(p_ptr->chp == 98 && p_ptr->poisoned == 4);
+    int contact_tick = (POISON_TERRAIN_DOSE + 4) / 5;
+    assert(p_ptr->chp == 100 - contact_tick);
+    assert(p_ptr->poisoned == POISON_TERRAIN_DOSE - contact_tick);
     p_ptr->restoring = true; p_ptr->entranced = 1; p_ptr->energy = 100;
     cave_feat[p_ptr->py][p_ptr->px] = FEAT_FLOOR;
     process_player();
-    assert(p_ptr->chp == 97 && p_ptr->poisoned == 3);
+    int bank_tick = (POISON_TERRAIN_DOSE - contact_tick + 4) / 5;
+    assert(p_ptr->chp == 100 - contact_tick - bank_tick);
+    assert(p_ptr->poisoned == POISON_TERRAIN_DOSE - contact_tick - bank_tick);
     puts("Real complete player actions apply pool contact before poison tick and suppress regeneration PASS.");
     check_weapon_fear();
+    check_protected_terrain_movement();
+    check_cooperative_movement();
 }
 '''
 

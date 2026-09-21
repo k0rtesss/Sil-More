@@ -19,7 +19,7 @@ static void test_poison_ai(void)
     CHECK(cave_exist_mon(&races[1], 3, 3, false, false));
     CHECK(cave_passable_mon(m, 3, 3, &bash) == 100);
     CHECK(monster_step_cost(m, 3, 2, 3, 3) == 4);
-    CHECK(monster_poison_step_damage(m, 3, 2, 3, 3) == 12);
+    CHECK(monster_poison_step_damage(m, 3, 2, 3, 3) == 2 * POISON_TERRAIN_DOSE);
     CHECK(monster_terrain_penalty(m, 3, 3) > 0);
     update_flow(3, 8, 1);
     y = m->fy; x = m->fx;
@@ -41,22 +41,24 @@ static void test_poison_ai(void)
 
     m = reset_map(7, 11, 3, 2, 3, 8);
     poison_corridor(2);
-    m->hp = 19;
+    m->hp = 3 * POISON_TERRAIN_DOSE + 1;
     update_flow(3, 8, 1);
-    CHECK(flow_dist(1, 3, 2) < FLOW_MAX_DIST); /* Two tiles cost 18 total. */
+    CHECK(flow_dist(1, 3, 2) < FLOW_MAX_DIST); /* Entry plus two action-start doses. */
     y = m->fy; x = m->fx;
     get_move_advance(m, &y, &x);
     CHECK(y == 3 && x == 3);
-    m->hp = 18;
+    m->hp = 3 * POISON_TERRAIN_DOSE;
     update_flow(3, 8, 1);
     CHECK(flow_dist(1, 3, 2) == FLOW_MAX_DIST);
-    m->hp = 25; m->poisoned = 7;
+    m->hp = 3 * POISON_TERRAIN_DOSE + 7; m->poisoned = 7;
     update_flow(3, 8, 1);
     CHECK(flow_dist(1, 3, 2) == FLOW_MAX_DIST); /* Existing debt counts. */
 
-    m->hp = 16; m->poisoned = 9; /* HP19, two doses, then a ceil(12/5) tick. */
+    int tick = (2 * POISON_TERRAIN_DOSE + 4) / 5;
+    m->hp = 3 * POISON_TERRAIN_DOSE + 1 - tick;
+    m->poisoned = 2 * POISON_TERRAIN_DOSE - tick;
     move_monster(m, 3, 3);
-    CHECK(monster_poison_step_damage(m, 3, 3, 3, 4) == 6);
+    CHECK(monster_poison_step_damage(m, 3, 3, 3, 4) == POISON_TERRAIN_DOSE);
     CHECK(get_move_escape_poison(m, &y, &x));
     CHECK(y == 3 && x == 4); /* Continue survivable crossing, no oscillation. */
     m->hp = 7; m->poisoned = 10;

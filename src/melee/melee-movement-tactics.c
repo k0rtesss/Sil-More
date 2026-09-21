@@ -35,6 +35,7 @@ typedef struct tactical_context
 typedef struct tactical_choice
 {
     int y, x, goal_y, goal_x, gain;
+    int reason;
 } tactical_choice;
 
 static int tactical_confidence(const monster_type* m_ptr, int feature)
@@ -71,7 +72,7 @@ static int tactical_hazard(monster_type* m_ptr, int y, int x)
         score = 20; defense = tactical_confidence(m_ptr, MON_AI_POISON); break;
     case FEAT_CHASM: return 75;
     case FEAT_WATER: return 8;
-    case FEAT_DEEP_WATER: return (r_info[m_ptr->r_idx].flags2 & RF2_FLYING) ? 0 : 60;
+    case FEAT_DEEP_WATER: return 60; /* This is the player's landing hazard. */
     case FEAT_ICE:
     case FEAT_MELTING_ICE: return 6; /* Cold resistance is not sure footing. */
     default: return 0;
@@ -232,7 +233,139 @@ static bool tactical_impale_pair(int py, int px, int y, int x, int ay, int ax)
         || (MAX(ABS(ady), ABS(adx)) == 1 && dy == 2 * ady && dx == 2 * adx));
 }
 
-static int tactical_position_score(const tactical_context* c, int y, int x)
+/* Prefer a useful fighting position on terrain that hinders the opponent
+ * without harming us. Merely being allowed onto a square is not protection:
+ * flight avoids pools and poor footing, but does not prevent lava damage.
+ * Keep the reward bounded so it cannot outweigh pursuit or a lost firing lane. */
+static int tactical_protected_terrain(const tactical_context* c, int y, int x,
+    int dist, bool has_shot)
+{
+    monster_type* m_ptr = c->actor;
+    monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    bool flying = (r_ptr->flags2 & RF2_FLYING) != 0;
+    bool protected = false;
+    if (!c->sight || !has_shot
+        || (c->ranged ? (dist < m_ptr->min_range || dist > m_ptr->best_range)
+                      : dist != 1))
+        return 0;
+    switch (cave_feat[y][x])
+    {
+    case FEAT_LAVA: protected = (r_ptr->flags3 & RF3_RES_FIRE) != 0; break;
+    case FEAT_POISON: protected = flying || (r_ptr->flags3 & RF3_RES_POIS); break;
+    case FEAT_CHASM:
+    case FEAT_WATER:
+    case FEAT_DEEP_WATER:
+    case FEAT_ICE:
+    case FEAT_MELTING_ICE: protected = flying; break;
+    default: break;
+    }
+    if (!protected) return 0;
+    return MIN(24, tactical_hazard(m_ptr, y, x) / 2);
+}
+
+/* A healthy melee creature can screen one nearby ally. Use a maximum rather
+ * than adding every ally's reward, and leave an already occupied guard post
+ * to its defender. All allies here were locally seen and affiliation-checked. */
+static int tactical_guard_score_visible(const tactical_context* c, int y, int x,
+    bool withdrawal, bool visible_only)
+{
+    monster_type* m = c->actor;
+    if (!c->sight || c->ranged || m->hp * 2 <= m->maxhp
+        || (r_info[m->r_idx].flags1 & RF1_NEVER_BLOW)) return 0;
+    int dist = distance(y, x, c->py, c->px), best = 0;
+    if (dist > 2 || !los(y, x, c->py, c->px)) return 0;
+    for (int i = 0; i < c->ally_count; ++i)
+    {
+        monster_type* ally = c->allies[i];
+        if (visible_only && !ally->ml) continue;
+        int ally_dist = distance(ally->fy, ally->fx, c->py, c->px);
+        if (ally->alertness < ALERTNESS_ALERT || ally_dist <= dist || ally_dist > 5
+            || distance(y, x, ally->fy, ally->fx) > 2) continue;
+        if (withdrawal)
+        {
+            if (ally->stance != STANCE_FLEEING || ally->hp * 2 > ally->maxhp)
+                continue;
+        }
+        else
+        {
+            if (!r_info[ally->r_idx].freq_ranged || ally->stance == STANCE_FLEEING
+                || ally_dist < 2
+                || !los(ally->fy, ally->fx, c->py, c->px)
+                || tactical_on_lane(y, x, ally->fy, ally->fx, c->py, c->px))
+                continue;
+        }
+        bool covered = false;
+        for (int j = 0; j < c->ally_count; ++j)
+        {
+            monster_type* guard = c->allies[j];
+            if (guard == ally || guard->stance == STANCE_FLEEING
+                || guard->alertness < ALERTNESS_ALERT || guard->hp * 2 <= guard->maxhp
+                || guard->min_range > 1
+                || (r_info[guard->r_idx].flags1 & RF1_NEVER_BLOW)) continue;
+            int guard_dist = distance(guard->fy, guard->fx, c->py, c->px);
+            if (guard_dist <= 2 && guard_dist < ally_dist
+                && distance(guard->fy, guard->fx, ally->fy, ally->fx) <= 2
+                && los(guard->fy, guard->fx, c->py, c->px)
+                && (withdrawal || !tactical_on_lane(guard->fy, guard->fx,
+                    ally->fy, ally->fx, c->py, c->px)))
+            { covered = true; break; }
+        }
+        if (!covered) best = MAX(best, withdrawal ? 30 : 24);
+    }
+    return best;
+}
+
+static int tactical_guard_score(const tactical_context* c, int y, int x,
+    bool withdrawal)
+{
+    return tactical_guard_score_visible(c, y, x, withdrawal, false);
+}
+
+/* Hear the current performance; generic remembered singing is not evidence
+ * of a particular song. Sound distance, not LOS alone, weakens these effects.
+ * No player song skill, Voice, or target index enters this preview. */
+static void tactical_song_scores(const tactical_context* c, int y, int x,
+    bool has_shot, int* spacing, int* pressure)
+{
+    monster_type* m = c->actor;
+    int current_noise, next_noise, weight = 0;
+    *spacing = *pressure = 0;
+    if (!c->sight) return;
+    current_noise = flow_dist(FLOW_PLAYER_NOISE, m->fy, m->fx);
+    if (current_noise > MAX_SIGHT) return;
+    next_noise = flow_dist(FLOW_PLAYER_NOISE, y, x);
+    if (next_noise >= FLOW_MAX_DIST) return;
+    if (!(singing(SNG_CHALLENGE) && m->stance == STANCE_AGGRESSIVE))
+    {
+        /* Ranged creatures can give up an attack to buy a few squares of
+         * resistance. Melee creatures keep their useful attack contact.
+         * Six sound steps is a tactical spacing limit, not a song radius. */
+        if (singing(SNG_MASTERY)) weight = c->ranged ? 24 : 4;
+        if (singing(SNG_LORIEN)) weight = MAX(weight, c->ranged ? 20 : 3);
+        if (singing(SNG_ELBERETH)
+            && (r_info[m->r_idx].flags2 & RF2_SMART)) weight = MAX(weight, 3);
+        if (has_shot)
+            *spacing = MAX(-24, MIN(24,
+                weight * (MIN(6, next_noise) - MIN(6, current_noise))));
+    }
+    /* A duel has no escape radius after selection. React only to our own
+     * still-active pressure stacks, not the player's hidden selected target. */
+    bool contest = singing(SNG_CONTEST) && m->song_contest_stacks
+        && !m->song_contest_completed;
+    bool lament = singing(SNG_LAMENT) && m->song_lament_stacks
+        && !m->song_lament_completed;
+    if (contest || lament)
+    {
+        int dist = distance(y, x, c->py, c->px);
+        if (c->ranged)
+            *pressure = has_shot && dist >= m->min_range && dist <= m->best_range ? 24 : 0;
+        else
+            *pressure = dist == 1 ? 24 : dist == 2 ? 8 : 0;
+    }
+}
+
+static int tactical_position_details(const tactical_context* c, int y, int x,
+    int reasons[MON_TACTIC_MAX])
 {
     monster_type* m_ptr = c->actor;
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
@@ -247,6 +380,14 @@ static int tactical_position_score(const tactical_context* c, int y, int x)
     if (!c->ranged && dist == 1) score += 8;
     if (c->ranged && !has_shot) score -= 24;
     if (c->ranged && dist < m_ptr->min_range) score -= 15;
+    int parts[MON_TACTIC_MAX] = { 0 };
+    parts[MON_TACTIC_TERRAIN] = tactical_protected_terrain(c, y, x, dist, has_shot);
+    parts[MON_TACTIC_GUARD] = tactical_guard_score(c, y, x, false);
+    parts[MON_TACTIC_WITHDRAWAL] = tactical_guard_score(c, y, x, true);
+    tactical_song_scores(c, y, x, has_shot,
+        &parts[MON_TACTIC_SONG_DISTANCE], &parts[MON_TACTIC_SONG_PRESSURE]);
+    /* One screening job, even when both kinds of ally are nearby. */
+    if (parts[MON_TACTIC_WITHDRAWAL]) parts[MON_TACTIC_GUARD] = 0;
     for (int i = 0; i < c->ally_count; ++i)
     {
         monster_type* ally = c->allies[i];
@@ -260,17 +401,17 @@ static int tactical_position_score(const tactical_context* c, int y, int x)
              * Follow Through needs a kill first; a wounded ally makes that
              * opening more likely. Neither depends on inter-ally adjacency. */
             int follow_risk = ally->hp <= ally->maxhp / 2 ? 8 : 3;
-            score -= MAX(sweep * 9, follow * follow_risk);
+            parts[MON_TACTIC_SWEEP] -= MAX(sweep * 9, follow * follow_risk);
             if (!dot) score += MAX(0, tactical_confidence(m_ptr, MON_AI_FLANKING)) * 2;
         }
         if (distance(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx) == 1 && ally_dist > 1) trailing++;
         if (separation == 1) score -= 3;
         if (impale && tactical_impale_pair(c->py, c->px, y, x, ally->fy, ally->fx))
-            score -= impale * 8;
+            parts[MON_TACTIC_IMPALE] -= impale * 8;
         if (r_info[ally->r_idx].freq_ranged
             && tactical_on_lane(y, x, ally->fy, ally->fx, c->py, c->px)) score -= 18;
         if (ally->stance == STANCE_FLEEING
-            && tactical_on_lane(y, x, c->py, c->px, ally->fy, ally->fx)) score -= 10;
+            && tactical_on_lane(ally->fy, ally->fx, c->py, c->px, y, x)) score -= 10;
     }
     if (trailing && tactical_open_neighbors(m_ptr->fy, m_ptr->fx) <= 4
         && tactical_open_neighbors(y, x) > tactical_open_neighbors(m_ptr->fy, m_ptr->fx)) score += 18;
@@ -316,8 +457,8 @@ static int tactical_position_score(const tactical_context* c, int y, int x)
             int retreat = MAX(0, tactical_confidence(m_ptr, MON_AI_CONTROLLED_RETREAT));
             /* Take reachable junctions ahead of a witnessed retreating route
              * instead of blindly repeating its stand/retreat/chase sequence. */
-            if (forward > 0) score += kiting * 3;
-            if (forward < 0 && dist == 1) score -= retreat * 4;
+            if (forward > 0) parts[MON_TACTIC_INTERCEPT] += kiting * 3;
+            if (forward < 0 && dist == 1) parts[MON_TACTIC_INTERCEPT] -= retreat * 4;
             if (forward > 0 && dist == 2)
                 score -= MAX(0, tactical_confidence(m_ptr, MON_AI_CHARGE)) * 5;
         }
@@ -335,7 +476,7 @@ static int tactical_position_score(const tactical_context* c, int y, int x)
             score -= MAX(0, tactical_confidence(m_ptr, MON_AI_EXCHANGE))
                 * MIN(8, monster_terrain_penalty(m_ptr, c->py, c->px));
             if (m_ptr->ai.attack_y == m_ptr->fy && m_ptr->ai.attack_x == m_ptr->fx)
-                score += MAX(0, tactical_confidence(m_ptr, MON_AI_CONCENTRATION)) * 4;
+                parts[MON_TACTIC_CONCENTRATION] += MAX(0, tactical_confidence(m_ptr, MON_AI_CONCENTRATION)) * 4;
         }
         /* A prepared opponent is a reason to improve cover or use existing
          * ranged pressure; waiting does not erase their Concentration. */
@@ -357,7 +498,14 @@ static int tactical_position_score(const tactical_context* c, int y, int x)
             if (after <= 0) score += 4;
         }
     }
+    for (int i = 1; i < MON_TACTIC_MAX; ++i) score += parts[i];
+    if (reasons) memcpy(reasons, parts, sizeof(parts));
     return score - monster_terrain_penalty(m_ptr, y, x) * 10;
+}
+
+static int tactical_position_score(const tactical_context* c, int y, int x)
+{
+    return tactical_position_details(c, y, x, NULL);
 }
 
 static bool tactical_enterable(monster_type* m_ptr, int y, int x)
@@ -484,6 +632,41 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     choice->goal_y = c.oy + best_goal / TACTICAL_WIDTH;
     choice->goal_x = c.ox + best_goal % TACTICAL_WIDTH;
     choice->gain = best_score - baseline;
+    /* Explain only an improvement already made by the first step, not an
+     * unexecuted second step of the local plan. Previews remain side-effect free. */
+    int before[MON_TACTIC_MAX], after[MON_TACTIC_MAX], improvement = 3;
+    tactical_position_details(&c, m_ptr->fy, m_ptr->fx, before);
+    tactical_position_details(&c, choice->y, choice->x, after);
+    choice->reason = MON_TACTIC_NONE;
+    for (int i = 1; i < MON_TACTIC_MAX; ++i)
+    {
+        /* Message details may use player visibility; the decision above may
+         * not. Do not reveal an unseen archer or wounded ally through prose. */
+        if (i == MON_TACTIC_GUARD || i == MON_TACTIC_WITHDRAWAL)
+        {
+            bool withdrawal = i == MON_TACTIC_WITHDRAWAL;
+            before[i] = tactical_guard_score_visible(&c, m_ptr->fy, m_ptr->fx,
+                withdrawal, true);
+            after[i] = tactical_guard_score_visible(&c, choice->y, choice->x,
+                withdrawal, true);
+        }
+        if (i == MON_TACTIC_IMPALE || i == MON_TACTIC_SWEEP)
+        {
+            bool visible_ally = false;
+            for (int n = 0; n < c.ally_count; ++n)
+            {
+                monster_type* ally = c.allies[n];
+                if (ally->ml && (i == MON_TACTIC_IMPALE
+                        ? tactical_impale_pair(c.py, c.px, m_ptr->fy, m_ptr->fx,
+                            ally->fy, ally->fx)
+                        : distance(ally->fy, ally->fx, c.py, c.px) == 1))
+                { visible_ally = true; break; }
+            }
+            if (!visible_ally) continue;
+        }
+        if (after[i] - before[i] > improvement)
+        { improvement = after[i] - before[i]; choice->reason = i; }
+    }
     return true;
 }
 
@@ -500,6 +683,7 @@ bool get_move_tactical(monster_type* m_ptr, int* ty, int* tx)
         return get_move_tactical_morgoth(m_ptr, ty, tx);
     if (!tactical_choose(m_ptr, &choice)) return false;
     *ty = choice.y; *tx = choice.x;
+    monster_ai_plan_feedback(m_ptr, choice.reason, choice.y, choice.x);
     /* Only execution commits. Reusing an anchor cannot refresh its budget. */
     if (!m_ptr->ai.goal_age || m_ptr->ai.goal_y != choice.goal_y || m_ptr->ai.goal_x != choice.goal_x)
     {

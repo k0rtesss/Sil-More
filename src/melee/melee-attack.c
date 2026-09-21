@@ -628,7 +628,7 @@ int monster_melee_utility(const monster_type* m_ptr, int blow,
     if (blow == 0 && (r_ptr->flags2 & RF2_KNOCK_BACK)
         && monster_ai_can_see_player(m_ptr))
         control += monster_tactical_displacement_utility(
-            (monster_type*)m_ptr, p_ptr->py, p_ptr->px, false);
+            (monster_type*)m_ptr, m_ptr->fy, m_ptr->fx, false);
     if (monster_ai_confidence(m_ptr, MON_AI_RIPOSTE) > 0)
         control -= (100 - hit) / 5;
     damage = (damage + control) * hit / 100;

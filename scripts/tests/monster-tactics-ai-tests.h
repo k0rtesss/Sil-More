@@ -3,21 +3,21 @@ static void test_tactical_poison_preview(void)
 {
     int pending;
     monster_type* m = reset_map(11, 11, 5, 4, 5, 5);
-    CHECK(monster_ai_poison_preview(0, true, true, 1, &pending) == 3);
-    CHECK(pending == 9); /* entry 6, action-start 6, ceil(12/5) */
-    CHECK(monster_ai_poison_preview(9, true, false, 1, &pending) == 3);
-    CHECK(pending == 12); /* pool-to-pool cannot double the action's contact */
+    CHECK(monster_ai_poison_preview(0, true, true, 1, &pending) == 4);
+    CHECK(pending == 12); /* entry 8, action-start 8, ceil(16/5) */
+    CHECK(monster_ai_poison_preview(9, true, false, 1, &pending) == 4);
+    CHECK(pending == 13); /* pool-to-pool cannot double the action's contact */
     CHECK(monster_ai_poison_preview(100, true, true, 2, &pending) == 38);
-    CHECK(pending == 68); /* caps before each of the two actual ticks */
+    CHECK(pending == 70); /* caps before each of the two actual ticks */
     CHECK(monster_ai_poison_preview(9, false, false, 2, &pending) == 4);
     CHECK(pending == 5);
     tile(4, 4, FEAT_POISON);
-    CHECK(monster_ai_poison_damage(m, 4, 4, 1) == 3);
+    CHECK(monster_ai_poison_damage(m, 4, 4, 1) == 4);
     tile(5, 4, FEAT_POISON);
     m->poisoned = 9;
-    CHECK(monster_ai_poison_damage(m, 4, 4, 1) == 3);
-    CHECK(monster_ai_poison_damage(m, 5, 4, 2) == 7);
-    m->hp = 7;
+    CHECK(monster_ai_poison_damage(m, 4, 4, 1) == 4);
+    CHECK(monster_ai_poison_damage(m, 5, 4, 2) == 9);
+    m->hp = 9;
     CHECK(monster_ai_poison_safe(m, 5, 4, 1));
     CHECK(!monster_ai_poison_safe(m, 5, 4, 2)); /* unsafe recovery */
     CHECK(monster_ai_poison_safe(m, 4, 3, 2)); /* safe exit, existing poison ticks */
@@ -216,12 +216,235 @@ static void test_tactical_attack_geometry(void)
     CHECK(distance(y, x, 5, 5) == 2);
 }
 
+static void test_tactical_protected_terrain(void)
+{
+    monster_type* m = reset_map(11, 11, 5, 4, 5, 5);
+    int y, x;
+    races[1].flags2 |= RF2_KNOCK_BACK | RF2_FLYING;
+    tile(5, 6, FEAT_DEEP_WATER);
+    CHECK(tactical_knockback(m, 5, 4) == 60); /* danger to player, not flyer */
+
+    m = reset_map(11, 11, 5, 4, 5, 5);
+    tile(4, 4, FEAT_POISON);
+    CHECK(!get_move_tactical(m, &y, &x));
+    races[1].flags3 = RF3_RES_POIS;
+    CHECK(get_move_tactical(m, &y, &x));
+    CHECK(y == 4 && x == 4); /* immune creature takes useful pool footing */
+    move_monster(m, y, x);
+    CHECK(!get_move_tactical(m, &y, &x)); /* hold it instead of orbiting */
+
+    m = reset_map(11, 11, 5, 4, 5, 5);
+    tile(4, 4, FEAT_POISON);
+    races[1].flags2 |= RF2_FLYING;
+    CHECK(get_move_tactical(m, &y, &x));
+    CHECK(y == 4 && x == 4);
+    monster_ai_reset(m);
+    monster_ai_observe(m, MON_AI_POISON, 3);
+    CHECK(!get_move_tactical(m, &y, &x)); /* witnessed protection reduces value */
+
+    m = reset_map(11, 11, 5, 4, 5, 5);
+    tile(4, 4, FEAT_LAVA);
+    races[1].flags2 |= RF2_FLYING;
+    CHECK(!get_move_tactical(m, &y, &x)); /* flight does not stop lava damage */
+    races[1].flags3 = RF3_RES_FIRE;
+    CHECK(get_move_tactical(m, &y, &x));
+    CHECK(y == 4 && x == 4);
+    monster_ai_reset(m);
+    tile(4, 4, FEAT_FLOOR);
+    CHECK(!get_move_tactical(m, &y, &x)); /* no stale terrain objective */
+
+    m = reset_map(11, 11, 5, 4, 5, 5);
+    races[1].flags3 = RF3_RES_POIS;
+    tile(4, 3, FEAT_POISON);
+    CHECK(!get_move_tactical(m, &y, &x)); /* melee keeps contact */
+    tile(4, 4, FEAT_POISON);
+    races[1].flags2 |= RF2_MINDLESS;
+    CHECK(!get_move_tactical(m, &y, &x));
+
+    m = reset_map(11, 11, 5, 2, 5, 5);
+    m->min_range = 2; m->best_range = 3;
+    races[1].flags2 |= RF2_FLYING;
+    tile(4, 2, FEAT_DEEP_WATER);
+    CHECK(get_move_tactical(m, &y, &x));
+    CHECK(y == 4 && x == 2); /* ranged flyer keeps a shot from water */
+    move_monster(m, y, x);
+    CHECK(!get_move_tactical(m, &y, &x));
+}
+
+static void test_tactical_cooperation(void)
+{
+    monster_type* m = reset_map(15, 15, 6, 4, 6, 8);
+    monsters[2] = *m;
+    monsters[2].r_idx = 2; monsters[2].fx = 5;
+    monsters[2].min_range = 2; monsters[2].best_range = 3;
+    occupants[6][5] = 2;
+    races[2].freq_ranged = 50;
+    tactical_context c = { .actor=m, .py=6, .px=8, .sight=true,
+        .ally_count=1 };
+    c.allies[0] = &monsters[2];
+    CHECK(tactical_guard_score(&c, 5, 6, false) > 0);
+    CHECK(!tactical_guard_score(&c, 6, 6, false)); /* keep the archer's lane */
+    CHECK(!tactical_guard_score(&c, 6, 4, false)); /* not behind the archer */
+    m->hp = 40;
+    CHECK(!tactical_guard_score(&c, 5, 6, false)); /* wounded guards preserve themselves */
+    m->hp = 100;
+    tactical_choice choice;
+    CHECK(tactical_choose(m, &choice));
+    CHECK(tactical_guard_score(&c, choice.goal_y, choice.goal_x, false) > 0);
+    int y, x;
+    for (int step = 0; step < 3; ++step)
+    {
+        int old_y = m->fy, old_x = m->fx;
+        monster_ai_begin_turn(m);
+        CHECK(get_move_tactical(m, &y, &x));
+        move_monster(m, y, x);
+        monster_ai_end_turn(m, old_y, old_x, false);
+        if (tactical_guard_score(&c, y, x, false)) break;
+    }
+    CHECK(tactical_guard_score(&c, y, x, false) > 0);
+
+    monsters[3] = *m; monsters[3].fy=5; monsters[3].fx=7;
+    c.allies[1] = &monsters[3]; c.ally_count = 2;
+    CHECK(!tactical_guard_score(&c, 7, 6, false)); /* another healthy guard covers it */
+    c.ally_count = 1;
+    monsters[2].hp = 30; monsters[2].stance = STANCE_FLEEING;
+    CHECK(!tactical_guard_score(&c, 5, 6, false));
+    CHECK(tactical_guard_score(&c, 5, 6, true) > 0);
+    CHECK(!tactical_guard_score(&c, 6, 4, true)); /* leave the path away open */
+    c.sight = false;
+    CHECK(!tactical_guard_score(&c, 5, 6, true));
+
+    m = reset_map(11, 11, 6, 5, 5, 5);
+    monsters[2] = *m; monsters[2].r_idx=2;
+    monsters[2].fy=4; monsters[2].fx=3; occupants[4][3]=2;
+    monsters[2].hp=30; monsters[2].stance=STANCE_FLEEING;
+    monsters[2].ml=true;
+    CHECK(tactical_choose(m, &choice));
+    CHECK(choice.reason == MON_TACTIC_WITHDRAWAL);
+    CHECK(distance(choice.y, choice.x, 5, 5) == 1);
+    CHECK(distance(choice.y, choice.x, 4, 3) <= 2);
+    monsters[2].ml=false;
+    tactical_choice hidden;
+    CHECK(tactical_choose(m, &hidden));
+    CHECK(hidden.y == choice.y && hidden.x == choice.x);
+    CHECK(hidden.reason != MON_TACTIC_WITHDRAWAL); /* choice is unchanged; don't reveal ally */
+}
+
+static void test_tactical_feedback(void)
+{
+    monster_type* m = reset_map(11, 11, 5, 4, 5, 5);
+    playerturn = 500;
+    tactical_messages = 0;
+    m->ml = true;
+    tile(4, 4, FEAT_POISON); races[1].flags3 = RF3_RES_POIS;
+    int y, x;
+    CHECK(get_move_tactical(m, &y, &x));
+    CHECK(m->ai.feedback_reason == MON_TACTIC_TERRAIN);
+    CHECK(!tactical_messages); /* selecting or previewing never prints */
+    monster_ai_end_turn(m, 5, 4, false);
+    CHECK(!tactical_messages); /* move failed */
+    CHECK(get_move_tactical(m, &y, &x));
+    move_monster(m, y, x);
+    monster_ai_end_turn(m, 5, 4, false);
+    CHECK(tactical_messages == 1 && m->ai.feedback_cooldown == 8);
+    CHECK(strstr(last_tactical_message, "hazardous ground") != NULL);
+    ++playerturn;
+    monster_ai_begin_turn(m);
+    monster_ai_plan_feedback(m, MON_TACTIC_RETREAT_WAIT, m->fy, m->fx);
+    monster_ai_end_turn(m, m->fy, m->fx, false);
+    CHECK(tactical_messages == 1); /* per-creature cooldown */
+    m->ai.feedback_cooldown = 0;
+    monster_ai_plan_feedback(m, MON_TACTIC_RETREAT_WAIT, m->fy, m->fx);
+    monster_ai_end_turn(m, m->fy, m->fx, true);
+    CHECK(tactical_messages == 1); /* skipped turn is not deliberate waiting */
+    monster_ai_plan_feedback(m, MON_TACTIC_RETREAT_WAIT, m->fy, m->fx);
+    m->ml = false;
+    monster_ai_end_turn(m, m->fy, m->fx, false);
+    CHECK(tactical_messages == 1); /* became unseen during action */
+    m->ml = true;
+    monster_ai_plan_feedback(m, MON_TACTIC_RETREAT_WAIT, m->fy, m->fx);
+    monster_ai_end_turn(m, m->fy, m->fx, false);
+    CHECK(tactical_messages == 2);
+    m->ai.feedback_cooldown = 0;
+    monster_ai_plan_feedback(m, MON_TACTIC_RETREAT_WAIT, m->fy, m->fx);
+    monster_ai_end_turn(m, m->fy, m->fx, false);
+    CHECK(tactical_messages == 2); /* one message per player action */
+}
+
+static void test_tactical_songs(void)
+{
+    monster_type* m = reset_map(15, 15, 7, 4, 7, 7);
+    m->min_range = 2; m->best_range = 3;
+    update_flow(7, 7, FLOW_PLAYER_NOISE);
+    tactical_choice choice, again;
+    CHECK(!tactical_choose(m, &choice));
+    p_ptr->song1 = SNG_MASTERY;
+    CHECK(tactical_choose(m, &choice));
+    CHECK(flow_dist(FLOW_PLAYER_NOISE, choice.y, choice.x)
+        > flow_dist(FLOW_PLAYER_NOISE, m->fy, m->fx));
+    CHECK(choice.reason == MON_TACTIC_SONG_DISTANCE);
+    monster_type snapshot = *m;
+    u64b rng = Rand_state_export();
+    p_ptr->skill_use[S_SNG] = 100;
+    CHECK(tactical_choose(m, &again));
+    CHECK(again.y == choice.y && again.x == choice.x);
+    CHECK(!memcmp(m, &snapshot, sizeof(snapshot)) && rng == Rand_state_export());
+    p_ptr->song2 = SNG_CHALLENGE;
+    CHECK(!tactical_choose(m, &again)); /* compelled aggressive approach is retained */
+    p_ptr->song2 = SNG_NOTHING;
+    p_ptr->song1 = SNG_LORIEN;
+    CHECK(tactical_choose(m, &choice));
+    CHECK(choice.reason == MON_TACTIC_SONG_DISTANCE);
+    p_ptr->song1 = SNG_MASTERY;
+    int steps = 0;
+    while (steps < 8 && tactical_choose(m, &choice))
+    {
+        int old_y=m->fy, old_x=m->fx;
+        move_monster(m, choice.y, choice.x);
+        monster_ai_end_turn(m, old_y, old_x, false);
+        ++steps;
+    }
+    CHECK(steps > 0 && steps < 8); /* a few steps, not endless retreat */
+    CHECK(flow_dist(FLOW_PLAYER_NOISE, m->fy, m->fx) <= 6);
+
+    m = reset_map(15, 15, 7, 4, 7, 7);
+    update_flow(7, 7, FLOW_PLAYER_NOISE);
+    tactical_context c = { .actor=m, .py=7, .px=7, .sight=true };
+    int spacing, pressure;
+    p_ptr->song1 = SNG_CONTEST;
+    tactical_song_scores(&c, 7, 6, true, &spacing, &pressure);
+    CHECK(!spacing && !pressure); /* an uninvolved bystander */
+    m->song_contest_stacks = 1;
+    tactical_song_scores(&c, 7, 6, true, &spacing, &pressure);
+    CHECK(!spacing && pressure == 24);
+    tactical_song_scores(&c, 7, 3, true, &spacing, &pressure);
+    CHECK(!spacing && !pressure); /* moving away cannot break this duel */
+    m->song_contest_completed = true;
+    tactical_song_scores(&c, 7, 6, true, &spacing, &pressure);
+    CHECK(!pressure);
+    p_ptr->song1 = SNG_LAMENT; m->song_lament_stacks = 1;
+    tactical_song_scores(&c, 7, 6, true, &spacing, &pressure);
+    CHECK(pressure == 24);
+    c.sight = false;
+    tactical_song_scores(&c, 7, 6, true, &spacing, &pressure);
+    CHECK(!spacing && !pressure); /* no access to an unseen singer's position */
+    c.sight = true;
+    p_ptr->song1 = SNG_MASTERY;
+    c.ranged = true; m->min_range = 2; m->best_range = 3;
+    tactical_song_scores(&c, 7, 3, false, &spacing, &pressure);
+    CHECK(!spacing && !pressure); /* no reward for losing our shot */
+}
+
 static void test_tactical_extension(void)
 {
     test_tactical_poison_preview();
     test_tactical_light();
     test_tactical_history_and_evidence();
     test_tactical_attack_geometry();
+    test_tactical_protected_terrain();
+    test_tactical_cooperation();
+    test_tactical_feedback();
+    test_tactical_songs();
     monster_type* morgoth = reset_map(11, 11, 5, 4, 5, 5);
     races[R_IDX_MORGOTH] = races[1];
     morgoth->r_idx = R_IDX_MORGOTH;

@@ -19,6 +19,8 @@ static monster_race races[R_IDX_MORGOTH + 1];
 static monster_lore lore[R_IDX_MORGOTH + 1];
 static character_profile profiles[1];
 static int checks;
+static int tactical_messages;
+static const char* last_tactical_message;
 
 #define CHECK(test) do { checks++; if (!(test)) { \
     fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #test); exit(1); } } while (0)
@@ -37,7 +39,7 @@ int monster_stat(monster_type* m, int stat)
 bool monster_race_is_vala(int r_idx)
 { return r_idx == R_IDX_MORGOTH; }
 bool singing(int song)
-{ (void)song; return false; }
+{ return p_ptr->song1 == song || p_ptr->song2 == song; }
 
 /* These effects belong to retreat/territorial behavior. Advancing along a
  * reachable flow must never call them in the fixtures below. */
@@ -49,8 +51,17 @@ void calc_stance(monster_type* m) { (void)m; CHECK(false); }
 byte projectable(int y1, int x1, int y2, int x2, u32b flags)
 { (void)flags; return los(y1, x1, y2, x2); }
 void monster_desc(char* out, size_t len, const monster_type* m, int mode)
-{ (void)out; (void)len; (void)m; (void)mode; CHECK(false); }
-void msg_format(cptr fmt, ...) { (void)fmt; CHECK(false); }
+{ (void)m; (void)mode; snprintf(out, len, "the test monster"); }
+void msg_format(cptr fmt, ...)
+{
+    CHECK(strcmp(fmt, "%^s %s") == 0);
+    va_list args;
+    va_start(args, fmt);
+    (void)va_arg(args, const char*);
+    last_tactical_message = va_arg(args, const char*);
+    va_end(args);
+    ++tactical_messages;
+}
 
 static void tile(int y, int x, int feat)
 {
@@ -64,6 +75,7 @@ static void tile(int y, int x, int feat)
 static monster_type* reset_map(int h, int w, int my, int mx, int py, int px)
 {
     memset(p_ptr, 0, sizeof(*p_ptr));
+    p_ptr->song1 = p_ptr->song2 = SNG_NOTHING;
     memset(monsters, 0, sizeof(monsters));
     memset(races, 0, sizeof(races));
     memset(occupants, 0, sizeof(occupants));

@@ -733,6 +733,8 @@ typedef struct monster_ai_state
     byte attack_y, attack_x, attack_chain;
     s32b player_action_turn, attack_turn;
     bool cast_checked, cast_available; /* Current action only; never saved. */
+    /* Presentation only, never saved; losing a cooldown cannot change combat. */
+    byte feedback_reason, feedback_y, feedback_x, feedback_cooldown;
 } monster_ai_state;
 
 /* Physical observations and work orders are separate from player tracking. */
