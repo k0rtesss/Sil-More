@@ -38,6 +38,7 @@ bool confirm_enter_morgoth_hall(void)
     int wid, hgt;
     int title_row;
     int body_row;
+    int prompt_row;
     bool compact;
 
     static const char* text_wide[] = {
@@ -62,15 +63,18 @@ bool confirm_enter_morgoth_hall(void)
     /* Paranoia */
     message_flush();
 
-    /* Get terminal size */
+    /* Save the gameplay screen and hide supporting panes while the warning is
+     * active, so the message log does not show through the full-screen text. */
+    screen_save();
+    screen_push_supporting_panes_hidden();
+
+    /* Get terminal size after switching to the full-screen layout. */
     Term_get_size(&wid, &hgt);
     compact = (wid < 64) || (hgt <= 18);
     text = compact ? text_compact : text_wide;
     title_row = (hgt <= 16) ? 0 : (compact ? 1 : 2);
     body_row = (hgt <= 16) ? 2 : (compact ? 3 : 6);
-
-    /* Save screen */
-    screen_save();
+    prompt_row = MAX(body_row + 1, hgt - 8);
     Term_clear();
 
     /* Title */
@@ -134,7 +138,7 @@ bool confirm_enter_morgoth_hall(void)
         int col = (wid - (int)strlen(prompt)) / 2;
         if (col < 1)
             col = 1;
-        Term_putstr(col, hgt - 3, -1, TERM_YELLOW, prompt);
+        Term_putstr(col, prompt_row, -1, TERM_YELLOW, prompt);
     }
     sdl_touch_pane_begin_yes_no_prompt_lower("Enter Morgoth's hall?");
     Term_fresh();
@@ -154,6 +158,7 @@ bool confirm_enter_morgoth_hall(void)
 
     /* Restore screen */
     sdl_touch_pane_end_yes_no_prompt();
+    screen_pop_supporting_panes_hidden();
     screen_load();
 
     /* Normal negation */

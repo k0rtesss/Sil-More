@@ -230,23 +230,38 @@ void atomonth(int number, char* output)
 
 
 
+static int silmarils_in_object(const object_type* o_ptr)
+{
+    if (!o_ptr)
+        return 0;
+
+    if ((o_ptr->tval == TV_LIGHT)
+        && (o_ptr->sval == SV_LIGHT_SILMARIL))
+    {
+        return o_ptr->number;
+    }
+
+    if (o_ptr->name1 == ART_MORGOTH_1)
+        return 1;
+    if (o_ptr->name1 == ART_MORGOTH_2)
+        return 2;
+    if (o_ptr->name1 == ART_MORGOTH_3)
+        return 3;
+
+    return 0;
+}
+
 int silmarils_possessed(void)
 {
     int silmarils = 0;
     int i;
 
     for (i = 0; i < INVEN_TOTAL; i++)
-    {
-        if (((&inventory[i])->tval == TV_LIGHT)
-            && ((&inventory[i])->sval == SV_LIGHT_SILMARIL))
-            silmarils += (&inventory[i])->number;
-        if ((&inventory[i])->name1 == ART_MORGOTH_1)
-            silmarils += 1;
-        if ((&inventory[i])->name1 == ART_MORGOTH_2)
-            silmarils += 2;
-        if ((&inventory[i])->name1 == ART_MORGOTH_3)
-            silmarils += 3;
-    }
+        silmarils += silmarils_in_object(&inventory[i]);
+
+    /* Expandable carried entries live outside the legacy inventory array. */
+    for (i = 0; i < player_carried_extra_entry_count(); i++)
+        silmarils += silmarils_in_object(player_carried_extra_entry_at(i));
 
     return silmarils;
 }
@@ -266,6 +281,16 @@ int has_iron_crown(void)
         {
             return name1;  // Return which crown variant they have
         }
+    }
+
+    /* The crown can also be in an expandable carried Pack/Harness entry. */
+    for (i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        object_type* o_ptr = player_carried_extra_entry_at(i);
+        int name1 = o_ptr ? o_ptr->name1 : 0;
+
+        if ((name1 >= ART_MORGOTH_0) && (name1 <= ART_MORGOTH_3))
+            return name1;
     }
 
     return 0;  // No crown
