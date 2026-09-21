@@ -281,21 +281,52 @@ static void test_flow_targets_and_poison_merge(void)
     CHECK(flow_dist(1, 10, 2) == FLOW_MAX_DIST);
 }
 
-static int masked_roll(int seed, bool masking, bool visible, bool moving,
-    bool combat)
+static int masked_roll_kind(int seed, int kind, bool visible, bool moving,
+    bool combat, bool main_roll, int difficulty)
 {
     monster_type* m = reset_map();
     m->alertness = ALERTNESS_UNWARY;
     if (visible) for (int y=1; y<14; y++) tile(y,11,FEAT_FLOOR);
     update_flow(5,6,FLOW_PLAYER_NOISE);
-    if (masking) cave_event_emit(CAVE_EVENT_COLLAPSE,m->fy,m->fx,30);
+    if (kind) cave_event_emit(kind,m->fy,m->fx,24);
     cave_events_player_moved(moving);
     player_attacked = combat; attacked_player = false;
     Rand_state_init(seed);
-    monster_perception(true,true,5);
-    if (masking && !visible && m->alertness == ALERTNESS_UNWARY)
+    monster_perception(true,main_roll,difficulty);
+    if (kind && !visible && m->alertness == ALERTNESS_UNWARY)
         CHECK(m->ai.sense.kind == MON_SENSE_NONE);
     return m->alertness;
+}
+static int masked_roll(int seed, bool masking, bool visible, bool moving,
+    bool combat)
+{
+    return masked_roll_kind(seed, masking ? CAVE_EVENT_COLLAPSE : CAVE_EVENT_NONE,
+        visible, moving, combat, true, 5);
+}
+
+static void test_fighting_sound_masking(void)
+{
+    for (int mode = 0; mode < 4; mode++)
+    {
+        int quiet = 0, masked = 0;
+        bool moving = mode == 0, combat = mode == 2, main_roll = mode != 3;
+        for (int seed = 1; seed <= 100; seed++)
+        {
+            int q = masked_roll_kind(seed, CAVE_EVENT_NONE, false, moving,
+                combat, main_roll, 5);
+            int m = masked_roll_kind(seed, CAVE_EVENT_FIGHT, false, moving,
+                combat, main_roll, 5);
+            CHECK(m <= q); quiet += q; masked += m;
+            CHECK(masked_roll_kind(seed, CAVE_EVENT_NONE, true, moving,
+                combat, main_roll, 5)
+                == masked_roll_kind(seed, CAVE_EVENT_FIGHT, true, moving,
+                    combat, main_roll, 5));
+            /* A sufficiently loud noise remains audible through the fight. */
+            CHECK(masked_roll_kind(seed, CAVE_EVENT_FIGHT, false, moving,
+                combat, main_roll, -100) > ALERTNESS_ALERT);
+        }
+        CHECK(masked < quiet);
+    }
 }
 static void test_world_sound_masking(void)
 {
@@ -317,6 +348,7 @@ static void test_world_sound_masking(void)
 int main(void)
 {
     test_world_sound_masking();
+    test_fighting_sound_masking();
     test_capabilities_and_acquisition(); test_local_trails();
     test_hearing_and_recognition(); test_deposition_and_roundtrip();
     test_known_target_pursuit();

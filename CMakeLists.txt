@@ -425,6 +425,7 @@ set(SIL_MORE_SOURCES
     src/monster/monster-world.c
     src/monster/monster-tactics.c
     src/monster/monster-thrall.c
+    src/monster/monster-social.c
     src/cave/cave-light.c
     src/monster/monster-summon.c
     src/monster/monster-update.c

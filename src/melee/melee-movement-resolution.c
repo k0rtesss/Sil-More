@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "monster/monster-senses.h"
+#include "monster/monster-social.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-tactics.h"
 #include "externs.h"
@@ -396,7 +397,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
     if (do_move)
     {
         /* Entering a wall */
-        if (cave_info[ny][nx] & (CAVE_WALL))
+        if (cave_monster_wall_bold(ny, nx))
         {
             /* Monster passes through walls (and doors) */
             if (r_ptr->flags2 & (RF2_PASS_WALL))
@@ -787,7 +788,6 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
         {
             int i;
             monster_type* n_ptr;
-            monster_race* nr_ptr;
             bool alerted_others = false;
 
             /* Scan all other monsters */
@@ -795,14 +795,15 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
             {
                 /* Access the monster */
                 n_ptr = &mon_list[i];
-                nr_ptr = &r_info[n_ptr->r_idx];
 
                 /* Ignore dead monsters */
                 if (!n_ptr->r_idx || n_ptr == m_ptr)
                     continue;
 
-                /* Ignore monsters with the wrong symbol */
-                if (r_ptr->d_char != nr_ptr->d_char)
+                /* Scent directions are shared only with actual allies.  A
+                 * common glyph is not enough to cross a local feud or a
+                 * different custom band. */
+                if (!monster_social_allies(m_ptr, n_ptr))
                     continue;
 
                 /* Ignore monsters with specific orders */

@@ -1,6 +1,7 @@
 /* File: monster-list.c */
 
 #include "monster-internal.h"
+#include "monster-social.h"
 
 /*
  * Return another race for a monster to polymorph into.  -LM-
@@ -146,6 +147,7 @@ void delete_monster_idx(int i)
     cave_m_idx[y][x] = 0;
     song_disguise_handle_monster_removed(i);
     song_duels_handle_monster_removed(i);
+    monster_social_remap(i, 0);
 
     /* Delete objects */
     for (this_o_idx = m_ptr->hold_o_idx; this_o_idx; this_o_idx = next_o_idx)
@@ -274,6 +276,7 @@ static void compact_monsters_aux(int i1, int i2)
         p_ptr->health_who = i2;
 
     /* Hack -- move monster */
+    monster_social_remap(i1, i2);
     memcpy(&mon_list[i2], &mon_list[i1], sizeof(monster_type));
 
     /* Hack -- wipe hole */
@@ -431,6 +434,8 @@ void compact_monsters(int size)
 void wipe_mon_list(void)
 {
     int i;
+
+    monster_social_reset();
 
     /* Delete all the monsters */
     for (i = mon_max - 1; i >= 1; i--)

@@ -4,6 +4,7 @@
 #include "melee/melee-util.h"
 #include "monster/monster-abilities.h"
 #include "monster/monster-ai.h"
+#include "monster/monster-social.h"
 #include "monster/monster-tactics.h"
 #include "monster/monster-senses.h"
 #include "cave/cave-light.h"
@@ -45,8 +46,10 @@ static int tactical_confidence(const monster_type* m_ptr, int feature)
 
 static bool tactical_ally(monster_type* m_ptr, int y, int x)
 {
-    return in_bounds(y, x) && !(y == m_ptr->fy && x == m_ptr->fx)
-        && attacker_at(y, x) && los(m_ptr->fy, m_ptr->fx, y, x);
+    if (!in_bounds(y, x) || (y == m_ptr->fy && x == m_ptr->fx)
+        || cave_m_idx[y][x] <= 0 || !los(m_ptr->fy, m_ptr->fx, y, x))
+        return false;
+    return monster_social_allies(m_ptr, &mon_list[cave_m_idx[y][x]]);
 }
 
 /* Terrain is observable; hidden traps and player equipment are not. */

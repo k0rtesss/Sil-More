@@ -17,7 +17,8 @@ static bool thrall_can_walk(int y, int x)
 {
     return in_bounds_fully(y, x) && cave_empty_bold(y, x)
         && !cave_trap_bold(y, x) && !cave_glyph(y, x)
-        && cave_feat[y][x] != FEAT_DEEP_WATER;
+        && cave_feat[y][x] != FEAT_DEEP_WATER
+        && cave_feat[y][x] != FEAT_ILLUSORY_WALL;
 }
 
 static void thrall_wander(monster_type* m_ptr)
@@ -34,7 +35,8 @@ static void thrall_wander(monster_type* m_ptr)
             continue;
         int feat = cave_feat[y][x];
         if (thrall_can_walk(y, x)
-            || (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL))
+            || (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL)
+            || feat == FEAT_ILLUSORY_WALL)
             choices[count++] = i;
     }
     if (!count)

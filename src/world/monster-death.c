@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "monster/monster-ai.h"
+#include "monster/monster-social.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -121,15 +122,14 @@ extern void break_truce(bool obvious)
 }
 
 /*
- * Checks whether monsters on two separate coordinates are of the same type
- * (i.e. the same letter or share an RF3_ race flag)
+ * Checks whether monsters on two separate coordinates can cooperate.  The
+ * social layer owns race/glyph compatibility, wandering bands, and local
+ * hostilities; callers retain this coordinate-based convenience wrapper.
  */
 bool similar_monsters(int m1y, int m1x, int m2y, int m2x)
 {
     monster_type* m_ptr;
-    monster_race* r_ptr;
     monster_type* n_ptr;
-    monster_race* nr_ptr;
 
     /*first check if there are monsters on both coordinates*/
     if (!(cave_m_idx[m1y][m1x] > 0))
@@ -139,35 +139,15 @@ bool similar_monsters(int m1y, int m1x, int m2y, int m2x)
 
     /* Access monster 1*/
     m_ptr = &mon_list[cave_m_idx[m1y][m1x]];
-    r_ptr = &r_info[m_ptr->r_idx];
 
     /* Access monster 2*/
     n_ptr = &mon_list[cave_m_idx[m2y][m2x]];
-    nr_ptr = &r_info[n_ptr->r_idx];
-
-    /* Monsters have the same symbol */
-    if (r_ptr->d_char == nr_ptr->d_char)
-        return (true);
-
-    /*
-     * Same race (we are not checking all RF3 types
-     * because that would be true at
-     * the symbol check
-     */
-    if ((r_ptr->flags3 & (RF3_DRAGON)) && (nr_ptr->flags3 & (RF3_DRAGON)))
-        return (true);
-    if ((r_ptr->flags3 & (RF3_SERPENT)) && (nr_ptr->flags3 & (RF3_SERPENT)))
-        return (true);
-    if ((r_ptr->flags3 & (RF3_HORROR)) && (nr_ptr->flags3 & (RF3_HORROR)))
-        return (true);
-
-    /*Not the same*/
-    return (false);
+    return monster_social_allies(m_ptr, n_ptr);
 }
 
 /*
- *  Cause a temporary penalty to morale in monsters of the same type who can see
- * the specified monster. (Used when it dies and for cruel blow).
+ *  Cause a temporary penalty to allied monsters that can see the specified
+ * monster. (Used when it dies and for cruel blow).
  */
 static void scare_onlooking_friends_observed(
     const monster_type* m_ptr, int amount, bool weapon_fear)
@@ -193,10 +173,10 @@ static void scare_onlooking_friends_observed(
         y = n_ptr->fy;
         x = n_ptr->fx;
 
-        // Only consider alert monsters of the same type in line of sight
+        // Only consider alert allies in line of sight
         if ((n_ptr->alertness >= ALERTNESS_ALERT)
             && !(r_ptr->flags3 & (RF3_NO_FEAR))
-            && similar_monsters(fy, fx, y, x) && los(y, x, fy, fx))
+            && monster_social_allies(m_ptr, n_ptr) && los(y, x, fy, fx))
         {
             // cause a temporary morale penalty
             n_ptr->tmp_morale += amount;
@@ -1252,6 +1232,12 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
 {
     monster_type* m_ptr = &mon_list[m_idx];
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
+
+    /* Even an armour-absorbed player hit is a social threat.  Ambient
+     * monster damage uses who == 0, while direct player damage uses a
+     * negative source index. */
+    if (who < 0)
+        monster_social_player_attack(m_ptr);
 
     /* Redraw (later) if needed */
     if (p_ptr->health_who == m_idx)

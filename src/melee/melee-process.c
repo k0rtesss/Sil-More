@@ -8,6 +8,7 @@
 #include "melee/melee-util.h"
 #include "monster/monster-senses.h"
 #include "monster/monster-world.h"
+#include "monster/monster-social.h"
 #include "cave/cave-events.h"
 
 int challenge_check(monster_type* m_ptr)
@@ -496,6 +497,9 @@ static void process_monster(monster_type* m_ptr)
     }
 
     monster_senses_refresh(m_ptr);
+
+    if (monster_social_turn(m_ptr))
+        return;
 
     if (monster_world_turn(m_ptr))
         return;
@@ -1057,7 +1061,7 @@ int morale_from_friends(monster_type* m_ptr)
 
         // Only consider alert monsters of the same type in line of sight
         if ((n_ptr->alertness >= ALERTNESS_ALERT)
-            && similar_monsters(fy, fx, y, x) && los(fy, fx, y, x))
+            && monster_social_allies(m_ptr, n_ptr) && los(fy, fx, y, x))
         {
             monster_race* nr_ptr = &r_info[n_ptr->r_idx];
             int multiplier = 1;
@@ -1595,6 +1599,7 @@ void process_monsters(s16b minimum_energy)
         old_y = m_ptr->fy;
         old_x = m_ptr->fx;
         monster_ai_begin_turn(m_ptr);
+        monster_social_tick(m_ptr);
         monster_abilities_begin_action(m_ptr);
 
         /* Lava also affects sleeping monsters and those missing their turn. */
@@ -1807,6 +1812,12 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
             if (player_centered && main_roll && !combat_noise_bonus
                 && cave_events_player_is_moving())
                 movement_mask = cave_sound_mask_at(m_ptr->fy, m_ptr->fx);
+            /* A nearby brawl distracts hearing even while the player stands
+             * still. Loud player actions still use their usual difficulty;
+             * masking is a penalty, never immunity to being heard. */
+            if (player_centered)
+                movement_mask = MAX(movement_mask,
+                    cave_fighting_mask_at(m_ptr->fy, m_ptr->fx));
             /* Hearing is masked; visual recognition retains its quiet baseline. */
             if (!sees_player) m_perception -= movement_mask;
 

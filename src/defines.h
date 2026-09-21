@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 18 /* Illusory walls, following the living-dungeon format. */
+#define VERSION_EXTRA 20 /* Dispute phases, witness responses and attention. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -3743,6 +3743,11 @@
  */
 #define cave_wall_bold(Y, X)                                                   \
     ((cave_feat[Y][X] >= FEAT_WALL_HEAD) && (cave_feat[Y][X] <= FEAT_WALL_TAIL))
+
+/* Illusory walls remain player-passable, but monsters perceive them as walls. */
+#define cave_monster_wall_bold(Y, X)                                           \
+    ((cave_info[Y][X] & (CAVE_WALL))                                           \
+        || (cave_feat[Y][X] == FEAT_ILLUSORY_WALL))
 
 /*
  * Determine if a "legal" grid is an "impassable" grid

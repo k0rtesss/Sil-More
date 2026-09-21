@@ -3,6 +3,7 @@
 #include "angband.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-senses.h"
+#include "monster/monster-social.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-water-flow.h"
 #include "blitz.h"
@@ -138,6 +139,28 @@ static void wr_flood_surface_markers(void)
             wr_byte((byte)x);
             wr_byte(kind);
         }
+}
+
+static void wr_monster_social(void)
+{
+    wr_u16b(MON_SOCIAL_SAVE_MAGIC);
+    for (int a = 1; a < MON_GROUP_MAX; a++)
+        for (int b = a + 1; b < MON_GROUP_MAX; b++)
+            wr_byte((byte)monster_group_relation(a, b));
+    wr_u16b(mon_max);
+    for (int i = 1; i < mon_max; i++)
+    {
+        const monster_type* m = &mon_list[i];
+        wr_byte(m->social_group);
+        wr_s16b(m->social_rival);
+        wr_byte(m->social_memory);
+        wr_byte(m->social_cooldown);
+        wr_byte(m->social_state);
+        wr_byte(m->social_timer);
+        wr_s16b(m->social_focus);
+        wr_s16b(m->social_ally);
+        wr_byte(m->social_player_threat);
+    }
 }
 
 /*
@@ -498,6 +521,7 @@ void wr_dungeon(void)
     wr_flood_trap_kinds();
     wr_flood_surface_markers();
     save_write_environment();
+    wr_monster_social();
 
     log_debug("Dungeon data write completed - %d objects, %d monsters", o_max - 1, mon_max - 1);
     log_trace("[save:%06u] === END DUNGEON ===", (unsigned)save_byte_offset);

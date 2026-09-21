@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "melee/melee-util.h"
+#include "monster/monster-social.h"
 #include <assert.h>
 #include <stdio.h>
 #include <time.h>
@@ -278,6 +279,17 @@ static void test_tactics(void)
     occupants[4][6] = 2;
     CHECK(get_move_tactical(m, &y, &x));
     CHECK(y == 5 && x == 4); /* Spread opposite the allied attacker. */
+    /* Formation scoring must ignore a physically adjacent hostile creature,
+     * even when the two races would otherwise share the fallback glyph. */
+    monster_social_reset();
+    CHECK(monster_social_set_group(m, MON_GROUP_CUSTOM_FIRST));
+    CHECK(monster_social_set_group(&monsters[2], MON_GROUP_CUSTOM_FIRST));
+    CHECK(tactical_ally(m, 4, 6));
+    CHECK(monster_social_set_group(&monsters[2], MON_GROUP_CUSTOM_FIRST + 1));
+    CHECK(monster_group_set_relation(MON_GROUP_CUSTOM_FIRST,
+        MON_GROUP_CUSTOM_FIRST + 1, MON_REL_HOSTILE));
+    CHECK(!tactical_ally(m, 4, 6));
+    monster_social_reset();
     move_monster(m, y, x);
     CHECK(!get_move_tactical(m, &y, &x));
     m = reset_map(7, 7, 1, 1, 1, 2);

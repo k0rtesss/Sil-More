@@ -411,7 +411,7 @@ static void test_legacy_absence(void)
 '''
 
 
-def main():
+def main(extra_tests="", extra_calls=""):
     OUT.mkdir(parents=True, exist_ok=True)
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index("static const char* guids[]")]
     prefix += '\n#include "monster/monster-ai.h"\n#include "monster/monster-senses.h"\n'
@@ -420,8 +420,9 @@ def main():
     init = ENGINE_FIXTURE[ENGINE_FIXTURE.index("int main(int argc,char** argv)"):]
     init = init[:init.index("    check_templates();")]
     harness = prefix + fixture_function("terminal_extra") + "\n"
-    harness += fixture_function("reset_map") + "\n" + TESTS + "\n" + init
+    harness += fixture_function("reset_map") + "\n" + TESTS + "\n" + extra_tests + "\n" + init
     harness += '    test_current_roundtrip(); test_monster_record_legacy_compatibility(); test_legacy_absence();\n'
+    harness += extra_calls + '\n'
     harness += '    puts("Monster dungeon scent persistence integration: PASS.");\n'
     harness += '    SDL_Quit(); return 0;\n}\n'
     sources = []

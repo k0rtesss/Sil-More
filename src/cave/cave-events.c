@@ -158,6 +158,15 @@ int cave_sound_mask_at(int y, int x)
         mask = MAX(mask, event_strength(i, y, x) / 3);
     return MIN(10, mask);
 }
+int cave_fighting_mask_at(int y, int x)
+{
+    int mask = 0;
+    for (int i = 0; i < CAVE_EVENTS_MAX; i++)
+        if (events[i].kind == CAVE_EVENT_FIGHT)
+            mask = MAX(mask, event_strength(i, y, x) / 3);
+    return MIN(10, mask);
+}
+
 static const char* event_noise(int kind)
 {
     switch (kind)
@@ -171,6 +180,7 @@ static const char* event_noise(int kind)
         case CAVE_EVENT_THAW: return "ice breaking and water dripping";
         case CAVE_EVENT_BRIDGE: return "timbers and masonry shifting";
         case CAVE_EVENT_VENT: return "a hissing vent";
+        case CAVE_EVENT_FIGHT: return "shouts and clashing weapons";
         default: return "an ominous rumble";
     }
 }

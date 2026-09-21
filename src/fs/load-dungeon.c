@@ -3,6 +3,7 @@
 #include "angband.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-senses.h"
+#include "monster/monster-social.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-water-flow.h"
 #include "blitz.h"
@@ -25,6 +26,74 @@
  * Read one dungeon RLE pair.  The low-level reader returns zero at EOF, so
  * verify that both bytes actually advanced the stream before inspecting them.
  */
+static errr rd_monster_social(void)
+{
+    monster_social_reset();
+    if (!savefile_version_at_least(0, 9, 8, 19)) return 0;
+    u16b magic = 0, count = 0;
+    u32b start = load_byte_offset;
+    rd_u16b(&magic);
+    if (magic != MON_SOCIAL_SAVE_MAGIC || load_byte_offset - start != 2)
+        goto invalid;
+    for (int a = 1; a < MON_GROUP_MAX; a++)
+        for (int b = a + 1; b < MON_GROUP_MAX; b++)
+        {
+            byte relation = 0;
+            start = load_byte_offset;
+            rd_byte(&relation);
+            if (load_byte_offset - start != 1
+                || !monster_group_set_relation(a, b, relation)) goto invalid;
+        }
+    start = load_byte_offset;
+    rd_u16b(&count);
+    if (load_byte_offset - start != 2 || count != mon_max) goto invalid;
+    for (int i = 1; i < mon_max; i++)
+    {
+        monster_type* m = &mon_list[i];
+        start = load_byte_offset;
+        rd_byte(&m->social_group);
+        rd_s16b(&m->social_rival);
+        rd_byte(&m->social_memory);
+        rd_byte(&m->social_cooldown);
+        if (savefile_version_at_least(0, 9, 8, 20))
+        {
+            rd_byte(&m->social_state);
+            rd_byte(&m->social_timer);
+            rd_s16b(&m->social_focus);
+            rd_s16b(&m->social_ally);
+            rd_byte(&m->social_player_threat);
+            if (load_byte_offset - start != MON_SOCIAL_RECORD_BYTES) goto invalid;
+        }
+        else
+        {
+            if (load_byte_offset - start != 5) goto invalid;
+            /* Old feuds were already fighting; give them a bounded duration. */
+            if (m->social_rival)
+            {
+                m->social_state = MON_SOCIAL_FIGHT;
+                m->social_timer = MON_SOCIAL_DISPUTE_ACTIONS;
+            }
+        }
+        if (!monster_social_valid(m)) goto invalid;
+    }
+    /* Personal quarrels are always mutual. Reject mismatched/reused indices. */
+    for (int i = 1; i < mon_max; i++)
+    {
+        const monster_type* m = &mon_list[i];
+        if (m->social_rival && (mon_list[m->social_rival].social_rival != i
+                || mon_list[m->social_rival].social_state != m->social_state)) goto invalid;
+        if (m->social_state == MON_SOCIAL_HELP
+            && (mon_list[m->social_ally].social_rival != m->social_focus
+                || mon_list[m->social_ally].social_state != MON_SOCIAL_FIGHT)) goto invalid;
+    }
+    if (!load_only_checksums_remain()) goto invalid;
+    return 0;
+invalid:
+    monster_social_reset();
+    note("Invalid monster relationships.");
+    return -1;
+}
+
 static errr rd_floods(void)
 {
     u16b magic = 0, count = 0;
@@ -1132,6 +1201,8 @@ errr rd_dungeon(void)
     if (rd_flood_surface_markers())
         return -1;
     if (load_read_environment())
+        return -1;
+    if (rd_monster_social())
         return -1;
 
     /*** Success ***/

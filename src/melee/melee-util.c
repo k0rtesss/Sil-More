@@ -2,6 +2,7 @@
 #include "externs.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-util.h"
+#include "monster/monster-social.h"
 
 int get_scent(int y, int x)
 {
@@ -71,7 +72,7 @@ bool cave_exist_mon(
     }
 
     /* Feature is not a wall */
-    if (!(cave_info[y][x] & (CAVE_WALL)))
+    if (!cave_monster_wall_bold(y, x))
         return (true);
 
     /* Feature is a wall */
@@ -260,7 +261,7 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
     /*** Check passability of various features. ***/
 
     /* Feature is not a wall */
-    if (!(cave_info[y][x] & (CAVE_WALL)))
+    if (!cave_monster_wall_bold(y, x))
     {
         /* Any monster can handle floors, except glyphs and chasms, which are
          * handled above */
@@ -272,7 +273,7 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
     {
         /* Granite, Quartz, Rubble */
         if (((feat >= FEAT_QUARTZ) && (feat <= FEAT_WALL_SOLID))
-            || (feat == FEAT_RUBBLE))
+            || (feat == FEAT_RUBBLE) || (feat == FEAT_ILLUSORY_WALL))
         {
             /* Impassible except for monsters that move through walls */
             if ((r_ptr->flags2 & (RF2_PASS_WALL))
@@ -503,7 +504,7 @@ int monster_step_cost(monster_type* m_ptr,
         if (!(r_ptr->flags2 & (RF2_PASS_DOOR | RF2_PASS_WALL)))
             cost++;
     }
-    else if (cave_wall_bold(to_y, to_x)
+    else if (cave_monster_wall_bold(to_y, to_x)
         && !(r_ptr->flags2 & RF2_PASS_WALL))
     {
         if (r_ptr->flags2 & RF2_KILL_WALL)
@@ -563,7 +564,6 @@ int adj_mon_count(int y, int x)
 void tell_allies(int y, int x, u32b flag)
 {
     monster_type* m_ptr;
-    monster_race* r_ptr;
 
     int i;
 
@@ -574,27 +574,25 @@ void tell_allies(int y, int x, u32b flag)
         return;
 
     m_ptr = &mon_list[cave_m_idx[y][x]];
-    r_ptr = &r_info[m_ptr->r_idx];
 
     /* Scan all other monsters */
     for (i = mon_max - 1; i >= 1; i--)
     {
         /* Access the monster */
         monster_type* n_ptr = &mon_list[i];
-        monster_race* nr_ptr = &r_info[n_ptr->r_idx];
 
         int dist;
 
         // Access the monster
         n_ptr = &mon_list[i];
-        nr_ptr = &r_info[n_ptr->r_idx];
 
         // Ignore dead monsters
         if (!n_ptr->r_idx)
             continue;
 
-        // Ignore monsters with the wrong symbol
-        if (r_ptr->d_char != nr_ptr->d_char)
+        /* Only actual social allies receive this warning.  In particular,
+         * shared glyphs and broad race flags do not override a local feud. */
+        if (!monster_social_allies(m_ptr, n_ptr))
             continue;
 
         // Ignore monsters that already know

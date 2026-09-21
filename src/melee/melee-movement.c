@@ -551,7 +551,7 @@ static void make_confused_move(monster_type* m_ptr, int y, int x)
     }
 
     /* Feature is a wall */
-    else if (cave_info[y][x] & (CAVE_WALL))
+    else if (cave_monster_wall_bold(y, x))
     {
         /* Feature is a (known) door */
         if (cave_known_closed_door_bold(y, x))

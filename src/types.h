@@ -828,6 +828,14 @@ struct monster_type
     monster_ai_state ai; /* Bounded, individually witnessed tactical knowledge. */
     monster_world_state world; /* Environmental memory survives list compaction. */
 
+    byte social_group; /* Zero infers race membership; otherwise a band ID. */
+    s16b social_rival; /* Personal feud, repaired on deletion/compaction. */
+    byte social_memory; /* Actions before an unseen rival is forgotten. */
+    byte social_cooldown; /* Delay before another spontaneous quarrel. */
+    byte social_state, social_timer; /* Challenge, fight, help, or withdrawal. */
+    s16b social_focus, social_ally; /* Witness's threat and supported combatant. */
+    byte social_player_threat; /* Recent player aggression, in own actions. */
+
     byte blow_dd_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage dice */
     byte blow_ds_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage sides */
     byte armor_ps_reduction; /* Reduction applied to protection sides */

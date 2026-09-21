@@ -2,6 +2,7 @@
 
 #include "monster-internal.h"
 #include "monster-ai.h"
+#include "monster-social.h"
 
 /*
  * Pronoun arrays, by gender.
@@ -620,6 +621,14 @@ static void describe_monster_live_state(const monster_type* m_ptr)
         ? (m_ptr->morale + 9) / 10 : m_ptr->morale / 10;
     text_out_c(m_ptr->morale < 0 ? TERM_L_RED : TERM_SLATE,
         format("Morale: %d.  ", morale));
+    switch (m_ptr->social_state)
+    {
+        case MON_SOCIAL_CHALLENGE: text_out("It is confronting a rival.  "); break;
+        case MON_SOCIAL_FIGHT: text_out("It has an ongoing quarrel.  "); break;
+        case MON_SOCIAL_HELP: text_out("It has taken an ally's side in a quarrel.  "); break;
+        case MON_SOCIAL_AVOID: text_out("It is trying to withdraw from a disturbance.  "); break;
+        default: break;
+    }
     if (monster_ai_confidence(m_ptr, MON_AI_SLAY_FEAR) > 0)
         text_out("It remembers weapon strikes that frightened its kind.  ");
     describe_monster_observations(m_ptr);

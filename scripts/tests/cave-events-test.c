@@ -19,6 +19,17 @@ int main(void)
     for(int y=0;y<15;y++) for(int x=0;x<22;x++)
         features[y][x]=(!y||!x||y==14||x==21||x==11)?FEAT_WALL_PERM:FEAT_FLOOR;
     cave_events_reset(); cave_water_flow_reset();
+    cave_event_emit(CAVE_EVENT_FIGHT,5,8,24);
+    CHECK(cave_fighting_mask_at(5,8)==8);
+    CHECK(cave_fighting_mask_at(5,3)>0);
+    CHECK(cave_fighting_mask_at(5,18)==0);
+    cave_events_process();
+    CHECK(strstr(last_message,"shouts and clashing weapons to the east")!=NULL);
+    memcpy(saved,cave_events_state(),sizeof(saved));
+    cave_events_restore(saved,cave_events_next_serial());
+    CHECK(cave_fighting_mask_at(5,8)==8);
+    turn+=60; CHECK(cave_fighting_mask_at(5,8)==0);
+    turn=100; cave_events_reset(); notices=interruptions=0;
     cave_event_emit(CAVE_EVENT_BUILD,5,8,20);
     CHECK(cave_event_for_listener(5,3,10,0,&e)); CHECK(e.y==5 && e.x==8);
     CHECK(!cave_event_for_listener(5,18,100,0,&e));
@@ -45,6 +56,13 @@ int main(void)
     CHECK(cave_sound_mask_at(5,8)==0);
     features[5][5]=FEAT_WALL_PERM; cave_events_terrain_changed();
     CHECK(!cave_event_for_listener(5,8,100,0,&e));
+    cave_events_reset(); features[5][5]=FEAT_FLOOR; cave_events_terrain_changed();
+    cave_event_emit(CAVE_EVENT_FIGHT,5,2,24);
+    CHECK(cave_fighting_mask_at(5,8)==6);
+    features[5][5]=FEAT_DOOR_HEAD; cave_events_terrain_changed();
+    CHECK(cave_fighting_mask_at(5,8)==4);
+    features[5][5]=FEAT_WALL_PERM; cave_events_terrain_changed();
+    CHECK(cave_fighting_mask_at(5,8)==0);
     cave_events_reset(); features[7][7]=FEAT_FLOOR; features[8][8]=FEAT_FLOOR;
     cave_event_emit(CAVE_EVENT_COLLAPSE,7,7,30); cave_events_terrain_changed();
     CHECK(!cave_event_for_listener(8,8,100,0,&e));

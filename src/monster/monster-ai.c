@@ -2,6 +2,7 @@
 #include "externs.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-senses.h"
+#include "monster/monster-social.h"
 #include <string.h>
 
 _Static_assert(MON_AI_SLAY_FEAR + 1 == MON_AI_FEATURE_COUNT,
@@ -81,6 +82,12 @@ void monster_ai_witness(int feature, int evidence, int y, int x)
 
 void monster_ai_player_attack(monster_type* target, int attack_type)
 {
+    /* Player aggression is a social signal even when this monster cannot
+     * currently learn the corresponding combat technique.  Record it before
+     * the visibility and knowledge filters below. */
+    if (target && target->r_idx)
+        monster_social_player_attack(target);
+
     int feature = -1;
     switch (attack_type)
     {
@@ -147,16 +154,6 @@ void monster_ai_player_action(void)
     }
 }
 
-static bool warning_allies(const monster_race* a, const monster_race* b)
-{
-    u32b company = RF3_ORC | RF3_MAN | RF3_RAUKO;
-    if ((a->flags3 & company) && (b->flags3 & company))
-        return true;
-    if ((a->flags3 & RF3_DRAGON) && (b->flags3 & RF3_DRAGON))
-        return true;
-    return a->d_char == b->d_char;
-}
-
 void monster_ai_share_warning(monster_type* source)
 {
     if (!monster_ai_enabled(source) || source->confused
@@ -194,7 +191,7 @@ void monster_ai_share_warning(monster_type* source)
             || target->alertness < ALERTNESS_UNWARY
             || distance(source->fy, source->fx, target->fy, target->fx) > 12
             || !los(source->fy, source->fx, target->fy, target->fx)
-            || !warning_allies(&r_info[source->r_idx], &r_info[target->r_idx]))
+            || !monster_social_allies(source, target))
             continue;
         for (int n = 0; n < 2; ++n)
         {

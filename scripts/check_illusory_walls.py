@@ -15,6 +15,18 @@ static bool same_illusion_cell(SDL_Surface* a,SDL_Surface* b,int big) {
                   (byte*)b->pixels+row*b->pitch+x*4,(big?32:16)*4)) return false;
     return true;
 }
+static int illusion_count(void) {
+    int count = 0;
+    for (int y=0; y<p_ptr->cur_map_hgt; y++)
+        for (int x=0; x<p_ptr->cur_map_wid; x++)
+            if (cave_feat[y][x] == FEAT_ILLUSORY_WALL) count++;
+    return count;
+}
+static void illusion_separator(int y, int x) {
+    cave_set_feat(y, x, FEAT_WALL_EXTRA);
+    cave_set_feat(y, x - 1, FEAT_WALL_EXTRA);
+    cave_set_feat(y, x + 1, FEAT_WALL_EXTRA);
+}
 static void illusion_tests(void) {
     messages_init();
     assert(option_norm[OPT_illusory_walls]);
@@ -42,9 +54,39 @@ static void illusion_tests(void) {
     }
     puts("Illusion generation: default on, option off, protected rooms, permanent walls, special depth, fixtures and hazards: PASS");
 
+    /* The target count follows the map dimensions, like the stair count. */
+    water_map(66,66,FEAT_FLOOR);
+    illusion_separator(10,10); illusion_separator(20,20);
+    illusion_separator(30,30); illusion_separator(40,40);
+    op_ptr->opt[OPT_illusory_walls] = true;
+    place_illusory_passages();
+    int small_count = illusion_count();
+    water_map(165,165,FEAT_FLOOR);
+    illusion_separator(10,10); illusion_separator(30,30);
+    illusion_separator(50,50); illusion_separator(70,70);
+    illusion_separator(90,90); illusion_separator(110,110);
+    illusion_separator(130,130); illusion_separator(150,150);
+    place_illusory_passages();
+    int large_count = illusion_count();
+    assert(small_count == 2 && large_count == 8);
+    puts("Illusion generation: map-size scaling: PASS");
+
     water_map(24,24,FEAT_FLOOR);
     cave_set_feat(10,11,FEAT_ILLUSORY_WALL);
     assert(cave_floor_bold(10,11) && !cave_known_closed_door_bold(10,11));
+    assert(cave_monster_wall_bold(10,11));
+    monster_type* m = &mon_list[1];
+    memset(m, 0, sizeof(*m));
+    m->r_idx = 1; m->fy = 10; m->fx = 10;
+    cave_m_idx[10][10] = 1;
+    u32b old_flags2 = r_info[1].flags2;
+    r_info[1].flags2 = 0;
+    bool bash = false;
+    assert(!cave_exist_mon(&r_info[1], 10, 11, false, false));
+    assert(cave_passable_mon(m, 10, 11, &bash) == 0);
+    assert(monster_step_cost(m, 10, 10, 10, 11) == 0);
+    r_info[1].flags2 = old_flags2;
+    cave_m_idx[10][10] = 0;
     for (int light=-5; light<=10; light++) {
         cave_light[10][11]=light;
         assert(cave_illusion_opacity(10,11)==255-30*MIN(5,MAX(0,light)));

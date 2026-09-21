@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "monster/monster-ai.h"
+#include "monster/monster-social.h"
 #include "monster/monster-tactics.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -275,6 +276,43 @@ static void test_observed_choices_and_pure_previews(void)
     CHECK(calls == random_calls);
 }
 
+static void test_cooperation_gates(void)
+{
+    monster_type* m = setup();
+    monster_type* ally = &monsters[2];
+    monster_social_reset();
+    ally->r_idx = 2; ally->fy = 10; ally->fx = 11;
+    ally->alertness = ALERTNESS_ALERT;
+    ally->stance = STANCE_FLEEING;
+    occupants[10][11] = 2;
+    races[1].flags4 = RF4_RALLY;
+    races[2].flags3 = RF3_ORC;
+    CHECK(monster_social_set_group(m, MON_GROUP_CUSTOM_FIRST));
+    CHECK(monster_social_set_group(ally, MON_GROUP_CUSTOM_FIRST));
+    CHECK(monster_ranged_utility(m, 96 + 24) > 0);
+    CHECK(monster_social_set_group(ally, MON_GROUP_CUSTOM_FIRST + 1));
+    CHECK(monster_group_set_relation(MON_GROUP_CUSTOM_FIRST,
+        MON_GROUP_CUSTOM_FIRST + 1, MON_REL_HOSTILE));
+    CHECK(monster_ranged_utility(m, 96 + 24) == 0);
+
+    m = setup();
+    ally = &monsters[2];
+    monster_social_reset();
+    ally->r_idx = 2; ally->fy = 10; ally->fx = 11;
+    ally->alertness = ALERTNESS_ALERT;
+    occupants[10][11] = 2;
+    races[1].flags4 = RF4_BRTH_FIRE;
+    races[1].spell_power = 8;
+    CHECK(monster_social_set_group(m, MON_GROUP_CUSTOM_FIRST));
+    CHECK(monster_social_set_group(ally, MON_GROUP_CUSTOM_FIRST));
+    int allied_breath = monster_ranged_utility(m, 96 + 3);
+    CHECK(monster_social_set_group(ally, MON_GROUP_CUSTOM_FIRST + 1));
+    CHECK(monster_group_set_relation(MON_GROUP_CUSTOM_FIRST,
+        MON_GROUP_CUSTOM_FIRST + 1, MON_REL_HOSTILE));
+    int hostile_breath = monster_ranged_utility(m, 96 + 3);
+    CHECK(hostile_breath > allied_breath);
+}
+
 static void test_offscreen_piercing(void)
 {
     monster_type* m = setup();
@@ -289,6 +327,7 @@ int main(void)
     test_legality_and_payment();
     test_blow_choice_and_smite();
     test_observed_choices_and_pure_previews();
+    test_cooperation_gates();
     test_offscreen_piercing();
     printf("Monster AI combat: %d checks passed.\n", checks);
     return 0;

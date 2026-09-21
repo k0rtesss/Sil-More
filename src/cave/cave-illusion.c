@@ -104,7 +104,11 @@ void place_illusory_passages(void)
     if (!illusory_walls || p_ptr->depth <= 0 || p_ptr->depth >= MORGOTH_DEPTH)
         return;
     int placed = 0;
-    int target = 1 + p_ptr->depth / 7;
+    int map_size = (p_ptr->cur_map_hgt + p_ptr->cur_map_wid) / 2;
+    /* Scale the count with the generated level, like other per-level terrain
+     * populations: two walls on a 66x66 level, eight on a 165x165 level. */
+    int target = 2 + ((map_size - 66) * 6) / 99;
+    target = MAX(2, target);
     for (int n = 0; n < target; n++)
     {
         int candidates = 0, chosen_y = 0, chosen_x = 0;

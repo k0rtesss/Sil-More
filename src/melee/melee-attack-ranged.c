@@ -4,6 +4,7 @@
 #include "support/geometry.h"
 #include "externs.h"
 #include "melee/melee-attack.h"
+#include "monster/monster-social.h"
 
 bool monster_ranged_is_song(int attack)
 {
@@ -108,7 +109,8 @@ static int nearby_support_utility(const monster_type* m_ptr, bool rally)
         const monster_type* ally = &mon_list[i];
         const monster_race* race;
         int d;
-        if (!ally->r_idx || ally == m_ptr) continue;
+        if (!ally->r_idx || ally == m_ptr
+            || !monster_social_allies(m_ptr, ally)) continue;
         d = distance(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx);
         if (d > MAX_SIGHT || !los(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx))
             continue;
@@ -123,7 +125,6 @@ static int nearby_support_utility(const monster_type* m_ptr, bool rally)
         }
         else
         {
-            if (race->d_char != r_info[m_ptr->r_idx].d_char) continue;
             if (ally->alertness < ALERTNESS_ALERT) utility += 18;
             else if (ally->mflag & MFLAG_ACTV) utility += 4;
         }
@@ -163,6 +164,7 @@ static int breath_collateral_cost(const monster_type* m_ptr, int attack)
             : attack == 101 ? RF3_RES_POIS : 0;
         int harm;
         if (!ally->r_idx || ally == m_ptr
+            || !monster_social_allies(m_ptr, ally)
             || !monster_breath_hits_grid(m_ptr, attack, ally->fy, ally->fx)) continue;
         if (r_info[ally->r_idx].flags3 & immunity) continue;
         if (attack == 102 && ((r_info[ally->r_idx].flags4 & RF4_BRTH_DARK)
@@ -210,7 +212,9 @@ int monster_ranged_utility(const monster_type* m_ptr, int attack)
         for (i = 1; i < mon_max; ++i)
         {
             const monster_type* ally = &mon_list[i];
-            if (ally != m_ptr && ally->r_idx && (ally->mflag & MFLAG_ACTV)
+            if (ally != m_ptr && ally->r_idx
+                && monster_social_allies(m_ptr, ally)
+                && (ally->mflag & MFLAG_ACTV)
                 && distance(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx) <= 4
                 && los(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx)) ++allies;
         }
@@ -910,11 +914,16 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         for (int i = mon_max - 1; i >= 1; i--)
         {
             monster_type* target = &mon_list[i];
-            monster_race* r_ptr = &r_info[target->r_idx];
+            monster_race* r_ptr;
 
             // Rally works on living monsters which are orcs, men, or raukar
             if (!target->r_idx || target == m_ptr
-                || (!(r_ptr->flags3 & (RF3_ORC)) && !(r_ptr->flags3 & (RF3_MAN))
+                || !monster_social_allies(m_ptr, target))
+            {
+                continue;
+            }
+            r_ptr = &r_info[target->r_idx];
+            if ((!(r_ptr->flags3 & (RF3_ORC)) && !(r_ptr->flags3 & (RF3_MAN))
                     && !(r_ptr->flags3 & (RF3_RAUKO))))
             {
                 continue;

@@ -95,5 +95,7 @@ errr load_read_environment(void)
             || (w->observation_age && !in_bounds_fully(w->observation_y,w->observation_x)))
             return invalid_environment();
     }
-    return load_only_checksums_remain() ? 0 : invalid_environment();
+    /* Version 19 appends monster diplomacy after the environment block. */
+    return savefile_version_at_least(0, 9, 8, 19)
+        || load_only_checksums_remain() ? 0 : invalid_environment();
 }
