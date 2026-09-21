@@ -9,6 +9,9 @@
 #include "melee/melee-util.h"
 #include <stdio.h>
 
+int level_partition_index_for_point(int y, int x)
+{ (void)y; (void)x; return -1; }
+
 /* Link real sensing, perception, scent deposition, movement costs and flows.
  * Only unrelated quest boundaries, messages and character skill setup are
  * stubbed. In particular hearing runs the production alertness roll. */

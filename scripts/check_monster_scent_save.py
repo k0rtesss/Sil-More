@@ -142,6 +142,9 @@ static void fresh_map(void)
     memset(p_ptr, 0, sizeof(*p_ptr));
     reset_map(10);
     p_ptr->cur_map_hgt = 20; p_ptr->cur_map_wid = 24;
+    partition_meta_save fresh_parts = {0};
+    fresh_parts.grid_rows = fresh_parts.grid_cols = fresh_parts.partition_count = 1;
+    level_partition_meta_set(&fresh_parts);
     p_ptr->py = 5; p_ptr->px = 5;
     p_ptr->chp = p_ptr->mhp = 100;
     p_ptr->food = PY_FOOD_FULL;

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "monster/monster-routine.h"
 #include "monster/monster-senses.h"
 #include "monster/monster-social.h"
 #include "monster/monster-ai.h"
@@ -186,6 +187,7 @@ static void pursuit_message(monster_type* m_ptr)
  */
 void monster_exchange_places(monster_type* m_ptr)
 {
+    if (!monster_routine_allows(m_ptr, p_ptr->py, p_ptr->px)) return;
     monster_lore* l_ptr = &l_list[m_ptr->r_idx];
     char m_name1[80];
     char m_name2[80];
@@ -275,6 +277,8 @@ void monster_exchange_places(monster_type* m_ptr)
  */
 void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
 {
+    if (in_bounds(ty, tx) && cave_m_idx[ty][tx] >= 0
+        && !monster_routine_allows(m_ptr, ty, tx)) return;
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     monster_lore* l_ptr = &l_list[m_ptr->r_idx];
 

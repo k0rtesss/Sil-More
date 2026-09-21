@@ -25,6 +25,9 @@ static int checks;
 
 bool varda_quest_duruin_can_enter(const monster_type* m, int y, int x)
 { (void)m; (void)y; (void)x; return true; }
+/* These isolated combat maps do not have generated partition metadata. */
+int level_partition_index_for_point(int y, int x)
+{ (void)y; (void)x; return -1; }
 int monster_skill(monster_type* m, int skill)
 { (void)m; (void)skill; return 10; }
 int success_chance(int sides, int skill, int difficulty)

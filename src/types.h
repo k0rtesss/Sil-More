@@ -736,6 +736,15 @@ typedef struct monster_ai_state
 } monster_ai_state;
 
 /* Physical observations and work orders are separate from player tracking. */
+#define MON_PATROL_MAX 128
+typedef struct monster_routine_state
+{
+    byte home_y, home_x;
+    byte territory; /* Partition index + 1; zero keeps ordinary behavior. */
+    byte style, count, next;
+    byte y[MON_PATROL_MAX], x[MON_PATROL_MAX];
+} monster_routine_state;
+
 typedef struct monster_world_state
 {
     u32b last_event;
@@ -827,6 +836,7 @@ struct monster_type
 
     monster_ai_state ai; /* Bounded, individually witnessed tactical knowledge. */
     monster_world_state world; /* Environmental memory survives list compaction. */
+    monster_routine_state routine; /* Individual territory and repeatable circuit. */
 
     byte social_group; /* Zero infers race membership; otherwise a band ID. */
     s16b social_rival; /* Personal feud, repaired on deletion/compaction. */

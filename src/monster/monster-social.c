@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "monster/monster-social.h"
+#include "monster/monster-routine.h"
 #include "monster/monster-senses.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
@@ -347,7 +348,8 @@ static void attack(monster_type* m, int victim, int b)
 
 static bool safe_step(monster_type* m, int y, int x)
 {
-    if (!in_bounds_fully(y, x) || cave_m_idx[y][x] || cave_trap_bold(y, x)
+    if (!in_bounds_fully(y, x) || !monster_routine_allows(m, y, x)
+        || cave_m_idx[y][x] || cave_trap_bold(y, x)
         || !cave_exist_mon(&r_info[m->r_idx], y, x, false, false)) return false;
     int pending = cave_environment_pending_hazard(y, x);
     return !pending && cave_feat[y][x] != FEAT_DEEP_WATER

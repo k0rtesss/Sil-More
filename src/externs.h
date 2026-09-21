@@ -267,6 +267,9 @@ extern byte (*cave_rewired)[MAX_DUNGEON_WID];
 extern s16b (*cave_light)[MAX_DUNGEON_WID];
 extern s16b (*cave_o_idx)[MAX_DUNGEON_WID];
 extern s16b (*cave_m_idx)[MAX_DUNGEON_WID];
+extern int cave_corridor1[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+extern int cave_corridor2[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+extern bool feature_is_any_door(int feat);
 extern u32b mon_power_ave[MAX_DEPTH][CREATURE_TYPE_MAX];
 
 extern byte cave_cost[MAX_FLOWS][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];

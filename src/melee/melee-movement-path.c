@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "monster/monster-routine.h"
 #include "externs.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-movement.h"
@@ -126,6 +127,13 @@ bool monster_can_smell(monster_type* m_ptr)
  */
 bool get_move_wander(monster_type* m_ptr, int* ty, int* tx)
 {
+    if (m_ptr->routine.style == MON_ROUTINE_PATROL
+        || (m_ptr->routine.territory
+            && (!(r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL)
+                || level_partition_index_for_point(m_ptr->fy, m_ptr->fx)
+                    != m_ptr->routine.territory - 1)))
+        return monster_routine_move(m_ptr, ty, tx);
+
     int d;
 
     int dist;

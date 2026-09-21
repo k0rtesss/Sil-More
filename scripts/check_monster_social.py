@@ -230,7 +230,9 @@ static void test_social_lifecycle_and_save(void)
     size_t dungeon_size, length = fixture_write_dungeon(encoded, sizeof(encoded), &dungeon_size);
     decode(encoded, plain, length);
     size_t block_size = 4 + (MON_GROUP_MAX-1)*(MON_GROUP_MAX-2)/2 + MON_SOCIAL_RECORD_BYTES*(mon_max-1);
-    size_t block = dungeon_size - block_size;
+    size_t routine_size = 4;
+    for (int i = 1; i < mon_max; i++) routine_size += 6 + 2 * mon_list[i].routine.count;
+    size_t block = dungeon_size - block_size - routine_size;
     assert(plain[block] == (MON_SOCIAL_SAVE_MAGIC & 255));
     u32b sentinel; size_t consumed;
     social_map();

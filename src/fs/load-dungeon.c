@@ -4,6 +4,7 @@
 #include "cave/cave-flood.h"
 #include "monster/monster-senses.h"
 #include "monster/monster-social.h"
+#include "monster/monster-routine.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-water-flow.h"
 #include "blitz.h"
@@ -86,11 +87,42 @@ static errr rd_monster_social(void)
             && (mon_list[m->social_ally].social_rival != m->social_focus
                 || mon_list[m->social_ally].social_state != MON_SOCIAL_FIGHT)) goto invalid;
     }
-    if (!load_only_checksums_remain()) goto invalid;
+    if (!savefile_version_at_least(0, 9, 8, 21)
+        && !load_only_checksums_remain()) goto invalid;
     return 0;
 invalid:
     monster_social_reset();
     note("Invalid monster relationships.");
+    return -1;
+}
+
+static errr rd_monster_routines(void)
+{
+    /* Older saves have no trustworthy birth location: preserve old behavior. */
+    for (int i = 1; i < mon_max; i++)
+        memset(&mon_list[i].routine, 0, sizeof(mon_list[i].routine));
+    if (!savefile_version_at_least(0, 9, 8, 21)) return 0;
+    u16b magic = 0, count = 0;
+    u32b start = load_byte_offset;
+    rd_u16b(&magic); rd_u16b(&count);
+    if (load_byte_offset - start != 4 || magic != MON_ROUTINE_SAVE_MAGIC
+        || count != mon_max) goto invalid;
+    for (int i = 1; i < mon_max; i++)
+    {
+        monster_routine_state* r = &mon_list[i].routine;
+        start = load_byte_offset;
+        rd_byte(&r->home_y); rd_byte(&r->home_x); rd_byte(&r->territory);
+        rd_byte(&r->style); rd_byte(&r->count); rd_byte(&r->next);
+        if (r->count > MON_PATROL_MAX) goto invalid;
+        for (int j = 0; j < r->count; j++)
+        { rd_byte(&r->y[j]); rd_byte(&r->x[j]); }
+        if (load_byte_offset - start != (u32b)(6 + 2 * r->count)
+            || !monster_routine_valid(&mon_list[i])) goto invalid;
+    }
+    if (!load_only_checksums_remain()) goto invalid;
+    return 0;
+invalid:
+    note("Invalid monster territories or patrol routes.");
     return -1;
 }
 
@@ -1204,6 +1236,11 @@ errr rd_dungeon(void)
         return -1;
     if (rd_monster_social())
         return -1;
+    if (rd_monster_routines())
+    {
+        monster_social_reset();
+        return -1;
+    }
 
     /*** Success ***/
 

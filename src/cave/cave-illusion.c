@@ -71,9 +71,105 @@ static bool illusion_stone(int feat)
         || feat == FEAT_WALL_OUTER;
 }
 
-/* Only pierce a single thickness of ordinary stone, within one partition.
- * Protected rooms, their perimeter, fixtures, and permanent walls are intact. */
-static bool illusion_candidate(int y, int x)
+static bool illusion_corridor_floor(int y, int x)
+{
+    return in_bounds_fully(y, x) && cave_feat[y][x] == FEAT_FLOOR
+        && (cave_corridor1[y][x] >= 0 || cave_corridor2[y][x] >= 0);
+}
+
+static bool illusion_corridor_id_valid(int id)
+{
+    return id >= 0 && id < DUN_ROOMS;
+}
+
+/* Tunnel endpoints are not corridor cells themselves: they are converted to
+ * doors before illusion placement runs. Record those doors against the room
+ * pair whose corridor floor they touch. */
+static void illusion_find_door_corridors(
+    bool corridor_has_door[DUN_ROOMS][DUN_ROOMS])
+{
+    static const int dy[4] = { -1, 1, 0, 0 };
+    static const int dx[4] = { 0, 0, -1, 1 };
+
+    memset(corridor_has_door, 0,
+        sizeof(bool) * DUN_ROOMS * DUN_ROOMS);
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+        {
+            int r1, r2, low, high;
+            if (!illusion_corridor_floor(y, x)) continue;
+            r1 = cave_corridor1[y][x];
+            r2 = cave_corridor2[y][x];
+            if (!illusion_corridor_id_valid(r1)
+                || !illusion_corridor_id_valid(r2))
+                continue;
+            low = MIN(r1, r2);
+            high = MAX(r1, r2);
+            for (int i = 0; i < 4; i++)
+                if (feature_is_any_door(cave_feat[y + dy[i]][x + dx[i]]))
+                {
+                    corridor_has_door[low][high] = true;
+                    break;
+                }
+        }
+}
+
+/* A candidate is the near wall of a planned, doorless corridor. Walk through
+ * the corridor width in the direction of its paired wall, so widened
+ * corridors still contribute exactly one wall pair. */
+static bool illusion_corridor_side(
+    int y, int x, int side_dy, int side_dx,
+    bool corridor_has_door[DUN_ROOMS][DUN_ROOMS])
+{
+    int source_y = y + side_dy;
+    int source_x = x + side_dx;
+    int axis_dy = side_dx;
+    int axis_dx = -side_dy;
+    int pair_y, pair_x;
+    int width = 0;
+    int partition = level_partition_index_for_point(y, x);
+    int r1, r2, low, high;
+
+    if (!illusion_corridor_floor(source_y, source_x)) return false;
+    r1 = cave_corridor1[source_y][source_x];
+    r2 = cave_corridor2[source_y][source_x];
+    if (!illusion_corridor_id_valid(r1)
+        || !illusion_corridor_id_valid(r2))
+        return false;
+    low = MIN(r1, r2);
+    high = MAX(r1, r2);
+    if (corridor_has_door[low][high]) return false;
+
+    /* Do not treat a room edge or a turn as a corridor side. */
+    if (!illusion_corridor_floor(source_y + axis_dy, source_x + axis_dx)
+        || !illusion_corridor_floor(source_y - axis_dy, source_x - axis_dx))
+        return false;
+
+    pair_y = source_y + side_dy;
+    pair_x = source_x + side_dx;
+    while (width < 3 && illusion_corridor_floor(pair_y, pair_x))
+    {
+        pair_y += side_dy;
+        pair_x += side_dx;
+        width++;
+    }
+
+    if (!in_bounds_fully(pair_y, pair_x)
+        || !illusion_stone(cave_feat[pair_y][pair_x])
+        || cave_fixture_at(pair_y, pair_x) != CAVE_FIXTURE_NONE
+        || (cave_info[pair_y][pair_x]
+            & (CAVE_ICKY | CAVE_G_VAULT | CAVE_MORGOTH_TUNNEL))
+        || level_partition_index_for_point(pair_y, pair_x) != partition)
+        return false;
+
+    return true;
+}
+
+/* Only pierce the side of a doorless planned corridor, within one partition.
+ * Protected rooms, their perimeter, fixtures, and permanent walls are
+ * intact. */
+static bool illusion_candidate(
+    int y, int x, bool corridor_has_door[DUN_ROOMS][DUN_ROOMS])
 {
     if (!illusion_stone(cave_feat[y][x])) return false;
     int partition = level_partition_index_for_point(y, x);
@@ -88,14 +184,10 @@ static bool illusion_candidate(int y, int x)
                 || level_partition_index_for_point(yy, xx) != partition)
                 return false;
         }
-    return (cave_feat[y - 1][x] == FEAT_FLOOR
-               && cave_feat[y + 1][x] == FEAT_FLOOR
-               && illusion_stone(cave_feat[y][x - 1])
-               && illusion_stone(cave_feat[y][x + 1]))
-        || (cave_feat[y][x - 1] == FEAT_FLOOR
-               && cave_feat[y][x + 1] == FEAT_FLOOR
-               && illusion_stone(cave_feat[y - 1][x])
-               && illusion_stone(cave_feat[y + 1][x]));
+    return illusion_corridor_side(y, x, -1, 0, corridor_has_door)
+        || illusion_corridor_side(y, x, 1, 0, corridor_has_door)
+        || illusion_corridor_side(y, x, 0, -1, corridor_has_door)
+        || illusion_corridor_side(y, x, 0, 1, corridor_has_door);
 }
 
 void place_illusory_passages(void)
@@ -109,12 +201,15 @@ void place_illusory_passages(void)
      * populations: two walls on a 66x66 level, eight on a 165x165 level. */
     int target = 2 + ((map_size - 66) * 6) / 99;
     target = MAX(2, target);
+    bool corridor_has_door[DUN_ROOMS][DUN_ROOMS];
+    illusion_find_door_corridors(corridor_has_door);
     for (int n = 0; n < target; n++)
     {
         int candidates = 0, chosen_y = 0, chosen_x = 0;
         for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
             for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
-                if (illusion_candidate(y, x) && rand_int(++candidates) == 0)
+                if (illusion_candidate(y, x, corridor_has_door)
+                    && rand_int(++candidates) == 0)
                 {
                     chosen_y = y;
                     chosen_x = x;

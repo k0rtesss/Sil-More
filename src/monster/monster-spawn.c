@@ -1,6 +1,7 @@
 /* File: monster-spawn.c */
 
 #include "monster-internal.h"
+#include "monster/monster-routine.h"
 
 /*
  * Attempt to place a monster of the given race at the given location.
@@ -254,6 +255,8 @@ bool place_monster_one(
             (cave_info[y][x] & CAVE_ICKY) ? 1 : 0,
             (cave_info[y][x] & CAVE_MORGOTH_TUNNEL) ? 1 : 0);
     }
+
+    monster_routine_spawn(n_ptr);
 
     // give the monster a place to wander towards
     new_wandering_destination(n_ptr, m_ptr);

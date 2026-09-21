@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "monster/monster-routine.h"
 #include "externs.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-util.h"
@@ -149,6 +150,8 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
         else
             return (100);
     }
+
+    if (!monster_routine_allows(m_ptr, y, x)) return 0;
 
     /* Duruin remains within the shadowed inner enclosure until attacked with
      * a bow or thrown weapon.  A player in the doorway can still be attacked

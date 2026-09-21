@@ -1,6 +1,7 @@
 /* File: level-generation.c */
 
 #include "angband.h"
+#include "monster/monster-routine.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-flood.h"
 #include "cave/cave.h"
@@ -2026,6 +2027,7 @@ if (playerturn == 0) {
         }
     }
 
+    monster_routine_finish_level();
     cave_environment_seed();
     level_gen_screen_finish(true);
 

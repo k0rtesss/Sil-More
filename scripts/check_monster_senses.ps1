@@ -12,6 +12,7 @@ try {
         scripts/tests/monster-senses-test.c src/variable.c src/tables.c src/rng.c `
         src/monster/monster-senses.c src/cmd/movement/cmd-run.c `
         src/melee/melee-util.c src/melee/melee-process.c src/melee/melee-movement-path.c `
+        src/monster/monster-routine.c `
         src/ui/targeting/direction.c `
         src/cave/cave-flow.c src/cave/cave-water.c src/cave/cave-geometry.c `
         src/cave/cave-events.c src/cave/cave-water-flow.c `

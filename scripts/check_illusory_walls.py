@@ -22,10 +22,21 @@ static int illusion_count(void) {
             if (cave_feat[y][x] == FEAT_ILLUSORY_WALL) count++;
     return count;
 }
+static void illusion_corridor(int y, int x) {
+    for (int dx=-1; dx<=1; dx++) {
+        cave_set_feat(y, x+dx, FEAT_FLOOR);
+        cave_corridor1[y][x+dx] = 0;
+        cave_corridor2[y][x+dx] = 1;
+    }
+    cave_set_feat(y-1, x, FEAT_WALL_EXTRA);
+    cave_set_feat(y+1, x, FEAT_WALL_EXTRA);
+}
 static void illusion_separator(int y, int x) {
     cave_set_feat(y, x, FEAT_WALL_EXTRA);
     cave_set_feat(y, x - 1, FEAT_WALL_EXTRA);
     cave_set_feat(y, x + 1, FEAT_WALL_EXTRA);
+    cave_set_feat(y - 1, x, FEAT_FLOOR);
+    cave_set_feat(y + 1, x, FEAT_FLOOR);
 }
 static void illusion_tests(void) {
     messages_init();
@@ -34,38 +45,54 @@ static void illusion_tests(void) {
     assert(OPT_illusory_walls < OPT_BIRTH);
     f_info[FEAT_ILLUSORY_WALL].mimic = FEAT_WALL_EXTRA;
 
-    /* A single thin separator, so placement has one unambiguous result. */
-    for (int mode=0; mode<7; mode++) {
+    /* A single thin planned corridor, so placement has one unambiguous wall
+     * pair. */
+    for (int mode=0; mode<8; mode++) {
         water_map(24,24,FEAT_WALL_EXTRA);
         for(int y=0;y<24;y++) for(int x=0;x<24;x++)
             cave_info[y][x]=CAVE_WALL|CAVE_MARK|CAVE_SEEN;
-        cave_set_feat(10,9,FEAT_FLOOR); cave_set_feat(10,11,FEAT_FLOOR);
+        illusion_corridor(10,10);
+        illusion_separator(16,16);
         op_ptr->opt[OPT_illusory_walls] = mode != 1;
         if(mode==2) cave_info[9][10] |= CAVE_ICKY;
-        if(mode==3) cave_set_feat(10,10,FEAT_WALL_PERM);
+        if(mode==3) cave_set_feat(9,10,FEAT_WALL_PERM);
         if(mode==4) p_ptr->depth=MORGOTH_DEPTH;
         if(mode==5) cave_fixture_set(9,10,CAVE_FIXTURE_WALL_TORCH);
-        if(mode==6) cave_set_feat(10,11,FEAT_CHASM);
+        if(mode==6) cave_set_feat(10,10,FEAT_CHASM);
+        if(mode==7) cave_set_feat(10,8,FEAT_DOOR_HEAD);
         place_illusory_passages();
-        if ((cave_feat[10][10]==FEAT_ILLUSORY_WALL) != (mode==0))
-            fprintf(stderr,"illusion generation mode %d: feature %d\n",mode,cave_feat[10][10]);
-        assert((cave_feat[10][10]==FEAT_ILLUSORY_WALL) == (mode==0));
-        if(mode==0) assert(cave_floor_bold(10,10));
+        bool placed_pair = cave_feat[9][10]==FEAT_ILLUSORY_WALL
+            || cave_feat[11][10]==FEAT_ILLUSORY_WALL;
+        if (placed_pair != (mode==0))
+            fprintf(stderr,"illusion generation mode %d: north %d south %d\n",
+                mode, cave_feat[9][10], cave_feat[11][10]);
+        assert(placed_pair == (mode==0));
+        assert(cave_feat[10][9]==FEAT_FLOOR && cave_feat[10][11]==FEAT_FLOOR);
+        assert(cave_feat[10][10] == (mode==6 ? FEAT_CHASM : FEAT_FLOOR));
+        assert(cave_feat[16][16] != FEAT_ILLUSORY_WALL);
+        if(mode==0) {
+            assert(cave_floor_bold(9,10) || cave_floor_bold(11,10));
+            assert(cave_floor_bold(9,10) != cave_floor_bold(11,10));
+            assert(cave_feat[9][10]!=FEAT_ILLUSORY_WALL
+                || cave_feat[11][10]==FEAT_WALL_EXTRA);
+            assert(cave_feat[11][10]!=FEAT_ILLUSORY_WALL
+                || cave_feat[9][10]==FEAT_WALL_EXTRA);
+        }
     }
-    puts("Illusion generation: default on, option off, protected rooms, permanent walls, special depth, fixtures and hazards: PASS");
+    puts("Illusion generation: default on, doorless corridors, option off, protected rooms, permanent walls, special depth, fixtures and hazards: PASS");
 
     /* The target count follows the map dimensions, like the stair count. */
     water_map(66,66,FEAT_FLOOR);
-    illusion_separator(10,10); illusion_separator(20,20);
-    illusion_separator(30,30); illusion_separator(40,40);
+    illusion_corridor(10,10); illusion_corridor(20,20);
+    illusion_corridor(30,30); illusion_corridor(40,40);
     op_ptr->opt[OPT_illusory_walls] = true;
     place_illusory_passages();
     int small_count = illusion_count();
     water_map(165,165,FEAT_FLOOR);
-    illusion_separator(10,10); illusion_separator(30,30);
-    illusion_separator(50,50); illusion_separator(70,70);
-    illusion_separator(90,90); illusion_separator(110,110);
-    illusion_separator(130,130); illusion_separator(150,150);
+    illusion_corridor(10,10); illusion_corridor(30,30);
+    illusion_corridor(50,50); illusion_corridor(70,70);
+    illusion_corridor(90,90); illusion_corridor(110,110);
+    illusion_corridor(130,130); illusion_corridor(150,150);
     place_illusory_passages();
     int large_count = illusion_count();
     assert(small_count == 2 && large_count == 8);

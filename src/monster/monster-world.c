@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "monster-world.h"
+#include "monster-routine.h"
 #include "monster-ai.h"
 #include "monster-senses.h"
 #include "cave/cave-environment.h"
@@ -32,7 +33,8 @@ static bool world_safe(monster_type* m, int y, int x)
 static bool world_inside(monster_type* m, int y, int x)
 {
     int radius = (r_info[m->r_idx].flags2 & RF2_TERRITORIAL) ? 6 : WORLD_RADIUS;
-    return distance(m->world.home_y, m->world.home_x, y, x) <= radius;
+    return monster_routine_allows(m, y, x)
+        && distance(m->world.home_y, m->world.home_x, y, x) <= radius;
 }
 
 static void world_finish(monster_type* m)

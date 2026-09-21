@@ -1,6 +1,7 @@
 /* File: fs/save-dungeon.c -- carved from save.c (shares state via fs/save-internal.h) */
 
 #include "angband.h"
+#include "monster/monster-routine.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-senses.h"
 #include "monster/monster-social.h"
@@ -522,6 +523,16 @@ void wr_dungeon(void)
     wr_flood_surface_markers();
     save_write_environment();
     wr_monster_social();
+    wr_u16b(MON_ROUTINE_SAVE_MAGIC);
+    wr_u16b(mon_max);
+    for (i = 1; i < mon_max; i++)
+    {
+        const monster_routine_state* r = &mon_list[i].routine;
+        wr_byte(r->home_y); wr_byte(r->home_x); wr_byte(r->territory);
+        wr_byte(r->style); wr_byte(r->count); wr_byte(r->next);
+        for (int j = 0; j < r->count; j++)
+        { wr_byte(r->y[j]); wr_byte(r->x[j]); }
+    }
 
     log_debug("Dungeon data write completed - %d objects, %d monsters", o_max - 1, mon_max - 1);
     log_trace("[save:%06u] === END DUNGEON ===", (unsigned)save_byte_offset);

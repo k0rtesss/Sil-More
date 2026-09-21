@@ -9,6 +9,7 @@
 #include "monster/monster-senses.h"
 #include "monster/monster-world.h"
 #include "monster/monster-social.h"
+#include "monster/monster-routine.h"
 #include "cave/cave-events.h"
 
 int challenge_check(monster_type* m_ptr)
@@ -497,6 +498,15 @@ static void process_monster(monster_type* m_ptr)
     }
 
     monster_senses_refresh(m_ptr);
+
+    /* Displacement does not replace the home territory with the new location. */
+    if (m_ptr->routine.territory && !m_ptr->confused
+        && level_partition_index_for_point(m_ptr->fy, m_ptr->fx)
+            != m_ptr->routine.territory - 1)
+    {
+        wander(m_ptr);
+        return;
+    }
 
     if (monster_social_turn(m_ptr))
         return;
