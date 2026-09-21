@@ -5,8 +5,8 @@
 # Read once on startup. Invalid records retain the safe built-in value.
 # Existing dungeon-themes and partition material choices seed the reservoirs.
 pulse:100
-water_step:400
-lava_step:700
+water_step:200
+lava_step:350
 acid_step:600
 crack_step:1200
 warning:50

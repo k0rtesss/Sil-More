@@ -109,12 +109,10 @@ static bool move_target_exits_gates(int y, int x)
         || (x == p_ptr->cur_map_wid - 1);
 }
 
-/*
- * Return the strongest actual mattock in the main-hand slot or pack.
- * Forge sabotage deliberately excludes shovels, while using the same
- * tunneling value as quartz-vein destruction.
- */
-static object_type* forge_sabotage_mattock(int* out_score)
+/* Return the strongest carried item with tunneling, using the same value as
+ * quartz-vein destruction.  Forge sabotage does not require a specific item
+ * type: weapons with tunneling work just as digging tools do. */
+static object_type* forge_sabotage_item(int* out_score)
 {
     object_type* best = NULL;
     int best_score = 0;
@@ -126,8 +124,7 @@ static object_type* forge_sabotage_mattock(int* out_score)
                             : player_pack_entry_at(ordinal);
         u32b f1, f2, f3;
 
-        if (!o_ptr->k_idx || (o_ptr->tval != TV_DIGGING)
-            || (o_ptr->sval != SV_MATTOCK))
+        if (!o_ptr->k_idx)
         {
             continue;
         }
@@ -152,7 +149,7 @@ static object_type* forge_sabotage_mattock(int* out_score)
 static bool forge_entry_choice(int y, int x)
 {
     ui_question_option options[2];
-    object_type* mattock;
+    object_type* tunneling_item;
     int digging_score = 0;
     int feat = cave_feat[y][x];
     int choice;
@@ -178,18 +175,18 @@ static bool forge_entry_choice(int y, int x)
         return choice == 0;
     }
 
-    mattock = forge_sabotage_mattock(&digging_score);
-    if (!mattock)
+    tunneling_item = forge_sabotage_item(&digging_score);
+    if (!tunneling_item)
     {
         SDL_strlcpy(tool_status,
-            "You carry no mattock with which to break it apart.",
+            "You carry no weapon or tool with tunneling to break it apart.",
             sizeof(tool_status));
     }
     else if (digging_score < TUNNEL_DIFFICULTY_QUARTZ)
     {
         char o_name[80];
 
-        object_desc(o_name, sizeof(o_name), mattock, false, -1);
+        object_desc(o_name, sizeof(o_name), tunneling_item, false, -1);
         strnfmt(tool_status, sizeof(tool_status),
             "Your %s has tunneling %d; destroying the forge requires %d.",
             o_name, digging_score, TUNNEL_DIFFICULTY_QUARTZ);
@@ -197,17 +194,17 @@ static bool forge_entry_choice(int y, int x)
     else if (p_ptr->stat_use[A_STR] < TUNNEL_DIFFICULTY_QUARTZ)
     {
         strnfmt(tool_status, sizeof(tool_status),
-            "Your mattock is suitable, but destroying the forge requires "
+            "Your tunneling item is suitable, but destroying the forge requires "
             "Strength %d.",
             TUNNEL_DIFFICULTY_QUARTZ);
     }
     else
     {
         SDL_strlcpy(tool_status,
-            "Your mattock and Strength are sufficient to destroy it.",
+            "Your tunneling item and Strength are sufficient to destroy it.",
             sizeof(tool_status));
     }
-    can_destroy = mattock
+    can_destroy = tunneling_item
         && (digging_score >= TUNNEL_DIFFICULTY_QUARTZ)
         && (p_ptr->stat_use[A_STR] >= TUNNEL_DIFFICULTY_QUARTZ);
 

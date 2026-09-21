@@ -5195,7 +5195,8 @@ static bool do_cmd_chest_minigame(int y, int x, s16b o_idx)
         if (p_ptr->active_ability[S_PER][PER_REWIRE_TRAPS])
             score += 5;
         difficulty = chest_disarm_difficulty(o_ptr);
-        result = show_interaction_skill_roll_animation("Disarming the chest",
+        result = show_interaction_skill_roll_animation_lock_or_disarm(
+            "Disarming the chest",
             "Testing the trap mechanism", y, x, score, difficulty, &roll);
 
         if (result > 0)
@@ -5232,7 +5233,8 @@ static bool do_cmd_chest_minigame(int y, int x, s16b o_idx)
     {
         score = p_ptr->skill_use[S_PER];
         difficulty = chest_lock_difficulty(o_ptr);
-        result = show_interaction_skill_roll_animation("Picking the chest lock",
+        result = show_interaction_skill_roll_animation_lock_or_disarm(
+            "Picking the chest lock",
             "Working the lockpick", y, x, score, difficulty, &roll);
         if (result <= 0)
         {
@@ -5290,7 +5292,8 @@ static bool do_cmd_open_chest_legacy(int y, int x, s16b o_idx)
         if (p_ptr->confused)
             difficulty += 5;
 
-        result = show_interaction_skill_roll_animation("Picking the chest lock",
+        result = show_interaction_skill_roll_animation_lock_or_disarm(
+            "Picking the chest lock",
             "Working the lockpick", y, x, score, difficulty, &lock_roll);
 
         /* Success -- May still have traps */
@@ -5317,7 +5320,7 @@ static bool do_cmd_open_chest_legacy(int y, int x, s16b o_idx)
                 if (p_ptr->active_ability[S_PER][PER_REWIRE_TRAPS])
                     difficulty -= 5;
 
-                result = show_interaction_skill_roll_animation(
+                result = show_interaction_skill_roll_animation_lock_or_disarm(
                     "Disarming the chest", "Testing the trap mechanism", y, x,
                     score, difficulty, &disarm_roll);
                 show_interaction_skill_roll_pair("Opening the chest", y, x,
@@ -5451,7 +5454,8 @@ static bool do_cmd_disarm_chest_legacy(int y, int x, s16b o_idx)
         difficulty += 5;
 
     // perform the check
-    result = show_interaction_skill_roll_animation("Disarming chest",
+    result = show_interaction_skill_roll_animation_lock_or_disarm(
+        "Disarming chest",
         "Testing the mechanism", y, x, score, difficulty, &roll);
 
     /* Already disarmed/unlocked (the trap is known by now -- an undiscovered

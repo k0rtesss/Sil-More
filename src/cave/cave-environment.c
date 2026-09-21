@@ -27,7 +27,7 @@ static int pending_count;
 static struct {
     int pulse, water_step, lava_step, acid_step, crack_step, warning;
     int growth_cap, changes;
-} config = {100, 400, 700, 600, 1200, 50, 24, 4};
+} config = {100, 200, 350, 600, 1200, 50, 24, 4};
 static bool config_loaded;
 
 static int speed_multiplier(byte speed)
@@ -154,6 +154,28 @@ static bool floor_bridge(int y, int x, bool* vertical)
     return sides || ends;
 }
 
+/* Historical floor-over-chasm crossings are not liquid terrain, so the
+ * source flood-fill cannot assign them an owner. Claim each intact crossing
+ * for one adjacent source to prevent every neighboring source from eroding it
+ * independently. */
+static void claim_unowned_bridge_sources(void)
+{
+    for (int y = 1; y < p_ptr->cur_map_hgt-1; y++) for (int x = 1; x < p_ptr->cur_map_wid-1; x++) {
+        environment_cell* c = &cells[y][x];
+        if (!(c->flags & ENV_BRIDGE) || c->owner || !c->integrity || !c->underlay) continue;
+        for (int d = 0; d < 4; d++) {
+            int ny = y + dy4[d], nx = x + dx4[d];
+            int id = cells[ny][nx].owner;
+            if (id <= 0 || id > state.source_count || sources[id-1].feature != c->underlay
+                || liquid(cave_feat[ny][nx]) != c->underlay) continue;
+            c->owner = id;
+            log_debug("ENV bridge source claim: turn=%d playerturn=%d at=(%d,%d) owner=%d underlay=%d",
+                turn, playerturn, y, x, id, c->underlay);
+            break;
+        }
+    }
+}
+
 void cave_environment_seed(void)
 {
     cave_environment_reset();
@@ -182,6 +204,9 @@ void cave_environment_seed(void)
             c->material = (f == FEAT_FLOOR || c->underlay == FEAT_CHASM
                 || c->underlay == FEAT_LAVA || c->underlay == FEAT_POISON
                 || FEAT_IS_ICE(c->underlay)) ? ENV_BRIDGE_STONE : ENV_BRIDGE_WOOD;
+            log_debug("ENV bridge seed: turn=%d playerturn=%d depth=%d at=(%d,%d) feat=%d underlay=%d material=%d chasm_area=%d",
+                turn, playerturn, p_ptr->depth, y, x, f, c->underlay, c->material,
+                (cave_info[y][x] & CAVE_CHASM_AREA) != 0);
         }
         c->heat = origin_heat(y, x);
         c->known_underlay = c->flags & ENV_BRIDGE ? c->underlay : cave_bridge_underlay(f);
@@ -206,11 +231,18 @@ void cave_environment_seed(void)
                 queue[tail++] = ny*MAX_DUNGEON_WID+nx;
             }
         }
+        int bridge_cells = 0;
+        for (int n = 0; n < tail; n++) {
+            int pos = queue[n], by = pos / MAX_DUNGEON_WID, bx = pos % MAX_DUNGEON_WID;
+            bridge_cells += (cells[by][bx].flags & ENV_BRIDGE) != 0;
+        }
         environment_source* s = &sources[id-1];
         s->y=y; s->x=x; s->feature=f;
         s->capacity = MIN(config.growth_cap, MAX(2, tail/8));
         s->next_turn = turn + scaled_interval(200 + random_below(500));
         s->phase = random_below(12);
+        log_debug("ENV source seed: id=%d feature=%d origin=(%d,%d) cells=%d bridge_cells=%d capacity=%d next_turn=%d phase=%d turn=%d playerturn=%d",
+            id, f, y, x, tail, bridge_cells, s->capacity, s->next_turn, s->phase, turn, playerturn);
     }
     /* Buried sources are chosen with the accepted geology, not rolled under
      * the player later. Only matching elemental partitions host new vents. */
@@ -234,6 +266,10 @@ void cave_environment_seed(void)
             turn+scaled_interval(1500+(int)random_below(3000))};
     }
     state.ready = true;
+    claim_unowned_bridge_sources();
+    log_info("ENV seed summary: turn=%d playerturn=%d depth=%d speed=%d sources=%d pulse=%d crack_step=%d warning=%d",
+        turn, playerturn, p_ptr->depth, op_ptr->environment_speed, state.source_count,
+        scaled_interval(config.pulse), scaled_interval(config.crack_step), config.warning);
 }
 
 void cave_environment_observe(int y, int x)
@@ -283,6 +319,8 @@ void cave_environment_changed(int y, int x, int old_feat, int new_feat)
             if (!FEAT_IS_ICE(new_feat)) c->flags &= ~ENV_FLOOR_ICE;
         }
         if ((c->flags & ENV_BRIDGE) && !FEAT_IS_BRIDGE(new_feat) && new_feat != c->bridge_feat) {
+            log_info("ENV bridge invalidated: turn=%d playerturn=%d at=(%d,%d) old_feat=%d new_feat=%d integrity=%d owner=%d pending=%d",
+                turn, playerturn, y, x, old_feat, new_feat, c->integrity, c->owner, c->pending_feat);
             c->integrity=0; c->work=0;
             if (liquid(new_feat)) c->underlay=new_feat;
         }
@@ -344,9 +382,14 @@ static bool preserves_routes(int y,int x,int feature)
 static bool commit(int y,int x,int feature,int event)
 {
     environment_cell* c=&cells[y][x];
+    bool bridge=(c->flags&ENV_BRIDGE)!=0;
+    int old=cave_feat[y][x], old_integrity=c->integrity, old_pending=c->pending_feat;
     if((c->flags&ENV_PROTECTED)||critical_object(y,x)||cave_m_idx[y][x]
-        || !preserves_routes(y,x,feature)) return false;
-    int old=cave_feat[y][x];
+        || !preserves_routes(y,x,feature)) {
+        if(bridge) log_info("ENV bridge commit blocked: turn=%d playerturn=%d at=(%d,%d) old_feat=%d requested=%d integrity=%d pending=%d event=%d",
+            turn, playerturn, y, x, old, feature, old_integrity, old_pending, event);
+        return false;
+    }
     changing=true;
     cave_set_feat(y,x,feature);
     changing=false;
@@ -357,6 +400,8 @@ static bool commit(int y,int x,int feature,int event)
     p_ptr->redraw |= PR_MAP;
     if(event)cave_event_emit(event,y,x,event==CAVE_EVENT_COLLAPSE?22:12);
     if(old==FEAT_QUARTZ)c->flags|=ENV_MINERAL_SPENT;
+    if(bridge) log_info("ENV bridge commit: turn=%d playerturn=%d at=(%d,%d) old_feat=%d new_feat=%d event=%d integrity=%d->%d pending=%d",
+        turn, playerturn, y, x, old, feature, event, old_integrity, c->integrity, old_pending);
     return true;
 }
 
@@ -403,11 +448,12 @@ static void update_heat(void)
         cells[y][x].heat=next_heat[y][x];
 }
 
-void cave_environment_flood_bridge(int y,int x,int fluid,int force)
+static void flood_bridge_with_reason(int y,int x,int fluid,int force,const char* reason)
 {
     if(!state.ready||!in_bounds_fully(y,x))return;
     environment_cell* c=&cells[y][x];
     if(!(c->flags&ENV_BRIDGE)||(c->flags&ENV_PROTECTED)||!c->integrity)return;
+    int old_integrity=c->integrity, old_underlay=c->underlay;
     if(c->underlay!=fluid)c->work=0;
     c->underlay=fluid;
     cave_environment_observe(y,x);
@@ -415,7 +461,16 @@ void cave_environment_flood_bridge(int y,int x,int fluid,int force)
     if(fluid==FEAT_LAVA)damage*=c->material==ENV_BRIDGE_WOOD?3:2;
     else if(fluid==FEAT_POISON)damage*=2;
     c->integrity=MAX(1,(int)c->integrity-damage);
-    if(c->integrity<=25)propose(y,x,fluid,CAVE_EVENT_CRACK);
+    bool warning=false;
+    if(c->integrity<=25)warning=propose(y,x,fluid,CAVE_EVENT_CRACK);
+    log_debug("ENV bridge damage: reason=%s turn=%d playerturn=%d at=(%d,%d) fluid=%d force=%d owner=%d feat=%d underlay=%d->%d integrity=%d->%d warning=%d due=%d",
+        reason, turn, playerturn, y, x, fluid, force, c->owner, c->bridge_feat, old_underlay,
+        c->underlay, old_integrity, c->integrity, warning, c->due);
+}
+
+void cave_environment_flood_bridge(int y,int x,int fluid,int force)
+{
+    flood_bridge_with_reason(y,x,fluid,force,"external");
 }
 
 static void source_step(int id)
@@ -424,6 +479,8 @@ static void source_step(int id)
     int interval=s->feature==FEAT_LAVA?config.lava_step:s->feature==FEAT_POISON?
         config.acid_step:s->feature==FEAT_CHASM?config.crack_step:config.water_step;
     if(turn<s->next_turn)return;
+    log_debug("ENV source pulse: id=%d feature=%d origin=(%d,%d) turn=%d playerturn=%d previous_next=%d phase=%d",
+        id, s->feature, s->y, s->x, turn, playerturn, s->next_turn, s->phase);
     s->next_turn=turn+scaled_interval(interval);
     if (s->phase==12) {
         environment_cell* origin=&cells[s->y][s->x];
@@ -454,7 +511,7 @@ static void source_step(int id)
             }
             if(!contact)continue;
             if((c->flags&ENV_BRIDGE)&&c->integrity) {
-                cave_environment_flood_bridge(y,x,s->feature,4);continue;
+                flood_bridge_with_reason(y,x,s->feature,4,"chasm-source");continue;
             }
             if(rock(f)) {
                 level_partition_kind part=level_partition_kind_for_point(y,x);
@@ -518,6 +575,9 @@ void cave_environment_process(void)
     }
     if(!geology_due)return;
     if(p_ptr->depth<1 || (p_ptr->depth>MORGOTH_DEPTH&&p_ptr->depth!=UTUMNO_DEPTH))return;
+    claim_unowned_bridge_sources();
+    log_debug("ENV geology pulse: turn=%d playerturn=%d pulse=%d sources=%d changes=%d",
+        turn, playerturn, pulse, state.source_count, remaining);
     update_heat();
     for(int i=1;i<=state.source_count;i++)source_step(i);
     /* Reservoir sampling gives a bounded number of thermal/mineral changes,
@@ -601,10 +661,11 @@ bool cave_environment_bridge_job_at(int y,int x,environment_bridge_job* job)
         if (c->underlay == FEAT_CHASM || c->underlay == FEAT_LAVA
             || c->underlay == FEAT_POISON)
             material=ENV_BRIDGE_STONE;
-        /* Restore even historical floor-over-chasm crossings as encoded
-         * bridge features. The renderer needs that identity to draw the
-         * repaired deck instead of leaving a plain floor tile. */
-        int feature = cave_bridge_feature(c->underlay,axis != 0);
+        /* Historical floor-over-chasm crossings remain floor tiles. They are
+         * still tracked as bridges and repairable, but restoring an encoded
+         * bridge would change their legacy terrain representation. */
+        int feature = c->bridge_feat == FEAT_FLOOR && c->underlay == FEAT_CHASM
+            ? FEAT_FLOOR : cave_bridge_feature(c->underlay,axis != 0);
         if (!feature) return false;
         *job=(environment_bridge_job){y,x,feature,material,c->integrity,true};return true;
     }
@@ -666,8 +727,18 @@ const environment_source* cave_environment_source_at(int i){return i>=0&&i<state
 environment_state cave_environment_get_state(void){return state;}
 bool cave_environment_restore_state(environment_state value)
 {
-    if(value.source_count>ENV_SOURCES_MAX||value.mineral_budget>8||(value.ready&&!value.random)||value.last_turn<0||value.last_turn>turn)return false;
-    state=value;load_config();return true;
+    if(value.source_count>ENV_SOURCES_MAX||value.mineral_budget>8||(value.ready&&!value.random)||value.last_turn<0||value.last_turn>turn) {
+        log_warn("ENV restore state rejected: turn=%d playerturn=%d last_turn=%d sources=%d budget=%d ready=%d random=%u",
+            turn, playerturn, value.last_turn, value.source_count, value.mineral_budget,
+            value.ready, value.random);
+        return false;
+    }
+    state=value;load_config();
+    log_info("ENV restore state: turn=%d playerturn=%d last_turn=%d sources=%d budget=%d ready=%d speed=%d pulse=%d crack_step=%d warning=%d",
+        turn, playerturn, state.last_turn, state.source_count, state.mineral_budget,
+        state.ready, op_ptr->environment_speed, scaled_interval(config.pulse),
+        scaled_interval(config.crack_step), config.warning);
+    return true;
 }
 bool cave_environment_restore_cell(int y,int x,environment_cell c)
 {
@@ -677,11 +748,19 @@ bool cave_environment_restore_cell(int y,int x,environment_cell c)
         ||c.known_underlay>=FEAT_COUNT||c.known_material>ENV_BRIDGE_STONE
         ||c.heat< -12||c.heat>12||c.due<0||(c.pending_feat&&c.due>turn+100000))return false;
     if(cells[y][x].pending_feat&&pending_count)pending_count--;
-    cells[y][x]=c;if(c.pending_feat)pending_count++;return true;
+    cells[y][x]=c;if(c.pending_feat)pending_count++;
+    if((c.flags&ENV_BRIDGE)||FEAT_IS_BRIDGE(c.base_feat)||FEAT_IS_BRIDGE(c.known_feat))
+        log_info("ENV bridge restore: turn=%d playerturn=%d at=(%d,%d) flags=%d base_feat=%d known_feat=%d bridge_feat=%d underlay=%d material=%d integrity=%d owner=%d pending=%d due=%d",
+            turn, playerturn, y, x, c.flags, c.base_feat, c.known_feat, c.bridge_feat,
+            c.underlay, c.material, c.integrity, c.owner, c.pending_feat, c.due);
+    return true;
 }
 bool cave_environment_restore_source(int i,environment_source s)
 {
     if(i<0||i>=state.source_count||!in_bounds_fully(s.y,s.x)||!liquid(s.feature)
         ||!s.capacity||s.capacity>64||s.used>s.capacity||s.phase>12||s.next_turn<0||s.next_turn>turn+100000)return false;
-    sources[i]=s;return true;
+    sources[i]=s;
+    log_debug("ENV source restore: id=%d feature=%d origin=(%d,%d) capacity=%d used=%d phase=%d next_turn=%d turn=%d playerturn=%d",
+        i+1, s.feature, s.y, s.x, s.capacity, s.used, s.phase, s.next_turn, turn, playerturn);
+    return true;
 }

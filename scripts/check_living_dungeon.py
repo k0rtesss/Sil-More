@@ -35,7 +35,7 @@ static void test_environment_speed(void)
 {
     CHECK(op_ptr->environment_speed==ENVIRONMENT_SPEED_NORMAL); /* Production init. */
     const int feats[]={FEAT_WATER,FEAT_LAVA,FEAT_POISON,FEAT_CHASM};
-    const int intervals[]={400,700,600,1200};
+    const int intervals[]={200,350,600,1200};
     int initial[4]={0};
     for(int speed=ENVIRONMENT_SPEED_SLOW;speed<=ENVIRONMENT_SPEED_FAST;speed++) {
         int rate=1<<speed;
@@ -74,7 +74,7 @@ static void test_environment_speed(void)
     CHECK(cave_environment_cell_at(10,11)->due==turn+50);
     CHECK(cave_environment_get_state().random==random);
     CHECK(cave_environment_get_state().last_turn==turn);
-    puts("Environment speed: Slow original timing, Normal 2x, Fast 4x, source startup/cadence, live rescheduling and unchanged warnings PASS.");
+    puts("Environment speed: faster water/lava cadence, Normal 2x, Fast 4x, live rescheduling and unchanged warnings PASS.");
 }
 
 bool test_pick_environment_speed(bool* handled);
@@ -284,6 +284,39 @@ static void test_thermal(void)
     CHECK(!(cave_environment_cell_at(10,10)->flags&ENV_FLOOR_ICE));
     puts("Heat: influence spreads beyond origin; frozen solid floor thaws to floor PASS.");
 }
+static void test_floor_chasm_bridges(void)
+{
+    clean();op_ptr->environment_speed=ENVIRONMENT_SPEED_NORMAL;
+    for(int y=9;y<=11;y++) {
+        setcell(y,9,FEAT_CHASM);setcell(y,10,FEAT_FLOOR);setcell(y,11,FEAT_CHASM);
+        cave_info[y][10]|=CAVE_CHASM_AREA;
+    }
+    cave_environment_seed();
+    environment_state state=cave_environment_get_state();
+    CHECK(state.source_count==2);
+    CHECK(cave_environment_cell_at(10,10)->owner>0);
+    environment_cell bridge=*cave_environment_cell_at(10,10);
+    bridge.owner=0;CHECK(cave_environment_restore_cell(10,10,bridge));
+    CHECK(cave_environment_cell_at(10,10)->owner==0);
+    for(int i=0;i<state.source_count;i++) {
+        environment_source source=*cave_environment_source_at(i);
+        source.next_turn=turn;source.phase=0;
+        CHECK(cave_environment_restore_source(i,source));
+    }
+    tick(5);
+    CHECK(cave_environment_cell_at(10,10)->owner>0);
+    CHECK(cave_environment_cell_at(10,10)->integrity==96);
+    setcell(10,10,FEAT_CHASM);
+    environment_bridge_job job;
+    CHECK(cave_environment_cell_at(10,10)->integrity==0);
+    CHECK(cave_environment_bridge_job_at(10,10,&job));
+    CHECK(job.material==ENV_BRIDGE_STONE&&job.feature==FEAT_FLOOR&&job.integrity==0);
+    for(int n=0;n<15;n++)CHECK(!cave_environment_bridge_work(10,10,job.material));
+    CHECK(cave_environment_bridge_work(10,10,job.material));
+    CHECK(cave_feat[10][10]==FEAT_FLOOR);
+    CHECK(cave_environment_cell_at(10,10)->integrity==100);
+    puts("Legacy floor-over-chasm bridges: one source claim prevents stacked erosion and stone repair restores floor crossing PASS.");
+}
 static void bridge_fixture(void)
 {
     clean();setcell(10,10,FEAT_BRIDGE_WATER_H);
@@ -422,7 +455,7 @@ def main():
     init=init[:init.index('    check_templates();')]
     source=OUT/'check.c'
     source.write_text(prefix+fixture_function('terminal_extra')+'\n'+fixture_function('reset_map')+'\n'+FRESH_MAP+'\n'+TESTS+'\n'+init+
-        '    test_environment_speed();test_environment_speed_settings();test_clock();test_reservoir();test_thermal();test_partition_heat();test_bridges();test_actors();test_protection();test_sole_route();test_memory();test_vents();test_debug_options();test_wizard_event_travel();\n'
+        '    test_environment_speed();test_environment_speed_settings();test_clock();test_reservoir();test_thermal();test_floor_chasm_bridges();test_partition_heat();test_bridges();test_actors();test_protection();test_sole_route();test_memory();test_vents();test_debug_options();test_wizard_event_travel();\n'
         '    printf("Living dungeon behavior: %d checks, %d failed groups.\\n",checks,failures);\n'
         '    SDL_Quit();return failures?1:0;\n}\n',encoding='utf-8')
     objects=shlex.split((BUILD/'CMakeFiles/sil-more.dir/objects1.rsp').read_text())

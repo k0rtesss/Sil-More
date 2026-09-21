@@ -771,6 +771,9 @@ extern bool trap_disarm_power(int feat, int* power);
 extern bool trap_is_rewireable(int feat);
 extern int show_interaction_skill_roll_animation(cptr title, cptr action,
     int y, int x, int skill, int difficulty, skill_roll_details* roll);
+extern int show_interaction_skill_roll_animation_lock_or_disarm(cptr title,
+    cptr action, int y, int x, int skill, int difficulty,
+    skill_roll_details* roll);
 extern int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
     int y, int x, int skill, int difficulty, int skill_sides,
     int difficulty_sides, skill_roll_details* roll);

@@ -2341,7 +2341,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row++;
         help_emit_heading("POISONOUS ACID", row++, col);
         put_role(ROLE_BODY, "- Green poisonous acid forms pools and rivers. Movement costs normal energy.", row++, col);
-        put_role(ROLE_WARN, "- Contact adds 6 poison stacks before resistance and poison protection. Poison caves remove one resistance level.", row++, col);
+        put_role(ROLE_WARN, "- Contact adds 8 poison stacks before resistance and poison protection. Poison caves remove one resistance level.", row++, col);
         put_role(ROLE_BODY, "- Entry and later actions on acid apply a dose, at most once per action. Leaving does not cure poison.", row++, col);
         put_role(ROLE_WARN, "- The acid can damage submerged items, even with poison resistance. Normal acid item protection applies.", row++, col);
         put_role(ROLE_BODY, "- Each poisoned creature takes one fifth of its remaining stacks as damage per action, rounded up, consuming those stacks.", row++, col);

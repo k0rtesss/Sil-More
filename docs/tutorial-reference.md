@@ -8628,7 +8628,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-Contact with poisonous acid adds 6 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the acid, even while resting or using an item.
+Contact with poisonous acid adds 8 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the acid, even while resting or using an item.
 
 **2. Info**
 

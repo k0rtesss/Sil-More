@@ -57,7 +57,7 @@ static monster_type* poison_monster(u32b f2,u32b f3) {
     return m;
 }
 static void poison_terrain_tests(void) {
-    const int doses[]={18,12,6,4,3};
+    const int doses[]={24,16,8,5,4};
     for(int res=-1;res<=3;res++) {
         poison_map();p_ptr->resist_pois=res;
         assert(player_poison_terrain_dose_at(10,11)==doses[res+1]);
@@ -67,15 +67,15 @@ static void poison_terrain_tests(void) {
         assert(acid_item_contacts==1); /* Poison resistance does not resist acid. */
     }
     poison_map();p_ptr->oppose_pois=1;poison_step(6);
-    assert(p_ptr->poisoned==4);
-    poison_map();poison_step(6);assert(p_ptr->poisoned==6);
+    assert(p_ptr->poisoned==5);
+    poison_map();poison_step(6);assert(p_ptr->poisoned==8);
     player_poison_terrain_begin_action();p_ptr->energy_use=100;
-    player_poison_terrain_end_action();assert(p_ptr->poisoned==12);
+    player_poison_terrain_end_action();assert(p_ptr->poisoned==16);
     player_poison_terrain_begin_action();p_ptr->energy_use=0;
-    player_poison_terrain_end_action();assert(p_ptr->poisoned==12);
+    player_poison_terrain_end_action();assert(p_ptr->poisoned==16);
     cave_set_feat(10,12,FEAT_POISON);poison_step(6);
-    assert(p_ptr->poisoned==18);poison_step(6);
-    assert(p_ptr->px==13&&p_ptr->poisoned==18);
+    assert(p_ptr->poisoned==24);poison_step(6);
+    assert(p_ptr->px==13&&p_ptr->poisoned==24);
     assert(acid_item_contacts==3); /* Entry, wait and second tile; no free/exit dose. */
     poison_map();picker_choice=1;poison_step(6);
     assert(p_ptr->px==10&&!p_ptr->energy_use&&!p_ptr->poisoned);
@@ -103,7 +103,7 @@ static void poison_terrain_tests(void) {
     poison_map();p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
     movement_choice=1;picker_choice=0;p_ptr->previous_action[1]=6;
     poison_step(6);
-    assert(p_ptr->px==11&&!p_ptr->leaping&&p_ptr->poisoned==6);
+    assert(p_ptr->px==11&&!p_ptr->leaping&&p_ptr->poisoned==8);
     assert(acid_item_contacts==1);
     poison_map();p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
     movement_choice=0;
@@ -111,26 +111,26 @@ static void poison_terrain_tests(void) {
     cave_set_feat(10,12,FEAT_WALL_EXTRA);
     player_poison_terrain_begin_action();continue_leap();
     player_poison_terrain_end_action();
-    assert(!p_ptr->leaping&&p_ptr->px==11&&p_ptr->poisoned==6);
+    assert(!p_ptr->leaping&&p_ptr->px==11&&p_ptr->poisoned==8);
     assert(acid_item_contacts==1);
     poison_map();cave_set_feat(10,11,FEAT_BRIDGE_POISON_H);poison_step(6);
     assert(p_ptr->px==11&&!p_ptr->poisoned&&!acid_item_contacts);
     player_poison_terrain_begin_action();p_ptr->energy_use=100;
     player_poison_terrain_end_action();assert(!acid_item_contacts);
-    poison_map();monster_swap(10,10,10,11);assert(p_ptr->poisoned==6);
+    poison_map();monster_swap(10,10,10,11);assert(p_ptr->poisoned==8);
     poison_map();character_dungeon=true;cave_set_feat(10,10,FEAT_POISON);
-    assert(p_ptr->poisoned==6);character_dungeon=false;
+    assert(p_ptr->poisoned==8);character_dungeon=false;
     puts("Poison player terrain: resistance, temporary resistance, entry/wait/exit, cancellation, forced entry, creation, successful/blocked leaps: PASS");
 
     monster_type* m=poison_monster(0,0);
-    monster_swap(10,10,10,11);assert(m->poisoned==6&&m->hp==200);
-    monster_poison_terrain_begin_action(1);assert(m->poisoned==12);
+    monster_swap(10,10,10,11);assert(m->poisoned==8&&m->hp==200);
+    monster_poison_terrain_begin_action(1);assert(m->poisoned==16);
     cave_set_feat(10,12,FEAT_POISON);monster_swap(10,11,10,12);
-    assert(m->poisoned==12);
-    assert(!monster_poison_tick(1));assert(m->poisoned==9&&m->hp==197);
+    assert(m->poisoned==16);
+    assert(!monster_poison_tick(1));assert(m->poisoned==12&&m->hp==196);
     monster_poison_terrain_end_action(1);
-    monster_swap(10,12,10,13);assert(m->poisoned==9);
-    assert(!monster_poison_tick(1));assert(m->poisoned==7&&m->hp==195);
+    monster_swap(10,12,10,13);assert(m->poisoned==12);
+    assert(!monster_poison_tick(1));assert(m->poisoned==9&&m->hp==193);
     for(int fly=0;fly<2;fly++) {
         m=poison_monster(fly?RF2_FLYING:0,fly?0:RF3_RES_POIS);
         monster_swap(10,10,10,11);monster_poison_terrain_begin_action(1);
@@ -145,7 +145,7 @@ static void poison_terrain_tests(void) {
     process_monsters(100);assert(m->hp==198&&m->poisoned==8&&m->energy==0);
     m=poison_monster(0,0);cave_set_feat(10,10,FEAT_POISON);
     m->skip_next_turn=true;m->energy=100;process_monsters(100);
-    assert(m->hp==198&&m->poisoned==4&&m->energy==0);
+    assert(m->hp==198&&m->poisoned==6&&m->energy==0);
     puts("Poison monsters: forced contact, once per action, continued ticks off terrain, immunity/flight, sleeping/skipped turns and no-energy scheduling: PASS");
 }
 '''

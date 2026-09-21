@@ -13,6 +13,8 @@
 
 #define INTERACTION_ROLL_ANIM_FRAME_MS 250
 #define INTERACTION_ROLL_BASH_REDUCTION_MS 1000
+#define INTERACTION_ROLL_FAST_CHANCE_MIN_PERCENT 90
+#define INTERACTION_ROLL_FAST_MAX_MS 1000
 
 static int bridge_repair_work_required(const environment_bridge_job* job)
 {
@@ -102,6 +104,28 @@ static bool interaction_roll_is_guaranteed(monster_type* actor, int skill,
     }
 
     return skill + 1 > difficulty + difficulty_sides;
+}
+
+static int interaction_roll_high_chance_lock_ms(int lock_ms,
+    monster_type* actor, int skill, int difficulty, int skill_sides,
+    int difficulty_sides)
+{
+    int success_percent;
+    int fast_lock_ms;
+
+    if (actor != PLAYER)
+        return lock_ms;
+
+    success_percent = player_skill_check_success_percent(skill, difficulty,
+        skill_sides, difficulty_sides);
+    if (success_percent < INTERACTION_ROLL_FAST_CHANCE_MIN_PERCENT)
+        return lock_ms;
+
+    /* At 90% keep one second of rolling time, then remove 100 ms for each
+     * additional percentage point.  A user-configured shorter duration still
+     * wins, so this remains a speed-up rather than an override. */
+    fast_lock_ms = (100 - success_percent) * 100;
+    return MIN(lock_ms, MIN(INTERACTION_ROLL_FAST_MAX_MS, fast_lock_ms));
 }
 
 static void interaction_roll_render_overlay(cptr title, cptr action, int y,
@@ -271,7 +295,7 @@ static int show_interaction_skill_roll_animation_actor_sided(
     monster_type* actor, cptr title,
     cptr action, int y, int x, int skill, int difficulty,
     int skill_sides, int difficulty_sides, skill_roll_details* roll,
-    int lock_adjust_ms)
+    int lock_adjust_ms, bool shorten_high_chance)
 {
     skill_roll_details local_roll;
     skill_roll_details preview_roll;
@@ -317,6 +341,11 @@ static int show_interaction_skill_roll_animation_actor_sided(
     lock_ms += lock_adjust_ms;
     if (lock_ms < 0)
         lock_ms = 0;
+    if (shorten_high_chance)
+    {
+        lock_ms = interaction_roll_high_chance_lock_ms(lock_ms, actor, skill,
+            difficulty, skill_sides, difficulty_sides);
+    }
     overlay_ms = get_sdl_dice_roll_overlay_ms();
     visual_seed = interaction_roll_visual_seed(title, action, y, x, skill,
         difficulty);
@@ -355,7 +384,7 @@ int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
     skill_roll_details* roll)
 {
     return show_interaction_skill_roll_animation_actor_sided(actor, title,
-        action, y, x, skill, difficulty, 10, 10, roll, 0);
+        action, y, x, skill, difficulty, 10, 10, roll, 0, false);
 }
 
 /*
@@ -367,7 +396,17 @@ int show_interaction_skill_roll_animation(cptr title, cptr action, int y,
     int x, int skill, int difficulty, skill_roll_details* roll)
 {
     return show_interaction_skill_roll_animation_actor_sided(
-        PLAYER, title, action, y, x, skill, difficulty, 10, 10, roll, 0);
+        PLAYER, title, action, y, x, skill, difficulty, 10, 10, roll, 0,
+        false);
+}
+
+int show_interaction_skill_roll_animation_lock_or_disarm(cptr title,
+    cptr action, int y, int x, int skill, int difficulty,
+    skill_roll_details* roll)
+{
+    return show_interaction_skill_roll_animation_actor_sided(
+        PLAYER, title, action, y, x, skill, difficulty, 10, 10, roll, 0,
+        true);
 }
 
 int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
@@ -376,7 +415,7 @@ int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
 {
     return show_interaction_skill_roll_animation_actor_sided(PLAYER, title,
         action, y, x, skill, difficulty, skill_sides, difficulty_sides, roll,
-        0);
+        0, false);
 }
 
 static int show_interaction_skill_roll_animation_bash(cptr title, cptr action,
@@ -384,7 +423,7 @@ static int show_interaction_skill_roll_animation_bash(cptr title, cptr action,
 {
     return show_interaction_skill_roll_animation_actor_sided(PLAYER, title,
         action, y, x, skill, difficulty, 10, 10, roll,
-        -INTERACTION_ROLL_BASH_REDUCTION_MS);
+        -INTERACTION_ROLL_BASH_REDUCTION_MS, false);
 }
 
 /*
@@ -806,7 +845,8 @@ bool do_cmd_open_aux(int y, int x)
         score = p_ptr->skill_use[S_PER];
         power = (cave_feat[y][x] - FEAT_DOOR_HEAD) & 0x07;
         difficulty = door_lockpick_difficulty(y, x);
-        result = show_interaction_skill_roll_animation("Picking the lock",
+        result = show_interaction_skill_roll_animation_lock_or_disarm(
+            "Picking the lock",
             "Working the lockpick", y, x, score, difficulty, &roll);
 
         if (result > 0)
@@ -1992,7 +2032,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
     {
         SDL_strlcpy(title, "Poisonous acid", sizeof(title));
         SDL_strlcpy(desc,
-            "Contact adds 6 poison stacks before resistance and poison protection. "
+            "Contact adds 8 poison stacks before resistance and poison protection. "
             "Its acid can damage submerged items using normal acid rules, "
             "even with poison resistance. Bridges keep items safe. "
             "Entering or spending another action here applies a dose; entry is "
@@ -2952,7 +2992,7 @@ bool do_cmd_disarm_aux(int y, int x)
         && trap_is_rewireable(cave_feat[y][x]) && !cave_rewired[y][x];
 
     // perform the check
-    result = show_interaction_skill_roll_animation(
+    result = show_interaction_skill_roll_animation_lock_or_disarm(
         rewiring ? "Rewiring trap" : "Disarming trap",
         rewiring ? "Re-keying the mechanism" : "Testing the mechanism", y, x,
         score, difficulty, &roll);
