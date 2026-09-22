@@ -62,6 +62,12 @@ typedef enum run_monster_sort_mode {
     RUN_MON_SORT_COUNT
 } run_monster_sort_mode;
 
+typedef enum run_monster_group {
+    RUN_MON_GROUP_ENCOUNTERS = 0,
+    RUN_MON_GROUP_UNIQUES,
+    RUN_MON_GROUP_COUNT
+} run_monster_group;
+
 typedef struct run_detail_list_state {
     int top;
     int highlight;
@@ -74,8 +80,16 @@ typedef struct run_detail_view_state {
     run_detail_list_state milestones;
     run_detail_list_state artefacts;
     run_detail_list_state monsters;
+    run_monster_group monster_group;
     run_monster_sort_mode monster_sort_mode;
 } run_detail_view_state;
+
+typedef struct run_history_monster_row {
+    u16b r_idx;
+    u16b seen;
+    u16b killed;
+    u16b deaths;
+} run_history_monster_row;
 
 typedef struct run_detail_text_view {
     int first_row;
@@ -2373,6 +2387,7 @@ enum {
     RUN_DETAIL_CLICK_NEXT_PANEL = -3,
     RUN_DETAIL_CLICK_INSPECT = -4,
     RUN_DETAIL_CLICK_SORT = -5,
+    RUN_DETAIL_CLICK_GROUP = -6,
     RUN_DETAIL_CLICK_TAB_BASE = -100
 };
 
@@ -2436,24 +2451,69 @@ static const char* run_history_monster_sort_labels[RUN_MON_SORT_COUNT] = {
     "Depth (uniques first)"
 };
 
-static const score_run_detail_block* g_monster_sort_details = NULL;
+static const char* run_history_monster_group_labels[RUN_MON_GROUP_COUNT] = {
+    "Encountered",
+    "Uniques"
+};
+
+static const run_history_monster_row* g_monster_sort_rows = NULL;
 static run_monster_sort_mode g_monster_sort_mode = RUN_MON_SORT_APPEARANCE;
 
-static bool run_history_monster_is_unique(const score_run_monster_v1* entry)
+static bool run_history_monster_race_is_unique(u16b r_idx)
 {
-    if (!entry || !r_info || !z_info)
+    if (!r_info || !z_info || r_idx == 0 || r_idx >= z_info->r_max)
         return false;
-    if (entry->r_idx <= 0 || entry->r_idx >= z_info->r_max)
+    if (r_info[r_idx].name == 0)
         return false;
-    const monster_race* r_ptr = &r_info[entry->r_idx];
-    return (r_ptr->flags1 & RF1_UNIQUE) != 0;
+    return (r_info[r_idx].flags1 & RF1_UNIQUE) != 0;
 }
 
-static int run_history_monster_level(const score_run_monster_v1* entry)
+static int run_history_monster_group_total(const score_run_detail_block* details,
+                                           run_monster_group group)
 {
-    if (!entry || !r_info || !z_info)
-        return -1;
-    if (entry->r_idx <= 0 || entry->r_idx >= z_info->r_max)
+    if (group == RUN_MON_GROUP_UNIQUES) {
+        int total = 0;
+
+        if (!r_info || !z_info)
+            return 0;
+        for (int i = 1; i < z_info->r_max; i++) {
+            if (run_history_monster_race_is_unique((u16b)i))
+                total++;
+        }
+        return total;
+    }
+
+    if (!details || !details->monsters)
+        return 0;
+    return MIN(details->header.monster_count,
+        details->header.monster_capacity);
+}
+
+static const score_run_monster_v1* run_history_find_monster_entry(
+    const score_run_detail_block* details, u16b r_idx)
+{
+    int total;
+
+    if (!details || !details->monsters)
+        return NULL;
+    total = MIN(details->header.monster_count,
+        details->header.monster_capacity);
+    for (int i = 0; i < total; i++) {
+        if (details->monsters[i].r_idx == r_idx)
+            return &details->monsters[i];
+    }
+    return NULL;
+}
+
+static bool run_history_monster_is_unique(const run_history_monster_row* entry)
+{
+    return entry && run_history_monster_race_is_unique(entry->r_idx);
+}
+
+static int run_history_monster_level(const run_history_monster_row* entry)
+{
+    if (!entry || !r_info || !z_info || entry->r_idx == 0
+        || entry->r_idx >= z_info->r_max)
         return -1;
     return r_info[entry->r_idx].level;
 }
@@ -2462,8 +2522,8 @@ static int run_history_compare_monsters(const void* va, const void* vb)
 {
     int ia = *(const int*)va;
     int ib = *(const int*)vb;
-    const score_run_monster_v1* ma = &g_monster_sort_details->monsters[ia];
-    const score_run_monster_v1* mb = &g_monster_sort_details->monsters[ib];
+    const run_history_monster_row* ma = &g_monster_sort_rows[ia];
+    const run_history_monster_row* mb = &g_monster_sort_rows[ib];
 
     if (g_monster_sort_mode == RUN_MON_SORT_DEPTH) {
         int a_unique = run_history_monster_is_unique(ma) ? 1 : 0;
@@ -2477,30 +2537,100 @@ static int run_history_compare_monsters(const void* va, const void* vb)
             return (b_level - a_level);
     }
 
-    if (ia != ib)
-        return (ia < ib) ? -1 : 1;
+    if (ma->r_idx != mb->r_idx)
+        return (ma->r_idx < mb->r_idx) ? -1 : 1;
     return 0;
 }
 
-static int* run_history_build_monster_order(const score_run_detail_block* details,
-                                            run_monster_sort_mode mode,
-                                            int total)
+static run_history_monster_row* run_history_build_monster_rows(
+    const score_run_detail_block* details, run_monster_group group,
+    run_monster_sort_mode mode, int* out_total)
 {
+    int total = run_history_monster_group_total(details, group);
+
+    if (out_total)
+        *out_total = total;
     if (total <= 0)
         return NULL;
-    int* order = mem_alloc_array(total, int);
-    if (!order)
+
+    run_history_monster_row* rows = mem_alloc_array(total,
+        run_history_monster_row);
+    if (!rows)
         return NULL;
+
+    if (group == RUN_MON_GROUP_UNIQUES) {
+        int row = 0;
+        for (int i = 1; i < z_info->r_max && row < total; i++) {
+            if (!run_history_monster_race_is_unique((u16b)i))
+                continue;
+
+            rows[row].r_idx = (u16b)i;
+            rows[row].seen = 0;
+            rows[row].killed = 0;
+            rows[row].deaths = 0;
+
+            const score_run_monster_v1* recorded =
+                run_history_find_monster_entry(details, (u16b)i);
+            if (recorded) {
+                rows[row].seen = recorded->seen;
+                rows[row].killed = recorded->killed;
+                rows[row].deaths = recorded->deaths;
+            }
+            row++;
+        }
+    } else {
+        for (int i = 0; i < total; i++) {
+            const score_run_monster_v1* recorded = &details->monsters[i];
+            rows[i].r_idx = recorded->r_idx;
+            rows[i].seen = recorded->seen;
+            rows[i].killed = recorded->killed;
+            rows[i].deaths = recorded->deaths;
+        }
+    }
+
+    if (mode == RUN_MON_SORT_APPEARANCE)
+        return rows;
+
+    g_monster_sort_rows = rows;
+    g_monster_sort_mode = mode;
+    int* order = mem_alloc_array(total, int);
+    if (!order) {
+        g_monster_sort_rows = NULL;
+        mem_free(rows);
+        if (out_total)
+            *out_total = 0;
+        return NULL;
+    }
     for (int i = 0; i < total; i++)
         order[i] = i;
-    if (mode == RUN_MON_SORT_APPEARANCE)
-        return order;
-
-    g_monster_sort_details = details;
-    g_monster_sort_mode = mode;
     qsort(order, total, sizeof(int), run_history_compare_monsters);
-    g_monster_sort_details = NULL;
-    return order;
+
+    run_history_monster_row* sorted = mem_alloc_array(total,
+        run_history_monster_row);
+    if (!sorted) {
+        mem_free(order);
+        g_monster_sort_rows = NULL;
+        mem_free(rows);
+        if (out_total)
+            *out_total = 0;
+        return NULL;
+    }
+    for (int i = 0; i < total; i++)
+        sorted[i] = rows[order[i]];
+
+    mem_free(order);
+    mem_free(rows);
+    g_monster_sort_rows = NULL;
+    return sorted;
+}
+
+static const char* run_history_monster_sort_label(run_monster_group group,
+                                                  run_monster_sort_mode mode)
+{
+    if (group == RUN_MON_GROUP_UNIQUES) {
+        return (mode == RUN_MON_SORT_DEPTH) ? "Depth" : "List order";
+    }
+    return run_history_monster_sort_labels[mode];
 }
 
 static int run_history_draw_general_panel(const score_record_v1* rec,
@@ -2756,7 +2886,8 @@ static bool run_history_handle_list_key(run_detail_list_state* state,
 }
 
 static int run_history_detail_panel_total(const score_run_detail_block* details,
-                                          run_detail_panel panel)
+                                          run_detail_panel panel,
+                                          run_monster_group monster_group)
 {
     if (!details)
         return 0;
@@ -2770,8 +2901,7 @@ static int run_history_detail_panel_total(const score_run_detail_block* details,
         return MIN(details->header.artefact_count,
             details->header.artefact_capacity);
     case RUN_PANEL_MONSTERS:
-        return MIN(details->header.monster_count,
-            details->header.monster_capacity);
+        return run_history_monster_group_total(details, monster_group);
     default:
         return 0;
     }
@@ -2916,24 +3046,24 @@ static void run_history_examine_artefact(const score_run_detail_block* details,
 
 static void run_history_examine_monster(const score_run_detail_block* details,
                                         const run_detail_list_state* state,
+                                        run_monster_group group,
                                         run_monster_sort_mode mode)
 {
-    int total = details->header.monster_count;
-    if (total > details->header.monster_capacity)
-        total = details->header.monster_capacity;
+    int total = 0;
     int idx = state->highlight;
-    if (idx < 0 || idx >= total)
+    run_history_monster_row* rows = run_history_build_monster_rows(details,
+        group, mode, &total);
+    if (!rows || idx < 0 || idx >= total) {
+        mem_free(rows);
         return;
+    }
 
-    int* order = run_history_build_monster_order(details, mode, total);
-    if (!order)
-        return;
-    const score_run_monster_v1* entry = &details->monsters[order[idx]];
-    mem_free(order);
+    u16b r_idx = rows[idx].r_idx;
+    mem_free(rows);
 
-    if (z_info && entry->r_idx > 0 && entry->r_idx < z_info->r_max) {
+    if (z_info && r_idx > 0 && r_idx < z_info->r_max) {
         screen_save();
-        (void)screen_roff(entry->r_idx, NULL);
+        (void)screen_roff(r_idx, NULL);
         screen_load();
     } else {
         bell("Monster information not available.");
@@ -2995,33 +3125,38 @@ static int run_history_draw_artefact_panel(const score_run_detail_block* details
 
 static int run_history_draw_monster_panel(const score_run_detail_block* details,
                                           run_detail_list_state* state,
+                                          run_monster_group group,
                                           run_monster_sort_mode sort_mode,
                                           int term_hgt)
 {
     int term_wid = 80;
-    int total = details->header.monster_count;
-    if (total > details->header.monster_capacity)
-        total = details->header.monster_capacity;
+    int total = 0;
     int rows = run_history_detail_body_rows(term_hgt, 5);
+    run_history_monster_row* entries = run_history_build_monster_rows(details,
+        group, sort_mode, &total);
 
-    if (total <= 0 || !details->monsters) {
-        c_prt(TERM_L_DARK, "No monster encounters were tracked for this run.", 3, 0);
+    if (total <= 0 || !entries) {
+        mem_free(entries);
+        if (group == RUN_MON_GROUP_UNIQUES)
+            c_prt(TERM_L_DARK, "No unique monsters are defined.", 3, 0);
+        else
+            c_prt(TERM_L_DARK, "No monster encounters were tracked for this run.", 3, 0);
         return rows;
     }
 
     run_history_clamp_list_state(state, rows, total);
-    int* order = run_history_build_monster_order(details, sort_mode, total);
-    if (!order) {
-        c_prt(TERM_L_DARK, "Unable to build monster list.", 3, 0);
-        return rows;
-    }
 
     score_ui_get_term_size(&term_wid, NULL);
 
     c_prt(TERM_L_BLUE,
-          format("=== Monster Encounters (%d total, %s) ===",
-                 total, run_history_monster_sort_labels[sort_mode]),
+          format("=== %s (%d total, %s) ===",
+                 (group == RUN_MON_GROUP_UNIQUES)
+                     ? "Unique Monsters" : "Monster Encounters",
+                 total, run_history_monster_sort_label(group, sort_mode)),
           2, 0);
+    c_prt(TERM_L_DARK,
+          format("Group: %s  (G to change)",
+                 run_history_monster_group_labels[group]), 3, 0);
     c_prt(TERM_L_UMBER, "Monster", 4, 2);
     if (score_ui_compact_width(term_wid)) {
         int seen_col = term_wid - 10;
@@ -3037,7 +3172,7 @@ static int run_history_draw_monster_panel(const score_run_detail_block* details,
         int idx = state->top + row;
         if (idx >= total)
             break;
-        const score_run_monster_v1* entry = &details->monsters[order[idx]];
+        const run_history_monster_row* entry = &entries[idx];
         const char* name = run_history_monster_name(entry->r_idx);
         byte pic_color = TERM_WHITE;
         char pic_char = '?';
@@ -3047,7 +3182,9 @@ static int run_history_draw_monster_panel(const score_run_detail_block* details,
             pic_color = monster_attr(r_ptr);
         }
 
-        byte color = (entry->killed > 0) ? TERM_L_GREEN : TERM_L_WHITE;
+        byte color = (entry->killed > 0) ? TERM_L_GREEN
+            : ((group == RUN_MON_GROUP_UNIQUES && entry->seen == 0)
+                ? TERM_SLATE : TERM_L_WHITE);
         byte display_color = (idx == state->highlight) ? TERM_YELLOW : color;
         int y = 5 + row;
         bool compact = score_ui_compact_width(term_wid);
@@ -3075,7 +3212,7 @@ static int run_history_draw_monster_panel(const score_run_detail_block* details,
         }
     }
 
-    mem_free(order);
+    mem_free(entries);
     return rows;
 }
 
@@ -3123,7 +3260,8 @@ static void run_history_show_detail(const run_history_entry* entry)
     panel_has_data[RUN_PANEL_ABILITIES] = have_details && details.ability_count > 0;
     panel_has_data[RUN_PANEL_MILESTONES] = have_details && details.milestone_count > 0;
     panel_has_data[RUN_PANEL_ARTEFACTS] = have_details && details.header.artefact_count > 0;
-    panel_has_data[RUN_PANEL_MONSTERS] = have_details && details.header.monster_count > 0;
+    panel_has_data[RUN_PANEL_MONSTERS] =
+        run_history_monster_group_total(&details, RUN_MON_GROUP_UNIQUES) > 0;
 
     run_detail_panel panel = RUN_PANEL_GENERAL;
     run_detail_view_state view = {0};
@@ -3141,6 +3279,7 @@ static void run_history_show_detail(const run_history_entry* entry)
         char confirm_label[16] = "";
         char back_label[16] = "";
         char sort_label[16] = "";
+        char group_label[16] = "";
         char footer_buf[192] = "";
         int active_list_rows = 0;
         int active_list_total = 0;
@@ -3161,6 +3300,8 @@ static void run_history_show_detail(const run_history_entry* entry)
                 back_label, sizeof(back_label));
             score_prompt_label(steamdeck_secondary_key(), "Y",
                 sort_label, sizeof(sort_label));
+            score_prompt_label(steamdeck_alt_action_key(), "X",
+                group_label, sizeof(group_label));
         }
 
         score_ui_get_term_size(&term_wid, &term_hgt);
@@ -3215,7 +3356,8 @@ static void run_history_show_detail(const run_history_entry* entry)
                 ? "D-pad navigate/view  [%s] back"
                 : "Dir navigate/view  Esc back";
             active_list_rows = ability_rows;
-            active_list_total = run_history_detail_panel_total(&details, panel);
+            active_list_total = run_history_detail_panel_total(&details, panel,
+                view.monster_group);
             scroll_first_row = 5;
             scroll_rows = ability_rows;
             enable_scroll_area = active_list_total > 0;
@@ -3226,7 +3368,8 @@ static void run_history_show_detail(const run_history_entry* entry)
                 ? "D-pad navigate/view  [%s] back"
                 : "Dir navigate/view  Esc back";
             active_list_rows = milestone_rows;
-            active_list_total = run_history_detail_panel_total(&details, panel);
+            active_list_total = run_history_detail_panel_total(&details, panel,
+                view.monster_group);
             scroll_first_row = 5;
             scroll_rows = milestone_rows;
             enable_scroll_area = active_list_total > 0;
@@ -3237,19 +3380,21 @@ static void run_history_show_detail(const run_history_entry* entry)
                 ? "D-pad navigate/view  [%s] inspect  [%s] back"
                 : "Dir navigate/view  Enter inspect  Esc back";
             active_list_rows = artefact_rows;
-            active_list_total = run_history_detail_panel_total(&details, panel);
+            active_list_total = run_history_detail_panel_total(&details, panel,
+                view.monster_group);
             scroll_first_row = 5;
             scroll_rows = artefact_rows;
             enable_scroll_area = active_list_total > 0;
             break;
         case RUN_PANEL_MONSTERS:
             monster_rows = run_history_draw_monster_panel(&details, &view.monsters,
-                view.monster_sort_mode, term_hgt);
+                view.monster_group, view.monster_sort_mode, term_hgt);
             footer = steamdeck
-                ? "D-pad navigate/view  [%s] inspect  [%s] sort  [%s] back"
-                : "Dir navigate/view  Enter inspect  S sort  Esc back";
+                ? "D-pad navigate/view  [%s] inspect  [%s] sort  [%s] group  [%s] back"
+                : "Dir navigate/view  Enter inspect  S sort  G group  Esc back";
             active_list_rows = monster_rows;
-            active_list_total = run_history_detail_panel_total(&details, panel);
+            active_list_total = run_history_detail_panel_total(&details, panel,
+                view.monster_group);
             scroll_first_row = 5;
             scroll_rows = monster_rows;
             enable_scroll_area = active_list_total > 0;
@@ -3272,7 +3417,7 @@ static void run_history_show_detail(const run_history_entry* entry)
                         confirm_label, back_label);
                 } else if (panel == RUN_PANEL_MONSTERS) {
                     strnfmt(footer_buf, sizeof(footer_buf), footer,
-                        confirm_label, sort_label, back_label);
+                        confirm_label, sort_label, group_label, back_label);
                 }
             } else {
                 SDL_strlcpy(footer_buf, footer, sizeof(footer_buf));
@@ -3293,6 +3438,8 @@ static void run_history_show_detail(const run_history_entry* entry)
             if (panel == RUN_PANEL_MONSTERS) {
                 ui_menu_click_add_text_token(RUN_DETAIL_CLICK_SORT, 0,
                     term_hgt - 2, footer_buf, "sort");
+                ui_menu_click_add_text_token(RUN_DETAIL_CLICK_GROUP, 0,
+                    term_hgt - 2, footer_buf, "group");
             }
         }
 
@@ -3384,6 +3531,10 @@ static void run_history_show_detail(const run_history_entry* entry)
                         ch = 's';
                         click_generated_command = true;
                         break;
+                    case RUN_DETAIL_CLICK_GROUP:
+                        ch = 'g';
+                        click_generated_command = true;
+                        break;
                     default:
                         skip_command = true;
                         break;
@@ -3410,6 +3561,8 @@ static void run_history_show_detail(const run_history_entry* entry)
                 ch = '\r';
             else if (ch == steamdeck_secondary_key())
                 ch = 's';
+            else if (ch == steamdeck_alt_action_key())
+                ch = 'g';
         }
 
         switch (ch) {
@@ -3470,18 +3623,26 @@ static void run_history_show_detail(const run_history_entry* entry)
                 if (ch == ' ' || ch == '\r' || ch == '\n' ||
                     ch == 'x' || ch == 'X' || ch == 'r' || ch == 'R') {
                     run_history_examine_monster(&details, &view.monsters,
-                        view.monster_sort_mode);
+                        view.monster_group, view.monster_sort_mode);
                     handled = true;
                 } else if (ch == 's' || ch == 'S') {
                     view.monster_sort_mode =
                         (run_monster_sort_mode)((view.monster_sort_mode + 1) % RUN_MON_SORT_COUNT);
                     run_history_clamp_list_state(&view.monsters, monster_rows,
-                        MIN(details.header.monster_count, details.header.monster_capacity));
+                        run_history_monster_group_total(&details,
+                            view.monster_group));
+                    handled = true;
+                } else if (ch == 'g' || ch == 'G') {
+                    view.monster_group =
+                        (run_monster_group)((view.monster_group + 1)
+                            % RUN_MON_GROUP_COUNT);
+                    run_history_clamp_list_state(&view.monsters, monster_rows,
+                        run_history_monster_group_total(&details,
+                            view.monster_group));
                     handled = true;
                 } else {
-                    int total = details.header.monster_count;
-                    if (total > details.header.monster_capacity)
-                        total = details.header.monster_capacity;
+                    int total = run_history_monster_group_total(&details,
+                        view.monster_group);
                     handled = run_history_handle_list_key(&view.monsters, ch,
                         monster_rows, total);
                 }

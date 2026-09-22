@@ -5155,12 +5155,19 @@ static void sdl_tale_screen_render_canvas(const SDL_Rect* canvas)
             float line_h = line->heading
                 ? metrics.heading_h : metrics.body_line_h;
             byte attr = line->heading ? TERM_L_BLUE : TERM_WHITE;
+            byte alpha = line->entry == screen->active_entry
+                ? screen->active_alpha : 255;
 
-            if (line->entry != screen->active_entry)
+            if (i > start && line->entry != screen->layout_lines[i - 1].entry)
+                y += metrics.entry_gap;
+            if (line->entry > screen->active_entry)
+            {
+                y += line_h;
                 continue;
+            }
             (void)sdl_char_sheet_draw_text_alpha(
                 line->heading ? metrics.heading_font : metrics.body_font,
-                line->text, attr, screen->active_alpha,
+                line->text, attr, alpha,
                 metrics.column_x, y, metrics.column_w, line_h);
             y += line_h;
         }

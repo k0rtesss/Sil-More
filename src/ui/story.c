@@ -187,7 +187,6 @@ static void print_story_sdl(const int* sel_idx, int start, int total,
     bool saved_hide_cursor = false;
     char prompt[96];
     int completed_entry = -1;
-    int final_entry = total - start - 1;
 
     if (!sel_idx || start < 0 || start >= total)
         return;
@@ -239,8 +238,11 @@ static void print_story_sdl(const int* sel_idx, int start, int total,
             completed_entry = entry;
             if (!fast_forward)
             {
+                /* Keep completed chapters on the current page.  The story
+                 * screen is a running chronicle, not a one-entry slideshow;
+                 * the renderer retains earlier entries below the title. */
                 int fade_result = story_semantic_animate_entry(entry,
-                    fade_in, entry != final_entry);
+                    fade_in, false);
 
                 if (fade_result == 2)
                 {
