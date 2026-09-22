@@ -500,6 +500,7 @@ extern bool place_chest_in_partition( int pi, int y1, int y2, int x1, int x2, co
 extern void apply_quadrant_generation_modes(void);
 extern bool utumno_gen(void);
 extern bool utumno_build_entrance(int cy, int cx);
+extern void utumno_shape_frontiers(void);
 extern bool utumno_finalize_corridors(void);
 extern bool utumno_place_morgoth_route(void);
 extern void ensure_partition_connectivity(void);

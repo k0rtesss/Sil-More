@@ -31,6 +31,60 @@ static void tick(int count)
 }
 static void setcell(int y,int x,int f)
 { cave_set_feat(y,x,f); }
+static void test_utumno_contacts(void)
+{
+    for(int depth=UTUMNO_DEPTH;depth<=UTUMNO_FORGE_DEPTH;depth++) {
+        clean();p_ptr->depth=depth;
+        /* Four separated fronts must all react in one pulse, without an ice
+         * tile's own cold cancelling heat from the adjacent molten rock. */
+        for(int y=5;y<=14;y+=3) {
+            setcell(y,8,FEAT_LAVA);setcell(y,9,FEAT_ICE);
+        }
+        cave_environment_seed();
+        for(int i=0;i<cave_environment_get_state().source_count;i++) {
+            environment_source source=*cave_environment_source_at(i);
+            source.next_turn=turn+10000;CHECK(cave_environment_restore_source(i,source));
+        }
+        tick(10);
+        for(int y=5;y<=14;y+=3) {
+            CHECK(cave_feat[y][8]==FEAT_LAVA);
+            CHECK(cave_feat[y][9]==FEAT_MELTING_ICE);
+        }
+        tick(10);
+        for(int y=5;y<=14;y+=3)CHECK(cave_feat[y][9]==FEAT_WATER);
+        tick(10);
+        for(int y=5;y<=14;y+=3) {
+            CHECK(cave_feat[y][8]==FEAT_FLOOR);
+            CHECK(cave_environment_cell_at(y,8)->flags&ENV_DEPOSIT);
+        }
+        /* Neither occupied ice nor a protected dry destination may change. */
+        clean();p_ptr->depth=depth;
+        setcell(10,10,FEAT_LAVA);setcell(10,11,FEAT_ICE);
+        cave_m_idx[10][11]=-1;p_ptr->py=10;p_ptr->px=11;
+        setcell(9,10,FEAT_MORE);cave_environment_seed();tick(50);
+        CHECK(cave_feat[10][11]==FEAT_ICE && cave_feat[9][10]==FEAT_MORE);
+        clean();p_ptr->depth=depth;
+        setcell(10,10,FEAT_WATER);
+        setcell(9,10,FEAT_ICE);setcell(11,10,FEAT_ICE);
+        setcell(10,9,FEAT_ICE);setcell(10,11,FEAT_ICE);
+        cave_environment_seed();tick(10);
+        CHECK(cave_feat[10][10]==FEAT_ICE);
+        clean();p_ptr->depth=depth;
+        setcell(10,10,FEAT_LAVA);setcell(10,11,FEAT_WATER);
+        cave_environment_seed();
+        environment_cell added=*cave_environment_cell_at(10,10);
+        added.flags|=ENV_ADDED_LIQUID;added.base_feat=FEAT_FLOOR;
+        CHECK(cave_environment_restore_cell(10,10,added));
+        environment_source source=*cave_environment_source_at(added.owner-1);
+        source.used=1;source.next_turn=turn+10000;
+        CHECK(cave_environment_restore_source(added.owner-1,source));
+        tick(10);
+        CHECK(cave_feat[10][10]==FEAT_FLOOR);
+        CHECK(cave_environment_source_at(added.owner-1)->used==0);
+        CHECK(!(cave_environment_cell_at(10,10)->flags&ENV_ADDED_LIQUID));
+    }
+    puts("Utumno: four concurrent ice/lava fronts thaw in stages, water quenches lava, forge simulation runs, occupied ice/stairs survive PASS.");
+}
 static void test_environment_speed(void)
 {
     CHECK(op_ptr->environment_speed==ENVIRONMENT_SPEED_NORMAL); /* Production init. */
@@ -455,7 +509,7 @@ def main():
     init=init[:init.index('    check_templates();')]
     source=OUT/'check.c'
     source.write_text(prefix+fixture_function('terminal_extra')+'\n'+fixture_function('reset_map')+'\n'+FRESH_MAP+'\n'+TESTS+'\n'+init+
-        '    test_environment_speed();test_environment_speed_settings();test_clock();test_reservoir();test_thermal();test_floor_chasm_bridges();test_partition_heat();test_bridges();test_actors();test_protection();test_sole_route();test_memory();test_vents();test_debug_options();test_wizard_event_travel();\n'
+        '    test_environment_speed();test_environment_speed_settings();test_clock();test_reservoir();test_thermal();test_utumno_contacts();test_floor_chasm_bridges();test_partition_heat();test_bridges();test_actors();test_protection();test_sole_route();test_memory();test_vents();test_debug_options();test_wizard_event_travel();\n'
         '    printf("Living dungeon behavior: %d checks, %d failed groups.\\n",checks,failures);\n'
         '    SDL_Quit();return failures?1:0;\n}\n',encoding='utf-8')
     objects=shlex.split((BUILD/'CMakeFiles/sil-more.dir/objects1.rsp').read_text())

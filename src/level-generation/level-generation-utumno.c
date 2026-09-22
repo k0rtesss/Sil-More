@@ -2,8 +2,10 @@
 #include "level-generation/level-generation-internal.h"
 #include "level-generation/level-generation-terrain-access.h"
 #include "level-generation/level-generation-terrain-history.h"
+#include "level-generation/level-generation-terrain.h"
 #include "level-generation/level-generation-terrain-vaults.h"
 #include "cave/cave-water-flow.h"
+#include "cave/cave-fixtures.h"
 
 /* These templates are selected explicitly, never by the ordinary vault lottery. */
 #define UTUMNO_DOORS_VAULT 523
@@ -127,6 +129,49 @@ bool utumno_gen(void)
     }
     styles_init_for_level();
     return utumno_forge_gen();
+}
+
+/* Grow glacial shelves along the generated lava system. This opens the banks
+ * into a landscape rather than leaving thin, isolated elemental corridors.
+ * Work from a snapshot: the result cannot depend on the map scan direction.
+ * Only floor and unworked granite are replaced, so existing routes stay open. */
+void utumno_shape_frontiers(void)
+{
+    static byte banks[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    byte widths[(MAX_DUNGEON_HGT + 7) / 8][(MAX_DUNGEON_WID + 7) / 8];
+    memset(banks, 0, sizeof(banks));
+    for (int y = 0; y < (MAX_DUNGEON_HGT + 7) / 8; y++)
+        for (int x = 0; x < (MAX_DUNGEON_WID + 7) / 8; x++)
+            widths[y][x] = rand_range(2, 4);
+    for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
+        for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
+        {
+            if (cave_feat[y][x] != FEAT_LAVA || (cave_info[y][x] & CAVE_ICKY)) continue;
+            int radius = widths[y / 8][x / 8];
+            for (int dy = -radius; dy <= radius; dy++)
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    int yy = y + dy, xx = x + dx;
+                    if (in_bounds_fully(yy, xx) && distance(y, x, yy, xx) <= radius)
+                        banks[yy][xx] = 1;
+                }
+        }
+    int shelves = 0;
+    for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
+        for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
+        {
+            if (!banks[y][x] || (cave_info[y][x] & (CAVE_ICKY | CAVE_G_VAULT))
+                || cave_m_idx[y][x] || cave_o_idx[y][x] || cave_fixture_at(y, x)
+                || cave_corridor1[y][x] >= 0 || cave_corridor2[y][x] >= 0
+                || terrain_generation_reserved(y, x)
+                || terrain_vault_id_at(y, x) >= 0) continue;
+            int f = cave_feat[y][x];
+            if (f != FEAT_FLOOR && f != FEAT_WALL_EXTRA) continue;
+            cave_set_feat_style(y, x, FEAT_ICE, UTUMNO_ICE_STYLE);
+            cave_natural[y][x] = 1;
+            shelves++;
+        }
+    log_debug("Utumno: %d glacial bank tiles around the lava networks", shelves);
 }
 
 /* The mandatory ladder must be reachable on foot. The general room flood can

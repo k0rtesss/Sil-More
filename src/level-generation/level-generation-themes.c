@@ -49,7 +49,7 @@ static const terrain_landmark_profile terrain_landmark_defaults[TERRAIN_THEME_DE
     {100,55,90,1,2,40,30}, {100,55,90,1,2,40,30},
     {100,55,90,1,2,40,30}, {100,55,90,1,2,40,30},
     {100,55,90,1,2,40,30},
-    {0,50,50,1,1,0,0}, {100,40,70,1,2,40,30}
+    {0,50,50,1,1,0,0}, {100,55,90,2,3,65,45}
 };
 static const terrain_landmark_profile terrain_landmark_disabled = {
     0,50,50,1,1,0,0
@@ -65,7 +65,7 @@ static const terrain_network_profile terrain_network_defaults[TERRAIN_THEME_DEPT
     {{35,10,25,20,10},2,4,3,8,70}, {{35,10,25,20,10},2,4,3,8,70},
     {{35,10,25,20,10},2,4,3,8,70}, {{35,10,25,20,10},2,4,3,8,70},
     {{35,10,25,20,10},2,4,3,8,70}, {{35,10,25,20,10},2,4,3,8,70},
-    {{0,0,0,0,0},1,1,2,2,0}, {{25,25,0,0,50},2,4,3,8,70}
+    {{0,0,0,0,0},1,1,2,2,0}, {{25,25,0,0,50},3,5,5,12,20}
 };
 static const terrain_network_profile terrain_network_disabled = {
     {0,0,0,0,0},1,1,2,2,0

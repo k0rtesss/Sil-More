@@ -669,6 +669,7 @@ bool cave_gen(void)
         return false;
     }
     place_dungeon_terrain();
+    if (is_utumno_level) utumno_shape_frontiers();
 
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_ENTRY,
         "Placing stairs, rubble, doors, and player start.");

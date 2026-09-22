@@ -17,8 +17,16 @@ static object_type held[INVEN_TOTAL];
 static object_kind kinds[5];
 static maxima limits;
 static int active_calls, wield_slot_seen, storage_seen, use_calls;
-static int question_result;
+static int item_seen, menu_result = -1, expected_icon;
+static int combat_rows, pack_rows, belt_rows, harness_rows;
+static bool pack_disabled, belt_disabled;
+static character_profile characters[1];
+static player_race race;
 static bool confirmation;
+extern bool test_choose_active_item(int item, int* chosen_item, int* action);
+void __wrap_calc_bonuses_for_preview(void) {}
+bool __wrap_do_cmd_active_item(int item)
+{ active_calls++; item_seen = item; return confirmation; }
 
 void __wrap_do_cmd_toggle_active_weapon(void) { active_calls++; }
 bool __wrap_do_cmd_wield_to_slot(object_type* obj, int item, int slot)
@@ -33,14 +41,26 @@ bool __wrap_player_pack_item_action_blocked(const object_type* obj)
 void __wrap_object_desc(char* buf, size_t size, const object_type* obj,
     int pref, int mode)
 { (void)obj; (void)pref; (void)mode; SDL_strlcpy(buf, "test item", size); }
-int __wrap_ui_question_ask(cptr title, cptr desc,
-    const ui_question_option* options, int count, int y, int x, int def)
+int __wrap_ui_question_ask_objects_with_help(cptr title, cptr desc,
+    const ui_question_option* options, const object_type* const icons[],
+    int count, int y, int x, int def)
 {
     (void)title; (void)desc; (void)y; (void)x; (void)def;
-    assert(count == 2);
-    assert(streq(options[0].label, "Store in Pack"));
-    assert(streq(options[1].label, "Equip on Belt"));
-    return question_result;
+    combat_rows = pack_rows = belt_rows = harness_rows = 0;
+    pack_disabled = belt_disabled = false;
+    for (int i = 0; i < count; i++) {
+        if (strstr(options[i].label, "Store in Pack")) {
+            pack_rows++; pack_disabled = options[i].disabled;
+        } else if (strstr(options[i].label, "Equip on Belt")) {
+            belt_rows++; belt_disabled = options[i].disabled;
+        } else if (strstr(options[i].label, "Harness")) {
+            harness_rows++;
+        } else {
+            combat_rows++;
+            assert(icons[i] && icons[i]->k_idx == expected_icon);
+        }
+    }
+    return menu_result;
 }
 
 static void reset_calls(void)
@@ -48,7 +68,7 @@ static void reset_calls(void)
     active_calls = use_calls = 0;
     wield_slot_seen = storage_seen = -1;
     confirmation = true;
-    question_result = -1;
+    item_seen = -1;
 }
 
 static void set_item(int slot, int kind)
@@ -65,9 +85,13 @@ static void set_item(int slot, int kind)
 
 int main(void)
 {
+    setvbuf(stdout, NULL, _IONBF, 0);
     inventory = held;
     k_info = kinds;
     z_info = &limits;
+    c_info = characters;
+    current_character_profile = characters;
+    rp_ptr = &race;
     kinds[1].tval = TV_SWORD;
     kinds[1].sval = SV_DAGGER;
     kinds[1].flags3 = TR3_THROWING;
@@ -99,59 +123,99 @@ int main(void)
     reset_calls();
     assert(equipment_menu_use_entry(&entry, INVEN_WIELD,
         SUPPLY_FLOOR_ACTION_DEFAULT));
-    assert(active_calls == 1 && wield_slot_seen == -1);
+    assert(active_calls == 1 && wield_slot_seen == -1 && item_seen == 0);
     reset_calls();
     set_item(0, 3);
     assert(equipment_menu_use_entry(&entry, INVEN_BOW,
         SUPPLY_FLOOR_ACTION_DEFAULT));
-    assert(active_calls == 1 && wield_slot_seen == -1);
+    assert(active_calls == 1 && wield_slot_seen == -1 && item_seen == 0);
     assert(streq(inventory_page_use_action_text(&entry,
-        SUPPLY_FLOOR_ACTION_DEFAULT), "Equip"));
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Use"));
     assert(inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
         failure, sizeof(failure)));
     assert(active_calls == 2);
     puts("PASS: Main-hand and bow Equip continue to open Active setup.");
 
+    /* Same spear/dagger in a reserved slot, normal carried slot, or extra
+     * carried storage always opens the same item-specific menu. */
+    set_item(INVEN_WIELD, 1);
+    p_ptr->active_weapon_mode = PLAYER_ACTIVE_WEAPON_RANGED_1;
+    equipment_list_entry reserved;
+    equipment_entry_clear(&reserved);
+    reserved.equip_idx = INVEN_WIELD;
+    assert(streq(inventory_page_use_action_text(&reserved,
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Use"));
     reset_calls();
-    set_item(0, 1);
-    assert(streq(inventory_page_use_action_text(&entry,
-        SUPPLY_FLOOR_ACTION_DEFAULT), "Choose"));
-    assert(!inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
+    assert(inventory_page_use_entry(&reserved, SUPPLY_FLOOR_ACTION_DEFAULT,
         failure, sizeof(failure)));
-    assert(wield_slot_seen == -1 && storage_seen == -1 && active_calls == 0);
-    question_result = 0;
-    assert(inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
-        failure, sizeof(failure)));
-    assert(storage_seen == OBJECT_STORAGE_PACK);
+    assert(active_calls == 1 && item_seen == INVEN_WIELD);
     reset_calls();
-    question_result = 1;
-    assert(inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
+    assert(equipment_menu_use_entry(&reserved, INVEN_WIELD,
+        SUPPLY_FLOOR_ACTION_DEFAULT));
+    assert(active_calls == 1 && item_seen == INVEN_WIELD);
+    reset_calls();
+    confirmation = false;
+    assert(!inventory_page_use_entry(&reserved, SUPPLY_FLOOR_ACTION_DEFAULT,
         failure, sizeof(failure)));
-    assert(wield_slot_seen == INVEN_BELT && active_calls == 0);
-    puts("PASS: Harness dagger supports Pack, Belt, and cancel without unintended equip.");
+    assert(p_ptr->active_weapon_mode == PLAYER_ACTIVE_WEAPON_RANGED_1);
+    char where[80];
+    assert(streq(equipment_entry_source_text(&reserved, where, sizeof(where)), "Harness"));
+    p_ptr->active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
+    reserved.equipped = true;
+    assert(streq(equipment_entry_source_text(&reserved, where, sizeof(where)), "Active"));
+    puts("PASS: Reserved weapons use the same menu as loose Harness weapons; cancellation preserves active mode.");
 
     reset_calls();
-    set_item(INVEN_BELT, 1);
-    held[INVEN_BELT].ident |= IDENT_CURSED;
-    assert(streq(inventory_page_use_action_text(&entry,
-        SUPPLY_FLOOR_ACTION_DEFAULT), "Store"));
+    set_item(0, 1);
+    assert(player_carried_extra_load(&held[0]));
+    entry.item_idx = CARRIED_EXTRA_INDEX;
     assert(inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
         failure, sizeof(failure)));
-    assert(storage_seen == OBJECT_STORAGE_PACK && active_calls == 0);
-    reset_calls();
-    set_item(0, 2);
-    assert(streq(inventory_page_use_action_text(&entry,
-        SUPPLY_FLOOR_ACTION_DEFAULT), "Store"));
-    assert(inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
-        failure, sizeof(failure)));
-    assert(storage_seen == OBJECT_STORAGE_PACK && active_calls == 0);
+    assert(item_seen == CARRIED_EXTRA_INDEX);
+    entry.item_idx = 0;
+    player_carried_extra_reset_store();
     held[0].storage = OBJECT_STORAGE_PACK;
     assert(streq(inventory_page_use_action_text(&entry,
-        SUPPLY_FLOOR_ACTION_DEFAULT), "Ready"));
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Move to Harness"));
     assert(inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
         failure, sizeof(failure)));
     assert(storage_seen == OBJECT_STORAGE_HARNESS);
-    puts("PASS: Cursed Belt and stowable digging tools retain storage transfers.");
+    puts("PASS: Extra storage uses the same route; Pack transfer explicitly says Move to Harness.");
+
+    set_item(0, 1);
+    set_item(INVEN_WIELD, 1);
+    set_item(INVEN_BOW, 3);
+    p_ptr->active_weapon_mode = PLAYER_ACTIVE_WEAPON_RANGED_1;
+    expected_icon = 1;
+    int chosen_item, chosen_action;
+    object_type snapshot[INVEN_TOTAL];
+    player_active_weapon_assign_harness_color(&held[0]);
+    player_active_weapon_assign_harness_color(&held[INVEN_WIELD]);
+    player_active_weapon_assign_harness_color(&held[INVEN_BOW]);
+    memcpy(snapshot, held, sizeof(snapshot));
+    menu_result = -1;
+    assert(!test_choose_active_item(INVEN_WIELD, &chosen_item, &chosen_action));
+    assert(combat_rows >= 1 && pack_rows == 1 && belt_rows == 1 && harness_rows == 1);
+    int reserved_rows = combat_rows;
+    assert(memcmp(snapshot, held, sizeof(snapshot)) == 0);
+    assert(!test_choose_active_item(0, &chosen_item, &chosen_action));
+    assert(combat_rows == reserved_rows && pack_rows == 1 && belt_rows == 1);
+    menu_result = 0;
+    assert(test_choose_active_item(0, &chosen_item, &chosen_action));
+    assert(chosen_item == 0 && chosen_action == 0);
+    assert(test_choose_active_item(INVEN_WIELD, &chosen_item, &chosen_action));
+    assert(chosen_item == INVEN_WIELD && chosen_action == 0);
+    set_item(INVEN_BELT, 1);
+    held[INVEN_BELT].ident |= IDENT_CURSED;
+    assert(test_choose_active_item(0, &chosen_item, &chosen_action));
+    assert(belt_disabled && !pack_disabled);
+    held[INVEN_WIELD].ident |= IDENT_CURSED;
+    assert(test_choose_active_item(INVEN_WIELD, &chosen_item, &chosen_action));
+    assert(pack_disabled);
+    expected_icon = 3;
+    assert(test_choose_active_item(INVEN_BOW, &chosen_item, &chosen_action));
+    assert(chosen_item == INVEN_BOW && combat_rows >= 1 && !pack_rows && !belt_rows);
+    puts("PASS: Item menu filters out unrelated weapons, preserves state on cancel, and includes valid storage routes.");
 
     memset(held, 0, sizeof(held));
     set_item(0, 1);
@@ -183,7 +247,13 @@ def main():
     source.write_text(HARNESS, encoding="utf-8")
     cmake = BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())
-    excluded = ("/src/main.c.obj", "/src/cmd/ui/cmd-ui-knowledge.c.obj")
+    wrapper = OUT / "active-check.c"
+    wrapper.write_text('#include "player/player-active-weapon.c"\n'
+        'bool test_choose_active_item(int item, int* chosen_item, int* action) {\n'
+        'active_weapon_choice choice; if (!choose_active_weapon(&choice, item)) return false;\n'
+        '*chosen_item = choice.item; *action = choice.action; return true; }\n', encoding="utf-8")
+    excluded = ("/src/main.c.obj", "/src/cmd/ui/cmd-ui-knowledge.c.obj",
+                "/src/player/player-active-weapon.c.obj")
     rsp = OUT / "objects.rsp"
     rsp.write_text("\n".join('"' + p + '"' for p in objects
                              if not p.endswith(excluded)), encoding="utf-8")
@@ -194,10 +264,11 @@ def main():
     wrapped = ("do_cmd_toggle_active_weapon", "do_cmd_wield_to_slot",
                "do_cmd_move_item_to_storage", "do_cmd_use_item_by_index",
                "get_check", "player_pack_item_action_blocked", "object_desc",
-               "ui_question_ask")
+               "ui_question_ask_objects_with_help", "do_cmd_active_item",
+               "calc_bonuses_for_preview")
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17",
-        "-O0", "-g", "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
+        "-O0", "-g", "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(wrapper),
         "@" + str(rsp), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         *["-Wl,--wrap=" + s for s in wrapped], "-o", str(exe)],
         cwd=BUILD, env=env, check=True)

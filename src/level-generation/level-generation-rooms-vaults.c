@@ -350,6 +350,13 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 break;
             }
 
+            /* Authored ice uses its own token, distinct from ore and water. */
+            case '{':
+            {
+                cave_set_feat(y, x, FEAT_ICE);
+                break;
+            }
+
             /* Sunlight */
             case ',':
             {

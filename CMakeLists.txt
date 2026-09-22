@@ -101,6 +101,16 @@ if (SIL_BUILD_WITH_SDL_SOURCES)
     set(SDLTTF_VENDORED ON CACHE BOOL "Use vendored freetype/harfbuzz for mobile" FORCE)
   endif()
 
+  # The game only ships PNG image assets.  SDL_image enables AVIF by default,
+  # which pulls in vendored libavif/libaom on Android; libaom's configure step
+  # requires a host Perl installation even though Sil-More never loads AVIFs.
+  # Keep the Android build self-contained and avoid that unused host-tool
+  # dependency.  FORCE also fixes existing Gradle/CMake build trees whose cache
+  # recorded SDLIMAGE_AVIF=ON before this option was added.
+  if(ANDROID)
+    set(SDLIMAGE_AVIF OFF CACHE BOOL "Support loading AVIF images" FORCE)
+  endif()
+
   # Build SDL as static libraries on iOS to avoid code-signing issues
   # with dynamic frameworks and to simplify the app bundle.
   if(SIL_IOS)

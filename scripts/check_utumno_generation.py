@@ -23,6 +23,7 @@ HARNESS = r'''
 #include "level-generation/level-generation-themes.h"
 #include "level-generation/level-generation-terrain.h"
 #include "level-generation/level-generation-terrain-vaults.h"
+#include "cave/cave-environment.h"
 #include <assert.h>
 #include <stdio.h>
 static term test_term;
@@ -151,7 +152,7 @@ static void check_workshop_access(int depth) {
         /* Ordinary level generation may scatter rubble onto empty floors.
          * All fixed destinations must retain a dry route without digging,
          * secret-door discovery or even a diagonal squeeze. */
-        bool needs_access=strchr("~0uQ<>",token)!=NULL;
+        bool needs_access=strchr("~0xQ<>",token)!=NULL;
         if(needs_access&&!reached[y][x]) {
             printf("Unreachable vault%d token%c at%d,%d feature%d from%d,%d\n",
                 vault,token,y,x,cave_feat[y][x],sy,sx);
@@ -187,6 +188,45 @@ static void export_map(const char *out,int depth) {
         fputc('\n',f);
     }
     fclose(f);
+}
+static void check_living_landscape(void) {
+    int depth=p_ptr->depth;
+    if(depth!=UTUMNO_DEPTH&&depth!=UTUMNO_FORGE_DEPTH)return;
+    int contacts=0,active_channels=0;
+    static byte original[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static byte initially_accessible[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    memcpy(original,cave_feat,sizeof(original));
+    walking_flood();memcpy(initially_accessible,accessible,sizeof(accessible));
+    for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
+        const environment_cell* cell=cave_environment_cell_at(y,x);
+        int id=terrain_vault_id_at(y,x),f=cave_feat[y][x];
+        if(id==523||id==524) {
+            if(f==FEAT_LAVA||f==FEAT_WATER||f==FEAT_DEEP_WATER||FEAT_IS_ICE(f)) {
+                assert(!(cell->flags&ENV_PROTECTED));active_channels++;
+            } else assert(cell->flags&ENV_PROTECTED);
+        }
+        if(f!=FEAT_LAVA || id>=0)continue;
+        contacts+=FEAT_IS_ICE(cave_feat[y-1][x])+FEAT_IS_ICE(cave_feat[y+1][x])
+            +FEAT_IS_ICE(cave_feat[y][x-1])+FEAT_IS_ICE(cave_feat[y][x+1]);
+    }
+    assert(active_channels>30);
+    if(depth==UTUMNO_DEPTH)assert(contacts>=20);
+    p_ptr->leaving=false;
+    for(int n=0;n<100;n++){turn+=10;cave_environment_process();}
+    int changed=0;
+    for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
+        const environment_cell* cell=cave_environment_cell_at(y,x);
+        if(cell->flags&ENV_PROTECTED)assert(cave_feat[y][x]==original[y][x]);
+        changed+=cave_feat[y][x]!=original[y][x];
+    }
+    assert(changed>0);
+    walking_flood();
+    for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++)
+        if(initially_accessible[y][x]&&(cave_stair_bold(y,x)||cave_forge_bold(y,x)))
+            assert(accessible[y][x]);
+    check_workshop_access(depth);
+    printf("PASS depth%d live landscape: %d exterior ice/lava contacts, %d active workshop tiles, %d changes; protected structure and routes intact\n",
+        depth,contacts,active_channels,changed);
 }
 static int check(int depth,int seed,bool visited,bool enabled,const char *out) {
     wipe_o_list();wipe_mon_list();player_wipe();
@@ -253,7 +293,10 @@ static int check(int depth,int seed,bool visited,bool enabled,const char *out) {
         if(visited)assert(cave_feat[p_ptr->py][p_ptr->px]==FEAT_MORE&&!p_ptr->utumno_return_to_throne);
     }
     printf("PASS depth%d %dx%d partitions%d attempts%d stairs%d/%d/%d water%d ice%d lava%d forge%d chest%d monsters%d\n",depth,p_ptr->cur_map_hgt,p_ptr->cur_map_wid,current_partition_count,attempts,down,up,shafts,water,ice,lava,forges,chests,mon_cnt);
-    if(seed==1&&!small_maps)export_map(out,depth);
+    if(seed==1&&!small_maps) {
+        export_map(out,depth);
+        check_living_landscape();
+    }
     return first_size;
 }
 static void go_to_feature(int feature) {
@@ -381,7 +424,7 @@ def check_workshop_templates():
         rows = records[serial]
         assert rows and all(len(row) == len(rows[0]) for row in rows)
         dry = {(y, x) for y, row in enumerate(rows) for x, token in enumerate(row)
-               if token in ".+~0uQ<>"}
+               if token in ".+~0xQ<>"}
         start = (2, len(rows[0]) // 2) if serial == 524 else min(dry)
         assert start in dry
         reached = {start}

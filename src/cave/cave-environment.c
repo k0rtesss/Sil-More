@@ -103,6 +103,23 @@ static int liquid(int feature)
         || feature == FEAT_CHASM ? feature : 0;
 }
 
+static bool utumno_environment(void)
+{
+    return p_ptr->depth == UTUMNO_DEPTH || p_ptr->depth == UTUMNO_FORGE_DEPTH;
+}
+
+/* Only the elemental channels of the two workshops are live. Their masonry,
+ * dry aisles, bridges, stores and destinations retain vault protection. */
+static bool utumno_live_channel(int y, int x)
+{
+    if (!utumno_environment()) return false;
+    int vault = terrain_vault_id_at(y, x);
+    int f = cave_feat[y][x];
+    return (vault == 523 || vault == 524)
+        && (f == FEAT_LAVA || f == FEAT_WATER || f == FEAT_DEEP_WATER
+            || FEAT_IS_ICE(f));
+}
+
 static bool rock(int feature)
 {
     return feature == FEAT_QUARTZ || (feature >= FEAT_WALL_EXTRA
@@ -193,8 +210,10 @@ void cave_environment_seed(void)
         if (cave_natural[y][x] || part == LEVEL_PART_CAVEY || part == LEVEL_PART_RUINED
             || part == LEVEL_PART_BIG_CAVE || part == LEVEL_PART_CHASM) c->flags |= ENV_NATURAL;
         if (!in_bounds_fully(y, x) || anchor(y, x)
-            || (cave_info[y][x] & (CAVE_G_VAULT | CAVE_MORGOTH_TUNNEL))
-            || ((cave_info[y][x] & CAVE_ICKY) && !terrain_vault_policy_at(y, x))
+            || (cave_info[y][x] & CAVE_MORGOTH_TUNNEL)
+            || (!utumno_live_channel(y, x)
+                && ((cave_info[y][x] & CAVE_G_VAULT)
+                    || ((cave_info[y][x] & CAVE_ICKY) && !terrain_vault_policy_at(y, x))))
             || cave_fixture_at(y, x)) c->flags |= ENV_PROTECTED;
         bool vertical = false;
         if (in_bounds_fully(y, x) && (FEAT_IS_BRIDGE(f) || floor_bridge(y, x, &vertical))) {
@@ -574,7 +593,7 @@ void cave_environment_process(void)
         }
     }
     if(!geology_due)return;
-    if(p_ptr->depth<1 || (p_ptr->depth>MORGOTH_DEPTH&&p_ptr->depth!=UTUMNO_DEPTH))return;
+    if(p_ptr->depth<1 || (p_ptr->depth>MORGOTH_DEPTH&&!utumno_environment()))return;
     claim_unowned_bridge_sources();
     log_debug("ENV geology pulse: turn=%d playerturn=%d pulse=%d sources=%d changes=%d",
         turn, playerturn, pulse, state.source_count, remaining);
@@ -582,35 +601,62 @@ void cave_environment_process(void)
     for(int i=1;i<=state.source_count;i++)source_step(i);
     /* Reservoir sampling gives a bounded number of thermal/mineral changes,
      * independent of map size and scan direction. */
-    int cy=0,cx=0,target=0,event=0,seen=0;
+    struct thermal_change { int y, x, feature, event; } changes[16];
+    int selected=0,seen=0;
+    int thermal_limit=utumno_environment()?remaining:MIN(remaining,1);
     for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
         environment_cell* c=&cells[y][x]; int f=cave_feat[y][x],to=0,ev=0;
         if(c->flags&ENV_PROTECTED || c->pending_feat || (c->flags&ENV_BRIDGE)
             || cave_m_idx[y][x] || critical_object(y,x))continue;
-        if(f==FEAT_WATER&&c->heat<=-2){to=FEAT_ICE;ev=CAVE_EVENT_FREEZE;}
-        else if(FEAT_IS_ICE(f)&&c->heat>=2){to=(c->flags&ENV_FLOOR_ICE)?c->base_feat:
+        bool hot_contact=false;
+        if(utumno_environment())for(int d=0;d<4;d++)
+            hot_contact|=cave_bridge_underlay(cave_feat[y+dy4[d]][x+dx4[d]])==FEAT_LAVA;
+        if(f==FEAT_WATER&&c->heat<=-2&&!hot_contact){to=FEAT_ICE;ev=CAVE_EVENT_FREEZE;}
+        else if(FEAT_IS_ICE(f)&&(c->heat>=2||hot_contact)){to=(c->flags&ENV_FLOOR_ICE)?c->base_feat:
             f==FEAT_ICE?FEAT_MELTING_ICE:FEAT_WATER;ev=CAVE_EVENT_THAW;}
-        else if(f==FEAT_FLOOR&&c->heat<=-4&&(c->flags&ENV_NATURAL)) {
+        else if(f==FEAT_FLOOR&&c->heat<=-4&&!hot_contact&&(c->flags&ENV_NATURAL)) {
             bool wet=false;
             for(int d=0;d<4;d++)wet|=liquid(cave_feat[y+dy4[d]][x+dx4[d]])==FEAT_WATER;
             if(wet){to=FEAT_ICE;ev=CAVE_EVENT_FREEZE;}
         } else if(f==FEAT_LAVA) {
             bool water=false;
-            for(int d=0;d<4;d++)water|=liquid(cave_feat[y+dy4[d]][x+dx4[d]])==FEAT_WATER;
+            for(int d=0;d<4;d++) {
+                int neighbor=cave_bridge_underlay(cave_feat[y+dy4[d]][x+dx4[d]]);
+                /* At Utumno's contact fronts, ice must melt before its water
+                 * quenches lava. Otherwise the heat disappears before thaw. */
+                water|=utumno_environment()?(neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER)
+                    :liquid(neighbor)==FEAT_WATER;
+            }
             if(water){to=FEAT_FLOOR;ev=CAVE_EVENT_VENT;}
         } else if(rock(f)&&f!=FEAT_QUARTZ&&state.mineral_budget
             &&(c->flags&ENV_NATURAL)&&!(c->flags&ENV_MINERAL_SPENT)&&random_below(1500)==0) {
             for(int d=0;d<4;d++)if(cave_feat[y+dy4[d]][x+dx4[d]]==FEAT_QUARTZ){to=FEAT_QUARTZ;ev=CAVE_EVENT_CRACK;}
         }
-        if(to&&random_below(++seen)==0){cy=y;cx=x;target=to;event=ev;}
+        if(to&&thermal_limit) {
+            int slot;
+            if(!utumno_environment())slot=random_below(seen+1)==0?0:thermal_limit;
+            else slot=seen<thermal_limit?seen:(int)random_below(seen+1);
+            seen++;
+            if(slot<thermal_limit)changes[slot]=(struct thermal_change){y,x,to,ev};
+            selected=MIN(seen,thermal_limit);
+        }
     }
-    if(target&&remaining) {
+    for(int i=0;i<selected;i++) {
+        int cy=changes[i].y,cx=changes[i].x,target=changes[i].feature,event=changes[i].event;
         environment_cell* c=&cells[cy][cx];int old=cave_feat[cy][cx];
+        /* Several sampled deposits can compete for the last mineral unit. */
+        if(target==FEAT_QUARTZ&&!state.mineral_budget)continue;
         if(commit(cy,cx,target,event)) {
             if(old==FEAT_FLOOR&&target==FEAT_ICE){c->flags|=ENV_FLOOR_ICE;c->base_feat=FEAT_FLOOR;}
             if(!FEAT_IS_ICE(target))c->flags&=~ENV_FLOOR_ICE;
             if(target==FEAT_QUARTZ){c->flags|=ENV_MINERAL_SPENT;state.mineral_budget--;}
-            if(old==FEAT_LAVA)c->flags|=ENV_DEPOSIT;
+            if(old==FEAT_LAVA) {
+                c->flags|=ENV_DEPOSIT;
+                if((c->flags&ENV_ADDED_LIQUID)&&c->owner) {
+                    if(sources[c->owner-1].used)sources[c->owner-1].used--;
+                    c->flags&=~ENV_ADDED_LIQUID;
+                }
+            }
         }
     }
 }

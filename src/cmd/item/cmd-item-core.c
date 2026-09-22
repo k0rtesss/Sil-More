@@ -2448,6 +2448,42 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
         return do_cmd_unquiver_pack_arrow(item);
     }
 
+    /* Reserved weapon slots are an implementation detail of the Harness.
+     * Storing one must use the same delayed Pack action as a carried copy. */
+    if (player_inventory_handle_is_equipped(item)
+        && target_storage == OBJECT_STORAGE_PACK)
+    {
+        object_type moving;
+
+        o_ptr = player_inventory_object(item);
+        if (!o_ptr || !o_ptr->k_idx || cursed_p(o_ptr)
+            || !object_can_choose_pack_or_harness(o_ptr))
+            return false;
+        object_copy(&moving, o_ptr);
+        moving.storage = OBJECT_STORAGE_PACK;
+        moving.pickup = false;
+        moving.pickup_slot = -1;
+        if (!inven_carry_okay_after_removing(&moving, item, o_ptr->number))
+        {
+            msg_print("There is no room in your Pack for that item.");
+            return false;
+        }
+        if (player_pack_action_start_forced(PLAYER_PACK_ACTION_MOVE_STORAGE,
+                item, target_storage, false, o_ptr))
+            return true;
+        if (smith_oath_forbids_object(o_ptr) && !smith_oath_confirm_break())
+            return false;
+        object_copy(o_ptr, &moving);
+        if (inven_takeoff(item, moving.number) < 0)
+            return false;
+        tutorial_game_action_done("store", &moving);
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        p_ptr->update |= PU_BONUS;
+        p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+        return true;
+    }
+
     if (!player_inventory_handle_is_carried(item))
         return false;
 

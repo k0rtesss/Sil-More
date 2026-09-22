@@ -2253,6 +2253,8 @@ extern bool player_set_active_weapon_mode(
 extern bool player_ready_bow_with_arrow(int arrow_item);
 extern bool player_ready_throwing_weapon(object_type* o_ptr, int item);
 extern void do_cmd_toggle_active_weapon(void);
+extern bool player_active_item_menu_available(int item);
+extern bool do_cmd_active_item(int item);
 extern void player_queue_active_weapon_mode(int mode);
 extern void player_queue_ranged_quiver_mode(int mode);
 extern void do_cmd_pending_active_weapon_mode(void);

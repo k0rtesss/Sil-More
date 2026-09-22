@@ -330,6 +330,53 @@ int main(void)
     }
     assert(pack_daggers == 4 && harness_daggers == 1);
     puts("PASS: Partial equipped exchange between full pools preserves every weapon.");
+
+    /* An inactive reserved weapon and an active one must both be storable
+     * without first taking it off (or briefly granting free Pack access). */
+    for (int mode = 0; mode < 2; mode++) {
+        clear_items();
+        player_pack_action_reset();
+        p_ptr->active_weapon_mode = mode == 0
+            ? PLAYER_ACTIVE_WEAPON_MELEE : PLAYER_ACTIVE_WEAPON_RANGED_1;
+        held[INVEN_WIELD] = item(2, 2, OBJECT_STORAGE_HARNESS, 4);
+        p_ptr->inven_cnt = 0;
+        p_ptr->equip_cnt = 1;
+        assert(do_cmd_move_item_to_storage(INVEN_WIELD, OBJECT_STORAGE_PACK));
+        assert(player_pack_action_pending() && p_ptr->energy_use == 100);
+        assert(held[INVEN_WIELD].number == 2);
+        player_pack_action_process();
+        assert(player_pack_action_pending() && held[INVEN_WIELD].number == 2);
+        player_pack_action_process();
+        assert(!player_pack_action_pending() && !held[INVEN_WIELD].k_idx);
+        assert(p_ptr->equip_cnt == 0);
+        int stored = 0;
+        for (int i = 0; i < player_pack_entry_count(); i++) {
+            object_type* obj = player_pack_entry_at(i);
+            assert(obj->storage == OBJECT_STORAGE_PACK);
+            assert(obj->pickup_slot == -1);
+            stored += obj->number;
+        }
+        assert(stored == 2);
+    }
+    puts("PASS: Active and inactive reserved weapons store exactly once after three Pack turns.");
+
+    clear_items();
+    player_pack_action_reset();
+    held[INVEN_BELT] = item(2, 1, OBJECT_STORAGE_HARNESS, 4);
+    p_ptr->equip_cnt = 1;
+    p_ptr->inven_cnt = 0;
+    assert(do_cmd_move_item_to_storage(INVEN_BELT, OBJECT_STORAGE_PACK));
+    player_pack_action_cancel();
+    assert(held[INVEN_BELT].number == 1 && !player_pack_action_pending());
+    held[INVEN_BELT].ident |= IDENT_CURSED;
+    assert(!do_cmd_move_item_to_storage(INVEN_BELT, OBJECT_STORAGE_PACK));
+    assert(held[INVEN_BELT].number == 1 && !player_pack_action_pending());
+    held[INVEN_BELT].ident &= ~IDENT_CURSED;
+    held[0] = item(3, 1, OBJECT_STORAGE_PACK, 260);
+    p_ptr->inven_cnt = 1;
+    assert(!do_cmd_move_item_to_storage(INVEN_BELT, OBJECT_STORAGE_PACK));
+    assert(held[INVEN_BELT].number == 1 && !player_pack_action_pending());
+    puts("PASS: Cancel, cursed Belt, and full Pack leave the equipped item in place.");
     return 0;
 }
 '''

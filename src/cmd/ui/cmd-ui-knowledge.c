@@ -4268,24 +4268,6 @@ static bool equipment_slot_is_inactive_harness_item(int slot)
         && !equipment_slot_active_for_display(slot);
 }
 
-static int inactive_harness_ready_mode_for_slot(int slot)
-{
-    if (!equipment_slot_is_inactive_harness_item(slot))
-        return PLAYER_ACTIVE_WEAPON_NONE;
-
-    switch (slot)
-    {
-    case INVEN_WIELD:
-    case INVEN_ARM:
-        return PLAYER_ACTIVE_WEAPON_MELEE;
-    case INVEN_BOW:
-    case INVEN_QUIVER1:
-        return PLAYER_ACTIVE_WEAPON_RANGED_1;
-    default:
-        return PLAYER_ACTIVE_WEAPON_NONE;
-    }
-}
-
 static bool equipment_slot_accepts_object(int slot, const object_type* o_ptr)
 {
     int natural_slot;
@@ -4364,6 +4346,26 @@ static object_type* equipment_entry_object(const equipment_list_entry* entry)
         return &o_list[entry->floor_idx];
 
     return NULL;
+}
+
+static int equipment_entry_item_handle(const equipment_list_entry* entry)
+{
+    if (!entry || entry->floor_idx > 0 || entry->supply_idx >= 0)
+        return -1;
+    return entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL
+        ? entry->equip_idx : entry->item_idx;
+}
+
+static bool equipment_entry_has_active_item_menu(const equipment_list_entry* entry)
+{
+    return player_active_item_menu_available(equipment_entry_item_handle(entry));
+}
+
+static bool equipment_entry_is_active_combat(const equipment_list_entry* entry)
+{
+    int item = equipment_entry_item_handle(entry);
+    return (item == INVEN_WIELD || item == INVEN_BOW || item == INVEN_ARM)
+        && inventory[item].k_idx && player_equipment_slot_is_active(item);
 }
 
 static bool equipment_entry_is_quiver_arrow(
@@ -4916,6 +4918,8 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
         {
             return "Harness";
         }
+        if (equipment_entry_is_active_combat(entry))
+            return "Active";
         return equipment_slot_where_text(entry->equip_idx);
     }
 
@@ -5278,7 +5282,8 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
     }
     object_desc(name, sizeof(name), o_ptr, true, 3);
     if (entry->equipped && !show_source)
-        SDL_strlcat(name, " [equipped]", sizeof(name));
+        SDL_strlcat(name, equipment_entry_is_active_combat(entry)
+            ? " [active]" : " [equipped]", sizeof(name));
     else if (entry->floor_idx > 0 && entry->floor_idx < o_max && !show_source)
         SDL_strlcat(name, " [floor]", sizeof(name));
     strnfmt(display_name, display_name_len, "%s%s", label_prefix, name);
@@ -5725,25 +5730,6 @@ static cptr browser_item_use_action_text(const object_type* o_ptr, int item)
     return action;
 }
 
-static bool inventory_page_is_combat_weapon(const object_type* o_ptr)
-{
-    if (!o_ptr || !o_ptr->k_idx || object_has_broken_prefix(o_ptr))
-        return false;
-
-    switch (o_ptr->tval)
-    {
-    case TV_BOW:
-    case TV_DIGGING:
-    case TV_HAFTED:
-    case TV_POLEARM:
-    case TV_SWORD:
-    case TV_ARROW:
-        return true;
-    default:
-        return false;
-    }
-}
-
 /* Objects reached through the Supplies page are not equipped, even though
  * their synthetic item index is numerically above the equipment slots. */
 static cptr supply_item_use_action_text(const object_type* o_ptr, int item)
@@ -5884,21 +5870,12 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
         return equipment_ready_after_wield(selected_slot);
     }
 
+    if (selected_slot != INVEN_BELT
+        && equipment_entry_has_active_item_menu(entry))
+        return do_cmd_active_item(equipment_entry_item_handle(entry));
+
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
-        int ready_mode = inactive_harness_ready_mode_for_slot(
-            entry->equip_idx);
-
-        if (entry->equip_idx == INVEN_BOW && !entry->equipped)
-        {
-            if (!confirm_equipment_entry_action("Ready", entry))
-                return false;
-            return player_ready_bow_with_arrow(
-                player_quiver_selected_arrow_slot());
-        }
-        if (ready_mode != PLAYER_ACTIVE_WEAPON_NONE)
-            return player_set_active_weapon_mode(ready_mode, true, true);
-
         if (!confirm_equipment_entry_action(
                 browser_item_use_action_text(
                     &inventory[entry->equip_idx], entry->equip_idx), entry))
@@ -5943,15 +5920,6 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
             if (!confirm_equipment_entry_action("Remove", entry))
                 return false;
             do_cmd_use_item_by_index(entry->item_idx);
-            return true;
-        }
-        /* The Active chooser selects a main-hand/bow setup, not a Belt
-         * or off-hand destination selected in the equipment browser. */
-        if ((selected_slot == INVEN_WIELD || selected_slot == INVEN_BOW)
-            && o_ptr->storage == OBJECT_STORAGE_HARNESS
-            && inventory_page_is_combat_weapon(o_ptr))
-        {
-            do_cmd_toggle_active_weapon();
             return true;
         }
         if (!confirm_equipment_entry_action(
@@ -7799,46 +7767,6 @@ static bool inventory_slot_pick_overlay_entry(
     return object_info_overlay_show_multi(objects, headings, 2);
 }
 
-static bool inventory_page_can_equip_on_belt(const object_type* o_ptr)
-{
-    if (!o_ptr || !o_ptr->k_idx || !object_is_belt_weapon(o_ptr)
-        || object_has_broken_prefix(o_ptr))
-    {
-        return false;
-    }
-
-    /* do_cmd_wield() refuses to give up a cursed Belt item, so do not offer
-     * a destination which would only fail after the chooser closes. */
-    return !inventory[INVEN_BELT].k_idx
-        || !cursed_p(&inventory[INVEN_BELT]);
-}
-
-static bool inventory_page_choose_harness_destination(
-    const object_type* o_ptr, bool* equip_on_belt)
-{
-    ui_question_option options[2] = {
-        { 'p', "Store in Pack", TERM_L_WHITE, false },
-        { 'b', "Equip on Belt", TERM_L_WHITE, false }
-    };
-    char item_name[120];
-    char detail[240];
-    int choice;
-
-    if (!o_ptr || !o_ptr->k_idx || !equip_on_belt)
-        return false;
-
-    object_desc(item_name, sizeof(item_name), o_ptr, true, 3);
-    strnfmt(detail, sizeof(detail),
-        "%s can be stored in the Pack or equipped at the Belt.", item_name);
-    choice = ui_question_ask("Keep item where?", detail, options,
-        N_ELEMENTS(options), UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
-    if (choice < 0 || choice >= (int)N_ELEMENTS(options))
-        return false;
-
-    *equip_on_belt = choice == 1;
-    return true;
-}
-
 static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
     supply_floor_action floor_action)
 {
@@ -7847,13 +7775,11 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
     if (!entry)
         return "Use";
 
+    if (equipment_entry_has_active_item_menu(entry))
+        return "Use";
+
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
-        if (inactive_harness_ready_mode_for_slot(entry->equip_idx)
-            != PLAYER_ACTIVE_WEAPON_NONE)
-        {
-            return "Ready";
-        }
         return browser_item_use_action_text(&inventory[entry->equip_idx],
             entry->equip_idx);
     }
@@ -7870,15 +7796,8 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
         o_ptr = player_inventory_object(entry->item_idx);
         if (object_can_choose_pack_or_harness(o_ptr))
         {
-            if (o_ptr->storage == OBJECT_STORAGE_HARNESS
-                && inventory_page_can_equip_on_belt(o_ptr))
-            {
-                return "Choose";
-            }
-            /* Keep the Pack route available for stowable weapons even
-             * when a cursed Belt item prevents offering that destination. */
             return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
-                ? "Ready" : "Store";
+                ? "Move to Harness" : "Store in Pack";
         }
         return browser_item_use_action_text(o_ptr, entry->item_idx);
     }
@@ -7940,14 +7859,11 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
         return floor_entry_perform_action(entry->floor_idx, floor_action, -1);
     }
 
+    if (equipment_entry_has_active_item_menu(entry))
+        return do_cmd_active_item(equipment_entry_item_handle(entry));
+
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
-        int ready_mode = inactive_harness_ready_mode_for_slot(
-            entry->equip_idx);
-
-        if (ready_mode != PLAYER_ACTIVE_WEAPON_NONE)
-            return player_set_active_weapon_mode(ready_mode, true, true);
-
         if (!confirm_equipment_entry_action(
                 inventory_page_use_action_text(entry, floor_action), entry))
         {
@@ -7970,38 +7886,12 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
     {
         object_type* o_ptr = player_inventory_object(entry->item_idx);
         cptr action = inventory_page_use_action_text(entry, floor_action);
-        bool choose_harness_destination = object_can_choose_pack_or_harness(o_ptr)
-            && o_ptr->storage == OBJECT_STORAGE_HARNESS
-            && inventory_page_can_equip_on_belt(o_ptr);
-        bool opens_harness_destination = choose_harness_destination
-            && streq(action, "Choose");
-        bool opens_active_weapon = o_ptr->storage == OBJECT_STORAGE_HARNESS
-            && inventory_page_is_combat_weapon(o_ptr)
-            && streq(action, "Equip");
-
-        if ((!opens_harness_destination && !opens_active_weapon)
-            && !confirm_equipment_entry_action(action, entry))
+        if (!confirm_equipment_entry_action(action, entry))
         {
             return false;
         }
         if (object_can_choose_pack_or_harness(o_ptr))
         {
-            if (choose_harness_destination)
-            {
-                bool equip_on_belt;
-
-                if (!inventory_page_choose_harness_destination(o_ptr,
-                        &equip_on_belt))
-                {
-                    return false;
-                }
-                if (equip_on_belt)
-                {
-                    return do_cmd_wield_to_slot(o_ptr, entry->item_idx,
-                        INVEN_BELT);
-                }
-            }
-
             byte target_storage =
                 inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
                 ? OBJECT_STORAGE_HARNESS : OBJECT_STORAGE_PACK;
@@ -8014,12 +7904,6 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
                     failure, failure_len);
             }
             return moved;
-        }
-        if (o_ptr->storage == OBJECT_STORAGE_HARNESS
-            && inventory_page_is_combat_weapon(o_ptr))
-        {
-            do_cmd_toggle_active_weapon();
-            return true;
         }
         do_cmd_use_item_by_index(entry->item_idx);
         return true;
@@ -11731,7 +11615,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             supply_draw_page_header(&layout, page,
                 supply_browser_hover_page(), "Equipped");
             supply_draw_page_summary(&layout, TERM_SLATE,
-                "Equipped items, slots, and matching pack/supply choices");
+                "Active combat gear, worn items, and Belt equipment");
             Term_erase(0, layout.header_row, 255);
             if (layout.stacked)
             {
@@ -11858,25 +11742,25 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s] equip  [%s] drop  [%s] back",
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s] use  [%s] drop  [%s] back",
                         prev_label, next_label, info_label, confirm_label,
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] info  [%s] equip  [%s] drop",
+                        "D-pad nav  [%s] info  [%s] use  [%s] drop",
                         info_label, confirm_label, drop_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] equip  [%s] drop  [%s] back",
+                        "D-pad nav  [%s/%s] page  [%s] use  [%s] drop  [%s] back",
                         prev_label, next_label, confirm_label,
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] equip  [%s] drop",
+                        "D-pad nav  [%s] use  [%s] drop",
                         confirm_label, drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "D-pad nav  [%s] equip  [%s] drop", confirm_label,
+                    "D-pad nav  [%s] use  [%s] drop", confirm_label,
                     drop_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_mid;
@@ -11897,7 +11781,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                 supply_touch_row_prompt(prompt_buf, sizeof(prompt_buf),
                     layout.term_wid, desc_overlay_on, drop_click_mode, false,
-                    "equip");
+                    "use");
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_SLATE, prompt_buf);
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_PREVIEW,
@@ -11915,14 +11799,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 const char* const* variants;
                 size_t variant_count;
                 static const char* letter_variants[] = {
-                    "letter use  Dir move  x preview  u equip  z drop  Tab  Esc",
+                    "letter use  Dir move  x preview  u use  z drop  Tab  Esc",
                     "letter use  x preview  z drop  Tab  Esc",
                     "letter use  z drop  Tab  Esc"
                 };
                 static const char* move_variants[] = {
-                    "Dir move  x preview  u equip  z drop  Tab  Esc",
-                    "x preview  u equip  z drop  Tab  Esc",
-                    "u equip  z drop  Esc"
+                    "Dir move  x preview  u use  z drop  Tab  Esc",
+                    "x preview  u use  z drop  Tab  Esc",
+                    "u use  z drop  Esc"
                 };
 
                 if (indexed_menu_letters_enabled())
