@@ -5884,7 +5884,8 @@ static int smith_bonus_menu_aux(int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if (clicked_choice == SMITH_CLICK_BACK)
+            if ((clicked_choice == SMITH_CLICK_BACK)
+                || (click_action == UI_MENU_CLICK_SECONDARY))
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
                     return 0;
@@ -5892,22 +5893,6 @@ static int smith_bonus_menu_aux(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
-
-                if (click_action == UI_MENU_CLICK_SECONDARY)
-                {
-                    int item = smith_melt_item_handle_for_choice(
-                        clicked_choice);
-
-                    if (item >= 0)
-                    {
-                        *highlight = clicked_choice;
-                        describe_item_with_comparisons(item, true);
-                        return 0;
-                    }
-                }
-
                 if (!smith_ui_pointer_choice_confirms(
                         clicked_choice, click_action, highlight))
                 {
@@ -8196,8 +8181,7 @@ int melt_menu_aux(int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
+            if (clicked_choice == SMITH_CLICK_BACK)
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
                     return 0;
@@ -8205,6 +8189,22 @@ int melt_menu_aux(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
+                if (click_action == UI_MENU_CLICK_HOVER)
+                    return 0;
+
+                if (click_action == UI_MENU_CLICK_SECONDARY)
+                {
+                    int item = smith_melt_item_handle_for_choice(
+                        clicked_choice);
+
+                    if (item >= 0)
+                    {
+                        *highlight = clicked_choice;
+                        describe_item_with_comparisons(item, true);
+                    }
+                    return 0;
+                }
+
                 if (!smith_ui_pointer_choice_confirms(
                         clicked_choice, click_action, highlight))
                 {

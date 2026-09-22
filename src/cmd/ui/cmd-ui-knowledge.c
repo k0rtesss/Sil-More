@@ -5945,7 +5945,9 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
             do_cmd_use_item_by_index(entry->item_idx);
             return true;
         }
-        if (selected_slot != EQUIPMENT_MENU_QUIVERS
+        /* The Active chooser selects a main-hand/bow setup, not a Belt
+         * or off-hand destination selected in the equipment browser. */
+        if ((selected_slot == INVEN_WIELD || selected_slot == INVEN_BOW)
             && o_ptr->storage == OBJECT_STORAGE_HARNESS
             && inventory_page_is_combat_weapon(o_ptr))
         {
@@ -7873,11 +7875,8 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
             {
                 return "Choose";
             }
-            if (o_ptr->storage == OBJECT_STORAGE_HARNESS
-                && inventory_page_is_combat_weapon(o_ptr))
-            {
-                return "Equip";
-            }
+            /* Keep the Pack route available for stowable weapons even
+             * when a cursed Belt item prevents offering that destination. */
             return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
                 ? "Ready" : "Store";
         }
@@ -8001,13 +8000,6 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
                     return do_cmd_wield_to_slot(o_ptr, entry->item_idx,
                         INVEN_BELT);
                 }
-            }
-
-            else if (o_ptr->storage == OBJECT_STORAGE_HARNESS
-                && inventory_page_is_combat_weapon(o_ptr))
-            {
-                do_cmd_toggle_active_weapon();
-                return true;
             }
 
             byte target_storage =
