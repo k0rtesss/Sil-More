@@ -2792,7 +2792,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Gain +1 Attack with throwing weapons, halve distance penalties, and make thrown criticals easier. Personally learning Throwing reduces throwing weapons' Harness volume by 20%. It also allows quick throws of Harness daggers while a one-handed or hand-and-a-half melee weapon, or a bow, is active.",
+          "text": "Gain +1 Attack with throwing weapons, halve distance penalties, and make thrown criticals easier. Personally learning Throwing reduces throwing weapons' Harness volume by 20%. It also allows quick throws of Harness daggers with no melee weapon equipped, or while a one-handed or hand-and-a-half melee weapon, a throwing weapon, or a Shortbow is active.",
           "kind": "decision",
           "anchor": "abilities"
         },

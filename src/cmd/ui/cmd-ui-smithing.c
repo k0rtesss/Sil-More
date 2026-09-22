@@ -618,13 +618,200 @@ static void smith_ui_put_fitted(int col, int row, int width, byte attr, cptr tex
     smith_ui_draw_fitted(col, row, width, attr, text, true);
 }
 
+static int smith_ui_put_wrapped(int col, int row, int width, int max_lines,
+    byte attr, cptr text);
+
+static void smith_ui_split_object_title(cptr description,
+    char* name, size_t name_size, char* suffix, size_t suffix_size)
+{
+    const char* suffix_start = NULL;
+    size_t description_len;
+    size_t name_len;
+
+    if (!description)
+        description = "";
+
+    description_len = strlen(description);
+
+    /* Combat/protection/pval details begin after a space and one of these
+     * delimiters.  Keep the delimiter with the suffix, but draw that suffix
+     * immediately after the item name when it fits on one line. */
+    for (const char* p = description; *p; p++)
+    {
+        if ((p > description) && (p[-1] == ' ')
+            && strchr("([{<", *p))
+        {
+            suffix_start = p;
+            break;
+        }
+    }
+
+    if (!suffix_start)
+        suffix_start = description + description_len;
+
+    name_len = (size_t)(suffix_start - description);
+    if (suffix_start < description + description_len && name_len > 0)
+        name_len--;
+
+    if (name_size > 0)
+    {
+        if (name_len >= name_size)
+            name_len = name_size - 1;
+        SDL_memcpy(name, description, name_len);
+        name[name_len] = '\0';
+    }
+
+    if (suffix_size > 0)
+        SDL_strlcpy(suffix, suffix_start, suffix_size);
+}
+
+static void smith_ui_build_object_stats(char* stats, size_t stats_size,
+    cptr suffix, cptr weight)
+{
+    if (!stats || stats_size == 0)
+        return;
+
+    stats[0] = '\0';
+    if (suffix && suffix[0])
+        SDL_strlcpy(stats, suffix, stats_size);
+    if (weight && weight[0])
+    {
+        if (stats[0])
+            SDL_strlcat(stats, "   ", stats_size);
+        SDL_strlcat(stats, weight, stats_size);
+    }
+}
+
+static int smith_ui_wrapped_line_count(cptr text, int width)
+{
+    cptr s = text;
+    int lines = 0;
+    int line_width = 0;
+
+    if (!s || width <= 0)
+        return 0;
+
+    while (*s)
+    {
+        cptr word;
+        int word_len = 0;
+        int word_width;
+
+        while (*s == ' ')
+            s++;
+        if (!*s)
+            break;
+
+        word = s;
+        while (word[word_len] && word[word_len] != ' ')
+        {
+            int char_len = utf8_sequence_len(word + word_len);
+
+            if (char_len <= 0)
+                char_len = 1;
+            word_len += char_len;
+        }
+        word_width = utf8_display_width_n(word, word_len);
+
+        if (line_width > 0
+            && line_width + 1 + word_width <= width)
+        {
+            line_width += 1 + word_width;
+            s += word_len;
+            continue;
+        }
+
+        if (line_width > 0)
+        {
+            lines++;
+            line_width = 0;
+            continue;
+        }
+
+        if (word_width <= width)
+        {
+            line_width = word_width;
+            s += word_len;
+            continue;
+        }
+
+        /* A single very long word still needs to make progress. */
+        while (word_len > 0)
+        {
+            int copy_len = smith_ui_utf8_prefix_len(word, width);
+
+            if (copy_len <= 0)
+            {
+                copy_len = utf8_sequence_len(word);
+                if (copy_len <= 0)
+                    copy_len = 1;
+            }
+
+            if (copy_len > word_len)
+                copy_len = word_len;
+            word += copy_len;
+            word_len -= copy_len;
+            lines++;
+        }
+        s += (int)(word - s);
+    }
+
+    if (line_width > 0)
+        lines++;
+
+    return lines;
+}
+
+static int smith_ui_object_title_lines(cptr description, cptr weight,
+    int width)
+{
+    char name[160];
+    char suffix[160];
+    char stats[224];
+    int suffix_width;
+    int weight_width;
+    int name_width;
+    int name_gap = 1;
+    int suffix_weight_gap = 3;
+
+    width = smith_ui_safe_width(smith_ui_desc_col(), width);
+    if (width <= 0)
+        return 0;
+
+    smith_ui_split_object_title(description, name, sizeof(name), suffix,
+        sizeof(suffix));
+    smith_ui_build_object_stats(stats, sizeof(stats), suffix, weight);
+
+    suffix_width = utf8_display_width_n(suffix, (int)strlen(suffix));
+    weight_width = utf8_display_width_n(weight ? weight : "",
+        weight ? (int)strlen(weight) : 0);
+    if (suffix_width <= 0)
+        name_gap = 0;
+    if (weight_width <= 0)
+        suffix_weight_gap = 0;
+
+    name_width = width - suffix_width - weight_width
+        - name_gap - suffix_weight_gap;
+    if (name_width >= 1
+        && utf8_display_width_n(name, (int)strlen(name)) <= name_width)
+    {
+        return 1;
+    }
+
+    name_width = smith_ui_wrapped_line_count(name, width);
+    if (name_width < 1)
+        name_width = 1;
+
+    return name_width + (stats[0] ? 1 : 0);
+}
+
 /*
  * Draw an object's title without letting a long quantity/name run into its
- * combat statistics.  The story font packs text by pixel width, while the
- * terminal still lays out each field in columns.  Keeping the name and the
- * suffix in separate spans gives the statistics their own protected region.
+ * combat statistics.  If the name cannot fit beside those fields, give it
+ * the full line and put the stats on the following line instead of hiding
+ * part of the item name behind an ellipsis.
  */
-static void smith_ui_put_object_title(int col, int row, int width, byte attr,
+static int smith_ui_put_object_title(int col, int row, int width, byte attr,
     cptr description, cptr weight)
 {
     char name[160];
@@ -632,8 +819,7 @@ static void smith_ui_put_object_title(int col, int row, int width, byte attr,
     char fitted_name[160];
     char fitted_suffix[160];
     char fitted_weight[64];
-    const char* suffix_start = NULL;
-    int name_len = 0;
+    char stats[224];
     int suffix_width;
     int weight_width;
     int name_width;
@@ -646,37 +832,13 @@ static void smith_ui_put_object_title(int col, int row, int width, byte attr,
     if (!weight)
         weight = "";
 
-    /* Combat/protection/pval details begin after a space and one of these
-     * delimiters.  Keep the delimiter with the suffix, but draw that suffix
-     * immediately after the item name rather than at the far edge of the
-     * description line.
-     */
-    for (const char* p = description; *p; p++)
-    {
-        if ((p > description) && (p[-1] == ' ')
-            && strchr("([{<", *p))
-        {
-            suffix_start = p;
-            break;
-        }
-    }
-
-    if (!suffix_start)
-        suffix_start = description + strlen(description);
-
-    name_len = (int)(suffix_start - description);
-    if (suffix_start < description + strlen(description))
-        name_len--;
-    if (name_len >= (int)sizeof(name))
-        name_len = (int)sizeof(name) - 1;
-    SDL_memcpy(name, description, (size_t)name_len);
-    name[name_len] = '\0';
-
-    SDL_strlcpy(suffix, suffix_start, sizeof(suffix));
+    smith_ui_split_object_title(description, name, sizeof(name), suffix,
+        sizeof(suffix));
+    smith_ui_build_object_stats(stats, sizeof(stats), suffix, weight);
 
     width = smith_ui_safe_width(col, width);
     if (width <= 0)
-        return;
+        return 0;
 
     suffix_width = utf8_display_width_n(suffix, (int)strlen(suffix));
     weight_width = utf8_display_width_n(weight, (int)strlen(weight));
@@ -692,14 +854,17 @@ static void smith_ui_put_object_title(int col, int row, int width, byte attr,
      * visible. */
     name_width = width - suffix_width - weight_width
         - name_gap - suffix_weight_gap;
-    if (name_width < 1)
+    if (name_width < 1
+        || utf8_display_width_n(name, (int)strlen(name)) > name_width)
     {
-        name_width = 1;
-        name_gap = 0;
-        suffix_weight_gap = 0;
-        suffix_width = MIN(suffix_width, MAX(0, width - name_width));
-        weight_width = MIN(weight_width,
-            MAX(0, width - name_width - suffix_width));
+        int name_lines = smith_ui_wrapped_line_count(name, width);
+
+        if (name_lines < 1)
+            name_lines = 1;
+        smith_ui_put_wrapped(col, row, width, name_lines, attr, name);
+        if (stats[0])
+            smith_ui_put_fitted(col, row + name_lines, width, attr, stats);
+        return name_lines + (stats[0] ? 1 : 0);
     }
 
     smith_ui_fit_text(fitted_name, sizeof(fitted_name), name, name_width);
@@ -721,6 +886,8 @@ static void smith_ui_put_object_title(int col, int row, int width, byte attr,
         smith_ui_put_fitted(col + name_display_width + name_gap
                 + suffix_width + suffix_weight_gap,
             row, weight_width, attr, fitted_weight);
+
+    return 1;
 }
 
 static void smith_ui_fill_row(int col, int row, int width, byte attr)
@@ -2307,6 +2474,47 @@ static int metal_carried(byte sval)
     return (w);
 }
 
+static bool smith_melt_item_is_eligible(const object_type* o_ptr)
+{
+    u32b f1, f2, f3;
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    object_flags(o_ptr, &f1, &f2, &f3);
+    (void)f1;
+    (void)f2;
+    return (f3 & (TR3_MITHRIL | TR3_STAR_IRON))
+        && !(o_ptr->ident & IDENT_CANT_MELT);
+}
+
+static int smith_melt_item_handle_for_choice(int choice)
+{
+    int number = 0;
+    int total = player_pack_entry_count()
+        + (INVEN_TOTAL - INVEN_WIELD);
+
+    if (choice < 1)
+        return -1;
+
+    for (int ordinal = 0; ordinal < total; ordinal++)
+    {
+        int item = ordinal < player_pack_entry_count()
+            ? player_pack_entry_handle_at(ordinal)
+            : INVEN_WIELD + ordinal - player_pack_entry_count();
+        object_type* o_ptr = player_inventory_object(item);
+
+        if (!smith_melt_item_is_eligible(o_ptr))
+            continue;
+
+        number++;
+        if (number == choice)
+            return item;
+    }
+
+    return -1;
+}
+
 int mithril_carried(void)
 {
     return metal_carried(SV_METAL_MITHRIL);
@@ -3328,7 +3536,7 @@ void prt_object_description(void)
     int min_desc_row;
     int max_lines;
     int progress_lines;
-    int header_lines = 1;
+    int header_lines;
     int info_lines;
     int lore_lines;
     int lore_info_lines;
@@ -3366,6 +3574,9 @@ void prt_object_description(void)
     strnfmt(weight_desc, sizeof(weight_desc), "%d.%d lb",
         smith_o_ptr->weight * smith_o_ptr->number / 10,
         (smith_o_ptr->weight * smith_o_ptr->number) % 10);
+
+    header_lines = smith_ui_object_title_lines(o_desc, weight_desc,
+        desc_width);
 
     base_desc = object_lore_select_base_text(smith_o_ptr, base_desc_buf,
         sizeof(base_desc_buf));
@@ -3413,9 +3624,8 @@ void prt_object_description(void)
             return;
     }
 
-    smith_ui_put_object_title(desc_col, desc_row, desc_width, TERM_L_WHITE,
-        o_desc, weight_desc);
-    desc_row++;
+    desc_row += smith_ui_put_object_title(desc_col, desc_row, desc_width,
+        TERM_L_WHITE, o_desc, weight_desc);
     if (desc_row > smith_ui_content_bottom_row())
         return;
 
@@ -4519,8 +4729,7 @@ int create_sval_menu_aux(int tval, int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
+            if (clicked_choice == SMITH_CLICK_BACK)
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
                     return 0;
@@ -4528,6 +4737,17 @@ int create_sval_menu_aux(int tval, int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
+                if (click_action == UI_MENU_CLICK_HOVER)
+                    return 0;
+
+                if (click_action == UI_MENU_CLICK_SECONDARY)
+                {
+                    *highlight = clicked_choice;
+                    create_base_object(tval, sval[clicked_choice - 1]);
+                    describe_object_with_comparisons(smith_o_ptr, true);
+                    return 0;
+                }
+
                 if (!smith_ui_pointer_choice_confirms(
                         clicked_choice, click_action, highlight))
                 {
@@ -5664,8 +5884,7 @@ static int smith_bonus_menu_aux(int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
+            if (clicked_choice == SMITH_CLICK_BACK)
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
                     return 0;
@@ -5673,6 +5892,22 @@ static int smith_bonus_menu_aux(int* highlight)
             }
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
+                if (click_action == UI_MENU_CLICK_HOVER)
+                    return 0;
+
+                if (click_action == UI_MENU_CLICK_SECONDARY)
+                {
+                    int item = smith_melt_item_handle_for_choice(
+                        clicked_choice);
+
+                    if (item >= 0)
+                    {
+                        *highlight = clicked_choice;
+                        describe_item_with_comparisons(item, true);
+                        return 0;
+                    }
+                }
+
                 if (!smith_ui_pointer_choice_confirms(
                         clicked_choice, click_action, highlight))
                 {

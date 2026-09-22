@@ -71,6 +71,7 @@ errr test_read_fixtures(void);
 bool test_pick_torch_option(bool* handled);
 void test_reset_torch_option(bool* app_dirty);
 void apply_tunnel_niche_torch_glow(int, int, int, int);
+void apply_cave_fixture_glow(int, int, int, int, bool);
 int place_vault_template_fixtures(int, int, const vault_type*, bool, bool, bool);
 static byte stream[200000];
 static unsigned stream_size, stream_pos;
@@ -146,6 +147,37 @@ static void option_tests(void) {
 
 static void floor_at(int y, int x) {
     cave_feat[y][x] = FEAT_FLOOR; cave_info[y][x] = 0;
+}
+static void fixture_light_map(int wall_y, int wall_x) {
+    cave_fixtures_clear();
+    for (int y=1; y<31; y++) for (int x=1; x<31; x++) floor_at(y,x);
+    cave_feat[wall_y][wall_x] = FEAT_WALL_EXTRA;
+    cave_info[wall_y][wall_x] = CAVE_WALL;
+}
+static void fixture_light_tests(void) {
+    const int wy=10, wx=10;
+    fixture_light_map(wy,wx);
+    cave_fixture_set(wy,wx,CAVE_FIXTURE_WALL_TORCH);
+    apply_cave_fixture_glow(wy,wx,wy,wx+1,false);
+    assert(cave_info[wy][wx-1] & CAVE_GLOW);
+    assert(cave_info[wy][wx+1] & CAVE_GLOW);
+    assert(!(cave_info[wy][wx+2] & CAVE_GLOW));
+
+    fixture_light_map(wy,wx);
+    cave_fixture_set(wy,wx,CAVE_FIXTURE_BRAZIER);
+    apply_cave_fixture_glow(wy,wx,wy,wx+1,false);
+    assert(cave_info[wy][wx-2] & CAVE_GLOW);
+    assert(cave_info[wy][wx+2] & CAVE_GLOW);
+    assert(!(cave_info[wy][wx-3] & CAVE_GLOW));
+    assert(!(cave_info[wy][wx+3] & CAVE_GLOW));
+
+    /* Tunnel niches intentionally retain their walkable-cell-centered light. */
+    fixture_light_map(wy,wx);
+    apply_tunnel_niche_torch_glow(wy,wx+1,0,1);
+    assert(cave_fixture_at(wy,wx) == CAVE_FIXTURE_BRAZIER);
+    assert(cave_info[wy][wx+3] & CAVE_GLOW);
+    assert(!(cave_info[wy][wx-2] & CAVE_GLOW));
+    puts("Wall fixture centers/radii and niche light behavior: PASS");
 }
 static void niche(int y, int x) {
     floor_at(y, x);
@@ -893,6 +925,7 @@ int main(void) {
     animation_tests();
     pan_tests();
     asynchronous_tests();
+    fixture_light_tests();
     sdl_idle_animation_shutdown();
     SDL_Quit(); puts("Idle animation checks: PASS"); return 0;
 }

@@ -1357,6 +1357,8 @@ extern bool object_info_overlay_show_multi(const object_type** objects,
     const char** headings, int count);
 extern void object_info_overlay_clear(void);
 extern void describe_item_with_comparisons(int item_index, bool include_comparisons);
+extern void describe_object_with_comparisons(object_type* o_ptr,
+    bool include_comparisons);
 extern char describe_item_with_floor_actions(int item_index,
     bool include_comparisons);
 

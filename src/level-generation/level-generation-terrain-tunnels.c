@@ -486,8 +486,9 @@ void apply_tunnel_niche_torch_glow(
             && !(cave_info[wall_y][wall_x] & (CAVE_ROOM | CAVE_ICKY)))
         {
             cave_fixture_set(wall_y, wall_x, CAVE_FIXTURE_BRAZIER);
-            apply_cave_fixture_glow(wall_y, wall_x, niche_y, niche_x,
-                false);
+            /* Niche lighting is deliberately centered on the walkable niche
+             * cell, unlike ordinary wall-mounted fixtures. */
+            cave_info[wall_y][wall_x] |= CAVE_GLOW;
         }
     }
 

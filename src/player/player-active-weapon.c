@@ -1739,19 +1739,33 @@ static bool player_active_weapon_allows_quick_throw(void)
 {
     const object_type* active_weapon;
 
+    /* Quick Throw can use a Harness dagger even when the player has no
+     * equipped weapon at all. */
+    if (!inventory[INVEN_WIELD].k_idx && !inventory[INVEN_BOW].k_idx)
+        return true;
+
     if (player_active_weapon_is_ranged())
     {
+        /* Quick Throw does not require changing away from an active
+         * throwing weapon.  Only the Shortbow is a valid active bow here. */
+        if (player_active_weapon_kind()
+            == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
+        {
+            return true;
+        }
         if (player_active_weapon_kind()
             != PLAYER_ACTIVE_WEAPON_KIND_BOW)
         {
             return false;
         }
         active_weapon = &inventory[INVEN_BOW];
-        return active_weapon->k_idx && active_weapon->tval == TV_BOW;
+        return active_weapon->k_idx && active_weapon->tval == TV_BOW
+            && active_weapon->sval == SV_SHORT_BOW;
     }
 
     active_weapon = &inventory[INVEN_WIELD];
-    return object_allows_quick_throw(active_weapon);
+    /* An empty active hand is also a valid Quick Throw stance. */
+    return !active_weapon->k_idx || object_allows_quick_throw(active_weapon);
 }
 
 static bool object_is_dagger(const object_type* o_ptr)

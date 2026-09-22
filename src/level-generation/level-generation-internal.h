@@ -603,7 +603,7 @@ extern tunnel_profile choose_tunnel_profile(bool tentative);
 extern void apply_tunnel_niche_torch_glow(
     int niche_y, int niche_x, int front_dy, int front_dx);
 extern void apply_fixture_light_area(
-    int source_y, int source_x, int radius, bool allow_room_tiles);
+    int center_y, int center_x, int radius, bool allow_room_tiles);
 extern void apply_cave_fixture_glow(
     int wall_y, int wall_x, int source_y, int source_x,
     bool allow_room_tiles);

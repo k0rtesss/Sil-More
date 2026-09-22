@@ -16,6 +16,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_guid.h"
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
+#include "ui/question.h"
 
 static void desc_obj_fake(int k_idx);
 static cptr equipment_slot_text(int slot);
@@ -5724,6 +5725,25 @@ static cptr browser_item_use_action_text(const object_type* o_ptr, int item)
     return action;
 }
 
+static bool inventory_page_is_combat_weapon(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx || object_has_broken_prefix(o_ptr))
+        return false;
+
+    switch (o_ptr->tval)
+    {
+    case TV_BOW:
+    case TV_DIGGING:
+    case TV_HAFTED:
+    case TV_POLEARM:
+    case TV_SWORD:
+    case TV_ARROW:
+        return true;
+    default:
+        return false;
+    }
+}
+
 /* Objects reached through the Supplies page are not equipped, even though
  * their synthetic item index is numerically above the equipment slots. */
 static cptr supply_item_use_action_text(const object_type* o_ptr, int item)
@@ -5923,6 +5943,13 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
             if (!confirm_equipment_entry_action("Remove", entry))
                 return false;
             do_cmd_use_item_by_index(entry->item_idx);
+            return true;
+        }
+        if (selected_slot != EQUIPMENT_MENU_QUIVERS
+            && o_ptr->storage == OBJECT_STORAGE_HARNESS
+            && inventory_page_is_combat_weapon(o_ptr))
+        {
+            do_cmd_toggle_active_weapon();
             return true;
         }
         if (!confirm_equipment_entry_action(
@@ -7770,6 +7797,46 @@ static bool inventory_slot_pick_overlay_entry(
     return object_info_overlay_show_multi(objects, headings, 2);
 }
 
+static bool inventory_page_can_equip_on_belt(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx || !object_is_belt_weapon(o_ptr)
+        || object_has_broken_prefix(o_ptr))
+    {
+        return false;
+    }
+
+    /* do_cmd_wield() refuses to give up a cursed Belt item, so do not offer
+     * a destination which would only fail after the chooser closes. */
+    return !inventory[INVEN_BELT].k_idx
+        || !cursed_p(&inventory[INVEN_BELT]);
+}
+
+static bool inventory_page_choose_harness_destination(
+    const object_type* o_ptr, bool* equip_on_belt)
+{
+    ui_question_option options[2] = {
+        { 'p', "Store in Pack", TERM_L_WHITE, false },
+        { 'b', "Equip on Belt", TERM_L_WHITE, false }
+    };
+    char item_name[120];
+    char detail[240];
+    int choice;
+
+    if (!o_ptr || !o_ptr->k_idx || !equip_on_belt)
+        return false;
+
+    object_desc(item_name, sizeof(item_name), o_ptr, true, 3);
+    strnfmt(detail, sizeof(detail),
+        "%s can be stored in the Pack or equipped at the Belt.", item_name);
+    choice = ui_question_ask("Keep item where?", detail, options,
+        N_ELEMENTS(options), UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
+    if (choice < 0 || choice >= (int)N_ELEMENTS(options))
+        return false;
+
+    *equip_on_belt = choice == 1;
+    return true;
+}
+
 static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
     supply_floor_action floor_action)
 {
@@ -7801,6 +7868,16 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
         o_ptr = player_inventory_object(entry->item_idx);
         if (object_can_choose_pack_or_harness(o_ptr))
         {
+            if (o_ptr->storage == OBJECT_STORAGE_HARNESS
+                && inventory_page_can_equip_on_belt(o_ptr))
+            {
+                return "Choose";
+            }
+            if (o_ptr->storage == OBJECT_STORAGE_HARNESS
+                && inventory_page_is_combat_weapon(o_ptr))
+            {
+                return "Equip";
+            }
             return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
                 ? "Ready" : "Store";
         }
@@ -7894,14 +7971,45 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
     {
         object_type* o_ptr = player_inventory_object(entry->item_idx);
         cptr action = inventory_page_use_action_text(entry, floor_action);
+        bool choose_harness_destination = object_can_choose_pack_or_harness(o_ptr)
+            && o_ptr->storage == OBJECT_STORAGE_HARNESS
+            && inventory_page_can_equip_on_belt(o_ptr);
+        bool opens_harness_destination = choose_harness_destination
+            && streq(action, "Choose");
+        bool opens_active_weapon = o_ptr->storage == OBJECT_STORAGE_HARNESS
+            && inventory_page_is_combat_weapon(o_ptr)
+            && streq(action, "Equip");
 
-        if (!confirm_equipment_entry_action(
-                action, entry))
+        if ((!opens_harness_destination && !opens_active_weapon)
+            && !confirm_equipment_entry_action(action, entry))
         {
             return false;
         }
         if (object_can_choose_pack_or_harness(o_ptr))
         {
+            if (choose_harness_destination)
+            {
+                bool equip_on_belt;
+
+                if (!inventory_page_choose_harness_destination(o_ptr,
+                        &equip_on_belt))
+                {
+                    return false;
+                }
+                if (equip_on_belt)
+                {
+                    return do_cmd_wield_to_slot(o_ptr, entry->item_idx,
+                        INVEN_BELT);
+                }
+            }
+
+            else if (o_ptr->storage == OBJECT_STORAGE_HARNESS
+                && inventory_page_is_combat_weapon(o_ptr))
+            {
+                do_cmd_toggle_active_weapon();
+                return true;
+            }
+
             byte target_storage =
                 inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
                 ? OBJECT_STORAGE_HARNESS : OBJECT_STORAGE_PACK;
@@ -7914,6 +8022,12 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
                     failure, failure_len);
             }
             return moved;
+        }
+        if (o_ptr->storage == OBJECT_STORAGE_HARNESS
+            && inventory_page_is_combat_weapon(o_ptr))
+        {
+            do_cmd_toggle_active_weapon();
+            return true;
         }
         do_cmd_use_item_by_index(entry->item_idx);
         return true;

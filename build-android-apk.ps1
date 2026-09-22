@@ -5,6 +5,8 @@ param(
     [ValidateSet('Sideload','Play')]
     [string]$Delivery = 'Sideload',
 
+    [switch]$Apk2,
+
     [string]$KeystorePath = $env:SIL_MORE_RELEASE_STORE_FILE,
 
     [string]$KeystoreAlias = $env:SIL_MORE_RELEASE_KEY_ALIAS
@@ -202,6 +204,33 @@ function Get-AndroidApkPath {
     return Join-Path $AndroidDir "app\build\outputs\apk\$flavor\$buildType\app-$flavor-$buildType.apk"
 }
 
+function Get-AndroidApplicationId {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Delivery,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Config,
+
+        [switch]$Apk2
+    )
+
+    $applicationId = if ($Delivery -eq 'Play') {
+        'com.silmore.myapp'
+    } else {
+        'com.silmore.myapp.sideload'
+    }
+
+    if ($Config -eq 'Debug') {
+        $applicationId += '.debug'
+    }
+    if ($Apk2) {
+        $applicationId += '.apk2'
+    }
+
+    return $applicationId
+}
+
 $androidDir = Join-Path $PSScriptRoot 'android'
 if (-not (Test-Path $androidDir)) {
     throw "Android project folder not found: $androidDir"
@@ -269,7 +298,11 @@ try {
         Set-ProcessEnvironmentValue -Name 'Path' -Value "$javaHome\bin;$($previousEnvironment['Path'])"
     }
 
-    $gradleArgs = @($task)
+    $gradleArgs = @()
+    if ($Apk2) {
+        $gradleArgs += '-PSIL_MORE_APK2=true'
+    }
+    $gradleArgs += $task
     if ($releaseSigning) {
         Set-ProcessEnvironmentValue -Name 'SIL_MORE_RELEASE_STORE_FILE' -Value $releaseSigning.StoreFile
         Set-ProcessEnvironmentValue -Name 'SIL_MORE_RELEASE_STORE_PASSWORD' -Value $releaseSigning.StorePassword
@@ -288,7 +321,9 @@ try {
             throw "Gradle wrapper failed with exit code $LASTEXITCODE"
         }
         $apkPath = Get-AndroidApkPath -AndroidDir $androidDir -Delivery $Delivery -Config $Config
+        $applicationId = Get-AndroidApplicationId -Delivery $Delivery -Config $Config -Apk2:$Apk2
         Write-Host "APK build completed via gradlew ($task)." -ForegroundColor Green
+        Write-Host "Application ID: $applicationId" -ForegroundColor Green
         if (Test-Path $apkPath) {
             Write-Host "APK: $apkPath" -ForegroundColor Green
         }
@@ -301,7 +336,9 @@ try {
             throw "Gradle CLI failed with exit code $LASTEXITCODE"
         }
         $apkPath = Get-AndroidApkPath -AndroidDir $androidDir -Delivery $Delivery -Config $Config
+        $applicationId = Get-AndroidApplicationId -Delivery $Delivery -Config $Config -Apk2:$Apk2
         Write-Host "APK build completed via gradle CLI ($task)." -ForegroundColor Green
+        Write-Host "Application ID: $applicationId" -ForegroundColor Green
         if (Test-Path $apkPath) {
             Write-Host "APK: $apkPath" -ForegroundColor Green
         }

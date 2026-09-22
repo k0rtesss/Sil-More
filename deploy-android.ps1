@@ -5,6 +5,8 @@ param(
     [ValidateSet('Sideload','Play')]
     [string]$Delivery = 'Sideload',
 
+    [switch]$Apk2,
+
     [string]$AdbPath,
 
     [string]$Serial,
@@ -37,7 +39,9 @@ function Get-AndroidApplicationId {
         [string]$Delivery,
 
         [Parameter(Mandatory = $true)]
-        [string]$Config
+        [string]$Config,
+
+        [switch]$Apk2
     )
 
     if ($Delivery -eq 'Play') {
@@ -47,7 +51,10 @@ function Get-AndroidApplicationId {
     }
 
     if ($Config -eq 'Debug') {
-        return "$applicationId.debug"
+        $applicationId += '.debug'
+    }
+    if ($Apk2) {
+        $applicationId += '.apk2'
     }
 
     return $applicationId
@@ -56,6 +63,9 @@ function Get-AndroidApplicationId {
 $buildParams = @{
     Config = $Config
     Delivery = $Delivery
+}
+if ($Apk2) {
+    $buildParams['Apk2'] = $true
 }
 if ($Config -eq 'Release') {
     if ($KeystorePath) {
@@ -71,6 +81,9 @@ if ($Config -eq 'Release') {
 $installParams = @{
     Config = $Config
     Delivery = $Delivery
+}
+if ($Apk2) {
+    $installParams['Apk2'] = $true
 }
 if ($AdbPath) {
     $installParams['AdbPath'] = $AdbPath
@@ -103,7 +116,7 @@ if ($LaunchApp) {
         throw "adb not found for launch step: $adb"
     }
 
-    $applicationId = Get-AndroidApplicationId -Delivery $Delivery -Config $Config
+    $applicationId = Get-AndroidApplicationId -Delivery $Delivery -Config $Config -Apk2:$Apk2
     $launchArgs = @(
         '-s', $targetSerial,
         'shell', 'am', 'start', '-n', "$applicationId/com.silqh.silmore.SilMoreActivity"
@@ -117,4 +130,5 @@ if ($LaunchApp) {
     Write-Host "Launched $applicationId on $targetSerial." -ForegroundColor Green
 }
 
-Write-Host "Deploy complete for $Delivery $Config." -ForegroundColor Green
+$variantLabel = if ($Apk2) { 'apk2 ' } else { '' }
+Write-Host "Deploy complete for ${variantLabel}$Delivery $Config." -ForegroundColor Green

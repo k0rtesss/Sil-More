@@ -89,25 +89,25 @@ static int fixture_grid_distance(int y1, int x1, int y2, int x2)
     return MAX(ABS(y1 - y2), ABS(x1 - x2));
 }
 
-/* Apply the light field from a fixture's walkable side.  LOS prevents a wall
- * fixture from lighting through the wall behind it, while the endpoint wall
- * itself is explicitly included so the flame remains visible. */
+/* Apply a light field from its center grid.  LOS prevents light from passing
+ * through intervening walls, while wall cells remain valid endpoints so a
+ * wall-mounted fixture can illuminate its own tile. */
 void apply_fixture_light_area(
-    int source_y, int source_x, int radius, bool allow_room_tiles)
+    int center_y, int center_x, int radius, bool allow_room_tiles)
 {
-    if (!in_bounds_fully(source_y, source_x) || radius < 0)
+    if (!in_bounds_fully(center_y, center_x) || radius < 0)
         return;
 
-    for (int y = source_y - radius; y <= source_y + radius; ++y)
+    for (int y = center_y - radius; y <= center_y + radius; ++y)
     {
-        for (int x = source_x - radius; x <= source_x + radius; ++x)
+        for (int x = center_x - radius; x <= center_x + radius; ++x)
         {
             if (!in_bounds_fully(y, x)
-                || fixture_grid_distance(source_y, source_x, y, x) > radius
+                || fixture_grid_distance(center_y, center_x, y, x) > radius
                 || !fixture_light_tile_ok(y, x, allow_room_tiles))
                 continue;
-            if ((y != source_y || x != source_x)
-                && !los(source_y, source_x, y, x))
+            if ((y != center_y || x != center_x)
+                && !los(center_y, center_x, y, x))
                 continue;
             cave_info[y][x] |= CAVE_GLOW;
         }
@@ -119,11 +119,15 @@ void apply_cave_fixture_glow(
     bool allow_room_tiles)
 {
     if (!in_bounds_fully(wall_y, wall_x)
-        || !fixture_wall_feature(cave_feat[wall_y][wall_x]))
+        || !fixture_wall_feature(cave_feat[wall_y][wall_x])
+        || !fixture_source_ok(source_y, source_x, allow_room_tiles))
         return;
 
+    /* source_y/source_x still identifies the walkable side used to validate
+     * placement and save reapplication. Ordinary wall fixtures themselves
+     * are the light center; do not shift their field onto that side. */
     cave_info[wall_y][wall_x] |= CAVE_GLOW;
-    apply_fixture_light_area(source_y, source_x,
+    apply_fixture_light_area(wall_y, wall_x,
         fixture_light_radius(cave_fixture_at(wall_y, wall_x)),
         allow_room_tiles);
 }

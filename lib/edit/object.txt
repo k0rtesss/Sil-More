@@ -1371,7 +1371,7 @@ D: tireless march, a louder tread, and endurance without honour.
 ##### Gloves #####
 
 N:125:& Set~ of Gloves
-G:]:U
+G:]:W
 T:5:20
 I:31:1:0
 Y:PACK:9

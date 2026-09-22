@@ -11,7 +11,8 @@ enum cave_fixture_kind {
     CAVE_FIXTURE_WALL_TORCH_2
 };
 
-/* Static decorative fixtures use a grid radius from their walkable side.
+/* Static wall fixtures use a grid radius centered on their wall tile.
+ * Tunnel niches intentionally keep their separate niche-centered light.
  * Torches light one square; braziers light two. This is intentionally
  * separate from the radius of a carried torch. */
 #define CAVE_FIXTURE_TORCH_LIGHT_RADIUS 1
