@@ -79,8 +79,11 @@ bool weapon_glows(const object_type* o_ptr)
     if (wield_slot(o_ptr) != INVEN_WIELD)
         return (false);
 
-    // use the player's position where needed
-    if ((iy == 0) && (ix == 0))
+    /* Carried equipment can retain an old floor location in existing saves.
+     * Use the player's location for inventory slots; only floor objects use
+     * their stored coordinates. */
+    if (player_inventory_handle_for_object(o_ptr) >= 0
+        || ((iy == 0) && (ix == 0)))
     {
         iy = py;
         ix = px;

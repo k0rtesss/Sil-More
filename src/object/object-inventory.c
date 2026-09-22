@@ -1037,6 +1037,18 @@ bool inven_carry_okay_after_removing(
     return result;
 }
 
+/* Remove floor linkage and position from an object copied into inventory. */
+static void forget_carried_object_location(object_type* o_ptr)
+{
+    if (!o_ptr)
+        return;
+
+    o_ptr->next_o_idx = 0;
+    o_ptr->held_m_idx = 0;
+    o_ptr->iy = o_ptr->ix = 0;
+    o_ptr->marked = false;
+}
+
 /*
  * Add an item to the players inventory, and return the slot used.
  *
@@ -1132,6 +1144,7 @@ int inven_carry(object_type* o_ptr, bool combine_ammo)
             int placed = MIN(o_ptr->number, object_stack_limit(o_ptr));
 
             object_copy(d_ptr, o_ptr);
+            forget_carried_object_location(d_ptr);
             d_ptr->number = placed;
             d_ptr->pickup = false;
             d_ptr->pickup_slot = PICKUP_SLOT_ACTIVE_THROWING;
@@ -1176,6 +1189,7 @@ int inven_carry(object_type* o_ptr, bool combine_ammo)
         {
             int placed = MIN(o_ptr->number, 1);
             object_copy(d_ptr, o_ptr);
+            forget_carried_object_location(d_ptr);
             d_ptr->number = placed;
             d_ptr->pickup = false;
             d_ptr->pickup_slot = -1;
@@ -1412,16 +1426,7 @@ int inven_carry(object_type* o_ptr, bool combine_ammo)
     }
 
     /* Forget stack */
-    j_ptr->next_o_idx = 0;
-
-    /* Forget monster */
-    j_ptr->held_m_idx = 0;
-
-    /* Forget location */
-    j_ptr->iy = j_ptr->ix = 0;
-
-    /* No longer marked */
-    j_ptr->marked = false;
+    forget_carried_object_location(j_ptr);
 
     /* Count the items */
     p_ptr->inven_cnt++;
