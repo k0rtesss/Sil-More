@@ -823,6 +823,9 @@ int sdl_object_tooltip_font_px(void)
 #endif
     int font_px = sdl_aux_cell_height_for_font_size(font_size);
 
+    if (sdl_touch_only_mobile_device_active())
+        font_px = MAX(font_px, sdl_main_menu_pane_font_px());
+
     return (font_px > 0) ? font_px : SDL_OBJECT_TOOLTIP_FONT_SIZE;
 }
 

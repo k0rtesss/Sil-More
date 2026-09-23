@@ -1638,6 +1638,16 @@ static int active_weapon_filter_item_choices(active_weapon_choice choices[],
             continue;
         choices[kept] = choices[i];
         options[kept] = options[i];
+        {
+            char original_label[sizeof(choices[kept].label)];
+            bool active = strstr(choices[kept].label, "[active]") != NULL;
+
+            SDL_strlcpy(original_label, choices[kept].label,
+                sizeof(original_label));
+            strnfmt(choices[kept].label, sizeof(choices[kept].label),
+                "%s: %s", active ? "Active setup" : "Make active",
+                original_label);
+        }
         options[kept].label = choices[kept].label;
         options[kept].key = active_weapon_menu_key(kept);
         kept++;
@@ -1775,9 +1785,9 @@ static bool choose_active_weapon(active_weapon_choice* selected, int item)
     }
 
     selected_index = ui_question_ask_objects_with_help(
-            item >= 0 ? "Use Harness item" : "Change active weapon",
+            item >= 0 ? "Choose item setup" : "Change active weapon",
             item >= 0
-                ? "Choose a combat setup using this item, or choose where to keep it. [active] marks your current setup. Harness items are carried and available; only active combat gear grants combat bonuses. Changing only arrows is free. Other changes keep their normal turn cost and ability exceptions. Pack actions take three turns."
+                ? "Make this item active, including a compatible Harness shield and arrows where available, or choose where to keep it. [active] marks your current setup. Only active combat gear grants combat bonuses. Changing only arrows is free. Other changes keep their normal turn cost and ability exceptions. Pack actions take three turns."
                 : "Choose how to ready a weapon; the current choice is marked [active]. Each bow row selects one arrow type from the mixed Quiver, and changing only that arrow choice always takes no time. A throwing-capable weapon has separate Melee and Throwing choices. One-handed melee and throwing rows list available Harness shield combinations; Point Blank Archery also allows a round shield with a shortbow. Expected attack and damage are shown at the end of each row. Other active-weapon changes take one turn unless an ability makes your first change before your next action free.",
             options, object_icons, count, UI_QUESTION_GLOBAL,
             UI_QUESTION_GLOBAL, default_index);

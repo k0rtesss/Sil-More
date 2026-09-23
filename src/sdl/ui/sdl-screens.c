@@ -6668,6 +6668,16 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         cptr label = jump_to_last_page
             ? "Jump to last page" : display_close_label;
 
+        /* The race-book shortcut needs a full third of a portrait footer.
+         * A single long line was scaled down to half the neighboring labels. */
+        if (jump_to_last_page && g_sdl_narrative_portrait_rendering)
+        {
+            cw = MIN(content_w * control_width_fraction, bh * 9.0f);
+            ccx = content_x + (content_w - cw) * 0.5f;
+            r.x = ccx;
+            r.w = cw;
+        }
+
         if (jump_to_last_page && steamdeck_controls_active())
         {
             char last_label[16];
@@ -6689,8 +6699,30 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             if (larger_font)
                 close_font = larger_font;
         }
-        (void)sdl_char_sheet_draw_text(close_font, label, a, ccx, close_y,
-            cw, close_h, true);
+        if (g_sdl_narrative_portrait_rendering
+            && !steamdeck_controls_active()
+            && (jump_to_last_page
+                || (label && streq(label, "Create character"))))
+        {
+            int line_px = MAX(1,
+                (int)((float)TTF_GetFontHeight(prompt_font) * 0.58f));
+            TTF_Font* line_font = sdl_story_font_for_height_slot(line_px,
+                SDL_STORY_FONT_SLOT_DEFAULT);
+            float line_h = close_h * 0.5f;
+            cptr first_line = jump_to_last_page ? "Jump to" : "Create";
+            cptr second_line = jump_to_last_page ? "last page" : "character";
+
+            if (!line_font)
+                line_font = prompt_font;
+            (void)sdl_char_sheet_draw_text_aligned(line_font,
+                first_line, a, ccx, close_y, cw, line_h, true, true);
+            (void)sdl_char_sheet_draw_text_aligned(line_font,
+                second_line, a, ccx, close_y + line_h, cw, line_h,
+                true, true);
+        }
+        else
+            (void)sdl_char_sheet_draw_text(close_font, label, a, ccx,
+                close_y, cw, close_h, true);
         sdl_char_sheet_add_select_button_hit(r, SDL_SELECT_CLICK_CLOSE);
     }
 }
@@ -8301,6 +8333,8 @@ void sdl_char_sheet_render_hover_tooltip(void)
     else
         font_px = sdl_char_sheet_clampi((int)((float)screen.h * 0.020f), 14,
             30);
+    if (sdl_touch_only_mobile_device_active())
+        font_px = MAX(font_px, sdl_main_menu_pane_font_px());
     font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_MENU);
     if (!font)
         return;
@@ -8308,7 +8342,9 @@ void sdl_char_sheet_render_hover_tooltip(void)
     pad = sdl_char_sheet_clampf((float)font_px * 0.44f, 9.0f, 18.0f);
     gap = sdl_char_sheet_clampf((float)font_px * 0.38f, 7.0f, 16.0f);
     margin = sdl_char_sheet_clampf((float)screen.h * 0.010f, 7.0f, 18.0f);
-    max_box_w = MIN((float)screen.w * 0.62f, 980.0f);
+    max_box_w = MIN((float)screen.w
+        * (sdl_touch_only_mobile_device_active() ? 0.90f : 0.62f),
+        980.0f);
     max_box_w = MAX(max_box_w, MIN((float)screen.w - margin * 2.0f, 360.0f));
     max_text_w = max_box_w - pad * 2.0f;
     if (max_text_w <= 1.0f)
@@ -11332,7 +11368,7 @@ static bool sdl_char_sheet_book_story_pages_fit(int px, float content_w,
 }
 
 /*
- * Choose one shared body size (no bigger than the title) for every race-book
+ * Choose one shared body size for every race-book
  * story page.  The final selection page is deliberately excluded and fitted
  * independently below, so its longer list+lore layout cannot shrink the
  * chronicle.
@@ -11342,6 +11378,7 @@ int sdl_char_sheet_book_body_px(float canvas_h, float content_w,
 {
     float region_h = (region_bottom > top_y) ? (region_bottom - top_y) : 1.0f;
     int min_px = sdl_char_sheet_clampi((int)(canvas_h * 0.018f), 14, 24);
+    int max_px = title_px;
     int lowest_px;
     int low_index;
     int high_index;
@@ -11353,12 +11390,17 @@ int sdl_char_sheet_book_body_px(float canvas_h, float content_w,
         && g_sdl_character_sheet_screen.select_book_mode
         && g_sdl_character_sheet_screen.select_page_count >= 3;
 
-    if (title_px < min_px)
+    /* Portrait phones split the chronicle over four leaves.  The title-sized
+     * ceiling left most of each leaf empty and made the prose hard to read. */
+    if (mobile_pages && g_sdl_narrative_portrait_rendering)
+        max_px = MIN(88, (title_px * 3) / 2);
+
+    if (max_px < min_px)
         return min_px;
-    lowest_px = title_px - ((title_px - min_px) / 2) * 2;
+    lowest_px = max_px - ((max_px - min_px) / 2) * 2;
     body_px = lowest_px;
     low_index = 0;
-    high_index = (title_px - lowest_px) / 2;
+    high_index = (max_px - lowest_px) / 2;
     while (low_index <= high_index) {
         int index = low_index + (high_index - low_index) / 2;
         int px = lowest_px + index * 2;
@@ -13008,6 +13050,14 @@ static void sdl_character_sheet_screen_render_canvas(
 
     title_px = sdl_char_sheet_clampi((int)((float)canvas.h * 0.046f), 24,
         64);
+    if (g_sdl_narrative_portrait_rendering
+        && g_sdl_character_sheet_screen.context
+            == SDL_CHARACTER_SHEET_BIRTH_SELECT
+        && g_sdl_character_sheet_screen.select_book_mode)
+    {
+        title_px = sdl_char_sheet_clampi((int)((float)canvas.h * 0.060f),
+            28, 78);
+    }
 #if SIL_SDL_MOBILE_BUILD
     if (sdl_touch_only_device_active())
     {

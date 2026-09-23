@@ -95,6 +95,11 @@ android {
         targetSdk androidTargetSdk
         versionCode gameVersionCode
         versionName gameVersion
+        // Select a distinct launcher label for the APK2 installation while
+        // retaining the existing labels for the primary app and debug builds.
+        manifestPlaceholders = [
+                appNameResource: buildApk2 ? 'app_name_apk2' : 'app_name'
+        ]
 
         ndk {
             abiFilters 'arm64-v8a'

@@ -257,11 +257,11 @@ For a second test install that can coexist with the primary APK, use the APK2 he
 .\deploy-android-apk2.ps1 -LaunchApp
 ```
 
-The default APK2 debug package is `com.silmore.myapp.sideload.debug.apk2`. It has separate Android app data, so it does not share saves or configuration with `com.silmore.myapp.sideload.debug`. To build or install the APK2 copy as separate steps, pass `-Apk2` to the existing helpers:
+The APK2 release package is `com.silmore.myapp.sideload.apk2` and appears in the Android launcher as `Sil-More APK 2`. It has separate Android app data, so it does not share saves or configuration with `com.silmore.myapp.sideload`. To build or install the APK2 copy as separate steps, pass `-Config Release -Apk2` to the existing helpers:
 
 ```powershell
-.\build-android-apk.ps1 -Config Debug -Apk2
-.\install-android-apk.ps1 -Config Debug -Apk2
+.\build-android-apk.ps1 -Config Release -Apk2
+.\install-android-apk.ps1 -Config Release -Apk2
 ```
 
 To build, install, and launch a release-signed APK in one step:

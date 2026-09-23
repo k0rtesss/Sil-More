@@ -28,7 +28,10 @@ enum {
 
 static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
 {
-    const float scale = 1.14f;
+    /* Keep explanation cards near the gameplay tutorial's readable type size
+     * on touch-only mobile screens; panels measure and wrap at this size. */
+    const float scale = sdl_touch_only_mobile_device_active()
+        ? 1.45f : 1.14f;
 
     return (int)sdl_touch_pane_clampf(
         px * scale, min_px * scale, max_px * scale);
@@ -37,6 +40,13 @@ static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
 static TTF_Font* sdl_touch_tutorial_font_for_height(int font_px)
 {
     return sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
+}
+
+static int sdl_touch_tutorial_readable_body_px(int suggested_px)
+{
+    if (sdl_touch_only_mobile_device_active())
+        return MAX(suggested_px, sdl_main_menu_pane_font_px());
+    return suggested_px;
 }
 
 static int sdl_touch_tutorial_story_width_n(TTF_Font* font, cptr text,
@@ -739,6 +749,9 @@ static bool sdl_touch_tutorial_header_compute(const SDL_Rect* screen,
         30.0f, 50.0f);
     out->body_px = sdl_touch_tutorial_text_px((float)screen->h * 0.032f,
         22.0f, 34.0f);
+    out->body_px = sdl_touch_tutorial_readable_body_px(out->body_px);
+    if (sdl_touch_only_mobile_device_active())
+        out->title_px = MAX(out->title_px, out->body_px + 6);
     title_font = sdl_touch_tutorial_font_for_height(out->title_px);
     body_font = sdl_touch_tutorial_font_for_height(out->body_px);
     if (!title_font || !body_font)
@@ -774,6 +787,14 @@ static bool sdl_touch_tutorial_header_compute(const SDL_Rect* screen,
         out->title_max_w = out->panel.w * 0.52f;
     out->body_max_w = out->panel.w - pad * 2.0f;
     out->title_h = (float)MAX(title_h, 1);
+    if (sdl_touch_only_mobile_device_active())
+    {
+        int title_lines = sdl_touch_tutorial_line_count(title,
+            out->title_px, out->title_max_w);
+
+        out->title_h = MAX(out->title_h,
+            (float)MAX(1, title_lines) * (float)out->title_px * 1.30f);
+    }
     out->body_y = out->text_y + out->title_h + 5.0f;
     out->body_h = sdl_touch_tutorial_rich_draw_or_measure(body,
         out->center_x, out->body_y, out->body_max_w, out->body_px,
@@ -827,8 +848,14 @@ float sdl_touch_tutorial_draw_header_at(const SDL_Rect* screen,
         title_color.b, 230);
     SDL_RenderRect(g_state.renderer, &layout.panel);
 
-    (void)sdl_touch_tutorial_draw_text_line(title, layout.center_x,
-        layout.text_y, layout.title_max_w, layout.title_px, title_color, true);
+    if (sdl_touch_only_mobile_device_active())
+        (void)sdl_touch_tutorial_draw_wrapped_centered(title,
+            layout.center_x, layout.text_y, layout.title_max_w,
+            layout.title_px, title_color);
+    else
+        (void)sdl_touch_tutorial_draw_text_line(title, layout.center_x,
+            layout.text_y, layout.title_max_w, layout.title_px, title_color,
+            true);
     (void)sdl_touch_tutorial_draw_rich_centered(body, layout.center_x,
         layout.body_y, layout.body_max_w, layout.body_px, text_color);
 
@@ -876,13 +903,16 @@ static float sdl_touch_tutorial_footer_height(const SDL_Rect* screen)
 
     font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
         22.0f, 30.0f);
+    font_px = sdl_touch_tutorial_readable_body_px(font_px);
     line_h = (float)font_px * 1.30f;
     bottom_pad = sdl_touch_pane_clampf((float)screen->h * 0.008f,
         6.0f, 10.0f);
     legacy_h = sdl_touch_pane_clampf((float)screen->h * 0.090f,
         54.0f, 78.0f);
 
-    return MAX(legacy_h, line_h * 2.0f + bottom_pad);
+    return MAX(legacy_h, line_h
+        * (sdl_touch_only_mobile_device_active() ? 3.0f : 2.0f)
+        + bottom_pad);
 }
 
 void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
@@ -900,6 +930,7 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
 
     font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
         22.0f, 30.0f);
+    font_px = sdl_touch_tutorial_readable_body_px(font_px);
     line_h = (float)font_px * 1.30f;
     y = (float)(screen->y + screen->h)
         - sdl_touch_tutorial_footer_height(screen);
@@ -962,7 +993,7 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
             sizeof(page_text));
     }
 
-    (void)sdl_touch_tutorial_draw_rich_centered(advance_text,
+    line_h = sdl_touch_tutorial_draw_rich_centered(advance_text,
         (float)screen->x + (float)screen->w * 0.5f, y,
         (float)screen->w * 0.90f, font_px, text_color);
     (void)sdl_touch_tutorial_draw_rich_centered(page_text,
@@ -1209,6 +1240,8 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
     font_px = mobile_section
         ? sdl_touch_tutorial_text_px((float)screen->h * 0.036f, 22.0f, 30.0f)
         : sdl_touch_tutorial_text_px((float)screen->h * 0.030f, 16.0f, 24.0f);
+    if (mobile_section)
+        font_px = sdl_touch_tutorial_readable_body_px(font_px);
     pad = sdl_touch_pane_clampf((float)screen->h * 0.012f, 5.0f, 9.0f);
 
     w = (float)screen->w * 0.88f;
@@ -1222,7 +1255,8 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
         return;
     text_w = w - pad * 2.0f;
 
-    min_font_px = mobile_section ? 16 : 14;
+    min_font_px = mobile_section
+        ? sdl_touch_tutorial_readable_body_px(16) : 14;
     {
         int low_px = min_font_px;
         int high_px = MAX(font_px, min_font_px);
@@ -1357,6 +1391,7 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
     float screen_bottom;
     float text_w;
     int title_px;
+    int title_lines;
     int detail_px;
     int detail_lines;
 
@@ -1367,24 +1402,32 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
         26.0f, 38.0f);
     detail_px = sdl_touch_tutorial_text_px((float)screen->h * 0.034f,
         22.0f, 32.0f);
+    detail_px = sdl_touch_tutorial_readable_body_px(detail_px);
+    if (sdl_touch_only_mobile_device_active())
+        title_px = MAX(title_px, detail_px + 6);
     pad = sdl_touch_pane_clampf((float)screen->h * 0.016f, 10.0f, 18.0f);
 
     max_box_w = (float)screen->w - 2.0f * pad;
     if (max_box_w < 80.0f)
         return;
 
-    box_w = (float)screen->w * 0.42f;
+    box_w = (float)screen->w
+        * (sdl_touch_only_mobile_device_active() ? 0.90f : 0.42f);
     if (box_w < 300.0f)
         box_w = 300.0f;
-    if (box_w > 620.0f)
-        box_w = 620.0f;
+    if (box_w > (sdl_touch_only_mobile_device_active() ? 980.0f
+                                                     : 620.0f))
+        box_w = sdl_touch_only_mobile_device_active() ? 980.0f : 620.0f;
     if (box_w > max_box_w)
         box_w = max_box_w;
     text_w = box_w - pad * 2.0f;
+    title_lines = sdl_touch_only_mobile_device_active()
+        ? MAX(1, sdl_touch_tutorial_line_count(title, title_px, text_w))
+        : 1;
     detail_lines = sdl_touch_tutorial_rich_line_count(detail, detail_px,
         text_w);
 
-    box_h = pad * 2.0f + (float)title_px * 1.25f;
+    box_h = pad * 2.0f + (float)title_lines * (float)title_px * 1.30f;
     if (detail_lines > 0)
         box_h += 7.0f + (float)detail_lines * (float)detail_px * 1.30f;
 
@@ -1421,13 +1464,18 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
         title_color.b, 242);
     SDL_RenderRect(g_state.renderer, &box);
 
-    (void)sdl_touch_tutorial_draw_text_line(title,
-        box.x + box.w * 0.5f, box.y + pad, text_w,
-        title_px, title_color, true);
+    if (sdl_touch_only_mobile_device_active())
+        (void)sdl_touch_tutorial_draw_wrapped_centered(title,
+            box.x + box.w * 0.5f, box.y + pad, text_w,
+            title_px, title_color);
+    else
+        (void)sdl_touch_tutorial_draw_text_line(title,
+            box.x + box.w * 0.5f, box.y + pad, text_w,
+            title_px, title_color, true);
     if (detail_lines > 0) {
         (void)sdl_touch_tutorial_draw_rich_centered(detail,
             box.x + box.w * 0.5f,
-            box.y + pad + (float)title_px * 1.34f,
+            box.y + pad + (float)title_lines * (float)title_px * 1.34f,
             text_w, detail_px, detail_color);
     }
 }
@@ -1444,6 +1492,7 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
     float text_w;
     float h;
     int title_px;
+    int title_lines = 0;
     int body_px;
     int body_lines;
 
@@ -1455,6 +1504,16 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
         26.0f, 38.0f);
     body_px = sdl_touch_tutorial_text_px((float)screen->h * 0.034f,
         22.0f, 32.0f);
+    body_px = sdl_touch_tutorial_readable_body_px(body_px);
+    if (sdl_touch_only_mobile_device_active())
+        title_px = MAX(title_px, body_px + 6);
+    if (sdl_touch_only_mobile_device_active())
+    {
+        /* Side-by-side guide panels leave too few words per line on phones.
+         * Use the open width above the illustrated control instead. */
+        x = (float)screen->x + pad;
+        w = (float)screen->w - pad * 2.0f;
+    }
     text_w = w - pad * 2.0f;
     if (text_w <= 40.0f)
         return;
@@ -1462,7 +1521,12 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
     body_lines = sdl_touch_tutorial_rich_line_count(body, body_px, text_w);
     h = pad * 2.0f + (float)body_lines * (float)body_px * 1.30f;
     if (title && title[0])
-        h += (float)title_px * 1.35f + 5.0f;
+    {
+        title_lines = sdl_touch_only_mobile_device_active()
+            ? MAX(1, sdl_touch_tutorial_line_count(title, title_px, text_w))
+            : 1;
+        h += (float)title_lines * (float)title_px * 1.35f + 5.0f;
+    }
 
     box = (SDL_FRect){ .x = x, .y = y, .w = w, .h = h };
     footer_top = (float)(screen->y + screen->h)
@@ -1487,8 +1551,13 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
 
     y = box.y + pad;
     if (title && title[0]) {
-        y += sdl_touch_tutorial_draw_text_line(title,
-            box.x + box.w * 0.5f, y, text_w, title_px, title_color, true);
+        if (sdl_touch_only_mobile_device_active())
+            y += sdl_touch_tutorial_draw_wrapped_centered(title,
+                box.x + box.w * 0.5f, y, text_w, title_px, title_color);
+        else
+            y += sdl_touch_tutorial_draw_text_line(title,
+                box.x + box.w * 0.5f, y, text_w, title_px, title_color,
+                true);
         y += 5.0f;
     }
     (void)sdl_touch_tutorial_draw_rich(body, box.x + pad, y, text_w,
@@ -2055,7 +2124,7 @@ void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
 
     sdl_touch_tutorial_draw_info_panel(screen,
         panel_x, panel_y, panel_w, "Button wheel controls",
-        "<t>Outer arrows:</t> <a>tap</a> a direction to step.\n<t>Inner wheel:</t> <a>press and drag</a> toward a direction, then release. Drag 1.3x the centre-to-arrow distance until <g>Run</g> appears to run on release.\n<t>Center:</t> <a>tap</a> to repeat the last direction.\n<a>Swipe edge:</a> reveal or hide the touch pane.\n<t>Quick access:</t> <a>tap</a> a button for its command; <a>hold</a> for its description. The square changes it; the cross closes the description.\n<t>Status changes:</t> the wheel re-centres and shrinks inside the open lane as the condition panel grows.\nDescription cards open above the bottom-center quick-access overlay.");
+        "<t>Outer arrows:</t> <a>tap</a> to step.\n<t>Inner wheel:</t> <a>press and drag</a>, then release. Drag farther until <g>Run</g> appears to run.\n<t>Center:</t> <a>tap</a> to repeat the last direction.\n<a>Swipe edge:</a> reveal or hide the touch pane.\n<t>Quick access:</t> <a>tap</a> a command; <a>hold</a> for its description. The square changes it; the cross closes it.\n<t>Status changes:</t> the wheel moves and shrinks as the condition panel grows.\nDescription cards open above Quick Access.");
 
     (void)sdl_touch_tutorial_draw_header(screen, header_title, header_body,
         page, page_count);
@@ -2690,8 +2759,8 @@ static bool birth_coach_step_zone(const birth_coach_step* step, SDL_FRect* out)
 
 /*
  * The coach's own callout box: wider than the shared zone-prompt, left-aligned
- * body text, an auto-shrinking font and no 14-line cap, so detailed multi-line
- * explanations fit without being truncated.  Positioned beside the highlighted
+ * body text, a font fitted to available height and no 14-line cap, so detailed
+ * explanations fit without truncation.  Positioned beside the highlighted
  * block when one is given, otherwise centred under the title.
  */
 static void birth_coach_draw_callout(const SDL_Rect* screen,
@@ -2717,11 +2786,16 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
         28.0f, 44.0f);
     int detail_px = sdl_touch_tutorial_text_px((float)screen->h * 0.038f,
         22.0f, 36.0f);
+    bool mobile = sdl_touch_only_mobile_device_active();
     int n = 0;
 
     max_box_w = (float)screen->w - pad * 2.0f;
     if (max_box_w <= 40.0f)
         return;
+
+    detail_px = sdl_touch_tutorial_readable_body_px(detail_px);
+    if (mobile)
+        title_px = MAX(title_px, detail_px + 6);
 
     box_w = (float)screen->w * 0.64f;
     if (box_w > 1160.0f)
@@ -2733,6 +2807,8 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
         title_px, body, detail_px, pad);
     if (natural_box_w > box_w)
         box_w = natural_box_w;
+    if (mobile)
+        box_w = max_box_w;
     if (box_w > max_box_w)
         box_w = max_box_w;
 
@@ -2744,13 +2820,15 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     if (avail_h < (float)screen->h * 0.40f)
         avail_h = (float)screen->h * 0.82f;
 
-    /* Shrink the body font until the wrapped text fits the vertical budget. */
+    /* Fit the complete wrapped explanation without shrinking it to the old
+     * tiny mobile floor.  A wider box leaves room for the larger type. */
     {
         int initial_title_px = title_px;
         int title_gap = MAX(initial_title_px - detail_px, 8);
-        int low_px = 18;
-        int high_px = MAX(detail_px, 18);
-        int chosen_px = 18;
+        int min_px = mobile ? sdl_touch_tutorial_readable_body_px(32) : 18;
+        int low_px = min_px;
+        int high_px = MAX(detail_px, min_px);
+        int chosen_px = min_px;
 
         while (low_px <= high_px) {
             int candidate_px = low_px + (high_px - low_px) / 2;
@@ -2758,8 +2836,12 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
                 candidate_px + title_gap);
             int candidate_lines = sdl_touch_tutorial_rich_line_count(body,
                 candidate_px, text_w);
+            int candidate_title_lines = mobile
+                ? MAX(1, sdl_touch_tutorial_line_count(title,
+                    candidate_title_px, text_w)) : 1;
             float candidate_line_h = (float)candidate_px * 1.30f;
-            float candidate_title_h = (float)candidate_title_px * 1.25f;
+            float candidate_title_h = (float)candidate_title_lines
+                * (float)candidate_title_px * 1.30f;
             float candidate_h = pad * 2.0f + candidate_title_h + 6.0f
                 + (float)candidate_lines * candidate_line_h;
 
@@ -2775,7 +2857,10 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     }
     n = sdl_touch_tutorial_rich_line_count(body, detail_px, text_w);
     line_h = (float)detail_px * 1.30f;
-    title_h = (float)title_px * 1.25f;
+    title_h = mobile
+        ? (float)MAX(1, sdl_touch_tutorial_line_count(title, title_px,
+            text_w)) * (float)title_px * 1.30f
+        : (float)title_px * 1.25f;
     box_h = pad * 2.0f + title_h + 6.0f + (float)n * line_h;
 
     /* Place beside the block: below it if there is room, else above, else at the
@@ -2812,8 +2897,12 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     SDL_RenderRect(g_state.renderer, &box);
 
     y = box.y + pad;
-    (void)sdl_touch_tutorial_draw_text_line(title, box.x + box.w * 0.5f, y,
-        text_w, title_px, title_color, true);
+    if (mobile)
+        (void)sdl_touch_tutorial_draw_wrapped_centered(title,
+            box.x + box.w * 0.5f, y, text_w, title_px, title_color);
+    else
+        (void)sdl_touch_tutorial_draw_text_line(title,
+            box.x + box.w * 0.5f, y, text_w, title_px, title_color, true);
     y += title_h + 6.0f;
     (void)sdl_touch_tutorial_draw_rich(body, box.x + pad, y, text_w,
         detail_px, text_color);
@@ -3034,14 +3123,17 @@ void sdl_touch_tutorial_choice_layout(const SDL_Rect* screen,
         (float)screen->h * 0.245f, 118.0f, 190.0f)
         + sdl_touch_tutorial_top_reserved_height(screen);
     bottom = (float)(screen->y + screen->h)
-        - sdl_touch_pane_clampf((float)screen->h * 0.115f, 62.0f, 92.0f);
+        - MAX(sdl_touch_pane_clampf((float)screen->h * 0.115f,
+            62.0f, 92.0f), sdl_touch_tutorial_footer_height(screen));
     if (bottom <= top + 80.0f)
         bottom = (float)(screen->y + screen->h) - 46.0f;
     if (bottom <= top + 80.0f)
         top = (float)screen->y + 88.0f;
 
     gap = sdl_touch_pane_clampf((float)screen->h * 0.018f, 8.0f, 16.0f);
-    grid = (screen->w >= 760 && screen->h >= 430);
+    grid = (screen->w >= 760 && screen->h >= 430)
+        && !(sdl_touch_only_mobile_device_active()
+            && screen->h > screen->w);
 
     if (grid) {
         card_w = (max_w - gap) * 0.5f;
@@ -3088,6 +3180,7 @@ void sdl_touch_tutorial_draw_choice_card(const SDL_FRect* rect,
     float pad;
     float text_x;
     float text_w;
+    float body_h;
     float y;
     int title_px;
     int body_px;
@@ -3099,6 +3192,9 @@ void sdl_touch_tutorial_draw_choice_card(const SDL_FRect* rect,
     pad = sdl_touch_pane_clampf(rect->h * 0.13f, 8.0f, 17.0f);
     title_px = sdl_touch_tutorial_text_px(rect->h * 0.205f, 17.0f, 28.0f);
     body_px = sdl_touch_tutorial_text_px(rect->h * 0.148f, 13.0f, 21.0f);
+    body_px = sdl_touch_tutorial_readable_body_px(body_px);
+    if (sdl_touch_only_mobile_device_active())
+        title_px = MAX(title_px, body_px + 6);
 
     shadow = *rect;
     shadow.x += 3.0f;
@@ -3127,13 +3223,19 @@ void sdl_touch_tutorial_draw_choice_card(const SDL_FRect* rect,
     text_w = rect->w - pad * 2.0f;
     y = rect->y + pad;
 
-    (void)sdl_touch_tutorial_draw_text_line(title, text_x, y, text_w,
-        title_px, title_color, false);
+    if (sdl_touch_only_mobile_device_active())
+        y += sdl_touch_tutorial_draw_wrapped(title, text_x, y, text_w,
+            title_px, title_color);
+    else
+        y += sdl_touch_tutorial_draw_text_line(title, text_x, y, text_w,
+            title_px, title_color, false);
 
-    if (rect->h >= pad * 2.0f + (float)title_px * 1.25f
-            + (float)body_px * 1.55f)
+    body_h = sdl_touch_tutorial_rich_draw_or_measure(choice->body,
+        text_x, y, text_w, body_px, body_color, false, false);
+    if (rect->h >= y - rect->y + pad
+            + (float)title_px * 0.12f + body_h)
     {
-        y += (float)title_px * 1.35f;
+        y += (float)title_px * 0.12f;
         (void)sdl_touch_tutorial_draw_rich(choice->body, text_x, y,
             text_w, body_px, body_color);
     }
@@ -3162,8 +3264,9 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         return false;
 
     sdl_touch_tutorial_draw_screen_dim(&screen, 172);
-    footer_px = sdl_touch_tutorial_text_px((float)screen.h * 0.028f,
-        16.0f, 24.0f);
+    footer_px = sdl_touch_tutorial_readable_body_px(
+        sdl_touch_tutorial_text_px((float)screen.h * 0.028f,
+            16.0f, 24.0f));
 
     sdl_touch_tutorial_choice_layout(&screen, choice_rects);
     current_index = sdl_touch_tutorial_current_choice_index();
@@ -3178,7 +3281,7 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         0, 0);
 
     y = (float)(screen.y + screen.h)
-        - sdl_touch_pane_clampf((float)screen.h * 0.076f, 42.0f, 62.0f);
+        - sdl_touch_tutorial_footer_height(&screen);
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
         SDL_TOUCH_TUTORIAL_FOOTER_ALPHA);
@@ -3188,12 +3291,12 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         .w = (float)screen.w,
         .h = (float)(screen.y + screen.h) - y + 8.0f,
     });
-    (void)sdl_touch_tutorial_draw_text_line(
+    (void)sdl_touch_tutorial_draw_wrapped_centered(
         sdl_touch_tutorial_device_available()
             ? "Tap a choice to apply it   Back keeps the current preset"
             : "Click a choice   Up/Down selects   Enter applies   Esc keeps current",
         (float)screen.x + (float)screen.w * 0.5f, y,
-        (float)screen.w * 0.92f, footer_px, text_color, true);
+        (float)screen.w * 0.92f, footer_px, text_color);
 
     SDL_RenderPresent(g_state.renderer);
     sdl_restore_render_target(d);

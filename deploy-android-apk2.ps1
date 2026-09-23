@@ -1,6 +1,6 @@
 param(
-    [ValidateSet('Debug','Release')]
-    [string]$Config = 'Debug',
+    [ValidateSet('Release')]
+    [string]$Config = 'Release',
 
     [ValidateSet('Sideload','Play')]
     [string]$Delivery = 'Sideload',
