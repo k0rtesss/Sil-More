@@ -40,6 +40,12 @@ static bool auto_pickup_okay(const object_type* o_ptr)
 void land(void)
 {
     bool ended_in_air = p_ptr->leaping;
+    int landing_feat = cave_feat[p_ptr->py][p_ptr->px];
+    bool landing_plays_fall_sound = landing_feat == FEAT_CHASM
+        || landing_feat == FEAT_TRAP_PIT
+        || (landing_feat == FEAT_TRAP_false_FLOOR && !p_ptr->avoid_traps
+            && p_ptr->depth != UTUMNO_DEPTH
+            && p_ptr->depth != UTUMNO_FORGE_DEPTH);
     // the player has landed
     p_ptr->leaping = false;
     if (ended_in_air && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px]))
@@ -56,6 +62,12 @@ void land(void)
         player_poison_terrain_exposure(false);
     }
     if (p_ptr->is_dead) return;
+
+    /* Falling tiles play this when their fall resolves in hit_trap(). */
+    if (!landing_plays_fall_sound)
+    {
+        sound(MSG_LANDING);
+    }
 
     // make some noise when landing
     stealth_score -= 5;
@@ -764,6 +776,7 @@ void process_player(void)
 
                 /* Get a command (normal) */
                 sil_popup_trace_stage("request-command-begin");
+                sdl_sound_update_environment();
                 TIME_PHASE("request_command", request_command());
                 sil_popup_trace_end("next-command-received-before-popup");
                 sdl_question_menu_clear_context_hint();
@@ -1409,6 +1422,7 @@ void process_player(void)
         && p_ptr->previous_action[0] >= 1
         && p_ptr->previous_action[0] <= 9
         && p_ptr->previous_action[0] != 5);
+    sdl_sound_update_environment();
     sil_popup_trace_stage("action-upkeep-complete");
 
 #if !defined(__ANDROID__) && !defined(SIL_IOS)

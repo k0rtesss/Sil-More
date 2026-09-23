@@ -1609,6 +1609,7 @@ void hit_trap(int y, int x)
         {
             msg_print("...and land somewhere deeper in the Iron Hells.");
             message_flush();
+            sound(MSG_LANDING);
 
             // add to the notes file
             do_cmd_note("Fell into a chasm", p_ptr->depth);
@@ -1647,6 +1648,7 @@ void hit_trap(int y, int x)
         message_flush();
         msg_print("...and land somewhere deeper in the Iron Hells.");
         message_flush();
+        sound(MSG_LANDING);
 
         // add to the notes file
         do_cmd_note("Fell through a false floor", p_ptr->depth);
@@ -1671,6 +1673,7 @@ void hit_trap(int y, int x)
     case FEAT_TRAP_PIT:
     {
         msg_print("You fall into a pit!");
+        sound(MSG_LANDING);
 
         /* Falling damage (deeper pits hit harder) */
         dam = damroll(2 + trap_depth_dice(7), 4);
@@ -1691,6 +1694,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_SPIKED_PIT:
     {
+        sound(MSG_TRAP_SPIKED);
         msg_print("You fall into a spiked pit!");
 
         /* Falling damage (deeper pits hit harder) */
@@ -1788,6 +1792,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_FLASH:
     {
+        sound(MSG_TRAP_FLASH);
         if (!p_ptr->blind)
         {
             msg_print("There is a searing flash of light!");
@@ -1855,6 +1860,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_ACID:
     {
+        sound(MSG_TRAP_ACID);
         msg_print("You are splashed with acid!");
 
         /* Acid damage (stronger deeper down) */
@@ -1879,12 +1885,14 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_FLOOD:
     {
+        sound(MSG_TRAP_FLOOD);
         cave_flood_trigger(y, x);
         break;
     }
 
     case FEAT_TRAP_IMPRISONMENT:
     {
+        sound(MSG_SHUTDOOR);
         msg_print("Words of imprisonment echo through the halls!");
         (void)lock_doors_radius(y, x, 10, 10 + (p_ptr->depth / 2));
 
@@ -1893,6 +1901,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_ALARM:
     {
+        sound(MSG_TRAP_ALARM);
         if (singing(SNG_SILENCE))
         {
             msg_print("You hear the muffled toll of a bell above your head.");
@@ -1910,6 +1919,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_CALTROPS:
     {
+        sound(MSG_TRAP_CALTROPS);
         if (skill_check(PLAYER, p_ptr->skill_use[S_PER], 10, NULL) > 0)
         {
             msg_print("You step carefully amidst a field of caltrops.");
@@ -1943,20 +1953,30 @@ void hit_trap(int y, int x)
     case FEAT_TRAP_ROOST:
     {
         int count = 0;
+        int idle_sound_m_idx = 0;
 
         for (i = 0; i < 1000; i++)
         {
             if (count < 2)
             {
-                count += summon_specific(y, x,
-                    p_ptr->depth + damroll(2, 2) - damroll(2, 2),
-                    SUMMON_BIRD_BAT);
+                int summoned_m_idx = 0;
+                if (summon_specific_with_index(y, x,
+                        p_ptr->depth + damroll(2, 2) - damroll(2, 2),
+                        SUMMON_BIRD_BAT, &summoned_m_idx))
+                {
+                    count++;
+                    if (!idle_sound_m_idx)
+                        idle_sound_m_idx = summoned_m_idx;
+                }
             }
         }
 
         if (count >= 1)
         {
             msg_print("There is a flutter of wings from high above.");
+            if (idle_sound_m_idx > 0)
+                monster_sound_force(&mon_list[idle_sound_m_idx],
+                    MONSTER_SOUND_IDLE);
 
             /* Forget the trap */
             cave_info[y][x] &= ~(CAVE_MARK);
@@ -1971,6 +1991,7 @@ void hit_trap(int y, int x)
     case FEAT_TRAP_WEB:
     {
         int count = 0;
+        int spider_m_idx = 0;
 
         msg_print("You are caught in a vast black web.");
 
@@ -1978,15 +1999,18 @@ void hit_trap(int y, int x)
         {
             if (count < 1)
             {
-                count += summon_specific(y, x,
+                count += summon_specific_with_index(y, x,
                     p_ptr->depth + damroll(2, 2) - damroll(2, 2),
-                    SUMMON_SPIDER);
+                    SUMMON_SPIDER, &spider_m_idx);
             }
         }
 
         if (count >= 1)
         {
             msg_print("A spider descends from the gloom.");
+            if (spider_m_idx > 0)
+                monster_sound_force(&mon_list[spider_m_idx],
+                    MONSTER_SOUND_IDLE);
         }
 
         break;
@@ -1994,6 +2018,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_DEADFALL:
     {
+        sound(MSG_TRAP_DEADFALL);
         int yy, xx;
         int sy = y; // to soothe compiler warnings
         int sx = x; // to soothe compiler warnings

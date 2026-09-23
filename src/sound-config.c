@@ -10,6 +10,9 @@
 #include <string.h>
 #include <SDL3/SDL.h>
 
+_Static_assert(SOUND_CONFIG_EVENT_MAX == MSG_MAX,
+    "SOUND_CONFIG_EVENT_MAX must match MSG_MAX");
+
 static const char* const legacy_music_main_path = "music/main.wav";
 static const char* const default_music_main_path = "music/main.ogg";
 static const char* const legacy_music_main_full_path = "music/main_full.wav";
@@ -42,6 +45,11 @@ static void sound_config_sanitize(struct sound_config* config)
         sound_config_clamp_unit(config->volume_monster_hits);
     config->volume_traps = sound_config_clamp_unit(config->volume_traps);
     config->volume_other = sound_config_clamp_unit(config->volume_other);
+    config->volume_river = sound_config_clamp_unit(config->volume_river);
+    config->volume_torches = sound_config_clamp_unit(config->volume_torches);
+    config->volume_lava = sound_config_clamp_unit(config->volume_lava);
+    config->volume_forge = sound_config_clamp_unit(config->volume_forge);
+    config->volume_bridge = sound_config_clamp_unit(config->volume_bridge);
     config->music_main_volume =
         sound_config_clamp_unit(config->music_main_volume);
     config->music_ambient_volume =
@@ -68,11 +76,17 @@ void sound_config_set_defaults(struct sound_config* config)
     config->enable_walk = true;
     config->enable_doors = true;
     config->enable_monster_hits = true;
+    config->enable_other = true;
     config->enable_attack = true;
     config->enable_damage = true;
     config->enable_death = true;
     config->enable_idle = true;
     config->enable_traps = true;
+    config->enable_river = true;
+    config->enable_torches = true;
+    config->enable_lava = true;
+    config->enable_forge = true;
+    config->enable_bridge = true;
     config->volume_master = 1.0f;
     config->volume_combat = 1.0f;
     config->volume_inventory = 1.0f;
@@ -81,6 +95,11 @@ void sound_config_set_defaults(struct sound_config* config)
     config->volume_monster_hits = 1.0f;
     config->volume_traps = 1.0f;
     config->volume_other = 1.0f;
+    config->volume_river = 1.0f;
+    config->volume_torches = 1.0f;
+    config->volume_lava = 1.0f;
+    config->volume_forge = 1.0f;
+    config->volume_bridge = 1.0f;
     config->music_main_enabled = true;
     config->music_ambient_enabled = true;
     config->music_main_volume = 1.0f;
@@ -211,11 +230,47 @@ void sound_config_load(const char* filename, struct sound_config* config)
         log_debug("Loaded sound enable_monster_hits: %s", config->enable_monster_hits ? "true" : "false");
     }
 
+    cJSON* enable_other = cJSON_GetObjectItemCaseSensitive(root, "enableOther");
+    if (cJSON_IsBool(enable_other)) {
+        config->enable_other = cJSON_IsTrue(enable_other);
+        log_debug("Loaded sound enable_other: %s", config->enable_other ? "true" : "false");
+    }
+
     // Load trap sounds flag
     cJSON* enable_traps = cJSON_GetObjectItemCaseSensitive(root, "enableTraps");
     if (cJSON_IsBool(enable_traps)) {
         config->enable_traps = cJSON_IsTrue(enable_traps);
         log_debug("Loaded sound enable_traps: %s", config->enable_traps ? "true" : "false");
+    }
+
+    cJSON* enable_river = cJSON_GetObjectItemCaseSensitive(root, "enableRiver");
+    if (cJSON_IsBool(enable_river)) {
+        config->enable_river = cJSON_IsTrue(enable_river);
+        log_debug("Loaded sound enable_river: %s", config->enable_river ? "true" : "false");
+    }
+
+    cJSON* enable_torches = cJSON_GetObjectItemCaseSensitive(root, "enableTorches");
+    if (cJSON_IsBool(enable_torches)) {
+        config->enable_torches = cJSON_IsTrue(enable_torches);
+        log_debug("Loaded sound enable_torches: %s", config->enable_torches ? "true" : "false");
+    }
+
+    cJSON* enable_lava = cJSON_GetObjectItemCaseSensitive(root, "enableLava");
+    if (cJSON_IsBool(enable_lava)) {
+        config->enable_lava = cJSON_IsTrue(enable_lava);
+        log_debug("Loaded sound enable_lava: %s", config->enable_lava ? "true" : "false");
+    }
+
+    cJSON* enable_forge = cJSON_GetObjectItemCaseSensitive(root, "enableForge");
+    if (cJSON_IsBool(enable_forge)) {
+        config->enable_forge = cJSON_IsTrue(enable_forge);
+        log_debug("Loaded sound enable_forge: %s", config->enable_forge ? "true" : "false");
+    }
+
+    cJSON* enable_bridge = cJSON_GetObjectItemCaseSensitive(root, "enableBridge");
+    if (cJSON_IsBool(enable_bridge)) {
+        config->enable_bridge = cJSON_IsTrue(enable_bridge);
+        log_debug("Loaded sound enable_bridge: %s", config->enable_bridge ? "true" : "false");
     }
 
     // Load volume settings
@@ -265,6 +320,36 @@ void sound_config_load(const char* filename, struct sound_config* config)
     if (cJSON_IsNumber(volume_other)) {
         config->volume_other = (float)volume_other->valuedouble;
         log_debug("Loaded other volume: %.2f", config->volume_other);
+    }
+
+    cJSON* volume_river = cJSON_GetObjectItemCaseSensitive(root, "volumeRiver");
+    if (cJSON_IsNumber(volume_river)) {
+        config->volume_river = (float)volume_river->valuedouble;
+        log_debug("Loaded river volume: %.2f", config->volume_river);
+    }
+
+    cJSON* volume_torches = cJSON_GetObjectItemCaseSensitive(root, "volumeTorches");
+    if (cJSON_IsNumber(volume_torches)) {
+        config->volume_torches = (float)volume_torches->valuedouble;
+        log_debug("Loaded torches volume: %.2f", config->volume_torches);
+    }
+
+    cJSON* volume_lava = cJSON_GetObjectItemCaseSensitive(root, "volumeLava");
+    if (cJSON_IsNumber(volume_lava)) {
+        config->volume_lava = (float)volume_lava->valuedouble;
+        log_debug("Loaded lava volume: %.2f", config->volume_lava);
+    }
+
+    cJSON* volume_forge = cJSON_GetObjectItemCaseSensitive(root, "volumeForge");
+    if (cJSON_IsNumber(volume_forge)) {
+        config->volume_forge = (float)volume_forge->valuedouble;
+        log_debug("Loaded forge volume: %.2f", config->volume_forge);
+    }
+
+    cJSON* volume_bridge = cJSON_GetObjectItemCaseSensitive(root, "volumeBridge");
+    if (cJSON_IsNumber(volume_bridge)) {
+        config->volume_bridge = (float)volume_bridge->valuedouble;
+        log_debug("Loaded bridge volume: %.2f", config->volume_bridge);
     }
 
     cJSON* music_main_enabled = cJSON_GetObjectItemCaseSensitive(root, "music_main_enabled");
@@ -389,11 +474,17 @@ void sound_config_save(const char* filename, const struct sound_config* config)
     cJSON_AddBoolToObject(root, "enableWalk", config->enable_walk);
     cJSON_AddBoolToObject(root, "enableDoors", config->enable_doors);
     cJSON_AddBoolToObject(root, "enableMonsterHits", config->enable_monster_hits);
+    cJSON_AddBoolToObject(root, "enableOther", config->enable_other);
     cJSON_AddBoolToObject(root, "enableAttack", config->enable_attack);
     cJSON_AddBoolToObject(root, "enableDamage", config->enable_damage);
     cJSON_AddBoolToObject(root, "enableDeath", config->enable_death);
     cJSON_AddBoolToObject(root, "enableIdle", config->enable_idle);
     cJSON_AddBoolToObject(root, "enableTraps", config->enable_traps);
+    cJSON_AddBoolToObject(root, "enableRiver", config->enable_river);
+    cJSON_AddBoolToObject(root, "enableTorches", config->enable_torches);
+    cJSON_AddBoolToObject(root, "enableLava", config->enable_lava);
+    cJSON_AddBoolToObject(root, "enableForge", config->enable_forge);
+    cJSON_AddBoolToObject(root, "enableBridge", config->enable_bridge);
     cJSON_AddNumberToObject(root, "volumeMaster", config->volume_master);
     cJSON_AddNumberToObject(root, "volumeCombat", config->volume_combat);
     cJSON_AddNumberToObject(root, "volumeInventory", config->volume_inventory);
@@ -402,6 +493,11 @@ void sound_config_save(const char* filename, const struct sound_config* config)
     cJSON_AddNumberToObject(root, "volumeMonsterHits", config->volume_monster_hits);
     cJSON_AddNumberToObject(root, "volumeTraps", config->volume_traps);
     cJSON_AddNumberToObject(root, "volumeOther", config->volume_other);
+    cJSON_AddNumberToObject(root, "volumeRiver", config->volume_river);
+    cJSON_AddNumberToObject(root, "volumeTorches", config->volume_torches);
+    cJSON_AddNumberToObject(root, "volumeLava", config->volume_lava);
+    cJSON_AddNumberToObject(root, "volumeForge", config->volume_forge);
+    cJSON_AddNumberToObject(root, "volumeBridge", config->volume_bridge);
     cJSON_AddBoolToObject(root, "music_main_enabled", config->music_main_enabled);
     cJSON_AddBoolToObject(root, "music_ambient_enabled", config->music_ambient_enabled);
     cJSON_AddNumberToObject(root, "music_main_volume", config->music_main_volume);

@@ -742,13 +742,17 @@ bool cave_environment_bridge_work(int y,int x,int material)
     if(!cave_environment_bridge_job_at(y,x,&job)||job.material!=material)return false;
     environment_cell* c=&cells[y][x];
     int required=job.integrity?4:material==ENV_BRIDGE_WOOD?8:16;
-    if(++c->work<required)return false;
+    if(++c->work<required) {
+        cave_events_note_bridge_work(y, x);
+        return false;
+    }
     /* Reinforcing an intact occupied deck changes no collision or underlay. */
     if (cave_feat[y][x] == job.feature) cave_event_emit(CAVE_EVENT_BRIDGE,y,x,12);
     else if(!commit(y,x,job.feature,CAVE_EVENT_BRIDGE)){c->work--;return false;}
     c->flags|=ENV_BRIDGE;c->bridge_feat=job.feature;c->material=material;
     if(!job.repair)c->underlay=cave_bridge_underlay(job.feature);
     c->integrity=100;c->work=0;
+    cave_events_note_bridge_work(y, x);
     cave_environment_observe(y,x);
     return true;
 }

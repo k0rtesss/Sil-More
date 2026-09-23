@@ -284,6 +284,9 @@ void process_world(void)
     /* Check for Varda quest interaction every turn */
     check_varda_quest_interaction();
 
+    /* Positional loops can change on any actor turn, not just world ticks. */
+    sdl_sound_update_environment();
+
     /* Stop now unless the turn count is divisible by 10 */
     if (turn % 10)
         return;

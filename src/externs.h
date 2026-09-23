@@ -1331,6 +1331,8 @@ extern bool place_monster(int y, int x, bool slp, bool grp, bool vault);
 extern bool quest_monster_spawn_okay(int r_idx);
 extern bool alloc_monster(bool on_stairs, bool force_undead);
 extern bool summon_specific(int y1, int x1, int lev, int type);
+extern bool summon_specific_with_index(int y1, int x1, int lev, int type,
+    int* m_idx);
 extern bool reproduce_monster(int old_m_idx, int new_r_idx);
 extern void message_pain(int m_idx, int dam);
 
@@ -1787,6 +1789,7 @@ extern char inkey(void);
 extern void bell(cptr reason);
 extern void sound(int val);
 extern void monster_sound(const monster_type* m_ptr, int action);
+extern void monster_sound_force(const monster_type* m_ptr, int action);
 extern void sound_delayed(int val, unsigned int delay_ms);
 extern void sdl_present_batch_begin(void);
 extern void sdl_present_batch_end(void);

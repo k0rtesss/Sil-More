@@ -17,10 +17,15 @@ enum cave_fixture_kind {
  * separate from the radius of a carried torch. */
 #define CAVE_FIXTURE_TORCH_LIGHT_RADIUS 1
 #define CAVE_FIXTURE_BRAZIER_LIGHT_RADIUS 2
+/* Environmental audio reaches farther than the fixture glow. */
+#define CAVE_FIXTURE_TORCH_SOUND_RADIUS 2
+#define CAVE_FIXTURE_BRAZIER_SOUND_RADIUS 3
 
 #define SAVEFILE_FIXTURES_MAGIC 0xF178
 void cave_fixtures_clear(void);
 byte cave_fixture_at(int y, int x);
 void cave_fixture_set(int y, int x, byte kind);
+/* Returns the nearest visible fixture's sound strength, or zero. */
+int cave_fixture_sound_level_at(int y, int x);
 
 #endif

@@ -37,3 +37,38 @@ void cave_fixture_set(int y, int x, byte kind)
     fixtures[y][x] = kind <= CAVE_FIXTURE_WALL_TORCH_2
         ? kind : CAVE_FIXTURE_NONE;
 }
+
+int cave_fixture_sound_level_at(int y, int x)
+{
+    int best = 0;
+
+    if (!p_ptr || !in_bounds_fully(y, x))
+        return 0;
+
+    for (int yy = y - CAVE_FIXTURE_BRAZIER_SOUND_RADIUS;
+         yy <= y + CAVE_FIXTURE_BRAZIER_SOUND_RADIUS; ++yy)
+    {
+        for (int xx = x - CAVE_FIXTURE_BRAZIER_SOUND_RADIUS;
+             xx <= x + CAVE_FIXTURE_BRAZIER_SOUND_RADIUS; ++xx)
+        {
+            byte kind;
+            int radius;
+            int grid_distance;
+
+            if (!in_bounds_fully(yy, xx)
+                || (kind = cave_fixture_at(yy, xx)) == CAVE_FIXTURE_NONE)
+                continue;
+
+            radius = kind == CAVE_FIXTURE_BRAZIER
+                ? CAVE_FIXTURE_BRAZIER_SOUND_RADIUS
+                : CAVE_FIXTURE_TORCH_SOUND_RADIUS;
+            grid_distance = MAX(ABS(yy - y), ABS(xx - x));
+            if (grid_distance > radius || !los(y, x, yy, xx))
+                continue;
+
+            best = MAX(best, radius - grid_distance + 1);
+        }
+    }
+
+    return best;
+}

@@ -375,6 +375,13 @@ static byte message_log_type_color(u16b type)
     case MSG_TRAP_GAS:
     case MSG_TRAP_NEEDLE:
     case MSG_TRAP_FIRE:
+    case MSG_TRAP_ACID:
+    case MSG_TRAP_FLOOD:
+    case MSG_TRAP_SPIKED:
+    case MSG_TRAP_ALARM:
+    case MSG_TRAP_CALTROPS:
+    case MSG_TRAP_DEADFALL:
+    case MSG_TRAP_FLASH:
         return TERM_L_RED;
 
     case MSG_BELL:

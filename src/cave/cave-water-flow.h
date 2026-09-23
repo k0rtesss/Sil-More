@@ -22,11 +22,19 @@ enum cave_water_flow_direction {
  * Freshwater and poisonous acid use the same source-to-outlet graph. */
 void cave_water_flow_build(void);
 
-/* Clear the graph when a terrain edit invalidates it.  An invalid graph is a
- * safe calm-liquid fallback until the next build or savefile restore. */
+/* Clear the graph when a terrain edit invalidates it.  An invalid graph keeps
+ * the visual flow calm until the next build or savefile restore; ambient
+ * audio has a compatibility fallback for liquid terrain. */
 void cave_water_flow_reset(void);
 void cave_water_flow_invalidate(void);
 void cave_water_flow_invalidate_at(int y, int x);
+
+/* Generation-only topology for rivers built outside the landmark planner.
+ * Mark their channel/basin cells and receiving outlet before the final graph
+ * is built. */
+void cave_water_flow_generation_plan_reset(void);
+void cave_water_flow_generation_plan_cell(int y, int x, int feature,
+    bool channel, bool basin, bool outlet);
 
 /* Test/tools hook and savefile support.  set() is intentionally O(1) and
  * makes the table immediately readable by the renderer. */

@@ -348,7 +348,7 @@ static errr rd_water_flow(void)
 {
     cave_water_flow_restore_begin();
     if (!savefile_has_cave_water_flow)
-        return 0; /* Pre-flow saves deliberately fall back to calm water. */
+        return 0; /* Visual flow is calm; ambient audio uses terrain fallback. */
 
     u16b magic = 0;
     u32b start_offset = load_byte_offset;

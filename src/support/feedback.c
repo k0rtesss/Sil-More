@@ -45,20 +45,31 @@ void sound(int val)
     sdl_sound_handle(val);
 }
 
+/* Play a one-shot environmental sound with the same distance curve as the
+ * ambient water, lava, and forge loops. */
+void sound_at_environment_level(int val, int level, int max_level)
+{
+    if (!use_sound)
+        return;
+
+    sdl_sound_handle_at_environment_level(val, level, max_level);
+}
+
 /* Nearby unseen monsters can be heard, but audio does not reveal their grid or
  * alter the gameplay noise/detection system. Idle sounds use the gameplay
  * noise flow for walls and doors; other monster sounds keep the broad audio
  * range used by their existing feedback. */
-void monster_sound(const monster_type* m_ptr, int action)
+static void monster_sound_internal(const monster_type* m_ptr, int action,
+    bool force_idle)
 {
     if (!use_sound || !m_ptr || !m_ptr->r_idx)
         return;
 
     if (action == MONSTER_SOUND_IDLE)
     {
-        if (m_ptr->alertness < ALERTNESS_UNWARY
+        if (!force_idle && (m_ptr->alertness < ALERTNESS_UNWARY
             || flow_dist(FLOW_PLAYER_NOISE, m_ptr->fy, m_ptr->fx)
-                > MONSTER_IDLE_SOUND_MAX_PATH)
+                > MONSTER_IDLE_SOUND_MAX_PATH))
             return;
     }
     else if (distance(p_ptr->py, p_ptr->px, m_ptr->fy, m_ptr->fx) > MAX_SIGHT)
@@ -66,7 +77,20 @@ void monster_sound(const monster_type* m_ptr, int action)
         return;
     }
 
-    sdl_sound_monster(m_ptr->r_idx, action);
+    if (force_idle)
+        sdl_sound_monster_force(m_ptr->r_idx, action);
+    else
+        sdl_sound_monster(m_ptr->r_idx, action);
+}
+
+void monster_sound(const monster_type* m_ptr, int action)
+{
+    monster_sound_internal(m_ptr, action, false);
+}
+
+void monster_sound_force(const monster_type* m_ptr, int action)
+{
+    monster_sound_internal(m_ptr, action, true);
 }
 
 /*

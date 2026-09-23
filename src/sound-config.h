@@ -2,7 +2,9 @@
 
 #include <stdbool.h>
 
-#define SOUND_CONFIG_EVENT_MAX 72
+/* Keep this equal to MSG_MAX in defines.h; the config header is included
+ * before angband.h in some translation units, so it cannot include defines.h. */
+#define SOUND_CONFIG_EVENT_MAX 87
 
 // Sound configuration structure
 struct sound_config {
@@ -12,11 +14,17 @@ struct sound_config {
     bool enable_walk;          // Enable walk sounds
     bool enable_doors;         // Enable door sounds
     bool enable_monster_hits;  // Master switch for monster sounds
+    bool enable_other;         // Enable sounds outside the named groups
     bool enable_attack; // Enable attack sounds
     bool enable_damage; // Enable damage sounds
     bool enable_death; // Enable death sounds
     bool enable_idle; // Enable idle sounds
     bool enable_traps;         // Enable trap sounds
+    bool enable_river;         // Enable running and still water/acid loops
+    bool enable_torches;       // Enable torch and brazier loops
+    bool enable_lava;          // Enable lava loops
+    bool enable_forge;         // Enable forge loop and hammering sounds
+    bool enable_bridge;        // Enable bridge construction and repair loops
     float volume_master;       // Master volume (0.0-1.0, default: 1.0)
     float volume_combat;       // Combat sounds volume (0.0-1.0, default: 1.0)
     float volume_inventory;    // Inventory sounds volume (0.0-1.0, default: 1.0)
@@ -25,6 +33,11 @@ struct sound_config {
     float volume_monster_hits; // Monster hit sounds volume (0.0-1.0, default: 1.0)
     float volume_traps;        // Trap sounds volume (0.0-1.0, default: 1.0)
     float volume_other;        // Other sounds volume (0.0-1.0, default: 1.0)
+    float volume_river;         // River loop volume (0.0-1.0, default: 1.0)
+    float volume_torches;       // Torch loop volume (0.0-1.0, default: 1.0)
+    float volume_lava;          // Lava loop volume (0.0-1.0, default: 1.0)
+    float volume_forge;         // Forge loop and hammering volume (0.0-1.0, default: 1.0)
+    float volume_bridge;        // Bridge work loop volume (0.0-1.0, default: 1.0)
     bool music_main_enabled;
     bool music_ambient_enabled;
     float music_main_volume;

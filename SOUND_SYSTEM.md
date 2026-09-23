@@ -54,9 +54,13 @@ Each event name corresponds to a game action. Available events include:
 - **opendoor**: Opening doors
 - **shutdoor**: Closing doors
 - **walk**: Footsteps
+- **landing**: Landing after a leap or fall
+- **ice**: Environmental ice cracking as it freezes or thaws
 - **eat**: Consuming food
 - **quaff**: Drinking potions
 - **drop**: Dropping items
+- **horn_terror**, **horn_thunder**, **horn_force**, **horn_blasting**, **horn_warning**: Sounding each horn type
+- **trap_gas**, **trap_needle**, **trap_fire**, **trap_acid**, **trap_flood**, **trap_spiked**, **trap_alarm**, **trap_caltrops**, **trap_deadfall**, **trap_flash**: Triggering the corresponding trap
 - **kill**: Killing monsters
 - **level**: Level up
 - **death**: Character death
@@ -70,7 +74,7 @@ Folder paths can be:
 1. **Relative to lib/xtra**: `"sound/SFX/Footsteps/Stone"`
 2. **Absolute paths**: `"C:/sounds/custom/footsteps"` (Windows) or `"/home/user/sounds/footsteps"` (Unix)
 
-The game will scan the folder and randomly select from all `.wav` files found.
+The game scans the folder for supported sound files and picks one at random for each event. Horn events have separate settings; by default they all use `sound/horn`, which contains two OGG clips.
 
 ## Example Configuration
 

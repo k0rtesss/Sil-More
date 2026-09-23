@@ -45,6 +45,7 @@ static byte melting_ice_candidates[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte reserved[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 /* 1: terrain, 2: an intentional architectural crossing. */
 static byte proposed[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte proposed_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte deep_water_core[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte deep_water_seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
@@ -456,6 +457,7 @@ static void terrain_shape(terrain_candidate* c, int width, bool pool)
     int side = one_in_(2) ? 1 : -1;
     c->count = c->bridges = c->bridge_approach_count = 0;
     memset(proposed, 0, sizeof(proposed));
+    memset(proposed_basin, 0, sizeof(proposed_basin));
     memcpy(shadow, cave_feat, sizeof(shadow));
     for (int i = 0; i < c->path_count; i++)
         terrain_add_cell(c, c->path[i].y, c->path[i].x, true);
@@ -473,6 +475,8 @@ static void terrain_shape(terrain_candidate* c, int width, bool pool)
     if ((pool || c->endpoint_pool) && c->feature != FEAT_CHASM)
     {
         coord seed = c->endpoint_pool ? c->path[0] : c->path[c->path_count - 1];
+        if (terrain_add_cell(c, seed.y, seed.x, false))
+            proposed_basin[seed.y][seed.x] = 1;
         /* An inland endpoint always retains its attached basin, including
          * when a wider candidate is narrowed for connectivity. */
         for (int radius = 1; radius <= 2; radius++)
@@ -485,7 +489,8 @@ static void terrain_shape(terrain_candidate* c, int width, bool pool)
                     if (!terrain_cell(y, x, c->partition, false)) continue;
                     for (int d = 0; d < 4; d++)
                         if (proposed[y + channel_dy[d]][x + channel_dx[d]]) attached = true;
-                    if (attached) terrain_add_cell(c, y, x, false);
+                    if (attached && terrain_add_cell(c, y, x, false))
+                        proposed_basin[y][x] = 1;
                 }
     }
 }
@@ -581,12 +586,29 @@ static void terrain_commit(terrain_candidate* c, int material)
         bool excavated = terrain_is_rock(cave_feat[p.y][p.x]);
         cave_set_feat(p.y, p.x, c->feature); /* preserve this region's style */
         if (c->feature == FEAT_ICE) melting_ice_candidates[p.y][p.x] = 1;
+        if (c->feature == FEAT_WATER || c->feature == FEAT_POISON)
+            cave_water_flow_generation_plan_cell(p.y, p.x, c->feature,
+                false, proposed_basin[p.y][p.x], false);
         if (excavated)
         {
             cave_natural[p.y][p.x] = 1;
             cave_info[p.y][p.x] |= CAVE_ROOM;
         }
         painted++;
+    }
+    if ((c->feature == FEAT_WATER || c->feature == FEAT_POISON)
+        && c->path_count > 0)
+    {
+        for (int i = 0; i < c->path_count; i++)
+        {
+            coord p = c->path[i];
+            bool basin = proposed_basin[p.y][p.x] != 0;
+            cave_water_flow_generation_plan_cell(p.y, p.x, c->feature,
+                !basin, basin, false);
+        }
+        coord outlet = c->path[c->path_count - 1];
+        cave_water_flow_generation_plan_cell(outlet.y, outlet.x, c->feature,
+            true, false, true);
     }
     terrain_reserve_crossings(c);
     terrain_stats.accepted++;
@@ -818,6 +840,7 @@ static void terrain_melt_ice(void)
 void place_dungeon_terrain(void)
 {
     const terrain_theme_profile* profile = terrain_theme_for_depth(p_ptr->depth);
+    cave_water_flow_generation_plan_reset();
     if (!terrain_history_active()) terrain_generation_reset();
     if (!dun || current_partition_count < 1 || current_partition_count > 25) return;
     bool landmark = terrain_history_started() ? terrain_history_active() : place_terrain_landmark();

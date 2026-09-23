@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "externs.h"
+#include "cave/cave-bridge.h"
 #include "cave/cave-events.h"
 #include "cave/cave-water-flow.h"
 
@@ -10,13 +11,31 @@ static u32b next_serial = 1, revision = 1;
 static byte fields[CAVE_EVENTS_MAX][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static u32b field_revision[CAVE_EVENTS_MAX], field_serial[CAVE_EVENTS_MAX];
 static byte ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte flowing_liquid_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte still_liquid_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte lava_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte forge_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte bridge_work_sources[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte bridge_work_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static s32b ambient_turn = -1, last_notice[CAVE_EVENT_MAX];
+static s32b bridge_work_turn = -1, bridge_work_field_turn = -1;
+static u32b bridge_work_revision = 1;
+static u32b bridge_work_field_revision, bridge_work_field_terrain_revision;
 static s32b ambient_notice_turn = -200;
 static bool in_ambient_noise;
 static u32b ambient_revision, announced[CAVE_EVENTS_MAX];
 static int queue[SOUND_CELLS], head, tail, count;
 static bool queued[MAX_DUNGEON_HGT][MAX_DUNGEON_WID], player_moved;
 static const char* event_noise(int kind);
+
+/* A forge's feature value is also its remaining-use counter.  The first
+ * feature in each quality range is depleted and must not emit forge fire. */
+static bool cave_forge_has_fire(int feat)
+{
+    return ((feat > FEAT_FORGE_NORMAL_HEAD && feat <= FEAT_FORGE_NORMAL_TAIL)
+        || (feat > FEAT_FORGE_GOOD_HEAD && feat <= FEAT_FORGE_GOOD_TAIL)
+        || (feat > FEAT_FORGE_UNIQUE_HEAD && feat <= FEAT_FORGE_UNIQUE_TAIL));
+}
 
 void cave_events_player_moved(bool moved) { player_moved = moved; }
 bool cave_events_player_is_moving(void) { return player_moved; }
@@ -88,8 +107,15 @@ void cave_events_reset(void)
 {
     memset(events, 0, sizeof(events)); memset(field_serial, 0, sizeof(field_serial));
     memset(announced, 0, sizeof(announced));
+    memset(bridge_work_sources, 0, sizeof(bridge_work_sources));
+    memset(bridge_work_ambient, 0, sizeof(bridge_work_ambient));
     memset(last_notice, -1, sizeof(last_notice));
     next_serial = 1; revision++; ambient_turn = -1; player_moved = false;
+    bridge_work_turn = -1; bridge_work_field_turn = -1;
+    bridge_work_revision++;
+    bridge_work_field_revision = 0;
+    bridge_work_field_terrain_revision = 0;
+    ambient_revision = 0;
     in_ambient_noise = false; ambient_notice_turn = turn - 200;
 }
 void cave_event_emit(int kind, int y, int x, int volume)
@@ -132,27 +158,176 @@ bool cave_event_for_listener(int y, int x, int perception, u32b after,
     if (event) *event = events[best];
     return true;
 }
+static void refresh_ambient_fields(void)
+{
+    int yy, xx;
+
+    if (!p_ptr || (ambient_turn == turn / 10
+        && ambient_revision == revision))
+        return;
+
+    memset(ambient, 0, sizeof(ambient));
+    memset(flowing_liquid_ambient, 0, sizeof(flowing_liquid_ambient));
+    memset(still_liquid_ambient, 0, sizeof(still_liquid_ambient));
+    memset(lava_ambient, 0, sizeof(lava_ambient));
+    memset(forge_ambient, 0, sizeof(forge_ambient));
+    begin_field();
+    for (yy = 0; yy < p_ptr->cur_map_hgt; yy++)
+        for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
+        {
+            int feat = cave_feat[yy][xx];
+            int underlay = cave_bridge_underlay(feat);
+            bool moving = cave_water_flow_direction(yy, xx)
+                != CAVE_WATER_FLOW_CALM;
+            bool flow_metadata_missing = !cave_water_flow_is_valid();
+
+            /* Separate running channels from still pools and lakes. Older
+             * saves lack the flow graph, so keep their liquid audible as
+             * flowing water through the compatibility fallback. */
+            if (underlay == FEAT_WATER || underlay == FEAT_DEEP_WATER
+                || underlay == FEAT_POISON)
+            {
+                if (moving || flow_metadata_missing)
+                    flowing_liquid_ambient[yy][xx]
+                        = CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1;
+                else
+                    still_liquid_ambient[yy][xx]
+                        = CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1;
+            }
+
+            if (underlay == FEAT_LAVA)
+                lava_ambient[yy][xx] = CAVE_LAVA_SOUND_RADIUS + 1;
+
+            if (cave_forge_has_fire(feat))
+                forge_ambient[yy][xx] = CAVE_FORGE_SOUND_RADIUS + 1;
+
+            /* Still pools do not add noise to the discrete dungeon-event mask. */
+            if ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER
+                || feat == FEAT_POISON || FEAT_IS_BRIDGE(feat)) && moving)
+                ambient[yy][xx] = 8;
+            else if (feat == FEAT_LAVA)
+                ambient[yy][xx] = 5;
+            if (ambient[yy][xx]) enqueue(yy, xx);
+        }
+    propagate(ambient);
+
+    /* Reuse the same wall/door-aware propagation for the river field. This
+     * deliberately reaches open cells beside the liquid, not just liquid
+     * tiles themselves. */
+    begin_field();
+    for (yy = 0; yy < p_ptr->cur_map_hgt; yy++)
+        for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
+            if (flowing_liquid_ambient[yy][xx])
+                enqueue(yy, xx);
+    propagate(flowing_liquid_ambient);
+
+    /* Still water and acid pools have an independent field and loop, allowing
+     * them to mix with nearby running water at their respective distances. */
+    begin_field();
+    for (yy = 0; yy < p_ptr->cur_map_hgt; yy++)
+        for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
+            if (still_liquid_ambient[yy][xx])
+                enqueue(yy, xx);
+    propagate(still_liquid_ambient);
+
+    /* Lava has its own loop, but uses the same wall/door-aware propagation. */
+    begin_field();
+    for (yy = 0; yy < p_ptr->cur_map_hgt; yy++)
+        for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
+            if (lava_ambient[yy][xx])
+                enqueue(yy, xx);
+    propagate(lava_ambient);
+
+    /* Forge fire uses the same wall/door-aware propagation as the other
+     * environmental loops, so nearby open cells also hear it. */
+    begin_field();
+    for (yy = 0; yy < p_ptr->cur_map_hgt; yy++)
+        for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
+            if (forge_ambient[yy][xx])
+                enqueue(yy, xx);
+    propagate(forge_ambient);
+
+    ambient_turn = turn / 10;
+    ambient_revision = revision;
+}
+
+int cave_flowing_water_sound_level_at(int y, int x)
+{
+    if (!in_bounds(y, x)) return 0;
+    refresh_ambient_fields();
+    return flowing_liquid_ambient[y][x];
+}
+
+void cave_events_note_bridge_work(int y, int x)
+{
+    if (!in_bounds(y, x)) return;
+    if (bridge_work_turn != turn)
+    {
+        memset(bridge_work_sources, 0, sizeof(bridge_work_sources));
+        bridge_work_turn = turn;
+    }
+    bridge_work_sources[y][x] = CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1;
+    bridge_work_revision++;
+}
+
+static void refresh_bridge_work_field(void)
+{
+    if (!p_ptr || (bridge_work_field_turn == turn
+        && bridge_work_field_revision == bridge_work_revision
+        && bridge_work_field_terrain_revision == revision))
+        return;
+
+    memset(bridge_work_ambient, 0, sizeof(bridge_work_ambient));
+    begin_field();
+    if (bridge_work_turn == turn)
+    {
+        for (int yy = 0; yy < p_ptr->cur_map_hgt; yy++)
+            for (int xx = 0; xx < p_ptr->cur_map_wid; xx++)
+                if (bridge_work_sources[yy][xx] && sound_open(yy, xx))
+                {
+                    bridge_work_ambient[yy][xx] = bridge_work_sources[yy][xx];
+                    enqueue(yy, xx);
+                }
+    }
+    propagate(bridge_work_ambient);
+    bridge_work_field_turn = turn;
+    bridge_work_field_revision = bridge_work_revision;
+    bridge_work_field_terrain_revision = revision;
+}
+
+int cave_bridge_work_sound_level_at(int y, int x)
+{
+    if (!in_bounds(y, x)) return 0;
+    refresh_bridge_work_field();
+    return bridge_work_ambient[y][x];
+}
+
+int cave_still_liquid_sound_level_at(int y, int x)
+{
+    if (!in_bounds(y, x)) return 0;
+    refresh_ambient_fields();
+    return still_liquid_ambient[y][x];
+}
+
+int cave_lava_sound_level_at(int y, int x)
+{
+    if (!in_bounds(y, x)) return 0;
+    refresh_ambient_fields();
+    return lava_ambient[y][x];
+}
+
+int cave_forge_sound_level_at(int y, int x)
+{
+    if (!in_bounds(y, x)) return 0;
+    refresh_ambient_fields();
+    return forge_ambient[y][x];
+}
+
 int cave_sound_mask_at(int y, int x)
 {
-    int i, yy, xx, mask;
+    int i, mask;
     if (!in_bounds(y, x)) return 0;
-    if (ambient_turn != turn / 10 || ambient_revision != revision)
-    {
-        memset(ambient, 0, sizeof(ambient)); begin_field();
-        for (yy = 0; yy < p_ptr->cur_map_hgt; yy++)
-            for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
-            {
-                int feat = cave_feat[yy][xx];
-                /* Still pools, including pooled acid, are quiet. */
-                if ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER || feat == FEAT_POISON
-                    || FEAT_IS_BRIDGE(feat))
-                    && cave_water_flow_direction(yy, xx) != CAVE_WATER_FLOW_CALM)
-                    ambient[yy][xx] = 8;
-                else if (feat == FEAT_LAVA) ambient[yy][xx] = 5;
-                if (ambient[yy][xx]) enqueue(yy, xx);
-            }
-        propagate(ambient); ambient_turn = turn / 10; ambient_revision = revision;
-    }
+    refresh_ambient_fields();
     mask = ambient[y][x];
     for (i = 0; i < CAVE_EVENTS_MAX; i++)
         mask = MAX(mask, event_strength(i, y, x) / 3);
@@ -208,6 +383,12 @@ void cave_events_process(void)
         else if (ABS(dy) > ABS(dx)) direction = dy < 0 ? "to the north" : "to the south";
         else direction = dx < 0 ? "to the west" : "to the east";
         msg_format("You hear %s %s.", event_noise(e->kind), direction);
+        if (e->kind == CAVE_EVENT_CRACK || e->kind == CAVE_EVENT_COLLAPSE)
+            sound_at_environment_level(MSG_TRAP_DEADFALL, strength, e->volume);
+        else if (e->kind == CAVE_EVENT_FLOOD)
+            sound_at_environment_level(MSG_TRAP_FLOOD, strength, e->volume);
+        else if (e->kind == CAVE_EVENT_FREEZE || e->kind == CAVE_EVENT_THAW)
+            sound_at_environment_level(MSG_ICE, strength, e->volume);
         last_notice[e->kind] = turn; notices++;
     }
     (void)cave_sound_mask_at(p_ptr->py, p_ptr->px);

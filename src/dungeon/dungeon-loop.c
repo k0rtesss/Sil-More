@@ -226,6 +226,7 @@ void dungeon(void)
     /* Refresh */
     log_debug("Final terminal refresh");
     Term_fresh();
+    sdl_sound_update_environment();
 
     /* Confirm downward progress after the new level is visible.  Comparing
      * against the previous displayed level avoids replaying this on restore or

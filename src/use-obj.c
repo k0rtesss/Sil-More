@@ -1188,6 +1188,25 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
     /* Window stuff */
     p_ptr->window |= (PW_PLAYER_0);
 
+    switch (o_ptr->sval)
+    {
+    case SV_HORN_TERROR:
+        sound(MSG_HORN_TERROR);
+        break;
+    case SV_HORN_THUNDER:
+        sound(MSG_HORN_THUNDER);
+        break;
+    case SV_HORN_FORCE:
+        sound(MSG_HORN_FORCE);
+        break;
+    case SV_HORN_BLASTING:
+        sound(MSG_HORN_BLASTING);
+        break;
+    case SV_HORN_WARNING:
+        sound(MSG_HORN_WARNING);
+        break;
+    }
+
     msg_print("You sound a loud note on the horn.");
 
     /* Analyze the horn */

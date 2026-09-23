@@ -3956,7 +3956,22 @@
 #define MSG_TRAP_FIRE 69
 #define MSG_CHEST_OPEN 70
 #define MSG_TORCH_LIGHT 71
-#define MSG_MAX 72
+#define MSG_FORGE 72
+#define MSG_HORN_TERROR 73
+#define MSG_HORN_THUNDER 74
+#define MSG_HORN_FORCE 75
+#define MSG_HORN_BLASTING 76
+#define MSG_HORN_WARNING 77
+#define MSG_LANDING 78
+#define MSG_TRAP_ACID 79
+#define MSG_TRAP_FLOOD 80
+#define MSG_TRAP_SPIKED 81
+#define MSG_TRAP_ALARM 82
+#define MSG_TRAP_CALTROPS 83
+#define MSG_TRAP_DEADFALL 84
+#define MSG_TRAP_FLASH 85
+#define MSG_ICE 86
+#define MSG_MAX 87
 
 /*
  * Maximum number of macro trigger names

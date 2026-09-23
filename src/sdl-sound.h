@@ -15,7 +15,16 @@ void sdl_sound_shutdown(void);
 
 /* Play the sound mapped to the specified Angband message index. */
 void sdl_sound_handle(int sound_idx);
+/* Play a one-shot with the distance gain used by environmental loops. */
+void sdl_sound_handle_at_environment_level(int sound_idx, int level,
+    int max_level);
 void sdl_sound_monster(int race_idx, int action);
+/* Play a monster action without the normal idle-cue probability roll. */
+void sdl_sound_monster_force(int race_idx, int action);
+
+/* Update/stop positional environmental loops used during dungeon play. */
+void sdl_sound_update_environment(void);
+void sdl_sound_stop_environment(void);
 
 /* Schedule a sound to play after delay_ms milliseconds without blocking the
  * caller. Playback starts from the timer callback through SDL_mixer's

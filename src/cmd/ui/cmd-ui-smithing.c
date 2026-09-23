@@ -9256,6 +9256,11 @@ void do_cmd_smithing_screen(void)
          * UI transition should cancel the action that was just accepted. */
         p_ptr->smithing_starting = true;
 
+        /* The work has been accepted and the player is now actually forging;
+         * previews, browsing, and cancelled menus stay silent. */
+        if (forge_uses(p_ptr->py, p_ptr->px) > 0)
+            sound(MSG_FORGE);
+
         /* Recalculate bonuses */
         p_ptr->update |= (PU_BONUS);
 

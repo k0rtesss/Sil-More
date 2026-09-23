@@ -17,6 +17,10 @@ static byte flow_lake[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte topology_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte topology_role[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte topology_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte generation_feature[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte generation_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte generation_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte generation_outlet[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte component_seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static int flow_distance[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static int flow_channel_distance[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
@@ -67,6 +71,25 @@ void cave_water_flow_invalidate(void)
     /* Keep this cheap: feature edits are common during generation, while the
      * final graph is built once after all terrain edits have settled. */
     flow_valid = false;
+}
+
+void cave_water_flow_generation_plan_reset(void)
+{
+    memset(generation_feature, 0, sizeof(generation_feature));
+    memset(generation_basin, 0, sizeof(generation_basin));
+    memset(generation_channel, 0, sizeof(generation_channel));
+    memset(generation_outlet, 0, sizeof(generation_outlet));
+}
+
+void cave_water_flow_generation_plan_cell(int y, int x, int feature,
+    bool channel, bool basin, bool outlet)
+{
+    if (!map_coord(y, x)
+        || (feature != FEAT_WATER && feature != FEAT_POISON)) return;
+    generation_feature[y][x] = (byte)feature;
+    generation_channel[y][x] |= channel;
+    generation_basin[y][x] |= basin;
+    generation_outlet[y][x] |= outlet;
 }
 
 void cave_water_flow_invalidate_at(int y, int x)
@@ -209,6 +232,19 @@ static void gather_generation_topology(void)
             if (terrain_landmark_channel_cell(y, x)) topology_channel[y][x] = 1;
             int role = terrain_landmark_terminal_role(y, x);
             if (role & 3) topology_role[y][x] |= (byte)(role & 3);
+    }
+}
+
+static void merge_generation_plan(void)
+{
+    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (int x = 0; x < p_ptr->cur_map_wid; x++)
+        {
+            int feature = generation_feature[y][x];
+            if (!feature || flow_feature(cave_feat[y][x]) != feature) continue;
+            if (generation_basin[y][x]) topology_basin[y][x] = 1;
+            if (generation_channel[y][x]) topology_channel[y][x] = 1;
+            if (generation_outlet[y][x]) topology_role[y][x] |= 2;
         }
 }
 
@@ -239,10 +275,12 @@ void cave_water_flow_build(void)
     cave_water_flow_reset();
     if (!p_ptr || p_ptr->cur_map_hgt <= 0 || p_ptr->cur_map_wid <= 0) {
         flow_valid = true;
+        cave_water_flow_generation_plan_reset();
         return;
     }
 
     gather_generation_topology();
+    merge_generation_plan();
     memset(component_seen, 0, sizeof(component_seen));
     for (int y = 0; y < p_ptr->cur_map_hgt; y++)
         for (int x = 0; x < p_ptr->cur_map_wid; x++)
@@ -448,4 +486,5 @@ void cave_water_flow_build(void)
         }
         }
     flow_valid = true;
+    cave_water_flow_generation_plan_reset();
 }

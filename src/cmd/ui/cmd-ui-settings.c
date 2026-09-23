@@ -76,6 +76,7 @@ void clear_skills_and_abilities()
  */
 enum {
     SOUND_OPT_ENABLED = 0,
+    SOUND_OPT_MASTER_VOLUME,
     SOUND_OPT_ATTACK_ENABLED,
     SOUND_OPT_DAMAGE_ENABLED,
     SOUND_OPT_DEATH_ENABLED,
@@ -86,6 +87,12 @@ enum {
     SOUND_OPT_WALK_ENABLED,
     SOUND_OPT_DOORS_ENABLED,
     SOUND_OPT_TRAPS_ENABLED,
+    SOUND_OPT_OTHER_ENABLED,
+    SOUND_OPT_RIVER_ENABLED,
+    SOUND_OPT_TORCHES_ENABLED,
+    SOUND_OPT_LAVA_ENABLED,
+    SOUND_OPT_FORGE_ENABLED,
+    SOUND_OPT_BRIDGE_ENABLED,
     SOUND_OPT_COMBAT_VOLUME,
     SOUND_OPT_MONSTER_HITS_VOLUME,
     SOUND_OPT_INVENTORY_VOLUME,
@@ -93,6 +100,11 @@ enum {
     SOUND_OPT_DOORS_VOLUME,
     SOUND_OPT_TRAPS_VOLUME,
     SOUND_OPT_OTHER_VOLUME,
+    SOUND_OPT_RIVER_VOLUME,
+    SOUND_OPT_TORCHES_VOLUME,
+    SOUND_OPT_LAVA_VOLUME,
+    SOUND_OPT_FORGE_VOLUME,
+    SOUND_OPT_BRIDGE_VOLUME,
     SOUND_OPT_MUSIC_MAIN_ENABLED,
     SOUND_OPT_MUSIC_AMBIENT_ENABLED,
     SOUND_OPT_MUSIC_MAIN_VOLUME,
@@ -254,6 +266,7 @@ static const struct option_group_marker debug_option_groups[] = {
 
 static const struct option_group_marker sound_option_groups[] = {
     { SOUND_OPTION_ROW(SOUND_OPT_ENABLED), "Master" },
+    { SOUND_OPTION_ROW(SOUND_OPT_MASTER_VOLUME), "Master" },
     { SOUND_OPTION_ROW(SOUND_OPT_ATTACK_ENABLED), "Sound Types" },
     { SOUND_OPTION_ROW(SOUND_OPT_DAMAGE_ENABLED), "Sound Types" },
     { SOUND_OPTION_ROW(SOUND_OPT_DEATH_ENABLED), "Sound Types" },
@@ -264,6 +277,12 @@ static const struct option_group_marker sound_option_groups[] = {
     { SOUND_OPTION_ROW(SOUND_OPT_WALK_ENABLED), "Effects" },
     { SOUND_OPTION_ROW(SOUND_OPT_DOORS_ENABLED), "Effects" },
     { SOUND_OPTION_ROW(SOUND_OPT_TRAPS_ENABLED), "Effects" },
+    { SOUND_OPTION_ROW(SOUND_OPT_OTHER_ENABLED), "Effects" },
+    { SOUND_OPTION_ROW(SOUND_OPT_RIVER_ENABLED), "Environmental" },
+    { SOUND_OPTION_ROW(SOUND_OPT_TORCHES_ENABLED), "Environmental" },
+    { SOUND_OPTION_ROW(SOUND_OPT_LAVA_ENABLED), "Environmental" },
+    { SOUND_OPTION_ROW(SOUND_OPT_FORGE_ENABLED), "Environmental" },
+    { SOUND_OPTION_ROW(SOUND_OPT_BRIDGE_ENABLED), "Environmental" },
     { SOUND_OPTION_ROW(SOUND_OPT_COMBAT_VOLUME), "Effect Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_MONSTER_HITS_VOLUME), "Effect Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_INVENTORY_VOLUME), "Effect Volume" },
@@ -271,6 +290,11 @@ static const struct option_group_marker sound_option_groups[] = {
     { SOUND_OPTION_ROW(SOUND_OPT_DOORS_VOLUME), "Effect Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_TRAPS_VOLUME), "Effect Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_OTHER_VOLUME), "Effect Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_RIVER_VOLUME), "Environmental Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_TORCHES_VOLUME), "Environmental Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_LAVA_VOLUME), "Environmental Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_FORGE_VOLUME), "Environmental Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_BRIDGE_VOLUME), "Environmental Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_MUSIC_MAIN_ENABLED), "Music" },
     { SOUND_OPTION_ROW(SOUND_OPT_MUSIC_AMBIENT_ENABLED), "Music" },
     { SOUND_OPTION_ROW(SOUND_OPT_MUSIC_MAIN_VOLUME), "Music Volume" },
@@ -603,6 +627,7 @@ static cptr sound_option_label(int index)
         switch (index)
         {
         case SOUND_OPT_ENABLED: return narrow ? "Sounds" : "Game sounds";
+        case SOUND_OPT_MASTER_VOLUME: return narrow ? "Master vol" : "Master volume";
         case SOUND_OPT_COMBAT_ENABLED: return narrow ? "Combat sfx" : "Combat sounds";
         case SOUND_OPT_MONSTER_HITS_ENABLED: return narrow ? "Monster sfx" : "Monster sounds";
         case SOUND_OPT_ATTACK_ENABLED: return narrow ? "Attack sfx" : "Attack sounds";
@@ -613,6 +638,12 @@ static cptr sound_option_label(int index)
         case SOUND_OPT_WALK_ENABLED: return narrow ? "Walk sfx" : "Walk sounds";
         case SOUND_OPT_DOORS_ENABLED: return narrow ? "Door sfx" : "Door sounds";
         case SOUND_OPT_TRAPS_ENABLED: return narrow ? "Trap sfx" : "Trap sounds";
+        case SOUND_OPT_OTHER_ENABLED: return narrow ? "Other sfx" : "Other sounds";
+        case SOUND_OPT_RIVER_ENABLED: return narrow ? "Water sfx" : "Water/river sounds";
+        case SOUND_OPT_TORCHES_ENABLED: return narrow ? "Torch sfx" : "Torch sounds";
+        case SOUND_OPT_LAVA_ENABLED: return narrow ? "Lava sfx" : "Lava sounds";
+        case SOUND_OPT_FORGE_ENABLED: return narrow ? "Forge sfx" : "Forge sounds";
+        case SOUND_OPT_BRIDGE_ENABLED: return narrow ? "Bridge sfx" : "Bridge work sounds";
         case SOUND_OPT_COMBAT_VOLUME: return narrow ? "Combat vol" : "Combat volume";
         case SOUND_OPT_MONSTER_HITS_VOLUME: return narrow ? "Monster vol" : "Monster volume";
         case SOUND_OPT_INVENTORY_VOLUME: return narrow ? "Inv vol" : "Inventory volume";
@@ -620,6 +651,11 @@ static cptr sound_option_label(int index)
         case SOUND_OPT_DOORS_VOLUME: return narrow ? "Door vol" : "Door volume";
         case SOUND_OPT_TRAPS_VOLUME: return narrow ? "Trap vol" : "Trap volume";
         case SOUND_OPT_OTHER_VOLUME: return narrow ? "Other vol" : "Other volume";
+        case SOUND_OPT_RIVER_VOLUME: return narrow ? "Water vol" : "Water/river vol";
+        case SOUND_OPT_TORCHES_VOLUME: return narrow ? "Torch vol" : "Torch volume";
+        case SOUND_OPT_LAVA_VOLUME: return narrow ? "Lava vol" : "Lava volume";
+        case SOUND_OPT_FORGE_VOLUME: return narrow ? "Forge vol" : "Forge volume";
+        case SOUND_OPT_BRIDGE_VOLUME: return narrow ? "Bridge vol" : "Bridge work vol";
         case SOUND_OPT_MUSIC_MAIN_ENABLED: return "Menu music";
         case SOUND_OPT_MUSIC_AMBIENT_ENABLED: return "Ambient music";
         case SOUND_OPT_MUSIC_MAIN_VOLUME: return narrow ? "Menu vol" : "Menu music volume";
@@ -631,6 +667,7 @@ static cptr sound_option_label(int index)
     switch (index)
     {
     case SOUND_OPT_ENABLED: return "Enable game sounds";
+    case SOUND_OPT_MASTER_VOLUME: return "Master sound volume";
     case SOUND_OPT_COMBAT_ENABLED: return "Enable combat sounds";
     case SOUND_OPT_MONSTER_HITS_ENABLED: return "Enable monster sounds";
     case SOUND_OPT_ATTACK_ENABLED: return "Enable attack sounds";
@@ -641,6 +678,12 @@ static cptr sound_option_label(int index)
     case SOUND_OPT_WALK_ENABLED: return "Enable walk sounds";
     case SOUND_OPT_DOORS_ENABLED: return "Enable door sounds";
     case SOUND_OPT_TRAPS_ENABLED: return "Enable trap sounds";
+    case SOUND_OPT_OTHER_ENABLED: return "Enable other sounds";
+    case SOUND_OPT_RIVER_ENABLED: return "Enable water and river sounds";
+    case SOUND_OPT_TORCHES_ENABLED: return "Enable torch sounds";
+    case SOUND_OPT_LAVA_ENABLED: return "Enable lava sounds";
+    case SOUND_OPT_FORGE_ENABLED: return "Enable forge sounds";
+    case SOUND_OPT_BRIDGE_ENABLED: return "Enable bridge repair and construction sounds";
     case SOUND_OPT_COMBAT_VOLUME: return "Combat sounds volume";
     case SOUND_OPT_MONSTER_HITS_VOLUME: return "Monster sounds volume";
     case SOUND_OPT_INVENTORY_VOLUME: return "Inventory sounds volume";
@@ -648,6 +691,11 @@ static cptr sound_option_label(int index)
     case SOUND_OPT_DOORS_VOLUME: return "Door sounds volume";
     case SOUND_OPT_TRAPS_VOLUME: return "Trap sounds volume";
     case SOUND_OPT_OTHER_VOLUME: return "Other sounds volume";
+    case SOUND_OPT_RIVER_VOLUME: return "Water and river sounds volume";
+    case SOUND_OPT_TORCHES_VOLUME: return "Torch sounds volume";
+    case SOUND_OPT_LAVA_VOLUME: return "Lava sounds volume";
+    case SOUND_OPT_FORGE_VOLUME: return "Forge sounds volume";
+    case SOUND_OPT_BRIDGE_VOLUME: return "Bridge repair and construction sounds volume";
     case SOUND_OPT_MUSIC_MAIN_ENABLED: return "Enable main menu music";
     case SOUND_OPT_MUSIC_AMBIENT_ENABLED: return "Enable ambient dungeon music";
     case SOUND_OPT_MUSIC_MAIN_VOLUME: return "Main menu music volume";
@@ -1444,6 +1492,7 @@ static float* sound_option_volume_ptr(struct sound_config* sound_cfg,
 
     switch (index)
     {
+    case SOUND_OPT_MASTER_VOLUME: return &sound_cfg->volume_master;
     case SOUND_OPT_COMBAT_VOLUME: return &sound_cfg->volume_combat;
     case SOUND_OPT_MONSTER_HITS_VOLUME: return &sound_cfg->volume_monster_hits;
     case SOUND_OPT_INVENTORY_VOLUME: return &sound_cfg->volume_inventory;
@@ -1451,6 +1500,11 @@ static float* sound_option_volume_ptr(struct sound_config* sound_cfg,
     case SOUND_OPT_DOORS_VOLUME: return &sound_cfg->volume_doors;
     case SOUND_OPT_TRAPS_VOLUME: return &sound_cfg->volume_traps;
     case SOUND_OPT_OTHER_VOLUME: return &sound_cfg->volume_other;
+    case SOUND_OPT_RIVER_VOLUME: return &sound_cfg->volume_river;
+    case SOUND_OPT_TORCHES_VOLUME: return &sound_cfg->volume_torches;
+    case SOUND_OPT_LAVA_VOLUME: return &sound_cfg->volume_lava;
+    case SOUND_OPT_FORGE_VOLUME: return &sound_cfg->volume_forge;
+    case SOUND_OPT_BRIDGE_VOLUME: return &sound_cfg->volume_bridge;
     case SOUND_OPT_MUSIC_MAIN_VOLUME: return &sound_cfg->music_main_volume;
     case SOUND_OPT_MUSIC_AMBIENT_VOLUME: return &sound_cfg->music_ambient_volume;
     default: return NULL;
@@ -1508,8 +1562,14 @@ static bool sound_option_pick_value(int index, struct sound_config* sound_cfg,
         return false;
 
     *volume = new_volume;
-    if (index == SOUND_OPT_MUSIC_MAIN_VOLUME
-        || index == SOUND_OPT_MUSIC_AMBIENT_VOLUME)
+    if (index == SOUND_OPT_MASTER_VOLUME
+        || index == SOUND_OPT_MUSIC_MAIN_VOLUME
+        || index == SOUND_OPT_MUSIC_AMBIENT_VOLUME
+        || index == SOUND_OPT_RIVER_VOLUME
+        || index == SOUND_OPT_TORCHES_VOLUME
+        || index == SOUND_OPT_LAVA_VOLUME
+        || index == SOUND_OPT_FORGE_VOLUME
+        || index == SOUND_OPT_BRIDGE_VOLUME)
     {
         sdl_music_update_volumes();
         sdl_sound_save_config();
@@ -1603,6 +1663,9 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
             sound_cfg->enabled = def.enabled;
             use_sound = sound_cfg->enabled;
             break;
+        case SOUND_OPT_MASTER_VOLUME:
+            sound_cfg->volume_master = def.volume_master;
+            break;
         case SOUND_OPT_COMBAT_ENABLED:
             sound_cfg->enable_combat = def.enable_combat;
             break;
@@ -1633,6 +1696,24 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
         case SOUND_OPT_TRAPS_ENABLED:
             sound_cfg->enable_traps = def.enable_traps;
             break;
+        case SOUND_OPT_OTHER_ENABLED:
+            sound_cfg->enable_other = def.enable_other;
+            break;
+        case SOUND_OPT_RIVER_ENABLED:
+            sound_cfg->enable_river = def.enable_river;
+            break;
+        case SOUND_OPT_TORCHES_ENABLED:
+            sound_cfg->enable_torches = def.enable_torches;
+            break;
+        case SOUND_OPT_LAVA_ENABLED:
+            sound_cfg->enable_lava = def.enable_lava;
+            break;
+        case SOUND_OPT_FORGE_ENABLED:
+            sound_cfg->enable_forge = def.enable_forge;
+            break;
+        case SOUND_OPT_BRIDGE_ENABLED:
+            sound_cfg->enable_bridge = def.enable_bridge;
+            break;
         case SOUND_OPT_COMBAT_VOLUME:
             sound_cfg->volume_combat = def.volume_combat;
             break;
@@ -1653,6 +1734,21 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
             break;
         case SOUND_OPT_OTHER_VOLUME:
             sound_cfg->volume_other = def.volume_other;
+            break;
+        case SOUND_OPT_RIVER_VOLUME:
+            sound_cfg->volume_river = def.volume_river;
+            break;
+        case SOUND_OPT_TORCHES_VOLUME:
+            sound_cfg->volume_torches = def.volume_torches;
+            break;
+        case SOUND_OPT_LAVA_VOLUME:
+            sound_cfg->volume_lava = def.volume_lava;
+            break;
+        case SOUND_OPT_FORGE_VOLUME:
+            sound_cfg->volume_forge = def.volume_forge;
+            break;
+        case SOUND_OPT_BRIDGE_VOLUME:
+            sound_cfg->volume_bridge = def.volume_bridge;
             break;
         case SOUND_OPT_MUSIC_MAIN_ENABLED:
             sound_cfg->music_main_enabled = def.music_main_enabled;
@@ -1875,6 +1971,10 @@ extern void do_cmd_options_aux(int page, cptr info)
                     strnfmt(value_str, sizeof(value_str), "%s",
                         sound_cfg->enabled ? "yes" : "no ");
                     break;
+                case SOUND_OPT_MASTER_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_master * 100.0f);
+                    break;
                 case SOUND_OPT_COMBAT_ENABLED:
                     strnfmt(value_str, sizeof(value_str), "%s",
                         sound_cfg->enable_combat ? "yes" : "no ");
@@ -1915,6 +2015,30 @@ extern void do_cmd_options_aux(int page, cptr info)
                     strnfmt(value_str, sizeof(value_str), "%s",
                         sound_cfg->enable_traps ? "yes" : "no ");
                     break;
+                case SOUND_OPT_OTHER_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_other ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_RIVER_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_river ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_TORCHES_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_torches ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_LAVA_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_lava ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_FORGE_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_forge ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_BRIDGE_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_bridge ? "yes" : "no ");
+                    break;
                 case SOUND_OPT_COMBAT_VOLUME:
                     strnfmt(value_str, sizeof(value_str), "%.0f%%",
                         sound_cfg->volume_combat * 100.0f);
@@ -1942,6 +2066,26 @@ extern void do_cmd_options_aux(int page, cptr info)
                 case SOUND_OPT_OTHER_VOLUME:
                     strnfmt(value_str, sizeof(value_str), "%.0f%%",
                         sound_cfg->volume_other * 100.0f);
+                    break;
+                case SOUND_OPT_RIVER_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_river * 100.0f);
+                    break;
+                case SOUND_OPT_TORCHES_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_torches * 100.0f);
+                    break;
+                case SOUND_OPT_LAVA_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_lava * 100.0f);
+                    break;
+                case SOUND_OPT_FORGE_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_forge * 100.0f);
+                    break;
+                case SOUND_OPT_BRIDGE_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_bridge * 100.0f);
                     break;
                 case SOUND_OPT_MUSIC_MAIN_ENABLED:
                     strnfmt(value_str, sizeof(value_str), "%s",
@@ -2397,6 +2541,30 @@ extern void do_cmd_options_aux(int page, cptr info)
                             sound_cfg->enable_traps = !sound_cfg->enable_traps;
                             changed = true;
                             break;
+                        case SOUND_OPT_OTHER_ENABLED:
+                            sound_cfg->enable_other = !sound_cfg->enable_other;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_RIVER_ENABLED:
+                            sound_cfg->enable_river = !sound_cfg->enable_river;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_TORCHES_ENABLED:
+                            sound_cfg->enable_torches = !sound_cfg->enable_torches;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_LAVA_ENABLED:
+                            sound_cfg->enable_lava = !sound_cfg->enable_lava;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_FORGE_ENABLED:
+                            sound_cfg->enable_forge = !sound_cfg->enable_forge;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_BRIDGE_ENABLED:
+                            sound_cfg->enable_bridge = !sound_cfg->enable_bridge;
+                            changed = true;
+                            break;
                         case SOUND_OPT_MUSIC_MAIN_ENABLED:
                             sound_cfg->music_main_enabled = !sound_cfg->music_main_enabled;
                             changed = true;
@@ -2483,6 +2651,27 @@ extern void do_cmd_options_aux(int page, cptr info)
                     case SOUND_OPT_TRAPS_ENABLED:
                         sound_cfg->enable_traps = true;
                         break;
+                    case SOUND_OPT_OTHER_ENABLED:
+                        sound_cfg->enable_other = true;
+                        break;
+                    case SOUND_OPT_RIVER_ENABLED:
+                        sound_cfg->enable_river = true;
+                        break;
+                    case SOUND_OPT_TORCHES_ENABLED:
+                        sound_cfg->enable_torches = true;
+                        break;
+                    case SOUND_OPT_LAVA_ENABLED:
+                        sound_cfg->enable_lava = true;
+                        break;
+                    case SOUND_OPT_FORGE_ENABLED:
+                        sound_cfg->enable_forge = true;
+                        break;
+                    case SOUND_OPT_BRIDGE_ENABLED:
+                        sound_cfg->enable_bridge = true;
+                        break;
+                    case SOUND_OPT_MASTER_VOLUME:
+                        sound_cfg->volume_master = (sound_cfg->volume_master < 1.0f) ? sound_cfg->volume_master + 0.1f : 1.0f;
+                        break;
                     case SOUND_OPT_COMBAT_VOLUME:
                         sound_cfg->volume_combat = (sound_cfg->volume_combat < 1.0f) ? sound_cfg->volume_combat + 0.1f : 1.0f;
                         break;
@@ -2503,6 +2692,21 @@ extern void do_cmd_options_aux(int page, cptr info)
                         break;
                     case SOUND_OPT_OTHER_VOLUME:
                         sound_cfg->volume_other = (sound_cfg->volume_other < 1.0f) ? sound_cfg->volume_other + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_RIVER_VOLUME:
+                        sound_cfg->volume_river = (sound_cfg->volume_river < 1.0f) ? sound_cfg->volume_river + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_TORCHES_VOLUME:
+                        sound_cfg->volume_torches = (sound_cfg->volume_torches < 1.0f) ? sound_cfg->volume_torches + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_LAVA_VOLUME:
+                        sound_cfg->volume_lava = (sound_cfg->volume_lava < 1.0f) ? sound_cfg->volume_lava + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_FORGE_VOLUME:
+                        sound_cfg->volume_forge = (sound_cfg->volume_forge < 1.0f) ? sound_cfg->volume_forge + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_BRIDGE_VOLUME:
+                        sound_cfg->volume_bridge = (sound_cfg->volume_bridge < 1.0f) ? sound_cfg->volume_bridge + 0.1f : 1.0f;
                         break;
                     case SOUND_OPT_MUSIC_MAIN_ENABLED:
                         sound_cfg->music_main_enabled = true;
@@ -2689,6 +2893,27 @@ extern void do_cmd_options_aux(int page, cptr info)
                     case SOUND_OPT_TRAPS_ENABLED:
                         sound_cfg->enable_traps = false;
                         break;
+                    case SOUND_OPT_OTHER_ENABLED:
+                        sound_cfg->enable_other = false;
+                        break;
+                    case SOUND_OPT_RIVER_ENABLED:
+                        sound_cfg->enable_river = false;
+                        break;
+                    case SOUND_OPT_TORCHES_ENABLED:
+                        sound_cfg->enable_torches = false;
+                        break;
+                    case SOUND_OPT_LAVA_ENABLED:
+                        sound_cfg->enable_lava = false;
+                        break;
+                    case SOUND_OPT_FORGE_ENABLED:
+                        sound_cfg->enable_forge = false;
+                        break;
+                    case SOUND_OPT_BRIDGE_ENABLED:
+                        sound_cfg->enable_bridge = false;
+                        break;
+                    case SOUND_OPT_MASTER_VOLUME:
+                        sound_cfg->volume_master = (sound_cfg->volume_master > 0.0f) ? sound_cfg->volume_master - 0.1f : 0.0f;
+                        break;
                     case SOUND_OPT_COMBAT_VOLUME:
                         sound_cfg->volume_combat = (sound_cfg->volume_combat > 0.0f) ? sound_cfg->volume_combat - 0.1f : 0.0f;
                         break;
@@ -2709,6 +2934,21 @@ extern void do_cmd_options_aux(int page, cptr info)
                         break;
                     case SOUND_OPT_OTHER_VOLUME:
                         sound_cfg->volume_other = (sound_cfg->volume_other > 0.0f) ? sound_cfg->volume_other - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_RIVER_VOLUME:
+                        sound_cfg->volume_river = (sound_cfg->volume_river > 0.0f) ? sound_cfg->volume_river - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_TORCHES_VOLUME:
+                        sound_cfg->volume_torches = (sound_cfg->volume_torches > 0.0f) ? sound_cfg->volume_torches - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_LAVA_VOLUME:
+                        sound_cfg->volume_lava = (sound_cfg->volume_lava > 0.0f) ? sound_cfg->volume_lava - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_FORGE_VOLUME:
+                        sound_cfg->volume_forge = (sound_cfg->volume_forge > 0.0f) ? sound_cfg->volume_forge - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_BRIDGE_VOLUME:
+                        sound_cfg->volume_bridge = (sound_cfg->volume_bridge > 0.0f) ? sound_cfg->volume_bridge - 0.1f : 0.0f;
                         break;
                     case SOUND_OPT_MUSIC_MAIN_ENABLED:
                         sound_cfg->music_main_enabled = false;

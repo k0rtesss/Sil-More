@@ -7,6 +7,8 @@
 #include "log/log.h"
 #include "log/perf.h"
 #include "sound-config.h"
+#include "cave/cave-events.h"
+#include "cave/cave-fixtures.h"
 #include "cJSON.h"
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
@@ -17,8 +19,18 @@
 #define SDL_SOUND_MAX_VARIANTS 64
 #define SDL_SOUND_NAME_LEN 256
 #define SDL_SOUND_MAX_ACTIVE_TRACKS 16
-#define SDL_SOUND_MAX_MUSIC_CACHE 8
+#define SDL_SOUND_MAX_MUSIC_CACHE 10
 #define MONSTER_IDLE_SOUND_CHANCE_PERCENT 5
+#define RIVER_LOOP_SOUND_PATH "sound/river/River Stream Loop.ogg"
+/* The bundled mixer omits MP3 decoding; keep this loop in Vorbis format. */
+#define STILL_WATER_LOOP_SOUND_PATH "sound/lake/still_water_ambient.ogg"
+#define TORCH_LOOP_SOUND_PATH "sound/torch_light/Torch Loop.ogg"
+#define LAVA_LOOP_SOUND_PATH "sound/lava/Lava Loop.ogg"
+#define FORGE_LOOP_SOUND_PATH "sound/forge/Fire in Furnace Loop.ogg"
+#define BRIDGE_LOOP_WOOD_SOUND_PATH "sound/bridge/wood.ogg"
+#define BRIDGE_LOOP_OTHER_SOUND_PATH "sound/bridge/other.ogg"
+#define WATER_WALK_SOUND_PATH "sound/water_walking"
+#define ENVIRONMENT_LOOP_VOLUME_SCALE 0.5f
 
 typedef struct {
     char path[1024];
@@ -29,6 +41,9 @@ typedef struct {
     char sound_files[MSG_MAX][SDL_SOUND_MAX_VARIANTS][SDL_SOUND_NAME_LEN];
     MIX_Audio* sound_audio[MSG_MAX][SDL_SOUND_MAX_VARIANTS];
     int sound_counts[MSG_MAX];
+    char water_walk_files[SDL_SOUND_MAX_VARIANTS][SDL_SOUND_NAME_LEN];
+    MIX_Audio* water_walk_audio[SDL_SOUND_MAX_VARIANTS];
+    int water_walk_count;
 } sound_bank;
 
 typedef struct {
@@ -49,7 +64,13 @@ static struct {
     bool enable_walk;
     bool enable_doors;
     bool enable_monster_hits;
+    bool enable_other;
     bool enable_traps;
+    bool enable_river;
+    bool enable_torches;
+    bool enable_lava;
+    bool enable_forge;
+    bool enable_bridge;
     float volume_combat;
     float volume_inventory;
     float volume_walk;
@@ -57,11 +78,28 @@ static struct {
     float volume_monster_hits;
     float volume_traps;
     float volume_other;
+    float volume_river;
+    float volume_torches;
+    float volume_lava;
+    float volume_forge;
+    float volume_bridge;
     MIX_Track* sfx_tracks[SDL_SOUND_MAX_ACTIVE_TRACKS];
     int next_sfx_track;
     MIX_Track* music_main_track;
     MIX_Track* music_menu_track;
     MIX_Track* music_ambient_track;
+    MIX_Track* river_loop_track;
+    MIX_Track* still_water_loop_track;
+    MIX_Track* torch_loop_track;
+    MIX_Track* lava_loop_track;
+    MIX_Track* forge_loop_track;
+    MIX_Track* bridge_work_loop_track;
+    int river_loop_level;
+    int still_water_loop_level;
+    int torch_loop_level;
+    int lava_loop_level;
+    int forge_loop_level;
+    int bridge_work_loop_level;
     char music_main_path[1024];
     char music_main_full_path[1024];
     char music_ambient_path[1024];
@@ -122,13 +160,19 @@ static bool sdl_sound_create_track_pool(void);
 static bool sdl_sound_ensure_mixer(void);
 static void sdl_sound_destroy_mixer(void);
 static MIX_Audio* sdl_sound_get_sample_audio(int sound_idx, int sample_idx);
+static MIX_Audio* sdl_sound_get_water_walk_audio(int sample_idx);
 static MIX_Audio* sdl_sound_get_music_audio(const char* path);
 static MIX_Track* sdl_sound_acquire_sfx_track(bool quiet);
 static bool sdl_sound_play_track_audio(MIX_Track* track, MIX_Audio* audio, float gain,
     int loops, bool quiet);
 static bool sdl_sound_play_sample_locked(int sound_idx, int sample_idx,
-    bool quiet, bool profile);
+    bool quiet, bool profile, float gain_scale);
 static void sdl_sound_preload_event(int sound_idx);
+static void sdl_sound_preload_water_walk(void);
+static bool sdl_sound_play_water_walk_sample_locked(int sample_idx,
+    bool quiet, bool profile);
+static bool sdl_sound_play_environment_loop(MIX_Track* track,
+    const char* relative_path, float gain, const char* label);
 static void sdl_music_stop_track(MIX_Track* track);
 static void sdl_music_stop_title_track(void);
 static bool sdl_music_play_title_track(const char* primary_path,
@@ -192,6 +236,7 @@ static bool sound_is_inventory(int sound_idx)
     if (sound_idx == MSG_DROP || sound_idx == MSG_QUAFF || sound_idx == MSG_ZAP ||
         sound_idx == MSG_EAT || sound_idx == MSG_PICK || sound_idx == MSG_ARMOR ||
         sound_idx == MSG_TORCH_LIGHT ||
+        (sound_idx >= MSG_HORN_TERROR && sound_idx <= MSG_HORN_WARNING) ||
         (sound_idx >= MSG_EQUIP_SWORD && sound_idx <= MSG_UNEQUIP_JEWELRY) ||
         (sound_idx >= MSG_DROP_GLASS && sound_idx <= MSG_ACTIVATE)) {
         return true;
@@ -203,7 +248,11 @@ static bool sound_is_inventory(int sound_idx)
 static bool sound_is_trap(int sound_idx)
 {
     return sound_idx == MSG_TRAP_GAS || sound_idx == MSG_TRAP_NEEDLE ||
-        sound_idx == MSG_TRAP_FIRE;
+        sound_idx == MSG_TRAP_FIRE || sound_idx == MSG_TRAP_ACID ||
+        sound_idx == MSG_TRAP_FLOOD || sound_idx == MSG_TRAP_SPIKED ||
+        sound_idx == MSG_TRAP_ALARM || sound_idx == MSG_TRAP_CALTROPS ||
+        sound_idx == MSG_TRAP_DEADFALL || sound_idx == MSG_TRAP_FLASH ||
+        sound_idx == MSG_ICE;
 }
 
 static bool sound_is_door(int sound_idx)
@@ -233,6 +282,10 @@ static bool is_sound_enabled(int sound_idx)
         && !g_sound_config.enable_attack)
         return false;
 
+    if (sound_idx == MSG_FORGE) {
+        return sound_state.enable_forge;
+    }
+
     if (sound_is_combat(sound_idx)) {
         return sound_state.enable_combat;
     }
@@ -245,7 +298,11 @@ static bool is_sound_enabled(int sound_idx)
         return sound_state.enable_inventory;
     }
 
-    if (sound_idx == MSG_WALK) {
+    if (sound_idx == MSG_WALK && p_ptr && p_ptr->leaping) {
+        return false;
+    }
+
+    if (sound_idx == MSG_WALK || sound_idx == MSG_LANDING) {
         return sound_state.enable_walk;
     }
 
@@ -257,11 +314,15 @@ static bool is_sound_enabled(int sound_idx)
         return sound_state.enable_doors;
     }
 
-    return true;
+    return sound_state.enable_other;
 }
 
 static float get_sound_volume(int sound_idx)
 {
+    if (sound_idx == MSG_FORGE) {
+        return sound_state.volume_forge;
+    }
+
     if (sound_is_combat(sound_idx)) {
         return sound_state.volume_combat;
     }
@@ -274,7 +335,7 @@ static float get_sound_volume(int sound_idx)
         return sound_state.volume_inventory;
     }
 
-    if (sound_idx == MSG_WALK) {
+    if (sound_idx == MSG_WALK || sound_idx == MSG_LANDING) {
         return sound_state.volume_walk;
     }
 
@@ -292,6 +353,11 @@ static float get_sound_volume(int sound_idx)
 static void sdl_sound_reset_bank(void)
 {
     sound_state.bank_loaded = false;
+    sound_state.bank.water_walk_count = 0;
+    for (int j = 0; j < SDL_SOUND_MAX_VARIANTS; j++) {
+        sound_state.bank.water_walk_files[j][0] = '\0';
+        sound_state.bank.water_walk_audio[j] = NULL;
+    }
     for (int i = 0; i < MSG_MAX; i++) {
         sound_state.bank.sound_counts[i] = 0;
         for (int j = 0; j < SDL_SOUND_MAX_VARIANTS; j++) {
@@ -320,6 +386,12 @@ static void sdl_sound_destroy_cached_audio(void)
                 MIX_DestroyAudio(sound_state.bank.sound_audio[i][j]);
                 sound_state.bank.sound_audio[i][j] = NULL;
             }
+        }
+    }
+    for (int i = 0; i < SDL_SOUND_MAX_VARIANTS; i++) {
+        if (sound_state.bank.water_walk_audio[i]) {
+            MIX_DestroyAudio(sound_state.bank.water_walk_audio[i]);
+            sound_state.bank.water_walk_audio[i] = NULL;
         }
     }
 
@@ -479,6 +551,18 @@ static bool sdl_sound_load_from_config(const struct sound_config* config)
         }
     }
 
+    char water_walk_path[1024];
+    int water_walk_count = 0;
+    sdl_sound_build_path(WATER_WALK_SOUND_PATH, water_walk_path,
+        sizeof(water_walk_path));
+    if (sdl_sound_scan_folder(water_walk_path,
+            sound_state.bank.water_walk_files, &water_walk_count,
+            SDL_SOUND_MAX_VARIANTS)) {
+        sound_state.bank.water_walk_count = water_walk_count;
+        log_debug("Loaded %d water-walking sound(s) from '%s'",
+            water_walk_count, water_walk_path);
+    }
+
     sound_state.bank_loaded = loaded_events > 0;
     log_info("Loaded sound events: %d/%d", loaded_events, MSG_MAX);
     return sound_state.bank_loaded;
@@ -532,7 +616,11 @@ static void sdl_sound_fill_missing_events_from_defaults(struct sound_config* con
 
     int copied = 0;
     for (int i = 0; i < MSG_MAX; i++) {
-        if (!config->events[i][0] && defaults.events[i][0]) {
+        bool migrate_legacy_dig = i == MSG_DIG
+            && streq(config->events[i], "sound/dig")
+            && streq(defaults.events[i], "sound/tunnel");
+        if ((!config->events[i][0] || migrate_legacy_dig)
+            && defaults.events[i][0]) {
             SDL_strlcpy(config->events[i], defaults.events[i], sizeof(config->events[i]));
             copied++;
         }
@@ -646,8 +734,17 @@ static bool sdl_sound_create_track_pool(void)
     sound_state.music_main_track = MIX_CreateTrack(sound_state.mixer);
     sound_state.music_menu_track = MIX_CreateTrack(sound_state.mixer);
     sound_state.music_ambient_track = MIX_CreateTrack(sound_state.mixer);
+    sound_state.river_loop_track = MIX_CreateTrack(sound_state.mixer);
+    sound_state.still_water_loop_track = MIX_CreateTrack(sound_state.mixer);
+    sound_state.torch_loop_track = MIX_CreateTrack(sound_state.mixer);
+    sound_state.lava_loop_track = MIX_CreateTrack(sound_state.mixer);
+    sound_state.forge_loop_track = MIX_CreateTrack(sound_state.mixer);
+    sound_state.bridge_work_loop_track = MIX_CreateTrack(sound_state.mixer);
     if (!sound_state.music_main_track || !sound_state.music_menu_track ||
-        !sound_state.music_ambient_track) {
+        !sound_state.music_ambient_track || !sound_state.river_loop_track ||
+        !sound_state.still_water_loop_track ||
+        !sound_state.torch_loop_track || !sound_state.lava_loop_track ||
+        !sound_state.forge_loop_track || !sound_state.bridge_work_loop_track) {
         log_warn("Failed to create music tracks: %s", SDL_GetError());
         return false;
     }
@@ -739,6 +836,24 @@ static void sdl_sound_destroy_mixer(void)
     if (sound_state.music_ambient_track) {
         MIX_StopTrack(sound_state.music_ambient_track, 0);
     }
+    if (sound_state.river_loop_track) {
+        MIX_StopTrack(sound_state.river_loop_track, 0);
+    }
+    if (sound_state.still_water_loop_track) {
+        MIX_StopTrack(sound_state.still_water_loop_track, 0);
+    }
+    if (sound_state.torch_loop_track) {
+        MIX_StopTrack(sound_state.torch_loop_track, 0);
+    }
+    if (sound_state.lava_loop_track) {
+        MIX_StopTrack(sound_state.lava_loop_track, 0);
+    }
+    if (sound_state.forge_loop_track) {
+        MIX_StopTrack(sound_state.forge_loop_track, 0);
+    }
+    if (sound_state.bridge_work_loop_track) {
+        MIX_StopTrack(sound_state.bridge_work_loop_track, 0);
+    }
     for (int i = 0; i < SDL_SOUND_MAX_ACTIVE_TRACKS; i++) {
         if (sound_state.sfx_tracks[i]) {
             MIX_StopTrack(sound_state.sfx_tracks[i], 0);
@@ -757,6 +872,18 @@ static void sdl_sound_destroy_mixer(void)
     sound_state.music_main_track = NULL;
     sound_state.music_menu_track = NULL;
     sound_state.music_ambient_track = NULL;
+    sound_state.river_loop_track = NULL;
+    sound_state.still_water_loop_track = NULL;
+    sound_state.torch_loop_track = NULL;
+    sound_state.lava_loop_track = NULL;
+    sound_state.forge_loop_track = NULL;
+    sound_state.bridge_work_loop_track = NULL;
+    sound_state.river_loop_level = 0;
+    sound_state.still_water_loop_level = 0;
+    sound_state.torch_loop_level = 0;
+    sound_state.lava_loop_level = 0;
+    sound_state.forge_loop_level = 0;
+    sound_state.bridge_work_loop_level = 0;
     for (int i = 0; i < SDL_SOUND_MAX_ACTIVE_TRACKS; i++) {
         sound_state.sfx_tracks[i] = NULL;
     }
@@ -799,6 +926,34 @@ static MIX_Audio* sdl_sound_get_sample_audio(int sound_idx, int sample_idx)
     return audio;
 }
 
+static MIX_Audio* sdl_sound_get_water_walk_audio(int sample_idx)
+{
+    if (sample_idx < 0 || sample_idx >= sound_state.bank.water_walk_count
+        || sample_idx >= SDL_SOUND_MAX_VARIANTS) {
+        return NULL;
+    }
+
+    if (sound_state.bank.water_walk_audio[sample_idx])
+        return sound_state.bank.water_walk_audio[sample_idx];
+
+    if (!sdl_sound_ensure_mixer())
+        return NULL;
+
+    const char* sample_path = sound_state.bank.water_walk_files[sample_idx];
+    if (!sample_path[0])
+        return NULL;
+
+    MIX_Audio* audio = MIX_LoadAudio(sound_state.mixer, sample_path, true);
+    if (!audio) {
+        log_warn("Failed to load water-walking sample '%s': %s",
+            sample_path, SDL_GetError());
+        return NULL;
+    }
+
+    sound_state.bank.water_walk_audio[sample_idx] = audio;
+    return audio;
+}
+
 static bool sdl_sound_ensure_mutex(void)
 {
     if (g_sound_mutex)
@@ -829,6 +984,20 @@ static void sdl_sound_preload_event(int sound_idx)
     if (loaded > 0)
         log_debug("Preloaded %d/%d sample(s) for sound event %d", loaded,
             sample_count, sound_idx);
+}
+
+static void sdl_sound_preload_water_walk(void)
+{
+    int loaded = 0;
+
+    for (int i = 0; i < sound_state.bank.water_walk_count; i++) {
+        if (sdl_sound_get_water_walk_audio(i))
+            loaded++;
+    }
+
+    if (loaded > 0)
+        log_debug("Preloaded %d/%d water-walking sample(s)", loaded,
+            sound_state.bank.water_walk_count);
 }
 
 static MIX_Audio* sdl_sound_get_music_audio(const char* path)
@@ -897,6 +1066,37 @@ static MIX_Track* sdl_sound_acquire_sfx_track(bool quiet)
     sound_state.next_sfx_track = (sound_state.next_sfx_track + 1) %
         SDL_SOUND_MAX_ACTIVE_TRACKS;
     return track;
+}
+
+static bool sdl_sound_play_environment_loop(MIX_Track* track,
+    const char* relative_path, float gain, const char* label)
+{
+    char configured_path[1024];
+    char resolved_path[1024];
+    MIX_Audio* audio;
+
+    if (!track || !relative_path || !relative_path[0])
+        return false;
+
+    sdl_sound_build_path(relative_path, configured_path, sizeof(configured_path));
+    if (!sdl_sound_resolve_music_path(configured_path, resolved_path,
+            sizeof(resolved_path)))
+    {
+        log_debug("Environmental sound '%s' is unavailable at '%s'",
+            label ? label : "loop", configured_path);
+        return false;
+    }
+
+    audio = sdl_sound_get_music_audio(resolved_path);
+    if (!audio)
+        return false;
+
+    if (!sdl_sound_play_track_audio(track, audio, gain, -1, false))
+        return false;
+
+    log_debug("Starting environmental sound loop '%s': %s",
+        label ? label : "loop", resolved_path);
+    return true;
 }
 
 static bool sdl_sound_play_track_audio(MIX_Track* track, MIX_Audio* audio, float gain,
@@ -1118,7 +1318,13 @@ void sdl_sound_reload(void)
     sound_state.enable_walk = g_sound_config.enable_walk;
     sound_state.enable_doors = g_sound_config.enable_doors;
     sound_state.enable_monster_hits = g_sound_config.enable_monster_hits;
+    sound_state.enable_other = g_sound_config.enable_other;
     sound_state.enable_traps = g_sound_config.enable_traps;
+    sound_state.enable_river = g_sound_config.enable_river;
+    sound_state.enable_torches = g_sound_config.enable_torches;
+    sound_state.enable_lava = g_sound_config.enable_lava;
+    sound_state.enable_forge = g_sound_config.enable_forge;
+    sound_state.enable_bridge = g_sound_config.enable_bridge;
     sound_state.volume_combat = g_sound_config.volume_combat;
     sound_state.volume_inventory = g_sound_config.volume_inventory;
     sound_state.volume_walk = g_sound_config.volume_walk;
@@ -1126,6 +1332,11 @@ void sdl_sound_reload(void)
     sound_state.volume_monster_hits = g_sound_config.volume_monster_hits;
     sound_state.volume_traps = g_sound_config.volume_traps;
     sound_state.volume_other = g_sound_config.volume_other;
+    sound_state.volume_river = g_sound_config.volume_river;
+    sound_state.volume_torches = g_sound_config.volume_torches;
+    sound_state.volume_lava = g_sound_config.volume_lava;
+    sound_state.volume_forge = g_sound_config.volume_forge;
+    sound_state.volume_bridge = g_sound_config.volume_bridge;
     sound_state.music_main_enabled = g_sound_config.music_main_enabled;
     sound_state.music_ambient_enabled = g_sound_config.music_ambient_enabled;
     sound_state.music_main_volume = g_sound_config.music_main_volume;
@@ -1172,13 +1383,17 @@ void sdl_sound_reload(void)
             MSG_WEAPON_UNARMED,
             MSG_MONSTER_ATTACK,
             MSG_MONSTER_ATTACK_RANGED,
-            MSG_MONSTER_ATTACK_BREATH
+            MSG_MONSTER_ATTACK_BREATH,
+            MSG_FORGE,
+            MSG_LANDING
         };
 
         for (int i = 0; i < (int)N_ELEMENTS(gameplay_preload_events); i++) {
             if (is_sound_enabled(gameplay_preload_events[i]))
                 sdl_sound_preload_event(gameplay_preload_events[i]);
         }
+        if (is_sound_enabled(MSG_WALK))
+            sdl_sound_preload_water_walk();
     }
 
     sdl_music_update_volumes();
@@ -1200,12 +1415,14 @@ void sdl_sound_shutdown(void)
 
 void sdl_music_play_main(void)
 {
+    sdl_sound_stop_environment();
     log_debug("Starting title music: %s", sound_state.music_main_path);
     (void)sdl_music_play_title_track(sound_state.music_main_path, NULL, "main");
 }
 
 void sdl_music_play_main_full(void)
 {
+    sdl_sound_stop_environment();
     log_debug("Starting full title music: %s", sound_state.music_main_full_path);
     (void)sdl_music_play_title_track(sound_state.music_main_full_path,
         sound_state.music_main_path, "main_full");
@@ -1213,12 +1430,14 @@ void sdl_music_play_main_full(void)
 
 void sdl_music_play_death(void)
 {
+    sdl_sound_stop_environment();
     log_debug("Starting death music: %s", sound_state.music_death_path);
     (void)sdl_music_play_title_track(sound_state.music_death_path, NULL, "death");
 }
 
 void sdl_music_play_menu_theme(void)
 {
+    sdl_sound_stop_environment();
     if (!sound_state.music_main_enabled) {
         sdl_music_stop_main();
         return;
@@ -1271,6 +1490,182 @@ void sdl_music_stop_ambient(void)
     sdl_music_stop_track(sound_state.music_ambient_track);
 }
 
+static float sdl_sound_environment_gain(int level, int maximum,
+    float volume)
+{
+    float normalized;
+
+    if (level <= 0 || maximum <= 0)
+        return 0.0f;
+
+    normalized = (float)MIN(level, maximum) / (float)maximum;
+    return volume * ENVIRONMENT_LOOP_VOLUME_SCALE
+        * (0.25f + 0.75f * normalized);
+}
+
+void sdl_sound_stop_environment(void)
+{
+    sdl_music_stop_track(sound_state.river_loop_track);
+    sdl_music_stop_track(sound_state.still_water_loop_track);
+    sdl_music_stop_track(sound_state.torch_loop_track);
+    sdl_music_stop_track(sound_state.lava_loop_track);
+    sdl_music_stop_track(sound_state.forge_loop_track);
+    sdl_music_stop_track(sound_state.bridge_work_loop_track);
+    sound_state.river_loop_level = 0;
+    sound_state.still_water_loop_level = 0;
+    sound_state.torch_loop_level = 0;
+    sound_state.lava_loop_level = 0;
+    sound_state.forge_loop_level = 0;
+    sound_state.bridge_work_loop_level = 0;
+}
+
+void sdl_sound_update_environment(void)
+{
+    int river_level;
+    int still_water_level;
+    int torch_level;
+    int lava_level;
+    int forge_level;
+    int bridge_work_level;
+
+    if (!g_sound_config.enabled || !character_generated || !p_ptr
+        || !p_ptr->playing || p_ptr->is_dead || p_ptr->depth < 0
+        || !cave_feat)
+    {
+        sdl_sound_stop_environment();
+        return;
+    }
+
+    if (!sdl_sound_ensure_mixer())
+        return;
+
+    river_level = sound_state.enable_river
+        ? cave_flowing_water_sound_level_at(p_ptr->py, p_ptr->px) : 0;
+    still_water_level = sound_state.enable_river
+        ? cave_still_liquid_sound_level_at(p_ptr->py, p_ptr->px) : 0;
+    torch_level = sound_state.enable_torches
+        ? cave_fixture_sound_level_at(p_ptr->py, p_ptr->px) : 0;
+    lava_level = sound_state.enable_lava
+        ? cave_lava_sound_level_at(p_ptr->py, p_ptr->px) : 0;
+    forge_level = sound_state.enable_forge
+        ? cave_forge_sound_level_at(p_ptr->py, p_ptr->px) : 0;
+    bridge_work_level = sound_state.enable_bridge
+        ? cave_bridge_work_sound_level_at(p_ptr->py, p_ptr->px) : 0;
+    sound_state.river_loop_level = river_level;
+    sound_state.still_water_loop_level = still_water_level;
+    sound_state.torch_loop_level = torch_level;
+    sound_state.lava_loop_level = lava_level;
+    sound_state.forge_loop_level = forge_level;
+    sound_state.bridge_work_loop_level = bridge_work_level;
+
+    if (river_level <= 0)
+    {
+        sdl_music_stop_track(sound_state.river_loop_track);
+    }
+    else
+    {
+        float gain = sdl_sound_environment_gain(river_level,
+            CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1, sound_state.volume_river);
+        if (sound_state.river_loop_track
+            && !MIX_TrackPlaying(sound_state.river_loop_track)
+            && !MIX_TrackPaused(sound_state.river_loop_track))
+            (void)sdl_sound_play_environment_loop(sound_state.river_loop_track,
+                RIVER_LOOP_SOUND_PATH, gain, "river");
+        else if (sound_state.river_loop_track)
+            (void)MIX_SetTrackGain(sound_state.river_loop_track, gain);
+    }
+
+    if (still_water_level <= 0)
+    {
+        sdl_music_stop_track(sound_state.still_water_loop_track);
+    }
+    else
+    {
+        float gain = sdl_sound_environment_gain(still_water_level,
+            CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1, sound_state.volume_river);
+        if (sound_state.still_water_loop_track
+            && !MIX_TrackPlaying(sound_state.still_water_loop_track)
+            && !MIX_TrackPaused(sound_state.still_water_loop_track))
+            (void)sdl_sound_play_environment_loop(
+                sound_state.still_water_loop_track,
+                STILL_WATER_LOOP_SOUND_PATH, gain, "still-water");
+        else if (sound_state.still_water_loop_track)
+            (void)MIX_SetTrackGain(sound_state.still_water_loop_track, gain);
+    }
+
+    if (torch_level <= 0)
+    {
+        sdl_music_stop_track(sound_state.torch_loop_track);
+    }
+    else
+    {
+        float gain = sdl_sound_environment_gain(torch_level,
+            CAVE_FIXTURE_BRAZIER_SOUND_RADIUS + 1, sound_state.volume_torches);
+        if (sound_state.torch_loop_track
+            && !MIX_TrackPlaying(sound_state.torch_loop_track)
+            && !MIX_TrackPaused(sound_state.torch_loop_track))
+            (void)sdl_sound_play_environment_loop(sound_state.torch_loop_track,
+                TORCH_LOOP_SOUND_PATH, gain, "torch");
+        else if (sound_state.torch_loop_track)
+            (void)MIX_SetTrackGain(sound_state.torch_loop_track, gain);
+    }
+
+    if (lava_level <= 0)
+    {
+        sdl_music_stop_track(sound_state.lava_loop_track);
+    }
+    else
+    {
+        float gain = sdl_sound_environment_gain(lava_level,
+            CAVE_LAVA_SOUND_RADIUS + 1, sound_state.volume_lava);
+        if (sound_state.lava_loop_track
+            && !MIX_TrackPlaying(sound_state.lava_loop_track)
+            && !MIX_TrackPaused(sound_state.lava_loop_track))
+            (void)sdl_sound_play_environment_loop(sound_state.lava_loop_track,
+                LAVA_LOOP_SOUND_PATH, gain, "lava");
+        else if (sound_state.lava_loop_track)
+            (void)MIX_SetTrackGain(sound_state.lava_loop_track, gain);
+    }
+
+    if (forge_level <= 0)
+    {
+        sdl_music_stop_track(sound_state.forge_loop_track);
+    }
+    else
+    {
+        float gain = sdl_sound_environment_gain(forge_level,
+            CAVE_FORGE_SOUND_RADIUS + 1, sound_state.volume_forge);
+        if (sound_state.forge_loop_track
+            && !MIX_TrackPlaying(sound_state.forge_loop_track)
+            && !MIX_TrackPaused(sound_state.forge_loop_track))
+            (void)sdl_sound_play_environment_loop(sound_state.forge_loop_track,
+                FORGE_LOOP_SOUND_PATH, gain, "forge");
+        else if (sound_state.forge_loop_track)
+            (void)MIX_SetTrackGain(sound_state.forge_loop_track, gain);
+    }
+
+    if (bridge_work_level <= 0)
+    {
+        sdl_music_stop_track(sound_state.bridge_work_loop_track);
+    }
+    else
+    {
+        float gain = sdl_sound_environment_gain(bridge_work_level,
+            CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1, sound_state.volume_bridge);
+        if (sound_state.bridge_work_loop_track
+            && !MIX_TrackPlaying(sound_state.bridge_work_loop_track)
+            && !MIX_TrackPaused(sound_state.bridge_work_loop_track))
+        {
+            const char* path = SDL_rand(2)
+                ? BRIDGE_LOOP_WOOD_SOUND_PATH : BRIDGE_LOOP_OTHER_SOUND_PATH;
+            (void)sdl_sound_play_environment_loop(
+                sound_state.bridge_work_loop_track, path, gain, "bridge work");
+        }
+        else if (sound_state.bridge_work_loop_track)
+            (void)MIX_SetTrackGain(sound_state.bridge_work_loop_track, gain);
+    }
+}
+
 void sdl_music_update(void)
 {
 }
@@ -1300,6 +1695,54 @@ void sdl_music_update_volumes(void)
             sound_state.music_ambient_volume)) {
         log_debug("Failed to update ambient music volume: %s", SDL_GetError());
     }
+
+    if (sound_state.river_loop_track && sound_state.river_loop_level > 0 &&
+        !MIX_SetTrackGain(sound_state.river_loop_track,
+            sdl_sound_environment_gain(sound_state.river_loop_level,
+                CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1,
+                sound_state.volume_river))) {
+        log_debug("Failed to update river loop volume: %s", SDL_GetError());
+    }
+
+    if (sound_state.still_water_loop_track
+        && sound_state.still_water_loop_level > 0
+        && !MIX_SetTrackGain(sound_state.still_water_loop_track,
+            sdl_sound_environment_gain(sound_state.still_water_loop_level,
+                CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1,
+                sound_state.volume_river))) {
+        log_debug("Failed to update still-water loop volume: %s", SDL_GetError());
+    }
+
+    if (sound_state.torch_loop_track && sound_state.torch_loop_level > 0 &&
+        !MIX_SetTrackGain(sound_state.torch_loop_track,
+            sdl_sound_environment_gain(sound_state.torch_loop_level,
+                CAVE_FIXTURE_BRAZIER_SOUND_RADIUS + 1,
+                sound_state.volume_torches))) {
+        log_debug("Failed to update torch loop volume: %s", SDL_GetError());
+    }
+
+    if (sound_state.lava_loop_track && sound_state.lava_loop_level > 0 &&
+        !MIX_SetTrackGain(sound_state.lava_loop_track,
+            sdl_sound_environment_gain(sound_state.lava_loop_level,
+                CAVE_LAVA_SOUND_RADIUS + 1, sound_state.volume_lava))) {
+        log_debug("Failed to update lava loop volume: %s", SDL_GetError());
+    }
+
+    if (sound_state.forge_loop_track && sound_state.forge_loop_level > 0 &&
+        !MIX_SetTrackGain(sound_state.forge_loop_track,
+            sdl_sound_environment_gain(sound_state.forge_loop_level,
+                CAVE_FORGE_SOUND_RADIUS + 1, sound_state.volume_forge))) {
+        log_debug("Failed to update forge loop volume: %s", SDL_GetError());
+    }
+
+    if (sound_state.bridge_work_loop_track
+        && sound_state.bridge_work_loop_level > 0
+        && !MIX_SetTrackGain(sound_state.bridge_work_loop_track,
+            sdl_sound_environment_gain(sound_state.bridge_work_loop_level,
+                CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1,
+                sound_state.volume_bridge))) {
+        log_debug("Failed to update bridge work loop volume: %s", SDL_GetError());
+    }
 }
 
 void sdl_music_request_welcome_main_once(void)
@@ -1315,7 +1758,7 @@ bool sdl_music_consume_welcome_main_once(void)
 }
 
 static bool sdl_sound_play_sample_locked(int sound_idx, int sample_idx,
-    bool quiet, bool profile)
+    bool quiet, bool profile, float gain_scale)
 {
     if (sound_idx < 0 || sound_idx >= MSG_MAX || !g_sound_config.enabled) {
         return false;
@@ -1355,17 +1798,60 @@ static bool sdl_sound_play_sample_locked(int sound_idx, int sample_idx,
 
     if (!quiet)
         log_trace("sdl_sound_handle: idx=%d path='%s'", sound_idx, sample_path);
-    bool played = sdl_sound_play_track_audio(track, audio, get_sound_volume(sound_idx),
-        0, quiet);
+    bool played = sdl_sound_play_track_audio(track, audio,
+        get_sound_volume(sound_idx) * gain_scale, 0, quiet);
     if (profile)
         sil_perf_end("audio.sfx.play", phase);
     return played;
 }
 
-void sdl_sound_handle(int sound_idx)
+static bool sdl_sound_play_water_walk_sample_locked(int sample_idx,
+    bool quiet, bool profile)
+{
+    if (!g_sound_config.enabled || !is_sound_enabled(MSG_WALK)
+        || sample_idx < 0 || sample_idx >= sound_state.bank.water_walk_count
+        || !sdl_sound_ensure_mixer()) {
+        return false;
+    }
+
+    const char* sample_path = sound_state.bank.water_walk_files[sample_idx];
+    sil_perf_stamp phase = profile ? sil_perf_begin() : (sil_perf_stamp){ 0 };
+    MIX_Audio* audio = sdl_sound_get_water_walk_audio(sample_idx);
+    if (profile) {
+        sil_perf_end("audio.sfx.decode", phase);
+        phase = sil_perf_begin();
+    }
+    MIX_Track* track = sdl_sound_acquire_sfx_track(quiet);
+    if (!audio || !track) {
+        if (profile)
+            sil_perf_end("audio.sfx.play", phase);
+        return false;
+    }
+
+    if (!quiet)
+        log_trace("sdl_sound_handle: idx=%d path='%s'", MSG_WALK, sample_path);
+    bool played = sdl_sound_play_track_audio(track, audio,
+        get_sound_volume(MSG_WALK), 0, quiet);
+    if (profile)
+        sil_perf_end("audio.sfx.play", phase);
+    return played;
+}
+
+static bool sdl_sound_player_on_water_walk_tile(void)
+{
+    if (!p_ptr || !cave_feat || !in_bounds(p_ptr->py, p_ptr->px))
+        return false;
+
+    int feature = cave_feat[p_ptr->py][p_ptr->px];
+    return feature == FEAT_WATER || feature == FEAT_DEEP_WATER
+        || feature == FEAT_POISON;
+}
+
+static void sdl_sound_handle_with_gain(int sound_idx, float gain_scale)
 {
     int sample_count;
     int sample_idx;
+    bool use_water_walk;
 
     if (sound_idx < 0 || sound_idx >= MSG_MAX || !g_sound_config.enabled)
         return;
@@ -1375,13 +1861,42 @@ void sdl_sound_handle(int sound_idx)
     sil_perf_stamp perf = sil_perf_begin();
     SDL_LockMutex(g_sound_mutex);
     sil_perf_end("audio.sfx.lock", perf);
-    sample_count = sound_state.bank.sound_counts[sound_idx];
+    use_water_walk = sound_idx == MSG_WALK
+        && sound_state.bank.water_walk_count > 0
+        && sdl_sound_player_on_water_walk_tile();
+    sample_count = use_water_walk ? sound_state.bank.water_walk_count
+        : sound_state.bank.sound_counts[sound_idx];
     if (sample_count > 0) {
         sample_idx = (sample_count > 1) ? Rand_div(sample_count) : 0;
-        (void)sdl_sound_play_sample_locked(sound_idx, sample_idx, false, true);
+        if (!use_water_walk || !sdl_sound_play_water_walk_sample_locked(
+                sample_idx, false, true)) {
+            if (use_water_walk) {
+                sample_count = sound_state.bank.sound_counts[sound_idx];
+                sample_idx = (sample_count > 1) ? Rand_div(sample_count) : 0;
+            }
+            (void)sdl_sound_play_sample_locked(sound_idx, sample_idx,
+                false, true, gain_scale);
+        }
     }
     SDL_UnlockMutex(g_sound_mutex);
     sil_perf_end("audio.sfx.total", perf);
+}
+
+void sdl_sound_handle(int sound_idx)
+{
+    sdl_sound_handle_with_gain(sound_idx, 1.0f);
+}
+
+void sdl_sound_handle_at_environment_level(int sound_idx, int level,
+    int max_level)
+{
+    float gain_scale;
+
+    if (level <= 0 || max_level <= 0)
+        return;
+
+    gain_scale = sdl_sound_environment_gain(level, max_level, 1.0f);
+    sdl_sound_handle_with_gain(sound_idx, gain_scale);
 }
 
 /* Each race explicitly assigns recordings to its individual blow slots and
@@ -1465,7 +1980,8 @@ static bool monster_sound_ranged_reuses_melee(int race_idx, const char* path)
     return false;
 }
 
-void sdl_sound_monster(int race_idx, int action)
+static void sdl_sound_monster_internal(int race_idx, int action,
+    bool force_idle)
 {
     if (race_idx <= 0 || !z_info || race_idx >= z_info->r_max
         || action < 0 || action >= MONSTER_SOUND_RANGED_BASE + 32
@@ -1484,7 +2000,7 @@ void sdl_sound_monster(int race_idx, int action)
     SDL_LockMutex(g_sound_mutex);
     sil_perf_end("audio.monster.lock", perf);
     /* Cosmetic randomness must not consume the dungeon/combat RNG. */
-    if (action == MONSTER_SOUND_IDLE
+    if (!force_idle && action == MONSTER_SOUND_IDLE
         && SDL_rand(100) >= MONSTER_IDLE_SOUND_CHANCE_PERCENT) {
         goto finished;
     }
@@ -1556,6 +2072,16 @@ finished:
     sil_perf_end("audio.monster.total", perf);
 }
 
+void sdl_sound_monster(int race_idx, int action)
+{
+    sdl_sound_monster_internal(race_idx, action, false);
+}
+
+void sdl_sound_monster_force(int race_idx, int action)
+{
+    sdl_sound_monster_internal(race_idx, action, true);
+}
+
 static Uint32 SDLCALL sdl_sound_deferred_timer_cb(void* userdata,
     SDL_TimerID id, Uint32 interval)
 {
@@ -1574,7 +2100,7 @@ static Uint32 SDLCALL sdl_sound_deferred_timer_cb(void* userdata,
         SDL_LockMutex(g_sound_mutex);
         if (request->generation == g_sound_generation) {
             played = sdl_sound_play_sample_locked(request->sound_idx,
-                request->sample_idx, true, false);
+                request->sample_idx, true, false, 1.0f);
         }
         SDL_UnlockMutex(g_sound_mutex);
     }
@@ -1702,7 +2228,13 @@ void sdl_sound_save_config(void)
     sound_state.enable_walk = g_sound_config.enable_walk;
     sound_state.enable_doors = g_sound_config.enable_doors;
     sound_state.enable_monster_hits = g_sound_config.enable_monster_hits;
+    sound_state.enable_other = g_sound_config.enable_other;
     sound_state.enable_traps = g_sound_config.enable_traps;
+    sound_state.enable_river = g_sound_config.enable_river;
+    sound_state.enable_torches = g_sound_config.enable_torches;
+    sound_state.enable_lava = g_sound_config.enable_lava;
+    sound_state.enable_forge = g_sound_config.enable_forge;
+    sound_state.enable_bridge = g_sound_config.enable_bridge;
     sound_state.volume_combat = g_sound_config.volume_combat;
     sound_state.volume_inventory = g_sound_config.volume_inventory;
     sound_state.volume_walk = g_sound_config.volume_walk;
@@ -1710,6 +2242,11 @@ void sdl_sound_save_config(void)
     sound_state.volume_monster_hits = g_sound_config.volume_monster_hits;
     sound_state.volume_traps = g_sound_config.volume_traps;
     sound_state.volume_other = g_sound_config.volume_other;
+    sound_state.volume_river = g_sound_config.volume_river;
+    sound_state.volume_torches = g_sound_config.volume_torches;
+    sound_state.volume_lava = g_sound_config.volume_lava;
+    sound_state.volume_forge = g_sound_config.volume_forge;
+    sound_state.volume_bridge = g_sound_config.volume_bridge;
     sound_state.music_main_enabled = g_sound_config.music_main_enabled;
     sound_state.music_ambient_enabled = g_sound_config.music_ambient_enabled;
     sound_state.music_main_volume = g_sound_config.music_main_volume;
@@ -1742,6 +2279,7 @@ void sdl_sound_save_config(void)
     }
 
     sdl_music_update_volumes();
+    sdl_sound_update_environment();
     sound_config_save(g_sound_config_path, &g_sound_config);
     log_debug("Sound configuration saved to %s", g_sound_config_path);
 }

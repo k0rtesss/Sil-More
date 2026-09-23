@@ -810,9 +810,6 @@ void move_player(int dir)
             }
         }
 
-        /* Sound */
-        sound(MSG_WALK);
-
         // do flanking or controlled retreat attack if any
         flanking_or_retreat(y, x);
 
@@ -820,8 +817,10 @@ void move_player(int dir)
         monster_swap(py, px, y, x);
         sil_popup_trace_stage("move-swap-returned");
         if (p_ptr->is_dead) return;
-        if ((py != y || px != x) && p_ptr->py == y && p_ptr->px == x)
+        if ((py != y || px != x) && p_ptr->py == y && p_ptr->px == x) {
             player_water_movement(cave_feat[py][px], cave_feat[y][x]);
+            sound(MSG_WALK);
+        }
         tutorial_action_finished("move", "", true);
 
         /* Check for Mandos quest interaction after movement */
