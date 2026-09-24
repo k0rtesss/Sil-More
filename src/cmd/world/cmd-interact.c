@@ -773,7 +773,8 @@ static bool do_cmd_open_test(int y, int x)
     if (!cave_known_closed_door_bold(y, x))
     {
         /* Message */
-        message(MSG_NOTHING_TO_OPEN, 0, "You see nothing there to open.");
+        message_at(y, x, MSG_NOTHING_TO_OPEN, 0,
+            "You see nothing there to open.");
 
         /* Nope */
         return (false);
@@ -851,7 +852,8 @@ bool do_cmd_open_aux(int y, int x)
 
         if (result > 0)
         {
-            message(MSG_OPENDOOR, 0, "You have picked the lock.");
+            message_at(y, x, MSG_OPENDOOR, 0,
+                "You have picked the lock.");
             cave_set_feat(y, x, FEAT_OPEN);
             p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
             return false;
@@ -866,7 +868,7 @@ bool do_cmd_open_aux(int y, int x)
             if (jammed)
             {
                 cave_set_feat(y, x, FEAT_DOOR_HEAD + 0x08 + power);
-                message(MSG_LOCKPICK_FAIL, 0,
+                message_at(y, x, MSG_LOCKPICK_FAIL, 0,
                     "The pick twists in the lock, jamming it fast!");
                 SDL_strlcpy(previous,
                     "Lockpick failed and jammed the door.",
@@ -874,7 +876,7 @@ bool do_cmd_open_aux(int y, int x)
             }
             else
             {
-                message(MSG_LOCKPICK_FAIL, 0,
+                message_at(y, x, MSG_LOCKPICK_FAIL, 0,
                     "You failed to pick the lock.");
                 SDL_strlcpy(previous,
                     "Lockpick failed. The door remains locked.",
@@ -920,7 +922,8 @@ bool do_cmd_open_aux(int y, int x)
         if (result > 0)
         {
             /* Message */
-            message(MSG_OPENDOOR, 0, "You have picked the lock.");
+            message_at(y, x, MSG_OPENDOOR, 0,
+                "You have picked the lock.");
 
             /* Open the door */
             cave_set_feat(y, x, FEAT_OPEN);
@@ -936,7 +939,8 @@ bool do_cmd_open_aux(int y, int x)
             flush();
 
             /* Message */
-            message(MSG_LOCKPICK_FAIL, 0, "You failed to pick the lock.");
+            message_at(y, x, MSG_LOCKPICK_FAIL, 0,
+                "You failed to pick the lock.");
 
             /* We may keep trying */
             more = true;
@@ -953,7 +957,7 @@ bool do_cmd_open_aux(int y, int x)
         p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
 
         /* Sound */
-        sound(MSG_OPENDOOR);
+        sound_at(MSG_OPENDOOR, y, x);
     }
 
     /* Result */
@@ -1178,7 +1182,7 @@ static bool do_cmd_close_aux(int y, int x)
     p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
 
     /* Sound */
-    sound(MSG_SHUTDOOR);
+    sound_at(MSG_SHUTDOOR, y, x);
 
     /* Result */
     return (false);
@@ -2281,7 +2285,7 @@ static bool twall(int y, int x)
         return (false);
 
     /* Sound */
-    sound(MSG_DIG);
+    sound_at(MSG_DIG, y, x);
 
     /* Forget the wall */
     // cave_info[y][x] &= ~(CAVE_MARK);
@@ -3305,13 +3309,14 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
                 if (singing(SNG_SILENCE))
                 {
                     /* Message */
-                    message(
-                        MSG_BASHDOOR, 0, "A door opens with a muffled crash!");
+                    message_at(y, x, MSG_BASHDOOR, 0,
+                        "A door opens with a muffled crash!");
                 }
                 else
                 {
                     /* Message */
-                    message(MSG_BASHDOOR, 0, "A door crashes open!");
+                    message_at(y, x, MSG_BASHDOOR, 0,
+                        "A door crashes open!");
                 }
             }
             else
@@ -3319,13 +3324,14 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
                 if (singing(SNG_SILENCE))
                 {
                     /* Message */
-                    message(MSG_BASHDOOR, 0,
+                    message_at(y, x, MSG_BASHDOOR, 0,
                         "The door opens with a muffled crash!");
                 }
                 else
                 {
                     /* Message */
-                    message(MSG_BASHDOOR, 0, "The door crashes open!");
+                    message_at(y, x, MSG_BASHDOOR, 0,
+                        "The door crashes open!");
                 }
             }
 
@@ -3364,7 +3370,8 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
         if (cave_known_closed_door_bold(y, x))
         {
             /* Message */
-            message(MSG_BASHDOOR_FAIL, 0, "The door holds firm.");
+            message_at(y, x, MSG_BASHDOOR_FAIL, 0,
+                "The door holds firm.");
         }
 
         /* Stuns */

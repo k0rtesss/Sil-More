@@ -34,6 +34,7 @@ bool lock_door(int y, int x, int power)
                 || (cave_feat[y][x] == FEAT_BROKEN))
             {
                 cave_set_feat(y, x, FEAT_DOOR_HEAD);
+                sound_at(MSG_SHUTDOOR, y, x);
 
                 obvious = true;
 

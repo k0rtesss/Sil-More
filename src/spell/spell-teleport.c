@@ -127,8 +127,8 @@ void teleport_away(int m_idx, int dis)
         look = false;
     }
 
-    /* Sound */
-    sound(MSG_TPOTHER);
+    /* Sound at the monster's departure grid. */
+    sound_at(MSG_TPOTHER, oy, ox);
 
     /*the monster should re-evaluate their target*/
     m_ptr->target_y = 0;
@@ -396,8 +396,8 @@ void teleport_towards(int oy, int ox, int ny, int nx)
         }
     }
 
-    /* Sound (assumes monster is moving) */
-    sound(MSG_TPOTHER);
+    /* Sound at the monster's departure grid. */
+    sound_at(MSG_TPOTHER, oy, ox);
 
     /* Move monster */
     monster_swap(oy, ox, y, x);

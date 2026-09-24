@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-events.h"
 
 /* 53 KiB at the maximum level size; constant-time lookup while drawing. */
 static byte fixtures[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
@@ -38,9 +39,9 @@ void cave_fixture_set(int y, int x, byte kind)
         ? kind : CAVE_FIXTURE_NONE;
 }
 
-int cave_fixture_sound_level_at(int y, int x)
+float cave_fixture_sound_gain_at(int y, int x)
 {
-    int best = 0;
+    float best = 0.0f;
 
     if (!p_ptr || !in_bounds_fully(y, x))
         return 0;
@@ -62,11 +63,8 @@ int cave_fixture_sound_level_at(int y, int x)
             radius = kind == CAVE_FIXTURE_BRAZIER
                 ? CAVE_FIXTURE_BRAZIER_SOUND_RADIUS
                 : CAVE_FIXTURE_TORCH_SOUND_RADIUS;
-            grid_distance = MAX(ABS(yy - y), ABS(xx - x));
-            if (grid_distance > radius || !los(y, x, yy, xx))
-                continue;
-
-            best = MAX(best, radius - grid_distance + 1);
+            grid_distance = cave_audio_distance(yy, xx, y, x);
+            best = MAX(best, sound_distance_gain(grid_distance, radius));
         }
     }
 

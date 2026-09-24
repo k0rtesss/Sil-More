@@ -1471,6 +1471,7 @@ D: than to cut cleanly.
 
 N:141:(Nimble)
 W:8:50:0:2000
+Y:-20
 C:1:0:0:0:0:0:0
 # compacted sval ranges to avoid excessive T: lines without changing coverage
 T:23:4:4

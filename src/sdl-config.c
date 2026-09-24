@@ -3649,6 +3649,14 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "debugCharacterSheet");
+        if (cJSON_IsBool(item)) {
+            config->debug_character_sheet = cJSON_IsTrue(item);
+            log_debug("Loaded debugCharacterSheet: %s",
+                config->debug_character_sheet ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
             "mobileStartingZoomOffset");
         if (cJSON_IsNumber(item)) {
             config->mobile_starting_zoom_offset = item->valueint;
@@ -5277,6 +5285,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         config->terminal_menu_scale_offset);
     cJSON_AddBoolToObject(sdl, "compactInventoryMenus",
         config->compact_inventory_menus);
+    cJSON_AddBoolToObject(sdl, "debugCharacterSheet",
+        config->debug_character_sheet);
     cJSON_AddNumberToObject(sdl, "mobileStartingZoomOffset",
         config->mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -5988,6 +5998,7 @@ void sdl_config_set_defaults(struct sdl_config* config)
         SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
             config->main_view_scale);
     config->compact_inventory_menus = false;
+    config->debug_character_sheet = false;
     config->mobile_starting_zoom_offset =
         SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT;
     config->mobile_portrait_mode = false;

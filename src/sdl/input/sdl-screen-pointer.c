@@ -1867,11 +1867,14 @@ static bool g_minimap_redraw_pending;
 
 void sdl_minimap_begin(void)
 {
+    bool skeleton_hints_visible = g_minimap.skeleton_hints_visible;
+
     sdl_minimap_map_texture_cache_clear();
     g_minimap_redraw_pending = false;
     memset(&g_minimap, 0, sizeof(g_minimap));
     g_minimap.active = true;
     g_minimap.zoom_step = 0;
+    g_minimap.skeleton_hints_visible = skeleton_hints_visible;
     g_minimap.pending_hint_index = -1;
     g_minimap.default_zoom_pending = true;
     if (g_minimap_pending_focus_active
@@ -1935,6 +1938,15 @@ bool sdl_minimap_adjust_zoom(int delta)
         return false;
 
     return sdl_minimap_set_zoom_step(g_minimap.zoom_step + delta);
+}
+
+void sdl_minimap_toggle_skeleton_hints(void)
+{
+    if (!g_minimap.active)
+        return;
+
+    g_minimap.skeleton_hints_visible = !g_minimap.skeleton_hints_visible;
+    (void)sdl_minimap_redraw();
 }
 
 bool sdl_minimap_offset_by(float dx, float dy)
@@ -2049,13 +2061,18 @@ void sdl_minimap_close(void)
 
 bool sdl_minimap_handle_control_point(float x, float y)
 {
-    const float hit_pad = 7.0f;
+    const float hit_pad = 4.0f;
 
     if (!g_minimap.active)
         return false;
 
     if (sdl_minimap_point_in_rect(x, y, &g_minimap.close_rect)) {
         sdl_minimap_close();
+        return true;
+    }
+
+    if (sdl_minimap_point_in_rect(x, y, &g_minimap.skeleton_hints_rect)) {
+        sdl_minimap_toggle_skeleton_hints();
         return true;
     }
 
@@ -2075,6 +2092,13 @@ bool sdl_minimap_handle_control_point(float x, float y)
             hit_pad))
     {
         sdl_minimap_close();
+        return true;
+    }
+
+    if (sdl_minimap_point_in_rect_expanded(x, y,
+            &g_minimap.skeleton_hints_rect, hit_pad))
+    {
+        sdl_minimap_toggle_skeleton_hints();
         return true;
     }
 
@@ -2191,7 +2215,7 @@ bool sdl_minimap_hint_source_at_canvas_point(float x, float y,
     int grid_y = -1;
     int grid_x = -1;
 
-    if (!g_minimap.map_layout_valid)
+    if (!g_minimap.skeleton_hints_visible || !g_minimap.map_layout_valid)
         return false;
 
     count = hint_messages_count_for_save();
@@ -2691,6 +2715,10 @@ bool sdl_minimap_handle_key(const SDL_KeyboardEvent* key_event)
         (void)sdl_minimap_adjust_zoom(-1);
         return true;
 
+    case SDLK_H:
+        sdl_minimap_toggle_skeleton_hints();
+        return true;
+
     case SDLK_LEFT:
     case SDLK_KP_4:
         dx = -1;
@@ -2818,6 +2846,10 @@ bool sdl_minimap_handle_gamepad_button(SDL_GamepadButton button,
         (void)sdl_minimap_adjust_zoom(1);
         break;
 
+    case SDL_GAMEPAD_BUTTON_NORTH:
+        sdl_minimap_toggle_skeleton_hints();
+        break;
+
     case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
         (void)sdl_minimap_pan(-1, 0);
         break;
@@ -2943,6 +2975,7 @@ void sdl_minimap_layout_controls(const sdl_view* d, int canvas_w,
 
     g_minimap.zoom_out_rect = (SDL_FRect){0};
     g_minimap.zoom_in_rect = (SDL_FRect){0};
+    g_minimap.skeleton_hints_rect = (SDL_FRect){0};
     g_minimap.close_rect = (SDL_FRect){0};
     g_minimap.zoom_out_enabled = g_minimap.zoom_step > 0;
     g_minimap.zoom_in_enabled = g_minimap.zoom_step < MINIMAP_MAX_ZOOM_STEP;
@@ -2951,21 +2984,21 @@ void sdl_minimap_layout_controls(const sdl_view* d, int canvas_w,
         return;
 
     margin = (float)d->cell_h * 0.5f;
-    if (margin < 8.0f)
-        margin = 8.0f;
+    if (margin < 12.0f)
+        margin = 12.0f;
     gap = margin * 0.75f;
-    if (gap < 6.0f)
-        gap = 6.0f;
+    if (gap < 8.0f)
+        gap = 8.0f;
 
-    size = (float)d->cell_h * 2.1f;
-    size = sdl_minimap_clampf(size, 36.0f, 56.0f);
+    size = (float)d->cell_h * 2.8f;
+    size = sdl_minimap_clampf(size, 48.0f, 64.0f);
     if (canvas_h > 0)
         size = sdl_minimap_clampf(size, 24.0f, (float)canvas_h - margin * 2.0f);
 
-    available_w = (float)canvas_w - margin * 2.0f - gap * 2.0f;
-    if (available_w < size * 3.0f)
-        size = available_w / 3.0f;
-    if (size < 22.0f)
+    available_w = (float)canvas_w - margin * 2.0f - gap * 3.0f;
+    if (available_w < size * 4.0f)
+        size = available_w / 4.0f;
+    if (size < 24.0f)
         return;
 
     g_minimap.close_rect.w = size;
@@ -2973,9 +3006,14 @@ void sdl_minimap_layout_controls(const sdl_view* d, int canvas_w,
     g_minimap.close_rect.x = (float)canvas_w - margin - size;
     g_minimap.close_rect.y = margin;
 
+    g_minimap.skeleton_hints_rect.w = size;
+    g_minimap.skeleton_hints_rect.h = size;
+    g_minimap.skeleton_hints_rect.x = g_minimap.close_rect.x - gap - size;
+    g_minimap.skeleton_hints_rect.y = margin;
+
     g_minimap.zoom_in_rect.w = size;
     g_minimap.zoom_in_rect.h = size;
-    g_minimap.zoom_in_rect.x = g_minimap.close_rect.x - gap - size;
+    g_minimap.zoom_in_rect.x = g_minimap.skeleton_hints_rect.x - gap - size;
     g_minimap.zoom_in_rect.y = margin;
 
     g_minimap.zoom_out_rect.w = size;
@@ -3058,6 +3096,65 @@ void sdl_minimap_draw_button(const SDL_FRect* rect, bool enabled,
     sdl_minimap_draw_button_symbol(rect, symbol, icon);
 }
 
+static void sdl_minimap_draw_hint_visibility_button(const SDL_FRect* rect,
+    bool visible)
+{
+    SDL_Color background = visible
+        ? (SDL_Color){20, 42, 38, 245}
+        : (SDL_Color){24, 28, 34, 245};
+    SDL_Color outline = visible
+        ? (SDL_Color){112, 190, 166, 255}
+        : (SDL_Color){150, 156, 166, 255};
+    SDL_Color icon = visible
+        ? (SDL_Color){232, 240, 236, 255}
+        : (SDL_Color){176, 182, 192, 255};
+    float left;
+    float right;
+    float top;
+    float bottom;
+    float center_x;
+    float center_y;
+    float pupil_size;
+    SDL_FRect pupil;
+
+    if (!rect || rect->w <= 0.0f || rect->h <= 0.0f)
+        return;
+
+    SDL_SetRenderDrawColor(g_state.renderer, background.r, background.g,
+        background.b, background.a);
+    SDL_RenderFillRect(g_state.renderer, rect);
+    SDL_SetRenderDrawColor(g_state.renderer, outline.r, outline.g,
+        outline.b, outline.a);
+    SDL_RenderRect(g_state.renderer, rect);
+
+    left = rect->x + rect->w * 0.23f;
+    right = rect->x + rect->w * 0.77f;
+    top = rect->y + rect->h * 0.30f;
+    bottom = rect->y + rect->h * 0.70f;
+    center_x = rect->x + rect->w * 0.5f;
+    center_y = rect->y + rect->h * 0.5f;
+    SDL_SetRenderDrawColor(g_state.renderer, icon.r, icon.g, icon.b,
+        icon.a);
+    SDL_RenderLine(g_state.renderer, left, center_y, center_x, top);
+    SDL_RenderLine(g_state.renderer, center_x, top, right, center_y);
+    SDL_RenderLine(g_state.renderer, right, center_y, center_x, bottom);
+    SDL_RenderLine(g_state.renderer, center_x, bottom, left, center_y);
+
+    pupil_size = rect->w * 0.10f;
+    pupil = (SDL_FRect){
+        center_x - pupil_size * 0.5f,
+        center_y - pupil_size * 0.5f,
+        pupil_size,
+        pupil_size
+    };
+    SDL_RenderFillRect(g_state.renderer, &pupil);
+    if (!visible) {
+        SDL_RenderLine(g_state.renderer,
+            rect->x + rect->w * 0.24f, rect->y + rect->h * 0.76f,
+            rect->x + rect->w * 0.76f, rect->y + rect->h * 0.24f);
+    }
+}
+
 void sdl_minimap_draw_controls(sdl_view* d, int canvas_w, int canvas_h)
 {
     if (!g_minimap.active || !d)
@@ -3068,6 +3165,8 @@ void sdl_minimap_draw_controls(sdl_view* d, int canvas_w, int canvas_h)
         g_minimap.zoom_out_enabled, 0);
     sdl_minimap_draw_button(&g_minimap.zoom_in_rect,
         g_minimap.zoom_in_enabled, 1);
+    sdl_minimap_draw_hint_visibility_button(&g_minimap.skeleton_hints_rect,
+        g_minimap.skeleton_hints_visible);
     sdl_minimap_draw_button(&g_minimap.close_rect, true, 2);
 }
 
@@ -3094,19 +3193,39 @@ void sdl_minimap_draw_prompt(sdl_view* d, int canvas_w, int canvas_h)
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
     SDL_RenderFillRect(g_state.renderer, &bar);
 
-    if (steamdeck_controls_active())
-        prompt = "Minimap  d-pad pan  L1/R1 zoom  A/B closes";
-    else if (d->cols >= 66)
-        prompt = "Minimap  drag/dir pan  +/- wheel pinch zoom  Esc closes";
-    else
-        prompt = "Minimap  drag/dir pan  +/- zoom  Esc closes";
+    if (steamdeck_controls_active()) {
+        if (d->cols >= 46)
+            prompt = "Minimap d-pad pan L1/R1 zoom Y hints A/B close";
+        else if (d->cols >= 38)
+            prompt = "D-pad pan L1/R1 zoom Y hints A/B close";
+        else if (d->cols >= 36)
+            prompt = "D-pad pan L1/R1 zoom Y hints B close";
+        else if (d->cols >= 15)
+            prompt = "Y hints B close";
+        else if (d->cols >= 7)
+            prompt = "Y hints";
+        else
+            prompt = "Y";
+    } else if (d->cols >= 53) {
+        prompt = "Minimap drag/dir pan +/- wheel pinch zoom H hints Esc";
+    } else if (d->cols >= 41) {
+        prompt = "Minimap drag/dir pan +/- zoom H hints Esc";
+    } else if (d->cols >= 37) {
+        prompt = "Map drag/dir pan +/- zoom H hints Esc";
+    } else if (d->cols >= 24) {
+        prompt = "Pan +/- zoom H hints Esc";
+    } else if (d->cols >= 14) {
+        prompt = "+/- zoom H Esc";
+    } else if (d->cols >= 5) {
+        prompt = "+/- H";
+    } else if (d->cols >= 3) {
+        prompt = "+/-";
+    } else {
+        prompt = "+";
+    }
 
     len = (int)strlen(prompt);
-    if (len > d->cols)
-        len = d->cols;
     col = (d->cols - len) / 2;
-    if (col < 0)
-        col = 0;
 
     sdl_render_mono_text(d, col, row, len, prompt, text);
 }

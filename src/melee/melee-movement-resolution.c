@@ -438,6 +438,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                 if (cave_any_closed_door_bold(ny, nx))
                 {
                     cave_set_feat(ny, nx, FEAT_BROKEN);
+                    sound_at(MSG_BASHDOOR, ny, nx);
 
                     if (msg)
                     {
@@ -454,6 +455,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                 else
                 {
                     cave_set_feat(ny, nx, FEAT_FLOOR);
+                    sound_at(MSG_DIG, ny, nx);
 
                     if (msg)
                     {
@@ -526,6 +528,8 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                     // monster noise
                     m_ptr->noise += 15;
                 }
+
+                sound_at(MSG_DIG, ny, nx);
             }
 
             /* Doors */
@@ -581,6 +585,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                         cave_set_feat(ny, nx, FEAT_BROKEN);
                     else
                         cave_set_feat(ny, nx, FEAT_OPEN);
+                    sound_at(MSG_BASHDOOR, ny, nx);
                 }
 
                 /* Monster opens the door */
@@ -595,6 +600,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
 
                         /* Unlock the door */
                         cave_set_feat(ny, nx, FEAT_DOOR_HEAD + 0x00);
+                        sound_at(MSG_OPENDOOR, ny, nx);
 
                         /* Do not move */
                         do_move = false;
@@ -614,6 +620,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
 
                         /* Open the door */
                         cave_set_feat(ny, nx, FEAT_OPEN);
+                        sound_at(MSG_OPENDOOR, ny, nx);
 
                         /* Step into doorway sometimes */
                         if (!one_in_(5))

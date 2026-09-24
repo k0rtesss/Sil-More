@@ -229,6 +229,8 @@ struct sdl_config {
     int terminal_menu_scale_offset;
     // Use focus-dependent compact layouts for Inventory-style browsers.
     bool compact_inventory_menus;
+    // Use the compact terminal character sheet when opening the sheet in SDL.
+    bool debug_character_sheet;
     // Extra scale steps applied when mobile gameplay first appears.
     int mobile_starting_zoom_offset;
     // On mobile, request a real portrait device orientation.  Landscape

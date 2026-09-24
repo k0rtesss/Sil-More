@@ -1591,7 +1591,7 @@ D: from your very eyes.
 
 
 N:133:Shadow
-O:FACING_RIGHT
+O:FACING_LEFT
 Q:6c92b6a7a9e4a63e
 W:13:3
 G:W:d

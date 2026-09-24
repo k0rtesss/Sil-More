@@ -2062,6 +2062,7 @@ extern void sdl_minimap_begin(void);
 extern void sdl_minimap_end(void);
 extern void sdl_minimap_focus(int y, int x);
 extern bool sdl_minimap_adjust_zoom(int delta);
+extern void sdl_minimap_toggle_skeleton_hints(void);
 extern bool sdl_minimap_pan(int dx, int dy);
 extern bool sdl_minimap_take_hint_click(int* out_index);
 extern void c_put_str(byte attr, cptr str, int row, int col);

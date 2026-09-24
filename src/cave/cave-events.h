@@ -2,10 +2,11 @@
 #define INCLUDED_CAVE_EVENTS_H
 
 #include "h-basic.h"
+#include "sound-spatial.h"
 
-#define CAVE_FLOWING_LIQUID_SOUND_RADIUS 5
-#define CAVE_LAVA_SOUND_RADIUS 5
-#define CAVE_FORGE_SOUND_RADIUS 5
+#define CAVE_FLOWING_LIQUID_SOUND_RADIUS SOUND_RADIUS_LOCAL
+#define CAVE_LAVA_SOUND_RADIUS SOUND_RADIUS_LOCAL
+#define CAVE_FORGE_SOUND_RADIUS SOUND_RADIUS_LOCAL
 
 enum cave_event_kind {
     CAVE_EVENT_NONE, CAVE_EVENT_CRACK, CAVE_EVENT_COLLAPSE,
@@ -46,6 +47,9 @@ int cave_forge_sound_level_at(int y, int x);
 /* Fighting masks hearing of player sounds, including actions while stationary. */
 int cave_fighting_mask_at(int y, int x);
 void cave_events_terrain_changed(void);
+/* Playback-only shortest acoustic path; -1 if blocked. Closed doors cost five
+ * tiles, and diagonals cannot leak through closed corners. */
+int cave_audio_distance(int source_y, int source_x, int listener_y, int listener_x);
 const cave_world_event* cave_events_state(void);
 u32b cave_events_next_serial(void);
 void cave_events_restore(const cave_world_event* events, u32b serial);

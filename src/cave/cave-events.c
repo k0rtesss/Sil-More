@@ -25,6 +25,9 @@ static s32b ambient_notice_turn = -200;
 static bool in_ambient_noise;
 static u32b ambient_revision, announced[CAVE_EVENTS_MAX];
 static int queue[SOUND_CELLS], head, tail, count;
+static byte audio_field[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static u32b audio_revision;
+static int audio_y = -1, audio_x = -1;
 static bool queued[MAX_DUNGEON_HGT][MAX_DUNGEON_WID], player_moved;
 static const char* event_noise(int kind);
 
@@ -59,7 +62,7 @@ static void begin_field(void)
 }
 /* Positive costs and monotonically increasing, capped intensities bound work.
  * A cell is queued only once at a time, even for a field with many sources. */
-static void propagate(byte field[MAX_DUNGEON_HGT][MAX_DUNGEON_WID])
+static void propagate(byte field[MAX_DUNGEON_HGT][MAX_DUNGEON_WID], bool playback)
 {
     while (count)
     {
@@ -70,16 +73,67 @@ static void propagate(byte field[MAX_DUNGEON_HGT][MAX_DUNGEON_WID])
         {
             int ny = y + dy, nx = x + dx, strength;
             if ((!dy && !dx) || !sound_open(ny, nx)) continue;
-            /* Neither walls nor closed doors permit diagonal corner leaks. */
-            if (dy && dx && (!sound_open(y, nx) || !sound_open(ny, x)
-                || cave_any_closed_door_bold(y, nx)
-                || cave_any_closed_door_bold(ny, x))) continue;
+            if (dy && dx)
+            {
+                bool side_a = sound_open(y, nx) && !cave_any_closed_door_bold(y, nx);
+                bool side_b = sound_open(ny, x) && !cave_any_closed_door_bold(ny, x);
+                /* Playback can bend around an exposed corner. Two touching
+                 * walls/closed doors still seal it. Preserve the existing
+                 * stricter rule for gameplay noise and monster detection. */
+                if (playback ? (!side_a && !side_b) : (!side_a || !side_b))
+                    continue;
+            }
             strength = field[y][x] - (cave_any_closed_door_bold(ny, nx) ? 5 : 1);
             if (strength <= field[ny][nx]) continue;
             field[ny][nx] = strength; enqueue(ny, nx);
         }
     }
 }
+int cave_audio_distance(int source_y, int source_x, int listener_y, int listener_x)
+{
+    /* One listener field serves every effect/fixture, rebuilt only on movement
+     * or terrain change. It does not read or write the AI hearing flow. */
+    const int strength = 64;
+    if (!p_ptr || !cave_feat || !in_bounds(source_y, source_x)
+        || !in_bounds(listener_y, listener_x))
+        return -1;
+    if (source_y == listener_y && source_x == listener_x)
+        return 0;
+    if (audio_revision != revision || audio_y != listener_y || audio_x != listener_x)
+    {
+        memset(audio_field, 0, sizeof(audio_field));
+        begin_field();
+        audio_field[listener_y][listener_x] = strength;
+        enqueue(listener_y, listener_x);
+        propagate(audio_field, true);
+        audio_revision = revision;
+        audio_y = listener_y;
+        audio_x = listener_x;
+    }
+    if (audio_field[source_y][source_x])
+        return strength - audio_field[source_y][source_x]
+            - (cave_any_closed_door_bold(source_y, source_x) ? 4 : 0);
+    /* Wall-mounted fixtures and digging/collapse sounds radiate into all
+     * eight exposed neighbours. The source is on the wall's surface: reaching
+     * a diagonal neighbour does not traverse either adjacent wall tile. */
+    if (cave_wall_bold(source_y, source_x)
+        && !cave_any_closed_door_bold(source_y, source_x))
+    {
+        int best = 0;
+        for (int dy = -1; dy <= 1; ++dy)
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+            int y = source_y + dy, x = source_x + dx;
+            if ((!dy && !dx) || !in_bounds(y, x)) continue;
+            if (in_bounds(y, x) && sound_open(y, x))
+                best = MAX(best, audio_field[y][x]);
+        }
+        if (best > 1)
+            return strength - best + 1;
+    }
+    return -1;
+}
+
 static bool recorded(const cave_world_event* e)
 {
     return e->serial && e->kind > CAVE_EVENT_NONE && e->kind < CAVE_EVENT_MAX
@@ -97,7 +151,7 @@ static int event_strength(int i, int y, int x)
     {
         memset(fields[i], 0, sizeof(fields[i])); begin_field();
         fields[i][e->y][e->x] = MIN(64, e->volume);
-        enqueue(e->y, e->x); propagate(fields[i]);
+        enqueue(e->y, e->x); propagate(fields[i], false);
         field_revision[i] = revision; field_serial[i] = e->serial;
     }
     return MAX(0, fields[i][y][x] - ((turn - e->turn) / 10) * 2);
@@ -209,7 +263,7 @@ static void refresh_ambient_fields(void)
                 ambient[yy][xx] = 5;
             if (ambient[yy][xx]) enqueue(yy, xx);
         }
-    propagate(ambient);
+    propagate(ambient, false);
 
     /* Reuse the same wall/door-aware propagation for the river field. This
      * deliberately reaches open cells beside the liquid, not just liquid
@@ -219,7 +273,7 @@ static void refresh_ambient_fields(void)
         for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
             if (flowing_liquid_ambient[yy][xx])
                 enqueue(yy, xx);
-    propagate(flowing_liquid_ambient);
+    propagate(flowing_liquid_ambient, true);
 
     /* Still water and acid pools have an independent field and loop, allowing
      * them to mix with nearby running water at their respective distances. */
@@ -228,7 +282,7 @@ static void refresh_ambient_fields(void)
         for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
             if (still_liquid_ambient[yy][xx])
                 enqueue(yy, xx);
-    propagate(still_liquid_ambient);
+    propagate(still_liquid_ambient, true);
 
     /* Lava has its own loop, but uses the same wall/door-aware propagation. */
     begin_field();
@@ -236,7 +290,7 @@ static void refresh_ambient_fields(void)
         for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
             if (lava_ambient[yy][xx])
                 enqueue(yy, xx);
-    propagate(lava_ambient);
+    propagate(lava_ambient, true);
 
     /* Forge fire uses the same wall/door-aware propagation as the other
      * environmental loops, so nearby open cells also hear it. */
@@ -245,7 +299,7 @@ static void refresh_ambient_fields(void)
         for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
             if (forge_ambient[yy][xx])
                 enqueue(yy, xx);
-    propagate(forge_ambient);
+    propagate(forge_ambient, true);
 
     ambient_turn = turn / 10;
     ambient_revision = revision;
@@ -289,7 +343,7 @@ static void refresh_bridge_work_field(void)
                     enqueue(yy, xx);
                 }
     }
-    propagate(bridge_work_ambient);
+    propagate(bridge_work_ambient, true);
     bridge_work_field_turn = turn;
     bridge_work_field_revision = bridge_work_revision;
     bridge_work_field_terrain_revision = revision;
@@ -384,11 +438,11 @@ void cave_events_process(void)
         else direction = dx < 0 ? "to the west" : "to the east";
         msg_format("You hear %s %s.", event_noise(e->kind), direction);
         if (e->kind == CAVE_EVENT_CRACK || e->kind == CAVE_EVENT_COLLAPSE)
-            sound_at_environment_level(MSG_TRAP_DEADFALL, strength, e->volume);
+            sound_at(MSG_TRAP_DEADFALL, e->y, e->x);
         else if (e->kind == CAVE_EVENT_FLOOD)
-            sound_at_environment_level(MSG_TRAP_FLOOD, strength, e->volume);
+            sound_at(MSG_TRAP_FLOOD, e->y, e->x);
         else if (e->kind == CAVE_EVENT_FREEZE || e->kind == CAVE_EVENT_THAW)
-            sound_at_environment_level(MSG_ICE, strength, e->volume);
+            sound_at(MSG_ICE, e->y, e->x);
         last_notice[e->kind] = turn; notices++;
     }
     (void)cave_sound_mask_at(p_ptr->py, p_ptr->px);

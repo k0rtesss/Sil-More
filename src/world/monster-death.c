@@ -1291,7 +1291,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
 
             else
             {
-                message_format(MSG_KILL, m_ptr->r_idx, "%^s%s", m_name, note);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "%^s%s", m_name, note);
             }
         }
 
@@ -1301,8 +1302,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
             // You only get messages for unseen monsters if you kill them
             if ((who < 0)
                 && (distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px) == 1))
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "You have killed %s.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "You have killed %s.", m_name);
             // else			message_format(MSG_KILL, m_ptr->r_idx,
             // "%^s has been killed.", m_name);
         }
@@ -1311,22 +1312,22 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
         else if (monster_nonliving(r_ptr))
         {
             if (who < 0)
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "You have destroyed %s.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "You have destroyed %s.", m_name);
             else
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "%^s has been destroyed.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "%^s has been destroyed.", m_name);
         }
 
         /* Death by Physical attack -- living monster */
         else
         {
             if (who < 0)
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "You have slain %s.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "You have slain %s.", m_name);
             else
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "%^s has been slain.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "%^s has been slain.", m_name);
         }
 
         /* Generate treasure */

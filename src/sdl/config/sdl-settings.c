@@ -15,6 +15,9 @@ void get_sdl_config_info(char* buf, size_t size)
         "Compact Inventory Menus: %s\n",
         config.compact_inventory_menus ? "Yes" : "No");
     offset += (size_t)strnfmt(buf + offset, size - offset,
+        "Character Sheet Mode: %s\n",
+        config.debug_character_sheet ? "debug" : "SDL");
+    offset += (size_t)strnfmt(buf + offset, size - offset,
         "Mobile Starting Zoom Offset: %+d\n",
         config.mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)

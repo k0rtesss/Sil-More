@@ -2,6 +2,7 @@
 /* Exercise the real backend with a dummy audio device, without starting a game. */
 #include "../../src/sdl-sound.c"
 #include <assert.h>
+#include <limits.h>
 
 static maxima limits;
 maxima* z_info = &limits;
@@ -50,13 +51,211 @@ int distance(int y1, int x1, int y2, int x2)
     int dy = abs(y1-y2), dx = abs(x1-x2);
     return MAX(dx,dy) + MIN(dx,dy)/2;
 }
-static int test_player_noise_distance;
-int flow_dist(int which_flow, int y, int x)
+bool character_generated;
+static byte test_features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+byte (*cave_feat)[MAX_DUNGEON_WID] = test_features;
+static int test_acoustic_distance = -1;
+static int test_river_level, test_still_level, test_lava_level, test_forge_level, test_bridge_level;
+static float test_torch_gain;
+int cave_audio_distance(int sy, int sx, int ly, int lx)
 {
-    (void)y;
-    (void)x;
-    assert(which_flow == FLOW_PLAYER_NOISE);
-    return test_player_noise_distance;
+    return test_acoustic_distance >= 0 ? test_acoustic_distance
+        : MAX(abs(sy-ly), abs(sx-lx));
+}
+int cave_flowing_water_sound_level_at(int y, int x) { (void)y; (void)x; return test_river_level; }
+int cave_still_liquid_sound_level_at(int y, int x) { (void)y; (void)x; return test_still_level; }
+int cave_lava_sound_level_at(int y, int x) { (void)y; (void)x; return test_lava_level; }
+int cave_forge_sound_level_at(int y, int x) { (void)y; (void)x; return test_forge_level; }
+int cave_bridge_work_sound_level_at(int y, int x) { (void)y; (void)x; return test_bridge_level; }
+float cave_fixture_sound_gain_at(int y, int x) { (void)y; (void)x; return test_torch_gain; }
+static MIX_Track* last_sfx(void)
+{
+    return sound_state.sfx_tracks[(sound_state.next_sfx_track
+        + SDL_SOUND_MAX_ACTIVE_TRACKS - 1) % SDL_SOUND_MAX_ACTIVE_TRACKS];
+}
+
+static void expect_gain(MIX_Track* track, float expected)
+{
+    assert(SDL_fabsf(MIX_GetTrackGain(track) - expected) < 0.0001f);
+}
+
+static void test_stealth_footsteps(void)
+{
+    assert(sound_footstep_stealth_gain(0) == 1.0f);
+    assert(SDL_fabsf(sound_footstep_stealth_gain(5) - 0.9f) < 0.0001f);
+    assert(SDL_fabsf(sound_footstep_stealth_gain(-5) - 1.1f) < 0.0001f);
+    assert(SDL_fabsf(sound_footstep_stealth_gain(10) - (13.0f / 15.0f)) < 0.0001f);
+    assert(SDL_fabsf(sound_footstep_stealth_gain(20) - 0.84f) < 0.0001f);
+    assert(sound_footstep_stealth_gain(INT_MAX) >= 0.8f);
+    assert(sound_footstep_stealth_gain(INT_MAX) < sound_footstep_stealth_gain(20));
+    assert(sound_footstep_stealth_gain(INT_MIN) <= 1.2f);
+    assert(sound_footstep_stealth_gain(INT_MIN) > sound_footstep_stealth_gain(-20));
+
+    player.py = player.px = 5;
+    test_features[5][5] = FEAT_FLOOR;
+    player.skill_use[S_STL] = 5;
+    sound(MSG_WALK);
+    MIX_Track* dry = last_sfx();
+    expect_gain(dry, 0.9f);
+    player.px = 6;
+    test_features[5][6] = FEAT_WATER;
+    sound(MSG_WALK);
+    MIX_Track* water = last_sfx();
+    expect_gain(water, 0.9f);
+    player.skill_use[S_STL] = -5;
+    sound(MSG_WALK);
+    MIX_Track* loud = last_sfx();
+    expect_gain(loud, 1.1f);
+
+    /* Movement updates distance but preserves the emitting step's skill.
+     * These assertions catch both a lost modifier and applying it twice. */
+    player.px = 8;
+    sdl_sound_update_environment();
+    SDL_Delay(SOUND_GAIN_RAMP_MS + 80);
+    expect_gain(dry, 0.4f);
+    expect_gain(water, 0.625f);
+    expect_gain(loud, 1.1f * 25.0f / 36.0f);
+    sound_at(MSG_WALK, 5, 9); /* another source does not inherit our skill */
+    expect_gain(last_sfx(), 1.0f);
+    sound(MSG_HIT);
+    expect_gain(last_sfx(), 1.0f);
+    sound_state.volume_walk = 0.3f;
+    sound(MSG_WALK);
+    expect_gain(last_sfx(), 0.33f);
+    sound_state.volume_walk = 1.0f;
+
+    player.skill_use[S_STL] = 5;
+    sound_delayed(MSG_WALK, 80);
+    player.skill_use[S_STL] = -5;
+    player.px = 9;
+    sdl_sound_update_environment();
+    SDL_Delay(130);
+    expect_gain(last_sfx(), 0.9f);
+    assert(!g_delayed_sounds);
+
+    int next = sound_state.next_sfx_track;
+    player.leaping = true;
+    sound(MSG_WALK);
+    assert(next == sound_state.next_sfx_track);
+    player.leaping = false;
+    sound_state.enable_walk = false;
+    sound(MSG_WALK);
+    assert(next == sound_state.next_sfx_track);
+    sound_state.enable_walk = true;
+    player.skill_use[S_STL] = 0;
+    player.px = 5;
+    MIX_StopAllTracks(sound_state.mixer, 0);
+}
+
+static void test_spatial_playback(void)
+{
+    test_acoustic_distance = -1;
+    player.py = player.px = 5;
+    player.cur_map_hgt = 40; player.cur_map_wid = 40;
+    player.playing = character_generated = true;
+    sound_state.volume_combat = sound_state.volume_inventory = sound_state.volume_walk = 1.0f;
+    sound_state.enable_river = sound_state.enable_lava = sound_state.enable_torches = true;
+    sound_state.enable_forge = sound_state.enable_bridge = true;
+    sound_state.volume_river = sound_state.volume_lava = sound_state.volume_torches = 1.0f;
+    sound_state.volume_forge = sound_state.volume_bridge = 1.0f;
+    MIX_StopAllTracks(sound_state.mixer, 0);
+    /* A long decoded recording makes playback assertions independent of the
+     * duration of a particular hit variant. Production routing stays intact. */
+    sound_state.bank.sound_counts[MSG_HIT] = 1;
+    SDL_strlcpy(sound_state.bank.sound_files[MSG_HIT][0],
+        "lib/xtra/" RIVER_LOOP_SOUND_PATH, SDL_SOUND_NAME_LEN);
+    sound_state.bank.water_walk_count = 1;
+    SDL_strlcpy(sound_state.bank.water_walk_files[0],
+        "lib/xtra/" RIVER_LOOP_SOUND_PATH, SDL_SOUND_NAME_LEN);
+    sound_state.bank.sound_counts[MSG_WALK] = 1;
+    SDL_strlcpy(sound_state.bank.sound_files[MSG_WALK][0],
+        "lib/xtra/" RIVER_LOOP_SOUND_PATH, SDL_SOUND_NAME_LEN);
+    test_stealth_footsteps();
+    sound_at(MSG_HIT, 5, 6);
+    MIX_Track* near = last_sfx();
+    expect_gain(near, 1.0f);
+    sound_at(MSG_HIT, 5, 16);
+    MIX_Track* far = last_sfx();
+    expect_gain(far, 121.0f / 441.0f);
+    assert(near != far && MIX_TrackPlaying(near) && MIX_TrackPlaying(far));
+    sound_at(MSG_HIT, 5, 26);
+    expect_gain(last_sfx(), 1.0f / 441.0f);
+    int next = sound_state.next_sfx_track;
+    sound_at(MSG_HIT, 5, 27);
+    assert(next == sound_state.next_sfx_track);
+    monster_type mon = { .r_idx = 21, .fy = 5, .fx = 17, .alertness = ALERTNESS_ALERT };
+    monster_sound_force(&mon, MONSTER_SOUND_IDLE);
+    assert(next == sound_state.next_sfx_track); /* forcing cannot bypass radius */
+    mon.fx = 16;
+    monster_sound_force(&mon, MONSTER_SOUND_IDLE);
+    expect_gain(last_sfx(), 1.0f / 121.0f);
+    /* Water footsteps obey the same gain, using the source tile's material. */
+    test_features[5][11] = FEAT_WATER;
+    sound_at(MSG_WALK, 5, 11);
+    expect_gain(last_sfx(), 1.0f / 36.0f);
+
+    player.px = 15;
+    sdl_sound_update_environment();
+    SDL_Delay(SOUND_GAIN_RAMP_MS + 80);
+    expect_gain(near, 169.0f / 441.0f);
+    expect_gain(far, 1.0f);
+
+    /* The timer retains the source and the main thread refreshes queued gain
+     * if the listener moves before impact. No dungeon reads on timer threads. */
+    player.px = 5;
+    sound_delayed_at(MSG_HIT, 80, 5, 16);
+    player.px = 15;
+    sdl_sound_update_environment();
+    SDL_Delay(130);
+    expect_gain(last_sfx(), 1.0f);
+    assert(!g_delayed_sounds);
+
+    test_river_level = 1; test_still_level = 7;
+    test_lava_level = test_forge_level = test_bridge_level = 7;
+    test_torch_gain = 1.0f;
+    sdl_sound_update_environment();
+    SDL_Delay(SOUND_GAIN_RAMP_MS + 80);
+    expect_gain(sound_state.river_loop_track, 0.5f / 36.0f);
+    expect_gain(sound_state.still_water_loop_track, 0.5f);
+    expect_gain(sound_state.torch_loop_track, 0.5f);
+    expect_gain(sound_state.lava_loop_track, 0.5f);
+    expect_gain(sound_state.forge_loop_track, 0.5f);
+    expect_gain(sound_state.bridge_work_loop_track, 0.5f);
+    for (int i = 0; i < ENVIRONMENT_LOOP_COUNT; ++i)
+        assert(MIX_TrackPlaying(environment_spatial[i].track));
+    /* Reversing a fade keeps the same loop running, and repeated refreshes
+     * cannot extend a fade forever. Test interpolation without timer races. */
+    SDL_LockMutex(g_sound_mutex);
+    spatial_track* loop = &environment_spatial[0];
+    sdl_sound_target_gain(loop, 0.0f);
+    Uint64 started = loop->ramp_start_ms;
+    float halfway = sdl_sound_ramp_gain(loop, started + SOUND_GAIN_RAMP_MS / 2);
+    assert(halfway > 0.0f && halfway < loop->start_gain);
+    sdl_sound_target_gain(loop, 0.0f);
+    assert(loop->ramp_start_ms == started);
+    sdl_sound_target_gain(loop, 0.5f);
+    SDL_UnlockMutex(g_sound_mutex);
+    assert(MIX_TrackPlaying(loop->track));
+    test_river_level = 0;
+    sdl_sound_update_environment();
+    SDL_Delay(SOUND_GAIN_RAMP_MS + 80);
+    assert(!MIX_TrackPlaying(sound_state.river_loop_track));
+    assert(MIX_TrackPlaying(sound_state.still_water_loop_track));
+    sound_state.enable_lava = false;
+    sdl_sound_update_environment();
+    SDL_Delay(SOUND_GAIN_RAMP_MS + 80);
+    assert(!MIX_TrackPlaying(sound_state.lava_loop_track));
+    assert(MIX_TrackPlaying(sound_state.forge_loop_track));
+
+    sound_delayed_at(MSG_HIT, 50, 5, 16);
+    next = sound_state.next_sfx_track;
+    sdl_sound_stop_environment();
+    SDL_Delay(100);
+    assert(sound_state.next_sfx_track == next);
+    assert(!g_delayed_sounds);
+    for (int i = 0; i < SDL_SOUND_MAX_ACTIVE_TRACKS; ++i)
+        assert(!MIX_TrackPlaying(sound_state.sfx_tracks[i]));
+    character_generated = false;
 }
 int main(int argc, char** argv)
 {
@@ -94,7 +293,7 @@ int main(int argc, char** argv)
     sound_state.enable_monster_hits = true;
     sound_state.volume_monster_hits = 1.0f;
     monster_type mon = {0};
-    mon.r_idx = 21; mon.alertness = ALERTNESS_ALERT; mon.fx = 21;
+    mon.r_idx = 21; mon.alertness = ALERTNESS_ALERT; mon.fx = 22;
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
     assert(!g_monster_sounds);
     mon.fx = 1; use_sound = false;
@@ -190,11 +389,11 @@ int main(int argc, char** argv)
     monster_sound(&mon, MONSTER_SOUND_DAMAGE);
     assert(monster_entry_has_audio(g_monster_sounds));
     assert(strstr(g_monster_sounds->files[0], "Bat_Damage.ogg"));
-    mon.r_idx = 21; mon.fx = 1; test_player_noise_distance = 11;
+    mon.r_idx = 21; mon.fx = 1; test_acoustic_distance = 12;
     monster_sound_entry* before = g_monster_sounds;
     for (int i = 0; i < 1000; ++i) monster_sound(&mon, MONSTER_SOUND_IDLE);
     assert(g_monster_sounds == before);
-    test_player_noise_distance = 10;
+    test_acoustic_distance = 11;
     mon.alertness = ALERTNESS_UNWARY - 1;
     for (int i = 0; i < 1000; ++i) monster_sound(&mon, MONSTER_SOUND_IDLE);
     assert(g_monster_sounds == before);
@@ -246,8 +445,10 @@ int main(int argc, char** argv)
     sdl_sound_shutdown(); assert(!g_monster_sounds);
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
     assert(monster_entry_has_audio(g_monster_sounds));
+    test_spatial_playback();
     sdl_sound_shutdown(); SDL_Quit();
     printf("PASS: type toggles and persistence, range, mute, per-race playback, missing sounds, idle (%d/1000), "
+        "bounded stealth footsteps, spatial gain, moving listener, delayed origins, six-loop mixing/fades, "
         "cache cleanup/recreation; decoded %d OGG files.\n", emitted, argc - 1);
     return 0;
 }

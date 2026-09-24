@@ -3,8 +3,6 @@
 #include "externs.h"
 #include "sdl-sound.h"
 
-#define MONSTER_IDLE_SOUND_MAX_PATH 10
-
 /*
  * Flush the screen, make a noise
  */
@@ -45,42 +43,25 @@ void sound(int val)
     sdl_sound_handle(val);
 }
 
-/* Play a one-shot environmental sound with the same distance curve as the
- * ambient water, lava, and forge loops. */
-void sound_at_environment_level(int val, int level, int max_level)
+void sound_at(int val, int y, int x)
 {
-    if (!use_sound)
-        return;
-
-    sdl_sound_handle_at_environment_level(val, level, max_level);
+    if (use_sound)
+        sdl_sound_handle_at(val, y, x);
 }
 
-/* Nearby unseen monsters can be heard, but audio does not reveal their grid or
- * alter the gameplay noise/detection system. Idle sounds use the gameplay
- * noise flow for walls and doors; other monster sounds keep the broad audio
- * range used by their existing feedback. */
+/* Sleeping monsters remain silent. Forced trap cues skip the idle probability
+ * and sleep gates, but never bypass spatial attenuation. */
 static void monster_sound_internal(const monster_type* m_ptr, int action,
     bool force_idle)
 {
     if (!use_sound || !m_ptr || !m_ptr->r_idx)
         return;
 
-    if (action == MONSTER_SOUND_IDLE)
-    {
-        if (!force_idle && (m_ptr->alertness < ALERTNESS_UNWARY
-            || flow_dist(FLOW_PLAYER_NOISE, m_ptr->fy, m_ptr->fx)
-                > MONSTER_IDLE_SOUND_MAX_PATH))
-            return;
-    }
-    else if (distance(p_ptr->py, p_ptr->px, m_ptr->fy, m_ptr->fx) > MAX_SIGHT)
-    {
+    if (action == MONSTER_SOUND_IDLE && !force_idle
+        && m_ptr->alertness < ALERTNESS_UNWARY)
         return;
-    }
 
-    if (force_idle)
-        sdl_sound_monster_force(m_ptr->r_idx, action);
-    else
-        sdl_sound_monster(m_ptr->r_idx, action);
+    sdl_sound_monster_at(m_ptr->r_idx, action, m_ptr->fy, m_ptr->fx, force_idle);
 }
 
 void monster_sound(const monster_type* m_ptr, int action)
@@ -104,4 +85,10 @@ void sound_delayed(int val, unsigned int delay_ms)
         return;
 
     sdl_sound_handle_delayed(val, (Uint32)delay_ms);
+}
+
+void sound_delayed_at(int val, unsigned int delay_ms, int y, int x)
+{
+    if (use_sound)
+        sdl_sound_handle_delayed_at(val, (Uint32)delay_ms, y, x);
 }

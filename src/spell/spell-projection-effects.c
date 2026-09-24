@@ -95,6 +95,7 @@ bool project_f(
                 /* Unlock the door */
                 cave_set_feat(y, x, FEAT_DOOR_HEAD + 0x00);
 
+                sound_at(MSG_OPENDOOR, y, x);
                 msg_print("You hear a 'click'.");
             }
             else if (result <= 10)
@@ -104,6 +105,7 @@ bool project_f(
 
                 /* Open the door */
                 cave_set_feat(y, x, FEAT_OPEN);
+                sound_at(MSG_OPENDOOR, y, x);
 
                 /* Update the flow code */
                 p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
@@ -123,6 +125,7 @@ bool project_f(
             {
                 /* Break the door */
                 cave_set_feat(y, x, FEAT_BROKEN);
+                sound_at(MSG_BASHDOOR, y, x);
 
                 /* Update the flow code */
                 p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
@@ -1596,7 +1599,8 @@ bool project_m(
             if ((do_fear) && (m_ptr->ml) && (!suppress_message))
             {
                 /* Message */
-                message_format(MSG_FLEE, m_ptr->r_idx, "%^s cowers.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_FLEE,
+                    m_ptr->r_idx, "%^s cowers.", m_name);
             }
 
             /* Hack -- handle sleep */

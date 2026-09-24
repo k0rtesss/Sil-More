@@ -3,6 +3,7 @@
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
+#include "ui/character-screen.h"
 
 extern struct sound_config g_sound_config;
 #include "externs.h"
@@ -1082,6 +1083,26 @@ void do_cmd_character_sheet(void)
     /* Forever */
     while (1)
     {
+        if (config.debug_character_sheet)
+        {
+            int wid = 80;
+            int hgt = 24;
+            const char* prompt = "DEBUG: any key returns to the game";
+            bool saved_hide_cursor = hide_cursor;
+
+            display_player(DISPLAY_PLAYER_MODE_COMPACT_STATS_SKILLS);
+            Term_get_size(&wid, &hgt);
+            if (hgt > 0)
+                c_put_str(TERM_SLATE, prompt, hgt - 1,
+                    MAX(0, (wid - (int)strlen(prompt)) / 2));
+            Term_fresh();
+
+            hide_cursor = true;
+            (void)inkey();
+            hide_cursor = saved_hide_cursor;
+            break;
+        }
+
         bool steamdeck = steamdeck_controls_active();
         character_sheet_item sheet_items[CHARACTER_SHEET_MAX_ITEMS];
         int sheet_item_count;

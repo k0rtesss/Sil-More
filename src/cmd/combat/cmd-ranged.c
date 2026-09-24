@@ -688,6 +688,7 @@ void do_cmd_fire(int quiver)
                 if (!ghost_arrow)
                 {
                     hit_wall = true;
+                    sound_at(MSG_HITWALL, ny, nx);
 
                     // record resting place of arrow
                     final_y = y;
@@ -975,6 +976,8 @@ void do_cmd_fire(int quiver)
                     // no negative damage
                     if (net_dam < 0)
                         net_dam = 0;
+
+                    sound_at((net_dam > 0) ? MSG_HIT : MSG_ARMOR, y, x);
 
                     break_mercy_oath(m_ptr, net_dam);
                     break_valorous_oath(m_ptr, net_dam, ATT_MAIN, -1);  // Direct archery shot
@@ -2241,6 +2244,7 @@ void do_cmd_throw(bool automatic)
         if (!cave_floor_bold(ny, nx))
         {
             hit_wall = true;
+            sound_at(MSG_HITWALL, ny, nx);
             log_trace("do_cmd_throw: hit wall at i=%d, breaking loop before updating y,x", i);
 
             // Show collision
@@ -2601,6 +2605,8 @@ void do_cmd_throw(bool automatic)
                 // no negative damage
                 if (net_dam < 0)
                     net_dam = 0;
+
+                sound_at((net_dam > 0) ? MSG_HIT : MSG_ARMOR, y, x);
 
                 break_mercy_oath(m_ptr, net_dam);
                 break_valorous_oath(m_ptr, net_dam, ATT_MAIN, -1);  // Direct thrown weapon

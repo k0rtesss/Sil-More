@@ -2746,7 +2746,8 @@ void sdl_minimap_draw_hint_destinations(const SDL_FRect* map_dst, int min_y,
     sdl_hint_destination_pending_label labels[SDL_HINT_DESTINATION_LABEL_MAX];
     int label_count = 0;
 
-    if (!map_dst || max_y < min_y || max_x < min_x)
+    if (!g_minimap.skeleton_hints_visible || !map_dst
+        || max_y < min_y || max_x < min_x)
         return;
     grid_h = map_dst->h / (float)(max_y - min_y + 1);
     had_clip = SDL_RenderClipEnabled(g_state.renderer);
@@ -2802,7 +2803,8 @@ void sdl_minimap_draw_hint_sources(const SDL_FRect* map_dst, int min_y,
     float grid_w;
     float grid_h;
 
-    if (!map_dst || map_rows <= 0 || map_cols <= 0)
+    if (!g_minimap.skeleton_hints_visible || !map_dst
+        || map_rows <= 0 || map_cols <= 0)
         return;
 
     count = hint_messages_count_for_save();
@@ -2941,6 +2943,115 @@ static void sdl_minimap_draw_focused_location(const SDL_FRect* map_dst,
     }
 }
 
+static bool sdl_minimap_stair_selection_color(byte feature,
+    SDL_Color* color)
+{
+    if (!color)
+        return false;
+
+    switch (feature) {
+    case FEAT_LESS:
+        *color = (SDL_Color){70, 245, 135, 255};
+        return true;
+    case FEAT_MORE:
+        *color = (SDL_Color){255, 185, 75, 255};
+        return true;
+    case FEAT_LESS_SHAFT:
+        *color = (SDL_Color){70, 205, 255, 255};
+        return true;
+    case FEAT_MORE_SHAFT:
+        *color = (SDL_Color){235, 125, 255, 255};
+        return true;
+    default:
+        return false;
+    }
+}
+
+static void sdl_minimap_draw_stair_selections(const SDL_FRect* map_dst,
+    int min_y, int min_x, int max_y, int max_x)
+{
+    const float min_marker = 12.0f;
+    bool had_clip;
+    SDL_Rect old_clip;
+    SDL_Rect map_clip;
+    float grid_w;
+    float grid_h;
+
+    if (!map_dst || map_dst->w <= 0.0f || map_dst->h <= 0.0f
+        || max_y < min_y || max_x < min_x)
+    {
+        return;
+    }
+
+    grid_w = map_dst->w / (float)(max_x - min_x + 1);
+    grid_h = map_dst->h / (float)(max_y - min_y + 1);
+    had_clip = SDL_RenderClipEnabled(g_state.renderer);
+    if (had_clip)
+        SDL_GetRenderClipRect(g_state.renderer, &old_clip);
+    map_clip = sdl_frect_to_clip_rect(map_dst);
+    if (had_clip) {
+        SDL_Rect intersection;
+
+        if (!SDL_GetRectIntersection(&map_clip, &old_clip, &intersection))
+            return;
+        map_clip = intersection;
+    }
+    SDL_SetRenderClipRect(g_state.renderer, &map_clip);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+
+    for (int y = min_y; y <= max_y; ++y) {
+        for (int x = min_x; x <= max_x; ++x) {
+            SDL_Color color;
+            SDL_FRect marker;
+            float center_x;
+            float center_y;
+
+            if (!sdl_minimap_focus_point_valid(y, x)
+                || !(cave_info[y][x] & (CAVE_MARK | CAVE_SEEN))
+                || !sdl_minimap_stair_selection_color(cave_feat[y][x],
+                    &color))
+            {
+                continue;
+            }
+
+            marker = (SDL_FRect){
+                map_dst->x + (float)(x - min_x) * grid_w,
+                map_dst->y + (float)(y - min_y) * grid_h,
+                grid_w,
+                grid_h
+            };
+            center_x = marker.x + marker.w * 0.5f;
+            center_y = marker.y + marker.h * 0.5f;
+            if (marker.w < min_marker) {
+                marker.w = min_marker;
+                marker.x = center_x - marker.w * 0.5f;
+            }
+            if (marker.h < min_marker) {
+                marker.h = min_marker;
+                marker.y = center_y - marker.h * 0.5f;
+            }
+
+            SDL_SetRenderDrawColor(g_state.renderer, color.r, color.g,
+                color.b, 72);
+            SDL_RenderFillRect(g_state.renderer, &marker);
+            SDL_SetRenderDrawColor(g_state.renderer, color.r, color.g,
+                color.b, color.a);
+            SDL_RenderRect(g_state.renderer, &marker);
+            if (marker.w >= 8.0f && marker.h >= 8.0f) {
+                SDL_FRect inner = {
+                    marker.x + 1.0f,
+                    marker.y + 1.0f,
+                    marker.w - 2.0f,
+                    marker.h - 2.0f
+                };
+                SDL_RenderRect(g_state.renderer, &inner);
+            }
+        }
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, had_clip ? &old_clip : NULL);
+}
+
 void sdl_minimap_draw_focus_tip(sdl_view* d, int canvas_w, int canvas_h,
     const SDL_FRect* map_dst, int min_y, int min_x, int max_y, int max_x)
 {
@@ -2961,7 +3072,8 @@ void sdl_minimap_draw_focus_tip(sdl_view* d, int canvas_w, int canvas_h,
     SDL_FRect box;
     SDL_Color text = {235, 242, 236, 255};
 
-    if (!g_minimap.active || !g_minimap.focus_active || !d || !map_dst)
+    if (!g_minimap.skeleton_hints_visible || !g_minimap.active
+        || !g_minimap.focus_active || !d || !map_dst)
         return;
     if (d->cell_w <= 0 || d->cell_h <= 0 || d->cols <= 0 || d->rows <= 0)
         return;
@@ -3090,8 +3202,10 @@ bool sdl_minimap_known_bounds(int* min_y, int* min_x, int* max_y,
         any = true;
     }
 
-    sdl_minimap_expand_bounds_for_hints(min_y, min_x, max_y, max_x,
-        &any);
+    if (g_minimap.skeleton_hints_visible) {
+        sdl_minimap_expand_bounds_for_hints(min_y, min_x, max_y, max_x,
+            &any);
+    }
 
     if (g_minimap.focus_active
         && sdl_minimap_grid_opened(g_minimap.focus_y, g_minimap.focus_x))
@@ -3640,6 +3754,8 @@ void sdl_side_map_pane_render(void)
     sdl_minimap_draw_hint_destinations(&map_dst, min_y, min_x, max_y,
         max_x);
     sdl_minimap_draw_hint_sources(&map_dst, min_y, min_x, max_y, max_x);
+    sdl_minimap_draw_stair_selections(&map_dst, min_y, min_x, max_y,
+        max_x);
     sdl_side_map_pane_draw_player_marker(&map_dst, min_y, min_x, max_y,
         max_x);
     SDL_SetRenderClipRect(g_state.renderer, NULL);
@@ -4367,6 +4483,8 @@ bool sdl_display_pixel_map(int* cy, int* cx)
         max_x);
     sdl_minimap_draw_hint_sources(&map_dst, min_y, min_x, max_y, max_x);
     sdl_minimap_draw_focused_location(&map_dst, min_y, min_x, max_y, max_x);
+    sdl_minimap_draw_stair_selections(&map_dst, min_y, min_x, max_y,
+        max_x);
 
     if (p_ptr->py >= min_y && p_ptr->py <= max_y
         && p_ptr->px >= min_x && p_ptr->px <= max_x)

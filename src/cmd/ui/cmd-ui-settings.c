@@ -3328,6 +3328,7 @@ void do_cmd_pane_settings(void)
         PANE_SETTING_MAIN_VIEW_SCALE,
         PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET,
         PANE_SETTING_COMPACT_INVENTORY_MENUS,
+        PANE_SETTING_DEBUG_CHARACTER_SHEET,
         PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET,
         PANE_SETTING_CAMERA_VERTICAL_DISTANCE,
         PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE,
@@ -3451,6 +3452,17 @@ void do_cmd_pane_settings(void)
             get_sdl_compact_inventory_menus() ? "yes" : "no",
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_COMPACT_INVENTORY_MENUS, 3, a, buf);
+
+        a = (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
+            ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Character Sheet Mode",
+                "Character Sheet",
+                "Sheet Mode"),
+            config.debug_character_sheet ? "debug" : "SDL",
+            row_width, 5);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_DEBUG_CHARACTER_SHEET, 4, a, buf);
 
         /* Extra zoom applied when mobile gameplay starts. */
         a = (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
@@ -3671,6 +3683,10 @@ void do_cmd_pane_settings(void)
                     "Use shorter category names in Equipped, Inventory, and "
                     "Supplies. When focus moves to the item list, hide the "
                     "category pane and use its space for item names.",
+                [PANE_SETTING_DEBUG_CHARACTER_SHEET] =
+                    "Choose debug to use the compact terminal character sheet "
+                    "for h/@. "
+                    "Choose SDL to return to the current character sheet.",
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
                     "Extra zoom steps applied when gameplay starts on mobile. "
                     "Set to 0 to start at the configured main-map scale. The "
@@ -3789,6 +3805,10 @@ void do_cmd_pane_settings(void)
                     case PANE_SETTING_COMPACT_INVENTORY_MENUS:
                         set_sdl_compact_inventory_menus(
                             def.compact_inventory_menus);
+                        break;
+                    case PANE_SETTING_DEBUG_CHARACTER_SHEET:
+                        config.debug_character_sheet =
+                            def.debug_character_sheet;
                         break;
                     case PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET:
                         set_sdl_mobile_starting_zoom_offset(
@@ -4013,6 +4033,12 @@ void do_cmd_pane_settings(void)
                     !get_sdl_compact_inventory_menus());
                 settings_changed = true;
             }
+            else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
+            {
+                config.debug_character_sheet =
+                    !config.debug_character_sheet;
+                settings_changed = true;
+            }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             {
                 int old_value = get_sdl_mobile_starting_zoom_offset();
@@ -4194,6 +4220,14 @@ void do_cmd_pane_settings(void)
                     settings_changed = true;
                 }
             }
+            else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
+            {
+                if (!config.debug_character_sheet)
+                {
+                    config.debug_character_sheet = true;
+                    settings_changed = true;
+                }
+            }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             {
                 val = get_sdl_mobile_starting_zoom_offset();
@@ -4337,6 +4371,14 @@ void do_cmd_pane_settings(void)
                 if (get_sdl_compact_inventory_menus())
                 {
                     set_sdl_compact_inventory_menus(false);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
+            {
+                if (config.debug_character_sheet)
+                {
+                    config.debug_character_sheet = false;
                     settings_changed = true;
                 }
             }

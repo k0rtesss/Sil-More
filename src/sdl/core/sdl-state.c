@@ -957,7 +957,9 @@ player_exchange_target_state g_player_exchange_target;
 bool g_map_touch_selected = false;
 int g_map_touch_selected_y = 0;
 int g_map_touch_selected_x = 0;
-minimap_state g_minimap;
+minimap_state g_minimap = {
+    .skeleton_hints_visible = true
+};
 side_map_pane_state g_side_map_pane = {
     .default_zoom_pending = true,
     .last_depth = -32768

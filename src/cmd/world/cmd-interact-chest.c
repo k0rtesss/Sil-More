@@ -264,9 +264,6 @@ static void chest_trap(int y, int x, s16b o_idx)
 
     object_type* o_ptr = &o_list[o_idx];
 
-    (void)x; // casting to soothe compilation warnings
-    (void)y;
-
     /* Ignore disarmed chests */
     if (o_ptr->pval <= 0)
         return;
@@ -287,7 +284,7 @@ static void chest_trap(int y, int x, s16b o_idx)
     /* Needle - Hallucination */
     if (trap & (CHEST_NEEDLE_HALLU))
     {
-        sound(MSG_TRAP_NEEDLE);
+        sound_at(MSG_TRAP_NEEDLE, y, x);
 
         if (skill_check(NULL, needle_skill, p_ptr->stat_use[A_DEX], PLAYER) > 0)
         {
@@ -310,7 +307,7 @@ static void chest_trap(int y, int x, s16b o_idx)
     /* Needle - Entrancement */
     if (trap & (CHEST_NEEDLE_ENTRANCE))
     {
-        sound(MSG_TRAP_NEEDLE);
+        sound_at(MSG_TRAP_NEEDLE, y, x);
 
         if (skill_check(NULL, needle_skill, p_ptr->stat_use[A_DEX], PLAYER) > 0)
         {
@@ -333,7 +330,7 @@ static void chest_trap(int y, int x, s16b o_idx)
     /* Needle - Lose strength */
     if (trap & (CHEST_NEEDLE_LOSE_STR))
     {
-        sound(MSG_TRAP_NEEDLE);
+        sound_at(MSG_TRAP_NEEDLE, y, x);
 
         if (skill_check(NULL, needle_skill, p_ptr->stat_use[A_DEX], PLAYER) > 0)
         {
@@ -349,7 +346,7 @@ static void chest_trap(int y, int x, s16b o_idx)
     /* Confusion Gas */
     if (trap & (CHEST_GAS_CONF))
     {
-        sound(MSG_TRAP_GAS);
+        sound_at(MSG_TRAP_GAS, y, x);
 
         msg_print("A noxious vapour escapes from the chest!");
         if (allow_player_confusion(NULL))
@@ -365,7 +362,7 @@ static void chest_trap(int y, int x, s16b o_idx)
     /* Acrid Smoke */
     if (trap & (CHEST_GAS_STUN))
     {
-        sound(MSG_TRAP_GAS);
+        sound_at(MSG_TRAP_GAS, y, x);
 
         msg_print("Acrid smoke pours from the chest!");
         if (allow_player_stun(NULL))
@@ -392,7 +389,7 @@ static void chest_trap(int y, int x, s16b o_idx)
     /* Poison Gas */
     if (trap & (CHEST_GAS_POISON))
     {
-        sound(MSG_TRAP_GAS);
+        sound_at(MSG_TRAP_GAS, y, x);
 
         msg_print("A noxious vapour escapes from the chest!");
 
@@ -404,7 +401,7 @@ static void chest_trap(int y, int x, s16b o_idx)
     /* Flame */
     if (trap & (CHEST_FLAME))
     {
-        sound(MSG_TRAP_FIRE);
+        sound_at(MSG_TRAP_FIRE, y, x);
 
         msg_print("There is a sudden burst of flame!");
 
@@ -5239,17 +5236,19 @@ static bool do_cmd_chest_minigame(int y, int x, s16b o_idx)
         if (result <= 0)
         {
             flush();
-            message(MSG_LOCKPICK_FAIL, 0, "You failed to pick the lock.");
+            message_at(y, x, MSG_LOCKPICK_FAIL, 0,
+                "You failed to pick the lock.");
             SDL_strlcpy(line,
                 "Lockpick failed. The chest remains locked.", sizeof(line));
             chest_minigame_schedule_retry(y, x, line, true);
             return true;
         }
 
-        message(MSG_LOCKPICK_FAIL, 0, "You have picked the lock.");
+        message_at(y, x, MSG_LOCKPICK_FAIL, 0,
+            "You have picked the lock.");
     }
 
-    sound(MSG_CHEST_OPEN);
+    sound_at(MSG_CHEST_OPEN, y, x);
     chest_trap(y, x, o_idx);
     chest_death(y, x, o_idx);
     chest_minigame_clear_retry();
@@ -5299,7 +5298,8 @@ static bool do_cmd_open_chest_legacy(int y, int x, s16b o_idx)
         /* Success -- May still have traps */
         if (result > 0)
         {
-            message(MSG_LOCKPICK_FAIL, 0, "You have picked the lock.");
+            message_at(y, x, MSG_LOCKPICK_FAIL, 0,
+                "You have picked the lock.");
 
             /* A known trap gets a committed disarm attempt after the lock.
              * An undiscovered trap cannot be disarmed and fires when the
@@ -5351,14 +5351,15 @@ static bool do_cmd_open_chest_legacy(int y, int x, s16b o_idx)
             /* We may continue repeating */
             more = true;
             flush();
-            message(MSG_LOCKPICK_FAIL, 0, "You failed to pick the lock.");
+            message_at(y, x, MSG_LOCKPICK_FAIL, 0,
+                "You failed to pick the lock.");
         }
     }
 
     /* Allowed to open */
     if (flag)
     {
-        sound(MSG_CHEST_OPEN);
+        sound_at(MSG_CHEST_OPEN, y, x);
 
         /* Apply chest traps, if any */
         chest_trap(y, x, o_idx);

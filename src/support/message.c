@@ -1090,6 +1090,23 @@ void message(u16b message_type, s16b extra, cptr message)
     msg_print_aux(message_type, message);
 }
 
+void message_at(int y, int x, u16b message_type, s16b extra, cptr text)
+{
+    (void)extra;
+    sound_at(message_type, y, x);
+    msg_print_aux(message_type, text);
+}
+
+void message_format_at(int y, int x, u16b message_type, s16b extra, cptr fmt, ...)
+{
+    va_list vp;
+    char buf[1024];
+    va_start(vp, fmt);
+    (void)vstrnfmt(buf, sizeof(buf), fmt, vp);
+    va_end(vp);
+    message_at(y, x, message_type, extra, buf);
+}
+
 /*
  * Display a formatted message and play the associated sound.
  *

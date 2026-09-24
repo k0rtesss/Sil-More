@@ -235,7 +235,7 @@ static bool forge_entry_choice(int y, int x)
     if (choice != 1)
         return false;
 
-    sound(MSG_DIG);
+    sound_at(MSG_DIG, y, x);
     monster_perception(true, false, -10);
     cave_set_feat(y, x, FEAT_RUBBLE);
     gain_exp(FORGE_DESTROY_EXP);

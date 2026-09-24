@@ -5,7 +5,9 @@
 
 void bell(cptr reason);
 void sound(int val);
-void sound_at_environment_level(int val, int level, int max_level);
+/* Use the actual source grid for all effects away from the player. */
+void sound_at(int val, int y, int x);
 void sound_delayed(int val, unsigned int delay_ms);
+void sound_delayed_at(int val, unsigned int delay_ms, int y, int x);
 
 #endif /* INCLUDED_SUPPORT_FEEDBACK_H */

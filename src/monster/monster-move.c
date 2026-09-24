@@ -177,6 +177,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
     switch (feat)
     {
     case FEAT_TRAP_DART:
+        sound_at(MSG_TRAP_NEEDLE, fy, fx);
         if (m_ptr->ml)
             msg_format("A dart shoots out and strikes %s.", m_name);
         dd = 1;
@@ -184,6 +185,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
         break;
 
     case FEAT_TRAP_CALTROPS:
+        sound_at(MSG_TRAP_CALTROPS, fy, fx);
         if (m_ptr->ml)
             msg_format("%^s blunders into a field of caltrops.", m_name);
         dd = 1;
@@ -191,6 +193,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
         break;
 
     case FEAT_TRAP_ACID:
+        sound_at(MSG_TRAP_ACID, fy, fx);
         if (m_ptr->ml)
             msg_format("%^s is splashed with acid.", m_name);
         dd = 4;
@@ -198,6 +201,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
         break;
 
     case FEAT_TRAP_DEADFALL:
+        sound_at(MSG_TRAP_DEADFALL, fy, fx);
         if (m_ptr->ml)
             msg_format("The ceiling collapses on %s!", m_name);
         dd = 6;
@@ -206,6 +210,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
         break;
 
     case FEAT_TRAP_GAS_CONF:
+        sound_at(MSG_TRAP_GAS, fy, fx);
         if (m_ptr->ml)
             msg_format("Confusing vapours billow around %s.", m_name);
         /* Reuse the same radius effect the player gas trap uses; it confuses

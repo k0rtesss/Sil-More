@@ -460,7 +460,7 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
 
         /* Only play drop sound while the player is actively in a live dungeon. */
         if (character_dungeon) {
-            sound(drop_sound);
+            sound_at(drop_sound, by, bx);
         }
     }
 

@@ -23,6 +23,9 @@ void msg_format(cptr fmt, ...);
 void msg_debug(cptr fmt, ...);
 void message(u16b message_type, s16b extra, cptr message);
 void message_format(u16b message_type, s16b extra, cptr fmt, ...);
+/* Preserve message colour/history while locating its associated sound. */
+void message_at(int y, int x, u16b message_type, s16b extra, cptr text);
+void message_format_at(int y, int x, u16b message_type, s16b extra, cptr fmt, ...);
 void message_flush(void);
 void message_discard_pending(void);
 

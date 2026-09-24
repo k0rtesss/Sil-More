@@ -194,10 +194,17 @@ bool sdl_android_has_controller_device(void)
     jmethodID get_sources = NULL;
     jmethodID get_keyboard_type = NULL;
     jmethodID is_virtual = NULL;
+    jmethodID get_name = NULL;
     jintArray ids = NULL;
     jint* id_values = NULL;
     jsize count = 0;
     bool has_controller = false;
+
+    /* Raw Android source flags also describe fingerprint sensors and other
+     * internal devices.  Auto must not override SDL's device filtering or
+     * select a controller that the game could not open. */
+    if (g_gamepad_state.pad_count == 0)
+        return false;
 
     if (!env)
         return false;
@@ -218,7 +225,9 @@ bool sdl_android_has_controller_device(void)
         "getKeyboardType", "()I");
     is_virtual = (*env)->GetMethodID(env, input_device_class,
         "isVirtual", "()Z");
-    if (!get_device_ids || !get_device || !get_sources) {
+    get_name = (*env)->GetMethodID(env, input_device_class,
+        "getName", "()Ljava/lang/String;");
+    if (!get_device_ids || !get_device || !get_sources || !get_name) {
         sdl_android_clear_pending_exception(env);
         goto cleanup;
     }
@@ -252,6 +261,33 @@ bool sdl_android_has_controller_device(void)
         }
         if (!device)
             continue;
+
+        /* Keep the same sensor exclusion as SDL's Android joystick driver.
+         * Otherwise an ignored sensor could satisfy this scan while the SDL
+         * gamepad above is actually an alphabetic tablet keyboard.  Android's
+         * isVirtual() only tests for a negative device ID, not these drivers. */
+        jstring name = (jstring)(*env)->CallObjectMethod(env, device, get_name);
+        if ((*env)->ExceptionCheck(env) || !name) {
+            sdl_android_clear_pending_exception(env);
+            if (name)
+                (*env)->DeleteLocalRef(env, name);
+            (*env)->DeleteLocalRef(env, device);
+            continue;
+        }
+        const char* name_text = (*env)->GetStringUTFChars(env, name, NULL);
+        if (!name_text) {
+            sdl_android_clear_pending_exception(env);
+            (*env)->DeleteLocalRef(env, name);
+            (*env)->DeleteLocalRef(env, device);
+            continue;
+        }
+        bool sensor = SDL_strncmp(name_text, "uinput-", 7) == 0;
+        (*env)->ReleaseStringUTFChars(env, name, name_text);
+        (*env)->DeleteLocalRef(env, name);
+        if (sensor) {
+            (*env)->DeleteLocalRef(env, device);
+            continue;
+        }
 
         sources = (*env)->CallIntMethod(env, device, get_sources);
         if ((*env)->ExceptionCheck(env)) {
@@ -3306,9 +3342,7 @@ sdl_startup_device_class sdl_detect_startup_device_class(
 #if defined(SDL_PLATFORM_ANDROID)
     android_has_controller = sdl_android_has_controller_device();
     g_android_controller_present = android_has_controller;
-    if (android_has_controller && !has_gamepad) {
-        log_info("Android InputDevice reports a controller before SDL has an opened gamepad");
-    } else if (!android_has_controller && has_gamepad) {
+    if (!android_has_controller && has_gamepad) {
         log_info("Ignoring SDL gamepad classification because Android InputDevice reports no non-keyboard controller");
     }
 #endif

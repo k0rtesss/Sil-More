@@ -13872,11 +13872,13 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         inv_column = 1;
                         supply_set_interaction_mode(&overlay_cache,
                             &desc_overlay_on, &drop_click_mode,
-                            &delete_click_mode, SUPPLY_INTERACTION_DESCRIPTION);
+                            &delete_click_mode, desc_overlay_on
+                                ? SUPPLY_INTERACTION_NONE
+                                : SUPPLY_INTERACTION_DESCRIPTION);
                     }
-                    supply_touch_preview_restore_group_focus(
-                        touch_only && click_generated_command,
-                        preview_was_open, desc_overlay_on, &inv_column);
+                    /* Modal pickers have no category-only state: after a
+                     * touch long-press closes the comparison, keep focus on
+                     * the candidate list so the next tap can select an item. */
                     break;
                 }
                 if (inventory_entry_cnt)

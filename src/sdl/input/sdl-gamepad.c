@@ -3140,12 +3140,6 @@ void sdl_gamepad_init(void)
 
     log_info("SDL_GetGamepads returned %d gamepad%s",
         count, (count == 1) ? "" : "s");
-#if defined(SDL_PLATFORM_ANDROID)
-    if (count == 0 && sdl_android_has_controller_device()) {
-        log_warn("Android InputDevice reports a controller, but SDL_GetGamepads returned none at startup");
-    }
-#endif
-
     for (int i = 0; i < count; i++) {
         sdl_gamepad_open(ids[i]);
     }

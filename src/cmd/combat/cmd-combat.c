@@ -1694,7 +1694,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_SPIKED_PIT:
     {
-        sound(MSG_TRAP_SPIKED);
+        sound_at(MSG_TRAP_SPIKED, y, x);
         msg_print("You fall into a spiked pit!");
 
         /* Falling damage (deeper pits hit harder) */
@@ -1743,7 +1743,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_DART:
     {
-        sound(MSG_TRAP_NEEDLE);
+        sound_at(MSG_TRAP_NEEDLE, y, x);
 
         if (check_hit(15, true))
         {
@@ -1792,7 +1792,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_FLASH:
     {
-        sound(MSG_TRAP_FLASH);
+        sound_at(MSG_TRAP_FLASH, y, x);
         if (!p_ptr->blind)
         {
             msg_print("There is a searing flash of light!");
@@ -1814,7 +1814,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_GAS_CONF:
     {
-        sound(MSG_TRAP_GAS);
+        sound_at(MSG_TRAP_GAS, y, x);
 
         msg_print("A vapor fills the air and you feel yourself becoming "
                   "lightheaded.");
@@ -1836,7 +1836,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_GAS_MEMORY:
     {
-        sound(MSG_TRAP_GAS);
+        sound_at(MSG_TRAP_GAS, y, x);
 
         msg_print("You are surrounded by a strange mist!");
         if (saving_throw(NULL, 0))
@@ -1860,7 +1860,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_ACID:
     {
-        sound(MSG_TRAP_ACID);
+        sound_at(MSG_TRAP_ACID, y, x);
         msg_print("You are splashed with acid!");
 
         /* Acid damage (stronger deeper down) */
@@ -1885,14 +1885,14 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_FLOOD:
     {
-        sound(MSG_TRAP_FLOOD);
+        sound_at(MSG_TRAP_FLOOD, y, x);
         cave_flood_trigger(y, x);
         break;
     }
 
     case FEAT_TRAP_IMPRISONMENT:
     {
-        sound(MSG_SHUTDOOR);
+        sound_at(MSG_SHUTDOOR, y, x);
         msg_print("Words of imprisonment echo through the halls!");
         (void)lock_doors_radius(y, x, 10, 10 + (p_ptr->depth / 2));
 
@@ -1901,7 +1901,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_ALARM:
     {
-        sound(MSG_TRAP_ALARM);
+        sound_at(MSG_TRAP_ALARM, y, x);
         if (singing(SNG_SILENCE))
         {
             msg_print("You hear the muffled toll of a bell above your head.");
@@ -1919,7 +1919,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_CALTROPS:
     {
-        sound(MSG_TRAP_CALTROPS);
+        sound_at(MSG_TRAP_CALTROPS, y, x);
         if (skill_check(PLAYER, p_ptr->skill_use[S_PER], 10, NULL) > 0)
         {
             msg_print("You step carefully amidst a field of caltrops.");
@@ -2018,7 +2018,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_DEADFALL:
     {
-        sound(MSG_TRAP_DEADFALL);
+        sound_at(MSG_TRAP_DEADFALL, y, x);
         int yy, xx;
         int sy = y; // to soothe compiler warnings
         int sx = x; // to soothe compiler warnings
@@ -3218,7 +3218,8 @@ void py_attack_aux(int y, int x, int attack_type)
             // onset, so weapon_animation_delay is "ms from swing start" rather
             // than drifting with display_hit's internal pause.
             u16b result_sound = (net_dam > 0) ? MSG_HIT : MSG_ARMOR;
-            sound_delayed(result_sound, weapon_animation_delay(weapon_swing_type));
+            sound_delayed_at(result_sound, weapon_animation_delay(weapon_swing_type),
+                m_ptr->fy, m_ptr->fx);
 
             // determine the punctuation for the attack ("...", ".", "!" etc)
             attack_punctuation(punctuation, net_dam, crit_bonus_dice);

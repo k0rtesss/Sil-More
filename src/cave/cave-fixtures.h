@@ -2,6 +2,7 @@
 #define INCLUDED_CAVE_FIXTURES_H
 
 #include "h-basic.h"
+#include "sound-spatial.h"
 
 /* Decorations do not change collision, light propagation, or item placement. */
 enum cave_fixture_kind {
@@ -18,14 +19,14 @@ enum cave_fixture_kind {
 #define CAVE_FIXTURE_TORCH_LIGHT_RADIUS 1
 #define CAVE_FIXTURE_BRAZIER_LIGHT_RADIUS 2
 /* Environmental audio reaches farther than the fixture glow. */
-#define CAVE_FIXTURE_TORCH_SOUND_RADIUS 2
-#define CAVE_FIXTURE_BRAZIER_SOUND_RADIUS 3
+#define CAVE_FIXTURE_TORCH_SOUND_RADIUS SOUND_RADIUS_TORCH
+#define CAVE_FIXTURE_BRAZIER_SOUND_RADIUS SOUND_RADIUS_BRAZIER
 
 #define SAVEFILE_FIXTURES_MAGIC 0xF178
 void cave_fixtures_clear(void);
 byte cave_fixture_at(int y, int x);
 void cave_fixture_set(int y, int x, byte kind);
-/* Returns the nearest visible fixture's sound strength, or zero. */
-int cave_fixture_sound_level_at(int y, int x);
+/* Strongest audible fixture, normalized with its own radius. */
+float cave_fixture_sound_gain_at(int y, int x);
 
 #endif

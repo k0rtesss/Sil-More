@@ -934,6 +934,13 @@ void do_cmd_view_map(void)
                     continue;
                 }
 
+                if (ch == 'h' || ch == 'H')
+                {
+                    sdl_minimap_toggle_skeleton_hints();
+                    Term_fresh();
+                    continue;
+                }
+
                 switch (ch)
                 {
                 case '1': pan_dx = -1; pan_dy = 1; break;
