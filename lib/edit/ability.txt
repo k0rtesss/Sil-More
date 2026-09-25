@@ -318,7 +318,7 @@ N:45:Sprinting
 I:2:5:7
 P:2/0:2/4
 D:Sprinting with the endurance of the messengers who bore tidings across Beleriand, running without rest from Hithlum to Nargothrond. Once their stride found its rhythm across open ground, they moved with the tireless speed of the Firstborn, their pace quickening with every stride.
-E:Increased speed after running in roughly the same direction for 4+ squares while wearing only light armour, or 5+ squares otherwise.
+E:Increased speed after running in roughly the same direction for 3+ squares while wearing only light armour, or 4+ squares otherwise.
 T:30:0:99  # Boots
 
 N:46:Flanking

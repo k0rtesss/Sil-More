@@ -2606,7 +2606,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Move in roughly the same direction for at least four squares in light armour, or five otherwise, to gain speed. Turning sharply or breaking the run loses the benefit.
+Move in roughly the same direction for at least three squares in light armour, or four otherwise, to gain speed. Turning sharply or breaking the run loses the benefit.
 
 Trigger: Public ability preview or newly available ability; raw serial 45, skill 2, ability slot 5.
 
@@ -3542,7 +3542,7 @@ Trigger: Public ability preview or newly available ability; raw serial 153, skil
 
 Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/birth-traits.c`, `src/monster/monster-move.c`, `src/player/player-bonuses.c`, `src/player/player-skills.c`, `src/player/player-song-disguise.c`, `src/player/player-song-duels.c`.
 
-## Song of Lórien
+## Song of LÃ³rien
 
 `ability.154.preview`
 
@@ -3656,7 +3656,7 @@ Trigger: Public ability preview or newly available ability; raw serial 160, skil
 
 Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth-traits.c`, `src/dungeon/dungeon-startup.c`.
 
-## Aulë's Forge
+## AulÃ«'s Forge
 
 `ability.161.preview`
 
@@ -3666,7 +3666,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Aulë's Forge improves on Masterpiece. Above your normal smithing limit, spend 1 base Smithing for each 2 excess difficulty points, rounding the cost up. You can reach up to twice your base Smithing beyond the normal limit. This quest reward replaces the less efficient Masterpiece rule.
+AulÃ«'s Forge improves on Masterpiece. Above your normal smithing limit, spend 1 base Smithing for each 2 excess difficulty points, rounding the cost up. You can reach up to twice your base Smithing beyond the normal limit. This quest reward replaces the less efficient Masterpiece rule.
 
 Trigger: Public ability preview or newly available ability; raw serial 161, skill 8, ability slot 1.
 
@@ -4466,11 +4466,43 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-Quartz is solid rock. Digging through it requires a suitable tool and can take repeated noisy turns. Inspect the tunnelling action before committing.
+Quartz veins contain milky crystals. Breaking a vein releases a gem; deep veins may also yield mithril, while meteorite chasms alone can yield star iron. Digging needs a tool rating and Strength of at least 2. An ordinary strike cracks intact quartz; a strong strike shatters it. Clearing the rubble takes another action.
 
 Trigger: Feature 51 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
 Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cmd/movement/cmd-movement.c`.
+
+## Damaged wall
+
+`terrain.104`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+**1. Info**
+
+Cracks weaken this wall. A digging tool rated 2 and Strength 2 can break it into rubble. Damaged walls contain no mineral rewards. Erosion can weaken intact walls before they collapse.
+
+Trigger: Feature 104 is visibly adjacent and marked; hidden terrain is excluded.
+
+Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cave/cave-rock.c`.
+
+## Cracked quartz vein
+
+`terrain.105`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+**1. Info**
+
+This damaged mineral vein still holds its crystals. Break it with a digging tool rated 2 and Strength 2 to release its gem and any metal. Star iron occurs only in meteorite chasms. Clearing the rubble gives no second reward.
+
+Trigger: Feature 105 is visibly adjacent and marked; hidden terrain is excluded.
+
+Sources: `lib/edit/terrain.txt`, `src/cmd/world/cmd-interact.c`, `src/cave/cave-rock.c`.
 
 ## Granite wall
 
@@ -4848,7 +4880,7 @@ Trigger: Feature 84 is on the player square or visibly adjacent and marked; secr
 
 Sources: `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/effects.c`, `src/melee/melee-movement-resolution.c`.
 
-## Imprisonment — known effect
+## Imprisonment â€” known effect
 
 `effect.191`
 
@@ -4864,7 +4896,7 @@ Trigger: Item kind 191 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Freedom — known effect
+## Freedom â€” known effect
 
 `effect.192`
 
@@ -4880,7 +4912,7 @@ Trigger: Item kind 192 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Light — known effect
+## Light â€” known effect
 
 `effect.193`
 
@@ -4896,7 +4928,7 @@ Trigger: Item kind 193 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Sanctity — known effect
+## Sanctity â€” known effect
 
 `effect.195`
 
@@ -4912,7 +4944,7 @@ Trigger: Item kind 195 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Understanding — known effect
+## Understanding â€” known effect
 
 `effect.196`
 
@@ -4928,7 +4960,7 @@ Trigger: Item kind 196 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Revelations — known effect
+## Revelations â€” known effect
 
 `effect.197`
 
@@ -4944,7 +4976,7 @@ Trigger: Item kind 197 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Treasures — known effect
+## Treasures â€” known effect
 
 `effect.198`
 
@@ -4960,7 +4992,7 @@ Trigger: Item kind 198 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Foes — known effect
+## Foes â€” known effect
 
 `effect.199`
 
@@ -4976,7 +5008,7 @@ Trigger: Item kind 199 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Slumber — known effect
+## Slumber â€” known effect
 
 `effect.200`
 
@@ -4992,7 +5024,7 @@ Trigger: Item kind 200 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Majesty — known effect
+## Majesty â€” known effect
 
 `effect.201`
 
@@ -5008,7 +5040,7 @@ Trigger: Item kind 201 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Self Knowledge — known effect
+## Self Knowledge â€” known effect
 
 `effect.202`
 
@@ -5024,7 +5056,7 @@ Trigger: Item kind 202 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Warding — known effect
+## Warding â€” known effect
 
 `effect.203`
 
@@ -5040,7 +5072,7 @@ Trigger: Item kind 203 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Dismay — known effect
+## Dismay â€” known effect
 
 `effect.204`
 
@@ -5056,7 +5088,7 @@ Trigger: Item kind 204 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Recharging — known effect
+## Recharging â€” known effect
 
 `effect.206`
 
@@ -5072,7 +5104,7 @@ Trigger: Item kind 206 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Summoning — known effect
+## Summoning â€” known effect
 
 `effect.210`
 
@@ -5088,7 +5120,7 @@ Trigger: Item kind 210 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Shadows — known effect
+## Shadows â€” known effect
 
 `effect.211`
 
@@ -5104,7 +5136,7 @@ Trigger: Item kind 211 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Terror — known effect
+## Terror â€” known effect
 
 `effect.240`
 
@@ -5120,7 +5152,7 @@ Trigger: Item kind 240 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Thunder — known effect
+## Thunder â€” known effect
 
 `effect.241`
 
@@ -5136,7 +5168,7 @@ Trigger: Item kind 241 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Force — known effect
+## Force â€” known effect
 
 `effect.242`
 
@@ -5152,7 +5184,7 @@ Trigger: Item kind 242 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Blasting — known effect
+## Blasting â€” known effect
 
 `effect.243`
 
@@ -5168,7 +5200,7 @@ Trigger: Item kind 243 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Warning — known effect
+## Warning â€” known effect
 
 `effect.250`
 
@@ -5184,7 +5216,7 @@ Trigger: Item kind 250 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Miruvor — known effect
+## Miruvor â€” known effect
 
 `effect.313`
 
@@ -5200,7 +5232,7 @@ Trigger: Item kind 313 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Orcish Liquor — known effect
+## Orcish Liquor â€” known effect
 
 `effect.315`
 
@@ -5216,7 +5248,7 @@ Trigger: Item kind 315 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Esgalduin — known effect
+## Esgalduin â€” known effect
 
 `effect.316`
 
@@ -5232,7 +5264,7 @@ Trigger: Item kind 316 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Clarity — known effect
+## Clarity â€” known effect
 
 `effect.317`
 
@@ -5248,7 +5280,7 @@ Trigger: Item kind 317 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Healing — known effect
+## Healing â€” known effect
 
 `effect.318`
 
@@ -5264,7 +5296,7 @@ Trigger: Item kind 318 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Voice — known effect
+## Voice â€” known effect
 
 `effect.319`
 
@@ -5280,7 +5312,7 @@ Trigger: Item kind 319 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## true Sight — known effect
+## true Sight â€” known effect
 
 `effect.320`
 
@@ -5296,7 +5328,7 @@ Trigger: Item kind 320 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Antidote — known effect
+## Antidote â€” known effect
 
 `effect.321`
 
@@ -5312,7 +5344,7 @@ Trigger: Item kind 321 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Quickness — known effect
+## Quickness â€” known effect
 
 `effect.322`
 
@@ -5328,7 +5360,7 @@ Trigger: Item kind 322 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Elemental Resistance — known effect
+## Elemental Resistance â€” known effect
 
 `effect.323`
 
@@ -5344,7 +5376,7 @@ Trigger: Item kind 323 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Strength — known effect
+## Strength â€” known effect
 
 `effect.327`
 
@@ -5360,7 +5392,7 @@ Trigger: Item kind 327 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
-## Dexterity — known effect
+## Dexterity â€” known effect
 
 `effect.328`
 
@@ -5376,7 +5408,7 @@ Trigger: Item kind 328 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
-## Constitution — known effect
+## Constitution â€” known effect
 
 `effect.329`
 
@@ -5392,7 +5424,7 @@ Trigger: Item kind 329 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
-## Grace — known effect
+## Grace â€” known effect
 
 `effect.330`
 
@@ -5408,7 +5440,7 @@ Trigger: Item kind 330 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
-## Slowness — known effect
+## Slowness â€” known effect
 
 `effect.343`
 
@@ -5424,7 +5456,7 @@ Trigger: Item kind 343 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Poison — known effect
+## Poison â€” known effect
 
 `effect.344`
 
@@ -5440,7 +5472,7 @@ Trigger: Item kind 344 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Blindness — known effect
+## Blindness â€” known effect
 
 `effect.345`
 
@@ -5456,7 +5488,7 @@ Trigger: Item kind 345 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Confusion — known effect
+## Confusion â€” known effect
 
 `effect.346`
 
@@ -5472,7 +5504,7 @@ Trigger: Item kind 346 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Awkwardness — known effect
+## Awkwardness â€” known effect
 
 `effect.348`
 
@@ -5488,7 +5520,7 @@ Trigger: Item kind 348 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Disconnection — known effect
+## Disconnection â€” known effect
 
 `effect.350`
 
@@ -5504,7 +5536,7 @@ Trigger: Item kind 350 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Rage — known effect
+## Rage â€” known effect
 
 `effect.380`
 
@@ -5520,7 +5552,7 @@ Trigger: Item kind 380 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Sustenance — known effect
+## Sustenance â€” known effect
 
 `effect.381`
 
@@ -5536,7 +5568,7 @@ Trigger: Item kind 381 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Terror — known effect
+## Terror â€” known effect
 
 `effect.382`
 
@@ -5552,7 +5584,7 @@ Trigger: Item kind 382 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Healing — known effect
+## Healing â€” known effect
 
 `effect.383`
 
@@ -5568,7 +5600,7 @@ Trigger: Item kind 383 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Restoration — known effect
+## Restoration â€” known effect
 
 `effect.384`
 
@@ -5584,7 +5616,7 @@ Trigger: Item kind 384 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Emptiness — known effect
+## Emptiness â€” known effect
 
 `effect.385`
 
@@ -5600,7 +5632,7 @@ Trigger: Item kind 385 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Visions — known effect
+## Visions â€” known effect
 
 `effect.386`
 
@@ -5616,7 +5648,7 @@ Trigger: Item kind 386 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Entrancement — known effect
+## Entrancement â€” known effect
 
 `effect.387`
 
@@ -5632,7 +5664,7 @@ Trigger: Item kind 387 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Weakness — known effect
+## Weakness â€” known effect
 
 `effect.388`
 
@@ -5648,7 +5680,7 @@ Trigger: Item kind 388 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Sickness — known effect
+## Sickness â€” known effect
 
 `effect.389`
 
@@ -5664,7 +5696,7 @@ Trigger: Item kind 389 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Piece of Dark Bread — known effect
+## Piece of Dark Bread â€” known effect
 
 `effect.399`
 
@@ -5680,7 +5712,7 @@ Trigger: Item kind 399 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Strip of Dried Meat — known effect
+## Strip of Dried Meat â€” known effect
 
 `effect.400`
 
@@ -5696,7 +5728,7 @@ Trigger: Item kind 400 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Fragment of Lembas — known effect
+## Fragment of Lembas â€” known effect
 
 `effect.401`
 
@@ -6418,7 +6450,7 @@ Trigger: Quest 1 is publicly offered or accepted; only its revealed text is supp
 
 Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest-status.c`.
 
-## Aulë the Smith
+## AulÃ« the Smith
 
 `quest.2`
 
@@ -6428,7 +6460,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-{detail} Forge a work that meets Aulë's current requirements, then collect the reward. Read the objective and smithing proposal before spending materials. Leaving this level before the reward is granted abandons the quest.
+{detail} Forge a work that meets AulÃ«'s current requirements, then collect the reward. Read the objective and smithing proposal before spending materials. Leaving this level before the reward is granted abandons the quest.
 
 Trigger: Quest 2 is publicly offered or accepted; only its revealed text is supplied in context.
 
@@ -6466,7 +6498,7 @@ Trigger: Quest 4 is publicly offered or accepted; only its revealed text is supp
 
 Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest-status.c`.
 
-## Oromë, the Great Hunter
+## OromÃ«, the Great Hunter
 
 `quest.5`
 

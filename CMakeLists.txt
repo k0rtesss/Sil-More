@@ -230,6 +230,7 @@ set(SIL_MORE_SOURCES
     src/cave/cave-water-flow.c
     src/cave/cave-events.c
     src/cave/cave-environment.c
+    src/cave/cave-rock.c
     src/cave/cave-bridge.c
     src/cave/cave-lava.c
     src/cave/cave-poison.c

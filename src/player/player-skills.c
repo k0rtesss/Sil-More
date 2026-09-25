@@ -419,7 +419,7 @@ bool sprinting(void)
 
     if (p_ptr->active_ability[S_EVN][EVN_SPRINTING])
     {
-        /* Count up to 5 squares so the heavier-armour threshold can be met */
+        /* Count recent compatible movement toward the armour threshold */
         for (i = 1; i < 5; i++)
         {
             if ((p_ptr->previous_action[i] >= 1)
@@ -451,7 +451,7 @@ bool sprinting(void)
     }
 
     /* Light armour lets you reach top speed a square sooner */
-    return (turns >= (wearing_only_light_armour() ? 4 : 5));
+    return (turns >= (wearing_only_light_armour() ? 3 : 4));
 }
 
 /* Calculate stats */

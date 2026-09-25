@@ -187,39 +187,23 @@ bool project_f(
         if (cave_feat[y][x] == FEAT_WALL_PERM)
             break;
 
-        /* Granite */
-        if (cave_feat[y][x] >= FEAT_WALL_EXTRA
-            && skill_check(PLAYER, dif, 14, NULL) > 0)
+        /* Classify once: failed granite checks must not retry as quartz. */
+        if (FEAT_IS_ROCK(cave_feat[y][x]))
         {
-            /* Message */
-            if (cave_info[y][x] & (CAVE_MARK))
+            int old = cave_feat[y][x];
+            int resistance = FEAT_IS_GRANITE(old) ? 14 : 12;
+            int margin = skill_check(PLAYER, dif, resistance, NULL);
+            int next = cave_rock_damage_feature(old, margin);
+            if (next != old)
             {
-                msg_print("The wall shatters!");
-                obvious = true;
+                if (cave_info[y][x] & CAVE_MARK)
+                {
+                    msg_print(next == FEAT_RUBBLE ? "The stone shatters into rubble!"
+                        : "Cracks spread through the stone!");
+                    obvious = true;
+                }
+                cave_set_feat(y, x, next);
             }
-
-            /* Forget the wall */
-            cave_info[y][x] &= ~(CAVE_MARK);
-
-            /* Destroy the wall */
-            cave_set_feat(y, x, FEAT_RUBBLE);
-        }
-        /* Quartz */
-        else if (cave_feat[y][x] >= FEAT_QUARTZ
-            && skill_check(PLAYER, dif, 12, NULL) > 0)
-        {
-            /* Message */
-            if (cave_info[y][x] & (CAVE_MARK))
-            {
-                msg_print("The vein shatters!");
-                obvious = true;
-            }
-
-            /* Forget the wall */
-            cave_info[y][x] &= ~(CAVE_MARK);
-
-            /* Destroy the wall */
-            cave_set_feat(y, x, FEAT_RUBBLE);
         }
         /* Rubble */
         else if (cave_feat[y][x] == FEAT_RUBBLE

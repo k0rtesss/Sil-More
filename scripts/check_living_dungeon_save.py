@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the real v17 dungeon extension, compaction, and v16 migration.
+"""Exercise the environment extension, current dungeon tail, and v16 migration.
 
 Requires build-incremental.ps1. Uses only temporary engine fixture data.
 """
@@ -80,6 +80,7 @@ static void make_fixture(void)
     c=*cave_environment_cell_at(10,12);
     c.flags=ENV_FLOOR_ICE|ENV_MINERAL_SPENT|ENV_DEPOSIT;
     c.base_feat=FEAT_FLOOR; c.known_feat=FEAT_ICE; c.heat=-7;
+    c.due=1120; /* Continuous exposure without a pending hazard survives reload. */
     CHECK(cave_environment_restore_cell(10,12,c));
     turn-=100; /* Expired sounds still identify the last wizard destination. */
     cave_event_emit(CAVE_EVENT_BUILD,9,11,12);
@@ -105,13 +106,15 @@ static void make_fixture(void)
     event_offset=cursor;
     world_offset=event_offset+4+12*CAVE_EVENTS_MAX;
     CHECK(word(plain+world_offset)==2);
-    CHECK(world_offset+2+18==extension_end);
+    /* Diplomacy and routines are later append-only lanes. The environment
+     * still occupies exactly its original typed records before them. */
+    CHECK(world_offset+2+18<extension_end);
 }
 static void test_current_roundtrip(void)
 {
     make_fixture(); clean_map();
     u32b sentinel; size_t consumed;
-    CHECK(fixture_read_dungeon(encoded,saved_length,17,&sentinel,&consumed)==0);
+    CHECK(fixture_read_dungeon(encoded,saved_length,VERSION_EXTRA,&sentinel,&consumed)==0);
     CHECK(sentinel==0xA1B2C3D4U && consumed==saved_length);
     CHECK(mon_max==2 && cave_m_idx[8][9]==1);
     CHECK(!memcmp(&mon_list[1].world,&expected_world,sizeof(expected_world)));
@@ -154,12 +157,49 @@ static void test_legacy_v16(void)
     for(int i=0;i<CAVE_EVENTS_MAX;i++) CHECK(!cave_events_state()[i].serial);
     puts("v16: exact byte consumption, safe ecology seed, no stale job/event/work/warning PASS.");
 }
+static void test_lava_continuation(void)
+{
+    clean_map();character_dungeon=true;op_ptr->environment_speed=ENVIRONMENT_SPEED_NORMAL;
+    cave_set_feat(10,10,FEAT_LAVA);cave_environment_seed();
+    bool cooled=false;
+    for(int n=0;n<600;n++) {
+        turn+=10;cave_environment_process();
+        int hot=0;
+        for(int y=1;y<19;y++)for(int x=1;x<23;x++)
+            hot+=(cave_environment_cell_at(y,x)->flags&ENV_ADDED_LIQUID)!=0;
+        if(cave_environment_source_at(0)->used&&!hot){cooled=true;break;}
+    }
+    CHECK(cooled);
+    int saved_turn=turn;size_t dungeon_size;
+    size_t length=fixture_write_dungeon(encoded,sizeof(encoded),&dungeon_size);
+    for(int n=0;n<500;n++){turn+=10;cave_environment_process();}
+    static byte features[20][24];
+    for(int y=0;y<20;y++)for(int x=0;x<24;x++) {
+        features[y][x]=cave_feat[y][x];expected_cells[y][x]=*cave_environment_cell_at(y,x);
+    }
+    environment_state expected=cave_environment_get_state();
+    environment_source source=*cave_environment_source_at(0);
+    clean_map();turn=saved_turn;
+    u32b sentinel;size_t consumed;
+    CHECK(fixture_read_dungeon(encoded,length,VERSION_EXTRA,&sentinel,&consumed)==0);
+    CHECK(sentinel==0xA1B2C3D4U&&consumed==length);
+    character_dungeon=true;
+    for(int n=0;n<500;n++){turn+=10;cave_environment_process();}
+    environment_state actual=cave_environment_get_state();
+    CHECK(actual.random==expected.random&&actual.last_turn==expected.last_turn);
+    CHECK(!memcmp(&source,cave_environment_source_at(0),sizeof(source)));
+    for(int y=0;y<20;y++)for(int x=0;x<24;x++) {
+        CHECK(cave_feat[y][x]==features[y][x]);
+        CHECK(!memcmp(&expected_cells[y][x],cave_environment_cell_at(y,x),sizeof(environment_cell)));
+    }
+    puts("Lava continuation: saving a cooled fringe resumes the exact same next 500 actions and ownership/budget state PASS.");
+}
 static void reject_byte(size_t offset, byte value)
 {
     memcpy(corrupted,plain,saved_length); corrupted[offset]=value;
     encode(corrupted,modified,saved_length); clean_map();
     u32b sentinel; size_t consumed;
-    CHECK(fixture_read_dungeon(modified,saved_length,17,&sentinel,&consumed)!=0);
+    CHECK(fixture_read_dungeon(modified,saved_length,VERSION_EXTRA,&sentinel,&consumed)!=0);
 }
 static void test_corruption(void)
 {
@@ -176,13 +216,13 @@ static void test_corruption(void)
     const size_t cuts[]={0,1,12,13,22,23};
     for(unsigned i=0;i<sizeof(cuts)/sizeof(cuts[0]);i++) {
         clean_map(); u32b sentinel; size_t consumed;
-        CHECK(fixture_read_dungeon(encoded,extension_offset+cuts[i],17,&sentinel,&consumed)!=0);
+        CHECK(fixture_read_dungeon(encoded,extension_offset+cuts[i],VERSION_EXTRA,&sentinel,&consumed)!=0);
     }
     const size_t positions[]={cell_offset+3,event_offset+3,event_offset+15,
         world_offset+1,world_offset+8,extension_end-1,extension_end+7};
     for(unsigned i=0;i<sizeof(positions)/sizeof(positions[0]);i++) {
         clean_map(); u32b sentinel; size_t consumed;
-        CHECK(fixture_read_dungeon(encoded,positions[i],17,&sentinel,&consumed)!=0);
+        CHECK(fixture_read_dungeon(encoded,positions[i],VERSION_EXTRA,&sentinel,&consumed)!=0);
     }
     puts("v17: invalid headers, budgets, RLE, cells, events, actor jobs and truncated tails rejected PASS.");
 }
@@ -197,7 +237,7 @@ def main():
     init=ENGINE_FIXTURE[ENGINE_FIXTURE.index('int main(int argc,char** argv)'):]
     init=init[:init.index('    check_templates();')]
     harness=prefix+fixture_function('terminal_extra')+'\n'+fixture_function('reset_map')+'\n'+FRESH_MAP+'\n'+TESTS+'\n'+init
-    harness+='    test_current_roundtrip(); test_legacy_v16(); test_corruption();\n'
+    harness+='    test_current_roundtrip(); test_legacy_v16(); test_corruption(); test_lava_continuation();\n'
     harness+='    printf("Living dungeon persistence: %d checks PASS.\\n",checks);\n    SDL_Quit(); return 0;\n}\n'
     sources=[]
     for name,content in (('check.c',harness),('writer.c',WRITER),('reader.c',READER)):

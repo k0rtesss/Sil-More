@@ -120,6 +120,8 @@ bool feat_supports_lighting(int feat)
     case FEAT_FLOOR:
     case FEAT_SECRET:
     case FEAT_QUARTZ:
+    case FEAT_CRACKED_QUARTZ:
+    case FEAT_DAMAGED_WALL:
     case FEAT_WALL_EXTRA:
     case FEAT_WALL_INNER:
     case FEAT_WALL_OUTER:
@@ -908,19 +910,19 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
 
 #if DEPTH_BASED_WALLS
             /* Apply style-based wall/vein graphics for non-ASCII graphics */
-            if (!graphics_are_ascii() && (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL) && feat != FEAT_RUBBLE)
+            if (!graphics_are_ascii() && FEAT_IS_WALL(feat) && feat != FEAT_RUBBLE)
             {
                 /* Get the cave color for this location */
                 byte color_value = cave_color[y][x];
 
                 /* Decode style index from cave_color (first-variant flag is ignored here) */
                 int sidx2 = cave_style_index_for_color(color_value);
-                if (feat == FEAT_QUARTZ) {
+                if (FEAT_IS_QUARTZ(feat) || feat == FEAT_DAMAGED_WALL) {
                     /* Veins */
                     if (sidx2 >= 0) {
                         int display_sidx2 = cave_hallucination_style_for_display(sidx2);
                         style_type* s = &style_info[display_sidx2];
-                        if (s->vein_defined) {
+                        if (s->vein_defined && feat == FEAT_DAMAGED_WALL) {
                             /* Full replacement vein tile */
                             a = (byte)(s->vein_row | 0x80);
                             c = (char)(s->vein_col | 0x80);
@@ -928,8 +930,8 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
                             /* Overlay default vein tile on this style's wall tile */
                             extern byte get_default_vein_row(void);
                             extern byte get_default_vein_col(void);
-                            byte dv_r = get_default_vein_row();
-                            byte dv_c = get_default_vein_col();
+                            byte dv_r = FEAT_IS_QUARTZ(feat) ? GRAPHICS_QUARTZ_OVERLAY_ROW : get_default_vein_row();
+                            byte dv_c = FEAT_IS_QUARTZ(feat) ? (feat == FEAT_CRACKED_QUARTZ ? 2 : 0) : get_default_vein_col();
                             byte wall_a = (byte)(s->wall_row | 0x80);
                             byte wall_c = (byte)(s->wall_col | 0x80);
                             if (use_graphics == GRAPHICS_MICROCHASM && feat_supports_lighting(feat)) {
@@ -982,8 +984,8 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
                             byte wall_c = (byte)(sfb->wall_col | 0x80);
                             extern byte get_default_vein_row(void);
                             extern byte get_default_vein_col(void);
-                            byte dv_r = get_default_vein_row();
-                            byte dv_c = get_default_vein_col();
+                            byte dv_r = FEAT_IS_QUARTZ(feat) ? GRAPHICS_QUARTZ_OVERLAY_ROW : get_default_vein_row();
+                            byte dv_c = FEAT_IS_QUARTZ(feat) ? (feat == FEAT_CRACKED_QUARTZ ? 2 : 0) : get_default_vein_col();
                             a = (byte)(dv_r | 0x80); c = (char)(dv_c | 0x80);
                             if (use_graphics == GRAPHICS_MICROCHASM && feat_supports_lighting(feat)) {
                                 if (p_ptr->blind || (!(info & (CAVE_GLOW)) && cave_light[y][x] <= 0)) {
@@ -1064,13 +1066,14 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
             }
             else {
                 /* ASCII/text mode: colour wall & vein glyphs by their style. */
-                if (graphics_are_ascii() && (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL) && feat != FEAT_RUBBLE)
+                if (graphics_are_ascii() && FEAT_IS_WALL(feat) && feat != FEAT_RUBBLE)
                 {
                     int sidx2 = cave_style_index_for_color(cave_color[y][x]);
                     if (sidx2 < 0) sidx2 = cave_style_primary_for_grid(y, x);
                     sidx2 = cave_hallucination_style_for_display(sidx2);
                     int style_attr = cave_style_ascii_attr(sidx2);
                     if (style_attr >= 0) a = (byte)style_attr;
+                    if (FEAT_IS_QUARTZ(feat)) a = TERM_WHITE;
                 }
 
                 /* Standard lighting effects (darkens unlit walls). */

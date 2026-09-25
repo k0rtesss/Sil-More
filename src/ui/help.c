@@ -2362,6 +2362,9 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row++;
         help_emit_heading("LIVING DUNGEON", row++, col);
         put_role(ROLE_BODY, "- Rivers rise and recede, damaged walls crumble, and heat or cold spreads into neighboring passages.", row++, col);
+        put_role(ROLE_BODY, "- Exposed rubble can settle into chasms or wash away beside moving water or acid. Sheltered piles need clearing.", row++, col);
+        put_role(ROLE_BODY, "- Cooling lava forms crust. An active source can flood its cooled fringe again after a warning.", row++, col);
+        put_role(ROLE_BODY, "- New ice needs outside cold. Hot contact melts ice in stages; frost forms more gradually.", row++, col);
         put_role(ROLE_WARN, "- Cracks and rising floods warn of terrain changes. Inspect crossings for damage or ongoing repairs.", row++, col);
         put_role(ROLE_BODY, "- Flowing water and nearby collapses or construction muffle movement noise. They do not hide you from sight.", row++, col);
         put_role(ROLE_BODY, "- Audible changes appear in the message log. Monsters investigate physical sounds and flee unsafe ground.", row++, col);

@@ -517,6 +517,10 @@ struct monster_race
     u32b flags4; /* Flags 4 ('spells') */
     u32b flags5; /* Stateful combat abilities */
 
+    /* Template leadership, independent of generation and spell flags. */
+    byte command_grade, command_style, command_kin;
+    u32b command_authority; /* Permitted command kin, including its own. */
+
     monster_blow blow[MONSTER_BLOW_MAX]; /* Up to four blows per round */
 
     byte level; /* Level of creature */
@@ -737,6 +741,15 @@ typedef struct monster_ai_state
     byte feedback_reason, feedback_y, feedback_x, feedback_cooldown;
 } monster_ai_state;
 
+/* Rebuilt before each monster processing pass; never serialized. */
+typedef struct monster_squad_order
+{
+    s16b commander;
+    byte role, y, x, target_y, target_x;
+    byte job, plan, plan_age, anchor_y, anchor_x;
+    u32b plan_turn;
+} monster_squad_order;
+
 /* Physical observations and work orders are separate from player tracking. */
 #define MON_PATROL_MAX 128
 typedef struct monster_routine_state
@@ -837,6 +850,7 @@ struct monster_type
     bool ability_displaced; /* This action was interrupted by displacement. */
 
     monster_ai_state ai; /* Bounded, individually witnessed tactical knowledge. */
+    monster_squad_order squad; /* Local command and reserved combat position. */
     monster_world_state world; /* Environmental memory survives list compaction. */
     monster_routine_state routine; /* Individual territory and repeatable circuit. */
 

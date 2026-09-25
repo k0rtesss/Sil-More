@@ -135,7 +135,7 @@ static material_edge_class material_edge_feature_class(int y, int x,
 
     /* Open/broken doors have low feature IDs but still use door artwork. */
     if (feat == FEAT_OPEN || feat == FEAT_BROKEN
-        || (feat >= FEAT_DOOR_HEAD && feat <= FEAT_WALL_TAIL)
+        || ((feat >= FEAT_DOOR_HEAD && feat <= FEAT_WALL_TAIL) || FEAT_IS_ROCK(feat))
         || feat == FEAT_RAGE_WALL
         || feat == FEAT_WARDED || feat == FEAT_WARDED2
         || feat == FEAT_WARDED3)
@@ -147,7 +147,7 @@ static material_edge_class material_edge_feature_class(int y, int x,
         || mimic == FEAT_SUNLIGHT || mimic == FEAT_RUBBLE)
         return MATERIAL_EDGE_FLOOR;
     if (mimic == FEAT_OPEN || mimic == FEAT_BROKEN
-        || (mimic >= FEAT_DOOR_HEAD && mimic <= FEAT_WALL_TAIL)
+        || ((mimic >= FEAT_DOOR_HEAD && mimic <= FEAT_WALL_TAIL) || FEAT_IS_ROCK(mimic))
         || mimic == FEAT_RAGE_WALL)
         return MATERIAL_EDGE_WALL;
 

@@ -1583,6 +1583,9 @@ void process_monsters(s16b minimum_energy)
     if (cheat_timestop)
         return;
 
+    /* One common plan before individual actions, independent of action order. */
+    monster_squad_prepare();
+
     /* Process the monsters (backwards) */
     for (i = mon_max - 1; i >= 1; i--)
     {

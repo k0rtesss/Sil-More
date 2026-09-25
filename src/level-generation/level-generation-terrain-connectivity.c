@@ -17,8 +17,7 @@ bool connectivity_rescue_traversable(int ry, int rx)
         || cave_feat[ry][rx] == FEAT_POISON)
         return false;
 
-    bool is_wall = (cave_feat[ry][rx] >= FEAT_WALL_HEAD)
-        && (cave_feat[ry][rx] <= FEAT_WALL_TAIL)
+    bool is_wall = FEAT_IS_WALL(cave_feat[ry][rx])
         && (cave_feat[ry][rx] != FEAT_SECRET);
     if (is_wall && terrain_generation_reserved(ry, rx)) return false;
 
@@ -979,13 +978,13 @@ bool connect_rooms_stairs(void)
     log_trace("Total stairs placed: %d down, %d up", down_placed + down_stairs, up_placed + up_stairs);
 
 place_streamers:
-    /* Hack -- Add some quartz streamers */
+    /* Hack -- Add bands of fractured stone */
     for (i = 0; i < DUN_STR_QUA; i++)
     {
         /*if we can't build streamers, something is wrong with level*/
-        if (!build_streamer(FEAT_QUARTZ))
+        if (!build_streamer(FEAT_DAMAGED_WALL))
         {
-            log_trace("connect_rooms_stairs failed: Could not build quartz streamer %d", i);
+            log_trace("connect_rooms_stairs failed: Could not build damaged-wall band %d", i);
             return (false);
         }
     }

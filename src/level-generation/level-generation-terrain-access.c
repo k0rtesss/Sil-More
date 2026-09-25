@@ -20,7 +20,7 @@ bool terrain_generation_walkable(int y, int x,
     feat = features[y][x];
     if (terrain_gap(feat) || feat == FEAT_NONE) return false;
     if (feat == FEAT_SECRET) return true;
-    return feat < FEAT_WALL_HEAD || feat > FEAT_WALL_TAIL;
+    return !FEAT_IS_WALL(feat);
 }
 
 /* A leap must start and end on safe, unobstructed footing.  Closed doors are

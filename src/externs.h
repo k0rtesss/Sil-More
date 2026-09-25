@@ -560,6 +560,10 @@ extern void wiz_dark(void);
 extern void gates_illuminate(bool daytime);
 extern void cave_set_feat(int y, int x, int feat);
 extern void cave_set_feat_with_color(int y, int x, int feat, int color);
+extern int cave_rock_damage_feature(int feat, int margin);
+extern bool cave_quartz_natural_site(int y, int x);
+extern int cave_quartz_metal_kind(int y, int x, int depth);
+extern void cave_quartz_release(int y, int x);
 extern byte get_depth_color(int depth);
 extern void reset_depth_color_cache(void);
 /* Style-weight APIs */

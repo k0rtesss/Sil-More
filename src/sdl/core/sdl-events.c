@@ -315,15 +315,7 @@ void sdl_handle_renderer_reset(void)
         SDL_DestroyTexture(g_state.tileset);
         g_state.tileset = NULL;
 
-        SDL_Surface* ts = IMG_Load("lib/xtra/graf/16x16.png");
-        if (ts) {
-            g_state.tileset = SDL_CreateTextureFromSurface(g_state.renderer, ts);
-            if (g_state.tileset) {
-                SDL_SetTextureScaleMode(g_state.tileset, SDL_SCALEMODE_NEAREST);
-                SDL_SetTextureBlendMode(g_state.tileset, SDL_BLENDMODE_BLEND);
-            }
-            SDL_DestroySurface(ts);
-        }
+        sdl_load_tileset_texture();
     }
 
     // Force a full redraw

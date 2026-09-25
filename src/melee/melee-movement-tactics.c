@@ -29,7 +29,7 @@ typedef struct tactical_context
     monster_type* actor;
     monster_type* allies[TACTICAL_CELLS];
     int ally_count, oy, ox, py, px, original_distance;
-    bool ranged, shadow, sight;
+    bool ranged, shadow, sight, commanded, pack;
 } tactical_context;
 
 typedef struct tactical_choice
@@ -37,6 +37,9 @@ typedef struct tactical_choice
     int y, x, goal_y, goal_x, gain;
     int reason;
 } tactical_choice;
+
+static int squad_position_score(const tactical_context* c, int y, int x);
+static int squad_job_score(const monster_type* m, int y, int x);
 
 static int tactical_confidence(const monster_type* m_ptr, int feature)
 {
@@ -381,9 +384,13 @@ static int tactical_position_details(const tactical_context* c, int y, int x,
     if (c->ranged && !has_shot) score -= 24;
     if (c->ranged && dist < m_ptr->min_range) score -= 15;
     int parts[MON_TACTIC_MAX] = { 0 };
+    if (c->commanded) parts[MON_TACTIC_ORDER] = squad_position_score(c, y, x);
     parts[MON_TACTIC_TERRAIN] = tactical_protected_terrain(c, y, x, dist, has_shot);
-    parts[MON_TACTIC_GUARD] = tactical_guard_score(c, y, x, false);
-    parts[MON_TACTIC_WITHDRAWAL] = tactical_guard_score(c, y, x, true);
+    if (!c->pack)
+    {
+        parts[MON_TACTIC_GUARD] = tactical_guard_score(c, y, x, false);
+        parts[MON_TACTIC_WITHDRAWAL] = tactical_guard_score(c, y, x, true);
+    }
     tactical_song_scores(c, y, x, has_shot,
         &parts[MON_TACTIC_SONG_DISTANCE], &parts[MON_TACTIC_SONG_PRESSURE]);
     /* One screening job, even when both kinds of ally are nearby. */
@@ -519,6 +526,395 @@ static bool tactical_enterable(monster_type* m_ptr, int y, int x)
     return cave_passable_mon(m_ptr, y, x, &bash) >= 100;
 }
 
+/* A commander plans a small, visible squad once per scheduler pass. These
+ * reservations are shared by every member, rather than independently guessed
+ * from the positions left by monsters that happened to act first. */
+#define SQUAD_RADIUS 6
+#define SQUAD_MEMBERS 8
+#define SQUAD_MAX 16
+
+static bool squad_available(const monster_type* m)
+{
+    return !p_ptr->truce && monster_ai_enabled(m) && m->hp > 0
+        && m->alertness >= ALERTNESS_ALERT && !m->confused && !m->stunned
+        && !m->skip_this_turn && !m->skip_next_turn && !m->smite_recovery
+        && m->stance != STANCE_FLEEING && m->min_range < FLEE_RANGE
+        && !m->social_state && !song_disguise_monster_is_fooled(m)
+        && !(r_info[m->r_idx].flags1 & (RF1_PEACEFUL | RF1_NEVER_MOVE));
+}
+
+static int squad_command_rank(const monster_type* m)
+{
+    const monster_race* r = &r_info[m->r_idx];
+    if (!r->command_grade || !r->command_kin) return 0;
+    /* Level only breaks ties within a deliberately authored leadership grade. */
+    return r->command_grade * 1024 + r->level;
+}
+
+static bool squad_authority(const monster_type* leader, const monster_type* m)
+{
+    const monster_race* r = &r_info[leader->r_idx];
+    const monster_race* other = &r_info[m->r_idx];
+    if (!other->command_kin || other->command_kin >= MON_KIN_MAX
+        || !(r->command_authority & (1UL << other->command_kin))
+        || monster_social_relation(leader, m) == MON_REL_HOSTILE) return false;
+    if (r->command_style == MON_COMMAND_PACK)
+        return r->command_kin == other->command_kin
+            && other->command_style == MON_COMMAND_PACK
+            && monster_social_allies(leader, m);
+    /* Custom allegiances and personal feuds take precedence over race command. */
+    if (leader->social_group || m->social_group)
+        return monster_social_allies(leader, m);
+    if (r->command_kin == other->command_kin) return monster_social_allies(leader, m);
+    /* A shared wandering band alone never grants cross-species command. */
+    return r->command_grade == MON_COMMAND_COMMANDER;
+}
+
+static bool squad_contact(const monster_type* leader, const monster_type* m)
+{
+    int radius = ((r_info[leader->r_idx].flags2 | r_info[m->r_idx].flags2)
+        & RF2_SHORT_SIGHTED) ? 2 : SQUAD_RADIUS;
+    return squad_authority(leader, m)
+        && distance(leader->fy, leader->fx, m->fy, m->fx) <= radius
+        && los(leader->fy, leader->fx, m->fy, m->fx);
+}
+
+bool monster_squad_order_valid(const monster_type* m)
+{
+    int idx = m ? m->squad.commander : 0;
+    if (idx <= 0 || idx >= mon_max || !squad_available(m)
+        || !m->squad.role || !m->squad.job
+        || !in_bounds_fully(m->squad.y, m->squad.x)) return false;
+    const monster_type* leader = &mon_list[idx];
+    if (!squad_available(leader) || !squad_command_rank(leader)
+        || !squad_contact(leader, m) || !monster_ai_can_see_player(leader)) return false;
+    /* An old order must never track a player who has moved out of sight. */
+    return m->squad.target_y == p_ptr->py && m->squad.target_x == p_ptr->px;
+}
+
+static bool squad_ranged(const monster_type* m)
+{
+    const monster_race* r = &r_info[m->r_idx];
+    return m->min_range > 1 || (r->flags1 & RF1_NEVER_BLOW)
+        || (r->freq_ranged && (r->flags4 & RF4_ARCHERY_MASK));
+}
+
+/* Reserve the corridor containing a discretized shot, including shallow
+ * diagonals. Exact collinearity misses cells on those firing paths. */
+static bool squad_on_lane(int y, int x, int sy, int sx, int ty, int tx)
+{
+    int dy = ty - sy, dx = tx - sx, yy = y - sy, xx = x - sx;
+    return (yy || xx) && ABS(yy * dx - xx * dy) <= MAX(ABS(dy), ABS(dx))
+        && yy * dy + xx * dx > 0
+        && distance(sy, sx, y, x) < distance(sy, sx, ty, tx);
+}
+
+bool monster_squad_hold_position(const monster_type* m)
+{
+    bool post = m->squad.job == MON_JOB_HOLD || m->squad.job == MON_JOB_REGROUP
+        || m->squad.job == MON_JOB_GUARD || m->squad.job == MON_JOB_COVER;
+    return monster_squad_order_valid(m) && (squad_ranged(m) || post)
+        && m->fy == m->squad.y && m->fx == m->squad.x
+        && distance(m->fy, m->fx, m->squad.target_y, m->squad.target_x) >= 2
+        && !monster_terrain_penalty((monster_type*)m, m->fy, m->fx)
+        && monster_ai_poison_safe(m, m->fy, m->fx, 2)
+        && (post || projectable(m->fy, m->fx, m->squad.target_y, m->squad.target_x, PROJECT_CHCK));
+}
+
+static int squad_position_score(const tactical_context* c, int y, int x)
+{
+    const monster_squad_order* order = &c->actor->squad;
+    int score = MAX(-48, 24 - 16 * distance(y, x, order->y, order->x))
+        + squad_job_score(c->actor, y, x);
+    for (int i = 0; i < c->ally_count; ++i)
+    {
+        const monster_type* ally = c->allies[i];
+        if (ally->squad.commander != order->commander || !ally->squad.role) continue;
+        if (y == ally->squad.y && x == ally->squad.x) score -= 40;
+        if (squad_ranged(ally) && squad_on_lane(y, x, ally->squad.y,
+                ally->squad.x, c->py, c->px)) score -= 24;
+    }
+    return score;
+}
+
+/* Empty, observed, legal routes only: no plans through an ally, a wall the
+ * commander cannot see beyond, or a door that still needs opening. */
+static bool squad_enterable(monster_type* m, const monster_type* leader, int y, int x)
+{
+    return in_bounds_fully(y, x)
+        && (!cave_m_idx[y][x] || (y == m->fy && x == m->fx))
+        && (los(m->fy, m->fx, y, x) || los(leader->fy, leader->fx, y, x))
+        && tactical_enterable(m, y, x)
+        && monster_ai_poison_safe(m, y, x, TACTICAL_RADIUS);
+}
+
+static int squad_job_score(const monster_type* m, int y, int x)
+{
+    const monster_squad_order* o = &m->squad;
+    int dist = distance(y, x, o->target_y, o->target_x);
+    int anchor_dist = distance(y, x, o->anchor_y, o->anchor_x);
+    int anchor_target = distance(o->anchor_y, o->anchor_x, o->target_y, o->target_x);
+    switch (o->job)
+    {
+    case MON_JOB_FLANK:
+        return dist == 1 && (y - o->target_y) * (o->anchor_y - o->target_y)
+            + (x - o->target_x) * (o->anchor_x - o->target_x) < 0 ? 28 : 0;
+    case MON_JOB_GUARD:
+    case MON_JOB_COVER:
+        return anchor_dist <= 2 && dist < anchor_target
+            && !squad_on_lane(y, x, o->anchor_y, o->anchor_x, o->target_y, o->target_x)
+            ? (o->job == MON_JOB_COVER ? 44 : 36) : -anchor_dist * 4;
+    case MON_JOB_HOLD:
+        return -anchor_dist * 20 - (dist < 2 ? 48 : 0);
+    case MON_JOB_REGROUP:
+        return MIN(6, dist) * 40 - anchor_dist * 8;
+    default: return 0;
+    }
+}
+
+static void squad_assign_jobs(monster_type* leader, monster_type** members, int count,
+    const monster_squad_order* previous)
+{
+    const monster_race* r = &r_info[leader->r_idx];
+    int injured = 0, near = MAX_SIGHT, far = 0, ranged = -1, front = -1;
+    for (int i = 0; i < count; ++i)
+    {
+        monster_type* m = members[i];
+        int dist = distance(m->fy, m->fx, p_ptr->py, p_ptr->px);
+        /* Rear-line archers and a commander covering them are deliberately
+         * spaced back. Only assemble the approaching melee soldiers. */
+        if (m != leader && !squad_ranged(m))
+        { near = MIN(near, dist); far = MAX(far, dist); }
+        if (m->hp * 2 <= m->maxhp) ++injured;
+        if (squad_ranged(m)) ranged = i;
+        else if (front < 0 || dist < distance(members[front]->fy, members[front]->fx,
+                p_ptr->py, p_ptr->px)) front = i;
+        m->squad.job = MON_JOB_ADVANCE;
+    }
+    bool tactical = r->command_style == MON_COMMAND_TACTICAL;
+    int plan = MON_PLAN_ADVANCE;
+    if (tactical && r->command_grade == MON_COMMAND_COMMANDER)
+    {
+        if (injured * 2 >= count) plan = MON_PLAN_REGROUP;
+        else if (near >= 4 && far - near >= 3) plan = MON_PLAN_HOLD;
+    }
+    /* At most three player turns of regrouping / two of assembly. A persistent
+     * condition cannot restart its own budget after orders return to advance. */
+    int age = 0;
+    if (plan != MON_PLAN_ADVANCE && previous->role == MON_SQUAD_COMMANDER
+        && (previous->plan != MON_PLAN_ADVANCE || previous->plan_age))
+        age = MIN(8, previous->plan_age + (previous->plan_turn != (u32b)playerturn));
+    if (age >= (plan == MON_PLAN_HOLD ? 2 : 3)) plan = MON_PLAN_ADVANCE;
+    for (int i = 0; i < count; ++i)
+    {
+        monster_squad_order* o = &members[i]->squad;
+        o->plan = plan; o->plan_age = age; o->plan_turn = playerturn;
+        o->anchor_y = leader->fy; o->anchor_x = leader->fx;
+        if (plan != MON_PLAN_ADVANCE)
+            o->job = plan == MON_PLAN_HOLD ? MON_JOB_HOLD : MON_JOB_REGROUP;
+    }
+    if (plan != MON_PLAN_ADVANCE) return;
+    /* Packs pursue and surround; they never receive soldier guard assignments. */
+    if (!tactical || r->command_grade >= MON_COMMAND_LEADER)
+    {
+        for (int i = 0; i < count; ++i)
+            if (front >= 0 && i != front && !squad_ranged(members[i]))
+            {
+                members[i]->squad.job = MON_JOB_FLANK;
+                members[i]->squad.anchor_y = members[front]->fy;
+                members[i]->squad.anchor_x = members[front]->fx;
+                break;
+            }
+    }
+    if (!tactical || r->command_grade < MON_COMMAND_LEADER) return;
+    monster_type* protect = ranged >= 0 ? members[ranged] : NULL;
+    bool withdrawal = false;
+    for (int i = 1; i < mon_max; ++i)
+    {
+        monster_type* ally = &mon_list[i];
+        if (!ally->r_idx || ally->hp <= 0 || ally->hp * 2 > ally->maxhp
+            || ally->stance != STANCE_FLEEING || !squad_contact(leader, ally)) continue;
+        protect = ally; withdrawal = true; break;
+    }
+    if (!protect) return;
+    int guard = -1, best = -100000;
+    for (int i = 0; i < count; ++i)
+    {
+        monster_type* m = members[i];
+        const monster_race* mr = &r_info[m->r_idx];
+        if (m == protect || squad_ranged(m) || m->hp * 2 <= m->maxhp
+            || mr->command_style == MON_COMMAND_PACK) continue;
+        int score = mr->pd * mr->ps - 4 * distance(m->fy, m->fx, protect->fy, protect->fx);
+        if (score > best) { best = score; guard = i; }
+    }
+    if (guard >= 0)
+    {
+        members[guard]->squad.job = withdrawal ? MON_JOB_COVER : MON_JOB_GUARD;
+        members[guard]->squad.anchor_y = protect->fy;
+        members[guard]->squad.anchor_x = protect->fx;
+    }
+}
+
+static bool squad_assign_position(monster_type* m, monster_type* leader,
+    monster_type* members[SQUAD_MEMBERS], bool assigned[SQUAD_MEMBERS], int count,
+    const monster_squad_order* previous)
+{
+    tactical_context c = { .actor = m, .py = p_ptr->py, .px = p_ptr->px,
+        .original_distance = distance(m->fy, m->fx, p_ptr->py, p_ptr->px),
+        .ranged = squad_ranged(m), .sight = monster_ai_can_see_player(m),
+        .pack = r_info[m->r_idx].command_style == MON_COMMAND_PACK };
+    c.oy = m->fy - TACTICAL_RADIUS; c.ox = m->fx - TACTICAL_RADIUS;
+    c.shadow = (r_info[m->r_idx].flags2 & RF2_SMART) && r_info[m->r_idx].light < 0;
+    for (int i = 0; i < count; ++i)
+        if (members[i] != m) c.allies[c.ally_count++] = members[i];
+    int costs[TACTICAL_CELLS], steps[TACTICAL_CELLS] = { 0 };
+    bool done[TACTICAL_CELLS] = { false };
+    for (int i = 0; i < TACTICAL_CELLS; ++i) costs[i] = 100000;
+    int start = TACTICAL_RADIUS * TACTICAL_WIDTH + TACTICAL_RADIUS;
+    costs[start] = 0;
+    int best = -100000, goal = -1;
+    for (int visit = 0; visit < TACTICAL_CELLS; ++visit)
+    {
+        int at = -1;
+        for (int i = 0; i < TACTICAL_CELLS; ++i)
+            if (!done[i] && costs[i] < 100000 && (at < 0 || costs[i] < costs[at])) at = i;
+        if (at < 0) break;
+        done[at] = true;
+        int y = c.oy + at / TACTICAL_WIDTH, x = c.ox + at % TACTICAL_WIDTH;
+        int dist = distance(y, x, c.py, c.px);
+        bool reserved = false;
+        int formation = 0;
+        for (int i = 0; i < count; ++i)
+        {
+            if (!assigned[i]) continue;
+            monster_type* ally = members[i];
+            int ay = ally->squad.y, ax = ally->squad.x;
+            if (y == ay && x == ax) reserved = true;
+            if (squad_ranged(ally) && squad_on_lane(y, x, ay, ax, c.py, c.px))
+                formation -= 48;
+            if (!c.ranged && dist == 1 && distance(ay, ax, c.py, c.px) == 1
+                && (c.pack || r_info[leader->r_idx].command_grade >= MON_COMMAND_LEADER))
+            {
+                int dot = (y - c.py) * (ay - c.py) + (x - c.px) * (ax - c.px);
+                formation += dot < 0 ? 16 : 4;
+            }
+        }
+        /* Ranged units need an actual shot, not just their preferred range.
+         * Melee without a reachable contact square gets an approach position. */
+        if (!reserved && dist && (m->squad.plan == MON_PLAN_REGROUP || !c.ranged || (dist >= 2
+                && projectable(y, x, c.py, c.px, PROJECT_CHCK))))
+        {
+            int score = tactical_position_score(&c, y, x) + formation - costs[at]
+                + squad_job_score(m, y, x);
+            if (!c.ranged && dist == 1 && m->squad.plan == MON_PLAN_ADVANCE) score += 32;
+            if (c.ranged) score -= ABS(dist - MAX(3, m->best_range)) * 12;
+            if (at == start) score += 12; /* Keep an already useful post. */
+            if (previous->commander == m->squad.commander
+                && previous->target_y == c.py && previous->target_x == c.px
+                && previous->y == y && previous->x == x) score += 8;
+            if (score > best) { best = score; goal = at; }
+        }
+        if (steps[at] >= TACTICAL_RADIUS) continue;
+        for (int d = 0; d < 8; ++d)
+        {
+            int yy = y + ddy_ddd[d], xx = x + ddx_ddd[d];
+            int ry = yy - c.oy, rx = xx - c.ox;
+            if (ry < 0 || ry >= TACTICAL_WIDTH || rx < 0 || rx >= TACTICAL_WIDTH
+                || !squad_enterable(m, leader, yy, xx)) continue;
+            int next = ry * TACTICAL_WIDTH + rx;
+            int cost = costs[at] + monster_step_cost(m, y, x, yy, xx) * 4
+                + tactical_reaction_cost(&c, y, x, yy, xx)
+                + monster_terrain_penalty(m, yy, xx) * 8;
+            if (cost < costs[next])
+            { costs[next] = cost; steps[next] = steps[at] + 1; }
+        }
+    }
+    if (goal < 0) return false;
+    m->squad.y = c.oy + goal / TACTICAL_WIDTH;
+    m->squad.x = c.ox + goal % TACTICAL_WIDTH;
+    monster_senses_share_trace(m, c.py, c.px);
+    return true;
+}
+
+void monster_squad_prepare(void)
+{
+    monster_squad_order previous[MAX_MONSTERS];
+    bool considered[MAX_MONSTERS] = { false };
+    int followers[MAX_MONSTERS] = { 0 };
+    for (int i = 1; i < mon_max; ++i)
+    {
+        previous[i] = mon_list[i].squad;
+        memset(&mon_list[i].squad, 0, sizeof(mon_list[i].squad));
+    }
+    for (int i = 1; i < mon_max; ++i)
+    {
+        int leader = previous[i].commander;
+        if (leader > 0 && leader < mon_max && leader != i
+            && previous[leader].role == MON_SQUAD_COMMANDER
+            && squad_available(&mon_list[i]) && squad_available(&mon_list[leader])
+            && squad_contact(&mon_list[leader], &mon_list[i])) ++followers[leader];
+    }
+    for (int squad = 0; squad < SQUAD_MAX;)
+    {
+        int leader_idx = 0, rank = 0;
+        for (int i = 1; i < mon_max; ++i)
+        {
+            monster_type* m = &mon_list[i];
+            if (considered[i] || m->squad.role || !squad_available(m)) continue;
+            int candidate = squad_command_rank(m);
+            if (candidate && followers[i]) candidate += 512;
+            if (candidate > rank && monster_ai_can_see_player(m))
+            { leader_idx = i; rank = candidate; }
+        }
+        if (!leader_idx) break;
+        considered[leader_idx] = true;
+        monster_type* leader = &mon_list[leader_idx];
+        monster_type* members[SQUAD_MEMBERS] = { leader };
+        bool assigned[SQUAD_MEMBERS] = { false };
+        int count = 1;
+        /* Retain viable members before recruiting new nearby allies. */
+        while (count < SQUAD_MEMBERS)
+        {
+            monster_type* next = NULL;
+            int closest = 100000;
+            for (int i = 1; i < mon_max; ++i)
+            {
+                monster_type* m = &mon_list[i];
+                if (m->squad.role || !squad_available(m) || !squad_contact(leader, m)) continue;
+                bool member = false;
+                for (int n = 0; n < count; ++n) if (members[n] == m) member = true;
+                if (member) continue;
+                int dist = distance(m->fy, m->fx, p_ptr->py, p_ptr->px);
+                if (previous[i].commander != leader_idx) dist += 64;
+                if (dist < closest) { closest = dist; next = m; }
+            }
+            if (!next) break;
+            members[count++] = next;
+        }
+        if (count < 2) continue;
+        ++squad;
+        for (int i = 0; i < count; ++i)
+        {
+            monster_type* m = members[i];
+            m->squad = (monster_squad_order){ .commander = leader_idx,
+                .role = i ? MON_SQUAD_SOLDIER : MON_SQUAD_COMMANDER,
+                .y = m->fy, .x = m->fx, .target_y = p_ptr->py, .target_x = p_ptr->px };
+        }
+        squad_assign_jobs(leader, members, count, &previous[leader_idx]);
+        /* Reserve useful firing positions first, then arrange the melee line. */
+        for (int ranged = 1; ranged >= 0; --ranged)
+            for (int i = 0; i < count; ++i)
+            {
+                monster_type* m = members[i];
+                if (squad_ranged(m) != (bool)ranged) continue;
+                int idx = (int)(m - mon_list);
+                assigned[i] = squad_assign_position(m, leader, members, assigned,
+                    count, &previous[idx]);
+                if (!assigned[i]) m->squad.job = MON_JOB_NONE;
+            }
+    }
+}
+
 /* A cheap but poisoned label cannot erase a survivable alternative. */
 static void tactical_add_label(tactical_label labels[TACTICAL_LABELS], tactical_label next)
 {
@@ -560,13 +956,17 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
         || (r_ptr->flags1 & (RF1_NEVER_MOVE | RF1_PEACEFUL))) return false;
     c.shadow = (r_ptr->flags2 & RF2_SMART) && r_ptr->light < 0;
     c.sight = monster_ai_can_see_player(m_ptr);
+    c.commanded = monster_squad_order_valid(m_ptr);
+    c.pack = r_ptr->command_style == MON_COMMAND_PACK;
     c.actor = m_ptr;
     if (c.sight) { c.py = p_ptr->py; c.px = p_ptr->px; }
+    else if (c.commanded) { c.py = m_ptr->squad.target_y; c.px = m_ptr->squad.target_x; }
     else if (!c.shadow || !monster_senses_target(m_ptr, &c.py, &c.px)) return false;
     c.oy = m_ptr->fy - TACTICAL_RADIUS; c.ox = m_ptr->fx - TACTICAL_RADIUS;
     c.original_distance = distance(m_ptr->fy, m_ptr->fx, c.py, c.px);
     if (c.original_distance > MAX(6, m_ptr->best_range + 1)) return false;
-    c.ranged = m_ptr->min_range > 1 || (r_ptr->flags1 & RF1_NEVER_BLOW);
+    c.ranged = m_ptr->min_range > 1 || (r_ptr->flags1 & RF1_NEVER_BLOW)
+        || (c.commanded && squad_ranged(m_ptr));
     adjacent = c.original_distance == 1;
     avoid_sweep = tactical_confidence(m_ptr, MON_AI_WHIRLWIND) > 0
         || tactical_confidence(m_ptr, MON_AI_FOLLOW_THROUGH) > 0;
@@ -592,6 +992,7 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
         int y = c.oy + at / TACTICAL_WIDTH, x = c.ox + at % TACTICAL_WIDTH;
         int dist = distance(y, x, c.py, c.px);
         if (at != start && (!adjacent || dist == 1 || c.ranged || c.shadow
+                || (c.commanded && m_ptr->squad.plan == MON_PLAN_REGROUP)
                 || (avoid_sweep && dist == 2)))
         {
             int score = tactical_position_score(&c, y, x) - here.cost - here.damage * 3;
@@ -642,6 +1043,7 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     {
         /* Message details may use player visibility; the decision above may
          * not. Do not reveal an unseen archer or wounded ally through prose. */
+        if (c.pack && (i == MON_TACTIC_GUARD || i == MON_TACTIC_WITHDRAWAL)) continue;
         if (i == MON_TACTIC_GUARD || i == MON_TACTIC_WITHDRAWAL)
         {
             bool withdrawal = i == MON_TACTIC_WITHDRAWAL;
@@ -650,6 +1052,9 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
             after[i] = tactical_guard_score_visible(&c, choice->y, choice->x,
                 withdrawal, true);
         }
+        if (i == MON_TACTIC_ORDER && (!c.commanded
+                || m_ptr->squad.role != MON_SQUAD_SOLDIER
+                || !mon_list[m_ptr->squad.commander].ml)) continue;
         if (i == MON_TACTIC_IMPALE || i == MON_TACTIC_SWEEP)
         {
             bool visible_ally = false;
@@ -667,6 +1072,7 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
         if (after[i] - before[i] > improvement)
         { improvement = after[i] - before[i]; choice->reason = i; }
     }
+    if (choice->reason == MON_TACTIC_ORDER && c.pack) choice->reason = MON_TACTIC_PACK;
     return true;
 }
 

@@ -1,16 +1,23 @@
 # Slow environmental speed timing, in engine ticks (10 = one normal-speed action).
 # Gameplay setting: Slow uses these values; Normal (default) runs at 2x, Fast at 4x.
-# Initial source delays, geology pulses and source intervals scale with speed.
+# Source delays, geology pulses and continuous exposure scale with speed.
 # Warnings, per-update change limits and monster work actions keep their duration.
 # Read once on startup. Invalid records retain the safe built-in value.
 # Existing dungeon-themes and partition material choices seed the reservoirs.
 pulse:100
 water_step:200
 lava_step:350
-acid_step:600
-crack_step:1200
+acid_step:200
+crack_step:600
 warning:50
-# Finite added cells per reservoir; recession returns its reserved capacity.
-growth_cap:24
+# Continuous hot contact (plus 0-50% jitter); freezing water takes twice this,
+# and a frost coating takes three times this. Every stage remains observable.
+thermal_step:100
+# Exposed rubble settles into a drop or is removed by moving/corrosive liquid.
+rubble_step:600
+# Water/acid regain capacity on recession. Lava reuses its bounded cooled fringe;
+# its footprint and chasm expansion cannot grow beyond their reserved capacity.
+# Additional per-source caps: lava 8, acid 6, chasm 4; buried vents 4.
+growth_cap:12
 # Maximum committed changes in one world update.
 changes:4

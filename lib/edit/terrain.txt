@@ -667,3 +667,12 @@ N:103:illusory wall
 G:#:s
 T:15:14
 M:56
+
+# Appended IDs preserve existing saved terrain identities.
+N:104:damaged wall
+G:#:s
+T:0:6
+
+N:105:cracked quartz vein
+G:%:w
+T:0:6

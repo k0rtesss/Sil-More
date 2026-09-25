@@ -84,7 +84,7 @@ const terrain_generation_stats* terrain_generation_last_stats(void)
 static bool terrain_is_rock(int feat)
 {
     return feat == FEAT_WALL_EXTRA || feat == FEAT_WALL_OUTER
-        || feat == FEAT_QUARTZ;
+        || FEAT_IS_QUARTZ(feat) || feat == FEAT_DAMAGED_WALL;
 }
 
 static bool terrain_is_gap(int feat)

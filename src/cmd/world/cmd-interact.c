@@ -1856,32 +1856,25 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                     "obstacles to dig through (difficulty 1).",
                     sizeof(desc));
             }
-            else if (feat == FEAT_QUARTZ)
+            else if (FEAT_IS_QUARTZ(feat))
             {
-                level_partition_kind part_kind
-                    = level_partition_kind_for_point(y, x);
-                bool in_chasm_area
-                    = (cave_info[y][x] & CAVE_CHASM_AREA) != 0;
-                bool loot_ground = ((part_kind == LEVEL_PART_CAVEY)
-                    || (part_kind == LEVEL_PART_BIG_CAVE))
-                    && ((cave_info[y][x] & CAVE_ROOM) != 0) && !in_chasm_area;
-                bool star_ground
-                    = (part_kind == LEVEL_PART_CHASM) && in_chasm_area;
-
                 difficulty = TUNNEL_DIFFICULTY_QUARTZ;
-                SDL_strlcpy(title, "Quartz vein", sizeof(title));
+                SDL_strlcpy(title, feat == FEAT_CRACKED_QUARTZ
+                    ? "Cracked quartz vein" : "Quartz vein", sizeof(title));
                 SDL_strlcpy(desc,
-                    "A vein of milky quartz seams the rock (digging "
-                    "difficulty 2). Miners tell that veins in great caverns "
-                    "can hold gems below 500 ft and even mithril below 600 "
-                    "ft, and that veins in the chasm's depths may yield "
-                    "star-iron.",
-                    sizeof(desc));
-                if ((loot_ground || star_ground) && (p_ptr->depth >= 10))
-                {
-                    grid_question_append(desc, sizeof(desc),
-                        "This one lies in promising ground.");
-                }
+                    "Milky crystals seam the rock (digging difficulty 2). "
+                    "Breaking the vein releases a gem. Deep veins may also "
+                    "yield mithril; only meteorite chasms hold star iron. "
+                    "A strong strike can shatter intact stone at once; "
+                    "otherwise it cracks first.", sizeof(desc));
+            }
+            else if (feat == FEAT_DAMAGED_WALL)
+            {
+                difficulty = TUNNEL_DIFFICULTY_DAMAGED;
+                SDL_strlcpy(title, "Damaged wall", sizeof(title));
+                SDL_strlcpy(desc, "Fractured stone or crumbling masonry "
+                    "(digging difficulty 2). Breaking it leaves rubble, "
+                    "without mineral rewards.", sizeof(desc));
             }
             else
             {
@@ -1889,7 +1882,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 difficulty = TUNNEL_DIFFICULTY_GRANITE;
                 SDL_strlcpy(title, "Granite wall", sizeof(title));
                 SDL_strlcpy(desc,
-                    "A wall of solid granite (digging difficulty 3).",
+                    "Solid granite (digging difficulty 3). An ordinary strike "
+                    "damages it; a strong strike reduces it to rubble.",
                     sizeof(desc));
             }
 
@@ -2278,7 +2272,7 @@ static bool do_cmd_tunnel_test(int y, int x)
  * of the room, and whose "illumination" status do not change with
  * the rest of the room.
  */
-static bool twall(int y, int x)
+static bool twall(int y, int x, int margin)
 {
     /* Paranoia -- Require a wall or door or some such */
     if (cave_floor_bold(y, x))
@@ -2290,115 +2284,9 @@ static bool twall(int y, int x)
     /* Forget the wall */
     // cave_info[y][x] &= ~(CAVE_MARK);
 
-    /* Granite */
-    if (cave_feat[y][x] >= FEAT_WALL_EXTRA && cave_feat[y][x] <= FEAT_WALL_SOLID)
+    if (FEAT_IS_ROCK(cave_feat[y][x]))
     {
-        /* Regular granite walls - just convert to rubble, no special drops */
-        cave_set_feat(y, x, FEAT_RUBBLE);
-    }
-
-    /* Quartz */
-    else if (cave_feat[y][x] == FEAT_QUARTZ)
-    {
-        /* Cave and big-cave quartz can yield gems or mithril; chasm-tagged quartz yields star-iron. */
-        int depth = p_ptr->depth;
-        level_partition_kind part_kind = level_partition_kind_for_point(y, x);
-        bool in_chasm_area = (cave_info[y][x] & CAVE_CHASM_AREA) != 0;
-        bool in_cave_loot_quartz = ((part_kind == LEVEL_PART_CAVEY)
-            || (part_kind == LEVEL_PART_BIG_CAVE))
-            && ((cave_info[y][x] & CAVE_ROOM) != 0)
-            && !in_chasm_area;
-        bool allow_mithril = in_cave_loot_quartz;
-        bool allow_star_iron = (part_kind == LEVEL_PART_CHASM) && in_chasm_area;
-        
-        /* Base 10% chance at depth 10, scaling up to 25% at depth 20+ */
-        int special_chance = 10 + depth;
-        if (special_chance > 25) special_chance = 25;
-        
-        log_debug("twall: digging vein at (%d,%d) depth=%d part=%d cave_info=0x%04x in_cave_loot_quartz=%d in_chasm=%d allow_mithril=%d allow_star_iron=%d special_chance=%d%%",
-                  y, x, depth, part_kind, cave_info[y][x], in_cave_loot_quartz, in_chasm_area, allow_mithril, allow_star_iron, special_chance);
-        
-        if ((allow_mithril || allow_star_iron) && depth >= 10 && rand_int(100) < special_chance)
-        {
-            object_type object_type_body;
-            object_type *i_ptr = &object_type_body;
-            object_wipe(i_ptr);
-            
-            log_debug("twall: PASSED chance check! Attempting drop at depth=%d", depth);
-            
-            bool try_mithril = allow_mithril
-                && (depth >= MITHRIL_VEIN_MIN_DEPTH) && (rand_int(100) < 45);
-
-            log_debug("twall: try_star_iron=%d try_mithril=%d", allow_star_iron, try_mithril);
-
-            if (allow_star_iron)
-            {
-                /* Drop star iron */
-                s16b k_idx = lookup_kind(TV_METAL, SV_METAL_STAR_IRON);
-                if (k_idx > 0)
-                {
-                    object_prep(i_ptr, k_idx);
-                    drop_near(i_ptr, -1, y, x);
-                    msg_print("You find a jagged shard of star iron!");
-                }
-            }
-            else if (try_mithril)
-            {
-                /* Drop mithril */
-                s16b k_idx = lookup_kind(TV_METAL, SV_METAL_MITHRIL);
-                if (k_idx > 0)
-                {
-                    object_prep(i_ptr, k_idx);
-                    drop_near(i_ptr, -1, y, x);
-                    msg_print("You find a gleaming piece of mithril!");
-                }
-            }
-            else
-            {
-                /* Try to drop a gem using profiled generation to ensure we get a gem */
-                log_debug("twall: Attempting gem drop via profile");
-                drop_profile gem_profile;
-                drop_profile_default(&gem_profile);
-                gem_profile.weight_weapon = 0;
-                gem_profile.weight_armor = 0;
-                gem_profile.weight_jewelry = 0;
-                gem_profile.weight_supply = 120;
-                gem_profile.supply_potion = 0;
-                gem_profile.supply_herb = 0;
-                gem_profile.supply_gem = 50;
-                gem_profile.supply_staff = 0;
-                gem_profile.supply_light = 0;
-                gem_profile.supply_arrows = 0;
-
-                if (drop_generate_object_profiled(depth, DROP_QUALITY_NORMAL,
-                        DROP_TYPE_STAFF, 0, false, &gem_profile, i_ptr))
-                {
-                    log_debug("twall: gem generated successfully, tval=%d", i_ptr->tval);
-                    if (i_ptr->tval == TV_GEM)
-                    {
-                        char gem_name[80];
-
-                        i_ptr->number = 1;
-                        object_aware(i_ptr);
-                        object_desc(gem_name, sizeof(gem_name), i_ptr, true, 0);
-                        drop_near(i_ptr, -1, y, x);
-                        msg_format("%^s glitters in the rubble!", gem_name);
-                    }
-                    else
-                    {
-                        drop_near(i_ptr, -1, y, x);
-                        msg_print("A gem glitters in the rubble!");
-                    }
-                }
-                else
-                {
-                    log_debug("twall: gem generation FAILED");
-                }
-            }
-        }
-        
-        /* Leave a pile of rubble */
-        cave_set_feat(y, x, FEAT_RUBBLE);
+        cave_set_feat(y, x, cave_rock_damage_feature(cave_feat[y][x], margin));
     }
 
     /* Rubble */
@@ -2540,7 +2428,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
     object_desc(o_name, sizeof(o_name), digger_ptr, false, -1);
 
     /* Granite */
-    if (cave_feat[y][x] >= FEAT_WALL_EXTRA)
+    if (FEAT_IS_GRANITE(cave_feat[y][x]))
     {
         difficulty = TUNNEL_DIFFICULTY_GRANITE;
         SDL_strlcpy(success_message, "You break through the granite.",
@@ -2558,7 +2446,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
         }
     }
     /* Quartz */
-    else if (cave_feat[y][x] >= FEAT_QUARTZ)
+    else if (FEAT_IS_QUARTZ(cave_feat[y][x]))
     {
         difficulty = TUNNEL_DIFFICULTY_QUARTZ;
         SDL_strlcpy(success_message, "You shatter the quartz.",
@@ -2574,6 +2462,14 @@ static bool do_cmd_tunnel_aux(int y, int x)
             strnfmt(failure_message, sizeof(failure_message),
                 "You are not strong enough to break the quartz.");
         }
+    }
+    else if (cave_feat[y][x] == FEAT_DAMAGED_WALL)
+    {
+        difficulty = TUNNEL_DIFFICULTY_DAMAGED;
+        SDL_strlcpy(success_message, "You break the damaged wall into rubble.", sizeof(success_message));
+        SDL_strlcpy(failure_message, difficulty > digging_score
+            ? "Your tool cannot break the damaged wall."
+            : "You are not strong enough to break the damaged wall.", sizeof(failure_message));
     }
     /* Rubble */
     else if (cave_feat[y][x] == FEAT_RUBBLE)
@@ -2621,8 +2517,17 @@ static bool do_cmd_tunnel_aux(int y, int x)
         /* Make a lot of noise */
         monster_perception(true, false, -10);
 
-        twall(y, x);
-        msg_print(success_message);
+        /* Eligibility guarantees progress. Strength decides whether an intact
+         * wall skips its damaged stage; never reroll tool eligibility. */
+        int margin = FEAT_IS_ROCK(cave_feat[y][x])
+            ? MAX(1, skill_check(PLAYER, p_ptr->stat_use[A_STR], difficulty, NULL)) : 1;
+        twall(y, x, margin);
+        if (cave_feat[y][x] == FEAT_DAMAGED_WALL)
+            msg_print("You fracture the wall. It still blocks the way.");
+        else if (cave_feat[y][x] == FEAT_CRACKED_QUARTZ)
+            msg_print("You crack the quartz vein. Its crystals remain embedded.");
+        else
+            msg_print(success_message);
 
         // Possibly identify the digger
         if (!object_known_p(digger_ptr) && (f1 & (TR1_TUNNEL)))

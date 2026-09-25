@@ -23,11 +23,12 @@ static byte after[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
 static const int dy4[4] = {-1, 0, 1, 0}, dx4[4] = {0, 1, 0, -1};
 static bool changing;
+static bool reconcile_lava_fringe;
 static int pending_count;
 static struct {
     int pulse, water_step, lava_step, acid_step, crack_step, warning;
-    int growth_cap, changes;
-} config = {100, 200, 350, 600, 1200, 50, 24, 4};
+    int growth_cap, changes, thermal_step, rubble_step;
+} config = {100, 200, 350, 200, 600, 50, 12, 4, 100, 600};
 static bool config_loaded;
 
 static int speed_multiplier(byte speed)
@@ -39,7 +40,7 @@ static int speed_multiplier(byte speed)
 static int scaled_interval(int ticks)
 {
     int rate = speed_multiplier(op_ptr->environment_speed);
-    return MAX(10, (ticks + rate - 1) / rate);
+    return MIN(100000, MAX(10, (ticks + rate - 1) / rate));
 }
 
 void cave_environment_set_speed(byte speed)
@@ -55,6 +56,12 @@ void cave_environment_set_speed(byte speed)
         if (sources[i].next_turn > turn)
             sources[i].next_turn = turn + MIN(100000, MAX(10,
                 ((sources[i].next_turn - turn) * old_rate + rate - 1) / rate));
+    for (int y = 1; y < p_ptr->cur_map_hgt-1; y++) for (int x = 1; x < p_ptr->cur_map_wid-1; x++) {
+        environment_cell* c = &cells[y][x];
+        if (!c->pending_feat && c->due > turn)
+            c->due = turn + MIN(100000, MAX(10,
+                ((c->due-turn)*old_rate+rate-1)/rate));
+    }
 }
 
 static void load_config(void)
@@ -79,6 +86,8 @@ static void load_config(void)
         else if (!strcmp(key, "acid_step")) target = &config.acid_step;
         else if (!strcmp(key, "crack_step")) target = &config.crack_step;
         else if (!strcmp(key, "warning")) { target = &config.warning; low = 30; }
+        else if (!strcmp(key, "thermal_step")) target = &config.thermal_step;
+        else if (!strcmp(key, "rubble_step")) target = &config.rubble_step;
         else if (!strcmp(key, "growth_cap")) { target = &config.growth_cap; low = 1; high = 64; }
         else if (!strcmp(key, "changes")) { target = &config.changes; low = 1; high = 16; }
         if (target && value >= low && value <= high) *target = value;
@@ -103,6 +112,20 @@ static int liquid(int feature)
         || feature == FEAT_CHASM ? feature : 0;
 }
 
+static int source_interval(int feature)
+{
+    return feature == FEAT_LAVA ? config.lava_step
+        : feature == FEAT_POISON ? config.acid_step
+        : feature == FEAT_CHASM ? config.crack_step : config.water_step;
+}
+
+static int source_capacity(int feature)
+{
+    int cap = feature == FEAT_CHASM ? 4 : feature == FEAT_LAVA ? 8
+        : feature == FEAT_POISON ? 6 : config.growth_cap;
+    return MIN(config.growth_cap, cap);
+}
+
 static bool utumno_environment(void)
 {
     return p_ptr->depth == UTUMNO_DEPTH || p_ptr->depth == UTUMNO_FORGE_DEPTH;
@@ -122,8 +145,7 @@ static bool utumno_live_channel(int y, int x)
 
 static bool rock(int feature)
 {
-    return feature == FEAT_QUARTZ || (feature >= FEAT_WALL_EXTRA
-        && feature <= FEAT_WALL_SOLID);
+    return FEAT_IS_ROCK(feature);
 }
 
 static bool anchor(int y, int x)
@@ -145,7 +167,9 @@ static int origin_heat(int y, int x)
 {
     int f = cave_bridge_underlay(cave_feat[y][x]);
     if (f == FEAT_LAVA) return 12;
-    if (FEAT_IS_ICE(f) && !(cells[y][x].flags & ENV_FLOOR_ICE)) return -8;
+    /* A coating or recently frozen pool is not a new cold source. */
+    if (FEAT_IS_ICE(f) && FEAT_IS_ICE(cells[y][x].base_feat)
+        && !(cells[y][x].flags & ENV_FLOOR_ICE)) return -8;
     big_cave_type_t kind = level_partition_big_cave_type_for_point(y, x);
     if (kind == BIG_CAVE_ICE && (cells[y][x].flags & ENV_NATURAL)) return -6;
     if (kind == BIG_CAVE_FIRE && (cells[y][x].flags & ENV_NATURAL)) return 6;
@@ -158,6 +182,7 @@ void cave_environment_reset(void)
     memset(sources, 0, sizeof(sources));
     memset(&state, 0, sizeof(state));
     changing = false;
+    reconcile_lava_fringe = false;
     pending_count = 0;
     cave_events_reset();
 }
@@ -193,6 +218,42 @@ static void claim_unowned_bridge_sources(void)
     }
 }
 
+/* The earlier one-shot cooling rule saved spent supply but cleared ownership
+ * from cooled ground. Recover only that missing, already-spent footprint.
+ * No new ground or supply is granted, and fully quenched pools remain cold. */
+static void restore_lava_fringe_owners(void)
+{
+    if (!reconcile_lava_fringe) return;
+    reconcile_lava_fringe = false;
+    for (int id=1;id<=state.source_count;id++) {
+        environment_source* s=&sources[id-1];
+        if (s->feature!=FEAT_LAVA || !s->used) continue;
+        int missing=s->used;
+        for (int y=1;y<p_ptr->cur_map_hgt-1;y++) for (int x=1;x<p_ptr->cur_map_wid-1;x++) {
+            environment_cell* c=&cells[y][x];
+            if (c->owner==id && liquid(c->base_feat)!=FEAT_LAVA
+                && (c->flags&(ENV_DEPOSIT|ENV_ADDED_LIQUID))) missing--;
+        }
+        bool found=true;
+        while (missing>0 && found) {
+            found=false;
+            for (int y=1;y<p_ptr->cur_map_hgt-1 && missing>0;y++)
+                for (int x=1;x<p_ptr->cur_map_wid-1 && missing>0;x++) {
+                    environment_cell* c=&cells[y][x];
+                    if (c->owner || !(c->flags&ENV_DEPOSIT) || (c->flags&(ENV_PROTECTED|ENV_BRIDGE))
+                        || cave_feat[y][x]!=FEAT_FLOOR || liquid(c->base_feat)==FEAT_LAVA) continue;
+                    bool contact=y==s->y && x==s->x;
+                    for (int d=0;d<4;d++) {
+                        int ny=y+dy4[d],nx=x+dx4[d];
+                        contact|=cells[ny][nx].owner==id
+                            && (cave_feat[ny][nx]==FEAT_LAVA || (cells[ny][nx].flags&ENV_DEPOSIT));
+                    }
+                    if (contact) { c->owner=id;missing--;found=true; }
+                }
+        }
+    }
+}
+
 void cave_environment_seed(void)
 {
     cave_environment_reset();
@@ -205,7 +266,7 @@ void cave_environment_seed(void)
         environment_cell* c = &cells[y][x];
         int f = cave_feat[y][x];
         c->base_feat = c->known_feat = f;
-        c->integrity = 100;
+        c->integrity = (f == FEAT_DAMAGED_WALL || f == FEAT_CRACKED_QUARTZ) ? 60 : 100;
         level_partition_kind part = level_partition_kind_for_point(y, x);
         if (cave_natural[y][x] || part == LEVEL_PART_CAVEY || part == LEVEL_PART_RUINED
             || part == LEVEL_PART_BIG_CAVE || part == LEVEL_PART_CHASM) c->flags |= ENV_NATURAL;
@@ -257,8 +318,9 @@ void cave_environment_seed(void)
         }
         environment_source* s = &sources[id-1];
         s->y=y; s->x=x; s->feature=f;
-        s->capacity = MIN(config.growth_cap, MAX(2, tail/8));
-        s->next_turn = turn + scaled_interval(200 + random_below(500));
+        s->capacity = MIN(source_capacity(f), MAX(2, tail/8));
+        int interval = source_interval(f);
+        s->next_turn = turn + scaled_interval(interval/2 + random_below(interval/2));
         s->phase = random_below(12);
         log_debug("ENV source seed: id=%d feature=%d origin=(%d,%d) cells=%d bridge_cells=%d capacity=%d next_turn=%d phase=%d turn=%d playerturn=%d",
             id, f, y, x, tail, bridge_cells, s->capacity, s->next_turn, s->phase, turn, playerturn);
@@ -281,8 +343,8 @@ void cave_environment_seed(void)
         if (!candidates) break;
         int id = ++state.source_count;
         cells[sy][sx].owner=id;
-        sources[id-1]=(environment_source){sy,sx,material,6,0,12,
-            turn+scaled_interval(1500+(int)random_below(3000))};
+        sources[id-1]=(environment_source){sy,sx,material,MIN(config.growth_cap,4),0,12,
+            turn+scaled_interval(800+(int)random_below(800))};
     }
     state.ready = true;
     claim_unowned_bridge_sources();
@@ -323,17 +385,39 @@ int cave_environment_display_underlay(int y, int x)
     return cave_bridge_underlay(feature);
 }
 
+static void release_supply(environment_cell* c, bool refund)
+{
+    if (!(c->flags & ENV_ADDED_LIQUID)) return;
+    /* Molten supply circulates through a bounded fringe. A cooled fringe
+     * keeps its owner and spent footprint even while no lava occupies it. */
+    bool lava_fringe = c->owner && sources[c->owner-1].feature == FEAT_LAVA
+        && (c->flags & ENV_DEPOSIT) && liquid(c->base_feat) != FEAT_LAVA;
+    if (refund && !lava_fringe && c->owner && sources[c->owner-1].used)
+        sources[c->owner-1].used--;
+    c->flags &= ~ENV_ADDED_LIQUID;
+    if (!(c->flags & ENV_BRIDGE) && !lava_fringe) c->owner = 0;
+}
+
 void cave_environment_changed(int y, int x, int old_feat, int new_feat)
 {
     cave_events_terrain_changed();
     if (!state.ready || !in_bounds(y,x) || old_feat == new_feat) return;
     environment_cell* c = &cells[y][x];
     if (cave_info[y][x] & CAVE_SEEN) c->known_feat = new_feat;
+    if (new_feat == FEAT_DAMAGED_WALL || new_feat == FEAT_CRACKED_QUARTZ)
+        c->integrity = MIN(c->integrity, 60);
     if (!changing) {
         if (c->pending_feat && pending_count) pending_count--;
         c->pending_feat=0; c->due=0;
         c->work=0;
-        if (old_feat == FEAT_QUARTZ) c->flags |= ENV_MINERAL_SPENT;
+        if (c->owner && liquid(new_feat) != sources[c->owner-1].feature)
+            release_supply(c, true);
+        /* Cleared or quarried ground is a settled ledge, not a fresh crack
+         * target. Liquids can still wash over it. */
+        if ((rock(old_feat) || old_feat == FEAT_RUBBLE) && new_feat == FEAT_FLOOR)
+            c->flags |= ENV_DEPOSIT;
+        if (FEAT_IS_QUARTZ(old_feat) && !FEAT_IS_QUARTZ(new_feat))
+            c->flags |= ENV_MINERAL_SPENT;
         if (c->flags & ENV_FLOOR_ICE) {
             if (!FEAT_IS_ICE(new_feat)) c->flags &= ~ENV_FLOOR_ICE;
         }
@@ -418,7 +502,7 @@ static bool commit(int y,int x,int feature,int event)
     p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
     p_ptr->redraw |= PR_MAP;
     if(event)cave_event_emit(event,y,x,event==CAVE_EVENT_COLLAPSE?22:12);
-    if(old==FEAT_QUARTZ)c->flags|=ENV_MINERAL_SPENT;
+    if(FEAT_IS_QUARTZ(old)&&!FEAT_IS_QUARTZ(feature))c->flags|=ENV_MINERAL_SPENT;
     if(bridge) log_info("ENV bridge commit: turn=%d playerturn=%d at=(%d,%d) old_feat=%d new_feat=%d event=%d integrity=%d->%d pending=%d",
         turn, playerturn, y, x, old, feature, event, old_integrity, c->integrity, old_pending);
     return true;
@@ -492,11 +576,39 @@ void cave_environment_flood_bridge(int y,int x,int fluid,int force)
     flood_bridge_with_reason(y,x,fluid,force,"external");
 }
 
-static void source_step(int id)
+/* Weather one exposed site, never an entire shoreline in lockstep. Quiet
+ * water does not grind granite, and a sound bridge over a void does not rot. */
+static int weathering(int y, int x, int feature, bool flowing)
+{
+    environment_cell* c = &cells[y][x];
+    if (c->flags & ENV_BRIDGE) {
+        if (!c->integrity) return 0;
+        if (feature == FEAT_CHASM) return c->integrity < 100 ? 1 : 0;
+        if (feature == FEAT_WATER)
+            return flowing && c->material == ENV_BRIDGE_WOOD ? 1 : 0;
+        return c->material == ENV_BRIDGE_WOOD ? 2 : 1;
+    }
+    if (!rock(cave_feat[y][x]) || level_partition_kind_for_point(y,x) == LEVEL_PART_LABYRINTH)
+        return 0;
+    /* Nearby talus supports the bank until it settles. Advance an existing
+     * fracture, but do not initiate a continuous row of new failures. */
+    if (c->integrity == 100) {
+        for (int dy=-2;dy<=2;dy++) for (int dx=-2;dx<=2;dx++) {
+            int ny=y+dy,nx=x+dx;
+            if (in_bounds_fully(ny,nx) && (cave_feat[ny][nx]==FEAT_RUBBLE
+                || cells[ny][nx].pending_feat==FEAT_RUBBLE)) return 0;
+        }
+    }
+    int wear = feature == FEAT_CHASM ? 20 : feature == FEAT_POISON ? 12
+        : feature == FEAT_LAVA ? 10 : flowing ? 5 : 0;
+    if (level_partition_kind_for_point(y,x) == LEVEL_PART_RUINED) wear += wear/2;
+    return wear;
+}
+
+static void source_step(int id, int* remaining)
 {
     environment_source* s=&sources[id-1];
-    int interval=s->feature==FEAT_LAVA?config.lava_step:s->feature==FEAT_POISON?
-        config.acid_step:s->feature==FEAT_CHASM?config.crack_step:config.water_step;
+    int interval=source_interval(s->feature);
     if(turn<s->next_turn)return;
     log_debug("ENV source pulse: id=%d feature=%d origin=(%d,%d) turn=%d playerturn=%d previous_next=%d phase=%d",
         id, s->feature, s->y, s->x, turn, playerturn, s->next_turn, s->phase);
@@ -510,59 +622,102 @@ static void source_step(int id)
         }
         return;
     }
-    bool rising=s->phase++%12<6;
+    int rise_steps=s->feature==FEAT_LAVA?4:6;
+    bool rising=s->phase++%12<rise_steps;
     s->phase%=12;
     if(s->feature==FEAT_CHASM)rising=true;
     int chosen_y=0,chosen_x=0,seen=0;
+    int worn_y=0,worn_x=0,worn_amount=0,wear_seen=0,wear_priority=-1;
+    bool expand=s->feature!=FEAT_CHASM || random_below(6)==0;
     for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
         environment_cell* c=&cells[y][x]; int f=cave_feat[y][x];
         if(c->flags&ENV_PROTECTED||c->pending_feat)continue;
         if(!rising) {
             if(c->owner!=id||!(c->flags&ENV_ADDED_LIQUID)||(c->flags&ENV_BRIDGE)
-                || liquid(f)!=s->feature)continue;
+                || f!=s->feature || !*remaining)continue;
         } else {
             if(c->owner && c->owner!=id)continue;
-            bool contact=false;
+            bool reheat=s->feature==FEAT_LAVA && c->owner==id
+                && (c->flags&ENV_DEPOSIT) && liquid(c->base_feat)!=FEAT_LAVA;
+            /* A buried vent can feed its own crust again; an extinguished
+             * generated lava pool cannot conjure a new vent. */
+            bool contact=reheat && y==s->y && x==s->x,flowing=false;
             for(int d=0;d<4;d++) {
                 int ny=y+dy4[d],nx=x+dx4[d];
-                if(cells[ny][nx].owner==id && liquid(cave_feat[ny][nx])==s->feature
-                    && !FEAT_IS_ICE(cave_feat[ny][nx])) contact=true;
+                int neighbor=cave_feat[ny][nx];
+                if(cells[ny][nx].owner==id && (neighbor==s->feature
+                    || (s->feature==FEAT_WATER && neighbor==FEAT_DEEP_WATER))) {
+                    contact=true;
+                    flowing|=cave_water_flow_direction(ny,nx)!=CAVE_WATER_FLOW_CALM;
+                }
             }
             if(!contact)continue;
-            if((c->flags&ENV_BRIDGE)&&c->integrity) {
-                flood_bridge_with_reason(y,x,s->feature,4,"chasm-source");continue;
-            }
-            if(rock(f)) {
-                level_partition_kind part=level_partition_kind_for_point(y,x);
-                if(part==LEVEL_PART_LABYRINTH)continue;
-                int wear=s->feature==FEAT_POISON?16:s->feature==FEAT_LAVA?12:5;
-                if(part==LEVEL_PART_RUINED)wear*=2;
-                c->integrity=MAX(1,(int)c->integrity-wear);
-                if(c->integrity<=25)propose(y,x,FEAT_RUBBLE,CAVE_EVENT_CRACK);
+            if(((c->flags&ENV_BRIDGE)&&c->integrity)||rock(f)) {
+                int wear=weathering(y,x,s->feature,flowing);
+                if(c->integrity<=25 && !preserves_routes(y,x,
+                    (c->flags&ENV_BRIDGE)?s->feature:FEAT_RUBBLE))wear=0;
+                int priority=100-c->integrity;
+                if(wear && !critical_object(y,x) && priority>=wear_priority) {
+                    if(priority>wear_priority){wear_priority=priority;wear_seen=0;}
+                    if(random_below(++wear_seen)==0) {
+                        worn_y=y;worn_x=x;worn_amount=wear;
+                    }
+                }
                 continue;
             }
-            if(s->used>=s->capacity || (f!=FEAT_FLOOR&&f!=FEAT_RUBBLE
+            if(!expand || (!reheat && s->used>=MIN(s->capacity,source_capacity(s->feature))) || (f!=FEAT_FLOOR&&f!=FEAT_RUBBLE
                 &&f!=FEAT_OPEN&&f!=FEAT_BROKEN))continue;
+            if((c->flags&ENV_DEPOSIT) && !reheat
+                && (s->feature==FEAT_CHASM||s->feature==FEAT_LAVA))continue;
+            /* Persistent water contact quenches a vent/fringe instead of
+             * generating an endless boil/refill loop in the same cell. */
+            if(reheat) {
+                bool quenched=false;
+                for(int d=0;d<4;d++) {
+                    int neighbor=cave_bridge_underlay(cave_feat[y+dy4[d]][x+dx4[d]]);
+                    quenched|=neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER;
+                }
+                if(quenched)continue;
+            }
+            /* Loose rock at a fissure settles through the rubble pass; it
+             * must not require spare capacity for a permanent new hole. */
+            if(s->feature==FEAT_CHASM && f==FEAT_RUBBLE)continue;
             if(s->feature==FEAT_CHASM && (!(c->flags&ENV_NATURAL)||p_ptr->depth>=MORGOTH_DEPTH))continue;
         }
         if(critical_object(y,x)||cave_m_idx[y][x])continue;
         if(random_below(++seen)==0){chosen_y=y;chosen_x=x;}
+    }
+    if(wear_seen) {
+        environment_cell* c=&cells[worn_y][worn_x];
+        int f=cave_feat[worn_y][worn_x];
+        if(c->flags&ENV_BRIDGE)
+            flood_bridge_with_reason(worn_y,worn_x,s->feature,worn_amount,"weathering");
+        else {
+            c->integrity=MAX(1,(int)c->integrity-worn_amount);
+            if(c->integrity<=70 && f!=FEAT_DAMAGED_WALL && f!=FEAT_CRACKED_QUARTZ)
+                propose(worn_y,worn_x,cave_rock_damage_feature(f,1),CAVE_EVENT_CRACK);
+            else if(c->integrity<=25)propose(worn_y,worn_x,FEAT_RUBBLE,CAVE_EVENT_CRACK);
+        }
     }
     if(!seen)return;
     environment_cell* c=&cells[chosen_y][chosen_x];
     if(!rising) {
         int target=s->feature==FEAT_LAVA?FEAT_FLOOR:c->base_feat;
         if(commit(chosen_y,chosen_x,target,s->feature==FEAT_LAVA?CAVE_EVENT_VENT:CAVE_EVENT_FLOOD)) {
-            c->flags&=~ENV_ADDED_LIQUID;
-            if(s->used)s->used--;
+            /* Keep the fixed lava fringe so later surges reuse this ground
+             * instead of either paving forever or exhausting all activity. */
+            if(s->feature==FEAT_LAVA)c->flags|=ENV_DEPOSIT;
+            release_supply(c,s->feature!=FEAT_LAVA);
+            --*remaining;
         }
     } else if(propose(chosen_y,chosen_x,s->feature,
             s->feature==FEAT_CHASM?CAVE_EVENT_CRACK:s->feature==FEAT_LAVA?CAVE_EVENT_VENT:CAVE_EVENT_FLOOD)) {
+        bool reheat=s->feature==FEAT_LAVA && c->owner==id && (c->flags&ENV_DEPOSIT);
         c->base_feat=cave_feat[chosen_y][chosen_x]==FEAT_RUBBLE?FEAT_FLOOR:cave_feat[chosen_y][chosen_x];
         c->owner=id;
         /* Reserve supply when scheduled, so simultaneous proposals cannot
          * borrow the same unit. Cancellation refunds it in the pulse. */
-        c->flags|=ENV_ADDED_LIQUID;s->used++;
+        c->flags|=ENV_ADDED_LIQUID;if(!reheat)s->used++;
     }
 }
 
@@ -580,14 +735,14 @@ void cave_environment_process(void)
         environment_cell* c=&cells[y][x];
         if(!c->pending_feat||turn<c->due||!remaining)continue;
         int f=c->pending_feat, event=(f==FEAT_RUBBLE||f==FEAT_CHASM)?CAVE_EVENT_COLLAPSE:
+            (f==FEAT_DAMAGED_WALL||f==FEAT_CRACKED_QUARTZ)?CAVE_EVENT_CRACK:
             f==FEAT_LAVA?CAVE_EVENT_VENT:CAVE_EVENT_FLOOD;
         if(commit(y,x,f,event)) {
             if(c->flags&ENV_BRIDGE){c->integrity=0;c->work=0;c->underlay=f;}
             remaining--;
         } else if(turn-c->due>300) {
             if((c->flags&ENV_ADDED_LIQUID)&&c->owner&&liquid(cave_feat[y][x])!=sources[c->owner-1].feature) {
-                if(sources[c->owner-1].used)sources[c->owner-1].used--;
-                c->flags&=~ENV_ADDED_LIQUID;
+                release_supply(c,true);
             }
             c->pending_feat=0;c->due=0;if(pending_count)pending_count--;
         }
@@ -595,10 +750,12 @@ void cave_environment_process(void)
     if(!geology_due)return;
     if(p_ptr->depth<1 || (p_ptr->depth>MORGOTH_DEPTH&&!utumno_environment()))return;
     claim_unowned_bridge_sources();
+    restore_lava_fringe_owners();
     log_debug("ENV geology pulse: turn=%d playerturn=%d pulse=%d sources=%d changes=%d",
         turn, playerturn, pulse, state.source_count, remaining);
     update_heat();
-    for(int i=1;i<=state.source_count;i++)source_step(i);
+    int first=random_below(state.source_count);
+    for(int n=0;n<state.source_count;n++)source_step((first+n)%state.source_count+1,&remaining);
     /* Reservoir sampling gives a bounded number of thermal/mineral changes,
      * independent of map size and scan direction. */
     struct thermal_change { int y, x, feature, event; } changes[16];
@@ -608,29 +765,52 @@ void cave_environment_process(void)
         environment_cell* c=&cells[y][x]; int f=cave_feat[y][x],to=0,ev=0;
         if(c->flags&ENV_PROTECTED || c->pending_feat || (c->flags&ENV_BRIDGE)
             || cave_m_idx[y][x] || critical_object(y,x))continue;
-        bool hot_contact=false;
-        if(utumno_environment())for(int d=0;d<4;d++)
-            hot_contact|=cave_bridge_underlay(cave_feat[y+dy4[d]][x+dx4[d]])==FEAT_LAVA;
+        bool hot_contact=false,wet=false,liquid_water=false,quartz=false,rubble_sink=false;
+        for(int d=0;d<4;d++) {
+            int ny=y+dy4[d],nx=x+dx4[d],neighbor=cave_feat[ny][nx];
+            hot_contact|=neighbor==FEAT_LAVA;
+            liquid_water|=neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER;
+            wet|=neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER
+                || (FEAT_IS_ICE(neighbor)&&!(cells[ny][nx].flags&ENV_FLOOR_ICE));
+            quartz|=FEAT_IS_QUARTZ(neighbor);
+            rubble_sink|=neighbor==FEAT_CHASM||neighbor==FEAT_LAVA||neighbor==FEAT_POISON
+                || ((neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER)
+                    && cave_water_flow_direction(ny,nx)!=CAVE_WATER_FLOW_CALM);
+        }
         if(f==FEAT_WATER&&c->heat<=-2&&!hot_contact){to=FEAT_ICE;ev=CAVE_EVENT_FREEZE;}
-        else if(FEAT_IS_ICE(f)&&(c->heat>=2||hot_contact)){to=(c->flags&ENV_FLOOR_ICE)?c->base_feat:
+        else if(FEAT_IS_ICE(f)&&(c->heat>=2||hot_contact
+            || (c->heat>=0&&!FEAT_IS_ICE(c->base_feat)))){to=(c->flags&ENV_FLOOR_ICE)?c->base_feat:
             f==FEAT_ICE?FEAT_MELTING_ICE:FEAT_WATER;ev=CAVE_EVENT_THAW;}
         else if(f==FEAT_FLOOR&&c->heat<=-4&&!hot_contact&&(c->flags&ENV_NATURAL)) {
-            bool wet=false;
-            for(int d=0;d<4;d++)wet|=liquid(cave_feat[y+dy4[d]][x+dx4[d]])==FEAT_WATER;
             if(wet){to=FEAT_ICE;ev=CAVE_EVENT_FREEZE;}
         } else if(f==FEAT_LAVA) {
             bool water=false;
             for(int d=0;d<4;d++) {
                 int neighbor=cave_bridge_underlay(cave_feat[y+dy4[d]][x+dx4[d]]);
-                /* At Utumno's contact fronts, ice must melt before its water
-                 * quenches lava. Otherwise the heat disappears before thaw. */
-                water|=utumno_environment()?(neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER)
-                    :liquid(neighbor)==FEAT_WATER;
+                /* Ice first melts; only liquid water quenches molten rock. */
+                water|=neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER;
             }
             if(water){to=FEAT_FLOOR;ev=CAVE_EVENT_VENT;}
-        } else if(rock(f)&&f!=FEAT_QUARTZ&&state.mineral_budget
-            &&(c->flags&ENV_NATURAL)&&!(c->flags&ENV_MINERAL_SPENT)&&random_below(1500)==0) {
-            for(int d=0;d<4;d++)if(cave_feat[y+dy4[d]][x+dx4[d]]==FEAT_QUARTZ){to=FEAT_QUARTZ;ev=CAVE_EVENT_CRACK;}
+        } else if(f==FEAT_RUBBLE&&rubble_sink) {
+            /* Gravity or moving/corrosive liquid removes loose debris from
+             * the ledge. Dry sheltered piles do not vanish with age. */
+            to=FEAT_FLOOR;ev=CAVE_EVENT_CRACK;
+        } else if(FEAT_IS_GRANITE(f)&&state.mineral_budget
+            &&cave_quartz_natural_site(y,x)&&cave_natural[y][x]
+            &&liquid_water&&quartz&&!(c->flags&ENV_MINERAL_SPENT)&&random_below(1500)==0) {
+            to=FEAT_QUARTZ;ev=CAVE_EVENT_MINERAL;
+        }
+        /* With no warning pending, due records continuous exposure time.
+         * It is already saved, so reloading cannot restart or skip settling.
+         * Mineral deposition has its own much slower stochastic clock. */
+        if(!to)c->due=0;
+        else if(to!=FEAT_QUARTZ) {
+            if(!c->due) {
+                int delay=f==FEAT_RUBBLE?config.rubble_step:config.thermal_step;
+                if(ev==CAVE_EVENT_FREEZE)delay*=f==FEAT_FLOOR?3:2;
+                c->due=turn+scaled_interval(delay+random_below(delay/2));
+            }
+            if(turn<c->due)continue;
         }
         if(to&&thermal_limit) {
             int slot;
@@ -650,12 +830,9 @@ void cave_environment_process(void)
             if(old==FEAT_FLOOR&&target==FEAT_ICE){c->flags|=ENV_FLOOR_ICE;c->base_feat=FEAT_FLOOR;}
             if(!FEAT_IS_ICE(target))c->flags&=~ENV_FLOOR_ICE;
             if(target==FEAT_QUARTZ){c->flags|=ENV_MINERAL_SPENT;state.mineral_budget--;}
-            if(old==FEAT_LAVA) {
+            if(old==FEAT_LAVA || old==FEAT_RUBBLE) {
                 c->flags|=ENV_DEPOSIT;
-                if((c->flags&ENV_ADDED_LIQUID)&&c->owner) {
-                    if(sources[c->owner-1].used)sources[c->owner-1].used--;
-                    c->flags&=~ENV_ADDED_LIQUID;
-                }
+                release_supply(c,false);
             }
         }
     }
@@ -764,10 +941,16 @@ bool cave_environment_describe(int y,int x,char* text,size_t size)
     if(!state.ready||!in_bounds_fully(y,x)||!(cave_info[y][x]&CAVE_SEEN))return false;
     environment_cell* c=&cells[y][x];
     if(c->pending_feat)strnfmt(text,size,"Unstable: %s",c->pending_feat==FEAT_CHASM?"the ground is splitting":
-        c->pending_feat==FEAT_RUBBLE?"stone is crumbling":c->pending_feat==FEAT_LAVA?"lava is rising":"a flood is approaching");
+        c->pending_feat==FEAT_RUBBLE?"stone is crumbling":
+        (c->pending_feat==FEAT_DAMAGED_WALL||c->pending_feat==FEAT_CRACKED_QUARTZ)?"cracks are spreading":c->pending_feat==FEAT_LAVA?"lava is rising":"a flood is approaching");
     else if(c->flags&ENV_BRIDGE)strnfmt(text,size,"%s crossing: %s%s",c->material==ENV_BRIDGE_WOOD?"Wooden":"Stone",
         !c->integrity?"destroyed":c->integrity<=25?"failing":c->integrity<100?"damaged":"sound",c->work?" (repairs underway)":"");
     else if(c->flags&ENV_FLOOR_ICE)strnfmt(text,size,"Frozen coating over solid ground");
+    else if(cave_feat[y][x]==FEAT_RUBBLE&&c->due)
+        strnfmt(text,size,"Loose rubble is gradually clearing at the exposed edge");
+    else if(cave_feat[y][x]==FEAT_FLOOR&&(c->flags&ENV_DEPOSIT)&&c->owner
+        &&sources[c->owner-1].feature==FEAT_LAVA&&liquid(c->base_feat)!=FEAT_LAVA)
+        strnfmt(text,size,"Cooled lava crust; renewed flow can cover it again");
     else if(c->work)strnfmt(text,size,"A crossing is being built");
     return text[0]!='\0';
 }
@@ -783,7 +966,7 @@ bool cave_environment_restore_state(environment_state value)
             value.ready, value.random);
         return false;
     }
-    state=value;load_config();
+    state=value;load_config();reconcile_lava_fringe=true;
     log_info("ENV restore state: turn=%d playerturn=%d last_turn=%d sources=%d budget=%d ready=%d speed=%d pulse=%d crack_step=%d warning=%d",
         turn, playerturn, state.last_turn, state.source_count, state.mineral_budget,
         state.ready, op_ptr->environment_speed, scaled_interval(config.pulse),
@@ -796,7 +979,7 @@ bool cave_environment_restore_cell(int y,int x,environment_cell c)
         ||c.bridge_feat>=FEAT_COUNT||c.underlay>=FEAT_COUNT||c.material>ENV_BRIDGE_STONE
         ||c.integrity>100||c.work>16||c.pending_feat>=FEAT_COUNT||c.owner>state.source_count
         ||c.known_underlay>=FEAT_COUNT||c.known_material>ENV_BRIDGE_STONE
-        ||c.heat< -12||c.heat>12||c.due<0||(c.pending_feat&&c.due>turn+100000))return false;
+        ||c.heat< -12||c.heat>12||c.due<0||c.due>turn+100000)return false;
     if(cells[y][x].pending_feat&&pending_count)pending_count--;
     cells[y][x]=c;if(c.pending_feat)pending_count++;
     if((c.flags&ENV_BRIDGE)||FEAT_IS_BRIDGE(c.base_feat)||FEAT_IS_BRIDGE(c.known_feat))

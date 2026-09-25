@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 21 /* Individual partition territories and patrol routes. */
+#define VERSION_EXTRA 22 /* Separate damaged walls and mineral veins. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -1321,7 +1321,9 @@
 #define FEAT_MELTING_ICE 0x66
 /* All built-in terrain records must be present in the installed data. */
 #define FEAT_ILLUSORY_WALL 0x67
-#define FEAT_COUNT (FEAT_ILLUSORY_WALL + 1)
+#define FEAT_DAMAGED_WALL 0x68
+#define FEAT_CRACKED_QUARTZ 0x69
+#define FEAT_COUNT (FEAT_CRACKED_QUARTZ + 1)
 #define FEAT_IS_ICE(F) ((F) == FEAT_ICE || (F) == FEAT_MELTING_ICE)
 #define MELTING_ICE_BREAK_ONE_IN 5
 #define FEAT_IS_BRIDGE(F) ((F) >= FEAT_BRIDGE_HEAD && (F) <= FEAT_BRIDGE_TAIL)
@@ -1380,6 +1382,15 @@
 #define FEAT_WALL_SOLID 0x3B
 #define FEAT_WALL_PERM 0x3F
 
+/* New terrain IDs are appended; never infer rock properties from ordering. */
+#define FEAT_IS_QUARTZ(F) ((F) == FEAT_QUARTZ || (F) == FEAT_CRACKED_QUARTZ)
+#define FEAT_IS_GRANITE(F) ((F) >= FEAT_WALL_EXTRA && (F) <= FEAT_WALL_SOLID)
+#define FEAT_IS_ROCK(F) (FEAT_IS_GRANITE(F) || FEAT_IS_QUARTZ(F) || (F) == FEAT_DAMAGED_WALL)
+#define FEAT_IS_WALL(F) (((F) >= FEAT_WALL_HEAD && (F) <= FEAT_WALL_TAIL) \
+    || (F) == FEAT_DAMAGED_WALL || (F) == FEAT_CRACKED_QUARTZ)
+/* Runtime palette variants of the existing vein overlay, reserved atlas row. */
+#define GRAPHICS_QUARTZ_OVERLAY_ROW 60
+
 // Forges
 #define FEAT_FORGE 0x0F
 
@@ -1395,6 +1406,7 @@
 /* Tunneling thresholds shared by terrain interaction and forge sabotage. */
 #define TUNNEL_DIFFICULTY_RUBBLE 1
 #define TUNNEL_DIFFICULTY_QUARTZ 2
+#define TUNNEL_DIFFICULTY_DAMAGED 2
 #define TUNNEL_DIFFICULTY_GRANITE 3
 
 /* Reward for denying a normal or enchanted forge to Morgoth's army. */
@@ -3742,7 +3754,7 @@
  * Determine if a "legal" grid is a "wall" grid
  */
 #define cave_wall_bold(Y, X)                                                   \
-    ((cave_feat[Y][X] >= FEAT_WALL_HEAD) && (cave_feat[Y][X] <= FEAT_WALL_TAIL))
+    FEAT_IS_WALL(cave_feat[Y][X])
 
 /* Illusory walls remain player-passable, but monsters perceive them as walls. */
 #define cave_monster_wall_bold(Y, X)                                           \
@@ -3753,8 +3765,7 @@
  * Determine if a "legal" grid is an "impassable" grid
  */
 #define cave_impassable_bold(Y, X)                                             \
-    (((cave_feat[Y][X] >= FEAT_WALL_HEAD)                                      \
-         && (cave_feat[Y][X] <= FEAT_WALL_TAIL))                               \
+    (FEAT_IS_WALL(cave_feat[Y][X])                                            \
         || (cave_feat[Y][X] == FEAT_CHASM))
 
 /*

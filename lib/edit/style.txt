@@ -5,7 +5,7 @@ V:0.9.8
 # Sections
 # - Styles: N:/G:/W:/Y:/F:/D: define tile coordinates per style.
 #   - W: wall tile (row:col)
-#   - Y: vein tile (row:col). If omitted, a default overlay is used (see E: below).
+#   - Y: damaged-wall tile (row:col). If omitted, use the default overlay (E:).
 #   - F: floor tile(s) (row:col). May include multiple space-separated tokens;
 #        one variant is chosen per level (and per vault) and used consistently.
 #        F:TILE:row:col ... instead varies the floor tiles per map square,
@@ -13,9 +13,10 @@ V:0.9.8
 #   - D: door tile(s) (row:col). May include multiple space-separated tokens;
 #        one variant is chosen per level (and per vault) and used consistently.
 # - Defaults:
-#   - E:row:col sets the default vein overlay tile used whenever a style omits Y:.
-#     In that case, the vein is drawn as a transparent overlay over the wall.
-#     If Y: is present for a style, the vein fully replaces the wall tile.
+#   - E:row:col sets the damage overlay used whenever a style omits Y:.
+#     Damage is drawn as a transparent overlay over the wall.
+#     If Y: is present, the damaged-wall tile fully replaces the wall tile.
+#     Quartz uses a milky-white runtime palette of E: over the local wall.
 #   - EK:R:G:B (optional) sets an explicit color-key for overlays (Windows renderer).
 #     If not set, the overlay's own top-left pixel color is used as the key.
 #     Use EK if your overlay's transparent color is not the top-left pixel.
@@ -135,7 +136,7 @@ S:polished serpentine jade
 M1:The passage opens into a hall of polished green stone, carved with unsettling, serpentine patterns.
 M2:This is no natural rock, but a substance born of alchemy and a dragon's thought.
 M1:A faint, harmonious hum vibrates through the jade-like walls, a music that gnaws at your resolve.
-M2:It is a song of enthrallment, a lure for the lost children of Húrin.
+M2:It is a song of enthrallment, a lure for the lost children of HÃºrin.
 M1:The elegance of the chamber is a lie, its beauty as cold and sharp as a shard of glass.
 M2:It is the calculated perfection of the Serpent's gaze, which binds the will even as it slays.
 N:9:Shadow0 #BigCrudeShadow
@@ -160,7 +161,7 @@ M1:The very masonry is built of the faces of the dead, their silent screams froz
 M2:You have come to a place where valour and despair are the mortar that binds the walls.
 M1:You walk now through a catacomb of sorrow, where the slain of the Nirnaeth Arnoediad form the foundation.
 M2:A curse lies on this place, the weight of Tears Unnumbered.
-M1:The air is cold with the breath of unhoused fëar, their last cries trapped within the rock.
+M1:The air is cold with the breath of unhoused fÃ«ar, their last cries trapped within the rock.
 M2:You feel the gaze of a thousand skulls that have no eyes.
 N:11:Shadow2 #PurpleGreen
 W:17:10
@@ -277,7 +278,7 @@ F:23:8 23:12 23:18
 D:0:10 20:6 20:9 20:12 20:15 20:18 20:21 20:24 20:27
 S:red-hot latticed iron
 M1:The walls are a lattice of red-hot iron, pulsing with a fierce and steady heat.
-M2:The light it casts is the colour of blood and the unquenchable vengeance of the House of Fëanor.
+M2:The light it casts is the colour of blood and the unquenchable vengeance of the House of FÃ«anor.
 M1:You must shield your face from the searing air that rises from the glowing plates.
 M2:It is the very breath of the fires of doom, the heat of the world's ending given form.
 M1:The chamber hums with a barely contained power, the sound of a mighty forge-bellows.
@@ -375,7 +376,7 @@ D:0:10 20:6 20:9 20:12 20:15 20:18
 S:deep twilight-purple brick
 M1:You enter a hall of simple, deep purple bricks, the colour of twilight in a dying land.
 M2:A profound sadness permeates the air, a sense of beauty lost forevermore.
-M1:The silence here is heavy with memory, as if this place heard once a song of Lúthien Tinuviel.
+M1:The silence here is heavy with memory, as if this place heard once a song of LÃºthien Tinuviel.
 M2:Now all that remains is a faded echo, a whisper of unbearable grief.
 M1:The colour is that of the heather on the high moors under a bruised sky.
 M2:It is a place of mourning for a world that has been broken beyond repair.

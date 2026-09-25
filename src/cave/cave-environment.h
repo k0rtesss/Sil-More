@@ -18,9 +18,11 @@ typedef struct environment_cell {
     byte integrity, work, pending_feat, owner;
     byte known_underlay, known_material;
     s16b heat;
-    s32b due;
+    s32b due; /* Warning deadline, or continuous exposure deadline when not pending. */
 } environment_cell;
 typedef struct environment_source {
+    /* used is current added water/acid, a reusable lava fringe's footprint,
+     * or permanently added chasm cells. */
     byte y, x, feature, capacity, used, phase;
     s32b next_turn;
 } environment_source;

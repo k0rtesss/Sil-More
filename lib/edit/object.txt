@@ -1021,7 +1021,7 @@ D: before enchantment it speaks of deep halls, red forge-light, and a
 D: people who could turn a miner's tool to war without any shame in the
 D: doing.
 D: It can be equipped as a weapon and (usually) allows you to dig
-D: through rubble or quartz.
+D: through rubble, damaged walls or quartz.
 
 
 

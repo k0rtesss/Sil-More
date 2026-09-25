@@ -458,6 +458,10 @@ bool carve_big_cave_bounds(int y_min, int y_max, int x_min, int x_max,
     dun->is_quest[idx] = false;
     mark_room_anchor_meta(idx, LAYOUT_ANCHOR_CA_BLOB, false);
 
+    for (int y = min_y; y <= max_y; y++)
+        for (int x = min_x; x <= max_x; x++)
+            if (cave_floor_bold(y, x) && (cave_info[y][x] & CAVE_ROOM)
+                && !(cave_info[y][x] & CAVE_ICKY)) cave_natural[y][x] = 1;
     scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x, 0);
 
     log_trace("Big cave anchor: bounds=(%d,%d)-(%d,%d) center=(%d,%d) edge=%d floors=%d pillars=%d",

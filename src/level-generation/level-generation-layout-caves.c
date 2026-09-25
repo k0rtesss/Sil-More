@@ -15,6 +15,7 @@ void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2, u16b info_fl
             if (!in_bounds_fully(gy, gx))
                 continue;
 
+            if (!cave_quartz_natural_site(gy, gx)) continue;
             /* Only consider granite walls */
             int feat = cave_feat[gy][gx];
             if (feat < FEAT_WALL_EXTRA || feat > FEAT_WALL_SOLID)
@@ -30,13 +31,17 @@ void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2, u16b info_fl
                         continue;
                     int ny = gy + dy, nx = gx + dx;
                     if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
-                        && (cave_info[ny][nx] & CAVE_ROOM))
+                        && (cave_info[ny][nx] & CAVE_ROOM)
+                        && (cave_natural[ny][nx] || (cave_info[ny][nx] & CAVE_CHASM_AREA))
+                        && !(cave_info[ny][nx] & CAVE_ICKY))
                         adj_cave_floor = true;
                 }
             }
 
-            /* If adjacent to cave floor, ~30% chance to become quartz vein */
-            if (adj_cave_floor && (rand_int(100) < 30))
+            /* Mark natural host rock even when no deposit is exposed. */
+            if (adj_cave_floor) cave_natural[gy][gx] = 1;
+            /* Gems are guaranteed now: keep actual deposits sparse. */
+            if (adj_cave_floor && (rand_int(100) < 5))
             {
                 cave_set_feat(gy, gx, FEAT_QUARTZ);
                 /* Mark as part of a room so tunneling can detect cave quartz */
@@ -274,7 +279,9 @@ bool carve_ca_blob_anchor(void)
                         continue;
                     int ny = gy + dy, nx = gx + dx;
                     if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
-                        && (cave_info[ny][nx] & CAVE_ROOM))
+                        && (cave_info[ny][nx] & CAVE_ROOM)
+                        && (cave_natural[ny][nx] || (cave_info[ny][nx] & CAVE_CHASM_AREA))
+                        && !(cave_info[ny][nx] & CAVE_ICKY))
                     {
                         borders_floor = true;
                     }
@@ -505,7 +512,9 @@ bool carve_ca_blob_anchor_bounds(int y_min, int y_max, int x_min, int x_max, int
                         continue;
                     int ny = gy + dy, nx = gx + dx;
                     if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
-                        && (cave_info[ny][nx] & CAVE_ROOM))
+                        && (cave_info[ny][nx] & CAVE_ROOM)
+                        && (cave_natural[ny][nx] || (cave_info[ny][nx] & CAVE_CHASM_AREA))
+                        && !(cave_info[ny][nx] & CAVE_ICKY))
                     {
                         borders_floor = true;
                     }

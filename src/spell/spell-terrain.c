@@ -294,11 +294,11 @@ void destroy_area(int y1, int x1, int r, bool full)
                     feat = FEAT_WALL_EXTRA;
                 }
 
-                /* Quartz */
+                /* Fractured stone */
                 else if (t < 100)
                 {
-                    /* Create quartz vein */
-                    feat = FEAT_QUARTZ;
+                    /* Create damaged stone, never new minerals */
+                    feat = FEAT_DAMAGED_WALL;
                 }
 
                 /* Change the feature */
@@ -642,7 +642,7 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                             else if (t < 70)
                                 feat = FEAT_WALL_EXTRA;
                             else
-                                feat = FEAT_QUARTZ;
+                                feat = FEAT_DAMAGED_WALL;
                         }
                         else
                         {
@@ -661,7 +661,7 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                         else if (t < 80)
                             feat = FEAT_WALL_EXTRA;
                         else
-                            feat = FEAT_QUARTZ;
+                            feat = FEAT_DAMAGED_WALL;
                     }
 
                     // if we started with rubble
@@ -675,7 +675,7 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                         else if (t < 70)
                             feat = FEAT_WALL_EXTRA;
                         else
-                            feat = FEAT_QUARTZ;
+                            feat = FEAT_DAMAGED_WALL;
                     }
 
                     // if we started with a wall of some sort

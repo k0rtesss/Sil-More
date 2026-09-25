@@ -1,5 +1,78 @@
 # Monster AI implementation plan
 
+## Commander and soldier coordination (2026-09-25)
+
+`monster_squad_prepare()` in `src/melee/melee-movement-tactics.c` now makes one
+shared plan before each `process_monsters()` pass. Leadership is authored in
+`lib/edit/monster.txt` as `L:grade:doctrine:kin[:additional command kin]`.
+Rally and Escort no longer determine eligibility. There are 105 explicit
+profiles, including 50 non-unique types capable of leading a compatible group.
+Morgoth retains his separate behavior.
+
+| Grade | Selection and behavior | Examples |
+|---|---|---|
+| NONE | May follow a compatible leader, cannot lead | Spider hatchlings, phantoms |
+| ORDINARY | Elected when no higher grade is present; separate approach/firing positions | Orc soldiers, warriors, archers; ordinary trolls |
+| LEADER | Preferred over ordinary members; can assign a flanker, ranged guard or withdrawal cover | Orc champions, Easterling warriors/spies, troll guards |
+| COMMANDER | Highest grade; can briefly assemble approaching melee soldiers or regroup a battered squad | Orc captains, Fankil, Gothmog |
+
+Within a grade, a viable incumbent outranks every newcomer. Level breaks ties
+only when electing a new leader. Existing members are retained before recruiting
+new allies. Death, incapacity, loss of contact/sight, or a higher-grade arrival
+can change leadership; current HP and small score changes cannot reshuffle it.
+
+- Each commander coordinates up to eight members, including itself, within six
+  squares and line of sight. Short-sighted members require contact within two.
+  At most sixteen squads are planned per pass.
+- Command kin are explicit, independent of incidental shared wandering bands.
+  Dragons can command dragons, never trolls by virtue of level. Extra authority
+  is permitted only for tactical commanders: Gothmog and Turkano may direct
+  orcs/trolls alongside raukar; Fankil may direct raukar alongside Men. Hostile
+  relations and explicit conflicting allegiances still prevent recruitment.
+- PACK profiles (wolves/werewolves and spiders) use pursuit and surrounding,
+  without soldier guard assignments or assembly plans. Ordinary wolves can
+  elect an alpha despite lacking SMART; mindless creatures remain excluded.
+- Experienced tactical leaders assign at most one guard, prioritizing cover
+  for a visible wounded fleeing ally over a ranged guard, and one flanker when
+  the available soldiers allow it. Roles influence the production movement score.
+- Commanders can assemble melee soldiers spread by at least three squares,
+  while the nearest is still at least four squares from the player, for up to
+  two player turns. Archers and the commander are excluded from this spread
+  calculation. If at least half the squad is at half health or less, the
+  commander may order up to three turns of retreat toward a more distant,
+  cohesive position. A persistent condition cannot renew its own wait budget.
+- The commander must currently recognize the player. Soldiers can follow its
+  shared sighting without personal sight, but orders stop when contact, sight,
+  alertness, or morale fails. Confusion, stun, skipped/recovery turns, social
+  disputes, Song of Disguise and the truce exclude coordination.
+- A bounded search of observed, empty, legal routes assigns separate positions.
+  Ranged positions are assigned first; melee soldiers favor contact and opposite
+  sides while avoiding the reserved firing corridors. Existing useful positions
+  and unchanged orders receive modest preference to reduce reshuffling.
+- Orders influence the existing tactical movement score; its poison budgets,
+  reaction costs, terrain rules and final movement legality remain authoritative.
+  Archers hold a safe assigned position with a firing line. Spells and melee
+  attacks still use the ordinary action scheduler and costs.
+- `monster_type.squad` is runtime-only. Plans are reconstructed after loading;
+  deletion clears a commander's orders and compaction repairs its index. No new
+  save record, monster flag, race ID, combat stats, or generation rule is introduced.
+  The race-template record has new command metadata; its raw cache is regenerated
+  automatically when its size changes. Invalid/duplicate leadership records,
+  unknown tokens, and unauthorized cross-kin declarations are rejected.
+- Visible soldiers may report following orders after a successful move, using
+  the existing message cooldown and only when the commander is also visible.
+
+Validation: focused assignment/contact/corridor/lifecycle tests, stable elections,
+grade succession, cross-kin boundaries, pack behavior, guards, retreat and assembly
+budgets; full Fankil and ordinary-orc scheduler fixtures including commander
+death and champion succession; actual commander withdrawal through get/make/process
+move; real template parsing, invalid records, raw-cache loading and old-size cache
+regeneration. Standard Windows build, combat/learning suites, legacy monster-record
+roundtrips and template-version checks pass. Encounter difficulty and visual feel
+still require interactive playtesting.
+
+## Earlier adaptive AI implementation record
+
 Updated 2026-09-11. Implemented against branch `0.9.8`, including the monster, ability, and poison baseline now committed as `d67d8ded`.
 
 Implementation is in `src/monster/monster-ai.c`, `monster-senses.c`, `monster-tactics.c`, the existing melee decision/movement modules, shared light/projection helpers, and the real player action and damage routes. Save version is now **0.9.8.6**. Morgoth keeps a separate copy of his previous tactical movement and his ordinary song-selection gate.

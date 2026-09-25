@@ -401,6 +401,7 @@ static const char* event_noise(int kind)
     switch (kind)
     {
         case CAVE_EVENT_CRACK: return "stone cracking";
+        case CAVE_EVENT_MINERAL: return "a faint chiming of growing crystals";
         case CAVE_EVENT_COLLAPSE: return "a thunderous collapse";
         case CAVE_EVENT_FLOOD: return "a rushing flood";
         case CAVE_EVENT_BUILD: return "rhythmic hammering";

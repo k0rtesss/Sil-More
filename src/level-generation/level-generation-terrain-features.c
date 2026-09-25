@@ -87,7 +87,7 @@ void alloc_object_global(int set, int typ, int num, bool out_of_sight)
 }
 
 /*
- * Places "streamers" of quartz through dungeon
+ * Places bands of weakened rock through the dungeon
  */
 bool build_streamer(int feat)
 {
@@ -135,7 +135,8 @@ bool build_streamer(int feat)
             if (cave_feat[ty][tx] > FEAT_WALL_SOLID)
                 continue;
 
-            /* Clear previous contents, add proper vein type */
+            if (cave_info[ty][tx] & (CAVE_ICKY | CAVE_G_VAULT)) continue;
+            /* Clear previous contents, add proper weakened wall type */
             cave_set_feat(ty, tx, feat);
         }
 

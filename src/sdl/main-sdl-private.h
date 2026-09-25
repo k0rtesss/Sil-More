@@ -3283,6 +3283,7 @@ bool sdl_side_map_pane_handle_pointer_up(float x, float y, bool mouse, SDL_Finge
 void sdl_side_map_pane_cancel_pointer(SDL_FingerID finger_id, bool mouse);
 bool sdl_display_pixel_map(int* cy, int* cx);
 errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp, const byte* tap, const char* tcp);
+SDL_Surface* sdl_quartz_tileset_surface(SDL_Surface* source);
 bool sdl_load_tileset_texture(void);
 void sdl_apply_tiles_to_terms(bool tiles);
 void sdl_mark_tiles_mode_game_redraw(void);

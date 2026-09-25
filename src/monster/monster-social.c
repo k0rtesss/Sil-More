@@ -84,6 +84,12 @@ void monster_social_remap(int old_idx, int new_idx)
     {
         monster_type* m = &mon_list[i];
         if (!m->r_idx) continue;
+        /* Commands cannot survive their leader's death or a reused index. */
+        if (m->squad.commander == old_idx)
+        {
+            if (new_idx) m->squad.commander = new_idx;
+            else memset(&m->squad, 0, sizeof(m->squad));
+        }
         if (!new_idx && (m->social_rival == old_idx
                 || m->social_focus == old_idx || m->social_ally == old_idx))
             forget_rival(m);

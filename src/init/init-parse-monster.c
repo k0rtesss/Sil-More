@@ -9,6 +9,7 @@
 #include "score/score_guid.h"
 #include "init-parse-internal.h"
 #include "init-object-bonuses.h"
+#include "monster/monster-tactics.h"
 #include <ctype.h>
 
 #ifdef ALLOW_TEMPLATES
@@ -46,6 +47,58 @@ static errr grab_one_spell_flag(monster_race* ptr, cptr what)
     memset(f, 0, sizeof(f));
     f[RF4] = &(ptr->flags4);
     return grab_one_flag(f, "monster", what);
+}
+
+static int command_token(const char* token, const char* const* names, int count)
+{
+    for (int i = 0; i < count; ++i) if (streq(token, names[i])) return i;
+    return -1;
+}
+
+static errr parse_command(monster_race* race, char* text)
+{
+    static const char* const grades[] = {"NONE", "ORDINARY", "LEADER", "COMMANDER"};
+    static const char* const styles[] = {"TACTICAL", "PACK"};
+    static const char* const kin[] = {"NONE", "ORC", "MAN", "ELF", "TROLL",
+        "RAUKO", "WOLF", "CAT", "DRAGON", "SPIDER", "UNDEAD", "VAMPIRE",
+        "GIANT", "HORROR"};
+    _Static_assert(N_ELEMENTS(kin) == MON_KIN_MAX, "Command kin names must match enum");
+    if (race->command_kin) return PARSE_ERROR_GENERIC;
+    char* style = strchr(text, ':');
+    if (!style) return PARSE_ERROR_GENERIC;
+    *style++ = '\0';
+    char* family = strchr(style, ':');
+    if (!family) return PARSE_ERROR_GENERIC;
+    *family++ = '\0';
+    char* extra = strchr(family, ':');
+    if (extra) *extra++ = '\0';
+    int grade = command_token(text, grades, N_ELEMENTS(grades));
+    int doctrine = command_token(style, styles, N_ELEMENTS(styles));
+    int kind = command_token(family, kin, N_ELEMENTS(kin));
+    if (grade < 0 || doctrine < 0 || kind <= MON_KIN_NONE)
+        return PARSE_ERROR_GENERIC;
+    u32b authority = 1UL << kind;
+    if (extra)
+    {
+        /* Cross-kin authority is always explicit and reserved for commanders. */
+        if (grade != MON_COMMAND_COMMANDER || doctrine == MON_COMMAND_PACK)
+            return PARSE_ERROR_GENERIC;
+        do
+        {
+            char* next = strchr(extra, '|');
+            if (next) *next++ = '\0';
+            int allowed = command_token(extra, kin, N_ELEMENTS(kin));
+            if (allowed <= MON_KIN_NONE || (authority & (1UL << allowed)))
+                return PARSE_ERROR_GENERIC;
+            authority |= 1UL << allowed;
+            extra = next;
+        } while (extra);
+    }
+    race->command_grade = grade;
+    race->command_style = doctrine;
+    race->command_kin = kind;
+    race->command_authority = authority;
+    return 0;
 }
 
 /*
@@ -97,6 +150,13 @@ errr parse_r_info(char* buf, header* head)
         /* Store the name */
         if (!(r_ptr->name = add_name(head, s)))
             return (PARSE_ERROR_OUT_OF_MEMORY);
+    }
+
+    /* Leadership: grade, doctrine, kin, and optional extra command kin. */
+    else if (buf[0] == 'L')
+    {
+        if (!r_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        return parse_command(r_ptr, buf + 2);
     }
 
     /* Process 'D' for "Description" */

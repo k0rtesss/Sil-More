@@ -377,7 +377,7 @@ bool carve_straight_big_partition_connector(
             cave_corridor2[y][x] = r2;
             carved = true;
         }
-        else if ((feat >= FEAT_WALL_HEAD) && (feat <= FEAT_WALL_TAIL))
+        else if FEAT_IS_WALL(feat)
         {
             /* Don't carve through inner/solid room walls, rubble walls, etc. */
             if (feat != FEAT_WALL_EXTRA)

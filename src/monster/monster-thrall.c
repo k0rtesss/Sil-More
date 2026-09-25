@@ -35,7 +35,7 @@ static void thrall_wander(monster_type* m_ptr)
             continue;
         int feat = cave_feat[y][x];
         if (thrall_can_walk(y, x)
-            || (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL)
+            || FEAT_IS_WALL(feat)
             || feat == FEAT_ILLUSORY_WALL)
             choices[count++] = i;
     }
@@ -59,7 +59,7 @@ static void thrall_wander(monster_type* m_ptr)
     m_ptr->visual_facing_dir = (byte)rough_direction(oy, ox, y, x);
     if (m_ptr->ml)
         lite_spot(oy, ox);
-    if (cave_feat[y][x] == FEAT_QUARTZ)
+    if (FEAT_IS_QUARTZ(cave_feat[y][x]))
     {
         cave_set_feat(y, x, FEAT_RUBBLE);
         p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;

@@ -265,6 +265,12 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 break;
             }
 
+            /* Damaged masonry, distinct from an authored mineral deposit. */
+            case '/':
+            {
+                cave_set_feat_with_color(y, x, FEAT_DAMAGED_WALL, 0);
+                break;
+            }
             /* Quartz vein */
             case '%':
             {
@@ -407,7 +413,7 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                             near_vault_door = true;
                         }
                         /* Walls and wall-like */
-                        else if ((nfeat >= FEAT_WALL_HEAD && nfeat <= FEAT_WALL_TAIL) ||
+                        else if (FEAT_IS_WALL(nfeat) ||
                                  nfeat == FEAT_QUARTZ || nfeat == FEAT_RUBBLE) {
                             near_vault_wall = true;
                         }
@@ -978,7 +984,7 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 place_vault_monster_token('A', y, x);
                 break;
             }
-            /* Aulë (quest giver) */
+            /* AulÃ« (quest giver) */
             case 'L':
             {
                 place_vault_monster_token('L', y, x);
@@ -1567,7 +1573,7 @@ bool choose_vault_contact(
                     door_x = x;
                 }
             }
-            else if ((feat >= FEAT_WALL_HEAD) && (feat <= FEAT_WALL_TAIL))
+            else if FEAT_IS_WALL(feat)
             {
                 wall_seen++;
                 if (one_in_(wall_seen))
@@ -1595,7 +1601,7 @@ bool choose_vault_contact(
                     door_x = x;
                 }
             }
-            else if ((feat >= FEAT_WALL_HEAD) && (feat <= FEAT_WALL_TAIL))
+            else if FEAT_IS_WALL(feat)
             {
                 wall_seen++;
                 if (one_in_(wall_seen))

@@ -588,7 +588,7 @@ void force_map_redraw(void)
  *
  * Note that all "walls" always look like "secret doors" (see "map_info()").
  */
-static const int priority_table[13][2] = {
+static const int priority_table[][2] = {
     /* Dark */
     { FEAT_NONE, 2 },
 
@@ -600,6 +600,8 @@ static const int priority_table[13][2] = {
 
     /* Quartz */
     { FEAT_QUARTZ, 11 },
+    { FEAT_CRACKED_QUARTZ, 11 },
+    { FEAT_DAMAGED_WALL, 11 },
 
     /* Rubble */
     { FEAT_RUBBLE, 13 },

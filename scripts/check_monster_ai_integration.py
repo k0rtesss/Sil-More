@@ -15,6 +15,55 @@ CHECKS = r'''
 #include "spell/spell-projection-internal.h"
 void process_player(void); /* Internal production scheduler entry point. */
 
+static void check_command_profiles(void)
+{
+    assert(r_info[41].command_grade == MON_COMMAND_ORDINARY);
+    assert(r_info[81].command_grade == MON_COMMAND_LEADER);
+    assert(r_info[91].command_grade == MON_COMMAND_COMMANDER);
+    assert(r_info[82].command_grade == MON_COMMAND_LEADER);
+    assert(r_info[192].command_grade == MON_COMMAND_LEADER);
+    assert(r_info[11].command_style == MON_COMMAND_PACK);
+    assert(r_info[222].command_authority == (1UL << MON_KIN_DRAGON));
+    assert(r_info[241].command_authority & (1UL << MON_KIN_TROLL));
+    assert(r_info[409].command_authority & (1UL << MON_KIN_RAUKO));
+    int ordinary_leaders = 0;
+    for (int i = 1; i < z_info->r_max; ++i)
+    {
+        const monster_race* r = &r_info[i];
+        if (r->command_kin) {
+            assert(r->command_kin < MON_KIN_MAX && r->command_grade <= MON_COMMAND_COMMANDER);
+            assert(r->command_authority & (1UL << r->command_kin));
+        }
+        if (!(r->flags1 & RF1_UNIQUE) && r->command_grade) ++ordinary_leaders;
+    }
+    assert(ordinary_leaders >= 40);
+    /* This fixture's data directory is temporary. Exercise both raw-cache load
+     * and automatic replacement of a cache with the old race-record size. */
+    assert(free_info(&r_head) == 0); assert(init_r_info() == 0);
+    assert(r_info[41].command_grade == MON_COMMAND_ORDINARY);
+    char path[1024]; strnfmt(path, sizeof(path), "%s/monster.raw", ANGBAND_DIR_DATA);
+    FILE* raw = fopen(path, "r+b"); assert(raw);
+    header old; assert(fread(&old, sizeof(old), 1, raw) == 1);
+    old.info_len -= 8;
+    rewind(raw); assert(fwrite(&old, sizeof(old), 1, raw) == 1); assert(fclose(raw) == 0);
+    assert(free_info(&r_head) == 0); assert(init_r_info() == 0);
+    assert(r_info[241].command_grade == MON_COMMAND_COMMANDER);
+    const char* invalid[] = {"L:KING:TACTICAL:ORC", "L:ORDINARY:SOLDIER:ORC",
+        "L:LEADER:TACTICAL:NONE", "L:ORDINARY:TACTICAL:ORC:TROLL",
+        "L:COMMANDER:PACK:WOLF:ORC", "L:COMMANDER:TACTICAL:ORC:TROLL|",
+        "L:COMMANDER:TACTICAL:ORC:ORC", "L:LEADER:TACTICAL"};
+    for (int i = 0; i < (int)N_ELEMENTS(invalid); ++i)
+    {
+        monster_race race = {0}; char names[128] = {0};
+        header head = {.info_num = 1, .info_ptr = &race, .name_ptr = names};
+        char name[] = "N:0:command parser fixture", line[128]; error_idx = -1;
+        assert(parse_r_info(name, &head) == 0);
+        SDL_strlcpy(line, invalid[i], sizeof(line));
+        assert(parse_r_info(line, &head) != 0 && !race.command_kin);
+    }
+    printf("Command templates: %d ordinary leader-capable races; grades, kin, malformed records and cache regeneration PASS.\n", ordinary_leaders);
+}
+
 static monster_type* adaptive_fixture(int race, int evasion)
 {
     monster_type* m = combat_fixture(race, evasion);
@@ -125,6 +174,113 @@ static void check_weapon_fear(void)
     assert(m->stance == STANCE_FLEEING);
     assert(monster_ai_confidence(m, MON_AI_SLAY_FEAR) == 3);
     puts("Production Doriath hit: exact -20 fear cohort learns and a shaken target flees; misses, ordinary fear, unrelated kinds, confusion, fear immunity, unseen attackers and warning spread stay distinct PASS.");
+}
+
+static void check_commanded_squad(void)
+{
+    monster_type* leader = adaptive_fixture(409, 0); /* Fankil's actual template. */
+    int leader_idx = cave_m_idx[leader->fy][leader->fx];
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->py = 10; p_ptr->px = 16;
+    cave_m_idx[10][16] = -1;
+    assert(place_monster_one(8, 11, 82, false, true, NULL));
+    assert(place_monster_one(12, 11, 82, false, true, NULL));
+    assert(place_monster_one(10, 8, 103, false, true, NULL));
+    int guards[] = {cave_m_idx[8][11], cave_m_idx[12][11]};
+    int archer_idx = cave_m_idx[10][8];
+    int moved = 0;
+    for (int round = 0; round < 6; ++round)
+    {
+        int old_y[MAX_MONSTERS], old_x[MAX_MONSTERS];
+        for (int i = 1; i < mon_max; ++i)
+        {
+            monster_type* m = &mon_list[i];
+            if (!m->r_idx) continue;
+            old_y[i] = m->fy; old_x[i] = m->fx;
+            m->alertness = ALERTNESS_ALERT;
+            m->skip_next_turn = m->skip_this_turn = false;
+            m->stance = STANCE_AGGRESSIVE; m->tmp_morale = 200;
+            m->min_range = i == archer_idx ? 2 : 1;
+            m->best_range = i == archer_idx ? 4 : 1;
+            m->cdis = distance(m->fy, m->fx, p_ptr->py, p_ptr->px);
+            m->energy = 100;
+        }
+        process_monsters(100); /* Must prepare the plan and consume it itself. */
+        assert(leader->squad.role == MON_SQUAD_COMMANDER);
+        for (int n = 0; n < 2; ++n)
+        {
+            monster_type* m = &mon_list[guards[n]];
+            assert(m->squad.commander == leader_idx && m->squad.role == MON_SQUAD_SOLDIER);
+            moved += m->fy != old_y[guards[n]] || m->fx != old_x[guards[n]];
+            assert(cave_m_idx[m->fy][m->fx] == guards[n]);
+        }
+        for (int i = 1; i < mon_max; ++i)
+            for (int j = 1; j < i; ++j)
+                if (mon_list[i].squad.role && mon_list[j].squad.role)
+                    assert(mon_list[i].squad.y != mon_list[j].squad.y
+                        || mon_list[i].squad.x != mon_list[j].squad.x);
+        ++playerturn;
+    }
+    assert(moved >= 2);
+    assert(distance(mon_list[guards[0]].fy, mon_list[guards[0]].fx, 10, 16) == 1
+        || distance(mon_list[guards[1]].fy, mon_list[guards[1]].fx, 10, 16) == 1);
+    assert(distance(mon_list[archer_idx].fy, mon_list[archer_idx].fx, 10, 16) >= 2);
+    delete_monster_idx(leader_idx);
+    assert(!mon_list[guards[0]].squad.role && !mon_list[guards[1]].squad.role);
+    assert(place_monster_one(10, 10, 82, false, true, NULL));
+    monster_squad_prepare();
+    assert(mon_list[guards[0]].squad.role && mon_list[guards[1]].squad.role);
+    assert(mon_list[guards[0]].squad.commander != leader_idx);
+    puts("Real Fankil squad: six scheduler rounds, separate orders, melee approach, ranged spacing and commander death PASS.");
+}
+
+static void check_ordinary_squad(void)
+{
+    monster_type* first = adaptive_fixture(41, 0); /* Ordinary orc soldiers. */
+    int first_idx = cave_m_idx[10][10];
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0; p_ptr->px = 13; cave_m_idx[10][13] = -1;
+    assert(place_monster_one(9, 10, 41, false, true, NULL));
+    int follower = cave_m_idx[9][10];
+    for (int i = 1; i < mon_max; ++i) if (mon_list[i].r_idx) {
+        monster_type* m = &mon_list[i];
+        m->alertness = ALERTNESS_ALERT; m->skip_next_turn = m->skip_this_turn = false;
+        m->stance = STANCE_AGGRESSIVE; m->tmp_morale = 200;
+        m->min_range = m->best_range = 1; m->energy = 100;
+        m->cdis = distance(m->fy, m->fx, 10, 13);
+    }
+    process_monsters(100);
+    assert(first->squad.role == MON_SQUAD_COMMANDER);
+    assert(mon_list[follower].squad.commander == first_idx);
+    assert(first->fy != 10 || first->fx != 10 || mon_list[follower].fy != 9 || mon_list[follower].fx != 10);
+    /* A champion takes over; its death returns command to an ordinary survivor. */
+    assert(place_monster_one(11, 10, 81, false, true, NULL));
+    int champion = cave_m_idx[11][10];
+    monster_type* chief = &mon_list[champion];
+    chief->alertness = ALERTNESS_ALERT; chief->stance = STANCE_AGGRESSIVE;
+    chief->skip_this_turn = chief->skip_next_turn = false;
+    chief->min_range = chief->best_range = 1;
+    monster_squad_prepare();
+    assert(first->squad.commander == champion);
+    delete_monster_idx(champion); monster_squad_prepare();
+    assert(first->squad.role && mon_list[follower].squad.role);
+    int commander = first->squad.commander;
+    assert(r_info[mon_list[commander].r_idx].command_grade == MON_COMMAND_ORDINARY);
+    /* Execute a commander-ordered withdrawal through real get/make/process_move. */
+    monster_type* m = adaptive_fixture(91, 0);
+    assert(place_monster_one(9, 9, 41, false, true, NULL));
+    for (int i = 1; i < mon_max; ++i) if (mon_list[i].r_idx) {
+        monster_type* n = &mon_list[i]; n->alertness = ALERTNESS_ALERT;
+        n->skip_this_turn = n->skip_next_turn = false; n->stance = STANCE_AGGRESSIVE;
+        n->min_range = n->best_range = 1; n->hp = MAX(1, n->maxhp / 4);
+    }
+    ++playerturn; monster_squad_prepare();
+    assert(m->squad.plan == MON_PLAN_REGROUP);
+    int y, x; bool fear = false, bash = false;
+    assert(get_move(m, &y, &x, &fear, false));
+    assert(distance(y, x, p_ptr->py, p_ptr->px) > 1);
+    assert(make_move(m, &y, &x, fear, &bash)); process_move(m, y, x, bash);
+    assert(distance(m->fy, m->fx, p_ptr->py, p_ptr->px) > 1);
+    puts("Ordinary orc soldier scheduler coordination, champion succession and real commander retreat movement: PASS.");
 }
 
 static void check_protected_terrain_movement(void)
@@ -309,6 +465,8 @@ static void check_adaptive_integration(void)
     check_weapon_fear();
     check_protected_terrain_movement();
     check_cooperative_movement();
+    check_commanded_squad();
+    check_ordinary_squad();
 }
 '''
 
@@ -319,6 +477,8 @@ def main():
         "int main(int argc,char** argv)", CHECKS + "\nint main(int argc,char** argv)")
     engine.HARNESS = engine.HARNESS.replace(
         "    check_combat();", "    check_combat();\n    check_adaptive_integration();")
+    engine.HARNESS = engine.HARNESS.replace(
+        "    check_templates();", "    check_command_profiles();\n    check_templates();")
     engine.main()
 
 

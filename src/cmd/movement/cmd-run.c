@@ -1336,6 +1336,8 @@ static bool run_test(void)
 
             /* Walls */
             case FEAT_QUARTZ:
+            case FEAT_CRACKED_QUARTZ:
+            case FEAT_DAMAGED_WALL:
             case FEAT_WALL_EXTRA:
             case FEAT_WALL_INNER:
             case FEAT_WALL_OUTER:

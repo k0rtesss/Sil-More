@@ -3932,7 +3932,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Move in roughly the same direction for at least four squares in light armour, or five otherwise, to gain speed. Turning sharply or breaking the run loses the benefit.",
+          "text": "Move in roughly the same direction for at least three squares in light armour, or four otherwise, to gain speed. Turning sharply or breaking the run loses the benefit.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -7864,7 +7864,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "Quartz is solid rock. Digging through it requires a suitable tool and can take repeated noisy turns. Inspect the tunnelling action before committing.",
+          "text": "Quartz veins contain milky crystals. Breaking a vein releases a gem; deep veins may also yield mithril, while meteorite chasms alone can yield star iron. Digging needs a tool rating and Strength of at least 2. An ordinary strike cracks intact quartz; a strong strike shatters it. Clearing the rubble takes another action.",
           "kind": "info",
           "anchor": "map"
         }
@@ -7879,6 +7879,52 @@
         "src/cmd/movement/cmd-movement.c"
       ],
       "terrain_serial": 51
+    },
+    {
+      "id": "terrain.104",
+      "title": "Damaged wall",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "Cracks weaken this wall. A digging tool rated 2 and Strength 2 can break it into rubble. Damaged walls contain no mineral rewards. Erosion can weaken intact walls before they collapse.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Feature 104 is visibly adjacent and marked; hidden terrain is excluded."
+      },
+      "sources": [
+        "lib/edit/terrain.txt",
+        "src/cmd/world/cmd-interact.c",
+        "src/cave/cave-rock.c"
+      ],
+      "terrain_serial": 104
+    },
+    {
+      "id": "terrain.105",
+      "title": "Cracked quartz vein",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "This damaged mineral vein still holds its crystals. Break it with a digging tool rated 2 and Strength 2 to release its gem and any metal. Star iron occurs only in meteorite chasms. Clearing the rubble gives no second reward.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Feature 105 is visibly adjacent and marked; hidden terrain is excluded."
+      },
+      "sources": [
+        "lib/edit/terrain.txt",
+        "src/cmd/world/cmd-interact.c",
+        "src/cave/cave-rock.c"
+      ],
+      "terrain_serial": 105
     },
     {
       "id": "terrain.63",

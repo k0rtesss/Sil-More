@@ -275,7 +275,7 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
     else
     {
         /* Granite, Quartz, Rubble */
-        if (((feat >= FEAT_QUARTZ) && (feat <= FEAT_WALL_SOLID))
+        if (FEAT_IS_ROCK(feat)
             || (feat == FEAT_RUBBLE) || (feat == FEAT_ILLUSORY_WALL))
         {
             /* Impassible except for monsters that move through walls */

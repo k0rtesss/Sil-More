@@ -258,7 +258,9 @@ static void monster_ai_report_action(monster_type* m_ptr, int old_y, int old_x,
         "draws back from your song.",
         "moves to press the attack against your singing.",
         "takes advantage of the hazardous ground.",
-        "holds back, wary of your retreating strike."
+        "holds back, wary of your retreating strike.",
+        "moves into position at its commander's direction.",
+        "moves into position with its pack."
     };
     int reason = m_ptr->ai.feedback_reason;
     bool moved = old_y != m_ptr->fy || old_x != m_ptr->fx;
@@ -297,10 +299,12 @@ void monster_ai_end_turn(monster_type* m_ptr, int old_y, int old_x, bool skipped
 void monster_ai_reset(monster_type* m_ptr)
 {
     memset(&m_ptr->ai, 0, sizeof(m_ptr->ai));
+    memset(&m_ptr->squad, 0, sizeof(m_ptr->squad));
 }
 
 void monster_ai_sanitize(monster_type* m_ptr)
 {
+    memset(&m_ptr->squad, 0, sizeof(m_ptr->squad));
     for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)
     {
         monster_ai_observation* o = &m_ptr->ai.observations[f];

@@ -17,7 +17,7 @@ bool player_passable(int y, int x, bool ignore_rubble_and_chasms)
         && (cave_info[y - 1][x] & (CAVE_ICKY))
         && (cave_info[y + 1][x] & (CAVE_ICKY));
 
-    if ((feature < FEAT_WALL_HEAD) || (feature > FEAT_WALL_TAIL))
+    if (!FEAT_IS_WALL(feature))
     {
         return !((feature == FEAT_CHASM) && !ignore_rubble_and_chasms);
     }

@@ -35,7 +35,7 @@ static bool structure_wall(int feat)
 {
     return feat == FEAT_WALL_EXTRA || feat == FEAT_WALL_OUTER
         || feat == FEAT_WALL_INNER || feat == FEAT_WALL_SOLID
-        || feat == FEAT_QUARTZ;
+        || FEAT_IS_QUARTZ(feat) || feat == FEAT_DAMAGED_WALL;
 }
 
 static bool structure_floor(int feat)

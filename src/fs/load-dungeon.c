@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "cave/cave-flood.h"
+#include "cave/cave-environment.h"
 #include "monster/monster-senses.h"
 #include "monster/monster-social.h"
 #include "monster/monster-routine.h"
@@ -1266,6 +1267,28 @@ errr rd_dungeon(void)
     }
 
     /* The dungeon is ready */
+    if (!savefile_version_at_least(0, 9, 8, 22))
+    {
+        /* Old quartz also represented architectural damage. Its provenance
+         * cannot identify individual authored mineral vaults, so keep only
+         * natural cave/chasm deposits on legacy maps. No contents are mined
+         * during this migration; future levels use explicit vault symbols. */
+        for (int yy = 1; yy < p_ptr->cur_map_hgt - 1; yy++)
+            for (int xx = 1; xx < p_ptr->cur_map_wid - 1; xx++)
+                if (!cave_quartz_natural_site(yy, xx))
+                {
+                    environment_cell cell = *cave_environment_cell_at(yy, xx);
+                    if (cave_feat[yy][xx] == FEAT_QUARTZ)
+                    {
+                        cave_set_feat(yy, xx, FEAT_DAMAGED_WALL);
+                        cell.integrity = MIN(cell.integrity, 60);
+                    }
+                    if (cell.known_feat == FEAT_QUARTZ) cell.known_feat = FEAT_DAMAGED_WALL;
+                    if (cell.base_feat == FEAT_QUARTZ) cell.base_feat = FEAT_DAMAGED_WALL;
+                    if (cell.pending_feat == FEAT_QUARTZ) cell.pending_feat = FEAT_DAMAGED_WALL;
+                    if (!cave_environment_restore_cell(yy, xx, cell)) return -1;
+                }
+    }
     character_dungeon = true;
 
     log_trace("[load:%06u] === END DUNGEON ===", (unsigned)load_byte_offset);

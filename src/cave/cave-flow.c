@@ -986,6 +986,11 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     bool poison_changed = cave_feat[y][x] != feat && feat == FEAT_POISON;
     if (cave_feat[y][x] != feat)
         cave_fixture_set(y, x, CAVE_FIXTURE_NONE);
+    /* Construction replaces natural provenance; cave carvers mark their
+     * own floors again after placement. This also covers room-over-cave edits. */
+    if (!character_dungeon && cave_natural
+        && (FEAT_IS_GRANITE(feat) || feat == FEAT_FLOOR))
+        cave_natural[y][x] = 0;
     /* Change the feature */
     cave_feat[y][x] = feat;
     cave_environment_changed(y, x, old_feat, feat);
@@ -1014,6 +1019,7 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
 
     /* Handle "wall/door" grids */
     if (((feat >= FEAT_DOOR_HEAD) && (feat <= FEAT_WALL_TAIL))
+        || FEAT_IS_ROCK(feat)
         || feat == FEAT_WARDED || feat == FEAT_WARDED2 || feat == FEAT_WARDED3)
     {
         cave_info[y][x] |= (CAVE_WALL);
@@ -1028,6 +1034,9 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     /* Notice/Redraw */
     if (character_dungeon)
     {
+        if (FEAT_IS_QUARTZ(old_feat) && !FEAT_IS_QUARTZ(feat)
+            && (feat == FEAT_RUBBLE || !cave_wall_bold(y, x)))
+            cave_quartz_release(y, x);
         if (old_feat != feat && p_ptr->py == y && p_ptr->px == x
             && water_movement_energy(100, old_feat, old_feat,
                 p_ptr->leaping)

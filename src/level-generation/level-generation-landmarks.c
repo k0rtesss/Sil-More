@@ -111,7 +111,7 @@ bool terrain_landmark_partition(int pi)
 static bool lm_rock(int feat)
 {
     return feat == FEAT_WALL_EXTRA || feat == FEAT_WALL_OUTER
-        || feat == FEAT_WALL_INNER || feat == FEAT_WALL_SOLID || feat == FEAT_QUARTZ;
+        || feat == FEAT_WALL_INNER || feat == FEAT_WALL_SOLID || FEAT_IS_QUARTZ(feat) || feat == FEAT_DAMAGED_WALL;
 }
 
 static bool lm_passage(int y, int x)

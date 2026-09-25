@@ -21,6 +21,7 @@ static character_profile profiles[1];
 static int checks;
 static int tactical_messages;
 static const char* last_tactical_message;
+static const monster_type* squad_fooled;
 
 #define CHECK(test) do { checks++; if (!(test)) { \
     fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #test); exit(1); } } while (0)
@@ -40,6 +41,8 @@ bool monster_race_is_vala(int r_idx)
 { return r_idx == R_IDX_MORGOTH; }
 bool singing(int song)
 { return p_ptr->song1 == song || p_ptr->song2 == song; }
+bool song_disguise_monster_is_fooled(const monster_type* m)
+{ return m == squad_fooled; }
 
 /* These effects belong to retreat/territorial behavior. Advancing along a
  * reachable flow must never call them in the fixtures below. */
@@ -483,12 +486,16 @@ static void test_pursuit_flow(void)
     puts("Pursuit choices and all direction ties match full search: PASS.");
 }
 
+#include "monster-squad-tests.h"
+
 int main(void)
 {
     test_terrain(); test_flows(); test_tactics(); test_advance(); test_full_map();
     test_poison_ai();
     test_flow_fast_path();
     test_tactical_extension();
+    test_squads();
+    test_squad_grades(); test_squad_jobs(); test_squad_group_plans();
     test_pursuit_flow();
     printf("Monster AI regression checks passed: %d\n", checks);
     return 0;

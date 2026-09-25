@@ -1088,7 +1088,7 @@ bool sdl_rage_wall_tint_active(int y, int x)
         return false;
 
     feat = f_info[cave_feat[y][x]].mimic;
-    return (feat >= FEAT_WALL_HEAD) && (feat <= FEAT_WALL_TAIL)
+    return FEAT_IS_WALL(feat)
         && (feat != FEAT_RUBBLE);
 }
 
@@ -4632,6 +4632,45 @@ errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
     return 0;
 }
 
+/* Preserve the existing vein mask and alpha; remap its blue-green shading to
+ * milky quartz. Store light/dark pairs in a reserved runtime atlas row so every
+ * tile consumer (map, minimap and previews) receives the same mineral colour. */
+SDL_Surface* sdl_quartz_tileset_surface(SDL_Surface* source)
+{
+    extern byte get_default_vein_row(void);
+    extern byte get_default_vein_col(void);
+    const int size = TILE_SIZE;
+    int sx = get_default_vein_col() * size;
+    int sy = get_default_vein_row() * size;
+    if (!source || sx + size > source->w || sy + size > source->h) return NULL;
+    SDL_Surface* result = SDL_CreateSurface(source->w,
+        MAX(source->h, (GRAPHICS_QUARTZ_OVERLAY_ROW + 1) * size), SDL_PIXELFORMAT_RGBA32);
+    if (!result) return NULL;
+    SDL_FillSurfaceRect(result, NULL, SDL_MapSurfaceRGBA(result, 0, 0, 0, 0));
+    SDL_BlendMode blend;
+    SDL_GetSurfaceBlendMode(source, &blend);
+    SDL_SetSurfaceBlendMode(source, SDL_BLENDMODE_NONE);
+    bool copied = SDL_BlitSurface(source, NULL, result, NULL);
+    SDL_SetSurfaceBlendMode(source, blend);
+    if (!copied) { SDL_DestroySurface(result); return NULL; }
+    for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {
+        Uint8 r, g, b, a;
+        if (!SDL_ReadSurfacePixel(source, sx+x, sy+y, &r, &g, &b, &a)) {
+            SDL_DestroySurface(result); return NULL;
+        }
+        for (int variant = 0; variant < 4; variant++) {
+            int light = 140 + (r + g + b) / 4;
+            if (variant >= 2) light -= 28; /* Fractured crystals remain pale. */
+            if (variant & 1) light = light * 2 / 5;
+            Uint32* row = (Uint32*)((byte*)result->pixels
+                + (GRAPHICS_QUARTZ_OVERLAY_ROW * size + y) * result->pitch);
+            row[variant * size + x] = SDL_MapSurfaceRGBA(result,
+                MIN(255, light), MIN(255, light+5), MIN(255, light+9), a);
+        }
+    }
+    return result;
+}
+
 bool sdl_load_tileset_texture(void)
 {
     SDL_Surface* ts;
@@ -4647,6 +4686,13 @@ bool sdl_load_tileset_texture(void)
         return false;
     }
 
+    SDL_Surface* mineral_tiles = sdl_quartz_tileset_surface(ts);
+    SDL_DestroySurface(ts);
+    if (!mineral_tiles) {
+        log_error("Failed to prepare quartz overlay: %s", SDL_GetError());
+        return false;
+    }
+    ts = mineral_tiles;
     tileset_width = ts->w;
     texture = SDL_CreateTextureFromSurface(g_state.renderer, ts);
     SDL_DestroySurface(ts);
