@@ -1331,6 +1331,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
         }
 
         /* Generate treasure */
+        if (who < 0 && (r_ptr->flags1 & RF1_UNIQUE)
+            && !(r_ptr->flags1 & RF1_PEACEFUL)) catastrophe_note(CATA_UNIQUE);
         monster_death(m_idx);
 
         /* Auto-recall only if visible or unique */

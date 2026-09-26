@@ -9239,6 +9239,9 @@ void do_cmd_smithing_screen(void)
         if (p_ptr->smithing_leftover > 0)
         {
             p_ptr->smithing = p_ptr->smithing_leftover;
+            /* Older saves did not record the accepted crafting difficulty. */
+            if (catastrophe_get_state().craft_difficulty < 0)
+                catastrophe_accept_craft(object_difficulty(smith_o_ptr));
         }
         else
         {
@@ -9249,6 +9252,7 @@ void do_cmd_smithing_screen(void)
             // Also set the smithing leftover counter (to allow you to resume if
             // interrupted)
             p_ptr->smithing_leftover = p_ptr->smithing;
+            catastrophe_accept_craft(object_difficulty(smith_o_ptr));
         }
 
         /* Restoring gameplay zoom after this saved-screen menu can recenter the
@@ -9352,6 +9356,8 @@ void create_smithing_item(void)
 
         log_debug("Artifact #%d created at depth %d", p_ptr->self_made_arts, p_ptr->depth);
     }
+
+    catastrophe_crafted(smith_o_ptr);
 
         /* ------------------------------------------------------ */
         /* New escape-curse: smithing can back-fire               */

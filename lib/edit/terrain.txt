@@ -365,7 +365,7 @@ G:1:s
 # 0x33 --> quartz vein
 
 N:51:quartz vein
-G:%:w
+G:%:W
 T:0:6
 
 # 0x34 --> unused
@@ -674,5 +674,5 @@ G:#:s
 T:0:6
 
 N:105:cracked quartz vein
-G:%:w
+G:%:W
 T:0:6

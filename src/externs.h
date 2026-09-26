@@ -754,6 +754,8 @@ extern void run_step(int dir);
 
 /* cmd2.c */
 extern int min_depth(void);
+extern int min_depth_timer_stage(void);
+extern void m_fall_in_chasm(int y, int x);
 extern void min_depth_timer_status(int* base_increment, int* additional_increment,
     int* total_increment, int* progress, int* threshold);
 extern void morgoth_call_sync_loaded_stage(void);
@@ -1535,6 +1537,7 @@ extern cptr partition_config_get_discovery_text(level_partition_kind kind,
     big_cave_type_t cave_type);
 extern bool object_uses_smithing_difficulty(const object_type* o_ptr);
 extern int object_smithing_difficulty(const object_type* o_ptr);
+extern int object_intrinsic_difficulty(const object_type* o_ptr);
 extern int object_weight_rarity(const object_type* o_ptr, int depth);
 extern void drop_system_init(void);
 extern bool drop_generate_object(int depth, drop_quality quality, int droptype,

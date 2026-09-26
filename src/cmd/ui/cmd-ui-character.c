@@ -114,7 +114,8 @@ typedef enum {
     CHARACTER_SHEET_VALUE_DEX,
     CHARACTER_SHEET_VALUE_CON,
     CHARACTER_SHEET_VALUE_GRA,
-    CHARACTER_SHEET_VALUE_DEPTH_PROGRESS
+    CHARACTER_SHEET_VALUE_DEPTH_PROGRESS,
+    CHARACTER_SHEET_VALUE_CATASTROPHE
 } character_sheet_value_kind;
 
 typedef struct {
@@ -298,6 +299,8 @@ static int character_sheet_collect_semantic_items(character_sheet_item items[],
         character_sheet_add_semantic_value(items, &count, max_items,
             "Minimum depth progress", CHARACTER_SHEET_VALUE_DEPTH_PROGRESS,
             row++, 0);
+        character_sheet_add_semantic_value(items, &count, max_items,
+            "Catastrophe", CHARACTER_SHEET_VALUE_CATASTROPHE, row++, 0);
     }
     character_sheet_add_semantic_value(items, &count, max_items, "Deep Call",
         CHARACTER_SHEET_VALUE_DEEP_CALL, row++, 0);
@@ -763,6 +766,12 @@ static void character_sheet_format_value_item(const character_sheet_item* item,
             "Depth c/m: %d ft current / %d ft minimum. Current is your location; minimum is the shallowest depth stairs can return you to as time and Deep Call pressure force you deeper.",
             p_ptr->depth * 50, min_depth() * 50);
         break;
+    case CHARACTER_SHEET_VALUE_CATASTROPHE:
+        if (catastrophe_active())
+            strnfmt(buf, buflen, "Catastrophe: 100%% - active. Morgoth's wrath is already changing this level every action. No activation roll is needed. Anger: %d/6.", p_ptr->morgoth_state);
+        else
+            strnfmt(buf, buflen, "Catastrophe: %d%% chance on the next qualifying deed or overdue minimum-depth milestone. Failed rolls increase this chance. On the run a catastrophe is always active.", catastrophe_chance());
+        break;
     case CHARACTER_SHEET_VALUE_DEEP_CALL:
     {
         int base = 0;
@@ -1036,6 +1045,7 @@ void character_sheet_format_vital_description(cptr label, char* buf,
     {
         kind = CHARACTER_SHEET_VALUE_DEPTH_PROGRESS;
     }
+    else if (streq(label, "Catastrophe")) kind = CHARACTER_SHEET_VALUE_CATASTROPHE;
     else if (streq(label, "Deep Call"))
         kind = CHARACTER_SHEET_VALUE_DEEP_CALL;
     else if (streq(label, "Turn")) kind = CHARACTER_SHEET_VALUE_TURN;

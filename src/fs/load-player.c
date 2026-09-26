@@ -32,6 +32,7 @@ static void rd_tutorial_character_state(void)
 errr rd_extra(void)
 {
     int i, j;
+    catastrophe_reset_run();
 
     byte tmp8u;
     u16b file_e_max;

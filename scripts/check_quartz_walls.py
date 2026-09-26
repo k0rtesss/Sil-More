@@ -211,7 +211,7 @@ static void test_visual(void)
         Uint8 r,g,b,a,qr,qg,qb,qa;
         SDL_ReadSurfacePixel(source,get_default_vein_col()*16+x,get_default_vein_row()*16+y,&r,&g,&b,&a);
         SDL_ReadSurfacePixel(atlas,x,GRAPHICS_QUARTZ_OVERLAY_ROW*16+y,&qr,&qg,&qb,&qa);
-        CHECK(a==qa);if(a)CHECK(qr>r && qg>g && qb>b);
+        CHECK(a==qa);if(a)CHECK(qr>=100 && qg>=qr && qb>=qg && qb-qr<=20 && qb<220);
     }
     SDL_Surface* preview=SDL_CreateSurface(512,256,SDL_PIXELFORMAT_RGBA32);CHECK(preview);
     g_state.renderer=SDL_CreateSoftwareRenderer(preview);CHECK(g_state.renderer);
@@ -233,7 +233,7 @@ static void test_visual(void)
     SDL_DestroyTexture(g_state.tileset);g_state.tileset=NULL;
     SDL_DestroyRenderer(g_state.renderer);g_state.renderer=NULL;
     SDL_DestroySurface(preview);SDL_DestroySurface(atlas);SDL_DestroySurface(source);
-    puts("SDL: preserved alpha mask, brighter mineral palette, light/dark map rendering PASS");
+    puts("SDL: preserved alpha mask, cool silver-white mineral palette, light/dark map rendering PASS");
 }
 '''
 

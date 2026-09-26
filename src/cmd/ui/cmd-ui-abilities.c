@@ -5002,6 +5002,7 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         p_ptr->have_ability[skilltype][abilitynum] = true;
         p_ptr->active_ability[skilltype][abilitynum] = true;
         ability_log_record_gain(skilltype, abilitynum);
+        catastrophe_ability(skilltype, abilitynum);
         p_ptr->new_exp -= total_exp_cost;
 
         if (banechoice <= 0 && oathchoice <= 0)

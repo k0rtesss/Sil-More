@@ -166,6 +166,7 @@ void player_wipe(void)
 
     /* Wipe the player */
     memset(p_ptr, 0, sizeof(player_type));
+    catastrophe_reset_run();
 
     turn = 0;
     playerturn = 0;

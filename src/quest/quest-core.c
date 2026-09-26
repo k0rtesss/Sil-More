@@ -277,6 +277,7 @@ void apply_quest_rewards(int quest_idx)
     if (!p_ptr || quest_idx <= 0 || quest_idx >= z_info->quest_max) return;
 
     q_ptr = &quest_info[quest_idx];
+    catastrophe_note(CATA_VALAR);
 
     /* Apply stat bonuses */
     for (int i = 0; i < 4; i++) {

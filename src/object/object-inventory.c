@@ -794,7 +794,19 @@ static bool quiver_can_accept_arrow(const object_type* o_ptr)
 
 /* Move as many arrows as possible into the dedicated mixed-arrow store.
  * Returns the number accepted and leaves any excess in o_ptr. */
+static int player_quiver_absorb_arrow_impl(object_type* o_ptr);
+
 int player_quiver_absorb_arrow(object_type* o_ptr)
+{
+    object_type incoming;
+    bool artefact = o_ptr && o_ptr->k_idx && o_ptr->name1;
+    if (artefact) object_copy(&incoming,o_ptr);
+    int placed = player_quiver_absorb_arrow_impl(o_ptr);
+    if (placed > 0 && artefact) catastrophe_acquired(&incoming);
+    return placed;
+}
+
+static int player_quiver_absorb_arrow_impl(object_type* o_ptr)
 {
     int allowed;
     int original_number;
@@ -1062,7 +1074,19 @@ static void forget_carried_object_location(object_type* o_ptr)
  * Note that this code must remove any location/stack information
  * from the object once it is placed into the inventory.
  */
+static int inven_carry_impl(object_type* o_ptr, bool combine_ammo);
+
 int inven_carry(object_type* o_ptr, bool combine_ammo)
+{
+    object_type incoming;
+    bool artefact = o_ptr && o_ptr->k_idx && o_ptr->name1;
+    if (artefact) object_copy(&incoming,o_ptr);
+    int slot = inven_carry_impl(o_ptr,combine_ammo);
+    if (slot >= 0 && artefact) catastrophe_acquired(&incoming);
+    return slot;
+}
+
+static int inven_carry_impl(object_type* o_ptr, bool combine_ammo)
 {
     int i = 1; // default value to soothe compilation warnings
     int j, k;

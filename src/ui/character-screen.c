@@ -420,6 +420,25 @@ static bool display_player_min_depth_progress_bar_line(int x, int y, int line_w)
     return true;
 }
 
+static int display_player_catastrophe(int x, int y, int width)
+{
+    char value[40], text[80];
+    catastrophe_format(value, sizeof(value));
+    strnfmt(text, sizeof(text), "Catastrophe: %s", value);
+    byte attr = catastrophe_active() ? TERM_L_RED : TERM_ORANGE;
+    if ((int)strlen(text) <= width) {
+        Term_putstr(x,y,width,attr,text);
+        return 1;
+    }
+    strnfmt(text, sizeof(text), "Catastrophe: %d%%", catastrophe_chance());
+    Term_putstr(x,y,width,attr,text);
+    if (catastrophe_active()) {
+        Term_putstr(x,y+1,width,attr,"active");
+        return 2;
+    }
+    return 1;
+}
+
 static void display_player_deep_call_line(int x, int y, int line_w)
 {
     const char* label = (line_w >= 16) ? "Deep Call" : "Call";
@@ -565,6 +584,7 @@ void display_player_xtra_info(int mode)
 
         if (display_player_min_depth_progress_bar_line(col_stats, row_stats, LINEW20))
             row_stats++;
+        row_stats += display_player_catastrophe(col_stats,row_stats,LINEW20);
     }
 
     display_player_deep_call_line(col_stats, row_stats++, LINEW20);
@@ -1181,6 +1201,8 @@ static int display_player_compact_summary_block(int row_start)
             }
         }
 
+        if (turn > 0) row += display_player_catastrophe(col,row,
+            MAX(1,wid-COMPACT_RIGHT_PAD-col));
         display_player_deep_call_line(col, row++,
             MAX(1, wid - COMPACT_RIGHT_PAD - col));
 
@@ -1305,6 +1327,7 @@ static int display_player_compact_summary_block(int row_start)
             row_r++;
     }
 
+    if (turn > 0) row_r += display_player_catastrophe(col_r,row_r,LINEW20);
     display_player_deep_call_line(col_r, row_r++, LINEW20);
 
     /* Turn (right) */

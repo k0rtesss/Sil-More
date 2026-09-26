@@ -4632,8 +4632,9 @@ errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
     return 0;
 }
 
-/* Preserve the existing vein mask and alpha; remap its blue-green shading to
- * milky quartz. Store light/dark pairs in a reserved runtime atlas row so every
+/* Preserve the existing vein mask and alpha; remap its shading to cool
+ * silver-white.
+ * Store light/dark pairs in a reserved runtime atlas row so every
  * tile consumer (map, minimap and previews) receives the same mineral colour. */
 SDL_Surface* sdl_quartz_tileset_surface(SDL_Surface* source)
 {
@@ -4659,13 +4660,14 @@ SDL_Surface* sdl_quartz_tileset_surface(SDL_Surface* source)
             SDL_DestroySurface(result); return NULL;
         }
         for (int variant = 0; variant < 4; variant++) {
-            int light = 140 + (r + g + b) / 4;
-            if (variant >= 2) light -= 28; /* Fractured crystals remain pale. */
-            if (variant & 1) light = light * 2 / 5;
+            int silver_level = 104 + (r + g + b) / 8;
+            if (variant >= 2) silver_level -= 16;
+            if (variant & 1) silver_level = silver_level * 2 / 5;
             Uint32* row = (Uint32*)((byte*)result->pixels
                 + (GRAPHICS_QUARTZ_OVERLAY_ROW * size + y) * result->pitch);
             row[variant * size + x] = SDL_MapSurfaceRGBA(result,
-                MIN(255, light), MIN(255, light+5), MIN(255, light+9), a);
+                MIN(255, silver_level), MIN(255, silver_level + 4),
+                MIN(255, silver_level + 10), a);
         }
     }
     return result;

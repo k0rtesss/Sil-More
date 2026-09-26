@@ -504,6 +504,7 @@ void process_player(void)
             p_ptr->command_see = false;
 
         /* Assume free turn */
+        catastrophe_begin_action();
         cave_flood_begin_action();
         player_lava_begin_action();
         player_poison_terrain_begin_action();
@@ -912,6 +913,7 @@ void process_player(void)
         last_player_x = p_ptr->px;
         morgoth_entry_preconfirmed = false;
 
+        catastrophe_end_action();
         player_lava_end_action();
         player_poison_terrain_end_action();
         player_melting_ice_end_action();
@@ -1411,6 +1413,8 @@ void process_player(void)
         depth_counter_increment : 0;
 
     process_morgoth_call_pressure();
+    catastrophe_depth_tick(min_depth_timer_stage());
+    catastrophe_flush_events();
 
     /* Window stuff */
 

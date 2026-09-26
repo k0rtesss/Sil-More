@@ -1214,6 +1214,12 @@ static int smithing_difficulty_baseline(const object_type* o_ptr)
     return dif;
 }
 
+int object_intrinsic_difficulty(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx) return 0;
+    return smithing_difficulty_baseline(o_ptr);
+}
+
 int object_smithing_difficulty(const object_type* o_ptr)
 {
     if (!object_uses_smithing_difficulty(o_ptr))

@@ -230,6 +230,7 @@ set(SIL_MORE_SOURCES
     src/cave/cave-water-flow.c
     src/cave/cave-events.c
     src/cave/cave-environment.c
+    src/cave/cave-catastrophe.c
     src/cave/cave-rock.c
     src/cave/cave-bridge.c
     src/cave/cave-lava.c
@@ -488,6 +489,7 @@ set(SIL_MORE_SOURCES
     src/fs/save-notes-inventory.c
     src/fs/save-dungeon.c
     src/fs/save-environment.c
+    src/fs/catastrophe-state.c
     src/fs/load-environment.c
     src/score/score_io.c
     src/score/score_logic.c

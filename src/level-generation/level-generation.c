@@ -2029,6 +2029,7 @@ if (playerturn == 0) {
     }
 
     monster_routine_finish_level();
+    catastrophe_prepare_level();
     cave_environment_seed();
     level_gen_screen_finish(true);
 

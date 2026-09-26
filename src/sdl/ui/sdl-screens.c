@@ -3282,6 +3282,9 @@ int sdl_char_sheet_collect_vitals(sdl_char_sheet_line* lines,
         SDL_strlcpy(label_value, "Depth timer\t", sizeof(label_value));
         sdl_char_sheet_add_line(lines, &count, max_count, label_value,
             TERM_L_BLUE, vital_choice, vital_desc);
+        catastrophe_format(value, sizeof(value));
+        ADD_VITAL("Catastrophe", value,
+            catastrophe_active() ? TERM_L_RED : TERM_ORANGE);
     }
 
     {

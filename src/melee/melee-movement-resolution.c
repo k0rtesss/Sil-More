@@ -656,6 +656,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
 
             /* Break the rune */
             cave_set_feat(ny, nx, FEAT_FLOOR);
+            sound_at(MSG_HITWALL, ny, nx);
         }
     }
 
@@ -675,6 +676,10 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
             {
                 /* Note that the monster killed another monster (if visible) */
                 did_kill_body = true;
+
+                /* Ambient monster kills skip the normal player-credit/death
+                 * bookkeeping path, but the victim still makes a death sound. */
+                monster_sound(n_ptr, MONSTER_SOUND_DEATH);
 
                 /* Kill the monster */
                 delete_monster(ny, nx);
@@ -982,6 +987,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                     /* Carry the object */
                     (void)monster_carry(
                         cave_m_idx[m_ptr->fy][m_ptr->fx], i_ptr);
+                    sound_at(MSG_PICK, ny, nx);
                 }
 
                 /* Destroy the item */
@@ -1005,6 +1011,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
 
                     /* Delete the object */
                     delete_object_idx(this_o_idx);
+                    sound_at(MSG_HITWALL, ny, nx);
                 }
             }
         }

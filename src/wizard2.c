@@ -3136,6 +3136,7 @@ static const debug_menu_entry debug_menu_character[] = {
 };
 
 static debug_menu_entry debug_menu_map[] = {
+    { '!', '!', "Trigger catastrophe (!)", TERM_L_RED },
     { 'b', 'b', "Teleport to target (b)", TERM_L_BLUE },
     { 'h', 'h', "Teleport to last dungeon event (h)", TERM_L_BLUE },
     { 'p', 'p', "Phase door (p)", TERM_L_BLUE },
@@ -3249,6 +3250,54 @@ static char do_cmd_debug_choose(void)
  *
  * The "p_ptr->command_arg" may have been set.
  */
+static void do_cmd_debug_catastrophe(void)
+{
+    if (catastrophe_active()) {
+        catastrophe_state s=catastrophe_get_state();
+        msg_format("Catastrophe already active: %s at (%d,%d).",
+            catastrophe_name(s.kind),s.y,s.x);
+        return;
+    }
+    static cptr labels[CATA_KIND_MAX]={"Automatic","Water","Poisonous acid","Lava","Ice","Chasm"};
+    ui_question_option options[CATA_KIND_MAX];
+    for(int i=0;i<CATA_KIND_MAX;i++) {
+        bool enabled=catastrophe_can_start(i);
+        options[i]=(ui_question_option){(char)('a'+i),labels[i],
+            enabled?TERM_L_WHITE:TERM_SLATE,!enabled};
+    }
+    if (!catastrophe_can_start(CATA_AUTO)) {
+        msg_print("This level has no eligible catastrophe source.");return;
+    }
+    int choice=ui_question_ask("Trigger catastrophe",
+        "Uses Morgoth's current anger. Unavailable materials have no source on this level.",
+        options,CATA_KIND_MAX,UI_QUESTION_GLOBAL,UI_QUESTION_GLOBAL,0);
+    if(choice>=0&&!catastrophe_start(choice))msg_print("The catastrophe could not start.");
+}
+
+static void do_cmd_debug_refresh_terrain(void)
+{
+    /* Marking a tile alone reveals its old memory. Debug revelation must
+     * take a fresh terrain/bridge snapshot, including changes out of sight. */
+    for (int y=1; y<p_ptr->cur_map_hgt-1; y++)
+        for (int x=1; x<p_ptr->cur_map_wid-1; x++) {
+            bool exposed=!cave_wall_bold(y,x) || cave_feat[y][x]==FEAT_RUBBLE;
+            for (int d=0; d<8 && !exposed; d++) {
+                int ny=y+ddy_ddd[d], nx=x+ddx_ddd[d];
+                exposed=!cave_wall_bold(ny,nx) || cave_feat[ny][nx]==FEAT_RUBBLE;
+            }
+            if (exposed) cave_info[y][x] |= CAVE_MARK;
+            else if (!(cave_info[y][x]&CAVE_SEEN)) cave_info[y][x] &= ~CAVE_MARK;
+            cave_environment_reveal(y,x);
+        }
+#ifdef USE_SDL
+    /* Reveal changes outside the main viewport must invalidate retained maps. */
+    sdl_minimap_map_texture_cache_clear();
+#endif
+    p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+    p_ptr->redraw |= PR_MAP;
+    p_ptr->window |= PW_OVERHEAD;
+}
+
 static void do_cmd_debug_execute(char cmd)
 {
     int py = p_ptr->py;
@@ -3261,6 +3310,9 @@ static void do_cmd_debug_execute(char cmd)
     /* Analyze the command */
     switch (cmd)
     {
+    case '!':
+        do_cmd_debug_catastrophe();
+        break;
     /* Ignore */
     case ESCAPE:
     case ' ':
@@ -3336,6 +3388,7 @@ static void do_cmd_debug_execute(char cmd)
     {
         detect_all_doors_traps();
         detect_all();
+        do_cmd_debug_refresh_terrain();
         break;
     }
 
@@ -3575,6 +3628,7 @@ static void do_cmd_debug_execute(char cmd)
     case 'w':
     {
         wiz_light();
+        do_cmd_debug_refresh_terrain();
         break;
     }
 

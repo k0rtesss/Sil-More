@@ -32,6 +32,16 @@ static byte side_dirs[20][8] = { { 0, 0, 0, 0, 0, 0, 0, 0 }, /* bias right */
     { 7, 4, 8, 1, 9, 2, 6, 3 }, { 8, 7, 9, 4, 6, 1, 3, 2 },
     { 9, 8, 6, 7, 3, 4, 2, 1 } };
 
+/* Failed door interactions end in make_move(), rather than process_move(),
+ * so they need to emit their positional cue here. Successful interactions
+ * are emitted by the movement resolver after the terrain actually changes. */
+static void monster_failed_door_attempt(int y, int x, bool bash)
+{
+    if (!in_bounds(y, x) || !cave_any_closed_door_bold(y, x))
+        return;
+    sound_at(bash ? MSG_BASHDOOR_FAIL : MSG_LOCKPICK_FAIL, y, x);
+}
+
 /* A ranged creature at its preferred distance can improve its footing while
  * keeping a shot. Water only costs time to cross; standing in it is harmless. */
 static void get_move_better_footing(monster_type* m_ptr, int* ty, int* tx)
@@ -794,6 +804,7 @@ bool make_move(
             /* Failure to enter grid.  Cancel move */
             else
             {
+                monster_failed_door_attempt(*ty, *tx, *bash);
                 return (false);
             }
         }
@@ -868,6 +879,8 @@ bool make_move(
                         if (!percent_chance(chance))
                         {
                             /* Can't move */
+                            if (chance > 0)
+                                monster_failed_door_attempt(*ty, *tx, *bash);
                             return (false);
                         }
 
@@ -1077,6 +1090,7 @@ bool make_move(
         if ((moves_data[i].move_chance < 100)
             && !percent_chance(moves_data[i].move_chance))
         {
+            monster_failed_door_attempt(*ty, *tx, moves_data[i].move_bash);
             return (false);
         }
     }

@@ -353,9 +353,9 @@ void cave_environment_seed(void)
         scaled_interval(config.pulse), scaled_interval(config.crack_step), config.warning);
 }
 
-void cave_environment_observe(int y, int x)
+void cave_environment_reveal(int y, int x)
 {
-    if (state.ready && in_bounds(y,x) && (cave_info[y][x] & CAVE_SEEN)) {
+    if (state.ready && in_bounds(y,x)) {
         environment_cell* c = &cells[y][x];
         int f = cave_feat[y][x];
         c->known_feat = f;
@@ -363,6 +363,12 @@ void cave_environment_observe(int y, int x)
             && (FEAT_IS_BRIDGE(f) || f == c->bridge_feat) ? c->underlay : cave_bridge_underlay(f);
         c->known_material = c->material;
     }
+}
+
+void cave_environment_observe(int y, int x)
+{
+    if (in_bounds(y,x) && (cave_info[y][x] & CAVE_SEEN))
+        cave_environment_reveal(y,x);
 }
 
 int cave_environment_known_feature(int y, int x)
@@ -520,6 +526,96 @@ static bool propose(int y,int x,int feature,int event)
     return true;
 }
 
+/* Catastrophes share the cell/substrate/bridge bookkeeping, but commit now,
+ * including occupied ground and routes that ordinary ecology must preserve. */
+bool cave_environment_catastrophe_change(int y, int x, int feature)
+{
+    if (!state.ready || catastrophe_protected(y,x)) return false;
+    environment_cell* c = &cells[y][x];
+    int old = cave_feat[y][x];
+    release_supply(c, true);
+    c->owner = 0;
+    if (c->pending_feat && pending_count) pending_count--;
+    c->pending_feat = 0; c->due = 0;
+    if (old == feature) return true;
+    if (FEAT_IS_ICE(feature) && !FEAT_IS_ICE(old)) {
+        c->base_feat = old;
+        if (old != FEAT_WATER && old != FEAT_DEEP_WATER) c->flags |= ENV_FLOOR_ICE;
+    }
+    cave_info[y][x] &= ~CAVE_HIDDEN;
+    cave_set_feat(y,x,feature);
+    cave_environment_observe(y,x);
+    p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+    p_ptr->redraw |= PR_MAP;
+    return true;
+}
+
+/* Keep the existing water/lava and ice/lava reactions on the action clock
+ * wherever wrath is involved. Snapshot first so scan order cannot make a
+ * melting cell also quench its neighbour in the same reaction step. */
+void cave_environment_catastrophe_react(void)
+{
+    if (!state.ready) return;
+    memset(shadow, 0, sizeof(shadow));
+    for (int y=1; y<p_ptr->cur_map_hgt-1; y++)
+        for (int x=1; x<p_ptr->cur_map_wid-1; x++) {
+            int f=cave_feat[y][x];
+            if (f!=FEAT_LAVA && !FEAT_IS_ICE(f)) continue;
+            bool involved=catastrophe_owns(y,x), hot=false, water=false;
+            for (int d=0; d<4; d++) {
+                int ny=y+dy4[d], nx=x+dx4[d];
+                const environment_cell* neighbor=&cells[ny][nx];
+                int nf=cave_feat[ny][nx];
+                if ((neighbor->flags&ENV_BRIDGE) && neighbor->integrity)
+                    nf=neighbor->underlay;
+                involved|=catastrophe_owns(ny,nx);
+                hot|=nf==FEAT_LAVA;
+                water|=nf==FEAT_WATER || nf==FEAT_DEEP_WATER;
+            }
+            if (!involved) continue;
+            if (f==FEAT_LAVA && water) shadow[y][x]=FEAT_FLOOR;
+            else if (FEAT_IS_ICE(f) && hot)
+                shadow[y][x]=(cells[y][x].flags&ENV_FLOOR_ICE)
+                    ?cells[y][x].base_feat
+                    :f==FEAT_ICE?FEAT_MELTING_ICE:FEAT_WATER;
+        }
+    for (int y=1; y<p_ptr->cur_map_hgt-1; y++)
+        for (int x=1; x<p_ptr->cur_map_wid-1; x++)
+            if (shadow[y][x]) cave_environment_catastrophe_change(y,x,shadow[y][x]);
+}
+
+bool cave_environment_catastrophe_contact(int y, int x, int feature,
+    int wall_force, int bridge_force)
+{
+    if (!state.ready || catastrophe_protected(y,x)) return false;
+    environment_cell* c = &cells[y][x];
+    int f = cave_feat[y][x];
+    bool bridge = (c->flags & ENV_BRIDGE) && c->integrity
+        && (FEAT_IS_BRIDGE(f) || f == c->bridge_feat);
+    if (bridge) {
+        bool wood = c->material == ENV_BRIDGE_WOOD;
+        if (feature == FEAT_WATER && !wood) return false;
+        if (FEAT_IS_ICE(feature)) return false;
+        int force = bridge_force * (wood ? 3 : 1);
+        if (feature == FEAT_LAVA) force *= wood ? 3 : 2;
+        else if (feature == FEAT_POISON) force *= 2;
+        c->integrity = MAX(0,(int)c->integrity-force);
+        c->underlay = feature; c->work = 0;
+        if (!c->integrity) cave_environment_catastrophe_change(y,x,feature);
+        cave_environment_observe(y,x);
+        return true;
+    }
+    if (!rock(f) || !wall_force) return false;
+    if (level_partition_kind_for_point(y,x) == LEVEL_PART_RUINED) wall_force += wall_force/2;
+    c->integrity = MAX(0,(int)c->integrity-wall_force);
+    int integrity = c->integrity;
+    if (integrity <= 25) cave_environment_catastrophe_change(y,x,FEAT_RUBBLE);
+    else if (integrity <= 70 && f != FEAT_DAMAGED_WALL && f != FEAT_CRACKED_QUARTZ)
+        cave_environment_catastrophe_change(y,x,cave_rock_damage_feature(f,1));
+    c->integrity = integrity;
+    return true;
+}
+
 int cave_environment_pending_hazard(int y,int x)
 {
     return state.ready&&in_bounds_fully(y,x)?cells[y][x].pending_feat:0;
@@ -631,7 +727,7 @@ static void source_step(int id, int* remaining)
     bool expand=s->feature!=FEAT_CHASM || random_below(6)==0;
     for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
         environment_cell* c=&cells[y][x]; int f=cave_feat[y][x];
-        if(c->flags&ENV_PROTECTED||c->pending_feat)continue;
+        if(c->flags&ENV_PROTECTED||c->pending_feat||catastrophe_owns(y,x))continue;
         if(!rising) {
             if(c->owner!=id||!(c->flags&ENV_ADDED_LIQUID)||(c->flags&ENV_BRIDGE)
                 || f!=s->feature || !*remaining)continue;
@@ -733,6 +829,9 @@ void cave_environment_process(void)
      * number of world turns even when the geology pulse is slower. */
     for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
         environment_cell* c=&cells[y][x];
+        if (catastrophe_owns(y,x) && c->pending_feat) {
+            c->pending_feat=0;c->due=0;if(pending_count)pending_count--;
+        }
         if(!c->pending_feat||turn<c->due||!remaining)continue;
         int f=c->pending_feat, event=(f==FEAT_RUBBLE||f==FEAT_CHASM)?CAVE_EVENT_COLLAPSE:
             (f==FEAT_DAMAGED_WALL||f==FEAT_CRACKED_QUARTZ)?CAVE_EVENT_CRACK:
@@ -763,7 +862,7 @@ void cave_environment_process(void)
     int thermal_limit=utumno_environment()?remaining:MIN(remaining,1);
     for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
         environment_cell* c=&cells[y][x]; int f=cave_feat[y][x],to=0,ev=0;
-        if(c->flags&ENV_PROTECTED || c->pending_feat || (c->flags&ENV_BRIDGE)
+        if(catastrophe_owns(y,x) || c->flags&ENV_PROTECTED || c->pending_feat || (c->flags&ENV_BRIDGE)
             || cave_m_idx[y][x] || critical_object(y,x))continue;
         bool hot_contact=false,wet=false,liquid_water=false,quartz=false,rubble_sink=false;
         for(int d=0;d<4;d++) {

@@ -120,7 +120,8 @@ static errr rd_monster_routines(void)
         if (load_byte_offset - start != (u32b)(6 + 2 * r->count)
             || !monster_routine_valid(&mon_list[i])) goto invalid;
     }
-    if (!load_only_checksums_remain()) goto invalid;
+    if (!savefile_version_at_least(0, 9, 8, 23)
+        && !load_only_checksums_remain()) goto invalid;
     return 0;
 invalid:
     note("Invalid monster territories or patrol routes.");
@@ -1242,6 +1243,8 @@ errr rd_dungeon(void)
         monster_social_reset();
         return -1;
     }
+
+    if (load_read_catastrophe()) return -1;
 
     /*** Success ***/
 

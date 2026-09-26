@@ -225,6 +225,8 @@ static s32b min_depth_counter_stage(void)
     return min_depth_counter / step;
 }
 
+int min_depth_timer_stage(void) { return min_depth_counter_stage(); }
+
 void morgoth_call_sync_loaded_stage(void)
 {
     if (!p_ptr)

@@ -16,7 +16,7 @@ V:0.9.8
 #   - E:row:col sets the damage overlay used whenever a style omits Y:.
 #     Damage is drawn as a transparent overlay over the wall.
 #     If Y: is present, the damaged-wall tile fully replaces the wall tile.
-#     Quartz uses a milky-white runtime palette of E: over the local wall.
+#     Quartz uses a cool silver-white runtime palette of E: over the local wall.
 #   - EK:R:G:B (optional) sets an explicit color-key for overlays (Windows renderer).
 #     If not set, the overlay's own top-left pixel color is used as the key.
 #     Use EK if your overlay's transparent color is not the top-left pixel.

@@ -586,6 +586,7 @@ static bool grant_varda_reward(cptr* completion_texts, int completion_count)
     create_chosen_artefact(selected, p_ptr->py, p_ptr->px, true);
     msg_print("Starlight gathers at your feet, coalescing into a shining relic.");
     p_ptr->varda_quest = VARDA_QUEST_REWARDED;
+    catastrophe_note(CATA_VALAR);
     p_ptr->varda_vault_ready = 0;
     p_ptr->varda_vault_placed = 1;
 

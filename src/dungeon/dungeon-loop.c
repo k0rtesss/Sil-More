@@ -258,6 +258,8 @@ void dungeon(void)
     tutorial_game_start();
 
     log_info("Dungeon display setup completed successfully");
+    catastrophe_resume_level();
+    if (p_ptr->is_dead || p_ptr->leaving) return;
 
     /* Log final state after setup */
     log_debug("Final setup state: character_generated=%s, character_icky=%d, update=0x%08X, redraw=0x%08X, window=0x%08X",

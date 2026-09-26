@@ -4111,6 +4111,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     }
 
     /* Once the player has equipped an item, remember its combat stats forever. */
+    if (item < 0) catastrophe_acquired(o_ptr);
     o_ptr->ident |= (IDENT_HANDLED);
 
     /* Increment the equip counter by hand */

@@ -534,6 +534,7 @@ void wr_dungeon(void)
         { wr_byte(r->y[j]); wr_byte(r->x[j]); }
     }
 
+    save_write_catastrophe();
     log_debug("Dungeon data write completed - %d objects, %d monsters", o_max - 1, mon_max - 1);
     log_trace("[save:%06u] === END DUNGEON ===", (unsigned)save_byte_offset);
 }

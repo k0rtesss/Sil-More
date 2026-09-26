@@ -44,6 +44,10 @@ void cave_environment_process(void);
 void cave_environment_set_speed(byte speed);
 void cave_environment_changed(int y, int x, int old_feat, int new_feat);
 void cave_environment_flood_bridge(int y, int x, int liquid, int force);
+bool cave_environment_catastrophe_change(int y, int x, int feature);
+void cave_environment_catastrophe_react(void);
+bool cave_environment_catastrophe_contact(int y, int x, int feature,
+    int wall_force, int bridge_force);
 int cave_environment_pending_hazard(int y, int x);
 bool cave_environment_bridge_job_at(int y, int x, environment_bridge_job* job);
 /* One unit of work is one worker action. True means the crossing completed. */
@@ -55,6 +59,8 @@ int cave_environment_thaw_feature(int y, int x, int fallback);
 int cave_environment_known_feature(int y, int x);
 int cave_environment_display_underlay(int y, int x);
 void cave_environment_observe(int y, int x);
+/* Explicit revelation refreshes remembered terrain without granting sight. */
+void cave_environment_reveal(int y, int x);
 const environment_cell* cave_environment_cell_at(int y, int x);
 const environment_source* cave_environment_source_at(int index);
 environment_state cave_environment_get_state(void);

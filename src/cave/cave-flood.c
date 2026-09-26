@@ -165,16 +165,26 @@ static bool floodable_ground(int feat, byte kind)
         || (kind == CAVE_FLOOD_KIND_ACID && feat == FEAT_POISON);
 }
 
-static bool flood_diagonal_step_allowed(int y, int x, int ny, int nx,
-    byte kind)
+bool cave_flood_step_allowed(int y, int x, int ny, int nx,
+    bool (*passable)(int y, int x, int policy), int policy)
 {
     if (y == ny || x == nx)
         return true;
 
     /* Do not let the wave squeeze diagonally through the corner of two
      * blocking cells. */
-    return floodable_ground(cave_feat[y][nx], kind)
-        && floodable_ground(cave_feat[ny][x], kind);
+    return passable(y, nx, policy) && passable(ny, x, policy);
+}
+
+static bool floodable_cell(int y, int x, int kind)
+{
+    return floodable_ground(cave_feat[y][x], kind);
+}
+
+static bool flood_diagonal_step_allowed(int y, int x, int ny, int nx,
+    byte kind)
+{
+    return cave_flood_step_allowed(y, x, ny, nx, floodable_cell, kind);
 }
 
 static void flood_path_search_begin(int y, int x)

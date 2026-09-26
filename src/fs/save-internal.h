@@ -13,6 +13,7 @@
 #define INCLUDED_FS_SAVE_INTERNAL_H
 
 void save_write_environment(void);
+void save_write_catastrophe(void);
 
 /* Running count of bytes written (used in the inline "[save:%06u]" log lines). */
 extern u32b save_byte_offset;

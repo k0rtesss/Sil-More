@@ -35,4 +35,9 @@ void cave_flood_clear_surface_markers(void);
 bool cave_flood_restore_surface(int y, int x, byte kind);
 void cave_flood_surface_changed(int y, int x, int new_feat);
 
+/* Shared connected-wave corner rule. The caller supplies its material and
+ * protection policy; ordinary trap floods keep their existing policy. */
+bool cave_flood_step_allowed(int y, int x, int ny, int nx,
+    bool (*passable)(int y, int x, int policy), int policy);
+
 #endif

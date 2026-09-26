@@ -1073,7 +1073,7 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
                     sidx2 = cave_hallucination_style_for_display(sidx2);
                     int style_attr = cave_style_ascii_attr(sidx2);
                     if (style_attr >= 0) a = (byte)style_attr;
-                    if (FEAT_IS_QUARTZ(feat)) a = TERM_WHITE;
+                    if (FEAT_IS_QUARTZ(feat)) a = TERM_L_WHITE;
                 }
 
                 /* Standard lighting effects (darkens unlit walls). */
