@@ -175,7 +175,7 @@ static const cptr character_sheet_skill_descriptions[S_MAX] = {
     "Reduces noise and helps avoid visual detection.",
     "Detects hidden doors, traps, and invisible foes; helps identify items.",
     "Resists fear, confusion, entrancement, and other hostile effects.",
-    "Determines which items you can craft at forges.",
+    "Common crafting skill: ranks, permanent DEX + GRA, active masteries and flat bonuses. The forge adds the item's category and forge bonus; How calculated (?) explains the result.",
     "Determines song power and opposed song checks.",
     ""
 };
@@ -655,10 +655,10 @@ static cptr character_sheet_stat_description(int stat)
 {
     switch (stat)
     {
-    case A_STR: return "weapon damage die sides and carried-weight limit";
-    case A_DEX: return "melee, evasion, archery, and stealth";
+    case A_STR: return "weapon damage die sides and carried-weight limit; permanent Strength also aids heavy-metal Smithing";
+    case A_DEX: return "melee, evasion, archery, and stealth; permanent Dexterity also aids Smithing";
     case A_CON: return "maximum health";
-    case A_GRA: return "will, perception, smithing, song, and voice";
+    case A_GRA: return "will, perception, song, and voice; permanent Grace also aids Smithing";
     }
 
     return "character performance";
@@ -924,6 +924,9 @@ static void character_sheet_format_skill_item(const character_sheet_item* item,
         skill_names_full[skill], character_sheet_skill_description(skill),
         p_ptr->skill_use[skill], p_ptr->skill_base[skill], stat_mod,
         equip_mod, misc_mod, next_cost);
+
+    if (skill == S_SMT)
+        SDL_strlcat(buf, " The stat column is permanent Dexterity + Grace + active smithing masteries. The forge adds the item category's extra contribution and forge bonus; use How calculated for the full breakdown.", buflen);
 
     if (!p_ptr->leaping && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px])
         && (skill == S_MEL || skill == S_ARC

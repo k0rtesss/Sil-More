@@ -79,6 +79,8 @@ void get_extra(void)
     int i, j;
     
     p_ptr->new_exp = p_ptr->exp = get_start_xp();
+    p_ptr->lore = 0;
+    p_ptr->knowledge_points = 0;
     p_ptr->discovery_lore_flags = 0;
     p_ptr->quick_access_prompt_flags = 0;
     log_debug("Set starting experience to %d", p_ptr->exp);
@@ -862,4 +864,14 @@ int birth_stat_increase_cost(int stat)
         return 0;
 
     return birth_stat_costs[next_index] - birth_stat_costs[current_index];
+}
+
+int birth_stat_current_cost(int stat)
+{
+    int index = stat + 4;
+
+    if (index < 0 || index >= (int)N_ELEMENTS(birth_stat_costs))
+        return 9999;
+
+    return birth_stat_costs[index];
 }

@@ -104,6 +104,18 @@ static void ability_menu_put_exit_button(void)
 int abilities_in_skill(int skilltype);
 bool prereqs(int skilltype, int abilitynum);
 
+static bool ability_uses_knowledge_points(int skilltype, int abilitynum)
+{
+    return lore_system_enabled()
+        && b_info[ability_index(skilltype, abilitynum)].knowledge_cost > 0;
+}
+
+static int ability_purchase_knowledge_cost(int skilltype, int abilitynum)
+{
+    if (!ability_uses_knowledge_points(skilltype, abilitynum)) return 0;
+    return MAX(0, b_info[ability_index(skilltype, abilitynum)].knowledge_cost - p_ptr->lore);
+}
+
 static int ability_purchase_exp_cost(int skilltype)
 {
     int is_free = (c_info[p_ptr->pcharacter].flags & RHF_FREE) ? 1 : 0;
@@ -279,6 +291,35 @@ static void ability_menu_render_prerequisites_block(int skilltype,
 
     row += 2;
 
+    if (lore_system_enabled() && b_ptr->lore_req)
+    {
+        strnfmt(buf, sizeof(buf), "Lore %d (%d now)", b_ptr->lore_req, p_ptr->lore);
+        Term_putstr(desc_col + 2, row++, -1,
+            p_ptr->lore >= b_ptr->lore_req ? TERM_L_GREEN : TERM_L_DARK, buf);
+    }
+
+    for (int stat = 0; stat < A_MAX; ++stat)
+    {
+        static cptr names[] = { "Str", "Dex", "Con", "Gra" };
+        int need = b_ptr->stat_req[stat];
+        if (!need) continue;
+        int have = player_permanent_stat(stat);
+        strnfmt(buf, sizeof(buf), "%s %d (%d permanent)", names[stat], need, have);
+        Term_putstr(desc_col + 2, row++, -1,
+            have >= need ? TERM_L_GREEN : TERM_L_DARK, buf);
+    }
+    if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
+    {
+        for (int i = 0; i < b_ptr->required_count; ++i)
+        {
+            int skill = b_ptr->required_skilltype[i];
+            int num = b_ptr->required_abilitynum[i];
+            strnfmt(buf, sizeof(buf), "Requires %s", b_name + b_info[ability_index(skill, num)].name);
+            Term_putstr(desc_col + 2, row++, -1,
+                p_ptr->innate_ability[skill][num] ? TERM_L_GREEN : TERM_L_DARK, buf);
+        }
+    }
+
     if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
     {
         for (j = 0; j < b_ptr->prereqs; j++)
@@ -318,14 +359,17 @@ static void ability_menu_render_prerequisites_block(int skilltype,
 
     if (skilltype != S_SPC && prereqs(skilltype, b_ptr->abilitynum))
     {
-        int exp_cost = ability_purchase_exp_cost(skilltype);
+        bool knowledge = ability_uses_knowledge_points(skilltype, b_ptr->abilitynum);
+        int exp_cost = knowledge ? ability_purchase_knowledge_cost(skilltype, b_ptr->abilitynum)
+            : ability_purchase_exp_cost(skilltype);
+        int available = knowledge ? p_ptr->knowledge_points : p_ptr->new_exp;
 
         Term_putstr(desc_col, row, -1, TERM_YELLOW, "Current price:");
 
-        ability_menu_format_amount_line(buf, sizeof(buf), "experience", "Exp",
-            exp_cost, p_ptr->new_exp, info_width);
+        ability_menu_format_amount_line(buf, sizeof(buf), knowledge ? "knowledge" : "experience",
+            knowledge ? "KP" : "Exp", exp_cost, available, info_width);
         Term_putstr(desc_col + 2, row + 1, -1,
-            (exp_cost <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK, buf);
+            (exp_cost <= available) ? TERM_L_GREEN : TERM_L_DARK, buf);
 
         row += 2;
     }
@@ -353,9 +397,10 @@ static int ability_menu_stepped_song_bonus(int skill, int first_threshold,
     return bonus;
 }
 
-static int ability_menu_current_song_score(void)
+static int ability_menu_current_song_score(const ability_type* ability)
 {
-    return MAX(0, p_ptr->skill_use[S_SNG]);
+    return MAX(0, ability ? ability_score(S_SNG, ability->abilitynum)
+        : p_ptr->skill_use[S_SNG]);
 }
 
 static bool ability_menu_weapon_skill_bonus_text(int skilltype,
@@ -649,7 +694,7 @@ static void ability_menu_append_song_cost(char* text, size_t text_size,
 
 static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
 {
-    int song_skill = ability_menu_current_song_score();
+    int song_skill = ability_menu_current_song_score(b_ptr);
     char bonus_text[384];
 
     bonus_text[0] = '\0';
@@ -949,6 +994,10 @@ int abilities_in_skill(int skilltype)
         if (b_ptr->skilltype != skilltype)
             continue;
 
+        /* Lore abilities use a separate currency while the beta is enabled. */
+        if (ability_uses_knowledge_points(skilltype, b_ptr->abilitynum))
+            continue;
+
         /* Add to the count */
         if (p_ptr->innate_ability[skilltype][b_ptr->abilitynum])
             count++;
@@ -960,6 +1009,14 @@ int abilities_in_skill(int skilltype)
 static bool prereq_abilities_met(const ability_type* b_ptr)
 {
     int i;
+
+    if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
+    {
+        for (i = 0; i < b_ptr->required_count; ++i)
+            if (!p_ptr->innate_ability[b_ptr->required_skilltype[i]]
+                    [b_ptr->required_abilitynum[i]])
+                return false;
+    }
 
     if (b_ptr->prereqs > 0 && !(p_ptr->active_ability[S_PER][PER_QUICK_STUDY]))
     {
@@ -986,7 +1043,7 @@ bool prereqs(int skilltype, int abilitynum)
         return (false);
     }
 
-    return prereq_abilities_met(b_ptr);
+    return ability_stat_requirements_met(b_ptr) && prereq_abilities_met(b_ptr);
 }
 
 static char song_menu_letter(int song_index)
@@ -3124,6 +3181,13 @@ static void ability_browser_build_summary(int skilltype, char* summary,
         (skilltype >= 0 && skilltype < S_MAX) ? p_ptr->skill_base[skilltype] : 0,
         (skilltype >= 0 && skilltype < S_MAX) ? p_ptr->skill_use[skilltype] : 0,
         next_skill, ability_price);
+    if (lore_system_enabled())
+    {
+        size_t used = strlen(summary);
+        strnfcat(summary, summary_len, &used, " | Lore %d, KP %ld",
+            p_ptr->lore, (long)p_ptr->knowledge_points);
+    }
+
 }
 
 static bool ability_browser_train_skill(int skilltype)
@@ -3660,7 +3724,12 @@ static void ability_browser_entry_state(char* buf, size_t buflen,
     }
 
     if (prereqs(skilltype, abilitynum))
-        strnfmt(buf, buflen, "%d XP", ability_purchase_exp_cost(skilltype));
+    {
+        bool knowledge = ability_uses_knowledge_points(skilltype, abilitynum);
+        strnfmt(buf, buflen, "%d %s", knowledge
+            ? ability_purchase_knowledge_cost(skilltype, abilitynum)
+            : ability_purchase_exp_cost(skilltype), knowledge ? "KP" : "XP");
+    }
     else
         SDL_strlcpy(buf, "locked", buflen);
 }
@@ -3754,7 +3823,7 @@ static void ability_browser_draw_ability_list(
 static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
     char* bonus_text, size_t text_size)
 {
-    int song_skill = ability_menu_current_song_score();
+    int song_skill = ability_menu_current_song_score(b_ptr);
 
     if (!b_ptr || !bonus_text || text_size == 0)
         return false;
@@ -4003,6 +4072,37 @@ static void ability_browser_add_prerequisites(
         ability_desc_add_wrapped(lines, line_count, TERM_L_DARK, buf, width);
     }
 
+    if (lore_system_enabled() && b_ptr->lore_req)
+    {
+        strnfmt(buf, sizeof(buf), "Lore: %d required (%d now)", b_ptr->lore_req, p_ptr->lore);
+        ability_desc_add_wrapped(lines, line_count,
+            p_ptr->lore >= b_ptr->lore_req ? TERM_L_GREEN : TERM_L_DARK, buf, width);
+    }
+
+    for (int stat = 0; stat < A_MAX; ++stat)
+    {
+        static cptr names[] = { "Strength", "Dexterity", "Constitution", "Grace" };
+        int need = b_ptr->stat_req[stat];
+        if (!need) continue;
+        int have = player_permanent_stat(stat);
+        strnfmt(buf, sizeof(buf), "%s: %d required (%d permanent)", names[stat], need, have);
+        ability_desc_add_wrapped(lines, line_count,
+            have >= need ? TERM_L_GREEN : TERM_L_DARK, buf, width);
+    }
+    if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
+    {
+        for (int i = 0; i < b_ptr->required_count; ++i)
+        {
+            int skill = b_ptr->required_skilltype[i];
+            int num = b_ptr->required_abilitynum[i];
+            strnfmt(buf, sizeof(buf), "Required ability: %s",
+                b_name + b_info[ability_index(skill, num)].name);
+            ability_desc_add_wrapped(lines, line_count,
+                p_ptr->innate_ability[skill][num] ? TERM_L_GREEN : TERM_L_DARK,
+                buf, width);
+        }
+    }
+
     if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
     {
         for (int j = 0; j < b_ptr->prereqs; j++)
@@ -4028,9 +4128,11 @@ static void ability_browser_add_prerequisites(
 
     if (skilltype != S_SPC
         && !p_ptr->have_ability[skilltype][b_ptr->abilitynum]
-        && prereq_abilities_met(b_ptr))
+        && prereq_abilities_met(b_ptr) && ability_stat_requirements_met(b_ptr))
     {
-        int ability_xp = ability_purchase_exp_cost(skilltype);
+        bool knowledge = ability_uses_knowledge_points(skilltype, b_ptr->abilitynum);
+        int knowledge_cost = ability_purchase_knowledge_cost(skilltype, b_ptr->abilitynum);
+        int ability_xp = knowledge ? 0 : ability_purchase_exp_cost(skilltype);
         int skill_xp = (b_ptr->level > p_ptr->skill_base[skilltype])
             ? ability_browser_skill_training_cost(
                 p_ptr->skill_base[skilltype], b_ptr->level)
@@ -4039,7 +4141,13 @@ static void ability_browser_add_prerequisites(
         byte cost_attr = (total_xp <= p_ptr->new_exp)
             ? TERM_L_GREEN : TERM_L_DARK;
 
-        if (skill_xp > 0)
+        if (knowledge)
+        {
+            strnfmt(buf, sizeof(buf), "Cost: %d KP (%ld available) + %d skill XP (%ld available)",
+                knowledge_cost, (long)p_ptr->knowledge_points, skill_xp, (long)p_ptr->new_exp);
+            if (knowledge_cost > p_ptr->knowledge_points) cost_attr = TERM_L_DARK;
+        }
+        else if (skill_xp > 0)
         {
             strnfmt(buf, sizeof(buf),
                 "Total XP: %d (%d skill + %d ability; %ld available)",
@@ -4062,6 +4170,38 @@ static void ability_browser_add_current_blocks(
 
     if (!b_ptr)
         return;
+
+    if (b_ptr->score_weights_set)
+    {
+        static cptr names[] = { "Strength", "Dexterity", "Constitution", "Grace" };
+        ability_desc_add_blank(lines, line_count);
+        ability_desc_add_heading(lines, line_count, TERM_YELLOW,
+            skilltype == S_SMT ? "Smithing mastery contribution" : "Ability score");
+        for (int stat = 0; stat < A_MAX; ++stat)
+        {
+            if (!b_ptr->stat_score_weight_set[stat]) continue;
+            int weight = b_ptr->stat_score_weight[stat];
+            int value = skilltype == S_SMT ? player_permanent_stat(stat)
+                : p_ptr->stat_use[stat];
+            strnfmt(buf, sizeof(buf), "%s%d.%02dx %s (%d)",
+                weight < 0 ? "-" : "", ABS(weight) / 100, ABS(weight) % 100,
+                names[stat], value);
+            ability_desc_add_wrapped(lines, line_count, TERM_SLATE, buf, width);
+        }
+        for (int skill = 0; skill < S_MAX; ++skill)
+        {
+            if (!b_ptr->skill_score_weight_set[skill]) continue;
+            int weight = b_ptr->skill_score_weight[skill];
+            strnfmt(buf, sizeof(buf), "%s%d.%02dx %s (ranks + flat bonuses)",
+                weight < 0 ? "-" : "", ABS(weight) / 100, ABS(weight) % 100,
+                skill_names_full[skill]);
+            ability_desc_add_wrapped(lines, line_count, TERM_SLATE, buf, width);
+        }
+        strnfmt(buf, sizeof(buf), "Total: %+d%s",
+            ability_score(skilltype, b_ptr->abilitynum),
+            skilltype == S_SMT ? " Smithing on every craft" : "");
+        ability_desc_add_wrapped(lines, line_count, TERM_L_GREEN, buf, width);
+    }
 
     if (skilltype == S_SNG)
     {
@@ -4251,9 +4391,11 @@ static int ability_browser_build_description(int skilltype,
     }
     else
     {
-        strnfmt(status, sizeof(status), "%s. Price %d XP.",
+        bool knowledge = ability_uses_knowledge_points(skilltype, b_ptr->abilitynum);
+        strnfmt(status, sizeof(status), "%s. Price %d %s.",
             prereqs(skilltype, b_ptr->abilitynum) ? "Available" : "Locked",
-            ability_purchase_exp_cost(skilltype));
+            knowledge ? ability_purchase_knowledge_cost(skilltype, b_ptr->abilitynum)
+                : ability_purchase_exp_cost(skilltype), knowledge ? "KP" : "XP");
     }
     ability_desc_add_wrapped(lines, &line_count, TERM_SLATE, status, width);
 
@@ -4850,6 +4992,8 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         int skill_cost = 0;
         int total_exp_cost;
         int exp_cost;
+        int knowledge_cost = 0;
+        bool knowledge;
 
         if (skilltype == S_SPC)
         {
@@ -4858,6 +5002,11 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         }
 
         b_ptr = &b_info[ability_index(skilltype, abilitynum)];
+        if (!ability_stat_requirements_met(b_ptr))
+        {
+            bell("Your permanent stats do not meet this ability's requirements.");
+            return false;
+        }
         has_skill_prereq = (p_ptr->skill_base[skilltype] >= b_ptr->level);
         has_ability_prereq = prereq_abilities_met(b_ptr);
 
@@ -4867,7 +5016,14 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
             return false;
         }
 
-        exp_cost = ability_purchase_exp_cost(skilltype);
+        knowledge = ability_uses_knowledge_points(skilltype, abilitynum);
+        knowledge_cost = ability_purchase_knowledge_cost(skilltype, abilitynum);
+        if (knowledge && knowledge_cost > p_ptr->knowledge_points)
+        {
+            bell("You do not have enough knowledge points to acquire this ability.");
+            return false;
+        }
+        exp_cost = knowledge ? 0 : ability_purchase_exp_cost(skilltype);
         total_exp_cost = exp_cost;
         if (!has_skill_prereq)
         {
@@ -4974,7 +5130,16 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
                     "Buying a song does not start singing. Its description states its Voice cost; Voice does not regenerate while any song is active.");
             tutorial_game_wait();
             if (!tutorial_game_action_allowed("buy-ability", NULL)) return false;
-            if (train_skill)
+            if (knowledge)
+            {
+                if (train_skill)
+                    strnfmt(prompt, sizeof(prompt), "Raise %s %d to %d (%d XP) and gain %s (%d KP)? ",
+                        skill_names_full[skilltype], old_skill_base, b_ptr->level,
+                        skill_cost, gain_name, knowledge_cost);
+                else
+                    strnfmt(prompt, sizeof(prompt), "Gain %s for %d KP? ", gain_name, knowledge_cost);
+            }
+            else if (train_skill)
             {
                 strnfmt(prompt, sizeof(prompt),
                     "Raise %s %d to %d (%d XP) and gain %s (%d XP), %d XP total? ",
@@ -5004,6 +5169,7 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         ability_log_record_gain(skilltype, abilitynum);
         catastrophe_ability(skilltype, abilitynum);
         p_ptr->new_exp -= total_exp_cost;
+        p_ptr->knowledge_points -= knowledge_cost;
 
         if (banechoice <= 0 && oathchoice <= 0)
         {

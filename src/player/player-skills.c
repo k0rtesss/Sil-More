@@ -121,7 +121,7 @@ static int song_synergy_bonus(byte abilitynum, int full_skill)
 
 int song_effective_skill(int abilitynum)
 {
-    int skill = p_ptr->skill_use[S_SNG];
+    int skill = ability_score(S_SNG, abilitynum);
     const int full_skill = skill;
 
     // penalize minor themes - check if this ability is the minor theme
@@ -139,7 +139,7 @@ int song_effective_skill(int abilitynum)
         && (abilitynum != SNG_DISGUISE) && (abilitynum != SNG_LORIEN))
     {
         // Calculate Silence bonus directly to avoid recursion
-        int silence_skill = p_ptr->skill_use[S_SNG] / 2;
+        int silence_skill = ability_score(S_SNG, SNG_SILENCE) / 2;
         int silence_penalty = silence_skill / 2;
         skill -= silence_penalty;
         if (skill < 0)

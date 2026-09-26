@@ -597,7 +597,7 @@
       "priority": 24,
       "steps": [
         {
-          "text": "Mithril and star iron are smithing materials. Keep them if you plan to forge or improve equipment. A forge, the relevant abilities and enough Smithing are still needed; the smithing preview lists the materials and other costs.",
+          "text": "Mithril and star iron are smithing materials. Keep them if you plan to forge or improve equipment. A forge, the relevant abilities and enough Smithing are still needed; the preview and its How calculated (or ?) view list capacity, difficulty, materials and other costs.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -2419,7 +2419,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "Choose an item or improvement, then review its difficulty, forge uses, materials, time and any attribute or XP costs. The preview lets you compare options before committing. Your abilities can change both what you may forge and its costs.",
+          "text": "Choose a base item to see your Smithing capacity and open How calculated (or ?) for the breakdown. Capacity lists invested ranks, the common stat bonus, equipment Smithing, misc Smithing and the forge bonus. The common bonus is permanent Dexterity + permanent Grace, plus Expertise's Dexterity, Enchantment's Grace and Artifice's Grace; the selected category then adds 0.5 Strength + 0.5 Dexterity for heavy metal, Dexterity for mail or light craft, or Grace for jewellery. Sum craft stats before flooring; temporary or conditional stat boosts do not count. The same breakdown shows the item's difficulty components and modifiers, before/after reforge difficulty, and Masterpiece or Aule's Forge rank sacrifices. Reforging uses ceil(1.5 * difficulty increase); review materials, time and forge uses before committing.",
           "kind": "info",
           "anchor": "menu"
         }
@@ -5385,7 +5385,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus.",
+          "text": "Requires 2 permanent Grace. When active, adds permanent Grace to the common Smithing bonus for every craft, and creates enchanted items with named special properties. Determine enchantments on items and gain a modest identification bonus.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5422,7 +5422,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal.",
+          "text": "Requires 2 permanent Dexterity and one crafting ability. When active, adds permanent Dexterity to the common Smithing bonus for every craft. Halve smithing time and remove normal XP and attribute costs. Masterpiece and Aule's Forge still sacrifice base Smithing ranks; materials and forge uses still matter.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5457,7 +5457,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties.",
+          "text": "Requires 4 permanent Dexterity and Grace, Enchantment, and one crafting ability. When active, adds permanent Grace to the common Smithing bonus for every craft. Create custom artefacts from known materials and gain a significant identification bonus. Inspect the How calculated (or ?) breakdown for all costs.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5494,7 +5494,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Forge an item above your normal difficulty limit by permanently spending base Smithing: one skill point per excess difficulty point. The amount available is limited by your invested Smithing.",
+          "text": "Requires 4 permanent Dexterity and 5 permanent Grace, Enchantment, and one crafting ability. Forge above the item category's normal effective capacity by sacrificing one base Smithing rank per excess point, up to your invested ranks. Expertise never removes this sacrifice; craft and material permissions still apply.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5602,7 +5602,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "At a forge, repair damaged items or add a missing prefix to a found item. Reforging difficulty is 1.5 times the increase in difficulty. Compare the result and costs before committing.",
+          "text": "At a forge, repair damaged items or add a missing prefix to a found item. Reforging difficulty is ceil(1.5 * the difficulty increase), checked against the target item's Smithing category. Compare the before/after difficulty and all costs in How calculated (or ?) before committing.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -6563,7 +6563,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Aulë's Forge improves on Masterpiece. Above your normal smithing limit, spend 1 base Smithing for each 2 excess difficulty points, rounding the cost up. You can reach up to twice your base Smithing beyond the normal limit. This quest reward replaces the less efficient Masterpiece rule.",
+          "text": "Aulë's Forge improves on Masterpiece. Above your normal effective capacity, spend ceil(excess difficulty / 2) base Smithing ranks. You can reach up to twice your base Smithing beyond the normal capacity. This quest reward replaces the less efficient Masterpiece rule; the exact sacrifice appears in How calculated (or ?).",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -7979,7 +7979,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.",
+          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8002,7 +8002,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.",
+          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8026,7 +8026,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.",
+          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8050,7 +8050,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.",
+          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8074,7 +8074,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.",
+          "text": "This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8121,7 +8121,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.",
+          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8144,7 +8144,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.",
+          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8168,7 +8168,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.",
+          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8192,7 +8192,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.",
+          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8216,7 +8216,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.",
+          "text": "This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8263,7 +8263,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.",
+          "text": "This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8286,7 +8286,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.",
+          "text": "This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.",
           "kind": "info",
           "anchor": "map"
         }
@@ -8310,7 +8310,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.",
+          "text": "This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10044,7 +10044,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "A forge has limited uses. Open Smithing while at it to inspect possible items and their costs. The preview shows difficulty, materials, time and forge uses before you commit. An exhausted forge cannot make another item.",
+          "text": "A forge has limited uses. Open Smithing while at it to inspect possible items and their costs. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview also shows materials, time, forge uses and any reforge or overcap rank sacrifice before you commit. An exhausted forge cannot make another item.",
           "kind": "info",
           "anchor": "none"
         }
@@ -10584,7 +10584,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "{detail} Forge a work that meets Aulë's current requirements, then collect the reward. Read the objective and smithing proposal before spending materials. Leaving this level before the reward is granted abandons the quest.",
+          "text": "{detail} Forge a work that meets Aulë's current requirements, then collect the reward. Read the objective and use How calculated (or ?) to inspect effective capacity and any overcap sacrifice before spending materials. Leaving this level before the reward is granted abandons the quest.",
           "kind": "decision",
           "anchor": "quests"
         }

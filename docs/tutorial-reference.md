@@ -484,7 +484,7 @@ Priority: **24** (higher appears first).
 
 **1. Info**
 
-Mithril and star iron are smithing materials. Keep them if you plan to forge or improve equipment. A forge, the relevant abilities and enough Smithing are still needed; the smithing preview lists the materials and other costs.
+Mithril and star iron are smithing materials. Keep them if you plan to forge or improve equipment. A forge, the relevant abilities and enough Smithing are still needed; the preview and its How calculated (or ?) view list capacity, difficulty, materials and other costs.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -1874,7 +1874,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-Choose an item or improvement, then review its difficulty, forge uses, materials, time and any attribute or XP costs. The preview lets you compare options before committing. Your abilities can change both what you may forge and its costs.
+Choose a base item to see your Smithing capacity and open How calculated (or ?) for the breakdown. Capacity lists invested ranks, the common stat bonus, equipment Smithing, misc Smithing and the forge bonus. The common bonus is permanent Dexterity + permanent Grace, plus Expertise's Dexterity, Enchantment's Grace and Artifice's Grace; the selected category then adds 0.5 Strength + 0.5 Dexterity for heavy metal, Dexterity for mail or light craft, or Grace for jewellery. Sum craft stats before flooring; temporary or conditional stat boosts do not count. The same breakdown shows the item's difficulty components and modifiers, before/after reforge difficulty, and Masterpiece or Aule's Forge rank sacrifices. Reforging uses ceil(1.5 * difficulty increase); review materials, time and forge uses before committing.
 
 Trigger: The named menu is actually opened: smithing.
 
@@ -3216,7 +3216,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus.
+Requires 2 permanent Grace. When active, adds permanent Grace to the common Smithing bonus for every craft, and creates enchanted items with named special properties. Determine enchantments on items and gain a modest identification bonus.
 
 Trigger: Public ability preview or newly available ability; raw serial 123, skill 6, ability slot 3.
 
@@ -3232,7 +3232,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal.
+Requires 2 permanent Dexterity and one crafting ability. When active, adds permanent Dexterity to the common Smithing bonus for every craft. Halve smithing time and remove normal XP and attribute costs. Masterpiece and Aule's Forge still sacrifice base Smithing ranks; materials and forge uses still matter.
 
 Trigger: Public ability preview or newly available ability; raw serial 124, skill 6, ability slot 4.
 
@@ -3248,7 +3248,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties.
+Requires 4 permanent Dexterity and Grace, Enchantment, and one crafting ability. When active, adds permanent Grace to the common Smithing bonus for every craft. Create custom artefacts from known materials and gain a significant identification bonus. Inspect the How calculated (or ?) breakdown for all costs.
 
 Trigger: Public ability preview or newly available ability; raw serial 125, skill 6, ability slot 5.
 
@@ -3264,7 +3264,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Forge an item above your normal difficulty limit by permanently spending base Smithing: one skill point per excess difficulty point. The amount available is limited by your invested Smithing.
+Requires 4 permanent Dexterity and 5 permanent Grace, Enchantment, and one crafting ability. Forge above the item category's normal effective capacity by sacrificing one base Smithing rank per excess point, up to your invested ranks. Expertise never removes this sacrifice; craft and material permissions still apply.
 
 Trigger: Public ability preview or newly available ability; raw serial 126, skill 6, ability slot 6.
 
@@ -3312,7 +3312,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-At a forge, repair damaged items or add a missing prefix to a found item. Reforging difficulty is 1.5 times the increase in difficulty. Compare the result and costs before committing.
+At a forge, repair damaged items or add a missing prefix to a found item. Reforging difficulty is ceil(1.5 * the difficulty increase), checked against the target item's Smithing category. Compare the before/after difficulty and all costs in How calculated (or ?) before committing.
 
 Trigger: Public ability preview or newly available ability; raw serial 129, skill 6, ability slot 9.
 
@@ -3666,7 +3666,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-AulÃ«'s Forge improves on Masterpiece. Above your normal smithing limit, spend 1 base Smithing for each 2 excess difficulty points, rounding the cost up. You can reach up to twice your base Smithing beyond the normal limit. This quest reward replaces the less efficient Masterpiece rule.
+AulÃ«'s Forge improves on Masterpiece. Above your normal effective capacity, spend ceil(excess difficulty / 2) base Smithing ranks. You can reach up to twice your base Smithing beyond the normal capacity. This quest reward replaces the less efficient Masterpiece rule; the exact sacrifice appears in How calculated (or ?).
 
 Trigger: Public ability preview or newly available ability; raw serial 161, skill 8, ability slot 1.
 
@@ -4546,7 +4546,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.
 
 Trigger: Known nearby terrain in this feature family, after grouping equivalent strengths or positive remaining-use counts; exhausted forges have separate lessons.
 
@@ -4564,7 +4564,7 @@ Archive compatibility entry. New encounters use `terrain.65` for this terrain fa
 
 **1. Info**
 
-This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.65.
 
@@ -4582,7 +4582,7 @@ Archive compatibility entry. New encounters use `terrain.65` for this terrain fa
 
 **1. Info**
 
-This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.65.
 
@@ -4600,7 +4600,7 @@ Archive compatibility entry. New encounters use `terrain.65` for this terrain fa
 
 **1. Info**
 
-This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.65.
 
@@ -4618,7 +4618,7 @@ Archive compatibility entry. New encounters use `terrain.65` for this terrain fa
 
 **1. Info**
 
-This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. The proposal lists difficulty, materials, time and other costs.
+This forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview lists materials, time, forge uses and any reforge or overcap rank sacrifice before you commit.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.65.
 
@@ -4650,7 +4650,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.
 
 Trigger: Known nearby terrain in this feature family, after grouping equivalent strengths or positive remaining-use counts; exhausted forges have separate lessons.
 
@@ -4668,7 +4668,7 @@ Archive compatibility entry. New encounters use `terrain.71` for this terrain fa
 
 **1. Info**
 
-This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.71.
 
@@ -4686,7 +4686,7 @@ Archive compatibility entry. New encounters use `terrain.71` for this terrain fa
 
 **1. Info**
 
-This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.71.
 
@@ -4704,7 +4704,7 @@ Archive compatibility entry. New encounters use `terrain.71` for this terrain fa
 
 **1. Info**
 
-This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.71.
 
@@ -4722,7 +4722,7 @@ Archive compatibility entry. New encounters use `terrain.71` for this terrain fa
 
 **1. Info**
 
-This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here, allowing more difficult items.
+This enchanted forge has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +3 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.71.
 
@@ -4754,7 +4754,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.
+This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.
 
 Trigger: Known nearby terrain in this feature family, after grouping equivalent strengths or positive remaining-use counts; exhausted forges have separate lessons.
 
@@ -4772,7 +4772,7 @@ Archive compatibility entry. New encounters use `terrain.77` for this terrain fa
 
 **1. Info**
 
-This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.
+This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.77.
 
@@ -4790,7 +4790,7 @@ Archive compatibility entry. New encounters use `terrain.77` for this terrain fa
 
 **1. Info**
 
-This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.
+This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here; How calculated (or ?) shows that forge bonus alongside your other capacity terms.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use terrain.77.
 
@@ -6060,7 +6060,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-A forge has limited uses. Open Smithing while at it to inspect possible items and their costs. The preview shows difficulty, materials, time and forge uses before you commit. An exhausted forge cannot make another item.
+A forge has limited uses. Open Smithing while at it to inspect possible items and their costs. Choose How calculated (or ?) to see your capacity and the selected item's actual difficulty components and modifiers; the preview also shows materials, time, forge uses and any reforge or overcap rank sacrifice before you commit. An exhausted forge cannot make another item.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; world.forge.
 
@@ -6460,7 +6460,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-{detail} Forge a work that meets AulÃ«'s current requirements, then collect the reward. Read the objective and smithing proposal before spending materials. Leaving this level before the reward is granted abandons the quest.
+{detail} Forge a work that meets AulÃ«'s current requirements, then collect the reward. Read the objective and use How calculated (or ?) to inspect effective capacity and any overcap sacrifice before spending materials. Leaving this level before the reward is granted abandons the quest.
 
 Trigger: Quest 2 is publicly offered or accepted; only its revealed text is supplied in context.
 

@@ -12,6 +12,10 @@
 # N: ability number : ability name
 # I: skill number : ability value : level requirement
 # P: prerequisite skill number / prerequisite ability value : ...
+# A: mandatory skill number / ability value (repeat for AND requirements)
+# R: stat name : minimum : ... (STR, DEX, CON, GRA; optional beta LORE)
+# S: stat or skill name : coefficient : ... (1.5, 3/2, 150%, 1x)
+# K: base knowledge-point cost (Lore beta only; reduced by Lore)
 # Y: carriage target : percentage reduction when personally learned
 # D: description (poetic/lore text)
 # E: effect (mechanical description)
@@ -22,7 +26,16 @@
 # 'I' is the skill number (melee = 1 etc), ability number in this skill
 #     and the level requirement for the ability
 #
-# 'P' is the prerequisite abilities if any
+# 'P' requires any listed ability. Each 'A' line is additionally required.
+#     Quick Study bypasses this tree, but not skill or stat requirements.
+# 'R' uses base stats plus learned permanent stat increases, without equipment,
+#     drain, potions, songs or conditional combat bonuses. Lore is ignored when off.
+# 'S' replaces an ability's default skill score with weighted stat/skill sources.
+#     Skill sources exclude their stat contribution. Sum first, then floor once.
+#     Smithing's common bonus is permanent DEX + GRA plus active mastery
+#     weights; heavy adds 0.5 STR + 0.5 DEX, mail/light adds DEX, and
+#     jewellery adds GRA. Equipment, misc and forge bonuses are separate.
+#     Sum all craft-stat terms before flooring once.
 #
 # 'Y' grants learned carriage efficiency. Supported targets are THROWING
 #     and ARROWS. The percentage does not stack with an item's own volume
@@ -431,6 +444,8 @@ E:+1 Dexterity.
 
 N:80:Quick Study
 I:4:0:1
+R:LORE:2
+K:2
 D:With the quick understanding of the loremasters of Gondolin, who gathered and preserved the accumulated wisdom of the Noldor within the Hidden City. Their voracious study of all arts and sciences allowed them to grasp new disciplines swiftly, drawing connections that others would miss.
 E:Take advanced abilities without prerequisites. Modest bonus to identifying items.
 T:40:0:99  # Amulet
@@ -463,6 +478,8 @@ T:40:0:99  # Amulet
 
 N:84:Alchemy
 I:4:4:5
+R:LORE:3
+K:3
 D:Understanding the hidden properties of things as did the scholars of the Noldor in Tirion, who studied the nature of every herb and mineral beneath the light of Laurelin. Such knowledge reveals the purpose of elixirs and powders at a glance, and attunes the mind to the resonance of enchanted crystals.
 E:Auto-identify herbs, potions, staves, and horns. While diseased, a Gem of Self Knowledge shows the disease name and cure herb. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
 T:32:0:99  # Helm
@@ -523,6 +540,8 @@ T:34:0:99  # Shields
 
 N:101:Channeling
 I:5:1:2
+R:LORE:4
+K:4
 D:Channeling power as the Maiar once aided the Eldar in Valinor, guiding the flow of enchantment through crafted vessels. Those who master this art understand the inner workings of staves and horns instinctively, and can draw forth their power without risk of the wild discharges that imperil the untrained.
 E:Auto-identify staves and horns. Channel charges safely without risk.
 T:32:0:99  # Helm
@@ -597,6 +616,9 @@ D:Enduring as the great pillars of Menegroth carved by the dwarves of Belegost i
 D:Long hardship has taught you to travel and fight beneath a fuller, more cumbersome load.
 E:+1 Constitution. +6.0 qt Pack capacity.
 
+# Lore R: and K: fields apply only while Lore fifth stat (Beta) is enabled.
+# R: minimum permanent stats. S: ability stat/skill coefficients (1 = x1).
+# P: any listed learned ability. Each A: line is additionally required.
 # Smithing ---------------------------------------------
 
 N:120:Weaponsmith
@@ -621,32 +643,41 @@ T:31:0:99  # Gloves
 
 N:123:Enchantment
 I:6:3:5
+R:GRA:2
+S:GRA:1
 D:Enchanting items with the artistry of Telchar of Nogrod, greatest of dwarven smiths, whose works were imbued with power beyond their mere substance. The enchanter weaves virtue into the very fabric of their creations, and can discern the enchantments hidden within the works of others.
-E:Create {special} items. Determine enchantments on items. Modest ID bonus.
+E:Requires 2 permanent Grace. When active, add permanent Grace to the common Smithing bonus for every craft. Create {special} items. Determine enchantments on items. Modest ID bonus.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
 N:124:Expertise
 I:6:4:6
-P:6/3
+R:DEX:2
+S:DEX:1
+P:6/0:6/1:6/2
 D:Attaining the effortless mastery of Curufin, most skilled of the sons of Fëanor in the crafts of hand, who could shape metal with a speed and ease that seemed almost careless. Such expertise allows the smith to work without waste, achieving in moments what lesser craftsmen labor over for hours.
-E:Halve forging time. Negate all experience and stat costs of smithing.
+E:Requires 2 permanent Dexterity. When active, add permanent Dexterity to the common Smithing bonus for every craft. Halve forging time. Negate experience and stat costs, but not Smithing ranks sacrificed to Masterpiece or Aule's Forge.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
 N:125:Artifice
 I:6:5:7
-P:6/2:6/3
+R:DEX:4:GRA:4
+S:GRA:1
+A:6/3
+P:6/0:6/1:6/2
 D:Mastering the highest artifice as Fëanor did when he created the Silmarils and the palantiri in the Blessed Realm, works so extraordinary that they could never be duplicated. Such mastery allows the creation of truly unique objects of power, and grants deep insight into the nature of all crafted things.
-E:Create highly customised artifacts. Significant bonus to identifying items.
+E:Requires 4 permanent Dexterity and Grace, Enchantment, and a crafting ability. When active, add permanent Grace to the common Smithing bonus for every craft. Create highly customised artifacts using known materials. Significant bonus to identifying items.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
 N:126:Masterpiece
 I:6:6:8
-P:6/3
+R:DEX:4:GRA:5
+A:6/3
+P:6/0:6/1:6/2
 D:Crafting a masterpiece that strains the very limits of skill, as the great works of the First Age were wrought only through tremendous sacrifice. The smith pours their very essence into the creation, achieving what should be impossible, though the effort leaves them diminished.
-E:Create items beyond normal difficulty limit. Drains Smithing skill per excess difficulty point.
+E:Requires 4 permanent Dexterity and 5 permanent Grace, Enchantment, and a crafting ability. Exceed normal effective capacity by up to your base Smithing ranks, sacrificing one rank per excess point. All craft and material requirements still apply.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -665,7 +696,7 @@ T:31:0:99  # Gloves
 N:129:Reforging
 I:6:9:4
 D:Reworking worn gear as the patient craftsmen of Nogrod straightened bent mail, renewed old edges, and laid fresh virtue on worthy pieces after hard-fought battles. A smith with this art can restore what was marred in the deeps or add new excellence to found gear without remaking it from nothing.
-E:Repair damaged items at a forge, restore damaged bridges, or add a missing prefix to a found item. Reforging difficulty is 1.5x the difficulty increase.
+E:Repair damaged items at a forge, restore damaged bridges, or add a missing prefix to a found item. Reforging difficulty is ceil(1.5 * the difficulty increase), checked against the target item's Smithing category.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -846,7 +877,7 @@ E:Immune to fear, hallucination, trance, rage, stun, and confusion. Quest reward
 N:161:Aulë's Forge
 I:8:1:0
 D:Harnessing the creative fire of Aulë the Smith, mightiest of craftsmen among the Valar, who shaped the substance of Arda itself and fashioned the Dwarves in secret beneath the mountains. His blessing upon a mortal smith grants mastery at the forge that surpasses all ordinary limits of skill.
-E:Exceed effective Smithing by up to twice your base Smithing. Each 2 points of excess difficulty cost 1 base Smithing, rounding the cost up. Supersedes Masterpiece. Quest reward.
+E:Exceed normal effective capacity by up to twice your base Smithing. Each 2 points of excess difficulty costs ceil(excess / 2) base Smithing ranks. Supersedes Masterpiece. Quest reward.
 N:162:Oath of Mercy
 I:8:2:0
 D:Swearing the Oath of Mercy, akin to the compassion shown by Finrod Felagund when he befriended Beren in Nargothrond, honouring the bond between all free peoples. Those who vow to spare the helpless are touched by a gentle grace, but the oath is fragile and shatters if its keeper takes the life of a defenceless foe.

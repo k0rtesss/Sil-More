@@ -186,7 +186,7 @@ cptr option_text[OPT_MAX] = {
     "assassination_over_charge", /* OPT_assassination_over_charge */
     "pacifist_attack_warning", /* OPT_pacifist_attack_warning */
     "active_weapon_switch_confirm", /* OPT_active_weapon_switch_confirm */
-    NULL, /* reserved legacy slot: view_torch_grids */
+    "lore_beta", /* OPT_lore_beta */
     NULL, /* reserved legacy slot: dungeon_align */
     NULL, /* reserved legacy slot: dungeon_stair */
     NULL, /* reserved legacy slot */
@@ -431,7 +431,7 @@ cptr option_desc[OPT_MAX] = {
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */
     "Warn before making direct attacks (useful for pacifist runs)", /* OPT_pacifist_attack_warning */
     "Confirm before paid melee/ranged active switches", /* OPT_active_weapon_switch_confirm */
-    NULL, /* reserved legacy slot: view_torch_grids */
+    "Beta: enable the Lore fifth stat at birth and its knowledge abilities", /* OPT_lore_beta */
     NULL, /* reserved legacy slot: dungeon_align */
     NULL, /* reserved legacy slot: dungeon_stair */
     NULL, /* reserved legacy slot */
@@ -692,7 +692,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_assassination_over_charge */
     false, /* OPT_pacifist_attack_warning */
     true, /* OPT_active_weapon_switch_confirm */
-    false, /* reserved legacy slot: view_torch_grids */
+    false, /* OPT_lore_beta */
     false, /* reserved legacy slot: dungeon_align */
     false, /* reserved legacy slot: dungeon_stair */
     false, /* reserved legacy slot */
@@ -952,7 +952,8 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_utumno_corridors, OPT_illusory_walls,
         OPT_vault_drop_frequency, OPT_noble_item_spawn_mode,
         OPT_min_depth_timer_mode, OPT_environment_speed, OPT_load_blitz_by_default,
-        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
+        OPT_lore_beta,
+        OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Display ***/
 

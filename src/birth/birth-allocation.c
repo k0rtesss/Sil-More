@@ -72,14 +72,14 @@ void birth_recommended_stats(int stats[A_MAX])
     stats[A_GRA] = prefer_strength ? 1 : 2;
 }
 
-NavResult player_birth_aux_2(int stats[A_MAX])
+NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
 {
     int i;
 
     int stat = 0;
 
     int cost;
-    int stat_costs[A_MAX];
+    int stat_costs[BIRTH_STAT_MAX];
 
     char ch;
 
@@ -101,6 +101,12 @@ NavResult player_birth_aux_2(int stats[A_MAX])
     while (1)
     {
         bool steamdeck = steamdeck_controls_active();
+        bool lore_enabled = lore_system_enabled();
+        int stat_count = lore_enabled ? BIRTH_STAT_MAX : A_MAX;
+
+        if (!lore_enabled)
+            stats[BIRTH_STAT_LORE] = 0;
+
         /* Reset cost */
         cost = 0;
 
@@ -113,10 +119,13 @@ NavResult player_birth_aux_2(int stats[A_MAX])
             /* Apply the racial bonuses */
             p_ptr->stat_base[i] = stats[i] + bonus;
             p_ptr->stat_drain[i] = 0;
-
-            /* Total cost */
-            cost += birth_stat_costs[stats[i] + 4];
         }
+
+        p_ptr->lore = lore_enabled ? stats[BIRTH_STAT_LORE] : 0;
+
+        /* Total cost, including Lore only when the beta system is active. */
+        for (i = 0; i < stat_count; i++)
+            cost += birth_stat_current_cost(stats[i]);
 
         /* Restrict cost */
         if (cost > MAX_COST)
@@ -124,15 +133,30 @@ NavResult player_birth_aux_2(int stats[A_MAX])
             /* Warning */
             bell("Excessive stats!");
 
-            /* Reduce stat */
-            stats[stat]--;
+            /* Reduce the focused stat, or the last positive stat if a
+             * preset left focus on a zero-valued row. */
+            if (stats[stat] > 0)
+                stats[stat]--;
+            else
+            {
+                for (int j = stat_count - 1; j >= 0; j--)
+                {
+                    if (stats[j] > 0)
+                    {
+                        stats[j]--;
+                        stat = j;
+                        break;
+                    }
+                }
+            }
 
             /* Recompute costs */
             continue;
         }
 
-        for (i = 0; i < A_MAX; i++)
-            stat_costs[i] = birth_stat_increase_cost(stats[i]);
+        for (i = 0; i < BIRTH_STAT_MAX; i++)
+            stat_costs[i] = (i < stat_count)
+                ? birth_stat_increase_cost(stats[i]) : 0;
 
         p_ptr->new_exp = p_ptr->exp = get_start_xp();
 
@@ -171,7 +195,7 @@ NavResult player_birth_aux_2(int stats[A_MAX])
             if (ui_menu_click_take_action(&clicked_choice, &click_action))
             {
                 ui_menu_click_clear();
-                if (clicked_choice >= 0 && clicked_choice < A_MAX)
+                if (clicked_choice >= 0 && clicked_choice < stat_count)
                 {
                     if (click_action == UI_MENU_CLICK_HOVER
                         || clicked_choice != stat)
@@ -207,6 +231,8 @@ NavResult player_birth_aux_2(int stats[A_MAX])
             || (steamdeck && ch == steamdeck_alt_action_key()))
         {
             birth_recommended_stats(stats);
+            if (lore_enabled)
+                stats[BIRTH_STAT_LORE] = 0;
             continue;
         }
 
@@ -240,13 +266,13 @@ NavResult player_birth_aux_2(int stats[A_MAX])
         /* Prev stat */
         if (ch == '8')
         {
-            stat = (stat + A_MAX - 1) % A_MAX;
+            stat = (stat + stat_count - 1) % stat_count;
         }
 
         /* Next stat */
         if (ch == '2')
         {
-            stat = (stat + 1) % A_MAX;
+            stat = (stat + 1) % stat_count;
         }
 
         /* Decrease stat */
@@ -256,7 +282,7 @@ NavResult player_birth_aux_2(int stats[A_MAX])
         }
 
         /* Increase stat */
-        if (ch == '6')
+        if (ch == '6' && birth_stat_increase_cost(stats[stat]) > 0)
         {
             stats[stat]++;
         }

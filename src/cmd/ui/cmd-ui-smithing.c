@@ -151,10 +151,19 @@ static int smith_ui_scroll_top[SMITH_SCROLL_MAX];
 static int smith_ui_touch_drag_sink;
 
 #define SMITH_CLICK_BACK 33000
+#define SMITH_CLICK_CALC 33001
+#define SMITH_CLICK_CALC_UP 33002
+#define SMITH_CLICK_CALC_DOWN 33003
+static void smith_show_calculations(const object_type* reforge_source);
 
 /* Controller B uses a gameplay binding, so normalize it to menu Back here. */
-static char smithing_menu_key(char ch)
+static char smithing_menu_key(char ch, const object_type* reforge_source)
 {
+    if (ch == '?')
+    {
+        smith_show_calculations(reforge_source);
+        return 0;
+    }
     return (char)steamdeck_menu_key(ch, 0, 0);
 }
 
@@ -1198,7 +1207,7 @@ static void smith_ui_add_back_click_target(int col, int row, cptr text)
 
 static void smith_ui_draw_navigation_prompt(bool root_menu)
 {
-    char prompt[48];
+    char prompt[80];
     int row;
 
     if (sdl_touch_only_device_active())
@@ -1220,8 +1229,10 @@ static void smith_ui_draw_navigation_prompt(bool root_menu)
             root_menu ? "Exit" : "Back");
     }
 
+    SDL_strlcat(prompt, "  [? How calculated]", sizeof(prompt));
     Term_erase(0, row, smith_ui_term_wid());
     Term_putstr(0, row, smith_ui_term_wid(), TERM_SLATE, prompt);
+    ui_menu_click_add_text_token(SMITH_CLICK_CALC, 0, row, prompt, "[? How calculated]");
     smith_ui_add_back_click_target(0, row, prompt);
 }
 
@@ -1239,6 +1250,9 @@ static void smith_ui_begin_touch_scroll_area(bool root_menu)
     else
         ui_menu_click_add_touch_button(
             SMITH_CLICK_BACK, "Back", TERM_DARK);
+
+    if (sdl_touch_only_device_active())
+        ui_menu_click_add_touch_button(SMITH_CLICK_CALC, "How calculated", TERM_L_BLUE);
 
     ui_scroll_area_begin(1, bottom_row, SDL_TOUCH_MENU_CATEGORY_OTHER);
     ui_scroll_area_set_keys('8', '2', '6', '4');
@@ -2649,7 +2663,24 @@ static int dif_mod_signed(int value, int positive_base)
 /*
  * Determines the difficulty of a given object.
  */
-int object_difficulty(object_type* o_ptr)
+enum smith_difficulty_part {
+    SMITH_DIF_BASE, SMITH_DIF_WEIGHT, SMITH_DIF_ATTACK, SMITH_DIF_EVASION,
+    SMITH_DIF_DAMAGE, SMITH_DIF_PROTECTION, SMITH_DIF_WEAPON,
+    SMITH_DIF_TUNNEL, SMITH_DIF_STATS, SMITH_DIF_SKILLS, SMITH_DIF_MULTIPLE,
+    SMITH_DIF_SUSTAINS, SMITH_DIF_POWERS, SMITH_DIF_RESISTS,
+    SMITH_DIF_DRAWBACKS, SMITH_DIF_ABILITIES, SMITH_DIF_PARTS
+};
+
+typedef struct smith_difficulty_breakdown {
+    int parts[SMITH_DIF_PARTS];
+    int subtotal, character_percent, slot_percent, enchantable_percent;
+    int multiplier, scaled, total;
+    bool artefact_arrows;
+} smith_difficulty_breakdown;
+
+/* Optional accounting records the real arithmetic without changing it. */
+static int smith_object_difficulty(object_type* o_ptr,
+    smith_difficulty_breakdown* breakdown)
 {
     object_kind* k_ptr = &k_info[o_ptr->k_idx];
     int x, new, base;
@@ -2657,6 +2688,12 @@ int object_difficulty(object_type* o_ptr)
     int dif = 0;
     int dif_inc = 0;
     int dif_dec = 0;
+    int accounted = 0;
+    if (breakdown) memset(breakdown, 0, sizeof(*breakdown));
+#define SMITH_PART(part) do { \
+    if (breakdown) breakdown->parts[part] = dif_inc - dif_dec - accounted; \
+    accounted = dif_inc - dif_dec; \
+} while (0)
     int weight_factor;
     u32b f1, f2, f3, f4;
     int brands = 0;
@@ -2725,6 +2762,8 @@ int object_difficulty(object_type* o_ptr)
         else if ((f1 & TR1_BRAND_FIRE) || (f2 & (TR2_LIGHT | TR2_RADIANCE)))
             dif_mult -= 25;
     }
+
+    if (breakdown) breakdown->character_percent = dif_mult - 100;
 
     // special rules for horns
     if (o_ptr->tval == TV_HORN)
@@ -2797,6 +2836,8 @@ int object_difficulty(object_type* o_ptr)
         dif_inc += k_ptr->level / 2;
     }
 
+    SMITH_PART(SMITH_DIF_BASE);
+
     // unusual weight
     if (o_ptr->weight == 0)
         weight_factor = 1100;
@@ -2808,6 +2849,8 @@ int object_difficulty(object_type* o_ptr)
     dif_inc += (weight_factor - 100) / 20;
     if (f4 & (TR4_WEIGHT | TR4_NEG_WEIGHT))
         dif_inc += 5;
+
+    SMITH_PART(SMITH_DIF_WEIGHT);
 
     // Jewelry combat bonuses are paid from zero, regardless of base item mins.
     int smith_base_att = ((o_ptr->tval == TV_RING) || (o_ptr->tval == TV_AMULET))
@@ -2841,6 +2884,8 @@ int object_difficulty(object_type* o_ptr)
             dif_inc -= 1;
     }
 
+    SMITH_PART(SMITH_DIF_ATTACK);
+
     // evasion bonus
     x = evn_base - smith_base_evn;
     if (o_ptr->tval == TV_SOFT_ARMOR || o_ptr->tval == TV_MAIL
@@ -2859,11 +2904,15 @@ int object_difficulty(object_type* o_ptr)
             dif_inc -= 2;
     }
 
+    SMITH_PART(SMITH_DIF_EVASION);
+
     // damage bonus
     x = (ds_base - smith_base_ds);
     // dd used to be a factor here, but a shortsword is far more breakable than
     // a great axe adjusted to make >1 damage sides expensive to smith
     dif_inc += dif_mod_signed(x, 3 * ABS(x) + 2);
+
+    SMITH_PART(SMITH_DIF_DAMAGE);
 
     // protection bonus
     base = smith_base_prot;
@@ -2888,6 +2937,8 @@ int object_difficulty(object_type* o_ptr)
     {
         dif_inc += dif_mod_signed(x, 3);
     }
+
+    SMITH_PART(SMITH_DIF_PROTECTION);
 
     // weapon modifiers
     if (f1 & TR1_SLAY_ORC)
@@ -3028,6 +3079,8 @@ int object_difficulty(object_type* o_ptr)
         dif_inc += 2;  // Light armour tag (e.g. the (Light) ego)
     }
 
+    SMITH_PART(SMITH_DIF_WEAPON);
+
     // pval dependent bonuses
     if (f1 & TR1_TUNNEL)
     {
@@ -3043,6 +3096,8 @@ int object_difficulty(object_type* o_ptr)
         dif_mod(x, 18, &dif_inc);
         smithing_cost.str += x;
     }
+
+    SMITH_PART(SMITH_DIF_TUNNEL);
 
     if (o_ptr->stat_bonus[A_STR] > 0)
     {
@@ -3068,6 +3123,8 @@ int object_difficulty(object_type* o_ptr)
         dif_mod(x, 14, &dif_inc);
         smithing_cost.gra += x;
     }
+
+    SMITH_PART(SMITH_DIF_STATS);
 
     if (o_ptr->skill_bonus[S_ARC] > 0)
     {
@@ -3099,6 +3156,8 @@ int object_difficulty(object_type* o_ptr)
         x = o_ptr->skill_bonus[S_SNG];
         dif_mod(x, 4, &dif_inc);
     }
+
+    SMITH_PART(SMITH_DIF_SKILLS);
 
     /*
      * Extra difficulty for multiple distinct stat/skill bonuses.
@@ -3136,6 +3195,8 @@ int object_difficulty(object_type* o_ptr)
             dif_inc += (skill_count - 1) * 3;
     }
 
+    SMITH_PART(SMITH_DIF_MULTIPLE);
+
     // Sustains
     if (f2 & TR2_SUST_STR)
     {
@@ -3153,6 +3214,8 @@ int object_difficulty(object_type* o_ptr)
     {
         dif_inc += 2;
     }
+
+    SMITH_PART(SMITH_DIF_SUSTAINS);
 
     // Abilities
     if (f2 & TR2_SLOW_DIGEST)
@@ -3212,6 +3275,8 @@ int object_difficulty(object_type* o_ptr)
         dif_dec += 5;
     }
 
+    SMITH_PART(SMITH_DIF_POWERS);
+
     // Elemental Resistances
     if (f2 & TR2_RES_COLD)
     {
@@ -3255,6 +3320,8 @@ int object_difficulty(object_type* o_ptr)
     {
         dif_inc += 1;
     }
+
+    SMITH_PART(SMITH_DIF_RESISTS);
 
     // Penalty Flags
     if (!o_ptr->name1)
@@ -3325,6 +3392,8 @@ int object_difficulty(object_type* o_ptr)
         }
     }
 
+    SMITH_PART(SMITH_DIF_DRAWBACKS);
+
     // Abilities
     for (i = 0; i < o_ptr->abilities; i++)
     {
@@ -3343,8 +3412,13 @@ int object_difficulty(object_type* o_ptr)
         // else smithing_cost.uses += 2;
     }
 
+    SMITH_PART(SMITH_DIF_ABILITIES);
+
     // Set the overall difficulty
     dif = dif_inc - dif_dec;
+
+    if (breakdown) breakdown->subtotal = dif;
+    int slot_multiplier_start = dif_mult;
 
     // Increased difficulties for minor slots
     switch (wield_slot(o_ptr))
@@ -3377,6 +3451,9 @@ int object_difficulty(object_type* o_ptr)
     }
     }
 
+    if (breakdown) breakdown->slot_percent = dif_mult - slot_multiplier_start;
+    int enchantable_multiplier_start = dif_mult;
+
     // Decreased difficulties for easily enchatable items
     if (k_ptr->flags3 & (TR3_ENCHANTABLE))
     {
@@ -3389,6 +3466,8 @@ int object_difficulty(object_type* o_ptr)
     {
         dif_mult -= 30;
     }
+
+    if (breakdown) breakdown->enchantable_percent = dif_mult - enchantable_multiplier_start;
 
     // Mithril
     if (k_ptr->flags3 & TR3_MITHRIL)
@@ -3427,12 +3506,20 @@ int object_difficulty(object_type* o_ptr)
     // Apply the difficulty multiplier
     dif = dif * dif_mult / 100;
 
+    if (breakdown) { breakdown->multiplier = dif_mult; breakdown->scaled = dif; }
+
     // Artefact arrows are much easier
     if ((o_ptr->tval == TV_ARROW) && (o_ptr->name1))
         dif /= 2;
 
+    if (breakdown)
+    {
+        breakdown->artefact_arrows = (o_ptr->tval == TV_ARROW && o_ptr->name1);
+        breakdown->total = dif;
+    }
+
     // Deal with masterpiece and Aulë's Forge
-    int effective_skill = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
+    int effective_skill = smithing_effective_skill(o_ptr);
 
     if (p_ptr->have_ability[S_SPC][SPC_AULE]) {
         // Aulë's Forge: supersedes Masterpiece, allows burning base skill for 2x difficulty allowance
@@ -3505,6 +3592,12 @@ int object_difficulty(object_type* o_ptr)
     }
 
     return (dif);
+#undef SMITH_PART
+}
+
+int object_difficulty(object_type* o_ptr)
+{
+    return smith_object_difficulty(o_ptr, NULL);
 }
 
 /*
@@ -3666,7 +3759,7 @@ void prt_object_description(void)
  */
 int too_difficult(object_type* o_ptr)
 {
-    int ability = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
+    int ability = smithing_effective_skill(o_ptr);
     int dif = object_difficulty(o_ptr);
 
     if (p_ptr->have_ability[S_SPC][SPC_AULE]) {
@@ -3695,6 +3788,7 @@ int too_difficult(object_type* o_ptr)
 void prt_object_difficulty(void)
 {
     int dif;
+    smith_difficulty_breakdown breakdown;
     char buf[80];
     int turn_multiplier = 10;
     int costs = 0;
@@ -3723,12 +3817,6 @@ void prt_object_difficulty(void)
     else
         attr = TERM_SLATE;
 
-    if (!portrait)
-    {
-        smith_ui_put_fitted(COL_SMT4, 2, smith_ui_line_width(COL_SMT4), attr,
-            "Difficulty:");
-    }
-
     // change colour if smithing drain is required
     if ((smithing_cost.drain > 0)
         && (smithing_cost.drain <= p_ptr->skill_base[S_SMT]))
@@ -3737,35 +3825,21 @@ void prt_object_difficulty(void)
     }
 
     // calculate difficulty (and costs)
-    dif = object_difficulty(smith_o_ptr);
+    dif = smith_object_difficulty(smith_o_ptr, &breakdown);
 
-    if (portrait)
-    {
-        int used;
-
-        strnfmt(buf, sizeof(buf), "Measure   Difficulty: %d / %d", dif,
-            p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
-        used = smith_ui_put_wrapped(COL_SMT1, measure_row,
-            smith_ui_line_width(COL_SMT1),
-            MAX(1, smith_ui_content_bottom_row() - measure_row + 1), attr,
-            buf);
-        smith_ui_cost_title_row_override = measure_row + MAX(1, used);
-    }
-    else
-    {
-        sprintf(buf, "%d", dif);
-        smith_ui_put_fitted(COL_SMT4 + 2, 4, 4, attr, buf);
-
-        if (compact)
-            strnfmt(buf, sizeof(buf), "/%d",
-                p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
-        else
-            strnfmt(buf, sizeof(buf), "(max %d)",
-                p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
-        smith_ui_put_fitted(COL_SMT4 + (compact ? 4 : 5), 4,
-            smith_ui_line_width(COL_SMT4 + (compact ? 4 : 5)), TERM_L_DARK,
-            buf);
-    }
+    int col = portrait ? COL_SMT1 : COL_SMT4;
+    int row = portrait ? measure_row : 2;
+    int width = smith_ui_line_width(col);
+    smith_ui_put_fitted(col, row++, width, attr, format("Difficulty %d", dif));
+    smith_ui_put_fitted(col, row++, width, TERM_L_GREEN,
+        format("Capacity %d", smithing_effective_skill(smith_o_ptr)));
+    strnfmt(buf, sizeof(buf), "%d x %d%%%s = %d", breakdown.subtotal,
+        breakdown.multiplier, breakdown.artefact_arrows ? " / 2" : "", dif);
+    smith_ui_put_fitted(col, row++, width, TERM_SLATE, buf);
+    cptr calc_label = "[? Details]";
+    smith_ui_put_fitted(col, row, width, TERM_L_BLUE, calc_label);
+    ui_menu_click_add_text_token(SMITH_CLICK_CALC, col, row++, calc_label, calc_label);
+    if (portrait) smith_ui_cost_title_row_override = row;
 
     cost_title_row = smith_ui_cost_title_row();
 
@@ -4334,9 +4408,10 @@ static void smith_eval_object(const object_type* src, int* difficulty,
     smithing_cost = smithing_cost_backup;
 }
 
-static bool smith_reforge_difficulty_affordable(int difficulty, int* drain_out)
+static bool smith_reforge_difficulty_affordable(const object_type* target,
+    int difficulty, int* drain_out)
 {
-    int effective_skill = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
+    int effective_skill = smithing_effective_skill(target);
 
     if (drain_out)
         *drain_out = 0;
@@ -4427,7 +4502,16 @@ static bool reforge_preview_build(const object_type* source, int prefix_idx,
 
     preview->affordable
         = smith_reforge_difficulty_affordable(
-            preview->scaled_difficulty, &preview->cost.drain);
+            smith_o_ptr, preview->scaled_difficulty, &preview->cost.drain);
+
+    /* Buying only the difficulty increase must not waive permissions for the
+     * finished item, even when Masterpiece or Aule pays for its excess. */
+    preview->cost.enchantment = after_cost.enchantment;
+    preview->cost.artifice = after_cost.artifice;
+    preview->cost.alloy_mastery = after_cost.alloy_mastery;
+    if (preview->cost.enchantment || preview->cost.artifice
+        || preview->cost.alloy_mastery)
+        preview->affordable = false;
 
     if (!p_ptr->active_ability[S_SMT][SMT_REPAIR])
     {
@@ -4514,6 +4598,282 @@ static bool reforge_preview_build(const object_type* source, int prefix_idx,
 
     preview->turns = MAX(10, preview->scaled_difficulty * turn_multiplier);
     return true;
+}
+
+#define SMITH_REPORT_MAX_LINES 256
+typedef struct smith_calculation_report {
+    int count;
+    char text[SMITH_REPORT_MAX_LINES][180];
+    byte attr[SMITH_REPORT_MAX_LINES];
+} smith_calculation_report;
+
+/* Pre-wrap the report so every line remains reachable on narrow displays. */
+static void smith_report_add(smith_calculation_report* report, int width,
+    byte attr, cptr text)
+{
+    if (!text) return;
+    if (!*text && report->count < SMITH_REPORT_MAX_LINES)
+    {
+        report->attr[report->count] = attr;
+        report->text[report->count++][0] = '\0';
+    }
+    while (*text && report->count < SMITH_REPORT_MAX_LINES)
+    {
+        int take = smith_ui_utf8_prefix_len(text, MAX(1, width));
+        int length = (int)strlen(text);
+        if (take > 178) take = utf8_safe_prefix_len(text, 178);
+        if (take <= 0) take = utf8_sequence_len_n(text, length);
+        if (take < length)
+        {
+            int space = take;
+            while (space > 0 && text[space] != ' ') --space;
+            if (space > 0) take = space;
+        }
+        SDL_memcpy(report->text[report->count], text, take);
+        report->text[report->count][take] = '\0';
+        report->attr[report->count++] = attr;
+        text += take;
+        while (*text == ' ') ++text;
+    }
+}
+
+static void smith_scaled_text(int value, char* text, size_t size)
+{
+    strnfmt(text, size, "%s%d.%02d", value < 0 ? "-" : "",
+        ABS(value) / 100, ABS(value) % 100);
+}
+
+static void smith_report_evaluate(const object_type* object, bool keep_alloy,
+    smith_difficulty_breakdown* breakdown, smithing_cost_type* cost)
+{
+    object_type saved = *smith_o_ptr;
+    smith_alloy_state saved_alloy = smith_alloy;
+    smithing_cost_type saved_cost = smithing_cost;
+    *smith_o_ptr = *object;
+    if (!keep_alloy) smith_clear_alloy_state(&smith_alloy);
+    (void)smith_object_difficulty(smith_o_ptr, breakdown);
+    *cost = smithing_cost;
+    *smith_o_ptr = saved;
+    smith_alloy = saved_alloy;
+    smithing_cost = saved_cost;
+}
+
+static void smith_report_difficulty(smith_calculation_report* report, int width,
+    cptr title, const smith_difficulty_breakdown* breakdown)
+{
+    static cptr labels[SMITH_DIF_PARTS] = {
+        "Base item", "Weight changes", "Attack quality", "Evasion quality",
+        "Damage quality", "Protection quality", "Weapon properties",
+        "Tunnelling / damage bonus", "Attribute bonuses", "Skill bonuses",
+        "Multiple-bonus surcharge", "Stat sustains", "Special powers",
+        "Resistances", "Drawbacks", "Granted abilities"
+    };
+    smith_report_add(report, width, TERM_YELLOW, title);
+    for (int i = 0; i < SMITH_DIF_PARTS; ++i)
+    {
+        if (breakdown->parts[i] || i == SMITH_DIF_BASE)
+            smith_report_add(report, width, TERM_WHITE,
+                format("%s: %+d", labels[i], breakdown->parts[i]));
+    }
+    smith_report_add(report, width, TERM_L_WHITE,
+        format("Subtotal: %d", breakdown->subtotal));
+    smith_report_add(report, width, TERM_WHITE,
+        format("Multiplier: 100%% %+d%% character %+d%% slot %+d%% enchantability = %d%%",
+            breakdown->character_percent, breakdown->slot_percent,
+            breakdown->enchantable_percent, breakdown->multiplier));
+    smith_report_add(report, width, TERM_WHITE,
+        format("%d x %d / 100 = %d (integer division)", breakdown->subtotal,
+            breakdown->multiplier, breakdown->scaled));
+    if (breakdown->artefact_arrows)
+        smith_report_add(report, width, TERM_WHITE,
+            format("Artefact arrows: %d / 2 = %d", breakdown->scaled, breakdown->total));
+    smith_report_add(report, width, TERM_L_GREEN,
+        format("Item difficulty: %d", breakdown->total));
+}
+
+static void smith_build_calculation_report(smith_calculation_report* report,
+    int width, const object_type* reforge_source)
+{
+    static const int masteries[] = { SMT_EXPERTISE, SMT_ENCHANTMENT, SMT_ARTEFACT };
+    static cptr names[] = { "Expertise", "Enchantment", "Artifice" };
+    static cptr stats[] = { "STR", "DEX", "CON", "GRA" };
+    int common = smithing_common_stat_bonus();
+    int common_scaled = smithing_common_stat_bonus_scaled();
+    int flat = p_ptr->skill_equip_mod[S_SMT] + p_ptr->skill_misc_mod[S_SMT];
+    int sheet = p_ptr->skill_base[S_SMT] + flat + common;
+    char value[32], total[32];
+    report->count = 0;
+    if (smith_o_ptr->k_idx)
+    {
+        char description[180];
+        object_desc(description, sizeof(description), smith_o_ptr, true, 3);
+        smith_report_add(report, width, TERM_L_WHITE, description);
+        smith_report_add(report, width, TERM_WHITE, "");
+    }
+    smith_report_add(report, width, TERM_YELLOW, "YOUR SMITHING CAPACITY");
+    smith_report_add(report, width, TERM_SLATE,
+        "Crafting uses permanent stats. Equipment stat boosts, drain, potions, songs and Adversity do not count.");
+    smith_report_add(report, width, TERM_WHITE,
+        format("Permanent STR %d, DEX %d, GRA %d", player_permanent_stat(A_STR),
+            player_permanent_stat(A_DEX), player_permanent_stat(A_GRA)));
+    smith_report_add(report, width, TERM_WHITE,
+        format("Common foundation: DEX %d + GRA %d = %d", player_permanent_stat(A_DEX),
+            player_permanent_stat(A_GRA), player_permanent_stat(A_DEX) + player_permanent_stat(A_GRA)));
+    for (size_t i = 0; i < N_ELEMENTS(masteries); ++i)
+    {
+        bool active = p_ptr->active_ability[S_SMT][masteries[i]];
+        smith_scaled_text(smithing_mastery_stat_bonus_scaled(masteries[i]), value, sizeof(value));
+        smith_report_add(report, width, active ? TERM_WHITE : TERM_L_DARK,
+            format("%s: %s%s", names[i], value, active ? "" : " (inactive)"));
+        if (active)
+        {
+            const ability_type* ability = &b_info[ability_index(S_SMT, masteries[i])];
+            for (int stat = 0; stat < A_MAX; ++stat)
+            {
+                if (!ability->stat_score_weight_set[stat]) continue;
+                smith_scaled_text(ability->stat_score_weight[stat], value, sizeof(value));
+                smith_report_add(report, width, TERM_SLATE,
+                    format("  %s x %s %d", value, stats[stat], player_permanent_stat(stat)));
+            }
+        }
+    }
+    smith_scaled_text(common_scaled, value, sizeof(value));
+    smith_report_add(report, width, TERM_WHITE,
+        format("Common stat contribution: floor(%s) = %d", value, common));
+    smith_report_add(report, width, TERM_L_GREEN,
+        format("Character sheet: %d ranks %+d common stats %+d equipment %+d other = %d",
+            p_ptr->skill_base[S_SMT], common, p_ptr->skill_equip_mod[S_SMT],
+            p_ptr->skill_misc_mod[S_SMT], sheet));
+    if (!smith_o_ptr->k_idx)
+    {
+        smith_report_add(report, width, TERM_WHITE,
+            "Choose a base item to add its category and inspect its difficulty.");
+        smith_report_add(report, width, TERM_SLATE,
+            "Category extras: heavy metal 0.5 STR + 0.5 DEX; mail/light craft DEX; jewellery GRA.");
+        return;
+    }
+    int extra_scaled = smithing_category_stat_bonus_scaled(smith_o_ptr);
+    int all_stats = smithing_stat_bonus(smith_o_ptr);
+    int forge = forge_bonus(p_ptr->py, p_ptr->px);
+    int capacity = smithing_effective_skill(smith_o_ptr);
+    smith_scaled_text(extra_scaled, value, sizeof(value));
+    smith_report_add(report, width, TERM_WHITE,
+        format("%s extra: %s = %s", smithing_stat_category_name(smith_o_ptr),
+            smithing_category_stat_formula(smith_o_ptr), value));
+    smith_scaled_text(common_scaled + extra_scaled, total, sizeof(total));
+    smith_report_add(report, width, TERM_WHITE,
+        format("All craft stats: floor(%s) = %d (round once)", total, all_stats));
+    smith_report_add(report, width, TERM_L_GREEN,
+        format("Normal capacity: %d ranks %+d flat %+d craft stats %+d forge = %d",
+            p_ptr->skill_base[S_SMT], flat, all_stats, forge, capacity));
+    smith_report_add(report, width, TERM_SLATE,
+        format("From the sheet: %d %+d category/rounding %+d forge = %d",
+            sheet, all_stats - common, forge, capacity));
+    smith_report_add(report, width, TERM_WHITE, "");
+
+    smith_difficulty_breakdown after, before;
+    smithing_cost_type after_cost, before_cost;
+    smith_report_evaluate(smith_o_ptr, !reforge_source, &after, &after_cost);
+    int difficulty = after.total;
+    int drain = after_cost.drain;
+    if (reforge_source)
+    {
+        smith_report_evaluate(reforge_source, false, &before, &before_cost);
+        smith_report_difficulty(report, width, "ORIGINAL ITEM DIFFICULTY", &before);
+        smith_report_add(report, width, TERM_WHITE, "");
+        smith_report_difficulty(report, width, "REFORGED ITEM DIFFICULTY", &after);
+        int increase = MAX(0, after.total - before.total);
+        difficulty = (increase * 3 + 1) / 2;
+        (void)smith_reforge_difficulty_affordable(smith_o_ptr, difficulty, &drain);
+        smith_report_add(report, width, TERM_L_GREEN,
+            format("Reforge: ceil(1.5 x max(0, %d - %d)) = %d", after.total, before.total, difficulty));
+    }
+    else
+        smith_report_difficulty(report, width, "ITEM DIFFICULTY", &after);
+
+    smith_report_add(report, width, TERM_WHITE, "");
+    smith_report_add(report, width, TERM_YELLOW, "CAPACITY AND SACRIFICE");
+    int excess = MAX(0, difficulty - capacity);
+    smith_report_add(report, width, TERM_WHITE,
+        format("Difficulty %d - normal capacity %d = %d excess", difficulty, capacity, excess));
+    int maximum = capacity + (p_ptr->have_ability[S_SPC][SPC_AULE] ? 2
+        : p_ptr->active_ability[S_SMT][SMT_MASTERPIECE] ? 1 : 0) * p_ptr->skill_base[S_SMT];
+    if (difficulty > maximum)
+        smith_report_add(report, width, TERM_RED,
+            format("Maximum allowed difficulty: %d. This design is beyond your limit.", maximum));
+    else if (p_ptr->have_ability[S_SPC][SPC_AULE])
+        smith_report_add(report, width, TERM_WHITE,
+            format("Aule's Forge: ceil(excess / 2); maximum %d. Sacrifice %d base ranks.",
+                capacity + 2 * p_ptr->skill_base[S_SMT], drain));
+    else if (p_ptr->active_ability[S_SMT][SMT_MASTERPIECE])
+        smith_report_add(report, width, TERM_WHITE,
+            format("Masterpiece: 1 rank per excess; maximum %d. Sacrifice %d base ranks.",
+                capacity + p_ptr->skill_base[S_SMT], drain));
+    else if (excess)
+        smith_report_add(report, width, TERM_RED, "Beyond normal capacity; Masterpiece or Aule's Forge is required.");
+    else
+        smith_report_add(report, width, TERM_L_GREEN, "Within normal capacity; no Smithing ranks are sacrificed.");
+    smith_report_add(report, width, TERM_SLATE,
+        "Expertise never removes rank sacrifice. Craft permissions, materials, forge uses and other costs still apply.");
+}
+
+static void smith_show_calculations(const object_type* reforge_source)
+{
+    smith_calculation_report* report = mem_alloc(smith_calculation_report);
+    if (!report) return;
+    int top = 0;
+    bool done = false;
+    screen_save();
+    while (!done)
+    {
+        int width = MAX(1, smith_ui_term_wid() - 4);
+        int page = MAX(1, smith_ui_content_bottom_row() - 3);
+        smith_build_calculation_report(report, width, reforge_source);
+        int max_top = MAX(0, report->count - page);
+        top = MAX(0, MIN(top, max_top));
+        for (int row = 0; row < smith_ui_term_hgt(); ++row)
+            Term_erase(0, row, smith_ui_term_wid());
+        ui_menu_click_begin();
+        ui_menu_click_set_hover_enabled(false);
+        ui_menu_click_set_outside_cancel_enabled(true);
+        smith_ui_put_fitted(2, 0, width, TERM_L_WHITE, "Smithing - How calculated");
+        smith_ui_put_fitted(2, 1, width, TERM_SLATE,
+            format("Lines %d-%d of %d", top + 1, MIN(top + page, report->count), report->count));
+        for (int i = 0; i < page && top + i < report->count; ++i)
+            smith_ui_put_fitted(2, 2 + i, width, report->attr[top + i], report->text[top + i]);
+        int nav_row = smith_ui_content_bottom_row();
+        cptr nav = "[Up] [Down] [Back]";
+        smith_ui_put_fitted(2, nav_row, width, TERM_SLATE, nav);
+        ui_menu_click_add_text_token(SMITH_CLICK_CALC_UP, 2, nav_row, nav, "[Up]");
+        ui_menu_click_add_text_token(SMITH_CLICK_CALC_DOWN, 2, nav_row, nav, "[Down]");
+        ui_menu_click_add_text_token(SMITH_CLICK_BACK, 2, nav_row, nav, "[Back]");
+        if (sdl_touch_only_device_active())
+            ui_menu_click_add_touch_button(SMITH_CLICK_BACK, "Back", TERM_DARK);
+        ui_scroll_area_begin(2, nav_row - 1, SDL_TOUCH_MENU_CATEGORY_OTHER);
+        ui_scroll_area_set_keys('8', '2', '6', '4');
+        ui_scroll_area_set_offset_target(&top, max_top);
+        if (!sdl_touch_only_device_active())
+            Term_putstr(0, smith_ui_prompt_row(), -1, TERM_SLATE, "Up/Down scroll  Space next page  Esc back");
+        Term_fresh();
+        char ch = (char)steamdeck_menu_key(inkey(), 0, 0);
+        int choice, action;
+        if (ui_menu_click_take_action(&choice, &action))
+        {
+            if (action == UI_MENU_CLICK_HOVER) continue;
+            if (choice == SMITH_CLICK_CALC_UP) top -= page;
+            else if (choice == SMITH_CLICK_CALC_DOWN) top += page;
+            else if (choice == SMITH_CLICK_BACK || action == UI_MENU_CLICK_SECONDARY) done = true;
+        }
+        if (ch == '8') --top;
+        else if (ch == '2') ++top;
+        else if (ch == ' ' || ch == '6') top += page;
+        else if (ch == '9') top -= page;
+        else if (ch == ESCAPE || ch == '4' || ch == '\r' || ch == '\n' || ch == '?') done = true;
+    }
+    ui_menu_click_clear();
+    ui_scroll_area_clear();
+    screen_load();
+    mem_free(report);
 }
 
 static void pay_smithing_cost_struct(const smithing_cost_type* cost)
@@ -4720,7 +5080,7 @@ int create_sval_menu_aux(int tval, int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -4729,7 +5089,13 @@ int create_sval_menu_aux(int tval, int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if (clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if (clicked_choice == SMITH_CLICK_BACK)
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
                     return 0;
@@ -4930,7 +5296,7 @@ int create_tval_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -4939,7 +5305,13 @@ int create_tval_menu_aux(int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if ((clicked_choice == SMITH_CLICK_BACK)
                 || (click_action == UI_MENU_CLICK_SECONDARY))
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -5440,7 +5812,7 @@ int numbers_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -5449,7 +5821,13 @@ int numbers_menu_aux(int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if ((clicked_choice == SMITH_CLICK_BACK)
                 || (click_action == UI_MENU_CLICK_SECONDARY))
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -5875,7 +6253,7 @@ static int smith_bonus_menu_aux(int* highlight)
     Term_gotoxy(2, (hl_row >= first_row) ? hl_row : first_row);
 
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -5884,7 +6262,13 @@ static int smith_bonus_menu_aux(int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if ((clicked_choice == SMITH_CLICK_BACK)
                 || (click_action == UI_MENU_CLICK_SECONDARY))
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -6078,33 +6462,22 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
     if (portrait)
     {
         int divider_row = smith_ui_used_bottom_row() + 1;
-
         smith_ui_draw_horizontal_divider(divider_row);
         measure_row = divider_row + 1;
-        strnfmt(buf, sizeof(buf), "Measure   Reforge: %d (+%d raw)",
-            preview->scaled_difficulty, preview->raw_delta_difficulty);
-        smith_ui_cost_title_row_override = measure_row
-            + MAX(1, smith_ui_put_wrapped(COL_SMT1, measure_row,
-                         smith_ui_line_width(COL_SMT1),
-                         MAX(1, smith_ui_content_bottom_row() - measure_row + 1),
-                         attr, buf));
     }
-    else
-    {
-        smith_ui_put_fitted(COL_SMT4, 2, smith_ui_line_width(COL_SMT4), attr,
-            "Reforge Diff:");
-        strnfmt(buf, sizeof(buf), "%d", preview->scaled_difficulty);
-        smith_ui_put_fitted(COL_SMT4 + 2, 4, 4, attr, buf);
-
-        if (compact)
-            strnfmt(buf, sizeof(buf), "+%d raw", preview->raw_delta_difficulty);
-        else
-            strnfmt(buf, sizeof(buf), "(+%d raw)",
-                preview->raw_delta_difficulty);
-        smith_ui_put_fitted(COL_SMT4 + (compact ? 4 : 5), 4,
-            smith_ui_line_width(COL_SMT4 + (compact ? 4 : 5)), TERM_L_DARK,
-            buf);
-    }
+    int col = portrait ? COL_SMT1 : COL_SMT4;
+    int row = portrait ? measure_row : 2;
+    int width = smith_ui_line_width(col);
+    smith_ui_put_fitted(col, row++, width, attr,
+        format("Reforge %d", preview->scaled_difficulty));
+    smith_ui_put_fitted(col, row++, width, TERM_L_GREEN,
+        format("Capacity %d", smithing_effective_skill(smith_o_ptr)));
+    smith_ui_put_fitted(col, row++, width, TERM_SLATE,
+        format("ceil(%d x 1.5) = %d", preview->raw_delta_difficulty, preview->scaled_difficulty));
+    cptr calc_label = "[? Details]";
+    smith_ui_put_fitted(col, row, width, TERM_L_BLUE, calc_label);
+    ui_menu_click_add_text_token(SMITH_CLICK_CALC, col, row++, calc_label, calc_label);
+    if (portrait) smith_ui_cost_title_row_override = row;
 
     smith_ui_put_fitted(portrait ? COL_SMT1 : COL_SMT4,
         smith_ui_cost_title_row(),
@@ -6129,6 +6502,21 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
     if (preview->cost.jeweller)
     {
         smith_ui_put_cost_line(costs, TERM_RED, "Jeweller");
+        costs++;
+    }
+    if (preview->cost.enchantment)
+    {
+        smith_ui_put_cost_line(costs, TERM_RED, "Enchantment");
+        costs++;
+    }
+    if (preview->cost.artifice)
+    {
+        smith_ui_put_cost_line(costs, TERM_RED, "Artifice");
+        costs++;
+    }
+    if (preview->cost.alloy_mastery)
+    {
+        smith_ui_put_cost_line(costs, TERM_RED, "Alloy mastery");
         costs++;
     }
     if (preview->needs_forge)
@@ -6338,7 +6726,7 @@ static int reforge_prefix_menu(const object_type* source)
 
         Term_fresh();
         hide_cursor = true;
-        ch = smithing_menu_key(inkey());
+        ch = smithing_menu_key(inkey(), source);
         hide_cursor = false;
 
         {
@@ -6347,7 +6735,13 @@ static int reforge_prefix_menu(const object_type* source)
 
             if (ui_menu_click_take_action(&clicked_choice, &click_action))
             {
-                if ((clicked_choice == SMITH_CLICK_BACK)
+                if (clicked_choice == SMITH_CLICK_CALC)
+                {
+                    if (click_action != UI_MENU_CLICK_HOVER)
+                        smith_show_calculations(source);
+                    ch = 0;
+                }
+                else if ((clicked_choice == SMITH_CLICK_BACK)
                     || (click_action == UI_MENU_CLICK_SECONDARY))
                 {
                     if (click_action == UI_MENU_CLICK_HOVER)
@@ -6453,7 +6847,8 @@ static void create_special(int ego_prefix, int ego_suffix)
 
     /* Apply ego bonuses */
     if (object_has_ego(smith_o_ptr))
-        object_into_special(smith_o_ptr, p_ptr->skill_use[S_SMT], true);
+        object_into_special(smith_o_ptr,
+            smithing_effective_skill(smith_o_ptr) - forge_bonus(p_ptr->py, p_ptr->px), true);
 
     /* Re-evaluate stack size now that an enchantment is applied */
     smith_o_ptr->number = smith_default_stack_size(smith_o_ptr);
@@ -6594,7 +6989,7 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -6603,7 +6998,13 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if ((clicked_choice == SMITH_CLICK_BACK)
                 || (click_action == UI_MENU_CLICK_SECONDARY))
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -7148,7 +7549,7 @@ int artefact_flag_menu_aux(int category, int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -7157,7 +7558,13 @@ int artefact_flag_menu_aux(int category, int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if ((clicked_choice == SMITH_CLICK_BACK)
                 || (click_action == UI_MENU_CLICK_SECONDARY))
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -7607,7 +8014,7 @@ int artefact_ability_menu_aux(int skill, int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -7616,7 +8023,13 @@ int artefact_ability_menu_aux(int skill, int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if ((clicked_choice == SMITH_CLICK_BACK)
                 || (click_action == UI_MENU_CLICK_SECONDARY))
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -7909,7 +8322,7 @@ int artefact_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -7918,7 +8331,13 @@ int artefact_menu_aux(int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if ((clicked_choice == SMITH_CLICK_BACK)
                 || (click_action == UI_MENU_CLICK_SECONDARY))
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -8172,7 +8591,7 @@ int melt_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -8181,7 +8600,13 @@ int melt_menu_aux(int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if (clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if (clicked_choice == SMITH_CLICK_BACK)
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
                     return 0;
@@ -8529,7 +8954,8 @@ static int smith_root_draw_header(void)
 {
     char title[80];
     char status[160];
-    int skill = p_ptr->skill_use[S_SMT];
+    int skill = p_ptr->skill_base[S_SMT] + p_ptr->skill_equip_mod[S_SMT]
+        + p_ptr->skill_misc_mod[S_SMT] + smithing_common_stat_bonus();
     int bonus = forge_bonus(p_ptr->py, p_ptr->px);
     bool at_forge = cave_forge_bold(p_ptr->py, p_ptr->px);
     int uses = at_forge ? forge_uses(p_ptr->py, p_ptr->px) : 0;
@@ -8558,7 +8984,7 @@ static int smith_root_draw_header(void)
     if (at_forge)
     {
         strnfmt(status, sizeof(status),
-            "Forge: %d use%s   Smithing: %d%s%d   Metal: %d.%d mithril, %d.%d star-iron",
+            "Forge: %d use%s   Common Smithing: %d%s%d   Metal: %d.%d mithril, %d.%d star-iron",
             uses, (uses == 1) ? "" : "s", skill, (bonus >= 0) ? "+" : "",
             bonus, mithril_carried() / 10, mithril_carried() % 10,
             star_iron_carried() / 10, star_iron_carried() % 10);
@@ -8566,7 +8992,7 @@ static int smith_root_draw_header(void)
     else
     {
         strnfmt(status, sizeof(status),
-            "Exploration preview   Smithing: %d   Metal: %d.%d mithril, %d.%d star-iron",
+            "Exploration preview   Common Smithing: %d   Metal: %d.%d mithril, %d.%d star-iron",
             skill, mithril_carried() / 10, mithril_carried() % 10,
             star_iron_carried() / 10, star_iron_carried() % 10);
     }
@@ -8584,6 +9010,25 @@ static int smith_root_draw_header(void)
         row++;
     }
 
+    int stats_width = smith_ui_portrait_layout() ? width
+        : MAX(1, smith_ui_cost_col() - col - 2);
+    strnfmt(status, sizeof(status), "Common %d = %d ranks %+d stats %+d gear %+d other",
+        skill, p_ptr->skill_base[S_SMT], smithing_common_stat_bonus(),
+        p_ptr->skill_equip_mod[S_SMT], p_ptr->skill_misc_mod[S_SMT]);
+    used = smith_ui_put_wrapped(col, row, stats_width,
+        MAX(1, smith_ui_content_bottom_row() - row + 1), TERM_SLATE, status);
+    row += MAX(1, used);
+    if (smith_o_ptr->k_idx)
+        strnfmt(status, sizeof(status), "%s %+d, forge %+d -> capacity %d",
+            smithing_stat_category_name(smith_o_ptr),
+            smithing_stat_bonus(smith_o_ptr) - smithing_common_stat_bonus(),
+            bonus, smithing_effective_skill(smith_o_ptr));
+    else
+        SDL_strlcpy(status, "Choose a base item for its category bonus.", sizeof(status));
+    used = smith_ui_put_wrapped(col, row, stats_width,
+        MAX(1, smith_ui_content_bottom_row() - row + 1), TERM_SLATE, status);
+    row += MAX(1, used);
+
     return row;
 }
 
@@ -8599,15 +9044,10 @@ static int smith_root_draw_chrome(int detail_col, int list_w, int header_row)
         int width = smith_ui_cost_col() - detail_col - 2;
         smith_ui_put_fitted(detail_col, header_row, width, TERM_SLATE, "Lore");
     }
-    if (!smith_ui_portrait_layout())
-    {
-        smith_ui_put_fitted(smith_ui_cost_col(), header_row,
-            smith_ui_line_width(smith_ui_cost_col()), TERM_SLATE, "Measure");
-    }
-
     if (divider_row <= smith_ui_content_bottom_row())
     {
-        for (int x = 0; x < term_wid; x++)
+        for (int x = 0; x < (smith_ui_portrait_layout()
+                ? term_wid : smith_ui_cost_col() - 1); x++)
             Term_putch(x, divider_row, TERM_L_DARK, '=');
     }
 
@@ -8931,7 +9371,7 @@ int smithing_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = smithing_menu_key(inkey(), NULL);
     hide_cursor = false;
 
     {
@@ -8940,7 +9380,13 @@ int smithing_menu_aux(int* highlight)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
+            if (clicked_choice == SMITH_CLICK_CALC)
+            {
+                if (click_action != UI_MENU_CLICK_HOVER)
+                    smith_show_calculations(NULL);
+                ch = 0;
+            }
+            else if ((clicked_choice == SMITH_CLICK_BACK)
                 || (click_action == UI_MENU_CLICK_SECONDARY))
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -9013,7 +9459,7 @@ int smithing_menu_aux(int* highlight)
  */
 void do_cmd_smithing_screen(void)
 {
-    tutorial_game_menu("smithing", "Preview an item and read its difficulty and full costs before accepting. Creating, resuming and reforging keep their ordinary forge, resource and time costs.");
+    tutorial_game_menu("smithing", "Your sheet shows common Smithing; the forge adds the item's category and forge bonuses. Compare item difficulty with your capacity, then use How calculated (?) for the formulas and costs before accepting. Reforging costs the rounded-up 1.5x difficulty increase.");
     int actiontype = -1;
     int highlight = 1;
     bool leave_menu = false;

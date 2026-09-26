@@ -856,6 +856,8 @@ void process_player(void)
                     if (!greater_vault_xp_awarded)
                     {
                         gain_exp(vault_xp);
+                        gain_knowledge_points(5,
+                            "The great vault yields hidden knowledge.");
                         greater_vault_xp_awarded = true;
                     }
 
@@ -877,6 +879,8 @@ void process_player(void)
                 if (!greater_vault_xp_awarded)
                 {
                     gain_exp(vault_xp);
+                    gain_knowledge_points(5,
+                        "The great vault yields hidden knowledge.");
                     greater_vault_xp_awarded = true;
                 }
             }

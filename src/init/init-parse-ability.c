@@ -12,6 +12,487 @@
 #include <ctype.h>
 
 #ifdef ALLOW_TEMPLATES
+static void ability_req_copy_token(char* out, size_t out_sz, cptr src)
+{
+    size_t len;
+    size_t i;
+    size_t j = 0;
+
+    if (!out || out_sz == 0)
+        return;
+
+    out[0] = '\0';
+
+    if (!src)
+        return;
+
+    while (*src && isspace((unsigned char)*src))
+        src++;
+
+    len = strlen(src);
+    while (len > 0 && isspace((unsigned char)src[len - 1]))
+        len--;
+
+    for (i = 0; i < len && j + 1 < out_sz; i++)
+    {
+        unsigned char c = (unsigned char)src[i];
+
+        if ((c == '-') || isspace(c))
+            out[j++] = '_';
+        else
+            out[j++] = (char)toupper(c);
+    }
+
+    out[j] = '\0';
+}
+
+static bool ability_req_parse_int(cptr src, int max_value, int* out)
+{
+    char token[32];
+    int value = 0;
+    int i;
+
+    if (!out)
+        return false;
+
+    ability_req_copy_token(token, sizeof(token), src);
+
+    if (!token[0])
+        return false;
+
+    for (i = 0; token[i]; i++)
+    {
+        if (!isdigit((unsigned char)token[i]))
+            return false;
+
+        value = (value * 10) + (token[i] - '0');
+        if (value > max_value)
+            return false;
+    }
+
+    *out = value;
+    return true;
+}
+
+static bool ability_req_parse_stat_name(cptr src, int* index)
+{
+    char token[64];
+    cptr name;
+
+    if (!index)
+        return false;
+
+    ability_req_copy_token(token, sizeof(token), src);
+    name = token;
+
+    if (!strncmp(name, "STAT_", 5))
+        name += 5;
+    else if (!strncmp(name, "A_", 2))
+        name += 2;
+    else if (!strncmp(name, "STAT", 4) && isdigit((unsigned char)name[4]))
+        name += 4;
+    else if ((name[0] == 'A') && isdigit((unsigned char)name[1]))
+        name += 1;
+
+    if (ability_req_parse_int(name, A_MAX - 1, index))
+        return true;
+
+    if (streq(name, "STR") || streq(name, "STRENGTH"))
+    {
+        *index = A_STR;
+        return true;
+    }
+    if (streq(name, "DEX") || streq(name, "DEXTERITY"))
+    {
+        *index = A_DEX;
+        return true;
+    }
+    if (streq(name, "CON") || streq(name, "CONSTITUTION"))
+    {
+        *index = A_CON;
+        return true;
+    }
+    if (streq(name, "GRA") || streq(name, "GRACE"))
+    {
+        *index = A_GRA;
+        return true;
+    }
+
+    return false;
+}
+
+static bool ability_req_parse_skill_name(cptr src, int* index)
+{
+    char token[64];
+    cptr name;
+
+    if (!index)
+        return false;
+
+    ability_req_copy_token(token, sizeof(token), src);
+    name = token;
+
+    if (!strncmp(name, "SKILL_", 6))
+        name += 6;
+    else if (!strncmp(name, "S_", 2))
+        name += 2;
+    else if (!strncmp(name, "SKILL", 5) && isdigit((unsigned char)name[5]))
+        name += 5;
+    else if ((name[0] == 'S') && isdigit((unsigned char)name[1]))
+        name += 1;
+
+    if (ability_req_parse_int(name, S_MAX - 1, index))
+        return true;
+
+    if (streq(name, "MEL") || streq(name, "MELEE"))
+    {
+        *index = S_MEL;
+        return true;
+    }
+    if (streq(name, "ARC") || streq(name, "ARCHERY"))
+    {
+        *index = S_ARC;
+        return true;
+    }
+    if (streq(name, "EVN") || streq(name, "EVASION"))
+    {
+        *index = S_EVN;
+        return true;
+    }
+    if (streq(name, "STL") || streq(name, "STEALTH"))
+    {
+        *index = S_STL;
+        return true;
+    }
+    if (streq(name, "PER") || streq(name, "PERCEPTION"))
+    {
+        *index = S_PER;
+        return true;
+    }
+    if (streq(name, "WIL") || streq(name, "WILL"))
+    {
+        *index = S_WIL;
+        return true;
+    }
+    if (streq(name, "SMT") || streq(name, "CMT") || streq(name, "SMITHING"))
+    {
+        *index = S_SMT;
+        return true;
+    }
+    if (streq(name, "SNG") || streq(name, "SONG"))
+    {
+        *index = S_SNG;
+        return true;
+    }
+    if (streq(name, "SPC") || streq(name, "SPECIAL"))
+    {
+        *index = S_SPC;
+        return true;
+    }
+
+    return false;
+}
+
+static bool ability_req_parse_name(cptr src, bool* is_stat, int* index)
+{
+    if (!is_stat || !index)
+        return false;
+
+    if (ability_req_parse_stat_name(src, index))
+    {
+        *is_stat = true;
+        return true;
+    }
+
+    if (ability_req_parse_skill_name(src, index))
+    {
+        *is_stat = false;
+        return true;
+    }
+
+    return false;
+}
+
+static errr parse_ability_requirement_line(ability_type* b_ptr, char* s)
+{
+    int count = 0;
+    char* comment = strchr(s, '#');
+    if (comment) *comment = '\0';
+    while (*s)
+    {
+        char* name = s;
+        char* value = strchr(name, ':');
+        char* next;
+        int stat, minimum;
+        if (!value) return PARSE_ERROR_GENERIC;
+        *value++ = '\0';
+        next = strchr(value, ':');
+        if (next) *next++ = '\0';
+        char token[64];
+        ability_req_copy_token(token, sizeof(token), name);
+        bool lore = streq(token, "LORE") || streq(token, "KNW")
+            || streq(token, "KNOWLEDGE");
+        if (!lore && !ability_req_parse_stat_name(name, &stat))
+            return PARSE_ERROR_GENERIC;
+        if (!ability_req_parse_int(value, 255, &minimum))
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        if (lore) b_ptr->lore_req = (byte)minimum;
+        else b_ptr->stat_req[stat] = (byte)minimum;
+        count++;
+        if (!next) break;
+        s = next;
+    }
+    return count ? 0 : PARSE_ERROR_GENERIC;
+}
+
+static void ability_score_copy_weight_token(char* out, size_t out_sz, cptr src)
+{
+    size_t len;
+    size_t i;
+    size_t j = 0;
+
+    if (!out || out_sz == 0)
+        return;
+
+    out[0] = '\0';
+
+    if (!src)
+        return;
+
+    while (*src && isspace((unsigned char)*src))
+        src++;
+
+    len = strlen(src);
+    while (len > 0 && isspace((unsigned char)src[len - 1]))
+        len--;
+
+    for (i = 0; i < len && j + 1 < out_sz; i++)
+    {
+        out[j++] = (char)toupper((unsigned char)src[i]);
+    }
+
+    out[j] = '\0';
+}
+
+static bool ability_score_parse_signed_long(cptr src, long* out)
+{
+    char token[32];
+    int i = 0;
+    int sign = 1;
+    long value = 0;
+
+    if (!out)
+        return false;
+
+    ability_score_copy_weight_token(token, sizeof(token), src);
+
+    if (!token[0])
+        return false;
+
+    if (token[i] == '+')
+        i++;
+    else if (token[i] == '-')
+    {
+        sign = -1;
+        i++;
+    }
+
+    if (!isdigit((unsigned char)token[i]))
+        return false;
+
+    for (; token[i]; i++)
+    {
+        if (!isdigit((unsigned char)token[i]))
+            return false;
+
+        value = (value * 10) + (token[i] - '0');
+        if (value > 1000000L)
+            return false;
+    }
+
+    *out = value * sign;
+    return true;
+}
+
+static long ability_score_div_round(long num, long denom)
+{
+    if (denom <= 0)
+        return 0;
+
+    if (num >= 0)
+        return (num + (denom / 2)) / denom;
+
+    return -((-num + (denom / 2)) / denom);
+}
+
+static bool ability_score_parse_weight(cptr src, int* out)
+{
+    char token[32];
+    char* slash;
+    bool is_percent = false;
+    size_t len;
+    int sign = 1;
+    int i = 0;
+    bool saw_digit = false;
+    long whole = 0;
+    long frac = 0;
+    long frac_scale = 1;
+    long value;
+
+    if (!out)
+        return false;
+
+    ability_score_copy_weight_token(token, sizeof(token), src);
+
+    if (!token[0])
+        return false;
+
+    len = strlen(token);
+    if ((len > 0) && (token[len - 1] == 'X'))
+        token[--len] = '\0';
+    if ((len > 0) && (token[len - 1] == '%'))
+    {
+        is_percent = true;
+        token[--len] = '\0';
+    }
+
+    slash = strchr(token, '/');
+    if (slash)
+    {
+        long numerator;
+        long denominator;
+
+        *slash++ = '\0';
+        if (!ability_score_parse_signed_long(token, &numerator)
+            || !ability_score_parse_signed_long(slash, &denominator)
+            || (denominator <= 0))
+        {
+            return false;
+        }
+
+        value = ability_score_div_round(numerator * 100L, denominator);
+        if (value < -32768L || value > 32767L)
+            return false;
+
+        *out = (int)value;
+        return true;
+    }
+
+    if (token[i] == '+')
+        i++;
+    else if (token[i] == '-')
+    {
+        sign = -1;
+        i++;
+    }
+
+    while (isdigit((unsigned char)token[i]))
+    {
+        saw_digit = true;
+        whole = (whole * 10) + (token[i] - '0');
+        if (whole > 32768L)
+            return false;
+        i++;
+    }
+
+    if (token[i] == '.')
+    {
+        i++;
+        while (isdigit((unsigned char)token[i]))
+        {
+            saw_digit = true;
+            if (frac_scale < 100000L)
+            {
+                frac = (frac * 10) + (token[i] - '0');
+                frac_scale *= 10;
+            }
+            i++;
+        }
+    }
+
+    if (!saw_digit || token[i])
+        return false;
+
+    if (is_percent)
+        value = whole + ability_score_div_round(frac, frac_scale);
+    else
+        value = (whole * 100L) + ability_score_div_round(frac * 100L, frac_scale);
+
+    value *= sign;
+
+    if (value < -32768L || value > 32767L)
+        return false;
+
+    *out = (int)value;
+    return true;
+}
+
+static errr parse_ability_score_line(ability_type* b_ptr, char* s)
+{
+    int count = 0;
+    char* comment;
+
+    if (!b_ptr || !s)
+        return (PARSE_ERROR_GENERIC);
+
+    comment = strchr(s, '#');
+    if (comment)
+        *comment = '\0';
+
+    while (*s)
+    {
+        char* score_name;
+        char* score_weight;
+        char* next;
+        int weight;
+        int index;
+        bool is_stat;
+
+        while (*s && (isspace((unsigned char)*s) || (*s == ':')))
+            s++;
+
+        if (!*s)
+            break;
+
+        score_name = s;
+        score_weight = strchr(score_name, ':');
+        if (!score_weight)
+            return (PARSE_ERROR_GENERIC);
+
+        *score_weight++ = '\0';
+        next = strchr(score_weight, ':');
+        if (next)
+            *next++ = '\0';
+
+        if (!ability_req_parse_name(score_name, &is_stat, &index))
+            return (PARSE_ERROR_GENERIC);
+
+        if (!ability_score_parse_weight(score_weight, &weight))
+            return (PARSE_ERROR_OUT_OF_BOUNDS);
+
+        if (is_stat)
+        {
+            b_ptr->stat_score_weight[index] = (s16b)weight;
+            b_ptr->stat_score_weight_set[index] = true;
+        }
+        else
+        {
+            b_ptr->skill_score_weight[index] = (s16b)weight;
+            b_ptr->skill_score_weight_set[index] = true;
+        }
+
+        b_ptr->score_weights_set = true;
+        count++;
+
+        if (!next)
+            break;
+
+        s = next;
+    }
+
+    return (count > 0) ? 0 : (PARSE_ERROR_GENERIC);
+}
+
 errr parse_b_info(char* buf, header* head)
 {
     int i;
@@ -78,10 +559,47 @@ errr parse_b_info(char* buf, header* head)
         if (3 != sscanf(buf + 2, "%d:%d:%d", &skilltype, &abilitynum, &level))
             return (PARSE_ERROR_GENERIC);
 
+        if (skilltype < 0 || skilltype >= S_MAX || abilitynum < 0
+            || abilitynum >= ABILITIES_MAX || level < 0 || level > 255)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+
         /* Save the values */
         b_ptr->skilltype = skilltype;
         b_ptr->abilitynum = abilitynum;
         b_ptr->level = level;
+    }
+
+    /* R: minimum permanent stats; S: weighted stats/skills, as on develop. */
+    else if (buf[0] == 'R' || buf[0] == 'S')
+    {
+        if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        return buf[0] == 'R' ? parse_ability_requirement_line(b_ptr, buf + 2)
+                             : parse_ability_score_line(b_ptr, buf + 2);
+    }
+
+    else if (buf[0] == 'K')
+    {
+        int cost;
+        if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (!ability_req_parse_int(buf + 2, 255, &cost))
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        b_ptr->knowledge_cost = (byte)cost;
+    }
+
+    /* A: every listed ability is mandatory, alongside the P: alternatives. */
+    else if (buf[0] == 'A')
+    {
+        int skill, ability;
+        char tail;
+        if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (sscanf(buf + 2, "%d/%d%c", &skill, &ability, &tail) != 2)
+            return PARSE_ERROR_GENERIC;
+        if (skill < 0 || skill >= S_MAX || ability < 0
+            || ability >= ABILITIES_MAX || b_ptr->required_count >= 4)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        i = b_ptr->required_count++;
+        b_ptr->required_skilltype[i] = (byte)skill;
+        b_ptr->required_abilitynum[i] = (byte)ability;
     }
 
     /* Process 'Y' for a learned carriage-efficiency rule. */

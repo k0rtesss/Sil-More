@@ -725,27 +725,28 @@ done:
     return result;
 }
 
-static void blitz_auto_assign_stats(int stats[A_MAX])
+static void blitz_auto_assign_stats(int stats[BIRTH_STAT_MAX])
 {
     int cost = 0;
+    int stat_count = lore_system_enabled() ? BIRTH_STAT_MAX : A_MAX;
 
-    for (int i = 0; i < A_MAX; i++)
+    for (int i = 0; i < BIRTH_STAT_MAX; i++)
         stats[i] = 0;
 
     while (cost < MAX_COST)
     {
-        int choices[A_MAX];
+        int choices[BIRTH_STAT_MAX];
         int choice_count = 0;
 
-        for (int i = 0; i < A_MAX; i++)
+        for (int i = 0; i < stat_count; i++)
         {
             int next = stats[i] + 1;
             int next_cost;
 
             if (next > 6)
                 continue;
-            next_cost = cost - birth_stat_costs[stats[i] + 4]
-                + birth_stat_costs[next + 4];
+            next_cost = cost - birth_stat_current_cost(stats[i])
+                + birth_stat_current_cost(next);
             if (next_cost <= MAX_COST)
                 choices[choice_count++] = i;
         }
@@ -754,9 +755,9 @@ static void blitz_auto_assign_stats(int stats[A_MAX])
             break;
 
         int pick = choices[rand_int(choice_count)];
-        cost -= birth_stat_costs[stats[pick] + 4];
+        cost -= birth_stat_current_cost(stats[pick]);
         stats[pick]++;
-        cost += birth_stat_costs[stats[pick] + 4];
+        cost += birth_stat_current_cost(stats[pick]);
     }
 }
 
@@ -842,7 +843,7 @@ static void blitz_auto_assign_skills(void)
 
 NavResult blitz_auto_build_character(void)
 {
-    int stats[A_MAX];
+    int stats[BIRTH_STAT_MAX];
 
     get_extra();
     blitz_auto_assign_stats(stats);
@@ -853,6 +854,8 @@ NavResult blitz_auto_build_character(void)
         p_ptr->stat_base[i] = stats[i] + bonus;
         p_ptr->stat_drain[i] = 0;
     }
+
+    p_ptr->lore = lore_system_enabled() ? stats[BIRTH_STAT_LORE] : 0;
 
     p_ptr->update |= (PU_BONUS | PU_HP);
     update_stuff();

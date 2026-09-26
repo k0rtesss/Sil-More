@@ -78,6 +78,7 @@ enum {
     SDL_STATUS_PANE_COLUMNS = 2,
     SDL_NARRATIVE_BANNER_MAX_LINES = 8,
     SDL_NARRATIVE_BANNER_LINE_LEN = 220,
+    SDL_BIRTH_STAT_MAX = A_MAX + 1,
     SDL_LOG_PANE_DEFAULT_ROWS = 5,
     SDL_OVERLAY_LOG_PANE_DEFAULT_ROWS = 8,
     SDL_OVERLAY_LOG_PANE_ALPHA = 220,
@@ -552,8 +553,8 @@ typedef struct sdl_character_sheet_screen_state {
     int focus_choice;
     int selected_index;
     int points_left;
-    int stat_values[A_MAX];
-    int stat_costs[A_MAX];
+    int stat_values[SDL_BIRTH_STAT_MAX];
+    int stat_costs[SDL_BIRTH_STAT_MAX];
     int skill_old_base[S_MAX];
     int skill_gain[S_MAX];
     int skill_costs[S_MAX];

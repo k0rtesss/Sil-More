@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 23 /* Morgoth's Wrath and artefact milestones. */
+#define VERSION_EXTRA 24 /* Lore and knowledge state in the player spare block. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -2975,6 +2975,7 @@
 #define OPT_pacifist_attack_warning (OPT_GAME_PLAY + 5)
 /* Confirm before paid melee/ranged active switches */
 #define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
+#define OPT_lore_beta (OPT_GAME_PLAY + 7)
 // reserved legacy slot: auto_haggle
 // reserved legacy slot: auto_scum
 // reserved legacy slot: allow_themed_levels

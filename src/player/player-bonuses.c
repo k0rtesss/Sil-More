@@ -1006,8 +1006,9 @@ void calc_bonuses(void)
     /* Affect Skill -- will (GRA) */
     p_ptr->skill_stat_mod[S_WIL] = p_ptr->stat_use[A_GRA];
 
-    /* Affect Skill -- smithing (GRA) */
-    p_ptr->skill_stat_mod[S_SMT] = p_ptr->stat_use[A_GRA];
+    /* Every craft shares permanent DEX + GRA and mastery. The forge adds only
+     * the selected category's extra contribution, without double-counting. */
+    p_ptr->skill_stat_mod[S_SMT] = smithing_common_stat_bonus();
 
     /* Affect Skill -- song (GRA) */
     p_ptr->skill_stat_mod[S_SNG] = p_ptr->stat_use[A_GRA];

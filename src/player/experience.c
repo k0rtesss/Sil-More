@@ -5,6 +5,34 @@
 #include "metarun.h"
 #include "sdl-config.h"
 
+bool lore_system_enabled(void)
+{
+    return op_ptr && op_ptr->opt[OPT_lore_beta];
+}
+
+void gain_knowledge_points(s32b amount, cptr reason)
+{
+    if (!lore_system_enabled() || amount <= 0)
+        return;
+
+    if (p_ptr->knowledge_points < 0)
+        p_ptr->knowledge_points = 0;
+    if (amount > PY_MAX_EXP - p_ptr->knowledge_points)
+        p_ptr->knowledge_points = PY_MAX_EXP;
+    else
+        p_ptr->knowledge_points += amount;
+
+    if (reason && reason[0])
+        msg_format("%s You gain %ld knowledge point%s.", reason,
+            (long)amount, amount == 1 ? "" : "s");
+    else
+        msg_format("You gain %ld knowledge point%s.", (long)amount,
+            amount == 1 ? "" : "s");
+
+    p_ptr->redraw |= (PR_EXP | PR_BASIC);
+    p_ptr->window |= PW_PLAYER_0;
+}
+
 /*
  * Falling damage. 3d4 for one floor, 6d4 for two floors.
  */

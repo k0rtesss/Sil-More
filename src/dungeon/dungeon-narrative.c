@@ -444,6 +444,7 @@ static void maybe_award_partition_discovery_xp(level_partition_kind kind,
 
     p_ptr->discovery_lore_flags |= bit;
     gain_exp(300);
+    gain_knowledge_points(2, "You discover a new region.");
     display_narrative_text(text, narrative_mode, line_delay);
 }
 

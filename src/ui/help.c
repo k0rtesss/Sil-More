@@ -2237,8 +2237,16 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, " skill and abilities determine your options.", row, x);
         row++;
         put_role(ROLE_BODY,
-            "- The Smithing screen previews difficulty, materials, forge uses, and costs.",
+            "- Smithing previews item difficulty, your capacity, materials, and costs.",
             row++, col);
+        put_role(ROLE_BODY,
+            "- Sheet stats: permanent DEX + GRA, plus active smithing masteries.", row++, col);
+        put_role(ROLE_BODY,
+            "- The forge adds a category extra and its forge bonus; round stats once.", row++, col);
+        put_role(ROLE_BODY,
+            "- Heavy metal: +0.5 STR +0.5 DEX; mail/light: +DEX; jewellery: +GRA.", row++, col);
+        put_role(ROLE_BODY,
+            "- Use [? How calculated] for capacity, item difficulty and reforge maths.", row++, col);
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_UI, "Train Skills", row, x);
@@ -2429,9 +2437,13 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_TERM, "Grace", row, x); x += 5;
         put_role(ROLE_BODY,
-            " contributes to Will, Perception, Smithing, Song, and maximum Voice.",
+            " contributes to Will, Perception, Song, and maximum Voice.",
             row, x);
         row++;
+        put_role(ROLE_BODY,
+            "- Permanent DEX/GRA and smithing masteries form common Smithing stats.", row++, col);
+        put_role(ROLE_BODY,
+            "- Item categories add STR/DEX/GRA at the forge; temporary boosts do not.", row++, col);
         put_role(ROLE_BODY,
             "- Pack and Harness volume limits are separate from Strength's weight limit.",
             row++, col);

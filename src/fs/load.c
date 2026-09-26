@@ -116,6 +116,7 @@ bool savefile_has_randart_flags4 = false;
 bool savefile_has_item_bonuses = false;
 bool savefile_has_randart_bonuses = false;
 bool savefile_has_morgoth_call_state = false;
+bool savefile_has_lore = false;
 bool savefile_has_combat_history = false;
 
 /* Version comparison helpers: update these when bumping savefile semantics. */
@@ -2834,6 +2835,7 @@ static errr rd_savefile_new_aux(void)
     savefile_has_item_bonuses = savefile_version_at_least(0, 9, 5, 2);
     savefile_has_randart_bonuses = savefile_version_at_least(0, 9, 5, 3);
     savefile_has_morgoth_call_state = savefile_version_at_least(0, 9, 6, 4);
+    savefile_has_lore = savefile_version_at_least(0, 9, 8, 24);
     savefile_has_combat_history = savefile_version_at_least(0, 9, 6, 9);
 
     /* Reset load byte offset counter */

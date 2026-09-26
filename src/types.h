@@ -317,6 +317,17 @@ struct ability_type
     byte level; /* Prerequisite skill level */
     byte carriage_target; /* ABILITY_CARRIAGE_* target, if any */
     byte carriage_reduction_percent; /* Learned ability reduction */
+    byte stat_req[A_MAX]; /* Minimum permanent character stats (R:) */
+    byte lore_req; /* Optional Lore beta requirement */
+    byte knowledge_cost; /* K: knowledge price when Lore beta is enabled */
+    byte score_weights_set; /* Explicit S: coefficients, 100 = x1 */
+    s16b stat_score_weight[A_MAX];
+    s16b skill_score_weight[S_MAX];
+    bool stat_score_weight_set[A_MAX];
+    bool skill_score_weight_set[S_MAX];
+    byte required_count; /* All A: abilities, in addition to any P: choice */
+    byte required_skilltype[4];
+    byte required_abilitynum[4];
     byte prereqs; /* Number of prerequisite abilities */
     byte prereq_skilltype[4]; /* Skill type (for prerequisites) */
     byte prereq_abilitynum[4]; /* The ability within that skill (for
@@ -1248,6 +1259,8 @@ struct player_type
     s32b kill_exp; /* Total experience from killing monsters */
     s32b descent_exp; /* Total experience from descending to new levels */
     s32b ident_exp; /* Total experience from identifying objects */
+    s16b lore; /* Lore stat for the optional beta system */
+    s32b knowledge_points; /* Knowledge currency for Lore abilities */
     byte discovery_lore_flags; /* Run-wide discovery XP awards already claimed */
     byte quick_access_prompt_flags; /* Run-wide item shortcut offers already made */
 

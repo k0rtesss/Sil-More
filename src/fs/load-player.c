@@ -291,6 +291,8 @@ errr rd_extra(void)
         s16b lamp_oil = 0;
         byte active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
         byte morgoth_call_state = 0;
+        s16b lore = 0;
+        s32b knowledge_points = 0;
         rd_byte(&morgoth_hall_entered);
         rd_byte(&morgoth_second_wind);
         rd_byte(&discovery_lore_flags);
@@ -311,7 +313,14 @@ errr rd_extra(void)
         if (savefile_has_morgoth_call_state)
         {
             rd_byte(&morgoth_call_state);
-            strip_bytes(7);
+            if (savefile_has_lore)
+            {
+                rd_s16b(&lore);
+                rd_s32b(&knowledge_points);
+                strip_bytes(1);
+            }
+            else
+                strip_bytes(7);
         }
         else
         {
@@ -324,6 +333,8 @@ errr rd_extra(void)
             quick_access_prompt_flags & QUICK_ACCESS_PROMPT_MASK;
         p_ptr->lamp_oil = lamp_oil;
         p_ptr->active_weapon_mode = active_weapon_mode;
+        p_ptr->lore = MAX(0, MIN(BASE_STAT_MAX, lore));
+        p_ptr->knowledge_points = MAX(0, MIN(PY_MAX_EXP, knowledge_points));
         if (savefile_has_morgoth_call_state)
         {
             p_ptr->morgoth_call_state =

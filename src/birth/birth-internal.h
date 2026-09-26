@@ -35,6 +35,8 @@
 
 #define BLITZ_MAX_EFFECT_COUNT 9
 #define MAX_COST 13
+#define BIRTH_STAT_LORE A_MAX
+#define BIRTH_STAT_MAX (A_MAX + 1)
 
 typedef struct birther birther;
 typedef struct birth_menu birth_menu;
@@ -91,6 +93,7 @@ void player_outfit(void);
 void finalize_character_creation_selection(void);
 
 int birth_stat_increase_cost(int stat);
+int birth_stat_current_cost(int stat);
 int birth_skill_cost(int base, int points);
 void birth_recommended_stats(int stats[A_MAX]);
 int birth_skill_specialty_score(int skill);
@@ -141,6 +144,6 @@ bool birth_character_is_set(int bit);
 NavResult select_oath(void);
 NavResult blitz_configure_effects(void);
 NavResult blitz_auto_build_character(void);
-NavResult player_birth_aux_2(int stats[A_MAX]);
+NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX]);
 
 #endif /* INCLUDED_BIRTH_INTERNAL_H */

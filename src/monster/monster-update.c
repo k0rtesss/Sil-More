@@ -501,6 +501,8 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
         && (l_ptr->psights < MAX_SHORT))
     {
         int new_exp = adjusted_mon_exp(r_ptr, false);
+        bool first_unique_sighting =
+            (r_ptr->flags1 & RF1_UNIQUE) && (l_ptr->tsights == 0);
 
         // gain experience for encounter
         gain_exp(new_exp);
@@ -526,6 +528,9 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
                 note2, format("Encountered %s", real_name), sizeof(note2));
 
             do_cmd_note(note2, p_ptr->depth);
+
+            if (first_unique_sighting)
+                gain_knowledge_points(1, "A unique foe enters your lore.");
         }
 
         // if it was a wraith, possibly realise you are haunted

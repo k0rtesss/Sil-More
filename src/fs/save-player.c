@@ -178,8 +178,8 @@ void wr_extra(void)
                 | SAVEFILE_MORGOTH_CALL_ESCALATION_MASK);
         wr_byte(morgoth_call_state);
     }
-    wr_u32b(0L);
-    wr_u16b(0U);
+    wr_s16b(p_ptr->lore);
+    wr_s32b(p_ptr->knowledge_points);
     wr_byte(0);
 
     /* Reserved: legacy item-quality squelch array (now unused) */

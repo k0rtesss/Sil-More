@@ -931,7 +931,7 @@ static void observe_nearby(void)
             if (cave_forge_bold(y, x)) {
                 forge = true;
                 if (tutorial_lesson_enabled(id)) detailed_forge = true;
-                else observe("world.forge", "terrain", "A forge", "Inspect the forge and its remaining uses. Open Smithing to compare requirements before committing resources.");
+                else observe("world.forge", "terrain", "A forge", "Inspect the forge and its remaining uses. Smithing shows your common skill plus category and forge bonuses. Use How calculated (?) to inspect your capacity, item difficulty and sacrifices before committing resources.");
             }
             if (cave_trap_bold(y, x)) {
                 trap = true;
