@@ -1,6 +1,7 @@
 /* File: birth/birth-setup.c */
 
 #include "angband.h"
+#include "meta_state.h"
 #include "birth/birth-internal.h"
 
 static bool starting_artifact_is_eligible(int art_idx, int k_idx);
@@ -134,6 +135,7 @@ void get_extra(void)
  */
 void player_wipe(void)
 {
+    meta_state_reset_character();
     /* We are about to wipe the old hero, so there is no fully-generated
      * character any more.  This must be cleared **before** we enter the
      * next character-creation cycle; otherwise helpers such as
@@ -221,6 +223,8 @@ void player_wipe(void)
     {
         artefact_type* a_ptr = &a_info[i];
 
+        if (i >= z_info->art_rand_max && i < z_info->art_self_made_max - 2)
+            memset(a_ptr, 0, sizeof(*a_ptr));
         a_ptr->cur_num = 0;
         a_ptr->found_num = 0;
         a_ptr->seen = 0;

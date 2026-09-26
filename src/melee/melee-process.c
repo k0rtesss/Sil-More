@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "meta_state.h"
 #include "monster/monster-tactics.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
@@ -416,6 +417,8 @@ static void process_monster(monster_type* m_ptr)
             // make sure the monster doesn't do any free attacks before its next
             // turn
             m_ptr->skip_this_turn = true;
+            if (m_ptr >= mon_list && m_ptr < mon_list + mon_max)
+                legendary_song_observe_mastery((int)(m_ptr - mon_list));
 
             // end the monster's turn
             return;

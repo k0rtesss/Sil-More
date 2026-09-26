@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "dungeon-internal.h"
+#include "meta_state.h"
 
 int g_banner_force_redraw_remaining = 0;
 char g_active_partition_banner_text[1024] = "";
@@ -41,6 +42,7 @@ void reset_level_entry_tracking(void)
     last_partition_kind = LEVEL_PART_NONE;
     partition_narrated_mask = 0;
     last_narrated_style_idx = -1;
+    legendary_area_level_reset();
 }
 
 static byte narrative_banner_turn_setting(void)

@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "meta_state.h"
 #include "monster/monster-ai.h"
 #include "blitz.h"
 #include "externs.h"
@@ -2914,6 +2915,8 @@ static errr rd_savefile_new_aux(void)
         note(format("Too many (%u) monster races!", tmp16u));
         return (-1);
     }
+
+    meta_state_reset_character();
 
     /* Read the available records */
     for (i = 0; i < tmp16u; i++)

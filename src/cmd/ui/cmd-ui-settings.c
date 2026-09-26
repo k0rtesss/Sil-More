@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "meta_state.h"
 #include "cave/cave-environment.h"
 #include "sdl-config.h"
 #include "sound-config.h"
@@ -194,6 +195,10 @@ static const struct option_group_marker gameplay_option_groups[] = {
     { OPT_pacifist_attack_warning, "Combat Behavior" },
     { OPT_active_weapon_switch_confirm, "Combat Behavior" },
     { OPT_lore_beta, "Beta" },
+    { OPT_meta_artefact_memory, "Beta" },
+    { OPT_meta_forged_artefacts, "Beta" },
+    { OPT_meta_revenge, "Beta" },
+    { OPT_meta_legendary_places, "Beta" },
     { OPT_forgo_attacking_unwary, "Combat Behavior" },
     { OPT_assassination_over_charge, "Combat Behavior" },
     { OPT_lockpick_minigame, "Interaction" },
@@ -818,6 +823,10 @@ static cptr option_menu_label(int opt)
         case OPT_pacifist_attack_warning: return narrow ? "Pacifist warn" : "Warn before attacks";
         case OPT_active_weapon_switch_confirm: return narrow ? "Weapon switch" : "Confirm weapon switch";
         case OPT_lore_beta: return narrow ? "Lore (Beta)" : "Lore fifth stat (Beta)";
+        case OPT_meta_artefact_memory: return narrow ? "Artefact lore (Beta)" : "Artefact knowledge (Beta)";
+        case OPT_meta_forged_artefacts: return narrow ? "Forged legacy (Beta)" : "Forged artefact legacy (Beta)";
+        case OPT_meta_revenge: return "Revenge foes (Beta)";
+        case OPT_meta_legendary_places: return narrow ? "Song places (Beta)" : "Legendary song places (Beta)";
         case OPT_forgo_attacking_unwary: return narrow ? "Skip unwary hits" : "Forgo unwary attacks";
         case OPT_assassination_over_charge: return narrow ? "Stealth over charge" : "Assassination over Charge";
         case OPT_lockpick_minigame: return narrow ? "Door checks" : "Locked-door interaction checks";
@@ -986,6 +995,8 @@ static void settings_semantic_line_from_menu_line(char* out, size_t outsz,
 
 static void option_apply_side_effects(int opt)
 {
+    if (opt >= OPT_meta_artefact_memory && opt <= OPT_meta_legendary_places)
+        meta_state_options_changed();
     if (opt == OPT_story_lists_inven_pane || opt == OPT_story_lists_equip_pane)
         redraw_inven_equip_subwindows();
     if (opt == OPT_story_monster_desc_pane)

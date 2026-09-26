@@ -6,6 +6,7 @@
 #include "externs.h"
 #include "player/player-song-internal.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
@@ -553,11 +554,23 @@ static int song_voice_cost_for_turn(int song, int theme_slot, int song_duration)
     }
 }
 
+static bool player_can_sustain_song(int song)
+{
+    if (song == SNG_NOTHING)
+        return true;
+    if (song < 0 || song >= SNG_MAX)
+        return false;
+
+    return p_ptr->active_ability[S_SNG][song]
+        || legendary_area_song_is_available(song);
+}
+
 void sing(void)
 {
     int type;
     int song = p_ptr->song1; // a default to soothe compilation warnings
     int score = 0;
+    int effective_score = 0;
     int cost = 0;
     bool abort_song = false;
 
@@ -577,9 +590,9 @@ void sing(void)
     if ((p_ptr->csp < 1)
         || ((p_ptr->song2 != SNG_NOTHING)
             && !p_ptr->active_ability[S_SNG][SNG_WOVEN_THEMES])
-        || (!p_ptr->active_ability[S_SNG][p_ptr->song1])
+        || (!player_can_sustain_song(p_ptr->song1))
         || ((p_ptr->song2 != SNG_NOTHING)
-            && !p_ptr->active_ability[S_SNG][p_ptr->song2]))
+            && !player_can_sustain_song(p_ptr->song2)))
     {
         /* Stop singing */
         if (song_disguise_is_active())
@@ -613,6 +626,10 @@ void sing(void)
             song = p_ptr->song2;
 
         score = ability_bonus(S_SNG, song);
+        effective_score = (song != SNG_NOTHING)
+            ? song_effective_skill(song) : 0;
+        if (song != SNG_NOTHING)
+            legendary_song_observe_begin(song, effective_score);
         cost += song_voice_cost_for_turn(song, type, p_ptr->song_duration);
 
         switch (song)
@@ -690,7 +707,7 @@ void sing(void)
         }
         case SNG_TREES:
         {
-            sing_song_of_trees(song_effective_skill(song));
+            sing_song_of_trees(effective_score);
             
             break;
         }
@@ -745,6 +762,9 @@ void sing(void)
             break;
         }
         }
+
+        if (song != SNG_NOTHING)
+            legendary_song_observe_end(song, effective_score);
 
         if (abort_song)
             break;

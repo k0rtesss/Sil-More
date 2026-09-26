@@ -4,6 +4,7 @@
 #include "externs.h"
 #include "player/player-song-internal.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
@@ -513,6 +514,9 @@ static void song_duel_finish_monster_loss(monster_type* m_ptr, int song, int son
         if (dec_stat(A_GRA, 1, false))
             msg_print("You feel drained.");
     }
+
+    if (m_ptr >= mon_list && m_ptr < mon_list + mon_max)
+        legendary_song_observe_monster((int)(m_ptr - mon_list), 0);
 
     m_ptr->song = SNG_NOTHING;
     m_ptr->song_lockout_timer = SONG_DUEL_LOCKOUT_TURNS;

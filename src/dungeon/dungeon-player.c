@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-player.c */
 
 #include "angband.h"
+#include "meta_state.h"
 #include "cave/cave-flood.h"
 #include "cave/cave-events.h"
 #include "monster/monster-ai.h"
@@ -810,6 +811,7 @@ void process_player(void)
         /* Update labyrinth map restriction and partition-entry messages/XP. */
         update_labyrinth_view_state(true);
         handle_partition_entry(false, op_ptr->partition_narrative_mode);
+        legendary_area_note_player_position();
 
         bool in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH)
             && (cave_info[p_ptr->py][p_ptr->px] & (CAVE_G_VAULT));

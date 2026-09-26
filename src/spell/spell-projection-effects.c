@@ -5,6 +5,7 @@
 #include "externs.h"
 #include "spell/spell-projection-internal.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
@@ -1040,6 +1041,9 @@ bool project_m(
                         if (stun_amount > 0)
                         {
                             stun_monster(m_ptr, stun_amount);
+                            if (dif >= 0)
+                                legendary_song_observe_monster(
+                                    cave_m_idx[y][x], 0);
                             
                             /*possibly update the monster health bar*/
                             if (p_ptr->health_who == cave_m_idx[m_ptr->fy][m_ptr->fx])

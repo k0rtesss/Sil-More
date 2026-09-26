@@ -5,6 +5,8 @@
 #include "fs/io_sdl.h"
 #include "gen-log.h"
 #include "log/log.h"
+#include "meta_state.h"
+#include "metarun.h"
 #include <string.h>
 
 /*
@@ -99,7 +101,7 @@ static bool drop_object_is_damaged(const object_type* o_ptr)
 
 static const char* DROP_RAW_FILE = "drops";
 static const u32b DROP_RAW_MAGIC = 0x44525053; /* 'DRPS' */
-static const u32b DROP_RAW_VERSION = 24;
+static const u32b DROP_RAW_VERSION = 25; /* Runtime Tale artefacts are never cached. */
 static const int DROP_MIN_DIFFICULTY = -15;
 
 typedef struct
@@ -2253,6 +2255,11 @@ static void build_ego_combo_variants(int prefix_idx, int suffix_idx)
 static void build_artifact_variants(int a_idx)
 {
     artefact_type* a_ptr = &a_info[a_idx];
+
+    if (a_idx >= z_info->art_rand_max
+        && !meta_artifact_runtime_slot_is_meta(a_idx))
+        return;
+
     if (!a_ptr->tval || !a_ptr->sval)
         return;
     int k_idx = lookup_kind(a_ptr->tval, a_ptr->sval);
@@ -2321,6 +2328,17 @@ static void build_artifact_variants(int a_idx)
         depth_arr, rarity_arr, 1);
 }
 
+static void append_runtime_meta_artifacts_to_drop_catalog(void)
+{
+    if (meta_artifact_runtime_count() == 0)
+        return;
+
+    for (int a_idx = z_info->art_rand_max; a_idx < z_info->art_max; a_idx++) {
+        if (meta_artifact_runtime_slot_is_meta(a_idx))
+            build_artifact_variants(a_idx);
+    }
+}
+
 static void clear_drop_entries(void)
 {
     mem_free_null(g_drop_entries);
@@ -2367,6 +2385,7 @@ static bool load_drop_raw(void)
     clear_drop_entries();
     g_drop_entries = buf;
     g_drop_count = hdr.count;
+    g_drop_capacity = hdr.count;
     return true;
 }
 
@@ -2400,6 +2419,12 @@ static bool save_drop_raw(void)
 
 void drop_system_init(void)
 {
+    if (!meta_artifact_prepare_runtime()) {
+        log_warn("drop_system_init: failed to prepare remembered artefacts");
+    }
+
+    metarun_apply_artefact_memory();
+
     /* Try to use cached raw if up to date */
 #ifdef CHECK_MODIFICATION_TIME
     char raw_path[1024];
@@ -2428,6 +2453,7 @@ void drop_system_init(void)
 
     if (!need_rebuild && load_drop_raw())
     {
+        append_runtime_meta_artifacts_to_drop_catalog();
         log_info("Loaded drop catalog from drops.raw (%zu entries)", g_drop_count);
         return;
     }
@@ -2464,8 +2490,9 @@ void drop_system_init(void)
         }
     }
 
-    /* Artefacts */
-    for (int a_idx = 1; a_idx < z_info->art_max; a_idx++)
+    /* Only canonical/random artefacts belong in the shared raw cache.
+     * Tale artefacts are appended after loading or writing that cache. */
+    for (int a_idx = 1; a_idx < z_info->art_rand_max; a_idx++)
         build_artifact_variants(a_idx);
 
     /* Log catalog size by category/group for diagnostics */
@@ -2481,6 +2508,7 @@ void drop_system_init(void)
     }
 
     save_drop_raw();
+    append_runtime_meta_artifacts_to_drop_catalog();
     log_info("Drop catalog rebuilt: %zu entries (weapon=%zu armor=%zu jewelry=%zu supply=%zu | normal=%zu ego=%zu art=%zu)",
         g_drop_count, cat_counts[DROP_CAT_WEAPON], cat_counts[DROP_CAT_ARMOR],
         cat_counts[DROP_CAT_JEWELRY], cat_counts[DROP_CAT_SUPPLY],
@@ -2835,6 +2863,9 @@ static bool collect_candidate_entries(
 
         if (e.group_kind == DROP_GROUP_ARTIFACT)
         {
+            if (e.group_id >= z_info->art_rand_max
+                && !meta_memory_enabled(OPT_meta_forged_artefacts))
+                continue;
             /* Skip artefacts if not allowed by the drop request */
             if (!req->allow_artefacts || req->quality < DROP_QUALITY_GOOD) {
                 filter_artifact++;

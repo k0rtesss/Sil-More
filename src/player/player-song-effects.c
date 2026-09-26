@@ -4,6 +4,7 @@
 #include "externs.h"
 #include "player/player-song-internal.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
@@ -253,6 +254,7 @@ void sing_song_of_challenge(int score)
             m_ptr->tmp_morale = MAX(m_ptr->tmp_morale, 30);
             calc_morale(m_ptr);
             calc_stance(m_ptr);
+            legendary_song_observe_monster(i, 0);
         }
     }
 }
@@ -581,6 +583,7 @@ void sing_song_of_elbereth(int score)
         {
             /* Decrease temporary morale */
             m_ptr->tmp_morale -= result * 10;
+            legendary_song_observe_monster(i, 0);
         }
     }
 }
@@ -648,6 +651,7 @@ void sing_song_of_lorien(int score)
         if (result > 0)
         {
             set_alertness(m_ptr, m_ptr->alertness - result);
+            legendary_song_observe_monster(i, 0);
         }
     }
 }
@@ -935,6 +939,7 @@ void sing_song_of_shattering(int score)
                 }
                 
                 log_debug("Song of Shattering: Weapon damage SUCCESS");
+                legendary_song_observe_monster(i, 0);
             }
             else
             {
@@ -964,6 +969,7 @@ void sing_song_of_shattering(int score)
                 }
                 
                 log_debug("Song of Shattering: Armour damage SUCCESS");
+                legendary_song_observe_monster(i, 0);
             }
             else
             {

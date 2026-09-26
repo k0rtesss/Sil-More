@@ -1,6 +1,7 @@
 /* File: monster-select.c */
 
 #include "monster-internal.h"
+#include "meta_state.h"
 
 /*
  * Apply a "monster restriction function" to the "monster allocation table"
@@ -8,6 +9,8 @@
 errr get_mon_num_prep(void)
 {
     int i;
+
+    meta_monster_apply_runtime_overrides();
 
     /* Scan the allocation table */
     for (i = 0; i < alloc_race_size; i++)
@@ -89,6 +92,8 @@ s16b get_mon_num(int level, bool special, bool allow_non_smart, bool vault)
     int build_vault_type = 0;
     bool exact_token = false;
     int current_generation_depth = player_generation_depth();
+
+    meta_monster_apply_runtime_overrides();
 
     // determine the effective level:
 

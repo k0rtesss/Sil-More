@@ -5,6 +5,7 @@
 #include "externs.h"
 #include "object/object-info.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "sdl-config.h"
 
 
@@ -2343,6 +2344,7 @@ static bool screen_out_head(const object_type* o_ptr)
     char o_name[2048];
     char base_desc_buf[2048];
     cptr base_desc = NULL;
+    const char* meta_desc = NULL;
 
     bool has_description = false;
 
@@ -2409,12 +2411,21 @@ static bool screen_out_head(const object_type* o_ptr)
     log_trace("screen_out_head: After printing object name, cursor position: x=%d, y=%d", Term->scr->cx, Term->scr->cy);
 
     /* Display the known artefact description */
+    if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr))
+        meta_desc = meta_artifact_runtime_description(o_ptr->name1);
+
     if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr)
         && a_info[o_ptr->name1].text)
 
     {
         p_text_out("\n\n   ");
         p_text_out(a_text + a_info[o_ptr->name1].text);
+        has_description = true;
+    }
+    else if (meta_desc && meta_desc[0])
+    {
+        p_text_out("\n\n   ");
+        p_text_out(meta_desc);
         has_description = true;
     }
     /* Display the known object description */

@@ -60,7 +60,9 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 24 /* Lore and knowledge state in the player spare block. */
+#define VERSION_EXTRA 25 /* Version-gated legendary song area map. */
+#define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
+#define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -383,6 +385,7 @@
 #define ART_SEEN_PHYSICAL 0x01 /* Player has actually seen the artefact */
 #define ART_SEEN_REVEALED 0x02 /* Revealed via lore/quests (knowledge menu) */
 #define ART_SEEN_METARUN_EASY_ID 0x04 /* Remembered EASY_ID artefact this metarun */
+#define ART_SEEN_METARUN_REVEALED 0x08 /* Revelation supplied only by Tale memory */
 
 /*
  * Run-wide discovery lore flags (player_type.discovery_lore_flags).
@@ -2977,6 +2980,10 @@
 /* Confirm before paid melee/ranged active switches */
 #define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
 #define OPT_lore_beta (OPT_GAME_PLAY + 7)
+#define OPT_meta_artefact_memory (OPT_GAME_PLAY + 8)
+#define OPT_meta_forged_artefacts (OPT_GAME_PLAY + 9)
+#define OPT_meta_revenge (OPT_GAME_PLAY + 10)
+#define OPT_meta_legendary_places (OPT_GAME_PLAY + 11)
 // reserved legacy slot: auto_haggle
 // reserved legacy slot: auto_scum
 // reserved legacy slot: allow_themed_levels
@@ -3412,7 +3419,7 @@
  * Information for "do_cmd_options()".
  */
 #define OPT_PAGE_MAX 7
-#define OPT_PAGE_PER 24
+#define OPT_PAGE_PER 28
 
 /*
  *  Break things into pages

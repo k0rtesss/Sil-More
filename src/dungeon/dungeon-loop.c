@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-loop.c */
 
 #include "angband.h"
+#include "meta_state.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
 
@@ -250,6 +251,7 @@ void dungeon(void)
                 == LEVEL_ENTRY_NARRATIVE_MESSAGE)
             entry_mode = PARTITION_NARRATIVE_MESSAGE;
         handle_partition_entry(true, entry_mode);
+        legendary_area_note_player_position();
     }
 
     keyboard_preset_maybe_show_first_game_selection();

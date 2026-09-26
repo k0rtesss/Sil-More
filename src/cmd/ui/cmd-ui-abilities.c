@@ -9,6 +9,7 @@ extern struct sound_config g_sound_config;
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include <ctype.h>
 #include "h-define.h"
 #include "metarun.h"
@@ -1115,7 +1116,8 @@ static int song_menu_collect_available(int songs[], int max_songs)
         if (!song_menu_is_singable(i))
             continue;
 
-        if (!p_ptr->active_ability[S_SNG][i])
+        if (!p_ptr->active_ability[S_SNG][i]
+            && !legendary_area_song_is_available(i))
             continue;
 
         if (count < max_songs)
@@ -1440,7 +1442,8 @@ void do_cmd_change_song()
                 {
                     song_choice = -1;
                 }
-                else if (p_ptr->active_ability[S_SNG][song_choice])
+                else if (p_ptr->active_ability[S_SNG][song_choice]
+                    || legendary_area_song_is_available(song_choice))
                 {
                     log_debug("Player selected song %d", song_choice);
                     done = true;

@@ -8,7 +8,7 @@ import os
 import shlex
 import subprocess
 import tempfile
-from check_monster_scent_save import ENGINE_FIXTURE, fixture_function, WRITER, READER, TESTS as SCENT_TESTS
+from check_monster_scent_save import ENGINE_FIXTURE, fixture_function, WRITER, READER, LEGENDARY_MIGRATION, TESTS as SCENT_TESTS
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build-standard'
@@ -16,7 +16,7 @@ OUT = ROOT / 'scripts/output/living-dungeon-save'
 
 start = SCENT_TESTS.index('static void fresh_map(void)')
 FRESH_MAP = SCENT_TESTS[start:SCENT_TESTS.index('\n}', start) + 2]
-TESTS = r'''
+TESTS = LEGENDARY_MIGRATION + r'''
 size_t fixture_write_dungeon(byte*, size_t, size_t*);
 int fixture_read_dungeon(const byte*, size_t, int, u32b*, size_t*);
 static byte encoded[262144], plain[262144], modified[262144], corrupted[262144];
@@ -142,6 +142,7 @@ static void test_legacy_v16(void)
     memcpy(corrupted,plain,extension_offset);
     memcpy(corrupted+extension_offset,plain+extension_end,8);
     size_t length=extension_offset+8;
+    length=strip_legendary_block(corrupted,length,20*24);
     encode(corrupted,modified,length);
     clean_map();
     cave_event_emit(CAVE_EVENT_COLLAPSE,5,5,30);

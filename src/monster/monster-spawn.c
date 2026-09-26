@@ -1,6 +1,7 @@
 /* File: monster-spawn.c */
 
 #include "monster-internal.h"
+#include "meta_state.h"
 #include "monster/monster-routine.h"
 
 /*
@@ -20,6 +21,8 @@ bool place_monster_one(
     monster_type monster_type_body;
 
     cptr name;
+
+    meta_monster_apply_runtime_overrides();
 
     /* Paranoia */
     if (!in_bounds(y, x))

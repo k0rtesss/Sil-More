@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "meta_state.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-social.h"
 #include "externs.h"
@@ -1329,6 +1330,9 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
                 message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
                     m_ptr->r_idx, "%^s has been slain.", m_name);
         }
+
+        if (who < 0)
+            meta_monster_record_revenge_kill((u16b)m_ptr->r_idx);
 
         /* Generate treasure */
         if (who < 0 && (r_ptr->flags1 & RF1_UNIQUE)

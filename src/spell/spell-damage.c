@@ -1,5 +1,7 @@
 ﻿/* File: spell/spell-damage.c */
 
+#include "score/score_guid.h"
+#include "meta_state.h"
 #include "angband.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
@@ -106,6 +108,48 @@ void take_hit(int dam, cptr kb_str)
         }
 
         killer_commit(kb_str);
+
+        {
+            const killer_info* killer = killer_last();
+            meta_monster_death_event event;
+            int killer_r_idx = 0;
+
+            if (meta_memory_enabled(OPT_meta_revenge)
+                && killer && killer->kind == SCORE_KILLER_MONSTER)
+            {
+                killer_r_idx = killer->race_index;
+                if (killer_r_idx > 0 && killer_r_idx < z_info->r_max)
+                {
+                    monster_race* killer_r_ptr = &r_info[killer_r_idx];
+
+                    if (killer_r_idx != R_IDX_MORGOTH
+                        && !(killer_r_ptr->flags1 & RF1_QUESTOR))
+                    {
+                        SDL_memset(&event, 0, sizeof(event));
+                        event.monster_guid =
+                            score_guid_from_u64(killer_r_ptr->guid);
+                        event.r_idx = (u16b)killer_r_idx;
+                        SDL_strlcpy(event.monster_name,
+                            r_name + ((r_base != NULL)
+                                    ? r_base[killer_r_idx].name
+                                    : killer_r_ptr->name),
+                            sizeof(event.monster_name));
+                        event.character_guid =
+                            c_info[p_ptr->pcharacter].guid;
+                        SDL_strlcpy(event.character_name,
+                            c_name + c_info[p_ptr->pcharacter].name,
+                            sizeof(event.character_name));
+                        event.depth = (byte)MAX(0, p_ptr->depth);
+                        event.turn = turn;
+                        SDL_strlcpy(event.cause, p_ptr->died_from,
+                            sizeof(event.cause));
+                        if (!meta_monster_record_player_death(&event))
+                            log_warn("Unable to persist revenge memory for %s",
+                                event.monster_name);
+                    }
+                }
+            }
+        }
 
         /* Note death */
         p_ptr->is_dead = true;

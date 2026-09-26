@@ -406,6 +406,7 @@ set(SIL_MORE_SOURCES
     src/melee/melee-movement-resolution.c
     src/melee/melee-process.c
     src/melee/melee-util.c
+    src/meta_state.c
     src/metarun/metarun-artefact-memory.c
     src/metarun/metarun-blessing-ui.c
     src/metarun/metarun-curses.c

@@ -1,6 +1,7 @@
 /* File: fs/load-dungeon.c -- carved from load.c (shares state via fs/load-internal.h) */
 
 #include "angband.h"
+#include "meta_state.h"
 #include "cave/cave-flood.h"
 #include "cave/cave-environment.h"
 #include "monster/monster-senses.h"
@@ -738,6 +739,93 @@ errr rd_dungeon(void)
             objects_count_prefetch = maybe_magic;
             log_debug("No door-choices after cave_color; staged objects count prefetch=%u", (unsigned)objects_count_prefetch);
         }
+    }
+
+    legendary_area_map_reset();
+    if (savefile_version_at_least(0, 9, 8, 25))
+    {
+        u16b magic;
+        rd_u16b(&magic);
+        if (magic != SAVEFILE_LEGENDARY_AREA_MAGIC)
+        {
+            note("Invalid legendary-area marker");
+            return -1;
+        }
+        byte legendary_version = 0;
+        u16b active_count = 0;
+        u16b active_id = META_DUNGEON_LEGENDARY_AREA_ID_NONE;
+        guid64 active_guid = { 0, 0 };
+        bool active_seen = false;
+
+        rd_byte(&legendary_version);
+        if (legendary_version != SAVEFILE_LEGENDARY_AREA_VERSION)
+        {
+            note(format("Invalid legendary-area map version %u",
+                (unsigned)legendary_version));
+            return (-1);
+        }
+
+        rd_u16b(&active_count);
+        if (active_count > 8)
+        {
+            note(format("Invalid legendary-area active count %u",
+                (unsigned)active_count));
+            return (-1);
+        }
+        for (int ai = 0; ai < active_count; ai++)
+        {
+            u16b area_id = 0;
+            guid64 record_guid = { 0, 0 };
+            byte entry_seen = 0;
+
+            rd_u16b(&area_id);
+            rd_u32b(&record_guid.hi);
+            rd_u32b(&record_guid.lo);
+            rd_byte(&entry_seen);
+            if (active_id == META_DUNGEON_LEGENDARY_AREA_ID_NONE)
+            {
+                active_id = area_id;
+                active_guid = record_guid;
+                active_seen = entry_seen != 0;
+            }
+        }
+
+        if (!legendary_area_map_ensure())
+            return (-1);
+
+        for (x = y = 0; y < p_ptr->cur_map_hgt;)
+        {
+            u16b area_id = 0;
+            u32b pair_offset = load_byte_offset;
+
+            rd_byte(&count);
+            rd_u16b(&area_id);
+            if ((load_byte_offset - pair_offset) != 3 || count == 0
+                || count > (p_ptr->cur_map_hgt - y) * p_ptr->cur_map_wid - x)
+            {
+                note("Invalid legendary-area map run length");
+                return (-1);
+            }
+            for (i = count; i > 0; i--)
+            {
+                legendary_area_id[y][x] = area_id;
+                if (++x >= p_ptr->cur_map_wid)
+                {
+                    x = 0;
+                    if (++y >= p_ptr->cur_map_hgt)
+                        break;
+                }
+            }
+        }
+
+        if (active_id != META_DUNGEON_LEGENDARY_AREA_ID_NONE
+            && !legendary_area_restore_after_load(active_id, active_guid,
+                active_seen))
+        {
+            log_warn("Could not restore active legendary-area record");
+        }
+        legendary_area_discard_unresolved_loaded_records();
+
     }
 
     /* Optional extension: rewired-trap difficulty (0.9.7.2+).  New saves always

@@ -106,7 +106,34 @@ int fixture_read_monster(const byte* buffer, size_t length, int extra,
 }
 '''
 
-TESTS = r'''
+LEGENDARY_MIGRATION = r'''
+/* Construct historical fixtures from the current writer by removing .25's
+ * typed area block, just as each fixture removes the other later lanes. */
+static size_t strip_legendary_block(byte* data, size_t length, int cells)
+{
+    size_t start = 0;
+    bool found = false;
+    for (size_t i = 0; i + 5 < length; i++) {
+        if (data[i] == 0xF0 && data[i+1] == 0xC1 && data[i+2] == 1) {
+            start = i; found = true; break;
+        }
+    }
+    assert(found);
+    unsigned records = data[start+3] | ((unsigned)data[start+4] << 8);
+    size_t end = start + 5 + 11 * records;
+    int filled = 0;
+    while (filled < cells) {
+        assert(end + 3 <= length && data[end]);
+        filled += data[end]; end += 3;
+    }
+    assert(filled == cells && end + 2 <= length);
+    assert(data[end] == 0xF0 && data[end+1] == 0xC2);
+    memmove(data + start, data + end, length - end);
+    return length - (end - start);
+}
+'''
+
+TESTS = LEGENDARY_MIGRATION + r'''
 size_t fixture_write_dungeon(byte*, size_t, size_t*);
 int fixture_read_dungeon(const byte*, size_t, int, u32b*, size_t*);
 size_t fixture_write_monster(const monster_type*, byte*, size_t);
@@ -402,6 +429,7 @@ static void test_legacy_absence(void)
     memmove(plain + water_offset, plain + water_offset + sizeof(water_block),
         length - water_offset - sizeof(water_block));
     length -= sizeof(water_block);
+    length = strip_legendary_block(plain, length, 20*24);
     encode(plain, modified, length);
     fresh_map(); cave_when[7][7] = scent_when;
     u32b sentinel; size_t consumed;

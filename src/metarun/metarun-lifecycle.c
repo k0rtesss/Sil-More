@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "meta_state.h"
 #include "metarun-internal.h"
 #include "metarun/metarun-files.h"
 
@@ -1214,5 +1215,10 @@ bool start_new_metarun(void)
                  p_ptr ? (unsigned)p_ptr->noscore : 0,
                  savefile);
     }
-    return metarun_commit_new_slot(grown, new_id, activation_time);
+    if (!metarun_commit_new_slot(grown, new_id, activation_time))
+        return false;
+    if (!meta_state_clear_current_metarun_files())
+        log_warn("metarun: unable to clear remembered-state databases for Tale %u",
+            (unsigned)metar.id);
+    return true;
 }

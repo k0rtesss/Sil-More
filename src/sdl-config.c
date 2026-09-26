@@ -3,6 +3,7 @@
 #include "fs/path.h"
 #include "sdl-config.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "pane.h"
 #include "cJSON.h"
 #include "tutorial/tutorial.h"
@@ -1759,6 +1760,8 @@ static const byte app_text_options[] = {
 static const byte app_gameplay_options[] = {
     OPT_active_weapon_switch_confirm,
     OPT_lore_beta,
+    OPT_meta_artefact_memory, OPT_meta_forged_artefacts,
+    OPT_meta_revenge, OPT_meta_legendary_places,
     OPT_load_blitz_by_default,
     OPT_lockpick_minigame,
     OPT_chest_trap_minigame,
@@ -1880,6 +1883,8 @@ static void sdl_config_apply_app_option_defaults(void)
 void sdl_config_reset_app_options_to_defaults(void)
 {
     sdl_config_apply_app_option_defaults();
+    if (character_generated)
+        meta_state_options_changed();
 }
 
 static void sdl_config_load_app_option_group(cJSON* app_options,
@@ -6185,5 +6190,4 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv)
         }
     }
 }
-
 

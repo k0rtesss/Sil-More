@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "meta_state.h"
 #include "metarun-internal.h"
 
 #define METARUN_ARTEFACT_MEMORY_FILENAME "artefact_memory.db"
@@ -177,12 +178,17 @@ static bool metarun_artefact_memory_exists(void)
     return true;
 }
 
-static void metarun_artefact_memory_apply_flags(int a_idx, byte flags)
+static void metarun_artefact_memory_apply_flags(int a_idx, byte flags,
+    bool inherited)
 {
     if (!metarun_artefact_valid_index(a_idx))
         return;
 
     artefact_type *a_ptr = &a_info[a_idx];
+    if (inherited && !(a_ptr->seen & ART_SEEN_REVEALED))
+        a_ptr->seen |= ART_SEEN_METARUN_REVEALED;
+    if (!inherited)
+        a_ptr->seen &= ~ART_SEEN_METARUN_REVEALED;
     if ((flags & METARUN_ARTEFACT_MEMORY_REVEALED) != 0)
         a_ptr->seen |= ART_SEEN_REVEALED;
 
@@ -195,7 +201,7 @@ static void metarun_artefact_memory_apply_flags(int a_idx, byte flags)
 
 static bool metarun_record_artefact_memory(int a_idx, byte flags)
 {
-    if (run_mode_is_blitz())
+    if (!meta_memory_enabled(OPT_meta_artefact_memory))
         return false;
     if (!metarun_artefact_valid_index(a_idx) || flags == 0)
         return false;
@@ -214,7 +220,7 @@ static bool metarun_record_artefact_memory(int a_idx, byte flags)
 
     u32b metarun_id = metar.id;
     guid64 guid = a_ptr->guid;
-    metarun_artefact_memory_apply_flags(a_idx, flags);
+    metarun_artefact_memory_apply_flags(a_idx, flags, false);
 
     metarun_artefact_memory_header header;
     SDL_IOStream *file = metarun_artefact_memory_open(&header, true);
@@ -274,10 +280,17 @@ static bool metarun_record_artefact_memory(int a_idx, byte flags)
 
 void metarun_apply_artefact_memory(void)
 {
-    if (run_mode_is_blitz())
-        return;
     if (!z_info || !a_info)
         return;
+    if (!meta_memory_enabled(OPT_meta_artefact_memory)) {
+        for (int i = 1; i < z_info->art_max; i++) {
+            if (a_info[i].seen & ART_SEEN_METARUN_REVEALED)
+                a_info[i].seen &= ~ART_SEEN_REVEALED;
+            a_info[i].seen &= ~(ART_SEEN_METARUN_EASY_ID
+                | ART_SEEN_METARUN_REVEALED);
+        }
+        return;
+    }
 
     metarun_artefact_memory_header header;
     SDL_IOStream *file = metarun_artefact_memory_open(&header, false);
@@ -301,7 +314,7 @@ void metarun_apply_artefact_memory(void)
         if (!a_idx)
             continue;
 
-        metarun_artefact_memory_apply_flags(a_idx, record.flags);
+        metarun_artefact_memory_apply_flags(a_idx, record.flags, true);
         applied++;
     }
 
@@ -312,7 +325,7 @@ void metarun_apply_artefact_memory(void)
 
 void metarun_seed_artefact_memory_from_current_state_if_missing(void)
 {
-    if (run_mode_is_blitz())
+    if (!meta_memory_enabled(OPT_meta_artefact_memory))
         return;
     if (!z_info || !a_info)
         return;
@@ -361,6 +374,8 @@ bool metarun_record_artefact_revealed(int a_idx)
 
 bool metarun_try_identify_remembered_artefact(object_type *o_ptr)
 {
+    if (!meta_memory_enabled(OPT_meta_artefact_memory))
+        return false;
     if (!o_ptr || !o_ptr->k_idx || !o_ptr->name1)
         return false;
     if (object_known_p(o_ptr))

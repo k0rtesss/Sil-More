@@ -1,6 +1,7 @@
 /* File: monster-desc.c */
 
 #include "monster-internal.h"
+#include "meta_state.h"
 
 static void display_monlist_with_health_bars(void)
 {
@@ -246,6 +247,8 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
         r_ptr = &r_info[m_ptr->r_idx];
     }
 
+    meta_monster_apply_runtime_overrides();
+
     name = (r_name + r_ptr->name);
 
     /* Can we "see" it (forced, or not hidden + visible) */
@@ -379,6 +382,18 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
         {
             /* Start with the name (thus nominative and objective) */
             SDL_strlcpy(desc, name, max);
+            {
+                const meta_monster_record* record =
+                    meta_monster_find_record_for_race((u16b)m_ptr->r_idx);
+
+                if (record && record->rank > 0)
+                {
+                    int stars = MIN(3, record->rank);
+
+                    while (stars-- > 0)
+                        SDL_strlcat(desc, "*", max);
+                }
+            }
         }
 
         /* It could be an indefinite monster */
@@ -432,11 +447,22 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
 void monster_desc_race(char* desc, size_t max, int r_idx)
 {
     monster_race* r_ptr = &r_info[r_idx];
+    const meta_monster_record* record;
+
+    meta_monster_apply_runtime_overrides();
 
     cptr name = (r_name + r_ptr->name);
 
     /* Write the name */
     SDL_strlcpy(desc, name, max);
+    record = meta_monster_find_record_for_race((u16b)r_idx);
+    if (record && record->rank > 0)
+    {
+        int stars = MIN(3, record->rank);
+
+        while (stars-- > 0)
+            SDL_strlcat(desc, "*", max);
+    }
 }
 
 /*

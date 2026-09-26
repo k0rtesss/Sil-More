@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "meta_state.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -386,6 +387,9 @@ void init_angband(void)
     if (metarun_created) {
         cleanup_old_game_files();
     }
+
+    if (!meta_state_init())
+        quit("Cannot initialize meta-state subsystem");
 
     /* Done */
     note("                                              ");
