@@ -329,6 +329,11 @@ extern errr Term_inkey(char* ch, bool wait, bool take);
 
 extern errr Term_save(void);
 extern errr Term_load(void);
+/* Independent, single-use snapshot for a modal inside an already saved screen.
+ * Loading consumes the snapshot and preserves the ordinary Term_save buffer. */
+typedef struct term_snapshot term_snapshot;
+extern term_snapshot* Term_snapshot_save(void);
+extern errr Term_snapshot_load(term_snapshot* snapshot);
 
 extern errr Term_exchange(void);
 

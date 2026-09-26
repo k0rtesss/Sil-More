@@ -338,6 +338,8 @@ int collect_character_trait_lines(int race, int character, bool short_labels,
 
     HANDLE_UNIQUE_EX("Gift of Eru", "Gift of Eru", "Gift of Eru", RHF_GIFTERU, TERM_VIOLET);
     HANDLE_UNIQUE_EX("Seafarer", "Seafarer", "Seafarer", RHF_FREE, TERM_VIOLET);
+    HANDLE_UNIQUE_EX("Dwarven Smithing", "Dwarf Smith", "Dwarven Smithing",
+        RHF_DWARVEN_SMITHING, TERM_VIOLET);
     HANDLE_UNIQUE_EX("Kinslayer", "Kinslayer", "Kinslayer", RHF_KINSLAYER, TERM_UMBER);
     HANDLE_UNIQUE_EX("Treacherous", "Treacherous", "Treacherous", RHF_TREACHERY, TERM_UMBER);
     HANDLE_UNIQUE_EX("Doom of Mandos", "Mandos' Doom", "Doom of Mandos", RHF_CURSE, TERM_UMBER);

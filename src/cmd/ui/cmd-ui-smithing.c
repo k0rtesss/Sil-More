@@ -159,7 +159,7 @@ static void smith_show_calculations(const object_type* reforge_source);
 /* Controller B uses a gameplay binding, so normalize it to menu Back here. */
 static char smithing_menu_key(char ch, const object_type* reforge_source)
 {
-    if (ch == '?')
+    if (ch == '?' || (steamdeck_controls_active() && ch == steamdeck_info_key()))
     {
         smith_show_calculations(reforge_source);
         return 0;
@@ -1208,6 +1208,7 @@ static void smith_ui_add_back_click_target(int col, int row, cptr text)
 static void smith_ui_draw_navigation_prompt(bool root_menu)
 {
     char prompt[80];
+    char details[48];
     int row;
 
     if (sdl_touch_only_device_active())
@@ -1217,22 +1218,28 @@ static void smith_ui_draw_navigation_prompt(bool root_menu)
     if (steamdeck_controls_active())
     {
         char back_label[16];
+        char info_label[16];
 
         controller_prompt_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
         strnfmt(prompt, sizeof(prompt), "[%s] %s", back_label,
             root_menu ? "Exit" : "Back");
+        controller_prompt_label(steamdeck_info_key(), "View", info_label,
+            sizeof(info_label));
+        strnfmt(details, sizeof(details), "[%s How calculated]", info_label);
     }
     else
     {
         strnfmt(prompt, sizeof(prompt), "Esc %s",
             root_menu ? "Exit" : "Back");
+        SDL_strlcpy(details, "[? How calculated]", sizeof(details));
     }
 
-    SDL_strlcat(prompt, "  [? How calculated]", sizeof(prompt));
+    SDL_strlcat(prompt, "  ", sizeof(prompt));
+    SDL_strlcat(prompt, details, sizeof(prompt));
     Term_erase(0, row, smith_ui_term_wid());
     Term_putstr(0, row, smith_ui_term_wid(), TERM_SLATE, prompt);
-    ui_menu_click_add_text_token(SMITH_CLICK_CALC, 0, row, prompt, "[? How calculated]");
+    ui_menu_click_add_text_token(SMITH_CLICK_CALC, 0, row, prompt, details);
     smith_ui_add_back_click_target(0, row, prompt);
 }
 
@@ -3836,7 +3843,8 @@ void prt_object_difficulty(void)
     strnfmt(buf, sizeof(buf), "%d x %d%%%s = %d", breakdown.subtotal,
         breakdown.multiplier, breakdown.artefact_arrows ? " / 2" : "", dif);
     smith_ui_put_fitted(col, row++, width, TERM_SLATE, buf);
-    cptr calc_label = "[? Details]";
+    cptr calc_label = (sdl_touch_only_device_active() || steamdeck_controls_active())
+        ? "[Details]" : "[? Details]";
     smith_ui_put_fitted(col, row, width, TERM_L_BLUE, calc_label);
     ui_menu_click_add_text_token(SMITH_CLICK_CALC, col, row++, calc_label, calc_label);
     if (portrait) smith_ui_cost_title_row_override = row;
@@ -4713,12 +4721,17 @@ static void smith_build_calculation_report(smith_calculation_report* report,
     smith_report_add(report, width, TERM_YELLOW, "YOUR SMITHING CAPACITY");
     smith_report_add(report, width, TERM_SLATE,
         "Crafting uses permanent stats. Equipment stat boosts, drain, potions, songs and Adversity do not count.");
+    if (smithing_affinity_stat_bonus() > 0)
+        smith_report_add(report, width, TERM_L_GREEN,
+            format("Dwarven Smithing: affinity level %d adds +%d to every craft stat.",
+                affinity_level(S_SMT), smithing_affinity_stat_bonus()));
     smith_report_add(report, width, TERM_WHITE,
-        format("Permanent STR %d, DEX %d, GRA %d", player_permanent_stat(A_STR),
-            player_permanent_stat(A_DEX), player_permanent_stat(A_GRA)));
+        format("Smithing STR %d, DEX %d, GRA %d", smithing_effective_stat(A_STR),
+            smithing_effective_stat(A_DEX), smithing_effective_stat(A_GRA)));
     smith_report_add(report, width, TERM_WHITE,
-        format("Common foundation: DEX %d + GRA %d = %d", player_permanent_stat(A_DEX),
-            player_permanent_stat(A_GRA), player_permanent_stat(A_DEX) + player_permanent_stat(A_GRA)));
+        format("Common foundation: DEX %d + GRA %d = %d", smithing_effective_stat(A_DEX),
+            smithing_effective_stat(A_GRA),
+            smithing_effective_stat(A_DEX) + smithing_effective_stat(A_GRA)));
     for (size_t i = 0; i < N_ELEMENTS(masteries); ++i)
     {
         bool active = p_ptr->active_ability[S_SMT][masteries[i]];
@@ -4733,7 +4746,8 @@ static void smith_build_calculation_report(smith_calculation_report* report,
                 if (!ability->stat_score_weight_set[stat]) continue;
                 smith_scaled_text(ability->stat_score_weight[stat], value, sizeof(value));
                 smith_report_add(report, width, TERM_SLATE,
-                    format("  %s x %s %d", value, stats[stat], player_permanent_stat(stat)));
+                    format("  %s x %s %d", value, stats[stat],
+                        smithing_effective_stat(stat)));
             }
         }
     }
@@ -4824,6 +4838,9 @@ static void smith_show_calculations(const object_type* reforge_source)
     int top = 0;
     bool done = false;
     screen_save();
+    /* screen_save only stores the outermost screen. Preserve the complete
+     * immediate parent too: Smithing submenus repaint only part of the grid. */
+    term_snapshot* parent = Term_snapshot_save();
     while (!done)
     {
         int width = MAX(1, smith_ui_term_wid() - 4);
@@ -4852,10 +4869,24 @@ static void smith_show_calculations(const object_type* reforge_source)
         ui_scroll_area_begin(2, nav_row - 1, SDL_TOUCH_MENU_CATEGORY_OTHER);
         ui_scroll_area_set_keys('8', '2', '6', '4');
         ui_scroll_area_set_offset_target(&top, max_top);
+        ui_scroll_area_enable_horizontal_page_swipe('9', '6');
         if (!sdl_touch_only_device_active())
-            Term_putstr(0, smith_ui_prompt_row(), -1, TERM_SLATE, "Up/Down scroll  Space next page  Esc back");
+        {
+            char prompt[96];
+            if (steamdeck_controls_active())
+            {
+                char previous[16], next[16], back[16];
+                controller_prompt_label(steamdeck_prev_page_key(), "LB", previous, sizeof(previous));
+                controller_prompt_label(steamdeck_next_page_key(), "RB", next, sizeof(next));
+                controller_prompt_label(steamdeck_back_key(), "B", back, sizeof(back));
+                strnfmt(prompt, sizeof(prompt), "Up/Down scroll  %s/%s page  %s Back", previous, next, back);
+            }
+            else
+                SDL_strlcpy(prompt, "Up/Down scroll  Space next page  Esc back", sizeof(prompt));
+            smith_ui_put_fitted(0, smith_ui_prompt_row(), smith_ui_term_wid(), TERM_SLATE, prompt);
+        }
         Term_fresh();
-        char ch = (char)steamdeck_menu_key(inkey(), 0, 0);
+        char ch = (char)steamdeck_menu_key(inkey(), '9', '6');
         int choice, action;
         if (ui_menu_click_take_action(&choice, &action))
         {
@@ -4868,11 +4899,14 @@ static void smith_show_calculations(const object_type* reforge_source)
         else if (ch == '2') ++top;
         else if (ch == ' ' || ch == '6') top += page;
         else if (ch == '9') top -= page;
-        else if (ch == ESCAPE || ch == '4' || ch == '\r' || ch == '\n' || ch == '?') done = true;
+        else if (ch == ESCAPE || ch == '4' || ch == '\r' || ch == '\n' || ch == '?'
+            || (steamdeck_controls_active() && ch == steamdeck_info_key())) done = true;
     }
     ui_menu_click_clear();
     ui_scroll_area_clear();
+    Term_snapshot_load(parent);
     screen_load();
+    Term_fresh();
     mem_free(report);
 }
 
@@ -6474,7 +6508,8 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
         format("Capacity %d", smithing_effective_skill(smith_o_ptr)));
     smith_ui_put_fitted(col, row++, width, TERM_SLATE,
         format("ceil(%d x 1.5) = %d", preview->raw_delta_difficulty, preview->scaled_difficulty));
-    cptr calc_label = "[? Details]";
+    cptr calc_label = (sdl_touch_only_device_active() || steamdeck_controls_active())
+        ? "[Details]" : "[? Details]";
     smith_ui_put_fitted(col, row, width, TERM_L_BLUE, calc_label);
     ui_menu_click_add_text_token(SMITH_CLICK_CALC, col, row++, calc_label, calc_label);
     if (portrait) smith_ui_cost_title_row_override = row;

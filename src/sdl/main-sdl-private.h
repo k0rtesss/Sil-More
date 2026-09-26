@@ -72,6 +72,7 @@ enum {
     SDL_STARTUP_ISSUE_MAX = 1024,
     SDL_TOUCH_YES_NO_MAX_LINES = 8,
     SDL_TOUCH_YES_NO_LINE_LEN = 160,
+    SDL_TOUCH_YES_NO_TEXT_LEN = 1024,
     SDL_TOUCH_TUTORIAL_MAX_LINES = 14,
     SDL_TOUCH_TUTORIAL_LINE_LEN = 192,
     SDL_STATUS_PANE_MAX_ENTRIES = 48,
@@ -1628,7 +1629,7 @@ extern bool g_touch_pane_second_panel;
 extern bool g_touch_pane_ctrl_toggle;
 extern bool g_touch_pane_reset_confirm_active;
 extern bool g_touch_pane_yes_no_prompt_active;
-extern char g_touch_pane_yes_no_prompt_text[SDL_TOUCH_YES_NO_LINE_LEN];
+extern char g_touch_pane_yes_no_prompt_text[SDL_TOUCH_YES_NO_TEXT_LEN];
 extern sdl_touch_yes_no_prompt_placement g_touch_pane_yes_no_prompt_placement;
 extern sdl_touch_yes_no_prompt_hover g_touch_pane_yes_no_prompt_hover;
 extern bool g_touch_pane_yes_no_prompt_anchor_active;

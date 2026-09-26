@@ -162,6 +162,7 @@ static const character_sheet_named_trait character_sheet_named_traits[] = {
     { "Woven Master", "Song is not reduced for woven minor themes." },
     { "Gift of Eru", "Story deaths are not counted if you die." },
     { "Seafarer", "Abilities cost less to acquire." },
+    { "Dwarven Smithing", "Each positive Smithing affinity level adds +1 to every stat for Smithing calculations and requirements." },
     { "Kinslayer", "Retrieving Silmarils may endanger your kin." },
     { "Treacherous", "You may steal a Silmaril at the end." },
     { "Doom of Mandos", "Curses offered to you grow more complex." },
@@ -175,7 +176,7 @@ static const cptr character_sheet_skill_descriptions[S_MAX] = {
     "Reduces noise and helps avoid visual detection.",
     "Detects hidden doors, traps, and invisible foes; helps identify items.",
     "Resists fear, confusion, entrancement, and other hostile effects.",
-    "Common crafting skill: ranks, permanent DEX + GRA, active masteries and flat bonuses. The forge adds the item's category and forge bonus; How calculated (?) explains the result.",
+    "Common crafting skill: ranks, permanent DEX + GRA, active masteries and flat bonuses. Dwarven Smithing adds affinity level to every craft stat. The forge adds the item's category and forge bonus; How calculated (?) explains the result.",
     "Determines song power and opposed song checks.",
     ""
 };
@@ -433,6 +434,7 @@ static int character_sheet_collect_semantic_items(character_sheet_item items[],
     ADD_SEMANTIC_UNIQUE_U("Woven Master", UNQ_WOVEN_MASTER);
     ADD_SEMANTIC_UNIQUE("Gift of Eru", RHF_GIFTERU);
     ADD_SEMANTIC_UNIQUE("Seafarer", RHF_FREE);
+    ADD_SEMANTIC_UNIQUE("Dwarven Smithing", RHF_DWARVEN_SMITHING);
     ADD_SEMANTIC_UNIQUE("Kinslayer", RHF_KINSLAYER);
     ADD_SEMANTIC_UNIQUE("Treacherous", RHF_TREACHERY);
     ADD_SEMANTIC_UNIQUE("Doom of Mandos", RHF_CURSE);
@@ -919,14 +921,24 @@ static void character_sheet_format_skill_item(const character_sheet_item* item,
     equip_mod = p_ptr->skill_equip_mod[skill];
     misc_mod = p_ptr->skill_misc_mod[skill];
 
+    /* Live SDL descriptions have a 256-byte budget. Keep the complete formula
+     * and next-rank cost together instead of appending a second explanation. */
+    if (skill == S_SMT)
+    {
+        strnfmt(buf, buflen,
+            "Smithing: %d = %d ranks %+d stat %+d equip %+d misc. "
+            "Stat: permanent DEX + GRA + active masteries. "
+            "Forge adds category and forge bonuses (How calculated). Next point: %d XP.",
+            p_ptr->skill_use[skill], p_ptr->skill_base[skill], stat_mod,
+            equip_mod, misc_mod, next_cost);
+        return;
+    }
+
     strnfmt(buf, buflen,
         "%s: %s Current %d = base %d%+d stat%+d equip%+d misc. Next point: %d XP.",
         skill_names_full[skill], character_sheet_skill_description(skill),
         p_ptr->skill_use[skill], p_ptr->skill_base[skill], stat_mod,
         equip_mod, misc_mod, next_cost);
-
-    if (skill == S_SMT)
-        SDL_strlcat(buf, " The stat column is permanent Dexterity + Grace + active smithing masteries. The forge adds the item category's extra contribution and forge bonus; use How calculated for the full breakdown.", buflen);
 
     if (!p_ptr->leaping && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px])
         && (skill == S_MEL || skill == S_ARC

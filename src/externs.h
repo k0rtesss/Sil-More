@@ -2316,7 +2316,11 @@ extern int ability_potential_skill_bonus_with_partner(
     int skilltype, int abilitynum);
 extern int ability_bonus(int skilltype, int abilitynum);
 extern int player_permanent_stat(int stat);
+extern int smithing_affinity_stat_bonus(void);
+extern int smithing_effective_stat(int stat);
 extern bool ability_stat_requirements_met(const ability_type* ability);
+extern int ability_required_skill(const ability_type* ability, int skill);
+extern bool ability_skill_requirements_met(const ability_type* ability);
 extern int ability_score(int skilltype, int abilitynum);
 extern int ability_stat_score_scaled(const ability_type* ability, bool permanent);
 extern int smithing_stat_bonus(const object_type* object);

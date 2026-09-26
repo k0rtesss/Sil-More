@@ -223,7 +223,8 @@ static errr parse_ability_requirement_line(ability_type* b_ptr, char* s)
         char* name = s;
         char* value = strchr(name, ':');
         char* next;
-        int stat, minimum;
+        int index, minimum;
+        bool is_stat = true;
         if (!value) return PARSE_ERROR_GENERIC;
         *value++ = '\0';
         next = strchr(value, ':');
@@ -232,12 +233,16 @@ static errr parse_ability_requirement_line(ability_type* b_ptr, char* s)
         ability_req_copy_token(token, sizeof(token), name);
         bool lore = streq(token, "LORE") || streq(token, "KNW")
             || streq(token, "KNOWLEDGE");
-        if (!lore && !ability_req_parse_stat_name(name, &stat))
+        if (!lore && !ability_req_parse_name(name, &is_stat, &index))
             return PARSE_ERROR_GENERIC;
-        if (!ability_req_parse_int(value, 255, &minimum))
+        if (!lore && !is_stat && index == S_SPC)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        if (!ability_req_parse_int(value,
+                (lore || is_stat) ? 255 : BASE_SKILL_MAX, &minimum))
             return PARSE_ERROR_OUT_OF_BOUNDS;
         if (lore) b_ptr->lore_req = (byte)minimum;
-        else b_ptr->stat_req[stat] = (byte)minimum;
+        else if (is_stat) b_ptr->stat_req[index] = (byte)minimum;
+        else b_ptr->skill_req[index] = MAX(b_ptr->skill_req[index], minimum);
         count++;
         if (!next) break;
         s = next;
@@ -569,7 +574,7 @@ errr parse_b_info(char* buf, header* head)
         b_ptr->level = level;
     }
 
-    /* R: minimum permanent stats; S: weighted stats/skills, as on develop. */
+    /* R: minimum permanent stats/base skills; S: weighted stats/skills. */
     else if (buf[0] == 'R' || buf[0] == 'S')
     {
         if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;

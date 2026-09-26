@@ -147,7 +147,9 @@ static void ability_menu_sort_entries_by_level(ability_type* entries[],
         int abilitynum = abilitynums[i];
         int j = i - 1;
 
-        while ((j >= 0) && (entry->level < entries[j]->level))
+        while ((j >= 0)
+            && (ability_required_skill(entry, entry->skilltype)
+                < ability_required_skill(entries[j], entries[j]->skilltype)))
         {
             entries[j + 1] = entries[j];
             attrs[j + 1] = attrs[j];
@@ -281,15 +283,26 @@ static void ability_menu_render_prerequisites_block(int skilltype,
 
     Term_putstr(desc_col, row, -1, TERM_YELLOW, "Prerequisites:");
 
+    int primary_need = ability_required_skill(b_ptr, skilltype);
     ability_menu_format_amount_line(buf, sizeof(buf), "skill points", "Skill",
-        b_ptr->level, p_ptr->skill_base[skilltype], info_width);
+        primary_need, p_ptr->skill_base[skilltype], info_width);
 
     Term_putstr(desc_col + 2, row + 1, -1,
-        (b_ptr->level <= p_ptr->skill_base[skilltype]) ? TERM_L_GREEN
+        (primary_need <= p_ptr->skill_base[skilltype]) ? TERM_L_GREEN
                                                        : TERM_L_DARK,
         buf);
 
     row += 2;
+
+    for (int skill = 0; skill < S_MAX; ++skill)
+    {
+        int need = ability_required_skill(b_ptr, skill);
+        if (skill == skilltype || !need) continue;
+        strnfmt(buf, sizeof(buf), "%s %d base (%d now)",
+            skill_names_full[skill], need, p_ptr->skill_base[skill]);
+        Term_putstr(desc_col + 2, row++, -1,
+            p_ptr->skill_base[skill] >= need ? TERM_L_GREEN : TERM_L_DARK, buf);
+    }
 
     if (lore_system_enabled() && b_ptr->lore_req)
     {
@@ -303,8 +316,10 @@ static void ability_menu_render_prerequisites_block(int skilltype,
         static cptr names[] = { "Str", "Dex", "Con", "Gra" };
         int need = b_ptr->stat_req[stat];
         if (!need) continue;
-        int have = player_permanent_stat(stat);
-        strnfmt(buf, sizeof(buf), "%s %d (%d permanent)", names[stat], need, have);
+        int have = skilltype == S_SMT ? smithing_effective_stat(stat)
+                                      : player_permanent_stat(stat);
+        strnfmt(buf, sizeof(buf), "%s %d (%d %s)", names[stat], need, have,
+            skilltype == S_SMT ? "for Smithing" : "permanent");
         Term_putstr(desc_col + 2, row++, -1,
             have >= need ? TERM_L_GREEN : TERM_L_DARK, buf);
     }
@@ -1038,7 +1053,7 @@ bool prereqs(int skilltype, int abilitynum)
 
     b_ptr = &b_info[ability_index(skilltype, abilitynum)];
 
-    if (p_ptr->skill_base[skilltype] < b_ptr->level)
+    if (!ability_skill_requirements_met(b_ptr))
     {
         return (false);
     }
@@ -3151,6 +3166,51 @@ static int ability_browser_skill_training_cost(int current_base,
     return cost;
 }
 
+typedef struct
+{
+    int target[S_MAX];
+    int cost[S_MAX];
+    int total_cost;
+    int count;
+} ability_skill_training;
+
+/* Plan every required increase before checking affordability or changing state. */
+static bool ability_browser_plan_training(const ability_type* ability,
+    ability_skill_training* plan)
+{
+    memset(plan, 0, sizeof(*plan));
+    for (int skill = 0; skill < S_MAX; ++skill)
+    {
+        int need = ability_required_skill(ability, skill);
+        if (need > BASE_SKILL_MAX || (skill == S_SPC && need > 0))
+            return false;
+        plan->target[skill] = p_ptr->skill_base[skill];
+        if (!need) continue;
+        plan->target[skill] = MAX(p_ptr->skill_base[skill], need);
+        if (need <= p_ptr->skill_base[skill]) continue;
+        plan->cost[skill] = ability_browser_skill_training_cost(
+            p_ptr->skill_base[skill], need);
+        plan->total_cost += plan->cost[skill];
+        plan->count++;
+    }
+    return true;
+}
+
+static void ability_browser_format_training(const ability_skill_training* plan,
+    char* buf, size_t size)
+{
+    buf[0] = '\0';
+    for (int skill = 0; skill < S_MAX; ++skill)
+    {
+        char part[96];
+        if (plan->target[skill] <= p_ptr->skill_base[skill]) continue;
+        strnfmt(part, sizeof(part), "%s%s %d to %d (%d XP)",
+            buf[0] ? ", " : "", skill_names_full[skill],
+            p_ptr->skill_base[skill], plan->target[skill], plan->cost[skill]);
+        SDL_strlcat(buf, part, size);
+    }
+}
+
 static void ability_browser_build_summary(int skilltype, char* summary,
     size_t summary_len)
 {
@@ -3614,11 +3674,12 @@ static void ability_browser_sort_entries(ability_browser_entry entries[],
     for (int i = 1; i < count; i++)
     {
         ability_browser_entry entry = entries[i];
+        int level = ability_required_skill(entry.b_ptr, entry.b_ptr->skilltype);
         int j = i - 1;
 
         while (j >= 0
-            && (entry.b_ptr->level < entries[j].b_ptr->level
-                || (entry.b_ptr->level == entries[j].b_ptr->level
+            && (level < ability_required_skill(entries[j].b_ptr, entries[j].b_ptr->skilltype)
+                || (level == ability_required_skill(entries[j].b_ptr, entries[j].b_ptr->skilltype)
                     && entry.abilitynum < entries[j].abilitynum)))
         {
             entries[j + 1] = entries[j];
@@ -3797,7 +3858,8 @@ static void ability_browser_draw_ability_list(
             indexed_menu_normal_prefix(prefix, sizeof(prefix), idx);
         Term_putstr(layout->ability_col, y, prefix_w, prefix_attr, prefix);
 
-        strnfmt(level, sizeof(level), "%2d", entry->b_ptr->level);
+        strnfmt(level, sizeof(level), "%2d",
+            ability_required_skill(entry->b_ptr, entry->b_ptr->skilltype));
         ability_browser_put_fitted(level_col, y, 2, level_attr, level);
         name_cursor = entry->name;
         for (int line_idx = 0; line_idx < entry_rows; line_idx++) {
@@ -4054,22 +4116,27 @@ static void ability_browser_add_prerequisites(
     ability_desc_add_blank(lines, line_count);
     ability_desc_add_heading(lines, line_count, TERM_YELLOW, "Requirements");
 
-    strnfmt(buf, sizeof(buf), "Skill: %d %s base (%d now)",
-        b_ptr->level, skill_names_full[skilltype],
-        p_ptr->skill_base[skilltype]);
-    ability_desc_add_wrapped(lines, line_count,
-        (b_ptr->level <= p_ptr->skill_base[skilltype]) ? TERM_L_GREEN
-                                                       : TERM_L_DARK,
-        buf, width);
-
-    if (b_ptr->level > p_ptr->skill_base[skilltype])
+    /* Show the primary skill first, then every additional invested-rank gate. */
+    for (int order = 0; order <= S_MAX; ++order)
     {
-        int skill_xp = ability_browser_skill_training_cost(
-            p_ptr->skill_base[skilltype], b_ptr->level);
+        int skill = order == 0 ? skilltype : order - 1;
+        if (order > 0 && skill == skilltype) continue;
+        int need = ability_required_skill(b_ptr, skill);
+        if (order > 0 && !need) continue;
+        strnfmt(buf, sizeof(buf), "Skill: %d %s base (%d now)",
+            need, skill_names_full[skill], p_ptr->skill_base[skill]);
+        ability_desc_add_wrapped(lines, line_count,
+            need <= p_ptr->skill_base[skill] ? TERM_L_GREEN : TERM_L_DARK,
+            buf, width);
 
-        strnfmt(buf, sizeof(buf), "Skill XP: %d needed to reach level %d",
-            skill_xp, b_ptr->level);
-        ability_desc_add_wrapped(lines, line_count, TERM_L_DARK, buf, width);
+        if (need > p_ptr->skill_base[skill])
+        {
+            int skill_xp = ability_browser_skill_training_cost(
+                p_ptr->skill_base[skill], need);
+            strnfmt(buf, sizeof(buf), "%s XP: %d needed to reach level %d",
+                skill_names_full[skill], skill_xp, need);
+            ability_desc_add_wrapped(lines, line_count, TERM_L_DARK, buf, width);
+        }
     }
 
     if (lore_system_enabled() && b_ptr->lore_req)
@@ -4084,8 +4151,10 @@ static void ability_browser_add_prerequisites(
         static cptr names[] = { "Strength", "Dexterity", "Constitution", "Grace" };
         int need = b_ptr->stat_req[stat];
         if (!need) continue;
-        int have = player_permanent_stat(stat);
-        strnfmt(buf, sizeof(buf), "%s: %d required (%d permanent)", names[stat], need, have);
+        int have = skilltype == S_SMT ? smithing_effective_stat(stat)
+                                      : player_permanent_stat(stat);
+        strnfmt(buf, sizeof(buf), "%s: %d required (%d %s)", names[stat], need,
+            have, skilltype == S_SMT ? "for Smithing" : "permanent");
         ability_desc_add_wrapped(lines, line_count,
             have >= need ? TERM_L_GREEN : TERM_L_DARK, buf, width);
     }
@@ -4133,10 +4202,9 @@ static void ability_browser_add_prerequisites(
         bool knowledge = ability_uses_knowledge_points(skilltype, b_ptr->abilitynum);
         int knowledge_cost = ability_purchase_knowledge_cost(skilltype, b_ptr->abilitynum);
         int ability_xp = knowledge ? 0 : ability_purchase_exp_cost(skilltype);
-        int skill_xp = (b_ptr->level > p_ptr->skill_base[skilltype])
-            ? ability_browser_skill_training_cost(
-                p_ptr->skill_base[skilltype], b_ptr->level)
-            : 0;
+        ability_skill_training training;
+        if (!ability_browser_plan_training(b_ptr, &training)) return;
+        int skill_xp = training.total_cost;
         int total_xp = skill_xp + ability_xp;
         byte cost_attr = (total_xp <= p_ptr->new_exp)
             ? TERM_L_GREEN : TERM_L_DARK;
@@ -4181,7 +4249,7 @@ static void ability_browser_add_current_blocks(
         {
             if (!b_ptr->stat_score_weight_set[stat]) continue;
             int weight = b_ptr->stat_score_weight[stat];
-            int value = skilltype == S_SMT ? player_permanent_stat(stat)
+            int value = skilltype == S_SMT ? smithing_effective_stat(stat)
                 : p_ptr->stat_use[stat];
             strnfmt(buf, sizeof(buf), "%s%d.%02dx %s (%d)",
                 weight < 0 ? "-" : "", ABS(weight) / 100, ABS(weight) % 100,
@@ -4985,11 +5053,10 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
     if (!p_ptr->have_ability[skilltype][abilitynum])
     {
         ability_type* b_ptr;
-        bool has_skill_prereq;
         bool has_ability_prereq;
-        bool train_skill = false;
-        int old_skill_base = 0;
-        int skill_cost = 0;
+        ability_skill_training training;
+        bool train_skill;
+        int skill_cost;
         int total_exp_cost;
         int exp_cost;
         int knowledge_cost = 0;
@@ -5007,7 +5074,6 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
             bell("Your permanent stats do not meet this ability's requirements.");
             return false;
         }
-        has_skill_prereq = (p_ptr->skill_base[skilltype] >= b_ptr->level);
         has_ability_prereq = prereq_abilities_met(b_ptr);
 
         if (!has_ability_prereq)
@@ -5024,21 +5090,16 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
             return false;
         }
         exp_cost = knowledge ? 0 : ability_purchase_exp_cost(skilltype);
-        total_exp_cost = exp_cost;
-        if (!has_skill_prereq)
+        if (!ability_browser_plan_training(b_ptr, &training))
         {
-            old_skill_base = p_ptr->skill_base[skilltype];
-            skill_cost = ability_browser_skill_training_cost(
-                old_skill_base, b_ptr->level);
-            total_exp_cost += skill_cost;
-            train_skill = true;
-
-            if (b_ptr->level > BASE_SKILL_MAX)
-            {
-                bell("This ability requires an invalid skill level.");
-                return false;
-            }
-
+            bell("This ability requires an invalid skill level.");
+            return false;
+        }
+        skill_cost = training.total_cost;
+        total_exp_cost = exp_cost + skill_cost;
+        train_skill = training.count > 0;
+        if (train_skill)
+        {
             if (total_exp_cost > p_ptr->new_exp)
             {
                 msg_format("Need %d XP (%d skill + %d ability), but only %ld XP is available.",
@@ -5106,7 +5167,8 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
 
         {
             char gain_name[80];
-            char prompt[240];
+            char prompt[1024];
+            char training_text[768];
 
             if (banechoice > 0)
             {
@@ -5130,22 +5192,23 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
                     "Buying a song does not start singing. Its description states its Voice cost; Voice does not regenerate while any song is active.");
             tutorial_game_wait();
             if (!tutorial_game_action_allowed("buy-ability", NULL)) return false;
+            ability_browser_format_training(&training, training_text,
+                sizeof(training_text));
             if (knowledge)
             {
                 if (train_skill)
-                    strnfmt(prompt, sizeof(prompt), "Raise %s %d to %d (%d XP) and gain %s (%d KP)? ",
-                        skill_names_full[skilltype], old_skill_base, b_ptr->level,
-                        skill_cost, gain_name, knowledge_cost);
+                    strnfmt(prompt, sizeof(prompt),
+                        "Raise %s and gain %s (%d KP), %d XP + %d KP total? ",
+                        training_text, gain_name, knowledge_cost,
+                        skill_cost, knowledge_cost);
                 else
                     strnfmt(prompt, sizeof(prompt), "Gain %s for %d KP? ", gain_name, knowledge_cost);
             }
             else if (train_skill)
             {
                 strnfmt(prompt, sizeof(prompt),
-                    "Raise %s %d to %d (%d XP) and gain %s (%d XP), %d XP total? ",
-                    skill_names_full[skilltype], old_skill_base,
-                    b_ptr->level, skill_cost, gain_name, exp_cost,
-                    total_exp_cost);
+                    "Raise %s and gain %s (%d XP), %d XP total? ",
+                    training_text, gain_name, exp_cost, total_exp_cost);
             }
             else
             {
@@ -5158,9 +5221,14 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
 
         if (train_skill)
         {
-            p_ptr->skill_base[skilltype] = b_ptr->level;
-            if (old_skill_base == 0)
-                sdl_quick_access_suggest_skill_shortcut(skilltype);
+            for (int skill = 0; skill < S_MAX; ++skill)
+            {
+                int old_skill_base = p_ptr->skill_base[skill];
+                if (training.target[skill] <= old_skill_base) continue;
+                p_ptr->skill_base[skill] = training.target[skill];
+                if (old_skill_base == 0)
+                    sdl_quick_access_suggest_skill_shortcut(skill);
+            }
         }
 
         p_ptr->innate_ability[skilltype][abilitynum] = true;

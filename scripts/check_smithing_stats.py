@@ -51,10 +51,51 @@ int fixture_read_player(const byte* buffer, size_t length, int extra)
 }
 '''
 
+CHARACTER = r'''
+#include "cmd/ui/cmd-ui-character.c"
+#include <assert.h>
+void fixture_smithing_description(char* desc, size_t size)
+{
+    character_sheet_item item = {0};
+    item.kind = CHARACTER_SHEET_ITEM_SKILL; item.skill = S_SMT;
+    character_sheet_format_item_description(&item, desc, size);
+    assert(strlen(desc) < 256);
+    assert(strstr(desc, "Next point:") && strstr(desc, "XP."));
+}
+'''
+
+# Exercise the real mobile capability predicate without needing an Android driver.
+MOBILE_LAYOUT = r'''
+#include "sdl/main-sdl-private.h"
+#undef SIL_SDL_MOBILE_BUILD
+#define SIL_SDL_MOBILE_BUILD 1
+#include "sdl/core/sdl-layout.c"
+'''
+
 SDL_UI = r'''
 #include "sdl/ui/sdl-screens.c"
 #include "player/player-upkeep-internal.h"
 #include <assert.h>
+extern void fixture_smithing_description(char* desc, size_t size);
+void fixture_input_mode(int mode)
+{
+    config.gamepad_enabled = true;
+    config.input_ui_mode = mode == 1 ? SDL_INPUT_UI_MODE_CONTROLLER : SDL_INPUT_UI_MODE_PLATFORM;
+    g_direct_touch_present = (mode == 2);
+    assert(steamdeck_controls_active() == (mode == 1));
+    assert(sdl_touch_only_device_active() == (mode == 2));
+}
+char fixture_controller_button(int button)
+{
+    SDL_GamepadButtonEvent event = {0};
+    event.button = button; event.down = true;
+    sdl_gamepad_handle_button(&event);
+    event.down = false; sdl_gamepad_handle_button(&event);
+    char ch;
+    assert(Term_inkey(&ch, false, true) == 0);
+    return ch;
+}
+
 void check_sdl_skill_display(cptr output, cptr fonts)
 {
     memset(p_ptr->active_ability, 0, sizeof(p_ptr->active_ability));
@@ -91,8 +132,51 @@ void check_sdl_skill_display(cptr output, cptr fonts)
     sdl_ui_text_cache_clear();
     TTF_CloseFont(font);
     SDL_DestroyRenderer(g_state.renderer); g_state.renderer = NULL;
-    SDL_DestroySurface(canvas); TTF_Quit();
+    SDL_DestroySurface(canvas);
+    /* Run the actual 640-byte formatter -> 256-byte live item -> hover renderer. */
+    char desc[640]; fixture_smithing_description(desc, sizeof(desc));
+    assert(strstr(desc, "= 0 ranks +40 stat"));
+    strnfmt(config.story_font, sizeof(config.story_font), "%s/MarcellusSC-Regular.ttf", fonts);
+    SDL_strlcpy(config.story_font2, config.story_font, sizeof(config.story_font2));
+    int sizes[][2] = {{1280,800}, {640,360}, {360,640}};
+    for (int mode = 0; mode < 3; ++mode)
+    for (int s = 0; s < 3; ++s)
+    {
+        fixture_input_mode(mode);
+        int w = sizes[s][0], h = sizes[s][1];
+        canvas = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_RGBA8888); assert(canvas);
+        g_state.window = SDL_CreateWindow("Smithing fixture", w, h, SDL_WINDOW_HIDDEN);
+        assert(g_state.window);
+        g_state.renderer = SDL_CreateSoftwareRenderer(canvas); assert(g_state.renderer);
+        g_sdl_character_sheet_screen.context = SDL_CHARACTER_SHEET_LIVE;
+        g_sdl_character_sheet_screen.live_item_count = 0;
+        g_sdl_character_sheet_screen.hit_count = 0;
+        g_sdl_character_sheet_screen.last_desc_px = 40;
+        sdl_character_sheet_screen_add_live_item(42, 0 /* skill */,
+            S_SMT, 0, "Smithing", desc);
+        sdl_char_sheet_add_hit((SDL_FRect){30, h - 65, w - 60, 40}, 42, desc, TERM_L_BLUE);
+        g_sdl_character_sheet_screen.hover_choice = 42;
+        assert(!strcmp(sdl_char_sheet_hover_desc(NULL, NULL), desc));
+        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+        SDL_RenderClear(g_state.renderer);
+        sdl_char_sheet_render_hover_tooltip();
+        SDL_FRect box = g_sdl_char_sheet_hover_tooltip_rect;
+        assert(box.w > 0 && box.h > 0);
+        assert(box.x >= 0 && box.y >= 0 && box.x + box.w <= w && box.y + box.h <= h);
+        SDL_RenderPresent(g_state.renderer);
+        strnfmt(path, sizeof(path), "%s/tooltip-%d-%dx%d.png", output, mode, w, h);
+        assert(IMG_SavePNG(canvas, path));
+        sdl_ui_text_cache_clear();
+        SDL_DestroyRenderer(g_state.renderer); g_state.renderer = NULL;
+        SDL_DestroyWindow(g_state.window); g_state.window = NULL;
+        SDL_DestroySurface(canvas);
+    }
+    fixture_input_mode(0);
+    for (int i = 0; i < g_state.story_font_count; ++i) TTF_CloseFont(g_state.story_fonts[i].font);
+    g_state.story_font_count = 0;
+    TTF_Quit();
     puts("Screenshot scenario: actual SDL skill collector and renderer show common +40 with zero ranks PASS.");
+    puts("Complete live tooltip and viewport bounds: desktop/controller/touch at landscape/portrait sizes PASS.");
 }
 '''
 
@@ -136,6 +220,135 @@ SMITH = r'''
 #include <assert.h>
 /* ORIGINAL_DIFFICULTY */
 extern char fixture_input_key;
+extern char (*fixture_input_action)(void);
+extern void fixture_input_mode(int mode);
+extern char fixture_controller_button(int button);
+
+static byte parent_planes[6][80 * 48];
+static int input_step, input_mode;
+static int previous_top;
+static void check_parent_planes(bool save)
+{
+    void* planes[] = {Term->scr->va, Term->scr->vc, Term->scr->vta,
+        Term->scr->vtc, Term->scr->vstory, Term->scr->vhealth};
+    for (int i = 0; i < 6; ++i)
+        if (save) memcpy(parent_planes[i], planes[i], Term->wid * Term->hgt);
+        else assert(!memcmp(parent_planes[i], planes[i], Term->wid * Term->hgt));
+}
+static void fixture_click(int choice)
+{
+    bool wake = false;
+    assert(ui_menu_click_handle_choice_action(choice, UI_MENU_CLICK_PRIMARY, &wake));
+}
+static char report_navigation(void)
+{
+    int step = input_step++;
+    assert(step < 6);
+    if (step == 0)
+    {
+        check_parent_planes(true);
+        if (input_mode == 2)
+        {
+            bool found = false;
+            for (int i = 0; i < ui_menu_click_touch_button_count(); ++i)
+            {
+                int choice; cptr label; byte attr;
+                assert(ui_menu_click_touch_button_get(i, &choice, &label, &attr));
+                if (choice == SMITH_CLICK_CALC && !strcmp(label, "How calculated")) found = true;
+            }
+            assert(found); fixture_click(SMITH_CLICK_CALC);
+            return UI_MENU_CLICK_WAKE_KEY;
+        }
+        return input_mode == 1 ? fixture_controller_button(SDL_GAMEPAD_BUTTON_BACK) : '?';
+    }
+    char row[128];
+    memcpy(row, Term->scr->c[1], Term->wid); row[Term->wid] = 0;
+    int top; assert(sscanf(row, " Lines %d", &top) == 1);
+    if (step == 1 || step == 3) assert(top == 1);
+    if (step == 2 || step == 4) assert(top > previous_top);
+    previous_top = top;
+    assert(ui_scroll_area_has_offset_target());
+    if (input_mode == 2)
+    {
+        assert(ui_scroll_area_is_horizontal_page_mode());
+        if (step == 1) return ui_scroll_area_get_horizontal_key(-1);
+        if (step == 2) return ui_scroll_area_get_horizontal_key(1);
+        if (step == 3) assert(ui_scroll_area_offset_scroll(5));
+        if (step == 4) fixture_click(SMITH_CLICK_BACK);
+        return UI_MENU_CLICK_WAKE_KEY;
+    }
+    if (step == 1) return input_mode == 1 ? fixture_controller_button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) : ' ';
+    if (step == 2) return input_mode == 1 ? fixture_controller_button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) : '9';
+    if (step == 3) return '2';
+    return input_mode == 1 ? fixture_controller_button(SDL_GAMEPAD_BUTTON_EAST) : ESCAPE;
+}
+
+static void check_nested_report(void)
+{
+    for (input_mode = 0; input_mode < 3; ++input_mode)
+    for (int shape = 0; shape < 2; ++shape)
+    {
+        fixture_input_mode(input_mode);
+        Term_resize(shape ? 32 : 80, shape ? 40 : 24);
+        Term_putstr(0, 0, -1, TERM_RED, "Original dungeon");
+        screen_save();
+        for (int y = 0; y < Term->hgt; ++y) Term_erase(0, y, Term->wid);
+        Term_putstr(0, 0, -1, TERM_GREEN, "Forge parent");
+        Term->scr->ta[0][0] = 12; Term->scr->tc[0][0] = 't';
+        Term->scr->story[0][0] = STORY_FLAG_USE;
+        Term->scr->health[0][0] = 128;
+        screen_save();
+        for (int repeat = 0; repeat < 2; ++repeat)
+        {
+            int highlight = 1;
+            input_step = 0; fixture_input_action = report_navigation;
+            Term_flush();
+            assert(create_sval_menu_aux(TV_SWORD, &highlight) == 0);
+            fixture_input_action = NULL;
+            assert(input_step == 5 && highlight == 1);
+            assert(!ui_scroll_area_has_offset_target());
+            check_parent_planes(false);
+        }
+        screen_load(); screen_load();
+        assert(!memcmp(Term->scr->c[0], "Original dungeon", 16));
+    }
+    fixture_input_mode(0); Term_resize(80,24);
+    puts("Actual subtype menu: nested restoration of all six planes, repeated keyboard/controller/touch paging and Back PASS.");
+    /* Rotation/resize while in a report crops safely and erases uncovered cells,
+     * while retaining the outer saved screen and invalidating every old plane. */
+    int resized[][2] = {{40,18}, {100,30}};
+    for (int shape = 0; shape < 2; ++shape)
+    {
+        Term_putstr(0, 0, -1, TERM_RED, "Outer screen");
+        Term_save();
+        Term_putstr(0, 0, -1, TERM_GREEN, "Parent screen");
+        Term_gotoxy(79,23);
+        term_snapshot* snapshot = Term_snapshot_save();
+        Term_resize(resized[shape][0], resized[shape][1]);
+        for (int y = 0; y < Term->hgt; ++y)
+            for (int x = 0; x < Term->wid; ++x)
+                Term_putch(x,y,TERM_BLUE,'X');
+        assert(Term_snapshot_load(snapshot) == 0);
+        assert(!memcmp(Term->scr->c[0], "Parent screen", 13));
+        assert(Term->scr->cu == (shape == 0));
+        for (int y = 0; y < Term->hgt; ++y)
+            for (int x = 0; x < Term->wid; ++x)
+            {
+                assert(Term->old->a[y][x] == 255 && Term->old->c[y][x] == 0);
+                assert(Term->old->ta[y][x] == 255 && Term->old->tc[y][x] == 0);
+                assert(Term->old->story[y][x] == 255 && Term->old->health[y][x] == 255);
+                if (x >= 80 || y >= 24)
+                {
+                    assert(Term->scr->c[y][x] == Term->char_blank);
+                    assert(!Term->scr->ta[y][x] && !Term->scr->tc[y][x]);
+                    assert(!Term->scr->story[y][x] && !Term->scr->health[y][x]);
+                }
+            }
+        Term_load(); assert(!memcmp(Term->scr->c[0], "Outer screen", 12));
+        Term_resize(80,24);
+    }
+    puts("Nested snapshots after shrink/grow: clear margins, cursor bounds and outer save preserved PASS.");
+}
 
 static bool report_has(const smith_calculation_report* report, cptr needle)
 {
@@ -243,6 +456,7 @@ void check_calculation_display(cptr output)
         fclose(file);
     }
     Term_resize(80,24);
+    check_nested_report();
     puts("Calculation view: narrow wrapping, actual modal navigation, state preservation and forge layouts PASS.");
 }
 
@@ -416,10 +630,12 @@ extern size_t fixture_write_player(byte* buffer, size_t capacity, bool old);
 extern int fixture_read_player(const byte* buffer, size_t length, int extra);
 static term test_term;
 char fixture_input_key = ' ';
+char (*fixture_input_action)(void);
 static errr terminal_extra(int action, int value)
 {
     (void)value;
-    if (action == TERM_XTRA_EVENT) Term_keypress(fixture_input_key);
+    if (action == TERM_XTRA_EVENT)
+        Term_keypress(fixture_input_action ? fixture_input_action() : fixture_input_key);
     return 0;
 }
 static errr parse_line(header* h, cptr line)
@@ -542,6 +758,40 @@ int main(int argc, char** argv)
     object_prep(&ring, lookup_kind(TV_RING, 0));
     object_prep(&bow, lookup_kind(TV_BOW, SV_SHORT_BOW));
     assert(heavy.k_idx && mail.k_idx && ring.k_idx && bow.k_idx);
+    const player_race* saved_race = rp_ptr;
+    character_profile* saved_profile = current_character_profile;
+    rp_ptr = &p_info[4]; current_character_profile = &c_info[20];
+    assert(rp_ptr->flags & RHF_DWARVEN_SMITHING);
+    assert(affinity_level(S_SMT) == 1);
+    assert(smithing_affinity_stat_bonus() == 1);
+    assert(smithing_effective_stat(A_STR) == 4);
+    assert(smithing_stat_bonus(&heavy) == 12);
+    assert(smithing_stat_bonus(&mail) == 12);
+    assert(smithing_stat_bonus(&ring) == 12);
+    assert(!ability_stat_requirements_met(
+        &b_info[ability_index(S_SMT, SMT_MASTERPIECE)]));
+    current_character_profile = &c_info[18];
+    assert(affinity_level(S_SMT) == 2);
+    assert(smithing_affinity_stat_bonus() == 2);
+    assert(smithing_effective_stat(A_GRA) == 5);
+    assert(smithing_stat_bonus(&heavy) == 15);
+    assert(smithing_stat_bonus(&mail) == 15);
+    assert(smithing_stat_bonus(&ring) == 15);
+    assert(ability_stat_requirements_met(
+        &b_info[ability_index(S_SMT, SMT_MASTERPIECE)]));
+    p_ptr->active_ability[S_SMT][SMT_EXPERTISE] = true;
+    assert(smithing_mastery_stat_bonus_scaled(SMT_EXPERTISE) == 500);
+    p_ptr->active_ability[S_SMT][SMT_EXPERTISE] = false;
+    ability_type non_smith = {0};
+    non_smith.skilltype = S_MEL; non_smith.stat_req[A_STR] = 4;
+    assert(!ability_stat_requirements_met(&non_smith));
+    current_character_profile = &c_info[22];
+    assert(affinity_level(S_SMT) == 0);
+    assert(smithing_affinity_stat_bonus() == 0);
+    assert(smithing_effective_stat(A_DEX) == 3);
+    assert(smithing_stat_bonus(&heavy) == 9);
+    rp_ptr = saved_race; current_character_profile = saved_profile;
+    puts("Dwarven Smithing: affinity +1, mastery +2, and a cancelled affinity +0 affect only Smithing stats PASS.");
     assert(smithing_effective_skill(&heavy) == 21);
     p_ptr->active_ability[S_SMT][SMT_EXPERTISE] = true;
     assert(smithing_effective_skill(&heavy) == 24);
@@ -614,7 +864,8 @@ def main():
     objects = shlex.split((cmake / "objects1.rsp").read_text())
     omit = ("/src/main.c.obj", "/src/cmd/ui/cmd-ui-smithing.c.obj",
             "/src/cmd/ui/cmd-ui-abilities.c.obj", "/src/fs/save.c.obj", "/src/fs/load.c.obj",
-            "/src/birth/birth-blitz.c.obj", "/src/sdl/ui/sdl-screens.c.obj")
+            "/src/birth/birth-blitz.c.obj", "/src/sdl/ui/sdl-screens.c.obj",
+            "/src/cmd/ui/cmd-ui-character.c.obj", "/src/sdl/core/sdl-layout.c.obj")
     objects = [obj for obj in objects if not obj.endswith(omit)]
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + obj + '"' for obj in objects))
@@ -647,7 +898,8 @@ def main():
     smith = SMITH.replace("/* ORIGINAL_DIFFICULTY */", old_smith)
     for name, code in (("smith.c", smith), ("abilities.c", ABILITIES), ("main.c", MAIN),
                        ("writer.c", WRITER), ("reader.c", reader), ("old-player.c", old),
-                       ("birth.c", birth), ("sdl-ui.c", SDL_UI)):
+                       ("birth.c", birth), ("sdl-ui.c", SDL_UI),
+                       ("character.c", CHARACTER), ("mobile-layout.c", MOBILE_LAYOUT)):
         source = OUT / name
         source.write_text(code, encoding="utf-8")
         sources.append(str(source))

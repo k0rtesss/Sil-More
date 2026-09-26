@@ -3444,6 +3444,7 @@ int sdl_char_sheet_collect_traits(sdl_char_sheet_line* lines,
     ADD_UNIQUE_U("Woven Master", UNQ_WOVEN_MASTER, TERM_VIOLET);
     ADD_UNIQUE("Gift of Eru", RHF_GIFTERU, TERM_VIOLET);
     ADD_UNIQUE("Seafarer", RHF_FREE, TERM_VIOLET);
+    ADD_UNIQUE("Dwarven Smithing", RHF_DWARVEN_SMITHING, TERM_VIOLET);
     ADD_UNIQUE("Kinslayer", RHF_KINSLAYER, TERM_UMBER);
     ADD_UNIQUE("Treacherous", RHF_TREACHERY, TERM_UMBER);
     ADD_UNIQUE("Doom of Mandos", RHF_CURSE, TERM_UMBER);

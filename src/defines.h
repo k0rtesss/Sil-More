@@ -2381,7 +2381,8 @@
 #define RHF_FREE 0x00800000L
 #define RHF_MOR_CURSE 0x01000000L
 #define RHF_KHELED_ZARAM 0x02000000L
-#define RHF_RHFXXX27 0x04000000L
+#define RHF_DWARVEN_SMITHING                                                   \
+    0x04000000L /* Smithing affinities add to stats used for Smithing */
 #define RHF_RHFXXX28 0x08000000L
 #define RHF_RHFXXX29 0x10000000L
 #define RHF_RHFXXX30 0x20000000L

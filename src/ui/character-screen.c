@@ -759,6 +759,7 @@ void display_player_xtra_info(int mode)
     HANDLE_UNIQUE_U("Woven Master",       UNQ_WOVEN_MASTER, TERM_VIOLET);
     HANDLE_UNIQUE("Gift of Eru",          RHF_GIFTERU,      TERM_VIOLET);
     HANDLE_UNIQUE("Seafarer",             RHF_FREE,         TERM_VIOLET);
+    HANDLE_UNIQUE("Dwarven Smithing",     RHF_DWARVEN_SMITHING, TERM_VIOLET);
 
     HANDLE_UNIQUE("Kinslayer",            RHF_KINSLAYER,    TERM_UMBER);
     HANDLE_UNIQUE("Treacherous",          RHF_TREACHERY,    TERM_UMBER);
@@ -1459,6 +1460,7 @@ static int collect_compact_trait_lines(compact_trait_line* out, int out_max)
     HANDLE_UNIQUE_U("Woven Master",       UNQ_WOVEN_MASTER, TERM_VIOLET);
     HANDLE_UNIQUE("Gift of Eru",          RHF_GIFTERU,      TERM_VIOLET);
     HANDLE_UNIQUE("Seafarer",             RHF_FREE,         TERM_VIOLET);
+    HANDLE_UNIQUE("Dwarven Smithing",     RHF_DWARVEN_SMITHING, TERM_VIOLET);
 
     HANDLE_UNIQUE("Kinslayer",            RHF_KINSLAYER,    TERM_UMBER);
     HANDLE_UNIQUE("Treacherous",          RHF_TREACHERY,    TERM_UMBER);

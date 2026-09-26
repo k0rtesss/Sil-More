@@ -24,6 +24,41 @@ int player_permanent_stat(int stat)
     return MAX(BASE_STAT_MIN, MIN(BASE_STAT_MAX, value));
 }
 
+int smithing_affinity_stat_bonus(void)
+{
+    u32b flags;
+
+    if (!rp_ptr || !current_character_profile) return 0;
+    flags = rp_ptr->flags | current_character_profile->flags;
+    if (!(flags & RHF_DWARVEN_SMITHING)) return 0;
+    return MAX(0, affinity_level(S_SMT));
+}
+
+int smithing_effective_stat(int stat)
+{
+    if (stat < 0 || stat >= A_MAX) return 0;
+    return player_permanent_stat(stat) + smithing_affinity_stat_bonus();
+}
+
+int ability_required_skill(const ability_type* ability, int skill)
+{
+    if (!ability || skill < 0 || skill >= S_MAX) return 0;
+    return MAX(ability->skill_req[skill],
+        skill == ability->skilltype ? ability->level : 0);
+}
+
+bool ability_skill_requirements_met(const ability_type* ability)
+{
+    if (!ability || !p_ptr) return false;
+    for (int skill = 0; skill < S_MAX; ++skill)
+    {
+        int need = ability_required_skill(ability, skill);
+        if (need > 0 && p_ptr->skill_base[skill] < need)
+            return false;
+    }
+    return true;
+}
+
 bool ability_stat_requirements_met(const ability_type* ability)
 {
     if (!ability) return false;
@@ -31,7 +66,9 @@ bool ability_stat_requirements_met(const ability_type* ability)
         return false;
     for (int i = 0; i < A_MAX; ++i)
         if (ability->stat_req[i] > 0
-            && player_permanent_stat(i) < ability->stat_req[i])
+            && (ability->skilltype == S_SMT ? smithing_effective_stat(i)
+                                            : player_permanent_stat(i))
+                < ability->stat_req[i])
             return false;
     return true;
 }
@@ -45,7 +82,10 @@ int ability_stat_score_scaled(const ability_type* ability, bool permanent)
     for (int i = 0; i < A_MAX; ++i)
         if (ability->stat_score_weight_set[i])
             scaled += ability->stat_score_weight[i]
-                * (permanent ? player_permanent_stat(i) : p_ptr->stat_use[i]);
+                * (permanent
+                    ? (ability->skilltype == S_SMT ? smithing_effective_stat(i)
+                                                   : player_permanent_stat(i))
+                    : p_ptr->stat_use[i]);
     return scaled;
 }
 
@@ -119,7 +159,7 @@ int smithing_mastery_stat_bonus_scaled(int abilitynum)
 int smithing_common_stat_bonus_scaled(void)
 {
     static const int masteries[] = { SMT_EXPERTISE, SMT_ENCHANTMENT, SMT_ARTEFACT };
-    int scaled = 100 * (player_permanent_stat(A_DEX) + player_permanent_stat(A_GRA));
+    int scaled = 100 * (smithing_effective_stat(A_DEX) + smithing_effective_stat(A_GRA));
     for (size_t i = 0; i < N_ELEMENTS(masteries); ++i)
         scaled += smithing_mastery_stat_bonus_scaled(masteries[i]);
     return scaled;
@@ -136,9 +176,9 @@ int smithing_category_stat_bonus_scaled(const object_type* object)
     switch (smithing_stat_category(object))
     {
     case CRAFT_HEAVY:
-        return 50 * (player_permanent_stat(A_STR) + player_permanent_stat(A_DEX));
-    case CRAFT_JEWELLERY: return 100 * player_permanent_stat(A_GRA);
-    default: return 100 * player_permanent_stat(A_DEX);
+        return 50 * (smithing_effective_stat(A_STR) + smithing_effective_stat(A_DEX));
+    case CRAFT_JEWELLERY: return 100 * smithing_effective_stat(A_GRA);
+    default: return 100 * smithing_effective_stat(A_DEX);
     }
 }
 

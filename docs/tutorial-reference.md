@@ -2426,7 +2426,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Arrows gain one extra critical damage die against sleeping or unwary enemies. Alert targets do not provide this benefit.
+Learning requires 6 base Archery and 3 base Stealth. Arrows gain one extra critical damage die against sleeping or unwary enemies. Alert targets do not provide this benefit.
 
 Trigger: Public ability preview or newly available ability; raw serial 24, skill 1, ability slot 4.
 
@@ -2622,7 +2622,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-While wearing only light armour, moving between two squares beside an enemy grants a free melee attack against it. The move must keep you adjacent to that enemy.
+Learning requires 8 base Evasion and Dodging, or Quick Study in place of Dodging. While wearing only light armour, moving between two squares beside an enemy grants a free melee attack against it. The move must keep you adjacent to that enemy.
 
 Trigger: Public ability preview or newly available ability; raw serial 46, skill 2, ability slot 6.
 
@@ -3136,7 +3136,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Lower the morale of enemies whose Will is lower than yours. A larger Will advantage creates more pressure to flee.
+Learning requires 9 base Will and either Formidable or Inner Light; Quick Study can bypass the ability prerequisite. Lower the morale of enemies whose Will is lower than yours. A larger Will advantage creates more pressure to flee.
 
 Trigger: Public ability preview or newly available ability; raw serial 109, skill 5, ability slot 9.
 
@@ -3472,7 +3472,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-A critical melee hit slays its target if the target's Health is at most twice your effective Song. It must be a critical hit; ordinary hits do not trigger this effect.
+Learning requires 6 base Song and either Song of Challenge or Formidable; Quick Study can bypass the ability prerequisite. A critical melee hit slays its target if the target's Health is at most twice your effective Song. It must be a critical hit; ordinary hits do not trigger this effect.
 
 Trigger: Public ability preview or newly available ability; raw serial 149, skill 7, ability slot 10.
 
@@ -3618,7 +3618,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Contest challenges one eligible foe to repeated opposed rolls. Winning permanently reduces its Will, Stealth, Evasion and armour dice. Losing drains one randomly chosen attribute by 1. A completed duel stops the song and locks singing for 10 turns; you cannot repeat the same completed duel against that foe.
+Learning requires 12 base Song, 5 base Will, and either Song of Staying, Song of Disguise or Song of Mastery. Quick Study bypasses the ability prerequisite, but both skills are still required. Contest challenges one eligible foe to repeated opposed rolls. Winning permanently reduces its Will, Stealth, Evasion and armour dice. Losing drains one randomly chosen attribute by 1. A completed duel stops the song and locks singing for 10 turns; you cannot repeat the same completed duel against that foe.
 
 Trigger: Public ability preview or newly available ability; raw serial 158, skill 7, ability slot 18.
 

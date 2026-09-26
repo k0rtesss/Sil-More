@@ -562,7 +562,9 @@ flag_name info_flags_desc[] = {
 { "Can steal a Silmaril in the end", RHF, RHF_TREACHERY },
 { "Decreased ability price", RHF, RHF_FREE },
 { "Encounter more dangerous creatures", RHF, RHF_MOR_CURSE },
-{ "Kheled-zaram gives +30 bonus to identification", RHF, RHF_KHELED_ZARAM }
+{ "Kheled-zaram gives +30 bonus to identification", RHF, RHF_KHELED_ZARAM },
+{ "Each positive Smithing affinity level adds +1 to every stat for Smithing", RHF,
+    RHF_DWARVEN_SMITHING }
 };
 
 const size_t info_flags_desc_n = sizeof(info_flags_desc) / sizeof(info_flags_desc[0]);

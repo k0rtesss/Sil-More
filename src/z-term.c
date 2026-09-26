@@ -2469,30 +2469,13 @@ errr Term_save(void)
     return (0);
 }
 
-/*
- * Restore the "requested" contents (see above).
- *
- * Every "Term_save()" should match exactly one "Term_load()"
- */
-errr Term_load(void)
+/* Invalidate every rendered plane after restoring saved terminal contents. */
+static void term_invalidate_restored_screen(void)
 {
     int y, x;
 
     int w = Term->wid;
     int h = Term->hgt;
-
-    /* Create */
-    if (!Term->mem)
-    {
-        /* Allocate window */
-        Term->mem = mem_alloc(term_win);
-
-        /* Initialize window */
-        term_win_init(Term->mem, w, h);
-    }
-
-    /* Load */
-    term_win_copy(Term->scr, Term->mem, w, h);
 
     /* CRITICAL FIX: Invalidate the old buffer to force redraw
      * Without this, Term_fresh_row_pict may skip cells that appear unchanged
@@ -2530,9 +2513,58 @@ errr Term_load(void)
     /* Assume change */
     Term->y1 = 0;
     Term->y2 = h - 1;
+}
 
-    /* Success */
-    return (0);
+/* Restore the ordinary Term_save() buffer. */
+errr Term_load(void)
+{
+    if (!Term->mem)
+    {
+        Term->mem = mem_alloc(term_win);
+        term_win_init(Term->mem, Term->wid, Term->hgt);
+    }
+    term_win_copy(Term->scr, Term->mem, Term->wid, Term->hgt);
+    term_invalidate_restored_screen();
+    return 0;
+}
+
+struct term_snapshot
+{
+    term* owner;
+    int wid, hgt;
+    term_win window;
+};
+
+term_snapshot* Term_snapshot_save(void)
+{
+    term_snapshot* snapshot = mem_alloc(term_snapshot);
+    snapshot->owner = Term;
+    snapshot->wid = Term->wid;
+    snapshot->hgt = Term->hgt;
+    term_win_init(&snapshot->window, snapshot->wid, snapshot->hgt);
+    term_win_copy(&snapshot->window, Term->scr, snapshot->wid, snapshot->hgt);
+    return snapshot;
+}
+
+errr Term_snapshot_load(term_snapshot* snapshot)
+{
+    if (!snapshot) return -1;
+    bool same_term = (Term == snapshot->owner);
+    if (same_term)
+    {
+        /* Resizing a modal must not leave report text outside the saved area. */
+        for (int y = 0; y < Term->hgt; ++y)
+            Term_erase(0, y, Term->wid);
+        term_win_copy(Term->scr, &snapshot->window,
+            MIN(Term->wid, snapshot->wid), MIN(Term->hgt, snapshot->hgt));
+        if (Term->scr->cx >= Term->wid || Term->scr->cy >= Term->hgt)
+            Term->scr->cu = true;
+        term_invalidate_restored_screen();
+    }
+    term_win_nuke(&snapshot->window);
+    mem_free(snapshot);
+
+    return same_term ? 0 : -1;
 }
 
 /*

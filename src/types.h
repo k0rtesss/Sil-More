@@ -318,6 +318,7 @@ struct ability_type
     byte carriage_target; /* ABILITY_CARRIAGE_* target, if any */
     byte carriage_reduction_percent; /* Learned ability reduction */
     byte stat_req[A_MAX]; /* Minimum permanent character stats (R:) */
+    byte skill_req[S_MAX]; /* Additional invested skill ranks (R:) */
     byte lore_req; /* Optional Lore beta requirement */
     byte knowledge_cost; /* K: knowledge price when Lore beta is enabled */
     byte score_weights_set; /* Explicit S: coefficients, 100 = x1 */
