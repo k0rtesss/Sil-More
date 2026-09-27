@@ -1234,6 +1234,7 @@ extern int p_max(int typ, bool melee);
 extern int get_sides(int attack);
 extern int dodging_bonus(void);
 extern bool blocking_bonus_active(void);
+extern bool player_moved_last_turn(void);
 extern bool make_attack_normal(monster_type* m_ptr);
 extern bool make_attack_reaction(monster_type* m_ptr);
 extern bool make_attack_ranged(monster_type* m_ptr, int attack);

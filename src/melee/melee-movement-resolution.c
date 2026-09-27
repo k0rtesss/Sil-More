@@ -335,9 +335,26 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
     /* The grid is occupied by the player. */
     if (cave_m_idx[ny][nx] < 0)
     {
-        // unalert monsters notice the player instead of attacking
+        // Unalert monsters normally notice the player instead of attacking.
         if (m_ptr->alertness < ALERTNESS_ALERT)
         {
+            if (p_ptr->active_ability[S_STL][STL_ASSASSINATION]
+                && player_active_weapon_is_melee()
+                && !(r_ptr->flags1 & RF1_PEACEFUL)
+                && !p_ptr->truce && !p_ptr->confused && !p_ptr->afraid
+                && !p_ptr->entranced && (p_ptr->stun <= 100))
+            {
+                char m_name[80];
+
+                monster_desc(m_name, sizeof(m_name), m_ptr, 0);
+                msg_format("%^s bumps into you, and you strike first.",
+                    m_name);
+                py_attack_aux(m_ptr->fy, m_ptr->fx, ATT_OPPORTUNITY);
+
+                if (!m_ptr->r_idx || p_ptr->is_dead)
+                    return;
+            }
+
             set_alertness(
                 m_ptr, rand_range(ALERTNESS_ALERT, ALERTNESS_ALERT + 5));
 

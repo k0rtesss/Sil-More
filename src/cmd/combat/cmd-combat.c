@@ -1546,6 +1546,16 @@ bool is_normal_attack(int attack_type)
         || (attack_type == ATT_IMPALE);
 }
 
+/* A stationary player can turn an opportunity attack against an unaware
+ * contact into an assassination attack. Keep this separate from
+ * is_normal_attack(): opportunity attacks still need their one-blow,
+ * no-charge behavior. */
+static bool assassination_bonus_attack(int attack_type)
+{
+    return is_normal_attack(attack_type)
+        || (attack_type == ATT_OPPORTUNITY && !player_moved_last_turn());
+}
+
 extern bool check_hit(int power, bool display_roll)
 {
     if (hit_roll(power, p_ptr->skill_use[S_EVN] + dodging_bonus(), NULL, PLAYER,
@@ -3105,9 +3115,13 @@ void py_attack_aux(int y, int x, int attack_type)
             continue;
         }
 
-        if (is_normal_attack(attack_type))
+        if (assassination_bonus_attack(attack_type))
         {
-            assassination_bonus = stealth_melee_bonus(m_ptr, false);
+            /* Contact tells us the exact square even when the monster was
+             * not visible, so the new bump reaction can use the same stealth
+             * bonus as a well-placed known attack. */
+            assassination_bonus = stealth_melee_bonus(
+                m_ptr, attack_type == ATT_OPPORTUNITY);
         }
         else
         {
@@ -3142,7 +3156,7 @@ void py_attack_aux(int y, int x, int attack_type)
 
         // reward attacks on unaware monsters for characters with the
         // assassination ability, unless charge takes priority
-        if (is_normal_attack(attack_type) && !charge)
+        if (assassination_bonus_attack(attack_type) && !charge)
         {
             stealth_bonus = assassination_bonus;
         }

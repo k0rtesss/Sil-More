@@ -4199,7 +4199,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Gain a melee Attack bonus equal to your Stealth against enemies that are not alert, or enemies currently fooled by Song of Disguise.",
+          "text": "Gain a melee Attack bonus equal to your Stealth against enemies that are not alert, or enemies currently fooled by Song of Disguise. An unaware monster that bumps into you provokes a free melee attack; if you did not move on your previous turn, the attack gains this bonus.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -4213,7 +4213,8 @@
         "src/melee/melee-process.c",
         "src/birth/birth-traits.c",
         "src/cmd/combat/cmd-combat.c",
-        "src/cmd/ui/cmd-ui-abilities.c"
+        "src/cmd/ui/cmd-ui-abilities.c",
+        "src/melee/melee-movement-resolution.c"
       ],
       "ability": {
         "serial": 61,
@@ -4225,7 +4226,8 @@
         "runtime_sources": [
           "src/birth/birth-traits.c",
           "src/cmd/combat/cmd-combat.c",
-          "src/cmd/ui/cmd-ui-abilities.c"
+          "src/cmd/ui/cmd-ui-abilities.c",
+          "src/melee/melee-movement-resolution.c"
         ]
       },
       "category": "Stealth"

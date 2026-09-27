@@ -126,6 +126,88 @@ static void check_attack_energy(void)
     r_info[405].flags1 = third_flags;
     puts("Combat energy: peaceful/refused automatic attacks retain action cost; direct bump and fully refused Rage refund; Rage with a later attack spends its turn: PASS.");
 }
+
+static void check_assassination_bump(void)
+{
+    monster_type* m;
+    int assassination_attack;
+    int moving_attack;
+
+    /* A stationary contact with a visible, unaware monster gets the full
+     * stealth contribution in the recorded attack score. */
+    m = combat_fixture(403, 0);
+    object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    p_ptr->skill_use[S_MEL] = 100;
+    p_ptr->skill_use[S_STL] = 7;
+    p_ptr->mdd = p_ptr->mds = 1;
+    p_ptr->active_ability[S_STL][STL_ASSASSINATION] = true;
+    p_ptr->previous_action[0] = ACTION_MISC;
+    m->alertness = ALERTNESS_UNWARY;
+    m->ml = true;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    process_move(m, p_ptr->py, p_ptr->px, false);
+    assert(combat_number == 1);
+    assassination_attack = combat_rolls[0][0].att;
+    assert(m->alertness >= ALERTNESS_ALERT);
+
+    /* The same opportunity attack without Assassination loses exactly the
+     * stealth contribution. */
+    m = combat_fixture(403, 0);
+    object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    p_ptr->skill_use[S_MEL] = 100;
+    p_ptr->skill_use[S_STL] = 7;
+    p_ptr->mdd = p_ptr->mds = 1;
+    p_ptr->previous_action[0] = ACTION_MISC;
+    m->alertness = ALERTNESS_UNWARY;
+    m->ml = true;
+    py_attack_aux(m->fy, m->fx, ATT_OPPORTUNITY);
+    assert(combat_number == 1);
+    assert(assassination_attack == combat_rolls[0][0].att + 7);
+
+    /* Contact with an unseen monster still triggers the reaction and uses
+     * the exact contact square for the stealth calculation. */
+    m = combat_fixture(403, 0);
+    object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    p_ptr->skill_use[S_MEL] = 100;
+    p_ptr->skill_use[S_STL] = 7;
+    p_ptr->mdd = p_ptr->mds = 1;
+    p_ptr->active_ability[S_STL][STL_ASSASSINATION] = true;
+    p_ptr->previous_action[0] = ACTION_MISC;
+    m->alertness = ALERTNESS_UNWARY;
+    m->ml = false;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    process_move(m, p_ptr->py, p_ptr->px, false);
+    assert(combat_number == 1);
+
+    /* Moving on the previous turn still permits the contact attack, but it
+     * does not prepare the Assassination bonus. */
+    m = combat_fixture(403, 0);
+    object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    p_ptr->skill_use[S_MEL] = 100;
+    p_ptr->skill_use[S_STL] = 7;
+    p_ptr->mdd = p_ptr->mds = 1;
+    p_ptr->active_ability[S_STL][STL_ASSASSINATION] = true;
+    p_ptr->previous_action[0] = 6;
+    m->alertness = ALERTNESS_UNWARY;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    process_move(m, p_ptr->py, p_ptr->px, false);
+    assert(combat_number == 1);
+    moving_attack = combat_rolls[0][0].att;
+    assert(m->alertness >= ALERTNESS_ALERT);
+
+    m = combat_fixture(403, 0);
+    object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    p_ptr->skill_use[S_MEL] = 100;
+    p_ptr->skill_use[S_STL] = 7;
+    p_ptr->mdd = p_ptr->mds = 1;
+    p_ptr->previous_action[0] = 6;
+    m->alertness = ALERTNESS_UNWARY;
+    py_attack_aux(m->fy, m->fx, ATT_OPPORTUNITY);
+    assert(combat_number == 1);
+    assert(moving_attack == combat_rolls[0][0].att);
+
+    puts("Assassination: unaware bumps make one free opportunity attack; standing still adds the stealth bonus: PASS.");
+}
 '''
 
 
@@ -135,7 +217,7 @@ def main():
     source = out / "check.c"
     harness = engine.HARNESS.replace(
         "int main(int argc,char** argv)", CHECKS + "\nint main(int argc,char** argv)")
-    harness = harness.replace("    check_combat();", "    check_attack_energy();\n    check_interrupted_monster_move();")
+    harness = harness.replace("    check_combat();", "    check_attack_energy();\n    check_assassination_bump();\n    check_interrupted_monster_move();")
     source.write_text(harness, encoding="utf-8")
     cmake = engine.BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())

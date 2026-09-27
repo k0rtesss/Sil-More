@@ -407,7 +407,7 @@ T:45:0:99  # Ring
 N:61:Assassination
 I:3:1:4
 D:Striking from the shadows as the guerrilla fighters of Barahir's outlaw band struck at Morgoth's servants in the highlands of Dorthonion. Those who move unseen learn to exploit the moment of surprise, for a blade guided by stealth finds its mark far more surely than one wielded in open combat.
-E:Melee bonus equal to your Stealth score vs non-alert creatures and monsters fooled by Song of Disguise.
+E:Melee bonus equal to your Stealth score vs non-alert creatures and monsters fooled by Song of Disguise. An unaware monster that bumps into you provokes a free attack of opportunity; if you did not move on your previous turn, the attack gains this bonus.
 T:21:0:99  # Hafted
 T:22:0:99  # Polearms
 T:23:0:99  # Swords

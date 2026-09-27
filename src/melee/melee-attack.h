@@ -7,6 +7,7 @@ typedef struct monster_type monster_type;
 typedef struct object_type object_type;
 
 extern bool blocking_bonus_active(void);
+extern bool player_moved_last_turn(void);
 extern int elem_bonus(int effect);
 extern int protection_roll(int typ, bool melee);
 extern int p_min(int typ, bool melee);

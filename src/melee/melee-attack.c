@@ -36,6 +36,14 @@ static bool monster_cut_or_stun(int crit_bonus_dice, int net_dam, int effect)
     return (false);
 }
 
+bool player_moved_last_turn(void)
+{
+    int action = p_ptr->previous_action[0];
+
+    return ((action >= 1) && (action <= 9) && (action != 5))
+        || (action == ACTION_BASH);
+}
+
 bool blocking_bonus_active(void)
 {
     bool moved_last_turn = (p_ptr->previous_action[0] >= 1)

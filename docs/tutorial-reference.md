@@ -2718,11 +2718,11 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Gain a melee Attack bonus equal to your Stealth against enemies that are not alert, or enemies currently fooled by Song of Disguise.
+Gain a melee Attack bonus equal to your Stealth against enemies that are not alert, or enemies currently fooled by Song of Disguise. An unaware monster that bumps into you provokes a free melee attack; if you did not move on your previous turn, the attack gains this bonus.
 
 Trigger: Public ability preview or newly available ability; raw serial 61, skill 3, ability slot 1.
 
-Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-traits.c`, `src/cmd/combat/cmd-combat.c`, `src/cmd/ui/cmd-ui-abilities.c`.
+Sources: `lib/edit/ability.txt`, `src/melee/melee-process.c`, `src/birth/birth-traits.c`, `src/cmd/combat/cmd-combat.c`, `src/cmd/ui/cmd-ui-abilities.c`, `src/melee/melee-movement-resolution.c`.
 
 ## Cruel Blow
 
