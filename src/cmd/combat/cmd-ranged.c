@@ -1,4 +1,7 @@
 #include "angband.h"
+#include "quest/quest-rewards-beta.h"
+#include "quest/quest-runtime.h"
+#include "quest/quest-challenges.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "item_set.h"
@@ -408,6 +411,7 @@ static void restore_target_after_implicit_fire(
 
 void do_cmd_fire(int quiver)
 {
+    if (quest_challenge_forbid_ranged()) return;
     if (player_submerged_in_deep_water())
     {
         msg_print("You cannot attack while submerged in deep water.");
@@ -977,6 +981,7 @@ void do_cmd_fire(int quiver)
                     if (net_dam < 0)
                         net_dam = 0;
 
+                    quest_beta_bow_hit(net_dam);
                     sound_at((net_dam > 0) ? MSG_HIT : MSG_ARMOR, y, x);
 
                     break_mercy_oath(m_ptr, net_dam);
@@ -1252,6 +1257,7 @@ void do_cmd_fire(int quiver)
                 // if it misses the monster...
                 else
                 {
+                    quest_beta_bow_miss();
                     // there is at least one target left on the trajectory
                     targets_remaining = true;
                 }
@@ -1772,6 +1778,10 @@ static bool select_throw_slot(int* item)
  */
 void do_cmd_throw(bool automatic)
 {
+    if (quest_challenge_forbid_ranged()) {
+        throw_pending_slot = THROW_PENDING_NONE;
+        return;
+    }
     if (player_submerged_in_deep_water())
     {
         throw_pending_slot = THROW_PENDING_NONE;

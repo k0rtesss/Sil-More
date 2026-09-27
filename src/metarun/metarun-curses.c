@@ -1,4 +1,6 @@
 #include "angband.h"
+#include "quest/quest-rewards-beta.h"
+#include "quest/quest-runtime.h"
 #include "metarun-internal.h"
 
 int any_curse_flag_active(u32b flag)
@@ -133,6 +135,8 @@ void add_curse_stack(int idx)
         log_debug("Curse %d (%s) already at max stacks", idx, cu_name + cu_info[idx].name);
         return;
     }
+
+    if (quest_beta_cleanse_curse()) return;
 
     CURSE_ADD(idx, 1);
     log_info("Added curse stack: %s (now %d stacks)", cu_name + cu_info[idx].name, CURSE_GET(idx));

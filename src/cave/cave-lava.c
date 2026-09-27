@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "externs.h"
 #include "player/killer.h"
 #include "cave/cave-bridge.h"
@@ -126,6 +127,7 @@ bool monster_lava_exposure(int m_idx)
      * and race bookkeeping through the ordinary death routine first. */
     if (!flying || m_ptr->hp <= LAVA_FLYING_DAMAGE)
     {
+        if (m_ptr->mflag & MFLAG_PLAYER_PUSH) quest_followup_kill(m_ptr->r_idx);
         monster_death(m_idx);
         delete_monster_idx(m_idx);
         return true;

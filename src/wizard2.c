@@ -9,6 +9,8 @@
  */
 
 #include "angband.h"
+#include "quest/quest-runtime.h"
+#include "quest/quest-challenges.h"
 #include "blitz.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
@@ -2991,6 +2993,70 @@ static void do_cmd_debug_quest_texts(void)
     }
 }
 
+static void do_cmd_debug_quest_lab(void)
+{
+    debug_menu_entry entries[16];
+    char labels[16][160];
+    for (int id = 1; id <= 16; ++id) {
+        strnfmt(labels[id - 1], sizeof(labels[id - 1]), "%02d  %s%s", id,
+            quest_display_title(id), quest_enabled(id) ? "" : " [disabled]");
+        entries[id - 1] = (debug_menu_entry){ (char)('a' + id - 1), 0,
+            labels[id - 1], id <= 6 ? TERM_L_WHITE : TERM_YELLOW };
+    }
+    int selected = debug_overlay_choose_index("Quest laboratory",
+        "Original quests 1-6; recovered quests 7-16. Starting a fixture permanently marks this character as a sandbox; its quests cannot change Tale history.",
+        entries, N_ELEMENTS(entries));
+    if (selected < 0) return;
+    int id = selected + 1;
+    char status[256];
+    quest_debug_status(id, status, sizeof(status));
+    static const debug_menu_entry actions[] = {
+        {'i', 'i', "Inspect status and requirements", TERM_L_WHITE},
+        {'h', 'h', "Test quest challenge rules (sandbox)", TERM_YELLOW},
+        {'t', 't', "Toggle this quest for testing", TERM_YELLOW},
+        {'s', 's', "Start quest / spawn giver (sandbox)", TERM_L_GREEN},
+        {'v', 'v', "Generate this quest's vault (sandbox)", TERM_L_GREEN},
+        {'k', 'k', "Inject a target kill by race ID (sandbox)", TERM_YELLOW},
+        {'c', 'c', "Complete objective / claim reward (sandbox)", TERM_YELLOW},
+        {'r', 'r', "Reset objective progress (sandbox)", TERM_L_RED},
+        {'a', 'a', "Read introduction", TERM_L_WHITE},
+        {'z', 'z', "Read completion text", TERM_L_WHITE}
+    };
+    char action = debug_overlay_choose_command(quest_display_title(id), status,
+        actions, N_ELEMENTS(actions));
+    switch (action) {
+    case 'i':
+        msg_print(status);
+        msg_print(q_text + quest_info[id].challenge_text);
+        msg_format("Owner %d, stage %d, depths %d-%d, prerequisite available: %s.",
+            quest_info[id].vala_id, quest_info[id].sequence,
+            quest_info[id].depth_min, quest_info[id].depth_max,
+            check_quest_eligibility(id, p_ptr->depth) ? "yes" : "no");
+        break;
+    case 'h': quest_debug_choose_challenge(); break;
+    case 't': quest_set_enabled(id, !quest_enabled(id)); break;
+    case 's': quest_debug_start(id); break;
+    case 'v':
+        quest_debug_reset(id);
+        if (!quest_debug_prepare_vault(id)) msg_print("No available vault fixture for this quest.");
+        break;
+    case 'k': {
+        int race;
+        if (debug_overlay_get_int("Quest kill event", "Race ID to feed to active test quests.",
+            1, 1, z_info->r_max - 1, &race)) {
+            p_ptr->quest_test_sandbox = 1;
+            quest_followup_kill(race);
+            quest_followup_update();
+        }
+        break;
+    }
+    case 'c': quest_debug_complete(id); break;
+    case 'r': quest_debug_reset(id); break;
+    case 'a': do_cmd_debug_show_quest_text(id, false); break;
+    case 'z': do_cmd_debug_show_quest_text(id, true); break;
+    }
+}
+
 static bool debug_overlay_choose_preview_number(cptr title, cptr desc,
     int minimum, int maximum, int* out)
 {
@@ -3171,6 +3237,7 @@ static const debug_menu_entry debug_menu_system[] = {
     { '?', '?', "Help (?)", TERM_L_BLUE },
     { 'O', 'O', "Debug options (O)", TERM_L_WHITE },
     { 'Q', 'Q', "Show quest intro/completion text (Q)", TERM_YELLOW },
+    { 'J', 'J', "Quest laboratory: individual quests and fixtures (J)", TERM_YELLOW },
     { '2', '2', "Complete current quest (2)", TERM_L_RED },
     { '3', '3', "Check Orome quest status (3)", TERM_L_WHITE },
     { '4', '4', "Spawn all quest Valar for tile inspection (4)", TERM_ORANGE },
@@ -3531,6 +3598,10 @@ static void do_cmd_debug_execute(char cmd)
         do_cmd_wiz_query();
         break;
     }
+
+    case 'J':
+        do_cmd_debug_quest_lab();
+        break;
 
     /* Show quest intro/completion text */
     case 'Q':

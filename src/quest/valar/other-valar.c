@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -27,8 +28,8 @@ static bool is_brodda_dead(void)
         }
     }
 
-    log_trace("Brodda has been slain");
-    return true;
+    return r_info && z_info && R_IDX_ALDOR < z_info->r_max
+        && r_info[R_IDX_ALDOR].max_num == 0;
 }
 
 /*
@@ -36,6 +37,7 @@ static bool is_brodda_dead(void)
  */
 void check_aule_quest_interaction(void)
 {
+    if (!quest_enabled(QUEST_ID_AULE)) return;
     int i, y, x;
 
     /* Only check if quest is in appropriate state */
@@ -88,6 +90,8 @@ void check_aule_quest_interaction(void)
  */
 void aule_quest_interaction(void)
 {
+    if (quest_followup_interaction(R_IDX_AULE)) return;
+    if (!quest_enabled(QUEST_ID_AULE)) return;
     /* Prevent multiple interactions in the same turn */
     static int last_interaction_turn = -1;
     if (last_interaction_turn == turn) {
@@ -229,6 +233,8 @@ void aule_quest_interaction(void)
  */
 void mandos_quest_interaction(void)
 {
+    if (quest_followup_interaction(R_IDX_MANDOS)) return;
+    if (!quest_enabled(QUEST_ID_MANDOS)) return;
     /* Prevent multiple interactions in the same turn */
     static int last_interaction_turn = -1;
     if (last_interaction_turn == turn) {
@@ -404,6 +410,7 @@ void mandos_quest_interaction(void)
  */
 void check_mandos_quest_interaction(void)
 {
+    if (!quest_enabled(QUEST_ID_MANDOS)) return;
     int i, y, x;
     static s32b last_interaction_turn = -1;
 
@@ -465,6 +472,7 @@ void check_mandos_quest_interaction(void)
  */
 void check_mandos_quest_completion(int r_idx)
 {
+    if (!quest_enabled(QUEST_ID_MANDOS)) return;
     if (p_ptr->mandos_quest == MANDOS_QUEST_ACTIVE)
     {
         log_trace("Mandos quest: Checking completion after death of r_idx %d", r_idx);
@@ -488,6 +496,7 @@ void check_mandos_quest_completion(int r_idx)
  */
 void check_orome_quest_completion(void)
 {
+    if (!quest_enabled(QUEST_ID_OROME)) return;
     if (p_ptr->orome_quest == OROME_QUEST_ACTIVE) {
         /* Check thresholds for each monster type */
         bool quest_complete = false;
@@ -536,6 +545,8 @@ void check_orome_quest_completion(void)
  */
 void niena_quest_interaction(void)
 {
+    if (quest_followup_interaction(R_IDX_NIENA)) return;
+    if (!quest_enabled(QUEST_ID_NIENA)) return;
     /* Prevent multiple interactions in the same turn */
     static int last_interaction_turn = -1;
     if (last_interaction_turn == turn) {
@@ -709,6 +720,7 @@ void niena_quest_interaction(void)
  */
 void check_niena_quest_interaction(void)
 {
+    if (!quest_enabled(QUEST_ID_NIENA)) return;
     /* Only check if quest is in appropriate state */
     if (p_ptr->niena_quest != NIENA_QUEST_GIVER_PRESENT &&
         p_ptr->niena_quest != NIENA_QUEST_SUCCESS)
@@ -734,6 +746,7 @@ void check_niena_quest_interaction(void)
  */
 void check_niena_quest_completion(void)
 {
+    if (!quest_enabled(QUEST_ID_NIENA)) return;
     /* Only check if quest is active */
     if (p_ptr->niena_quest != NIENA_QUEST_ACTIVE) {
         return;
@@ -762,6 +775,8 @@ void check_niena_quest_completion(void)
  */
 void orome_quest_interaction(void)
 {
+    if (quest_followup_interaction(R_IDX_OROME)) return;
+    if (!quest_enabled(QUEST_ID_OROME)) return;
     /* Prevent multiple interactions in the same turn */
     static int last_interaction_turn = -1;
     if (last_interaction_turn == turn) {
@@ -906,6 +921,7 @@ void orome_quest_interaction(void)
  */
 void check_orome_quest_interaction(void)
 {
+    if (!quest_enabled(QUEST_ID_OROME)) return;
     /* Only check if quest can be started or completed */
     if (p_ptr->orome_quest != OROME_QUEST_GIVER_PRESENT &&
         p_ptr->orome_quest != OROME_QUEST_SUCCESS) {

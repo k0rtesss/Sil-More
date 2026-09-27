@@ -102,10 +102,7 @@ NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
     {
         bool steamdeck = steamdeck_controls_active();
         bool lore_enabled = lore_system_enabled();
-        int stat_count = lore_enabled ? BIRTH_STAT_MAX : A_MAX;
-
-        if (!lore_enabled)
-            stats[BIRTH_STAT_LORE] = 0;
+        int stat_count = A_MAX;
 
         /* Reset cost */
         cost = 0;
@@ -119,11 +116,10 @@ NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
             /* Apply the racial bonuses */
             p_ptr->stat_base[i] = stats[i] + bonus;
             p_ptr->stat_drain[i] = 0;
+            p_ptr->lore_stat_invested[i] = stats[i];
         }
 
-        p_ptr->lore = lore_enabled ? stats[BIRTH_STAT_LORE] : 0;
-
-        /* Total cost, including Lore only when the beta system is active. */
+        /* Bank the unspent allocation for later Lore purchases. */
         for (i = 0; i < stat_count; i++)
             cost += birth_stat_current_cost(stats[i]);
 
@@ -153,6 +149,8 @@ NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
             /* Recompute costs */
             continue;
         }
+
+        p_ptr->lore_points = lore_enabled ? MAX_COST - cost : 0;
 
         for (i = 0; i < BIRTH_STAT_MAX; i++)
             stat_costs[i] = (i < stat_count)
@@ -231,8 +229,6 @@ NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
             || (steamdeck && ch == steamdeck_alt_action_key()))
         {
             birth_recommended_stats(stats);
-            if (lore_enabled)
-                stats[BIRTH_STAT_LORE] = 0;
             continue;
         }
 

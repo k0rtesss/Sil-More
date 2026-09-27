@@ -6,6 +6,7 @@ Run build-incremental.ps1 first. Does not open or modify player saves.
 """
 from pathlib import Path
 import os
+import re
 import shlex
 import subprocess
 import tempfile
@@ -186,7 +187,6 @@ BIRTH = r'''
 /* ORIGINAL_FOUR_STAT_ALLOCATOR */
 void check_birth_allocation(void)
 {
-    bool saw_lore = false;
     for (int seed = 1; seed <= 100; ++seed)
     {
         int current[BIRTH_STAT_MAX], previous[A_MAX];
@@ -196,7 +196,7 @@ void check_birth_allocation(void)
         Rand_state_import(seed);
         original_four_stat_allocator(previous);
         assert(!memcmp(current, previous, sizeof(previous)));
-        assert(current[BIRTH_STAT_LORE] == 0);
+        assert(BIRTH_STAT_MAX == A_MAX);
         op_ptr->opt[OPT_lore_beta] = true;
         Rand_state_import(seed);
         blitz_auto_assign_stats(current);
@@ -207,11 +207,10 @@ void check_birth_allocation(void)
             cost += birth_stat_current_cost(current[i]);
         }
         assert(cost <= MAX_COST);
-        saw_lore |= current[BIRTH_STAT_LORE] > 0;
+        assert(!memcmp(current, previous, sizeof(previous)));
     }
-    assert(saw_lore);
     op_ptr->opt[OPT_lore_beta] = false;
-    puts("Birth allocation: 100 seeds identical to original with beta off; fifth stat charged within budget when on PASS.");
+    puts("Birth allocation: 100 seeds identical to original with beta off; four stats remain identical with beta on PASS.");
 }
 '''
 
@@ -576,46 +575,51 @@ void check_learning(void)
     puts("Parsed AND/OR prerequisites, permanent stat gates, Quick Study and atomic failure PASS.");
 
     assert(!lore_system_enabled());
-    p_ptr->lore = 0;
+    p_ptr->lore_points = 0;
     p_ptr->skill_base[S_PER] = 10;
     p_ptr->innate_ability[S_PER][PER_QUICK_STUDY] = true;
-    assert(!ability_uses_knowledge_points(S_PER, PER_QUICK_STUDY));
+    assert(!ability_uses_lore_points(S_PER, PER_QUICK_STUDY));
     assert(abilities_in_skill(S_PER) == 1);
     assert(prereqs(S_PER, PER_QUICK_STUDY));
     op_ptr->opt[OPT_lore_beta] = true;
-    assert(ability_uses_knowledge_points(S_PER, PER_QUICK_STUDY));
-    assert(!ability_uses_knowledge_points(S_SMT, SMT_EXPERTISE));
-    assert(b_info[ability_index(S_SMT, SMT_EXPERTISE)].lore_req == 0);
+    ability_type* quick = &b_info[ability_index(S_PER, PER_QUICK_STUDY)];
+    assert(ability_uses_lore_points(S_PER, PER_QUICK_STUDY));
+    assert(ability_in_lore_branch(quick));
+    assert(!ability_uses_lore_points(S_SMT, SMT_EXPERTISE));
+    assert(!b_info[ability_index(S_SMT, SMT_EXPERTISE)].lore_branch);
     assert(abilities_in_skill(S_PER) == 0);
-    assert(!prereqs(S_PER, PER_QUICK_STUDY));
-    p_ptr->lore = 2;
     assert(prereqs(S_PER, PER_QUICK_STUDY));
-    assert(ability_purchase_knowledge_cost(S_PER, PER_QUICK_STUDY) == 0);
-    /* As on develop, Lore discounts K: costs; missing base skill still costs XP. */
-    p_ptr->knowledge_points = 77; p_ptr->new_exp = 99;
+    assert(ability_purchase_lore_cost(S_PER, PER_QUICK_STUDY) == 1);
+    assert(ability_purchase_xp(quick) == 0);
+    p_ptr->new_exp = 99;
     p_ptr->skill_base[S_PER] = 0;
     p_ptr->innate_ability[S_PER][PER_QUICK_STUDY] = false;
     p_ptr->have_ability[S_PER][PER_QUICK_STUDY] = false;
+    ability_skill_training training;
+    assert(ability_browser_plan_training(quick, &training));
+    assert(training.total_cost == 0 && training.count == 0);
     assert(!ability_browser_activate_choice(S_PER, PER_QUICK_STUDY));
-    assert(p_ptr->knowledge_points == 77 && p_ptr->new_exp == 99);
+    assert(p_ptr->lore_points == 0 && p_ptr->new_exp == 99);
     assert(p_ptr->skill_base[S_PER] == 0);
+    p_ptr->lore_points = 77;
     op_ptr->opt[OPT_lore_beta] = false;
-    gain_knowledge_points(5, NULL);
-    assert(p_ptr->knowledge_points == 77 && p_ptr->lore == 2);
+    gain_lore_points(5, NULL);
+    assert(p_ptr->lore_points == 77);
     op_ptr->opt[OPT_lore_beta] = true;
-    gain_knowledge_points(5, NULL);
-    assert(p_ptr->knowledge_points == 82);
-    p_ptr->knowledge_points = PY_MAX_EXP - 1;
-    gain_knowledge_points(0x7fffffff, NULL);
-    assert(p_ptr->knowledge_points == PY_MAX_EXP);
+    gain_lore_points(5, NULL);
+    assert(p_ptr->lore_points == 82);
+    p_ptr->lore_points = PY_MAX_EXP - 1;
+    gain_lore_points(0x7fffffff, NULL);
+    assert(p_ptr->lore_points == PY_MAX_EXP);
     op_ptr->opt[OPT_lore_beta] = false;
-    puts("Lore beta: default off, gated requirements/currency, XP auto-training and dormant values PASS.");
+    puts("Lore beta: default off, separate branch, one-point cost, zero XP/training and dormant currency PASS.");
 }
 '''
 
 MAIN = r'''
 #include "angband.h"
 #include "externs.h"
+#include "metarun.h"
 #include "log/log.h"
 #include "sdl-config.h"
 #include "player/player-upkeep-internal.h"
@@ -653,9 +657,13 @@ static void check_coefficients(void)
     error_idx = -1;
     assert(parse_line(&h, "N:1:Coefficient test") == 0);
     assert(parse_line(&h, "I:6:4:6") == 0);
-    assert(parse_line(&h, "R:DEX:2:GRA:4:LORE:5") == 0);
+    assert(parse_line(&h, "R:DEX:2:GRA:4") == 0);
     assert(entries[1].stat_req[A_DEX] == 2 && entries[1].stat_req[A_GRA] == 4);
-    assert(entries[1].lore_req == 5);
+    assert(parse_line(&h, "R:LORE:5") != 0);
+    assert(parse_line(&h, "K:2") == 0);
+    assert(entries[1].lore_cost == 2);
+    assert(parse_line(&h, "L:1") == 0);
+    assert(entries[1].lore_branch);
     assert(parse_line(&h, "S:STR:0.5:DEX:3/2:GRA:100%:SMITHING:2x") == 0);
     assert(entries[1].stat_score_weight[A_STR] == 50);
     assert(entries[1].stat_score_weight[A_DEX] == 150);
@@ -682,7 +690,9 @@ static void check_coefficients(void)
 static void check_player_save(void)
 {
     byte* buffer = calloc(1024*1024, 1); assert(buffer);
-    p_ptr->lore = 5; p_ptr->knowledge_points = 1234;
+    p_ptr->lore_points = 1234;
+    p_ptr->lore_milestones = LORE_MILESTONE_SONG;
+    for (int i = 0; i < A_MAX; ++i) p_ptr->lore_stat_invested[i] = i + 1;
     p_ptr->diseased = 0;
     memset(p_ptr->stat_disease, 0, sizeof(p_ptr->stat_disease));
     p_ptr->disease_name = p_ptr->disease_cure = p_ptr->disease_knowledge = 0;
@@ -691,21 +701,31 @@ static void check_player_save(void)
     p_ptr->discovery_lore_flags = DISC_LORE_CHASM;
     op_ptr->opt[OPT_lore_beta] = false;
     size_t new_size = fixture_write_player(buffer, 1024*1024, false);
-    p_ptr->lore = 0; p_ptr->knowledge_points = 0;
-    assert(fixture_read_player(buffer, new_size, 24) == 0);
-    assert(p_ptr->lore == 5 && p_ptr->knowledge_points == 1234);
+    p_ptr->lore_points = 0; p_ptr->lore_milestones = 0;
+    memset(p_ptr->lore_stat_invested, 0, sizeof(p_ptr->lore_stat_invested));
+    assert(fixture_read_player(buffer, new_size, VERSION_EXTRA) == 0);
+    assert(p_ptr->lore_points == 1234 && p_ptr->lore_milestones == LORE_MILESTONE_SONG);
+    for (int i = 0; i < A_MAX; ++i) assert(p_ptr->lore_stat_invested[i] == i + 1);
     assert(!lore_system_enabled());
     assert(p_ptr->lamp_oil == 137 && p_ptr->morgoth_call_state == SAVEFILE_MORGOTH_CALL_SEEN);
     assert(p_ptr->discovery_lore_flags == DISC_LORE_CHASM);
+    for (int i = 0; i < A_MAX; ++i)
+    {
+        p_ptr->stat_base[i] = p_info[p_ptr->prace].r_adj[i]
+            + c_info[p_ptr->pcharacter].h_adj[i] + i;
+        for (int curse = 0; curse < z_info->cu_max; ++curse)
+            p_ptr->stat_base[i] += CURSE_GET(curse) * cu_info[curse].cu_adj[i];
+    }
     size_t old_size = fixture_write_player(buffer, 1024*1024, true);
-    assert(old_size == new_size);
-    p_ptr->lore = 19; p_ptr->knowledge_points = 9999;
-    assert(fixture_read_player(buffer, old_size, 23) == 0);
-    assert(p_ptr->lore == 0 && p_ptr->knowledge_points == 0);
+    p_ptr->lore_points = 9999;
+    assert(fixture_read_player(buffer, old_size, LEGACY_WRITER_EXTRA) == 0);
+    assert(p_ptr->lore_points == 0);
+    assert(p_ptr->lore_milestones == 0);
+    for (int i = 0; i < A_MAX; ++i) assert(p_ptr->lore_stat_invested[i] == i);
     assert(p_ptr->lamp_oil == 137 && p_ptr->morgoth_call_state == SAVEFILE_MORGOTH_CALL_SEEN);
     assert(p_ptr->discovery_lore_flags == DISC_LORE_CHASM);
     free(buffer);
-    puts("Real player save: v24 beta-off roundtrip, original v23 writer load, unchanged length/tail PASS.");
+    puts("Real player save: current beta-off currency/ranks roundtrip, zero legacy points and complete tail alignment PASS.");
 }
 static void check_settings(cptr directory)
 {
@@ -874,11 +894,18 @@ def main():
         *(str(BUILD / "_deps" / name) for name in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
         "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     sources = []
-    # Read the unmodified parent writer: this proves actual old-layout compatibility.
-    old = subprocess.check_output(["git", "show", "5256a6f8:src/fs/save-player.c"],
+    # Retain the legacy writer layout, adapting only removed in-memory fields.
+    legacy_ref = "ed5e9b322f550f423b14fb97fe8b92afa1d1a604"
+    legacy_defines = subprocess.check_output(["git", "show", f"{legacy_ref}:src/defines.h"], cwd=ROOT, text=True)
+    legacy_extra = int(re.search(r"^#define VERSION_EXTRA (\d+)", legacy_defines, re.M)[1])
+    assert legacy_extra in (24, 25), "Pin legacy_ref to the pre-Lore-currency writer commit"
+    old = subprocess.check_output(["git", "show", f"{legacy_ref}:src/fs/save-player.c"],
                                   cwd=ROOT).decode("utf-8")
     old = old[:old.index("\n}", old.index("void wr_extra(void)")) + 2]
     old = old.replace("void wr_extra(void)", "void fixture_old_extra(void)")
+    old = old.replace("p_ptr->knowledge_points", "0 /* unused beta currency */")
+    old = re.sub(r"p_ptr->lore\b", "0 /* unused beta stat */", old)
+    main_source = MAIN.replace("LEGACY_WRITER_EXTRA", str(legacy_extra))
     loader = (ROOT / "src/fs/load.c").read_text(encoding="utf-8")
     pos = loader.index("static errr rd_savefile_new_aux(void)")
     start = loader.index("    savefile_has_runtime_overrides =", pos)
@@ -896,7 +923,7 @@ def main():
     old_smith = old_smith[start:old_smith.index("\n}", start) + 2]
     old_smith = old_smith.replace("int object_difficulty(", "static int original_object_difficulty(")
     smith = SMITH.replace("/* ORIGINAL_DIFFICULTY */", old_smith)
-    for name, code in (("smith.c", smith), ("abilities.c", ABILITIES), ("main.c", MAIN),
+    for name, code in (("smith.c", smith), ("abilities.c", ABILITIES), ("main.c", main_source),
                        ("writer.c", WRITER), ("reader.c", reader), ("old-player.c", old),
                        ("birth.c", birth), ("sdl-ui.c", SDL_UI),
                        ("character.c", CHARACTER), ("mobile-layout.c", MOBILE_LAYOUT)):

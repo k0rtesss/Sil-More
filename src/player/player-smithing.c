@@ -44,7 +44,9 @@ int ability_required_skill(const ability_type* ability, int skill)
 {
     if (!ability || skill < 0 || skill >= S_MAX) return 0;
     return MAX(ability->skill_req[skill],
-        skill == ability->skilltype ? ability->level : 0);
+        skill == ability->skilltype
+            && !(lore_system_enabled() && ability->lore_branch)
+            ? ability->level : 0);
 }
 
 bool ability_skill_requirements_met(const ability_type* ability)
@@ -62,8 +64,6 @@ bool ability_skill_requirements_met(const ability_type* ability)
 bool ability_stat_requirements_met(const ability_type* ability)
 {
     if (!ability) return false;
-    if (lore_system_enabled() && p_ptr->lore < ability->lore_req)
-        return false;
     for (int i = 0; i < A_MAX; ++i)
         if (ability->stat_req[i] > 0
             && (ability->skilltype == S_SMT ? smithing_effective_stat(i)

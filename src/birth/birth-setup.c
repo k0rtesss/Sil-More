@@ -1,6 +1,9 @@
 /* File: birth/birth-setup.c */
 
 #include "angband.h"
+#include "quest/quest-rewards-beta.h"
+#include "quest/quest-runtime.h"
+#include "quest/quest-challenges.h"
 #include "meta_state.h"
 #include "birth/birth-internal.h"
 
@@ -39,7 +42,7 @@ static bool starting_artifact_is_eligible(int art_idx, int k_idx)
 
 int get_start_xp(void)
 {
-    if (birth_fixed_exp)
+    if (birth_fixed_exp || quest_challenge_active(CHALLENGE_FIXED_50K_XP))
     {
         return PY_FIXED_EXP;
     }
@@ -80,8 +83,6 @@ void get_extra(void)
     int i, j;
     
     p_ptr->new_exp = p_ptr->exp = get_start_xp();
-    p_ptr->lore = 0;
-    p_ptr->knowledge_points = 0;
     p_ptr->discovery_lore_flags = 0;
     p_ptr->quick_access_prompt_flags = 0;
     log_debug("Set starting experience to %d", p_ptr->exp);
@@ -331,6 +332,7 @@ void player_wipe(void)
     
     /* Oromë quest init */
     p_ptr->orome_quest = OROME_QUEST_NOT_STARTED;
+    p_ptr->orome_bow_hit_streak = p_ptr->orome_spear_ready = 0;
     p_ptr->orome_killed_count = 0;
     p_ptr->orome_target_type = 0;
     p_ptr->orome_target_count = 0;
@@ -388,6 +390,15 @@ static void give_start_items(const start_item *list)
         object_prep(i_ptr, k_idx);
         i_ptr->number = (byte)rand_range(e_ptr->min, e_ptr->max);
         i_ptr->weight = k_ptr->weight;
+
+        if (!quest_challenge_object_allowed(i_ptr)) {
+            if (i_ptr->tval == TV_LIGHT) {
+                object_prep(i_ptr, lookup_kind(TV_LIGHT, SV_LIGHT_TORCH));
+                i_ptr->number = 3;
+            } else if (i_ptr->tval == TV_SWORD || i_ptr->tval == TV_POLEARM) {
+                object_prep(i_ptr, lookup_kind(TV_HAFTED, SV_QUARTERSTAFF));
+            } else continue;
+        }
 
         /* Where would this be wielded? */
         slot = wield_slot(i_ptr);
@@ -687,6 +698,8 @@ void player_outfit(void)
         && metarun_has_major_blessing_effect(METARUN_MAJOR_EFFECT_START_ARTIFACT)) {
         grant_starting_artifact();
     }
+
+    quest_beta_birth();
 
     /* Starting light sources are stored in supplies now; equip one from there
      * after all birth gear has been added. */

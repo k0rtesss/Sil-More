@@ -191,36 +191,36 @@ cptr option_text[OPT_MAX] = {
     "meta_forged_artefacts", /* OPT_meta_forged_artefacts */
     "meta_revenge", /* OPT_meta_revenge */
     "meta_legendary_places", /* OPT_meta_legendary_places */
-    NULL, /* reserved legacy slot: track_follow */
-    NULL, /* reserved legacy slot: track_target */
-    NULL, /* reserved legacy slot: track_target */
-    NULL, /* reserved legacy slot: smart_cheat */
-    NULL, /* reserved legacy slot: view_reduce_lite */
-    NULL, /* reserved legacy slot: hidden_player */
-    NULL, /* reserved legacy slot: avoid_abort */
-    NULL, /* reserved legacy slot: avoid_other */
-    NULL, /* reserved legacy slot: flush_failure */
-    NULL, /* reserved legacy slot: flush_disturb */
-    NULL, /* reserved legacy slot: flush_command */
-    NULL, /* reserved legacy slot: fresh_before */
-    NULL, /* reserved legacy slot: fresh_after */
-    NULL, /* reserved legacy slot: fresh_message */
-    NULL, /* reserved legacy slot: compress_savefile */
+    "quest_1", /* OPT_quest_1 */
+    "quest_2", /* OPT_quest_2 */
+    "quest_3", /* OPT_quest_3 */
+    "quest_4", /* OPT_quest_4 */
+    "quest_5", /* OPT_quest_5 */
+    "quest_6", /* OPT_quest_6 */
+    "quest_7", /* OPT_quest_7 */
+    "quest_8", /* OPT_quest_8 */
+    "quest_9", /* OPT_quest_9 */
+    "quest_10", /* OPT_quest_10 */
+    "quest_11", /* OPT_quest_11 */
+    "quest_12", /* OPT_quest_12 */
+    "quest_13", /* OPT_quest_13 */
+    "quest_14", /* OPT_quest_14 */
+    "quest_15", /* OPT_quest_15 */
     "hilite_player", /* OPT_hilite_player */
     "hilite_target", /* OPT_hilite_target */
     "hilite_unwary", /* OPT_hilite_unwary */
     "solid_walls", /* OPT_solid_walls */
     "hybrid_walls", /* OPT_hybrid_walls */
-    NULL, /* reserved legacy slot: easy_open */
-    NULL, /* reserved legacy slot: easy_alter */
-    NULL, /* reserved legacy slot: easy_floor */
+    "quest_16", /* OPT_quest_16 */
+    "quest_rules_beta", /* OPT_quest_rules_beta */
+    "quest_rewards_beta", /* OPT_quest_rewards_beta */
     "instant_run", /* OPT_running_delay; legacy preference key */
     "center_player", /* OPT_center_player */
     "run_avoid_center", /* OPT_run_avoid_center */
-    NULL, /* reserved legacy slot: scroll_target */
+    "quest_challenges_beta", /* OPT_quest_challenges_beta */
     "show_dungeon_events", /* OPT_show_dungeon_events */
     "know_monster_info", /* OPT_know_monster_info */
-    NULL, /* reserved legacy slot: auto_display_lists */
+    "quest_lineage_beta", /* OPT_quest_lineage_beta */
     "artifact_unique_color", /* OPT_artifact_unique_color */
     NULL, /* obsolete: easy_main_menu (Esc always opens the main menu) */
     "story_lists", /* OPT_story_lists */
@@ -431,41 +431,41 @@ cptr option_desc[OPT_MAX] = {
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */
     "Warn before making direct attacks (useful for pacifist runs)", /* OPT_pacifist_attack_warning */
     "Confirm before paid melee/ranged active switches", /* OPT_active_weapon_switch_confirm */
-    "Beta: enable the Lore fifth stat at birth and its knowledge abilities", /* OPT_lore_beta */
+    "Beta: bank lore points for attributes and abilities; earn them from milestones", /* OPT_lore_beta */
     "Beta: Share revealed artefact knowledge and Easy Identify across characters in this Tale.", /* OPT_meta_artefact_memory */
     "Beta: Remember forged artefacts of difficulty 15 or more for other characters in this Tale.", /* OPT_meta_forged_artefacts */
     "Beta: Remember fallen characters through stronger, unique revenge foes and vengeance bonuses.", /* OPT_meta_revenge */
     "Beta: Remember great starting songs as places that grant a song or +5 effective song skill.", /* OPT_meta_legendary_places */
-    NULL, /* reserved legacy slot: track_follow */
-    NULL, /* reserved legacy slot: track_target */
-    NULL, /* reserved legacy slot: track_target */
-    NULL, /* reserved legacy slot: smart_cheat */
-    NULL, /* reserved legacy slot: view_reduce_lite */
-    NULL, /* reserved legacy slot: hidden_player */
-    NULL, /* reserved legacy slot: avoid_abort */
-    NULL, /* reserved legacy slot: avoid_other */
-    NULL, /* reserved legacy slot: flush_failure */
-    NULL, /* reserved legacy slot: flush_disturb */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot: fresh_before */
-    NULL, /* reserved legacy slot: fresh_after */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot: compress_savefile */
+    "Original quest 1 (Tulkas): disabling preserves existing progress.", /* OPT_quest_1 */
+    "Original quest 2 (Aulë): disabling preserves existing progress.", /* OPT_quest_2 */
+    "Original quest 3 (Mandos): disabling preserves existing progress.", /* OPT_quest_3 */
+    "Original quest 4 (Nienna): disabling preserves existing progress.", /* OPT_quest_4 */
+    "Original quest 5 (Oromë): disabling preserves existing progress.", /* OPT_quest_5 */
+    "Original quest 6 (Varda): disabling preserves existing progress.", /* OPT_quest_6 */
+    "Beta quest 7 (Mandos traitor): disabling preserves existing progress.", /* OPT_quest_7 */
+    "Beta quest 8 (Mandos betrayer): disabling preserves existing progress.", /* OPT_quest_8 */
+    "Beta quest 9 (Oromë dragons): disabling preserves existing progress.", /* OPT_quest_9 */
+    "Beta quest 10 (Oromë great hunt): disabling preserves existing progress.", /* OPT_quest_10 */
+    "Beta quest 11 (Nienna and Morgoth): disabling preserves existing progress.", /* OPT_quest_11 */
+    "Beta quest 12 (Nienna pacifist): disabling preserves existing progress.", /* OPT_quest_12 */
+    "Beta quest 13 (Tulkas orcs): disabling preserves existing progress.", /* OPT_quest_13 */
+    "Beta quest 14 (Tulkas and Morgoth): disabling preserves existing progress.", /* OPT_quest_14 */
+    "Beta quest 15 (Varda shadow): disabling preserves existing progress.", /* OPT_quest_15 */
     "Highlight the player with the cursor", /* OPT_hilite_player */
     "Highlight the target with the cursor", /* OPT_hilite_target */
     "Highlight sleeping and unwary creatures", /* OPT_hilite_unwary */
     "Display walls as solid blocks", /* OPT_solid_walls */
     "Display walls as semi-solid", /* OPT_hybrid_walls */
-    NULL, /* reserved legacy slot: easy_open */
-    NULL, /* reserved legacy slot: easy_alter */
-    NULL, /* reserved legacy slot: easy_floor */
+    "Beta quest 16 (Varda and Ungoliant): disabling preserves existing progress.", /* OPT_quest_16 */
+    "Beta quest rules: data caps and challenge-dependent chain progression; disabling preserves existing progress.", /* OPT_quest_rules_beta */
+    "Beta quest rewards: new or revised special reward mechanics; disabling preserves existing progress.", /* OPT_quest_rewards_beta */
     "Running delay in milliseconds", /* OPT_running_delay */
     "Center map continuously", /* OPT_center_player */
     "Avoid centering while running", /* OPT_run_avoid_center */
-    NULL, /* reserved legacy slot: scroll_target */
+    "Beta quest challenges: quest-linked challenge modes and unlocks; disabling preserves existing progress.", /* OPT_quest_challenges_beta */
     "Log all dungeon events, including inaudible events, in messages {debug}", /* OPT_show_dungeon_events */
     "Know all monster info", /* OPT_know_monster_info */
-    NULL, /* reserved legacy slot: auto_display_lists */
+    "Beta quest lineage: resurrection, cleansing, and future relic gifts; disabling preserves existing progress.", /* OPT_quest_lineage_beta */
     "Display artifacts in unique yellow color", /* OPT_artifact_unique_color */
     NULL, /* obsolete: easy_main_menu (Esc always opens the main menu) */
     "Render look/target lists with the story font", /* OPT_story_lists */
@@ -697,36 +697,36 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_meta_forged_artefacts */
     false, /* OPT_meta_revenge */
     false, /* OPT_meta_legendary_places */
-    false, /* reserved legacy slot: track_follow */
-    false, /* reserved legacy slot: track_target */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot: view_reduce_lite */
-    false, /* reserved legacy slot: hidden_player */
-    false, /* reserved legacy slot: avoid_abort */
-    false, /* reserved legacy slot: avoid_other */
-    false, /* reserved legacy slot: flush_failure */
-    false, /* reserved legacy slot: flush_disturb */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot: fresh_before */
-    false, /* reserved legacy slot: fresh_after */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot: compress_savefile */
+    true, /* OPT_quest_1 */
+    true, /* OPT_quest_2 */
+    true, /* OPT_quest_3 */
+    true, /* OPT_quest_4 */
+    true, /* OPT_quest_5 */
+    true, /* OPT_quest_6 */
+    false, /* OPT_quest_7 */
+    false, /* OPT_quest_8 */
+    false, /* OPT_quest_9 */
+    false, /* OPT_quest_10 */
+    false, /* OPT_quest_11 */
+    false, /* OPT_quest_12 */
+    false, /* OPT_quest_13 */
+    false, /* OPT_quest_14 */
+    false, /* OPT_quest_15 */
     false, /* OPT_hilite_player */
     false, /* OPT_hilite_target */
     false, /* OPT_hilite_unwary */
     true, /* OPT_solid_walls */
     false, /* OPT_hybrid_walls */
-    false, /* reserved legacy slot: easy_open */
-    false, /* reserved legacy slot: easy_alter */
-    false, /* reserved legacy slot: easy_floor */
+    false, /* OPT_quest_16 */
+    false, /* OPT_quest_rules_beta */
+    false, /* OPT_quest_rewards_beta */
     false, /* OPT_running_delay; value is stored in running_delay_ms */
     false, /* OPT_center_player */
     false, /* OPT_run_avoid_center */
-    false, /* reserved legacy slot: scroll_target */
+    false, /* OPT_quest_challenges_beta */
     false, /* OPT_show_dungeon_events */
     false, /* OPT_know_monster_info */
-    false, /* reserved legacy slot: auto_display_lists */
+    false, /* OPT_quest_lineage_beta */
     true, /* OPT_artifact_unique_color */
     true, /* obsolete: easy_main_menu (Esc always opens the main menu) */
     false, /* OPT_story_lists */
@@ -994,7 +994,18 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
     { OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
-        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE }
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
+
+    /*** Quest ***/
+
+    { OPT_quest_1, OPT_quest_2, OPT_quest_3, OPT_quest_4,
+        OPT_quest_5, OPT_quest_6, OPT_quest_7, OPT_quest_8,
+        OPT_quest_9, OPT_quest_10, OPT_quest_11, OPT_quest_12,
+        OPT_quest_13, OPT_quest_14, OPT_quest_15, OPT_quest_16,
+        OPT_quest_rules_beta, OPT_quest_rewards_beta,
+        OPT_quest_challenges_beta, OPT_quest_lineage_beta,
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE }
 };
 
 cptr inscrip_text[MAX_INSCRIP] = { NULL,

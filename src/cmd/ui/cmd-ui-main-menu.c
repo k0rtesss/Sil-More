@@ -2667,7 +2667,8 @@ static void thrall_quest_format_goal(const monster_type* m_ptr, char* buf,
     giver = thrall_quest_giver_name(m_ptr);
     item = get_thrall_quest_item_name(m_ptr->thrall_quest_item);
 
-    if (m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARD_PENDING)
+    if (m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARD_PENDING
+        || m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_FIRST_REWARD_PENDING)
     {
         strnfmt(buf, buflen,
             "Return to the %s and choose the aid he will grant you.", giver);

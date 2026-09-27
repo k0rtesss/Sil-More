@@ -1,6 +1,8 @@
 /* File: monster-select.c */
 
 #include "monster-internal.h"
+#include "quest/quest-runtime.h"
+extern bool quest_vault_spawn_permitted(int race);
 #include "meta_state.h"
 
 /*
@@ -193,6 +195,8 @@ s16b get_mon_num(int level, bool special, bool allow_non_smart, bool vault)
          * appropriate level */
         if (special && (table[i].level <= generation_level / 2))
             continue;
+
+        if (quest_followup_reserve_race(r_idx)) continue;
 
         /* Ignore monsters which are too prolific */
         if (r_ptr->cur_num >= r_ptr->max_num)

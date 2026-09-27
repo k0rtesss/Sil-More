@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "meta_state.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-social.h"
@@ -960,7 +961,7 @@ void monster_death(int m_idx)
     monster_sound(m_ptr, MONSTER_SOUND_DEATH);
 
     /* Track monster death for Nienna mercy quest */
-    if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE && m_ptr->r_idx != R_IDX_NIENA) {
+    if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_ACTIVE && m_ptr->r_idx != R_IDX_NIENA) {
         p_ptr->niena_monsters_killed++;
         log_trace("Nienna quest: Monster killed (total killed=%d, seen=%d)",
                  p_ptr->niena_monsters_killed, p_ptr->niena_monsters_seen);
@@ -1244,6 +1245,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
     if (p_ptr->health_who == m_idx)
         p_ptr->redraw |= (PR_HEALTHBAR);
 
+    quest_followup_damage(m_ptr, dam, who);
+
     /* Hurt it */
     m_ptr->hp -= dam;
 
@@ -1337,6 +1340,7 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
         /* Generate treasure */
         if (who < 0 && (r_ptr->flags1 & RF1_UNIQUE)
             && !(r_ptr->flags1 & RF1_PEACEFUL)) catastrophe_note(CATA_UNIQUE);
+        if (who < 0) quest_followup_kill(m_ptr->r_idx);
         monster_death(m_idx);
 
         /* Auto-recall only if visible or unique */

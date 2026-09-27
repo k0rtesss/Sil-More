@@ -412,7 +412,7 @@ B:'Day shall come again!' — seventy times you cried it as your axe fell; cry i
 F:EVN_AFFINITY | WIL_AFFINITY | PER_PENALTY | SNG_AFFINITY | MOR_CURSE | STL_PENALTY
 U:SNG_HURIN
 S:2:2:2:0
-C:5:3:5:5:5:7:7:10  # Song of Slaying  # Poison Resistance  # Indomitable # Formidable
+C:5:3:5:5:7:10  # Formidable  # Indomitable  # Song of Slaying
 P:2
 D: Mightiest of mortal warriors, a defiant heart set against Morgoth's darkness, whose valour upon Anfauglith rang with courage beyond mortal despair. Bound cruelly to his doom, made to watch ruin wrought upon kin and realm alike, his sorrow unmatched, yet his spirit unbroken amid relentless torment. Out of bitterness and wrathful grief shall come deeds of tragedy; yet his memory endures in pride, a hero forever defiant — Húrin the Steadfast, a flame that challenges darkness even unto the bitterest end.
 

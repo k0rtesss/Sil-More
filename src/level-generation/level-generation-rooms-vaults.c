@@ -100,6 +100,15 @@ bool vault_drop_passes(vault_drop_gate_kind kind)
  * Template min/max depths are checked separately by the selection paths. */
 bool vault_is_valid_for_depth(const vault_type* v_ptr, int depth)
 {
+    int vault = (int)(v_ptr - v_info);
+    int followup = quest_followup_vault(vault);
+    if (followup) {
+        if (!quest_followup_vault_allowed(vault, depth) || !quest_vault_tokens_available(vault)) return false;
+    } else {
+        if (vault_template_has_aule((vault_type*)v_ptr) && !quest_enabled(QUEST_ID_AULE)) return false;
+        if (vault_template_has_mandos((vault_type*)v_ptr) && !quest_enabled(QUEST_ID_MANDOS)) return false;
+        if (vault_template_has_duruin((vault_type*)v_ptr) && !quest_enabled(QUEST_ID_VARDA)) return false;
+    }
     cptr data = v_text + v_ptr->text;
 
     for (int i = 0; i < v_ptr->hgt * v_ptr->wid; ++i)
@@ -494,7 +503,9 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             if (*t == ' ')
                 continue;
 
-            if (is_vault_monster_token(*t))
+            if (quest_vault_token_race((int)(v_ptr - v_info), *t))
+                place_quest_vault_token((int)(v_ptr - v_info), *t, y, x);
+            else if (is_vault_monster_token(*t))
                 place_vault_monster_token(*t, y, x);
         }
     }
@@ -528,11 +539,13 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             if (*t == ' ')
                 continue;
 
-            if (is_vault_monster_token(*t))
+            if (quest_vault_token_race((int)(v_ptr - v_info), *t) || is_vault_monster_token(*t))
                 continue;
 
             if (place_vault_scroll_token(*t, y, x))
                 continue;
+
+            if (quest_vault_token_race((int)(v_ptr - v_info), *t)) continue;
 
             /* Analyze the symbol */
             switch (*t)

@@ -533,7 +533,7 @@ bool cave_gen(void)
         log_trace("Quest vault check: varda_vault_ready=%d, varda_quest=%d (ACTIVE=%d), varda_vault_placed=%d",
                   p_ptr->varda_vault_ready, p_ptr->varda_quest, VARDA_QUEST_ACTIVE, p_ptr->varda_vault_placed);
 
-        if (p_ptr->varda_vault_ready && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed) {
+        if (quest_enabled(QUEST_ID_VARDA) && p_ptr->varda_vault_ready && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed) {
             log_trace("Quest vault: === DURUIN BASTION FORCE PLACEMENT === Starting at depth %d", p_ptr->depth);
             if (!place_duruin_bastion()) {
                 log_trace("Quest vault: === DURUIN BASTION FAILED === Regenerating level");
@@ -541,10 +541,13 @@ bool cave_gen(void)
             }
             log_trace("Quest vault: === DURUIN BASTION SUCCESS === Placed successfully");
             duruin_bastion_forced = true;
-        } else if (p_ptr->varda_quest == VARDA_QUEST_ACTIVE) {
+        } else if (quest_enabled(QUEST_ID_VARDA) && p_ptr->varda_quest == VARDA_QUEST_ACTIVE) {
             log_trace("Quest vault: Varda quest ACTIVE but bastion not ready (vault_ready=%d, vault_placed=%d)",
                       p_ptr->varda_vault_ready, p_ptr->varda_vault_placed);
         }
+
+        if (!duruin_bastion_forced && place_followup_quest_vault())
+            duruin_bastion_forced = true; /* Already placed the quest encounter for this level. */
 
         /* Quest vaults can add another initiated quest until the per-run cap. */
         if (quest_can_initiate_more() && !duruin_bastion_forced)
@@ -1942,6 +1945,11 @@ if (playerturn == 0) {
         return;
     }
 
+    /* Every replacement of the old map abandons its unfinished quest vaults,
+     * including forced exits and regeneration at the same depth. Do this once,
+     * before retries can start placing encounters for the new level. */
+    quest_followup_discard_level();
+
     level_gen_screen_begin();
     reset_generation_retry_locks();
 
@@ -1969,6 +1977,7 @@ if (playerturn == 0) {
 
         /* Reset pending quest state changes at the start of each generation attempt */
         reset_pending_quest_states();
+        quest_followup_generation_begin();
 
         /* Reset quest states that may have been set during previous failed attempts */
         reset_quest_vault_states(preserved_initiated_count);
@@ -2196,6 +2205,9 @@ if (playerturn == 0) {
                 p_ptr->utumno_return_to_throne = false;
             /* QUEST VAULT REGENERATION FIX: Apply pending quest state changes when level generation is COMPLETELY successful */
             apply_pending_quest_states();
+            quest_followup_generation_commit();
+            if (quest_lottery_winner == 0 && !qv_placed_this_level && p_ptr->depth <= MORGOTH_DEPTH)
+                quest_followup_generate_giver();
 
             /* Only count quest vaults when level generation is completely successful. */
             if (quest_vault_placed_this_attempt) {

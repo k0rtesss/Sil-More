@@ -162,9 +162,14 @@ void process_quest_vault_area(int y0, int x0, vault_type *qv) {
     /* Force mark/reveal for debugging */
     for (int ry = y1; ry <= y2; ++ry) for (int rx = x1; rx <= x2; ++rx) cave_info[ry][rx] |= (CAVE_MARK|CAVE_SEEN|CAVE_GLOW);
 #endif
+    int followup = quest_followup_vault((int)(qv - v_info));
+    if (followup) {
+        quest_followup_vault_placed(followup, p_ptr->depth);
+        return; /* Its N token must never initialize the base Mandos quest. */
+    }
     bool quest_pending = false;
 
-    if (has_forge && has_aule && p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
+    if (quest_enabled(QUEST_ID_AULE) && has_forge && has_aule && p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
         !quest_metarun_blocked(QUEST_ID_AULE, METARUN_QUEST_AULE) &&
         quest_can_initiate_more()) {
         /* Record pending quest state change instead of applying immediately */
@@ -177,7 +182,7 @@ void process_quest_vault_area(int y0, int x0, vault_type *qv) {
         log_trace("Aulë quest: FORGE_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d",
                   p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
     }
-    if (has_mandos && p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
+    if (quest_enabled(QUEST_ID_MANDOS) && has_mandos && p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
         !quest_metarun_blocked(QUEST_ID_MANDOS, METARUN_QUEST_MANDOS) &&
         quest_can_initiate_more() && !quest_pending) {
         /* Record pending quest state change instead of applying immediately */

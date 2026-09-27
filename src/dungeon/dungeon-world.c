@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-world.c */
 
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
 #include "dungeon-internal.h"
@@ -268,6 +269,8 @@ void process_world(void)
     object_type* o_ptr;
 
     bool was_ghost = false;
+
+    quest_followup_update();
 
     /* Check for Tulkas quest interaction every turn */
     check_tulkas_quest_interaction();

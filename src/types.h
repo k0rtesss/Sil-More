@@ -319,8 +319,8 @@ struct ability_type
     byte carriage_reduction_percent; /* Learned ability reduction */
     byte stat_req[A_MAX]; /* Minimum permanent character stats (R:) */
     byte skill_req[S_MAX]; /* Additional invested skill ranks (R:) */
-    byte lore_req; /* Optional Lore beta requirement */
-    byte knowledge_cost; /* K: knowledge price when Lore beta is enabled */
+    byte lore_branch; /* L: moves this ability to Lore while the beta is enabled */
+    byte lore_cost; /* K: lore points, additional to XP outside the Lore branch */
     byte score_weights_set; /* Explicit S: coefficients, 100 = x1 */
     s16b stat_score_weight[A_MAX];
     s16b skill_score_weight[S_MAX];
@@ -887,7 +887,7 @@ struct monster_type
     /* Thrall quest system */
     byte thrall_quest_item;      /* Item the thrall wants: see THRALL_QUEST_* */
     byte thrall_quest_requested; /* 1 if the thrall's initial request has been shown to the player */
-    byte thrall_quest_completed; /* Thrall quest state: 0=active, 1=reward claimed, 2=reward pending */
+    byte thrall_quest_completed; /* THRALL_QUEST_STATE_* */
 };
 
 /*
@@ -1143,6 +1143,11 @@ struct quest_type
     byte reward_value; /* Specific reward identifier */
     byte oath_id; /* Associated oath ID (links to oath_info array) */
     byte quest_type; /* Quest type (Y: field - 0=vault, 1=roulet) */
+    byte vala_id; /* Z: owner, VALA_* */
+    byte sequence; /* J: stage within the owner chain */
+    byte quest_flags; /* F: QUEST_FLAG_* */
+    byte challenge_unlock; /* H: challenge reward */
+    byte completion_cap; /* L: per-lineage completion limit */
     byte stat_bonuses[4]; /* Stat bonuses (S: field - str:dex:con:gra) */
     byte skill_type; /* Skill type for bonuses (K: field first part) */
     byte skill_bonus; /* Skill bonus amount (K: field second part) */
@@ -1264,8 +1269,9 @@ struct player_type
     s32b kill_exp; /* Total experience from killing monsters */
     s32b descent_exp; /* Total experience from descending to new levels */
     s32b ident_exp; /* Total experience from identifying objects */
-    s16b lore; /* Lore stat for the optional beta system */
-    s32b knowledge_points; /* Knowledge currency for Lore abilities */
+    s32b lore_points; /* Banked birth points and once-per-run Lore rewards */
+    u16b lore_milestones; /* Claimed Lore rewards and first-thrall marker */
+    byte lore_stat_invested[A_MAX]; /* Purchased ranks, excluding innate bonuses */
     byte discovery_lore_flags; /* Run-wide discovery XP awards already claimed */
     byte quick_access_prompt_flags; /* Run-wide item shortcut offers already made */
 
@@ -1608,6 +1614,19 @@ struct player_type
     /* Generic quest/vault tracking */
     byte quest_vault_used;     /* Count of quest-designated vaults generated this game */
     byte quest_reserved[15];   /* quest_reserved[0] = quest encounters initiated this run; quest_reserved[1..6] mark quest completions recorded this run */
+    /* Version 0.9.8.26: recovered quests 7..16. Original six retain their layout. */
+    byte orome_bow_hit_streak; /* Two damaging bow hits prime a spear strike. */
+    byte orome_spear_ready;
+    byte quest_followup_state[10];
+    byte quest_followup_flags[10];
+    s16b quest_followup_depth[10];
+    u16b quest_followup_progress[10];
+    u16b quest_followup_recorded;
+    byte quest_lifetime_flags; /* Player kill / Morgoth attack facts, even before an offer. */
+    byte quest_test_sandbox; /* Debug fixtures never write Tale quest rewards. */
+    byte quest_challenge; /* Explicitly selected at birth; 0 means ordinary play. */
+    byte quest_challenge_failed;
+    byte quest_challenge_recorded;
     bool tutorial_deferred;    /* Pre-0.9.8 hero: tutorials start with the next new hero. */
 };
 
@@ -1865,6 +1884,5 @@ struct flag_name
 };
 
 #endif /* INCLUDED_TYPES_H */
-
 
 

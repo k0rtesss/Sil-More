@@ -229,19 +229,14 @@ static errr parse_ability_requirement_line(ability_type* b_ptr, char* s)
         *value++ = '\0';
         next = strchr(value, ':');
         if (next) *next++ = '\0';
-        char token[64];
-        ability_req_copy_token(token, sizeof(token), name);
-        bool lore = streq(token, "LORE") || streq(token, "KNW")
-            || streq(token, "KNOWLEDGE");
-        if (!lore && !ability_req_parse_name(name, &is_stat, &index))
+        if (!ability_req_parse_name(name, &is_stat, &index))
             return PARSE_ERROR_GENERIC;
-        if (!lore && !is_stat && index == S_SPC)
+        if (!is_stat && index == S_SPC)
             return PARSE_ERROR_OUT_OF_BOUNDS;
         if (!ability_req_parse_int(value,
-                (lore || is_stat) ? 255 : BASE_SKILL_MAX, &minimum))
+                is_stat ? 255 : BASE_SKILL_MAX, &minimum))
             return PARSE_ERROR_OUT_OF_BOUNDS;
-        if (lore) b_ptr->lore_req = (byte)minimum;
-        else if (is_stat) b_ptr->stat_req[index] = (byte)minimum;
+        if (is_stat) b_ptr->stat_req[index] = (byte)minimum;
         else b_ptr->skill_req[index] = MAX(b_ptr->skill_req[index], minimum);
         count++;
         if (!next) break;
@@ -588,7 +583,18 @@ errr parse_b_info(char* buf, header* head)
         if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
         if (!ability_req_parse_int(buf + 2, 255, &cost))
             return PARSE_ERROR_OUT_OF_BOUNDS;
-        b_ptr->knowledge_cost = (byte)cost;
+        b_ptr->lore_cost = (byte)cost;
+    }
+
+    /* Lore is a presentation/purchase branch, not a new engine skill. Keep
+     * I: identities stable for equipment, prerequisites and older saves. */
+    else if (buf[0] == 'L')
+    {
+        int branch;
+        if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (!ability_req_parse_int(buf + 2, 1, &branch))
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        b_ptr->lore_branch = (byte)branch;
     }
 
     /* A: every listed ability is mandatory, alongside the P: alternatives. */

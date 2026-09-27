@@ -3,6 +3,8 @@
 #include "score/score_guid.h"
 #include "meta_state.h"
 #include "angband.h"
+#include "quest/quest-rewards-beta.h"
+#include "quest/quest-runtime.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
 #include "log/log.h"
@@ -83,6 +85,7 @@ void take_hit(int dam, cptr kb_str)
     p_ptr->chp -= dam;
 
     attempt_to_cheat_death();
+    quest_beta_resurrect();
 
     /* Display the hitpoints */
     p_ptr->redraw |= (PR_HP);

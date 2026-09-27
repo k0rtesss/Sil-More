@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-challenges.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "cmd/world/cmd-interact-chest.h"
@@ -3301,6 +3302,11 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     if (o_ptr->tval == TV_ARROW)
     {
         do_cmd_quiver_arrows(o_ptr, item);
+        return;
+    }
+
+    if (!quest_challenge_object_allowed(o_ptr)) {
+        msg_print("Your chosen challenge forbids equipping that item.");
         return;
     }
 

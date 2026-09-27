@@ -1,4 +1,7 @@
 #include "angband.h"
+#include "quest/quest-rewards-beta.h"
+#include "quest/quest-runtime.h"
+#include "quest/quest-challenges.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -294,6 +297,9 @@ void calc_torch(void)
         if (!player_equipment_slot_counts_as_equipped(i))
             continue;
 
+        if (o_ptr->tval == TV_LIGHT && !quest_challenge_object_allowed(o_ptr))
+            continue;
+
         /* Extract the flags */
         object_flags4(o_ptr, &f1, &f2, &f3, &f4);
 
@@ -406,6 +412,9 @@ void calc_torch(void)
     {
         p_ptr->cur_light += 1;
     }
+
+    if (quest_special_ability_active(SPC_QUEEN_STARS))
+        p_ptr->cur_light++;
 
     /* Update the visuals */
     p_ptr->update |= (PU_UPDATE_VIEW);

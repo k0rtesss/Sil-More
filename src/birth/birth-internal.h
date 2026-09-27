@@ -35,8 +35,7 @@
 
 #define BLITZ_MAX_EFFECT_COUNT 9
 #define MAX_COST 13
-#define BIRTH_STAT_LORE A_MAX
-#define BIRTH_STAT_MAX (A_MAX + 1)
+#define BIRTH_STAT_MAX A_MAX
 
 typedef struct birther birther;
 typedef struct birth_menu birth_menu;

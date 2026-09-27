@@ -385,3 +385,60 @@ void place_chasm_island_sanctum(int cy, int cx)
         (void)place_exact_skeleton_at(cy, cx, SV_SKELETON_ELF);
     }
 }
+
+
+/* Do not reinterpret these symbols in ordinary vaults: m/p/l have newer uses. */
+static const struct { int vault; char token; const char *guid; } quest_tokens[] = {
+    {464, 'm', "707ee98ab7f93af6"}, /* Maeglin */
+    {465, '[', "0e401610ae33a21f"}, {465, ']', "7ed54d5976d25b3e"},
+    {465, '}', "66eda88da3bb69b9"}, {465, '{', "e7c39145ef0dc35d"},
+    {466, 'g', "333546bf2a893575"}, {466, 'b', "d41e3b6bfafb596f"},
+    {466, 'c', "bf68d49c92c9d98c"}, {466, 'l', "f30bbaa9d32572af"},
+    {466, 'p', "8a1995b8587aa0a2"}, {466, 't', "78d6c2d78e85ea3d"},
+    {467, '_', "bba0d000d9578563"}
+};
+static int quest_vault_permitted_race;
+
+int quest_vault_token_race(int vault, char token)
+{
+    for (size_t i = 0; i < N_ELEMENTS(quest_tokens); ++i) {
+        if (quest_tokens[i].vault != vault || quest_tokens[i].token != token) continue;
+        u64b guid;
+        if (!parse_u64b_hex(quest_tokens[i].guid, &guid)) return -1;
+        int race = monster_lookup_guid(guid);
+        return race > 0 ? race : -1;
+    }
+    return 0;
+}
+
+bool quest_vault_tokens_available(int vault)
+{
+    for (size_t i = 0; i < N_ELEMENTS(quest_tokens); ++i) {
+        if (quest_tokens[i].vault != vault) continue;
+        int race = quest_vault_token_race(vault, quest_tokens[i].token);
+        if (race <= 0 || race >= z_info->r_max) return false;
+        if ((r_info[race].flags1 & RF1_UNIQUE) &&
+            (r_info[race].max_num == 0 || r_info[race].cur_num != 0)) return false;
+    }
+    return true;
+}
+
+bool quest_vault_spawn_permitted(int race)
+{
+    return race > 0 && race == quest_vault_permitted_race;
+}
+
+bool place_quest_vault_token(int vault, char token, int y, int x)
+{
+    int race = quest_vault_token_race(vault, token);
+    if (race <= 0) return false;
+    int old_race = quest_vault_permitted_race;
+    bool old_exact = current_build_vault_exact_token;
+    quest_vault_permitted_race = race;
+    current_build_vault_exact_token = true;
+    bool placed = place_monster_one(y, x, race, true, true, NULL);
+    current_build_vault_exact_token = old_exact;
+    quest_vault_permitted_race = old_race;
+    if (!placed) log_warn("Quest vault %d failed exact token '%c' (race %d)", vault, token, race);
+    return placed;
+}

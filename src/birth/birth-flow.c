@@ -1,6 +1,8 @@
 /* File: birth/birth-flow.c */
 
 #include "angband.h"
+#include "quest/quest-challenges.h"
+#include "quest/quest-runtime.h"
 #include "birth/birth-internal.h"
 
 #define BASE_COLUMN 7
@@ -326,6 +328,8 @@ static NavResult player_birth_aux(void)
             return blitz_effects;
     }
 
+    quest_challenge_choose();
+
     /* Point-based flow */
     if (blitz_auto_allocates_stats())
     {
@@ -340,7 +344,6 @@ static NavResult player_birth_aux(void)
 
         for (int i = 0; i < A_MAX; i++)
             stat_alloc[i] = p_ptr->stat_base[i];
-        stat_alloc[BIRTH_STAT_LORE] = lore_system_enabled() ? p_ptr->lore : 0;
 
         /*
          * Keep the SDL layout stable across the stats/skills handoff.  Each
@@ -391,9 +394,9 @@ static NavResult player_birth_aux(void)
     // Reset the number of artefacts
     p_ptr->artefacts = 0;
 
-    log_trace("Final character stats: Str=%d Dex=%d Con=%d Gra=%d Lore=%d",
+    log_trace("Final character stats: Str=%d Dex=%d Con=%d Gra=%d Lore points=%d",
               p_ptr->stat_base[A_STR], p_ptr->stat_base[A_DEX],
-              p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA], p_ptr->lore);
+              p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA], p_ptr->lore_points);
 
     /* Accept */
     return NAV_OK;

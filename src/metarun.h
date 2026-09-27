@@ -34,6 +34,18 @@ extern curse_type* cu_info;
 #define METARUN_QUEST_NIENA    (1UL << 3)   /* Nienna quest completed  */
 #define METARUN_QUEST_OROME    (1UL << 4)   /* Oromë quest completed  */
 #define METARUN_QUEST_VARDA    (1UL << 5)   /* Varda quest completed  */
+#define METARUN_QUEST_MANDOS_TRAITOR (1UL << 6)
+#define METARUN_QUEST_MANDOS_BETRAYER (1UL << 7)
+#define METARUN_QUEST_OROME_DRAGONS (1UL << 8)
+#define METARUN_QUEST_OROME_GREAT_HUNT (1UL << 9)
+#define METARUN_QUEST_NIENA_MORGOTH (1UL << 10)
+#define METARUN_QUEST_NIENA_PACIFIST (1UL << 11)
+#define METARUN_QUEST_TULKAS_ORCS (1UL << 12)
+#define METARUN_QUEST_TULKAS_MORGOTH (1UL << 13)
+#define METARUN_QUEST_VARDA_SHADOW (1UL << 14)
+#define METARUN_QUEST_VARDA_UNGOLIANT (1UL << 15)
+/* Slots 8..15 use reserved_runtime[0..7], preserving the on-disk record size. */
+#define METARUN_KNOWN_QUESTS 16
 #define METARUN_QUEST_SLOT_MAX 8            /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
 /* Additional quests can be added as (1UL << 5), (1UL << 6), etc.   */

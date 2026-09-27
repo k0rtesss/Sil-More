@@ -417,7 +417,7 @@ B:You endure bravely—mightiest mortal warrior, spirit unbroken by darkness.
 F:EVN_AFFINITY | WIL_AFFINITY | PER_PENALTY | SNG_AFFINITY | MOR_CURSE | STL_PENALTY
 U:SNG_HURIN
 S:2:2:2:0
-C:5:3:5:5:5:7:7:10  # Song of Slaying  # Poison Resistance  # Indomitable # Formidable
+C:5:3:5:5:7:10  # Formidable  # Indomitable  # Song of Slaying
 P:2
 R:ed37fc4fce32643f:The Easterling usurper darkened his halls; his name is kept in wrath.
 D: Mightiest mortal warrior, defiant heart opposing Morgoth's darkness, whose valor on Anfauglith echoed courage beyond mortal despair. Bound cruelly to doom, witnessing ruin wrought upon kin and realm alike, sorrow unmatched, yet spirit unbroken amid relentless torment. Foreshadowing tragic deeds borne of bitterness and wrathful grief, memory enduring in pride and tragedy, hero forever defiant; Húrin, steadfast flame, challenging darkness even unto bitterest end.

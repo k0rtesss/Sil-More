@@ -30,6 +30,7 @@ static term fixture_term;
 static char confirmation[1024];
 static int confirmation_count;
 static bool accept_purchase;
+static cptr input_sequence;
 extern char g_touch_pane_yes_no_prompt_text[];
 
 bool fixture_confirm(cptr prompt)
@@ -48,7 +49,15 @@ bool fixture_confirm(cptr prompt)
 static errr terminal_extra(int action, int value)
 {
     (void)value;
-    if (action == TERM_XTRA_EVENT) Term_keypress(' ');
+    if (action == TERM_XTRA_EVENT)
+    {
+        if (input_sequence)
+        {
+            assert(*input_sequence);
+            Term_keypress(*input_sequence++);
+        }
+        else Term_keypress(' ');
+    }
     return 0;
 }
 
@@ -64,7 +73,7 @@ static void reset_player(void)
     p_ptr->song1 = p_ptr->song2 = SNG_NOTHING;
     for (int stat = 0; stat < A_MAX; ++stat) p_ptr->stat_base[stat] = 3;
     p_ptr->new_exp = 100000;
-    p_ptr->knowledge_points = 77;
+    p_ptr->lore_points = 77;
     op_ptr->opt[OPT_lore_beta] = false;
     confirmation[0] = '\0'; confirmation_count = 0;
     accept_purchase = false;
@@ -87,8 +96,8 @@ static void check_parser(void)
     error_idx = -1;
     assert(!parse_line(&h, "N:0:Fixture"));
     assert(!parse_line(&h, "I:1:4:6"));
-    assert(!parse_line(&h, "R:DEX:2:STEALTH:3:WILL:5:LORE:2"));
-    assert(entries[0].stat_req[A_DEX] == 2 && entries[0].lore_req == 2);
+    assert(!parse_line(&h, "R:DEX:2:STEALTH:3:WILL:5"));
+    assert(entries[0].stat_req[A_DEX] == 2);
     assert(entries[0].skill_req[S_STL] == 3 && entries[0].skill_req[S_WIL] == 5);
     assert(!parse_line(&h, "R:skill_archery:4:S_PER:2"));
     assert(ability_required_skill(&entries[0], S_ARC) == 6);
@@ -102,6 +111,12 @@ static void check_parser(void)
     assert(parse_line(&h, "R:WILL"));
     assert(!parse_line(&h, "R:0:2")); /* Existing numeric stat syntax. */
     assert(entries[0].stat_req[A_STR] == 2);
+    assert(!parse_line(&h, "L:1"));
+    assert(!parse_line(&h, "K:3"));
+    assert(entries[0].lore_branch && entries[0].lore_cost == 3);
+    assert(parse_line(&h, "L:2"));
+    assert(parse_line(&h, "K:-1"));
+    assert(parse_line(&h, "R:LORE:2")); /* Lore is no longer an attribute. */
     free(h.name_ptr); free(h.text_ptr);
     puts("Parser: mixed stats/Lore/skills, aliases, duplicate maxima and invalid ranks PASS.");
 }
@@ -189,7 +204,7 @@ static void check_purchase(void)
     accept_purchase = true;
     assert(ability_browser_activate_choice(S_ARC, ARC_AMBUSH));
     assert(p_ptr->skill_base[S_ARC] == 6 && p_ptr->skill_base[S_STL] == 3);
-    assert(p_ptr->skill_base[S_MEL] == 9 && p_ptr->knowledge_points == 77);
+    assert(p_ptr->skill_base[S_MEL] == 9 && p_ptr->lore_points == 77);
     assert(!p_ptr->new_exp && p_ptr->innate_ability[S_ARC][ARC_AMBUSH]);
 
     reset_player();
@@ -259,9 +274,9 @@ static void check_display_and_existing_gates(void)
     assert(!ability_browser_plan_training(&synthetic, &training));
 
     /* A data-authored ability can require more than two trained skills. */
+    reset_player();
     ability_type saved_ambush = *ambush;
     for (int skill = 0; skill < S_SPC; ++skill) ambush->skill_req[skill] = 3;
-    p_ptr->skill_base[S_SMT] = 0;
     assert(!ability_browser_activate_choice(S_ARC, ARC_AMBUSH));
     assert(strlen(confirmation) > 160 && strstr(confirmation, "Song 0 to 3"));
     assert(strstr(confirmation, "XP total"));
@@ -271,17 +286,155 @@ static void check_display_and_existing_gates(void)
     ability_type* study = &b_info[ability_index(S_PER, PER_QUICK_STUDY)];
     byte saved_requirement = study->skill_req[S_STL];
     study->skill_req[S_STL] = 3;
-    op_ptr->opt[OPT_lore_beta] = true; p_ptr->lore = 2;
-    p_ptr->new_exp = 699;
+    op_ptr->opt[OPT_lore_beta] = true;
+    p_ptr->new_exp = 599;
     assert(!ability_browser_activate_choice(S_PER, PER_QUICK_STUDY));
-    assert(p_ptr->new_exp == 699 && p_ptr->knowledge_points == 77);
+    assert(p_ptr->new_exp == 599 && p_ptr->lore_points == 77);
     assert(!p_ptr->skill_base[S_PER] && !p_ptr->skill_base[S_STL]);
-    p_ptr->new_exp = 700; accept_purchase = true;
+    p_ptr->new_exp = 600; accept_purchase = true;
     assert(ability_browser_activate_choice(S_PER, PER_QUICK_STUDY));
-    assert(!p_ptr->new_exp && p_ptr->knowledge_points == 77);
-    assert(p_ptr->skill_base[S_PER] == 1 && p_ptr->skill_base[S_STL] == 3);
+    assert(!p_ptr->new_exp && p_ptr->lore_points == 76);
+    assert(p_ptr->skill_base[S_PER] == 0 && p_ptr->skill_base[S_STL] == 3);
     study->skill_req[S_STL] = saved_requirement;
     puts("Wrapped requirements, duplicate primary ranks, stat gates and Lore-currency multi-skill purchase PASS.");
+}
+
+static void check_lore_points(void)
+{
+    extern NavResult player_birth_aux_2(int stats[A_MAX]);
+    extern void get_extra(void);
+    reset_player();
+    p_ptr->lore_points = 0;
+    p_ptr->lore_milestones = 0;
+    lore_artefact_milestones(65);
+    gain_lore_points(1, NULL);
+    assert(!p_ptr->lore_points && !p_ptr->lore_milestones);
+    op_ptr->opt[OPT_lore_beta] = true;
+    lore_artefact_milestones(14); assert(!p_ptr->lore_points);
+    for (int i = 0; i < 6; ++i)
+    {
+        lore_artefact_milestones(15 + 10 * i);
+        assert(p_ptr->lore_points == i + 1);
+        lore_artefact_milestones(15 + 10 * i);
+        assert(p_ptr->lore_points == i + 1);
+    }
+    object_type forged = {0}; forged.k_idx = 1; forged.name1 = 1;
+    catastrophe_accept_craft(65); catastrophe_crafted(&forged);
+    assert(p_ptr->lore_points == 6); /* Same thresholds as identification. */
+    p_ptr->lore_points = 0; p_ptr->lore_milestones = 0;
+    catastrophe_accept_craft(35); catastrophe_crafted(&forged);
+    assert(p_ptr->lore_points == 3);
+    lore_artefact_milestones(25); assert(p_ptr->lore_points == 3);
+    lore_award_milestone(LORE_MILESTONE_SONG, NULL);
+    lore_award_milestone(LORE_MILESTONE_SONG, NULL);
+    lore_award_milestone(LORE_MILESTONE_CATASTROPHE, NULL);
+    lore_award_milestone(LORE_MILESTONE_CATASTROPHE, NULL);
+    assert(p_ptr->lore_points == 5);
+    gain_lore_points(1, NULL); gain_lore_points(1, NULL); /* Each new vault. */
+    assert(p_ptr->lore_points == 7);
+    p_ptr->lore_points = PY_MAX_EXP - 1;
+    gain_lore_points(10, NULL); assert(p_ptr->lore_points == PY_MAX_EXP);
+
+    /* Purchased ranks, rather than racial/house bonuses, set stat prices. */
+    p_ptr->lore_stat_invested[A_STR] = 2;
+    p_ptr->stat_base[A_STR] = 5;
+    p_ptr->lore_points = 2;
+    assert(lore_stat_increase_cost(A_STR) == 3);
+    assert(!lore_increase_stat(A_STR) && p_ptr->stat_base[A_STR] == 5);
+    p_ptr->lore_points = 3;
+    assert(lore_increase_stat(A_STR));
+    assert(p_ptr->stat_base[A_STR] == 6 && !p_ptr->lore_points);
+    assert(p_ptr->lore_stat_invested[A_STR] == 3);
+    assert(lore_stat_increase_cost(A_STR) == 4);
+    assert(!lore_increase_stat(-1) && !lore_increase_stat(A_MAX));
+    p_ptr->lore_stat_invested[A_STR] = 6;
+    assert(!lore_stat_increase_cost(A_STR));
+
+    reset_player(); op_ptr->opt[OPT_lore_beta] = true;
+    p_ptr->new_exp = 0; p_ptr->lore_points = 3;
+    ability_browser_entry entries[ABILITIES_MAX];
+    int count = ability_browser_collect_entries(ABILITY_BROWSER_LORE, entries, ABILITIES_MAX);
+    assert(count == 3);
+    assert(ability_browser_tab_skill(ability_menu_skill_options()) == ABILITY_BROWSER_LORE);
+    char tokens[S_MAX + 1][40]; int widths[S_MAX + 1];
+    ability_browser_build_skill_tokens(ability_menu_skill_options() + 1,
+        ability_menu_skill_options(), true, tokens, widths);
+    assert(strstr(tokens[ability_menu_skill_options()], "Lore"));
+    for (int i = 0; i < count; ++i)
+    {
+        ability_type* a = entries[i].b_ptr;
+        assert(ability_purchase_xp(a) == 0);
+        assert(ability_purchase_lore_cost(a->skilltype, a->abilitynum) == 1);
+        ability_browser_desc_line lines[ABILITY_BROWSER_DESC_MAX_LINES];
+        int n = ability_browser_build_description(ABILITY_BROWSER_LORE, &entries[i], lines, 60);
+        assert(description_has(lines, n, "1 LP"));
+        accept_purchase = false;
+        assert(!ability_browser_activate_choice(a->skilltype, a->abilitynum));
+        assert(p_ptr->lore_points == 3 - i);
+        accept_purchase = true;
+        assert(ability_browser_activate_choice(a->skilltype, a->abilitynum));
+        assert(!p_ptr->new_exp && p_ptr->lore_points == 2 - i);
+    }
+    assert(!abilities_in_skill(S_PER) && !abilities_in_skill(S_WIL));
+    count = ability_browser_collect_entries(S_PER, entries, ABILITIES_MAX);
+    for (int i = 0; i < count; ++i) assert(!entries[i].b_ptr->lore_branch);
+
+    /* K: on a normal ability adds LP without waiving XP or rank requirements. */
+    reset_player(); op_ptr->opt[OPT_lore_beta] = true;
+    ability_type* a = &b_info[ability_index(S_ARC, ARC_AMBUSH)];
+    byte old_cost = a->lore_cost; a->lore_cost = 2;
+    int total = ability_purchase_xp(a) + 2700;
+    p_ptr->lore_points = 1; p_ptr->new_exp = total;
+    accept_purchase = true;
+    assert(!ability_browser_activate_choice(a->skilltype, a->abilitynum));
+    assert(p_ptr->new_exp == total && p_ptr->lore_points == 1);
+    p_ptr->lore_points = 2; p_ptr->new_exp = total - 1;
+    assert(!ability_browser_activate_choice(a->skilltype, a->abilitynum));
+    assert(!p_ptr->skill_base[S_ARC] && !p_ptr->skill_base[S_STL]);
+    p_ptr->new_exp = total;
+    assert(ability_browser_activate_choice(a->skilltype, a->abilitynum));
+    assert(!p_ptr->new_exp && !p_ptr->lore_points);
+    assert(strstr(confirmation, "XP + 2 LP total"));
+    assert(abilities_in_skill(S_ARC) == 1);
+    a->lore_cost = old_cost;
+
+    /* Exercise the real late-allocation modal, including cancellation and
+     * nested screen restoration, at desktop and narrow terminal widths. */
+    for (int width = 40; width <= 80; width += 40)
+    {
+        Term_resize(width, 24);
+        p_ptr->lore_stat_invested[A_STR] = 0;
+        p_ptr->stat_base[A_STR] = 3; p_ptr->lore_points = 3;
+        Term_putstr(1, 1, -1, TERM_WHITE, "outer ability screen");
+        accept_purchase = false;
+        Term_flush(); input_sequence = "\r\033";
+        ability_browser_train_attributes();
+        input_sequence = NULL;
+        assert(p_ptr->lore_points == 3 && p_ptr->stat_base[A_STR] == 3);
+        accept_purchase = true;
+        Term_flush(); input_sequence = "\r\033";
+        ability_browser_train_attributes();
+        input_sequence = NULL;
+        assert(p_ptr->lore_points == 2 && p_ptr->stat_base[A_STR] == 4);
+        assert(p_ptr->lore_stat_invested[A_STR] == 1);
+        assert(strstr(confirmation, "1 lore point"));
+        byte attr; char ch; Term_what(1, 1, &attr, &ch); assert(ch == 'o');
+    }
+    /* Confirming birth with points left retains them, including after the
+     * setup helper runs again for the next creation screen. */
+    int birth_stats[A_MAX] = {1, 1, 1, 1};
+    p_ptr->tutorial_deferred = true;
+    Term_flush(); input_sequence = "\r";
+    assert(player_birth_aux_2(birth_stats) == NAV_OK);
+    input_sequence = NULL;
+    assert(p_ptr->lore_points == 9);
+    for (int i = 0; i < A_MAX; ++i) assert(p_ptr->lore_stat_invested[i] == 1);
+    get_extra(); assert(p_ptr->lore_points == 9);
+    sdl_character_sheet_screen_hide();
+    op_ptr->opt[OPT_lore_beta] = false;
+    assert(!ability_browser_collect_entries(ABILITY_BROWSER_LORE, entries, ABILITIES_MAX));
+    assert(!lore_stat_increase_cost(A_CON));
+    puts("Lore: milestones, shared smithing thresholds, retained stat spending, branch and atomic XP+LP purchases PASS.");
 }
 
 int main(int argc, char** argv)
@@ -304,6 +457,7 @@ int main(int argc, char** argv)
     p_ptr->py = p_ptr->px = 2; cave_feat[2][2] = FEAT_FLOOR;
     check_parser(); check_selected_requirements(); check_purchase();
     check_display_and_existing_gates();
+    check_lore_points();
     puts("Ability requirements integration: PASS.");
     SDL_Quit(); return 0;
 }

@@ -6,6 +6,7 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "tutorial/tutorial-game.h"
 #include "blitz.h"
 #include "game/game-lifecycle.h"
@@ -33,6 +34,8 @@ void do_cmd_escape(int silmarils)
     time_t ct = time((time_t*)0);
     char long_day[40];
     char buf[120];
+
+    quest_followup_escape();
 
     /* set the escaped flag */
     p_ptr->escaped = true;

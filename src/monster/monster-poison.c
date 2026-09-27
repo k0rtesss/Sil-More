@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "externs.h"
+#include "quest/quest-runtime.h"
 
 /* Poison is pending damage, with the same cap and decay as player poison. */
 void monster_poison_add(int m_idx, int amount)
@@ -18,6 +19,7 @@ void monster_poison_add(int m_idx, int amount)
         return;
     }
 
+    if (!m_ptr->poisoned) m_ptr->mflag &= ~MFLAG_PLAYER_POISON;
     m_ptr->poisoned = MIN(100, m_ptr->poisoned + MIN(amount, 100));
     m_ptr->mflag |= MFLAG_ACTV;
     if (p_ptr->health_who == m_idx)
@@ -46,9 +48,14 @@ bool monster_poison_tick(int m_idx)
     x = m_ptr->fx;
     p_ptr->window |= PW_MONLIST | PW_MONSTER;
 
-    /* The ordinary damage route preserves Morgoth's transition and drops. */
+    int race = m_ptr->r_idx;
+    bool player_poison = (m_ptr->mflag & MFLAG_PLAYER_POISON) != 0;
+    if (player_poison) quest_followup_damage(m_ptr, damage, -1);
+    /* Keep ambient combat behavior while attributing quest objectives. */
     bool dead = mon_take_hit(m_idx, damage,
         seen ? " dies of poisoning." : "", 0);
+    if (dead && player_poison) quest_followup_kill(race);
+    if (!dead && !m_ptr->poisoned) m_ptr->mflag &= ~MFLAG_PLAYER_POISON;
     if (seen)
         display_hit(y, x, damage, GF_POIS, dead);
     return dead;
@@ -73,6 +80,9 @@ void monster_poison_brand(int m_idx, const object_type* first,
         object_flags(second, &f1, &f2, &f3);
         branded |= (f1 & TR1_BRAND_POIS) != 0;
     }
-    if (branded)
+    if (branded) {
         monster_poison_add(m_idx, (damage + 1) / 2);
+        if (m_idx > 0 && m_idx < mon_max && mon_list[m_idx].r_idx
+            && mon_list[m_idx].poisoned) mon_list[m_idx].mflag |= MFLAG_PLAYER_POISON;
+    }
 }

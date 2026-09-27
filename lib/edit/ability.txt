@@ -15,7 +15,10 @@
 # A: mandatory skill number / ability value (repeat for AND requirements)
 # R: stat or skill name : minimum : ... (STR, DEX, CON, GRA, STEALTH, WILL, etc.)
 # S: stat or skill name : coefficient : ... (1.5, 3/2, 150%, 1x)
-# K: base knowledge-point cost (Lore beta only; reduced by Lore)
+# K: lore-point price while Lore beta is enabled (additional to normal XP)
+# L:1 moves an ability to the Lore branch while beta is enabled; no ability XP
+#     or primary I: skill-level gate. K: sets its price (minimum 1 for Lore).
+#     Stable I: identities, explicit R: requirements and effects are retained.
 # Y: carriage target : percentage reduction when personally learned
 # D: description (poetic/lore text)
 # E: effect (mechanical description)
@@ -29,7 +32,7 @@
 # 'P' requires any listed ability. Each 'A' line is additionally required.
 #     Quick Study bypasses this tree, but not skill or stat requirements.
 # 'R' uses base stats plus learned permanent stat increases, without equipment,
-#     drain, potions, songs or conditional combat bonuses. Lore is ignored when off.
+#     drain, potions, songs or conditional combat bonuses.
 #     Skill requirements use invested base ranks, without attributes or equipment.
 #     All listed requirements apply. Repeated skill requirements use the highest
 #     minimum, including the primary skill level from I:. SPECIAL is not trainable.
@@ -197,6 +200,7 @@ T:31:0:99  # Gloves
 
 N:14:Strength
 I:0:14:20
+K:1
 D:Fortified in body as were the sons of Fëanor by their unyielding oaths sworn in the halls of Tirion beneath the light of the Two Trees, their sinews hardened by ages of war across Beleriand.
 E:+1 Strength.
 
@@ -284,6 +288,7 @@ T:31:1:1   # Gloves (leather gloves only)
 
 N:28:Dexterity
 I:1:8:10
+K:1
 D:Swift and sure of hand as the great archers of the Noldor who practiced their art beneath the light of the Two Trees in Aman, where their fingers first learned the song of the bowstring.
 E:+1 Dexterity.
 
@@ -384,6 +389,7 @@ T:30:0:99  # Boots
 
 N:50:Dexterity
 I:2:10:20
+K:1
 D:Agile as the feet of Lúthien dancing in the starlit glades of Neldoreth, where she moved with a grace beyond the reach of mortal or elf, her every motion as fluid as the waters of Esgalduin.
 E:+1 Dexterity.
 
@@ -449,6 +455,7 @@ T:45:0:99  # Ring
 N:66:Dexterity
 P:3/0:3/1
 I:3:6:11
+K:1
 D:Fleet and silent as the shadows that moved among the ancient forests of Beleriand before the rising of the Sun, when all the world lay under starlight and the Firstborn walked in silence upon the young earth.
 E:+1 Dexterity.
 
@@ -456,8 +463,8 @@ E:+1 Dexterity.
 
 N:80:Quick Study
 I:4:0:1
-R:LORE:2
-K:2
+L:1
+K:1
 D:With the quick understanding of the loremasters of Gondolin, who gathered and preserved the accumulated wisdom of the Noldor within the Hidden City. Their voracious study of all arts and sciences allowed them to grasp new disciplines swiftly, drawing connections that others would miss.
 E:Take advanced abilities without prerequisites. Modest bonus to identifying items.
 T:40:0:99  # Amulet
@@ -490,8 +497,8 @@ T:40:0:99  # Amulet
 
 N:84:Alchemy
 I:4:4:5
-R:LORE:3
-K:3
+L:1
+K:1
 D:Understanding the hidden properties of things as did the scholars of the Noldor in Tirion, who studied the nature of every herb and mineral beneath the light of Laurelin. Such knowledge reveals the purpose of elixirs and powders at a glance, and attunes the mind to the resonance of enchanted crystals.
 E:Auto-identify herbs, potions, staves, and horns. While diseased, a Gem of Self Knowledge shows the disease name and cure herb. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
 T:32:0:99  # Helm
@@ -529,6 +536,7 @@ T:19:0:99  # Bows
 
 N:89:Grace
 I:4:9:10
+K:1
 D:Blessed as the favoured of the Valar in the Undying Lands, where Manwë's eagles bore tidings and the light of the Trees touched all things with grace beyond the measure of Middle-earth.
 D:With watchful poise, you bear a greater array of ready weapons without letting strap, scabbard, or haft encumber your movement.
 E:+1 Grace. +6.0 qt Harness capacity.
@@ -552,8 +560,8 @@ T:34:0:99  # Shields
 
 N:101:Channeling
 I:5:1:2
-R:LORE:4
-K:4
+L:1
+K:1
 D:Channeling power as the Maiar once aided the Eldar in Valinor, guiding the flow of enchantment through crafted vessels. Those who master this art understand the inner workings of staves and horns instinctively, and can draw forth their power without risk of the wild discharges that imperil the untrained.
 E:Auto-identify staves and horns. Channel charges safely without risk.
 T:32:0:99  # Helm
@@ -590,7 +598,7 @@ T:36:0:99  # Soft Armour
 N:105:Indomitable
 I:5:5:5
 D:Indomitable in spirit as Húrin Thalion, who alone of all the lords of Men defied Morgoth to his face and endured twenty-eight years of torment upon the heights of Thangorodrim without breaking. Such unconquerable will shields the mind from terror and bewilderment, and sustains the body far beyond its ordinary limits.
-E:Resist fear, confusion, stunning, and hallucination. Hunger reduced to 1/3 normal rate.
+E:Resist fear, confusion, stunning, hallucination, and poison. Hunger reduced to 1/3 normal rate.
 T:40:0:99  # Amulet
 T:32:0:99  # Helm
 T:37:0:99  # Mail
@@ -599,12 +607,6 @@ N:106:Oath
 I:5:6:6
 D:Swearing a great oath as did Fëanor and his sons upon Taniquetil, calling Manwë and Varda and the everlasting darkness upon themselves should they fail or falter. Such binding vows carry terrible power, granting strength to those who keep them and ruin to those who break their word.
 E:Swear a great oath for a reward. Breaking the oath has consequences.
-
-N:107:Poison Resistance
-I:5:7:7
-R:CON:2
-D:Resisting poison as the hardy Folk of Haleth endured the venoms of Ungoliant's spawn in the passes of the Ered Gorgoroth. Through strength of constitution or long exposure, the body learns to resist the corruption of venom that would fell a lesser soul.
-E:Grants resistance to poison.
 
 N:108:Vengeance
 I:5:8:8
@@ -626,11 +628,12 @@ T:40:0:99  # Amulet
 
 N:110:Constitution
 I:5:10:12
+K:1
 D:Enduring as the great pillars of Menegroth carved by the dwarves of Belegost in ages past, which stood unshaken through war and sorrow until the very ruin of Doriath.
 D:Long hardship has taught you to travel and fight beneath a fuller, more cumbersome load.
 E:+1 Constitution. +6.0 qt Pack capacity.
 
-# Lore R: and K: fields apply only while Lore fifth stat (Beta) is enabled.
+# Lore L: and K: fields apply only while Lore points (Beta) is enabled.
 # R: minimum permanent stats/base skills. S: stat/skill coefficients (1 = x1).
 # P: any listed learned ability. Each A: line is additionally required.
 # Smithing ---------------------------------------------
@@ -675,7 +678,7 @@ T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
 N:125:Artifice
-I:6:5:7
+I:6:5:10
 R:DEX:4:GRA:4
 S:GRA:1
 A:6/3
@@ -686,7 +689,7 @@ T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
 N:126:Masterpiece
-I:6:6:8
+I:6:6:12
 R:DEX:4:GRA:5
 A:6/3
 P:6/0:6/1:6/2
@@ -696,7 +699,8 @@ T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
 N:127:Grace
-I:6:7:10
+I:6:7:12
+K:1
 D:Inspired as by the touch of Varda Elentari upon the works of the Eldar, whose blessing hallowed the greatest creations of the Noldor in the years before the Darkening.
 E:+1 Grace.
 
@@ -863,6 +867,7 @@ T:35:0:99  # Cloak
 N:157:Grace
 I:7:17:12
 P:7/0:7/11:7/12
+K:1
 D:Uplifted as by the Great Music of the Ainur before the foundations of the World were laid, when Ilúvatar revealed to them the themes of creation and each spirit contributed its voice to the Song that shaped all things.
 E:+1 Grace.
 
@@ -927,4 +932,22 @@ I:8:9:0
 D:Swearing the Oath of Light, dedicating yourself to the memory of the Two Trees as those faithful Noldor who kept Varda's stars burning even in the deepest darkness of Angband. You refuse any gear that would dim your radiance, and while the oath endures, your inner fire burns brighter against the encroaching shadow.
 E:+1 inner light intensity. Breaks if you equip gear that reduces your light.
 
+N:170:Wraith of Orome
+I:8:10:0
+D:Bearing Orome's hunting wrath, you enter battle as a shadow of the Huntsman riding beneath the stars. Rage sharpens every sinew instead of clouding the hand, turning fury into a clean and terrible pursuit.
+E:When raging, each stat rises by one instead of applying the normal rage stat changes. Quest reward.
 
+N:171:Huntsman's Rhythm
+I:8:11:0
+D:Following the cadence of Orome's hunt, bow and spear become one pursuit. Two true arrows mark the quarry's movement, and the next thrust follows with the force of the chase behind it.
+E:Two bow hits prime your next spear attack for doubled damage. Quest reward.
+
+N:172:Wrath of Tulkas
+I:8:12:0
+D:Tulkas' laughter thunders in your blood, lending the force that once cast Morgoth down before the gates of Utumno. Your smiting blows carry a joy so fierce that even mighty enemies feel the world shake.
+E:Smite strikes with enhanced force. Quest reward.
+
+N:173:Queen of the Stars
+I:8:13:0
+D:Varda's clear starlight rests upon you, bright and unsullied. In the deepest shadow, the memory of the stars answers, kindling a radiance no darkness can wholly devour.
+E:Strengthens Varda's light blessings. Quest reward.

@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 25 /* Version-gated legendary song area map. */
+#define VERSION_EXTRA 28 /* First-thrall Lore choice and persistent reward state. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
@@ -320,6 +320,16 @@
 #define R_IDX_NIENA 6
 #define R_IDX_OROME 332
 #define R_IDX_DURUIN 126
+#define R_IDX_ULDOR 115
+#define R_IDX_ULFANG 125
+#define R_IDX_BELEGWATH 166
+#define R_IDX_SCATHA 176
+#define R_IDX_SMAUG 195
+#define R_IDX_MAEGLIN 196
+#define R_IDX_DRAUGLUIN 205
+#define R_IDX_GOSTIR 215
+#define R_IDX_SHELOB 224
+#define R_IDX_THURINGWETHIL 234
 #define R_IDX_VARDA 321
 #define R_IDX_SPIDER_HATCHLING 32
 #define R_IDX_ORC_ARCHER 51
@@ -372,6 +382,7 @@
 #define THRALL_QUEST_STATE_ACTIVE 0
 #define THRALL_QUEST_STATE_REWARDED 1
 #define THRALL_QUEST_STATE_REWARD_PENDING 2
+#define THRALL_QUEST_STATE_FIRST_REWARD_PENDING 3
 
 /* Experience granted for completing quests. */
 #define QUEST_COMPLETION_EXP 300
@@ -766,7 +777,7 @@
 #define WIL_INNER_LIGHT 4
 #define WIL_INDOMITABLE 5
 #define WIL_OATH 6
-#define WIL_POISON_RESISTANCE 7
+#define WIL_RETIRED_POISON_RESISTANCE 7 /* Retired ability slot; save compatibility. */
 #define WIL_VENGEANCE 8
 #define WIL_MAJESTY 9
 #define WIL_CON 10
@@ -838,6 +849,10 @@
 #define SPC_OATH_VALOROUS 7  /* Oath of the Valorous Heart */
 #define SPC_UNIQUE_BANE 8  /* Enhanced effectiveness against unique monsters */
 #define SPC_OATH_LIGHT 9   /* Oath of Light */
+#define SPC_OROME_WRAITH 10
+#define SPC_HUNTSMAN_RHYTHM 11
+#define SPC_TULKAS_WRATH 12
+#define SPC_QUEEN_STARS 13
 
 /*
  * Attack Types
@@ -2609,6 +2624,8 @@
     0x00040000 /* Monster was just meleed by player last turn */
 #define MFLAG_DURUIN_PROVOKED                                                   \
     0x00080000 /* Duruin may leave his inner bastion enclosure */
+#define MFLAG_PLAYER_POISON 0x00100000 /* Player contributed to pending poison. */
+#define MFLAG_PLAYER_PUSH 0x00200000 /* Transient: resolve player knockback terrain. */
 
 /*
  * New monster race bit flags
@@ -2980,10 +2997,45 @@
 /* Confirm before paid melee/ranged active switches */
 #define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
 #define OPT_lore_beta (OPT_GAME_PLAY + 7)
+#define LORE_MILESTONE_SONG 0x0040
+#define LORE_MILESTONE_CATASTROPHE 0x0080
+#define LORE_FIRST_THRALL_HELPED 0x0100
+#define LORE_MILESTONE_MASK 0x01FF
 #define OPT_meta_artefact_memory (OPT_GAME_PLAY + 8)
 #define OPT_meta_forged_artefacts (OPT_GAME_PLAY + 9)
 #define OPT_meta_revenge (OPT_GAME_PLAY + 10)
 #define OPT_meta_legendary_places (OPT_GAME_PLAY + 11)
+
+/* Quest settings reuse reserved normal-option slots.  Keep these numeric
+ * assignments stable: they are persisted in the app config and savefiles. */
+#define OPT_quest_1 44
+#define OPT_quest_2 45
+#define OPT_quest_3 46
+#define OPT_quest_4 47
+#define OPT_quest_5 48
+#define OPT_quest_6 49
+#define OPT_quest_7 50
+#define OPT_quest_8 51
+#define OPT_quest_9 52
+#define OPT_quest_10 53
+#define OPT_quest_11 54
+#define OPT_quest_12 55
+#define OPT_quest_13 56
+#define OPT_quest_14 57
+#define OPT_quest_15 58
+#define OPT_quest_16 64
+#define OPT_quest_rules_beta 65
+#define OPT_quest_rewards_beta 66
+#define OPT_quest_challenges_beta 70
+#define OPT_quest_lineage_beta 73
+
+/* Stable names for the six original Valar quest switches. */
+#define OPT_quest_tulkas OPT_quest_1
+#define OPT_quest_aule OPT_quest_2
+#define OPT_quest_mandos OPT_quest_3
+#define OPT_quest_niena OPT_quest_4
+#define OPT_quest_orome OPT_quest_5
+#define OPT_quest_varda OPT_quest_6
 // reserved legacy slot: auto_haggle
 // reserved legacy slot: auto_scum
 // reserved legacy slot: allow_themed_levels
@@ -3418,7 +3470,7 @@
 /*
  * Information for "do_cmd_options()".
  */
-#define OPT_PAGE_MAX 7
+#define OPT_PAGE_MAX 8
 #define OPT_PAGE_PER 28
 
 /*
@@ -3431,6 +3483,7 @@
 #define CHALLENGE_PAGE 4
 #define DEBUG_PAGE 5
 #define SOUND_PAGE 6
+#define QUEST_PAGE 7
 
 /*** Macro Definitions ***/
 
@@ -4282,6 +4335,17 @@ typedef struct quest_mapping {
     /* Add quest-specific state constants or function pointers here as needed */
 } quest_mapping;
 
+#define VALA_TULKAS 1
+#define VALA_AULE   2
+#define VALA_MANDOS 3
+#define VALA_NIENNA 4
+#define VALA_NIENA  VALA_NIENNA
+#define VALA_OROME  5
+#define VALA_VARDA  6
+#define VALA_MAX    6
+#define VALA_STAGES 3
+#define QUEST_SLOT_MAX 24
+
 /* Quest ID mappings - modify this to add new quests */
 #define QUEST_ID_TULKAS  1  /* Tulkas quest in quest.txt */
 #define QUEST_ID_AULE    2  /* Aulë quest in quest.txt */
@@ -4290,6 +4354,28 @@ typedef struct quest_mapping {
 #define QUEST_ID_OROME   5  /* Oromë quest in quest.txt */
 #define QUEST_ID_VARDA   6  /* Varda quest in quest.txt */
 
+#define QUEST_ID_MANDOS_TRAITOR 7
+#define QUEST_ID_MANDOS_BETRAYER 8
+#define QUEST_ID_OROME_DRAGONS 9
+#define QUEST_ID_OROME_GREAT_HUNT 10
+#define QUEST_ID_NIENA_MORGOTH 11
+#define QUEST_ID_NIENA_PACIFIST 12
+#define QUEST_ID_TULKAS_ORCS 13
+#define QUEST_ID_TULKAS_MORGOTH 14
+#define QUEST_ID_VARDA_SHADOW 15
+#define QUEST_ID_VARDA_UNGOLIANT 16
+#define OROME_GREAT_HUNT_TARGET_COUNT 6
+#define OROME_GREAT_HUNT_TARGET_MASK 0x3F
+
+/* Generic quest state helpers for multi-stage quests. */
+#define QUEST_STATE_NOT_STARTED    0
+#define QUEST_STATE_GIVER_PRESENT  1
+#define QUEST_STATE_ACTIVE         2
+#define QUEST_STATE_SUCCESS        3
+#define QUEST_STATE_REWARDED       4
+#define QUEST_FLAG_GLOBAL          0x01
+#define QUEST_FLAG_OPTIONAL_CHAIN  0x02
+
 /* Quest mapping table - used by extract_quest_init_texts() and related functions */
 static const quest_mapping quest_id_map[] = {
     { QUEST_ID_TULKAS, "Tulkas the Strong" },
@@ -4297,10 +4383,29 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_MANDOS, "Mandos the Doomsman" },
     { QUEST_ID_NIENA,  "Nienna, Lady of Pity" },
     { QUEST_ID_OROME,  "Oromë the Hunter" },
-    { QUEST_ID_VARDA,  "Varda, Lady of the Stars" }
+    { QUEST_ID_VARDA,  "Varda, Lady of the Stars" },
+    { QUEST_ID_MANDOS_TRAITOR, "Mandos, Doom of the Easterlings" },
+    { QUEST_ID_MANDOS_BETRAYER, "Mandos, Doom of the Betrayer" },
+    { QUEST_ID_OROME_DRAGONS, "Orome, Warden of the Drakes" },
+    { QUEST_ID_OROME_GREAT_HUNT, "Orome, Hunt of the Great" },
+    { QUEST_ID_NIENA_MORGOTH, "Nienna's Mercy in Angband" },
+    { QUEST_ID_NIENA_PACIFIST, "Nienna's Path of Peace" },
+    { QUEST_ID_TULKAS_ORCS, "Tulkas, Orc-Bane" },
+    { QUEST_ID_TULKAS_MORGOTH, "Tulkas, Black Foe's Scourge" },
+    { QUEST_ID_VARDA_SHADOW, "Varda, Shadow's Bastion" },
+    { QUEST_ID_VARDA_UNGOLIANT, "Varda, Gloomweaver's Doom" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))
+
+/* Challenge identifiers (metarun-level tracking). */
+#define CHALLENGE_NONE            0
+#define CHALLENGE_DISCONNECTED    1
+#define CHALLENGE_SINGLE_STAIR    2
+#define CHALLENGE_FIXED_50K_XP    3
+#define CHALLENGE_TULKAS_BLUNT    4
+#define CHALLENGE_TORCHLIGHT      5
+#define CHALLENGE_MAX_TRACKED     7
 
 //Defines for number of heroes
 #define FLAG_COUNT 64

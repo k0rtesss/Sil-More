@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -484,6 +485,13 @@ static cptr process_quest_placeholders(cptr text, int quest_idx)
 /*
  * Get quest reward description for status display using actual quest data
  */
+static cptr quest_reward_with_lore(char* text, size_t size)
+{
+    if (lore_system_enabled())
+        SDL_strlcat(text, " | 1 Lore point", size);
+    return text;
+}
+
 static cptr get_quest_reward_text(int quest_idx)
 {
     static char reward_buf[200];
@@ -491,7 +499,13 @@ static cptr get_quest_reward_text(int quest_idx)
 
     if (quest_idx <= 0 || quest_idx >= z_info->quest_max) return "Unknown reward";
 
-    quest_type* q_ptr = &quest_info[quest_idx];
+    quest_type reward = quest_info[quest_idx];
+    if (quest_rewards_enabled()) {
+        if (quest_idx == QUEST_ID_OROME) { reward.ability_type = 8; reward.ability_id = SPC_OROME_WRAITH; }
+        if (quest_idx == QUEST_ID_TULKAS) { reward.ability_type = 8; reward.ability_id = SPC_UNIQUE_BANE; }
+        if (quest_idx == QUEST_ID_VARDA_SHADOW) { reward.ability_type = 8; reward.ability_id = SPC_QUEEN_STARS; }
+    } else if (quest_idx > QUEST_ID_VARDA) reward.ability_type = 0;
+    quest_type* q_ptr = &reward;
     reward_buf[0] = '\0';
 
     /* Handle special Tulkas artifact reward */
@@ -511,10 +525,10 @@ static cptr get_quest_reward_text(int quest_idx)
 
                 /* Get the full artifact description */
                 object_desc(reward_buf, sizeof(reward_buf), &temp_obj, true, 0);
-                return reward_buf;
+                return quest_reward_with_lore(reward_buf, sizeof(reward_buf));
             } else {
                 SDL_strlcpy(reward_buf, a_ptr->name, sizeof(reward_buf));
-                return reward_buf;
+                return quest_reward_with_lore(reward_buf, sizeof(reward_buf));
             }
         }
     }
@@ -522,7 +536,7 @@ static cptr get_quest_reward_text(int quest_idx)
     /* Varda reward description */
     if (quest_idx == QUEST_ID_VARDA) {
         SDL_strlcpy(reward_buf, "Choose one radiant artefact and unlock the Oath of Light (+1 light radius)", sizeof(reward_buf));
-        return reward_buf;
+        return quest_reward_with_lore(reward_buf, sizeof(reward_buf));
     }
 
     /* Build reward description from quest data */
@@ -552,7 +566,7 @@ static cptr get_quest_reward_text(int quest_idx)
     }
 
     /* Check skill bonuses */
-    if (q_ptr->skill_type && q_ptr->skill_bonus) {
+    if (q_ptr->skill_type < S_MAX && q_ptr->skill_bonus) {
         if (has_rewards) SDL_strlcat(reward_buf, "| ", sizeof(reward_buf));
         has_rewards = true;
 
@@ -600,11 +614,22 @@ static cptr get_quest_reward_text(int quest_idx)
         SDL_strlcat(reward_buf, get_oath_name_from_id(q_ptr->oath_id), sizeof(reward_buf));
     }
 
-    if (!has_rewards) {
-        SDL_strlcpy(reward_buf, "Unknown reward", sizeof(reward_buf));
+    if (quest_idx > QUEST_ID_VARDA) {
+        if (has_rewards) SDL_strlcat(reward_buf, " | ", sizeof(reward_buf));
+        strnfmt(temp_buf, sizeof(temp_buf), "%d XP", QUEST_COMPLETION_EXP);
+        SDL_strlcat(reward_buf, temp_buf, sizeof(reward_buf));
+        if (quest_lineage_enabled()) {
+            if (quest_idx == QUEST_ID_MANDOS_BETRAYER) SDL_strlcat(reward_buf, " | One reprieve", sizeof(reward_buf));
+            if (quest_idx == QUEST_ID_NIENA_PACIFIST) SDL_strlcat(reward_buf, " | One curse cleansing", sizeof(reward_buf));
+            if (quest_idx == QUEST_ID_VARDA_UNGOLIANT) SDL_strlcat(reward_buf, " | Future radiant relics", sizeof(reward_buf));
+        }
+        if (quest_idx == QUEST_ID_VARDA_SHADOW && quest_rewards_enabled()) SDL_strlcat(reward_buf, " | Radiant artefact", sizeof(reward_buf));
+        if (quest_challenges_enabled() && (q_ptr->challenge_unlock || quest_idx == QUEST_ID_VARDA_SHADOW)) SDL_strlcat(reward_buf, " | Challenge unlock", sizeof(reward_buf));
+    } else if (!has_rewards) {
+        SDL_strlcpy(reward_buf, "Quest completion experience", sizeof(reward_buf));
     }
 
-    return reward_buf;
+    return quest_reward_with_lore(reward_buf, sizeof(reward_buf));
 }
 
 /*
@@ -1118,6 +1143,21 @@ hint_quest_page do_cmd_quest_status_page(void)
 
     if (has_previous_completions) {
         quest_status_put_line(col, hgt, &row, TERM_WHITE, "");
+    }
+
+    for (int id = 7; id <= 16; ++id) {
+        byte state = quest_get_state(id);
+        if (state == QUEST_STATE_NOT_STARTED && !metarun_quest_completion_count(quest_metarun_flag(id))) continue;
+        char status[256];
+        quest_debug_status(id, status, sizeof(status));
+        quest_status_put_line(col, hgt, &row, TERM_YELLOW, quest_display_title(id));
+        quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, status);
+        quest_status_put_wrapped(col, wid, hgt, &row, TERM_WHITE,
+            q_text + quest_info[id].challenge_text);
+        quest_status_put_wrapped(col, wid, hgt, &row, TERM_L_GREEN,
+            get_quest_reward_text(id));
+        quest_status_put_line(col, hgt, &row, TERM_WHITE, "");
+        any_quests = true;
     }
 
     /* If no quests are active or completed */

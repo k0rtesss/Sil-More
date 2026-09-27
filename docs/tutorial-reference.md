@@ -4,7 +4,7 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 538 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 539 lessons, including 106 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
@@ -3072,7 +3072,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Gain resistance to fear, confusion, stun and hallucination. Hunger advances at one third of its normal rate.
+Gain resistance to fear, confusion, stun, hallucination and poison. Hunger advances at one third of its normal rate.
 
 Trigger: Public ability preview or newly available ability; raw serial 105, skill 5, ability slot 5.
 
@@ -3093,22 +3093,6 @@ Swear an oath for its benefit and accept its restriction. Read the exact terms b
 Trigger: Public ability preview or newly available ability; raw serial 106, skill 5, ability slot 6.
 
 Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth-traits.c`, `src/ui/character-dump.c`, `src/cmd/ui/cmd-ui-abilities.c`.
-
-## Poison Resistance
-
-`ability.107.preview`
-
-Level: **Extended**.
-
-Priority: **65** (higher appears first).
-
-**1. Decision**
-
-Gain one layer of poison resistance. It reduces new poison exposure; existing poison still needs time or a remedy to clear.
-
-Trigger: Public ability preview or newly available ability; raw serial 107, skill 5, ability slot 7.
-
-Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth-traits.c`.
 
 ## Vengeance
 

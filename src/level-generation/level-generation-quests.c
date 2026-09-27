@@ -41,6 +41,7 @@ float calculate_parametric_probability(quest_type* q_ptr, int depth);
 /* Determine if metarun history blocks a quest (unless oath override applies) */
 bool quest_metarun_blocked(int quest_id, u32b metarun_flag)
 {
+    if (!quest_enabled(quest_id)) return true;
     if (!metarun_flag) return false;
 
     int completion_count = metarun_quest_completion_count(metarun_flag);
@@ -52,7 +53,7 @@ bool quest_metarun_blocked(int quest_id, u32b metarun_flag)
         oath_override = true;
     }
 
-    if (completion_count >= METARUN_QUEST_COMPLETION_CAP) {
+    if (completion_count >= quest_completion_cap(quest_id)) {
         log_trace("Quest %d blocked by metarun cap (%d/%d)", quest_id, completion_count, METARUN_QUEST_COMPLETION_CAP);
         return true;
     }
@@ -272,7 +273,7 @@ void init_roulette_quest_registry(void) {
         quest_type* q_ptr = &quest_info[i];
 
         /* Skip if not a roulette quest (Y:1) */
-        if (q_ptr->quest_type != 1) continue;
+        if (i > QUEST_ID_VARDA || q_ptr->quest_type != 1) continue;
 
         /* Add to registry */
         roulette_quest_entry* entry = &roulette_quests[roulette_quest_count];
@@ -412,7 +413,7 @@ void run_quest_lottery(void) {
     }
 
     /* Varda's forced Bastion level owns quest placement for that level. */
-    if (p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
+    if (quest_enabled(QUEST_ID_VARDA) && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
         log_trace("Quest lottery: SKIPPED - Varda's Bastion must be placed at depth %d", p_ptr->depth);
         quest_lottery_winner = 0;
         quest_lottery_resolved = true;
@@ -480,6 +481,8 @@ void run_quest_lottery(void) {
         int quest_idx = quest_order[order_idx];
         roulette_quest_entry* entry = &roulette_quests[quest_idx];
 
+        if (!quest_enabled(entry->quest_id)) continue;
+
         /* Skip unsupported quests */
         if (!entry->quest_state_ptr || !entry->eligibility_check || !entry->probability_roll) {
             log_trace("Quest lottery: Skipping unsupported quest %d", entry->quest_id);
@@ -527,6 +530,7 @@ void run_quest_lottery(void) {
 
 void reset_generation_retry_locks(void)
 {
+    reset_followup_vault_roll();
     quest_lottery_winner = 0;
     quest_lottery_resolved = false;
     cached_quest_vault_roll = -1;

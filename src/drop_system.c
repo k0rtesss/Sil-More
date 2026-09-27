@@ -1,4 +1,6 @@
 #include "angband.h"
+#include "quest/quest-challenges.h"
+#include "quest/quest-runtime.h"
 #include "externs.h"
 #include "mem/alloc.h"
 #include "fs/path.h"
@@ -2911,6 +2913,8 @@ static bool collect_candidate_entries(
             if (!evil_allowed)
                 continue;
         }
+
+        if (!quest_challenge_object_allowed(&e.obj)) continue;
 
         if (!droptype_matches(req, &e)) {
             filter_droptype++;

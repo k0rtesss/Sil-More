@@ -728,7 +728,7 @@ done:
 static void blitz_auto_assign_stats(int stats[BIRTH_STAT_MAX])
 {
     int cost = 0;
-    int stat_count = lore_system_enabled() ? BIRTH_STAT_MAX : A_MAX;
+    int stat_count = A_MAX;
 
     for (int i = 0; i < BIRTH_STAT_MAX; i++)
         stats[i] = 0;
@@ -855,7 +855,13 @@ NavResult blitz_auto_build_character(void)
         p_ptr->stat_drain[i] = 0;
     }
 
-    p_ptr->lore = lore_system_enabled() ? stats[BIRTH_STAT_LORE] : 0;
+    p_ptr->lore_points = lore_system_enabled() ? MAX_COST : 0;
+    for (int i = 0; i < A_MAX; i++)
+    {
+        p_ptr->lore_stat_invested[i] = stats[i];
+        if (lore_system_enabled())
+            p_ptr->lore_points -= birth_stat_current_cost(stats[i]);
+    }
 
     p_ptr->update |= (PU_BONUS | PU_HP);
     update_stuff();

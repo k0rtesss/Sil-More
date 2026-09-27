@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "metarun-internal.h"
 
 bool oath_unlocked(int oath_id)
@@ -29,6 +30,7 @@ bool oath_banned(int oath_id)
  */
 void metarun_unlock_oath(int oath_id)
 {
+    if (quest_debug_sandbox()) return;
     if (run_mode_is_blitz()) return;
     if (current_run < 0 || current_run >= metarun_max) {
         log_trace("Oath unlock: Invalid current_run=%d, metarun_max=%d", current_run, metarun_max);

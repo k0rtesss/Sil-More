@@ -461,6 +461,8 @@ bool catastrophe_start(int kind)
     wrath.chance=depth_chance();
     memset(reached,0,sizeof(reached)); reached[sy][sx]=1;
     msg_format("Morgoth's wrath unleashes %s!",catastrophe_name(kind));
+    lore_award_milestone(LORE_MILESTONE_CATASTROPHE,
+        "You experience your first catastrophe.");
     disturb(0,0);
     const environment_cell* source_cell=cave_environment_cell_at(sy,sx);
     if (!(source_cell && (source_cell->flags&ENV_BRIDGE) && source_cell->integrity))
@@ -575,6 +577,7 @@ void catastrophe_crafted(const object_type* obj)
     if(obj&&obj->k_idx&&obj->name1) {
         (void)catastrophe_restore_guid(identity(obj));
         milestones(MAX(0,wrath.craft_difficulty),true);
+        lore_artefact_milestones(MAX(0,wrath.craft_difficulty));
     }
     wrath.craft_difficulty=-1;
 }

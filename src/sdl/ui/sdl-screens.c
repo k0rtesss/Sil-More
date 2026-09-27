@@ -3888,11 +3888,9 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
     char desc[384];
     char hint[192];
     bool focused = false;
-    bool lore_stat = (stat == A_MAX);
     SDL_FRect row_rect;
 
-    if (stat < 0 || stat >= SDL_BIRTH_STAT_MAX
-        || (lore_stat && !lore_system_enabled())
+    if (stat < 0 || stat >= A_MAX
         || !sdl_char_sheet_alloc_row_visible(y, h, line_h, row))
     {
         return;
@@ -3903,14 +3901,6 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
     if (focused)
         sdl_char_sheet_draw_focus_rect(row_rect, true);
 
-    if (lore_stat)
-    {
-        SDL_strlcpy(label, "Lore", sizeof(label));
-        cnv_stat(p_ptr ? p_ptr->lore
-                       : g_sdl_character_sheet_screen.stat_values[stat],
-            value);
-    }
-    else
     {
         sdl_char_sheet_copy_trimmed((p_ptr && (p_ptr->stat_drain[stat] < 0
                 || p_ptr->stat_disease[stat] < 0))
@@ -3924,7 +3914,7 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, 5,
         TERM_WHITE, label, focused);
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 6, 6,
-        (!lore_stat && p_ptr && (p_ptr->stat_drain[stat] < 0
+        (p_ptr && (p_ptr->stat_drain[stat] < 0
             || p_ptr->stat_disease[stat] < 0)) ? TERM_YELLOW
                                                 : TERM_L_GREEN,
         value, focused);
@@ -3937,14 +3927,8 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
             TERM_L_WHITE, cost, focused);
     }
 
-    if (lore_stat)
-        SDL_strlcpy(hint, "Lore governs Lore abilities and knowledge costs.",
-            sizeof(hint));
-    else
-    {
-        hint[0] = '\0';
-        character_sheet_format_stat_hint(stat, 0, false, hint, sizeof(hint));
-    }
+    hint[0] = '\0';
+    character_sheet_format_stat_hint(stat, 0, false, hint, sizeof(hint));
     if (allocation)
     {
 #if SIL_SDL_MOBILE_BUILD
@@ -4121,7 +4105,10 @@ static void sdl_char_sheet_draw_birth_points_row(TTF_Font* font, float x,
     if (!sdl_char_sheet_alloc_row_visible(y, h, line_h, row))
         return;
 
-    strnfmt(status, sizeof(status), "Points Left: %d",
+    strnfmt(status, sizeof(status),
+        (lore_system_enabled() && g_sdl_character_sheet_screen.context
+            == SDL_CHARACTER_SHEET_BIRTH_STATS)
+            ? "Lore points: %d" : "Points Left: %d",
         g_sdl_character_sheet_screen.points_left);
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, 20,
         TERM_L_BLUE, status, false);
@@ -4130,7 +4117,7 @@ static void sdl_char_sheet_draw_birth_points_row(TTF_Font* font, float x,
 void sdl_char_sheet_draw_birth_allocation_area(TTF_Font* font,
     float x, float y, float w, float h, float line_h, bool stats_screen)
 {
-    int stat_count = lore_system_enabled() ? SDL_BIRTH_STAT_MAX : A_MAX;
+    int stat_count = A_MAX;
     int skill_row = stat_count + 3;
     bool allocate_stats = g_sdl_character_sheet_screen.context
         == SDL_CHARACTER_SHEET_BIRTH_STATS;
@@ -4224,18 +4211,6 @@ int sdl_char_sheet_collect_stats(sdl_char_sheet_line* lines,
             (p_ptr->stat_drain[stat] < 0 || p_ptr->stat_disease[stat] < 0)
                 ? TERM_YELLOW : TERM_L_GREEN,
             choice, desc);
-    }
-
-    if (lore_system_enabled())
-    {
-        char value[32];
-        char text[128];
-
-        cnv_stat(p_ptr->lore, value);
-        strnfmt(text, sizeof(text), "Lore\t%s", value);
-        sdl_char_sheet_add_line(lines, &count, max_count, text,
-            TERM_L_GREEN, -1,
-            "Lore governs Lore abilities and knowledge costs.");
     }
 
     return count;
@@ -8827,7 +8802,7 @@ void sdl_char_sheet_panel_draw(const sdl_panel* p, TTF_Font* font,
     {
         bool allocate = (g_sdl_character_sheet_screen.context
             == SDL_CHARACTER_SHEET_BIRTH_STATS);
-        int stat_count = lore_system_enabled() ? SDL_BIRTH_STAT_MAX : A_MAX;
+        int stat_count = A_MAX;
 
         sdl_char_sheet_draw_heading(font, p->heading, x, y, w, line_h);
         for (int stat = 0; stat < stat_count; stat++)
@@ -12791,8 +12766,7 @@ bool sdl_character_sheet_screen_birth_sequence_active(void)
 static bool sdl_character_sheet_touch_allocation_choice(int choice)
 {
     if (g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_STATS)
-        return choice >= 0 && choice < (lore_system_enabled()
-            ? SDL_BIRTH_STAT_MAX : A_MAX);
+        return choice >= 0 && choice < A_MAX;
     if (g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_SKILLS)
         return choice >= 0 && choice < S_MAX && choice != S_SPC;
     return false;
@@ -13974,7 +13948,7 @@ static void sdl_character_sheet_screen_render_canvas(
         int stat_count = 0;
         int skill_count = 0;
         bool birth = sdl_char_sheet_birth_context();
-        int birth_stat_count = lore_system_enabled() ? SDL_BIRTH_STAT_MAX : A_MAX;
+        int birth_stat_count = A_MAX;
         bool wide5 = (sdl_char_sheet_target_ncols(content_w,
             (float)canvas.h) >= 5);
 

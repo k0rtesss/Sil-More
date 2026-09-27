@@ -1,0 +1,1105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sil-More · Ability Atlas</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0c1118;
+      --bg-deep: #080c12;
+      --surface: #131b25;
+      --surface-raised: #192433;
+      --surface-soft: #101821;
+      --text: #e8edf4;
+      --muted: #8d9aaa;
+      --faint: #5c6b7c;
+      --line: #2b3a4c;
+      --line-soft: #20303f;
+      --gold: #d7a758;
+      --gold-soft: #5d4727;
+      --blue: #69a9d6;
+      --blue-soft: #173850;
+      --violet: #ad8be3;
+      --violet-soft: #33244b;
+      --green: #75c59a;
+      --green-soft: #1a3e31;
+      --red: #db827e;
+      --shadow: 0 18px 46px rgba(0, 0, 0, .28);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 15px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% -10%, rgba(105, 169, 214, .13), transparent 34rem),
+        radial-gradient(circle at 100% 0%, rgba(173, 139, 227, .08), transparent 30rem),
+        var(--bg-deep);
+    }
+
+    button, input, select { font: inherit; }
+
+    button {
+      color: inherit;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-raised);
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: var(--blue); }
+    button:focus-visible, input:focus-visible, select:focus-visible,
+    .node:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+    input, select {
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-soft);
+      padding: 8px 10px;
+    }
+
+    input::placeholder { color: var(--faint); }
+
+    .app { min-height: 100vh; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--line-soft);
+      background: rgba(12, 17, 24, .86);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: max-content;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: .12em;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      color: var(--gold);
+      border: 1px solid var(--gold-soft);
+      border-radius: 9px;
+      background: #211b12;
+      font-size: 18px;
+    }
+
+    .brand strong { color: var(--gold); font-weight: 600; }
+
+    .topbar-copy {
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: .02em;
+    }
+
+    .topbar-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--faint);
+    }
+
+    .status-dot.ready { background: var(--green); box-shadow: 0 0 12px rgba(117, 197, 154, .55); }
+
+    .toolbar {
+      display: flex;
+      align-items: end;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--line-soft);
+      background: rgba(16, 24, 33, .72);
+    }
+
+    .source-controls, .view-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .source-controls { flex: 1 1 320px; }
+    .view-controls { flex: 3 1 540px; }
+
+    .field {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .field input { min-width: 190px; }
+    .field select { min-width: 132px; }
+
+    .primary { color: #17120b; border-color: var(--gold); background: var(--gold); }
+    .primary:hover { border-color: #f0ca7b; background: #e5b969; }
+    .quiet { background: transparent; }
+
+    .source-name {
+      max-width: 250px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .drop-zone {
+      margin: 18px 24px 0;
+      padding: 12px 16px;
+      color: var(--muted);
+      border: 1px dashed var(--line);
+      border-radius: 9px;
+      background: rgba(19, 27, 37, .52);
+      text-align: center;
+      font-size: 13px;
+    }
+
+    .drop-zone.is-dragging { color: var(--gold); border-color: var(--gold); background: rgba(93, 71, 39, .18); }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 355px;
+      gap: 18px;
+      padding: 18px 24px 28px;
+    }
+
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line-soft);
+      border-radius: 11px;
+      background: rgba(19, 27, 37, .86);
+      box-shadow: var(--shadow);
+    }
+
+    .graph-panel { overflow: hidden; }
+
+    .panel-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px 18px 12px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .eyebrow {
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { margin-top: 5px; font-size: 21px; font-weight: 500; }
+    h2 { font-size: 16px; font-weight: 500; }
+    h3 { font-size: 13px; font-weight: 600; }
+
+    .heading-meta {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .graph-actions { display: flex; align-items: center; gap: 7px; }
+    .graph-actions button { padding: 6px 9px; }
+
+    .zoom-control {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .zoom-control input { width: 92px; padding: 0; accent-color: var(--gold); }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 11px 18px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 11px;
+    }
+
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .legend-line { display: inline-block; width: 25px; border-top: 2px solid var(--blue); }
+    .legend-line.or { border-top-style: dashed; border-top-color: var(--gold); }
+    .legend-swatch { width: 11px; height: 11px; border-radius: 3px; background: var(--violet); }
+    .legend-swatch.lore { background: var(--gold); }
+    .legend-swatch.special { background: var(--green); }
+
+    .graph-scroll {
+      position: relative;
+      min-height: 520px;
+      max-height: min(72vh, 880px);
+      overflow: auto;
+      background:
+        linear-gradient(rgba(32, 48, 63, .22) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(32, 48, 63, .16) 1px, transparent 1px),
+        var(--bg);
+      background-size: 28px 28px;
+    }
+
+    #ability-graph {
+      display: block;
+      max-width: none;
+      transform-origin: top left;
+    }
+
+    .graph-empty {
+      display: grid;
+      place-items: center;
+      min-height: 520px;
+      padding: 40px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .graph-empty[hidden], #ability-graph[hidden] { display: none; }
+
+    .graph-empty strong { display: block; margin-bottom: 8px; color: var(--text); font-size: 16px; font-weight: 500; }
+
+    .lane-label { fill: var(--text); font-size: 13px; font-weight: 600; }
+    .lane-count { fill: var(--faint); font-size: 10px; }
+    .lane-rule { stroke: var(--line-soft); stroke-width: 1; }
+    .lane-cap { fill: rgba(105, 169, 214, .04); stroke: var(--line-soft); }
+
+    .node { cursor: pointer; }
+    .node rect { fill: var(--surface-raised); stroke: #3a4b5f; stroke-width: 1; }
+    .node:hover rect, .node:focus rect { stroke: var(--gold); stroke-width: 2; }
+    .node .node-name { fill: var(--text); font-size: 11px; font-weight: 600; pointer-events: none; }
+    .node .node-meta { fill: var(--muted); font-size: 9px; pointer-events: none; }
+    .node.standard rect { fill: #162435; }
+    .node.lore rect { fill: #302718; stroke: #6b542d; }
+    .node.special rect { fill: #183328; stroke: #376b51; }
+    .node.is-selected rect { stroke: var(--gold); stroke-width: 3; filter: drop-shadow(0 0 5px rgba(215, 167, 88, .33)); }
+    .node.is-related rect { stroke: var(--blue); }
+    .node.is-search-match rect { stroke: var(--green); stroke-width: 2; }
+    .node.is-dimmed { opacity: .19; }
+
+    .edge { fill: none; stroke-width: 1.5; opacity: .65; pointer-events: none; }
+    .edge.mandatory { stroke: var(--violet); }
+    .edge.choice { stroke: var(--gold); stroke-dasharray: 6 4; }
+    .edge.is-related { stroke-width: 2.6; opacity: 1; }
+    .edge.is-dimmed { opacity: .08; }
+
+    .detail-panel { align-self: start; padding-bottom: 16px; }
+    .detail-panel .panel-heading { border-bottom: 0; padding-bottom: 5px; }
+    .detail-body { padding: 0 18px; }
+
+    .detail-title { margin-top: 4px; font-size: 23px; line-height: 1.15; font-weight: 500; }
+    .detail-subtitle { margin-top: 5px; color: var(--muted); font-size: 12px; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+    .chip { padding: 4px 7px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); font-size: 11px; }
+    .chip.lore { color: var(--gold); border-color: var(--gold-soft); background: #241e14; }
+    .chip.special { color: var(--green); border-color: #2c5b45; background: #14291f; }
+
+    .detail-section { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--line-soft); }
+    .detail-section h3 { margin-bottom: 8px; color: var(--gold); letter-spacing: .03em; }
+    .detail-section p { color: var(--muted); font-size: 13px; line-height: 1.48; }
+    .detail-section p + p { margin-top: 9px; }
+    .effect { color: var(--text) !important; }
+
+    .requirement-list { display: grid; gap: 7px; }
+    .requirement-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 9px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .requirement-row strong { color: var(--text); font-weight: 500; }
+    .requirement-row .note { color: var(--gold); }
+
+    .ability-link { padding: 0; color: var(--blue); border: 0; background: transparent; text-align: left; text-decoration: underline; text-decoration-color: rgba(105, 169, 214, .35); text-underline-offset: 2px; }
+    .ability-link:hover { color: var(--gold); }
+
+    .missing-ref { color: var(--red); }
+    .source-code { color: var(--faint); font-family: Consolas, monospace; font-size: 11px; line-height: 1.45; word-break: break-word; }
+
+    .detail-empty { padding: 22px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .detail-empty strong { display: block; margin-bottom: 7px; color: var(--text); font-size: 15px; font-weight: 500; }
+
+    .footer-note {
+      padding: 0 24px 26px;
+      color: var(--faint);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 980px) {
+      .workspace { grid-template-columns: 1fr; }
+      .detail-panel { order: -1; }
+      .detail-body { padding-bottom: 4px; }
+    }
+
+    @media (max-width: 650px) {
+      .topbar, .toolbar, .workspace { padding-left: 14px; padding-right: 14px; }
+      .topbar { align-items: flex-start; flex-wrap: wrap; gap: 9px 14px; }
+      .topbar-status { margin-left: 0; }
+      .topbar-copy { flex-basis: 100%; }
+      .drop-zone { margin-left: 14px; margin-right: 14px; }
+      .panel-heading { align-items: flex-start; flex-direction: column; }
+      .heading-meta { text-align: left; }
+      .graph-actions { flex-wrap: wrap; }
+      .field input { min-width: 150px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Sil-More Ability Atlas">
+        <span class="brand-mark">✦</span>
+        <span>SIL-MORE <strong>ABILITY ATLAS</strong></span>
+      </a>
+      <p class="topbar-copy">Read the authored ability data as a navigable dependency map.</p>
+      <div class="topbar-status"><span id="status-dot" class="status-dot"></span><span id="status-text">Waiting for ability.txt</span></div>
+    </header>
+
+    <section class="toolbar" aria-label="Ability atlas controls">
+      <div class="source-controls">
+        <button id="open-file" class="primary" type="button">Open ability.txt</button>
+        <input id="file-input" type="file" accept=".txt,text/plain" hidden>
+        <span id="source-name" class="source-name">The page will try ../../lib/edit/ability.txt when served from the repository.</span>
+      </div>
+      <div class="view-controls">
+        <label class="field">Search abilities<input id="search" type="search" placeholder="Name, effect, description…" autocomplete="off"></label>
+        <label class="field">Skill lane<select id="skill-filter"><option value="all">All skills</option></select></label>
+        <label class="field">Branch<select id="branch-filter"><option value="all">All branches</option><option value="standard">Standard learning</option><option value="lore">Lore branch</option><option value="special">Quest / Special</option></select></label>
+        <button id="clear-selection" class="quiet" type="button">Clear focus</button>
+      </div>
+    </section>
+
+    <div id="drop-zone" class="drop-zone" role="region" aria-label="Ability file drop target">Drop <code>lib/edit/ability.txt</code> here to reload the map.</div>
+
+    <main class="workspace">
+      <section class="panel graph-panel" aria-labelledby="graph-heading">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Dependency map</span>
+            <h1 id="graph-heading">Ability paths</h1>
+          </div>
+          <div class="heading-meta"><span id="graph-count">No data loaded</span><br><span id="graph-source">—</span></div>
+          <div class="graph-actions">
+            <label class="zoom-control" for="zoom">Zoom <output id="zoom-value">70%</output><input id="zoom" type="range" min="45" max="125" value="70" step="5"></label>
+            <button id="fit-graph" class="quiet" type="button">Fit width</button>
+          </div>
+        </div>
+        <div class="legend" aria-label="Dependency legend">
+          <span class="legend-item"><i class="legend-line"></i> mandatory <code>A:</code></span>
+          <span class="legend-item"><i class="legend-line or"></i> choose one <code>P:</code></span>
+          <span class="legend-item"><i class="legend-swatch"></i> standard</span>
+          <span class="legend-item"><i class="legend-swatch lore"></i> Lore branch</span>
+          <span class="legend-item"><i class="legend-swatch special"></i> quest / special</span>
+        </div>
+        <div id="graph-scroll" class="graph-scroll">
+          <div id="graph-empty" class="graph-empty">
+            <div><strong>Load the authored ability file to begin.</strong>Select or drop <code>lib/edit/ability.txt</code>; the parser keeps <code>P:</code> alternatives and <code>A:</code> mandatory links distinct.</div>
+          </div>
+          <svg id="ability-graph" role="img" aria-labelledby="graph-heading" hidden>
+            <title>Sil-More ability dependency graph</title>
+            <desc>Abilities are grouped by skill lane. Click an ability to inspect its description, effect, skill gates, stat requirements, and prerequisite links.</desc>
+            <defs>
+              <marker id="arrow-mandatory" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 8 4 L 0 8 z" fill="var(--violet)"></path>
+              </marker>
+              <marker id="arrow-choice" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 8 4 L 0 8 z" fill="var(--gold)"></path>
+              </marker>
+            </defs>
+            <g id="graph-content"></g>
+          </svg>
+        </div>
+      </section>
+
+      <aside class="panel detail-panel" aria-labelledby="detail-heading" aria-live="polite">
+        <div class="panel-heading">
+          <div><span class="eyebrow">Selected ability</span><h2 id="detail-heading">Inspector</h2></div>
+        </div>
+        <div id="detail-empty" class="detail-body detail-empty"><strong>Click a node to inspect it.</strong>The inspector shows the authored lore, mechanical effect, learning gates, and the exact prerequisite links used by the parser.</div>
+        <div id="detail-content" class="detail-body" hidden></div>
+      </aside>
+    </main>
+
+    <p class="footer-note">This tool reads the text template directly. Skill gates come from <code>I:</code>, explicit stat and skill requirements from <code>R:</code>, and dependency edges from <code>P:</code>/<code>A:</code>; equipment targets remain available in the inspector as source data.</p>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const SKILLS = ["Melee", "Archery", "Evasion", "Stealth", "Perception", "Will", "Smithing", "Song", "Special"];
+      const STAT_INDEX = { STR: 0, DEX: 1, CON: 2, GRA: 3 };
+      const STAT_NAMES = ["Strength", "Dexterity", "Constitution", "Grace"];
+      const SKILL_ALIASES = {
+        MEL: 0, MELEE: 0, ARC: 1, ARCHERY: 1, EVN: 2, EVASION: 2,
+        STL: 3, STEALTH: 3, PER: 4, PERCEPTION: 4, WIL: 5, WILL: 5,
+        SMT: 6, CMT: 6, SMITHING: 6, SNG: 7, SONG: 7, SPC: 8, SPECIAL: 8
+      };
+
+      const state = {
+        abilities: [],
+        selectedId: null,
+        search: "",
+        skillFilter: "all",
+        branchFilter: "all",
+        zoom: 70,
+        sourceName: ""
+      };
+
+      const els = {
+        openFile: document.getElementById("open-file"),
+        fileInput: document.getElementById("file-input"),
+        sourceName: document.getElementById("source-name"),
+        statusDot: document.getElementById("status-dot"),
+        statusText: document.getElementById("status-text"),
+        search: document.getElementById("search"),
+        skillFilter: document.getElementById("skill-filter"),
+        branchFilter: document.getElementById("branch-filter"),
+        clearSelection: document.getElementById("clear-selection"),
+        dropZone: document.getElementById("drop-zone"),
+        graphCount: document.getElementById("graph-count"),
+        graphSource: document.getElementById("graph-source"),
+        graphScroll: document.getElementById("graph-scroll"),
+        graphEmpty: document.getElementById("graph-empty"),
+        graph: document.getElementById("ability-graph"),
+        graphContent: document.getElementById("graph-content"),
+        zoom: document.getElementById("zoom"),
+        zoomValue: document.getElementById("zoom-value"),
+        fitGraph: document.getElementById("fit-graph"),
+        detailEmpty: document.getElementById("detail-empty"),
+        detailContent: document.getElementById("detail-content")
+      };
+
+      const SVG_NS = "http://www.w3.org/2000/svg";
+
+      function svgElement(name, attributes = {}) {
+        const node = document.createElementNS(SVG_NS, name);
+        Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+        return node;
+      }
+
+      function escapeHTML(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function normaliseToken(value) {
+        return String(value ?? "")
+          .trim()
+          .toUpperCase()
+          .replace(/^STAT_/, "")
+          .replace(/^SKILL_/, "")
+          .replace(/^A_/, "")
+          .replace(/^S_/, "");
+      }
+
+      function parseIndex(value, map, max) {
+        const token = normaliseToken(value);
+        if (Object.prototype.hasOwnProperty.call(map, token)) return map[token];
+        if (/^\d+$/.test(token)) {
+          const number = Number(token);
+          if (number >= 0 && number < max) return number;
+        }
+        return null;
+      }
+
+      function parseScoreWeight(value) {
+        let token = String(value ?? "").trim().toUpperCase();
+        if (token.endsWith("X")) token = token.slice(0, -1);
+        if (token.endsWith("%")) return Number(token.slice(0, -1));
+        if (token.includes("/")) {
+          const [numerator, denominator] = token.split("/").map(Number);
+          if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+            return Math.round((numerator * 100) / denominator);
+          }
+          return NaN;
+        }
+        const number = Number(token);
+        return Number.isFinite(number) ? number * 100 : NaN;
+      }
+
+      function stripInlineComment(value) {
+        return String(value ?? "").split("#", 1)[0].trim();
+      }
+
+      function splitDirectivePairs(lines, score = false) {
+        const result = [];
+        for (const raw of lines || []) {
+          const tokens = stripInlineComment(raw).split(":").map(token => token.trim()).filter(Boolean);
+          for (let i = 0; i + 1 < tokens.length; i += 2) {
+            const statIndex = parseIndex(tokens[i], STAT_INDEX, STAT_NAMES.length);
+            const skillIndex = parseIndex(tokens[i], SKILL_ALIASES, SKILLS.length);
+            const value = score ? parseScoreWeight(tokens[i + 1]) : Number(tokens[i + 1]);
+            if (!Number.isFinite(value)) continue;
+            if (statIndex !== null) {
+              result.push({ kind: "stat", index: statIndex, value, label: STAT_NAMES[statIndex] });
+            } else if (skillIndex !== null) {
+              result.push({ kind: "skill", index: skillIndex, value, label: SKILLS[skillIndex] });
+            }
+          }
+        }
+        return result;
+      }
+
+      function parseReferenceToken(token) {
+        const clean = String(token ?? "").trim();
+        if (!clean) return null;
+        const parts = clean.split("/");
+        const skill = Number(parts[0]);
+        const ability = parts.length > 1 && parts[1] !== "" ? Number(parts[1]) : 0;
+        if (!Number.isInteger(skill) || !Number.isInteger(ability) || skill < 0 || skill >= SKILLS.length || ability < 0) return null;
+        return { skill, ability, key: `${skill}/${ability}` };
+      }
+
+      function parseReferenceLines(lines) {
+        const refs = [];
+        for (const raw of lines || []) {
+          const clean = stripInlineComment(raw);
+          for (const token of clean.split(":").filter(Boolean)) {
+            const ref = parseReferenceToken(token);
+            if (ref) refs.push(ref);
+          }
+        }
+        return refs;
+      }
+
+      function parseAbilityText(source) {
+        const records = [];
+        let current = null;
+        let version = "";
+        const lines = String(source ?? "").replace(/^\uFEFF/, "").split(/\r?\n/);
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line || line.startsWith("#")) continue;
+          if (line.startsWith("V:")) {
+            version = line.slice(2).trim();
+            continue;
+          }
+          const header = line.match(/^N:(\d+):(.*)$/);
+          if (header) {
+            if (current) records.push(current);
+            current = { serial: Number(header[1]), name: header[2].trim(), fields: {} };
+            continue;
+          }
+          if (!current) continue;
+          const directive = line.match(/^([A-Z]):(.*)$/);
+          if (!directive) continue;
+          const key = directive[1];
+          const value = directive[2].trim();
+          if (!current.fields[key]) current.fields[key] = [];
+          current.fields[key].push(value);
+        }
+        if (current) records.push(current);
+
+        const abilities = records.map(record => {
+          const field = key => record.fields[key] || [];
+          const info = (field("I")[0] || "").split(":").map(Number);
+          const skill = Number.isInteger(info[0]) ? info[0] : -1;
+          const ability = Number.isInteger(info[1]) ? info[1] : -1;
+          const level = Number.isInteger(info[2]) ? info[2] : 0;
+          const pairs = splitDirectivePairs(field("R"));
+          const scores = splitDirectivePairs(field("S"), true);
+          const carriage = field("Y")[0] ? stripInlineComment(field("Y")[0]).split(":") : [];
+          return {
+            id: `ability-${record.serial}`,
+            serial: record.serial,
+            name: record.name,
+            key: `${skill}/${ability}`,
+            skill,
+            ability,
+            level,
+            description: field("D"),
+            effect: field("E"),
+            prereqRefs: parseReferenceLines(field("P")),
+            requiredRefs: parseReferenceLines(field("A")),
+            requirements: pairs,
+            scoreWeights: scores,
+            loreBranch: Number(stripInlineComment(field("L")[0] || "")) === 1,
+            loreCost: Number(stripInlineComment(field("K")[0] || "")) || 0,
+            carriageTarget: carriage[0] || "",
+            carriageReduction: Number(carriage[1]) || 0,
+            equipment: field("T"),
+            fields: record.fields,
+            version
+          };
+        }).filter(ability => ability.skill >= 0 && ability.ability >= 0);
+
+        const byKey = new Map(abilities.map(ability => [ability.key, ability]));
+        let unresolved = 0;
+        for (const ability of abilities) {
+          for (const group of ["prereqRefs", "requiredRefs"]) {
+            ability[group] = ability[group].map(ref => {
+              const entry = byKey.get(ref.key) || null;
+              if (!entry) unresolved++;
+              return { ...ref, entry };
+            });
+          }
+        }
+        return { abilities, version, unresolved };
+      }
+
+      function branchOf(ability) {
+        if (ability.skill === 8) return "special";
+        return ability.loreBranch ? "lore" : "standard";
+      }
+
+      function branchLabel(ability) {
+        if (ability.skill === 8) return "Quest / Special";
+        if (ability.loreBranch) return "Lore branch";
+        return SKILLS[ability.skill] || "Unknown skill";
+      }
+
+      function displayRef(ref) {
+        if (!ref.entry) return `<span class="missing-ref">${escapeHTML(ref.key)}</span>`;
+        return `<button class="ability-link" type="button" data-select-id="${escapeHTML(ref.entry.id)}">${escapeHTML(ref.entry.name)}</button>`;
+      }
+
+      function formatWeight(value) {
+        const scaled = Number(value);
+        if (!Number.isFinite(scaled)) return String(value);
+        const number = scaled / 100;
+        return `${number > 0 ? "+" : ""}${number.toFixed(2).replace(/\.00$/, "")}×`;
+      }
+
+      function updateSkillOptions() {
+        const oldValue = state.skillFilter;
+        els.skillFilter.innerHTML = "<option value=\"all\">All skills</option>";
+        SKILLS.forEach((name, index) => {
+          const option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = name;
+          els.skillFilter.append(option);
+        });
+        if (oldValue === "all" || Number(oldValue) < SKILLS.length) {
+          els.skillFilter.value = oldValue;
+        } else {
+          state.skillFilter = "all";
+        }
+      }
+
+      function currentCandidates() {
+        return state.abilities.filter(ability => {
+          if (state.skillFilter !== "all" && ability.skill !== Number(state.skillFilter)) return false;
+          if (state.branchFilter !== "all" && branchOf(ability) !== state.branchFilter) return false;
+          return true;
+        });
+      }
+
+      function matchesSearch(ability) {
+        if (!state.search) return true;
+        const haystack = [
+          ability.name,
+          SKILLS[ability.skill],
+          ...ability.description,
+          ...ability.effect,
+          ...ability.requirements.map(item => `${item.label} ${item.value}`)
+        ].join(" ").toLowerCase();
+        return haystack.includes(state.search);
+      }
+
+      function ensureSelection(candidates) {
+        if (state.selectedId === null) return;
+        if (state.selectedId && candidates.some(ability => ability.id === state.selectedId)) return;
+        state.selectedId = candidates[0]?.id || null;
+      }
+
+      function dependencySets(selected) {
+        const ancestors = new Set();
+        const descendants = new Set();
+        if (!selected) return { ancestors, descendants };
+
+        function walkUp(ability) {
+          for (const ref of [...ability.prereqRefs, ...ability.requiredRefs]) {
+            if (!ref.entry || ancestors.has(ref.entry.id)) continue;
+            ancestors.add(ref.entry.id);
+            walkUp(ref.entry);
+          }
+        }
+
+        function walkDown(ability) {
+          for (const other of state.abilities) {
+            const refs = [...other.prereqRefs, ...other.requiredRefs];
+            if (!refs.some(ref => ref.entry?.id === ability.id) || descendants.has(other.id)) continue;
+            descendants.add(other.id);
+            walkDown(other);
+          }
+        }
+
+        walkUp(selected);
+        walkDown(selected);
+        return { ancestors, descendants };
+      }
+
+      function addWrappedText(parent, text, x, y, maxCharacters, className) {
+        const words = String(text || "").split(/\s+/).filter(Boolean);
+        const lines = [];
+        let line = "";
+        for (const word of words) {
+          const proposed = line ? `${line} ${word}` : word;
+          if (line && proposed.length > maxCharacters) {
+            lines.push(line);
+            line = word;
+          } else {
+            line = proposed;
+          }
+        }
+        if (line) lines.push(line);
+        lines.slice(0, 2).forEach((lineText, index) => {
+          const textNode = svgElement("text", { x, y: y + index * 13, class: className });
+          textNode.textContent = lineText;
+          parent.append(textNode);
+        });
+      }
+
+      function renderGraph() {
+        const candidates = currentCandidates();
+        if (state.search) {
+          const firstMatch = state.abilities.find(matchesSearch);
+          if (firstMatch) state.selectedId = firstMatch.id;
+        }
+        ensureSelection(candidates);
+        const selected = state.abilities.find(ability => ability.id === state.selectedId) || null;
+        const skills = state.skillFilter === "all"
+          ? SKILLS.map((_, index) => index)
+          : [Number(state.skillFilter)];
+        const positions = new Map();
+        const grouped = new Map(skills.map(skill => [skill, []]));
+        candidates.forEach(ability => grouped.get(ability.skill)?.push(ability));
+        grouped.forEach(list => list.sort((a, b) => a.level - b.level || a.ability - b.ability || a.serial - b.serial));
+
+        const laneWidth = 190;
+        const nodeWidth = 158;
+        const nodeHeight = 57;
+        const rowGap = 20;
+        const left = 22;
+        const top = 54;
+        let maxRows = 1;
+        grouped.forEach(list => { maxRows = Math.max(maxRows, list.length); });
+        const width = left * 2 + skills.length * laneWidth;
+        const height = top + maxRows * (nodeHeight + rowGap) + 28;
+
+        skills.forEach((skill, laneIndex) => {
+          const list = grouped.get(skill) || [];
+          list.forEach((ability, rowIndex) => {
+            positions.set(ability.id, {
+              x: left + laneIndex * laneWidth + 12,
+              y: top + rowIndex * (nodeHeight + rowGap),
+              w: nodeWidth,
+              h: nodeHeight
+            });
+          });
+        });
+
+        els.graphContent.replaceChildren();
+        const lanes = svgElement("g", { class: "lanes" });
+        skills.forEach((skill, laneIndex) => {
+          const x = left + laneIndex * laneWidth;
+          const lane = svgElement("g");
+          lane.append(svgElement("rect", { class: "lane-cap", x, y: 12, width: nodeWidth + 24, height: height - 26, rx: 8 }));
+          lane.append(svgElement("line", { class: "lane-rule", x1: x + 12, x2: x + nodeWidth + 12, y1: 43, y2: 43 }));
+          const label = svgElement("text", { class: "lane-label", x: x + 12, y: 29 });
+          label.textContent = SKILLS[skill] || "Unknown";
+          lane.append(label);
+          const count = svgElement("text", { class: "lane-count", x: x + nodeWidth - 9, y: 29, "text-anchor": "end" });
+          count.textContent = `${(grouped.get(skill) || []).length}`;
+          lane.append(count);
+          lanes.append(lane);
+        });
+        els.graphContent.append(lanes);
+
+        const edgeLayer = svgElement("g", { class: "edges" });
+        for (const target of candidates) {
+          const targetPosition = positions.get(target.id);
+          if (!targetPosition) continue;
+          const references = [
+            ...target.requiredRefs.map(ref => ({ ref, kind: "mandatory" })),
+            ...target.prereqRefs.map(ref => ({ ref, kind: "choice" }))
+          ];
+          for (const { ref, kind } of references) {
+            const source = ref.entry;
+            const sourcePosition = source ? positions.get(source.id) : null;
+            if (!sourcePosition) continue;
+            const sx = sourcePosition.x + sourcePosition.w;
+            const sy = sourcePosition.y + sourcePosition.h / 2;
+            const tx = targetPosition.x;
+            const ty = targetPosition.y + targetPosition.h / 2;
+            const bend = Math.max(24, Math.abs(tx - sx) * .42);
+            const path = svgElement("path", {
+              class: `edge ${kind}`,
+              d: `M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`,
+              "data-from": source.id,
+              "data-to": target.id,
+              "marker-end": `url(#arrow-${kind})`
+            });
+            edgeLayer.append(path);
+          }
+        }
+        els.graphContent.append(edgeLayer);
+
+        const nodeLayer = svgElement("g", { class: "nodes" });
+        for (const ability of candidates) {
+          const position = positions.get(ability.id);
+          const node = svgElement("g", {
+            class: `node ${branchOf(ability)}`,
+            transform: `translate(${position.x} ${position.y})`,
+            tabindex: "0",
+            role: "button",
+            "aria-label": `${ability.name}, ${branchLabel(ability)}, skill level ${ability.level}`,
+            "data-id": ability.id
+          });
+          const rect = svgElement("rect", { x: 0, y: 0, width: position.w, height: position.h, rx: 7 });
+          node.append(rect);
+          const title = svgElement("title");
+          title.textContent = `${ability.name} · ${branchLabel(ability)} · ${ability.level ? `skill ${ability.level}` : "quest reward"}`;
+          node.append(title);
+          addWrappedText(node, ability.name, 10, 20, 22, "node-name");
+          const meta = svgElement("text", { class: "node-meta", x: 10, y: 48 });
+          meta.textContent = ability.level ? `#${ability.serial} · level ${ability.level}` : `#${ability.serial} · reward`;
+          node.append(meta);
+          node.addEventListener("click", () => selectAbility(ability.id));
+          node.addEventListener("keydown", event => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              selectAbility(ability.id);
+            }
+          });
+          nodeLayer.append(node);
+        }
+        els.graphContent.append(nodeLayer);
+
+        els.graph.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        els.graph.setAttribute("width", String(width));
+        els.graph.setAttribute("height", String(height));
+        els.graph.setAttribute("preserveAspectRatio", "xMinYMin meet");
+        els.graph.style.width = `${Math.round(width * state.zoom / 100)}px`;
+        els.graph.style.height = `${Math.round(height * state.zoom / 100)}px`;
+        els.graph.hidden = candidates.length === 0;
+        els.graphEmpty.hidden = candidates.length > 0;
+        if (candidates.length > 0) {
+          els.graph.removeAttribute("hidden");
+          els.graph.style.display = "block";
+          els.graphEmpty.setAttribute("hidden", "");
+        }
+        els.graphCount.textContent = `${candidates.length} shown · ${state.abilities.length} total`;
+        els.graphSource.textContent = state.sourceName || "—";
+        els.zoom.value = String(state.zoom);
+        els.zoomValue.textContent = `${state.zoom}%`;
+        applyGraphFocus(selected);
+        renderDetails(selected);
+      }
+
+      function applyGraphFocus(selected) {
+        const { ancestors, descendants } = dependencySets(selected);
+        const related = new Set([...(selected ? [selected.id] : []), ...ancestors, ...descendants]);
+        const nodes = els.graphContent.querySelectorAll(".node");
+        nodes.forEach(node => {
+          const id = node.dataset.id;
+          node.classList.toggle("is-selected", id === selected?.id);
+          node.classList.toggle("is-related", Boolean(selected && related.has(id) && id !== selected.id));
+          node.classList.toggle("is-dimmed", Boolean(selected && !related.has(id)));
+          const ability = state.abilities.find(item => item.id === id);
+          node.classList.toggle("is-search-match", Boolean(ability && state.search && matchesSearch(ability)));
+          if (ability && state.search && !matchesSearch(ability) && !related.has(id)) node.classList.add("is-dimmed");
+        });
+        const edges = els.graphContent.querySelectorAll(".edge");
+        edges.forEach(edge => {
+          const from = edge.dataset.from;
+          const to = edge.dataset.to;
+          const isRelated = Boolean(selected && related.has(from) && related.has(to));
+          edge.classList.toggle("is-related", isRelated);
+          edge.classList.toggle("is-dimmed", Boolean(selected && !isRelated));
+        });
+      }
+
+      function renderDetails(ability) {
+        if (!ability) {
+          els.detailEmpty.hidden = false;
+          els.detailContent.hidden = true;
+          return;
+        }
+        const paragraphs = lines => (lines || []).map(line => `<p>${escapeHTML(line)}</p>`).join("");
+        const skillGate = ability.level > 0 ? `${escapeHTML(SKILLS[ability.skill] || "Skill")} ${ability.level}` : "No skill gate · quest reward";
+        const reqRows = [`<div class="requirement-row"><span>Identity</span><strong>${escapeHTML(SKILLS[ability.skill] || "Unknown")} ${ability.ability} · serial #${ability.serial}</strong></div>`];
+        reqRows.push(`<div class="requirement-row"><span>Primary gate</span><strong>${skillGate}${ability.loreBranch ? ` <span class="note">(Lore branch can change presentation)</span>` : ""}</strong></div>`);
+        ability.requirements.forEach(requirement => {
+          reqRows.push(`<div class="requirement-row"><span>${escapeHTML(requirement.kind === "stat" ? "Permanent stat" : "Base skill")}</span><strong>${escapeHTML(requirement.label)} ${requirement.value}</strong></div>`);
+        });
+        if (ability.loreCost) reqRows.push(`<div class="requirement-row"><span>Lore price</span><strong>${ability.loreCost} knowledge point${ability.loreCost === 1 ? "" : "s"}</strong></div>`);
+        if (ability.carriageTarget) reqRows.push(`<div class="requirement-row"><span>Carriage</span><strong>${escapeHTML(ability.carriageTarget)} −${ability.carriageReduction}%</strong></div>`);
+
+        const dependencyRows = [];
+        if (ability.prereqRefs.length) {
+          const label = ability.prereqRefs.length > 1 ? "Choose one (P:)" : "Prerequisite (P:)";
+          dependencyRows.push(`<div class="requirement-row"><span>${label}</span><strong>${ability.prereqRefs.map(displayRef).join(" <span class=\"note\">or</span> ")}</strong></div>`);
+        }
+        if (ability.requiredRefs.length) {
+          dependencyRows.push(`<div class="requirement-row"><span>Also required (A:)</span><strong>${ability.requiredRefs.map(displayRef).join(" <span class=\"note\">and</span> ")}</strong></div>`);
+        }
+        if (!dependencyRows.length) dependencyRows.push(`<div class="requirement-row"><span>Ability links</span><strong>No authored ability prerequisite</strong></div>`);
+
+        const scoreRows = ability.scoreWeights.length
+          ? `<div class="detail-section"><h3>Score formula</h3><div class="requirement-list">${ability.scoreWeights.map(weight => `<div class="requirement-row"><span>${escapeHTML(weight.kind === "stat" ? "Stat" : "Skill")}</span><strong>${escapeHTML(weight.label)} ${formatWeight(weight.value)}</strong></div>`).join("")}</div></div>`
+          : "";
+        const equipment = ability.equipment.length
+          ? `<div class="detail-section"><h3>Equipment context <span class="source-code">T:</span></h3><div class="source-code">${ability.equipment.map(line => escapeHTML(line)).join("<br>")}</div></div>`
+          : "";
+        const chips = [
+          `<span class="chip">${escapeHTML(branchLabel(ability))}</span>`,
+          `<span class="chip">I: ${escapeHTML(ability.skill)}:${escapeHTML(ability.ability)}:${escapeHTML(ability.level)}</span>`
+        ];
+        if (ability.loreBranch) chips.push(`<span class="chip lore">L:1 · Lore beta</span>`);
+        if (ability.skill === 8) chips.push(`<span class="chip special">Quest reward</span>`);
+        if (ability.loreCost) chips.push(`<span class="chip lore">K:${ability.loreCost}</span>`);
+
+        els.detailContent.innerHTML = `
+          <div class="eyebrow">${escapeHTML(branchLabel(ability))}</div>
+          <h2 class="detail-title">${escapeHTML(ability.name)}</h2>
+          <p class="detail-subtitle">The node is highlighted with ${ability.prereqRefs.length + ability.requiredRefs.length} authored ability link${ability.prereqRefs.length + ability.requiredRefs.length === 1 ? "" : "s"}.</p>
+          <div class="chips">${chips.join("")}</div>
+          <div class="detail-section"><h3>Dependency logic</h3><div class="requirement-list">${dependencyRows.join("")}</div></div>
+          <div class="detail-section"><h3>Learning requirements</h3><div class="requirement-list">${reqRows.join("")}</div></div>
+          <div class="detail-section"><h3>Description</h3>${paragraphs(ability.description)}</div>
+          <div class="detail-section"><h3>Mechanical effect</h3><div class="effect">${paragraphs(ability.effect)}</div></div>
+          ${scoreRows}${equipment}
+        `;
+        els.detailEmpty.hidden = true;
+        els.detailContent.hidden = false;
+      }
+
+      function selectAbility(id) {
+        if (!state.abilities.some(ability => ability.id === id)) return;
+        state.selectedId = id;
+        renderGraph();
+        const node = els.graphContent.querySelector(`[data-id="${CSS.escape(id)}"]`);
+        if (node) node.focus({ preventScroll: true });
+      }
+
+      function loadSource(source, name) {
+        const parsed = parseAbilityText(source);
+        state.abilities = parsed.abilities;
+        state.sourceName = name || "ability.txt";
+        state.selectedId = state.abilities[0]?.id || null;
+        els.sourceName.textContent = `${state.sourceName} · ${state.abilities.length} abilities${parsed.unresolved ? ` · ${parsed.unresolved} unresolved links` : ""}`;
+        els.statusText.textContent = `Loaded ${state.abilities.length} abilities${parsed.version ? ` · v${parsed.version}` : ""}`;
+        els.statusDot.classList.add("ready");
+        renderGraph();
+      }
+
+      async function loadFile(file) {
+        if (!file) return;
+        try {
+          loadSource(await file.text(), file.name);
+        } catch (error) {
+          setStatus(`Could not read ${file.name}`);
+          console.error(error);
+        }
+      }
+
+      function setStatus(message) {
+        els.statusText.textContent = message;
+        els.statusDot.classList.remove("ready");
+      }
+
+      async function tryAutoLoad() {
+        if (window.location.protocol === "file:") {
+          setStatus("Choose ability.txt to load the map");
+          return;
+        }
+        try {
+          const response = await fetch("../../lib/edit/ability.txt", { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          loadSource(await response.text(), "lib/edit/ability.txt");
+        } catch (error) {
+          setStatus("Choose or drop ability.txt to load the map");
+          console.info("Automatic ability.txt load unavailable:", error.message);
+        }
+      }
+
+      els.openFile.addEventListener("click", () => els.fileInput.click());
+      els.fileInput.addEventListener("change", event => loadFile(event.target.files[0]));
+      els.search.addEventListener("input", event => {
+        state.search = event.target.value.trim().toLowerCase();
+        renderGraph();
+      });
+      els.skillFilter.addEventListener("change", event => {
+        state.skillFilter = event.target.value;
+        renderGraph();
+      });
+      els.branchFilter.addEventListener("change", event => {
+        state.branchFilter = event.target.value;
+        renderGraph();
+      });
+      els.clearSelection.addEventListener("click", () => {
+        state.selectedId = null;
+        renderGraph();
+      });
+      els.zoom.addEventListener("input", event => {
+        state.zoom = Number(event.target.value);
+        renderGraph();
+      });
+      els.fitGraph.addEventListener("click", () => {
+        if (!state.abilities.length) return;
+        const width = state.skillFilter === "all" ? SKILLS.length * 190 + 44 : 234;
+        const available = Math.max(320, els.graphScroll.clientWidth - 24);
+        state.zoom = Math.max(45, Math.min(100, Math.round(available / width * 100)));
+        renderGraph();
+      });
+      els.detailContent.addEventListener("click", event => {
+        const link = event.target.closest("[data-select-id]");
+        if (link) selectAbility(link.dataset.selectId);
+      });
+      ["dragenter", "dragover"].forEach(type => els.dropZone.addEventListener(type, event => {
+        event.preventDefault();
+        els.dropZone.classList.add("is-dragging");
+      }));
+      ["dragleave", "drop"].forEach(type => els.dropZone.addEventListener(type, event => {
+        event.preventDefault();
+        els.dropZone.classList.remove("is-dragging");
+      }));
+      els.dropZone.addEventListener("drop", event => loadFile(event.dataTransfer.files[0]));
+
+      updateSkillOptions();
+      tryAutoLoad();
+    })();
+  </script>
+</body>
+</html>

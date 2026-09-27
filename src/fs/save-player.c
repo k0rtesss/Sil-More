@@ -178,9 +178,13 @@ void wr_extra(void)
                 | SAVEFILE_MORGOTH_CALL_ESCALATION_MASK);
         wr_byte(morgoth_call_state);
     }
-    wr_s16b(p_ptr->lore);
-    wr_s32b(p_ptr->knowledge_points);
+    wr_u16b(p_ptr->lore_milestones);
+    wr_s32b(p_ptr->lore_points);
     wr_byte(0);
+
+    /* Version 0.9.8.27: purchased ranks, without race/house/curse bonuses. */
+    for (i = 0; i < A_MAX; ++i)
+        wr_byte(p_ptr->lore_stat_invested[i]);
 
     /* Reserved: legacy item-quality squelch array (now unused) */
     for (i = 0; i < LEGACY_ITEM_QUALITY_BYTES; i++)
@@ -326,6 +330,23 @@ void wr_extra(void)
 #else
     /* Older versions (<=0.8.5) had no quest block; do not write marker */
 #endif
+
+    /* 0.9.8.26: explicitly versioned recovered quest state. */
+    wr_byte(0x5b);
+    for (i = 0; i < 10; ++i) {
+        wr_byte(p_ptr->quest_followup_state[i]);
+        wr_byte(p_ptr->quest_followup_flags[i]);
+        wr_s16b(p_ptr->quest_followup_depth[i]);
+        wr_u16b(p_ptr->quest_followup_progress[i]);
+    }
+    wr_u16b(p_ptr->quest_followup_recorded);
+    wr_byte(p_ptr->quest_lifetime_flags);
+    wr_byte(p_ptr->quest_test_sandbox);
+    wr_byte(p_ptr->quest_challenge);
+    wr_byte(p_ptr->quest_challenge_failed);
+    wr_byte(p_ptr->quest_challenge_recorded);
+    wr_byte(p_ptr->orome_bow_hit_streak);
+    wr_byte(p_ptr->orome_spear_ready);
 
     /* Skeleton note state (per-level tutorial-style messages) */
     {

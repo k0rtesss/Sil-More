@@ -3,6 +3,7 @@
 #define INCLUDED_LEVEL_GENERATION_INTERNAL_H
 
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "externs.h"
 #include "log/log.h"
 #include "gen-log.h"
@@ -732,5 +733,14 @@ extern void gates_gen(void);
 extern void throne_gen(void);
 extern void unring_a_bell(void);
 extern void generate_cave(void);
+
+/* Quest vault tokens are scoped to their recovered templates. */
+extern int quest_vault_token_race(int vault, char token);
+extern bool quest_vault_tokens_available(int vault);
+extern bool quest_vault_spawn_permitted(int race);
+extern bool place_quest_vault_token(int vault, char token, int y, int x);
+extern bool place_followup_quest_vault(void);
+extern void reset_followup_vault_roll(void);
+extern bool quest_debug_prepare_vault(int id);
 
 #endif /* INCLUDED_LEVEL_GENERATION_INTERNAL_H */

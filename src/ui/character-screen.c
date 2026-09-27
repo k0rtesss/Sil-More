@@ -20,12 +20,10 @@
 
 #define INSTRUCT_ROW 21
 #define QUESTION_COL 2
-#define CHARACTER_SCREEN_LORE_STAT A_MAX
-#define CHARACTER_SCREEN_ATTRIBUTE_COUNT (A_MAX + 1)
 
 static int character_screen_attribute_count(void)
 {
-    return lore_system_enabled() ? CHARACTER_SCREEN_ATTRIBUTE_COUNT : A_MAX;
+    return A_MAX;
 }
 
 static void display_skill(int skill, int row, int col)
@@ -1996,9 +1994,8 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
     if (stat < 0 || stat >= character_screen_attribute_count())
         return;
 
-    bool lore_stat = (stat == CHARACTER_SCREEN_LORE_STAT);
-    int use = lore_stat ? p_ptr->lore : p_ptr->stat_use[stat];
-    int base = lore_stat ? p_ptr->lore : p_ptr->stat_base[stat];
+    int use = p_ptr->stat_use[stat];
+    int base = p_ptr->stat_base[stat];
     int mod = use - base;
 
     int val_w = 10;
@@ -2029,7 +2026,7 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
     Term_erase(col, row, label_w);
     Term_erase(val_start, row, val_w);
 
-    const char* stat_label = lore_stat ? "Lore" : ((p_ptr->stat_drain[stat] < 0
+    const char* stat_label = ((p_ptr->stat_drain[stat] < 0
         || p_ptr->stat_disease[stat] < 0) ? stat_names_reduced[stat]
                                           : stat_names[stat]);
     char label_buf[32];
@@ -2075,7 +2072,7 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
     if (out_col < val_start)
         out_col = val_start;
 
-    byte stat_color = (!lore_stat && (p_ptr->stat_drain[stat] < 0
+    byte stat_color = ((p_ptr->stat_drain[stat] < 0
         || p_ptr->stat_disease[stat] < 0)) ? TERM_YELLOW : TERM_L_GREEN;
     byte value_attr = (stat == compact_stat_highlight) ? TERM_L_BLUE : stat_color;
     Term_putstr(out_col, row, val_len, value_attr, val_text);
@@ -2425,18 +2422,6 @@ void display_player_stat_info(int row, int col)
             strnfmt(buf, sizeof(buf), "%+3d", p_ptr->stat_misc_mod[i]);
             c_put_str(TERM_SLATE, buf, row + i, col + 21);
         }
-    }
-
-    if (lore_system_enabled())
-    {
-        if (story_character_enabled())
-            sdl_story_font_enable();
-        put_str("Lore", row + A_MAX, col);
-        if (story_character_enabled())
-            sdl_story_font_disable();
-
-        cnv_stat(p_ptr->lore, buf);
-        c_put_str(TERM_L_GREEN, buf, row + A_MAX, col + 5);
     }
 
     /* Leave with story font disabled */

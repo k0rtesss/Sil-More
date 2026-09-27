@@ -1,6 +1,8 @@
 /* File: monster-spawn.c */
 
 #include "monster-internal.h"
+#include "quest/quest-runtime.h"
+extern bool quest_vault_spawn_permitted(int race);
 #include "meta_state.h"
 #include "monster/monster-routine.h"
 
@@ -43,6 +45,8 @@ bool place_monster_one(
 
     if ((feeling >= LEV_THEME_HEAD) && (character_dungeon == true))
         return (false);
+
+    if (quest_followup_reserve_race(r_idx) && !quest_vault_spawn_permitted(r_idx)) return false;
 
     /* Race */
     r_ptr = &r_info[r_idx];

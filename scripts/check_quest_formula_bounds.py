@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import os
+import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,8 +28,8 @@ HARNESS = r'''
 int error_idx = -1;
 static maxima limits = { .oath_max = 16 };
 maxima* z_info = &limits;
-static quest_type quests[16];
-static header head = { .info_num = 16, .info_ptr = quests };
+static quest_type quests[32];
+static header head = { .info_num = 32, .info_ptr = quests };
 errr parse_quest_info(char* buf, header* head);
 
 /* Text storage and logging are irrelevant to eligibility/probability. */
@@ -44,6 +45,13 @@ static void parse(const char* text)
     assert(strlen(text) < sizeof(buf));
     snprintf(buf, sizeof(buf), "%s", text);
     assert(parse_quest_info(buf, &head) == 0);
+}
+
+static void reject(const char* text)
+{
+    char buf[4096];
+    snprintf(buf, sizeof(buf), "%s", text);
+    assert(parse_quest_info(buf, &head) != 0);
 }
 
 static void close_to(float actual, float expected)
@@ -86,28 +94,70 @@ int main(int argc, char** argv)
     close_to(calculate_parametric_probability(&quests[6], 4), 0.0f);
 
     /* Reversing directive order must have the same interpretation. */
-    parse("Q:7:Order fixture");
+    parse("Q:17:Order fixture");
     parse("P:LINEAR_INTERPOLATE:0.50:0.15:0:0");
     parse("E:DEPTH_RANGE:1:3");
     for (int depth = 0; depth <= 4; depth++)
-        close_to(calculate_parametric_probability(&quests[7], depth),
+        close_to(calculate_parametric_probability(&quests[17], depth),
             calculate_parametric_probability(&quests[6], depth));
 
     /* A second P: must not erase explicit bounds; no E: keeps defaults. */
     parse("P:LINEAR_INTERPOLATE:0.50:0.15:0:0");
-    assert(quests[7].depth_min == 1 && quests[7].depth_max == 3);
-    parse("Q:8:Default fixture");
+    assert(quests[17].depth_min == 1 && quests[17].depth_max == 3);
+    parse("Q:18:Default fixture");
     parse("P:FIXED_PERCENT:0.25:0:0:0");
-    assert(quests[8].depth_min == 0 && quests[8].depth_max == 25);
-    close_to(calculate_parametric_probability(&quests[8], 25), 0.25f);
-    close_to(calculate_parametric_probability(&quests[8], 26), 0.0f);
+    assert(quests[18].depth_min == 0 && quests[18].depth_max == 25);
+    close_to(calculate_parametric_probability(&quests[18], 25), 0.25f);
+    close_to(calculate_parametric_probability(&quests[18], 26), 0.0f);
+    assert(quests[2].vala_id == VALA_AULE && quests[5].vala_id == VALA_OROME);
+    assert(quests[7].sequence == 2 && quests[7].completion_cap == 2);
+    assert(quests[7].challenge_unlock == CHALLENGE_DISCONNECTED);
+    assert(quests[10].quest_flags & QUEST_FLAG_GLOBAL);
+    parse("E:SKILL_MIN:6:10");
+    assert(quests[18].eligibility_skill == S_SMT);
+    parse("E:SKILL_RANGE:SMT:10:20");
+    assert(quests[18].eligibility_type == 2 && quests[18].depth_min == 10 && quests[18].depth_max == 20);
+    parse("E:SKILL_RANGE:6:12:22");
+    assert(quests[18].eligibility_type == 2 && quests[18].eligibility_skill == S_SMT);
+    const char *bad[] = {"Q:19oops:Bad", "J:4", "J:0", "J:2:x", "L:256", "L:0", "L:2oops",
+        "O:999", "O:no", "A:8:999", "A:8:1:extra", "S:1:0:0:256", "K:UNKNOWN:2", "Z:Unknown", "F:UNKNOWN", "H:Unknown", "Y:2", "E:SKILL_MIN:UNKNOWN:10",
+        "E:SKILL_MIN:99:10", "E:DEPTH_RANGE:20:10", "E:DEPTH_RANGE:0:256",
+        "E:SKILL_RANGE:SMT:10", "E:SKILL_RANGE:SMT:20:10", "E:DEPTH_RANGE:1:3:extra",
+        "P:UNKNOWN:0:0:0:0", "P:FIXED_PERCENT:0.5", "P:FIXED_PERCENT:nan:0:0:0",
+        "P:FIXED_PERCENT:inf:0:0:0", "P:FIXED_PERCENT:0.5:0:0:0:extra",
+        "P:FIXED_PERCENT:1.5:0:0:0", "P:SCALED_RANGE:0.5:10:0:0"};
+    for (size_t n = 0; n < N_ELEMENTS(bad); ++n) reject(bad[n]);
     puts("Quest formula bounds: shipped endpoints, midpoints, exclusion, line order and defaults: PASS");
     return 0;
 }
 '''
 
 
+def check_content():
+    quest_text = (ROOT / "lib/edit/quest.txt").read_text(encoding="utf-8-sig")
+    ids = [int(n) for n in re.findall(r"^Q:(\d+):", quest_text, re.M)]
+    assert ids == list(range(1, 17)), ids
+    limits = (ROOT / "lib/edit/limits.txt").read_text(encoding="utf-8-sig")
+    assert int(re.search(r"^M:Q:(\d+)$", limits, re.M)[1]) > max(ids)
+    for filename, required in [("vault.txt", range(464, 468)), ("ability.txt", range(170, 174))]:
+        text = (ROOT / "lib/edit" / filename).read_text(encoding="utf-8-sig")
+        entries = list(re.finditer(r"^N:(\d+):", text, re.M))
+        serials = [int(m[1]) for m in entries]
+        assert serials == sorted(set(serials)), filename
+        assert set(required) <= set(serials), filename
+        if filename == "vault.txt":
+            for index, entry in enumerate(entries):
+                if int(entry[1]) in required:
+                    block = text[entry.start():entries[index + 1].start() if index + 1 < len(entries) else len(text)]
+                    assert re.search(r"^F:.*\bQUEST\b", block, re.M)
+    ability_text = (ROOT / "lib/edit/ability.txt").read_text(encoding="utf-8-sig")
+    rewards = set(re.findall(r"^I:(\d+):(\d+):", ability_text, re.M))
+    for reward in re.findall(r"^A:(\d+):(\d+)$", quest_text, re.M):
+        assert reward == ("0", "0") or reward in rewards, reward
+
+
 def main():
+    check_content()
     OUT.mkdir(parents=True, exist_ok=True)
     fixture = OUT / "check.c"
     fixture.write_text(HARNESS + probability_function() + TESTS, encoding="utf-8")

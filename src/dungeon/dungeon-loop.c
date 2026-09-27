@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-loop.c */
 
 #include "angband.h"
+#include "quest/quest-challenges.h"
 #include "meta_state.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
@@ -127,6 +128,8 @@ void dungeon(void)
         /* Cancel the stair request */
         p_ptr->create_stair = false;
     }
+
+    quest_challenge_prune_stairs();
 
     /* Make rubble */
     if (p_ptr->create_rubble)

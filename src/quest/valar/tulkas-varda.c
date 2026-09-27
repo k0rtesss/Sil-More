@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -26,6 +27,8 @@ static void tulkas_quest_decline(cptr message)
  */
 void tulkas_quest_interaction(void)
 {
+    if (quest_followup_interaction(R_IDX_TULKAS)) return;
+    if (!quest_enabled(QUEST_ID_TULKAS)) return;
     int target_r_idx, prize_a_idx;
     monster_race* r_ptr;
     artefact_type* a_ptr;
@@ -130,7 +133,7 @@ void tulkas_quest_interaction(void)
                 char* monster_pos = my_strstr(temp_text, "[monster name]");
                 if (monster_pos) {
                     char before[512], after[512];
-                    int before_len = monster_pos - temp_text;
+                    int before_len = MIN((int)(monster_pos - temp_text), (int)sizeof(before) - 1);
                     SDL_strlcpy(before, temp_text, before_len + 1);
                     before[before_len] = '\0';
                     SDL_strlcpy(after, monster_pos + 14, sizeof(after)); /* 14 = strlen("[monster name]") */
@@ -141,7 +144,7 @@ void tulkas_quest_interaction(void)
                 char* artifact_pos = my_strstr(temp_text, "[artifact name]");
                 if (artifact_pos) {
                     char before[512], after[512];
-                    int before_len = artifact_pos - temp_text;
+                    int before_len = MIN((int)(artifact_pos - temp_text), (int)sizeof(before) - 1);
                     SDL_strlcpy(before, temp_text, before_len + 1);
                     before[before_len] = '\0';
                     SDL_strlcpy(after, artifact_pos + 15, sizeof(after)); /* 15 = strlen("[artifact name]") */
@@ -259,6 +262,7 @@ void tulkas_quest_interaction(void)
  */
 void check_tulkas_quest_interaction(void)
 {
+    if (!quest_enabled(QUEST_ID_TULKAS)) return;
     /* Only check if quest is in appropriate state */
     if (p_ptr->tulkas_quest != TULKAS_QUEST_GIVER_PRESENT &&
         p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE)
@@ -286,6 +290,7 @@ void check_tulkas_quest_interaction(void)
  */
 void check_tulkas_quest_completion(int r_idx)
 {
+    if (!quest_enabled(QUEST_ID_TULKAS)) return;
     if (p_ptr->tulkas_quest == TULKAS_QUEST_ACTIVE &&
         r_idx == p_ptr->tulkas_target_r_idx)
     {
@@ -509,7 +514,10 @@ static int build_varda_reward_options(int* choices, int max_choices)
             if (a_ptr->cur_num != 0) continue;
             if (valar_reserved_artifacts && valar_reserved_artifacts[i]) continue;
 
-            candidates[candidate_count++] = i;
+            bool duplicate = false;
+            for (int j = 0; j < candidate_count; ++j)
+                if (candidates[j] == i) { duplicate = true; break; }
+            if (!duplicate) candidates[candidate_count++] = i;
         }
     }
 
@@ -593,9 +601,26 @@ static bool grant_varda_reward(cptr* completion_texts, int completion_count)
     metarun_mark_quest_completed(METARUN_QUEST_VARDA);
     metarun_unlock_oath(OATH_LIGHT);
     award_quest_completion_exp();
+    gain_lore_points(1, "You complete a Valar quest.");
     do_cmd_note("Varda blessed me with a radiant artefact and the Oath of Light.", p_ptr->depth);
 
     return true;
+}
+
+/* Followups share the current book/choice UI without completing base Varda. */
+bool quest_varda_radiant_gift(void)
+{
+    int choices[3] = {0};
+    int count = build_varda_reward_options(choices, N_ELEMENTS(choices));
+    if (!count) {
+        msg_print("Varda has no radiant artefacts left; her other blessings remain.");
+        return true;
+    }
+    cptr words[] = {"The Shadow Bastion has fallen. Choose Varda's radiant gift."};
+    int selected = prompt_varda_reward_choice_menu(choices, count, words, 1);
+    if (selected <= 0) return false;
+    create_chosen_artefact(selected, p_ptr->py, p_ptr->px, true);
+    return a_info[selected].cur_num != 0;
 }
 
 static void varda_make_light_pool(int y, int x)
@@ -640,6 +665,7 @@ static bool varda_quest_duruin_present(void)
 
 bool varda_quest_bastion_level_active(void)
 {
+    if (!quest_enabled(QUEST_ID_VARDA)) return false;
     if (!p_ptr) return false;
     if (p_ptr->varda_quest != VARDA_QUEST_ACTIVE) return false;
     if (!p_ptr->varda_vault_placed) return false;
@@ -706,6 +732,7 @@ bool varda_quest_confirm_leave_bastion(void)
 
 void varda_quest_fail_if_bastion_missed(void)
 {
+    if (!quest_enabled(QUEST_ID_VARDA)) return;
     if (!varda_quest_bastion_level_active()) return;
 
     p_ptr->varda_quest = VARDA_QUEST_FAILED;
@@ -719,6 +746,7 @@ void varda_quest_fail_if_bastion_missed(void)
 
 void check_varda_quest_completion(int r_idx)
 {
+    if (!quest_enabled(QUEST_ID_VARDA)) return;
     if (p_ptr->varda_quest == VARDA_QUEST_ACTIVE && r_idx == R_IDX_DURUIN) {
         p_ptr->varda_quest = VARDA_QUEST_SUCCESS;
         p_ptr->varda_vault_ready = 0;
@@ -730,6 +758,8 @@ void check_varda_quest_completion(int r_idx)
 
 void varda_quest_interaction(void)
 {
+    if (quest_followup_interaction(R_IDX_VARDA)) return;
+    if (!quest_enabled(QUEST_ID_VARDA)) return;
     static s32b last_interaction_turn = -1;
     if (last_interaction_turn == turn) return;
     last_interaction_turn = turn;
@@ -812,6 +842,7 @@ void varda_quest_interaction(void)
 
 void check_varda_quest_interaction(void)
 {
+    if (!quest_enabled(QUEST_ID_VARDA)) return;
     if (p_ptr->varda_quest < VARDA_QUEST_GIVER_PRESENT || p_ptr->varda_quest > VARDA_QUEST_SUCCESS) return;
 
     if (trigger_adjacent_quest_giver_interaction(

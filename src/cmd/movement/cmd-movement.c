@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "cmd/world/cmd-interact-chest.h"
@@ -112,7 +113,7 @@ void do_cmd_go_up(void)
     }
 
     // warn player if they have an active Nienna quest and are trying to leave
-    if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE)
+    if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_ACTIVE)
     {
         msg_print("Nienna's voice echoes in your mind:");
         msg_print("'If you leave now, you will have failed the mercy quest.'");
@@ -124,7 +125,7 @@ void do_cmd_go_up(void)
     }
 
     // warn player if they have an active Aulë quest and are trying to leave
-    if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
+    if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
     {
         msg_print("The forge fires dim as you prepare to leave...");
         msg_print("Abandoning Aulë's forge will mean failure of the quest.");
@@ -135,7 +136,7 @@ void do_cmd_go_up(void)
     }
 
     // warn player if they have an active Mandos quest and are trying to leave
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
     {
         msg_print("The spirits in the tomb grow restless as you prepare to leave...");
         msg_print("Abandoning the tomb will mean failure of Mandos' quest.");
@@ -384,45 +385,46 @@ finish_ascent:
     note_lost_greater_vault();
 
     /* New depth */
+    quest_followup_leave(new);
     p_ptr->depth = new;
 
     /* Reset tulkas quest */
-    if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
+    if (quest_enabled(QUEST_ID_TULKAS) && p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
     {
         p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
     }
 
     /* Reset niena quest */
-    if (p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
+    if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
     {
         p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
         msg_print("You have failed Nienna's mercy quest by leaving the level.");
     }
 
     /* Reset aule quest if active */
-    if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
+    if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
     {
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
         msg_print("You have abandoned Aulë's forge. The quest is lost.");
     }
-    else if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
+    else if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
     {
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
     }
 
     /* Reset mandos quest if active */
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
     {
         p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
         msg_print("You have abandoned the tomb. Mandos' quest is lost.");
     }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
+    else if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
     {
         p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
     }
 
     /* Reset Varda quest if she was waiting on the previous level */
-    if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
+    if (quest_enabled(QUEST_ID_VARDA) && p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
     {
         p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
         p_ptr->varda_level = 0;
@@ -434,7 +436,7 @@ finish_ascent:
     p_ptr->staircasiness += 1000;
 
     /* Remember disconnected stairs */
-    if (birth_discon_stair)
+    if (birth_discon_stair || quest_challenge_active(CHALLENGE_DISCONNECTED))
         p_ptr->create_stair = false;
 
     /* Leaving */
@@ -463,7 +465,7 @@ void do_cmd_go_down(void)
         return;
 
     // warn player if they have an active Nienna quest and are trying to leave
-    if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE)
+    if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_ACTIVE)
     {
         msg_print("Nienna's voice echoes in your mind:");
         msg_print("'If you leave now, you will have failed the mercy quest.'");
@@ -475,7 +477,7 @@ void do_cmd_go_down(void)
     }
 
     // warn player if they have an active Aulë quest and are trying to leave
-    if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
+    if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
     {
         msg_print("The forge fires dim as you prepare to leave...");
         msg_print("Abandoning Aulë's forge will mean failure of the quest.");
@@ -486,7 +488,7 @@ void do_cmd_go_down(void)
     }
 
     // warn player if they have an active Mandos quest and are trying to leave
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
     {
         msg_print("The spirits in the tomb grow restless as you prepare to leave...");
         msg_print("Abandoning the tomb will mean failure of Mandos' quest.");
@@ -600,16 +602,17 @@ finish_descent:
     note_lost_greater_vault();
 
     /* New depth */
+    quest_followup_leave(new);
     p_ptr->depth = new;
 
     /* Reset tulkas quest */
-    if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
+    if (quest_enabled(QUEST_ID_TULKAS) && p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
     {
         p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
     }
 
     /* Reset Varda quest if she was waiting on the previous level */
-    if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
+    if (quest_enabled(QUEST_ID_VARDA) && p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
     {
         p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
         p_ptr->varda_level = 0;
@@ -617,34 +620,34 @@ finish_descent:
     }
 
     /* Reset aule quest if active */
-    if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
+    if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
     {
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
         msg_print("You have abandoned Aulë's forge. The quest is lost.");
     }
-    else if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
+    else if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
     {
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
     }
 
     /* Reset mandos quest if active */
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
     {
         p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
         msg_print("You have abandoned the tomb. Mandos' quest is lost.");
     }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
+    else if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
     {
         p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
     }
 
     /* Reset niena quest if active */
-    if (p_ptr->niena_quest >= NIENA_QUEST_ACTIVE && p_ptr->niena_quest < NIENA_QUEST_REWARDED)
+    if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest >= NIENA_QUEST_ACTIVE && p_ptr->niena_quest < NIENA_QUEST_REWARDED)
     {
         p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
         msg_print("You have abandoned Nienna's mercy quest. The quest is lost.");
     }
-    else if (p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
+    else if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
     {
         p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
     }
@@ -654,7 +657,7 @@ finish_descent:
     p_ptr->staircasiness += 1000;
 
     /* Remember disconnected stairs */
-    if (birth_discon_stair)
+    if (birth_discon_stair || quest_challenge_active(CHALLENGE_DISCONNECTED))
         p_ptr->create_stair = false;
 
     /* Leaving */

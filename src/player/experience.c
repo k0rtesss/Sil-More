@@ -1,4 +1,6 @@
 #include "angband.h"
+#include "quest/quest-challenges.h"
+#include "quest/quest-runtime.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -10,27 +12,71 @@ bool lore_system_enabled(void)
     return op_ptr && op_ptr->opt[OPT_lore_beta];
 }
 
-void gain_knowledge_points(s32b amount, cptr reason)
+void gain_lore_points(s32b amount, cptr reason)
 {
     if (!lore_system_enabled() || amount <= 0)
         return;
 
-    if (p_ptr->knowledge_points < 0)
-        p_ptr->knowledge_points = 0;
-    if (amount > PY_MAX_EXP - p_ptr->knowledge_points)
-        p_ptr->knowledge_points = PY_MAX_EXP;
+    if (p_ptr->lore_points < 0)
+        p_ptr->lore_points = 0;
+    if (amount > PY_MAX_EXP - p_ptr->lore_points)
+        p_ptr->lore_points = PY_MAX_EXP;
     else
-        p_ptr->knowledge_points += amount;
+        p_ptr->lore_points += amount;
 
     if (reason && reason[0])
-        msg_format("%s You gain %ld knowledge point%s.", reason,
+        msg_format("%s You gain %ld lore point%s.", reason,
             (long)amount, amount == 1 ? "" : "s");
     else
-        msg_format("You gain %ld knowledge point%s.", (long)amount,
+        msg_format("You gain %ld lore point%s.", (long)amount,
             amount == 1 ? "" : "s");
 
     p_ptr->redraw |= (PR_EXP | PR_BASIC);
     p_ptr->window |= PW_PLAYER_0;
+}
+
+/* Each threshold is shared by identification and smithing and claimed once
+ * per hero. Keep this separate from the optional catastrophe controller. */
+void lore_award_milestone(u16b milestone, cptr reason)
+{
+    if (!p_ptr || !lore_system_enabled() || !milestone
+        || (p_ptr->lore_milestones & milestone)) return;
+    p_ptr->lore_milestones |= milestone;
+    gain_lore_points(1, reason);
+}
+
+void lore_artefact_milestones(int difficulty)
+{
+    for (int i = 0; i < 6; ++i)
+    {
+        char reason[96];
+        int threshold = 15 + 10 * i;
+        if (difficulty < threshold) break;
+        strnfmt(reason, sizeof(reason),
+            "You understand an artefact of difficulty %d.", threshold);
+        lore_award_milestone((u16b)(1U << i), reason);
+    }
+}
+
+int lore_stat_increase_cost(int stat)
+{
+    if (!p_ptr || !lore_system_enabled() || stat < 0 || stat >= A_MAX
+        || p_ptr->stat_base[stat] >= BASE_STAT_MAX) return 0;
+    return birth_stat_increase_cost(p_ptr->lore_stat_invested[stat]);
+}
+
+bool lore_increase_stat(int stat)
+{
+    int cost = lore_stat_increase_cost(stat);
+    if (!cost || cost > p_ptr->lore_points || death_spectator_active())
+        return false;
+    p_ptr->lore_points -= cost;
+    p_ptr->lore_stat_invested[stat]++;
+    p_ptr->stat_base[stat]++;
+    p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA);
+    p_ptr->redraw |= (PR_EXP | PR_BASIC);
+    p_ptr->window |= PW_PLAYER_0;
+    return true;
 }
 
 /*
@@ -122,7 +168,7 @@ void check_experience(void)
  */
 void gain_exp(s32b amount)
 {
-    if (birth_fixed_exp)
+    if (birth_fixed_exp || quest_challenge_active(CHALLENGE_FIXED_50K_XP))
     {
         return;
     }

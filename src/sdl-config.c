@@ -1762,6 +1762,12 @@ static const byte app_gameplay_options[] = {
     OPT_lore_beta,
     OPT_meta_artefact_memory, OPT_meta_forged_artefacts,
     OPT_meta_revenge, OPT_meta_legendary_places,
+    OPT_quest_1, OPT_quest_2, OPT_quest_3, OPT_quest_4,
+    OPT_quest_5, OPT_quest_6, OPT_quest_7, OPT_quest_8,
+    OPT_quest_9, OPT_quest_10, OPT_quest_11, OPT_quest_12,
+    OPT_quest_13, OPT_quest_14, OPT_quest_15, OPT_quest_16,
+    OPT_quest_rules_beta, OPT_quest_rewards_beta,
+    OPT_quest_challenges_beta, OPT_quest_lineage_beta,
     OPT_load_blitz_by_default,
     OPT_lockpick_minigame,
     OPT_chest_trap_minigame,
@@ -6190,4 +6196,3 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv)
         }
     }
 }
-

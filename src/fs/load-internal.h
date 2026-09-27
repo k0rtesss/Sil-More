@@ -45,7 +45,6 @@ extern bool savefile_has_randart_flags4;
 extern bool savefile_has_item_bonuses;
 extern bool savefile_has_randart_bonuses;
 extern bool savefile_has_morgoth_call_state;
-extern bool savefile_has_lore;
 extern bool savefile_has_combat_history;
 
 /* Prefetch / counters shared between the orchestrator and the lanes. */

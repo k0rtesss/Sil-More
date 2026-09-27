@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-runtime.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -233,29 +234,7 @@ int select_tulkas_quest_prize(int target_level)
  */
 u32b get_metarun_quest_flag(int quest_idx)
 {
-    quest_type* q_ptr;
-    const char* metarun_id;
-
-    /* Validate quest index */
-    if (quest_idx <= 0 || quest_idx >= z_info->quest_max) return 0;
-
-    q_ptr = &quest_info[quest_idx];
-
-    /* Get the metarun quest ID string from the M: field */
-    if (q_ptr->metarun_quest_id == 0) return 0;
-    metarun_id = quest_name_text + q_ptr->metarun_quest_id;
-
-    /* Map the string to the corresponding flag value */
-    if (streq(metarun_id, "METARUN_QUEST_TULKAS")) return METARUN_QUEST_TULKAS;
-    if (streq(metarun_id, "METARUN_QUEST_AULE")) return METARUN_QUEST_AULE;
-    if (streq(metarun_id, "METARUN_QUEST_MANDOS")) return METARUN_QUEST_MANDOS;
-    if (streq(metarun_id, "METARUN_QUEST_NIENA")) return METARUN_QUEST_NIENA;
-    if (streq(metarun_id, "METARUN_QUEST_OROME")) return METARUN_QUEST_OROME;
-    if (streq(metarun_id, "METARUN_QUEST_VARDA")) return METARUN_QUEST_VARDA;
-
-    /* Unknown or future quest */
-    log_debug("get_metarun_quest_flag: Unknown metarun_quest_id '%s' for quest_idx %d", metarun_id, quest_idx);
-    return 0;
+    return quest_metarun_flag(quest_idx);
 }
 
 /* Award the fixed experience for completing a normal quest. */
@@ -276,7 +255,16 @@ void apply_quest_rewards(int quest_idx)
     /* Validate quest index */
     if (!p_ptr || quest_idx <= 0 || quest_idx >= z_info->quest_max) return;
 
-    q_ptr = &quest_info[quest_idx];
+    if (!quest_enabled(quest_idx)) return;
+    quest_type reward = quest_info[quest_idx];
+    q_ptr = &reward;
+    if (quest_rewards_enabled()) {
+        if (quest_idx == QUEST_ID_TULKAS) { reward.ability_type = 8; reward.ability_id = SPC_UNIQUE_BANE; }
+        if (quest_idx == QUEST_ID_OROME) { reward.ability_type = 8; reward.ability_id = SPC_OROME_WRAITH; }
+        if (quest_idx == QUEST_ID_VARDA_SHADOW) { reward.ability_type = 8; reward.ability_id = SPC_QUEEN_STARS; }
+    } else if (quest_idx > QUEST_ID_VARDA) {
+        reward.ability_type = 0;
+    }
     catastrophe_note(CATA_VALAR);
 
     /* Apply stat bonuses */
@@ -354,7 +342,8 @@ void apply_quest_rewards(int quest_idx)
                 ability_log_record_gain(S_SPC, q_ptr->ability_id);
 
                 /* Get the ability name for the message */
-                ability_type* b_ptr = &b_info[ability_index(S_SPC, q_ptr->ability_id)];
+                int b_idx = ability_index(S_SPC, q_ptr->ability_id);
+                ability_type* b_ptr = b_idx > 0 && b_idx < z_info->b_max ? &b_info[b_idx] : NULL;
                 if (b_ptr && b_ptr->name && b_name) {
                     msg_format("You have learned %s!", b_name + b_ptr->name);
                     log_trace("Applied special ability: %s (skill=%d, ability=%d)",
@@ -366,7 +355,8 @@ void apply_quest_rewards(int quest_idx)
                 }
             } else {
                 /* Already have this ability */
-                ability_type* b_ptr = &b_info[ability_index(S_SPC, q_ptr->ability_id)];
+                int b_idx = ability_index(S_SPC, q_ptr->ability_id);
+                ability_type* b_ptr = b_idx > 0 && b_idx < z_info->b_max ? &b_info[b_idx] : NULL;
                 if (b_ptr && b_ptr->name && b_name) {
                     msg_format("You already possess %s.", b_name + b_ptr->name);
                 } else {
@@ -386,6 +376,7 @@ void apply_quest_rewards(int quest_idx)
     p_ptr->redraw |= (PR_STATS);
 
     award_quest_completion_exp();
+    gain_lore_points(1, "You complete a Valar quest.");
 }
 
 /*
@@ -415,6 +406,9 @@ bool check_quest_eligibility(int quest_idx, int depth)
 
     q_ptr = &quest_info[quest_idx];
 
+    if (!quest_enabled(quest_idx)) return false;
+    if (quest_idx > QUEST_ID_VARDA) return quest_followup_eligible(quest_idx, depth);
+
     /* Debug quest 2 specifically - show what was actually loaded */
     if (quest_idx == 2) {
         log_trace("Quest %d (Aulë) LOADED DATA: eligibility_type=%d, eligibility_skill=%d, eligibility_value=%d",
@@ -432,7 +426,7 @@ bool check_quest_eligibility(int quest_idx, int depth)
     }
 
     if (metarun_flag) {
-        if (metarun_count >= METARUN_QUEST_COMPLETION_CAP) {
+        if (metarun_count >= quest_completion_cap(quest_idx)) {
             log_trace("Quest %d eligibility: METARUN_CAP (%d/%d) = FAIL", quest_idx, metarun_count, METARUN_QUEST_COMPLETION_CAP);
             return false;
         }
@@ -590,7 +584,9 @@ cptr* extract_quest_init_texts(int quest_idx, int* count)
     full_text = q_text + q_ptr->init_text;
     if (!full_text || strlen(full_text) == 0) return NULL;
 
-    /* Allocate text array */
+    max_texts = 2;
+    for (cptr t = full_text; *t; ++t) if (*t == '\n') ++max_texts;
+    /* Allocate every authored line, including paragraph breaks. */
     texts = mem_alloc_array(max_texts, cptr);
     if (!texts) return NULL;
 
@@ -605,7 +601,7 @@ cptr* extract_quest_init_texts(int quest_idx, int* count)
 
     /* Split text by single newlines (each I: line becomes an entry) */
     line_start = text_copy;
-    while (line_start && *line_start && text_count < max_texts - 1) {
+    while (line_start && text_count < max_texts - 1) {
         /* Find the end of this line */
         line_end = strchr(line_start, '\n');
         if (line_end) {
@@ -662,7 +658,9 @@ cptr* extract_quest_completion_texts(int quest_idx, int* count)
     full_text = q_text + q_ptr->completion_text;
     if (!full_text || strlen(full_text) == 0) return NULL;
 
-    /* Allocate text array */
+    max_texts = 2;
+    for (cptr t = full_text; *t; ++t) if (*t == '\n') ++max_texts;
+    /* Allocate every authored line, including paragraph breaks. */
     texts = mem_alloc_array(max_texts, cptr);
     if (!texts) return NULL;
 

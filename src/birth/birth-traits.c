@@ -78,7 +78,6 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
         [WIL_INNER_LIGHT]           = "Inner Light",
         [WIL_INDOMITABLE]           = "Indomitable",
         [WIL_OATH]                  = "Oath",
-        [WIL_POISON_RESISTANCE]     = "Poison Resistance",
         [WIL_VENGEANCE]             = "Vengeance",
         [WIL_MAJESTY]               = "Majesty",
         [WIL_CON]                   = NULL,

@@ -9362,3 +9362,69 @@ The script now fully matches the game's drop generation logic for all item types
 - `src/fs/load.c`: normalize a living non-unique race's saved revenge cap of 1 to its ordinary 100 before optional runtime overlays; retain slain-foe limits and genuine uniques.
 - `src/level-generation/level-generation.c`: reset legendary area map/runtime state for every common generation attempt, including the Gates.
 - Added real template save/load and Gates-generation regressions to `scripts/check_meta_memories.py` (330 checks). Windows incremental build, living-dungeon persistence (1,575 checks), monster scent current/legacy/corruption checks and `git diff --check` pass. No save-format change; no interactive gameplay replay.
+
+
+## 2026-09-27: Recover develop quests and isolate experiments
+
+### Archaeology and scope
+
+- Current branch: 0.9.8, initial HEAD ed5e9b32. Develop lost Q7-Q16 and much of their runtime in merge bd67ea02; recovered authored content from its intact first parent ca3ac353.
+- Original Q1-Q6 retain their text, probabilities, and default rewards. Restored Z/J/F/H/L metadata, ten followups, four vaults (464-467), and abilities 170-173.
+- Manwe/Light/Unlight feature branch was never merged into develop; it is not part of this recovery. 36c91e73 was consulted as an extraction/reference aid, not merged.
+
+### Controls and testing workflow
+
+- Options -> Quest Options: original quests 1-6 ON; recovered quests 7-16 OFF; Rules, Rewards, Challenges, Lineage all OFF. All 20 switches persist in appOptions.gameplay. New systems/followups are excluded from Blitz; original six preserve their prior availability there.
+- Rules enables authored completion caps, additional oath/challenge prerequisites, and Aule's difficulty-25 work at his own forge. With Rules off, existing Aule behavior stays difficulty >20. Chain predecessors remain required for normal followup offers; debug fixtures bypass them.
+- Rewards enables revised Tulkas/Orome base rewards and new special abilities/radiant gifts. Lineage independently enables resurrection, curse cleansing, and future birth relics. Challenges independently enables optional unlocked birth trials. Enable the desired reward systems before completing a normal quest.
+- Debug menu -> System and Quests -> J (Quest laboratory): select one of all16 quests, inspect status/requirements, toggle locally, start a giver, generate its vault, inject a target kill, complete/claim reward, reset objective, or read full introduction/completion.
+- Vault fixtures support Q7/Q8/Q13/Q15 and switch to the appropriate depth. Use a fresh debug character when replaying already slain unique targets. Original Aule's debug start makes a forge at the player position. The H action tests any challenge, including locked ones.
+- Fixture mutation permanently marks the current character as a quest sandbox. Quest completion counters, oath/challenge unlocks, Great Hunt lineage progress and lineage reward consumption/grants do not write test results to the Tale. Objective reset replays the current character only. Existing non-quest debug tools retain their behavior.
+- Disabling a quest suspends its active hooks/reservations and retains saved progress; it does not reverse already earned stats/items or rebuild existing levels. Life-wide pacifism and Morgoth-hit facts still prevent a pause/enable loophole. Disable/re-enable of a challenge permanently forfeits victory credit while allowing its rules to be exercised again.
+
+### Recovered content
+
+| ID | Quest | Normal objective / setting | Main extra reward when enabled |
+|---|---|---|---|
+| 7 | Mandos, Doom of the Easterlings | Fortress, 500-650ft; Ulfang and Uldor | +1 Con, Fearless; disconnected stairs trial |
+| 8 | Mandos, Doom of the Betrayer | Maeglin, 850-950ft; Rules also requires Iron oath and disconnected victory | +1 Con; one lineage reprieve |
+| 9 | Orome, Warden of the Drakes | Ten non-hatchling dragons; offer 700ft+ | Wraith of Orome; single-stair trial |
+| 10 | Orome, Hunt of the Great | Scatha, Smaug, Draugluin, Gostir, Shelob, Thuringwethil across the Tale | Huntsman's Rhythm |
+| 11 | Nienna's Mercy in Angband | Leave Morgoth's hall upward with a Silmaril without personally striking him | Temporary mercy; fixed50K trial |
+| 12 | Nienna's Path of Peace | Escape with a Silmaril and no player-attributed kills in this life | Cancel the next lineage curse addition |
+| 13 | Tulkas, Orc-Bane | Stronghold at250-300ft; all six captains | Unique Bane; blunt-only trial |
+| 14 | Tulkas, Black Foe's Scourge | Personally deal at least half Morgoth's max HP and bring him to half HP | Wrath of Tulkas |
+| 15 | Varda, Shadow's Bastion | Early offer; Belegwath bastion beyond750ft | Radiant artefact choice, Queen of Stars; torchlight trial |
+| 16 | Varda, Gloomweaver's Doom | Kill Ungoliant after the Shadow Bastion prerequisite | Future births choose a radiant artefact |
+
+All normal quest completions grant the existing QUEST_COMPLETION_EXP (300). Normal global quests activate when their predecessor and active-slot conditions allow; specific vault/roulette quests also consume the existing encounter budget.
+
+### Repairs and implementation
+
+- Original dialogue extraction silently truncated at19 lines; it now includes every authored line. Fixed Varda's duplicate candidate pool, Tulkas placeholder bounds, Mandos treating an absent-but-living Brodda as dead, Nienna seen-counter overflow, and disabled Aule progression.
+- Parser strictly validates new metadata and malformed values; numeric skill parsing and unreachable SKILL_RANGE fixed without regressing formula E/P line ordering.
+- Recovered Easterling/Orc vaults needed tunnelable boundary entrances. Fixed their depth ranges and scoped old token meanings by vault ID, using existing monster GUIDs; ordinary vault meanings remain intact. New vaults are gated before placement, and unique spawn permissions are scoped to the exact quest token.
+- Pending vault state commits only on accepted generation; failed generation cannot spend quest encounters. Failed/abandoned objectives cannot continue earning kills/rewards or occupy active slots. Kills before speaking to an already-present giver are retained.
+- Objectives distinguish player attacks/kills from ambient damage. Instant song kills, player poison, and immediate knockback terrain deaths are covered; poison provenance persists in existing saved monster flags. The life-wide fact flags also cover attacks made while quests were disabled. Older saves conservatively seed kill facts from their existing kill history.
+- Quest counters cover all16 flags and completion calls are idempotent within the character. Data caps prevent future awards without erasing earned history. Great Hunt masks merge Tale progress instead of replacing it with a stale character snapshot.
+- Repaired dormant authored rewards: Orome rage uses +1 to each stat instead of normal rage adjustments; two damaging bow hits prime the next spear hit for doubled damage; Tulkas enables Smite with +1 damage die; Queen of Stars gives +1 light; Mandos revives once at full HP after ordinary cheat-death; Nienna blocks one curse addition; Varda offers three distinct available radiant relics at future births. Exact dormant effects were completed from authored promises rather than claimed to have worked in old develop.
+- Added optional challenge birth selector and actual rules: disconnected arrival stairs, one up/down stair, fixed50K XP, blunt-only weapons, and torch/Mallorn lights (historical INSTA_ART exception retained). Victories need a Silmaril, a valid uninterrupted challenge, and record once.
+- Quest player block is explicitly gated at0.9.8.26 (70 bytes). Current workspace save-extra27 additionally contains the independent concurrent Lore work. Metarun physical record size/offsets are unchanged; extra quest counters and challenge/gift data use previously reserved bytes initialized by explicit version, not file-length inference.
+
+### Validation
+
+- Windows incremental build passed. Quest tests: check_quest_formula_bounds.py, check_quest_vaults.py, check_quest_runtime.py, check_quest_rewards.py, check_quest_save.py, check_quest_attribution.py.
+- check_quest_integration.py passes1087 checks using actual engine objects: loads all templates, builds all four vaults with their unique targets, checks reachable authored targets, roundtrips42 JSON patterns, verifies defaults and Blitz behavior. Only temporary test directories are used.
+- Existing check_monster_scent_save.py and check_living_dungeon_save.py pass; the latter1575 checks. Expected malformed-save rejection logs are part of those tests.
+- Build/harness evidence does not establish interactive UI, manual full quest runs, Android behavior, or whole-character save/load replay. These remain the next testing step through the new controls.
+- Existing and concurrent unrelated edits were retained. No commit or branch merge was created.
+
+Final deployment verification: build-standard/sil-more.exe and sil-more-windows-sdl3/sil-more.exe SHA256 b6c5543b31040a39ba8828640e1d4fd78e475b8eeb73f1a32adc5ac4ec1c9f13 matched; quest/ability/vault/limits staged templates matched source. Final full-engine quest integration rerun:1087 checks PASS.
+
+## 2026-09-27: Fix quest lifecycle review findings
+
+- Failed followups are excluded from giver dispatch and acceptance, so abandoned Orc-Bane cannot consume a later Tulkas giver.
+- Shared quest-vault abandonment runs once before a replacement map is generated, covering falls, teleportation and same-depth regeneration even while the quest is disabled. Normal stairs use the same idempotent cleanup. Completed objectives retain pending rewards; unplaced/global quests and generation retries retain their state.
+- Regression coverage: failed-giver dispatch, disabled departure, all four quest vaults across offered/active/success/rewarded states, preserved progress, released active slots/unique reservations, same-map pauses and pending-generation retries. Full-engine tests exercise real chasm/false-floor/teleport exits and paused same-depth generation (1,118 integration checks).
+- Validation passed: parallel Windows incremental build; quest runtime, integration, rewards/challenges, save and vault suites; git diff --check. No interactive gameplay/device validation or save-format changes.
+- Staged the rebuilt standard executable and synchronized the existing Lore ability template required by that build. Executable SHA256 8dd95b5866f8dcd9358f9a7c941a16039ba827d6f42a5a2dbe34ff5bdc647277; ability/quest/vault/limits deployment hashes match source. Other source changes preserved; no commit created.

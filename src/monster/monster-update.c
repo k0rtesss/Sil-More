@@ -1,6 +1,7 @@
 /* File: monster-update.c */
 
 #include "monster-internal.h"
+#include "quest/quest-runtime.h"
 
 /*
  * Shared sound-based detection logic. Returns true when the check succeeds.
@@ -408,8 +409,8 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
             m_ptr->ml = true;
 
             /* Track monster visibility for Nienna mercy quest */
-            if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE && m_ptr->r_idx != R_IDX_NIENA) {
-                p_ptr->niena_monsters_seen++;
+            if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_ACTIVE && m_ptr->r_idx != R_IDX_NIENA) {
+                if (p_ptr->niena_monsters_seen < 255) p_ptr->niena_monsters_seen++;
                 log_trace("Nienna quest: Monster seen (total seen=%d, killed=%d)",
                          p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
             }
@@ -501,9 +502,6 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
         && (l_ptr->psights < MAX_SHORT))
     {
         int new_exp = adjusted_mon_exp(r_ptr, false);
-        bool first_unique_sighting =
-            (r_ptr->flags1 & RF1_UNIQUE) && (l_ptr->tsights == 0);
-
         // gain experience for encounter
         gain_exp(new_exp);
         p_ptr->encounter_exp += new_exp;
@@ -528,9 +526,6 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
                 note2, format("Encountered %s", real_name), sizeof(note2));
 
             do_cmd_note(note2, p_ptr->depth);
-
-            if (first_unique_sighting)
-                gain_knowledge_points(1, "A unique foe enters your lore.");
         }
 
         // if it was a wraith, possibly realise you are haunted

@@ -469,7 +469,12 @@ static song_contest_penalties song_duel_apply_contest_penalties(
 
 static void song_duel_finish_monster_loss(monster_type* m_ptr, int song, int song_skill)
 {
-    if (r_info[m_ptr->r_idx].flags1 & RF1_UNIQUE) catastrophe_note(CATA_SONG);
+    if (r_info[m_ptr->r_idx].flags1 & RF1_UNIQUE)
+    {
+        catastrophe_note(CATA_SONG);
+        lore_award_milestone(LORE_MILESTONE_SONG,
+            "Your Song of Power overcomes a unique foe.");
+    }
     char m_name[80];
     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 

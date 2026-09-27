@@ -782,6 +782,7 @@ bool project_m(
         {
             poison_dose = dam;
             monster_poison_add(cave_m_idx[y][x], poison_dose);
+            if (who < 0 && m_ptr->poisoned) m_ptr->mflag |= MFLAG_PLAYER_POISON;
             note = " is poisoned.";
         }
         /* Poison projections build the same delayed counter as weapons. */

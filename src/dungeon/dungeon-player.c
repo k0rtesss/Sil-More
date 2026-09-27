@@ -1,6 +1,9 @@
 /* File: dungeon/dungeon-player.c */
 
 #include "angband.h"
+#include "quest/quest-runtime.h"
+#include "quest/quest-challenges.h"
+#include "quest/quest-runtime.h"
 #include "meta_state.h"
 #include "cave/cave-flood.h"
 #include "cave/cave-events.h"
@@ -257,6 +260,7 @@ void process_player_aux(void)
  */
 void process_player(void)
 {
+    quest_challenge_validate();
     int i;
     int amount;
     int regen_multiplier;
@@ -571,7 +575,10 @@ void process_player(void)
                 {
                     int diff = object_difficulty(smith_o_ptr);
                     p_ptr->aule_last_object_diff = diff;
-                    if (diff > 20 && p_ptr->aule_quest == AULE_QUEST_ACTIVE) {
+                    if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest == AULE_QUEST_ACTIVE
+                        && diff >= (quest_rules_enabled() ? 25 : 21)
+                        && (!quest_rules_enabled() || (p_ptr->depth == p_ptr->aule_level
+                            && p_ptr->py == p_ptr->aule_forge_y && p_ptr->px == p_ptr->aule_forge_x))) {
                         p_ptr->aule_quest = AULE_QUEST_SUCCESS;
                         log_trace("Aulë quest: state -> SUCCESS (diff=%d)", diff);
                         msg_print("Your forging radiates unparalleled craft!");
@@ -858,8 +865,7 @@ void process_player(void)
                     if (!greater_vault_xp_awarded)
                     {
                         gain_exp(vault_xp);
-                        gain_knowledge_points(5,
-                            "The great vault yields hidden knowledge.");
+                        gain_lore_points(1, "You discover a greater vault.");
                         greater_vault_xp_awarded = true;
                     }
 
@@ -881,8 +887,7 @@ void process_player(void)
                 if (!greater_vault_xp_awarded)
                 {
                     gain_exp(vault_xp);
-                    gain_knowledge_points(5,
-                        "The great vault yields hidden knowledge.");
+                    gain_lore_points(1, "You discover a greater vault.");
                     greater_vault_xp_awarded = true;
                 }
             }

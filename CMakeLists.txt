@@ -480,7 +480,11 @@ set(SIL_MORE_SOURCES
     src/player/player-vitals.c
     src/pane.c
     src/quest/quest-core.c
+    src/quest/quest-runtime.c
+    src/quest/quest-rewards-beta.c
+    src/quest/quest-challenges.c
     src/quest/quest-dialogue.c
+    src/quest/quest-options.c
     src/quest/quest-status.c
     src/quest/valar/other-valar.c
     src/quest/valar/tulkas-varda.c

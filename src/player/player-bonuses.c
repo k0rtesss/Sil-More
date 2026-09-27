@@ -1,4 +1,6 @@
 #include "angband.h"
+#include "quest/quest-rewards-beta.h"
+#include "quest/quest-runtime.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -551,11 +553,6 @@ void calc_bonuses(void)
         p_ptr->skill_misc_mod[S_MEL] -= 3;
     }
 
-    if (p_ptr->active_ability[S_WIL][WIL_POISON_RESISTANCE])
-    {
-        p_ptr->resist_pois += 1;
-    }
-
     /*** Temporary flags ***/
 
     /* Slippery footing affects melee, bows and thrown attacks once through
@@ -586,10 +583,14 @@ void calc_bonuses(void)
     /* Temporary "Rage" */
     if (p_ptr->rage)
     {
-        p_ptr->stat_misc_mod[A_STR] += 1;
-        p_ptr->stat_misc_mod[A_DEX] -= 1;
-        p_ptr->stat_misc_mod[A_CON] += 1;
-        p_ptr->stat_misc_mod[A_GRA] -= 1;
+        if (quest_special_ability_active(SPC_OROME_WRAITH)) {
+            for (i = 0; i < A_MAX; i++) p_ptr->stat_misc_mod[i]++;
+        } else {
+            p_ptr->stat_misc_mod[A_STR] += 1;
+            p_ptr->stat_misc_mod[A_DEX] -= 1;
+            p_ptr->stat_misc_mod[A_CON] += 1;
+            p_ptr->stat_misc_mod[A_GRA] -= 1;
+        }
     }
 
     /* Temporary Strength */
@@ -651,15 +652,22 @@ void calc_bonuses(void)
         p_ptr->stat_misc_mod[A_STR] -= 1;
     }
 
-    // 'Indomitable' ability provides resist_fear, resist_confusion,
-    // resist_stunning and resist_hallucination as well as slowing hunger
+    // 'Indomitable' provides resistance to fear, confusion, stunning,
+    // hallucination and poison, as well as slowing hunger.
     if (p_ptr->active_ability[S_WIL][WIL_INDOMITABLE])
     {
         p_ptr->resist_confu += 1;
         p_ptr->resist_fear += 1;
         p_ptr->resist_stun += 1;
         p_ptr->resist_hallu += 1;
+        p_ptr->resist_pois += 1;
         p_ptr->hunger -= 1;
+    }
+    else if (p_ptr->active_ability[S_WIL][WIL_RETIRED_POISON_RESISTANCE])
+    {
+        /* Preserve the old benefit for saves that still carry the retired
+         * Poison Resistance slot. New characters cannot acquire this slot. */
+        p_ptr->resist_pois += 1;
     }
 
     /* Meta-run curses/blessings adjusting resistances */

@@ -635,6 +635,17 @@ errr load_metaruns(bool create_if_missing)
 
     if (metaruns) {
         for (s16b i = 0; i < metarun_max; i++) {
+            /* These bytes were unused on 0.9.8 before the quest port. The
+             * physical record size stays unchanged; only this explicit
+             * version selects their new meaning. Never infer it from size. */
+            if (metarun_header_before(&header, 0, 9, 8, 26)) {
+                metaruns[i].quest_completion_counts[6] = 0;
+                metaruns[i].quest_completion_counts[7] = 0;
+                memset(metaruns[i].reserved_runtime, 0, 16);
+                memset(metaruns[i].quest_reserved, 0, 5);
+                metaruns[i].completed_quests &= ~0xffc0UL;
+                metarun_clamp_and_sync_quests(&metaruns[i]);
+            }
             metarun_migrate_tutorial_notice(&metaruns[i], &header);
             if (interface_settings_migrated)
                 metarun_clear_obsolete_interface_options_097(&metaruns[i]);

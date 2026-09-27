@@ -1,4 +1,7 @@
 #include "angband.h"
+#include "quest/quest-rewards-beta.h"
+#include "quest/quest-runtime.h"
+#include "quest/quest-challenges.h"
 #include "meta_state.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-ai.h"
@@ -2532,7 +2535,10 @@ bool knock_back(int y1, int x1, int y2, int x2)
             monster_abilities_forced_movement(m_ptr);
 
             // actually move the monster
+            bool player_push = y1 == p_ptr->py && x1 == p_ptr->px;
+            if (player_push) m_ptr->mflag |= MFLAG_PLAYER_PUSH;
             monster_swap(y2, x2, y3, x3);
+            if (player_push) m_ptr->mflag &= ~MFLAG_PLAYER_PUSH;
         }
         else
         {
@@ -3056,7 +3062,8 @@ void py_attack_aux(int y, int x, int attack_type)
     /* Attack once for each legal blow */
     while (num++ < blows)
     {
-        smite = two_handed_melee() && p_ptr->active_ability[S_MEL][MEL_SMITE]
+        smite = two_handed_melee() && (p_ptr->active_ability[S_MEL][MEL_SMITE]
+            || quest_special_ability_active(SPC_TULKAS_WRATH))
             && num == 1
             && (attack_type == ATT_MAIN || attack_type == ATT_FLANKING
                 || attack_type == ATT_IMPALE
@@ -3091,6 +3098,11 @@ void py_attack_aux(int y, int x, int attack_type)
             o_ptr = &inventory[INVEN_ARM];
             weapon_weight = o_ptr->weight;
             object_flags4(o_ptr, &f1, &f2, &f3, &f4);
+        }
+
+        if (!quest_challenge_weapon_allowed(o_ptr)) {
+            msg_print("Your chosen challenge forbids attacking with this weapon.");
+            continue;
         }
 
         if (is_normal_attack(attack_type))
@@ -3186,6 +3198,7 @@ void py_attack_aux(int y, int x, int attack_type)
             }
 
             total_dice = mdd + slay_bonus_dice + crit_bonus_dice;
+            if (smite && quest_special_ability_active(SPC_TULKAS_WRATH)) total_dice++;
 
             if (crit_bonus_dice > 0) {
                 char tutorial_detail[240];
@@ -3223,6 +3236,9 @@ void py_attack_aux(int y, int x, int attack_type)
             /* No negative damage */
             if (net_dam < 0)
                 net_dam = 0;
+
+            net_dam = quest_beta_melee_damage(o_ptr, net_dam);
+            net_dam = quest_challenge_melee_damage(o_ptr, net_dam);
 
             break_mercy_oath(m_ptr, net_dam);
             break_valorous_oath(m_ptr, net_dam, attack_type, -1);  // -1 indicates player damage
@@ -3325,6 +3341,7 @@ void py_attack_aux(int y, int x, int attack_type)
                         prt = 0;
                         prt_percent = 0;
 
+                        quest_followup_damage(m_ptr, song_dam, -1);
                         if (morgoth_enter_final_stage(m_idx))
                         {
                             skip_take_hit = true;
@@ -3342,6 +3359,8 @@ void py_attack_aux(int y, int x, int attack_type)
                         prt_percent = 0;
 
                         /* Generate treasure */
+                        quest_followup_damage(m_ptr, dam, -1);
+                        quest_followup_kill(m_ptr->r_idx);
                         monster_death(m_idx);
 
                         /* Auto-recall only if visible or unique */
@@ -3490,6 +3509,7 @@ void py_attack_aux(int y, int x, int attack_type)
         /* Player misses */
         else
         {
+            quest_beta_melee_miss();
             // Play weapon swing sound (no result sound for misses, so no
             // scheduling needed)
             u16b weapon_swing_type = weapon_sound_message_type(o_ptr, false);

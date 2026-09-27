@@ -71,7 +71,8 @@ enum
     THRALL_REWARD_SANCTIFY = 2,
     THRALL_REWARD_IDENTIFY_ONE = 3,
     THRALL_REWARD_IDENTIFY_NATURE = 4,
-    THRALL_REWARD_LATER = 5
+    THRALL_REWARD_LATER = 5,
+    THRALL_REWARD_LORE_POINT = 6
 };
 
 typedef struct thrall_reward_option
@@ -1882,8 +1883,8 @@ bool reveal_random_artifact(void)
 
 static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 {
-    thrall_reward_option options[6];
-    ui_question_option question_options[6];
+    thrall_reward_option options[7];
+    ui_question_option question_options[7];
     int option_count = 0;
     int default_index = -1;
     char title[80];
@@ -1913,6 +1914,15 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
         options[option_count++] = (thrall_reward_option){
             THRALL_REWARD_IDENTIFY_ONE, 'c', "Identify an item",
             count_carried_identify_targets() > 0 };
+    }
+
+    if (lore_system_enabled()
+        && m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_FIRST_REWARD_PENDING)
+    {
+        char lore_hotkey = (char)('a' + option_count);
+        options[option_count++] = (thrall_reward_option){
+            THRALL_REWARD_LORE_POINT, lore_hotkey,
+            "Refuse a gift and gain 1 Lore point", true };
     }
 
     {
@@ -2015,6 +2025,10 @@ static bool offer_thrall_reward(monster_type* m_ptr, bool pending_reward)
             msg_print("The thrall finds no hidden virtues among your potions, gems, or herbs.");
             break;
 
+        case THRALL_REWARD_LORE_POINT:
+            gain_lore_points(1, "You refuse the thrall's gift.");
+            return true;
+
         case THRALL_REWARD_LATER:
         default:
             msg_format("%^s bows the head and waits for your return.", m_name);
@@ -2071,7 +2085,14 @@ void complete_thrall_quest(monster_type* m_ptr, int item_slot)
         THRALL_QUEST_COMPLETION_EXP);
 
     /* Reward can be claimed now or later. */
-    m_ptr->thrall_quest_completed = THRALL_QUEST_STATE_REWARD_PENDING;
+    if (lore_system_enabled()
+        && !(p_ptr->lore_milestones & LORE_FIRST_THRALL_HELPED))
+    {
+        p_ptr->lore_milestones |= LORE_FIRST_THRALL_HELPED;
+        m_ptr->thrall_quest_completed = THRALL_QUEST_STATE_FIRST_REWARD_PENDING;
+    }
+    else
+        m_ptr->thrall_quest_completed = THRALL_QUEST_STATE_REWARD_PENDING;
     catastrophe_note(CATA_THRALL);
 
     if (offer_thrall_reward(m_ptr, false))
@@ -2114,7 +2135,8 @@ bool handle_thrall_interaction(monster_type* m_ptr)
     }
 
     /* Reward is waiting to be claimed */
-    if (m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARD_PENDING)
+    if (m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARD_PENDING
+        || m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_FIRST_REWARD_PENDING)
     {
         if (offer_thrall_reward(m_ptr, true))
         {

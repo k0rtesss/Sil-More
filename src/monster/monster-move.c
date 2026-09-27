@@ -1,6 +1,7 @@
 /* File: monster-move.c */
 
 #include "monster-internal.h"
+#include "quest/quest-runtime.h"
 #include "log/perf.h"
 #include "cave/cave.h"
 
@@ -136,6 +137,7 @@ void m_fall_in_chasm(int fy, int fx)
         if (m_ptr->hp <= dam)
         {
             // kill the monster, gain experience etc
+            if (m_ptr->mflag & MFLAG_PLAYER_PUSH) quest_followup_kill(m_ptr->r_idx);
             monster_death(cave_m_idx[fy][fx]);
 
             // delete the monster

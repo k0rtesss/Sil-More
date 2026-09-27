@@ -5056,7 +5056,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Gain resistance to fear, confusion, stun and hallucination. Hunger advances at one third of its normal rate.",
+          "text": "Gain resistance to fear, confusion, stun, hallucination and poison. Hunger advances at one third of its normal rate.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5118,41 +5118,6 @@
           "src/birth/birth-traits.c",
           "src/ui/character-dump.c",
           "src/cmd/ui/cmd-ui-abilities.c"
-        ]
-      },
-      "category": "Will"
-    },
-    {
-      "id": "ability.107.preview",
-      "title": "Poison Resistance",
-      "level": "extended",
-      "priority": 65,
-      "steps": [
-        {
-          "text": "Gain one layer of poison resistance. It reduces new poison exposure; existing poison still needs time or a remedy to clear.",
-          "kind": "decision",
-          "anchor": "abilities"
-        }
-      ],
-      "trigger": {
-        "source": "src/tutorial/tutorial-game.c",
-        "predicate": "Public ability preview or newly available ability; raw serial 107, skill 5, ability slot 7."
-      },
-      "sources": [
-        "lib/edit/ability.txt",
-        "src/player/player-bonuses.c",
-        "src/birth/birth-traits.c"
-      ],
-      "ability": {
-        "serial": 107,
-        "skill": 5,
-        "slot": 7,
-        "base_requirement": 7,
-        "mechanics_source": "ability template and owning runtime",
-        "runtime_symbol": "WIL_POISON_RESISTANCE",
-        "runtime_sources": [
-          "src/birth/birth-traits.c",
-          "src/player/player-bonuses.c"
         ]
       },
       "category": "Will"

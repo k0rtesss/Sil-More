@@ -291,8 +291,8 @@ errr rd_extra(void)
         s16b lamp_oil = 0;
         byte active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
         byte morgoth_call_state = 0;
-        s16b lore = 0;
-        s32b knowledge_points = 0;
+        u16b lore_milestones = 0;
+        s32b lore_points = 0;
         rd_byte(&morgoth_hall_entered);
         rd_byte(&morgoth_second_wind);
         rd_byte(&discovery_lore_flags);
@@ -313,10 +313,10 @@ errr rd_extra(void)
         if (savefile_has_morgoth_call_state)
         {
             rd_byte(&morgoth_call_state);
-            if (savefile_has_lore)
+            if (savefile_version_at_least(0, 9, 8, 27))
             {
-                rd_s16b(&lore);
-                rd_s32b(&knowledge_points);
+                rd_u16b(&lore_milestones);
+                rd_s32b(&lore_points);
                 strip_bytes(1);
             }
             else
@@ -333,8 +333,8 @@ errr rd_extra(void)
             quick_access_prompt_flags & QUICK_ACCESS_PROMPT_MASK;
         p_ptr->lamp_oil = lamp_oil;
         p_ptr->active_weapon_mode = active_weapon_mode;
-        p_ptr->lore = MAX(0, MIN(BASE_STAT_MAX, lore));
-        p_ptr->knowledge_points = MAX(0, MIN(PY_MAX_EXP, knowledge_points));
+        p_ptr->lore_points = MAX(0, MIN(PY_MAX_EXP, lore_points));
+        p_ptr->lore_milestones = lore_milestones & LORE_MILESTONE_MASK;
         if (savefile_has_morgoth_call_state)
         {
             p_ptr->morgoth_call_state =
@@ -343,6 +343,14 @@ errr rd_extra(void)
                     | SAVEFILE_MORGOTH_CALL_ESCALATION_MASK);
         }
     }
+
+    memset(p_ptr->lore_stat_invested, 0, sizeof(p_ptr->lore_stat_invested));
+    if (savefile_version_at_least(0, 9, 8, 27))
+        for (i = 0; i < A_MAX; ++i)
+        {
+            rd_byte(&p_ptr->lore_stat_invested[i]);
+            p_ptr->lore_stat_invested[i] = MIN(6, p_ptr->lore_stat_invested[i]);
+        }
 
     /* Reserved: legacy item-quality squelch array (now unused) */
     {
@@ -557,6 +565,50 @@ errr rd_extra(void)
     /* Older saves may have an active Varda quest without the initiated counter. */
     if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE && p_ptr->quest_reserved[0] == 0) {
         p_ptr->quest_reserved[0] = 1;
+    }
+
+    memset(p_ptr->quest_followup_state, 0, sizeof(p_ptr->quest_followup_state));
+    memset(p_ptr->quest_followup_flags, 0, sizeof(p_ptr->quest_followup_flags));
+    memset(p_ptr->quest_followup_depth, 0, sizeof(p_ptr->quest_followup_depth));
+    memset(p_ptr->quest_followup_progress, 0, sizeof(p_ptr->quest_followup_progress));
+    p_ptr->quest_followup_recorded = 0;
+    p_ptr->quest_lifetime_flags = p_ptr->morgoth_hits ? 2 : 0;
+    if (z_info && l_list) for (int r = 1; r < z_info->r_max; ++r)
+        if (l_list[r].pkills) { p_ptr->quest_lifetime_flags |= 1; break; }
+    p_ptr->quest_test_sandbox = 0;
+    p_ptr->quest_challenge = 0;
+    p_ptr->quest_challenge_failed = 0;
+    p_ptr->quest_challenge_recorded = 0;
+    p_ptr->orome_bow_hit_streak = p_ptr->orome_spear_ready = 0;
+    if (savefile_version_at_least(0, 9, 8, 26)) {
+        rd_byte(&marker);
+        if (marker != 0x5b) { note("Invalid recovered quest block."); return -1; }
+        for (i = 0; i < 10; ++i) {
+            rd_byte(&p_ptr->quest_followup_state[i]);
+            rd_byte(&p_ptr->quest_followup_flags[i]);
+            rd_s16b(&p_ptr->quest_followup_depth[i]);
+            rd_u16b(&p_ptr->quest_followup_progress[i]);
+            if (p_ptr->quest_followup_state[i] > QUEST_STATE_REWARDED
+                || p_ptr->quest_followup_depth[i] < 0
+                || p_ptr->quest_followup_depth[i] >= MAX_DEPTH
+                || (p_ptr->quest_followup_flags[i] & ~15)) {
+                note("Invalid recovered quest state."); return -1;
+            }
+        }
+        rd_u16b(&p_ptr->quest_followup_recorded);
+        rd_byte(&p_ptr->quest_lifetime_flags);
+        rd_byte(&p_ptr->quest_test_sandbox);
+        rd_byte(&p_ptr->quest_challenge);
+        rd_byte(&p_ptr->quest_challenge_failed);
+        rd_byte(&p_ptr->quest_challenge_recorded);
+        rd_byte(&p_ptr->orome_bow_hit_streak);
+        rd_byte(&p_ptr->orome_spear_ready);
+        if (p_ptr->quest_followup_recorded > 1023 || p_ptr->quest_lifetime_flags > 3 || p_ptr->quest_test_sandbox > 1
+            || p_ptr->quest_challenge > CHALLENGE_TORCHLIGHT
+            || p_ptr->quest_challenge_failed > 1 || p_ptr->quest_challenge_recorded > 1
+            || p_ptr->orome_bow_hit_streak > 2 || p_ptr->orome_spear_ready > 1) {
+            note("Invalid recovered quest flags."); return -1;
+        }
     }
 
     /* Skeleton note state (per-level tutorial-style messages) */
@@ -780,6 +832,20 @@ errr rd_extra(void)
     /* Min depth counter */
     rd_s32b(&min_depth_counter);
     rd_tutorial_character_state();
+    if (!savefile_version_at_least(0, 9, 8, 27))
+    {
+        /* Old saves stored final base attributes. Recover their purchased
+         * ranks so racial and house bonuses do not inflate future prices. */
+        for (i = 0; i < A_MAX; ++i)
+        {
+            int innate = p_info[p_ptr->prace].r_adj[i]
+                + c_info[p_ptr->pcharacter].h_adj[i];
+            for (int curse = 0; curse < z_info->cu_max; ++curse)
+                innate += CURSE_GET(curse) * cu_info[curse].cu_adj[i];
+            p_ptr->lore_stat_invested[i] =
+                MAX(0, MIN(6, p_ptr->stat_base[i] - innate));
+        }
+    }
     morgoth_call_sync_loaded_stage();
     log_info("LOAD: min_depth_counter=%d, calculated min_depth()=%d", min_depth_counter, min_depth());
 

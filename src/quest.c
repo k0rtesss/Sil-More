@@ -4,6 +4,7 @@
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "quest/quest-runtime.h"
 #include <string.h>
 
 /* Local helpers */
@@ -17,89 +18,63 @@ static int popcount32(u32b value)
     return count;
 }
 
-static const u32b metarun_known_quest_flags[] = {
-    METARUN_QUEST_TULKAS,
-    METARUN_QUEST_AULE,
-    METARUN_QUEST_MANDOS,
-    METARUN_QUEST_NIENA,
-    METARUN_QUEST_OROME,
-    METARUN_QUEST_VARDA
-};
+#define METARUN_KNOWN_QUEST_MASK 0xffffUL
 
-#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_VARDA)
-
-static int quest_slot_from_flag(u32b quest_flag)
+static int quest_slot_from_flag(u32b flag)
 {
-    for (size_t i = 0; i < N_ELEMENTS(metarun_known_quest_flags) && i < METARUN_QUEST_SLOT_MAX; i++) {
-        if (quest_flag == metarun_known_quest_flags[i]) return (int)i;
-    }
+    for (int i = 0; i < METARUN_KNOWN_QUESTS; ++i)
+        if (flag == (1UL << i)) return i;
     return -1;
+}
+
+static byte *quest_count_slot(metarun *m, int slot)
+{
+    if (!m || slot < 0 || slot >= METARUN_KNOWN_QUESTS) return NULL;
+    return slot < METARUN_QUEST_SLOT_MAX ? &m->quest_completion_counts[slot]
+        : &m->reserved_runtime[slot - METARUN_QUEST_SLOT_MAX];
+}
+
+static int quest_count(const metarun *m, int slot)
+{
+    if (!m || slot < 0 || slot >= METARUN_KNOWN_QUESTS) return 0;
+    return slot < METARUN_QUEST_SLOT_MAX ? m->quest_completion_counts[slot]
+        : m->reserved_runtime[slot - METARUN_QUEST_SLOT_MAX];
 }
 
 void metarun_seed_quest_counts_from_mask(metarun *m, u32b mask)
 {
     if (!m) return;
-    for (size_t i = 0; i < N_ELEMENTS(metarun_known_quest_flags) && i < METARUN_QUEST_SLOT_MAX; i++) {
-        m->quest_completion_counts[i] = (mask & metarun_known_quest_flags[i]) ? 1 : 0;
-    }
-    for (size_t i = N_ELEMENTS(metarun_known_quest_flags); i < METARUN_QUEST_SLOT_MAX; i++) {
-        m->quest_completion_counts[i] = 0;
-    }
+    for (int i = 0; i < METARUN_KNOWN_QUESTS; ++i)
+        *quest_count_slot(m, i) = (mask & (1UL << i)) ? 1 : 0;
 }
 
 void metarun_clamp_and_sync_quests(metarun *m)
 {
     if (!m) return;
-
     u32b mask = m->completed_quests & ~((u32b)METARUN_KNOWN_QUEST_MASK);
-
-    for (size_t i = 0; i < METARUN_QUEST_SLOT_MAX; i++) {
-        byte count = m->quest_completion_counts[i];
-        if (count > METARUN_QUEST_COMPLETION_CAP) {
-            count = METARUN_QUEST_COMPLETION_CAP;
-        }
-
-        if (i < N_ELEMENTS(metarun_known_quest_flags)) {
-            if (count > 0) {
-                mask |= metarun_known_quest_flags[i];
-            }
-        } else {
-            count = 0;
-        }
-
-        m->quest_completion_counts[i] = count;
+    for (int i = 0; i < METARUN_KNOWN_QUESTS; ++i) {
+        byte *count = quest_count_slot(m, i);
+        /* Data/option caps control future awards, never erase earned history. */
+        if (*count > METARUN_QUEST_COMPLETION_CAP) *count = METARUN_QUEST_COMPLETION_CAP;
+        if (*count) mask |= 1UL << i;
     }
-
     m->completed_quests = mask;
 }
 
 int metarun_total_quest_completions(const metarun *m)
 {
     if (!m) return 0;
-
     int total = 0;
-    for (size_t i = 0; i < METARUN_QUEST_SLOT_MAX && i < N_ELEMENTS(metarun_known_quest_flags); i++) {
-        total += m->quest_completion_counts[i];
-    }
-
-    /* Preserve completions for unknown future quests represented only by the bitmask */
-    u32b unknown_mask = m->completed_quests & ~((u32b)METARUN_KNOWN_QUEST_MASK);
-    total += popcount32(unknown_mask);
-
-    return total;
+    for (int i = 0; i < METARUN_KNOWN_QUESTS; ++i) total += quest_count(m, i);
+    return total + popcount32(m->completed_quests & ~((u32b)METARUN_KNOWN_QUEST_MASK));
 }
 
 int metarun_quests_completed_at_least(int minimum_count)
 {
-    if (minimum_count <= 0) return (int)N_ELEMENTS(metarun_known_quest_flags);
-
     int total = 0;
-    for (size_t i = 0; i < METARUN_QUEST_SLOT_MAX && i < N_ELEMENTS(metarun_known_quest_flags); i++) {
-        if (metar.quest_completion_counts[i] >= minimum_count) {
-            total++;
-        }
-    }
-
+    int limit = quest_rules_enabled() ? METARUN_KNOWN_QUESTS : 6;
+    for (int i = 0; i < limit; ++i)
+        if (quest_count(&metar, i) >= minimum_count) ++total;
     return total;
 }
 
@@ -119,7 +94,7 @@ int quest_initiated_count_this_run(void)
 
 static bool quest_state_is_accepted(int quest_idx)
 {
-    if (!p_ptr) return false;
+    if (!p_ptr || !quest_enabled(quest_idx)) return false;
 
     switch (quest_idx) {
         case QUEST_ID_TULKAS:
@@ -135,7 +110,8 @@ static bool quest_state_is_accepted(int quest_idx)
         case QUEST_ID_VARDA:
             return p_ptr->varda_quest == VARDA_QUEST_ACTIVE;
         default:
-            return false;
+            return quest_get_state(quest_idx) == QUEST_STATE_ACTIVE
+                && !(p_ptr->quest_followup_flags[quest_idx - 7] & 2);
     }
 }
 
@@ -143,7 +119,7 @@ int quest_accepted_count_this_run(void)
 {
     int total = 0;
 
-    for (int quest_idx = QUEST_ID_TULKAS; quest_idx <= QUEST_ID_VARDA; quest_idx++) {
+    for (int quest_idx = QUEST_ID_TULKAS; quest_idx <= QUEST_ID_VARDA_UNGOLIANT; quest_idx++) {
         if (quest_state_is_accepted(quest_idx)) {
             total++;
         }
@@ -154,12 +130,12 @@ int quest_accepted_count_this_run(void)
 
 bool quest_can_initiate_more(void)
 {
-    return quest_initiated_count_this_run() < QUEST_MAX_INITIATED_PER_RUN;
+    return quest_debug_sandbox() || quest_initiated_count_this_run() < QUEST_MAX_INITIATED_PER_RUN;
 }
 
 bool quest_can_accept_more(void)
 {
-    return quest_accepted_count_this_run() < QUEST_MAX_ACCEPTED_PER_RUN;
+    return quest_debug_sandbox() || quest_accepted_count_this_run() < QUEST_MAX_ACCEPTED_PER_RUN;
 }
 
 void quest_note_initiated(int quest_idx)
@@ -184,6 +160,7 @@ static bool quest_completion_recorded_for_run(u32b quest_flag)
     int slot = quest_slot_from_flag(quest_flag);
     if (slot < 0) return false;
 
+    if (slot >= 6) return (p_ptr->quest_followup_recorded & (1U << (slot - 6))) != 0;
     int idx = QUEST_RESERVED_RECORD_BASE + slot;
     if (idx >= (int)N_ELEMENTS(p_ptr->quest_reserved)) return true; /* fail safe: assume recorded */
 
@@ -196,6 +173,7 @@ static void mark_quest_completion_recorded_for_run(u32b quest_flag)
     int slot = quest_slot_from_flag(quest_flag);
     if (slot < 0) return;
 
+    if (slot >= 6) { p_ptr->quest_followup_recorded |= 1U << (slot - 6); return; }
     int idx = QUEST_RESERVED_RECORD_BASE + slot;
     if (idx >= (int)N_ELEMENTS(p_ptr->quest_reserved)) return;
 
@@ -208,9 +186,7 @@ int metarun_quest_completion_count(u32b quest_flag)
     if (metarun_current_index() < 0) return 0;
 
     int slot = quest_slot_from_flag(quest_flag);
-    if (slot >= 0 && slot < METARUN_QUEST_SLOT_MAX) {
-        return metar.quest_completion_counts[slot];
-    }
+    if (slot >= 0) return quest_count(&metar, slot);
 
     /* Unknown flags fall back to the bitmask so legacy callers still work */
     return (metar.completed_quests & quest_flag) ? 1 : 0;
@@ -241,42 +217,22 @@ bool metarun_is_quest_completed(u32b quest_flag)
 
 void metarun_mark_quest_completed(u32b quest_flag)
 {
-    if (run_mode_is_blitz()) return;
+    if (run_mode_is_blitz() || quest_debug_sandbox() || !quest_flag) return;
     metarun *current = metarun_current_mutable();
-    if (!current) return;
-    if (!quest_flag) return;
-
+    if (!current || quest_completion_recorded_for_run(quest_flag)) return;
     int slot = quest_slot_from_flag(quest_flag);
-    bool changed = false;
-
-    if (slot >= 0 && slot < METARUN_QUEST_SLOT_MAX) {
-        byte current = metar.quest_completion_counts[slot];
-        if (current < METARUN_QUEST_COMPLETION_CAP) {
-            metar.quest_completion_counts[slot] = current + 1;
-            changed = true;
-        }
-        /* Always sync the per-run marker so we don't double-count this character */
+    if (slot >= 0) {
+        if (!quest_enabled(slot + 1)) return;
+        byte *count = quest_count_slot(&metar, slot);
+        if (*count < quest_completion_cap(slot + 1)) ++*count;
         mark_quest_completion_recorded_for_run(quest_flag);
-    } else if (!(metar.completed_quests & quest_flag)) {
-        /* Unknown quest flag - preserve legacy behavior */
-        metar.completed_quests |= quest_flag;
-        changed = true;
-    }
-
+    } else metar.completed_quests |= quest_flag;
     metarun_clamp_and_sync_quests(&metar);
     current->completed_quests = metar.completed_quests;
-    memcpy(current->quest_completion_counts, metar.quest_completion_counts, sizeof(metar.quest_completion_counts));
-
-    if (changed) {
-        int new_count = metarun_quest_completion_count(quest_flag);
-        log_trace("Metarun: Quest 0x%x completion recorded (count=%d, mask=0x%08X)",
-                  quest_flag, new_count, metar.completed_quests);
-        refresh_current_metar_score();
-        save_metaruns();
-    } else {
-        log_trace("Metarun: Quest 0x%x completion ignored (already at cap or recorded); mask=0x%08X",
-                  quest_flag, metar.completed_quests);
-    }
+    for (int i = 0; i < METARUN_KNOWN_QUESTS; ++i)
+        *quest_count_slot(current, i) = (byte)quest_count(&metar, i);
+    refresh_current_metar_score();
+    save_metaruns();
 }
 
 void metarun_check_and_update_quests(void)
@@ -292,6 +248,10 @@ void metarun_check_and_update_quests(void)
     
     log_trace("Metarun quest check: current_run=%d, tulkas=%d, aule=%d, mandos=%d, niena=%d, orome=%d, varda=%d", 
               current_idx, p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->varda_quest);
+
+    for (int id = 7; id <= 16; ++id)
+        if (quest_get_state(id) == QUEST_STATE_REWARDED)
+            metarun_mark_quest_completed(quest_metarun_flag(id));
 
     /* Only record once per character; completion handlers also call metarun_mark_quest_completed */
     if (p_ptr->tulkas_quest == TULKAS_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_TULKAS)) {
@@ -327,6 +287,7 @@ void metarun_check_and_update_quests(void)
 
 void metarun_restore_quest_states(void)
 {
+    if (!p_ptr) return;
     s16b current_idx = metarun_current_index();
     const metarun *current = metarun_current();
     if (!current) {

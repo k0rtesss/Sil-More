@@ -17,6 +17,8 @@ extern void sdl_log_pane_set_rows(enum pane_type pane, int rows);
 #include "metarun.h"
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
+#include "quest/quest-challenges.h"
+#include "quest/quest-runtime.h"
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/question.h"
@@ -219,6 +221,13 @@ static const struct option_group_marker gameplay_option_groups[] = {
     { -1, NULL }
 };
 
+static const struct option_group_marker quest_option_groups[] = {
+    { OPT_quest_1, "Original quests" },
+    { OPT_quest_7, "Beta quests" },
+    { OPT_quest_rules_beta, "Beta systems" },
+    { -1, NULL }
+};
+
 static const struct option_group_marker visual_option_groups[] = {
     { OPT_stealth_vision, "Overlays" },
     { OPT_sleep_icon, "Overlays" },
@@ -315,6 +324,7 @@ static const struct option_group_marker* get_option_groups_for_page(int page)
     case INTERFACE_PAGE: return interface_option_groups;
     case TEXT_PAGE: return text_option_groups;
     case GAMEPLAY_PAGE: return gameplay_option_groups;
+    case QUEST_PAGE: return quest_option_groups;
     case VISUAL_PAGE: return visual_option_groups;
     case CHALLENGE_PAGE: return challenge_option_groups;
     case DEBUG_PAGE: return debug_option_groups;
@@ -358,7 +368,7 @@ static bool option_group_starts_at(const struct option_group_marker* groups,
 static bool option_page_uses_app_config(int page)
 {
     return (page == INTERFACE_PAGE) || (page == TEXT_PAGE)
-        || (page == VISUAL_PAGE);
+        || (page == VISUAL_PAGE) || (page == QUEST_PAGE);
 }
 
 static int settings_ui_term_wid(void)
@@ -710,10 +720,70 @@ static cptr sound_option_label(int index)
     }
 }
 
+static cptr quest_option_menu_label(int opt, bool compact, bool narrow)
+{
+    if (!compact)
+    {
+        switch (opt)
+        {
+        case OPT_quest_1: return "Original quest 1: Tulkas";
+        case OPT_quest_2: return "Original quest 2: Aulë";
+        case OPT_quest_3: return "Original quest 3: Mandos";
+        case OPT_quest_4: return "Original quest 4: Nienna";
+        case OPT_quest_5: return "Original quest 5: Oromë";
+        case OPT_quest_6: return "Original quest 6: Varda";
+        case OPT_quest_7: return "Beta quest 7: Mandos traitor";
+        case OPT_quest_8: return "Beta quest 8: Mandos betrayer";
+        case OPT_quest_9: return "Beta quest 9: Oromë dragons";
+        case OPT_quest_10: return "Beta quest 10: Oromë great hunt";
+        case OPT_quest_11: return "Beta quest 11: Nienna and Morgoth";
+        case OPT_quest_12: return "Beta quest 12: Nienna pacifist";
+        case OPT_quest_13: return "Beta quest 13: Tulkas orcs";
+        case OPT_quest_14: return "Beta quest 14: Tulkas and Morgoth";
+        case OPT_quest_15: return "Beta quest 15: Varda shadow";
+        case OPT_quest_16: return "Beta quest 16: Varda and Ungoliant";
+        case OPT_quest_rules_beta: return "Quest rules (Beta)";
+        case OPT_quest_rewards_beta: return "Quest rewards (Beta)";
+        case OPT_quest_challenges_beta: return "Quest challenges (Beta)";
+        case OPT_quest_lineage_beta: return "Quest lineage (Beta)";
+        default: return NULL;
+        }
+    }
+
+    switch (opt)
+    {
+    case OPT_quest_1: return narrow ? "Q1 Tulkas" : "Q1 Tulkas (original)";
+    case OPT_quest_2: return narrow ? "Q2 Aule" : "Q2 Aulë (original)";
+    case OPT_quest_3: return narrow ? "Q3 Mandos" : "Q3 Mandos (original)";
+    case OPT_quest_4: return narrow ? "Q4 Nienna" : "Q4 Nienna (original)";
+    case OPT_quest_5: return narrow ? "Q5 Orome" : "Q5 Oromë (original)";
+    case OPT_quest_6: return narrow ? "Q6 Varda" : "Q6 Varda (original)";
+    case OPT_quest_7: return narrow ? "Q7 traitor" : "Q7 Mandos traitor (Beta)";
+    case OPT_quest_8: return narrow ? "Q8 betrayer" : "Q8 Mandos betrayer (Beta)";
+    case OPT_quest_9: return narrow ? "Q9 dragons" : "Q9 Orome dragons (Beta)";
+    case OPT_quest_10: return narrow ? "Q10 hunt" : "Q10 Orome great hunt (Beta)";
+    case OPT_quest_11: return narrow ? "Q11 Morgoth" : "Q11 Nienna and Morgoth (Beta)";
+    case OPT_quest_12: return narrow ? "Q12 pacifist" : "Q12 Nienna pacifist (Beta)";
+    case OPT_quest_13: return narrow ? "Q13 orcs" : "Q13 Tulkas orcs (Beta)";
+    case OPT_quest_14: return narrow ? "Q14 Morgoth" : "Q14 Tulkas and Morgoth (Beta)";
+    case OPT_quest_15: return narrow ? "Q15 shadow" : "Q15 Varda shadow (Beta)";
+    case OPT_quest_16: return narrow ? "Q16 Ungoliant" : "Q16 Varda Ungoliant (Beta)";
+    case OPT_quest_rules_beta: return narrow ? "Rules (Beta)" : "Quest rules (Beta)";
+    case OPT_quest_rewards_beta: return narrow ? "Rewards (Beta)" : "Quest rewards (Beta)";
+    case OPT_quest_challenges_beta: return narrow ? "Challenges (Beta)" : "Quest challenges (Beta)";
+    case OPT_quest_lineage_beta: return narrow ? "Lineage (Beta)" : "Quest lineage (Beta)";
+    default: return NULL;
+    }
+}
+
 static cptr option_menu_label(int opt)
 {
     bool compact = option_menu_use_compact_layout();
     bool narrow = option_menu_use_narrow_layout();
+    cptr quest_label = quest_option_menu_label(opt, compact, narrow);
+
+    if (quest_label)
+        return quest_label;
 
     switch (opt)
     {
@@ -822,7 +892,7 @@ static cptr option_menu_label(int opt)
         case OPT_valorous_oath_auto_attack_safety: return narrow ? "Valorous safety" : "Valorous oath safety";
         case OPT_pacifist_attack_warning: return narrow ? "Pacifist warn" : "Warn before attacks";
         case OPT_active_weapon_switch_confirm: return narrow ? "Weapon switch" : "Confirm weapon switch";
-        case OPT_lore_beta: return narrow ? "Lore (Beta)" : "Lore fifth stat (Beta)";
+        case OPT_lore_beta: return "Lore points (Beta)";
         case OPT_meta_artefact_memory: return narrow ? "Artefact lore (Beta)" : "Artefact knowledge (Beta)";
         case OPT_meta_forged_artefacts: return narrow ? "Forged legacy (Beta)" : "Forged artefact legacy (Beta)";
         case OPT_meta_revenge: return "Revenge foes (Beta)";
@@ -995,8 +1065,17 @@ static void settings_semantic_line_from_menu_line(char* out, size_t outsz,
 
 static void option_apply_side_effects(int opt)
 {
+    for (int i = 0; p_ptr && i < OPT_PAGE_PER; ++i) {
+        if (option_page[QUEST_PAGE][i] == opt) {
+            p_ptr->update |= PU_BONUS | PU_UPDATE_VIEW;
+            p_ptr->redraw |= PR_BASIC | PR_MAP;
+            break;
+        }
+    }
     if (opt >= OPT_meta_artefact_memory && opt <= OPT_meta_legendary_places)
         meta_state_options_changed();
+    if (opt == OPT_quest_challenges_beta)
+        quest_challenge_validate();
     if (opt == OPT_story_lists_inven_pane || opt == OPT_story_lists_equip_pane)
         redraw_inven_equip_subwindows();
     if (opt == OPT_story_monster_desc_pane)
@@ -3176,7 +3255,10 @@ extern void do_cmd_options_aux(int page, cptr info)
         }
         }
 
-        if (birth_fixed_exp && playerturn == 0 && p_ptr->exp != PY_FIXED_EXP)
+        bool fixed_exp_active = birth_fixed_exp
+            || quest_challenge_active(CHALLENGE_FIXED_50K_XP);
+
+        if (fixed_exp_active && playerturn == 0 && p_ptr->exp != PY_FIXED_EXP)
         {
             int total_exp = PY_FIXED_EXP;
             p_ptr->new_exp = total_exp;
@@ -3184,7 +3266,7 @@ extern void do_cmd_options_aux(int page, cptr info)
             check_experience();
             clear_skills_and_abilities();
         }
-        else if (!birth_fixed_exp && playerturn == 0
+        else if (!fixed_exp_active && playerturn == 0
             && p_ptr->exp >= PY_FIXED_EXP)
         {
             int total_exp = PY_START_EXP;
@@ -9893,9 +9975,9 @@ static void do_cmd_other_options(void)
 
 int options_menu(int* highlight)
 {
-    tutorial_game_menu("settings", "Input, presentation and gameplay options are separate. Gameplay tutorial mode and Tale lesson history are managed from Tutorial cards; controls tutorials and skeleton tips retain their separate settings.");
+    tutorial_game_menu("settings", "Input, presentation, gameplay, and quest options are separate. Gameplay tutorial mode and Tale lesson history are managed from Tutorial cards; controls tutorials and skeleton tips retain their separate settings.");
     int ch;
-    int options = 9;
+    int options = 10;
     int clicked_choice = 0;
     char line_buf[80];
     bool steamdeck = steamdeck_controls_active();
@@ -9927,12 +10009,13 @@ int options_menu(int* highlight)
     ADD_OPTIONS_MENU_ROW(4, 'd', "Visual Options");
     ADD_OPTIONS_MENU_ROW(5, 'e', "Text Options");
     ADD_OPTIONS_MENU_ROW(6, 'f', "Gameplay Options");
-    ADD_OPTIONS_MENU_ROW(7, 'g', "Sound Options");
-    ADD_OPTIONS_MENU_ROW(8, 'i', "Other Options");
-    ADD_OPTIONS_MENU_ROW(9, 'o', "Return to Game");
+    ADD_OPTIONS_MENU_ROW(7, 'h', "Quest Options");
+    ADD_OPTIONS_MENU_ROW(8, 'g', "Sound Options");
+    ADD_OPTIONS_MENU_ROW(9, 'i', "Other Options");
+    ADD_OPTIONS_MENU_ROW(10, 'o', "Return to Game");
 
     if (allow_debug_menu && p_ptr->noscore)
-        ADD_OPTIONS_MENU_ROW(10, 'p', "Debugging Options");
+        ADD_OPTIONS_MENU_ROW(11, 'p', "Debugging Options");
 
 #undef ADD_OPTIONS_MENU_ROW
 
@@ -9949,6 +10032,8 @@ int options_menu(int* highlight)
             "Map and tile appearance, highlighting, and related visuals.",
             "Fonts and text rendering options.",
             "Rules and quality-of-life options that affect play.",
+            "Original and Beta quest switches, plus Beta quest-system rules, "
+            "rewards, challenges, and lineage.",
             "Sound effects and volume.",
             "Palette, notes, and other miscellaneous actions.",
             "Close the menu and return to play.",
@@ -9975,7 +10060,7 @@ int options_menu(int* highlight)
             if (click_action == UI_MENU_CLICK_HOVER && clicked_choice < 0)
                 return (0);
             if (clicked_choice == -1)
-                clicked_choice = 9;
+                clicked_choice = 10;
             else if (clicked_choice == -2)
                 clicked_choice = *highlight;
             if (clicked_choice == SETTINGS_CLICK_RETURN)
@@ -10027,30 +10112,36 @@ int options_menu(int* highlight)
         return (6);
     }
 
-    if (menu_letters && ((ch == 'g') || (ch == 'G')))
+    if (menu_letters && ((ch == 'h') || (ch == 'H')))
     {
         *highlight = 7;
         return (7);
     }
 
-    if (menu_letters && ((ch == 'i') || (ch == 'I')))
+    if (menu_letters && ((ch == 'g') || (ch == 'G')))
     {
         *highlight = 8;
         return (8);
     }
 
-    if ((menu_letters && ((ch == 'o') || (ch == 'O') || (ch == 'q')))
-        || (ch == ESCAPE) || (steamdeck && ch == steamdeck_back_key()))
+    if (menu_letters && ((ch == 'i') || (ch == 'I')))
     {
         *highlight = 9;
         return (9);
     }
 
-    if (menu_letters && allow_debug_menu && p_ptr->noscore
-        && ((ch == 'p') || (ch == 'P')))
+    if ((menu_letters && ((ch == 'o') || (ch == 'O') || (ch == 'q')))
+        || (ch == ESCAPE) || (steamdeck && ch == steamdeck_back_key()))
     {
         *highlight = 10;
         return (10);
+    }
+
+    if (menu_letters && allow_debug_menu && p_ptr->noscore
+        && ((ch == 'p') || (ch == 'P')))
+    {
+        *highlight = 11;
+        return (11);
     }
 
     /* Choose current  */
@@ -10487,7 +10578,7 @@ static bool options_debug_page_available(void)
 
 static int options_menu_page_choice_turn(int choice, int direction)
 {
-    int page_choices[] = { 3, 4, 5, 6, 7, 10 };
+    int page_choices[] = { 3, 4, 5, 6, 7, 8, 11 };
     int count = options_debug_page_available()
         ? (int)N_ELEMENTS(page_choices)
         : (int)N_ELEMENTS(page_choices) - 1;
@@ -10610,12 +10701,19 @@ void do_cmd_options(void)
         }
         case 7:
         {
-            do_cmd_options_aux(SOUND_PAGE, "Sound Options");
+            do_cmd_options_aux(QUEST_PAGE, "Quest Options");
             options_queue_page_turn(choice, &queued_choice);
             Term_clear();
             break;
         }
         case 8:
+        {
+            do_cmd_options_aux(SOUND_PAGE, "Sound Options");
+            options_queue_page_turn(choice, &queued_choice);
+            Term_clear();
+            break;
+        }
+        case 9:
         {
             do_cmd_other_options();
             if (p_ptr && (p_ptr->leaving || !p_ptr->playing))
@@ -10623,7 +10721,7 @@ void do_cmd_options(void)
             Term_clear();
             break;
         }
-        case 9:
+        case 10:
         {
             /* Return to Game */
             settings_semantic_menu_hide();
@@ -10631,7 +10729,7 @@ void do_cmd_options(void)
             Term_clear();
             break;
         }
-        case 10:
+        case 11:
         {
             /* Debugging Options (only reachable when p_ptr->noscore) */
             do_cmd_options_aux(DEBUG_PAGE, "Debugging Options");

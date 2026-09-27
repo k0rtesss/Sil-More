@@ -84,6 +84,8 @@ bool place_duruin_bastion(void)
     vault_type* qv_ptr;
     int y, x;
 
+    if (!quest_enabled(QUEST_ID_VARDA)) return false;
+
     log_trace("Varda quest: Attempting to force-place Duruin Bastion at depth %d", p_ptr->depth);
 
     for (int i = 0; i < z_info->v_max; i++)
@@ -196,6 +198,7 @@ bool try_quest_vault_type(int v_type, bool *had_eligible_candidate)
     for (i = 0; i < z_info->v_max; i++)
     {
         qv_ptr = &v_info[i];
+        if (i == 466 || i == 467) continue;
         if (qv_ptr->typ != v_type) continue;
         if (!(qv_ptr->flags & VLT_QUEST)) continue;
         if (qv_ptr->depth > p_ptr->depth) continue;
@@ -239,7 +242,7 @@ bool try_quest_vault_type(int v_type, bool *had_eligible_candidate)
         }
 
         /* Check Mandos requirements */
-        if (vault_template_has_mandos(qv_ptr)) {
+        if (!quest_followup_vault(i) && vault_template_has_mandos(qv_ptr)) {
             log_trace("Quest vault: Checking Mandos vault '%s' - mandos_quest=%d, initiated=%d/%d",
                      v_name + qv_ptr->name, p_ptr->mandos_quest,
                      quest_initiated_count_this_run(), QUEST_MAX_INITIATED_PER_RUN);
@@ -424,5 +427,56 @@ bool try_quest_vault_type(int v_type, bool *had_eligible_candidate)
         log_trace("Quest vault: Type %d has no eligible templates for this character/depth", v_type);
     }
 
+    return false;
+}
+
+
+bool quest_debug_prepare_vault(int id)
+{
+    int depth;
+    switch (id) {
+    case QUEST_ID_MANDOS_TRAITOR: depth = 10; break;
+    case QUEST_ID_MANDOS_BETRAYER: depth = 17; break;
+    case QUEST_ID_TULKAS_ORCS: depth = 5; break;
+    case QUEST_ID_VARDA_SHADOW: depth = 16; break;
+    default: return false;
+    }
+    if (!quest_debug_sandbox() || !quest_enabled(id)) return false;
+    quest_debug_request_vault(id);
+    p_ptr->depth = depth;
+    p_ptr->create_stair = 0;
+    p_ptr->leaving = true;
+    return true;
+}
+
+/* Recover special encounters without adding entries to the legacy lottery.
+ * Failure to fit leaves the encounter eligible on a subsequent level. */
+static int followup_orc_roll = -1;
+void reset_followup_vault_roll(void) { followup_orc_roll = -1; }
+
+bool place_followup_quest_vault(void)
+{
+    int wanted = quest_debug_vault_requested();
+    if (!wanted && quest_followup_vault_allowed(467, p_ptr->depth)) wanted = QUEST_ID_VARDA_SHADOW;
+    if (!wanted && quest_lottery_winner == 0 && !qv_placed_this_level &&
+        quest_followup_vault_allowed(466, p_ptr->depth)) {
+        float chance = calculate_parametric_probability(&quest_info[QUEST_ID_TULKAS_ORCS], p_ptr->depth);
+        if (followup_orc_roll < 0) followup_orc_roll = rand_int(10000);
+        if (followup_orc_roll < (int)(chance * 10000)) wanted = QUEST_ID_TULKAS_ORCS;
+    }
+    if (!wanted) return false;
+    for (int i = 464; i <= 467 && i < z_info->v_max; ++i) {
+        if (quest_followup_vault(i) != wanted) continue;
+        vault_type *vault = &v_info[i];
+        if (!vault_is_valid_for_depth(vault, p_ptr->depth)) return false;
+        int y = p_ptr->cur_map_hgt / 2, x = p_ptr->cur_map_wid / 2;
+        if (!place_room_forced(y, x, vault) && !place_room_forced_exhaustive(vault, &y, &x)) {
+            log_warn("Quest %d: vault does not fit this generated map", wanted);
+            return false;
+        }
+        level_gen_debug_activate_quest_vault_name(v_name + vault->name);
+        process_quest_vault_area(y, x, vault);
+        return true;
+    }
     return false;
 }
