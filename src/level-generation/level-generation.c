@@ -419,7 +419,6 @@ bool cave_gen(void)
     // Square levels: same dimension for both height and width
     p_ptr->cur_map_hgt = l * (PANEL_HGT);
     p_ptr->cur_map_wid = l * (PANEL_HGT);  // Use PANEL_HGT for both to make square
-    legendary_area_map_reset();
 
     /* Fewer room attempts to reduce long regen loops; vault bias handled later */
     room_attempts = l * l * l * 2;
@@ -1988,6 +1987,7 @@ if (playerturn == 0) {
 
         cave_fixtures_clear();
         cave_flood_clear();
+        legendary_area_map_reset();
         terrain_generation_reset();
         terrain_vault_reset();
 

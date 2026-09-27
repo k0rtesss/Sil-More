@@ -1319,6 +1319,12 @@ static void restore_monster_races_from_base(void)
         byte saved_max_num = r_info[r].max_num;
 
         r_info[r] = r_base[r];
+        /* Revenge overlays save their temporary unique cap in monster lore.
+         * Rebuild the ordinary baseline before the optional overlay is
+         * reapplied, including when revenge is now disabled. Keep zero for
+         * slain foes and preserve the limits of genuine uniques. */
+        if (saved_max_num == 1 && !(r_info[r].flags1 & RF1_UNIQUE))
+            saved_max_num = 100;
         r_info[r].max_num = saved_max_num;
     }
 }

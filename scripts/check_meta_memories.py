@@ -4,6 +4,7 @@
 Run build-incremental.ps1 first. No player files or visible game window are used.
 The save fixture uses the production dungeon reader/writer, including a v24
 fixture with the new area block removed and malformed v25 block rejection.
+Template roundtrips cover inherited abilities and saved revenge population caps.
 """
 from pathlib import Path
 import os
@@ -16,6 +17,55 @@ from check_monster_scent_save import ENGINE_FIXTURE, fixture_function, WRITER, R
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/meta-memories"
+
+WRITER += r'''
+/* The same template lanes used by the full savefile writer. */
+size_t fixture_write_templates(byte* buffer, size_t capacity, bool artefacts)
+{
+    fff = SDL_IOFromMem(buffer, capacity); assert(fff);
+    xor_byte = 0; v_stamp = x_stamp = save_byte_offset = 0; write_error = false;
+    if (artefacts) {
+        for (int i = 0; i < z_info->art_max; i++) {
+            wr_byte(a_info[i].cur_num);
+            wr_byte(a_info[i].found_num);
+            wr_byte(a_info[i].seen);
+        }
+        wr_randarts();
+    } else {
+        for (int i = 0; i < z_info->r_max; i++) wr_lore(i);
+    }
+    size_t length = (size_t)SDL_TellIO(fff);
+    assert(!write_error); SDL_CloseIO(fff); fff = NULL;
+    return length;
+}
+'''
+
+READER += r'''
+int fixture_read_templates(const byte* buffer, size_t length, bool artefacts)
+{
+    fff = SDL_IOFromConstMem(buffer, length); assert(fff);
+    xor_byte = 0; v_check = x_check = load_byte_offset = 0;
+    sf_major = VERSION_MAJOR; sf_minor = VERSION_MINOR;
+    sf_patch = VERSION_PATCH; sf_extra = VERSION_EXTRA;
+    savefile_has_randart_flags4 = savefile_has_randart_bonuses = true;
+    randart_version = RANDART_VERSION;
+    int result = 0;
+    if (artefacts) {
+        for (int i = 0; i < z_info->art_max; i++) {
+            rd_byte(&a_info[i].cur_num);
+            rd_byte(&a_info[i].found_num);
+            rd_byte(&a_info[i].seen);
+        }
+        result = rd_randarts();
+    } else {
+        for (int i = 0; i < z_info->r_max; i++) rd_lore(i);
+        restore_monster_races_from_base();
+    }
+    assert((size_t)SDL_TellIO(fff) == length);
+    SDL_CloseIO(fff); fff = NULL;
+    return result;
+}
+'''
 
 TESTS = r'''
 #include "meta_state.h"
@@ -35,6 +85,9 @@ bool fixture_place_legendary(void);
 bool fixture_area_fit(const meta_dungeon_area*, int, int);
 int fixture_meta_drop_count(int);
 int fixture_smith_slot(void);
+size_t fixture_write_templates(byte*, size_t, bool);
+int fixture_read_templates(const byte*, size_t, bool);
+int fixture_meta_drop_abilities(int);
 static int checks;
 #define CHECK(t) do { checks++; if (!(t)) { fprintf(stderr,"FAIL %d: %s\n",__LINE__,#t); exit(1); } } while(0)
 static byte encoded[524288], plain[524288], legacy[524288];
@@ -356,6 +409,121 @@ static void test_song_capture(void)
     metar.id++; CHECK(!captured_count()); metar.id -= 3;
     puts("Real song effects: normal singing, disabled/below-threshold/no-effect capture, successful capture, deduplication and Tale isolation PASS.");
 }
+
+static void test_memory_reload(void)
+{
+    meta_state_reset_character(); metar.id += 10; set_options(true); reset_map(1);
+    int original = 0, slots[2];
+    for (int i = 1; i < z_info->art_norm_max; i++)
+        if (a_info[i].tval && a_info[i].sval) { original = i; break; }
+    CHECK(original);
+    artefact_type art = a_info[original];
+    art.cur_num = art.found_num = art.seen = 0;
+    art.abilities = 2;
+    art.skilltype[0] = S_MEL; art.abilitynum[0] = MEL_POWER;
+    art.skilltype[1] = S_PER; art.abilitynum[1] = PER_BANE; art.bane_type[1] = 2;
+    SDL_strlcpy(art.name, "Reload legacy", sizeof(art.name));
+    object_type object = {0}; object_prep(&object, lookup_kind(art.tval, art.sval));
+    p_ptr->pcharacter = 1;
+    for (int n = 0; n < 2; n++) {
+        meta_artifact_record record;
+        art.guid = score_guid_random();
+        CHECK(meta_artifact_build_created_record(&record, &art, &object, 20, false, false));
+        CHECK(meta_artifact_register_created(&record));
+    }
+    p_ptr->pcharacter = 2;
+    CHECK(meta_artifact_prepare_runtime() && meta_artifact_runtime_count() == 2);
+    int count = 0;
+    for (int i = z_info->art_rand_max; i < z_info->art_self_made_max - 2; i++)
+        if (meta_artifact_runtime_slot_is_meta(i)) slots[count++] = i;
+    CHECK(count == 2);
+    a_info[slots[1]].cur_num = a_info[slots[1]].found_num = 1;
+    a_info[slots[1]].seen = ART_SEEN_PHYSICAL | ART_SEEN_REVEALED;
+    a_info[slots[1]].att += 2; /* Preserve locally saved stats on rebind. */
+    int saved_attack = a_info[slots[1]].att;
+    size_t length = fixture_write_templates(encoded, sizeof(encoded), true);
+    meta_state_reset_character();
+    for (int i = z_info->art_rand_max; i < z_info->art_self_made_max; i++)
+        memset(&a_info[i], 0, sizeof(a_info[i])); /* Fresh process custom slots. */
+    CHECK(!fixture_read_templates(encoded, length, true));
+    drop_system_init();
+    for (int n = 0; n < 2; n++) {
+        const artefact_type* loaded = &a_info[slots[n]];
+        CHECK(meta_artifact_runtime_slot_is_meta(slots[n]));
+        CHECK(loaded->abilities == art.abilities);
+        CHECK(!memcmp(loaded->skilltype, art.skilltype, sizeof(art.skilltype)));
+        CHECK(!memcmp(loaded->abilitynum, art.abilitynum, sizeof(art.abilitynum)));
+        CHECK(!memcmp(loaded->bane_type, art.bane_type, sizeof(art.bane_type)));
+        CHECK(loaded->cur_num == n && loaded->found_num == n);
+        CHECK(loaded->seen == (n ? ART_SEEN_PHYSICAL | ART_SEEN_REVEALED : 0));
+        CHECK(fixture_meta_drop_abilities(slots[n]) == art.abilities);
+    }
+    CHECK(a_info[slots[1]].att == saved_attack);
+
+    const int race = 41, other = 42;
+    int unique = 0;
+    for (int i = 1; i < z_info->r_max; i++)
+        if (r_info[i].flags1 & RF1_UNIQUE) { unique = i; break; }
+    CHECK(unique);
+    r_info[race].max_num = 100;
+    r_info[other].max_num = 73; /* Unrelated limits must survive. */
+    r_info[unique].max_num = 1;
+    meta_monster_death_event event = {0};
+    event.r_idx = race; event.monster_guid = score_guid_from_u64(r_info[race].guid);
+    event.character_guid = c_info[1].guid; event.depth = 1; event.turn = 100;
+    CHECK(meta_monster_record_player_death(&event));
+    CHECK(meta_monster_apply_runtime_overrides() && r_info[race].max_num == 1);
+    length = fixture_write_templates(encoded, sizeof(encoded), false);
+    /* Load with either option setting, then toggle after loading. */
+    for (int enabled = 0; enabled < 2; enabled++) {
+        meta_state_reset_character();
+        op_ptr->opt[OPT_meta_revenge] = enabled;
+        CHECK(!fixture_read_templates(encoded, length, false));
+        CHECK(meta_monster_apply_runtime_overrides());
+        CHECK(r_info[race].max_num == (enabled ? 1 : 100));
+        CHECK(r_info[other].max_num == 73 && r_info[unique].max_num == 1);
+        op_ptr->opt[OPT_meta_revenge] = !enabled;
+        CHECK(meta_monster_apply_runtime_overrides());
+        CHECK(r_info[race].max_num == (enabled ? 100 : 1));
+    }
+    op_ptr->opt[OPT_meta_revenge] = true;
+    CHECK(meta_monster_apply_runtime_overrides());
+    r_info[race].max_num = r_info[unique].max_num = 0;
+    length = fixture_write_templates(encoded, sizeof(encoded), false);
+    for (int enabled = 0; enabled < 2; enabled++) {
+        meta_state_reset_character(); op_ptr->opt[OPT_meta_revenge] = enabled;
+        CHECK(!fixture_read_templates(encoded, length, false));
+        CHECK(meta_monster_apply_runtime_overrides());
+        CHECK(!r_info[race].max_num && !r_info[unique].max_num);
+    }
+    meta_state_reset_character(); metar.id -= 10; set_options(false);
+    puts("Template reload: inherited drop abilities, saved stats/counters, revenge caps, toggles and slain foes PASS.");
+}
+
+static void test_gates_transition(void)
+{
+    reset_map(1); set_options(false); op_ptr->opt[OPT_meta_legendary_places] = true;
+    meta_dungeon_record record = {0};
+    record.meta.metarun_id = metar.id; record.meta.record_guid = score_guid_random();
+    record.song_id = SNG_ELBERETH; record.depth = 1; record.hgt = record.wid = 3;
+    record.mask_cell_count = 9; record.singer_y = record.singer_x = 1;
+    record.affected_monster_count = 1;
+    byte blob[29] = {255, 1};
+    for (int i = 0; i < 9; i++) blob[2+i] = FEAT_FLOOR;
+    meta_dungeon_area area = {.record = record, .tile_blob = blob, .tile_blob_size = sizeof(blob)};
+    legendary_area_map_reset(); legendary_area_note_spawned(1, &area);
+    legendary_area_id[17][33] = legendary_area_id[100][100] = 1;
+    p_ptr->py = 17; p_ptr->px = 33;
+    CHECK(legendary_area_song_is_available(SNG_ELBERETH));
+    p_ptr->depth = 0; playerturn = 1; character_generated = true;
+    Rand_state_init(12345); generate_cave();
+    CHECK(character_dungeon && p_ptr->depth == 0);
+    CHECK(!legendary_area_id[17][33] && !legendary_area_id[100][100]);
+    CHECK(!legendary_area_get_save_record(1, NULL, NULL));
+    p_ptr->py = 17; p_ptr->px = 33;
+    CHECK(!legendary_area_song_is_available(SNG_ELBERETH));
+    puts("Gates generation: prior legendary map, record and song grants cleared PASS.");
+}
 '''
 
 PLACEMENT = r'''
@@ -373,6 +541,13 @@ int fixture_meta_drop_count(int a_idx)
     for (size_t i = 0; i < g_drop_count; i++)
         if (g_drop_entries[i].obj.name1 == a_idx) count++;
     return count;
+}
+int fixture_meta_drop_abilities(int a_idx)
+{
+    for (size_t i = 0; i < g_drop_count; i++)
+        if (g_drop_entries[i].obj.name1 == a_idx)
+            return g_drop_entries[i].obj.abilities;
+    return -1;
 }
 '''
 
@@ -395,6 +570,7 @@ def main():
     memcpy(r_base, r_info, z_info->r_max * sizeof(*r_base));
     reset_map(5);
     test_settings(); test_knowledge(); test_artefacts(); test_revenge(); test_places(); test_song_capture();
+    test_memory_reload(); test_gates_transition();
     printf("Tale memory integration: %d checks PASS.\\n", checks);
     SDL_Quit(); return 0;
 }

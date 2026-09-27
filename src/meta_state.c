@@ -2563,6 +2563,16 @@ bool meta_artifact_prepare_runtime(void)
         slot = &a_info[a_idx];
         if (!restored)
             *slot = record->artefact;
+        /* Randart saves omit granted abilities. Restore them from the Tale
+         * record even when rebinding a loaded slot, without overwriting its
+         * saved stats or discovery/population counters. */
+        slot->abilities = record->artefact.abilities;
+        memcpy(slot->skilltype, record->artefact.skilltype,
+            sizeof(slot->skilltype));
+        memcpy(slot->abilitynum, record->artefact.abilitynum,
+            sizeof(slot->abilitynum));
+        memcpy(slot->bane_type, record->artefact.bane_type,
+            sizeof(slot->bane_type));
         slot->guid = record->artefact_guid;
         if (record->artefact_name[0])
             SDL_strlcpy(slot->name, record->artefact_name, sizeof(slot->name));
