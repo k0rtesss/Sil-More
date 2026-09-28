@@ -30,10 +30,41 @@ static SDL_FRect drawn_text[64];
 static bool drawn_button[64];
 static int drawn_count;
 static char drawn_hints[1024];
+static char drawn_content[8192];
 static bool drawn_space,drawn_enter;
 static int fixture_run_count;
 static char fixture_id[160];
 static int fixture_width,fixture_height,fixture_font,fixture_scroll;
+static bool fixture_touch_controls;
+static SDL_FRect fixture_wheel, fixture_quick_access;
+bool __real_sdl_touch_round_layer_controls_active(void);
+bool __wrap_sdl_touch_round_layer_controls_active(void)
+{ return fixture_touch_controls || __real_sdl_touch_round_layer_controls_active(); }
+bool __real_sdl_touch_round_compute_layout(float *,float *,float *,float *,SDL_Rect *);
+bool __wrap_sdl_touch_round_compute_layout(float *cx,float *cy,float *r,float *inner,SDL_Rect *clip)
+{
+    if (!fixture_touch_controls) return __real_sdl_touch_round_compute_layout(cx,cy,r,inner,clip);
+    if (cx) *cx=fixture_wheel.x+fixture_wheel.w/2;
+    if (cy) *cy=fixture_wheel.y+fixture_wheel.h/2;
+    if (r) *r=fixture_wheel.w/2;
+    if (inner) *inner=fixture_wheel.w/4;
+    if (clip) *clip=(SDL_Rect){0,0,fixture_width,fixture_height};
+    return true;
+}
+bool __wrap_sdl_touch_thumb_current_bounds(SDL_FRect *r)
+{
+    if (!fixture_touch_controls) return false;
+    *r=fixture_quick_access; return true;
+}
+bool __real_sdl_map_grid_cell_rect(int,int,SDL_FRect *);
+bool __wrap_sdl_map_grid_cell_rect(int y,int x,SDL_FRect *r)
+{
+    if (!fixture_touch_controls) return __real_sdl_map_grid_cell_rect(y,x,r);
+    float size=MIN(48,fixture_width/12.0f);
+    *r=(SDL_FRect){fixture_width/2.0f+(x-p_ptr->px-0.5f)*size,
+        fixture_height*0.39f+(y-p_ptr->py-0.5f)*size,size,size};
+    return true;
+}
 static void fixture_check(bool condition,const char *expression)
 {
     if (!condition) {
@@ -49,6 +80,8 @@ float fixture_draw_text_line(cptr text,float x,float y,float width,int px,SDL_Co
     TTF_Font *font=sdl_story_font_for_height_slot(px,SDL_STORY_FONT_SLOT_TUTORIAL);
     int w=0,h=0;
     if (text && text[0] && font && TTF_GetStringSize(font,text,0,&w,&h)) {
+        SDL_strlcat(drawn_content,text,sizeof(drawn_content));
+        SDL_strlcat(drawn_content,"\n",sizeof(drawn_content));
         if (!centered && color.r==182 && color.g==191 && color.b==204) {
             SDL_strlcat(drawn_hints,text,sizeof(drawn_hints));
             SDL_strlcat(drawn_hints,"\n",sizeof(drawn_hints));
@@ -97,6 +130,12 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     if (font_override>0) font_size=font_override;
     field(entry,"id",fixture_id,sizeof(fixture_id));
     fixture_width=width; fixture_height=height; fixture_font=font_size;
+    fixture_touch_controls=cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"touch_controls"));
+    float radius=MIN(160,MIN(width*0.30f,height*0.30f));
+    fixture_wheel=width>height
+        ?(SDL_FRect){width-2*radius-8,height-2*radius-72,2*radius,2*radius}
+        :(SDL_FRect){width/2.0f-radius,height*0.77f-radius,2*radius,2*radius};
+    fixture_quick_access=(SDL_FRect){8,height-64,width-16,56};
     fixture_scroll=scroll; ++fixture_run_count;
     if (capture || fixture_run_count%100==0)
         printf("fixture %s @ %dx%d font %d scroll %d%s (run %d)\n",fixture_id,
@@ -154,8 +193,42 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     for (int y=0;y<height;y+=32) SDL_RenderLine(g_state.renderer,0,y,width,y);
     sdl_touch_tutorial_draw_text_line("LIVE GAME / MENU FIXTURE",12,12,width-24,18,
         (SDL_Color){180,195,177,255},false);
-    drawn_count=0; drawn_hints[0]='\0'; drawn_space=drawn_enter=false;
+    if (fixture_touch_controls) {
+        SDL_FRect neighborhood;
+        fixture_assert(tutorial_movement_neighborhood_rect(&neighborhood));
+        SDL_SetRenderDrawColor(g_state.renderer,100,180,160,255);
+        SDL_RenderRect(g_state.renderer,&neighborhood);
+        SDL_RenderRect(g_state.renderer,&fixture_wheel);
+        SDL_RenderRect(g_state.renderer,&fixture_quick_access);
+        sdl_touch_round_draw_circle(fixture_wheel.x+radius,fixture_wheel.y+radius,
+            radius,(SDL_Color){160,210,190,255});
+    }
+    drawn_count=0; drawn_hints[0]=drawn_content[0]='\0'; drawn_space=drawn_enter=false;
     sdl_gameplay_tutorial_render();
+    cJSON *forbidden_text=cJSON_GetObjectItemCaseSensitive(entry,"forbidden_text");
+    if (cJSON_IsString(forbidden_text))
+        fixture_assert(!strstr(drawn_content,forbidden_text->valuestring));
+    cJSON *expected_text=cJSON_GetObjectItemCaseSensitive(entry,"expected_text");
+    if (cJSON_IsString(expected_text))
+        fixture_assert(strstr(drawn_content,expected_text->valuestring)!=NULL);
+    bool suspended=character_icky && !fixture.can_continue && !tutorial_reading && !tutorial_card.w;
+    if (suspended) {
+        fixture_assert(drawn_count==0);
+        for (int b=0;b<3;++b) fixture_assert(!tutorial_buttons[b].w);
+    } else if (character_icky && !fixture.can_continue && !tutorial_reading) {
+        SDL_FRect rows;
+        if (tutorial_menu_cells_rect(&rows))
+            fixture_assert(!SDL_HasRectIntersectionFloat(&tutorial_card,&rows));
+    }
+    if (fixture_touch_controls && !tutorial_reading) {
+        fixture_assert(!SDL_HasRectIntersectionFloat(&tutorial_card,&fixture_wheel));
+        fixture_assert(!SDL_HasRectIntersectionFloat(&tutorial_card,&fixture_quick_access));
+        if (!character_icky && (strstr(fixture.action,"move") || strstr(fixture.action,"attack"))) {
+            SDL_FRect neighborhood;
+            fixture_assert(tutorial_movement_neighborhood_rect(&neighborhood));
+            fixture_assert(!SDL_HasRectIntersectionFloat(&tutorial_card,&neighborhood));
+        }
+    }
     if (!character_icky) {
         bool scrolling_hint=strstr(drawn_hints,"PgUp")
             || strstr(drawn_hints,"PgDn") || strstr(drawn_hints,"Wheel")
@@ -175,7 +248,7 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     fixture_assert(tutorial_card.x+tutorial_card.w<=width);
     fixture_assert(tutorial_card.y+tutorial_card.h<=height);
     for (int i=0;i<3;++i) {
-        if (!tutorial_buttons[i].w) { fixture_assert(i==0); continue; }
+        if (!tutorial_buttons[i].w) { fixture_assert(i==0 || suspended); continue; }
         fixture_assert(tutorial_buttons[i].h>=44);
         fixture_assert(tutorial_buttons[i].x>=tutorial_card.x);
         fixture_assert(tutorial_buttons[i].x+tutorial_buttons[i].w<=tutorial_card.x+tutorial_card.w);
@@ -314,7 +387,7 @@ def main():
     longest = max(((lesson, step) for lesson in lessons for step in lesson["steps"]),
                   key=lambda pair: len(pair[1]["text"]))
     selections = [(opening, opening["steps"][0], False, 1, False),
-                  (opening, next(step for step in opening["steps"] if step.get("action")), False, 4, False),
+                  (opening, opening["steps"][-1], False, 4, False),
                   (fleeing, fleeing["steps"][0], False, 2, False),
                   (longest[0], longest[1], True, 1, False)]
     description = next(lesson for lesson in lessons if lesson["id"] == "item.first_description")
@@ -355,6 +428,39 @@ def main():
         fixtures.append(dict(fixtures[0], id=f"{fixtures[0]['id']}.mode{mode}", mode=mode))
     fixtures.extend(dict(fixture, id=f"{fixture['id']}.font48", font_size=48)
                      for fixture in fixtures[:selected_count])
+    # All introductory pages have Continue and never append lesson-wide text,
+    # including stale context already captured by a displayed card.
+    for lesson_id in ("opening.move", "combat.first_adjacent"):
+        lesson = next(entry for entry in lessons if entry["id"] == lesson_id)
+        for step in lesson["steps"]:
+            for size in ([580, 1280], [360, 800]):
+                fixture = make_fixture(lesson, step, False, 3, False,
+                    context_text="FOOTERBUG Find a suitable weapon and armour.",
+                    subject_name="the Orc")
+                fixture.update(size=size, font_size=28, forbidden_text="FOOTERBUG",
+                               expected_text="Continue")
+                fixtures.append(fixture)
+    result = next(entry for entry in lessons if entry["id"] == "combat.first_result")
+    fixture = make_fixture(result, result["steps"][0], False, 3, False,
+                           context_text="DETAILOK Attack 12 against Evasion 10.")
+    fixture.update(size=[580, 1280], font_size=28, expected_text="DETAILOK")
+    fixtures.append(fixture)
+    for lesson_id, detail, expected in (
+        ("combat.critical", "Your hit margin was 12 with a 3.0 lb weapon, adding 1 critical die.", "margin was 12"),
+        ("status.poisoned", "Severity 15; the next damage tick is 3 Health.", "Severity 15"),
+        ("status.cut", "Severity 10; the next damage tick is 2 Health.", "Severity 10"),
+        ("status.stun", "Stun 60: -4 to every skill.", "Stun 60"),
+        ("status.diseased", "Disease penalties: Strength -1, Dexterity +0, Constitution -1, Grace +0.", "Disease penalties"),
+        ("storage.pack", "Pack space: 8/20.", "8/20"),
+        ("storage.harness", "Harness space: 6/10.", "6/10"),
+        ("storage.quiver", "Arrows: 15. Current free Quiver space: 30.", "Arrows: 15"),
+    ):
+        lesson = next(entry for entry in lessons if entry["id"] == lesson_id)
+        assert lesson["steps"][0]["text"].count("{detail}") == 1
+        fixture = make_fixture(lesson, lesson["steps"][0], False, 3, False,
+                               context_text=detail, capture=False)
+        fixture.update(size=[580, 1280], font_size=28, expected_text=expected)
+        fixtures.append(fixture)
     for device in range(1, 5):
         for font_size in (16, 48):
             for case, action, body, size, expected_scroll in (
@@ -370,6 +476,22 @@ def main():
                                  "input": device, "font_size": font_size,
                                  "size": size, "expected_scroll": expected_scroll,
                                  "capture": False})
+    # Reproduce the portrait control geometry from the reported overlap. Check
+    # every action step with both touch and mouse ownership, not only movement.
+    for lesson in lessons:
+        for step in lesson["steps"]:
+            if not step.get("action"):
+                continue
+            for size, font_size in (([580, 1280], 28), ([360, 800], 20), ([800, 360], 20)):
+                for device in (2, 3):
+                    fixture = make_fixture(lesson, step, False, device, False,
+                                           capture=lesson is opening and device == 3,
+                                           context_text="Find a suitable weapon and armour. Inspect each item before using or equipping it."
+                                               if lesson is opening else "")
+                    fixture.update(touch_controls=True, size=size, font_size=font_size)
+                    fixtures.append(fixture)
+                    fixtures.append(dict(fixture, menu=True, capture=False,
+                                         id=fixture["id"]+".menu"))
     if "--all" in sys.argv[1:]:
         for lesson in lessons:
             for step in lesson["steps"]:
@@ -396,7 +518,7 @@ def main():
                     str(ROOT / "src/sdl/ui/sdl-main-menu.c"), str(ROOT / "src/sdl-config.c"),
                     str(ROOT / "src/tutorial/tutorial.c"), "@" + str(response),
                     "@CMakeFiles/sil-more.dir/linkLibs.rsp",
-                    "-Wl,--wrap=tutorial_get_view,--wrap=tutorial_is_active,--wrap=tutorial_revision,--wrap=get_sdl_gameplay_tutorial_mode,--wrap=SDL_WaitEvent",
+                    "-Wl,--wrap=tutorial_get_view,--wrap=tutorial_is_active,--wrap=tutorial_revision,--wrap=get_sdl_gameplay_tutorial_mode,--wrap=SDL_WaitEvent,--wrap=sdl_touch_round_layer_controls_active,--wrap=sdl_touch_round_compute_layout,--wrap=sdl_touch_thumb_current_bounds,--wrap=sdl_map_grid_cell_rect",
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf")],
                    cwd=OUT, env=env, check=True, timeout=600 if "--all" in sys.argv[1:] else 60)

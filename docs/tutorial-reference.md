@@ -4,7 +4,7 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 538 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 542 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
@@ -12,7 +12,7 @@ The catalogue contains 538 lessons, including 107 ability previews. Every live a
 
 ## Tutorial modes
 
-Default: **Extended**. The catalogue has **155 Normal** lessons and **383 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
+Default: **Extended**. The catalogue has **156 Normal** lessons and **386 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
 
@@ -38,17 +38,15 @@ Priority: **70** (higher appears first).
 
 **1. Info**
 
-Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully and prepare before a fight. The world waits while you read. Continue advances a card; Skip ends its lesson. The mode button opens a selector for Disabled, Normal and Extended tutorials.
+Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully. The world waits while you read. Continue advances to the next page; Skip tutorial closes the current tutorial. Mode selects Disabled, Normal or Extended tutorials.
 
 **2. Info**
 
-Before fighting, prepare a weapon and armour. Items in your Pack are stored; items in your Harness are ready to reach. Your active weapon is the one you attack with. Item lessons will guide you through these choices as you find equipment.
+Before fighting, find a suitable weapon and armour. Inspect each item's description before using or equipping it. Items in your Pack are stored; items in your Harness are ready to reach. Your active weapon is the one you attack with.
 
-**3. Action**
+**3. Info**
 
-Move one square onto safe open floor. Choose any legal direction. Moving spends time, so nearby creatures can act. Skip lets you leave this practice and choose another action.
-
-Required action: `move`.
+Moving onto open floor takes you one square in the chosen direction. Movement spends time, so nearby creatures can act. Check the destination for enemies, traps and hazardous terrain. Continue returns to the game, where you can choose your next action.
 
 Trigger: A new Story hero starts at playerturn <= 1, excluding restored saves.
 
@@ -70,7 +68,7 @@ Trigger: A non-peaceful creature is visible in line of sight and the player is n
 
 Sources: `src/melee/melee-process.c`, `src/tutorial/tutorial-game.c`.
 
-## Make one melee attack
+## Melee attacks
 
 `combat.first_adjacent`
 
@@ -82,11 +80,9 @@ Priority: **45** (higher appears first).
 
 {subject} is beside you. Moving toward an adjacent enemy makes a melee attack. Check your active weapon and remaining Health first.
 
-**2. Action**
+**2. Info**
 
-Attack an adjacent enemy once. A miss also completes this practice. The enemy can retaliate. Skip if you would rather retreat, use an item or choose another tactic.
-
-Required action: `attack`; subject: `monster`.
+Melee attacks spend time even when they miss. Nearby enemies may retaliate. Retreating, using an item or choosing another tactic is also an option. Continue returns to the game.
 
 Trigger: A visible adjacent hostile is legally attackable, melee is active, and fear/confusion/truce/oath checks permit attack.
 
@@ -174,7 +170,7 @@ Priority: **55** (higher appears first).
 
 **1. Info**
 
-A critical hit adds damage dice. Lighter weapons need smaller winning margins to earn them. Finesse lowers the melee critical interval by 2; Power raises it by 1. Subtlety lowers it by another 2 when its weapon and free-hand requirements are met.
+{detail} A critical hit adds damage dice. Lighter weapons need smaller winning margins to earn them. Finesse lowers the melee critical interval by 2; Power raises it by 1. Subtlety lowers it by another 2 when its weapon and free-hand requirements are met.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
@@ -222,11 +218,11 @@ Priority: **25** (higher appears first).
 
 **1. Info**
 
-{subject} is nearby or in your belongings. Its description shows what your hero knows, including useful effects and drawbacks. Inspect unfamiliar equipment or consumables before deciding what to do with them.
+{subject} is at your feet or in your belongings. Its description shows what your hero knows, including useful effects and drawbacks. Inspect unfamiliar equipment or consumables before deciding what to do with them.
 
 **2. Action**
 
-Examine the item through Look, Inventory or Equipment. Reading its description is free. You can leave without picking up, equipping or using it.
+Choose Examine item to inspect the item at your feet. For carried items, select the item in the inventory browser and open its preview. Reading is free; you can leave without picking up, equipping or using anything.
 
 Required action: `examine`.
 
@@ -548,7 +544,7 @@ Priority: **24** (higher appears first).
 
 **1. Info**
 
-Staves spend charges to produce their known effect. Ready one in the Harness for prompt access; using one from the Pack takes extra handling time. Read the effect and remaining charges before using it. You can skip practice to save charges.
+Staves spend charges to produce their known effect. Ready one in the Harness for prompt access; using one from the Pack takes extra handling time. Read the effect and remaining charges before using it. Reading its description does not spend a charge.
 
 Trigger: The item type is publicly encountered; no hidden subtype or property is used.
 
@@ -724,7 +720,7 @@ Priority: **95** (higher appears first).
 
 **1. Info**
 
-Each infection gets a random disease name and one random cure herb from the ten herbs. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 100 player turns; it continues while resting. A Gem of Self Knowledge with Alchemy shows the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name and, once the name is known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved; a new infection gets a new name and cure and resets them. Eating the correct herb cures disease and restores its penalties instead of applying its normal effect or nourishment; other herbs act normally. Healing or Miruvor always cures it.
+{detail} Each infection gets a random disease name and one random cure herb from the ten herbs. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 100 player turns; it continues while resting. A Gem of Self Knowledge with Alchemy shows the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name and, once the name is known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved; a new infection gets a new name and cure and resets them. Eating the correct herb cures disease and restores its penalties instead of applying its normal effect or nourishment; other herbs act normally. Healing or Miruvor always cures it.
 
 Trigger: The disease condition is active and its lesson is unseen or in progress, or disease has just appeared.
 
@@ -740,7 +736,7 @@ Priority: **95** (higher appears first).
 
 **1. Info**
 
-Poison deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current poison severity, rounded up, as Health. Antidote or Miruvor removes the poison; you may still need healing afterward.
+{detail} Poison deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current poison severity, rounded up, as Health. Antidote or Miruvor removes the poison; you may still need healing afterward.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -756,7 +752,7 @@ Priority: **95** (higher appears first).
 
 **1. Info**
 
-Bleeding deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current bleeding severity, rounded up, as Health. Healing herbs or potions and Miruvor halve bleeding. Song of Staunching stops it when its effect occurs.
+{detail} Bleeding deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current bleeding severity, rounded up, as Health. Healing herbs or potions and Miruvor halve bleeding. Song of Staunching stops it when its effect occurs.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -772,7 +768,7 @@ Priority: **95** (higher appears first).
 
 **1. Info**
 
-Stun lowers every skill by 2, or by 4 at severity 50 or more. Above 100, you are knocked out and cannot act. Clarity or Miruvor removes stun; use it while you can still act.
+{detail} Stun lowers every skill by 2, or by 4 at severity 50 or more. Above 100, you are knocked out and cannot act. Clarity or Miruvor removes stun; use it while you can still act.
 
 Trigger: The public condition becomes active, or the displayed resource crosses its warning threshold.
 
@@ -1192,7 +1188,7 @@ Healing, Miruvor, or the identified cure herb cures disease and restores the att
 
 **2. Action**
 
-Choose and use a known remedy for disease. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for disease. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `diseased`.
 
@@ -1214,7 +1210,7 @@ Antidote or Miruvor removes poison. It stops future poison damage, though lost H
 
 **2. Action**
 
-Choose and use a known remedy for poison. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for poison. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `poisoned`.
 
@@ -1236,7 +1232,7 @@ A herb or potion of Healing, or Miruvor, restores Health and halves current blee
 
 **2. Action**
 
-Choose and use a known remedy for bleeding. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for bleeding. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `cut`.
 
@@ -1258,7 +1254,7 @@ Clarity or Miruvor removes stun. Acting before severity rises above 100 can prev
 
 **2. Action**
 
-Choose and use a known remedy for stun. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for stun. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `stun`.
 
@@ -1280,7 +1276,7 @@ Miruvor or Orcish Liquor removes fear. Orcish Liquor can also cause stun, so com
 
 **2. Action**
 
-Choose and use a known remedy for fear. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for fear. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `afraid`.
 
@@ -1302,7 +1298,7 @@ Clarity or Miruvor removes confusion so that movement and aiming become reliable
 
 **2. Action**
 
-Choose and use a known remedy for confusion. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for confusion. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `confused`.
 
@@ -1324,7 +1320,7 @@ True Sight or Miruvor cures blindness. True Sight also grants temporary sight pr
 
 **2. Action**
 
-Choose and use a known remedy for blindness. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for blindness. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `blind`.
 
@@ -1346,7 +1342,7 @@ Clarity, True Sight or Miruvor removes hallucination and makes displayed identit
 
 **2. Action**
 
-Choose and use a known remedy for hallucination. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for hallucination. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `image`.
 
@@ -1368,7 +1364,7 @@ Clarity ends rage. You will lose its attribute bonuses as well as its restrictio
 
 **2. Action**
 
-Choose and use a known remedy for rage. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for rage. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `rage`.
 
@@ -1390,7 +1386,7 @@ A known healing item can restore Health. Compare the amount healed and its other
 
 **2. Action**
 
-Choose and use a known remedy for low Health. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for low Health. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `health`.
 
@@ -1412,7 +1408,7 @@ Voice or Miruvor restores all Voice. Esgalduin restores one quarter of maximum V
 
 **2. Action**
 
-Choose and use a known remedy for low Voice. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for low Voice. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `voice`.
 
@@ -1434,7 +1430,7 @@ Known nourishing food can relieve hunger. Check any extra effects: Dried Meat ca
 
 **2. Action**
 
-Choose and use a known remedy for hunger. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for hunger. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `hunger`.
 
@@ -1456,7 +1452,7 @@ Restoration restores up to 3 drained points in each attribute. Attribute potions
 
 **2. Action**
 
-Choose and use a known remedy for attribute drain. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.
+Choose and use a known remedy for attribute drain. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.
 
 Required action: `use-item`; subject: `drain`.
 
@@ -1586,7 +1582,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-Gameplay tutorials have three modes: Disabled, Normal and Extended. Normal guides basic actions and survival; Extended adds detailed lessons. You can review encountered lessons or reset this Tale's tutorial progress separately. Device-control tutorials and skeleton hints have their own settings.
+Gameplay tutorials have three modes: Disabled, Normal and Extended. Normal guides basic actions and survival; Extended adds detailed tutorials. You can review encountered tutorials or reset this Tale's tutorial progress separately. Device-control tutorials and skeleton hints have their own settings.
 
 Trigger: The named menu is actually opened: settings.
 
@@ -1639,6 +1635,22 @@ The Harness holds ready gear within its own volume limit. Select Ready on a suit
 Trigger: The named menu is actually opened: harness.
 
 Sources: `src/tutorial/tutorial-game.c`.
+
+## The Quiver
+
+`menu.quiver`
+
+Level: **Normal**.
+
+Priority: **40** (higher appears first).
+
+**1. Info**
+
+The Quiver holds ready arrow stacks under its own capacity rules. Select a stack to inspect its quantity and actions. Changing only the active arrow stack is free; other active weapon changes keep their normal time costs.
+
+Trigger: The named menu is actually opened: quiver.
+
+Sources: `src/tutorial/tutorial-game.c`, `src/cmd/item/cmd-item-core.c`.
 
 ## Equipment
 
@@ -2034,7 +2046,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-A Tale spans its heroes, deaths and restarts. Gameplay lesson history belongs to the selected Tale. Starting another Tale has separate progress; the global Disabled, Normal or Extended preference applies across Tales. Reviewing encountered lessons remains available regardless of the selected mode.
+A Tale spans its heroes, deaths and restarts. Gameplay tutorial history belongs to the selected Tale. Starting another Tale has separate progress; the global Disabled, Normal or Extended preference applies across Tales. Reviewing encountered tutorials remains available regardless of the selected mode.
 
 Trigger: The named menu is actually opened: tales.
 
@@ -2066,7 +2078,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-Help explains mechanics and controls. The tutorial archive lets you reread encountered or skipped lessons. Both are free to browse.
+Help explains mechanics and controls. The tutorial archive lets you reread encountered or skipped tutorials. Both are free to browse.
 
 Trigger: The named menu is actually opened: help.
 
@@ -2130,7 +2142,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Gain +1 Attack with throwing weapons, halve distance penalties, and make thrown criticals easier. Personally learning Throwing reduces throwing weapons' Harness volume by 20%. It also allows quick throws of Harness daggers while a one-handed or hand-and-a-half melee weapon, or a bow, is active.
+Gain +1 Attack with throwing weapons, halve distance penalties, and make thrown criticals easier. Personally learning Throwing reduces throwing weapons' Harness volume by 20%. It also allows quick throws of Harness daggers with no melee weapon equipped, or while a one-handed or hand-and-a-half melee weapon, a throwing weapon, or a Shortbow is active.
 
 **2. Decision**
 
@@ -3542,7 +3554,7 @@ Trigger: Public ability preview or newly available ability; raw serial 153, skil
 
 Sources: `lib/edit/ability.txt`, `src/player/player-song-effects.c`, `src/birth/birth-traits.c`, `src/monster/monster-move.c`, `src/player/player-bonuses.c`, `src/player/player-skills.c`, `src/player/player-song-disguise.c`, `src/player/player-song-duels.c`.
 
-## Song of LÃ³rien
+## Song of Lórien
 
 `ability.154.preview`
 
@@ -3656,7 +3668,7 @@ Trigger: Public ability preview or newly available ability; raw serial 160, skil
 
 Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth-traits.c`, `src/dungeon/dungeon-startup.c`.
 
-## AulÃ«'s Forge
+## Aulë's Forge
 
 `ability.161.preview`
 
@@ -3666,7 +3678,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-AulÃ«'s Forge improves on Masterpiece. Above your normal smithing limit, spend 1 base Smithing for each 2 excess difficulty points, rounding the cost up. You can reach up to twice your base Smithing beyond the normal limit. This quest reward replaces the less efficient Masterpiece rule.
+Aulë's Forge improves on Masterpiece. Above your normal smithing limit, spend 1 base Smithing for each 2 excess difficulty points, rounding the cost up. You can reach up to twice your base Smithing beyond the normal limit. This quest reward replaces the less efficient Masterpiece rule.
 
 Trigger: Public ability preview or newly available ability; raw serial 161, skill 8, ability slot 1.
 
@@ -4466,7 +4478,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-Quartz veins contain milky crystals. Breaking a vein releases a gem; deep veins may also yield mithril, while meteorite chasms alone can yield star iron. Digging needs a tool rating and Strength of at least 2. An ordinary strike cracks intact quartz; a strong strike shatters it. Clearing the rubble takes another action.
+Quartz is a mineral vein, not a damaged wall: its visible crystals identify it. Breaking a vein releases a gem; deep veins may also yield mithril, while meteorite chasms alone can yield star iron. Digging needs a tool rating and Strength of at least 2. An ordinary strike cracks intact quartz; a strong strike shatters it. Clearing the rubble takes another action.
 
 Trigger: Feature 51 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -4482,7 +4494,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-Cracks weaken this wall. A digging tool rated 2 and Strength 2 can break it into rubble. Damaged walls contain no mineral rewards. Erosion can weaken intact walls before they collapse.
+A damaged wall is fractured stone or masonry, not quartz. It has no gem or metal reward: breaking it only leaves rubble. A digging tool rated 2 and Strength 2 can break it. Erosion can weaken intact walls before they collapse.
 
 Trigger: Feature 104 is visibly adjacent and marked; hidden terrain is excluded.
 
@@ -4498,7 +4510,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-This damaged mineral vein still holds its crystals. Break it with a digging tool rated 2 and Strength 2 to release its gem and any metal. Star iron occurs only in meteorite chasms. Clearing the rubble gives no second reward.
+A cracked quartz vein is still mineral-bearing, unlike a damaged wall: its crystals remain and breaking it releases its gem and any metal. Use a digging tool rated 2 and Strength 2. Star iron occurs only in meteorite chasms. Clearing the rubble gives no second reward.
 
 Trigger: Feature 105 is visibly adjacent and marked; hidden terrain is excluded.
 
@@ -4880,7 +4892,7 @@ Trigger: Feature 84 is on the player square or visibly adjacent and marked; secr
 
 Sources: `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/effects.c`, `src/melee/melee-movement-resolution.c`.
 
-## Imprisonment â€” known effect
+## Imprisonment — known effect
 
 `effect.191`
 
@@ -4896,7 +4908,7 @@ Trigger: Item kind 191 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Freedom â€” known effect
+## Freedom — known effect
 
 `effect.192`
 
@@ -4912,7 +4924,7 @@ Trigger: Item kind 192 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Light â€” known effect
+## Light — known effect
 
 `effect.193`
 
@@ -4928,7 +4940,7 @@ Trigger: Item kind 193 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Sanctity â€” known effect
+## Sanctity — known effect
 
 `effect.195`
 
@@ -4944,7 +4956,7 @@ Trigger: Item kind 195 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Understanding â€” known effect
+## Understanding — known effect
 
 `effect.196`
 
@@ -4960,7 +4972,7 @@ Trigger: Item kind 196 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Revelations â€” known effect
+## Revelations — known effect
 
 `effect.197`
 
@@ -4976,7 +4988,7 @@ Trigger: Item kind 197 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Treasures â€” known effect
+## Treasures — known effect
 
 `effect.198`
 
@@ -4992,7 +5004,7 @@ Trigger: Item kind 198 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Foes â€” known effect
+## Foes — known effect
 
 `effect.199`
 
@@ -5008,7 +5020,7 @@ Trigger: Item kind 199 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Slumber â€” known effect
+## Slumber — known effect
 
 `effect.200`
 
@@ -5024,7 +5036,7 @@ Trigger: Item kind 200 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Majesty â€” known effect
+## Majesty — known effect
 
 `effect.201`
 
@@ -5040,7 +5052,7 @@ Trigger: Item kind 201 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Self Knowledge â€” known effect
+## Self Knowledge — known effect
 
 `effect.202`
 
@@ -5056,7 +5068,7 @@ Trigger: Item kind 202 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Warding â€” known effect
+## Warding — known effect
 
 `effect.203`
 
@@ -5072,7 +5084,7 @@ Trigger: Item kind 203 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Dismay â€” known effect
+## Dismay — known effect
 
 `effect.204`
 
@@ -5088,7 +5100,7 @@ Trigger: Item kind 204 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Recharging â€” known effect
+## Recharging — known effect
 
 `effect.206`
 
@@ -5104,7 +5116,7 @@ Trigger: Item kind 206 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Summoning â€” known effect
+## Summoning — known effect
 
 `effect.210`
 
@@ -5120,7 +5132,7 @@ Trigger: Item kind 210 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Shadows â€” known effect
+## Shadows — known effect
 
 `effect.211`
 
@@ -5136,7 +5148,7 @@ Trigger: Item kind 211 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Terror â€” known effect
+## Terror — known effect
 
 `effect.240`
 
@@ -5152,7 +5164,7 @@ Trigger: Item kind 240 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Thunder â€” known effect
+## Thunder — known effect
 
 `effect.241`
 
@@ -5168,7 +5180,7 @@ Trigger: Item kind 241 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Force â€” known effect
+## Force — known effect
 
 `effect.242`
 
@@ -5184,7 +5196,7 @@ Trigger: Item kind 242 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Blasting â€” known effect
+## Blasting — known effect
 
 `effect.243`
 
@@ -5200,7 +5212,7 @@ Trigger: Item kind 243 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Warning â€” known effect
+## Warning — known effect
 
 `effect.250`
 
@@ -5216,7 +5228,7 @@ Trigger: Item kind 250 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Miruvor â€” known effect
+## Miruvor — known effect
 
 `effect.313`
 
@@ -5232,7 +5244,7 @@ Trigger: Item kind 313 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Orcish Liquor â€” known effect
+## Orcish Liquor — known effect
 
 `effect.315`
 
@@ -5248,7 +5260,7 @@ Trigger: Item kind 315 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Esgalduin â€” known effect
+## Esgalduin — known effect
 
 `effect.316`
 
@@ -5264,7 +5276,7 @@ Trigger: Item kind 316 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Clarity â€” known effect
+## Clarity — known effect
 
 `effect.317`
 
@@ -5280,7 +5292,7 @@ Trigger: Item kind 317 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Healing â€” known effect
+## Healing — known effect
 
 `effect.318`
 
@@ -5296,7 +5308,7 @@ Trigger: Item kind 318 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Voice â€” known effect
+## Voice — known effect
 
 `effect.319`
 
@@ -5312,7 +5324,7 @@ Trigger: Item kind 319 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## true Sight â€” known effect
+## true Sight — known effect
 
 `effect.320`
 
@@ -5328,7 +5340,7 @@ Trigger: Item kind 320 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Antidote â€” known effect
+## Antidote — known effect
 
 `effect.321`
 
@@ -5344,7 +5356,7 @@ Trigger: Item kind 321 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Quickness â€” known effect
+## Quickness — known effect
 
 `effect.322`
 
@@ -5360,7 +5372,7 @@ Trigger: Item kind 322 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Elemental Resistance â€” known effect
+## Elemental Resistance — known effect
 
 `effect.323`
 
@@ -5376,7 +5388,7 @@ Trigger: Item kind 323 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Strength â€” known effect
+## Strength — known effect
 
 `effect.327`
 
@@ -5392,7 +5404,7 @@ Trigger: Item kind 327 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
-## Dexterity â€” known effect
+## Dexterity — known effect
 
 `effect.328`
 
@@ -5408,7 +5420,7 @@ Trigger: Item kind 328 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
-## Constitution â€” known effect
+## Constitution — known effect
 
 `effect.329`
 
@@ -5424,7 +5436,7 @@ Trigger: Item kind 329 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
-## Grace â€” known effect
+## Grace — known effect
 
 `effect.330`
 
@@ -5440,7 +5452,7 @@ Trigger: Item kind 330 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`, `src/player/effects.c`.
 
-## Slowness â€” known effect
+## Slowness — known effect
 
 `effect.343`
 
@@ -5456,7 +5468,7 @@ Trigger: Item kind 343 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Poison â€” known effect
+## Poison — known effect
 
 `effect.344`
 
@@ -5472,7 +5484,7 @@ Trigger: Item kind 344 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Blindness â€” known effect
+## Blindness — known effect
 
 `effect.345`
 
@@ -5488,7 +5500,7 @@ Trigger: Item kind 345 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Confusion â€” known effect
+## Confusion — known effect
 
 `effect.346`
 
@@ -5504,7 +5516,7 @@ Trigger: Item kind 346 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Awkwardness â€” known effect
+## Awkwardness — known effect
 
 `effect.348`
 
@@ -5520,7 +5532,7 @@ Trigger: Item kind 348 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Disconnection â€” known effect
+## Disconnection — known effect
 
 `effect.350`
 
@@ -5536,7 +5548,7 @@ Trigger: Item kind 350 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Rage â€” known effect
+## Rage — known effect
 
 `effect.380`
 
@@ -5552,7 +5564,7 @@ Trigger: Item kind 380 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Sustenance â€” known effect
+## Sustenance — known effect
 
 `effect.381`
 
@@ -5568,7 +5580,7 @@ Trigger: Item kind 381 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Terror â€” known effect
+## Terror — known effect
 
 `effect.382`
 
@@ -5584,7 +5596,7 @@ Trigger: Item kind 382 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Healing â€” known effect
+## Healing — known effect
 
 `effect.383`
 
@@ -5600,7 +5612,7 @@ Trigger: Item kind 383 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Restoration â€” known effect
+## Restoration — known effect
 
 `effect.384`
 
@@ -5616,7 +5628,7 @@ Trigger: Item kind 384 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Emptiness â€” known effect
+## Emptiness — known effect
 
 `effect.385`
 
@@ -5632,7 +5644,7 @@ Trigger: Item kind 385 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Visions â€” known effect
+## Visions — known effect
 
 `effect.386`
 
@@ -5648,7 +5660,7 @@ Trigger: Item kind 386 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Entrancement â€” known effect
+## Entrancement — known effect
 
 `effect.387`
 
@@ -5664,7 +5676,7 @@ Trigger: Item kind 387 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Weakness â€” known effect
+## Weakness — known effect
 
 `effect.388`
 
@@ -5680,7 +5692,7 @@ Trigger: Item kind 388 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Sickness â€” known effect
+## Sickness — known effect
 
 `effect.389`
 
@@ -5696,7 +5708,7 @@ Trigger: Item kind 389 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Piece of Dark Bread â€” known effect
+## Piece of Dark Bread — known effect
 
 `effect.399`
 
@@ -5712,7 +5724,7 @@ Trigger: Item kind 399 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Strip of Dried Meat â€” known effect
+## Strip of Dried Meat — known effect
 
 `effect.400`
 
@@ -5728,7 +5740,7 @@ Trigger: Item kind 400 is aware and publicly encountered; no forced use.
 
 Sources: `lib/edit/object.txt`, `src/use-obj.c`.
 
-## Fragment of Lembas â€” known effect
+## Fragment of Lembas — known effect
 
 `effect.401`
 
@@ -5898,7 +5910,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-The Pack has its own volume limit. Weight also contributes to your overall load. Read both limits when selecting what to carry; a small but heavy object and a bulky light object create different constraints.
+{detail} The Pack has its own volume limit. Weight also contributes to your overall load. Read both limits when selecting what to carry; a small but heavy object and a bulky light object create different constraints.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; storage.pack.
 
@@ -5914,7 +5926,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-The Harness has a separate volume limit from the Pack. Readied gear can be reached under its own action rules. Moving an item between storage locations does not create unlimited total carrying capacity.
+{detail} The Harness has a separate volume limit from the Pack. Readied gear can be reached under its own action rules. Moving an item between storage locations does not create unlimited total carrying capacity.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; storage.harness.
 
@@ -5930,7 +5942,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-The Quiver holds arrows under its own capacity rules. Excess arrows may need Pack space. A stack can be picked up partially when only part fits; inspect the quantity actually collected.
+{detail} The Quiver holds arrows under its own capacity rules. Excess arrows may need Pack space. A stack can be picked up partially when only part fits; inspect the quantity actually collected.
 
 Trigger: The corresponding public state transition or explicit player action has occurred; storage.quiver.
 
@@ -6450,7 +6462,7 @@ Trigger: Quest 1 is publicly offered or accepted; only its revealed text is supp
 
 Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest-status.c`.
 
-## AulÃ« the Smith
+## Aulë the Smith
 
 `quest.2`
 
@@ -6460,7 +6472,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-{detail} Forge a work that meets AulÃ«'s current requirements, then collect the reward. Read the objective and smithing proposal before spending materials. Leaving this level before the reward is granted abandons the quest.
+{detail} Forge a work that meets Aulë's current requirements, then collect the reward. Read the objective and smithing proposal before spending materials. Leaving this level before the reward is granted abandons the quest.
 
 Trigger: Quest 2 is publicly offered or accepted; only its revealed text is supplied in context.
 
@@ -6498,7 +6510,7 @@ Trigger: Quest 4 is publicly offered or accepted; only its revealed text is supp
 
 Sources: `src/tutorial/tutorial-world.c`, `lib/edit/quest.txt`, `src/quest/quest-status.c`.
 
-## OromÃ«, the Great Hunter
+## Oromë, the Great Hunter
 
 `quest.5`
 
@@ -6524,7 +6536,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-{detail} Check Quests for the revealed destination and time limit. Plan your descent before leaving the current level; unexplored locations remain unknown.
+{detail} Check Quests for the revealed destination. Varda's trial is on the first level you reach after 500 ft; slay Duruin before leaving that level or the quest is lost. Plan your descent before entering it; unexplored locations remain unknown.
 
 Trigger: Quest 6 is publicly offered or accepted; only its revealed text is supplied in context.
 
@@ -8578,6 +8590,22 @@ Trigger: The known feature is on the player square or visibly adjacent; hidden t
 
 Sources: `src/tutorial/tutorial-game.c`, `lib/edit/terrain.txt`, `src/cave/cave-water.c`, `src/player/player-bonuses.c`.
 
+## Illusory wall
+
+`terrain.103`
+
+Level: **Extended**.
+
+Priority: **38** (higher appears first).
+
+**1. Info**
+
+An illusory wall looks like stone but is passable to you; monsters still treat it as a wall. Light makes the disguise fade, so inspect its appearance before relying on it as cover or a barrier.
+
+Trigger: Feature 103 is visibly adjacent or underfoot and marked; hidden terrain is excluded.
+
+Sources: `lib/edit/terrain.txt`, `src/defines.h`, `src/cave/cave-illusion.c`, `src/cave/cave-visuals.c`.
+
 ## Fighting on ice
 
 `world.ice`
@@ -8660,7 +8688,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-Contact with poisonous acid adds 8 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the acid, even while resting or using an item.
+Contact with poisonous acid adds 6 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the acid, even while resting or using an item.
 
 **2. Info**
 
@@ -8914,7 +8942,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-This trap releases shallow water beneath you. After each of your next two completed actions, the flood spreads farther across nearby floor and shallow water. On the second action its center becomes deep water, where movement takes four times normal energy and you cannot attack.
+This trap releases one shallow water cell beneath you. After each of your next two completed actions, it fills the next path-reachable ring (up to eight cells, then up to sixteen) without crossing walls; doors in the path are destroyed and replaced by water. Acid variants use acid instead. On the second action a water flood's center becomes deep water, where movement takes four times normal energy and you cannot attack.
 
 **2. Info**
 

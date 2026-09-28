@@ -26,6 +26,10 @@ enum {
     SDL_TOUCH_TUTORIAL_FOOTER_ALPHA = 220
 };
 
+/* A profile explanation can span several screens without skipping any text. */
+static int tutorial_panel_part;
+static int tutorial_panel_parts = 1;
+
 static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
 {
     /* Keep explanation cards near the gameplay tutorial's readable type size
@@ -476,9 +480,9 @@ static int sdl_touch_tutorial_rich_parse(cptr text, SDL_Color def,
  * Wrap and (optionally) draw marked-up body text.  Returns the total height.
  * With draw == false nothing is rendered, so callers can size a box first.
  */
-static float sdl_touch_tutorial_rich_draw_or_measure(cptr text, float x,
+static float sdl_touch_tutorial_rich_draw_lines(cptr text, float x,
     float y, float max_w, int font_px, SDL_Color def_color, bool centered,
-    bool draw)
+    bool draw, int first_line, int max_lines)
 {
     sdl_touch_tutorial_rich_piece pieces[SDL_TOUCH_TUTORIAL_RICH_MAX_PIECES];
     int line_idx[SDL_TOUCH_TUTORIAL_RICH_MAX_LINE_PIECES];
@@ -541,9 +545,10 @@ static float sdl_touch_tutorial_rich_draw_or_measure(cptr text, float x,
             continue;
         }
 
-        if (draw) {
+        if (draw && line_count >= first_line
+            && line_count - first_line < max_lines) {
             int draw_n = MIN(n, (int)N_ELEMENTS(line_idx));
-            float ly = y + line_h * (float)line_count;
+            float ly = y + line_h * (float)(line_count - first_line);
             float lx;
             float draw_w = 0.0f;
 
@@ -572,6 +577,14 @@ static float sdl_touch_tutorial_rich_draw_or_measure(cptr text, float x,
     }
 
     return line_h * (float)line_count;
+}
+
+static float sdl_touch_tutorial_rich_draw_or_measure(cptr text, float x,
+    float y, float max_w, int font_px, SDL_Color def_color, bool centered,
+    bool draw)
+{
+    return sdl_touch_tutorial_rich_draw_lines(text, x, y, max_w, font_px,
+        def_color, centered, draw, 0, INT_MAX);
 }
 
 static float sdl_touch_tutorial_draw_rich(cptr text, float x, float y,
@@ -751,7 +764,7 @@ static bool sdl_touch_tutorial_header_compute(const SDL_Rect* screen,
         22.0f, 34.0f);
     out->body_px = sdl_touch_tutorial_readable_body_px(out->body_px);
     if (sdl_touch_only_mobile_device_active())
-        out->title_px = MAX(out->title_px, out->body_px + 6);
+        out->title_px = out->body_px + 6;
     title_font = sdl_touch_tutorial_font_for_height(out->title_px);
     body_font = sdl_touch_tutorial_font_for_height(out->body_px);
     if (!title_font || !body_font)
@@ -796,7 +809,10 @@ static bool sdl_touch_tutorial_header_compute(const SDL_Rect* screen,
             (float)MAX(1, title_lines) * (float)out->title_px * 1.30f);
     }
     out->body_y = out->text_y + out->title_h + 5.0f;
-    out->body_h = sdl_touch_tutorial_rich_draw_or_measure(body,
+    /* On short landscape screens the explanation below already carries the
+     * instructions.  Keep the heading to its title to leave room to read it. */
+    out->body_h = sdl_touch_tutorial_rich_draw_or_measure(
+        sdl_touch_only_mobile_device_active() && screen->h < 560 ? "" : body,
         out->center_x, out->body_y, out->body_max_w, out->body_px,
         g_state.palette[TERM_L_WHITE], true, false);
     out->panel.h = out->body_y + out->body_h + pad - out->panel.y;
@@ -856,8 +872,9 @@ float sdl_touch_tutorial_draw_header_at(const SDL_Rect* screen,
         (void)sdl_touch_tutorial_draw_text_line(title, layout.center_x,
             layout.text_y, layout.title_max_w, layout.title_px, title_color,
             true);
-    (void)sdl_touch_tutorial_draw_rich_centered(body, layout.center_x,
-        layout.body_y, layout.body_max_w, layout.body_px, text_color);
+    if (layout.body_h > 0.0f)
+        (void)sdl_touch_tutorial_draw_rich_centered(body, layout.center_x,
+            layout.body_y, layout.body_max_w, layout.body_px, text_color);
 
     if (page_count > 0) {
         (void)sdl_touch_tutorial_draw_text_line(layout.page_buf,
@@ -910,9 +927,14 @@ static float sdl_touch_tutorial_footer_height(const SDL_Rect* screen)
     legacy_h = sdl_touch_pane_clampf((float)screen->h * 0.090f,
         54.0f, 78.0f);
 
-    return MAX(legacy_h, line_h
-        * (sdl_touch_only_mobile_device_active() ? 3.0f : 2.0f)
-        + bottom_pad);
+    if (sdl_touch_only_mobile_device_active()) {
+        int lines = sdl_touch_tutorial_rich_line_count("Tap for next page",
+            font_px, (float)screen->w * 0.90f)
+            + sdl_touch_tutorial_rich_line_count("Last page: tap to close.",
+                font_px, (float)screen->w * 0.90f);
+        return MAX(legacy_h, line_h * (float)lines + bottom_pad);
+    }
+    return MAX(legacy_h, line_h * 2.0f + bottom_pad);
 }
 
 void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
@@ -927,6 +949,8 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
 
     if (!screen)
         return;
+
+    single_page = single_page && tutorial_panel_part + 1 >= tutorial_panel_parts;
 
     font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
         22.0f, 30.0f);
@@ -972,11 +996,11 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
     {
         SDL_strlcpy(advance_text,
             single_page ? "<a>Tap</a> to <a>close</a>"
-                        : "<a>Tap</a> for the <a>next page</a>",
+                        : "<a>Tap</a> for <a>next page</a>",
             sizeof(advance_text));
         SDL_strlcpy(page_text,
             single_page ? "<t>Touch guide</t>"
-                        : "<t>Touch each page in order; the last tap closes</t>",
+                        : "<t>Last page: tap to close.</t>",
             sizeof(page_text));
     }
     else
@@ -992,6 +1016,10 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
             "<y>Left/Right</y> changes page   <y>Esc</y> <a>closes</a>",
             sizeof(page_text));
     }
+
+    if (tutorial_panel_parts > 1)
+        strnfmt(page_text, sizeof(page_text), "Text %d/%d",
+            tutorial_panel_part + 1, tutorial_panel_parts);
 
     line_h = sdl_touch_tutorial_draw_rich_centered(advance_text,
         (float)screen->x + (float)screen->w * 0.5f, y,
@@ -1255,8 +1283,7 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
         return;
     text_w = w - pad * 2.0f;
 
-    min_font_px = mobile_section
-        ? sdl_touch_tutorial_readable_body_px(16) : 14;
+    min_font_px = mobile_section && screen->h >= 560 ? 16 : 14;
     {
         int low_px = min_font_px;
         int high_px = MAX(font_px, min_font_px);
@@ -1480,8 +1507,8 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
     }
 }
 
-void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
-    float x, float y, float w, cptr title, cptr body)
+static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
+    float x, float y, float w, cptr title, cptr body, float max_bottom)
 {
     SDL_Color title_color = g_state.palette[TERM_YELLOW];
     SDL_Color text_color = g_state.palette[TERM_L_WHITE];
@@ -1491,10 +1518,13 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
     float pad;
     float text_w;
     float h;
+    float available_h;
+    float title_h = 0.0f;
     int title_px;
     int title_lines = 0;
     int body_px;
     int body_lines;
+    int page_lines;
 
     if (!screen || !body || !body[0] || w <= 20.0f)
         return;
@@ -1518,22 +1548,49 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
     if (text_w <= 40.0f)
         return;
 
-    body_lines = sdl_touch_tutorial_rich_line_count(body, body_px, text_w);
-    h = pad * 2.0f + (float)body_lines * (float)body_px * 1.30f;
-    if (title && title[0])
-    {
-        title_lines = sdl_touch_only_mobile_device_active()
-            ? MAX(1, sdl_touch_tutorial_line_count(title, title_px, text_w))
-            : 1;
-        h += (float)title_lines * (float)title_px * 1.35f + 5.0f;
+    footer_top = (float)(screen->y + screen->h)
+        - sdl_touch_tutorial_footer_height(screen) - pad;
+    footer_top = MIN(footer_top, max_bottom);
+    available_h = footer_top - y;
+    /* y is already below the measured heading.  Fit the text in that space;
+     * moving an oversized card upward would paint it over the heading. */
+    for (;;) {
+        body_lines = sdl_touch_tutorial_rich_line_count(body, body_px, text_w);
+        h = pad * 2.0f + (float)body_lines * (float)body_px * 1.30f;
+        if (title && title[0]) {
+            title_lines = sdl_touch_only_mobile_device_active()
+                ? MAX(1, sdl_touch_tutorial_line_count(title, title_px, text_w))
+                : 1;
+            title_h = (float)title_lines * (float)title_px * 1.35f;
+            h += title_h + 5.0f;
+        }
+        if (h <= available_h || body_px <= (screen->h < 560 ? 14 : 16))
+            break;
+        body_px--;
+        title_px = MIN(title_px, body_px + 6);
+    }
+    page_lines = body_lines;
+    if (h > available_h) {
+        float fixed_h = pad * 2.0f + title_h + (title_h > 0 ? 5.0f : 0);
+        page_lines = (int)((available_h - fixed_h) / (body_px * 1.30f));
+        /* If an illustration leaves no room for even one line, use the
+         * remaining reading area above the footer for this explanation. */
+        if (page_lines < 1) {
+            footer_top = (float)(screen->y + screen->h)
+                - sdl_touch_tutorial_footer_height(screen) - pad;
+            available_h = footer_top - y;
+            page_lines = MAX(1, (int)((available_h - fixed_h) / (body_px * 1.30f)));
+        }
+        tutorial_panel_parts = (body_lines + page_lines - 1) / page_lines;
+        tutorial_panel_part = MIN(tutorial_panel_part, tutorial_panel_parts - 1);
+        h = fixed_h + MIN(page_lines, body_lines - tutorial_panel_part * page_lines)
+            * body_px * 1.30f;
+    } else {
+        tutorial_panel_parts = 1;
+        tutorial_panel_part = 0;
     }
 
     box = (SDL_FRect){ .x = x, .y = y, .w = w, .h = h };
-    footer_top = (float)(screen->y + screen->h)
-        - sdl_touch_tutorial_footer_height(screen) - pad;
-    if (box.y + box.h > footer_top)
-        box.y = footer_top - box.h;
-    sdl_touch_tutorial_clamp_box_to_screen(&box, screen, pad);
     shadow = box;
     shadow.x += 3.0f;
     shadow.y += 3.0f;
@@ -1552,16 +1609,39 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
     y = box.y + pad;
     if (title && title[0]) {
         if (sdl_touch_only_mobile_device_active())
-            y += sdl_touch_tutorial_draw_wrapped_centered(title,
+            (void)sdl_touch_tutorial_draw_wrapped_centered(title,
                 box.x + box.w * 0.5f, y, text_w, title_px, title_color);
         else
-            y += sdl_touch_tutorial_draw_text_line(title,
+            (void)sdl_touch_tutorial_draw_text_line(title,
                 box.x + box.w * 0.5f, y, text_w, title_px, title_color,
                 true);
-        y += 5.0f;
+        y += title_h + 5.0f;
     }
-    (void)sdl_touch_tutorial_draw_rich(body, box.x + pad, y, text_w,
-        body_px, text_color);
+    (void)sdl_touch_tutorial_rich_draw_lines(body, box.x + pad, y, text_w,
+        body_px, text_color, false, true,
+        tutorial_panel_part * page_lines, page_lines);
+}
+
+void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
+    float x, float y, float w, cptr title, cptr body)
+{
+    sdl_touch_tutorial_draw_info_panel_before(screen, x, y, w, title, body,
+        screen ? (float)(screen->y + screen->h) : 0.0f);
+}
+
+static float sdl_touch_tutorial_legend_y_below_top_zone(
+    const SDL_Rect* screen, const SDL_FRect* zone, float y)
+{
+    float bottom = zone->y + zone->h;
+
+    /* Leave the top overlays and their descriptions visible above the card.
+     * Bottom controls and tall side panes do not reserve this top band. */
+    if (zone->w > 1.0f && zone->h > 1.0f
+        && bottom <= (float)screen->y + (float)screen->h * 0.5f)
+    {
+        return MAX(y, bottom);
+    }
+    return y;
 }
 
 void sdl_touch_tutorial_draw_main_screen_zones_compact(
@@ -1574,13 +1654,16 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
     int panel_rows;
     const char* legend_lines[8];
     int legend_n = 0;
+    float legend_y = header_bottom;
     bool supporting_pane_seen = false;
+    bool reserve_top_zones;
     bool show_main = section < 0 || section == 0;
     bool show_overlays = section < 0 || section == 1;
 
     if (!screen || !Term)
         return;
 
+    reserve_top_zones = !mouse && section == 1 && screen->w < screen->h;
     term_h = Term->hgt;
     map_cols = SCREEN_WID * (use_bigtile ? 2 : 1);
 
@@ -1627,6 +1710,9 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
         rect = (SDL_FRect){ (float)pane_rect.x, (float)pane_rect.y,
             (float)pane_rect.w, (float)pane_rect.h };
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Combat");
+        if (reserve_top_zones)
+            legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
+                screen, &rect, legend_y);
         if (section >= 0 && legend_n < (int)N_ELEMENTS(legend_lines)) {
             legend_lines[legend_n++] = mouse
                 ? "<t>Combat:</t> <a>click</a> an attack row to choose its mode."
@@ -1639,21 +1725,30 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
         if (sdl_touch_top_panel_compute_layout_for_display(qa_rects, &rect)) {
             sdl_touch_top_panel_render_buttons(qa_rects);
             sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Quick");
+            if (reserve_top_zones)
+                legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
+                    screen, &rect, legend_y);
             if (section >= 0 && legend_n < (int)N_ELEMENTS(legend_lines)) {
                 legend_lines[legend_n++] = mouse
                     ? "<t>Quick:</t> <a>click</a> a command; <a>right-click</a> to edit it."
-                    : "<t>Quick:</t> <a>tap</a> a command; <a>hold</a> for its description and edit control.";
+                    : "<t>Quick:</t> <a>tap</a> a command; <a>hold</a> for its description. The square changes the command; the cross closes the card.";
             }
         }
     }
     if (show_overlays && sdl_touch_tutorial_status_rect(&rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Status");
+        if (reserve_top_zones)
+            legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
+                screen, &rect, legend_y);
         if (section >= 0 && legend_n < (int)N_ELEMENTS(legend_lines))
             legend_lines[legend_n++] =
                 "<t>Status:</t> current conditions and remaining durations.";
     }
     if (show_overlays && sdl_touch_tutorial_view_rect(PANE_ROLLS, &rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Rolls");
+        if (reserve_top_zones)
+            legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
+                screen, &rect, legend_y);
         if (section >= 0 && legend_n < (int)N_ELEMENTS(legend_lines)) {
             legend_lines[legend_n++] = mouse
                 ? "<t>Rolls:</t> <a>click</a> to open <t>combat history</t>."
@@ -1670,14 +1765,23 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
 
     if (show_overlays && sdl_touch_tutorial_view_rect(PANE_INVENTORY, &rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Inventory");
+        if (reserve_top_zones)
+            legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
+                screen, &rect, legend_y);
         supporting_pane_seen = true;
     }
     if (show_overlays && sdl_touch_tutorial_view_rect(PANE_WORN, &rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Equipment");
+        if (reserve_top_zones)
+            legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
+                screen, &rect, legend_y);
         supporting_pane_seen = true;
     }
     if (show_overlays && sdl_touch_tutorial_view_rect(PANE_LOG, &rect)) {
         sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Messages");
+        if (reserve_top_zones)
+            legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
+                screen, &rect, legend_y);
         supporting_pane_seen = true;
     }
     if (supporting_pane_seen && legend_n < (int)N_ELEMENTS(legend_lines)) {
@@ -1686,7 +1790,7 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
             : "<t>Panes:</t> <a>tap</a> inventory, equipment, or messages panes.";
     }
 
-    sdl_touch_tutorial_draw_compact_zone_legend(screen, header_bottom,
+    sdl_touch_tutorial_draw_compact_zone_legend(screen, legend_y,
         legend_lines, legend_n, mouse, section >= 0);
 }
 
@@ -1827,11 +1931,11 @@ void sdl_touch_tutorial_draw_zones_page(const SDL_Rect* screen,
     cptr body;
 
     if (mobile_sections && page == 0) {
-        title = "Touch: Dungeon & Menus";
-        body = "<a>Tap</a> the highlighted play areas. Use the map to move or target; <a>hold</a> for contextual actions.";
+        title = "Dungeon & Menus";
+        body = "";
     } else if (mobile_sections) {
-        title = "Touch: Quick Controls & Status";
-        body = "<a>Tap</a> overlays for fast commands and views. <a>Hold</a> quick-access buttons for descriptions.";
+        title = "Quick Controls & Status";
+        body = "";
     } else {
         title = mouse ? "Main Screen Mouse Controls" : "Default Touch Layout";
         body = mouse
@@ -1855,7 +1959,7 @@ void sdl_touch_tutorial_draw_zones_page(const SDL_Rect* screen,
     (void)sdl_touch_tutorial_draw_header(screen, title, body,
         page, page_count);
 
-    sdl_touch_tutorial_draw_footer(screen, mouse, page_count == 1);
+    sdl_touch_tutorial_draw_footer(screen, mouse, page + 1 >= page_count);
 }
 
 static int sdl_touch_tutorial_zone_page_count(bool mouse)
@@ -1885,8 +1989,9 @@ void sdl_touch_tutorial_draw_pane_page(const SDL_Rect* screen, int page,
     SDL_Color border = g_state.palette[TERM_L_WHITE];
     bool have_pane = false;
     float header_bottom;
-    cptr header_title = "Preset: Touch pane + touch screen";
-    cptr header_body =
+    cptr header_title = sdl_touch_only_mobile_device_active()
+        ? "Touch Pane" : "Preset: Touch pane + touch screen";
+    cptr header_body = sdl_touch_only_mobile_device_active() ? "" :
         "Visible command pad. <a>Tap</a> buttons for actions; <a>hold</a> for alternates. Change presets any time in <t>Touch Settings</t>.";
 
     sdl_touch_tutorial_draw_screen_dim(screen, 128);
@@ -1961,14 +2066,16 @@ void sdl_touch_tutorial_draw_pane_page(const SDL_Rect* screen, int page,
             }
 
             sdl_touch_tutorial_draw_info_panel(screen, panel_x,
-                MAX((float)screen->y + (float)screen->h * 0.28f,
+                MAX((float)screen->y + (sdl_touch_only_mobile_device_active()
+                        ? 0.0f : (float)screen->h * 0.28f),
                     header_bottom + 12.0f), panel_w,
                 "Touch pane buttons", body);
         }
     } else {
         float max_w = (float)screen->w * 0.70f;
         float x = (float)screen->x + (float)screen->w * 0.15f;
-        float y = MAX((float)screen->y + (float)screen->h * 0.38f,
+        float y = MAX((float)screen->y + (sdl_touch_only_mobile_device_active()
+                ? 0.0f : (float)screen->h * 0.38f),
             header_bottom + 12.0f);
 
         sdl_touch_tutorial_draw_info_panel(screen, x, y, max_w,
@@ -1978,7 +2085,7 @@ void sdl_touch_tutorial_draw_pane_page(const SDL_Rect* screen, int page,
 
     (void)sdl_touch_tutorial_draw_header(screen, header_title, header_body,
         page, page_count);
-    sdl_touch_tutorial_draw_footer(screen, false, page_count == 1);
+    sdl_touch_tutorial_draw_footer(screen, false, page + 1 >= page_count);
 }
 
 void sdl_touch_tutorial_draw_movement_page(const SDL_Rect* screen,
@@ -1991,8 +2098,9 @@ void sdl_touch_tutorial_draw_movement_page(const SDL_Rect* screen,
     float y;
     float max_w;
     float header_bottom;
-    cptr header_title = "Preset: Corners + quick access";
-    cptr header_body =
+    cptr header_title = sdl_touch_only_mobile_device_active()
+        ? "Corners" : "Preset: Corners + quick access";
+    cptr header_body = sdl_touch_only_mobile_device_active() ? "" :
         "Pane hidden. <t>Side corner zones</t> handle movement and fast commands. Change presets any time in <t>Touch Settings</t>.";
 
     sdl_touch_tutorial_draw_screen_dim(screen, 142);
@@ -2018,13 +2126,15 @@ void sdl_touch_tutorial_draw_movement_page(const SDL_Rect* screen,
         }
         sdl_touch_tutorial_draw_info_panel(screen,
             (float)screen->x + (float)screen->w * 0.27f,
-            MAX((float)screen->y + (float)screen->h * 0.56f,
+            MAX((float)screen->y + (sdl_touch_only_mobile_device_active()
+                    ? 0.0f : (float)screen->h * 0.56f),
                 header_bottom + 12.0f),
             (float)screen->w * 0.46f, "Corners preset",
             "<a>Tap arrows:</a> step in the shown direction.\nThe top and bottom non-arrow buttons use <t>configurable commands</t>.\n<a>Hold</a> center blocks or command buttons for <n>alternate bindings</n>.\n<a>Swipe edge:</a> reveal or hide touch controls.\nChange <t>preset</t> and corner side in <t>Touch Settings</t>.");
     } else {
         x = (float)screen->x + (float)screen->w * 0.14f;
-        y = MAX((float)screen->y + (float)screen->h * 0.34f,
+        y = MAX((float)screen->y + (sdl_touch_only_mobile_device_active()
+                ? 0.0f : (float)screen->h * 0.34f),
             header_bottom + 12.0f);
         max_w = (float)screen->w * 0.72f;
 
@@ -2035,7 +2145,7 @@ void sdl_touch_tutorial_draw_movement_page(const SDL_Rect* screen,
 
     (void)sdl_touch_tutorial_draw_header(screen, header_title, header_body,
         page, page_count);
-    sdl_touch_tutorial_draw_footer(screen, false, page_count == 1);
+    sdl_touch_tutorial_draw_footer(screen, false, page + 1 >= page_count);
 }
 
 void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
@@ -2052,10 +2162,11 @@ void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
     float panel_x;
     float panel_w;
     float panel_y;
+    float panel_bottom;
     bool have_wheel;
-    cptr header_title = "Button Wheel + Quick Access";
-    cptr header_body =
-        "The <t>wheel</t> uses the open lane beside Quick Touch. <t>Portrait Wheel Center</t> can move it toward the screen middle without crossing live buttons or overlays. <t>Quick access</t> stays at <n>bottom center</n>.";
+    cptr header_title = "Button Wheel";
+    cptr header_body = sdl_touch_only_mobile_device_active() ? "" :
+        "<a>Release</a> to act after tapping, holding, or dragging. Adjust the wheel in <t>Touch Settings</t>.";
 
     sdl_touch_tutorial_draw_screen_dim(screen, 150);
     sdl_touch_tutorial_draw_overlay_menu(screen);
@@ -2121,14 +2232,22 @@ void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
     }
     panel_y = header_bottom + sdl_touch_pane_clampf(
         (float)screen->h * 0.035f, 18.0f, 32.0f);
+    panel_bottom = (float)(screen->y + screen->h);
+    if (sdl_touch_only_mobile_device_active() && screen->w < screen->h
+        && have_wheel)
+    {
+        /* Keep the illustrated wheel visible below the portrait explanation. */
+        panel_bottom = cy - radius - 12.0f;
+    }
 
-    sdl_touch_tutorial_draw_info_panel(screen,
-        panel_x, panel_y, panel_w, "Button wheel controls",
-        "<t>Outer arrows:</t> <a>tap</a> to step.\n<t>Inner wheel:</t> <a>press and drag</a>, then release. Drag farther until <g>Run</g> appears to run.\n<t>Center:</t> <a>tap</a> to repeat the last direction.\n<a>Swipe edge:</a> reveal or hide the touch pane.\n<t>Quick access:</t> <a>tap</a> a command; <a>hold</a> for its description. The square changes it; the cross closes it.\n<t>Status changes:</t> the wheel moves and shrinks as the condition panel grows.\nDescription cards open above Quick Access.");
+    sdl_touch_tutorial_draw_info_panel_before(screen,
+        panel_x, panel_y, panel_w, NULL,
+        "<t>Arrows:</t> <a>tap</a> to step. <a>Long press an arrow:</a> preview an action; <a>release</a> to attack, tunnel, or disarm.\n<t>Inner wheel:</t> <a>press and drag</a> toward a direction; <a>release</a> to step.\n<t>Run:</t> start <a>inside</a>; <a>drag to the outer rim</a> until <g>Run</g> appears, then <a>release</a> to run.\n<t>Center:</t> <a>tap</a> to repeat the last direction.\n<t>Wait / Rest:</t> <a>tap</a> to wait; <a>hold</a> to rest. <a>Swipe edge:</a> show or hide the touch pane.",
+        panel_bottom);
 
     (void)sdl_touch_tutorial_draw_header(screen, header_title, header_body,
         page, page_count);
-    sdl_touch_tutorial_draw_footer(screen, false, page_count == 1);
+    sdl_touch_tutorial_draw_footer(screen, false, page + 1 >= page_count);
 }
 
 int sdl_touch_tutorial_wait_action(Uint64 accept_after_ns)
@@ -2270,15 +2389,20 @@ void sdl_touch_tutorial_draw_page(int page, bool full, int page_count,
     if (!sdl_rect_has_area(&screen))
         return;
 
+    tutorial_panel_parts = 1;
+    if (page < zone_page_count) tutorial_panel_part = 0;
+
     old_suppress_top_panel = g_touch_tutorial_suppress_runtime_top_panel;
     g_touch_tutorial_suppress_runtime_top_panel = true;
     rendered = sdl_render_current_window_frame();
-    g_touch_tutorial_suppress_runtime_top_panel = old_suppress_top_panel;
-    if (!rendered)
+    if (!rendered) {
+        g_touch_tutorial_suppress_runtime_top_panel = old_suppress_top_panel;
         return;
+    }
 
     if (page < zone_page_count) {
         sdl_touch_tutorial_draw_zones_page(&screen, page, page_count, mouse);
+        g_touch_tutorial_suppress_runtime_top_panel = old_suppress_top_panel;
         return;
     }
 
@@ -2299,6 +2423,7 @@ void sdl_touch_tutorial_draw_page(int page, bool full, int page_count,
             break;
         }
     }
+    g_touch_tutorial_suppress_runtime_top_panel = old_suppress_top_panel;
 }
 
 void sdl_touch_tutorial_prepare_snapshot(void)
@@ -2319,6 +2444,24 @@ void sdl_touch_tutorial_prepare_snapshot(void)
         Term_fresh();
 }
 
+static bool sdl_touch_tutorial_navigate(int *page, int page_count, int action)
+{
+    if (action == 2) return true;
+    if (action > 0) {
+        if (tutorial_panel_part + 1 < tutorial_panel_parts) ++tutorial_panel_part;
+        else if (*page + 1 >= page_count) return true;
+        else { ++*page; tutorial_panel_part = 0; }
+    } else if (action < 0) {
+        if (tutorial_panel_part > 0) --tutorial_panel_part;
+        else if (*page > 0) {
+            --*page;
+            /* Clamp to the preceding explanation's last part when drawn. */
+            tutorial_panel_part = INT_MAX;
+        }
+    }
+    return false;
+}
+
 void sdl_touch_tutorial_run(bool full, bool mouse)
 {
     sdl_view* d;
@@ -2333,6 +2476,8 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
         return;
 
     gameplay_was_visible = sdl_device_tutorial_suspend_gameplay();
+    tutorial_panel_part = 0;
+    tutorial_panel_parts = 1;
     sdl_touch_tutorial_prepare_snapshot();
     d = sdl_view_from_term(Term);
     sdl_touch_cancel_all_inputs();
@@ -2351,21 +2496,13 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
         sdl_restore_render_target(d);
 
         action = sdl_touch_tutorial_wait_action(accept_after_ns);
-        if (action == 2) {
-            done = true;
-        } else if (action > 0) {
-            if (page + 1 >= page_count)
-                done = true;
-            else
-                page++;
+        done = sdl_touch_tutorial_navigate(&page, page_count, action);
+        if (action != 0)
             accept_after_ns = SDL_GetTicksNS() + 90000000ULL;
-        } else if (action < 0) {
-            if (page > 0)
-                page--;
-            accept_after_ns = SDL_GetTicksNS() + 90000000ULL;
-        }
     }
 
+    tutorial_panel_part = 0;
+    tutorial_panel_parts = 1;
     if (sdl_render_current_window_frame()) {
         SDL_RenderPresent(g_state.renderer);
         sdl_restore_render_target(d);

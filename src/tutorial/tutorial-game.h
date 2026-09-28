@@ -32,6 +32,8 @@ void tutorial_game_lifecycle(const char *id);
 bool tutorial_game_command_allowed(int command, int direction);
 bool tutorial_game_action_allowed(const char *action, const object_type *item);
 bool tutorial_game_target_allowed(int y, int x);
+/* Shared read-only eligibility for offering and completing ranged tutorials. */
+bool tutorial_game_ranged_path_allowed(int range, int y, int x, bool exact);
 void tutorial_game_action_done(const char *action, const object_type *item);
 bool tutorial_game_begin_action(const char *action, const object_type *item);
 void tutorial_game_end_action(void);

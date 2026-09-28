@@ -24,6 +24,7 @@ static bool play_instrument(object_type *,bool *);
 static bool activate_object(object_type *);
 __USE_OBJECT_IMPLEMENTATION__
 __DESCRIPTION_IMPLEMENTATION__
+__MAIN_MENU_IMPLEMENTATION__
 
 static player_type test_player;
 player_type *p_ptr=&test_player;
@@ -66,6 +67,7 @@ static bool mock_broken,mock_smith_forbidden;
 static int extra_count,supply_count;
 static int world_start_calls;
 static int active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
+static int selected_arrow_slot=-1;
 static u16b test_path[4];
 static int test_path_count;
 static bool effect_commits=true;
@@ -78,7 +80,7 @@ int ui_question_ask_overlay(cptr title,cptr desc,const ui_question_option *optio
     int count,int anchor_y,int anchor_x,int default_index)
 { (void)title;(void)desc;(void)options;(void)count;(void)anchor_y;(void)anchor_x;(void)default_index;return 0; }
 bool death_spectator_active(void) { return false; }
-bool player_can_treat_as_throwing(const object_type *o) { (void)o; return false; }
+bool player_can_treat_as_throwing(const object_type *o) { return o && o->tval==TV_POLEARM; }
 bool player_power_throw_ready(void) { return false; }
 bool object_has_broken_prefix(const object_type *item) { (void)item; return mock_broken; }
 bool smith_oath_forbids_object(const object_type *item) { (void)item; return mock_smith_forbidden; }
@@ -103,7 +105,12 @@ bool player_pack_action_pending(void) { return pack_pending; }
 bool player_active_weapon_is_melee(void) { return active_weapon_kind==PLAYER_ACTIVE_WEAPON_KIND_MELEE; }
 int ability_index(int skill,int ability) { (void)skill;(void)ability;return 0; }
 int player_quiver_arrow_slots(int *slots,int count) { (void)slots;(void)count;return 0; }
-int player_quiver_selected_arrow_slot(void) { return -1; }
+int player_quiver_selected_arrow_slot(void) { return selected_arrow_slot; }
+int player_active_throwing_weapon_slot(void) { return INVEN_WIELD; }
+object_type *player_inventory_object(int slot)
+{ return slot>=0 && slot<INVEN_TOTAL ? &inventory[slot] : NULL; }
+int archery_range(const object_type *item) { return item->pval; }
+int throwing_range(const object_type *item) { return item->pval; }
 int player_inventory_handle_for_object(const object_type *item)
 { for(int i=0;i<INVEN_TOTAL;++i) if(item==&inventory[i]) return i;return -1; }
 bool player_inventory_handle_is_equipped(int slot) { return slot>=INVEN_WIELD && slot<INVEN_TOTAL; }
@@ -118,8 +125,9 @@ void msg_print(cptr message) { (void)message; }
 int project_path(u16b *path,int range,int y,int x,int *ty,int *tx,u32b flags)
 { (void)range;(void)y;(void)x;(void)ty;(void)tx;(void)flags;
   assert(test_path_count>=0 && test_path_count<=4);
-  for (int i=0;i<test_path_count;++i) path[i]=test_path[i];
-  return test_path_count; }
+  int count=MIN(range,test_path_count);
+  for (int i=0;i<count;++i) path[i]=test_path[i];
+  return count; }
 static bool mock_use_effect(object_type *item,bool *ident)
 {
     (void)item; ++effect_calls;
@@ -310,16 +318,76 @@ static void check_opening_first_turn(void)
 
     tutorial_game_start();
     tutorial_game_checkpoint();
-    assert(tutorial_get_view(&view) && !strcmp(view.id,"opening.move")
-        && view.step==3 && !strcmp(view.action,"move"));
+    assert(!tutorial_is_active());
+    assert(tutorial_lesson_status("opening.move")==TUTORIAL_COMPLETED);
+    assert(mock_description_events==3); /* Continue alone reads all three pages. */
+    assert(playerturn==0 && p_ptr->energy_use==0 && p_ptr->py==5 && p_ptr->px==5);
     assert(queue_count==0 && !pending_lesson("combat.first_monster"));
+    live_checkpoint();
+    assert(!tutorial_is_active() && !pending_lesson("combat.first_monster"));
 
     /* The first paid action opens automatic observations for the next
      * checkpoint; the visible monster was deliberately present all along. */
-    tutorial_action_finished("move",NULL,true);
     playerturn=1;
     live_checkpoint();
     assert(tutorial_get_view(&view) && !strcmp(view.id,"combat.first_monster"));
+}
+
+static void check_information_only_movement(void)
+{
+    tutorial_view view;
+    const char *ids[]={"opening.move","combat.first_adjacent"};
+    int y=p_ptr->py,x=p_ptr->px,energy=p_ptr->energy_use;
+    s32b turns=playerturn;
+    for (int i=0;i<2;++i) {
+        activate(ids[i],i?"monster":"");
+        while (tutorial_get_view(&view) && view.step<view.step_count) {
+            assert(view.can_continue && !view.action[0]);
+            tutorial_continue(); tutorial_checkpoint(true);
+        }
+        /* Existing progress at the former required-action page resumes as
+         * information at the same page index, without moving or attacking. */
+        tutorial_flush(); tutorial_invalidate_context();
+        tutorial_observe(ids[i],NULL); tutorial_checkpoint(true);
+        assert(tutorial_get_view(&view) && view.step==view.step_count);
+        assert(view.kind==TUTORIAL_STEP_INFO && view.can_continue && !view.action[0]);
+        tutorial_continue();
+        assert(tutorial_lesson_status(ids[i])==TUTORIAL_COMPLETED);
+    }
+    assert(p_ptr->py==y && p_ptr->px==x && p_ptr->energy_use==energy && playerturn==turns);
+}
+
+static void check_main_menu_tutorial(void)
+{
+    tutorial_view view;
+    int energy=p_ptr->energy_use, y=p_ptr->py, x=p_ptr->px;
+    s32b turns=playerturn;
+    for (int scenario=0;scenario<3;++scenario) {
+        bool skip=scenario==1, suspended=scenario==2;
+        tutorial_invalidate_context(); ++test_tale.id;
+        started=false; tutorial_game_start();
+        /* Opening the menu must focus its own information card even when a
+         * gameplay action card is suspended, then return to that action. */
+        if (suspended) { tutorial_observe("move",NULL); tutorial_checkpoint(true); }
+        mock_description_events=0; mock_description_skip=skip;
+        g_main_menu_overlay_active=false;
+        sdl_main_menu_overlay_begin();
+        assert(g_main_menu_overlay_active && mock_description_events==1);
+        assert(tutorial_lesson_status("menu.main-menu")
+            ==(skip?TUTORIAL_SKIPPED:TUTORIAL_COMPLETED));
+        if (suspended) assert(tutorial_get_view(&view) && !strcmp(view.id,"move"));
+        else assert(!tutorial_is_active());
+        /* The free menu-opening command returns to the player loop. Its
+         * checkpoint used to discard the menu tutorial before it was read. */
+        live_checkpoint();
+        assert(!pending_lesson("menu.main-menu"));
+        assert(tutorial_lesson_status("menu.main-menu")
+            ==(skip?TUTORIAL_SKIPPED:TUTORIAL_COMPLETED));
+        assert(p_ptr->energy_use==energy && playerturn==turns
+            && p_ptr->py==y && p_ptr->px==x);
+    }
+    mock_description_skip=false; g_main_menu_overlay_active=false;
+    puts("Main menu tutorial: Continue/Skip before free-command cleanup, suspended action and no game time: PASS");
 }
 
 static void check_live_checkpoints(void)
@@ -394,18 +462,38 @@ static void check_live_checkpoints(void)
     live_checkpoint(); assert(pending_lesson("terrain.9"));
     cave_feat[5][5]=FEAT_FLOOR; cave_info[5][5]=0;
     live_checkpoint(); assert(!pending_lesson("terrain.9"));
-    cave_feat[5][6]=FEAT_TRAP_DART; cave_info[5][6]=CAVE_MARK|CAVE_SEEN;
+    cave_feat[5][6]=FEAT_TRAP_DART; cave_info[5][6]=CAVE_MARK|CAVE_SEEN|CAVE_HIDDEN;
+    live_checkpoint(); assert(!pending_lesson("world.trap") && !pending_lesson("terrain.19"));
+    cave_info[5][6]=CAVE_MARK|CAVE_SEEN;
     live_checkpoint(); assert(!pending_lesson("world.trap") && pending_lesson("terrain.19"));
     cave_feat[5][6]=FEAT_FORGE_NORMAL_HEAD+1;
     live_checkpoint(); assert(!pending_lesson("world.trap") && !pending_lesson("terrain.19")
         && !pending_lesson("world.forge") && pending_lesson("terrain.65"));
     cave_feat[5][6]=FEAT_FLOOR; cave_info[5][6]=CAVE_MARK|CAVE_SEEN;
     live_checkpoint(); assert(!pending_lesson("terrain.65") && !pending_lesson("world.forge"));
+    /* Mineral and architectural damage are separate tutorial subjects, including
+     * the intermediate cracked-quartz state. */
+    cave_feat[5][6]=FEAT_DAMAGED_WALL;
+    live_checkpoint(); assert(pending_lesson("terrain.104")
+        && !pending_lesson("terrain.51") && !pending_lesson("terrain.105"));
+    cave_feat[5][6]=FEAT_QUARTZ;
+    live_checkpoint(); assert(pending_lesson("terrain.51")
+        && !pending_lesson("terrain.104") && !pending_lesson("terrain.105"));
+    cave_feat[5][6]=FEAT_CRACKED_QUARTZ;
+    live_checkpoint(); assert(pending_lesson("terrain.105")
+        && !pending_lesson("terrain.51") && !pending_lesson("terrain.104"));
+    cave_feat[5][6]=FEAT_FLOOR;
+    live_checkpoint(); assert(!pending_lesson("terrain.51")
+        && !pending_lesson("terrain.104") && !pending_lesson("terrain.105"));
     test_floor_objects[1]=(object_type){.k_idx=1,.tval=TV_STAFF,.number=1,.marked=true};
     cave_o_idx[5][6]=1;
-    live_checkpoint(); assert(pending_lesson("item.first_description"));
-    cave_o_idx[5][6]=0;
     live_checkpoint(); assert(!pending_lesson("item.first_description"));
+    assert(!reached_kinds[1]); /* Visible beside us is not yet examinable. */
+    cave_o_idx[5][6]=0; cave_o_idx[5][5]=1;
+    live_checkpoint(); assert(pending_lesson("item.first_description"));
+    cave_o_idx[5][5]=0; cave_o_idx[5][6]=1;
+    live_checkpoint(); assert(!pending_lesson("item.first_description"));
+    cave_o_idx[5][6]=0;
     assert(terrain_lesson_feature(7)==6 && terrain_lesson_feature(8)==6);
     assert(terrain_lesson_feature(20)==20 && terrain_lesson_feature(21)==20);
     assert(terrain_lesson_feature(32)==32 && terrain_lesson_feature(39)==33);
@@ -457,6 +545,74 @@ static void check_live_checkpoints(void)
     live_checkpoint();
     assert(!level_changed && tutorial_lesson_status("move")==TUTORIAL_IN_PROGRESS);
     puts("Live tutorial checkpoints: expiry, hazards, awareness/stealth scenarios, mode-safe actions and same-depth map refresh: PASS");
+}
+
+static void check_ranged_tutorial_availability(void)
+{
+    tutorial_invalidate_context(); ++test_tale.id; tutorial_sync_tale();
+    memset(p_ptr,0,sizeof(*p_ptr)); memset(inventory,0,sizeof(test_inventory));
+    memset(cave_m_idx,0,sizeof(test_mon_idx)); memset(mon_list,0,sizeof(test_monsters));
+    p_ptr->playing=true; p_ptr->py=p_ptr->px=5;
+    p_ptr->cur_map_hgt=p_ptr->cur_map_wid=12;
+    mock_merciless=mock_cowardly=mock_smith_forbidden=false;
+    mon_max=3;
+    mon_list[1]=(monster_type){.r_idx=1,.ml=true,.fy=5,.fx=8};
+    cave_m_idx[5][8]=1; cave_info[5][8]=CAVE_VIEW|CAVE_SEEN;
+    r_info[1].flags1=0; r_info[2].flags1=RF1_PEACEFUL;
+    for (int x=6;x<=8;++x) {
+        cave_feat[5][x]=FEAT_FLOOR; cave_info[5][x]|=CAVE_MARK|CAVE_SEEN;
+        test_path[x-6]=GRID(5,x);
+    }
+    test_path_count=3;
+    selected_arrow_slot=INVEN_QUIVER1;
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
+    inventory[INVEN_BOW]=(object_type){.k_idx=1,.tval=TV_BOW,.number=1,.pval=2};
+    object_type spare={.k_idx=1,.tval=TV_BOW,.number=1,.pval=4,.storage=OBJECT_STORAGE_HARNESS};
+    save_step("item.bow",1,"completed");
+
+    /* A longer-range spare bow must not make the active short bow eligible. */
+    offer_item_actions(&spare,true);
+    assert(!pending_lesson("item.bow.use"));
+    assert(tutorial_game_command_allowed(';',6));
+    inventory[INVEN_BOW].pval=3;
+    offer_item_actions(&spare,true);
+    assert(pending_lesson("item.bow.use"));
+    tutorial_checkpoint(true);
+    assert(tutorial_ranged_aim_allowed(3,5,8,true));
+    assert(!tutorial_ranged_aim_allowed(2,5,8,true));
+
+    /* Recheck the active card when its target moves out of range. */
+    inventory[INVEN_BOW].pval=2;
+    p_ptr->chp=p_ptr->mhp=20; p_ptr->food=PY_FOOD_ALERT;
+    live_checkpoint();
+    assert(!pending_lesson("item.bow.use"));
+    tutorial_invalidate_context();
+    inventory[INVEN_BOW].pval=3;
+    selected_arrow_slot=-1;
+    assert(!tutorial_ranged_target_available(true));
+    selected_arrow_slot=INVEN_QUIVER1;
+    test_path_count=1; /* The projectile path ends at a wall before the target. */
+    assert(!tutorial_ranged_target_available(true));
+    test_path_count=3;
+    mon_list[2]=(monster_type){.r_idx=2,.ml=true,.fy=5,.fx=6}; cave_m_idx[5][6]=2;
+    assert(!tutorial_ranged_target_available(true));
+    mon_list[2].ml=false; /* Unrevealed blockers must not leak through the card. */
+    assert(tutorial_ranged_target_available(true));
+    cave_m_idx[5][6]=0;
+
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+    inventory[INVEN_WIELD]=(object_type){.k_idx=1,.tval=TV_POLEARM,.number=1,.pval=2};
+    save_step("item.throwing",1,"completed");
+    offer_item_actions(&inventory[INVEN_WIELD],true);
+    assert(!pending_lesson("item.throwing.use"));
+    inventory[INVEN_WIELD].pval=3;
+    offer_item_actions(&inventory[INVEN_WIELD],true);
+    assert(pending_lesson("item.throwing.use"));
+    tutorial_checkpoint(true);
+    assert(tutorial_ranged_aim_allowed(3,5,8,true));
+    assert(!tutorial_ranged_aim_allowed(2,5,8,true));
+    tutorial_invalidate_context(); selected_arrow_slot=-1;
+    puts("Ranged tutorial availability: active weapon range, blocked/oath-safe paths, ammo, expiry and throwing: PASS");
 }
 
 int main(void)
@@ -691,6 +847,28 @@ int main(void)
     assert(!tutorial_game_command_allowed('f',0));
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
 
+    activate("item.bow.active","bow");
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_MELEE;
+    tutorial_game_action_done("change-active",NULL);
+    assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_IN_PROGRESS);
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+    tutorial_game_action_done("change-active",NULL);
+    assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_IN_PROGRESS);
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
+    tutorial_game_action_done("change-active",NULL);
+    assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_COMPLETED);
+    activate("item.throwing.active","throwing");
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+    tutorial_game_action_done("change-active",NULL);
+    assert(tutorial_lesson_status("item.throwing.active")==TUTORIAL_COMPLETED);
+    activate("item.arrows.active","arrows");
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
+    tutorial_game_action_done("change-active",NULL);
+    assert(tutorial_lesson_status("item.arrows.active")==TUTORIAL_IN_PROGRESS);
+    object_type arrows={.k_idx=1,.tval=TV_ARROW,.number=10};
+    tutorial_game_action_done("change-active",&arrows);
+    assert(tutorial_lesson_status("item.arrows.active")==TUTORIAL_COMPLETED);
+
     activate("item.staff.ready","staff");
     assert(tutorial_game_begin_action("ready",&staff));
     tutorial_checkpoint(false); /* Pack's paid multi-turn access hides the card. */
@@ -761,7 +939,10 @@ int main(void)
         assert(!tutorial_character_blocked());
     }
     check_opening_first_turn();
+    check_information_only_movement();
     check_live_checkpoints();
+    check_main_menu_tutorial();
+    check_ranged_tutorial_availability();
     tutorial_shutdown(); SDL_Quit();
     puts("Gameplay tutorial integration: PASS (typed actions, known instruments/remedies, post-cure completion, ranged path safety, movement/oath gates, hidden paid actions, inline/modal description success/failure and visibility, Off replay, level/reload history)");
     return 0;
@@ -804,6 +985,7 @@ static object_info_screen_capture object_info_overlay_capture;
 static bool object_info_overlay_capture_active;
 static bool new_paragraph;
 static bool mock_description_capture=true, mock_description_present=true;
+static bool mock_description_skip;
 static int mock_description_events, mock_description_keys;
 static int mock_description_popup_clears;
 s16b character_icky;
@@ -850,7 +1032,8 @@ errr Term_xtra(int event,int value)
     tutorial_view view; (void)event;(void)value;
     assert(++mock_description_events<30);
     assert(tutorial_get_view(&view) && view.can_continue);
-    tutorial_continue(); tutorial_checkpoint(true); return 0;
+    if (mock_description_skip) tutorial_skip(); else tutorial_continue();
+    tutorial_checkpoint(true); return 0;
 }
 char inkey(void) { if(mock_description_keys>0){--mock_description_keys;return '2';}return ESCAPE; }
 int target_dir(char key) { return key>='1'&&key<='9'?key-'0':0; }
@@ -859,11 +1042,40 @@ bool do_cmd_use_understanding_gem_on_item(const object_type *item) { (void)item;
 '''
 
 
+MAIN_MENU_STUBS = r'''
+/* Exercise the real menu-opening transaction; only its layout and unrelated
+ * frontend cleanup are stubbed. Tutorial core and waiting remain real. */
+typedef struct { int visible_count; } main_menu_pane_layout;
+static struct { bool need_present; } g_state;
+static bool g_main_menu_overlay_active, g_main_menu_pane_hover;
+static int g_main_menu_overlay_hover_choice, g_main_menu_overlay_highlight;
+term *Term;
+static bool sdl_main_menu_button_run_pending_disable_prompt(void) { return false; }
+static bool sdl_main_menu_overlay_layout(main_menu_pane_layout *layout)
+{ layout->visible_count=MAIN_MENU_MAX; return true; }
+bool dismiss_active_narrative_banner(void) { return false; }
+static void sdl_player_action_menu_cancel(void) {}
+static void sdl_touch_round_cancel_press(void) {}
+static void sdl_touch_top_panel_cancel_press(void) {}
+void sdl_question_menu_clear_context_hint(void) {}
+void sdl_object_tooltip_clear(void) {}
+static void sdl_mark_tiles_mode_game_redraw(void) {}
+void handle_stuff(void) {}
+static void sdl_main_menu_overlay_reset_nav_input(void) {}
+static bool sdl_main_menu_choice_disabled_now(int choice)
+{ return choice==MAIN_MENU_SAVE; }
+static void sdl_main_menu_overlay_scroll_to_highlight(int count) { (void)count; }
+'''
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--object-info-source', type=Path,
                         default=ROOT / 'src/object/object-info.c',
                         help='Optional pre-fix source snapshot for demonstrating the regression.')
+    parser.add_argument('--main-menu-source', type=Path,
+                        default=ROOT / 'src/sdl/ui/sdl-main-menu.c',
+                        help='Optional pre-fix main menu source for demonstrating the blink regression.')
     args = parser.parse_args()
     check_browser_preview_routes()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -880,6 +1092,10 @@ def main():
         ("move", "move", ""), ("attack", "attack", "monster"),
         ("throw", "throw", ""), ("fire", "fire", ""),
         ("item.bow.use", "fire", "bow"),
+        ("item.throwing.use", "throw", "throwing"),
+        ("item.bow.active", "change-active", "bow"),
+        ("item.throwing.active", "change-active", "throwing"),
+        ("item.arrows.active", "change-active", "arrows"),
         ("equip-test", "equip", ""), ("change-test", "change-active", ""),
         ("item.staff.ready", "ready", "staff"),
         ("item.armour.equip", "equip", "armour"),
@@ -902,17 +1118,21 @@ def main():
                'world.ice','world.poison','world.deepwater','menu.inventory'):
         lessons.append({'id':id,'title':id,'level':'normal',
                         'steps':[{'kind':'info','text':'Current context: {subject}'}]})
-    for id in ('terrain.9','terrain.19','terrain.20','terrain.65',
+    for id in ('terrain.9','terrain.19','terrain.20','terrain.51','terrain.65',
                'terrain.84','terrain.85','terrain.86','terrain.87','terrain.88',
-               'terrain.100','terrain.101'):
+               'terrain.100','terrain.101','terrain.104','terrain.105'):
         lessons.append({'id':id,'title':id,'level':'extended',
                         'steps':[{'kind':'info','text':'Detailed terrain context.'}]})
+    actual = json.loads((ROOT / 'lib/help/tutorials.json').read_text())['lessons']
+    lessons.append(next(entry for entry in actual if entry['id'] == 'menu.main-menu'))
+    for lesson_id in ('opening.move', 'combat.first_adjacent'):
+        lesson = next(entry for entry in actual if entry['id'] == lesson_id)
+        assert all(step['kind'] == 'info' and not step.get('action') for step in lesson['steps'])
+        lessons.append(lesson)
+    assert all(not {'move', 'attack'} & set(step.get('action', '').split('|'))
+               for lesson in actual for step in lesson['steps'])
     lessons.extend([
-        {'id':'opening.move','title':'Opening','priority':70,'steps':[
-            {'text':'Welcome.'}, {'text':'Prepare.'},
-            {'text':'Move once.','kind':'action','action':'move'}]},
         {'id':'combat.first_monster','title':'Awareness','priority':65,'steps':[{'text':'Creature awareness.'}]},
-        {'id':'combat.first_adjacent','title':'Attack','priority':45,'steps':[{'text':'Attack.','kind':'action','action':'attack','subject_type':'monster'}]},
         {'id':'combat.stealth','title':'Stealth','priority':40,'steps':[{'text':'Stealth.','kind':'action','action':'stealth'}]},
     ])
     (OUT / "catalogue.json").write_text(json.dumps({"version": 1, "lessons": lessons}))
@@ -944,7 +1164,10 @@ def main():
                       .replace("__DISEASE_IMPLEMENTATION__", disease)
                       .replace("__RANGED_AIM_IMPLEMENTATION__", aim)
                       .replace("__USE_OBJECT_IMPLEMENTATION__", use_body)
-                      .replace("__DESCRIPTION_IMPLEMENTATION__", description), encoding="utf-8")
+                      .replace("__DESCRIPTION_IMPLEMENTATION__", description)
+                      .replace("__MAIN_MENU_IMPLEMENTATION__", MAIN_MENU_STUBS + '\n' +
+                               c_function(args.main_menu_source.read_text(encoding='utf-8-sig'),
+                                          'sdl_main_menu_overlay_begin')), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
                                    str(BUILD / "_deps/SDL"), env["PATH"]])

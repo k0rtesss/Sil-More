@@ -1,5 +1,14 @@
 # Session notes
 
+## 2026-09-29: Master 0.9.8 release and tutorial backport
+
+- Merged `6d1335ad8403379985d8c64bb3a2e909d50b32dd` into master with a release merge commit. Retained the snapshot's canonical version 0.9.8 and save revision 22.
+- Backported `3f1719c0bab88cedfcd847a7d13d55bceb236312` separately, excluding the intervening catastrophe, skill/ability, metarun-memory, quest and Insight changes. Retained XP-only ability guidance and existing ability records; omitted the four later quest-reward previews and unused future-feature test mocks.
+- Tutorials: movement/melee explanations no longer force an action; loose floor-item lessons wait until the item is underfoot; hidden traps remain hidden; ranged lessons require a usable active weapon, ammunition and a reachable legal visible target. Main-menu cards finish before the free-command checkpoint. Touch explanations paginate, reserve control space and suppress competing descriptions. Quartz, damaged-wall, Quiver and illusory-wall guidance matches this release.
+- Regenerated `docs/tutorial-reference.md`; strict catalogue coverage passes with 542 cards and 107 ability previews. Tutorial core, integration, SDL input, world, archive, upgrade, startup and visibility checks passed, as did the full gameplay software-render sweep, touch profile/navigation checks and help layout checks. Inspected representative gameplay and touch captures.
+- Parallel Windows incremental build and `build-cmake.bat standard` passed. Commander AI checks (90,482), production AI integration, sound assignment/playback fixtures, environmental balance (127,595), Living Dungeon behavior (41,482), persistence (1,575), quartz checks (1,147), template versions and scoped whitespace checks passed.
+- Standard deployment executable, tutorial catalogue, monster, ability and terrain templates have matching SHA256 hashes. Existing untracked `docs/help-pages/` remains intact. No manual gameplay replay, physical-device run or listening assessment was performed.
+
 ## 2026-09-25: Environmental balance review (corrected after playability feedback)
 
 The first pass was rejected by the user: it minimized standing rubble by suppressing activity. Its 0.08 rubble tiles at 5,000 actions was not an adequate balance criterion. Measuring a short visit exposed the problem: the rejected version produced only 0.08 nearby chasm changes, 2.12 water changes, 0.92 lava changes and 0.54 acid changes in the first 200 Normal-speed actions. Lava then exhausted its lifetime supply and became entirely inactive. The implementation and conclusions below supersede that pass.

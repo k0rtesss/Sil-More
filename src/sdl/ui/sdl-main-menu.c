@@ -680,7 +680,9 @@ void sdl_main_menu_overlay_begin(void)
     sdl_main_menu_overlay_scroll_to_highlight(layout.visible_count);
     g_state.need_present = true;
     tutorial_game_menu("main-menu", "Open character views, Supplies, Knowledge, tutorials and settings from this menu.");
-    tutorial_checkpoint(true);
+    /* Opening this overlay is a free command. Read its information card
+     * before returning to the player loop, whose checkpoint clears UI lessons. */
+    tutorial_game_wait();
 }
 
 void sdl_main_menu_overlay_move(int delta)

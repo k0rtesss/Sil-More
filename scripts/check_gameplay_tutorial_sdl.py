@@ -40,6 +40,7 @@ static unsigned int revision;
 static int keys[16], key_count, flush_count, pending_choice;
 static int pending_mode_choice = -1, mode_selector_calls;
 static bool touch_only, disabled;
+static bool controls_visible;
 static tutorial_mode g_app_gameplay_tutorial_mode=TUTORIAL_MODE_EXTENDED;
 static int config_saves;
 void set_sdl_gameplay_tutorial_mode(tutorial_mode mode);
@@ -89,6 +90,24 @@ bool sdl_finger_event_to_render_coords(const SDL_TouchFingerEvent *event,float *
 { *x=event->x; *y=event->y; return true; }
 bool sdl_main_view_point_to_map(float x,float y,int *my,int *mx)
 { (void)my; (void)mx; return x>500 && y>500; }
+bool sdl_touch_round_layer_controls_active(void) { return controls_visible; }
+bool sdl_touch_round_compute_layout(float *cx,float *cy,float *r,float *inner,SDL_Rect *clip)
+{
+    (void)inner;
+    if (!controls_visible) return false;
+    if (cx) *cx=400;
+    if (cy) *cy=600;
+    if (r) *r=70;
+    if (clip) *clip=(SDL_Rect){0,0,1000,1000};
+    return true;
+}
+bool sdl_touch_pane_current_rect(SDL_Rect *r)
+{ if (!controls_visible) return false; *r=(SDL_Rect){100,700,150,50}; return true; }
+bool sdl_touch_thumb_current_bounds(SDL_FRect *r)
+{ if (!controls_visible) return false; *r=(SDL_FRect){100,800,150,50}; return true; }
+bool sdl_touch_top_panel_layout_visible(void) { return controls_visible; }
+bool sdl_touch_top_panel_compute_layout(SDL_FRect *buttons,SDL_FRect *panel)
+{ (void)buttons; if (!controls_visible) return false; *panel=(SDL_FRect){100,900,150,50}; return true; }
 #define NOOP(name) void name(void) {}
 NOOP(sdl_gamepad_mark_auto_ui)
 NOOP(sdl_gamepad_reset_movement_controls)
@@ -194,6 +213,16 @@ int main(void)
     }
     {
         tutorial_controls labels;
+        show(false,"use-item","poisoned");
+        SDL_strlcpy(current.id,"status.poisoned.remedy",sizeof(current.id));
+        tutorial_build_controls(&current,&labels,false);
+        assert(labels.command=='j' && !strcmp(labels.label[0],"Open supplies"));
+        tutorial_activate(0,&current);
+        assert(key_count==2 && keys[0]=='\\' && keys[1]=='j');
+        show(false,"use-item","staff");
+        SDL_strlcpy(current.id,"item.staff.use",sizeof(current.id));
+        tutorial_build_controls(&current,&labels,false);
+        assert(labels.command=='u');
         show(false,"examine","");
         tutorial_last_input=TUTORIAL_INPUT_KEYBOARD;
         tutorial_build_controls(&current,&labels,true);
@@ -255,7 +284,7 @@ int main(void)
         assert(!labels.controls_hint[0]);
         tutorial_last_input=TUTORIAL_INPUT_TOUCH;
         tutorial_build_controls(&current,&labels,true);
-        assert(strstr(labels.controls_hint,"Tap") && strstr(labels.read_hint,"Swipe"));
+        assert(strstr(labels.controls_hint,"Swipe") && strstr(labels.read_hint,"Swipe"));
         assert(!strstr(labels.controls_hint,"Click") && !strstr(labels.controls_hint,"Enter"));
         config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
         tutorial_build_controls(&current,&labels,true);
@@ -322,6 +351,61 @@ int main(void)
     e.key.repeat=true;
     assert(sdl_gameplay_tutorial_handle_event(&e));
     show(false,"move","");
+    /* Controls outside the map retain the whole down/drag/up gesture. The
+     * same locations remain blocked by informational cards and reading mode. */
+    controls_visible=true;
+    for (int i=0;i<4;++i) {
+        float x=i?150:400, y=i?600+i*100:600;
+        e=(SDL_Event){0}; e.tfinger.type=SDL_EVENT_FINGER_DOWN;
+        e.tfinger.timestamp=tutorial_input_barrier+1000000;
+        e.tfinger.fingerID=100+i; e.tfinger.x=x; e.tfinger.y=y;
+        assert(!sdl_gameplay_tutorial_handle_event(&e));
+        e.tfinger.type=SDL_EVENT_FINGER_MOTION; e.tfinger.x+=10;
+        assert(!sdl_gameplay_tutorial_handle_event(&e));
+        e.tfinger.type=SDL_EVENT_FINGER_UP;
+        assert(!sdl_gameplay_tutorial_handle_event(&e));
+    }
+    e=(SDL_Event){0}; e.button.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    e.button.timestamp=tutorial_input_barrier+1000000;
+    e.button.button=SDL_BUTTON_LEFT; e.button.x=400; e.button.y=600;
+    assert(!sdl_gameplay_tutorial_handle_event(&e));
+    e=(SDL_Event){0}; e.motion.type=SDL_EVENT_MOUSE_MOTION;
+    e.motion.timestamp=tutorial_input_barrier+1000000;
+    e.motion.x=410; e.motion.y=600; e.motion.xrel=10;
+    assert(!sdl_gameplay_tutorial_handle_event(&e));
+    e=(SDL_Event){0}; e.button.type=SDL_EVENT_MOUSE_BUTTON_UP;
+    e.button.timestamp=tutorial_input_barrier+1000000;
+    e.button.button=SDL_BUTTON_LEFT; e.button.x=410; e.button.y=600;
+    assert(!sdl_gameplay_tutorial_handle_event(&e));
+    show(true,"","");
+    e=(SDL_Event){0}; e.tfinger.type=SDL_EVENT_FINGER_DOWN;
+    e.tfinger.timestamp=tutorial_input_barrier+1000000;
+    e.tfinger.fingerID=110; e.tfinger.x=400; e.tfinger.y=600;
+    assert(sdl_gameplay_tutorial_handle_event(&e));
+    show(false,"move",""); tutorial_set_reading(true);
+    e.tfinger.timestamp=tutorial_input_barrier+1000000;
+    assert(sdl_gameplay_tutorial_handle_event(&e));
+    controls_visible=false;
+    show(false,"move","");
+    /* Compact cards over native selectors can be expanded to read and then
+     * resumed without consuming a selection or a game command. */
+    character_icky=1; tutorial_max_scroll=4;
+    e=key_event(SDL_EVENT_KEY_DOWN,SDLK_PAGEDOWN,SDL_SCANCODE_PAGEDOWN);
+    assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_reading);
+    tutorial_activate(0,&current);
+    assert(!tutorial_reading && key_count==0 && current.active);
+    tutorial_card=(SDL_FRect){0};
+    memset(tutorial_buttons,0,sizeof(tutorial_buttons));
+    e=(SDL_Event){0}; e.tfinger.type=SDL_EVENT_FINGER_DOWN;
+    e.tfinger.timestamp=tutorial_input_barrier+1000000;
+    e.tfinger.fingerID=120; e.tfinger.x=40; e.tfinger.y=100;
+    assert(!sdl_gameplay_tutorial_handle_event(&e));
+    e.tfinger.type=SDL_EVENT_FINGER_UP;
+    assert(!sdl_gameplay_tutorial_handle_event(&e));
+    e=(SDL_Event){0}; e.wheel.type=SDL_EVENT_MOUSE_WHEEL;
+    e.wheel.timestamp=tutorial_input_barrier+1000000; e.wheel.y=-1;
+    assert(!sdl_gameplay_tutorial_handle_event(&e));
+    character_icky=0;
     /* Page and wheel input are owned by a short action card, but they do not
      * enter reading mode when the rendered body has no overflow. */
     tutorial_max_scroll=0; tutorial_reading=false;

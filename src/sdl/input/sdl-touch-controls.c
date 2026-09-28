@@ -6737,6 +6737,10 @@ void sdl_touch_top_panel_render_buttons(
     }
 
     g_touch_top_panel_description_layout_valid = false;
+    /* Tutorial illustrations use the live buttons, but their hover/description
+     * cards must not compete with the guide's own explanation cards. */
+    if (g_touch_tutorial_suppress_runtime_top_panel)
+        return;
     if (g_touch_top_panel_description_slot >= 0) {
         int slot = g_touch_top_panel_description_slot;
 

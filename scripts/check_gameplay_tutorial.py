@@ -5,6 +5,7 @@ Uses the configured CMake include paths and SDL library. All progress writes go
 to scripts/output/tutorial-check; no player preferences or Tales are opened.
 """
 from pathlib import Path
+import json
 import os
 import subprocess
 
@@ -15,6 +16,7 @@ OUT = ROOT / "scripts/output/tutorial-check"
 HARNESS = r'''
 #include "angband.h"
 #include <assert.h>
+#include <stdlib.h>
 #include "tutorial/tutorial.c"
 
 static metarun test_tale;
@@ -407,7 +409,8 @@ int main(int argc, char **argv)
             assert(tutorial_archive_entry(i, &view, NULL));
             if (!strncmp(view.id, "ability.", 8)) ++abilities;
         }
-        assert(abilities == 107);
+        assert(argc > 2);
+        assert(abilities == atoi(argv[2]));
         tutorial_shutdown();
         char help_directory[1024];
         SDL_strlcpy(help_directory, argv[1], sizeof(help_directory));
@@ -450,7 +453,13 @@ def main():
                     str(ROOT / "src/cJSON.c"), "_deps/SDL/libSDL3.dll.a",
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     catalogue = ROOT / 'lib/help/tutorials.json'
-    command = [str(exe)] + ([str(catalogue)] if catalogue.exists() else [])
+    command = [str(exe)]
+    if catalogue.exists():
+        data = json.loads(catalogue.read_text(encoding='utf-8'))
+        expected_abilities = sum(
+            1 for lesson in data['lessons']
+            if lesson['id'].startswith('ability.'))
+        command.extend([str(catalogue), str(expected_abilities)])
     subprocess.run(command, cwd=OUT, env=env, check=True, timeout=30)
 
 

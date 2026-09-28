@@ -1188,7 +1188,7 @@ void sdl_object_tooltip_render(void)
     int health_end = -1;
     monster_type* tooltip_monster = NULL;
 
-    if (!g_object_tooltip.active)
+    if (g_touch_tutorial_suppress_runtime_top_panel || !g_object_tooltip.active)
         return;
     if (g_object_tooltip.touch && g_object_tooltip.expires_at
         && SDL_GetTicksNS() >= g_object_tooltip.expires_at)

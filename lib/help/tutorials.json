@@ -8,20 +8,19 @@
       "priority": 70,
       "steps": [
         {
-          "text": "Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully and prepare before a fight. The world waits while you read. Continue advances a card; Skip ends its lesson. The mode button opens a selector for Disabled, Normal and Extended tutorials.",
+          "text": "Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully. The world waits while you read. Continue advances to the next page; Skip tutorial closes the current tutorial. Mode selects Disabled, Normal or Extended tutorials.",
           "kind": "info",
           "anchor": "none"
         },
         {
-          "text": "Before fighting, prepare a weapon and armour. Items in your Pack are stored; items in your Harness are ready to reach. Your active weapon is the one you attack with. Item lessons will guide you through these choices as you find equipment.",
+          "text": "Before fighting, find a suitable weapon and armour. Inspect each item's description before using or equipping it. Items in your Pack are stored; items in your Harness are ready to reach. Your active weapon is the one you attack with.",
           "kind": "info",
           "anchor": "map"
         },
         {
-          "text": "Move one square onto safe open floor. Choose any legal direction. Moving spends time, so nearby creatures can act. Skip lets you leave this practice and choose another action.",
-          "kind": "action",
-          "anchor": "map",
-          "action": "move"
+          "text": "Moving onto open floor takes you one square in the chosen direction. Movement spends time, so nearby creatures can act. Check the destination for enemies, traps and hazardous terrain. Continue returns to the game, where you can choose your next action.",
+          "kind": "info",
+          "anchor": "map"
         }
       ],
       "trigger": {
@@ -56,7 +55,7 @@
     },
     {
       "id": "combat.first_adjacent",
-      "title": "Make one melee attack",
+      "title": "Melee attacks",
       "level": "normal",
       "priority": 45,
       "steps": [
@@ -66,11 +65,9 @@
           "anchor": "monster"
         },
         {
-          "text": "Attack an adjacent enemy once. A miss also completes this practice. The enemy can retaliate. Skip if you would rather retreat, use an item or choose another tactic.",
-          "kind": "action",
-          "anchor": "monster",
-          "action": "attack",
-          "subject_type": "monster"
+          "text": "Melee attacks spend time even when they miss. Nearby enemies may retaliate. Retreating, using an item or choosing another tactic is also an option. Continue returns to the game.",
+          "kind": "info",
+          "anchor": "monster"
         }
       ],
       "trigger": {
@@ -181,7 +178,7 @@
       "priority": 55,
       "steps": [
         {
-          "text": "A critical hit adds damage dice. Lighter weapons need smaller winning margins to earn them. Finesse lowers the melee critical interval by 2; Power raises it by 1. Subtlety lowers it by another 2 when its weapon and free-hand requirements are met.",
+          "text": "{detail} A critical hit adds damage dice. Lighter weapons need smaller winning margins to earn them. Finesse lowers the melee critical interval by 2; Power raises it by 1. Subtlety lowers it by another 2 when its weapon and free-hand requirements are met.",
           "kind": "info",
           "anchor": "combat-rolls"
         }
@@ -242,12 +239,12 @@
       "priority": 25,
       "steps": [
         {
-          "text": "{subject} is nearby or in your belongings. Its description shows what your hero knows, including useful effects and drawbacks. Inspect unfamiliar equipment or consumables before deciding what to do with them.",
+          "text": "{subject} is at your feet or in your belongings. Its description shows what your hero knows, including useful effects and drawbacks. Inspect unfamiliar equipment or consumables before deciding what to do with them.",
           "kind": "info",
           "anchor": "inventory"
         },
         {
-          "text": "Examine the item through Look, Inventory or Equipment. Reading its description is free. You can leave without picking up, equipping or using it.",
+          "text": "Choose Examine item to inspect the item at your feet. For carried items, select the item in the inventory browser and open its preview. Reading is free; you can leave without picking up, equipping or using anything.",
           "kind": "action",
           "anchor": "inventory",
           "action": "examine"
@@ -685,7 +682,7 @@
       "priority": 24,
       "steps": [
         {
-          "text": "Staves spend charges to produce their known effect. Ready one in the Harness for prompt access; using one from the Pack takes extra handling time. Read the effect and remaining charges before using it. You can skip practice to save charges.",
+          "text": "Staves spend charges to produce their known effect. Ready one in the Harness for prompt access; using one from the Pack takes extra handling time. Read the effect and remaining charges before using it. Reading its description does not spend a charge.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -910,7 +907,7 @@
       "priority": 95,
       "steps": [
         {
-          "text": "Each infection gets a random disease name and one random cure herb from the ten herbs. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 100 player turns; it continues while resting. A Gem of Self Knowledge with Alchemy shows the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name and, once the name is known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved; a new infection gets a new name and cure and resets them. Eating the correct herb cures disease and restores its penalties instead of applying its normal effect or nourishment; other herbs act normally. Healing or Miruvor always cures it.",
+          "text": "{detail} Each infection gets a random disease name and one random cure herb from the ten herbs. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 100 player turns; it continues while resting. A Gem of Self Knowledge with Alchemy shows the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name and, once the name is known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved; a new infection gets a new name and cure and resets them. Eating the correct herb cures disease and restores its penalties instead of applying its normal effect or nourishment; other herbs act normally. Healing or Miruvor always cures it.",
           "kind": "info",
           "anchor": "status"
         }
@@ -932,7 +929,7 @@
       "priority": 95,
       "steps": [
         {
-          "text": "Poison deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current poison severity, rounded up, as Health. Antidote or Miruvor removes the poison; you may still need healing afterward.",
+          "text": "{detail} Poison deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current poison severity, rounded up, as Health. Antidote or Miruvor removes the poison; you may still need healing afterward.",
           "kind": "info",
           "anchor": "health"
         }
@@ -954,7 +951,7 @@
       "priority": 95,
       "steps": [
         {
-          "text": "Bleeding deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current bleeding severity, rounded up, as Health. Healing herbs or potions and Miruvor halve bleeding. Song of Staunching stops it when its effect occurs.",
+          "text": "{detail} Bleeding deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current bleeding severity, rounded up, as Health. Healing herbs or potions and Miruvor halve bleeding. Song of Staunching stops it when its effect occurs.",
           "kind": "info",
           "anchor": "health"
         }
@@ -976,7 +973,7 @@
       "priority": 95,
       "steps": [
         {
-          "text": "Stun lowers every skill by 2, or by 4 at severity 50 or more. Above 100, you are knocked out and cannot act. Clarity or Miruvor removes stun; use it while you can still act.",
+          "text": "{detail} Stun lowers every skill by 2, or by 4 at severity 50 or more. Above 100, you are knocked out and cannot act. Clarity or Miruvor removes stun; use it while you can still act.",
           "kind": "info",
           "anchor": "status"
         }
@@ -1553,7 +1550,7 @@
           "anchor": "status"
         },
         {
-          "text": "Choose and use a known remedy for disease. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for disease. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "status",
           "action": "use-item",
@@ -1581,7 +1578,7 @@
           "anchor": "health"
         },
         {
-          "text": "Choose and use a known remedy for poison. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for poison. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "health",
           "action": "use-item",
@@ -1609,7 +1606,7 @@
           "anchor": "health"
         },
         {
-          "text": "Choose and use a known remedy for bleeding. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for bleeding. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "health",
           "action": "use-item",
@@ -1637,7 +1634,7 @@
           "anchor": "supplies"
         },
         {
-          "text": "Choose and use a known remedy for stun. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for stun. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "supplies",
           "action": "use-item",
@@ -1665,7 +1662,7 @@
           "anchor": "supplies"
         },
         {
-          "text": "Choose and use a known remedy for fear. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for fear. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "supplies",
           "action": "use-item",
@@ -1693,7 +1690,7 @@
           "anchor": "supplies"
         },
         {
-          "text": "Choose and use a known remedy for confusion. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for confusion. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "supplies",
           "action": "use-item",
@@ -1721,7 +1718,7 @@
           "anchor": "supplies"
         },
         {
-          "text": "Choose and use a known remedy for blindness. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for blindness. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "supplies",
           "action": "use-item",
@@ -1749,7 +1746,7 @@
           "anchor": "supplies"
         },
         {
-          "text": "Choose and use a known remedy for hallucination. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for hallucination. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "supplies",
           "action": "use-item",
@@ -1777,7 +1774,7 @@
           "anchor": "supplies"
         },
         {
-          "text": "Choose and use a known remedy for rage. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for rage. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "supplies",
           "action": "use-item",
@@ -1805,7 +1802,7 @@
           "anchor": "health"
         },
         {
-          "text": "Choose and use a known remedy for low Health. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for low Health. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "health",
           "action": "use-item",
@@ -1833,7 +1830,7 @@
           "anchor": "voice"
         },
         {
-          "text": "Choose and use a known remedy for low Voice. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for low Voice. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "voice",
           "action": "use-item",
@@ -1861,7 +1858,7 @@
           "anchor": "supplies"
         },
         {
-          "text": "Choose and use a known remedy for hunger. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for hunger. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "supplies",
           "action": "use-item",
@@ -1889,7 +1886,7 @@
           "anchor": "supplies"
         },
         {
-          "text": "Choose and use a known remedy for attribute drain. Using a suitable item completes this practice. You can cancel the item choice or Skip the lesson to keep the resource.",
+          "text": "Choose and use a known remedy for attribute drain. Using a suitable item completes this practice. You can cancel the item choice or Skip tutorial to keep the resource.",
           "kind": "action",
           "anchor": "supplies",
           "action": "use-item",
@@ -2056,7 +2053,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "Gameplay tutorials have three modes: Disabled, Normal and Extended. Normal guides basic actions and survival; Extended adds detailed lessons. You can review encountered lessons or reset this Tale's tutorial progress separately. Device-control tutorials and skeleton hints have their own settings.",
+          "text": "Gameplay tutorials have three modes: Disabled, Normal and Extended. Normal guides basic actions and survival; Extended adds detailed tutorials. You can review encountered tutorials or reset this Tale's tutorial progress separately. Device-control tutorials and skeleton hints have their own settings.",
           "kind": "info",
           "anchor": "menu"
         }
@@ -2127,6 +2124,27 @@
       },
       "sources": [
         "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "menu.quiver",
+      "title": "The Quiver",
+      "level": "normal",
+      "priority": 40,
+      "steps": [
+        {
+          "text": "The Quiver holds ready arrow stacks under its own capacity rules. Select a stack to inspect its quantity and actions. Changing only the active arrow stack is free; other active weapon changes keep their normal time costs.",
+          "kind": "info",
+          "anchor": "menu"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The named menu is actually opened: quiver."
+      },
+      "sources": [
+        "src/tutorial/tutorial-game.c",
+        "src/cmd/item/cmd-item-core.c"
       ]
     },
     {
@@ -2619,7 +2637,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "A Tale spans its heroes, deaths and restarts. Gameplay lesson history belongs to the selected Tale. Starting another Tale has separate progress; the global Disabled, Normal or Extended preference applies across Tales. Reviewing encountered lessons remains available regardless of the selected mode.",
+          "text": "A Tale spans its heroes, deaths and restarts. Gameplay tutorial history belongs to the selected Tale. Starting another Tale has separate progress; the global Disabled, Normal or Extended preference applies across Tales. Reviewing encountered tutorials remains available regardless of the selected mode.",
           "kind": "info",
           "anchor": "menu"
         }
@@ -2659,7 +2677,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "Help explains mechanics and controls. The tutorial archive lets you reread encountered or skipped lessons. Both are free to browse.",
+          "text": "Help explains mechanics and controls. The tutorial archive lets you reread encountered or skipped tutorials. Both are free to browse.",
           "kind": "info",
           "anchor": "menu"
         }
@@ -7864,7 +7882,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "Quartz veins contain milky crystals. Breaking a vein releases a gem; deep veins may also yield mithril, while meteorite chasms alone can yield star iron. Digging needs a tool rating and Strength of at least 2. An ordinary strike cracks intact quartz; a strong strike shatters it. Clearing the rubble takes another action.",
+          "text": "Quartz is a mineral vein, not a damaged wall: its visible crystals identify it. Breaking a vein releases a gem; deep veins may also yield mithril, while meteorite chasms alone can yield star iron. Digging needs a tool rating and Strength of at least 2. An ordinary strike cracks intact quartz; a strong strike shatters it. Clearing the rubble takes another action.",
           "kind": "info",
           "anchor": "map"
         }
@@ -7887,7 +7905,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "Cracks weaken this wall. A digging tool rated 2 and Strength 2 can break it into rubble. Damaged walls contain no mineral rewards. Erosion can weaken intact walls before they collapse.",
+          "text": "A damaged wall is fractured stone or masonry, not quartz. It has no gem or metal reward: breaking it only leaves rubble. A digging tool rated 2 and Strength 2 can break it. Erosion can weaken intact walls before they collapse.",
           "kind": "info",
           "anchor": "map"
         }
@@ -7910,7 +7928,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "This damaged mineral vein still holds its crystals. Break it with a digging tool rated 2 and Strength 2 to release its gem and any metal. Star iron occurs only in meteorite chasms. Clearing the rubble gives no second reward.",
+          "text": "A cracked quartz vein is still mineral-bearing, unlike a damaged wall: its crystals remain and breaking it releases its gem and any metal. Use a digging tool rated 2 and Strength 2. Star iron occurs only in meteorite chasms. Clearing the rubble gives no second reward.",
           "kind": "info",
           "anchor": "map"
         }
@@ -9836,7 +9854,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "The Pack has its own volume limit. Weight also contributes to your overall load. Read both limits when selecting what to carry; a small but heavy object and a bulky light object create different constraints.",
+          "text": "{detail} The Pack has its own volume limit. Weight also contributes to your overall load. Read both limits when selecting what to carry; a small but heavy object and a bulky light object create different constraints.",
           "kind": "info",
           "anchor": "status"
         }
@@ -9857,7 +9875,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "The Harness has a separate volume limit from the Pack. Readied gear can be reached under its own action rules. Moving an item between storage locations does not create unlimited total carrying capacity.",
+          "text": "{detail} The Harness has a separate volume limit from the Pack. Readied gear can be reached under its own action rules. Moving an item between storage locations does not create unlimited total carrying capacity.",
           "kind": "info",
           "anchor": "status"
         }
@@ -9878,7 +9896,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "The Quiver holds arrows under its own capacity rules. Excess arrows may need Pack space. A stack can be picked up partially when only part fits; inspect the quantity actually collected.",
+          "text": "{detail} The Quiver holds arrows under its own capacity rules. Excess arrows may need Pack space. A stack can be picked up partially when only part fits; inspect the quantity actually collected.",
           "kind": "info",
           "anchor": "quiver"
         }
@@ -10672,7 +10690,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "{detail} Check Quests for the revealed destination and time limit. Plan your descent before leaving the current level; unexplored locations remain unknown.",
+          "text": "{detail} Check Quests for the revealed destination. Varda's trial is on the first level you reach after 500 ft; slay Duruin before leaving that level or the quest is lost. Plan your descent before entering it; unexplored locations remain unknown.",
           "kind": "decision",
           "anchor": "quests"
         }
@@ -13724,6 +13742,29 @@
         "lib/edit/terrain.txt",
         "src/cave/cave-water.c",
         "src/player/player-bonuses.c"
+      ]
+    },
+    {
+      "id": "terrain.103",
+      "title": "Illusory wall",
+      "level": "extended",
+      "priority": 38,
+      "steps": [
+        {
+          "text": "An illusory wall looks like stone but is passable to you; monsters still treat it as a wall. Light makes the disguise fade, so inspect its appearance before relying on it as cover or a barrier.",
+          "kind": "info",
+          "anchor": "map"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Feature 103 is visibly adjacent or underfoot and marked; hidden terrain is excluded."
+      },
+      "sources": [
+        "lib/edit/terrain.txt",
+        "src/defines.h",
+        "src/cave/cave-illusion.c",
+        "src/cave/cave-visuals.c"
       ]
     },
     {

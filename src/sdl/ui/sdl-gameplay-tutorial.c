@@ -218,7 +218,8 @@ static int tutorial_command(const tutorial_view *view)
     if (strstr(a, "stealth")) return 'S';
     if (strstr(a, "change-active")) return '\t';
     if (strstr(a, "ready") || strstr(a, "equip")) return 'i';
-    if (strstr(a, "use-item")) return 'u';
+    if (strstr(a, "use-item"))
+        return !strncmp(view->id,"status.",7) && strstr(view->id,".remedy") ? 'j' : 'u';
     if (strstr(a, "ranged") || strstr(a, "fire")) return 'f';
     if (strstr(a, "throw")) return 't';
     if (strstr(a, "pickup")) return 'g';
@@ -309,7 +310,9 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
             const char *verb=strstr(view->action,"attack")?"Attack":"Move";
             strnfmt(out->action_hint,sizeof(out->action_hint),"%s%s",verb,
                 input==TUTORIAL_INPUT_CONTROLLER?" with your movement controls."
-                :input==TUTORIAL_INPUT_TOUCH?" by tapping the target square."
+                :input==TUTORIAL_INPUT_TOUCH?(sdl_touch_round_layer_controls_active()
+                    ?" with the direction wheel or tap the target square."
+                    :" by tapping the target square.")
                 :input==TUTORIAL_INPUT_MOUSE?" by clicking the target square."
                 :" with your movement keys.");
         }
@@ -338,7 +341,7 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
         else strnfmt(out->controls_hint,sizeof(out->controls_hint),"%s: skip",back);
         strnfmt(out->read_hint,sizeof(out->read_hint),"%s: read",native?menu:read);
     } else if (input==TUTORIAL_INPUT_TOUCH) {
-        SDL_strlcpy(out->controls_hint,scrollable?"Tap a button | Swipe this card to read":"Tap a button",sizeof(out->controls_hint));
+        SDL_strlcpy(out->controls_hint,scrollable?"Swipe this card to read":"",sizeof(out->controls_hint));
         SDL_strlcpy(out->read_hint,"Swipe: read",sizeof(out->read_hint));
     } else {
         SDL_strlcpy(out->controls_hint,scrollable?"Wheel or drag to read":"",sizeof(out->controls_hint));
@@ -480,6 +483,70 @@ static bool tutorial_movement_neighborhood_rect(SDL_FRect *rect)
     return found;
 }
 
+/* Use the same live geometry as the controls, including wheels placed outside
+ * the map. These regions must remain both visible and reachable during an
+ * action step. The ordinary input owners still validate each actual command. */
+static int tutorial_touch_control_rects(SDL_FRect rects[4])
+{
+    int count = 0;
+    float cx, cy, radius;
+    SDL_Rect pane, clip;
+    SDL_FRect wheel, bounds;
+    if (sdl_touch_round_layer_controls_active()
+        && sdl_touch_round_compute_layout(&cx, &cy, &radius, NULL, &clip)) {
+        wheel = (SDL_FRect){cx-radius, cy-radius, 2*radius, 2*radius};
+        bounds = (SDL_FRect){clip.x, clip.y, clip.w, clip.h};
+        if (SDL_GetRectIntersectionFloat(&wheel, &bounds, &rects[count])) ++count;
+    }
+    if (sdl_touch_pane_current_rect(&pane))
+        rects[count++] = (SDL_FRect){pane.x, pane.y, pane.w, pane.h};
+    if (sdl_touch_thumb_current_bounds(&rects[count])) ++count;
+    if (sdl_touch_top_panel_layout_visible()
+        && sdl_touch_top_panel_compute_layout(NULL, &rects[count])) ++count;
+    return count;
+}
+
+/* Find the largest vertical gap across the card's horizontal span. Reflowing
+ * into that gap keeps controls clear even when a full-height card fits neither
+ * above nor below the player. Prefer the bottom gap when sizes are equal. */
+static SDL_FRect tutorial_action_card_space(SDL_FRect bounds,
+    const SDL_FRect *obstacles, int count, float margin)
+{
+    SDL_FRect best = {bounds.x, bounds.y, bounds.w, 0};
+    for (int start = -1; start < count; ++start) {
+        float top = start < 0 ? bounds.y
+            : MAX(bounds.y, obstacles[start].y+obstacles[start].h+margin);
+        float bottom = bounds.y+bounds.h;
+        for (int i = 0; i < count; ++i) {
+            const SDL_FRect *r = &obstacles[i];
+            if (r->x >= bounds.x+bounds.w || r->x+r->w <= bounds.x
+                || r->y+r->h+margin <= top) continue;
+            bottom = MIN(bottom, r->y-margin);
+        }
+        if (bottom-top >= best.h)
+            best = (SDL_FRect){bounds.x, top, bounds.w, bottom-top};
+    }
+    return best;
+}
+
+static SDL_FRect tutorial_action_card_side_space(SDL_FRect bounds,
+    const SDL_FRect *obstacles, int count, float margin, float minimum)
+{
+    SDL_FRect best = {0};
+    for (int i = 0; i < count; ++i)
+        for (int side = 0; side < 2; ++side) {
+            SDL_FRect area = bounds;
+            if (side) {
+                area.x = MAX(bounds.x, obstacles[i].x+obstacles[i].w+margin);
+                area.w = bounds.x+bounds.w-area.x;
+            } else area.w = MIN(bounds.w, obstacles[i].x-margin-bounds.x);
+            if (area.w < MIN(240.0f,bounds.w)) continue;
+            area = tutorial_action_card_space(area,obstacles,count,margin);
+            if (area.h >= minimum && area.w*area.h > best.w*best.h) best = area;
+        }
+    return best;
+}
+
 static bool tutorial_hit(float x, float y, const SDL_FRect *r)
 {
     return x >= r->x && y >= r->y && x < r->x+r->w && y < r->y+r->h;
@@ -570,12 +637,14 @@ void sdl_gameplay_tutorial_render(void)
     SDL_FRect anchor;
     bool has_anchor;
     bool compact_action;
+    bool action_step;
+    SDL_FRect card_space;
     float margin, width, height, pad, line_h, body_y, body_h;
     float button_h=44, button_pad, gap, footer_h, footer_y, hint_h[2];
     float label_h[3]={0}, shortcut_h[3]={0};
     int label_px, shortcut_px, hint_px[2], first_button, button_count;
     int font_px, line_count, visible_lines;
-    char text[3072], heading[256], lines[48][SDL_TOUCH_TUTORIAL_LINE_LEN];
+    char heading[256], lines[48][SDL_TOUCH_TUTORIAL_LINE_LEN];
     TTF_Font *font;
     const SDL_Color white = {240,239,231,255}, gold = {244,202,111,255};
     const SDL_Color muted = {182,191,204,255};
@@ -583,8 +652,8 @@ void sdl_gameplay_tutorial_render(void)
     if (tutorial_mode_selector_active) return;
     if (!tutorial_get_view(&view) || screen.w <= 0 || screen.h <= 0) return;
     tutorial_build_controls(&view,&controls,false);
-    compact_action=!view.can_continue && !tutorial_reading
-        && !tutorial_menu_owns_input() && screen.h<360;
+    action_step=!view.can_continue && !tutorial_reading;
+    compact_action=action_step && screen.h<360;
     margin = MAX(8.0f, MIN(screen.w, screen.h)*0.018f);
     pad = margin;
     font_px = sdl_main_menu_pane_font_px();
@@ -595,6 +664,46 @@ void sdl_gameplay_tutorial_render(void)
     if (!font) return;
     line_h = MAX(font_px*1.35f,tutorial_text_height("Ag",font_px,0)+1);
     width = MIN(screen.w-2*margin, MAX(690.0f,font_px*24.0f));
+    card_space = (SDL_FRect){screen.x+(screen.w-width)/2, screen.y+margin,
+        width, screen.h-2*margin};
+    if (action_step) {
+        SDL_FRect obstacles[5];
+        int count = tutorial_touch_control_rects(obstacles);
+        int control_count = count;
+        SDL_FRect controls_space = tutorial_action_card_space(card_space,
+            obstacles, count, margin);
+        if (tutorial_menu_owns_input()) {
+            if (tutorial_menu_cells_rect(&obstacles[count])) ++count;
+        } else if ((strstr(view.action,"move") || strstr(view.action,"attack"))
+            && tutorial_movement_neighborhood_rect(&obstacles[count])) ++count;
+        SDL_FRect action_space = tutorial_action_card_space(card_space,
+            obstacles, count, margin);
+        /* If there is no room for even the compact card beside the map
+         * neighborhood, keep the touch controls usable as the movement route. */
+        float minimum = 8+line_h*2.5f+MAX(44.0f,line_h*2)+5;
+        if (action_space.h < minimum)
+            action_space = tutorial_action_card_side_space(card_space,
+                obstacles,count,margin,minimum);
+        if (controls_space.h < minimum)
+            controls_space = tutorial_action_card_side_space(card_space,
+                obstacles,control_count,margin,minimum);
+        if (tutorial_menu_owns_input() && count > control_count
+            && action_space.h < minimum) {
+            /* A small selector may leave no room for a readable card. Let
+             * the selection use the whole menu; the tutorial remains active
+             * and returns when the menu closes (or the controller opens the
+             * card for reading). Never cover the rows needed to finish it. */
+            tutorial_card = (SDL_FRect){0};
+            memset(tutorial_buttons,0,sizeof(tutorial_buttons));
+            tutorial_max_scroll = 0;
+            return;
+        }
+        if (action_space.h >= minimum) card_space = action_space;
+        else if (controls_space.h >= minimum) card_space = controls_space;
+        width = card_space.w;
+        compact_action = card_space.h < 360;
+        if (compact_action) pad = 4;
+    }
     first_button=controls.primary?0:1;
     button_count=3-first_button;
     label_px=MAX(13,(int)(font_px*0.85f));
@@ -615,40 +724,27 @@ void sdl_gameplay_tutorial_render(void)
     hint_h[1]=tutorial_text_height("Ag",hint_px[1],width);
     footer_h=button_h+gap;
     if (!compact_action) footer_h+=hint_h[0]+hint_h[1]+gap*(hint_h[0]>0?2:1);
-    if (view.context.text[0] && !strstr(view.body,view.context.text))
-        strnfmt(text,sizeof(text),"%s\n%s",view.body,view.context.text);
-    else SDL_strlcpy(text,view.body,sizeof(text));
+    /* The catalogue places live context with {detail}/{subject}. Appending
+     * lesson-wide context here repeats it on every page, even unrelated ones. */
     font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
     if (!font) return;
-    line_count = sdl_touch_tutorial_wrap_lines(text,font,width-2*pad,lines,48);
+    line_count = sdl_touch_tutorial_wrap_lines(view.body,font,width-2*pad,lines,48);
     /* Fit the complete lesson before resorting to scrolling. Only the small
      * live-action strip deliberately limits how much body text is shown. */
     height=2*pad+line_h*(1.5f+(compact_action?1:MAX(1,line_count)))+footer_h+1;
-    height=MIN(screen.h-2*margin,MAX(compact_action?100.0f:210.0f,height));
+    height=MIN(card_space.h,MAX(compact_action?100.0f:210.0f,height));
     body_h = height-2*pad-line_h*1.5f-footer_h;
     visible_lines = MAX(0,(int)(body_h/line_h));
     tutorial_max_scroll = MAX(0,line_count-visible_lines);
     tutorial_scroll = MIN(tutorial_scroll,tutorial_max_scroll);
     tutorial_build_controls(&view,&controls,tutorial_max_scroll>0);
     has_anchor = tutorial_anchor_rect(&view, &anchor);
-    float card_x = screen.x+(screen.w-width)/2;
-    float card_top = screen.y+margin;
-    float card_bottom = screen.y+screen.h-height-margin;
+    float card_x = card_space.x;
+    float card_top = card_space.y;
+    float card_bottom = card_space.y+card_space.h-height;
     tutorial_card = (SDL_FRect){card_x,card_bottom,width,height};
     if (has_anchor && anchor.y+anchor.h/2 > screen.y+screen.h/2)
         tutorial_card.y = card_top;
-    if (!view.can_continue && strstr(view.action,"move")) {
-        SDL_FRect neighborhood;
-        SDL_FRect top_card = {card_x,card_top,width,height};
-        SDL_FRect bottom_card = {card_x,card_bottom,width,height};
-        if (tutorial_movement_neighborhood_rect(&neighborhood)
-            && SDL_HasRectIntersectionFloat(&tutorial_card,&neighborhood)) {
-            if (!SDL_HasRectIntersectionFloat(&top_card,&neighborhood))
-                tutorial_card.y = card_top;
-            else if (!SDL_HasRectIntersectionFloat(&bottom_card,&neighborhood))
-                tutorial_card.y = card_bottom;
-        }
-    }
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(g_state.renderer, 0,0,0,145);
     if (has_anchor) {
@@ -762,8 +858,7 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
             /* A page key is still owned by the card when the body fits, but
              * it must not turn a short action card into a different mode with
              * no text to reveal. */
-            if (!view.can_continue && !tutorial_menu_owns_input()
-                && tutorial_max_scroll > 0) tutorial_set_reading(true);
+            if (!view.can_continue && tutorial_max_scroll > 0) tutorial_set_reading(true);
             tutorial_scroll=MAX(0,MIN(tutorial_max_scroll,tutorial_scroll+(ev->key.key==SDLK_PAGEUP?-1:1))); break;
         }
         if (view.can_continue || tutorial_reading) {
@@ -838,8 +933,9 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
         mouse=pointer=true; x=ev->motion.x; y=ev->motion.y; break;
     case SDL_EVENT_MOUSE_WHEEL:
         if (!active) return ev->common.timestamp < tutorial_input_barrier;
-        if (!view.can_continue && !tutorial_menu_owns_input()
-            && tutorial_max_scroll > 0) tutorial_set_reading(true);
+        if (!view.can_continue && tutorial_menu_owns_input()
+            && !tutorial_card.w && !tutorial_reading) return false;
+        if (!view.can_continue && tutorial_max_scroll > 0) tutorial_set_reading(true);
         tutorial_scroll=MAX(0,MIN(tutorial_max_scroll,tutorial_scroll-(int)ev->wheel.y));
         g_state.need_present=true; return true;
     case SDL_EVENT_FINGER_DOWN:
@@ -863,7 +959,9 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
     if (!active) return false;
     if (mouse && ev->type==SDL_EVENT_MOUSE_MOTION) {
         tutorial_update_mouse_hover(x,y);
-        return true;
+        if (!view.can_continue && tutorial_menu_owns_input()
+            && !tutorial_card.w && !tutorial_reading) return false;
+        return !(tutorial_pointer_gameplay && !view.can_continue && !tutorial_reading);
     }
     if (down) {
         tutorial_pointer_mouse=mouse; tutorial_pointer_finger=finger;
@@ -873,8 +971,7 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
             tutorial_focus=i; tutorial_pressed_button=i; g_state.need_present=true; return true;
         }
         if (tutorial_hit(x,y,&tutorial_card)) {
-            if (!view.can_continue && !tutorial_menu_owns_input()
-                && tutorial_max_scroll > 0) {
+            if (!view.can_continue && tutorial_max_scroll > 0) {
                 tutorial_set_reading(true);
                 /* This accepted fresh down starts the reading drag itself. */
                 if (mouse) tutorial_blocked_mouse&=~SDL_BUTTON_LMASK;
@@ -896,7 +993,11 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
                  * part of the main map rect. */
                 tutorial_pointer_gameplay = true;
             } else {
+                SDL_FRect controls[4];
+                int count = tutorial_touch_control_rects(controls);
                 tutorial_pointer_gameplay = sdl_main_view_point_to_map(x,y,&map_y,&map_x);
+                for (int i=0; i<count; ++i)
+                    if (tutorial_hit(x,y,&controls[i])) tutorial_pointer_gameplay = true;
             }
         }
         return !tutorial_pointer_gameplay;

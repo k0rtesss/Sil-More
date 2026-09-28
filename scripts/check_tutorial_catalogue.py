@@ -213,10 +213,12 @@ def validate():
         if id.startswith('terrain.'):
             assert target in expected_terrain, f'{id}: invalid terrain representative'
     opening = by_id['opening.move']['steps']
-    assert [step['kind'] for step in opening] == ['info', 'info', 'action']
-    assert opening[-1]['action'] == 'move'
+    assert [step['kind'] for step in opening] == ['info', 'info', 'info']
+    assert all(step['kind'] == 'info' for step in by_id['combat.first_adjacent']['steps'])
+    assert all(not {'move', 'attack'} & set(step.get('action', '').split('|'))
+               for lesson in lessons for step in lesson['steps']), 'Movement and melee tutorials must only explain'
     assert all(step['kind'] == 'info' for step in by_id['combat.first_monster']['steps']), 'Seeing a creature must not force stealth'
-    assert by_id['combat.first_monster']['priority'] > by_id['combat.first_adjacent']['priority'], 'Explain the first creature before attack practice'
+    assert by_id['combat.first_monster']['priority'] > by_id['combat.first_adjacent']['priority'], 'Explain the first creature before melee attacks'
     assert by_id['combat.stealth']['steps'][-1]['action'] == 'stealth'
     for hazard in ('water', 'lava', 'ice', 'poison'):
         lesson = by_id['world.' + hazard]

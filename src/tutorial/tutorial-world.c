@@ -189,12 +189,12 @@ void tutorial_world_checkpoint(void)
     if (!initialized) { tutorial_world_start(); return; }
     now=snapshot();
     if ((now.pack!=previous.pack || now.pack_limit!=previous.pack_limit) && now.pack>0) {
-        strnfmt(text,sizeof(text),"Pack space: %d/%d. Inspect the item's handling costs before accessing it.",
+        strnfmt(text,sizeof(text),"Pack space: %d/%d.",
             now.pack,now.pack_limit);
         world_observe("storage.pack","storage","Pack",text);
     }
     if ((now.harness!=previous.harness || now.harness_limit!=previous.harness_limit) && now.harness>0) {
-        strnfmt(text,sizeof(text),"Harness space: %d/%d. The Harness and Pack have separate volume limits.",
+        strnfmt(text,sizeof(text),"Harness space: %d/%d.",
             now.harness,now.harness_limit);
         world_observe("storage.harness","storage","Harness",text);
     }

@@ -14,24 +14,10 @@ static int throw_pending_slot = THROW_PENDING_NONE;
  * shots keep their existing targeting and oath prompts unchanged. */
 static bool tutorial_ranged_aim_allowed(int range, int ty, int tx, bool exact)
 {
-    u16b path[256];
-    int path_y=ty,path_x=tx;
-    bool found=false;
     const char *action=tutorial_current_action();
     if (!tutorial_action_waiting()
         || (!strstr(action,"fire") && !strstr(action,"throw"))) return true;
-    if (exact && !tutorial_game_target_allowed(ty,tx)) goto rejected;
-    int count=ABS(project_path(path,range,p_ptr->py,p_ptr->px,&path_y,&path_x,PROJECT_THRU));
-    for (int i=0;i<count;++i) {
-        int y=GRID_Y(path[i]),x=GRID_X(path[i]);
-        int monster=cave_m_idx[y][x];
-        /* Never infer a tutorial hint from an unrevealed intervening actor. */
-        if (monster<=0 || !mon_list[monster].ml) continue;
-        if (!tutorial_game_target_allowed(y,x)) goto rejected;
-        found=true;
-    }
-    if (found) return true;
-rejected:
+    if (tutorial_game_ranged_path_allowed(range,ty,tx,exact)) return true;
     msg_print("Choose a visible hostile target for this lesson, or skip it.");
     return false;
 }

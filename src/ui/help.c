@@ -2831,8 +2831,9 @@ static void show_help_screen_legacy(int source_page, int display_page,
         if (hybrid_walls) { c_put_str(TERM_L_WHITE + (MAX_COLORS * BG_DARK), "#", row, col); }
         else if (solid_walls) { c_put_str(TERM_L_WHITE + (MAX_COLORS * BG_SAME), "#", row, col); }
         else { c_put_str(TERM_L_WHITE, "#", row, col); }
-        put_role(ROLE_BODY, "wall", row, col + 2); row++;
+        put_role(ROLE_BODY, "wall (granite or damaged)", row, col + 2); row++;
         c_put_str(TERM_WHITE + (MAX_COLORS * BG_SAME), "%", row, col); put_role(ROLE_BODY, "quartz vein", row, col + 2); row++;
+        put_role(ROLE_SUBTLE, "Quartz has crystals and mineral rewards; damaged walls only leave rubble.", row, col); row++;
         c_put_str(TERM_DARK, "%", row, col); put_role(ROLE_BODY, "chasm", row, col + 2); row++;
         c_put_str(TERM_SLATE, ":", row, col); put_role(ROLE_BODY, "rubble", row, col + 2); row++;
         c_put_str(TERM_L_UMBER, "+", row, col); put_role(ROLE_BODY, "closed door", row, col + 2); row++;
