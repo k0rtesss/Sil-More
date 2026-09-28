@@ -91,6 +91,8 @@ void ident_see_invisible(const monster_type *m) { (void)m; ++side_effects; }
 void ident_haunted(void) { ++side_effects; }
 s32b adjusted_mon_exp(const monster_race *r, bool kill) { (void)r; (void)kill; return 10; }
 void gain_exp(s32b amount) { p_ptr->exp += amount; ++side_effects; }
+bool quest_enabled(int id) { (void)id; return true; }
+void insight_award_monster_type(u32b flags) { (void)flags; ++side_effects; }
 void monster_desc_race(char *s, size_t n, int r) { (void)r; snprintf(s,n,"test"); ++side_effects; }
 void do_cmd_note(char *s, int d) { (void)s; (void)d; ++side_effects; }
 void log_log(int level, const char *file, int line, const char *fmt, ...) {

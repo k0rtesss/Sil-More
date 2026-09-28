@@ -1,5 +1,11 @@
 # Session notes
 
+## 2026-09-28: Distinguish damaged-wall and quartz tutorial guidance
+
+- Updated the terrain tutorial cards for quartz (51), damaged wall (104), and cracked quartz (105) to state the visual/material distinction and mineral-reward difference explicitly; added the same reminder to the terrain help legend.
+- Extended `scripts/check_gameplay_tutorial_integration.py` to assert the three live feature IDs produce separate tutorial observations.
+- Validation: incremental Windows build, focused tutorial integration, help layout, SDL tutorial gate, software-render fixtures, JSON parse, and scoped `git diff --check` passed. The broad catalogue checker remains blocked by the pre-existing missing `ability.170.preview`–`ability.173.preview` entries.
+
 ## 2026-09-26: Catastrophe speed analysis (no tuning change)
 
 User stopped water-rendering investigation and requested pacing simulations. Added `scripts/analyze_catastrophe_speed.py`, linking the production controller and restoring identical serialized maps for comparisons. Completed 356 runs of 200 actions: 60 open chambers, 20 straight corridors, 176 normal-source runs across 15 generated maps, and 100 matched-source runs on five generated layouts. Maps span 110–220 tiles per side and 2,431–14,321 initial dry-ground cells. Observer stays on a protected stair; no monster movement or ambient geology. Material interaction and hazard handlers remain active. The 16,000 chamber/corridor action samples are checked against the analytical quota formula.
@@ -9428,3 +9434,19 @@ Final deployment verification: build-standard/sil-more.exe and sil-more-windows-
 - Regression coverage: failed-giver dispatch, disabled departure, all four quest vaults across offered/active/success/rewarded states, preserved progress, released active slots/unique reservations, same-map pauses and pending-generation retries. Full-engine tests exercise real chasm/false-floor/teleport exits and paused same-depth generation (1,118 integration checks).
 - Validation passed: parallel Windows incremental build; quest runtime, integration, rewards/challenges, save and vault suites; git diff --check. No interactive gameplay/device validation or save-format changes.
 - Staged the rebuilt standard executable and synchronized the existing Lore ability template required by that build. Executable SHA256 8dd95b5866f8dcd9358f9a7c941a16039ba827d6f42a5a2dbe34ff5bdc647277; ability/quest/vault/limits deployment hashes match source. Other source changes preserved; no commit created.
+
+## 2026-09-29: Main-menu tutorial blinking away
+
+- The SDL main-menu opening command returned after a bare tutorial checkpoint. Because opening the menu spends no time, the next player-loop checkpoint immediately expired its unread UI tutorial.
+- `src/sdl/ui/sdl-main-menu.c` now calls the existing `tutorial_game_wait()` after observing the menu. It focuses and reads the menu card before command cleanup, leaving the menu open after Continue or Skip.
+- Extended the existing integration fixture to execute the real menu-opening function and tutorial core. Covers Continue, Skip, resuming a suspended action card, the following free-command checkpoint, and unchanged position/energy/player turns. The pre-fix source fails the new regression; the fix passes.
+- Validation: gameplay tutorial integration and SDL input gate pass; parallel Windows incremental build and scoped diff check pass. Copied the build to the standard deployment; both executable SHA256 values are `204160846fa9e516dc0046b1d9ca2a85461c83393df844a85f8081d4ff90cacc`.
+- Existing dirty tutorial, Help, and input edits preserved. Interactive visual/device replay was not performed.
+
+## 2026-09-29: Tutorial review repairs
+
+- Ranged tutorial offers and shot validation now share a read-only path check. Offers use the active bow/throwing weapon's range, require reachable visible legal targets and bow ammunition, and expire when the setup is no longer usable. Hidden actors do not leak through availability.
+- Touch profile explanations paginate when they cannot fit. Continue/back navigates every text part before leaving the page; mobile Touch Pane/Corners headers and placement reserve reading space. Regression fixtures cover all three profiles at eight size/font/inset combinations, real SDL touch events, and continuation/back/close behavior; representative captures inspected.
+- Corrected Insight XP/IP guidance and Varda's leave-level restriction. Added the four quest-reward ability previews, plus missing Quiver menu and terrain.103 coverage required by the catalogue audit. Regenerated docs/tutorial-reference.md. The core count check reads the authored catalogue; the visibility fixture tracks the new quest/Insight hooks.
+- Validation passed: parallel Windows incremental build; strict catalogue coverage (545 cards, 110 ability previews); tutorial core, integration, SDL input, world, archive, upgrade, startup, visibility and production FOV checks; full catalogue software-render sweep; expanded touch render/navigation fixture; git diff --check.
+- Staged standard executable and lib/help/tutorials.json. SHA256 matches: exe ddf35ac4ec3b8f582b6681272659b25d682fd07ad0a9025d54aa62a6f85770cf; catalogue f26ef13668fe6323938c2965a83549d745ad1d659c252f3d40f17c7ce09ce531. Existing dirty changes preserved. No physical-device or manual gameplay replay, save-format change, or commit.

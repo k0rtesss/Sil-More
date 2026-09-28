@@ -441,7 +441,7 @@ void tutorial_game_ability(int skill, int ability, bool before_purchase)
     preview_index = tutorial_ability_lesson_index(index);
     strnfmt(id, sizeof(id), "ability.%d.preview", preview_index);
     observe(id, "ability", b_name + entry->name,
-        before_purchase ? "Read the live requirements, effect and XP cost. Continue returns to your purchase decision; it does not buy the ability."
+        before_purchase ? "Read the live requirements, effect and price in XP or Insight Points. Continue returns to your purchase decision; it does not buy the ability."
         : "This ability is now available. Read its effect and current activation requirements.");
     if (before_purchase) request_ui_lesson(id);
 }
@@ -542,6 +542,15 @@ static bool tutorial_nearby_feature_is_interesting(int feat)
         && feat != FEAT_WALL_SOLID;
 }
 
+static bool tutorial_nearby_feature_is_revealed(int y, int x)
+{
+    /* Hidden traps render as ordinary floor.  Do not expose the underlying
+     * feature to a tutorial until the player has actually discovered it. */
+    return (cave_info[y][x] & CAVE_MARK)
+        && !(FEAT_IS_TRAP(cave_feat[y][x])
+            && (cave_info[y][x] & CAVE_HIDDEN));
+}
+
 static bool tutorial_nearby_object_present(int y, int x)
 {
     for (int index = cave_o_idx[y][x]; index;
@@ -595,6 +604,44 @@ bool tutorial_game_target_allowed(int y, int x)
             && strcmp(view.id, "item.horn.use"))) return true;
     if (!in_bounds(y, x) || cave_m_idx[y][x] <= 0) return false;
     return target_can_be_attacked(&mon_list[cave_m_idx[y][x]]);
+}
+
+bool tutorial_game_ranged_path_allowed(int range, int y, int x, bool exact)
+{
+    u16b path[256];
+    int path_y = y, path_x = x;
+    bool found = false, reached = false;
+    if (range <= 0) return false;
+    if (exact && (!in_bounds(y, x) || cave_m_idx[y][x] <= 0
+        || !target_can_be_attacked(&mon_list[cave_m_idx[y][x]]))) return false;
+    int count = ABS(project_path(path, range, p_ptr->py, p_ptr->px,
+        &path_y, &path_x, PROJECT_THRU));
+    for (int i = 0; i < count; ++i) {
+        int py = GRID_Y(path[i]), px = GRID_X(path[i]);
+        int monster = cave_m_idx[py][px];
+        if (py == y && px == x) reached = true;
+        /* Do not reveal unseen actors through tutorial availability. */
+        if (monster <= 0 || !mon_list[monster].ml) continue;
+        if (!target_can_be_attacked(&mon_list[monster])) return false;
+        found = true;
+    }
+    return found && (!exact || reached);
+}
+
+static bool tutorial_ranged_target_available(bool bow)
+{
+    const object_type *weapon = bow ? &inventory[INVEN_BOW]
+        : player_inventory_object(player_active_throwing_weapon_slot());
+    if (!weapon || !weapon->k_idx) return false;
+    if (bow && player_quiver_selected_arrow_slot() < 0) return false;
+    int range = bow ? archery_range(weapon) : throwing_range(weapon);
+    for (int i = 1; i < mon_max; ++i) {
+        const monster_type *monster = &mon_list[i];
+        if (tutorial_monster_observable(monster)
+            && tutorial_game_ranged_path_allowed(range,
+                monster->fy, monster->fx, true)) return true;
+    }
+    return false;
 }
 
 /* All target facts below are visible or recorded lore. Never reveal a hidden
@@ -707,6 +754,14 @@ void tutorial_game_action_done(const char *action, const object_type *item)
 {
     tutorial_view view;
     const char *type = item_type(item);
+    /* Direct pointer/keyboard mode switches have no selected item pointer.
+     * Credit the resulting weapon role, but never an arrow-stack change:
+     * that requires the chooser's committed, specific arrow subject. */
+    if (!item && !strcmp(action, "change-active")) {
+        int kind = player_active_weapon_kind();
+        if (kind == PLAYER_ACTIVE_WEAPON_KIND_BOW) type = "bow";
+        else if (kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING) type = "throwing";
+    }
     /* A permitted Change Active setup can finish its paid Pack access through
      * the wield callback. Actual equipping also readies that chosen item. */
     if (item && !strcmp(action, "equip") && tutorial_action_waiting()
@@ -779,7 +834,8 @@ static void offer_item_actions(const object_type *item, bool hostile_target)
         if (!active) {
             strnfmt(id, sizeof(id), "item.%s.active", type);
             observe_item_action(id, type, name, "Open Change Active and choose this type of weapon. Only ready gear is offered; the normal setup cost still applies.");
-        } else if (hostile_target && (!strcmp(type, "throwing") || player_quiver_selected_arrow_slot() >= 0)) {
+        } else if (hostile_target
+            && tutorial_ranged_target_available(!strcmp(type, "bow"))) {
             strnfmt(id, sizeof(id), "item.%s.use", type);
             observe_item_action(id, type, name, "Choose a visible hostile target and make one ranged attack. The normal time, ammunition and reaction rules apply.");
         }
@@ -910,7 +966,9 @@ static void observe_nearby(void)
     const char *hazard_detail_ids[] = {"terrain.84", "terrain.85", "terrain.86", "terrain.87", "terrain.100", "terrain.102"};
     const char *hazard_names[] = {"Shallow water", "Molten lava", "Ice", "Poisonous acid", "Deep water", "Melting ice"};
     char id[80];
-    /* Reached means this square or visibly adjacent, not distant discovery. */
+    /* Terrain and containers can be introduced while visibly adjacent.
+     * Loose items must be underfoot: Examine opens the current floor pile,
+     * and an examination card prevents moving onto an adjacent item. */
     for (int y = MAX(0, p_ptr->py - 1); y <= MIN(p_ptr->cur_map_hgt - 1, p_ptr->py + 1); ++y)
         for (int x = MAX(0, p_ptr->px - 1); x <= MIN(p_ptr->cur_map_wid - 1, p_ptr->px + 1); ++x) {
             if (!tutorial_nearby_grid_reached(y, x)) continue;
@@ -919,10 +977,12 @@ static void observe_nearby(void)
                 if (!item->marked || p_ptr->image) continue;
                 chest |= item->tval == TV_CHEST;
                 skeleton |= item->tval == TV_SKELETON;
-                tutorial_game_item(item);
+                if ((y == p_ptr->py && x == p_ptr->px)
+                    || item->tval == TV_CHEST || item->tval == TV_SKELETON)
+                    tutorial_game_item(item);
             }
             int feat = cave_feat[y][x];
-            if (!(cave_info[y][x] & CAVE_MARK)
+            if (!tutorial_nearby_feature_is_revealed(y, x)
                 || !tutorial_nearby_feature_is_interesting(feat)) continue;
             int lesson_feat = terrain_lesson_feature(feat);
             features[lesson_feat] = true;
@@ -1009,8 +1069,7 @@ void tutorial_game_start(void)
         && (opening_status == TUTORIAL_UNSEEN
             || opening_status == TUTORIAL_IN_PROGRESS);
     if (opening_pending)
-        observe("opening.move", "", "Your first steps",
-            "Find a suitable weapon and armour. Inspect each item before using or equipping it.");
+        observe("opening.move", "", "Your first steps", "");
 }
 
 void tutorial_game_checkpoint(void)
@@ -1030,13 +1089,12 @@ void tutorial_game_checkpoint(void)
         level_changed = false;
     }
     if (opening_pending) {
-        observe("opening.move", "", "Your first steps",
-            "Find a suitable weapon and armour. Inspect each item before using or equipping it.");
+        observe("opening.move", "", "Your first steps", "");
         tutorial_status status = tutorial_lesson_status("opening.move");
         if (status == TUTORIAL_COMPLETED || status == TUTORIAL_SKIPPED) opening_pending = false;
     }
     if (opening_turn_gate && playerturn == 0) {
-        /* On the initial turn, keep the opening movement card alone.  The
+        /* On the initial turn, keep the opening information cards alone. The
          * first checkpoint must not immediately replace it with a terrain,
          * object, monster, region, or status lesson.  Explicit menu lessons
          * still use their own request/focus path; automatic observations begin
@@ -1056,7 +1114,7 @@ void tutorial_game_checkpoint(void)
     }
     if (p_ptr->stealth_mode) tutorial_action_finished("stealth", "", true);
     if (player_active_weapon_mode() != previous_mode) {
-        tutorial_action_finished("change-active", "", true);
+        tutorial_game_action_done("change-active", NULL);
         previous_mode = player_active_weapon_mode();
     }
     for (int i = 0; i < (int)N_ELEMENTS(conditions); ++i) {
@@ -1066,13 +1124,13 @@ void tutorial_game_checkpoint(void)
         if (value && (!previous_conditions[i] || status == TUTORIAL_UNSEEN
             || status == TUTORIAL_IN_PROGRESS)) {
             if (!strcmp(condition->id, "status.poisoned") || !strcmp(condition->id, "status.cut"))
-                strnfmt(detail, sizeof(detail), "Severity %d; at this value the next damage tick is %d Health. %s", value, (value + 4) / 5, condition->effect);
+                strnfmt(detail, sizeof(detail), "Severity %d; at this value the next damage tick is %d Health.", value, (value + 4) / 5);
             else if (!strcmp(condition->id, "status.diseased"))
-                strnfmt(detail, sizeof(detail), "Disease penalties: Strength %+d, Dexterity %+d, Constitution %+d, Grace %+d. %s",
+                strnfmt(detail, sizeof(detail), "Disease penalties: Strength %+d, Dexterity %+d, Constitution %+d, Grace %+d.",
                     p_ptr->stat_disease[A_STR], p_ptr->stat_disease[A_DEX],
-                    p_ptr->stat_disease[A_CON], p_ptr->stat_disease[A_GRA], condition->effect);
+                    p_ptr->stat_disease[A_CON], p_ptr->stat_disease[A_GRA]);
             else if (!strcmp(condition->id, "status.stun"))
-                strnfmt(detail, sizeof(detail), "Stun %d: %+d to every skill. %s", value, value >= 50 ? -4 : -2, condition->effect);
+                strnfmt(detail, sizeof(detail), "Stun %d: %+d to every skill.", value, value >= 50 ? -4 : -2);
             else strnfmt(detail, sizeof(detail), "%s %d. %s", condition->name, value, condition->effect);
             observe(condition->id, condition->id + 7, condition->name, detail);
         }
@@ -1169,7 +1227,7 @@ void tutorial_game_checkpoint(void)
             if (target_can_be_attacked(monster) && player_active_weapon_is_melee()
                 && !p_ptr->entranced && p_ptr->stun <= 100) {
                 legal_adjacent = true;
-                observe("combat.first_adjacent", "monster", name, "Moving toward an adjacent hostile attacks it. Attack once, or skip this lesson to choose another tactic.");
+                observe("combat.first_adjacent", "monster", name, "");
             }
         }
         if (monster->stance == STANCE_FLEEING) {
