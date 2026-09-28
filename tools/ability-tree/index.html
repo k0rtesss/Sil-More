@@ -206,6 +206,32 @@
 
     .graph-panel { overflow: hidden; }
 
+    .graph-panel:fullscreen,
+    .graph-panel.is-fullscreen-fallback {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      min-height: 0;
+      max-height: 100vh;
+      flex-direction: column;
+      border: 0;
+      border-radius: 0;
+      background: var(--bg-deep);
+      box-shadow: none;
+    }
+
+    .graph-panel:fullscreen .graph-scroll,
+    .graph-panel.is-fullscreen-fallback .graph-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
+    }
+
+    body.diagram-fallback-fullscreen { overflow: hidden; }
+
     .panel-heading {
       display: flex;
       align-items: center;
@@ -232,6 +258,14 @@
       color: var(--muted);
       font-size: 12px;
       text-align: right;
+    }
+
+    .mode-badge {
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
     }
 
     .graph-actions { display: flex; align-items: center; gap: 7px; }
@@ -261,9 +295,12 @@
     .legend-item { display: inline-flex; align-items: center; gap: 6px; }
     .legend-line { display: inline-block; width: 25px; border-top: 2px solid var(--blue); }
     .legend-line.or { border-top-style: dashed; border-top-color: var(--gold); }
+    .legend-line.stage { border-top-color: var(--blue); }
     .legend-swatch { width: 11px; height: 11px; border-radius: 3px; background: var(--violet); }
     .legend-swatch.lore { background: var(--gold); }
+    .legend-swatch.upgrade { background: var(--blue); }
     .legend-swatch.special { background: var(--green); }
+    .legend-item[hidden] { display: none; }
 
     .graph-scroll {
       position: relative;
@@ -308,6 +345,8 @@
     .node .node-meta { fill: var(--muted); font-size: 9px; pointer-events: none; }
     .node.standard rect { fill: #162435; }
     .node.lore rect { fill: #302718; stroke: #6b542d; }
+    .node.upgrade rect { fill: #182e42; stroke: #38759e; }
+    .node.has-lore-upgrade rect { stroke: #6b542d; }
     .node.special rect { fill: #183328; stroke: #376b51; }
     .node.is-selected rect { stroke: var(--gold); stroke-width: 3; filter: drop-shadow(0 0 5px rgba(215, 167, 88, .33)); }
     .node.is-related rect { stroke: var(--blue); }
@@ -317,6 +356,7 @@
     .edge { fill: none; stroke-width: 1.5; opacity: .65; pointer-events: none; }
     .edge.mandatory { stroke: var(--violet); }
     .edge.choice { stroke: var(--gold); stroke-dasharray: 6 4; }
+    .edge.stage { stroke: var(--blue); }
     .edge.is-related { stroke-width: 2.6; opacity: 1; }
     .edge.is-dimmed { opacity: .08; }
 
@@ -330,6 +370,7 @@
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
     .chip { padding: 4px 7px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); font-size: 11px; }
     .chip.lore { color: var(--gold); border-color: var(--gold-soft); background: #241e14; }
+    .chip.upgrade { color: var(--blue); border-color: #2f6388; background: #142a3b; }
     .chip.special { color: var(--green); border-color: #2c5b45; background: #14291f; }
 
     .detail-section { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--line-soft); }
@@ -386,48 +427,54 @@
         <span>SIL-MORE <strong>ABILITY ATLAS</strong></span>
       </a>
       <p class="topbar-copy">Read the authored ability data as a navigable dependency map.</p>
-      <div class="topbar-status"><span id="status-dot" class="status-dot"></span><span id="status-text">Waiting for ability.txt</span></div>
+      <div class="topbar-status"><span id="status-dot" class="status-dot"></span><span id="status-text">Waiting for ability.txt + optional Insight overlay</span></div>
     </header>
 
     <section class="toolbar" aria-label="Ability atlas controls">
       <div class="source-controls">
         <button id="open-file" class="primary" type="button">Open ability.txt</button>
         <input id="file-input" type="file" accept=".txt,text/plain" hidden>
-        <span id="source-name" class="source-name">The page will try ../../lib/edit/ability.txt when served from the repository.</span>
+        <button id="open-overlay" class="quiet" type="button">Open Insight overlay</button>
+        <input id="overlay-input" type="file" accept=".txt,text/plain" hidden>
+        <span id="source-name" class="source-name">The page will try ../../lib/edit/ability.txt and ../../lib/edit/ability-insight.txt when served from the repository.</span>
       </div>
       <div class="view-controls">
         <label class="field">Search abilities<input id="search" type="search" placeholder="Name, effect, description…" autocomplete="off"></label>
         <label class="field">Skill lane<select id="skill-filter"><option value="all">All skills</option></select></label>
-        <label class="field">Branch<select id="branch-filter"><option value="all">All branches</option><option value="standard">Standard learning</option><option value="lore">Lore branch</option><option value="special">Quest / Special</option></select></label>
+        <label class="field">Branch<select id="branch-filter"><option value="all">All branches</option><option value="standard">Standard learning</option><option value="lore">Insight branch</option><option value="upgrade">New upgrade stages</option><option value="special">Quest / Special</option></select></label>
+        <label class="field">Upgrade model<select id="insight-mode"><option value="new">New · Insight upgrades</option><option value="old">Old · P/A prerequisites</option></select></label>
         <button id="clear-selection" class="quiet" type="button">Clear focus</button>
       </div>
     </section>
 
-    <div id="drop-zone" class="drop-zone" role="region" aria-label="Ability file drop target">Drop <code>lib/edit/ability.txt</code> here to reload the map.</div>
+    <div id="drop-zone" class="drop-zone" role="region" aria-label="Ability file drop target">Drop <code>ability.txt</code> or <code>ability-insight.txt</code> here; the second file is applied as an optional overlay.</div>
 
     <main class="workspace">
-      <section class="panel graph-panel" aria-labelledby="graph-heading">
+      <section id="diagram-panel" class="panel graph-panel" aria-labelledby="graph-heading">
         <div class="panel-heading">
           <div>
             <span class="eyebrow">Dependency map</span>
             <h1 id="graph-heading">Ability paths</h1>
           </div>
-          <div class="heading-meta"><span id="graph-count">No data loaded</span><br><span id="graph-source">—</span></div>
+          <div class="heading-meta"><span id="graph-mode" class="mode-badge">New upgrade system</span><br><span id="graph-count">No data loaded</span><br><span id="graph-source">—</span></div>
           <div class="graph-actions">
             <label class="zoom-control" for="zoom">Zoom <output id="zoom-value">70%</output><input id="zoom" type="range" min="45" max="125" value="70" step="5"></label>
             <button id="fit-graph" class="quiet" type="button">Fit width</button>
+            <button id="toggle-fullscreen" class="quiet" type="button" aria-pressed="false">Full screen</button>
           </div>
         </div>
         <div class="legend" aria-label="Dependency legend">
           <span class="legend-item"><i class="legend-line"></i> mandatory <code>A:</code></span>
           <span class="legend-item"><i class="legend-line or"></i> choose one <code>P:</code></span>
+          <span id="stage-legend" class="legend-item"><i class="legend-line stage"></i> upgrade chain <code>B:</code></span>
           <span class="legend-item"><i class="legend-swatch"></i> standard</span>
-          <span class="legend-item"><i class="legend-swatch lore"></i> Lore branch</span>
+          <span class="legend-item"><i class="legend-swatch lore"></i> Insight branch</span>
+          <span id="upgrade-legend" class="legend-item"><i class="legend-swatch upgrade"></i> upgrade stage</span>
           <span class="legend-item"><i class="legend-swatch special"></i> quest / special</span>
         </div>
         <div id="graph-scroll" class="graph-scroll">
           <div id="graph-empty" class="graph-empty">
-            <div><strong>Load the authored ability file to begin.</strong>Select or drop <code>lib/edit/ability.txt</code>; the parser keeps <code>P:</code> alternatives and <code>A:</code> mandatory links distinct.</div>
+            <div><strong>Load the authored ability files to begin.</strong>Select <code>lib/edit/ability.txt</code> and optionally load <code>lib/edit/ability-insight.txt</code>; switch between the old <code>P:</code>/<code>A:</code> graph and the new <code>B:</code>/<code>U:</code> Insight upgrade system.</div>
           </div>
           <svg id="ability-graph" role="img" aria-labelledby="graph-heading" hidden>
             <title>Sil-More ability dependency graph</title>
@@ -438,6 +485,9 @@
               </marker>
               <marker id="arrow-choice" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
                 <path d="M 0 0 L 8 4 L 0 8 z" fill="var(--gold)"></path>
+              </marker>
+              <marker id="arrow-stage" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 8 4 L 0 8 z" fill="var(--blue)"></path>
               </marker>
             </defs>
             <g id="graph-content"></g>
@@ -454,7 +504,7 @@
       </aside>
     </main>
 
-    <p class="footer-note">This tool reads the text template directly. Skill gates come from <code>I:</code>, explicit stat and skill requirements from <code>R:</code>, and dependency edges from <code>P:</code>/<code>A:</code>; equipment targets remain available in the inspector as source data.</p>
+    <p class="footer-note">This tool reads the text template directly. Both modes keep <code>I:</code> skill gates and <code>R:</code> stat/skill requirements. Old mode uses <code>P:</code>/<code>A:</code>; New mode replaces staged ability links with <code>B:</code> Insight upgrade chains and shows <code>U:</code> one-time upgrades.</p>
   </div>
 
   <script>
@@ -476,23 +526,34 @@
         search: "",
         skillFilter: "all",
         branchFilter: "all",
+        insightEnabled: true,
         zoom: 70,
-        sourceName: ""
+        sourceName: "",
+        baseSource: "",
+        baseName: "",
+        overlaySource: "",
+        overlayName: ""
       };
 
       const els = {
         openFile: document.getElementById("open-file"),
         fileInput: document.getElementById("file-input"),
+        openOverlay: document.getElementById("open-overlay"),
+        overlayInput: document.getElementById("overlay-input"),
         sourceName: document.getElementById("source-name"),
         statusDot: document.getElementById("status-dot"),
         statusText: document.getElementById("status-text"),
         search: document.getElementById("search"),
         skillFilter: document.getElementById("skill-filter"),
         branchFilter: document.getElementById("branch-filter"),
+        insightMode: document.getElementById("insight-mode"),
         clearSelection: document.getElementById("clear-selection"),
         dropZone: document.getElementById("drop-zone"),
+        graphMode: document.getElementById("graph-mode"),
         graphCount: document.getElementById("graph-count"),
         graphSource: document.getElementById("graph-source"),
+        stageLegend: document.getElementById("stage-legend"),
+        upgradeLegend: document.getElementById("upgrade-legend"),
         graphScroll: document.getElementById("graph-scroll"),
         graphEmpty: document.getElementById("graph-empty"),
         graph: document.getElementById("ability-graph"),
@@ -500,6 +561,8 @@
         zoom: document.getElementById("zoom"),
         zoomValue: document.getElementById("zoom-value"),
         fitGraph: document.getElementById("fit-graph"),
+        graphPanel: document.getElementById("diagram-panel"),
+        toggleFullscreen: document.getElementById("toggle-fullscreen"),
         detailEmpty: document.getElementById("detail-empty"),
         detailContent: document.getElementById("detail-content")
       };
@@ -601,7 +664,7 @@
         return refs;
       }
 
-      function parseAbilityText(source) {
+      function parseAbilityText(source, includeIncomplete = false) {
         const records = [];
         let current = null;
         let version = "";
@@ -639,6 +702,7 @@
           const pairs = splitDirectivePairs(field("R"));
           const scores = splitDirectivePairs(field("S"), true);
           const carriage = field("Y")[0] ? stripInlineComment(field("Y")[0]).split(":") : [];
+          const stages = field("B").map(line => stripInlineComment(line).split(":"));
           return {
             id: `ability-${record.serial}`,
             serial: record.serial,
@@ -653,19 +717,27 @@
             requiredRefs: parseReferenceLines(field("A")),
             requirements: pairs,
             scoreWeights: scores,
-            loreBranch: Number(stripInlineComment(field("L")[0] || "")) === 1,
-            loreCost: Number(stripInlineComment(field("K")[0] || "")) || 0,
+            insightBranch: Number(stripInlineComment(field("L")[0] || "")) === 1,
+            insightCost: Number(stripInlineComment(field("K")[0] || "")) || 0,
+            insightUpgradeCost: Number(stripInlineComment(field("U")[0] || "")) || 0,
+            stageParentKeys: stages.map(stage => stage[0]).filter(Boolean),
+            stageCost: Number(stages[0]?.[1]) || 0,
+            stageChoiceGroup: Number(stages[0]?.[2]) || 0,
             carriageTarget: carriage[0] || "",
             carriageReduction: Number(carriage[1]) || 0,
             equipment: field("T"),
             fields: record.fields,
             version
           };
-        }).filter(ability => ability.skill >= 0 && ability.ability >= 0);
+        }).filter(ability => includeIncomplete || (ability.skill >= 0 && ability.ability >= 0));
+
+        if (includeIncomplete) return { abilities, version, unresolved: 0 };
 
         const byKey = new Map(abilities.map(ability => [ability.key, ability]));
         let unresolved = 0;
         for (const ability of abilities) {
+          ability.stageParents = ability.stageParentKeys.map(key => byKey.get(key) || null);
+          if (ability.stageCost && (!ability.stageParents.length || ability.stageParents.some(parent => !parent))) unresolved++;
           for (const group of ["prereqRefs", "requiredRefs"]) {
             ability[group] = ability[group].map(ref => {
               const entry = byKey.get(ref.key) || null;
@@ -677,14 +749,54 @@
         return { abilities, version, unresolved };
       }
 
+      function mergeInsightOverlay(baseSource, overlaySource) {
+        const parsed = parseAbilityText(baseSource);
+        if (!overlaySource) return parsed;
+
+        const overlay = parseAbilityText(overlaySource, true);
+        const bySerial = new Map(parsed.abilities.map(ability => [ability.serial, ability]));
+        for (const entry of overlay.abilities) {
+          const target = bySerial.get(entry.serial);
+          if (!target || target.name !== entry.name) {
+            throw new Error(`Insight overlay record ${entry.serial}:${entry.name} does not match ability.txt`);
+          }
+          if (entry.insightBranch) target.insightBranch = true;
+          if (entry.insightCost) target.insightCost = entry.insightCost;
+          if (entry.insightUpgradeCost) target.insightUpgradeCost = entry.insightUpgradeCost;
+          if (entry.stageParentKeys.length) {
+            target.stageParentKeys = entry.stageParentKeys.slice();
+            target.stageCost = entry.stageCost;
+            target.stageChoiceGroup = entry.stageChoiceGroup;
+          }
+        }
+
+        const byKey = new Map(parsed.abilities.map(ability => [ability.key, ability]));
+        let unresolved = parsed.unresolved;
+        for (const ability of parsed.abilities) {
+          ability.stageParents = ability.stageParentKeys.map(key => byKey.get(key) || null);
+          if (ability.stageCost && (!ability.stageParents.length || ability.stageParents.some(parent => !parent))) unresolved++;
+        }
+        return { abilities: parsed.abilities, version: parsed.version, unresolved };
+      }
+
+      function stageHasParent(ability, parent) {
+        return ability.stageParents?.includes(parent) || false;
+      }
+
+      function stageSharesParent(a, b) {
+        return a.stageParents?.some(parent => b.stageParents?.includes(parent)) || false;
+      }
+
       function branchOf(ability) {
         if (ability.skill === 8) return "special";
-        return ability.loreBranch ? "lore" : "standard";
+        if (state.insightEnabled && ability.stageCost) return "upgrade";
+        return state.insightEnabled && ability.insightBranch ? "lore" : "standard";
       }
 
       function branchLabel(ability) {
         if (ability.skill === 8) return "Quest / Special";
-        if (ability.loreBranch) return "Lore branch";
+        if (state.insightEnabled && ability.stageCost) return "Insight upgrade stage";
+        if (state.insightEnabled && ability.insightBranch) return "Insight branch";
         return SKILLS[ability.skill] || "Unknown skill";
       }
 
@@ -731,9 +843,20 @@
           SKILLS[ability.skill],
           ...ability.description,
           ...ability.effect,
-          ...ability.requirements.map(item => `${item.label} ${item.value}`)
+          ...ability.requirements.map(item => `${item.label} ${item.value}`),
+          ...(ability.stageParents || []).map(parent => parent?.name || ""),
+          ability.stageCost ? `stage ${ability.stageCost} IP` : "",
+          ability.insightUpgradeCost ? `upgrade ${ability.insightUpgradeCost} IP` : ""
         ].join(" ").toLowerCase();
         return haystack.includes(state.search);
+      }
+
+      function searchPriority(ability) {
+        const name = ability.name.toLowerCase();
+        if (name === state.search) return 0;
+        if (name.startsWith(state.search)) return 1;
+        if (name.includes(state.search)) return 2;
+        return 3;
       }
 
       function ensureSelection(candidates) {
@@ -742,13 +865,46 @@
         state.selectedId = candidates[0]?.id || null;
       }
 
+      function abilityDependencies(ability) {
+        if (state.insightEnabled && ability.stageCost) {
+          return (ability.stageParents || []).map(parent => ({
+            ref: { key: parent?.key || "", entry: parent }, kind: "stage"
+          }));
+        }
+        return [
+          ...ability.requiredRefs.map(ref => ({ ref, kind: "mandatory" })),
+          ...ability.prereqRefs.map(ref => ({ ref, kind: "choice" }))
+        ];
+      }
+
+      function stagePath(ability) {
+        const path = [], seen = new Set();
+        while (ability && !seen.has(ability.id)) {
+          seen.add(ability.id); path.unshift(ability);
+          ability = state.insightEnabled && ability.stageCost ? ability.stageParents?.[0] : null;
+        }
+        return path;
+      }
+
+      function syncModeUI() {
+        const newMode = state.insightEnabled;
+        els.insightMode.value = newMode ? "new" : "old";
+        els.graphMode.textContent = newMode ? "New upgrade system" : "Old prerequisite system";
+        els.stageLegend.hidden = !newMode;
+        els.upgradeLegend.hidden = !newMode;
+        if (!newMode && state.branchFilter === "upgrade") {
+          state.branchFilter = "all";
+          els.branchFilter.value = "all";
+        }
+      }
+
       function dependencySets(selected) {
         const ancestors = new Set();
         const descendants = new Set();
         if (!selected) return { ancestors, descendants };
 
         function walkUp(ability) {
-          for (const ref of [...ability.prereqRefs, ...ability.requiredRefs]) {
+          for (const { ref } of abilityDependencies(ability)) {
             if (!ref.entry || ancestors.has(ref.entry.id)) continue;
             ancestors.add(ref.entry.id);
             walkUp(ref.entry);
@@ -757,7 +913,7 @@
 
         function walkDown(ability) {
           for (const other of state.abilities) {
-            const refs = [...other.prereqRefs, ...other.requiredRefs];
+            const refs = abilityDependencies(other).map(link => link.ref);
             if (!refs.some(ref => ref.entry?.id === ability.id) || descendants.has(other.id)) continue;
             descendants.add(other.id);
             walkDown(other);
@@ -791,9 +947,11 @@
       }
 
       function renderGraph() {
+        syncModeUI();
         const candidates = currentCandidates();
         if (state.search) {
-          const firstMatch = state.abilities.find(matchesSearch);
+          const firstMatch = state.abilities.filter(matchesSearch)
+            .sort((a, b) => searchPriority(a) - searchPriority(b) || a.serial - b.serial)[0];
           if (firstMatch) state.selectedId = firstMatch.id;
         }
         ensureSelection(candidates);
@@ -805,6 +963,17 @@
         const grouped = new Map(skills.map(skill => [skill, []]));
         candidates.forEach(ability => grouped.get(ability.skill)?.push(ability));
         grouped.forEach(list => list.sort((a, b) => a.level - b.level || a.ability - b.ability || a.serial - b.serial));
+        if (state.insightEnabled) grouped.forEach((list, skill) => {
+          const ordered = [], seen = new Set();
+          const append = ability => {
+            if (seen.has(ability.id)) return;
+            seen.add(ability.id); ordered.push(ability);
+            list.filter(child => stageHasParent(child, ability)).forEach(append);
+          };
+          list.filter(ability => !ability.stageCost || !(ability.stageParents || []).some(parent => list.includes(parent))).forEach(append);
+          list.forEach(append);
+          grouped.set(skill, ordered);
+        });
 
         const laneWidth = 190;
         const nodeWidth = 158;
@@ -850,10 +1019,7 @@
         for (const target of candidates) {
           const targetPosition = positions.get(target.id);
           if (!targetPosition) continue;
-          const references = [
-            ...target.requiredRefs.map(ref => ({ ref, kind: "mandatory" })),
-            ...target.prereqRefs.map(ref => ({ ref, kind: "choice" }))
-          ];
+          const references = abilityDependencies(target);
           for (const { ref, kind } of references) {
             const source = ref.entry;
             const sourcePosition = source ? positions.get(source.id) : null;
@@ -878,8 +1044,10 @@
         const nodeLayer = svgElement("g", { class: "nodes" });
         for (const ability of candidates) {
           const position = positions.get(ability.id);
+          const nodeClasses = [`node ${branchOf(ability)}`];
+          if (state.insightEnabled && ability.insightUpgradeCost) nodeClasses.push("has-lore-upgrade");
           const node = svgElement("g", {
-            class: `node ${branchOf(ability)}`,
+            class: nodeClasses.join(" "),
             transform: `translate(${position.x} ${position.y})`,
             tabindex: "0",
             role: "button",
@@ -889,11 +1057,13 @@
           const rect = svgElement("rect", { x: 0, y: 0, width: position.w, height: position.h, rx: 7 });
           node.append(rect);
           const title = svgElement("title");
-          title.textContent = `${ability.name} · ${branchLabel(ability)} · ${ability.level ? `skill ${ability.level}` : "quest reward"}`;
+          title.textContent = `${ability.name} · ${branchLabel(ability)} · ${ability.level ? `skill ${ability.level}` : "quest reward"}${state.insightEnabled && ability.insightUpgradeCost ? ` · U:${ability.insightUpgradeCost} IP` : ""}`;
           node.append(title);
           addWrappedText(node, ability.name, 10, 20, 22, "node-name");
           const meta = svgElement("text", { class: "node-meta", x: 10, y: 48 });
           meta.textContent = ability.level ? `#${ability.serial} · level ${ability.level}` : `#${ability.serial} · reward`;
+          if (state.insightEnabled && ability.stageCost) meta.textContent = `${ability.stageChoiceGroup ? "Choice" : "Stage " + stagePath(ability).length} · ${ability.stageCost} IP · level ${ability.level}`;
+          else if (state.insightEnabled && ability.insightUpgradeCost) meta.textContent += ` · U:${ability.insightUpgradeCost} IP`;
           node.append(meta);
           node.addEventListener("click", () => selectAbility(ability.id));
           node.addEventListener("keydown", event => {
@@ -959,22 +1129,39 @@
         const paragraphs = lines => (lines || []).map(line => `<p>${escapeHTML(line)}</p>`).join("");
         const skillGate = ability.level > 0 ? `${escapeHTML(SKILLS[ability.skill] || "Skill")} ${ability.level}` : "No skill gate · quest reward";
         const reqRows = [`<div class="requirement-row"><span>Identity</span><strong>${escapeHTML(SKILLS[ability.skill] || "Unknown")} ${ability.ability} · serial #${ability.serial}</strong></div>`];
-        reqRows.push(`<div class="requirement-row"><span>Primary gate</span><strong>${skillGate}${ability.loreBranch ? ` <span class="note">(Lore branch can change presentation)</span>` : ""}</strong></div>`);
+        reqRows.push(`<div class="requirement-row"><span>Primary gate</span><strong>${skillGate}${ability.insightBranch ? ` <span class="note">(Insight branch can change presentation)</span>` : ""}</strong></div>`);
         ability.requirements.forEach(requirement => {
           reqRows.push(`<div class="requirement-row"><span>${escapeHTML(requirement.kind === "stat" ? "Permanent stat" : "Base skill")}</span><strong>${escapeHTML(requirement.label)} ${requirement.value}</strong></div>`);
         });
-        if (ability.loreCost) reqRows.push(`<div class="requirement-row"><span>Lore price</span><strong>${ability.loreCost} knowledge point${ability.loreCost === 1 ? "" : "s"}</strong></div>`);
+        if (ability.insightCost) reqRows.push(`<div class="requirement-row"><span>Insight price</span><strong>${ability.insightCost} insight point${ability.insightCost === 1 ? "" : "s"}</strong></div>`);
+        if (ability.insightUpgradeCost) reqRows.push(`<div class="requirement-row"><span>${state.insightEnabled ? "Stat bonus upgrade" : "New-mode upgrade"}</span><strong>${ability.insightUpgradeCost} IP after learning${state.insightEnabled ? " · active in New mode" : " · ignored in Old mode"}</strong></div>`);
         if (ability.carriageTarget) reqRows.push(`<div class="requirement-row"><span>Carriage</span><strong>${escapeHTML(ability.carriageTarget)} −${ability.carriageReduction}%</strong></div>`);
 
         const dependencyRows = [];
-        if (ability.prereqRefs.length) {
+        const staged = state.insightEnabled && ability.stageCost;
+        if (staged) {
+          dependencyRows.push(`<div class="requirement-row"><span>Upgrade parent (B:)</span><strong>${(ability.stageParents || []).map(parent => displayRef({ key: parent?.key || "", entry: parent })).join(" <span class=\"note\">or</span> ")}</strong></div>`);
+          dependencyRows.push(`<div class="requirement-row"><span>Upgrade price</span><strong>${ability.stageCost} IP; no ability XP. Skill/stat gates remain.</strong></div>`);
+          dependencyRows.push(`<div class="requirement-row"><span>Progression</span><strong>${stagePath(ability).map(stage => escapeHTML(stage.name)).join(" → ")}</strong></div>`);
+        }
+        if (!staged && ability.prereqRefs.length) {
           const label = ability.prereqRefs.length > 1 ? "Choose one (P:)" : "Prerequisite (P:)";
           dependencyRows.push(`<div class="requirement-row"><span>${label}</span><strong>${ability.prereqRefs.map(displayRef).join(" <span class=\"note\">or</span> ")}</strong></div>`);
         }
-        if (ability.requiredRefs.length) {
+        if (!staged && ability.requiredRefs.length) {
           dependencyRows.push(`<div class="requirement-row"><span>Also required (A:)</span><strong>${ability.requiredRefs.map(displayRef).join(" <span class=\"note\">and</span> ")}</strong></div>`);
         }
         if (!dependencyRows.length) dependencyRows.push(`<div class="requirement-row"><span>Ability links</span><strong>No authored ability prerequisite</strong></div>`);
+        if (!state.insightEnabled && (ability.stageCost || ability.insightUpgradeCost)) {
+          dependencyRows.push(`<div class="requirement-row"><span>New system</span><strong>B:/U: upgrade data is ignored in Old mode; the original P:/A: rules apply.</strong></div>`);
+        }
+        if (state.insightEnabled) {
+          const upgrades = state.abilities.filter(child => stageHasParent(child, ability));
+          if (upgrades.length) dependencyRows.push(`<div class="requirement-row"><span>Next upgrades</span><strong>${upgrades.map(child => `${displayRef({ entry: child })} (${child.stageCost} IP)`).join("<br>")}</strong></div>`);
+          const alternatives = ability.stageChoiceGroup ? state.abilities.filter(other => other !== ability && stageSharesParent(other, ability) && other.stageChoiceGroup === ability.stageChoiceGroup) : [];
+          if (alternatives.length) dependencyRows.push(`<div class="requirement-row"><span>Exclusive choice</span><strong>Choosing this excludes ${alternatives.map(other => displayRef({ entry: other })).join(" or ")} and their later upgrades.</strong></div>`);
+          if (upgrades.some(child => child.stageChoiceGroup)) dependencyRows.push(`<div class="requirement-row"><span>Choose one path</span><strong>Exclusive upgrades cannot be learned together while Insight is on.</strong></div>`);
+        }
 
         const scoreRows = ability.scoreWeights.length
           ? `<div class="detail-section"><h3>Score formula</h3><div class="requirement-list">${ability.scoreWeights.map(weight => `<div class="requirement-row"><span>${escapeHTML(weight.kind === "stat" ? "Stat" : "Skill")}</span><strong>${escapeHTML(weight.label)} ${formatWeight(weight.value)}</strong></div>`).join("")}</div></div>`
@@ -986,14 +1173,16 @@
           `<span class="chip">${escapeHTML(branchLabel(ability))}</span>`,
           `<span class="chip">I: ${escapeHTML(ability.skill)}:${escapeHTML(ability.ability)}:${escapeHTML(ability.level)}</span>`
         ];
-        if (ability.loreBranch) chips.push(`<span class="chip lore">L:1 · Lore beta</span>`);
+        if (ability.insightBranch) chips.push(`<span class="chip lore">L:1 · Insight beta</span>`);
         if (ability.skill === 8) chips.push(`<span class="chip special">Quest reward</span>`);
-        if (ability.loreCost) chips.push(`<span class="chip lore">K:${ability.loreCost}</span>`);
+        if (ability.insightCost) chips.push(`<span class="chip lore">K:${ability.insightCost}</span>`);
+        if (ability.stageCost && state.insightEnabled) chips.push(`<span class="chip upgrade">B:${ability.stageCost} IP</span>`);
+        if (ability.insightUpgradeCost) chips.push(`<span class="chip ${state.insightEnabled ? "lore" : "upgrade"}">U:${ability.insightUpgradeCost} IP</span>`);
 
         els.detailContent.innerHTML = `
           <div class="eyebrow">${escapeHTML(branchLabel(ability))}</div>
           <h2 class="detail-title">${escapeHTML(ability.name)}</h2>
-          <p class="detail-subtitle">The node is highlighted with ${ability.prereqRefs.length + ability.requiredRefs.length} authored ability link${ability.prereqRefs.length + ability.requiredRefs.length === 1 ? "" : "s"}.</p>
+          <p class="detail-subtitle">${staged ? `Stage ${stagePath(ability).length} upgrade. Adds its effects to the earlier stages.` : "Base or standalone ability."} ${state.insightEnabled ? "New upgrade mode uses Insight chains." : "Old mode uses the original P:/A: prerequisites."}</p>
           <div class="chips">${chips.join("")}</div>
           <div class="detail-section"><h3>Dependency logic</h3><div class="requirement-list">${dependencyRows.join("")}</div></div>
           <div class="detail-section"><h3>Learning requirements</h3><div class="requirement-list">${reqRows.join("")}</div></div>
@@ -1013,21 +1202,39 @@
         if (node) node.focus({ preventScroll: true });
       }
 
-      function loadSource(source, name) {
-        const parsed = parseAbilityText(source);
+      function renderLoadedSources() {
+        if (!state.baseSource) return;
+        const parsed = mergeInsightOverlay(state.baseSource, state.overlaySource);
         state.abilities = parsed.abilities;
-        state.sourceName = name || "ability.txt";
         state.selectedId = state.abilities[0]?.id || null;
+        const overlayLabel = state.overlaySource ? ` + ${state.overlayName || "ability-insight.txt"}` : "";
+        state.sourceName = `${state.baseName || "ability.txt"}${overlayLabel}`;
         els.sourceName.textContent = `${state.sourceName} · ${state.abilities.length} abilities${parsed.unresolved ? ` · ${parsed.unresolved} unresolved links` : ""}`;
-        els.statusText.textContent = `Loaded ${state.abilities.length} abilities${parsed.version ? ` · v${parsed.version}` : ""}`;
+        els.statusText.textContent = `Loaded ${state.abilities.length} abilities${parsed.version ? ` · v${parsed.version}` : ""}${state.overlaySource ? " · Insight overlay applied" : ""}`;
         els.statusDot.classList.add("ready");
         renderGraph();
       }
 
-      async function loadFile(file) {
+      function loadBaseSource(source, name) {
+        state.baseSource = source;
+        state.baseName = name || "ability.txt";
+        renderLoadedSources();
+      }
+
+      function loadOverlaySource(source, name) {
+        state.overlaySource = source;
+        state.overlayName = name || "ability-insight.txt";
+        if (state.baseSource) renderLoadedSources();
+        else setStatus("Insight overlay loaded; choose ability.txt as the base");
+      }
+
+      async function loadFile(file, kind = "auto") {
         if (!file) return;
         try {
-          loadSource(await file.text(), file.name);
+          const source = await file.text();
+          const overlay = kind === "overlay" || (kind === "auto" && file.name.toLowerCase().includes("ability-insight"));
+          if (overlay) loadOverlaySource(source, file.name);
+          else loadBaseSource(source, file.name);
         } catch (error) {
           setStatus(`Could not read ${file.name}`);
           console.error(error);
@@ -1039,15 +1246,51 @@
         els.statusDot.classList.remove("ready");
       }
 
+      function syncFullscreenButton() {
+        const nativeFullscreen = document.fullscreenElement === els.graphPanel;
+        const fallbackFullscreen = els.graphPanel.classList.contains("is-fullscreen-fallback");
+        const active = nativeFullscreen || fallbackFullscreen;
+        els.toggleFullscreen.setAttribute("aria-pressed", String(active));
+        els.toggleFullscreen.textContent = active ? "Exit full screen" : "Full screen";
+        document.body.classList.toggle("diagram-fallback-fullscreen", fallbackFullscreen && !nativeFullscreen);
+      }
+
+      async function toggleFullscreen() {
+        if (document.fullscreenElement === els.graphPanel) {
+          await document.exitFullscreen();
+          return;
+        }
+
+        if (els.graphPanel.classList.contains("is-fullscreen-fallback")) {
+          els.graphPanel.classList.remove("is-fullscreen-fallback");
+          syncFullscreenButton();
+          return;
+        }
+
+        if (els.graphPanel.requestFullscreen) {
+          try {
+            await els.graphPanel.requestFullscreen();
+            return;
+          } catch (error) {
+            console.info("Native fullscreen unavailable; using the in-page fallback.", error.message);
+          }
+        }
+
+        els.graphPanel.classList.add("is-fullscreen-fallback");
+        syncFullscreenButton();
+      }
+
       async function tryAutoLoad() {
         if (window.location.protocol === "file:") {
-          setStatus("Choose ability.txt to load the map");
+          setStatus("Choose ability.txt; the Insight overlay is optional");
           return;
         }
         try {
-          const response = await fetch("../../lib/edit/ability.txt", { cache: "no-store" });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          loadSource(await response.text(), "lib/edit/ability.txt");
+          const baseResponse = await fetch("../../lib/edit/ability.txt", { cache: "no-store" });
+          if (!baseResponse.ok) throw new Error(`HTTP ${baseResponse.status}`);
+          loadBaseSource(await baseResponse.text(), "lib/edit/ability.txt");
+          const overlayResponse = await fetch("../../lib/edit/ability-insight.txt", { cache: "no-store" });
+          if (overlayResponse.ok) loadOverlaySource(await overlayResponse.text(), "lib/edit/ability-insight.txt");
         } catch (error) {
           setStatus("Choose or drop ability.txt to load the map");
           console.info("Automatic ability.txt load unavailable:", error.message);
@@ -1055,7 +1298,9 @@
       }
 
       els.openFile.addEventListener("click", () => els.fileInput.click());
-      els.fileInput.addEventListener("change", event => loadFile(event.target.files[0]));
+      els.fileInput.addEventListener("change", event => loadFile(event.target.files[0], "base"));
+      els.openOverlay.addEventListener("click", () => els.overlayInput.click());
+      els.overlayInput.addEventListener("change", event => loadFile(event.target.files[0], "overlay"));
       els.search.addEventListener("input", event => {
         state.search = event.target.value.trim().toLowerCase();
         renderGraph();
@@ -1083,6 +1328,18 @@
         state.zoom = Math.max(45, Math.min(100, Math.round(available / width * 100)));
         renderGraph();
       });
+      els.toggleFullscreen.addEventListener("click", () => toggleFullscreen());
+      els.insightMode.addEventListener("change", () => {
+        state.insightEnabled = els.insightMode.value === "new";
+        renderGraph();
+      });
+      document.addEventListener("fullscreenchange", syncFullscreenButton);
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && els.graphPanel.classList.contains("is-fullscreen-fallback")) {
+          els.graphPanel.classList.remove("is-fullscreen-fallback");
+          syncFullscreenButton();
+        }
+      });
       els.detailContent.addEventListener("click", event => {
         const link = event.target.closest("[data-select-id]");
         if (link) selectAbility(link.dataset.selectId);
@@ -1095,9 +1352,11 @@
         event.preventDefault();
         els.dropZone.classList.remove("is-dragging");
       }));
-      els.dropZone.addEventListener("drop", event => loadFile(event.dataTransfer.files[0]));
+      els.dropZone.addEventListener("drop", event => loadFile(event.dataTransfer.files[0], "auto"));
 
       updateSkillOptions();
+      syncModeUI();
+      syncFullscreenButton();
       tryAutoLoad();
     })();
   </script>

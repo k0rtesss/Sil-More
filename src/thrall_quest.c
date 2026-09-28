@@ -72,7 +72,7 @@ enum
     THRALL_REWARD_IDENTIFY_ONE = 3,
     THRALL_REWARD_IDENTIFY_NATURE = 4,
     THRALL_REWARD_LATER = 5,
-    THRALL_REWARD_LORE_POINT = 6
+    THRALL_REWARD_INSIGHT_POINT = 6
 };
 
 typedef struct thrall_reward_option
@@ -1916,13 +1916,13 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
             count_carried_identify_targets() > 0 };
     }
 
-    if (lore_system_enabled()
+    if (insight_system_enabled()
         && m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_FIRST_REWARD_PENDING)
     {
-        char lore_hotkey = (char)('a' + option_count);
+        char insight_hotkey = (char)('a' + option_count);
         options[option_count++] = (thrall_reward_option){
-            THRALL_REWARD_LORE_POINT, lore_hotkey,
-            "Refuse a gift and gain 1 Lore point", true };
+            THRALL_REWARD_INSIGHT_POINT, insight_hotkey,
+            "Refuse a gift and gain 1 Insight point", true };
     }
 
     {
@@ -2025,8 +2025,8 @@ static bool offer_thrall_reward(monster_type* m_ptr, bool pending_reward)
             msg_print("The thrall finds no hidden virtues among your potions, gems, or herbs.");
             break;
 
-        case THRALL_REWARD_LORE_POINT:
-            gain_lore_points(1, "You refuse the thrall's gift.");
+        case THRALL_REWARD_INSIGHT_POINT:
+            gain_insight_points(1, "You refuse the thrall's gift.");
             return true;
 
         case THRALL_REWARD_LATER:
@@ -2085,10 +2085,10 @@ void complete_thrall_quest(monster_type* m_ptr, int item_slot)
         THRALL_QUEST_COMPLETION_EXP);
 
     /* Reward can be claimed now or later. */
-    if (lore_system_enabled()
-        && !(p_ptr->lore_milestones & LORE_FIRST_THRALL_HELPED))
+    if (insight_system_enabled()
+        && !(p_ptr->insight_milestones & INSIGHT_FIRST_THRALL_HELPED))
     {
-        p_ptr->lore_milestones |= LORE_FIRST_THRALL_HELPED;
+        p_ptr->insight_milestones |= INSIGHT_FIRST_THRALL_HELPED;
         m_ptr->thrall_quest_completed = THRALL_QUEST_STATE_FIRST_REWARD_PENDING;
     }
     else

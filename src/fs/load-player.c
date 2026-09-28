@@ -282,7 +282,7 @@ errr rd_extra(void)
     rd_byte(&p_ptr->self_made_arts);
     rd_byte(&p_ptr->climbing);
 
-    // Compatibility block: persistent fields stored in 15 legacy reserved bytes.
+    // Compatibility block: persistent fields stored in legacy reserved bytes.
     {
         byte morgoth_hall_entered = 0;
         byte morgoth_second_wind = 0;
@@ -291,8 +291,9 @@ errr rd_extra(void)
         s16b lamp_oil = 0;
         byte active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
         byte morgoth_call_state = 0;
-        u16b lore_milestones = 0;
-        s32b lore_points = 0;
+        u16b insight_milestones = 0;
+        s32b insight_points = 0;
+        u32b insight_monster_types = 0;
         rd_byte(&morgoth_hall_entered);
         rd_byte(&morgoth_second_wind);
         rd_byte(&discovery_lore_flags);
@@ -315,9 +316,11 @@ errr rd_extra(void)
             rd_byte(&morgoth_call_state);
             if (savefile_version_at_least(0, 9, 8, 27))
             {
-                rd_u16b(&lore_milestones);
-                rd_s32b(&lore_points);
+                rd_u16b(&insight_milestones);
+                rd_s32b(&insight_points);
                 strip_bytes(1);
+                if (savefile_version_at_least(0, 9, 8, 30))
+                    rd_u32b(&insight_monster_types);
             }
             else
                 strip_bytes(7);
@@ -333,8 +336,9 @@ errr rd_extra(void)
             quick_access_prompt_flags & QUICK_ACCESS_PROMPT_MASK;
         p_ptr->lamp_oil = lamp_oil;
         p_ptr->active_weapon_mode = active_weapon_mode;
-        p_ptr->lore_points = MAX(0, MIN(PY_MAX_EXP, lore_points));
-        p_ptr->lore_milestones = lore_milestones & LORE_MILESTONE_MASK;
+        p_ptr->insight_points = MAX(0, MIN(PY_MAX_EXP, insight_points));
+        p_ptr->insight_milestones = insight_milestones & INSIGHT_MILESTONE_MASK;
+        p_ptr->insight_monster_types = insight_monster_types & RF3_RACE_MASK;
         if (savefile_has_morgoth_call_state)
         {
             p_ptr->morgoth_call_state =
@@ -344,13 +348,24 @@ errr rd_extra(void)
         }
     }
 
-    memset(p_ptr->lore_stat_invested, 0, sizeof(p_ptr->lore_stat_invested));
+    memset(p_ptr->insight_stat_invested, 0, sizeof(p_ptr->insight_stat_invested));
     if (savefile_version_at_least(0, 9, 8, 27))
         for (i = 0; i < A_MAX; ++i)
         {
-            rd_byte(&p_ptr->lore_stat_invested[i]);
-            p_ptr->lore_stat_invested[i] = MIN(6, p_ptr->lore_stat_invested[i]);
+            rd_byte(&p_ptr->insight_stat_invested[i]);
+            p_ptr->insight_stat_invested[i] = MIN(6, p_ptr->insight_stat_invested[i]);
         }
+
+    /* Older saves have no purchased extra powers. */
+    memset(p_ptr->insight_ability_upgraded, 0, sizeof(p_ptr->insight_ability_upgraded));
+    if (savefile_version_at_least(0, 9, 8, 29))
+        for (i = 0; i < S_MAX; ++i)
+            for (int ability = 0; ability < ABILITIES_MAX; ++ability)
+            {
+                rd_byte(&p_ptr->insight_ability_upgraded[i][ability]);
+                p_ptr->insight_ability_upgraded[i][ability] =
+                    p_ptr->insight_ability_upgraded[i][ability] != 0;
+            }
 
     /* Reserved: legacy item-quality squelch array (now unused) */
     {
@@ -842,7 +857,7 @@ errr rd_extra(void)
                 + c_info[p_ptr->pcharacter].h_adj[i];
             for (int curse = 0; curse < z_info->cu_max; ++curse)
                 innate += CURSE_GET(curse) * cu_info[curse].cu_adj[i];
-            p_ptr->lore_stat_invested[i] =
+            p_ptr->insight_stat_invested[i] =
                 MAX(0, MIN(6, p_ptr->stat_base[i] - innate));
         }
     }

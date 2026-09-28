@@ -319,8 +319,14 @@ struct ability_type
     byte carriage_reduction_percent; /* Learned ability reduction */
     byte stat_req[A_MAX]; /* Minimum permanent character stats (R:) */
     byte skill_req[S_MAX]; /* Additional invested skill ranks (R:) */
-    byte lore_branch; /* L: moves this ability to Lore while the beta is enabled */
-    byte lore_cost; /* K: lore points, additional to XP outside the Lore branch */
+    byte insight_branch; /* L: moves this ability to Insight while the beta is enabled */
+    byte insight_cost; /* K: Insight points, additional to XP outside the Insight branch */
+    byte insight_upgrade_cost; /* U: one-time IP price for an ability's extra power */
+    byte stage_parent_count; /* B: number of alternative preceding stages */
+    byte stage_parent_skill[ABILITY_STAGE_PARENTS_MAX];
+    byte stage_parent_ability[ABILITY_STAGE_PARENTS_MAX];
+    byte stage_cost; /* B: Insight price; zero means standalone/base ability */
+    byte stage_choice_group; /* B: nonzero groups are exclusive siblings */
     byte score_weights_set; /* Explicit S: coefficients, 100 = x1 */
     s16b stat_score_weight[A_MAX];
     s16b skill_score_weight[S_MAX];
@@ -1269,9 +1275,11 @@ struct player_type
     s32b kill_exp; /* Total experience from killing monsters */
     s32b descent_exp; /* Total experience from descending to new levels */
     s32b ident_exp; /* Total experience from identifying objects */
-    s32b lore_points; /* Banked birth points and once-per-run Lore rewards */
-    u16b lore_milestones; /* Claimed Lore rewards and first-thrall marker */
-    byte lore_stat_invested[A_MAX]; /* Purchased ranks, excluding innate bonuses */
+    s32b insight_points; /* Banked birth points and once-per-run Insight rewards */
+    u16b insight_milestones; /* Claimed Insight rewards and first-thrall marker */
+    u32b insight_monster_types; /* RF3 race types that already awarded Insight */
+    byte insight_stat_invested[A_MAX]; /* Purchased ranks, excluding innate bonuses */
+    byte insight_ability_upgraded[S_MAX][ABILITIES_MAX]; /* Purchased extra powers */
     byte discovery_lore_flags; /* Run-wide discovery XP awards already claimed */
     byte quick_access_prompt_flags; /* Run-wide item shortcut offers already made */
 

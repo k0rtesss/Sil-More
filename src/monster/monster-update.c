@@ -512,6 +512,10 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
         if (l_ptr->tsights < MAX_SHORT)
             l_ptr->tsights++;
 
+        /* Insight is a once-per-run reward for the first visible member of
+         * each monster family, not for every individual unique. */
+        insight_award_monster_type(r_ptr->flags3);
+
         // If the player encounters a Unique for the first time, write a note.
         if (r_ptr->flags1 & RF1_UNIQUE)
         {

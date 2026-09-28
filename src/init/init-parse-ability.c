@@ -8,6 +8,7 @@
 #include "metarun.h"
 #include "score/score_guid.h"
 #include "init-parse-internal.h"
+#include "init2-internal.h"
 #include "init-object-bonuses.h"
 #include <ctype.h>
 
@@ -577,16 +578,17 @@ errr parse_b_info(char* buf, header* head)
                              : parse_ability_score_line(b_ptr, buf + 2);
     }
 
-    else if (buf[0] == 'K')
+    else if (buf[0] == 'K' || buf[0] == 'U')
     {
         int cost;
         if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
         if (!ability_req_parse_int(buf + 2, 255, &cost))
             return PARSE_ERROR_OUT_OF_BOUNDS;
-        b_ptr->lore_cost = (byte)cost;
+        if (buf[0] == 'U') b_ptr->insight_upgrade_cost = (byte)cost;
+        else b_ptr->insight_cost = (byte)cost;
     }
 
-    /* Lore is a presentation/purchase branch, not a new engine skill. Keep
+    /* Insight is a presentation/purchase branch, not a new engine skill. Keep
      * I: identities stable for equipment, prerequisites and older saves. */
     else if (buf[0] == 'L')
     {
@@ -594,7 +596,37 @@ errr parse_b_info(char* buf, header* head)
         if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
         if (!ability_req_parse_int(buf + 2, 1, &branch))
             return PARSE_ERROR_OUT_OF_BOUNDS;
-        b_ptr->lore_branch = (byte)branch;
+        b_ptr->insight_branch = (byte)branch;
+    }
+
+    /* B: parent skill/ability : Insight price : exclusive sibling group.
+     * Repeat B: for alternative preceding stages; all alternatives share the
+     * same price and choice group. */
+    else if (buf[0] == 'B')
+    {
+        int skill, ability, cost, group;
+        char tail;
+        if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (sscanf(buf + 2, "%d/%d:%d:%d%c", &skill, &ability, &cost, &group, &tail) != 4)
+            return PARSE_ERROR_GENERIC;
+        if (skill < 0 || skill >= S_SPC || ability < 0 || ability >= ABILITIES_MAX
+            || cost < 1 || cost > 255 || group < 0 || group > 255)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        if (b_ptr->stage_parent_count >= ABILITY_STAGE_PARENTS_MAX)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        if (b_ptr->stage_parent_count > 0
+            && (b_ptr->stage_cost != cost
+                || b_ptr->stage_choice_group != group))
+            return PARSE_ERROR_GENERIC;
+        for (int i = 0; i < b_ptr->stage_parent_count; ++i)
+            if (b_ptr->stage_parent_skill[i] == skill
+                && b_ptr->stage_parent_ability[i] == ability)
+                return PARSE_ERROR_GENERIC;
+        b_ptr->stage_parent_skill[b_ptr->stage_parent_count] = (byte)skill;
+        b_ptr->stage_parent_ability[b_ptr->stage_parent_count] = (byte)ability;
+        b_ptr->stage_parent_count++;
+        b_ptr->stage_cost = (byte)cost;
+        b_ptr->stage_choice_group = (byte)group;
     }
 
     /* A: every listed ability is mandatory, alongside the P: alternatives. */
@@ -745,6 +777,181 @@ errr parse_b_info(char* buf, header* head)
 
     /* Success */
     return (0);
+}
+
+/* Insight's changing progression is deliberately kept out of ability.txt.
+ * This parser applies the optional ability-insight.txt overlay to the stable
+ * ability records after the normal ability template has loaded. */
+static ability_type* insight_overlay_b_ptr;
+
+static errr parse_b_insight_overlay(char* buf, header* head)
+{
+    int i;
+    char* s;
+
+    if (buf[0] == 'N')
+    {
+        cptr expected_name;
+
+        s = strchr(buf + 2, ':');
+        if (!s)
+            return PARSE_ERROR_GENERIC;
+        *s++ = '\0';
+        if (!*s)
+            return PARSE_ERROR_GENERIC;
+
+        i = atoi(buf + 2);
+        if (i <= error_idx)
+            return PARSE_ERROR_NON_SEQUENTIAL_RECORDS;
+        if (i < 0 || i >= head->info_num)
+            return PARSE_ERROR_TOO_MANY_ENTRIES;
+
+        insight_overlay_b_ptr = (ability_type*)head->info_ptr + i;
+        if (!head->name_ptr)
+        {
+            insight_overlay_b_ptr = NULL;
+            return PARSE_ERROR_GENERIC;
+        }
+        expected_name = head->name_ptr + insight_overlay_b_ptr->name;
+        if (!streq(expected_name, s))
+        {
+            insight_overlay_b_ptr = NULL;
+            return PARSE_ERROR_GENERIC;
+        }
+
+        error_idx = i;
+    }
+    else if (buf[0] == 'K' || buf[0] == 'U')
+    {
+        int cost;
+
+        if (!insight_overlay_b_ptr)
+            return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (!ability_req_parse_int(buf + 2, 255, &cost))
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+
+        if (buf[0] == 'K')
+        {
+            if (insight_overlay_b_ptr->insight_cost)
+                return PARSE_ERROR_GENERIC;
+            insight_overlay_b_ptr->insight_cost = (byte)cost;
+        }
+        else
+        {
+            if (insight_overlay_b_ptr->insight_upgrade_cost)
+                return PARSE_ERROR_GENERIC;
+            insight_overlay_b_ptr->insight_upgrade_cost = (byte)cost;
+        }
+    }
+    else if (buf[0] == 'L')
+    {
+        int branch;
+
+        if (!insight_overlay_b_ptr)
+            return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (!ability_req_parse_int(buf + 2, 1, &branch))
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        if (insight_overlay_b_ptr->insight_branch)
+            return PARSE_ERROR_GENERIC;
+        insight_overlay_b_ptr->insight_branch = (byte)branch;
+    }
+    else if (buf[0] == 'B')
+    {
+        int skill, ability, cost, group;
+        char tail;
+        int slot;
+
+        if (!insight_overlay_b_ptr)
+            return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (sscanf(buf + 2, "%d/%d:%d:%d%c", &skill, &ability, &cost,
+                &group, &tail) != 4)
+            return PARSE_ERROR_GENERIC;
+        if (skill < 0 || skill >= S_SPC || ability < 0
+            || ability >= ABILITIES_MAX || cost < 1 || cost > 255
+            || group < 0 || group > 255)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+
+        slot = insight_overlay_b_ptr->stage_parent_count;
+        if (slot >= ABILITY_STAGE_PARENTS_MAX)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        if (slot > 0
+            && (insight_overlay_b_ptr->stage_cost != cost
+                || insight_overlay_b_ptr->stage_choice_group != group))
+            return PARSE_ERROR_GENERIC;
+        for (i = 0; i < slot; ++i)
+        {
+            if (insight_overlay_b_ptr->stage_parent_skill[i] == skill
+                && insight_overlay_b_ptr->stage_parent_ability[i] == ability)
+                return PARSE_ERROR_GENERIC;
+        }
+
+        insight_overlay_b_ptr->stage_parent_skill[slot] = (byte)skill;
+        insight_overlay_b_ptr->stage_parent_ability[slot] = (byte)ability;
+        insight_overlay_b_ptr->stage_parent_count++;
+        insight_overlay_b_ptr->stage_cost = (byte)cost;
+        insight_overlay_b_ptr->stage_choice_group = (byte)group;
+    }
+    else
+    {
+        /* The overlay may only change Insight metadata. */
+        return PARSE_ERROR_UNDEFINED_DIRECTIVE;
+    }
+
+    return 0;
+}
+
+errr init_b_insight_overlay(header* head)
+{
+    SDL_IOStream* fp;
+    char path[1024];
+    errr err;
+    int i;
+    u32b name_size;
+    u32b text_size;
+
+    /* The base raw cache may have been generated before the split. Clear all
+     * overlay-owned fields first so removed or relocated stages cannot linger
+     * when an old cache is otherwise considered usable. */
+    for (i = 0; i < head->info_num; ++i)
+    {
+        ability_type* ability = (ability_type*)head->info_ptr + i;
+        ability->insight_branch = 0;
+        ability->insight_cost = 0;
+        ability->insight_upgrade_cost = 0;
+        ability->stage_parent_count = 0;
+        memset(ability->stage_parent_skill, 0,
+            sizeof(ability->stage_parent_skill));
+        memset(ability->stage_parent_ability, 0,
+            sizeof(ability->stage_parent_ability));
+        ability->stage_cost = 0;
+        ability->stage_choice_group = 0;
+    }
+
+    path_build(path, sizeof(path), ANGBAND_DIR_EDIT, "ability-insight.txt");
+    fp = sdl_fopen(path, "r");
+    if (!fp)
+    {
+        log_debug("Optional Insight ability overlay '%s' is not present", path);
+        return 0;
+    }
+
+    /* init_info_txt is also used for allocating template strings. Preserve
+     * the already-loaded base header sizes because this overlay adds none. */
+    name_size = head->name_size;
+    text_size = head->text_size;
+    insight_overlay_b_ptr = NULL;
+    err = init_info_txt(fp, path, head, parse_b_insight_overlay);
+    sdl_fclose(fp);
+    head->name_size = name_size;
+    head->text_size = text_size;
+
+    if (err)
+    {
+        display_parse_error("ability-insight", err, path);
+        return err;
+    }
+
+    return 0;
 }
 
 /*

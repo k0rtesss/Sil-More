@@ -865,7 +865,7 @@ void process_player(void)
                     if (!greater_vault_xp_awarded)
                     {
                         gain_exp(vault_xp);
-                        gain_lore_points(1, "You discover a greater vault.");
+                        gain_insight_points(1, "You discover a greater vault.");
                         greater_vault_xp_awarded = true;
                     }
 
@@ -887,7 +887,7 @@ void process_player(void)
                 if (!greater_vault_xp_awarded)
                 {
                     gain_exp(vault_xp);
-                    gain_lore_points(1, "You discover a greater vault.");
+                    gain_insight_points(1, "You discover a greater vault.");
                     greater_vault_xp_awarded = true;
                 }
             }

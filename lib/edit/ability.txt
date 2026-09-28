@@ -15,10 +15,10 @@
 # A: mandatory skill number / ability value (repeat for AND requirements)
 # R: stat or skill name : minimum : ... (STR, DEX, CON, GRA, STEALTH, WILL, etc.)
 # S: stat or skill name : coefficient : ... (1.5, 3/2, 150%, 1x)
-# K: lore-point price while Lore beta is enabled (additional to normal XP)
-# L:1 moves an ability to the Lore branch while beta is enabled; no ability XP
-#     or primary I: skill-level gate. K: sets its price (minimum 1 for Lore).
-#     Stable I: identities, explicit R: requirements and effects are retained.
+# Insight branch metadata and staged upgrades live in the optional
+# lib/edit/ability-insight.txt overlay. This stable file keeps the ability
+# identities, core prerequisites, learning gates, and effects shared by all
+# settings. The overlay may change as the Insight path is iterated.
 # Y: carriage target : percentage reduction when personally learned
 # D: description (poetic/lore text)
 # E: effect (mechanical description)
@@ -148,7 +148,7 @@ T:31:0:99  # Gloves
 
 N:9:Whirlwind Attack
 I:0:9:9
-P:0/4:0/6
+P:0/4:0/6:5/3
 D:Like the whirlwind of steel that was Turgon in the defense of Vinyamar, when foes pressed in from all sides. The mightiest of the Noldor could hold a ring of enemies at bay, their blades striking in every direction with deadly arcs.
 E:Free attack on all adjacent enemies when you attack one. Requires 5 open adjacent squares. Also works with flanking or retreat attacks.
 T:21:0:99  # Hafted
@@ -158,7 +158,7 @@ T:31:0:99  # Gloves
 
 N:10:Zone of Control
 I:0:10:10
-P:0/1:0/4
+P:0/0:0/4
 D:Commanding the battlefield as did the captains of the Union of Maedhros, who held their ground with such authority that no foe dared move freely in their presence. Any servant of Morgoth who tried to slip past the watchful blade of a Noldorin captain earned a swift and punishing stroke.
 E:Free attack when an opponent moves between two squares adjacent to you, so long as you did not move on your previous turn.
 T:21:0:99  # Hafted
@@ -168,7 +168,7 @@ T:31:0:99  # Gloves
 
 N:11:Smite
 I:0:11:11
-P:0/2:0/5
+P:0/2:0/5:0/7
 R:STR:3
 D:Delivering a smiting blow reminiscent of Ecthelion's fatal strike against Gothmog, Lord of Balrogs, in the fountains of Gondolin. Wielding a great weapon in both hands, the warrior gathers all their might into a single devastating blow that can shatter shields and break the will of the mightiest foes.
 E:First melee attack with a two-handed weapon deals maximum damage. Costs a turn to recover afterward.
@@ -178,7 +178,7 @@ T:23:0:99  # Swords
 
 N:12:Two Weapon Fighting
 I:0:12:12
-P:0/1:2/2
+P:0/1:2/2:0/15
 R:DEX:3
 D:Wielding dual blades as did the twin sons of Fëanor, Amrod and Amras, in the hunts of Ossiriand. Fighting with a weapon in each hand was a rare art among the Eldar, for it demanded both the dexterity to strike with the off-hand and the strength to guide two blades at once through the fury of combat.
 E:Wield a one-handed weapon in off-hand for an extra attack at -3 Strength and Dexterity.
@@ -200,7 +200,7 @@ T:31:0:99  # Gloves
 
 N:14:Strength
 I:0:14:20
-K:1
+R:MELEE:20
 D:Fortified in body as were the sons of Fëanor by their unyielding oaths sworn in the halls of Tirion beneath the light of the Two Trees, their sinews hardened by ages of war across Beleriand.
 E:+1 Strength.
 
@@ -288,7 +288,7 @@ T:31:1:1   # Gloves (leather gloves only)
 
 N:28:Dexterity
 I:1:8:10
-K:1
+R:ARCHERY:10
 D:Swift and sure of hand as the great archers of the Noldor who practiced their art beneath the light of the Two Trees in Aman, where their fingers first learned the song of the bowstring.
 E:+1 Dexterity.
 
@@ -360,7 +360,7 @@ T:36:0:99  # Soft Armour
 
 N:47:Heavy Armour Use
 I:2:7:9
-P:2/1:2/3
+P:2/1:2/3:5/3
 D:Bearing heavy armour as did the dwarven allies of the Noldor, clad in mail and plate forged in the great smithies of Belegost. The dwarves of the Blue Mountains were renowned for fighting unbowed beneath the weight of their war-harness, turning the sheer mass of their armour into a bulwark of protection.
 E:[1dX] extra protection vs physical damage only (not elemental attacks), where X = total armour weight / 15 lbs. +1 evasion with Mail Corslets and Hauberks.
 T:37:0:99  # Mail
@@ -378,7 +378,7 @@ T:31:0:99  # Gloves
 
 N:49:Controlled Retreat
 I:2:9:11
-P:2/0:2/1
+P:2/0:2/1:0/4
 D:Executing a controlled retreat like the ordered withdrawal of the rearguard of Gondolin during the city's fall. Turgon's captains did not flee blindly but gave ground in good order, each warrior turning to deliver a parting blow before stepping back, buying time with disciplined defiance.
 E:Free attack when stepping away from an opponent, if you did not move last round.
 T:21:0:99  # Hafted
@@ -389,7 +389,7 @@ T:30:0:99  # Boots
 
 N:50:Dexterity
 I:2:10:20
-K:1
+R:EVASION:20
 D:Agile as the feet of Lúthien dancing in the starlit glades of Neldoreth, where she moved with a grace beyond the reach of mortal or elf, her every motion as fluid as the waters of Esgalduin.
 E:+1 Dexterity.
 
@@ -425,7 +425,7 @@ T:31:0:99  # Gloves
 
 N:63:Exchange Places
 I:3:3:6
-P:3/0:2/3
+P:2/0:2/3
 D:Exchanging places deftly as in the elusive maneuvers of the scouts who served in the March of Maedhros. These bold warriors learned to slip past an enemy with breathtaking agility, trading positions in a moment of daring that left their foe turned about and facing the wrong way.
 E:Use 'X' to swap positions with an adjacent enemy. They get a free attack as you pass.
 T:30:0:99  # Boots
@@ -455,7 +455,7 @@ T:45:0:99  # Ring
 N:66:Dexterity
 P:3/0:3/1
 I:3:6:11
-K:1
+R:STEALTH:11
 D:Fleet and silent as the shadows that moved among the ancient forests of Beleriand before the rising of the Sun, when all the world lay under starlight and the Firstborn walked in silence upon the young earth.
 E:+1 Dexterity.
 
@@ -463,8 +463,6 @@ E:+1 Dexterity.
 
 N:80:Quick Study
 I:4:0:1
-L:1
-K:1
 D:With the quick understanding of the loremasters of Gondolin, who gathered and preserved the accumulated wisdom of the Noldor within the Hidden City. Their voracious study of all arts and sciences allowed them to grasp new disciplines swiftly, drawing connections that others would miss.
 E:Take advanced abilities without prerequisites. Modest bonus to identifying items.
 T:40:0:99  # Amulet
@@ -497,8 +495,6 @@ T:40:0:99  # Amulet
 
 N:84:Alchemy
 I:4:4:5
-L:1
-K:1
 D:Understanding the hidden properties of things as did the scholars of the Noldor in Tirion, who studied the nature of every herb and mineral beneath the light of Laurelin. Such knowledge reveals the purpose of elixirs and powders at a glance, and attunes the mind to the resonance of enchanted crystals.
 E:Auto-identify herbs, potions, staves, and horns. While diseased, a Gem of Self Knowledge shows the disease name and cure herb. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
 T:32:0:99  # Helm
@@ -527,7 +523,7 @@ T:32:0:99  # Helm
 
 N:88:Master Hunter
 I:4:8:9
-P:4/3:4/5
+P:4/1:4/5
 D:A master hunter in the manner of Celegorm, who rode with Oromë the Huntsman in the forests of Valinor and later hunted in the vales of Himlad with Huan at his side. Such a hunter knows the ways of their quarry intimately, and each kill deepens their understanding, making the next encounter swifter and more certain.
 E:+1 attack per previous kill of the same monster type (max Perception/2).
 T:32:0:99  # Helm
@@ -536,7 +532,7 @@ T:19:0:99  # Bows
 
 N:89:Grace
 I:4:9:10
-K:1
+R:PERCEPTION:10
 D:Blessed as the favoured of the Valar in the Undying Lands, where Manwë's eagles bore tidings and the light of the Trees touched all things with grace beyond the measure of Middle-earth.
 D:With watchful poise, you bear a greater array of ready weapons without letting strap, scabbard, or haft encumber your movement.
 E:+1 Grace. +6.0 qt Harness capacity.
@@ -560,8 +556,6 @@ T:34:0:99  # Shields
 
 N:101:Channeling
 I:5:1:2
-L:1
-K:1
 D:Channeling power as the Maiar once aided the Eldar in Valinor, guiding the flow of enchantment through crafted vessels. Those who master this art understand the inner workings of staves and horns instinctively, and can draw forth their power without risk of the wild discharges that imperil the untrained.
 E:Auto-identify staves and horns. Channel charges safely without risk.
 T:32:0:99  # Helm
@@ -610,7 +604,7 @@ E:Swear a great oath for a reward. Breaking the oath has consequences.
 
 N:108:Vengeance
 I:5:8:8
-P:5/2
+P:5/2:4/3
 D:Seeking vengeance with the fury that drove the Noldor across the Grinding Ice after the Kinslaying at Alqualondë and the burning of the ships at Losgar. When wounded by a foe, that searing pain becomes fuel for a more devastating return stroke, the desire for retribution lending terrible force to the answering blow.
 E:+1 damage die on your next melee hit after being damaged in melee. Does not stack.
 T:40:0:99  # Amulet
@@ -628,12 +622,12 @@ T:40:0:99  # Amulet
 
 N:110:Constitution
 I:5:10:12
-K:1
+R:WILL:12
 D:Enduring as the great pillars of Menegroth carved by the dwarves of Belegost in ages past, which stood unshaken through war and sorrow until the very ruin of Doriath.
 D:Long hardship has taught you to travel and fight beneath a fuller, more cumbersome load.
 E:+1 Constitution. +6.0 qt Pack capacity.
 
-# Lore L: and K: fields apply only while Lore points (Beta) is enabled.
+# The optional Insight overlay is loaded after this stable template.
 # R: minimum permanent stats/base skills. S: stat/skill coefficients (1 = x1).
 # P: any listed learned ability. Each A: line is additionally required.
 # Smithing ---------------------------------------------
@@ -663,7 +657,7 @@ I:6:3:5
 R:GRA:2
 S:GRA:1
 D:Enchanting items with the artistry of Telchar of Nogrod, greatest of dwarven smiths, whose works were imbued with power beyond their mere substance. The enchanter weaves virtue into the very fabric of their creations, and can discern the enchantments hidden within the works of others.
-E:Requires 2 permanent Grace. When active, add permanent Grace to the common Smithing bonus for every craft. Create {special} items. Determine enchantments on items. Modest ID bonus.
+E:Requires 2 permanent Grace. Create {special} items. Determine enchantments on items. Modest ID bonus.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -673,7 +667,7 @@ R:DEX:2
 S:DEX:1
 P:6/0:6/1:6/2
 D:Attaining the effortless mastery of Curufin, most skilled of the sons of Fëanor in the crafts of hand, who could shape metal with a speed and ease that seemed almost careless. Such expertise allows the smith to work without waste, achieving in moments what lesser craftsmen labor over for hours.
-E:Requires 2 permanent Dexterity. When active, add permanent Dexterity to the common Smithing bonus for every craft. Halve forging time. Negate experience and stat costs, but not Smithing ranks sacrificed to Masterpiece or Aule's Forge.
+E:Requires 2 permanent Dexterity. Halve forging time. Negate experience and stat costs, but not Smithing ranks sacrificed to Masterpiece or Aule's Forge.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -684,7 +678,7 @@ S:GRA:1
 A:6/3
 P:6/0:6/1:6/2
 D:Mastering the highest artifice as Fëanor did when he created the Silmarils and the palantiri in the Blessed Realm, works so extraordinary that they could never be duplicated. Such mastery allows the creation of truly unique objects of power, and grants deep insight into the nature of all crafted things.
-E:Requires 4 permanent Dexterity and Grace, Enchantment, and a crafting ability. When active, add permanent Grace to the common Smithing bonus for every craft. Create highly customised artifacts using known materials. Significant bonus to identifying items.
+E:Requires 4 permanent Dexterity and Grace, Enchantment, and a crafting ability. Create highly customised artifacts using known materials. Significant bonus to identifying items.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -700,7 +694,7 @@ T:31:0:99  # Gloves
 
 N:127:Grace
 I:6:7:12
-K:1
+R:SMITHING:12
 D:Inspired as by the touch of Varda Elentari upon the works of the Eldar, whose blessing hallowed the greatest creations of the Noldor in the years before the Darkening.
 E:+1 Grace.
 
@@ -867,7 +861,7 @@ T:35:0:99  # Cloak
 N:157:Grace
 I:7:17:12
 P:7/0:7/11:7/12
-K:1
+R:SONG:12
 D:Uplifted as by the Great Music of the Ainur before the foundations of the World were laid, when Ilúvatar revealed to them the themes of creation and each spirit contributed its voice to the Song that shaped all things.
 E:+1 Grace.
 

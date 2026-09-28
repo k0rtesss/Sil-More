@@ -45,7 +45,7 @@ int ability_required_skill(const ability_type* ability, int skill)
     if (!ability || skill < 0 || skill >= S_MAX) return 0;
     return MAX(ability->skill_req[skill],
         skill == ability->skilltype
-            && !(lore_system_enabled() && ability->lore_branch)
+            && !(insight_system_enabled() && ability->insight_branch)
             ? ability->level : 0);
 }
 
@@ -151,8 +151,10 @@ cptr smithing_stat_category_name(const object_type* object)
 
 int smithing_mastery_stat_bonus_scaled(int abilitynum)
 {
-    if (!p_ptr || !b_info || !z_info
+    if (!p_ptr || !b_info || !z_info || abilitynum < 0 || abilitynum >= ABILITIES_MAX
         || !p_ptr->active_ability[S_SMT][abilitynum]) return 0;
+    if (insight_ability_upgrade_cost(S_SMT, abilitynum)
+        && !p_ptr->insight_ability_upgraded[S_SMT][abilitynum]) return 0;
     return ability_stat_score_scaled(&b_info[ability_index(S_SMT, abilitynum)], true);
 }
 

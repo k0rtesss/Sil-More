@@ -601,7 +601,7 @@ static bool grant_varda_reward(cptr* completion_texts, int completion_count)
     metarun_mark_quest_completed(METARUN_QUEST_VARDA);
     metarun_unlock_oath(OATH_LIGHT);
     award_quest_completion_exp();
-    gain_lore_points(1, "You complete a Valar quest.");
+    gain_insight_points(1, "You complete a Valar quest.");
     do_cmd_note("Varda blessed me with a radiant artefact and the Oath of Light.", p_ptr->depth);
 
     return true;

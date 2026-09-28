@@ -59,7 +59,7 @@ int __wrap_ui_question_ask(cptr title,cptr desc,const ui_question_option* option
 static void clean(void)
 {
     fresh_map();catastrophe_reset_run();turn=1000;playerturn=100;
-    op_ptr->opt[OPT_lore_beta]=false;p_ptr->lore_points=0;p_ptr->lore_milestones=0;
+    op_ptr->opt[OPT_insight_beta]=false;p_ptr->insight_points=0;p_ptr->insight_milestones=0;
     p_ptr->game_type=0;p_ptr->depth=10;p_ptr->energy_use=100;
     p_ptr->py=2;p_ptr->px=2;p_ptr->chp=p_ptr->mhp=30000;
     p_ptr->resist_fire=20;p_ptr->resist_cold=20;p_ptr->resist_pois=20;
@@ -352,22 +352,22 @@ static void test_front_events_and_reveal(void)
 }
 static void test_real_events(void)
 {
-    clean();op_ptr->opt[OPT_lore_beta]=true;
+    clean();op_ptr->opt[OPT_insight_beta]=true;
     cave_set_feat(10,10,FEAT_WATER);
     CHECK(catastrophe_start(CATA_WATER));
-    CHECK(p_ptr->lore_points==1 && p_ptr->lore_milestones==LORE_MILESTONE_CATASTROPHE);
+    CHECK(p_ptr->insight_points==1 && p_ptr->insight_milestones==INSIGHT_MILESTONE_CATASTROPHE);
     catastrophe_reset_level();cave_set_feat(10,10,FEAT_WATER);
-    CHECK(catastrophe_start(CATA_WATER));CHECK(p_ptr->lore_points==1);
+    CHECK(catastrophe_start(CATA_WATER));CHECK(p_ptr->insight_points==1);
 
-    clean();op_ptr->opt[OPT_lore_beta]=true;
+    clean();op_ptr->opt[OPT_insight_beta]=true;
     object_type identified=artifact(ART_MORGOTH_3);
     acquisition_difficulty=65;
     identified.ident|=IDENT_KNOWN;
     a_info[identified.name1].found_num=0;
     inventory[0]=identified;
     update_lore(0);
-    CHECK(p_ptr->lore_points==6 && p_ptr->lore_milestones==0x3f);
-    update_lore(0);CHECK(p_ptr->lore_points==6);
+    CHECK(p_ptr->insight_points==6 && p_ptr->insight_milestones==0x3f);
+    update_lore(0);CHECK(p_ptr->insight_points==6);
 
     clean();r_info[R_IDX_DURUIN].max_num=1;r_info[R_IDX_DURUIN].cur_num=0;
     CHECK(place_monster_one(10,10,R_IDX_DURUIN,false,true,NULL));
@@ -378,15 +378,15 @@ static void test_real_events(void)
     CHECK(mon_take_hit(idx,1000,NULL,0));CHECK(!catastrophe_get_state().pending[CATA_UNIQUE]);
     for(int unique=0;unique<2;unique++) {
         clean();r_info[R_IDX_DURUIN].max_num=1;r_info[R_IDX_DURUIN].cur_num=0;
-        op_ptr->opt[OPT_lore_beta]=true;
+        op_ptr->opt[OPT_insight_beta]=true;
         CHECK(place_monster_one(10,10,unique?R_IDX_DURUIN:41,false,true,NULL));
         idx=cave_m_idx[10][10];mon_list[idx].ml=true;mon_list[idx].song_contest_stacks=2;
         p_ptr->song_target_idx=idx;p_ptr->song_target_song=SNG_CONTEST;p_ptr->song1=SNG_CONTEST;
         p_ptr->skill_use[S_WIL]=1000;
         CHECK(!song_duel_process_contest(1000));
         CHECK(catastrophe_get_state().pending[CATA_SONG]==(unsigned)unique);
-        CHECK(p_ptr->lore_points==unique);
-        CHECK(p_ptr->lore_milestones==(unique?LORE_MILESTONE_SONG:0));
+        CHECK(p_ptr->insight_points==unique);
+        CHECK(p_ptr->insight_milestones==(unique?INSIGHT_MILESTONE_SONG:0));
     }
     puts("Real player/environment unique deaths and completed unique/non-unique song duels: PASS");
 }

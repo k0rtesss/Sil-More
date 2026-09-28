@@ -63,6 +63,8 @@ void calc_bonuses(void)
 
     int armour_weight = 0;
 
+    ability_stages_normalize();
+
     // Remove off-hand weapons if you cannot wield them
     if (!bonuses_preview_active
         && !p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON])

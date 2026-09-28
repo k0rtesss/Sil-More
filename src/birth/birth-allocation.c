@@ -101,7 +101,7 @@ NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
     while (1)
     {
         bool steamdeck = steamdeck_controls_active();
-        bool lore_enabled = lore_system_enabled();
+        bool insight_enabled = insight_system_enabled();
         int stat_count = A_MAX;
 
         /* Reset cost */
@@ -116,10 +116,10 @@ NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
             /* Apply the racial bonuses */
             p_ptr->stat_base[i] = stats[i] + bonus;
             p_ptr->stat_drain[i] = 0;
-            p_ptr->lore_stat_invested[i] = stats[i];
+            p_ptr->insight_stat_invested[i] = stats[i];
         }
 
-        /* Bank the unspent allocation for later Lore purchases. */
+        /* Bank the unspent allocation for later Insight purchases. */
         for (i = 0; i < stat_count; i++)
             cost += birth_stat_current_cost(stats[i]);
 
@@ -150,7 +150,7 @@ NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
             continue;
         }
 
-        p_ptr->lore_points = lore_enabled ? MAX_COST - cost : 0;
+        p_ptr->insight_points = insight_enabled ? MAX_COST - cost : 0;
 
         for (i = 0; i < BIRTH_STAT_MAX; i++)
             stat_costs[i] = (i < stat_count)

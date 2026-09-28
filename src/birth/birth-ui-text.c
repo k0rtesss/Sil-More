@@ -51,7 +51,7 @@ bool birth_confirm_unspent_stat_points(int points_left, bool steamdeck)
     char warning_buf[160];
     bool confirmed = false;
 
-    if (points_left <= 0 || lore_system_enabled())
+    if (points_left <= 0 || insight_system_enabled())
         return true;
 
     Term_get_size(&wid, &hgt);

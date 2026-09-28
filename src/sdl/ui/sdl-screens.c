@@ -4106,9 +4106,9 @@ static void sdl_char_sheet_draw_birth_points_row(TTF_Font* font, float x,
         return;
 
     strnfmt(status, sizeof(status),
-        (lore_system_enabled() && g_sdl_character_sheet_screen.context
+        (insight_system_enabled() && g_sdl_character_sheet_screen.context
             == SDL_CHARACTER_SHEET_BIRTH_STATS)
-            ? "Lore points: %d" : "Points Left: %d",
+            ? "Insight points: %d" : "Points Left: %d",
         g_sdl_character_sheet_screen.points_left);
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, 20,
         TERM_L_BLUE, status, false);

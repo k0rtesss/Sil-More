@@ -1759,7 +1759,7 @@ static const byte app_text_options[] = {
 
 static const byte app_gameplay_options[] = {
     OPT_active_weapon_switch_confirm,
-    OPT_lore_beta,
+    OPT_insight_beta,
     OPT_meta_artefact_memory, OPT_meta_forged_artefacts,
     OPT_meta_revenge, OPT_meta_legendary_places,
     OPT_quest_1, OPT_quest_2, OPT_quest_3, OPT_quest_4,
@@ -1923,6 +1923,10 @@ static void sdl_config_load_app_option_group(cJSON* app_options,
             continue;
 
         item = cJSON_GetObjectItemCaseSensitive(group, key);
+        /* Insight points replaced the old Lore-point name; accept the old
+         * app-config key once so existing preferences keep the opt-in. */
+        if (opt == OPT_insight_beta && !cJSON_IsBool(item))
+            item = cJSON_GetObjectItemCaseSensitive(group, "lore_beta");
         if (opt == OPT_styled_monster_tile_health_bars)
         {
             if (cJSON_IsNumber(item))
@@ -1971,6 +1975,8 @@ static bool sdl_config_try_load_app_bool_option(cJSON* app_options,
         return false;
 
     item = cJSON_GetObjectItemCaseSensitive(group, key);
+    if (opt == OPT_insight_beta && !cJSON_IsBool(item))
+        item = cJSON_GetObjectItemCaseSensitive(group, "lore_beta");
     if (!cJSON_IsBool(item))
         return false;
 

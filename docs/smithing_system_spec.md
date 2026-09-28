@@ -51,6 +51,13 @@ Category is fixed by base item type; affixes/weight changes must not change the 
 
 These bonuses apply to **all items the character is otherwise allowed to craft**, including ordinary items.
 
+With Insight points (Beta) enabled, each bonus is a separate, one-time **1 IP**
+upgrade to its learned ability. Buying the base ability with XP retains its
+crafting, identification and cost/time effects but does not grant this bonus.
+Upgrades only contribute while the corresponding ability is active. With Insight
+disabled, these bonuses remain automatic. Saves before 0.9.8.29 start with no
+purchased upgrades; stored upgrades survive toggling Insight off and back on.
+
 ```text
 Expertise:   +1.0 * DEX
 Enchantment: +1.0 * GRA

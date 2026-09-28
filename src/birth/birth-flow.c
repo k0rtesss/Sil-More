@@ -394,9 +394,9 @@ static NavResult player_birth_aux(void)
     // Reset the number of artefacts
     p_ptr->artefacts = 0;
 
-    log_trace("Final character stats: Str=%d Dex=%d Con=%d Gra=%d Lore points=%d",
+    log_trace("Final character stats: Str=%d Dex=%d Con=%d Gra=%d Insight points=%d",
               p_ptr->stat_base[A_STR], p_ptr->stat_base[A_DEX],
-              p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA], p_ptr->lore_points);
+              p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA], p_ptr->insight_points);
 
     /* Accept */
     return NAV_OK;

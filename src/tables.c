@@ -186,7 +186,7 @@ cptr option_text[OPT_MAX] = {
     "assassination_over_charge", /* OPT_assassination_over_charge */
     "pacifist_attack_warning", /* OPT_pacifist_attack_warning */
     "active_weapon_switch_confirm", /* OPT_active_weapon_switch_confirm */
-    "lore_beta", /* OPT_lore_beta */
+    "insight_beta", /* OPT_insight_beta */
     "meta_artefact_memory", /* OPT_meta_artefact_memory */
     "meta_forged_artefacts", /* OPT_meta_forged_artefacts */
     "meta_revenge", /* OPT_meta_revenge */
@@ -431,7 +431,7 @@ cptr option_desc[OPT_MAX] = {
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */
     "Warn before making direct attacks (useful for pacifist runs)", /* OPT_pacifist_attack_warning */
     "Confirm before paid melee/ranged active switches", /* OPT_active_weapon_switch_confirm */
-    "Beta: bank lore points for attributes and abilities; earn them from milestones", /* OPT_lore_beta */
+    "Beta: bank insight points for attributes and abilities; earn them from milestones and monster types", /* OPT_insight_beta */
     "Beta: Share revealed artefact knowledge and Easy Identify across characters in this Tale.", /* OPT_meta_artefact_memory */
     "Beta: Remember forged artefacts of difficulty 15 or more for other characters in this Tale.", /* OPT_meta_forged_artefacts */
     "Beta: Remember fallen characters through stronger, unique revenge foes and vengeance bonuses.", /* OPT_meta_revenge */
@@ -692,7 +692,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_assassination_over_charge */
     false, /* OPT_pacifist_attack_warning */
     true, /* OPT_active_weapon_switch_confirm */
-    false, /* OPT_lore_beta */
+    false, /* OPT_insight_beta */
     false, /* OPT_meta_artefact_memory */
     false, /* OPT_meta_forged_artefacts */
     false, /* OPT_meta_revenge */
@@ -952,7 +952,7 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_utumno_corridors, OPT_illusory_walls,
         OPT_vault_drop_frequency, OPT_noble_item_spawn_mode,
         OPT_min_depth_timer_mode, OPT_environment_speed, OPT_load_blitz_by_default,
-        OPT_lore_beta,
+        OPT_insight_beta,
         OPT_meta_artefact_memory, OPT_meta_forged_artefacts, OPT_meta_revenge, OPT_meta_legendary_places,
         OPT_NONE, OPT_NONE, OPT_NONE },
 

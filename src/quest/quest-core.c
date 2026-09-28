@@ -376,7 +376,7 @@ void apply_quest_rewards(int quest_idx)
     p_ptr->redraw |= (PR_STATS);
 
     award_quest_completion_exp();
-    gain_lore_points(1, "You complete a Valar quest.");
+    gain_insight_points(1, "You complete a Valar quest.");
 }
 
 /*

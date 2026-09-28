@@ -19,11 +19,13 @@ WRITER = r'''
 #include "fs/save.c"
 #include <assert.h>
 extern void fixture_old_extra(void);
-size_t fixture_write_player(byte* buffer, size_t capacity, bool old)
+extern void fixture_v28_extra(void);
+size_t fixture_write_player(byte* buffer, size_t capacity, int old)
 {
     fff = SDL_IOFromMem(buffer, capacity); assert(fff);
     xor_byte = 0; v_stamp = x_stamp = save_byte_offset = 0; write_error = false;
-    if (old) fixture_old_extra(); else save_write_extra();
+    if (old == 2) fixture_v28_extra();
+    else if (old) fixture_old_extra(); else save_write_extra();
     save_wr_u32b(0xA12345FEU);
     size_t length = (size_t)SDL_TellIO(fff);
     assert(!write_error);
@@ -190,14 +192,14 @@ void check_birth_allocation(void)
     for (int seed = 1; seed <= 100; ++seed)
     {
         int current[BIRTH_STAT_MAX], previous[A_MAX];
-        op_ptr->opt[OPT_lore_beta] = false;
+        op_ptr->opt[OPT_insight_beta] = false;
         Rand_state_import(seed);
         blitz_auto_assign_stats(current);
         Rand_state_import(seed);
         original_four_stat_allocator(previous);
         assert(!memcmp(current, previous, sizeof(previous)));
         assert(BIRTH_STAT_MAX == A_MAX);
-        op_ptr->opt[OPT_lore_beta] = true;
+        op_ptr->opt[OPT_insight_beta] = true;
         Rand_state_import(seed);
         blitz_auto_assign_stats(current);
         int cost = 0;
@@ -209,7 +211,7 @@ void check_birth_allocation(void)
         assert(cost <= MAX_COST);
         assert(!memcmp(current, previous, sizeof(previous)));
     }
-    op_ptr->opt[OPT_lore_beta] = false;
+    op_ptr->opt[OPT_insight_beta] = false;
     puts("Birth allocation: 100 seeds identical to original with beta off; four stats remain identical with beta on PASS.");
 }
 '''
@@ -423,6 +425,19 @@ void check_calculation_display(cptr output)
     FILE* file = fopen(path, "w"); assert(file);
     for (int i = 0; i < report.count; ++i) fprintf(file, "%s\n", report.text[i]);
     fclose(file);
+    op_ptr->opt[OPT_insight_beta] = true;
+    p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT] = true;
+    p_ptr->innate_ability[S_SMT][SMT_ENCHANTMENT] = true;
+    memset(p_ptr->insight_ability_upgraded, 0, sizeof(p_ptr->insight_ability_upgraded));
+    smith_build_calculation_report(&report, 76, NULL);
+    assert(report_has(&report, "Enchantment: 0.00 (stat bonus upgrade: 1 IP)"));
+    p_ptr->insight_points = 1;
+    assert(insight_upgrade_ability(S_SMT, SMT_ENCHANTMENT));
+    smith_build_calculation_report(&report, 76, NULL);
+    assert(report_has(&report, "Enchantment: 3.00"));
+    op_ptr->opt[OPT_insight_beta] = false;
+    p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT] = false;
+    p_ptr->innate_ability[S_SMT][SMT_ENCHANTMENT] = false;
     /* Real modal route: keyboard entry/exit restores the forge and its state. */
     Term_flush(); fixture_input_key = ESCAPE;
     assert(smithing_menu_key('?', NULL) == 0);
@@ -574,22 +589,22 @@ void check_learning(void)
     assert(!prereqs(S_SMT, SMT_ARTEFACT));
     puts("Parsed AND/OR prerequisites, permanent stat gates, Quick Study and atomic failure PASS.");
 
-    assert(!lore_system_enabled());
-    p_ptr->lore_points = 0;
+    assert(!insight_system_enabled());
+    p_ptr->insight_points = 0;
     p_ptr->skill_base[S_PER] = 10;
     p_ptr->innate_ability[S_PER][PER_QUICK_STUDY] = true;
-    assert(!ability_uses_lore_points(S_PER, PER_QUICK_STUDY));
+    assert(!ability_uses_insight_points(S_PER, PER_QUICK_STUDY));
     assert(abilities_in_skill(S_PER) == 1);
     assert(prereqs(S_PER, PER_QUICK_STUDY));
-    op_ptr->opt[OPT_lore_beta] = true;
+    op_ptr->opt[OPT_insight_beta] = true;
     ability_type* quick = &b_info[ability_index(S_PER, PER_QUICK_STUDY)];
-    assert(ability_uses_lore_points(S_PER, PER_QUICK_STUDY));
-    assert(ability_in_lore_branch(quick));
-    assert(!ability_uses_lore_points(S_SMT, SMT_EXPERTISE));
-    assert(!b_info[ability_index(S_SMT, SMT_EXPERTISE)].lore_branch);
+    assert(ability_uses_insight_points(S_PER, PER_QUICK_STUDY));
+    assert(ability_in_insight_branch(quick));
+    assert(!ability_uses_insight_points(S_SMT, SMT_EXPERTISE));
+    assert(!b_info[ability_index(S_SMT, SMT_EXPERTISE)].insight_branch);
     assert(abilities_in_skill(S_PER) == 0);
     assert(prereqs(S_PER, PER_QUICK_STUDY));
-    assert(ability_purchase_lore_cost(S_PER, PER_QUICK_STUDY) == 1);
+    assert(ability_purchase_insight_cost(S_PER, PER_QUICK_STUDY) == 1);
     assert(ability_purchase_xp(quick) == 0);
     p_ptr->new_exp = 99;
     p_ptr->skill_base[S_PER] = 0;
@@ -599,20 +614,20 @@ void check_learning(void)
     assert(ability_browser_plan_training(quick, &training));
     assert(training.total_cost == 0 && training.count == 0);
     assert(!ability_browser_activate_choice(S_PER, PER_QUICK_STUDY));
-    assert(p_ptr->lore_points == 0 && p_ptr->new_exp == 99);
+    assert(p_ptr->insight_points == 0 && p_ptr->new_exp == 99);
     assert(p_ptr->skill_base[S_PER] == 0);
-    p_ptr->lore_points = 77;
-    op_ptr->opt[OPT_lore_beta] = false;
-    gain_lore_points(5, NULL);
-    assert(p_ptr->lore_points == 77);
-    op_ptr->opt[OPT_lore_beta] = true;
-    gain_lore_points(5, NULL);
-    assert(p_ptr->lore_points == 82);
-    p_ptr->lore_points = PY_MAX_EXP - 1;
-    gain_lore_points(0x7fffffff, NULL);
-    assert(p_ptr->lore_points == PY_MAX_EXP);
-    op_ptr->opt[OPT_lore_beta] = false;
-    puts("Lore beta: default off, separate branch, one-point cost, zero XP/training and dormant currency PASS.");
+    p_ptr->insight_points = 77;
+    op_ptr->opt[OPT_insight_beta] = false;
+    gain_insight_points(5, NULL);
+    assert(p_ptr->insight_points == 77);
+    op_ptr->opt[OPT_insight_beta] = true;
+    gain_insight_points(5, NULL);
+    assert(p_ptr->insight_points == 82);
+    p_ptr->insight_points = PY_MAX_EXP - 1;
+    gain_insight_points(0x7fffffff, NULL);
+    assert(p_ptr->insight_points == PY_MAX_EXP);
+    op_ptr->opt[OPT_insight_beta] = false;
+    puts("Insight beta: default off, separate branch, one-point cost, zero XP/training and dormant currency PASS.");
 }
 '''
 
@@ -630,7 +645,7 @@ extern void check_learning(void);
 extern void check_birth_allocation(void);
 extern void check_calculation_display(cptr output);
 extern void check_sdl_skill_display(cptr output, cptr fonts);
-extern size_t fixture_write_player(byte* buffer, size_t capacity, bool old);
+extern size_t fixture_write_player(byte* buffer, size_t capacity, int old);
 extern int fixture_read_player(const byte* buffer, size_t length, int extra);
 static term test_term;
 char fixture_input_key = ' ';
@@ -661,9 +676,9 @@ static void check_coefficients(void)
     assert(entries[1].stat_req[A_DEX] == 2 && entries[1].stat_req[A_GRA] == 4);
     assert(parse_line(&h, "R:LORE:5") != 0);
     assert(parse_line(&h, "K:2") == 0);
-    assert(entries[1].lore_cost == 2);
+    assert(entries[1].insight_cost == 2);
     assert(parse_line(&h, "L:1") == 0);
-    assert(entries[1].lore_branch);
+    assert(entries[1].insight_branch);
     assert(parse_line(&h, "S:STR:0.5:DEX:3/2:GRA:100%:SMITHING:2x") == 0);
     assert(entries[1].stat_score_weight[A_STR] == 50);
     assert(entries[1].stat_score_weight[A_DEX] == 150);
@@ -690,25 +705,55 @@ static void check_coefficients(void)
 static void check_player_save(void)
 {
     byte* buffer = calloc(1024*1024, 1); assert(buffer);
-    p_ptr->lore_points = 1234;
-    p_ptr->lore_milestones = LORE_MILESTONE_SONG;
-    for (int i = 0; i < A_MAX; ++i) p_ptr->lore_stat_invested[i] = i + 1;
+    p_ptr->insight_points = 1234;
+    p_ptr->insight_milestones = INSIGHT_MILESTONE_SONG;
+    p_ptr->insight_monster_types = RF3_ORC | RF3_RAUKO;
+    for (int i = 0; i < A_MAX; ++i) p_ptr->insight_stat_invested[i] = i + 1;
+    memset(p_ptr->insight_ability_upgraded, 0, sizeof(p_ptr->insight_ability_upgraded));
+    p_ptr->insight_ability_upgraded[S_SMT][SMT_ENCHANTMENT] = true;
+    p_ptr->insight_ability_upgraded[S_SMT][SMT_ARTEFACT] = true;
+    p_ptr->innate_ability[S_MEL][MEL_ZONE_OF_CONTROL] = true;
+    p_ptr->innate_ability[S_MEL][MEL_TWO_WEAPON] = true;
+    p_ptr->innate_ability[S_MEL][MEL_RAPID_ATTACK] = false;
     p_ptr->diseased = 0;
     memset(p_ptr->stat_disease, 0, sizeof(p_ptr->stat_disease));
     p_ptr->disease_name = p_ptr->disease_cure = p_ptr->disease_knowledge = 0;
     p_ptr->lamp_oil = 137;
     p_ptr->morgoth_call_state = SAVEFILE_MORGOTH_CALL_SEEN;
     p_ptr->discovery_lore_flags = DISC_LORE_CHASM;
-    op_ptr->opt[OPT_lore_beta] = false;
+    op_ptr->opt[OPT_insight_beta] = false;
     size_t new_size = fixture_write_player(buffer, 1024*1024, false);
-    p_ptr->lore_points = 0; p_ptr->lore_milestones = 0;
-    memset(p_ptr->lore_stat_invested, 0, sizeof(p_ptr->lore_stat_invested));
+    p_ptr->insight_points = 0; p_ptr->insight_milestones = 0;
+    p_ptr->insight_monster_types = 0;
+    memset(p_ptr->insight_stat_invested, 0, sizeof(p_ptr->insight_stat_invested));
+    memset(p_ptr->insight_ability_upgraded, 0xFF, sizeof(p_ptr->insight_ability_upgraded));
+    p_ptr->innate_ability[S_MEL][MEL_TWO_WEAPON] = false;
     assert(fixture_read_player(buffer, new_size, VERSION_EXTRA) == 0);
-    assert(p_ptr->lore_points == 1234 && p_ptr->lore_milestones == LORE_MILESTONE_SONG);
-    for (int i = 0; i < A_MAX; ++i) assert(p_ptr->lore_stat_invested[i] == i + 1);
-    assert(!lore_system_enabled());
+    assert(p_ptr->insight_points == 1234 && p_ptr->insight_milestones == INSIGHT_MILESTONE_SONG);
+    assert(p_ptr->insight_monster_types == (RF3_ORC | RF3_RAUKO));
+    for (int i = 0; i < A_MAX; ++i) assert(p_ptr->insight_stat_invested[i] == i + 1);
+    for (int skill = 0; skill < S_MAX; ++skill)
+        for (int ability = 0; ability < ABILITIES_MAX; ++ability)
+            assert(p_ptr->insight_ability_upgraded[skill][ability]
+                == (skill == S_SMT && (ability == SMT_ENCHANTMENT || ability == SMT_ARTEFACT)));
+    assert(!insight_system_enabled());
+    assert(p_ptr->innate_ability[S_MEL][MEL_ZONE_OF_CONTROL]);
+    assert(p_ptr->innate_ability[S_MEL][MEL_TWO_WEAPON]);
+    assert(!p_ptr->innate_ability[S_MEL][MEL_RAPID_ATTACK]);
+    op_ptr->opt[OPT_insight_beta] = true;
+    assert(!ability_stage_conflict(&b_info[ability_index(S_MEL, MEL_RAPID_ATTACK)]));
+    op_ptr->opt[OPT_insight_beta] = false;
     assert(p_ptr->lamp_oil == 137 && p_ptr->morgoth_call_state == SAVEFILE_MORGOTH_CALL_SEEN);
     assert(p_ptr->discovery_lore_flags == DISC_LORE_CHASM);
+    size_t v28_size = fixture_write_player(buffer, 1024*1024, 2);
+    assert(new_size - v28_size == sizeof(u32b) + S_MAX * ABILITIES_MAX);
+    assert(fixture_read_player(buffer, v28_size, 28) == 0);
+    assert(p_ptr->insight_points == 1234 && p_ptr->insight_milestones == INSIGHT_MILESTONE_SONG);
+    assert(p_ptr->insight_monster_types == 0);
+    for (int i = 0; i < A_MAX; ++i) assert(p_ptr->insight_stat_invested[i] == i + 1);
+    for (int skill = 0; skill < S_MAX; ++skill)
+        for (int ability = 0; ability < ABILITIES_MAX; ++ability)
+            assert(!p_ptr->insight_ability_upgraded[skill][ability]);
     for (int i = 0; i < A_MAX; ++i)
     {
         p_ptr->stat_base[i] = p_info[p_ptr->prace].r_adj[i]
@@ -717,35 +762,35 @@ static void check_player_save(void)
             p_ptr->stat_base[i] += CURSE_GET(curse) * cu_info[curse].cu_adj[i];
     }
     size_t old_size = fixture_write_player(buffer, 1024*1024, true);
-    p_ptr->lore_points = 9999;
+    p_ptr->insight_points = 9999;
     assert(fixture_read_player(buffer, old_size, LEGACY_WRITER_EXTRA) == 0);
-    assert(p_ptr->lore_points == 0);
-    assert(p_ptr->lore_milestones == 0);
-    for (int i = 0; i < A_MAX; ++i) assert(p_ptr->lore_stat_invested[i] == i);
+    assert(p_ptr->insight_points == 0);
+    assert(p_ptr->insight_milestones == 0);
+    for (int i = 0; i < A_MAX; ++i) assert(p_ptr->insight_stat_invested[i] == i);
     assert(p_ptr->lamp_oil == 137 && p_ptr->morgoth_call_state == SAVEFILE_MORGOTH_CALL_SEEN);
     assert(p_ptr->discovery_lore_flags == DISC_LORE_CHASM);
     free(buffer);
-    puts("Real player save: current beta-off currency/ranks roundtrip, zero legacy points and complete tail alignment PASS.");
+    puts("Real player save: current currency/ranks/upgrades/monster types roundtrip, v28 defaults, legacy points and complete tail alignment PASS.");
 }
 static void check_settings(cptr directory)
 {
     char filename[1024];
     strnfmt(filename, sizeof(filename), "%s/lore-options.json", directory);
-    assert(strcmp(option_text[OPT_lore_beta], "lore_beta") == 0);
-    assert(!option_norm[OPT_lore_beta]);
+    assert(strcmp(option_text[OPT_insight_beta], "insight_beta") == 0);
+    assert(!option_norm[OPT_insight_beta]);
     assert(strcmp(option_text[OPT_active_weapon_switch_confirm], "active_weapon_switch_confirm") == 0);
     assert(strcmp(option_text[OPT_environment_speed], "environment_speed") == 0);
     struct sdl_config local_config;
     sdl_config_set_defaults(&local_config);
-    op_ptr->opt[OPT_lore_beta] = true;
+    op_ptr->opt[OPT_insight_beta] = true;
     assert(sdl_config_save(filename, &local_config, NULL, 0));
-    op_ptr->opt[OPT_lore_beta] = false;
+    op_ptr->opt[OPT_insight_beta] = false;
     sdl_config_load_app_options(filename);
-    assert(lore_system_enabled());
+    assert(insight_system_enabled());
     FILE* file = fopen(filename, "w"); assert(file);
     fputs("{\"appOptions\":{\"gameplay\":{}}}", file); fclose(file);
     sdl_config_load_app_options(filename);
-    assert(!lore_system_enabled());
+    assert(!insight_system_enabled());
     puts("Real SDL JSON settings: fixed option slots, beta false default, saved true and missing-key migration PASS.");
 }
 int main(int argc, char** argv)
@@ -905,6 +950,16 @@ def main():
     old = old.replace("void wr_extra(void)", "void fixture_old_extra(void)")
     old = old.replace("p_ptr->knowledge_points", "0 /* unused beta currency */")
     old = re.sub(r"p_ptr->lore\b", "0 /* unused beta stat */", old)
+    v28 = subprocess.check_output(["git", "show", "837b5ace:src/fs/save-player.c"],
+                                  cwd=ROOT).decode("utf-8")
+    v28 = v28[:v28.index("\n}", v28.index("void wr_extra(void)")) + 2]
+    v28 = v28.replace("void wr_extra(void)", "void fixture_v28_extra(void)")
+    for old_name, new_name in (
+        ("lore_milestones", "insight_milestones"),
+        ("lore_points", "insight_points"),
+        ("lore_stat_invested", "insight_stat_invested"),
+    ):
+        v28 = v28.replace(old_name, new_name)
     main_source = MAIN.replace("LEGACY_WRITER_EXTRA", str(legacy_extra))
     loader = (ROOT / "src/fs/load.c").read_text(encoding="utf-8")
     pos = loader.index("static errr rd_savefile_new_aux(void)")
@@ -925,6 +980,7 @@ def main():
     smith = SMITH.replace("/* ORIGINAL_DIFFICULTY */", old_smith)
     for name, code in (("smith.c", smith), ("abilities.c", ABILITIES), ("main.c", main_source),
                        ("writer.c", WRITER), ("reader.c", reader), ("old-player.c", old),
+                       ("v28-player.c", v28),
                        ("birth.c", birth), ("sdl-ui.c", SDL_UI),
                        ("character.c", CHARACTER), ("mobile-layout.c", MOBILE_LAYOUT)):
         source = OUT / name

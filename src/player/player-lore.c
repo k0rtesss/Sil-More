@@ -477,7 +477,7 @@ void update_lore_aux(object_type* o_ptr)
                 // gain experience for identification
                 new_exp = 100;
                 gain_exp(new_exp);
-                lore_artefact_milestones(object_intrinsic_difficulty(o_ptr));
+                insight_artefact_milestones(object_intrinsic_difficulty(o_ptr));
                 p_ptr->ident_exp += new_exp;
                 object_desc(shorter_desc, sizeof(shorter_desc), o_ptr, true, 0);
                 msg_format("The hidden tale of %s rises before your thought, and 100 experience is won.",

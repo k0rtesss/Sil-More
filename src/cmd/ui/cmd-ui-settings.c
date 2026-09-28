@@ -196,7 +196,7 @@ static const struct option_group_marker gameplay_option_groups[] = {
     { OPT_valorous_oath_auto_attack_safety, "Combat Behavior" },
     { OPT_pacifist_attack_warning, "Combat Behavior" },
     { OPT_active_weapon_switch_confirm, "Combat Behavior" },
-    { OPT_lore_beta, "Beta" },
+    { OPT_insight_beta, "Beta" },
     { OPT_meta_artefact_memory, "Beta" },
     { OPT_meta_forged_artefacts, "Beta" },
     { OPT_meta_revenge, "Beta" },
@@ -892,7 +892,7 @@ static cptr option_menu_label(int opt)
         case OPT_valorous_oath_auto_attack_safety: return narrow ? "Valorous safety" : "Valorous oath safety";
         case OPT_pacifist_attack_warning: return narrow ? "Pacifist warn" : "Warn before attacks";
         case OPT_active_weapon_switch_confirm: return narrow ? "Weapon switch" : "Confirm weapon switch";
-        case OPT_lore_beta: return "Lore points (Beta)";
+        case OPT_insight_beta: return "Insight points (Beta)";
         case OPT_meta_artefact_memory: return narrow ? "Artefact lore (Beta)" : "Artefact knowledge (Beta)";
         case OPT_meta_forged_artefacts: return narrow ? "Forged legacy (Beta)" : "Forged artefact legacy (Beta)";
         case OPT_meta_revenge: return "Revenge foes (Beta)";

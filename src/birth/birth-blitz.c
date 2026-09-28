@@ -855,12 +855,12 @@ NavResult blitz_auto_build_character(void)
         p_ptr->stat_drain[i] = 0;
     }
 
-    p_ptr->lore_points = lore_system_enabled() ? MAX_COST : 0;
+    p_ptr->insight_points = insight_system_enabled() ? MAX_COST : 0;
     for (int i = 0; i < A_MAX; i++)
     {
-        p_ptr->lore_stat_invested[i] = stats[i];
-        if (lore_system_enabled())
-            p_ptr->lore_points -= birth_stat_current_cost(stats[i]);
+        p_ptr->insight_stat_invested[i] = stats[i];
+        if (insight_system_enabled())
+            p_ptr->insight_points -= birth_stat_current_cost(stats[i]);
     }
 
     p_ptr->update |= (PU_BONUS | PU_HP);

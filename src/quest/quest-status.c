@@ -485,10 +485,10 @@ static cptr process_quest_placeholders(cptr text, int quest_idx)
 /*
  * Get quest reward description for status display using actual quest data
  */
-static cptr quest_reward_with_lore(char* text, size_t size)
+static cptr quest_reward_with_insight(char* text, size_t size)
 {
-    if (lore_system_enabled())
-        SDL_strlcat(text, " | 1 Lore point", size);
+    if (insight_system_enabled())
+        SDL_strlcat(text, " | 1 Insight point", size);
     return text;
 }
 
@@ -525,10 +525,10 @@ static cptr get_quest_reward_text(int quest_idx)
 
                 /* Get the full artifact description */
                 object_desc(reward_buf, sizeof(reward_buf), &temp_obj, true, 0);
-                return quest_reward_with_lore(reward_buf, sizeof(reward_buf));
+                return quest_reward_with_insight(reward_buf, sizeof(reward_buf));
             } else {
                 SDL_strlcpy(reward_buf, a_ptr->name, sizeof(reward_buf));
-                return quest_reward_with_lore(reward_buf, sizeof(reward_buf));
+                return quest_reward_with_insight(reward_buf, sizeof(reward_buf));
             }
         }
     }
@@ -536,7 +536,7 @@ static cptr get_quest_reward_text(int quest_idx)
     /* Varda reward description */
     if (quest_idx == QUEST_ID_VARDA) {
         SDL_strlcpy(reward_buf, "Choose one radiant artefact and unlock the Oath of Light (+1 light radius)", sizeof(reward_buf));
-        return quest_reward_with_lore(reward_buf, sizeof(reward_buf));
+        return quest_reward_with_insight(reward_buf, sizeof(reward_buf));
     }
 
     /* Build reward description from quest data */
@@ -629,7 +629,7 @@ static cptr get_quest_reward_text(int quest_idx)
         SDL_strlcpy(reward_buf, "Quest completion experience", sizeof(reward_buf));
     }
 
-    return quest_reward_with_lore(reward_buf, sizeof(reward_buf));
+    return quest_reward_with_insight(reward_buf, sizeof(reward_buf));
 }
 
 /*

@@ -14,6 +14,9 @@ errr init_style_info(void);
 errr init_partition_info(void);
 errr init_k_info(void);
 errr init_b_info(void);
+#ifdef ALLOW_TEMPLATES
+errr init_b_insight_overlay(header* head);
+#endif
 errr init_a_info(void);
 void ensure_artifact_guids(void);
 void ensure_artifact_spawn_numbers(void);

@@ -7,28 +7,87 @@
 #include "metarun.h"
 #include "sdl-config.h"
 
-bool lore_system_enabled(void)
+bool insight_system_enabled(void)
 {
-    return op_ptr && op_ptr->opt[OPT_lore_beta];
+    return op_ptr && op_ptr->opt[OPT_insight_beta];
 }
 
-void gain_lore_points(s32b amount, cptr reason)
+typedef struct insight_monster_type_info
 {
-    if (!lore_system_enabled() || amount <= 0)
+    u32b flag;
+    cptr name;
+} insight_monster_type_info;
+
+/* Insight is awarded for the first visible member of each authored monster
+ * family, rather than for each individual unique monster.  These are the
+ * same race categories used by monster lore and slaying flags. */
+static const insight_monster_type_info insight_monster_types[] = {
+    { RF3_ORC,     "an Orc" },
+    { RF3_TROLL,   "a Troll" },
+    { RF3_SERPENT, "a Serpent" },
+    { RF3_DRAGON,  "a Dragon" },
+    { RF3_RAUKO,   "a Rauko" },
+    { RF3_UNDEAD,  "an Undead creature" },
+    { RF3_SPIDER,  "a Spider" },
+    { RF3_WOLF,    "a Wolf" },
+    { RF3_MAN,     "a Man" },
+    { RF3_ELF,     "an Elf" },
+    { RF3_GIANT,   "a Giant" },
+    { RF3_CAT,     "a Cat" },
+    { RF3_HORROR,  "a Horror" },
+    { RF3_VAMPIRE, "a Vampire" },
+};
+
+int insight_monster_types_possible(void)
+{
+    return (int)N_ELEMENTS(insight_monster_types);
+}
+
+int insight_monster_types_seen(void)
+{
+    int seen = 0;
+
+    if (!p_ptr) return 0;
+    for (size_t i = 0; i < N_ELEMENTS(insight_monster_types); ++i)
+        if (p_ptr->insight_monster_types & insight_monster_types[i].flag)
+            seen++;
+    return seen;
+}
+
+void insight_award_monster_type(u32b flags3)
+{
+    if (!p_ptr || !insight_system_enabled()) return;
+
+    for (size_t i = 0; i < N_ELEMENTS(insight_monster_types); ++i)
+    {
+        const insight_monster_type_info* type = &insight_monster_types[i];
+        if (!(flags3 & type->flag)
+            || (p_ptr->insight_monster_types & type->flag)) continue;
+
+        p_ptr->insight_monster_types |= type->flag;
+        char reason[96];
+        strnfmt(reason, sizeof(reason), "You first see %s.", type->name);
+        gain_insight_points(1, reason);
+    }
+}
+
+void gain_insight_points(s32b amount, cptr reason)
+{
+    if (!insight_system_enabled() || amount <= 0)
         return;
 
-    if (p_ptr->lore_points < 0)
-        p_ptr->lore_points = 0;
-    if (amount > PY_MAX_EXP - p_ptr->lore_points)
-        p_ptr->lore_points = PY_MAX_EXP;
+    if (p_ptr->insight_points < 0)
+        p_ptr->insight_points = 0;
+    if (amount > PY_MAX_EXP - p_ptr->insight_points)
+        p_ptr->insight_points = PY_MAX_EXP;
     else
-        p_ptr->lore_points += amount;
+        p_ptr->insight_points += amount;
 
     if (reason && reason[0])
-        msg_format("%s You gain %ld lore point%s.", reason,
+        msg_format("%s You gain %ld insight point%s.", reason,
             (long)amount, amount == 1 ? "" : "s");
     else
-        msg_format("You gain %ld lore point%s.", (long)amount,
+        msg_format("You gain %ld insight point%s.", (long)amount,
             amount == 1 ? "" : "s");
 
     p_ptr->redraw |= (PR_EXP | PR_BASIC);
@@ -37,15 +96,15 @@ void gain_lore_points(s32b amount, cptr reason)
 
 /* Each threshold is shared by identification and smithing and claimed once
  * per hero. Keep this separate from the optional catastrophe controller. */
-void lore_award_milestone(u16b milestone, cptr reason)
+void insight_award_milestone(u16b milestone, cptr reason)
 {
-    if (!p_ptr || !lore_system_enabled() || !milestone
-        || (p_ptr->lore_milestones & milestone)) return;
-    p_ptr->lore_milestones |= milestone;
-    gain_lore_points(1, reason);
+    if (!p_ptr || !insight_system_enabled() || !milestone
+        || (p_ptr->insight_milestones & milestone)) return;
+    p_ptr->insight_milestones |= milestone;
+    gain_insight_points(1, reason);
 }
 
-void lore_artefact_milestones(int difficulty)
+void insight_artefact_milestones(int difficulty)
 {
     for (int i = 0; i < 6; ++i)
     {
@@ -54,26 +113,51 @@ void lore_artefact_milestones(int difficulty)
         if (difficulty < threshold) break;
         strnfmt(reason, sizeof(reason),
             "You understand an artefact of difficulty %d.", threshold);
-        lore_award_milestone((u16b)(1U << i), reason);
+        insight_award_milestone((u16b)(1U << i), reason);
     }
 }
 
-int lore_stat_increase_cost(int stat)
+int insight_stat_increase_cost(int stat)
 {
-    if (!p_ptr || !lore_system_enabled() || stat < 0 || stat >= A_MAX
+    if (!p_ptr || !insight_system_enabled() || stat < 0 || stat >= A_MAX
         || p_ptr->stat_base[stat] >= BASE_STAT_MAX) return 0;
-    return birth_stat_increase_cost(p_ptr->lore_stat_invested[stat]);
+    return birth_stat_increase_cost(p_ptr->insight_stat_invested[stat]);
 }
 
-bool lore_increase_stat(int stat)
+bool insight_increase_stat(int stat)
 {
-    int cost = lore_stat_increase_cost(stat);
-    if (!cost || cost > p_ptr->lore_points || death_spectator_active())
+    int cost = insight_stat_increase_cost(stat);
+    if (!cost || cost > p_ptr->insight_points || death_spectator_active())
         return false;
-    p_ptr->lore_points -= cost;
-    p_ptr->lore_stat_invested[stat]++;
+    p_ptr->insight_points -= cost;
+    p_ptr->insight_stat_invested[stat]++;
     p_ptr->stat_base[stat]++;
     p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA);
+    p_ptr->redraw |= (PR_EXP | PR_BASIC);
+    p_ptr->window |= PW_PLAYER_0;
+    return true;
+}
+
+int insight_ability_upgrade_cost(int skill, int ability)
+{
+    if (!p_ptr || !b_info || !z_info || !insight_system_enabled()
+        || skill < 0 || skill >= S_MAX
+        || ability < 0 || ability >= ABILITIES_MAX) return 0;
+    const ability_type* entry = &b_info[ability_index(skill, ability)];
+    if (!entry->name || entry->skilltype != skill || entry->abilitynum != ability)
+        return 0;
+    return entry->insight_upgrade_cost;
+}
+
+bool insight_upgrade_ability(int skill, int ability)
+{
+    int cost = insight_ability_upgrade_cost(skill, ability);
+    if (!cost || cost > p_ptr->insight_points || death_spectator_active()
+        || !p_ptr->innate_ability[skill][ability]
+        || p_ptr->insight_ability_upgraded[skill][ability]) return false;
+    p_ptr->insight_points -= cost;
+    p_ptr->insight_ability_upgraded[skill][ability] = true;
+    p_ptr->update |= PU_BONUS;
     p_ptr->redraw |= (PR_EXP | PR_BASIC);
     p_ptr->window |= PW_PLAYER_0;
     return true;

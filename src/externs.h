@@ -2385,15 +2385,38 @@ extern void check_experience(void);
 extern void gain_skills_set_initial_skill(int skill);
 extern s32b adjusted_mon_exp(const monster_race* r_ptr, bool kill);
 extern void gain_exp(s32b amount);
-extern void gain_lore_points(s32b amount, cptr reason);
-extern void lore_award_milestone(u16b milestone, cptr reason);
-extern void lore_artefact_milestones(int difficulty);
-extern int lore_stat_increase_cost(int stat);
-extern bool lore_increase_stat(int stat);
+extern void gain_insight_points(s32b amount, cptr reason);
+extern void insight_award_monster_type(u32b flags3);
+extern int insight_monster_types_possible(void);
+extern int insight_monster_types_seen(void);
+extern void insight_award_milestone(u16b milestone, cptr reason);
+extern void insight_artefact_milestones(int difficulty);
+extern int insight_stat_increase_cost(int stat);
+extern int insight_ability_upgrade_cost(int skill, int ability);
+extern bool insight_upgrade_ability(int skill, int ability);
+extern errr ability_stages_validate(void);
+extern bool ability_is_stage(const ability_type* ability);
+extern int ability_stage_parent_count(const ability_type* ability);
+extern const ability_type* ability_stage_parent_at(const ability_type* ability,
+    int parent_index);
+extern const ability_type* ability_stage_parent(const ability_type* ability);
+extern bool ability_stage_has_parent(const ability_type* ability,
+    const ability_type* parent);
+extern bool ability_stage_shares_parent(const ability_type* a,
+    const ability_type* b);
+extern int ability_stage_depth(const ability_type* ability);
+extern bool ability_stage_parent_path_met(const ability_type* ability,
+    int parent_index);
+extern const ability_type* ability_stage_missing_parent(const ability_type* ability);
+extern bool ability_stages_exclusive(const ability_type* a, const ability_type* b);
+extern const ability_type* ability_stage_conflict(const ability_type* ability);
+extern void ability_stage_activate(const ability_type* ability);
+extern void ability_stages_normalize(void);
+extern bool insight_increase_stat(int stat);
 extern int birth_stat_increase_cost(int stat);
 extern int birth_stat_current_cost(int stat);
 extern void lose_exp(s32b amount);
-extern bool lore_system_enabled(void);
+extern bool insight_system_enabled(void);
 extern bool random_stair_location(int* sy, int* sx);
 extern void break_truce(bool obvious);
 extern bool similar_monsters(int m1y, int m1x, int m2y, int m2x);

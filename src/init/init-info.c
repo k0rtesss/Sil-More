@@ -782,6 +782,10 @@ errr init_b_info(void)
     b_name = b_head.name_ptr;
     b_text = b_head.text_ptr;
 
+#ifdef ALLOW_TEMPLATES
+    if (!err) err = init_b_insight_overlay(&b_head);
+#endif
+    if (!err) err = ability_stages_validate();
     return (err);
 }
 

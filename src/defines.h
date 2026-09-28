@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 28 /* First-thrall Lore choice and persistent reward state. */
+#define VERSION_EXTRA 30 /* Persistent Insight monster-type rewards. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
@@ -986,6 +986,7 @@
  * Total number of abilties per skill (not to be confused with A_MAX)
  */
 #define ABILITIES_MAX 20
+#define ABILITY_STAGE_PARENTS_MAX 4
 #define ABILITY_TIMELINE_MAX (S_MAX * ABILITIES_MAX)
 
 /*** Screen Locations ***/
@@ -2996,11 +2997,11 @@
 #define OPT_pacifist_attack_warning (OPT_GAME_PLAY + 5)
 /* Confirm before paid melee/ranged active switches */
 #define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
-#define OPT_lore_beta (OPT_GAME_PLAY + 7)
-#define LORE_MILESTONE_SONG 0x0040
-#define LORE_MILESTONE_CATASTROPHE 0x0080
-#define LORE_FIRST_THRALL_HELPED 0x0100
-#define LORE_MILESTONE_MASK 0x01FF
+#define OPT_insight_beta (OPT_GAME_PLAY + 7)
+#define INSIGHT_MILESTONE_SONG 0x0040
+#define INSIGHT_MILESTONE_CATASTROPHE 0x0080
+#define INSIGHT_FIRST_THRALL_HELPED 0x0100
+#define INSIGHT_MILESTONE_MASK 0x01FF
 #define OPT_meta_artefact_memory (OPT_GAME_PLAY + 8)
 #define OPT_meta_forged_artefacts (OPT_GAME_PLAY + 9)
 #define OPT_meta_revenge (OPT_GAME_PLAY + 10)

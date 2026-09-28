@@ -164,7 +164,7 @@ void wr_extra(void)
 
     wr_byte(p_ptr->climbing);
 
-    // Compatibility block: persistent fields stored in 15 legacy reserved bytes.
+    // Compatibility block: persistent fields stored in legacy reserved bytes.
     wr_byte(p_ptr->morgoth_hall_entered ? 1 : 0);
     wr_byte(p_ptr->morgoth_second_wind ? 1 : 0);
     wr_byte(p_ptr->discovery_lore_flags);
@@ -178,13 +178,21 @@ void wr_extra(void)
                 | SAVEFILE_MORGOTH_CALL_ESCALATION_MASK);
         wr_byte(morgoth_call_state);
     }
-    wr_u16b(p_ptr->lore_milestones);
-    wr_s32b(p_ptr->lore_points);
+    wr_u16b(p_ptr->insight_milestones);
+    wr_s32b(p_ptr->insight_points);
     wr_byte(0);
+
+    /* Version 0.9.8.30: one-time Insight rewards for monster families. */
+    wr_u32b(p_ptr->insight_monster_types & RF3_RACE_MASK);
 
     /* Version 0.9.8.27: purchased ranks, without race/house/curse bonuses. */
     for (i = 0; i < A_MAX; ++i)
-        wr_byte(p_ptr->lore_stat_invested[i]);
+        wr_byte(p_ptr->insight_stat_invested[i]);
+
+    /* Version 0.9.8.29: one-time Insight upgrades, indexed by stable ability ID. */
+    for (i = 0; i < S_MAX; ++i)
+        for (int ability = 0; ability < ABILITIES_MAX; ++ability)
+            wr_byte(p_ptr->insight_ability_upgraded[i][ability] ? 1 : 0);
 
     /* Reserved: legacy item-quality squelch array (now unused) */
     for (i = 0; i < LEGACY_ITEM_QUALITY_BYTES; i++)

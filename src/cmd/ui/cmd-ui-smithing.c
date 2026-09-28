@@ -4781,10 +4781,17 @@ static void smith_build_calculation_report(smith_calculation_report* report,
     for (size_t i = 0; i < N_ELEMENTS(masteries); ++i)
     {
         bool active = p_ptr->active_ability[S_SMT][masteries[i]];
+        int upgrade_cost = insight_ability_upgrade_cost(S_SMT, masteries[i]);
+        bool locked = upgrade_cost
+            && !p_ptr->insight_ability_upgraded[S_SMT][masteries[i]];
         smith_scaled_text(smithing_mastery_stat_bonus_scaled(masteries[i]), value, sizeof(value));
-        smith_report_add(report, width, active ? TERM_WHITE : TERM_L_DARK,
-            format("%s: %s%s", names[i], value, active ? "" : " (inactive)"));
-        if (active)
+        if (locked)
+            smith_report_add(report, width, TERM_L_DARK,
+                format("%s: %s (stat bonus upgrade: %d IP)", names[i], value, upgrade_cost));
+        else
+            smith_report_add(report, width, active ? TERM_WHITE : TERM_L_DARK,
+                format("%s: %s%s", names[i], value, active ? "" : " (inactive)"));
+        if (active && !locked)
         {
             const ability_type* ability = &b_info[ability_index(S_SMT, masteries[i])];
             for (int stat = 0; stat < A_MAX; ++stat)
